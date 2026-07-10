@@ -55,20 +55,35 @@ workout/[id]) are all **skeleton-based already — no change needed.**
 - `workout/new`, `pricing`, `exercises/add`, onboarding `min-h-[400px]`
   blocks — cold-start-only, low traffic; **P2, deferred.**
 
-## Fix plan
+## Fix plan / status
 
-- **Phase 1** — Eat/nutrition (#1): the exemplar. React Query
+- ✅ **Phase 1** — Eat/nutrition (#1): the exemplar. React Query
   `['nutrition', dateKey]` per-day query, `keepPreviousData`, adjacent-day
   prefetch, IndexedDB persistence, skeleton chrome, mutation invalidation.
-- **Phase 2 (P0s, one commit each)** — history (#2), analytics (#3),
-  exercises (#4), templates/[id] (#5). Same pattern: query cache with
-  long `staleTime` for immutable data, render cached data instantly on
-  revisit, skeleton only when the cache is truly empty.
-- **Deferred (P1/P2)** — templates list (#6), settings (#7) can adopt the
-  pattern opportunistically; DashboardClient (#8) already effectively fixed
-  by server `initialData`; redirect stubs (#10, #11) are trivial. Documented
-  here rather than churned.
-- **Never touched** — active workout session (#12).
+  Verified (`ux-audit/verify/nutrition-dayswitch.mjs`, 13/13).
+- ✅ **Phase 2 (all P0s, one commit each, each verified)** —
+  exercises (#4), history (#2), analytics (#3), templates/[id] (#5). Same
+  pattern: query cache with long `staleTime` for immutable data (moderate for
+  the editable template), render cached data instantly on revisit, skeleton /
+  no full-page spinner only when the cache is truly empty. Per-surface
+  Playwright specs in `ux-audit/verify/*-revisit.mjs` all pass.
+- **Deferred (P1/P2), documented not churned** — templates list (#6),
+  settings (#7) can adopt the pattern opportunistically (live data, lower
+  traffic); DashboardClient (#8) already effectively fixed by server
+  `initialData`; mesocycle (#9) already skeleton-based; redirect stubs
+  (#10, #11) are trivial; `workout/new`, `pricing`, `exercises/add`,
+  onboarding are cold-start-only (P2).
+- **Never touched** — active workout session (#12): live Zustand/outbox
+  state, explicitly out of scope.
+
+## Guardrail (Phase 3)
+
+- Convention documented in `CLAUDE.md` → "Loading States & Data Caching
+  (cached-first)": full-viewport loaders are cold-start-only; new data views
+  use `useQuery` + the cached-first pattern.
+- `ux-audit/verify/lib.mjs#assertNoReloadSpinner` is a reusable Playwright
+  helper that fails if a page's loading testid appears on an SPA revisit; the
+  Eat spec additionally arms a MutationObserver across all day switches.
 
 ## Eat-page architecture confirmation (Phase 0 stop-gate)
 
