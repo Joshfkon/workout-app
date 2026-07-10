@@ -34,7 +34,9 @@ import type { AddFoodTab } from '@/components/nutrition/AddFoodModal';
 import { MacroSummaryCard } from '@/components/nutrition/MacroSummaryCard';
 import { StickyMacroBar } from '@/components/nutrition/StickyMacroBar';
 import { NutritionQuickActions } from '@/components/nutrition/NutritionQuickActions';
+import { ShareNutritionText } from '@/components/nutrition/ShareNutritionText';
 import { useDailyNutritionSummary } from '@/hooks/useDailyNutritionSummary';
+import { DEFAULT_EATING_WINDOW, type EatingWindow } from '@/services/intakePacing';
 import {
   useNutritionDay,
   useNutritionGlobal,
@@ -221,6 +223,7 @@ function NutritionPageContent() {
   } | null>(null);
   const [trainingAge, setTrainingAge] = useState<'beginner' | 'intermediate' | 'advanced'>('intermediate');
   const [currentPhase, setCurrentPhase] = useState<'bulk' | 'cut' | 'maintenance' | null>(null);
+  const [mesoWeek, setMesoWeek] = useState<number | null>(null);
 
   // Modal states
   const [showAddFood, setShowAddFood] = useState(false);
@@ -548,6 +551,9 @@ function NutritionPageContent() {
     if (mesocycleData?.days_per_week) {
       profileData.workoutsPerWeek = mesocycleData.days_per_week;
     }
+    setMesoWeek(
+      typeof mesocycleData?.current_week === 'number' ? mesocycleData.current_week : null
+    );
 
     setUserProfile(profileData);
 
@@ -1274,6 +1280,20 @@ function NutritionPageContent() {
   const dailySummary = useDailyNutritionSummary(foodEntries, nutritionTargets);
   const dailyTotals = dailySummary.totals;
 
+  // Eating window drives the nutrition share's intraday pacing. Read from the
+  // nutrition_targets row (07:00–21:00 default when unset/unmigrated); the
+  // columns aren't on the NutritionTargets type yet, hence the cast.
+  const eatingWindow = useMemo<EatingWindow>(() => {
+    const start = (nutritionTargets as { eating_window_start_min?: number | null } | null)
+      ?.eating_window_start_min;
+    const end = (nutritionTargets as { eating_window_end_min?: number | null } | null)
+      ?.eating_window_end_min;
+    if (typeof start === 'number' && typeof end === 'number' && end > start) {
+      return { startMinutes: start, endMinutes: end };
+    }
+    return DEFAULT_EATING_WINDOW;
+  }, [nutritionTargets]);
+
   // Get meal config with custom names
   const mealConfig = getMealConfig(nutritionTargets?.meal_names);
 
@@ -1473,6 +1493,23 @@ function NutritionPageContent() {
           >
             <IconChevronRight size={18} aria-hidden="true" />
           </button>
+
+          {/* Share the day's macros as Wordle-style text (today, once targets exist) */}
+          {isToday && dailySummary.hasTargets && (
+            <ShareNutritionText
+              totals={dailyTotals}
+              targets={{
+                calories: nutritionTargets?.calories ?? null,
+                protein: nutritionTargets?.protein ?? null,
+                carbs: nutritionTargets?.carbs ?? null,
+                fat: nutritionTargets?.fat ?? null,
+              }}
+              phase={currentPhase}
+              phaseWeek={mesoWeek}
+              mealsLogged={mealsLogged}
+              eatingWindow={eatingWindow}
+            />
+          )}
 
           {/* Settings menu: macro setup + weight + custom foods */}
           <div className="relative">

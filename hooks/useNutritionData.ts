@@ -95,7 +95,7 @@ export interface NutritionGlobalBundle {
   } | null;
   userError: boolean;
   dexa: { body_fat_percent: number | null; weight_kg: number | null } | null;
-  mesocycle: { days_per_week: number | null } | null;
+  mesocycle: { days_per_week: number | null; current_week: number | null } | null;
   prefs: { weight_unit: string | null } | null;
   volumeProfile: { training_age: string | null; is_enhanced: boolean | null } | null;
   proteinRaw: Array<{ protein?: number; logged_at: string }>;
@@ -153,7 +153,7 @@ async function fetchNutritionGlobal(): Promise<NutritionGlobalBundle | null> {
       .maybeSingle(),
     supabase
       .from('mesocycles')
-      .select('days_per_week')
+      .select('days_per_week, current_week')
       .eq('user_id', user.id)
       .eq('state', 'active')
       .maybeSingle(),
