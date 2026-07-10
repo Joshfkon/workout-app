@@ -18,7 +18,7 @@ import type { AdjustedRIRResult } from '@/services/rpeCalibration';
 import type { ReadinessModulation } from '@/services/fatigueEngine';
 import { lightHaptic } from '@/lib/integrations/notifications';
 import { Input } from '@/components/ui';
-import { IconCheck, IconChevronDown, IconCloudPause } from '@tabler/icons-react';
+import { IconCheck, IconChevronDown, IconCloudPause, IconInfoCircle } from '@tabler/icons-react';
 import { InlineRestTimerBar } from './InlineRestTimerBar';
 import { DropsetPrompt } from './DropsetPrompt';
 import { BodyweightSetEditRow } from './BodyweightSetEditRow';
@@ -1358,6 +1358,24 @@ export const ExerciseCard = memo(function ExerciseCard({
           >
             {exercise.name}
           </button>
+          {/* Info affordance: opens the exercise detail sheet. 44x44 hit area
+              via padding, pulled back with negative margins so it doesn't
+              inflate the header height. stopPropagation keeps card handlers
+              (history/warmup toggles, parent taps) from firing. */}
+          {onExerciseNameClick && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onExerciseNameClick();
+              }}
+              className="-m-2.5 flex-shrink-0 inline-flex items-center justify-center min-w-[44px] min-h-[44px] text-surface-500 hover:text-surface-300 transition-colors"
+              title="Exercise details"
+              aria-label="Exercise details"
+            >
+              <IconInfoCircle size={16} stroke={2} />
+            </button>
+          )}
           {exercise.hypertrophyScore?.tier && (
             <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium leading-none flex-shrink-0 ${getTierBadgeClasses(exercise.hypertrophyScore.tier)}`}>
               {exercise.hypertrophyScore.tier}

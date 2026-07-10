@@ -1,6 +1,18 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
-const config: CapacitorConfig = {
+// Capacitor's typed config doesn't expose the WKWebView media flags, so we
+// widen the `ios` block to record `allowsInlineMediaPlayback` explicitly.
+// Note: Capacitor 8 already forces inline playback natively in
+// `CAPBridgeViewController.webViewConfiguration`
+// (`allowsInlineMediaPlayback = true`, `mediaTypesRequiringUserActionForPlayback = []`),
+// so tapped YouTube embeds play in place instead of going native-fullscreen,
+// and user-initiated tap-to-play needs no user-gesture adjustment. This entry
+// documents and pins that intent.
+type IOSConfig = NonNullable<CapacitorConfig['ios']> & {
+  allowsInlineMediaPlayback?: boolean;
+};
+
+const config: CapacitorConfig & { ios?: IOSConfig } = {
   appId: 'app.hypertrack.workout',
   appName: 'HyperTrack',
   webDir: 'out',
@@ -17,6 +29,9 @@ const config: CapacitorConfig = {
     contentInset: 'automatic',
     allowsLinkPreview: false,
     scheme: 'HyperTrack',
+    // Play the tapped YouTube embed inline in WKWebView instead of forcing
+    // native fullscreen (see note above — already the native default in v8).
+    allowsInlineMediaPlayback: true,
   },
 
   // Android specific configuration

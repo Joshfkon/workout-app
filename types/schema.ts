@@ -396,8 +396,13 @@ export interface Exercise {
   /** URL to thumbnail image for the demo (optional) */
   demoThumbnailUrl?: string;
 
-  /** YouTube video ID for form tutorials (e.g., "dQw4w9WgXcQ") */
-  youtubeVideoId?: string;
+  /**
+   * Curated YouTube video ID for form tutorials (e.g., "dQw4w9WgXcQ").
+   * When set, the exercise detail sheet shows a YouTube facade (with the
+   * MuscleWiki demo as fallback); when null/undefined, the MuscleWiki demo
+   * is shown unchanged.
+   */
+  youtubeVideoId?: string | null;
 
   /**
    * Exercise type: rep_based (default) or duration_based (for holds/planks)
