@@ -1,10 +1,14 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useQuery, useQueryClient, useIsRestoring } from '@tanstack/react-query';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent, Button, LoadingAnimation } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 import type { WorkoutTemplate, WorkoutTemplateExercise, WorkoutFolder } from '@/types/templates';
+
+const templateDetailKey = (id: string) => ['templateDetail', id] as const;
 import Link from 'next/link';
 import { useKeyboardInset } from '@/hooks/useKeyboardInset';
 
@@ -60,43 +64,63 @@ export default function TemplateDetailPage() {
 
   const supabase = createUntypedClient();
 
-  const loadTemplate = useCallback(async () => {
-    setIsLoading(true);
-    try {
+  const queryClient = useQueryClient();
+  const isRestoring = useIsRestoring();
+
+  // Per-template data cached by id, so returning to a template (or switching
+  // between templates) renders instantly instead of re-blocking full-screen.
+  // Moderate staleTime: templates are editable, so revisits revalidate; edits
+  // go through loadTemplate() which refetches this query.
+  const templateQuery = useQuery({
+    queryKey: templateDetailKey(templateId),
+    queryFn: async () => {
       const [templateResult, exercisesResult] = await Promise.all([
-        supabase
-          .from('workout_templates')
-          .select('*')
-          .eq('id', templateId)
-          .single(),
+        supabase.from('workout_templates').select('*').eq('id', templateId).single(),
         supabase
           .from('workout_template_exercises')
           .select('*')
           .eq('template_id', templateId)
           .order('sort_order', { ascending: true }),
       ]);
-
       if (templateResult.error) throw templateResult.error;
+      return {
+        template: templateResult.data as WorkoutTemplate,
+        exercises: (exercisesResult.data || []) as WorkoutTemplateExercise[],
+      };
+    },
+    enabled: !!templateId,
+    staleTime: 1000 * 60,
+    gcTime: IMMUTABLE_GC_TIME,
+  });
 
-      setTemplate(templateResult.data);
-      setExercises(exercisesResult.data || []);
-      setTemplateName(templateResult.data.name);
-      setTemplateNotes(templateResult.data.notes || '');
-      setTemplateFolderId(templateResult.data.folder_id);
-    } catch (err) {
-      console.error('Error loading template:', err);
+  // Sync local editing state from the cached query. Runs on load and after any
+  // edit (which refetches via loadTemplate) — refetches only fire after an
+  // explicit save, so this never clobbers an in-progress field edit.
+  useEffect(() => {
+    if (templateQuery.data) {
+      setTemplate(templateQuery.data.template);
+      setExercises(templateQuery.data.exercises);
+      setTemplateName(templateQuery.data.template.name);
+      setTemplateNotes(templateQuery.data.template.notes || '');
+      setTemplateFolderId(templateQuery.data.template.folder_id);
+      setIsLoading(false);
+    } else if (templateQuery.isError) {
       setError('Failed to load template');
-    } finally {
       setIsLoading(false);
     }
-  }, [supabase, templateId]);
+  }, [templateQuery.data, templateQuery.isError]);
+
+  // Mutations call this to refresh; it refetches the cached query, which
+  // re-runs the sync effect above.
+  const loadTemplate = useCallback(async () => {
+    await queryClient.refetchQueries({ queryKey: templateDetailKey(templateId) });
+  }, [queryClient, templateId]);
 
   useEffect(() => {
-    loadTemplate();
     loadFolders();
     loadAvailableExercises();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [templateId, loadTemplate]);
+  }, [templateId]);
 
   async function loadFolders() {
     const { data: { user } } = await supabase.auth.getUser();
@@ -293,6 +317,10 @@ export default function TemplateDetailPage() {
             .update({ sort_order: i })
             .eq('id', newExercises[i].id);
         }
+        // Persist the new order into the cache so a revisit keeps it.
+        queryClient.setQueryData(templateDetailKey(templateId), (prev: any) =>
+          prev ? { ...prev, exercises: newExercises } : prev
+        );
       } catch (err) {
         console.error('Error saving reorder:', err);
         // Reload to get correct order
@@ -334,14 +362,20 @@ export default function TemplateDetailPage() {
           .eq('id', update.id);
       }
       setExercises(newExercises);
+      queryClient.setQueryData(templateDetailKey(templateId), (prev: any) =>
+        prev ? { ...prev, exercises: newExercises } : prev
+      );
     } catch (err) {
       console.error('Error reordering exercises:', err);
     }
   }
 
-  if (isLoading) {
+  // Full-screen loader only on first-ever load with an empty cache. Revisiting
+  // this template id (warm cache) or reloading (IndexedDB restore) has the
+  // data available and renders immediately.
+  if (isLoading && !templateQuery.data && !isRestoring) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center" data-testid="template-full-loading">
         <LoadingAnimation />
       </div>
     );

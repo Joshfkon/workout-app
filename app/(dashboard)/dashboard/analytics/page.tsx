@@ -1,10 +1,12 @@
 'use client';
 
 import { useState, useEffect, useRef, useMemo, Suspense } from 'react';
+import { useQuery, useQueryClient, useIsRestoring } from '@tanstack/react-query';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge, FullPageLoading } from '@/components/ui';
+import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 import { BodyMeasurements } from '@/components/dashboard/BodyMeasurements';
 import { useMusclePriorities } from '@/components/settings/MusclePrioritySettings';
 import { createUntypedClient } from '@/lib/supabase/client';
@@ -501,52 +503,69 @@ function AnalyticsPageContent() {
   }, [progressPhotos]);
 
   // Fetch all data
-  useEffect(() => {
-    async function fetchData() {
+  // Analytics data is immutable-in-practice (DEXA history, completed-session
+  // lift trends, progress photos). Cache it so returning to Analytics renders
+  // instantly instead of re-blocking on the full-screen loader; a DEXA change
+  // invalidates the query. queryFn returns the raw bundle; the effect below
+  // processes it into the existing local state (downstream reads unchanged).
+  const mainQuery = useQuery({
+    queryKey: ['analytics', 'main'],
+    queryFn: async () => {
       const supabase = createUntypedClient();
       const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null;
+      const [profileResult, scanResult, photoResult, sessionsResult] = await Promise.all([
+        supabase
+          .from('users')
+          .select('height_cm, goal, experience, target_body_fat_percent, target_weight_kg, sex')
+          .eq('id', user.id)
+          .single(),
+        supabase
+          .from('dexa_scans')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('scan_date', { ascending: false }),
+        supabase
+          .from('progress_photos')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('photo_date', { ascending: false })
+          .limit(8),
+        supabase
+          .from('coaching_sessions')
+          .select('*, calibrated_lifts:calibrated_lifts(*)')
+          .eq('user_id', user.id)
+          .eq('status', 'completed')
+          .order('created_at', { ascending: false })
+          .limit(1),
+      ]);
+      return {
+        userId: user.id,
+        profile: profileResult.data,
+        scanData: scanResult.data,
+        photoData: photoResult.data,
+        sessionsData: sessionsResult.data,
+      };
+    },
+    staleTime: 1000 * 60 * 5,
+    gcTime: IMMUTABLE_GC_TIME,
+  });
+  const isRestoring = useIsRestoring();
+  const queryClient = useQueryClient();
 
-      if (!user) {
-        router.push('/login');
-        return;
-      }
-      
-      setUserId(user.id);
+  useEffect(() => {
+    if (mainQuery.data === null) {
+      router.push('/login');
+      return;
+    }
+    if (!mainQuery.data) return;
 
-      try {
-        // Run all queries in parallel for faster loading
-        const [profileResult, scanResult, photoResult, sessionsResult] = await Promise.all([
-          // User profile
-          supabase
-            .from('users')
-            .select('height_cm, goal, experience, target_body_fat_percent, target_weight_kg, sex')
-            .eq('id', user.id)
-            .single(),
-          // DEXA scans
-          supabase
-            .from('dexa_scans')
-            .select('*')
-            .eq('user_id', user.id)
-            .order('scan_date', { ascending: false }),
-          // Progress photos
-          supabase
-            .from('progress_photos')
-            .select('*')
-            .eq('user_id', user.id)
-            .order('photo_date', { ascending: false })
-            .limit(8),
-          // Coaching sessions with calibrated lifts
-          supabase
-            .from('coaching_sessions')
-            .select('*, calibrated_lifts:calibrated_lifts(*)')
-            .eq('user_id', user.id)
-            .eq('status', 'completed')
-            .order('created_at', { ascending: false })
-            .limit(1),
-        ]);
+    const { userId: uid, profile, scanData, photoData, sessionsData } = mainQuery.data;
 
+    setUserId(uid);
+
+    try {
         // Process user profile
-        const profile = profileResult.data;
         if (profile) {
           setUserProfile({
             heightCm: profile.height_cm,
@@ -559,7 +578,6 @@ function AnalyticsPageContent() {
         }
 
         // Process DEXA scans
-        const scanData = scanResult.data;
         if (scanData) {
           const transformedScans: DexaScan[] = scanData.map((scan: any) => ({
             id: scan.id,
@@ -578,7 +596,6 @@ function AnalyticsPageContent() {
         }
 
         // Process progress photos
-        const photoData = photoResult.data;
         if (photoData) {
           const transformedPhotos: ProgressPhoto[] = photoData.map((photo: any) => ({
             id: photo.id,
@@ -594,7 +611,6 @@ function AnalyticsPageContent() {
         }
 
         // Process strength profile from coaching sessions
-        const sessionsData = sessionsResult.data;
         if (sessionsData && sessionsData.length > 0) {
           const session = sessionsData[0];
           if (session.strength_profile) {
@@ -631,13 +647,11 @@ function AnalyticsPageContent() {
 
         setIsLoading(false);
       } catch (error) {
-        console.error('Failed to fetch analytics data:', error);
+        console.error('Failed to process analytics data:', error);
         setIsLoading(false);
       }
-    }
-
-    fetchData();
-  }, [router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mainQuery.data]);
 
   // Fetch lift-trend data for the Strength tab. Deliberately the SAME query
   // shape, window (LIFT_TREND_WINDOW_DAYS), and pure function as the home
@@ -1381,8 +1395,11 @@ function AnalyticsPageContent() {
     ? generateCoachingRecommendations(scans, userProfile.heightCm, userProfile.goal, userProfile.experience)
     : [];
 
-  if (isLoading) {
-    return <FullPageLoading text="Loading your analytics..." type="heartbeat" />;
+  // Full-screen loader only on first-ever load with an empty cache. A revisit
+  // (warm cache) or reload (IndexedDB restore) has the bundle available and
+  // renders immediately.
+  if (isLoading && !mainQuery.data && !isRestoring) {
+    return <div data-testid="analytics-full-loading"><FullPageLoading text="Loading your analytics..." type="heartbeat" /></div>;
   }
 
   // After the unified sheet saves: refresh the hub widgets, and for a DEXA
@@ -1414,6 +1431,9 @@ function AnalyticsPageContent() {
         }))
       );
     }
+    // Keep the cached analytics bundle fresh so a later revisit reflects the
+    // new DEXA scan instead of the stale persisted copy.
+    void queryClient.invalidateQueries({ queryKey: ['analytics', 'main'] });
   };
 
   // One-tap "Set as target" from the map's suggested milestone: persist as
@@ -1512,7 +1532,7 @@ function AnalyticsPageContent() {
   ];
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in" data-testid="analytics-content">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>

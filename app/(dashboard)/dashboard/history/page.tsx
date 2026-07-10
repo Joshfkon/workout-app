@@ -1,10 +1,17 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
+import { useQuery, useQueryClient, useIsRestoring } from '@tanstack/react-query';
 import { Card, Badge, Button, FullPageLoading, LoadingAnimation, ConfirmModal } from '@/components/ui';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
+
+// Completed workout history is immutable-in-practice: cache the first page
+// long and persist it so returning to History renders instantly instead of
+// re-blocking on the full-screen loader. Edits/deletes write through the cache.
+const HISTORY_FIRST_PAGE_KEY = ['history', 'sessions', 'page0'] as const;
 import { formatWeight, convertWeight, convertWeightForDisplay, inputWeightToKg, estimateE1RM, getLocalDateString } from '@/lib/utils';
 import { createRepeatSession } from '@/lib/training/repeatWorkout';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
@@ -128,6 +135,31 @@ function HistoryPageContent() {
   const router = useRouter();
   const exerciseIdParam = searchParams.get('exercise');
 
+  const queryClient = useQueryClient();
+
+  // Cached first page — the source that makes a revisit instant. The queryFn
+  // forward-references SESSION_SELECT/PAGE_SIZE (defined below); it only runs
+  // async, after those consts are initialized.
+  const firstPageQuery = useQuery({
+    queryKey: HISTORY_FIRST_PAGE_KEY,
+    queryFn: async () => {
+      const supabase = createUntypedClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [] as WorkoutHistory[];
+      const { data } = await supabase
+        .from('workout_sessions')
+        .select(SESSION_SELECT)
+        .eq('user_id', user.id)
+        .in('state', ['completed', 'in_progress'])
+        .order('completed_at', { ascending: false, nullsFirst: false })
+        .range(0, PAGE_SIZE - 1);
+      return data ? transformSessions(data) : [];
+    },
+    staleTime: IMMUTABLE_GC_TIME,
+    gcTime: IMMUTABLE_GC_TIME,
+  });
+  const isRestoring = useIsRestoring();
+
   const [workouts, setWorkouts] = useState<WorkoutHistory[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [page, setPage] = useState(0);
@@ -198,7 +230,10 @@ function HistoryPageContent() {
 
   // What the cards section shows: day selection replaces the paginated list;
   // the exercise chip filters either source client-side.
-  const baseWorkouts = selectedDay && viewMode === 'calendar' ? (dayWorkouts ?? []) : workouts;
+  // Fall back to the cached first page until the seed effect copies it into
+  // `workouts`, so a revisit paints the list on the first frame (no flash).
+  const listWorkouts = workouts.length ? workouts : (firstPageQuery.data ?? []);
+  const baseWorkouts = selectedDay && viewMode === 'calendar' ? (dayWorkouts ?? []) : listWorkouts;
   const displayedWorkouts = exerciseFilter
     ? baseWorkouts.filter(w => w.exercises.some(ex => ex.name === exerciseFilter))
     : baseWorkouts;
@@ -251,7 +286,7 @@ function HistoryPageContent() {
       // Update local card state + recompute the workout's volume total.
       // (E1RM, PRs, weekly volume, and future suggestions all derive from
       // set_logs at read time — no stored aggregates to fix up.)
-      setWorkouts(prev =>
+      mutateWorkouts(prev =>
         prev.map(w => {
           if (w.id !== workoutId) return w;
           const exercises = w.exercises.map(ex =>
@@ -344,7 +379,7 @@ function HistoryPageContent() {
       await supabase.from('workout_sessions').delete().in('id', workoutIds);
 
       // Update local state
-      setWorkouts(workouts.filter(w => !selectedWorkouts.has(w.id)));
+      mutateWorkouts(prev => prev.filter(w => !selectedWorkouts.has(w.id)));
       setSelectedWorkouts(new Set());
       setIsSelectMode(false);
     } catch (err) {
@@ -374,7 +409,7 @@ function HistoryPageContent() {
       await supabase.from('exercise_blocks').delete().eq('workout_session_id', workoutId);
       await supabase.from('workout_sessions').delete().eq('id', workoutId);
       
-      setWorkouts(workouts.filter(w => w.id !== workoutId));
+      mutateWorkouts(prev => prev.filter(w => w.id !== workoutId));
     } catch (err) {
       console.error('Failed to delete workout:', err);
       setActionError('Failed to delete workout. Please try again.');
@@ -635,10 +670,31 @@ function HistoryPageContent() {
       setIsLoadingMore(false);
   };
 
+  // Seed the accumulated list from the cached first page exactly once per
+  // mount. On a revisit the cache is warm, so this runs on the first render
+  // and there is no full-screen loader. Later mutations go through
+  // mutateWorkouts (state + cache) so this guard won't clobber paginated pages.
+  const seededRef = useRef(false);
   useEffect(() => {
-    fetchHistoryPage(0);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (!seededRef.current && firstPageQuery.data) {
+      seededRef.current = true;
+      setWorkouts(firstPageQuery.data);
+      setHasMore(firstPageQuery.data.length === PAGE_SIZE);
+      setIsLoading(false);
+    }
+  }, [firstPageQuery.data]);
+
+  // Update the visible list AND the persisted first-page cache together, so a
+  // delete/edit survives a revisit without a refetch.
+  const mutateWorkouts = useCallback(
+    (updater: (prev: WorkoutHistory[]) => WorkoutHistory[]) => {
+      setWorkouts(updater);
+      queryClient.setQueryData<WorkoutHistory[]>(HISTORY_FIRST_PAGE_KEY, (prev) =>
+        prev ? updater(prev) : prev
+      );
+    },
+    [queryClient]
+  );
 
   const handleLoadMore = () => {
     if (isLoadingMore) return;
@@ -825,9 +881,12 @@ function HistoryPageContent() {
     );
   };
 
-  if (isLoading) {
+  // Full-screen loader only on first-ever load with an empty cache. A revisit
+  // (warm in-memory cache) or reload (IndexedDB restore) has first-page data
+  // available immediately, so it renders the list instead of blocking.
+  if (isLoading && !firstPageQuery.data && !isRestoring) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-6" data-testid="history-full-loading">
         <div>
           <h1 className="text-2xl font-bold text-surface-100">Workout History</h1>
           <p className="text-surface-400 mt-1">Your past training sessions</p>

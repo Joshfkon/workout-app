@@ -423,6 +423,43 @@ FITBIT_CLIENT_SECRET=
 
 6. **Database constraints**: Check migrations for constraints (e.g., reps have upper bounds of 999)
 
+## Loading States & Data Caching (cached-first)
+
+Dashboard data views use a **cached-first / stale-while-revalidate** model via
+React Query. Follow this so navigation stays instant and we don't regress to
+blocking spinners.
+
+- **Single cache layer**: React Query only. The `QueryProvider`
+  (`components/providers/QueryProvider.tsx`) is mounted once at the dashboard
+  shell (`app/(dashboard)/layout.tsx`) with `QueryClientProvider` +
+  `PersistQueryClientProvider`. Do **not** add SWR or a second `QueryClient`.
+- **Full-viewport loaders are for cold start only.** A full-screen
+  `LoadingAnimation`/`FullPageLoading` may render **only** on the first-ever
+  load with an empty persisted cache. Every revisit, day/param switch, or warm
+  reload must render cached data or region-scoped skeletons — never a
+  full-page spinner. Gate the cold-start branch like:
+  `if (isLoading && !query.data && !isRestoring)` (see `useIsRestoring`), and
+  reserve a `*-full-loading` testid for that branch so the guardrail test can
+  assert it never appears on a revisit.
+- **New data views**: fetch with `useQuery`, not `fetch`-in-`useEffect` +
+  early-return spinner. Key by a stable, `PERSISTED_QUERY_PREFIXES`-prefixed
+  key (`lib/query/queryClient.ts`) if it should survive reloads.
+- **Cache policy**: immutable-in-practice data (past nutrition days, completed
+  history, DEXA scans, exercise catalog, a template's contents) gets a long
+  `staleTime` (`IMMUTABLE_GC_TIME`) + explicit invalidation on edit. Live data
+  (today's totals) gets a short `staleTime` with background refetch. Param
+  switches use `placeholderData: keepPreviousData` so the page never unmounts
+  to a spinner; skeleton only the numbers via `isPlaceholderData`.
+- **Mutations** must keep the cache correct: `queryClient.setQueryData` for
+  optimistic updates (see the nutrition/exercises/history pages) or
+  `invalidateQueries` on edits, so a revisit never shows stale data. Never
+  disturb the active-workout Zustand/outbox state — it is out of scope.
+- **Exemplar**: the Eat page (`app/(dashboard)/dashboard/nutrition/page.tsx`)
+  and its hooks (`hooks/useNutritionData.ts`).
+- **Guardrail test**: `ux-audit/verify/lib.mjs#assertNoReloadSpinner` fails if
+  a page's loading testid appears on an SPA revisit; per-surface specs live in
+  `ux-audit/verify/`.
+
 ## CI/CD
 
 GitHub Actions workflow (`.github/workflows/test.yml`):
