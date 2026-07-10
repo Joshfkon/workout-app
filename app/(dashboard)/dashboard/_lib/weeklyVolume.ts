@@ -17,6 +17,24 @@ import {
   type StandardMuscleGroup,
 } from '@/types/schema';
 import { toStandardMuscleForVolume } from '@/lib/migrations/muscle-groups';
+import { rollingWindowStartISO } from '@/lib/date/localDay';
+
+/**
+ * The "this week" window for weekly volume: a trailing 7 local days including
+ * today (the UI labels it "rolling 7 days"). Anchored to the START of the local
+ * day via the localDay module, so EVERY consumer — the home glance tile
+ * (server + client), the volume page's "This week vs MEV" card, and any
+ * relaunch-invariance test — filters `workout_sessions.completed_at` against the
+ * exact same lower bound. The bound depends only on which local day it is
+ * computed on, never on the time of day, which is what makes the set count
+ * stable across a force-quit/relaunch (the 71→87 regression).
+ */
+export const WEEKLY_VOLUME_WINDOW_DAYS = 7;
+
+/** ISO lower bound for the weekly-volume DB range filter. Pass `now` in tests. */
+export function weeklyVolumeWindowStartISO(now: Date = new Date()): string {
+  return rollingWindowStartISO(WEEKLY_VOLUME_WINDOW_DAYS, now);
+}
 
 // MEV per standard muscle (20 muscles) — the threshold for the 'low' status.
 export const MEV_TARGETS: Record<StandardMuscleGroup, number> = {
