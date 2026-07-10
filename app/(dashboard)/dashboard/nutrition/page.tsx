@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo, Suspense } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, useIsRestoring } from '@tanstack/react-query';
 import dynamic from 'next/dynamic';
 import { Card, CardHeader, CardTitle, CardContent, Button, LoadingAnimation, SwipeableRow, ToastContainer, useToasts } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
@@ -304,25 +304,32 @@ function NutritionPageContent() {
   const yesterdayQuery = useNutritionDay(yesterdayKey);
   const globalQuery = useNutritionGlobal(isMounted);
 
+  // True while React Query rehydrates its cache from IndexedDB on a cold reload.
+  // During this window queries are paused (no data yet) but the cache is warm —
+  // so we must NOT show the full-screen heart; skeletons cover the gap instead.
+  const isRestoring = useIsRestoring();
+
   const foodEntries = dayQuery.data ?? [];
   const yesterdayEntries = yesterdayQuery.data ?? [];
 
   // keepPreviousData hands us the PREVIOUS day's rows while a never-fetched day
-  // loads (isPlaceholderData). We show skeletons for the numbers rather than a
+  // loads (isPlaceholderData). Show skeletons for the numbers rather than a
   // different day's data. Already-cached days resolve with
-  // isPlaceholderData=false → instant, no skeleton, no flash.
-  const isDaySwitching = dayQuery.isPlaceholderData;
+  // isPlaceholderData=false → instant, no skeleton, no flash. Also skeleton
+  // while the persisted cache is still rehydrating.
+  const isDaySwitching = dayQuery.isPlaceholderData || (isRestoring && !dayQuery.data);
 
   // The ONLY state allowed to show the full-screen heart: first-ever load with
   // an empty persisted cache. Also covers the pre-mount / pre-date-init frames
   // where the body can't render (it dereferences selectedDate). A warm reload
-  // restores globalQuery.data from IndexedDB, so status is 'success' and this
-  // is false immediately — no spinner. `status === 'pending'` (not isLoading)
-  // because a disabled query reports isLoading=false.
+  // rehydrates globalQuery.data from IndexedDB, so this stays false during
+  // restoration (isRestoring) and after (status 'success') — no spinner.
+  // `status === 'pending'` (not isLoading) because a disabled query reports
+  // isLoading=false.
   const isColdStart =
     !isMounted ||
     !selectedDate ||
-    (!globalQuery.data && globalQuery.status === 'pending');
+    (!isRestoring && !globalQuery.data && globalQuery.status === 'pending');
 
   // Optimistic writer for the selected day's cache. Drop-in replacement for the
   // old setFoodEntries(setState) used by every mutation/undo path.
