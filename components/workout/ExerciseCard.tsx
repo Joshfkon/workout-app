@@ -7,7 +7,7 @@ import type { Exercise, ExerciseBlock, SetLog, WeightUnit, SetQuality, SetFeedba
 import { rpeToRir, muscleMatchesGroup } from '@/types/schema';
 import { convertWeight, formatMuscleName, formatWeightValue, convertWeightForDisplay, inputWeightToKg, roundToPlateIncrement } from '@/lib/utils';
 import { recommendSet, recommendSessionStart, estimateRepsForWeight, predictAmrapReps, recommendSeedForSlot, type SeedRecommendation } from '@/services/setRecommender';
-import { inferSetRole, type SetRole } from '@/services/suggestionEngine/setRoles';
+import { inferSetRole, sessionTopSetWeightKg, type SetRole } from '@/services/suggestionEngine/setRoles';
 import { RAMP_LOAD_FRACTION, WORKING_WEIGHT_CLAMP_FRACTION } from '@/services/suggestionEngine/constants';
 import { findSimilarExercises, calculateSimilarityScore } from '@/services/exerciseSwapper';
 import { filterExercisesByEquipment } from '@/services/equipmentFilter';
@@ -598,6 +598,33 @@ export const ExerciseCard = memo(function ExerciseCard({
     [previousSets, previousTopSetWeightKg, anchorE1RMKg, block.targetRepRange, effectiveTargetRir, exercise.minWeightIncrementKg]
   );
 
+  // Role of a completed set: its stored role wins; otherwise infer against the
+  // heavier of this session's top-so-far and last session's top working weight
+  // (matches the log-time inference in the workout page).
+  const roleOfCompletedSet = useCallback(
+    (s: SetLog): SetRole => {
+      if (s.setRole === 'working' || s.setRole === 'ramp') return s.setRole;
+      const topKg = Math.max(
+        previousTopSetWeightKg,
+        sessionTopSetWeightKg(completedSets.map((c) => ({ weightKg: c.weightKg })))
+      );
+      return inferSetRole(s.weightKg, topKg);
+    },
+    [completedSets, previousTopSetWeightKg]
+  );
+
+  // The set the within-session recommender should anchor on: the most recent
+  // completed WORKING set. Anchoring on a ramp/feeder set would re-derive the
+  // next working slot's load from the feeder (the original bug), so ramp sets
+  // are skipped — when only ramps have been logged this returns undefined and
+  // the caller falls back to the e1RM-anchored session-start seed.
+  const workingAnchorSet = useMemo(() => {
+    for (let i = completedSets.length - 1; i >= 0; i--) {
+      if (roleOfCompletedSet(completedSets[i]) !== 'ramp') return completedSets[i];
+    }
+    return undefined;
+  }, [completedSets, roleOfCompletedSet]);
+
   // Track the last known completed sets count to detect changes
   const prevCompletedCountRef = useRef(completedSets.length);
 
@@ -616,14 +643,30 @@ export const ExerciseCard = memo(function ExerciseCard({
     };
   }, []);
 
-  // Recalculate pending inputs based on the last completed set
+  // Recalculate pending inputs based on the last completed WORKING set (a
+  // trailing ramp/feeder must not anchor the next working slot).
   const recalculatePendingInputs = useCallback(() => {
     if (pendingSetsCount === 0) return;
 
     const targetRpe = 10 - effectiveTargetRir;
-    const lastCompleted = completedSets[completedSets.length - 1];
+    const lastCompleted = workingAnchorSet;
 
-    if (!lastCompleted) return;
+    // No working set to anchor on yet (e.g. only a ramp logged) → seed each
+    // pending slot from its role-aware session-start prescription instead.
+    if (!lastCompleted) {
+      const seeded: { weight: string; reps: string; rpe: string }[] = [];
+      for (let i = 0; i < pendingSetsCount; i++) {
+        const { seed } = buildSlotSeed(completedSets.length + i);
+        const w = seed.weightKg > 0 ? seed.weightKg : suggestedWeight;
+        seeded.push({
+          weight: seedWeightString(w),
+          reps: String(Math.round((seed.repRange[0] + seed.repRange[1]) / 2)),
+          rpe: String(targetRpe),
+        });
+      }
+      setPendingInputs(seeded);
+      return;
+    }
 
     // Calculate smart defaults using the within-session recommender
     const lastSetData = { weightKg: lastCompleted.weightKg, reps: lastCompleted.reps, rpe: lastCompleted.rpe };
@@ -665,23 +708,34 @@ export const ExerciseCard = memo(function ExerciseCard({
     // based on the just-completed set's performance
     if (currentCount > prevCount) {
       const targetRpe = 10 - effectiveTargetRir;
-      const lastCompleted = completedSets[completedSets.length - 1];
-      
-      // Calculate smart defaults using the shared suggestion engine
-      let smartWeight: number;
-      let smartReps: number;
+      // Anchor on the last completed WORKING set — a trailing ramp/feeder must
+      // not seed the next working slot off the feeder load.
+      const lastCompleted = workingAnchorSet;
 
-      if (lastCompleted) {
-        const lastSetData = { weightKg: lastCompleted.weightKg, reps: lastCompleted.reps, rpe: lastCompleted.rpe };
-        const rec = recommendNext(lastSetData);
-        smartWeight = rec.weightKg;
-        smartReps = rec.reps;
-      } else {
-        smartWeight = suggestedWeight;
-        smartReps = Math.round((block.targetRepRange[0] + block.targetRepRange[1]) / 2);
+      // No working anchor yet (e.g. only a ramp logged) → seed each pending slot
+      // from its role-aware session-start prescription (e1RM for working slots).
+      if (!lastCompleted) {
+        const seeded: { weight: string; reps: string; rpe: string }[] = [];
+        for (let i = 0; i < pendingSetsCount; i++) {
+          const { seed } = buildSlotSeed(completedSets.length + i);
+          const w = seed.weightKg > 0 ? seed.weightKg : suggestedWeight;
+          seeded.push({
+            weight: seedWeightString(w),
+            reps: String(Math.round((seed.repRange[0] + seed.repRange[1]) / 2)),
+            rpe: String(targetRpe),
+          });
+        }
+        setPendingInputs(seeded);
+        return;
       }
 
-      // Create updated pending inputs - all based on the last completed set
+      // Calculate smart defaults using the shared suggestion engine
+      const lastSetData = { weightKg: lastCompleted.weightKg, reps: lastCompleted.reps, rpe: lastCompleted.rpe };
+      const rec = recommendNext(lastSetData);
+      const smartWeight = rec.weightKg;
+      const smartReps = rec.reps;
+
+      // Create updated pending inputs - all based on the last working set
       const updatedInputs: { weight: string; reps: string; rpe: string }[] = [];
       for (let i = 0; i < pendingSetsCount; i++) {
         const isLastSet = i === pendingSetsCount - 1;
@@ -691,12 +745,11 @@ export const ExerciseCard = memo(function ExerciseCard({
         // For AMRAP sets, use bounded prediction
         let setReps = smartReps;
         if (isLastSet && isAmrapSuggested && lastCompleted?.rpe) {
-          const lastSetData = { weightKg: lastCompleted.weightKg, reps: lastCompleted.reps, rpe: lastCompleted.rpe };
           setReps = Math.max(amrapReps(lastSetData), smartReps);
         }
 
         updatedInputs.push({
-          weight: seedWeightString(smartWeight, lastCompleted?.weightKg),
+          weight: seedWeightString(smartWeight, lastCompleted.weightKg),
           reps: String(setReps),
           rpe: String(setRpe),
         });
@@ -728,13 +781,14 @@ export const ExerciseCard = memo(function ExerciseCard({
         
         const setIndex = completedSets.length + i;
         const prevSet = previousSets[setIndex];
-        const lastCompleted = completedSets[completedSets.length - 1];
+        // Anchor on the last completed WORKING set, not a trailing ramp/feeder.
+        const lastCompleted = workingAnchorSet;
         const isLastSet = i === pendingSetsCount - 1;
-        
+
         let defaultWeight: number;
         let defaultReps: number;
         let defaultRpe: number;
-        
+
         if (lastCompleted) {
           const lastSetData = { weightKg: lastCompleted.weightKg, reps: lastCompleted.reps, rpe: lastCompleted.rpe };
           const rec = recommendNext(lastSetData);
@@ -1131,7 +1185,10 @@ export const ExerciseCard = memo(function ExerciseCard({
     showRir: boolean;
     role: SetRole;
   } => {
-    const lastCompleted = completedSets[completedSets.length - 1];
+    // Anchor on the last WORKING set (not a trailing ramp/feeder) so the next
+    // working slot isn't re-derived from a feeder load. When only ramps are
+    // logged, this is undefined → fall through to the e1RM session-start seed.
+    const lastCompleted = workingAnchorSet;
     const explanation: string[] = [];
     let reason: string;
     let weight = '';

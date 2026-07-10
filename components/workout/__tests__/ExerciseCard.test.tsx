@@ -487,6 +487,41 @@ describe('ExerciseCard', () => {
       expect(screen.getByText(/starting point estimated/)).toBeInTheDocument();
     });
 
+    it('does not anchor the next working slot on a completed ramp/feeder set', () => {
+      // Failure case: set 1 was a light feeder (90 vs a 160 top set). After it is
+      // logged, the FIRST working slot must anchor on the e1RM (252.5 → ~175 kg,
+      // rep RANGE), not bump off the 90 kg feeder — and never say "too light".
+      const history = {
+        lastWorkoutDate: weeksAgo(1),
+        lastWorkoutSets: [
+          { weightKg: 90, reps: 13, rpe: 6 },
+          { weightKg: 140, reps: 14, rpe: 7.5 },
+          { weightKg: 160, reps: 8, rpe: 7.5 },
+          { weightKg: 160, reps: 11, rpe: 9 },
+        ],
+        estimatedE1RM: 252.5,
+        personalRecord: null,
+        totalSessions: 3,
+      };
+
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          block={createMockBlock({ targetSets: 4, targetWeightKg: 0 })}
+          sets={[createMockSetLog({ id: 'ramp-1', setNumber: 1, weightKg: 90, reps: 13, rpe: 6 })]}
+          isActive={true}
+          previousSets={history.lastWorkoutSets}
+          exerciseHistory={history}
+          onSetComplete={jest.fn().mockResolvedValue('id')}
+        />
+      );
+
+      expect(screen.getByText(/175 kg × 8–12 @ 2 RIR/)).toBeInTheDocument();
+      expect(screen.queryByText(/clearly too light/)).not.toBeInTheDocument();
+      // The feeder-anchored bump (~92.5 kg) must not appear.
+      expect(screen.queryByText(/92\.5 kg ×/)).not.toBeInTheDocument();
+    });
+
     it('surfaces the readiness easing in the suggestion reason', () => {
       render(
         <ExerciseCard

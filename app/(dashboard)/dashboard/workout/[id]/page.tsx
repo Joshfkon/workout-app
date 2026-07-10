@@ -1794,15 +1794,23 @@ export default function WorkoutPage() {
         }
       }
 
-      // Infer the set role (working | ramp) from this set's load vs the block's
-      // top working set so far, so ramp/feeder sets aren't graded or counted as
-      // junk volume. Provisional at log time (a heavier later set can't retro-
-      // relabel an earlier row live); the set_roles migration recomputes roles
-      // authoritatively once a session's sets are all known.
+      // Infer the set role (working | ramp) so ramp/feeder sets aren't graded or
+      // counted as junk volume. The reference is the HEAVIER of this session's
+      // top-so-far and last session's top working weight — so a feeder logged
+      // BEFORE its heavier working sets still classifies as ramp (a later heavier
+      // set can't retro-relabel an earlier row live). Only a first-ever session
+      // with a feeder logged first lacks a reference; the set_roles migration
+      // recomputes authoritatively over completed history. (A uniformly-lighter
+      // deload session may tag its lightest sets ramp — acceptable, low stimulus.)
       const blockWorkingSets = completedSets
         .filter((s) => s.exerciseBlockId === currentBlock.id && !s.isWarmup)
         .map((s) => ({ weightKg: s.weightKg }));
-      const blockTopKg = sessionTopSetWeightKg([...blockWorkingSets, { weightKg: data.weightKg }]);
+      const prevTopKg = (exerciseHistories[currentBlock.exerciseId]?.lastWorkoutSets ?? [])
+        .reduce((m, s) => (s.weightKg > m ? s.weightKg : m), 0);
+      const blockTopKg = Math.max(
+        sessionTopSetWeightKg([...blockWorkingSets, { weightKg: data.weightKg }]),
+        prevTopKg
+      );
       const setRole = data.weightKg > 0 ? inferSetRole(data.weightKg, blockTopKg) : 'working';
 
       const setId = crypto.randomUUID();
