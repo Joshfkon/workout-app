@@ -1,10 +1,18 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useQuery, useQueryClient, useIsRestoring } from '@tanstack/react-query';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { Card, Input, Badge, Button, LoadingAnimation, SkeletonExercise } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
+
+// Immutable-in-practice catalog: cache it long and persist to IndexedDB so
+// revisiting Exercises renders instantly instead of re-blocking on a spinner.
+const EXERCISE_CATALOG_KEY = ['exercises', 'catalog'] as const;
+const EXERCISE_CATALOG_COLUMNS =
+  'id, name, primary_muscle, secondary_muscles, mechanic, form_cues, common_mistakes, equipment_required, equipment, movement_pattern, is_bodyweight, bodyweight_type, assistance_type, is_custom, hypertrophy_tier, stretch_under_load, resistance_profile, progression_ease, demo_gif_url, demo_thumbnail_url, youtube_video_id';
 import { MUSCLE_GROUPS, muscleMatchesGroup } from '@/types/schema';
 import { EQUIPMENT_OPTIONS } from '@/lib/exercises/types';
 import { formatWeight, convertWeight, estimateE1RM } from '@/lib/utils';
@@ -103,8 +111,7 @@ interface ExerciseHistory {
 
 export default function ExercisesPage() {
   const [mounted, setMounted] = useState(false);
-  const [exercises, setExercises] = useState<Exercise[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [selectedMuscle, setSelectedMuscle] = useState<string | null>(null);
   const [selectedEquipment, setSelectedEquipment] = useState<string | null>(null);
@@ -164,24 +171,46 @@ export default function ExercisesPage() {
     setMounted(true);
   }, []);
 
-  useEffect(() => {
-    async function fetchExercises() {
+  const catalogQuery = useQuery({
+    queryKey: EXERCISE_CATALOG_KEY,
+    queryFn: async () => {
       const supabase = createUntypedClient();
       const { data, error } = await supabase
         .from('exercises')
-        .select('id, name, primary_muscle, secondary_muscles, mechanic, form_cues, common_mistakes, equipment_required, equipment, movement_pattern, is_bodyweight, bodyweight_type, assistance_type, is_custom, hypertrophy_tier, stretch_under_load, resistance_profile, progression_ease, demo_gif_url, demo_thumbnail_url, youtube_video_id')
+        .select(EXERCISE_CATALOG_COLUMNS)
         .order('name');
+      if (error) throw error;
+      return (data ?? []) as Exercise[];
+    },
+    enabled: mounted,
+    staleTime: IMMUTABLE_GC_TIME,
+    gcTime: IMMUTABLE_GC_TIME,
+  });
 
-      if (data && !error) {
-        setExercises(data);
-      }
-      setIsLoading(false);
-    }
+  const exercises = catalogQuery.data ?? [];
 
-    if (mounted) {
-      fetchExercises();
-    }
-  }, [mounted]);
+  // While the persisted cache rehydrates from IndexedDB on a cold reload, the
+  // query is paused (no data yet) but the cache is warm — don't flash the
+  // skeleton then.
+  const isRestoring = useIsRestoring();
+
+  // Skeleton only when we have NO catalog to show and aren't mid-restore. A
+  // disabled/pre-mount query still returns cached data, so a revisit (SPA) or
+  // warm reload (IndexedDB) renders the list immediately without the skeleton
+  // flash; only the first-ever load (empty cache) shows it. Keeping `!mounted`
+  // in the empty case preserves the server/client hydration match.
+  const isCatalogLoading =
+    !isRestoring && (!mounted || catalogQuery.isLoading) && exercises.length === 0;
+
+  // Optimistic writer for the cached catalog — drop-in for the old setExercises.
+  const mutateExercises = useCallback(
+    (updater: Exercise[] | ((prev: Exercise[]) => Exercise[])) => {
+      queryClient.setQueryData<Exercise[]>(EXERCISE_CATALOG_KEY, (prev = []) =>
+        typeof updater === 'function' ? updater(prev) : updater
+      );
+    },
+    [queryClient]
+  );
 
   const fetchExerciseHistory = async (exerciseId: string) => {
     if (exerciseHistories[exerciseId]) return; // Already loaded
@@ -407,7 +436,7 @@ export default function ExercisesPage() {
       if (error) throw error;
       
       // Update local state
-      setExercises(prev => prev.map(ex => 
+      mutateExercises(prev => prev.map(ex => 
         ex.id === editingExercise.id 
           ? { 
               ...ex, 
@@ -475,7 +504,7 @@ export default function ExercisesPage() {
       }
       
       // Remove from local state
-      setExercises(prev => prev.filter(ex => ex.id !== deletingExercise.id));
+      mutateExercises(prev => prev.filter(ex => ex.id !== deletingExercise.id));
       
       // Close modal
       setDeletingExercise(null);
@@ -539,7 +568,7 @@ export default function ExercisesPage() {
         <div>
           <h1 className="text-2xl font-bold text-surface-100">Exercise Library</h1>
           <p className="text-surface-400 mt-1">
-            {isLoading ? 'Loading...' : `${exercises.length} exercises available`}
+            {isCatalogLoading ? 'Loading...' : `${exercises.length} exercises available`}
           </p>
         </div>
         <div className="flex gap-3">
@@ -568,7 +597,7 @@ export default function ExercisesPage() {
               const supabase = createUntypedClient();
               const { data } = await supabase.from('exercises').select('*').order('name');
               if (data) {
-                setExercises(data as Exercise[]);
+                mutateExercises(data as Exercise[]);
               }
             }}
             disabled={isBatchCompleting}
@@ -767,8 +796,8 @@ export default function ExercisesPage() {
       </div>
 
       {/* Exercise list */}
-      {!mounted || isLoading ? (
-        <div className="space-y-4">
+      {isCatalogLoading ? (
+        <div className="space-y-4" data-testid="exercises-loading">
           <div className="flex justify-center py-8">
             <LoadingAnimation type="random" size="lg" text="Loading exercises..." />
           </div>
@@ -1227,7 +1256,7 @@ export default function ExercisesPage() {
         </div>
       )}
 
-      {!isLoading && filteredExercises.length === 0 && (
+      {!isCatalogLoading && filteredExercises.length === 0 && (
         <Card className="text-center py-12">
           <p className="text-surface-400">No exercises found</p>
           <p className="text-sm text-surface-500 mt-1">
