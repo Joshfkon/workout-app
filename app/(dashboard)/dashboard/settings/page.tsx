@@ -1,9 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useQuery, useQueryClient, useIsRestoring } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent, Button, Input, Select, Slider, Badge, Toggle, LoadingAnimation, Modal } from '@/components/ui';
+import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
+
+const SETTINGS_KEY = ['settings', 'user'] as const;
 import { STANDARD_MUSCLE_GROUPS, STANDARD_MUSCLE_DISPLAY_NAMES, DEFAULT_VOLUME_LANDMARKS, MUSCLE_GROUPS } from '@/types/schema';
 import type { Goal, Experience, WeightUnit, Equipment, StandardMuscleGroup, MuscleGroup, Rating } from '@/types/schema';
 import { createUntypedClient } from '@/lib/supabase/client';
@@ -146,18 +150,48 @@ export default function SettingsPage() {
   };
 
   // Load settings on mount and when page becomes visible
-  useEffect(() => {
-    async function loadSettings() {
+  const queryClient = useQueryClient();
+  const isRestoring = useIsRestoring();
+
+  // User settings row cached so returning to Settings renders instantly instead
+  // of re-blocking. Moderate staleTime + refetch on tab focus keeps it fresh.
+  const settingsQuery = useQuery({
+    queryKey: SETTINGS_KEY,
+    queryFn: async () => {
       const supabase = createUntypedClient();
       const { data: { user } } = await supabase.auth.getUser();
-      
-      if (user) {
-        setUserId(user.id);
-        const { data } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', user.id)
-          .single();
+      if (!user) return null;
+      const { data } = await supabase.from('users').select('*').eq('id', user.id).single();
+      const { data: latestWeightLog } = await supabase
+        .from('weight_log')
+        .select('weight, unit, logged_at')
+        .eq('user_id', user.id)
+        .order('logged_at', { ascending: false })
+        .limit(1)
+        .single();
+      return { userId: user.id, userRow: data, latestWeightLog };
+    },
+    staleTime: 1000 * 60,
+    gcTime: IMMUTABLE_GC_TIME,
+  });
+
+  // Refresh helper for the visibility handler (kept as loadSettings for minimal
+  // churn) — refetches the cached query.
+  const loadSettings = useCallback(async () => {
+    await queryClient.refetchQueries({ queryKey: SETTINGS_KEY });
+  }, [queryClient]);
+
+  // Fan the cached settings bundle into local editing state.
+  useEffect(() => {
+    if (settingsQuery.data === null) {
+      setIsLoading(false);
+      return;
+    }
+    if (!settingsQuery.data) return;
+    {
+      const { userId: uid, userRow: data, latestWeightLog } = settingsQuery.data;
+      {
+        setUserId(uid);
 
         if (data) {
           setGoal(data.goal || 'maintenance');
@@ -177,15 +211,7 @@ export default function SettingsPage() {
               : String(data.height_cm);
             setHeightDisplay(displayHeight);
           }
-          // Load latest weight from weight_log (most recent), fallback to users.weight_kg
-          const { data: latestWeightLog } = await supabase
-            .from('weight_log')
-            .select('weight, unit, logged_at')
-            .eq('user_id', user.id)
-            .order('logged_at', { ascending: false })
-            .limit(1)
-            .single();
-
+          // latestWeightLog comes from the cached query bundle above.
           let weightToDisplay: number | null = null;
           if (latestWeightLog) {
             // Use unified weight utility to validate and convert
@@ -245,22 +271,21 @@ export default function SettingsPage() {
           }
         }
       }
-      setIsLoading(false);
     }
-    loadSettings();
+    setIsLoading(false);
+  }, [settingsQuery.data]);
 
-    // Reload weight when page becomes visible (in case user logged weight in another tab)
+  // Refresh settings when the tab regains focus (weight may have changed in
+  // another tab) — refetches the cached query.
+  useEffect(() => {
     const handleVisibilityChange = () => {
-      if (!document.hidden) {
-        loadSettings();
-      }
+      if (!document.hidden) void loadSettings();
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
-
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, []);
+  }, [loadSettings]);
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -371,9 +396,11 @@ export default function SettingsPage() {
     }
   };
 
-  if (isLoading) {
+  // Full-screen loader only on first-ever load with an empty cache. A revisit
+  // (warm cache) or reload (IndexedDB restore) renders settings immediately.
+  if (isLoading && !settingsQuery.data && !isRestoring) {
     return (
-      <div className="max-w-2xl mx-auto flex flex-col items-center justify-center py-20">
+      <div className="max-w-2xl mx-auto flex flex-col items-center justify-center py-20" data-testid="settings-full-loading">
         <LoadingAnimation type="random" size="lg" />
         <p className="mt-4 text-surface-400">Loading settings...</p>
       </div>

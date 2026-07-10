@@ -28,6 +28,8 @@ export const PERSISTED_QUERY_PREFIXES = [
   'analytics',      // DEXA / lift-trend history
   'exercises',      // static exercise catalog
   'templateDetail', // a single template's contents
+  'templates',      // the folders + templates list
+  'settings',       // user settings/preferences row
 ] as const;
 
 export function shouldPersistQueryKey(queryKey: readonly unknown[]): boolean {
