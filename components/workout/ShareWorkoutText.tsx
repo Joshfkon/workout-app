@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { Button, Modal, ModalFooter, Toggle } from '@/components/ui';
+import { useTextShare } from '@/hooks/useTextShare';
 import {
   formatWorkoutShareText,
   type WorkoutShareTextInput,
@@ -19,43 +20,14 @@ interface ShareWorkoutTextProps {
 export function ShareWorkoutText({ input }: ShareWorkoutTextProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [cryptic, setCryptic] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const { share, copied } = useTextShare();
 
   const shareText = useMemo(
     () => formatWorkoutShareText({ ...input, cryptic }),
     [input, cryptic]
   );
 
-  const handleShare = async () => {
-    try {
-      const { Capacitor } = await import('@capacitor/core');
-      if (Capacitor.isNativePlatform()) {
-        const { Share } = await import('@capacitor/share');
-        await Share.share({ text: shareText });
-        return;
-      }
-    } catch {
-      // Plugin unavailable — fall through to the web paths.
-    }
-
-    if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
-      try {
-        await navigator.share({ text: shareText });
-        return;
-      } catch (err) {
-        // User cancelled the sheet — not an error, and don't copy instead.
-        if (err instanceof Error && err.name === 'AbortError') return;
-      }
-    }
-
-    try {
-      await navigator.clipboard.writeText(shareText);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Clipboard blocked (permissions) — the preview is selectable as a last resort.
-    }
-  };
+  const handleShare = () => share(shareText);
 
   return (
     <>
