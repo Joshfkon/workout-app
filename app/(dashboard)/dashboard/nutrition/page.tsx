@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect, useRef, Suspense } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, Suspense } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import dynamic from 'next/dynamic';
 import { Card, CardHeader, CardTitle, CardContent, Button, LoadingAnimation, SwipeableRow, ToastContainer, useToasts } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
@@ -34,6 +35,14 @@ import { MacroSummaryCard } from '@/components/nutrition/MacroSummaryCard';
 import { StickyMacroBar } from '@/components/nutrition/StickyMacroBar';
 import { NutritionQuickActions } from '@/components/nutrition/NutritionQuickActions';
 import { useDailyNutritionSummary } from '@/hooks/useDailyNutritionSummary';
+import {
+  useNutritionDay,
+  useNutritionGlobal,
+  nutritionDayKey,
+  fetchFoodLog,
+  NUTRITION_GLOBAL_KEY,
+  type NutritionGlobalBundle,
+} from '@/hooks/useNutritionData';
 import { recalculateMacrosForWeight } from '@/lib/actions/nutrition';
 import { getAdaptiveTDEE, onWeightLoggedRecalculateTDEE, resetAndRecalculateTDEE, type TDEEData } from '@/lib/actions/tdee';
 import { TDEEDashboard } from '@/components/nutrition/TDEEDashboard';
@@ -153,18 +162,50 @@ interface FoodLogInsert {
   nutritionix_id?: string;
 }
 
+/** Skeleton for the macro summary numbers while a never-fetched day loads. */
+function MacroNumbersSkeleton() {
+  return (
+    <div
+      className="rounded-2xl border border-surface-800 bg-surface-900 p-4 animate-pulse"
+      aria-hidden="true"
+    >
+      <div className="mb-4 flex items-center justify-between">
+        <div className="h-6 w-24 rounded bg-surface-800" />
+        <div className="h-4 w-16 rounded bg-surface-800" />
+      </div>
+      <div className="grid grid-cols-4 gap-3">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="space-y-2 text-center">
+            <div className="mx-auto h-7 w-12 rounded bg-surface-800" />
+            <div className="mx-auto h-3 w-10 rounded bg-surface-800" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Skeleton for a single meal section while a never-fetched day loads. */
+function MealSectionSkeleton() {
+  return (
+    <div className="rounded-2xl border border-surface-800 bg-surface-900 p-4 animate-pulse">
+      <div className="flex items-center justify-between">
+        <div className="h-4 w-28 rounded bg-surface-800" />
+        <div className="h-3 w-16 rounded bg-surface-800" />
+      </div>
+    </div>
+  );
+}
+
 function NutritionPageContent() {
   // Defer date initialization to client to prevent hydration mismatches
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [isMounted, setIsMounted] = useState(false);
-  const [foodEntries, setFoodEntries] = useState<FoodLogEntry[]>([]);
-  const [yesterdayEntries, setYesterdayEntries] = useState<FoodLogEntry[]>([]);
   const [weightEntries, setWeightEntries] = useState<WeightLogEntry[]>([]);
   const [nutritionTargets, setNutritionTargets] = useState<NutritionTargets | null>(null);
   const [customFoods, setCustomFoods] = useState<CustomFood[]>([]);
   const [frequentFoods, setFrequentFoods] = useState<FrequentFood[]>([]);
   const [systemFoods, setSystemFoods] = useState<SystemFood[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [userProfile, setUserProfile] = useState<UserProfileData>({});
   const [tdeeData, setTdeeData] = useState<TDEEData | null>(null);
   const [weightUnit, setWeightUnit] = useState<'lb' | 'kg'>('lb');
@@ -244,344 +285,263 @@ function NutritionPageContent() {
     }
   }, [isMounted, selectedDate]);
 
-  // Guard data loading until date is available
-  useEffect(() => {
-    if (selectedDate) {
-      loadData();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  const queryClient = useQueryClient();
+
+  // Yesterday relative to the selected date — powers "Copy yesterday" and
+  // doubles as the day-1 prefetch.
+  const yesterdayKey = useMemo(() => {
+    if (!selectedDate) return null;
+    const d = new Date(selectedDate + 'T00:00:00');
+    d.setDate(d.getDate() - 1);
+    return getLocalDateString(d);
   }, [selectedDate]);
 
-  async function loadData() {
-    // Guard: don't load data if date is not available
-    if (!selectedDate) {
-      setIsLoading(false);
-      return;
+  // Per-day food log is cached-first with keepPreviousData, so switching days
+  // never unmounts the page to a full-screen spinner. The date-independent
+  // user context (targets, weight, profile, TDEE, …) is a separate query,
+  // cached once and reused across date switches AND route revisits.
+  const dayQuery = useNutritionDay(selectedDate);
+  const yesterdayQuery = useNutritionDay(yesterdayKey);
+  const globalQuery = useNutritionGlobal(isMounted);
+
+  const foodEntries = dayQuery.data ?? [];
+  const yesterdayEntries = yesterdayQuery.data ?? [];
+
+  // keepPreviousData hands us the PREVIOUS day's rows while a never-fetched day
+  // loads (isPlaceholderData). We show skeletons for the numbers rather than a
+  // different day's data. Already-cached days resolve with
+  // isPlaceholderData=false → instant, no skeleton, no flash.
+  const isDaySwitching = dayQuery.isPlaceholderData;
+
+  // The ONLY state allowed to show the full-screen heart: first-ever load with
+  // an empty persisted cache. Also covers the pre-mount / pre-date-init frames
+  // where the body can't render (it dereferences selectedDate). A warm reload
+  // restores globalQuery.data from IndexedDB, so status is 'success' and this
+  // is false immediately — no spinner. `status === 'pending'` (not isLoading)
+  // because a disabled query reports isLoading=false.
+  const isColdStart =
+    !isMounted ||
+    !selectedDate ||
+    (!globalQuery.data && globalQuery.status === 'pending');
+
+  // Optimistic writer for the selected day's cache. Drop-in replacement for the
+  // old setFoodEntries(setState) used by every mutation/undo path.
+  const mutateFoodEntries = useCallback(
+    (updater: FoodLogEntry[] | ((prev: FoodLogEntry[]) => FoodLogEntry[])) => {
+      if (!selectedDate) return;
+      queryClient.setQueryData<FoodLogEntry[]>(nutritionDayKey(selectedDate), (prev = []) =>
+        typeof updater === 'function' ? updater(prev) : updater
+      );
+    },
+    [queryClient, selectedDate]
+  );
+
+  // Prefetch the NEXT day so forward navigation is instant too (day-1 is
+  // already fetched by yesterdayQuery). Predictable navigation → warm cache.
+  useEffect(() => {
+    if (!selectedDate) return;
+    const next = new Date(selectedDate + 'T00:00:00');
+    next.setDate(next.getDate() + 1);
+    const nextKey = getLocalDateString(next);
+    void queryClient.prefetchQuery({
+      queryKey: nutritionDayKey(nextKey),
+      queryFn: () => fetchFoodLog(nextKey),
+    });
+  }, [selectedDate, queryClient]);
+
+  // Fan the cached global bundle back out into the existing local state so
+  // every downstream mutation and derived read stays untouched. Runs once per
+  // load and again on background revalidation.
+  useEffect(() => {
+    if (globalQuery.data) processGlobal(globalQuery.data);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [globalQuery.data]);
+
+  function processGlobal(bundle: NutritionGlobalBundle) {
+    setNutritionTargets(bundle.targets);
+
+    // Process weight entries
+    const rawWeightEntries = bundle.weight || [];
+    setWeightEntries(rawWeightEntries);
+    setCustomFoods(bundle.customFoods || []);
+
+    // Set weight unit preference
+    if (bundle.prefs?.weight_unit) {
+      setWeightUnit(bundle.prefs.weight_unit as 'lb' | 'kg');
     }
 
-    setIsLoading(true);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        setIsLoading(false);
-        return;
-      }
+    // Process frequent foods
+    const frequentData = bundle.frequentRaw;
+    if (frequentData && frequentData.length > 0) {
+      const frequencyMap = new Map<string, FrequentFood>();
 
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      const thirtyDaysAgoStr = getLocalDateString(thirtyDaysAgo);
+      for (const entry of frequentData) {
+        if (!entry.food_name) continue;
+        const key = `${entry.meal_type}:${entry.food_name}`;
+        const existing = frequencyMap.get(key);
+        const servingsNum = entry.servings || 1;
 
-      // Yesterday relative to the selected date (for "Copy yesterday")
-      const previousDay = new Date(selectedDate + 'T00:00:00');
-      previousDay.setDate(previousDay.getDate() - 1);
-      const yesterdayStr = getLocalDateString(previousDay);
-
-      // Run all queries in parallel for faster loading
-      const [
-        foodResult,
-        yesterdayResult,
-        targetsResult,
-        weightResult,
-        customFoodsResult,
-        frequentResult,
-        userResult,
-        dexaResult,
-        mesocycleResult,
-        prefsResult,
-        volumeProfileResult,
-        proteinResult,
-        trainingSetsResult,
-      ] = await Promise.all([
-        // Food log entries for selected date
-        supabase
-          .from('food_log')
-          .select('*')
-          .eq('user_id', user.id)
-          .eq('logged_at', selectedDate)
-          .order('created_at', { ascending: true }),
-        // Food log entries for the previous day (Copy yesterday)
-        supabase
-          .from('food_log')
-          .select('*')
-          .eq('user_id', user.id)
-          .eq('logged_at', yesterdayStr)
-          .order('created_at', { ascending: true }),
-        // Nutrition targets - use maybeSingle() to handle missing targets
-        supabase
-          .from('nutrition_targets')
-          .select('*')
-          .eq('user_id', user.id)
-          .maybeSingle(),
-        // Weight entries (last 30 days)
-        supabase
-          .from('weight_log')
-          .select('*')
-          .eq('user_id', user.id)
-          .gte('logged_at', getLocalDateString(thirtyDaysAgo))
-          .order('logged_at', { ascending: false }),
-        // Custom foods
-        supabase
-          .from('custom_foods')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false }),
-        // Frequent foods (aggregated from recent food_log rows; logged_at is indexed)
-        supabase
-          .from('food_log')
-          .select('meal_type, food_name, serving_size, calories, protein, carbs, fat, servings')
-          .eq('user_id', user.id)
-          .order('logged_at', { ascending: false })
-          .limit(200),
-        // User profile data - use maybeSingle() to handle missing data
-        supabase
-          .from('users')
-          .select('height_cm, age, sex, goal')
-          .eq('id', user.id)
-          .maybeSingle(),
-        // DEXA scan data - use maybeSingle() to handle missing scans
-        supabase
-          .from('dexa_scans')
-          .select('body_fat_percent, weight_kg')
-          .eq('user_id', user.id)
-          .order('scan_date', { ascending: false })
-          .limit(1)
-          .maybeSingle(),
-        // Active mesocycle - use maybeSingle() to handle missing mesocycle
-        supabase
-          .from('mesocycles')
-          .select('days_per_week')
-          .eq('user_id', user.id)
-          .eq('state', 'active')
-          .maybeSingle(),
-        // User preferences (for weight unit) - use maybeSingle() to handle missing preferences
-        supabase
-          .from('user_preferences')
-          .select('weight_unit')
-          .eq('user_id', user.id)
-          .maybeSingle(),
-        // User volume profile (for training age and enhanced status) - use maybeSingle()
-        supabase
-          .from('user_volume_profiles')
-          .select('training_age, is_enhanced')
-          .eq('user_id', user.id)
-          .maybeSingle(),
-        // Average daily protein (last 30 days)
-        supabase
-          .from('food_log')
-          .select('protein, logged_at')
-          .eq('user_id', user.id)
-          .gte('logged_at', thirtyDaysAgoStr)
-          .order('logged_at', { ascending: false }),
-        // Weekly training sets (last 30 days)
-        supabase
-          .from('exercise_blocks')
-          .select(`
-            set_logs!inner (id, is_warmup),
-            workout_sessions!inner (completed_at, state)
-          `)
-          .eq('workout_sessions.user_id', user.id)
-          .eq('workout_sessions.state', 'completed')
-          .gte('workout_sessions.completed_at', thirtyDaysAgo.toISOString()),
-      ]);
-
-      // Process results
-      setFoodEntries(foodResult.data || []);
-      setYesterdayEntries(yesterdayResult.data || []);
-      setNutritionTargets(targetsResult.data);
-
-      // Process weight entries
-      const rawWeightEntries = weightResult.data || [];
-      setWeightEntries(rawWeightEntries);
-      setCustomFoods(customFoodsResult.data || []);
-
-      // Set weight unit preference
-      if (prefsResult.data?.weight_unit) {
-        setWeightUnit(prefsResult.data.weight_unit as 'lb' | 'kg');
-      }
-
-      // Process frequent foods
-      const frequentData = frequentResult.data;
-      if (frequentData && frequentData.length > 0) {
-        const frequencyMap = new Map<string, FrequentFood>();
-
-        for (const entry of frequentData) {
-          if (!entry.food_name) continue;
-          const key = `${entry.meal_type}:${entry.food_name}`;
-          const existing = frequencyMap.get(key);
-          const servingsNum = entry.servings || 1;
-
-          if (existing) {
-            const totalLogs = existing.times_logged + 1;
-            existing.avg_calories = (existing.avg_calories * existing.times_logged + (entry.calories || 0) / servingsNum) / totalLogs;
-            existing.avg_protein = (existing.avg_protein * existing.times_logged + (entry.protein || 0) / servingsNum) / totalLogs;
-            existing.avg_carbs = (existing.avg_carbs * existing.times_logged + (entry.carbs || 0) / servingsNum) / totalLogs;
-            existing.avg_fat = (existing.avg_fat * existing.times_logged + (entry.fat || 0) / servingsNum) / totalLogs;
-            existing.times_logged = totalLogs;
-          } else {
-            frequencyMap.set(key, {
-              user_id: user.id,
-              meal_type: entry.meal_type as MealType,
-              food_name: entry.food_name,
-              serving_size: entry.serving_size,
-              avg_calories: (entry.calories || 0) / servingsNum,
-              avg_protein: (entry.protein || 0) / servingsNum,
-              avg_carbs: (entry.carbs || 0) / servingsNum,
-              avg_fat: (entry.fat || 0) / servingsNum,
-              times_logged: 1,
-              last_logged: new Date().toISOString(),
-            });
-          }
-        }
-
-        setFrequentFoods(Array.from(frequencyMap.values()));
-      }
-
-      // Build user profile data
-      const profileData: UserProfileData = {};
-      const weightData = weightResult.data;
-
-      if (weightData && weightData.length > 0) {
-        // Convert weight to lbs for macro calculator
-        const weightEntry = weightData[0] as any;
-        const weightValue = weightEntry.weight || weightEntry.raw_weight || 0;
-        const weightEntryUnit = weightEntry.unit || weightEntry.raw_unit || weightUnit;
-
-        // Convert to lbs if needed
-        if (weightEntryUnit === 'kg') {
-          profileData.weightLbs = weightValue * 2.20462;
+        if (existing) {
+          const totalLogs = existing.times_logged + 1;
+          existing.avg_calories = (existing.avg_calories * existing.times_logged + (entry.calories || 0) / servingsNum) / totalLogs;
+          existing.avg_protein = (existing.avg_protein * existing.times_logged + (entry.protein || 0) / servingsNum) / totalLogs;
+          existing.avg_carbs = (existing.avg_carbs * existing.times_logged + (entry.carbs || 0) / servingsNum) / totalLogs;
+          existing.avg_fat = (existing.avg_fat * existing.times_logged + (entry.fat || 0) / servingsNum) / totalLogs;
+          existing.times_logged = totalLogs;
         } else {
-          profileData.weightLbs = weightValue;
+          frequencyMap.set(key, {
+            user_id: bundle.userId,
+            meal_type: entry.meal_type as MealType,
+            food_name: entry.food_name,
+            serving_size: entry.serving_size,
+            avg_calories: (entry.calories || 0) / servingsNum,
+            avg_protein: (entry.protein || 0) / servingsNum,
+            avg_carbs: (entry.carbs || 0) / servingsNum,
+            avg_fat: (entry.fat || 0) / servingsNum,
+            times_logged: 1,
+            last_logged: new Date().toISOString(),
+          });
         }
       }
 
-      const userData = userResult.data;
-      const userError = userResult.error;
+      setFrequentFoods(Array.from(frequencyMap.values()));
+    }
 
-      if (userError) {
-        setHeightCm(null);
-      } else if (userData) {
-        if (userData.height_cm != null && userData.height_cm !== undefined && userData.height_cm !== '') {
-          const heightValue = typeof userData.height_cm === 'string' ? parseFloat(userData.height_cm) : Number(userData.height_cm);
-          if (!isNaN(heightValue) && heightValue > 0) {
-            profileData.heightInches = Math.round(heightValue / 2.54);
-            setHeightCm(heightValue);
-          } else {
-            setHeightCm(null);
-          }
+    // Build user profile data
+    const profileData: UserProfileData = {};
+    const weightData = bundle.weight;
+
+    if (weightData && weightData.length > 0) {
+      // Convert weight to lbs for macro calculator
+      const weightEntry = weightData[0] as any;
+      const weightValue = weightEntry.weight || weightEntry.raw_weight || 0;
+      const weightEntryUnit = weightEntry.unit || weightEntry.raw_unit || weightUnit;
+
+      // Convert to lbs if needed
+      if (weightEntryUnit === 'kg') {
+        profileData.weightLbs = weightValue * 2.20462;
+      } else {
+        profileData.weightLbs = weightValue;
+      }
+    }
+
+    const userData = bundle.user;
+    const userError = bundle.userError;
+
+    if (userError) {
+      setHeightCm(null);
+    } else if (userData) {
+      if (userData.height_cm != null && userData.height_cm !== undefined && userData.height_cm !== '') {
+        const heightValue = typeof userData.height_cm === 'string' ? parseFloat(userData.height_cm) : Number(userData.height_cm);
+        if (!isNaN(heightValue) && heightValue > 0) {
+          profileData.heightInches = Math.round(heightValue / 2.54);
+          setHeightCm(heightValue);
         } else {
           setHeightCm(null);
         }
-        if (userData.age) {
-          profileData.age = userData.age;
-          setUserAge(userData.age);
-        }
-        if (userData.sex) {
-          profileData.sex = userData.sex as 'male' | 'female';
-        }
-        if (userData.goal) {
-          // Legacy 'maintain'/'recomp' values collapse to 'maintenance'
-          const g = userData.goal as string;
-          setCurrentPhase(g === 'bulk' || g === 'cut' ? g : 'maintenance');
-        }
       } else {
         setHeightCm(null);
       }
-
-      const dexaData = dexaResult.data;
-      if (dexaData) {
-        if (dexaData.body_fat_percent) {
-          profileData.bodyFatPercent = dexaData.body_fat_percent;
-        }
-        if (dexaData.weight_kg && !profileData.weightLbs) {
-          profileData.weightLbs = Math.round(dexaData.weight_kg * 2.20462);
-        }
-        // Store full DEXA scan data for P-ratio calculation
-        if (dexaData.body_fat_percent && dexaData.weight_kg) {
-          const fatMassKg = dexaData.weight_kg * (dexaData.body_fat_percent / 100);
-          const leanMassKg = dexaData.weight_kg - fatMassKg;
-          setLatestDexaScan({
-            body_fat_percent: dexaData.body_fat_percent,
-            weight_kg: dexaData.weight_kg,
-            lean_mass_kg: leanMassKg,
-            fat_mass_kg: fatMassKg,
-          });
-        }
-      } else {
-        setLatestDexaScan(null);
+      if (userData.age) {
+        profileData.age = userData.age;
+        setUserAge(userData.age);
       }
-
-      // Process volume profile for training age and enhanced status
-      const volumeProfileData = volumeProfileResult.data;
-      if (volumeProfileData) {
-        // Map 'novice' to 'beginner' for TDEEDashboard compatibility
-        const dbTrainingAge = volumeProfileData.training_age as 'novice' | 'intermediate' | 'advanced' | null;
-        if (dbTrainingAge === 'novice') {
-          setTrainingAge('beginner');
-        } else if (dbTrainingAge === 'intermediate' || dbTrainingAge === 'advanced') {
-          setTrainingAge(dbTrainingAge);
-        } else {
-          setTrainingAge('intermediate');
-        }
+      if (userData.sex) {
+        profileData.sex = userData.sex as 'male' | 'female';
       }
-
-      // Calculate average daily protein (last 30 days)
-      const proteinData = proteinResult.data || [];
-      if (proteinData.length > 0) {
-        // Group by date and sum protein per day
-        const proteinByDate = new Map<string, number>();
-        proteinData.forEach((entry: { protein?: number; logged_at: string }) => {
-          const date = entry.logged_at;
-          const protein = entry.protein || 0;
-          proteinByDate.set(date, (proteinByDate.get(date) || 0) + protein);
-        });
-
-        // Calculate average
-        const totalProtein = Array.from(proteinByDate.values()).reduce((a, b) => a + b, 0);
-        const avgProtein = totalProtein / proteinByDate.size;
-        setAvgDailyProteinGrams(avgProtein);
-      } else {
-        setAvgDailyProteinGrams(undefined);
+      if (userData.goal) {
+        // Legacy 'maintain'/'recomp' values collapse to 'maintenance'
+        const g = userData.goal as string;
+        setCurrentPhase(g === 'bulk' || g === 'cut' ? g : 'maintenance');
       }
-
-      // Calculate average weekly training sets (last 30 days)
-      const trainingData = trainingSetsResult.data || [];
-      if (trainingData.length > 0) {
-        // Count working sets (non-warmup)
-        let totalWorkingSets = 0;
-        trainingData.forEach((block: any) => {
-          if (block.set_logs && Array.isArray(block.set_logs)) {
-            const workingSets = block.set_logs.filter((set: any) => !set.is_warmup);
-            totalWorkingSets += workingSets.length;
-          }
-        });
-
-        // Average over 30 days = ~4.3 weeks
-        const avgWeeklySets = (totalWorkingSets / 30) * 7;
-        setAvgWeeklyTrainingSets(Math.round(avgWeeklySets));
-      } else {
-        setAvgWeeklyTrainingSets(undefined);
-      }
-
-      const mesocycleData = mesocycleResult.data;
-      if (mesocycleData?.days_per_week) {
-        profileData.workoutsPerWeek = mesocycleData.days_per_week;
-      }
-
-      setUserProfile(profileData);
-
-      // Load adaptive TDEE data
-      try {
-        const tdee = await getAdaptiveTDEE(targetsResult.data?.calories);
-        setTdeeData(tdee);
-      } catch (tdeeError) {
-        console.error('[Nutrition] Error loading TDEE data:', tdeeError);
-        setTdeeData(null); // Explicitly set to null on error
-      }
-    } catch (error) {
-      console.error('Error loading nutrition data:', error);
-    } finally {
-      setIsLoading(false);
+    } else {
+      setHeightCm(null);
     }
+
+    const dexaData = bundle.dexa;
+    if (dexaData) {
+      if (dexaData.body_fat_percent) {
+        profileData.bodyFatPercent = dexaData.body_fat_percent;
+      }
+      if (dexaData.weight_kg && !profileData.weightLbs) {
+        profileData.weightLbs = Math.round(dexaData.weight_kg * 2.20462);
+      }
+      // Store full DEXA scan data for P-ratio calculation
+      if (dexaData.body_fat_percent && dexaData.weight_kg) {
+        const fatMassKg = dexaData.weight_kg * (dexaData.body_fat_percent / 100);
+        const leanMassKg = dexaData.weight_kg - fatMassKg;
+        setLatestDexaScan({
+          body_fat_percent: dexaData.body_fat_percent,
+          weight_kg: dexaData.weight_kg,
+          lean_mass_kg: leanMassKg,
+          fat_mass_kg: fatMassKg,
+        });
+      }
+    } else {
+      setLatestDexaScan(null);
+    }
+
+    // Process volume profile for training age and enhanced status
+    const volumeProfileData = bundle.volumeProfile;
+    if (volumeProfileData) {
+      // Map 'novice' to 'beginner' for TDEEDashboard compatibility
+      const dbTrainingAge = volumeProfileData.training_age as 'novice' | 'intermediate' | 'advanced' | null;
+      if (dbTrainingAge === 'novice') {
+        setTrainingAge('beginner');
+      } else if (dbTrainingAge === 'intermediate' || dbTrainingAge === 'advanced') {
+        setTrainingAge(dbTrainingAge);
+      } else {
+        setTrainingAge('intermediate');
+      }
+    }
+
+    // Calculate average daily protein (last 30 days)
+    const proteinData = bundle.proteinRaw || [];
+    if (proteinData.length > 0) {
+      // Group by date and sum protein per day
+      const proteinByDate = new Map<string, number>();
+      proteinData.forEach((entry: { protein?: number; logged_at: string }) => {
+        const date = entry.logged_at;
+        const protein = entry.protein || 0;
+        proteinByDate.set(date, (proteinByDate.get(date) || 0) + protein);
+      });
+
+      // Calculate average
+      const totalProtein = Array.from(proteinByDate.values()).reduce((a, b) => a + b, 0);
+      const avgProtein = totalProtein / proteinByDate.size;
+      setAvgDailyProteinGrams(avgProtein);
+    } else {
+      setAvgDailyProteinGrams(undefined);
+    }
+
+    // Calculate average weekly training sets (last 30 days)
+    const trainingData = bundle.trainingSetsRaw || [];
+    if (trainingData.length > 0) {
+      // Count working sets (non-warmup)
+      let totalWorkingSets = 0;
+      trainingData.forEach((block: any) => {
+        if (block.set_logs && Array.isArray(block.set_logs)) {
+          const workingSets = block.set_logs.filter((set: any) => !set.is_warmup);
+          totalWorkingSets += workingSets.length;
+        }
+      });
+
+      // Average over 30 days = ~4.3 weeks
+      const avgWeeklySets = (totalWorkingSets / 30) * 7;
+      setAvgWeeklyTrainingSets(Math.round(avgWeeklySets));
+    } else {
+      setAvgWeeklyTrainingSets(undefined);
+    }
+
+    const mesocycleData = bundle.mesocycle;
+    if (mesocycleData?.days_per_week) {
+      profileData.workoutsPerWeek = mesocycleData.days_per_week;
+    }
+
+    setUserProfile(profileData);
+
+    // Adaptive TDEE was computed with the global bundle (server action).
+    setTdeeData(bundle.tdee);
   }
 
   /**
@@ -624,7 +584,7 @@ function NutritionPageContent() {
    */
   function applyInsertedEntries(rows: FoodLogEntry[]) {
     if (rows.length === 0) return;
-    setFoodEntries((prev) => [...prev, ...rows]);
+    mutateFoodEntries((prev) => [...prev, ...rows]);
     setFrequentFoods((prev) => {
       const map = new Map(prev.map((f) => [`${f.meal_type}:${f.food_name}`, { ...f }]));
       for (const row of rows) {
@@ -694,6 +654,10 @@ function NutritionPageContent() {
     } catch (tdeeError) {
       console.error('[Nutrition] Error refreshing TDEE data:', tdeeError);
     }
+
+    // Keep the cached global bundle consistent so a later remount/revalidation
+    // doesn't repopulate stale weight/targets into local state.
+    void queryClient.invalidateQueries({ queryKey: NUTRITION_GLOBAL_KEY });
   }
 
   /** Load the system food library once, on first food-modal open */
@@ -903,7 +867,7 @@ function NutritionPageContent() {
       return;
     }
 
-    setFoodEntries((prev) => prev.filter((e) => e.id !== id));
+    mutateFoodEntries((prev) => prev.filter((e) => e.id !== id));
 
     if (entry) {
       addToast('info', `Removed ${toTitleCase(entry.food_name)}`, 6000, {
@@ -923,7 +887,7 @@ function NutritionPageContent() {
                 source: entry.source || 'manual',
                 food_id: entry.food_id || undefined,
               });
-              setFoodEntries((prev) => [...prev, restored]);
+              mutateFoodEntries((prev) => [...prev, restored]);
             } catch (restoreError) {
               console.error('Error restoring food:', restoreError);
             }
@@ -960,7 +924,7 @@ function NutritionPageContent() {
     }
 
     const entry = foodEntries.find((e) => e.id === id);
-    setFoodEntries((prev) => prev.map((e) => (e.id === id ? { ...e, ...logUpdates } : e)));
+    mutateFoodEntries((prev) => prev.map((e) => (e.id === id ? { ...e, ...logUpdates } : e)));
 
     // The user hand-corrected per-serving nutrition (e.g. a barcode lookup
     // that returned calories but zero macros). Propagate the fix to the
@@ -1438,9 +1402,12 @@ function NutritionPageContent() {
     ? getDisplayWeight(todayWeightEntry.weight, (todayWeightEntry as any).unit as 'lb' | 'kg' | null, weightUnit).toFixed(1)
     : null;
 
-  if (isLoading) {
+  // Full-screen heart is reserved for first-ever load with an empty persisted
+  // cache. Date switches (keepPreviousData) and warm reloads (IndexedDB) never
+  // reach this — they render chrome + skeletons or cached data instead.
+  if (isColdStart) {
     return (
-      <div className="max-w-7xl mx-auto p-4 md:p-6">
+      <div className="max-w-7xl mx-auto p-4 md:p-6" data-testid="nutrition-full-loading">
         <div className="flex flex-col items-center justify-center py-20">
           <LoadingAnimation type="random" size="lg" />
           <p className="mt-4 text-surface-400">Loading nutrition data...</p>
@@ -1581,15 +1548,21 @@ function NutritionPageContent() {
           the hero card scrolls away (overlays the meal list — no layout shift) */}
       <StickyMacroBar summary={dailySummary} watchRef={heroCardRef} />
 
-      {/* Macro summary (replaces the 4-box grid + remaining-calories section) */}
-      <div ref={heroCardRef}>
-        <MacroSummaryCard
-          totals={dailyTotals}
-          targets={nutritionTargets}
-          mealsRemaining={mealsRemaining}
-          onCalculateMacros={() => setShowMacroCalculator(true)}
-          onEnterManually={() => setShowTargetsModal(true)}
-        />
+      {/* Macro summary (replaces the 4-box grid + remaining-calories section).
+          keepPreviousData shows the prior day while a never-fetched day loads;
+          skeleton the numbers rather than flash another day's totals. */}
+      <div ref={heroCardRef} data-testid="nutrition-macro-summary">
+        {isDaySwitching ? (
+          <MacroNumbersSkeleton />
+        ) : (
+          <MacroSummaryCard
+            totals={dailyTotals}
+            targets={nutritionTargets}
+            mealsRemaining={mealsRemaining}
+            onCalculateMacros={() => setShowMacroCalculator(true)}
+            onEnterManually={() => setShowTargetsModal(true)}
+          />
+        )}
       </div>
 
       {/* Quick actions: Describe / Scan / Search / Meals */}
@@ -1617,7 +1590,9 @@ function NutritionPageContent() {
 
       {/* Meal sections */}
       <div className="space-y-3">
-        {mealGroups.map((meal) => {
+        {isDaySwitching
+          ? mealConfig.map((meal) => <MealSectionSkeleton key={meal.type} />)
+          : mealGroups.map((meal) => {
           const mealCalories = Math.round(meal.entries.reduce((sum, e) => sum + (e.calories || 0), 0));
           const mealProtein = Math.round(meal.entries.reduce((sum, e) => sum + (e.protein || 0), 0));
           const mealCarbs = Math.round(meal.entries.reduce((sum, e) => sum + (e.carbs || 0), 0));
@@ -1924,7 +1899,12 @@ function NutritionPageContent() {
           latestDexaScan={latestDexaScan}
           regressionAnalysis={tdeeData.regressionAnalysis}
           targetCalories={nutritionTargets?.calories}
-          onRefresh={loadData}
+          onRefresh={() => {
+            void queryClient.invalidateQueries({ queryKey: NUTRITION_GLOBAL_KEY });
+            if (selectedDate) {
+              void queryClient.invalidateQueries({ queryKey: nutritionDayKey(selectedDate) });
+            }
+          }}
           onSetTarget={() => setShowMacroCalculator(true)}
           onReset={resetAndRecalculateTDEE}
         />
