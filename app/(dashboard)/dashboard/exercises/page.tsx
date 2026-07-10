@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { Card, Input, Badge, Button, LoadingAnimation, SkeletonExercise } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
-import { MUSCLE_GROUPS } from '@/types/schema';
+import { MUSCLE_GROUPS, muscleMatchesGroup } from '@/types/schema';
 import { EQUIPMENT_OPTIONS } from '@/lib/exercises/types';
 import { formatWeight, convertWeight, estimateE1RM } from '@/lib/utils';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
@@ -490,7 +490,11 @@ export default function ExercisesPage() {
 
   const filteredExercises = exercises.filter((ex) => {
     const matchesSearch = ex.name.toLowerCase().includes(search.toLowerCase());
-    const matchesMuscle = !selectedMuscle || ex.primary_muscle === selectedMuscle;
+    // Group-aware so a legacy chip ('back', 'shoulders', 'glutes') also matches
+    // exercises tagged with standard sub-muscles ('lats', 'rear_delts',
+    // 'glute_med'), not just an exact string equal. Without this, delt/lat/
+    // upper-chest and adductor/glute_med/upper_back exercises are unreachable.
+    const matchesMuscle = !selectedMuscle || muscleMatchesGroup(ex.primary_muscle, selectedMuscle);
 
     // Equipment filtering - check both equipment field and equipment_required array
     const matchesEquipment = !selectedEquipment ||

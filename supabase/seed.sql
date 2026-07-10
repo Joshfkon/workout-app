@@ -375,5 +375,12 @@ INSERT INTO exercises (name, primary_muscle, secondary_muscles, mechanic, defaul
   ARRAY['Keep body straight', 'Squeeze glutes', 'Don''t let hips sag or pike'],
   ARRAY['Hips too high', 'Hips sagging', 'Not breathing'],
   'Forearms on ground, elbows under shoulders',
-  'core', ARRAY['bodyweight']);
+  'core', ARRAY['bodyweight'])
+
+-- db reset runs migrations first, THEN this seed. Several later migrations
+-- insert exercises whose names also appear above (e.g. Front Raise, Glute
+-- Bridge, EZ Bar Curl). Without this clause a plain INSERT hits the UNIQUE(name)
+-- constraint on the first collision and aborts the entire seed. DO NOTHING lets
+-- the already-present (migration) row win and the rest of the seed proceed.
+ON CONFLICT (name) DO NOTHING;
 
