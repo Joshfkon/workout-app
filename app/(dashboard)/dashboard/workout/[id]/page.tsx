@@ -7,11 +7,13 @@ import { Card, Button, Badge, Input, LoadingAnimation, SkeletonExercise, Confirm
 import {
   enqueueSetInsert,
   flushSetOutbox,
+  isMissingColumnError,
   isNetworkError,
   listOutbox,
   outboxCount,
   removeQueuedSet,
   updateQueuedSet,
+  withoutOptionalSetLogColumns,
 } from '@/lib/offline/setOutbox';
 import type { SetSyncStatus } from '@/components/workout/ExerciseCard';
 import { InlineHint } from '@/components/ui/FirstTimeHint';
@@ -1863,6 +1865,15 @@ export default function WorkoutPage() {
         try {
           const result = await supabase.from('set_logs').insert(row);
           insertError = result.error;
+          // Schema-cache column miss (a set_roles-style migration not yet applied
+          // to this database): drop the optional columns and retry once so a
+          // migration lag can't block set logging mid-workout.
+          if (insertError && isMissingColumnError(insertError)) {
+            const retry = await supabase
+              .from('set_logs')
+              .insert(withoutOptionalSetLogColumns(row));
+            insertError = retry.error;
+          }
         } catch (e) {
           insertError = { message: e instanceof Error ? e.message : String(e) };
         }
