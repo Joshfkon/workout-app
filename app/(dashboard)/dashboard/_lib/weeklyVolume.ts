@@ -8,7 +8,11 @@
  * volume fetch. Pure: no React, no Supabase client.
  */
 
-import { resolvePrimaryMuscleCredits, SECONDARY_MUSCLE_CREDIT } from '@/services/volumeTracker';
+import {
+  resolvePrimaryMuscleCredits,
+  SECONDARY_MUSCLE_CREDIT,
+  type MuscleVolumeData,
+} from '@/services/volumeTracker';
 import {
   isStandardMuscle,
   legacyToStandardMuscles,
@@ -221,4 +225,45 @@ export function computeWeeklyMevSummary(muscleVolume: MuscleVolumeStats[]): Week
   ].sort((a, b) => Number(b.belowMev) - Number(a.belowMev) || b.sets - a.sets);
 
   return { totalSets, totalTarget, lowCount, entries };
+}
+
+/**
+ * The SINGLE below-MEV list both the "This Week vs MEV" card and the
+ * "Insufficient Volume" atrophy-risk warning consume, so their counts can
+ * never diverge again. Returns the below-MEV entries of a summary (trained-
+ * but-low PLUS completely-untrained 0-set muscles — see computeWeeklyMevSummary
+ * for why untrained muscles are included). Entries keep the summary's
+ * below-MEV-first ordering.
+ */
+export function selectMusclesBelowMev(summary: WeeklyMevSummary | null): MuscleMevEntry[] {
+  if (!summary) return [];
+  return summary.entries.filter((e) => e.belowMev);
+}
+
+/**
+ * Adapt the shared below-MEV list to the `MuscleVolumeData[]` shape the
+ * AtrophyRiskAlert component already renders (muscleGroup / totalSets /
+ * landmarks.mev). Only `mev` is meaningful downstream — the alert sorts by the
+ * MEV deficit and shows `sets/mev`; mav/mrv are carried only to satisfy the
+ * type and are set to mev as neutral placeholders. Entries whose muscle key
+ * can't be normalized to a standard group are dropped.
+ */
+export function mevSummaryToVolumeData(summary: WeeklyMevSummary | null): MuscleVolumeData[] {
+  return selectMusclesBelowMev(summary)
+    .map((entry): MuscleVolumeData | null => {
+      const standardMuscle = isStandardMuscle(entry.muscle)
+        ? (entry.muscle as StandardMuscleGroup)
+        : toStandardMuscleForVolume(entry.muscle);
+      if (!standardMuscle) return null;
+      return {
+        muscleGroup: standardMuscle as StandardMuscleGroup,
+        totalSets: entry.sets,
+        directSets: entry.sets,
+        indirectSets: 0,
+        landmarks: { mev: entry.mev, mav: entry.mev, mrv: entry.mev },
+        status: 'below_mev',
+        percentOfMrv: 0,
+      };
+    })
+    .filter((d): d is MuscleVolumeData => d !== null);
 }
