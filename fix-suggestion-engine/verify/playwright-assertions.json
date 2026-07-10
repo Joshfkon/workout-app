@@ -1,0 +1,57 @@
+{
+  "engineOutput": {
+    "scenario": "ISO-Lateral Low Row — set 1",
+    "unit": "lbs",
+    "history": "90×13@4, 140×14@2.5, 160×8@2.5, 160×11@1",
+    "storedE1RM": 252.5,
+    "target": {
+      "repRange": [
+        8,
+        12
+      ],
+      "rir": 2
+    },
+    "recentTopWorkingWeight": 160,
+    "working": {
+      "weight": 175,
+      "repRange": [
+        8,
+        12
+      ],
+      "rir": 2,
+      "showRir": true,
+      "role": "working",
+      "anchorSource": "e1rm",
+      "clamped": true,
+      "engineVersion": 2
+    },
+    "ramp": {
+      "weight": 100,
+      "repRange": [
+        8,
+        12
+      ],
+      "showRir": false,
+      "role": "ramp",
+      "anchorSource": "ramp_percent",
+      "engineVersion": 2
+    },
+    "forbiddenOldOutput": "92.5 × 13 @ 2 RIR — up 2.5 lbs vs last session — it was clearly too light"
+  },
+  "screenshots": [
+    {
+      "name": "banner-working.png",
+      "line": "175 lbs × 8–12 @ 2 RIR",
+      "expected": "175 lbs × 8–12 @ 2 RIR",
+      "matches": true,
+      "notOldWrongOutput": true
+    },
+    {
+      "name": "banner-ramp.png",
+      "line": "100 lbs × 8–12",
+      "expected": "100 lbs × 8–12",
+      "matches": true,
+      "notOldWrongOutput": true
+    }
+  ]
+}

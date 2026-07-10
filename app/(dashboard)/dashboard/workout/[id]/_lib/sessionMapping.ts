@@ -120,6 +120,8 @@ export interface SetLogRow {
   rest_seconds: number | null;
   is_warmup: boolean;
   set_type: SetType | null;
+  set_role?: 'working' | 'ramp' | null;
+  suggestion_engine_version?: number | null;
   parent_set_id: string | null;
   quality: SetQuality;
   quality_reason: string | null;
@@ -248,6 +250,8 @@ export function mapSetLogRow(set: SetLogRow): SetLog {
     restSeconds: set.rest_seconds,
     isWarmup: set.is_warmup,
     setType: set.set_type || (set.is_warmup ? 'warmup' : 'normal'),
+    setRole: set.set_role ?? undefined,
+    suggestionEngineVersion: set.suggestion_engine_version ?? undefined,
     parentSetId: set.parent_set_id || null,
     quality: set.quality,
     qualityReason: set.quality_reason || '',
