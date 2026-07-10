@@ -310,7 +310,11 @@ function NutritionPageContent() {
   const isRestoring = useIsRestoring();
 
   const foodEntries = dayQuery.data ?? [];
-  const yesterdayEntries = yesterdayQuery.data ?? [];
+  // While a never-fetched yesterday loads, keepPreviousData holds the PREVIOUS
+  // day's "yesterday" rows. Treat that as empty so "Copy from yesterday" never
+  // copies the wrong day's entries (it hides until the real prior day resolves;
+  // day-1 is prefetched, so this window is rare).
+  const yesterdayEntries = yesterdayQuery.isPlaceholderData ? [] : (yesterdayQuery.data ?? []);
 
   // keepPreviousData hands us the PREVIOUS day's rows while a never-fetched day
   // loads (isPlaceholderData). Show skeletons for the numbers rather than a

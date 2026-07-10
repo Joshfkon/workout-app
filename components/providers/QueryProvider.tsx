@@ -13,17 +13,42 @@
  * appropriate `staleTime` rather than fetch-in-useEffect + full-page spinner.
  */
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { makeQueryClient } from '@/lib/query/queryClient';
-import { buildPersistOptions } from '@/lib/query/idbPersister';
+import { buildPersistOptions, clearPersistedQueryCache } from '@/lib/query/idbPersister';
+import { createUntypedClient } from '@/lib/supabase/client';
 
 export function QueryProvider({ children }: { children: React.ReactNode }) {
   // One client per browser tab, created lazily so it isn't shared across
   // requests on the server.
   const [queryClient] = useState(() => makeQueryClient());
   const [persistOptions] = useState(() => buildPersistOptions());
+
+  // Purge the cache (memory + persisted IndexedDB) whenever the signed-in
+  // identity changes — sign-out, or user B signing in after user A on a shared
+  // browser. The persisted query keys aren't user-scoped, so without this a new
+  // user could rehydrate the previous user's private data (food logs, workouts,
+  // DEXA/profile) — worse with the long staleTime on immutable-in-practice
+  // queries, which wouldn't refetch it away.
+  const lastUserIdRef = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    const supabase = createUntypedClient();
+    void supabase.auth.getUser().then(({ data }: { data: { user: { id?: string } | null } }) => {
+      lastUserIdRef.current = data.user?.id ?? null;
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange(
+      (_event: string, session: { user?: { id?: string } | null } | null) => {
+      const nextUserId = session?.user?.id ?? null;
+      if (lastUserIdRef.current !== undefined && lastUserIdRef.current !== nextUserId) {
+        queryClient.clear();
+        void clearPersistedQueryCache();
+      }
+      lastUserIdRef.current = nextUserId;
+    });
+    return () => sub.subscription.unsubscribe();
+  }, [queryClient]);
 
   if (persistOptions) {
     return (
