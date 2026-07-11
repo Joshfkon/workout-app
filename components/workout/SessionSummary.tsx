@@ -345,14 +345,16 @@ export function SessionSummary({
           name,
           primaryMuscle: exercise?.primaryMuscle,
           targetSets: block.targetSets,
+          targetRepRange: block.targetRepRange ?? [8, 12],
+          targetRir: block.targetRir ?? 2,
           skipped: sets.length === 0,
           // Match by block, not name — the same exercise can appear in
-          // multiple blocks and only the record-setting one gets the 🔥.
+          // multiple blocks and only the record-setting one gets the 🏆.
           hasPR: personalRecords.some((pr) => pr.blockId === block.id),
           sets: sets.map((set, index) => ({
-            quality: set.quality,
             reps: set.reps,
             weightKg: set.weightKg,
+            rpe: set.rpe,
             isDropset: set.setType === 'dropset',
             isAmrap: index === amrapIndex,
           })),
@@ -368,6 +370,8 @@ export function SessionSummary({
           name: exercise?.name || 'Exercise',
           primaryMuscle: exercise?.primaryMuscle,
           targetSets: block.targetSets,
+          targetRepRange: block.targetRepRange ?? [8, 12],
+          targetRir: block.targetRir ?? 2,
           skipped: true,
           sets: [],
         },

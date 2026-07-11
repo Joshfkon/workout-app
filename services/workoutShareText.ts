@@ -7,24 +7,32 @@
  *   HyperTrack 💪 Shoulders & Arms
  *   Jul 8
  *
- *   🟩🟩🟩🟨  Incline Press 🔥
+ *   🟩🟩🟩🟨  Incline Press 🏆
  *   🟩🟩🟩⬜  Lateral Raise
  *   ⬛⬛⬛  Nordic Curl
  *
- *   18 sets · 21,340 lb · 58 min · 🔥2 PRs
+ *   18 sets · 21,340 lb · 58 min · 🏆 2 PRs
+ *   🟩 hit · 🟨 grind
  *
  * Pure module: no DB calls, no side effects. All emoji are plain Unicode so
  * alignment survives proportional fonts (the layout must read well ragged —
  * no space-padding beyond simple separators). Training data only: never
  * include body weight, body composition, calories, or nutrition data.
+ *
+ * Square encoding is a single binary judgment per working set, using the same
+ * band logic the rest of the app grades sets by:
+ *   🟩 hit  — reps landed in range at (or easier than) the planned effort
+ *   🟨 miss — reps fell under range, OR the set was harder than planned
+ *             (reps in reserve below target). See `isSetHit`.
  */
 
-import type { SetQuality, WeightUnit } from '@/types/schema';
+import type { WeightUnit } from '@/types/schema';
 
 export interface ShareSet {
-  quality: SetQuality;
   reps: number;
   weightKg: number;
+  /** RPE recorded for the set (1–10). RIR = 10 − rpe; drives the hit/miss square. */
+  rpe: number;
   /** AMRAP set — rendered as its earned color plus a ⚡ suffix. */
   isAmrap?: boolean;
   /**
@@ -40,6 +48,10 @@ export interface ShareExercise {
   /** Raw primaryMuscle string; drives the cryptic-mode emoji. */
   primaryMuscle?: string;
   targetSets: number;
+  /** Planned rep range [min, max] — a set under `min` reads as a miss. */
+  targetRepRange: [number, number];
+  /** Planned reps in reserve — a set below it (harder than planned) is a miss. */
+  targetRir: number;
   /** Performed working sets in order. Empty when the exercise was skipped. */
   sets: ShareSet[];
   /** Exercise skipped entirely — rendered as up to 3 ⬛ squares. */
@@ -75,23 +87,13 @@ const MAX_SKIPPED_SQUARES = 3;
 
 const GREEN = '🟩';
 const YELLOW = '🟨';
-const RED = '🟥';
 const WHITE = '⬜';
 const BLACK = '⬛';
 const AMRAP_SUFFIX = '⚡';
-const PR_SUFFIX = '🔥';
+const PR_MARKER = '🏆';
 
-/**
- * Set-classification → square mapping:
- * stimulative → 🟩, effective → 🟨, junk → 🟥.
- * Excessive (RPE 10 grind) reads as effective-but-grinding → 🟨.
- */
-const QUALITY_SQUARES: Record<SetQuality, string> = {
-  stimulative: GREEN,
-  effective: YELLOW,
-  excessive: YELLOW,
-  junk: RED,
-};
+/** One legend line, appended only when the grid contains a miss. */
+const LEGEND = `${GREEN} hit · ${YELLOW} grind`;
 
 const LEG_MUSCLES = ['quad', 'hamstring', 'glute', 'calf', 'calves', 'adductor', 'abductor', 'leg'];
 const ARM_MUSCLES = ['bicep', 'tricep', 'forearm', 'arm'];
@@ -104,14 +106,36 @@ export function muscleEmoji(primaryMuscle: string | undefined): string {
   return '🏋️';
 }
 
+/**
+ * Binary square judgment for one working set — the same band logic the live
+ * app uses to grade a set (see `progressionEngine.calculateSetQuality`):
+ *   🟩 hit  ← reps ≥ range min AND reps-in-reserve ≥ target (effort as planned
+ *             or easier)
+ *   🟨 miss ← reps under range, OR RIR below target (the set was harder than
+ *             planned)
+ * AMRAP sets are graded on reps alone: maximal effort *is* the plan there, so a
+ * low RIR is success, not a grind.
+ */
+export function isSetHit(set: ShareSet, targetRepMin: number, targetRir: number): boolean {
+  if (set.reps < targetRepMin) return false;
+  if (set.isAmrap) return true;
+  const rir = 10 - set.rpe;
+  return rir >= targetRir;
+}
+
 /** Squares row for one exercise (no name). */
 function buildSquares(exercise: ShareExercise): string {
   if (exercise.skipped || exercise.sets.length === 0) {
     return BLACK.repeat(Math.max(1, Math.min(MAX_SKIPPED_SQUARES, exercise.targetSets)));
   }
+  const [targetRepMin] = exercise.targetRepRange;
   const countedSets = exercise.sets.filter((s) => !s.isDropset);
   let squares = countedSets
-    .map((s) => QUALITY_SQUARES[s.quality] + (s.isAmrap ? AMRAP_SUFFIX : ''))
+    .map(
+      (s) =>
+        (isSetHit(s, targetRepMin, exercise.targetRir) ? GREEN : YELLOW) +
+        (s.isAmrap ? AMRAP_SUFFIX : '')
+    )
     .join('');
   // Planned sets not performed (partial skip) render as ⬜.
   const missing = exercise.targetSets - countedSets.length;
@@ -125,7 +149,7 @@ function exerciseVolumeKg(exercise: ShareExercise): number {
 
 function exerciseLine(exercise: ShareExercise, cryptic: boolean): string {
   const label = cryptic ? muscleEmoji(exercise.primaryMuscle) : exercise.name;
-  return `${buildSquares(exercise)}  ${label}${exercise.hasPR ? ` ${PR_SUFFIX}` : ''}`;
+  return `${buildSquares(exercise)}  ${label}${exercise.hasPR ? ` ${PR_MARKER}` : ''}`;
 }
 
 /**
@@ -185,11 +209,34 @@ function buildFooter(input: WorkoutShareTextInput): string {
     `${volumeStr} ${input.unit}`,
     formatFooterDuration(input.durationSeconds),
   ];
-  if (prCount > 0) parts.push(`${PR_SUFFIX}${prCount} PR${prCount === 1 ? '' : 's'}`);
+  if (prCount > 0) parts.push(`${PR_MARKER} ${prCount} PR${prCount === 1 ? '' : 's'}`);
   if (input.streakWeeks && input.streakWeeks > 1) {
     parts.push(`📅 ${input.streakWeeks}-wk streak`);
   }
   return parts.join(' · ');
+}
+
+/** Every glyph counted as two width units by `shareLineWidth`. */
+const WIDE_GLYPHS = [GREEN, YELLOW, WHITE, BLACK, AMRAP_SUFFIX, PR_MARKER, '💪', '🏋️', '🦵', '📅'];
+
+/**
+ * Emoji-aware rendered width of one line: each emoji square / pictograph counts
+ * as 2 units, every other code point as 1 — mirroring how an iMessage bubble at
+ * default text size fills. This is the share v2 line-width rule (shared in
+ * spirit with the nutrition share); the guardrail keeps the emoji square grid
+ * inside one bubble line so it never wraps mid-row.
+ */
+export function shareLineWidth(line: string): number {
+  let rest = line;
+  let width = 0;
+  for (const glyph of WIDE_GLYPHS) {
+    const parts = rest.split(glyph);
+    width += (parts.length - 1) * 2;
+    rest = parts.join('');
+  }
+  // Everything left is latin / digits / punctuation / spaces — 1 unit each.
+  width += Array.from(rest).length;
+  return width;
 }
 
 /**
@@ -197,11 +244,18 @@ function buildFooter(input: WorkoutShareTextInput): string {
  * same output.
  */
 export function formatWorkoutShareText(input: WorkoutShareTextInput): string {
+  const exerciseLines = buildExerciseLines(input.exercises, input.cryptic ?? false);
+
   const lines: string[] = [`${APP_NAME} 💪 ${input.title}`];
   if (input.subtitle) lines.push(input.subtitle);
   lines.push('');
-  lines.push(...buildExerciseLines(input.exercises, input.cryptic ?? false));
+  lines.push(...exerciseLines);
   lines.push('');
   lines.push(buildFooter(input));
+  // The legend answers "why yellow?" — shown only when a miss exists, so an
+  // all-green share stays tight.
+  if (exerciseLines.some((line) => line.includes(YELLOW))) {
+    lines.push(LEGEND);
+  }
   return lines.join('\n');
 }
