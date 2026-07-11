@@ -21,6 +21,7 @@ import { RestTimer, PauseOverlay } from '@/components/workout';
 import { IconGripVertical, IconX } from '@tabler/icons-react';
 import { useRestTimer } from '@/hooks/useRestTimer';
 import { useEducationStore } from '@/hooks/useEducationPreferences';
+import { lightHaptic } from '@/lib/integrations/notifications';
 
 // Dynamic import ExerciseCard (118KB) to reduce initial bundle and improve page load
 const ExerciseCard = dynamic(
@@ -369,12 +370,20 @@ export default function WorkoutPage() {
   const [allCollapsed, setAllCollapsed] = useState(false);
   const [collapsedBlocks, setCollapsedBlocks] = useState<Set<string>>(new Set());
   
-  // Drag reorder state for exercises
+  // Drag reorder state for exercises.
+  //
+  // Only two pieces of React state drive re-renders during a drag:
+  //   - isDraggingBlock: flips the list into "drag mode" (card bodies frozen,
+  //     rows dimmed) — set once on pickup, cleared once on drop.
+  //   - dragOverBlockIndex: the current drop target — updated ONLY when the
+  //     pointer crosses a row midpoint, so displaced rows re-render at most a
+  //     handful of times, never per-frame.
+  // The floating preview follows the finger via a direct style mutation on a
+  // ref (see dragPreviewRef) — NOT React state — so pointer-move never
+  // re-renders this (very large) page component.
   const [draggedBlockIndex, setDraggedBlockIndex] = useState<number | null>(null);
   const [dragOverBlockIndex, setDragOverBlockIndex] = useState<number | null>(null);
   const [isDraggingBlock, setIsDraggingBlock] = useState(false);
-  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const preCollapseStateRef = useRef<{ allCollapsed: boolean; collapsedBlocks: Set<string> } | null>(null);
 
   // Focus mode: keep only the current exercise expanded so you see just the
   // sets you're working on. Re-focuses when you advance to the next exercise;
@@ -387,13 +396,27 @@ export default function WorkoutPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentBlockIndex, blocks.length]);
 
-  // Floating drag preview state
-  const [dragPosition, setDragPosition] = useState<{ x: number; y: number } | null>(null);
-  const [dragTouchOffset, setDragTouchOffset] = useState<number>(0); // Offset from touch point to top of element
+  // Floating drag preview: width comes from the picked-up row's rect (React
+  // state, set once on pickup); its position is applied imperatively.
   const [draggedBlockRect, setDraggedBlockRect] = useState<DOMRect | null>(null);
-  const draggedBlockRef = useRef<HTMLDivElement | null>(null);
   const exerciseListRef = useRef<HTMLDivElement | null>(null);
+  const dragPreviewRef = useRef<HTMLDivElement | null>(null);
+
+  // Imperative drag bookkeeping (no re-renders):
+  //  - pendingDragRef: armed pointer-down awaiting the ~8px activation move.
+  //  - dragPosRef: current preview top/left, mutated onto dragPreviewRef.
+  //  - draggedIndexRef / dragOverIndexRef: latest values readable inside the
+  //    rapid pointer-move handler without waiting for a state flush.
+  //  - pointerYRef + autoScrollRafRef: edge-autoscroll loop.
+  const pendingDragRef = useRef<
+    { index: number; startY: number; rect: DOMRect | null; offset: number; active: boolean } | null
+  >(null);
+  const dragPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const dragTouchOffsetRef = useRef<number>(0);
+  const draggedIndexRef = useRef<number | null>(null);
+  const dragOverIndexRef = useRef<number | null>(null);
+  const pointerYRef = useRef<number>(0);
+  const autoScrollRafRef = useRef<number | null>(null);
   
   // Add exercise modal state
   const [showAddExercise, setShowAddExercise] = useState(false);
@@ -2615,240 +2638,214 @@ export default function WorkoutPage() {
     });
   }, []);
 
-  // Long press handlers for drag reorder
-  const handleBlockLongPressStart = useCallback((index: number, clientY: number) => {
-    longPressTimerRef.current = setTimeout(() => {
-      // Save current collapse state before collapsing all for drag mode
-      preCollapseStateRef.current = {
-        allCollapsed,
-        collapsedBlocks: new Set(collapsedBlocks),
-      };
+  // ── Drag-to-reorder (pointer-capture model) ───────────────────────────────
+  //
+  // The ☰ handle is a dedicated `touch-action: none` target, so we don't need
+  // a long-press to disambiguate from scrolling — drag begins on pointer-down
+  // + ~8px of movement. We capture the pointer to the handle so move/up keep
+  // firing even as the finger travels the whole screen, then apply the preview
+  // position imperatively (no per-frame React state).
 
-      // Get the element being dragged and its dimensions
-      const element = document.querySelector(`[data-block-index="${index}"]`) as HTMLElement;
-      if (element) {
-        const rect = element.getBoundingClientRect();
-        setDraggedBlockRect(rect);
-        // Calculate offset from touch point to top of element - keeps preview under finger
-        const touchOffset = clientY - rect.top;
-        setDragTouchOffset(touchOffset);
-        dragTouchOffsetRef.current = touchOffset;
-        // Position preview so it stays under the finger
-        setDragPosition({ x: rect.left, y: clientY - touchOffset });
-      }
+  const DRAG_ACTIVATE_PX = 8;
 
-      setDraggedBlockIndex(index);
-      setIsDraggingBlock(true);
-      // Collapse all exercises for iPhone-style drag mode
-      setAllCollapsed(true);
-
-      if (navigator.vibrate) {
-        navigator.vibrate(50);
-      }
-    }, 150); // short hold to activate drag — it's a dedicated touch-none handle, so a
-             // long delay isn't needed to disambiguate from scrolling; keep just enough
-             // to avoid a stray tap collapsing everything into drag mode
-  }, [allCollapsed, collapsedBlocks]);
-
-  const handleBlockLongPressEnd = useCallback(() => {
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-  }, []);
-
-  // Calculate the target index based on current drag position. Reads the
-  // data-block-index attribute (rather than the DOM position) because the
-  // list is rendered in two sections (started/current cards + the "Up next"
-  // rows), so DOM order is not guaranteed to match block order.
-  const calculateDragTargetIndex = useCallback((clientY: number): number => {
-    if (!exerciseListRef.current || draggedBlockIndex === null) return draggedBlockIndex ?? 0;
+  // Which block index the pointer currently sits over. Attribute-based (reads
+  // data-block-index) because the list renders in two sections (started/current
+  // cards + "Up next" rows), so DOM order isn't guaranteed to match block order.
+  const computeDragTargetIndex = useCallback((clientY: number): number => {
+    const draggedIndex = draggedIndexRef.current;
+    if (!exerciseListRef.current || draggedIndex === null) return draggedIndex ?? 0;
 
     const listItems = exerciseListRef.current.querySelectorAll('[data-block-index]');
-    let targetIndex = draggedBlockIndex;
-
+    let targetIndex = draggedIndex;
     for (let i = 0; i < listItems.length; i++) {
       const item = listItems[i] as HTMLElement;
       const itemIndex = Number(item.dataset.blockIndex);
       if (Number.isNaN(itemIndex)) continue;
       const rect = item.getBoundingClientRect();
       const midY = rect.top + rect.height / 2;
-
       if (clientY < midY) {
         targetIndex = itemIndex;
         break;
       }
       targetIndex = itemIndex + 1;
     }
-
-    // Clamp to valid range
     return Math.max(0, Math.min(targetIndex, blocks.length - 1));
-  }, [draggedBlockIndex, blocks.length]);
+  }, [blocks.length]);
 
-  const handleBlockDragMove = useCallback((clientY: number) => {
-    if (!isDraggingBlock || draggedBlockIndex === null) return;
-
-    // Update floating preview position - use touch offset to keep preview under finger
-    if (draggedBlockRect) {
-      setDragPosition({
-        x: draggedBlockRect.left,
-        y: clientY - dragTouchOffset
-      });
-    }
-
-    // Calculate which position the item would drop at
-    const targetIndex = calculateDragTargetIndex(clientY);
-    if (targetIndex !== dragOverBlockIndex && targetIndex !== draggedBlockIndex) {
+  const setDragOverIfChanged = useCallback((targetIndex: number) => {
+    if (targetIndex !== dragOverIndexRef.current) {
+      dragOverIndexRef.current = targetIndex;
       setDragOverBlockIndex(targetIndex);
     }
-  }, [isDraggingBlock, draggedBlockIndex, draggedBlockRect, dragTouchOffset, calculateDragTargetIndex, dragOverBlockIndex]);
+  }, []);
 
-  // Use refs to access latest values in document event listeners
-  const isDraggingBlockRef = useRef(isDraggingBlock);
-  const draggedBlockIndexRef = useRef(draggedBlockIndex);
-  const draggedBlockRectRef = useRef(draggedBlockRect);
-  const dragOverBlockIndexRef = useRef(dragOverBlockIndex);
-
-  // Keep refs in sync with state
-  useEffect(() => {
-    isDraggingBlockRef.current = isDraggingBlock;
-    draggedBlockIndexRef.current = draggedBlockIndex;
-    draggedBlockRectRef.current = draggedBlockRect;
-    dragOverBlockIndexRef.current = dragOverBlockIndex;
-  }, [isDraggingBlock, draggedBlockIndex, draggedBlockRect, dragOverBlockIndex]);
-
-  const handleBlockDragEnd = useCallback(async () => {
-    const finalTargetIndex = dragOverBlockIndex ?? draggedBlockIndex;
-
-    if (draggedBlockIndex !== null && finalTargetIndex !== null && draggedBlockIndex !== finalTargetIndex) {
-      const spliced = [...blocks];
-      const [removed] = spliced.splice(draggedBlockIndex, 1);
-      spliced.splice(finalTargetIndex, 0, removed);
-      const newBlocks = spliced.map((b, i) => ({ ...b, order: i + 1 }));
-
-      // Update local state immediately
-      setBlocks(newBlocks);
-
-      // Update current block index if needed
-      if (currentBlockIndex === draggedBlockIndex) {
-        setCurrentBlockIndex(finalTargetIndex);
-      } else if (draggedBlockIndex < currentBlockIndex && finalTargetIndex >= currentBlockIndex) {
-        setCurrentBlockIndex(currentBlockIndex - 1);
-      } else if (draggedBlockIndex > currentBlockIndex && finalTargetIndex <= currentBlockIndex) {
-        setCurrentBlockIndex(currentBlockIndex + 1);
-      }
-
-      // Persist the new order. exercise_blocks."order" (the column the loader
-      // sorts by) is UNIQUE per session, so write in two passes — park every
-      // block on a temporary offset first, then write the final 1..n values —
-      // to avoid transient unique-constraint collisions mid-update.
-      try {
-        const supabase = createUntypedClient();
-        for (let i = 0; i < newBlocks.length; i++) {
-          const { error: parkError } = await supabase
-            .from('exercise_blocks')
-            .update({ order: i + 1001 })
-            .eq('id', newBlocks[i].id);
-          if (parkError) throw parkError;
-        }
-        for (let i = 0; i < newBlocks.length; i++) {
-          const { error: orderError } = await supabase
-            .from('exercise_blocks')
-            .update({ order: i + 1 })
-            .eq('id', newBlocks[i].id);
-          if (orderError) throw orderError;
-        }
-      } catch (err) {
-        console.error('Error saving reorder:', err);
-      }
+  // Edge autoscroll: while dragging near the top/bottom of the viewport, scroll
+  // the window proportionally to how close the finger is to the edge. Long
+  // exercise lists can't be reordered end-to-end without it.
+  const stopAutoScroll = useCallback(() => {
+    if (autoScrollRafRef.current !== null) {
+      cancelAnimationFrame(autoScrollRafRef.current);
+      autoScrollRafRef.current = null;
     }
+  }, []);
 
+  const startAutoScroll = useCallback(() => {
+    if (autoScrollRafRef.current !== null) return;
+    const EDGE = 90;   // px from viewport edge where autoscroll kicks in
+    const MAX = 16;    // px/frame at the very edge
+    const step = () => {
+      const y = pointerYRef.current;
+      const vh = window.innerHeight;
+      let dy = 0;
+      if (y < EDGE) dy = -MAX * (1 - y / EDGE);
+      else if (y > vh - EDGE) dy = MAX * (1 - (vh - y) / EDGE);
+      if (dy !== 0) {
+        window.scrollBy(0, dy);
+        // Element positions shifted under the finger — recompute the target.
+        setDragOverIfChanged(computeDragTargetIndex(y));
+      }
+      autoScrollRafRef.current = requestAnimationFrame(step);
+    };
+    autoScrollRafRef.current = requestAnimationFrame(step);
+  }, [computeDragTargetIndex, setDragOverIfChanged]);
+
+  // Move the floating preview to follow the finger. Pure DOM write — never
+  // touches React state, so pointer-move doesn't re-render the page.
+  const applyPreviewPosition = useCallback((clientY: number) => {
+    dragPosRef.current = { x: dragPosRef.current.x, y: clientY - dragTouchOffsetRef.current };
+    if (dragPreviewRef.current) {
+      dragPreviewRef.current.style.transform =
+        `translate3d(${dragPosRef.current.x}px, ${dragPosRef.current.y}px, 0)`;
+    }
+  }, []);
+
+  const beginDrag = useCallback((index: number, clientY: number, rect: DOMRect | null) => {
+    dragTouchOffsetRef.current = rect ? clientY - rect.top : 0;
+    dragPosRef.current = { x: rect?.left ?? 0, y: clientY - dragTouchOffsetRef.current };
+    draggedIndexRef.current = index;
+    dragOverIndexRef.current = index;
+
+    setDraggedBlockRect(rect);
+    setDraggedBlockIndex(index);
+    setDragOverBlockIndex(index);
+    setIsDraggingBlock(true);
+
+    // Instant pickup feedback: a light haptic tap (Capacitor Haptics on native,
+    // navigator.vibrate on web — a no-op on iOS WKWebView, which is expected).
+    void lightHaptic();
+
+    pointerYRef.current = clientY;
+    startAutoScroll();
+  }, [startAutoScroll]);
+
+  const finishDrag = useCallback(async () => {
+    stopAutoScroll();
+
+    const draggedIndex = draggedIndexRef.current;
+    const finalTargetIndex = dragOverIndexRef.current ?? draggedIndex;
+
+    // Reset drag state first so the UI leaves drag-mode immediately on drop.
+    draggedIndexRef.current = null;
+    dragOverIndexRef.current = null;
     setDraggedBlockIndex(null);
     setDragOverBlockIndex(null);
     setIsDraggingBlock(false);
-    setDragPosition(null);
     setDraggedBlockRect(null);
 
-    // Restore pre-drag collapse state
-    if (preCollapseStateRef.current) {
-      setAllCollapsed(preCollapseStateRef.current.allCollapsed);
-      setCollapsedBlocks(preCollapseStateRef.current.collapsedBlocks);
-      preCollapseStateRef.current = null;
+    if (draggedIndex === null || finalTargetIndex === null || draggedIndex === finalTargetIndex) {
+      return;
     }
-  }, [draggedBlockIndex, dragOverBlockIndex, blocks, currentBlockIndex]);
 
-  // Document-level touch/mouse event listeners for drag
-  useEffect(() => {
-    if (!isDraggingBlock) return;
+    // Optimistic local reorder.
+    const spliced = [...blocks];
+    const [removed] = spliced.splice(draggedIndex, 1);
+    spliced.splice(finalTargetIndex, 0, removed);
+    const newBlocks = spliced.map((b, i) => ({ ...b, order: i + 1 }));
+    setBlocks(newBlocks);
 
-    const handleDocumentMove = (clientY: number) => {
-      if (!isDraggingBlockRef.current || draggedBlockIndexRef.current === null) return;
+    // Keep the "current" pointer on the same block after the shuffle.
+    if (currentBlockIndex === draggedIndex) {
+      setCurrentBlockIndex(finalTargetIndex);
+    } else if (draggedIndex < currentBlockIndex && finalTargetIndex >= currentBlockIndex) {
+      setCurrentBlockIndex(currentBlockIndex - 1);
+    } else if (draggedIndex > currentBlockIndex && finalTargetIndex <= currentBlockIndex) {
+      setCurrentBlockIndex(currentBlockIndex + 1);
+    }
 
-      // Update floating preview position - use touch offset to keep preview under finger
-      if (draggedBlockRectRef.current) {
-        setDragPosition({
-          x: draggedBlockRectRef.current.left,
-          y: clientY - dragTouchOffsetRef.current
-        });
+    // Persist the new order. exercise_blocks."order" (the column the loader
+    // sorts by) is UNIQUE per session, so write in two passes — park every
+    // block on a temporary offset first, then write the final 1..n values —
+    // to avoid transient unique-constraint collisions mid-update.
+    try {
+      const supabase = createUntypedClient();
+      for (let i = 0; i < newBlocks.length; i++) {
+        const { error: parkError } = await supabase
+          .from('exercise_blocks')
+          .update({ order: i + 1001 })
+          .eq('id', newBlocks[i].id);
+        if (parkError) throw parkError;
       }
-
-      // Calculate which position the item would drop at (attribute-based:
-      // DOM order can differ from block order with the "Up next" section)
-      if (!exerciseListRef.current) return;
-      const listItems = exerciseListRef.current.querySelectorAll('[data-block-index]');
-      let targetIndex = draggedBlockIndexRef.current;
-
-      for (let i = 0; i < listItems.length; i++) {
-        const item = listItems[i] as HTMLElement;
-        const itemIndex = Number(item.dataset.blockIndex);
-        if (Number.isNaN(itemIndex)) continue;
-        const rect = item.getBoundingClientRect();
-        const midY = rect.top + rect.height / 2;
-
-        if (clientY < midY) {
-          targetIndex = itemIndex;
-          break;
-        }
-        targetIndex = itemIndex + 1;
+      for (let i = 0; i < newBlocks.length; i++) {
+        const { error: orderError } = await supabase
+          .from('exercise_blocks')
+          .update({ order: i + 1 })
+          .eq('id', newBlocks[i].id);
+        if (orderError) throw orderError;
       }
+    } catch (err) {
+      console.error('Error saving reorder:', err);
+    }
+  }, [blocks, currentBlockIndex, stopAutoScroll]);
 
-      // Clamp to valid range
-      targetIndex = Math.max(0, Math.min(targetIndex, blocks.length - 1));
-
-      if (targetIndex !== draggedBlockIndexRef.current) {
-        setDragOverBlockIndex(targetIndex);
-      }
+  // Pointer handlers wired onto each ☰ handle.
+  const handleDragPointerDown = useCallback((e: React.PointerEvent, index: number) => {
+    e.stopPropagation();
+    const element = document.querySelector(`[data-block-index="${index}"]`) as HTMLElement | null;
+    pendingDragRef.current = {
+      index,
+      startY: e.clientY,
+      rect: element ? element.getBoundingClientRect() : null,
+      offset: 0,
+      active: false,
     };
+    // Capture so subsequent move/up fire on this handle even off-element.
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* older WebViews */ }
+  }, []);
 
-    const handleTouchMove = (e: TouchEvent) => {
-      e.preventDefault();
-      handleDocumentMove(e.touches[0].clientY);
-    };
+  const handleDragPointerMove = useCallback((e: React.PointerEvent) => {
+    const pending = pendingDragRef.current;
+    if (!pending) return;
 
-    const handleMouseMove = (e: MouseEvent) => {
-      handleDocumentMove(e.clientY);
-    };
+    if (!pending.active) {
+      // Not dragging yet — wait for the activation threshold so a tap on the
+      // handle doesn't trigger a reorder.
+      if (Math.abs(e.clientY - pending.startY) < DRAG_ACTIVATE_PX) return;
+      pending.active = true;
+      beginDrag(pending.index, e.clientY, pending.rect);
+    }
 
-    const handleTouchEnd = () => {
-      handleBlockDragEnd();
-    };
+    // Dragging: block the browser's native scroll for this pointer and update.
+    if (e.cancelable) e.preventDefault();
+    pointerYRef.current = e.clientY;
+    applyPreviewPosition(e.clientY);
+    setDragOverIfChanged(computeDragTargetIndex(e.clientY));
+  }, [beginDrag, applyPreviewPosition, computeDragTargetIndex, setDragOverIfChanged]);
 
-    const handleMouseUp = () => {
-      handleBlockDragEnd();
-    };
+  const handleDragPointerUp = useCallback((e: React.PointerEvent) => {
+    e.stopPropagation();
+    try { e.currentTarget.releasePointerCapture(e.pointerId); } catch { /* noop */ }
+    const pending = pendingDragRef.current;
+    pendingDragRef.current = null;
+    if (pending?.active) {
+      void finishDrag();
+    } else {
+      // Never crossed the threshold — treat as a tap, leave order untouched.
+      stopAutoScroll();
+    }
+  }, [finishDrag, stopAutoScroll]);
 
-    document.addEventListener('touchmove', handleTouchMove, { passive: false });
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('touchend', handleTouchEnd);
-    document.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      document.removeEventListener('touchmove', handleTouchMove);
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('touchend', handleTouchEnd);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isDraggingBlock, blocks.length, handleBlockDragEnd]);
+  // Safety net: cancel any in-flight autoscroll loop on unmount.
+  useEffect(() => stopAutoScroll, [stopAutoScroll]);
 
   const handleExerciseSwap = async (blockId: string, newExercise: Exercise) => {
     // Capture original exercise info before swap for override tracking
@@ -4337,12 +4334,16 @@ export default function WorkoutPage() {
             <div
               id={`exercise-${index}`}
               data-block-index={index}
-              style={{ transform: translateY ? `translateY(${translateY}px)` : undefined }}
+              data-dragging={isBeingDragged ? 'true' : undefined}
+              style={{
+                transform: translateY ? `translateY(${translateY}px)` : undefined,
+                contain: isDraggingBlock ? 'layout paint' : undefined,
+              }}
               className={`transition-transform duration-200 ease-out ${
                 isCurrent ? '' : 'opacity-80'
               } ${isInSuperset ? 'border-l-2 border-cyan-500/50 pl-2' : ''} ${
                 isBeingDragged ? 'opacity-0 pointer-events-none' : ''
-              }`}
+              } ${isDraggingBlock && !isBeingDragged ? 'opacity-50' : ''}`}
               onClick={(e) => {
                 // Only activate if not already current and click wasn't on an interactive element
                 if (!isCurrent && !isDraggingBlock) {
@@ -4356,32 +4357,17 @@ export default function WorkoutPage() {
               }}
             >
               {/* Exercise header with drag handle and collapse - simplified since name is now in grouped container */}
-              <div 
+              <div
                 className={`flex items-center gap-3 mb-3 ${!isCurrent ? 'cursor-pointer' : ''}`}
               >
-                {/* Drag handle - long press here to reorder */}
+                {/* Drag handle — pointer-down + ~8px here begins the reorder */}
                 <div
                   data-drag-handle
                   className="flex flex-col gap-0.5 text-surface-500 cursor-grab active:cursor-grabbing p-2 -m-1 touch-none"
-                  onTouchStart={(e) => {
-                    e.stopPropagation();
-                    handleBlockLongPressStart(index, e.touches[0].clientY);
-                  }}
-                  onTouchEnd={(e) => {
-                    e.stopPropagation();
-                    handleBlockLongPressEnd();
-                    handleBlockDragEnd();
-                  }}
-                  onMouseDown={(e) => {
-                    e.stopPropagation();
-                    handleBlockLongPressStart(index, e.clientY);
-                  }}
-                  onMouseUp={(e) => {
-                    e.stopPropagation();
-                    handleBlockLongPressEnd();
-                    handleBlockDragEnd();
-                  }}
-                  onMouseLeave={handleBlockLongPressEnd}
+                  onPointerDown={(e) => handleDragPointerDown(e, index)}
+                  onPointerMove={handleDragPointerMove}
+                  onPointerUp={handleDragPointerUp}
+                  onPointerCancel={handleDragPointerUp}
                 >
                   <div className="w-5 h-0.5 bg-current rounded" />
                   <div className="w-5 h-0.5 bg-current rounded" />
@@ -4413,9 +4399,10 @@ export default function WorkoutPage() {
                   {isComplete && !isCurrent && (
                     <Badge variant="success" size="sm">Done</Badge>
                   )}
-                  {/* Exercise name — only in this list row when COLLAPSED; when expanded
-                      the richer group-container header below shows the name (avoids duplication) */}
-                  {(allCollapsed || isBlockCollapsed) && (
+                  {/* Exercise name — shown in this list row when COLLAPSED or
+                      while dragging (bodies are frozen then); when expanded the
+                      richer group-container header below shows the name instead. */}
+                  {(allCollapsed || isBlockCollapsed || isDraggingBlock) && (
                     <span className={`text-sm font-medium truncate ${
                       isCurrent ? 'text-surface-100' : 'text-surface-300'
                     }`}>
@@ -4481,8 +4468,11 @@ export default function WorkoutPage() {
                 </button>
               </div>
 
-              {/* Expanded content - show when not globally collapsed and not individually collapsed */}
-              {!allCollapsed && !isBlockCollapsed && (() => {
+              {/* Expanded content - show when not globally collapsed and not
+                  individually collapsed. Frozen while a drag is in flight so
+                  rows render as lightweight title-bar proxies (no set lists,
+                  warmups, or AI-rec computations re-running per position swap). */}
+              {!allCollapsed && !isBlockCollapsed && !isDraggingBlock && (() => {
                 // Calculate AI recommended weight first so it can be used for warmup
                 const exerciseNote = coachMessage?.exerciseNotes.find(
                   n => n.name === block.exercise.name
@@ -4838,10 +4828,11 @@ export default function WorkoutPage() {
                 <div
                   key={block.id}
                   data-block-index={index}
+                  data-dragging={isBeingDragged ? 'true' : undefined}
                   style={{ transform: translateY ? `translateY(${translateY}px)` : undefined }}
                   className={`flex items-center gap-3 bg-surface-800/50 rounded-lg px-3 py-2.5 transition-transform duration-200 ease-out cursor-pointer hover:bg-surface-800 ${
                     isBeingDragged ? 'opacity-0 pointer-events-none' : ''
-                  }`}
+                  } ${isDraggingBlock && !isBeingDragged ? 'opacity-50' : ''}`}
                   onClick={(e) => {
                     if (isDraggingBlock) return;
                     const target = e.target as HTMLElement;
@@ -4863,29 +4854,14 @@ export default function WorkoutPage() {
                   >
                     Skip today
                   </button>
-                  {/* Drag handle - hold to reorder (wired to the existing block drag state) */}
+                  {/* Drag handle — pointer-down + ~8px here begins the reorder */}
                   <div
                     data-drag-handle
                     className="text-surface-500 cursor-grab active:cursor-grabbing p-1.5 -m-1 touch-none flex-shrink-0"
-                    onTouchStart={(e) => {
-                      e.stopPropagation();
-                      handleBlockLongPressStart(index, e.touches[0].clientY);
-                    }}
-                    onTouchEnd={(e) => {
-                      e.stopPropagation();
-                      handleBlockLongPressEnd();
-                      handleBlockDragEnd();
-                    }}
-                    onMouseDown={(e) => {
-                      e.stopPropagation();
-                      handleBlockLongPressStart(index, e.clientY);
-                    }}
-                    onMouseUp={(e) => {
-                      e.stopPropagation();
-                      handleBlockLongPressEnd();
-                      handleBlockDragEnd();
-                    }}
-                    onMouseLeave={handleBlockLongPressEnd}
+                    onPointerDown={(e) => handleDragPointerDown(e, index)}
+                    onPointerMove={handleDragPointerMove}
+                    onPointerUp={handleDragPointerUp}
+                    onPointerCancel={handleDragPointerUp}
                   >
                     <IconGripVertical size={16} stroke={2} />
                   </div>
@@ -4896,17 +4872,24 @@ export default function WorkoutPage() {
         )}
       </div>
 
-      {/* Floating drag preview */}
-      {isDraggingBlock && draggedBlockIndex !== null && dragPosition && (
+      {/* Floating drag preview. Positioned imperatively via a translate3d on
+          this node (see applyPreviewPosition) so following the finger never
+          re-renders the page. The callback ref re-applies the latest position
+          on every mount/re-render to stay in sync. */}
+      {isDraggingBlock && draggedBlockIndex !== null && (
         <div
-          className="fixed pointer-events-none z-50 transition-transform duration-75"
-          style={{
-            left: dragPosition.x,
-            top: dragPosition.y,
-            width: draggedBlockRect?.width ?? 'auto',
+          ref={(node) => {
+            dragPreviewRef.current = node;
+            if (node) {
+              node.style.transform =
+                `translate3d(${dragPosRef.current.x}px, ${dragPosRef.current.y}px, 0)`;
+            }
           }}
+          data-testid="drag-preview"
+          className="fixed left-0 top-0 pointer-events-none z-50 will-change-transform"
+          style={{ width: draggedBlockRect?.width ?? 'auto' }}
         >
-          <div className="bg-surface-900 rounded-xl p-3 shadow-2xl shadow-black/50 ring-2 ring-primary-500 scale-[1.02]">
+          <div className="bg-surface-900 rounded-xl p-3 shadow-2xl shadow-black/50 ring-2 ring-primary-500 scale-[1.03]">
             <div className="flex items-center gap-3">
               {/* Drag handle */}
               <div className="flex flex-col gap-0.5 text-surface-400 p-1">
