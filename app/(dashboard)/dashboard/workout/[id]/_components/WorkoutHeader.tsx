@@ -20,6 +20,7 @@ import {
   IconChevronsDown,
   IconChevronsUp,
   IconDotsVertical,
+  IconGauge,
   IconPlayerPause,
   IconPlayerPlay,
   IconPlus,
@@ -54,6 +55,8 @@ export interface WorkoutHeaderProps {
   injuryCount: number;
   onOpenInjuryModal: () => void;
   onOpenReadinessModal: () => void;
+  /** Opens the "which muscles should I hit today?" volume + recovery sheet. */
+  onOpenMuscleReadiness: () => void;
   onOpenPlateCalculator: () => void;
   onCancelWorkout: () => void;
   onAddExercise: () => void;
@@ -87,6 +90,7 @@ export function WorkoutHeader({
   injuryCount,
   onOpenInjuryModal,
   onOpenReadinessModal,
+  onOpenMuscleReadiness,
   onOpenPlateCalculator,
   onCancelWorkout,
   onAddExercise,
@@ -217,6 +221,15 @@ export function WorkoutHeader({
                   >
                     <IconActivity size={16} className="text-surface-400" />
                     Readiness
+                  </button>
+                  <button
+                    onClick={() => { onOpenMuscleReadiness(); onCloseToolsMenu(); }}
+                    className={menuItemClass}
+                    role="menuitem"
+                    data-testid="readiness-sheet-trigger"
+                  >
+                    <IconGauge size={16} className="text-surface-400" />
+                    What to train
                   </button>
                   <button
                     onClick={() => { onOpenPlateCalculator(); onCloseToolsMenu(); }}

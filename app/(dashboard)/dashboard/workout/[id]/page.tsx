@@ -37,6 +37,10 @@ import { useWorkoutTimer } from '@/hooks/useWorkoutTimer';
 // Dynamic imports for components not needed on initial render
 const WarmupProtocol = dynamic(() => import('@/components/workout').then(m => m.WarmupProtocol), { ssr: false });
 const ReadinessCheckIn = dynamic(() => import('@/components/workout').then(m => m.ReadinessCheckIn), { ssr: false });
+// The Muscle Readiness sheet (volume + recovery) is lazy — its content and data
+// hook only load/run the first time the user opens it, so it costs the workout
+// screen nothing on load.
+const MuscleReadinessSheet = dynamic(() => import('@/components/workout/MuscleReadinessSheet').then(m => m.MuscleReadinessSheet), { ssr: false });
 // The summary chunk loads over the network the first time the user finishes
 // a workout — without a loading fallback the screen renders BLANK until it
 // arrives (looks frozen on a slow connection), so show a matching skeleton.
@@ -459,6 +463,9 @@ export default function WorkoutPage() {
   // Injury report modal state
   const [showInjuryModal, setShowInjuryModal] = useState(false);
   const [showReadinessModal, setShowReadinessModal] = useState(false);
+  // In-workout Muscle Readiness sheet (volume + recovery). Separate from the
+  // pre-workout readiness CHECK-IN above.
+  const [showMuscleReadinessSheet, setShowMuscleReadinessSheet] = useState(false);
   // Per-muscle "previous session" lookup for the check-in soreness rows:
   // muscles on today's menu that a completed session trained in the last 4 days.
   const [recentMuscleSessions, setRecentMuscleSessions] = useState<
@@ -4159,6 +4166,7 @@ export default function WorkoutPage() {
         injuryCount={temporaryInjuries.length}
         onOpenInjuryModal={() => setShowInjuryModal(true)}
         onOpenReadinessModal={() => setShowReadinessModal(true)}
+        onOpenMuscleReadiness={() => setShowMuscleReadinessSheet(true)}
         onOpenPlateCalculator={() => setShowPlateCalculator(true)}
         onCancelWorkout={() => setShowCancelModal(true)}
         onAddExercise={handleOpenAddExercise}
@@ -5073,6 +5081,18 @@ export default function WorkoutPage() {
             />
           </div>
         </div>
+      )}
+
+      {/* Muscle Readiness sheet (volume + recovery). Lazy-mounted on first open;
+          READ-ONLY over the live session — passed the page's own block/set state,
+          never the store, so it can't mutate the session. */}
+      {showMuscleReadinessSheet && (
+        <MuscleReadinessSheet
+          isOpen={showMuscleReadinessSheet}
+          onClose={() => setShowMuscleReadinessSheet(false)}
+          liveBlocks={activeBlocks}
+          liveSets={completedSets}
+        />
       )}
 
       {/* Injury Report Modal */}
