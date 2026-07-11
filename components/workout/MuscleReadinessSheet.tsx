@@ -48,7 +48,7 @@ function formatReadyIn(hours: number): string {
   return `ready in ~${days}d`;
 }
 
-function ReadinessRowView({ row }: { row: ReadinessRow }) {
+export function ReadinessRowView({ row }: { row: ReadinessRow }) {
   const badge = RECOVERY_BADGE[row.recovery.status];
   const fillPct = row.target > 0 ? Math.min(100, Math.round((row.sets / row.target) * 100)) : 0;
   const readyIn = row.recovery.status === 'fresh' ? '' : formatReadyIn(row.recovery.hoursUntilReady);
@@ -86,6 +86,66 @@ function ReadinessRowView({ row }: { row: ReadinessRow }) {
   );
 }
 
+/**
+ * MuscleReadinessContent — the read-only "good targets + per-muscle rows" body
+ * shared by the bottom sheet and the empty-workout inline placement. Purely
+ * presentational: it takes already-assembled rows/targets (from
+ * `useMuscleReadiness`) so both surfaces render identical UI off the same data
+ * path. `maxRows` trims the list for the compact inline variant.
+ */
+export function MuscleReadinessContent({
+  rows,
+  targets,
+  isLoading,
+  maxRows,
+  loadingTestId = 'readiness-sheet-loading',
+  showFootnote = true,
+}: {
+  rows: ReadinessRow[];
+  targets: ReadinessRow[];
+  isLoading: boolean;
+  maxRows?: number;
+  loadingTestId?: string;
+  showFootnote?: boolean;
+}) {
+  const targetNames = targets.map((t) => t.displayName).join(', ');
+  const visibleRows = typeof maxRows === 'number' ? rows.slice(0, maxRows) : rows;
+
+  return (
+    <>
+      {/* Top strip: the answer at a glance. */}
+      <div className="mb-2 rounded-lg bg-surface-800/60 px-3 py-2.5">
+        <p className="text-[11px] uppercase tracking-wide text-surface-500">Good targets today</p>
+        <p className="text-sm text-surface-100 mt-0.5" data-testid="readiness-targets">
+          {targets.length > 0
+            ? targetNames
+            : "You're on top of volume — nothing behind and recovered right now."}
+        </p>
+      </div>
+
+      {isLoading ? (
+        <div className="py-8 text-center text-sm text-surface-500" data-testid={loadingTestId}>
+          Loading readiness…
+        </div>
+      ) : (
+        <div className="divide-y divide-surface-800/70">
+          {visibleRows.map((row) => (
+            <ReadinessRowView key={row.muscle} row={row} />
+          ))}
+        </div>
+      )}
+
+      {showFootnote && (
+        <p className="mt-3 text-[11px] leading-relaxed text-surface-600">
+          Sorted by what to train now: recovered muscles behind on weekly volume
+          come first; fatigued muscles sink to the bottom. Recovery is a simple
+          planning estimate, not a medical readout.
+        </p>
+      )}
+    </>
+  );
+}
+
 export function MuscleReadinessSheet({
   isOpen,
   onClose,
@@ -103,38 +163,10 @@ export function MuscleReadinessSheet({
     enabled: isOpen,
   });
 
-  const targetNames = targets.map((t) => t.displayName).join(', ');
-
   return (
     <BottomSheet isOpen={isOpen} onClose={onClose} title="Muscle readiness">
       <div data-testid="readiness-sheet">
-        {/* Top strip: the answer at a glance. */}
-        <div className="mb-2 rounded-lg bg-surface-800/60 px-3 py-2.5">
-          <p className="text-[11px] uppercase tracking-wide text-surface-500">Good targets today</p>
-          <p className="text-sm text-surface-100 mt-0.5" data-testid="readiness-targets">
-            {targets.length > 0
-              ? targetNames
-              : "You're on top of volume — nothing behind and recovered right now."}
-          </p>
-        </div>
-
-        {isLoading ? (
-          <div className="py-8 text-center text-sm text-surface-500" data-testid="readiness-sheet-loading">
-            Loading readiness…
-          </div>
-        ) : (
-          <div className="divide-y divide-surface-800/70">
-            {rows.map((row) => (
-              <ReadinessRowView key={row.muscle} row={row} />
-            ))}
-          </div>
-        )}
-
-        <p className="mt-3 text-[11px] leading-relaxed text-surface-600">
-          Sorted by what to train now: recovered muscles behind on weekly volume
-          come first; fatigued muscles sink to the bottom. Recovery is a simple
-          planning estimate, not a medical readout.
-        </p>
+        <MuscleReadinessContent rows={rows} targets={targets} isLoading={isLoading} />
       </div>
     </BottomSheet>
   );
