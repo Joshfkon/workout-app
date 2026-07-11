@@ -9,6 +9,24 @@ import { deriveWorkoutLabel, formatDistanceToNow, formatDuration } from '@/lib/u
 /** Matches hooks/useRestTimer's persisted shape. */
 const TIMER_STORAGE_KEY = 'workout_rest_timer';
 
+/**
+ * A persisted session with zero logged sets older than this is treated as
+ * abandoned. Rather than silently resuming it (whose timer would read hours
+ * long), we prompt "Resume or discard?" so a stale, empty session can't linger
+ * behind a fresh workout.
+ */
+export const STALE_EMPTY_SESSION_MS = 4 * 60 * 60 * 1000; // 4 hours
+
+export function isStaleEmptySession(
+  completedSetsCount: number,
+  startedAt: Date | null,
+  now: number
+): boolean {
+  if (completedSetsCount > 0) return false;
+  if (!startedAt) return false;
+  return now - startedAt.getTime() > STALE_EMPTY_SESSION_MS;
+}
+
 /** Remaining rest seconds from the timer's localStorage state, or null. */
 function readRestRemaining(): number | null {
   try {
@@ -29,6 +47,9 @@ export function ResumeWorkoutBanner() {
   const [mounted, setMounted] = useState(false);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [restRemaining, setRestRemaining] = useState<number | null>(null);
+  // Once the user answers the stale-empty prompt (or resumes past it), don't
+  // re-nag them for the same session while it stays mounted.
+  const [stalePromptDismissed, setStalePromptDismissed] = useState(false);
 
   const activeSession = useWorkoutStore((state) => state.activeSession);
   const exerciseBlocks = useWorkoutStore((state) => state.exerciseBlocks);
@@ -74,6 +95,11 @@ export function ResumeWorkoutBanner() {
     ? formatDistanceToNow(startedAt)
     : null;
 
+  // A persisted session with no sets that's been open for hours is almost
+  // certainly abandoned (e.g. left hanging on the add-exercise bug). Ask
+  // instead of silently keeping it alive behind the next workout.
+  const staleEmpty = isStaleEmptySession(completedSetsCount, startedAt, Date.now());
+
   const handleResume = () => {
     router.push(`/dashboard/workout/${activeSession.id}`);
   };
@@ -100,6 +126,39 @@ export function ResumeWorkoutBanner() {
             .filter((m): m is string => Boolean(m))
         )
       : 'Workout in progress';
+
+  // Stale + empty: prompt Resume-or-discard instead of the passive pill so a
+  // forgotten session can't quietly resurface with an hours-long timer.
+  if (staleEmpty && !stalePromptDismissed) {
+    return (
+      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+        <div className="bg-surface-900 rounded-xl p-6 max-w-sm w-full shadow-xl border border-surface-700">
+          <h3 className="text-lg font-semibold text-surface-100 mb-2">
+            Resume workout?
+          </h3>
+          <p className="text-surface-400 text-sm mb-4">
+            You started a workout{timeAgo ? ` ${timeAgo}` : ' a while ago'} but
+            never logged a set. Resume it, or discard it and start fresh?
+          </p>
+          <div className="flex gap-3">
+            <Button
+              onClick={() => { endSession(); setStalePromptDismissed(true); }}
+              variant="secondary"
+              className="flex-1"
+            >
+              Discard
+            </Button>
+            <Button
+              onClick={() => { setStalePromptDismissed(true); handleResume(); }}
+              className="flex-1"
+            >
+              Resume
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
