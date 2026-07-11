@@ -14,12 +14,15 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { loadEnv } from './_env';
 import {
   groupDuplicates,
   suggestSurvivor,
   type DedupExercise,
   type DedupGroup,
 } from '../services/exerciseDedup';
+
+loadEnv();
 
 type Row = Record<string, any>;
 

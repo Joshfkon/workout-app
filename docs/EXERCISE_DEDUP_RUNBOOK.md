@@ -60,11 +60,31 @@ What the migration does:
   `unmerge_exercise(id)` (service-role only).
 - After this, the app automatically hides soft-deleted exercises.
 
-## 3. Set service-role env vars (for the scripts)
+## 3. Provide the service-role credentials
 
 The scripts run with **`npx tsx`** (not `ts-node` — this repo's `module: esnext`
-tsconfig makes ts-node fail with `ERR_UNKNOWN_FILE_EXTENSION`). Set the env vars
-in the **same window** you run the script from. Syntax depends on your shell:
+tsconfig makes ts-node fail with `ERR_UNKNOWN_FILE_EXTENSION`).
+
+### Easiest: put them in `.env.local` (set once, reused forever)
+
+Create/edit `.env.local` in the project root (it's gitignored, so the secret
+stays local) with:
+
+```
+NEXT_PUBLIC_SUPABASE_URL=https://<your-ref>.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=<your sb_secret_... or eyJ... service_role key>
+```
+
+The scripts auto-load `.env.local` (then `.env`) via `scripts/_env.ts`, so you
+can just run `npx tsx scripts/exerciseDedupAudit.ts` with no `set`/`$env:` step.
+Real environment variables, if present, still win over the file.
+
+> Use the **secret** key (`sb_secret_…` or the legacy `service_role` JWT), not
+> the publishable/anon key — the scripts need to bypass row-level security.
+
+### Or: set them for one terminal window
+
+Syntax depends on your shell, and they only last for that window:
 
 **Command Prompt (cmd)** — note `set "NAME=value"`, no spaces around `=`:
 

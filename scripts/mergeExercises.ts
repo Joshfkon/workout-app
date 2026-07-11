@@ -22,6 +22,10 @@
  *     npx tsx scripts/mergeExercises.ts --survivor <id> --duplicates <id,id> --execute
  */
 
+import { loadEnv } from './_env';
+
+loadEnv();
+
 export interface MergeResult {
   survivor: string;
   survivorName: string;
