@@ -9,7 +9,7 @@
  *
  * Usage:
  *   NEXT_PUBLIC_SUPABASE_URL=xxx SUPABASE_SERVICE_ROLE_KEY=xxx \
- *     npx ts-node scripts/exerciseDedupAudit.ts
+ *     npx tsx scripts/exerciseDedupAudit.ts
  */
 
 import * as fs from 'fs';
@@ -173,7 +173,7 @@ function renderGroup(group: DedupGroup, index: number): string {
   const survivorIds = group.members.filter((m) => m.id !== survivor.id).map((m) => m.id);
   const cmd =
     survivorIds.length > 0
-      ? `\n\nSuggested merge (review first — survivor ✅ keeps its settings):\n\n\`\`\`bash\nnpx ts-node scripts/mergeExercises.ts --survivor ${survivor.id} --duplicates ${survivorIds.join(
+      ? `\n\nSuggested merge (review first — survivor ✅ keeps its settings):\n\n\`\`\`bash\nnpx tsx scripts/mergeExercises.ts --survivor ${survivor.id} --duplicates ${survivorIds.join(
           ','
         )} --dry-run\n\`\`\``
       : '';

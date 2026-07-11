@@ -15,11 +15,11 @@
  * Usage:
  *   # preview (no changes):
  *   NEXT_PUBLIC_SUPABASE_URL=xxx SUPABASE_SERVICE_ROLE_KEY=xxx \
- *     npx ts-node scripts/mergeExercises.ts --survivor <id> --duplicates <id,id> --dry-run
+ *     npx tsx scripts/mergeExercises.ts --survivor <id> --duplicates <id,id> --dry-run
  *
  *   # execute:
  *   NEXT_PUBLIC_SUPABASE_URL=xxx SUPABASE_SERVICE_ROLE_KEY=xxx \
- *     npx ts-node scripts/mergeExercises.ts --survivor <id> --duplicates <id,id> --execute
+ *     npx tsx scripts/mergeExercises.ts --survivor <id> --duplicates <id,id> --execute
  */
 
 export interface MergeResult {

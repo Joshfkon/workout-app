@@ -62,28 +62,40 @@ What the migration does:
 
 ## 3. Set service-role env vars (for the scripts)
 
-PowerShell (lasts for the current window only):
+The scripts run with **`npx tsx`** (not `ts-node` — this repo's `module: esnext`
+tsconfig makes ts-node fail with `ERR_UNKNOWN_FILE_EXTENSION`). Set the env vars
+in the **same window** you run the script from. Syntax depends on your shell:
+
+**Command Prompt (cmd)** — note `set "NAME=value"`, no spaces around `=`:
+
+```cmd
+set "NEXT_PUBLIC_SUPABASE_URL=https://<your-ref>.supabase.co"
+set "SUPABASE_SERVICE_ROLE_KEY=<service-role-key>"
+```
+
+**PowerShell**:
 
 ```powershell
 $env:NEXT_PUBLIC_SUPABASE_URL="https://<your-ref>.supabase.co"
 $env:SUPABASE_SERVICE_ROLE_KEY="<service-role-key>"
 ```
 
-macOS/Linux equivalent — prefix each command with the vars:
+**macOS/Linux** — prefix each command with the vars:
 
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=https://<ref>.supabase.co \
 SUPABASE_SERVICE_ROLE_KEY=<service-role-key> \
-  npx ts-node scripts/exerciseDedupAudit.ts
+  npx tsx scripts/exerciseDedupAudit.ts
 ```
 
 Find the service-role key in Supabase → Project Settings → API →
 `service_role` secret. **Keep it secret** — it bypasses row-level security.
+These vars only live for the current window; reopening a terminal clears them.
 
 ## 4. Generate the audit (read-only, changes nothing)
 
 ```powershell
-npx ts-node scripts/exerciseDedupAudit.ts
+npx tsx scripts/exerciseDedupAudit.ts
 ```
 
 This overwrites `docs/EXERCISE_DEDUP_AUDIT.md` with the real duplicate groups,
@@ -95,7 +107,7 @@ references, plus a suggested survivor (✅) and a ready-to-run merge command.
 For each group in the audit doc, **dry-run first** and read the counts:
 
 ```powershell
-npx ts-node scripts/mergeExercises.ts --survivor <survivorId> --duplicates <dupId1>,<dupId2> --dry-run
+npx tsx scripts/mergeExercises.ts --survivor <survivorId> --duplicates <dupId1>,<dupId2> --dry-run
 ```
 
 The dry-run reports how many set logs, template/mesocycle refs, etc. will move,
@@ -103,7 +115,7 @@ and which per-user settings will be dropped (survivor's values win). If it looks
 right, apply that one group:
 
 ```powershell
-npx ts-node scripts/mergeExercises.ts --survivor <survivorId> --duplicates <dupId1>,<dupId2> --execute
+npx tsx scripts/mergeExercises.ts --survivor <survivorId> --duplicates <dupId1>,<dupId2> --execute
 ```
 
 Rules of the road:
@@ -122,10 +134,15 @@ Rules of the road:
 
 ## Troubleshooting
 
+- **`ERR_UNKNOWN_FILE_EXTENSION ".ts"`** (from `ts-node`): use **`npx tsx`**
+  instead — it handles this repo's TS/ESM setup. `npx tsx` will offer to install
+  `tsx` the first time; accept it.
+- **`The filename, directory name, or volume label syntax is incorrect`** when
+  setting a var: you're in **cmd**, so use `set "NAME=value"`, not the PowerShell
+  `$env:NAME="value"` form.
 - **PowerShell blocks `npx`** (execution policy): run from Git Bash or cmd, or
   `Set-ExecutionPolicy -Scope Process RemoteSigned` in that window.
-- **`ts-node: command not found`**: run `npm install` in the folder.
 - **`db push` says "no migrations to apply"** but the file is there: you're on
   the wrong branch — recheck `git log --oneline -1`.
 - **Script errors with "Set NEXT_PUBLIC_SUPABASE_URL…"**: the env vars aren't set
-  in the current window (step 3); `$env:` vars don't carry across windows.
+  in the current window (step 3); they don't carry across windows.

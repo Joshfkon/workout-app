@@ -11,7 +11,7 @@
 >
 > ```bash
 > NEXT_PUBLIC_SUPABASE_URL=xxx SUPABASE_SERVICE_ROLE_KEY=xxx \
->   npx ts-node scripts/exerciseDedupAudit.ts
+>   npx tsx scripts/exerciseDedupAudit.ts
 > ```
 >
 > That overwrites this file with actual rows. The grouping/normalization logic
@@ -42,7 +42,7 @@ _Identical normalized name (parentheticals/punctuation/plurals ignored)._
 Suggested merge (review first — survivor ✅ keeps its settings):
 
 ```bash
-npx ts-node scripts/mergeExercises.ts --survivor <uuid-a> --duplicates <uuid-b>,<uuid-c>,<uuid-d> --dry-run
+npx tsx scripts/mergeExercises.ts --survivor <uuid-a> --duplicates <uuid-b>,<uuid-c>,<uuid-d> --dry-run
 ```
 
 #### Group 2: `adduction hip machine` (2 entries)
@@ -57,7 +57,7 @@ _Identical normalized name (parentheticals/punctuation/plurals ignored)._
 Suggested merge (review first — survivor ✅ keeps its settings):
 
 ```bash
-npx ts-node scripts/mergeExercises.ts --survivor <uuid-e> --duplicates <uuid-f> --dry-run
+npx tsx scripts/mergeExercises.ts --survivor <uuid-e> --duplicates <uuid-f> --dry-run
 ```
 
 ## Possible duplicates
@@ -77,7 +77,7 @@ _Similar names within the same primary muscle (≥ 60% name similarity)._
 Suggested merge (review first — survivor ✅ keeps its settings):
 
 ```bash
-npx ts-node scripts/mergeExercises.ts --survivor <uuid-g> --duplicates <uuid-h> --dry-run
+npx tsx scripts/mergeExercises.ts --survivor <uuid-g> --duplicates <uuid-h> --dry-run
 ```
 
 ---
