@@ -52,6 +52,45 @@ export function formatDate(date: string | Date, options?: Intl.DateTimeFormatOpt
 }
 
 /**
+ * Format a date for a chart axis tick: short month + day, with the year
+ * included only when the visible range crosses a year boundary
+ * (e.g. "Jul 4" vs "Jul 4, 2025"). Keeps tick labels narrow so they don't
+ * overlap on small viewports.
+ */
+export function formatChartTickDate(date: string | Date, includeYear = false): string {
+  return formatDate(
+    date,
+    includeYear
+      ? { month: 'short', day: 'numeric', year: 'numeric' }
+      : { month: 'short', day: 'numeric', year: undefined }
+  );
+}
+
+/**
+ * Index step for thinning date ticks based on how many days the range spans:
+ * 7D = every day, 14D = every 2nd day, 30D = weekly, 90D = every 2 weeks.
+ */
+export function dateTickStep(days: number): number {
+  if (days <= 7) return 1; // every day
+  if (days <= 14) return 2; // every 2nd day
+  if (days <= 30) return 7; // weekly
+  return 14; // every 2 weeks
+}
+
+/**
+ * Whether the tick at `index` (of `total` points) should render a label.
+ * The first and last points always get a label; interior ticks appear every
+ * `step` points, and a regular interior tick is suppressed when it would
+ * crowd the always-present last label.
+ */
+export function showDateTick(index: number, total: number, step: number): boolean {
+  const last = total - 1;
+  if (index <= 0 || index >= last) return true;
+  if (step <= 1) return true;
+  return index % step === 0 && last - index >= step;
+}
+
+/**
  * Format a date as a relative time string (e.g., "2 hours ago", "3 days ago")
  */
 export function formatDistanceToNow(date: string | Date): string {

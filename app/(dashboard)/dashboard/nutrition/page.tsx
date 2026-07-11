@@ -49,7 +49,13 @@ import { recalculateMacrosForWeight } from '@/lib/actions/nutrition';
 import { getAdaptiveTDEE, onWeightLoggedRecalculateTDEE, resetAndRecalculateTDEE, type TDEEData } from '@/lib/actions/tdee';
 import { TDEEDashboard } from '@/components/nutrition/TDEEDashboard';
 import { StepTracking } from '@/components/nutrition/StepTracking';
-import { getLocalDateString, formatDate } from '@/lib/utils';
+import {
+  getLocalDateString,
+  formatDate,
+  formatChartTickDate,
+  dateTickStep,
+  showDateTick,
+} from '@/lib/utils';
 import { getDisplayWeight, prepareWeightForStorage } from '@/lib/weightUtils';
 import { computeWeightRate } from '@/app/(dashboard)/dashboard/_lib/weightRate';
 import {
@@ -1368,23 +1374,25 @@ function NutritionPageContent() {
 
   // Prepare weight chart data (with unit validation and conversion)
   // Sort by date ascending (oldest first) for proper graph display
-  const weightChartData = [...weightEntries]
+  const weightChartEntries = [...weightEntries]
     .sort((a, b) => new Date(a.logged_at).getTime() - new Date(b.logged_at).getTime())
-    .slice(-30) // Take last 30 entries (most recent)
-    .map((entry) => {
-      // Use logged_at directly as date string to avoid timezone issues
-      const dateStr = entry.logged_at;
-      const validatedWeight = getDisplayWeight(entry.weight, (entry as any).unit as 'lb' | 'kg' | null, weightUnit);
+    .slice(-30); // Take last 30 entries (most recent)
+  // Include the year in tick labels only when the range crosses a year boundary.
+  const weightChartSpansYear =
+    weightChartEntries.length > 0 &&
+    new Date(weightChartEntries[0].logged_at).getFullYear() !==
+      new Date(weightChartEntries[weightChartEntries.length - 1].logged_at).getFullYear();
+  const weightChartData = weightChartEntries.map((entry) => {
+    // Use logged_at directly as date string to avoid timezone issues
+    const dateStr = entry.logged_at;
+    const validatedWeight = getDisplayWeight(entry.weight, (entry as any).unit as 'lb' | 'kg' | null, weightUnit);
 
-      return {
-        date: dateStr,
-        displayDate: formatDate(dateStr, {
-          month: 'short',
-          day: 'numeric',
-        }),
-        weight: Number(validatedWeight.toFixed(1)),
-      };
-    });
+    return {
+      date: dateStr,
+      displayDate: formatChartTickDate(dateStr, weightChartSpansYear),
+      weight: Number(validatedWeight.toFixed(1)),
+    };
+  });
 
   // Handle null date in rendering
   // CRITICAL: Server and client must render identical HTML to prevent hydration errors
@@ -1859,7 +1867,22 @@ function NutritionPageContent() {
                       <XAxis
                         dataKey="displayDate"
                         stroke="#888"
-                        style={{ fontSize: '12px' }}
+                        style={{ fontSize: '11px' }}
+                        interval={0}
+                        minTickGap={0}
+                        tickFormatter={(value: string, index: number) =>
+                          showDateTick(
+                            index,
+                            weightChartData.length,
+                            dateTickStep(weightChartData.length)
+                          )
+                            ? value
+                            : ''
+                        }
+                        angle={-35}
+                        textAnchor="end"
+                        height={44}
+                        tickMargin={6}
                       />
                       <YAxis
                         stroke="#888"

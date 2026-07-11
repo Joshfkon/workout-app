@@ -11,7 +11,7 @@ import {
   ResponsiveContainer,
   ReferenceLine,
 } from 'recharts';
-import { formatDate } from '@/lib/utils';
+import { formatDate, formatChartTickDate, dateTickStep, showDateTick } from '@/lib/utils';
 import { getDisplayWeight } from '@/lib/weightUtils';
 import type { RechartsTooltipProps } from '@/types/database-queries';
 
@@ -78,6 +78,12 @@ export const WeightGraph = memo(function WeightGraph({ weightHistory, preferredU
       .filter((entry) => new Date(entry.date) >= cutoffDate)
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
+    // Include the year in tick labels only when the range crosses a year boundary.
+    const spansYear =
+      filtered.length > 0 &&
+      new Date(filtered[0].date).getFullYear() !==
+        new Date(filtered[filtered.length - 1].date).getFullYear();
+
     return filtered.map((entry) => {
       // Use unified weight utility for consistent validation and conversion
       const displayWeight = getDisplayWeight(
@@ -88,7 +94,7 @@ export const WeightGraph = memo(function WeightGraph({ weightHistory, preferredU
 
       return {
         date: entry.date,
-        displayDate: formatDate(entry.date, { month: 'short', day: 'numeric' }),
+        displayDate: formatChartTickDate(entry.date, spansYear),
         weight: Number(displayWeight.toFixed(1)),
       };
     });
@@ -190,8 +196,17 @@ export const WeightGraph = memo(function WeightGraph({ weightHistory, preferredU
               fontSize={10}
               tickLine={false}
               axisLine={false}
-              interval="preserveStartEnd"
-              tickMargin={8}
+              interval={0}
+              minTickGap={0}
+              tickFormatter={(value: string, index: number) =>
+                showDateTick(index, chartData.length, dateTickStep(TIMEFRAME_DAYS[timeframe]))
+                  ? value
+                  : ''
+              }
+              angle={-35}
+              textAnchor="end"
+              height={38}
+              tickMargin={4}
             />
             <YAxis
               stroke="#71717a"

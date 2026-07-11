@@ -35,6 +35,9 @@ import {
   formatHeight,
   heightCmToInches,
   getPlateColor,
+  formatChartTickDate,
+  dateTickStep,
+  showDateTick,
 } from '../utils';
 
 describe('Date Utilities', () => {
@@ -88,6 +91,66 @@ describe('Date Utilities', () => {
     it('handles ISO date strings', () => {
       const result = formatDate('2024-01-15T12:00:00Z');
       expect(result).toContain('2024');
+    });
+  });
+
+  describe('formatChartTickDate', () => {
+    it('omits the year by default', () => {
+      const result = formatChartTickDate('2024-07-04');
+      expect(result).toContain('Jul');
+      expect(result).toContain('4');
+      expect(result).not.toContain('2024');
+    });
+
+    it('includes the year when requested', () => {
+      const result = formatChartTickDate('2024-07-04', true);
+      expect(result).toContain('Jul');
+      expect(result).toContain('4');
+      expect(result).toContain('2024');
+    });
+  });
+
+  describe('dateTickStep', () => {
+    it('labels every day for a 7-day range', () => {
+      expect(dateTickStep(7)).toBe(1);
+    });
+
+    it('labels every 2nd day for a 14-day range', () => {
+      expect(dateTickStep(14)).toBe(2);
+    });
+
+    it('labels weekly for a 30-day range', () => {
+      expect(dateTickStep(30)).toBe(7);
+    });
+
+    it('labels every 2 weeks for a 90-day range', () => {
+      expect(dateTickStep(90)).toBe(14);
+    });
+  });
+
+  describe('showDateTick', () => {
+    it('always shows the first and last points', () => {
+      expect(showDateTick(0, 30, 7)).toBe(true);
+      expect(showDateTick(29, 30, 7)).toBe(true);
+    });
+
+    it('shows every point when step is 1', () => {
+      for (let i = 0; i < 7; i++) {
+        expect(showDateTick(i, 7, 1)).toBe(true);
+      }
+    });
+
+    it('shows interior ticks on the step interval', () => {
+      // 30-day weekly: 0, 7, 14, 21, then forced last (29); 28 is suppressed
+      const shown = Array.from({ length: 30 }, (_, i) => showDateTick(i, 30, 7))
+        .map((v, i) => (v ? i : null))
+        .filter((i): i is number => i !== null);
+      expect(shown).toEqual([0, 7, 14, 21, 29]);
+    });
+
+    it('suppresses an interior tick that would crowd the last label', () => {
+      // index 28 is a step multiple but sits next to the forced last (29)
+      expect(showDateTick(28, 30, 7)).toBe(false);
     });
   });
 
