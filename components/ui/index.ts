@@ -33,6 +33,7 @@ export {
   SkeletonExercise, 
   FullPageLoading 
 } from './LoadingAnimation';
+export { ErrorRetry } from './ErrorRetry';
 export { SwipeableRow } from './SwipeableRow';
 export { InfoTooltip, ExplainedTerm, type InfoTooltipProps } from './InfoTooltip';
 export { FirstTimeHint, InlineHint, type FirstTimeHintProps } from './FirstTimeHint';

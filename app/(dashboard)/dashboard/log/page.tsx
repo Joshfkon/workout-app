@@ -42,6 +42,7 @@ import {
   IconSalad,
 } from '@tabler/icons-react';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { resolveAuthState } from '@/lib/supabase/authState';
 import { getLocalDateString } from '@/lib/utils';
 import {
   startMesocycleWorkoutSession,
@@ -431,12 +432,18 @@ export default function LogPage() {
     setIsStartingBlank(true);
     setError(null);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      const auth = await resolveAuthState(supabase);
+      if (auth.status === 'unauthenticated') {
         router.push('/login');
         return;
       }
-      const { sessionId } = await getOrCreateTodaySession(supabase, user.id);
+      if (auth.status === 'error') {
+        // Verify failed transiently — don't sign the user out; let them retry.
+        setError("Couldn't verify your session. Check your connection and try again.");
+        setIsStartingBlank(false);
+        return;
+      }
+      const { sessionId } = await getOrCreateTodaySession(supabase, auth.userId);
       router.push(`/dashboard/workout/${sessionId}?fromCreate=true`);
     } catch (err) {
       console.error('Failed to start blank workout:', err);

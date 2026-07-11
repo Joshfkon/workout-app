@@ -14,6 +14,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { IconBarbell, IconLoader2 } from '@tabler/icons-react';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { resolveAuthState } from '@/lib/supabase/authState';
 import { Button, Card } from '@/components/ui';
 import {
   findTodayAdhocSession,
@@ -33,12 +34,16 @@ export default function QuickWorkoutPage() {
     let cancelled = false;
     (async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
+        const auth = await resolveAuthState(supabase);
+        // Only a genuinely signed-out user goes to /login. A transient verify
+        // failure must NOT log them out — the lookup is best-effort, so we just
+        // fall through and let the Start tap re-resolve everything.
+        if (auth.status === 'unauthenticated') {
           router.push('/login');
           return;
         }
-        const found = await findTodayAdhocSession(supabase, user.id);
+        if (auth.status === 'error') return;
+        const found = await findTodayAdhocSession(supabase, auth.userId);
         if (!cancelled) setExisting(found);
       } catch {
         // Lookup is best-effort; the Start tap re-resolves everything.
@@ -55,12 +60,18 @@ export default function QuickWorkoutPage() {
     setIsStarting(true);
     setError('');
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      const auth = await resolveAuthState(supabase);
+      if (auth.status === 'unauthenticated') {
         router.push('/login');
         return;
       }
-      const { sessionId } = await getOrCreateTodaySession(supabase, user.id);
+      if (auth.status === 'error') {
+        // Couldn't verify the session — don't sign the user out. Let them retry.
+        setError("Couldn't verify your session. Check your connection and try again.");
+        setIsStarting(false);
+        return;
+      }
+      const { sessionId } = await getOrCreateTodaySession(supabase, auth.userId);
       router.replace(`/dashboard/workout/${sessionId}?fromCreate=true`);
     } catch (err) {
       console.error('Failed to start quick workout:', err);

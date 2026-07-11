@@ -5,8 +5,9 @@ import { useQuery, useQueryClient, useIsRestoring } from '@tanstack/react-query'
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { Card, CardHeader, CardTitle, CardContent, Button, Badge, FullPageLoading } from '@/components/ui';
+import { Card, CardHeader, CardTitle, CardContent, Button, Badge, FullPageLoading, ErrorRetry } from '@/components/ui';
 import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
+import { resolveAuthState } from '@/lib/supabase/authState';
 import { BodyMeasurements } from '@/components/dashboard/BodyMeasurements';
 import { useMusclePriorities } from '@/components/settings/MusclePrioritySettings';
 import { createUntypedClient } from '@/lib/supabase/client';
@@ -377,6 +378,11 @@ function PercentileBar({ percentile, label, showValue = true }: { percentile: nu
   );
 }
 
+// Sentinel returned by the main query when there's genuinely no session, so
+// the effect can redirect to /login. Kept distinct from a thrown error (a
+// transient verify failure), which drives the retryable error state instead.
+const AUTH_REQUIRED = { authRequired: true } as const;
+
 function AnalyticsPageContent() {
   const router = useRouter();
   const pathname = usePathname();
@@ -512,8 +518,17 @@ function AnalyticsPageContent() {
     queryKey: ['analytics', 'main'],
     queryFn: async () => {
       const supabase = createUntypedClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return null;
+      // Distinguish a genuinely signed-out user (→ /login) from a transient
+      // failure to verify the session (→ throw, so React Query surfaces a
+      // retryable error state). A verify blip must never look like a logout.
+      const auth = await resolveAuthState(supabase);
+      if (auth.status === 'unauthenticated') return AUTH_REQUIRED;
+      if (auth.status === 'error') {
+        throw auth.error instanceof Error
+          ? auth.error
+          : new Error('Could not verify your session');
+      }
+      const user = { id: auth.userId };
       const [profileResult, scanResult, photoResult, sessionsResult] = await Promise.all([
         supabase
           .from('users')
@@ -554,11 +569,11 @@ function AnalyticsPageContent() {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    if (mainQuery.data === null) {
+    if (!mainQuery.data) return;
+    if ('authRequired' in mainQuery.data) {
       router.push('/login');
       return;
     }
-    if (!mainQuery.data) return;
 
     const { userId: uid, profile, scanData, photoData, sessionsData } = mainQuery.data;
 
@@ -1400,6 +1415,22 @@ function AnalyticsPageContent() {
   const recommendations = userProfile?.heightCm
     ? generateCoachingRecommendations(scans, userProfile.heightCm, userProfile.goal, userProfile.experience)
     : [];
+
+  // A transient failure to load/verify the session (network, 5xx, failed
+  // client init) — React Query has already retried and surfaced the error.
+  // Keep the user here with a Retry instead of bouncing them to /login: the
+  // session token is untouched, only the check failed.
+  if (mainQuery.isError) {
+    return (
+      <ErrorRetry
+        fullPage
+        title="Couldn't load your analytics"
+        message="We had trouble reaching the server. You're still signed in — check your connection and try again."
+        onRetry={() => { void mainQuery.refetch(); }}
+        isRetrying={mainQuery.isFetching}
+      />
+    );
+  }
 
   // Full-screen loader only on first-ever load with an empty cache. A revisit
   // (warm cache) or reload (IndexedDB restore) has the bundle available and
