@@ -227,11 +227,13 @@ export function isNetworkError(err: { message?: string; code?: string } | null |
  * set_logs columns added by migrations that may not yet exist in a database
  * running behind the deployed code (e.g. code shipped before the migration was
  * applied). If PostgREST rejects a write because one of these isn't in its
- * schema cache, we strip them and retry so the core set still saves — the
- * classification they carry is non-critical and the set_roles migration
- * recomputes it on backfill. See supabase/migrations/20260709000002_set_roles.sql.
+ * schema cache, we strip them and retry so the core set still saves — the data
+ * they carry is non-critical: set_role/suggestion_engine_version are recomputed
+ * on backfill (20260709000002_set_roles.sql), and a missing location_id simply
+ * degrades the set to legacy null-location (unknown gym) until the location
+ * calibration migration (20260711000002_location_scoped_calibration.sql) lands.
  */
-export const OPTIONAL_SET_LOG_COLUMNS = ['set_role', 'suggestion_engine_version'] as const;
+export const OPTIONAL_SET_LOG_COLUMNS = ['set_role', 'suggestion_engine_version', 'location_id'] as const;
 
 /**
  * True for a PostgREST "column not found in the schema cache" rejection

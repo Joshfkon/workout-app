@@ -58,6 +58,10 @@ interface ExerciseHistory {
   estimatedE1RM: number;
   personalRecord: { weightKg: number; reps: number; e1rm: number; date: string } | null;
   totalSessions: number;
+  /** Location-scoped calibration (services/progressionScope). */
+  progressionScope?: 'global' | 'local';
+  /** True when this history was seeded (softened) from another location. */
+  estimatedFromOtherLocation?: boolean;
 }
 
 interface WarmupSetData {
@@ -1340,9 +1344,18 @@ export const ExerciseCard = memo(function ExerciseCard({
       .map((s) => `× ${s.reps}${isDurationBased ? 's' : ''}`)
       .join(', ');
     const rir = lastSets[0].rpe != null ? Math.max(0, Math.round(10 - lastSets[0].rpe)) : null;
+    // Location-scoped calibration tag: for a local-scope exercise, mark whether
+    // the last session shown is this gym's own track ("· here") or a softened
+    // estimate carried over from another gym (rule 11).
+    let locationTag = '';
+    if (exerciseHistory?.progressionScope === 'local') {
+      locationTag = exerciseHistory.estimatedFromOtherLocation
+        ? ' · est. from another gym'
+        : ' · here';
+    }
     return `last session ${displayWeight(lastSets[0].weightKg, true)} ${weightLabel} ${repsPart}${
       rir !== null ? ` @ ${rir} RIR` : ''
-    }`;
+    }${locationTag}`;
   })();
 
   // Tooltip for the progression pace pill: E1RM trend vs expectation, plus

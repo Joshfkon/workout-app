@@ -103,6 +103,7 @@ import {
   fetchExerciseHistory,
   generateCoachMessage,
 } from './_lib/suggestions';
+import { deriveProgressionScope, type ProgressionScope } from '@/services/progressionScope';
 import {
   mapLoadedBlockRow,
   mapSetLogRow,
@@ -418,6 +419,10 @@ export default function WorkoutPage() {
   // Location filter state
   const [gymLocations, setGymLocations] = useState<GymLocation[]>([]);
   const [selectedLocationFilter, setSelectedLocationFilter] = useState<string | null>(null);
+  // The location THIS session was started at (workout_sessions.location_id).
+  // Stamped on every set logged here and used to scope local-scope exercise
+  // history for calibration. Null = legacy/unknown session.
+  const [sessionLocationId, setSessionLocationId] = useState<string | null>(null);
   const [showLocationDropdown, setShowLocationDropdown] = useState(false);
   // Blocklist of equipment_types ids the selected location lacks; consumed by
   // the shared fail-closed equipment filter (picker, swaps, injury adjuster).
@@ -792,6 +797,12 @@ export default function WorkoutPage() {
         // Transform data (row → domain mapping lives in ./_lib/sessionMapping)
         const transformedSession: WorkoutSession = mapWorkoutSessionRow(sessionData);
 
+        // The location this session was started at — stamped on new sets and
+        // used to scope local-scope exercise history for calibration. `null`
+        // for legacy sessions / databases without the location column.
+        const loadedLocationId = (sessionData.location_id as string | null) ?? null;
+        setSessionLocationId(loadedLocationId);
+
         const transformedBlocks: ExerciseBlockWithExercise[] = (blocksData || [])
           .filter((block: LoadedBlockRow) => block.exercises) // Filter out blocks without exercises
           .map(mapLoadedBlockRow);
@@ -935,7 +946,8 @@ export default function WorkoutPage() {
                     is_warmup,
                     set_number,
                     set_type,
-                    logged_at
+                    logged_at,
+                    location_id
                   )
                 `)
                 .in('exercise_id', exerciseIds)
@@ -1073,8 +1085,45 @@ export default function WorkoutPage() {
         
         // Process exercise history (already fetched in parallel above)
         if (allHistoryBlocks && allHistoryBlocks.length > 0) {
-          // Group by exercise, cap at 10 blocks each, compute E1RM/PR (./_lib/suggestions)
-          const histories: Record<string, ExerciseHistoryData> = buildExerciseHistories(allHistoryBlocks);
+          // Resolve each session exercise's progression scope (equipment-class
+          // derived, honoring any per-exercise override) so local-scope
+          // exercises read location-scoped history for calibration.
+          const scopeByExercise = new Map<string, ProgressionScope>();
+          for (const row of (blocksData || []) as LoadedBlockRow[]) {
+            const ex = row.exercises as
+              | {
+                  id: string;
+                  name?: string | null;
+                  equipment_required?: string[] | null;
+                  is_bodyweight?: boolean | null;
+                  progression_scope_override?: ProgressionScope | null;
+                }
+              | null;
+            if (!ex || scopeByExercise.has(ex.id)) continue;
+            scopeByExercise.set(
+              ex.id,
+              deriveProgressionScope({
+                equipmentRequired: ex.equipment_required,
+                isBodyweight: ex.is_bodyweight,
+                name: ex.name,
+                scopeOverride: ex.progression_scope_override ?? null,
+              })
+            );
+          }
+
+          // Group by exercise, cap at 10 blocks each, compute E1RM/PR (./_lib/suggestions).
+          // With a known session location, local-scope exercises are narrowed
+          // to that location's calibration track (softened fallback to other
+          // gyms on a first session there).
+          const histories: Record<string, ExerciseHistoryData> = buildExerciseHistories(
+            allHistoryBlocks,
+            loadedLocationId
+              ? {
+                  currentLocationId: loadedLocationId,
+                  scopeForExercise: (id) => scopeByExercise.get(id) ?? 'global',
+                }
+              : undefined
+          );
 
           setExerciseHistories(histories);
 
@@ -1832,6 +1881,9 @@ export default function WorkoutPage() {
         set_type: setType,
         set_role: setRole,
         suggestion_engine_version: SUGGESTION_ENGINE_VERSION,
+        // Stamp the session's location so this set feeds the right location's
+        // calibration track for local-scope exercises (null = legacy/unknown).
+        location_id: sessionLocationId,
         parent_set_id: data.parentSetId || null,
         rpe: data.rpe,
         is_warmup: false,
@@ -3234,8 +3286,24 @@ export default function WorkoutPage() {
         // If not in cache, fetch it from the database (for exercises added mid-workout)
         let exerciseHistory: ExerciseHistoryData | undefined = exerciseHistories[exercise.id];
         if (!exerciseHistory) {
-          // Fetch history for this exercise since it wasn't in the original query
-          const fetchedHistory = await fetchExerciseHistory(exercise.id, session.userId);
+          // Fetch history for this exercise since it wasn't in the original
+          // query — location-scoped for local-scope exercises when the session
+          // has a known location.
+          const addedScope = deriveProgressionScope({
+            equipmentRequired: (exercise as { equipment_required?: string[] | null }).equipment_required,
+            isBodyweight: (exercise as { is_bodyweight?: boolean | null }).is_bodyweight,
+            name: exercise.name,
+            scopeOverride:
+              (exercise as { progression_scope_override?: ProgressionScope | null })
+                .progression_scope_override ?? null,
+          });
+          const fetchedHistory = await fetchExerciseHistory(
+            exercise.id,
+            session.userId,
+            sessionLocationId
+              ? { progressionScope: addedScope, currentLocationId: sessionLocationId }
+              : undefined
+          );
           exerciseHistory = fetchedHistory ?? undefined;
 
           // Cache the result for future use (even if null, to avoid re-fetching)

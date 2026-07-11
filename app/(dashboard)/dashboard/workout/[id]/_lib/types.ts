@@ -57,4 +57,17 @@ export interface ExerciseHistoryData {
   estimatedE1RM: number;
   personalRecord: { weightKg: number; reps: number; e1rm: number; date: string } | null;
   totalSessions: number;
+  /**
+   * Location-scoped calibration (services/progressionScope). `global` exercises
+   * read full cross-location history; `local` exercises read history filtered to
+   * the current location. Undefined when history wasn't location-scoped.
+   */
+  progressionScope?: 'global' | 'local';
+  /**
+   * True when a local-scope exercise had no history at the current location and
+   * this data was seeded (softened) from another location — a starting point.
+   */
+  estimatedFromOtherLocation?: boolean;
+  /** Rationale shown to the user when estimatedFromOtherLocation. */
+  calibrationNote?: string;
 }
