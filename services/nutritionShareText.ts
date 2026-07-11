@@ -149,7 +149,12 @@ function minutesOfDay(now: Date): number {
   return now.getHours() * 60 + now.getMinutes();
 }
 
-function capitalize(phase: PacingPhase): string {
+/**
+ * Header label for a phase. 'maintenance' shows as "Recomp" — shorter (so the
+ * header stays inside the bubble) and the term users actually recognize.
+ */
+function phaseLabel(phase: PacingPhase): string {
+  if (phase === 'maintenance') return 'Recomp';
   return phase.charAt(0).toUpperCase() + phase.slice(1);
 }
 
@@ -289,7 +294,7 @@ function buildHeader(
   const datePart = noNumbers ? weekdayLabel(now) : monthDayLabel(now);
   let header = `${APP_NAME} 🍽️ ${datePart}`;
   if (phase) {
-    header += ` · ${capitalize(phase)}`;
+    header += ` · ${phaseLabel(phase)}`;
     // Week carries a digit (dropped in no-numbers) and only rides along when
     // the header still fits — the phase word alone is enough otherwise.
     if (phaseWeek && !noNumbers) {

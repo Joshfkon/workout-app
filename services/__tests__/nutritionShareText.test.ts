@@ -419,6 +419,19 @@ describe('formatNutritionShareText — header', () => {
     expect(out.split('\n')[0]).toBe('HyperTrack 🍽️ Jul 10 · Bulk');
   });
 
+  it('labels the maintenance phase "Recomp" and keeps the header in the bubble', () => {
+    const out = formatNutritionShareText(
+      dayLog({ calories: 2477, protein: 175, carbs: 280, fat: 74 }),
+      TARGETS,
+      'maintenance',
+      { now: at(20, 0), phaseWeek: 1 }
+    );
+    const header = out.split('\n')[0];
+    expect(header).toBe('HyperTrack 🍽️ Jul 10 · Recomp');
+    expect(header).not.toContain('Maintenance');
+    expect(shareLineWidth(header)).toBeLessThanOrEqual(LINE_WIDTH_CAP);
+  });
+
   it('omits the phase when there is no active phase', () => {
     const out = formatNutritionShareText(
       dayLog({ calories: 1279, protein: 88, carbs: 173, fat: 31 }),
