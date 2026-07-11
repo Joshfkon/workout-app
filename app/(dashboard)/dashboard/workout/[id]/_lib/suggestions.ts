@@ -19,6 +19,14 @@ import {
   quickWeightEstimateWithCalibration,
   type WorkingWeightRecommendation,
 } from '@/services/weightEstimationEngine';
+import {
+  resolveLegacyLocationAttribution,
+  scopeHistorySets,
+  softenOtherLocationEstimate,
+  type LegacyAttribution,
+  type LocatedSet,
+  type ProgressionScope,
+} from '@/services/progressionScope';
 import type {
   ExerciseBlockWithExercise,
   ExerciseHistoryData,
@@ -54,6 +62,8 @@ interface HistorySetLogRow {
   set_number: number | null;
   set_type: string | null;
   logged_at: string;
+  /** Location the set was logged at (null = legacy/unknown). */
+  location_id?: string | null;
 }
 
 /** Raw exercise_blocks row (joined with workout_sessions + set_logs). */
@@ -70,10 +80,96 @@ export interface HistoryBlockRow {
 }
 
 /**
- * Compute ExerciseHistoryData from a list of history blocks for ONE exercise,
- * ordered most-recent-first. Pure.
+ * Per-exercise location-scoping config for the history read. When present, a
+ * `local`-scope exercise reads only sets logged at `currentLocationId`; a
+ * `global`-scope exercise (or a null location) reads full history. See
+ * services/progressionScope.
  */
-function computeHistoryFromBlocks(historyBlocks: HistoryBlockRow[]): ExerciseHistoryData {
+export interface HistoryScopeConfig {
+  scope: ProgressionScope;
+  currentLocationId: string | null;
+  legacy?: LegacyAttribution;
+}
+
+/**
+ * Narrow a set of history blocks (for one exercise) to the set logs that the
+ * current location's calibration should read, per the progression scope. Drops
+ * blocks left with no readable sets. Returns the (possibly softened) flags so
+ * the suggestion can be labelled. Pure.
+ */
+function applyLocationScope(
+  historyBlocks: HistoryBlockRow[],
+  config: HistoryScopeConfig
+): {
+  blocks: HistoryBlockRow[];
+  estimatedFromOtherLocation: boolean;
+  calibrationNote?: string;
+} {
+  // Flatten every non-warmup set to a located set keyed by object identity, so
+  // the scoping decision maps cleanly back onto the block structure.
+  const located: LocatedSet<HistorySetLogRow>[] = [];
+  for (const block of historyBlocks) {
+    for (const s of block.set_logs ?? []) {
+      if (s.is_warmup) continue;
+      located.push({ locationId: s.location_id ?? null, set: s });
+    }
+  }
+
+  const scoped = scopeHistorySets(located, config);
+  if (scoped.scope === 'global') {
+    return { blocks: historyBlocks, estimatedFromOtherLocation: false };
+  }
+
+  const keep = new Set<HistorySetLogRow>(scoped.sets);
+  const blocks = historyBlocks
+    .map((block) => ({
+      ...block,
+      set_logs: (block.set_logs ?? []).filter((s) => s.is_warmup || keep.has(s)),
+    }))
+    .filter((block) => (block.set_logs ?? []).some((s) => !s.is_warmup));
+
+  return {
+    blocks,
+    estimatedFromOtherLocation: scoped.estimatedFromOtherLocation,
+    calibrationNote: scoped.calibrationNote,
+  };
+}
+
+/**
+ * Compute ExerciseHistoryData from a list of history blocks for ONE exercise,
+ * ordered most-recent-first. Pure. When `scopeConfig` is provided, the history
+ * is first narrowed to the current location's calibration track (rules 4–6).
+ */
+function computeHistoryFromBlocks(
+  historyBlocks: HistoryBlockRow[],
+  scopeConfig?: HistoryScopeConfig
+): ExerciseHistoryData {
+  let estimatedFromOtherLocation = false;
+  let calibrationNote: string | undefined;
+  let scope: ProgressionScope | undefined;
+
+  if (scopeConfig) {
+    scope = scopeConfig.scope;
+    const scoped = applyLocationScope(historyBlocks, scopeConfig);
+    historyBlocks = scoped.blocks;
+    estimatedFromOtherLocation = scoped.estimatedFromOtherLocation;
+    calibrationNote = scoped.calibrationNote;
+  }
+
+  // A local-scope exercise with no history at all (all blocks scoped away)
+  // degrades to the empty-history shape rather than reading another location.
+  if (historyBlocks.length === 0) {
+    return {
+      lastWorkoutDate: '',
+      lastWorkoutSets: [],
+      estimatedE1RM: 0,
+      personalRecord: null,
+      totalSessions: 0,
+      progressionScope: scope,
+      estimatedFromOtherLocation: false,
+    };
+  }
+
   let bestE1RM = 0;
   let personalRecord: ExerciseHistoryData['personalRecord'] = null;
   let totalSessions = 0;
@@ -121,19 +217,83 @@ function computeHistoryFromBlocks(historyBlocks: HistoryBlockRow[]): ExerciseHis
   return {
     lastWorkoutDate: lastSession?.completed_at || '',
     lastWorkoutSets: lastSets,
-    estimatedE1RM: bestE1RM,
+    // First session at a new implement: soften the seeded e1RM ~10% so the
+    // suggestion is a conservative starting point, not another gym's target
+    // (rule 4). Same-location history is untouched.
+    estimatedE1RM: softenOtherLocationEstimate(bestE1RM, estimatedFromOtherLocation),
     personalRecord,
     totalSessions,
+    progressionScope: scope,
+    estimatedFromOtherLocation,
+    calibrationNote,
   };
+}
+
+/**
+ * Location-scoping options for the history read. Omit for the legacy (global,
+ * cross-location) behavior. When present:
+ *   - `currentLocationId` is the session's location,
+ *   - `scopeForExercise` returns each exercise's progression scope
+ *     (services/progressionScope.deriveProgressionScope),
+ *   - `legacy` (optional) attributes null-location sets; derived from the
+ *     blocks' own location usage when omitted.
+ */
+export interface HistoryScopeOptions {
+  currentLocationId: string | null;
+  scopeForExercise: (exerciseId: string) => ProgressionScope;
+  legacy?: LegacyAttribution;
+}
+
+/**
+ * Count non-warmup sets per location across the history blocks. Used both to
+ * pick the most-used location for legacy attribution and to report how many
+ * null-location sets the attribution touches (rule 6).
+ */
+function summarizeLocationUsage(blocks: HistoryBlockRow[]): {
+  usageCounts: Record<string, number>;
+  nullLocationSetCount: number;
+} {
+  const usageCounts: Record<string, number> = {};
+  let nullLocationSetCount = 0;
+  for (const block of blocks) {
+    for (const s of block.set_logs ?? []) {
+      if (s.is_warmup) continue;
+      if (s.location_id) usageCounts[s.location_id] = (usageCounts[s.location_id] ?? 0) + 1;
+      else nullLocationSetCount++;
+    }
+  }
+  return { usageCounts, nullLocationSetCount };
 }
 
 /**
  * Group the batched exercise-history query result by exercise and compute
  * per-exercise history (limited to 10 most recent blocks each). Pure.
+ *
+ * With `scopeOptions`, each `local`-scope exercise's history is narrowed to the
+ * current location's calibration track (rules 4–6); without it, behavior is the
+ * legacy full-history read.
  */
 export function buildExerciseHistories(
-  allHistoryBlocks: HistoryBlockRow[]
+  allHistoryBlocks: HistoryBlockRow[],
+  scopeOptions?: HistoryScopeOptions
 ): Record<string, ExerciseHistoryData> {
+  // Derive legacy null-location attribution once from the whole result set
+  // (most-used location wins; ties stay ambiguous → global-visible).
+  let legacy: LegacyAttribution | undefined = scopeOptions?.legacy;
+  if (scopeOptions && !legacy) {
+    const { usageCounts, nullLocationSetCount } = summarizeLocationUsage(allHistoryBlocks || []);
+    legacy = resolveLegacyLocationAttribution(usageCounts);
+    if (nullLocationSetCount > 0) {
+      // Report how many sets the legacy assumption touches (rule 6).
+      console.info(
+        `[progressionScope] ${nullLocationSetCount} null-location set(s) attributed to ` +
+          (legacy.ambiguous
+            ? 'no single location (ambiguous) — kept visible across all locations'
+            : `most-used location ${legacy.legacyLocationId}`)
+      );
+    }
+  }
+
   // Group results by exercise_id and limit to 10 per exercise
   const groupedByExercise: Record<string, HistoryBlockRow[]> = {};
   for (const block of allHistoryBlocks || []) {
@@ -148,7 +308,14 @@ export function buildExerciseHistories(
 
   for (const [exerciseId, historyBlocks] of Object.entries(groupedByExercise)) {
     if (historyBlocks && historyBlocks.length > 0) {
-      histories[exerciseId] = computeHistoryFromBlocks(historyBlocks);
+      const scopeConfig: HistoryScopeConfig | undefined = scopeOptions
+        ? {
+            scope: scopeOptions.scopeForExercise(exerciseId),
+            currentLocationId: scopeOptions.currentLocationId,
+            legacy,
+          }
+        : undefined;
+      histories[exerciseId] = computeHistoryFromBlocks(historyBlocks, scopeConfig);
     }
   }
 
@@ -158,10 +325,15 @@ export function buildExerciseHistories(
 /**
  * Fetch exercise history for a specific exercise ID.
  * Used when adding a new exercise mid-workout that wasn't in the original query.
+ *
+ * `scope` (optional) narrows a local-scope exercise to the current location's
+ * calibration track; omit for the legacy full-history read. Legacy null-location
+ * attribution is derived from this exercise's own recent rows.
  */
 export async function fetchExerciseHistory(
   exerciseId: string,
-  userId: string
+  userId: string,
+  scope?: { progressionScope: ProgressionScope; currentLocationId: string | null }
 ): Promise<ExerciseHistoryData | null> {
   const supabase = createUntypedClient();
 
@@ -183,7 +355,8 @@ export async function fetchExerciseHistory(
         is_warmup,
         set_number,
         set_type,
-        logged_at
+        logged_at,
+        location_id
       )
     `)
     .eq('exercise_id', exerciseId)
@@ -196,7 +369,16 @@ export async function fetchExerciseHistory(
     return null;
   }
 
-  return computeHistoryFromBlocks(historyBlocks as HistoryBlockRow[]);
+  const blocks = historyBlocks as HistoryBlockRow[];
+  const scopeConfig: HistoryScopeConfig | undefined = scope
+    ? {
+        scope: scope.progressionScope,
+        currentLocationId: scope.currentLocationId,
+        legacy: resolveLegacyLocationAttribution(summarizeLocationUsage(blocks).usageCounts),
+      }
+    : undefined;
+
+  return computeHistoryFromBlocks(blocks, scopeConfig);
 }
 
 // Generate coach message based on workout structure and user context
@@ -395,6 +577,14 @@ export function generateCoachMessage(
       } catch (e) {
         // Silently fail if weight estimation fails
       }
+    }
+
+    // Location-scoped calibration: a local-scope exercise with no history at
+    // this gym is seeded (softened) from another location — surface that so the
+    // user knows the suggestion is a starting point to calibrate today (rule 4).
+    const historyForNote = exerciseHistories?.[block.exerciseId];
+    if (historyForNote?.estimatedFromOtherLocation && historyForNote.calibrationNote) {
+      reason += ` 📍 ${historyForNote.calibrationNote}`;
     }
 
     exerciseNotes.push({ name: ex.name, reason, weightRec });

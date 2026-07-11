@@ -5,8 +5,45 @@ import {
   updateSessionOrigin,
   type SessionOrigin,
 } from '@/lib/training/sessionOrigin';
+import { pickDefaultLocation } from '@/services/locationProfiles';
 
 type UntypedSupabase = ReturnType<typeof createUntypedClient>;
+
+/**
+ * True when workout_sessions.location_id doesn't exist yet (42703 = undefined
+ * column, PGRST204 = not in PostgREST schema cache) — the location calibration
+ * migration hasn't been applied. Location writes degrade to no-ops until then.
+ */
+function isMissingLocationColumn(error: { code?: string } | null): boolean {
+  const code = error?.code;
+  return code === '42703' || code === 'PGRST204';
+}
+
+/**
+ * Resolve the location a locationless launcher (blank / quick workout) should
+ * silently adopt: the user's last-used location, falling back to their default
+ * (rule 12 — no nag, the pre-workout chip stays the explicit control). Returns
+ * null when the user has no locations or the profile columns don't exist yet.
+ */
+async function resolveDefaultLocationId(
+  supabase: UntypedSupabase,
+  userId: string
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('gym_locations')
+    .select('id, is_default, last_used_at')
+    .eq('user_id', userId);
+  if (error || !data || data.length === 0) return null;
+
+  const picked = pickDefaultLocation(
+    (data as { id: string; is_default: boolean; last_used_at: string | null }[]).map((row) => ({
+      id: row.id,
+      isDefault: row.is_default,
+      lastUsedAt: row.last_used_at,
+    }))
+  );
+  return picked?.id ?? null;
+}
 
 /**
  * Reuse today's ad-hoc (non-mesocycle) session or create a fresh one.
@@ -28,9 +65,15 @@ type UntypedSupabase = ReturnType<typeof createUntypedClient>;
 export async function getOrCreateTodaySession(
   supabase: UntypedSupabase,
   userId: string,
-  origin: SessionOrigin = 'empty'
+  origin: SessionOrigin = 'empty',
+  locationId: string | null = null
 ): Promise<{ sessionId: string; isNewSession: boolean }> {
   const today = getLocalDateString();
+
+  // Rule 12: with no explicit location (blank / quick workout), silently adopt
+  // the last-used location so sets are still stamped for calibration.
+  const effectiveLocationId =
+    locationId ?? (await resolveDefaultLocationId(supabase, userId).catch(() => null));
 
   const { data: existingSessions } = await supabase
     .from('workout_sessions')
@@ -66,6 +109,17 @@ export async function getOrCreateTodaySession(
       // After a wipe the session is effectively fresh (warmups, order
       // restart) — it now belongs to whichever launcher reused it.
       await updateSessionOrigin(supabase, existing.id, origin);
+      // A fresh reuse also adopts the newly-selected location (best-effort;
+      // silently a no-op before the location migration lands).
+      if (effectiveLocationId) {
+        const { error: locError } = await supabase
+          .from('workout_sessions')
+          .update({ location_id: effectiveLocationId })
+          .eq('id', existing.id);
+        if (locError && !isMissingLocationColumn(locError)) {
+          console.warn('Failed to set session location:', locError);
+        }
+      }
     }
     return { sessionId: existing.id, isNewSession: !hasLoggedSets };
   }
@@ -78,6 +132,9 @@ export async function getOrCreateTodaySession(
       started_at: new Date().toISOString(),
       completion_percent: 0,
       origin,
+      // The gym this workout happens at (drives location-scoped calibration).
+      // insertWorkoutSessions strips this if the migration hasn't landed.
+      location_id: effectiveLocationId,
     },
   ]);
 

@@ -436,7 +436,8 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
       const { sessionId, isNewSession } = await getOrCreateTodaySession(
         supabase,
         user.id,
-        'ai_suggested'
+        'ai_suggested',
+        selectedLocationId
       );
 
       let order = 1;
