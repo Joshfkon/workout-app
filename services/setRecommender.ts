@@ -20,8 +20,10 @@
  */
 
 import { roundToIncrement, clamp } from '@/lib/utils';
+import { rpeToRir } from '@/types/schema';
 import {
   DEADBAND_RIR,
+  EFFORT_MATCH_TOLERANCE,
   MAX_STEP_PCT,
   MAX_REDUCE_PCT,
   HOLD_DROP_RATE,
@@ -69,6 +71,36 @@ export interface SetRecommendation {
   reps: number;
   rir: number;
   rationale: 'maintain' | 'increase_load' | 'reduce_load';
+  /**
+   * How the REFERENCE set's actual effort compared to the target RIR, derived
+   * from the same `dev` (lastRir − targetRir) the weight/rep math uses. The
+   * banner phrases a hold from this instead of assuming every in-deadband set
+   * "matched" — a set left easier than target must not read as matched.
+   */
+  effortVsTarget: 'easier' | 'on_target' | 'harder';
+}
+
+/**
+ * Resolve the RIR to feed the recommender from a PERSISTED set record, in
+ * priority order:
+ *   1. `feedback.repsInTank` — the exact RIR chip the user logged (ground truth).
+ *   2. `rpe` → `rpeToRir` — derived effort when only RPE was stored.
+ *   3. `targetRir` — ONLY when the set carries no effort signal at all.
+ *
+ * This is the read-path fix: the engine must grade the effort actually logged on
+ * the set, never a UI-selected / default value. Reading the stored RIR directly
+ * (rather than reconstructing it as `10 − rpe`) also keeps this consistent with
+ * every other read site (which use `rpeToRir`) and with the RIR-2 "good" chip,
+ * whose stored `rpe` is 7.5.
+ */
+export function resolveLastRir(
+  set: { rpe?: number | null; feedback?: { repsInTank?: number | null } | null },
+  targetRir: number
+): number {
+  const logged = set.feedback?.repsInTank;
+  if (logged != null) return Math.max(0, logged);
+  if (set.rpe != null) return Math.max(0, rpeToRir(set.rpe));
+  return targetRir;
 }
 
 // ============================================
@@ -126,6 +158,7 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
       reps: clamp(lastReps || repMin, repMin, repMax),
       rir: targetRir,
       rationale: 'maintain',
+      effortVsTarget: 'on_target',
     };
   }
 
@@ -134,6 +167,11 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
   const e1rm = Math.max(input.sessionBestE1RMKg ?? 0, epleyE1RM(lastWeightKg, lastReps, safeRir));
   const dev = safeRir - targetRir; // + = easier than target, - = harder
   const mid = Math.round((repMin + repMax) / 2);
+  // Classify the last set's effort from the SAME `dev` the math below uses, so
+  // the banner can never claim "matched" for a set that was actually easier or
+  // harder than target within the deadband.
+  const effortVsTarget: SetRecommendation['effortVsTarget'] =
+    dev >= EFFORT_MATCH_TOLERANCE ? 'easier' : dev <= -EFFORT_MATCH_TOLERANCE ? 'harder' : 'on_target';
 
   // ---- 1) Decide the WEIGHT (default: hold) ----
   let weightKg: number;
@@ -165,14 +203,19 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
     // Anchor on what you just did and shave incremental fatigue. Tracks the real
     // per-set decline (12->11->10->9) without double-counting.
     const drop = Math.max(1, Math.round(lastReps * HOLD_DROP_RATE));
-    reps = clamp(lastReps - drop, 1, repMax + OVERSHOOT_CEILING);
+    // Honor the LOGGED effort: a set left easier than target (dev > 0) has more
+    // reps in hand at the target effort; harder (dev < 0) fewer. Shifting by the
+    // RIR gap is the fix — the old code shaved from lastReps alone, silently
+    // grading every in-deadband set as if it hit the target (11 @ 3 RIR -> 10,
+    // "matched", when ~12 were available @ 2 RIR).
+    reps = clamp(lastReps + Math.round(dev) - drop, 1, repMax + OVERSHOOT_CEILING);
   } else {
     // Weight changed → no "last reps at this weight" to decrement from. Predict from
     // the fresh capacity anchor, de-rated for sets already done.
     reps = predictRepsAtWeight(e1rm, weightKg, targetRir, n, repMax);
   }
 
-  return { weightKg, reps, rir: targetRir, rationale };
+  return { weightKg, reps, rir: targetRir, rationale, effortVsTarget };
 }
 
 /** Input for recommendSessionStart — the matching set from the PREVIOUS session. */

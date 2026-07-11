@@ -6,7 +6,7 @@ import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/
 import type { Exercise, ExerciseBlock, SetLog, WeightUnit, SetQuality, SetFeedback, BodyweightData, ExercisePerformanceSnapshot } from '@/types/schema';
 import { rpeToRir, muscleMatchesGroup } from '@/types/schema';
 import { convertWeight, formatMuscleName, formatWeightValue, convertWeightForDisplay, inputWeightToKg, roundToPlateIncrement } from '@/lib/utils';
-import { recommendSet, recommendSessionStart, estimateRepsForWeight, predictAmrapReps, recommendSeedForSlot, type SeedRecommendation } from '@/services/setRecommender';
+import { recommendSet, recommendSessionStart, estimateRepsForWeight, predictAmrapReps, recommendSeedForSlot, resolveLastRir, type SeedRecommendation } from '@/services/setRecommender';
 import { inferSetRole, type SetRole } from '@/services/suggestionEngine/setRoles';
 import { RAMP_LOAD_FRACTION, WORKING_WEIGHT_CLAMP_FRACTION } from '@/services/suggestionEngine/constants';
 import { findSimilarExercises, calculateSimilarityScore } from '@/services/exerciseSwapper';
@@ -409,7 +409,7 @@ export const ExerciseCard = memo(function ExerciseCard({
     let best = 0;
     for (const s of completedSets) {
       if (s.weightKg > 0 && s.reps > 0) {
-        const rir = s.rpe != null ? Math.max(0, 10 - s.rpe) : effectiveTargetRir;
+        const rir = resolveLastRir(s, effectiveTargetRir);
         const e = s.weightKg * (1 + (s.reps + rir) / 30);
         if (e > best) best = e;
       }
@@ -417,11 +417,14 @@ export const ExerciseCard = memo(function ExerciseCard({
     return best > 0 ? best : undefined;
   }, [completedSets, effectiveTargetRir]);
 
-  const recommendNext = (last: { weightKg: number; reps: number; rpe?: number }) =>
+  // Grade the next set against the effort ACTUALLY logged on `last` — read from
+  // the persisted set record (feedback.repsInTank first, then rpe), never the
+  // prescribed/target RIR. `resolveLastRir` is the single read-path source.
+  const recommendNext = (last: { weightKg: number; reps: number; rpe?: number; feedback?: SetFeedback }) =>
     recommendSet({
       lastWeightKg: last.weightKg,
       lastReps: last.reps,
-      lastRir: last.rpe != null ? Math.max(0, 10 - last.rpe) : effectiveTargetRir,
+      lastRir: resolveLastRir(last, effectiveTargetRir),
       setsCompletedThisExercise: completedSets.length,
       sessionBestE1RMKg: sessionBestE1RM,
       targetRepRange: block.targetRepRange,
@@ -626,7 +629,7 @@ export const ExerciseCard = memo(function ExerciseCard({
     if (!lastCompleted) return;
 
     // Calculate smart defaults using the within-session recommender
-    const lastSetData = { weightKg: lastCompleted.weightKg, reps: lastCompleted.reps, rpe: lastCompleted.rpe };
+    const lastSetData = { weightKg: lastCompleted.weightKg, reps: lastCompleted.reps, rpe: lastCompleted.rpe, feedback: lastCompleted.feedback };
     const rec = recommendNext(lastSetData);
     const smartWeight = rec.weightKg;
     const smartReps = rec.reps;
@@ -672,7 +675,7 @@ export const ExerciseCard = memo(function ExerciseCard({
       let smartReps: number;
 
       if (lastCompleted) {
-        const lastSetData = { weightKg: lastCompleted.weightKg, reps: lastCompleted.reps, rpe: lastCompleted.rpe };
+        const lastSetData = { weightKg: lastCompleted.weightKg, reps: lastCompleted.reps, rpe: lastCompleted.rpe, feedback: lastCompleted.feedback };
         const rec = recommendNext(lastSetData);
         smartWeight = rec.weightKg;
         smartReps = rec.reps;
@@ -691,7 +694,7 @@ export const ExerciseCard = memo(function ExerciseCard({
         // For AMRAP sets, use bounded prediction
         let setReps = smartReps;
         if (isLastSet && isAmrapSuggested && lastCompleted?.rpe) {
-          const lastSetData = { weightKg: lastCompleted.weightKg, reps: lastCompleted.reps, rpe: lastCompleted.rpe };
+          const lastSetData = { weightKg: lastCompleted.weightKg, reps: lastCompleted.reps, rpe: lastCompleted.rpe, feedback: lastCompleted.feedback };
           setReps = Math.max(amrapReps(lastSetData), smartReps);
         }
 
@@ -736,7 +739,7 @@ export const ExerciseCard = memo(function ExerciseCard({
         let defaultRpe: number;
         
         if (lastCompleted) {
-          const lastSetData = { weightKg: lastCompleted.weightKg, reps: lastCompleted.reps, rpe: lastCompleted.rpe };
+          const lastSetData = { weightKg: lastCompleted.weightKg, reps: lastCompleted.reps, rpe: lastCompleted.rpe, feedback: lastCompleted.feedback };
           const rec = recommendNext(lastSetData);
           defaultWeight = rec.weightKg;
           defaultReps = rec.reps;
@@ -756,7 +759,7 @@ export const ExerciseCard = memo(function ExerciseCard({
           defaultRpe = 9.5;
           // For AMRAP sets, use bounded prediction
           if (lastCompleted?.rpe) {
-            const lastSetData = { weightKg: lastCompleted.weightKg, reps: lastCompleted.reps, rpe: lastCompleted.rpe };
+            const lastSetData = { weightKg: lastCompleted.weightKg, reps: lastCompleted.reps, rpe: lastCompleted.rpe, feedback: lastCompleted.feedback };
             defaultReps = Math.max(amrapReps(lastSetData), defaultReps);
           }
         } else {
@@ -801,7 +804,7 @@ export const ExerciseCard = memo(function ExerciseCard({
       // Calculate predicted max reps for AMRAP using bounded prediction
       let predictedReps: number | null = null;
       if (lastCompleted?.rpe) {
-        const lastSetData = { weightKg: lastCompleted.weightKg, reps: lastCompleted.reps, rpe: lastCompleted.rpe };
+        const lastSetData = { weightKg: lastCompleted.weightKg, reps: lastCompleted.reps, rpe: lastCompleted.rpe, feedback: lastCompleted.feedback };
         predictedReps = amrapReps(lastSetData);
       }
 
@@ -939,11 +942,13 @@ export const ExerciseCard = memo(function ExerciseCard({
             if (lastCompleted) {
               refWeight = lastCompleted.weightKg;
               refReps = lastCompleted.reps;
-              if (lastCompleted.rpe != null) refRir = Math.max(0, 10 - lastCompleted.rpe);
+              // Same persisted-RIR read as the banner (resolveLastRir), so the
+              // weight-edit rep estimate can't disagree with the suggestion.
+              refRir = resolveLastRir(lastCompleted, effectiveTargetRir);
             } else if (prevSet) {
               refWeight = prevSet.weightKg;
               refReps = prevSet.reps;
-              if (prevSet.rpe != null) refRir = rpeToRir(prevSet.rpe);
+              refRir = resolveLastRir(prevSet, effectiveTargetRir);
             } else if (suggestedWeight > 0) {
               refWeight = suggestedWeight;
               refReps = Math.round((block.targetRepRange[0] + block.targetRepRange[1]) / 2);
@@ -1158,7 +1163,7 @@ export const ExerciseCard = memo(function ExerciseCard({
       // Within-session: anchor to the just-completed set. This path already re-
       // anchors on whatever the user actually logged, so a logged override (Phase 4)
       // is reflected here with no stale "vs suggestion" commentary.
-      const lastSetData = { weightKg: lastCompleted.weightKg, reps: lastCompleted.reps, rpe: lastCompleted.rpe };
+      const lastSetData = { weightKg: lastCompleted.weightKg, reps: lastCompleted.reps, rpe: lastCompleted.rpe, feedback: lastCompleted.feedback };
       const rec = recommendNext(lastSetData);
       weight = seedWeightString(rec.weightKg, lastCompleted.weightKg);
       reps = rec.reps;
@@ -1174,6 +1179,12 @@ export const ExerciseCard = memo(function ExerciseCard({
         reason = `up ${deltaText || 'slightly'} — last set was clearly too light`;
       } else if (rec.rationale === 'reduce_load') {
         reason = `down ${deltaText || 'slightly'} — last set was harder than the target effort`;
+      } else if (rec.effortVsTarget === 'easier') {
+        // Held the weight, but the logged effort was BELOW target (more reps in
+        // reserve than asked) — say so and aim a little higher, never "matched".
+        reason = 'holding the weight — last set was easier than target, so aim for a rep or two more';
+      } else if (rec.effortVsTarget === 'harder') {
+        reason = 'holding the weight — last set ran a bit harder than target';
       } else {
         reason = 'holding the weight — your last set matched the target effort';
       }
