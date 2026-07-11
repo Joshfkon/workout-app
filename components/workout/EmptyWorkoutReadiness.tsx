@@ -39,7 +39,7 @@ export function EmptyWorkoutReadiness({
   const [now] = useState(() => new Date());
 
   // Empty workout: no live blocks/sets yet, so readiness is purely history-based.
-  const { rows, targets, isLoading } = useMuscleReadiness({
+  const { rows, targets, nextUp, isLoading } = useMuscleReadiness({
     liveBlocks: [],
     liveSets: [],
     now,
@@ -90,6 +90,7 @@ export function EmptyWorkoutReadiness({
         <MuscleReadinessContent
           rows={rows}
           targets={targets}
+          nextUp={nextUp}
           isLoading={isLoading}
           collapsible
           loadingTestId="readiness-inline-loading"

@@ -73,12 +73,57 @@ export interface ReadinessRow {
   children: ReadinessChild[];
 }
 
-/** A "good target today" — a coarse row or a fine child, behind and recovered. */
+/**
+ * A "good target today" — a coarse row or a fine child that is behind on volume
+ * and either Fresh now ('ready') or within `READY_SOON_HOURS` of Fresh ('soon').
+ * A muscle whose own row reads "Recovering" is NEVER emitted as tier 'ready'.
+ */
 export interface ReadinessTarget {
   muscle: string;
   displayName: string;
   isChild: boolean;
   score: number;
+  /**
+   * 'ready' — Fresh now AND behind on volume (a full-confidence pick).
+   * 'soon'  — behind on volume AND within READY_SOON_HOURS of Fresh; a
+   *           legitimate pick for a session planned a little ahead, shown muted.
+   */
+  tier: 'ready' | 'soon';
+  /** Hours until Fresh — 0 for 'ready', >0 for 'soon' (drives the "(ready ~2h)" label). */
+  readyInHours: number;
+}
+
+/** The soonest-ready lagging muscle, named in the honest empty state. */
+export interface NextReadyTarget {
+  muscle: string;
+  displayName: string;
+  hoursUntilReady: number;
+}
+
+/** Result of the shared good-targets selector: the picks + an empty-state fallback. */
+export interface GoodTargets {
+  targets: ReadinessTarget[];
+  /**
+   * Set only when `targets` is empty: the soonest lagging muscle still
+   * recovering, so the strip can say "Next up: Triceps in ~2h" instead of a
+   * bare "nothing" (or, worse, presenting a recovering muscle as ready).
+   */
+  nextUp: NextReadyTarget | null;
+}
+
+/**
+ * A lagging muscle within this many hours of Fresh is offered as a muted
+ * "ready soon" pick rather than excluded entirely — users often plan a session
+ * a few hours before training, and a muscle ready by session time is a
+ * legitimate target.
+ */
+export const READY_SOON_HOURS = 3;
+
+/** Compact "ready by" ETA for the strip: "<1h", "~2h", "~2d". */
+export function formatReadyEta(hours: number): string {
+  if (hours < 1) return '<1h';
+  if (hours < 24) return `~${Math.round(hours)}h`;
+  return `~${Math.round(hours / 24)}d`;
 }
 
 function volumeStatusForZone(zone: VolumeZone): VolumeStatus {
@@ -184,27 +229,123 @@ export function buildReadinessRows(
   return rows.sort(compareByActionability);
 }
 
+/** One flattened candidate (a coarse row or one of its fine children). */
+interface TargetCandidate {
+  muscle: string;
+  displayName: string;
+  isChild: boolean;
+  volumeGap: number;
+  recovery: MuscleRecoveryResult;
+}
+
 /**
- * The top-N "good targets today": recovered (not Fatigued) coarse groups AND
- * reachable fine children that are actually behind on volume, in actionability
- * order. A lagging fine child surfaces even when its coarse parent is on target.
+ * Flatten rows + their reachable lagging children into a single candidate list.
+ * A lagging fine child surfaces even when its coarse parent is on target.
  */
-export function topTargets(rows: ReadinessRow[], n = 3): ReadinessTarget[] {
-  const candidates: ReadinessTarget[] = [];
+function flattenCandidates(rows: ReadinessRow[]): TargetCandidate[] {
+  const out: TargetCandidate[] = [];
   for (const row of rows) {
-    if (row.recovery.status !== 'fatigued' && row.volumeGap > 0) {
-      candidates.push({ muscle: row.muscle, displayName: row.displayName, isChild: false, score: row.score });
-    }
+    out.push({
+      muscle: row.muscle,
+      displayName: row.displayName,
+      isChild: false,
+      volumeGap: row.volumeGap,
+      recovery: row.recovery,
+    });
     for (const child of row.children) {
-      if (child.recovery.status !== 'fatigued' && child.volumeGap > 0) {
-        candidates.push({
-          muscle: child.muscle,
-          displayName: child.displayName,
-          isChild: true,
-          score: child.volumeGap * RECOVERED_FACTOR[child.recovery.status],
-        });
-      }
+      out.push({
+        muscle: child.muscle,
+        displayName: child.displayName,
+        isChild: true,
+        volumeGap: child.volumeGap,
+        recovery: child.recovery,
+      });
     }
   }
-  return candidates.sort((a, b) => b.score - a.score).slice(0, n);
+  return out;
+}
+
+/**
+ * The shared "good targets today" selector — the SINGLE source of truth the
+ * strip renders, derived from the exact same `rows` (and thus the same recovery
+ * status) the per-muscle badges show, so the two can never disagree.
+ *
+ * Eligibility:
+ *  - 'ready' tier: status Fresh AND behind on volume (below MEV). This is the
+ *    fix for the reported bug — a muscle whose row reads "Recovering" is no
+ *    longer presented as a ready-now target.
+ *  - 'soon' tier (opt-in via `readySoonHours`): behind on volume AND within
+ *    `readySoonHours` of Fresh. Shown muted/parenthetical, not as ready-now.
+ *
+ * Both tiers rank by volume gap (bigger gap first) among eligible muscles only.
+ * When nothing qualifies, `nextUp` names the soonest-ready lagging muscle for an
+ * honest empty state.
+ */
+export function selectGoodTargets(
+  rows: ReadinessRow[],
+  n = 3,
+  readySoonHours: number = READY_SOON_HOURS
+): GoodTargets {
+  const lagging = flattenCandidates(rows).filter((c) => c.volumeGap > 0);
+
+  // Ready now: Fresh AND behind on volume. Ranked by volume gap (bigger first).
+  const ready: ReadinessTarget[] = lagging
+    .filter((c) => c.recovery.status === 'fresh')
+    .sort((a, b) => b.volumeGap - a.volumeGap || a.displayName.localeCompare(b.displayName))
+    .map((c) => ({
+      muscle: c.muscle,
+      displayName: c.displayName,
+      isChild: c.isChild,
+      score: c.volumeGap,
+      tier: 'ready' as const,
+      readyInHours: 0,
+    }));
+
+  // Ready soon: behind on volume and within the soon window of Fresh. Soonest
+  // first, bigger gap breaks ties. Never a muscle that's already Fresh.
+  const soon: ReadinessTarget[] = lagging
+    .filter(
+      (c) =>
+        c.recovery.status !== 'fresh' &&
+        c.recovery.hoursUntilReady > 0 &&
+        c.recovery.hoursUntilReady <= readySoonHours
+    )
+    .sort(
+      (a, b) =>
+        a.recovery.hoursUntilReady - b.recovery.hoursUntilReady ||
+        b.volumeGap - a.volumeGap ||
+        a.displayName.localeCompare(b.displayName)
+    )
+    .map((c) => ({
+      muscle: c.muscle,
+      displayName: c.displayName,
+      isChild: c.isChild,
+      score: c.volumeGap,
+      tier: 'soon' as const,
+      readyInHours: c.recovery.hoursUntilReady,
+    }));
+
+  const targets = [...ready, ...soon].slice(0, n);
+
+  // Empty state: name the soonest-ready lagging muscle still recovering.
+  let nextUp: NextReadyTarget | null = null;
+  if (targets.length === 0) {
+    const soonest = lagging
+      .filter((c) => c.recovery.status !== 'fresh' && c.recovery.hoursUntilReady > 0)
+      .sort(
+        (a, b) =>
+          a.recovery.hoursUntilReady - b.recovery.hoursUntilReady ||
+          b.volumeGap - a.volumeGap ||
+          a.displayName.localeCompare(b.displayName)
+      )[0];
+    if (soonest) {
+      nextUp = {
+        muscle: soonest.muscle,
+        displayName: soonest.displayName,
+        hoursUntilReady: soonest.recovery.hoursUntilReady,
+      };
+    }
+  }
+
+  return { targets, nextUp };
 }
