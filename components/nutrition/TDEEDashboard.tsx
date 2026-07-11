@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -25,11 +25,10 @@ import type { EnhancedTDEEEstimate } from '@/types/wearable';
 import { TDEERegressionGraph } from './TDEERegressionGraph';
 import { calculateFFMI } from '@/services/bodyCompEngine';
 import {
-  calculatePRatio,
-  predictWeightGainComposition,
-  type PRatioInputs,
-  type BodyCompProjection,
-} from '@/lib/body-composition/p-ratio';
+  projectWeightTrajectory,
+  type CompositionAnchors,
+  type ProjectionPhase,
+} from '@/services/weightProjection';
 
 interface ResetResult {
   success: boolean;
@@ -65,6 +64,8 @@ interface TDEEDashboardProps {
   currentWeight: number | null;
   targetWeight?: number | null;
   targetCalories?: number | null;
+  /** Current training phase — drives the projection direction sanity check. */
+  phase?: ProjectionPhase | null;
   heightCm?: number | null;
   bodyFatPercent?: number | null;
   avgDailyProteinGrams?: number;
@@ -93,6 +94,7 @@ export function TDEEDashboard({
   currentWeight,
   targetWeight,
   targetCalories,
+  phase,
   heightCm,
   bodyFatPercent,
   avgDailyProteinGrams,
@@ -110,6 +112,24 @@ export function TDEEDashboard({
   const [showDetails, setShowDetails] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [resetResult, setResetResult] = useState<ResetResult | null>(null);
+
+  // Weight Projection card is collapsed to a single-line summary by default.
+  // The preference persists across sessions.
+  const PROJECTION_PREF_KEY = 'hypertrack:weightProjectionExpanded';
+  const [projectionExpanded, setProjectionExpanded] = useState(false);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    setProjectionExpanded(window.localStorage.getItem(PROJECTION_PREF_KEY) === '1');
+  }, []);
+  const toggleProjection = () => {
+    setProjectionExpanded((prev) => {
+      const next = !prev;
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(PROJECTION_PREF_KEY, next ? '1' : '0');
+      }
+      return next;
+    });
+  };
 
   const handleReset = async () => {
     if (!onReset) return;
@@ -573,141 +593,99 @@ export function TDEEDashboard({
         </Card>
       )}
 
-      {/* Weight Predictions */}
-      {predictions.length > 0 && currentWeight && (() => {
-        // Calculate current body composition
-        const currentWeightKg = currentWeight / 2.20462;
-        const currentBodyFatPercent = bodyFatPercent || (heightCm ? 15 : null); // Default estimate if not available
-        const currentLeanMassKg = currentBodyFatPercent 
-          ? currentWeightKg * (1 - currentBodyFatPercent / 100)
+      {/* Weight Projection */}
+      {predictions.length > 0 && currentWeight && activeEstimate && (() => {
+        // Composition anchors. Height is the gate; body fat falls back to the
+        // latest DEXA scan, then a conservative 15% default.
+        const currentBF =
+          bodyFatPercent ??
+          (latestDexaScan ? (latestDexaScan.fat_mass_kg / latestDexaScan.weight_kg) * 100 : null) ??
+          (heightCm ? 15 : null);
+
+        const composition: CompositionAnchors | null =
+          heightCm && currentBF != null
+            ? {
+                heightCm,
+                currentBodyFatPercent: currentBF,
+                avgDailyProteinGrams: avgDailyProteinGrams ?? 150,
+                avgWeeklyTrainingSets: avgWeeklyTrainingSets ?? 10,
+                trainingAge: trainingAge ?? 'intermediate',
+                isEnhanced: isEnhanced ?? false,
+                biologicalSex: biologicalSex ?? 'male',
+                chronologicalAge,
+              }
+            : null;
+
+        const currentLeanMassKg =
+          currentBF != null ? (currentWeight / 2.20462) * (1 - currentBF / 100) : null;
+        const currentFFMI =
+          heightCm && currentLeanMassKg != null
+            ? calculateFFMI(currentLeanMassKg, heightCm).normalizedFfmi
+            : null;
+
+        // Single source of truth: the projection consumes the SAME TDEE shown on
+        // the Metabolism card (activeEstimate). The calorie figure is the current
+        // phase's target — never a value cached from a previous phase.
+        const projectionTdee = activeEstimate.estimatedTDEE;
+        const usedCalories =
+          targetCalories ?? predictions[0]?.assumedDailyCalories ?? projectionTdee;
+        const phaseValue: ProjectionPhase = phase ?? 'maintenance';
+
+        const projection = projectWeightTrajectory({
+          now: new Date(),
+          currentWeightLbs: currentWeight,
+          tdee: projectionTdee,
+          targetCalories: usedCalories,
+          phase: phaseValue,
+          standardError: activeEstimate.standardError,
+          horizonDays: predictions.slice(0, 4).map((p) => p.daysFromNow),
+          composition,
+        });
+
+        const headline = projection.horizons[projection.horizons.length - 1];
+        const headlineDate = new Date(headline.targetDate).toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+        });
+
+        const mismatchNote = projection.directionMismatch
+          ? `This projection assumes ${usedCalories.toLocaleString()} cal/day, ${
+              usedCalories < projectionTdee ? 'below' : 'above'
+            } your estimated TDEE (${projectionTdee.toLocaleString()}) — check your calorie target.`
           : null;
-        const currentFFMI = heightCm && currentLeanMassKg
-          ? calculateFFMI(currentLeanMassKg, heightCm)
-          : null;
 
-        // Helper function to project body composition using P-ratio
-        const projectBodyComposition = (prediction: WeightPrediction): BodyCompProjection | null => {
-          // Need minimum data
-          if (!heightCm || !currentWeight) {
-            return null;
-          }
-
-          // Both currentWeight and prediction.predictedWeight are in lbs
-          const currentWeightKg = currentWeight / 2.20462;
-          const predictedWeightKg = prediction.predictedWeight / 2.20462; // prediction.predictedWeight is already in lbs
-          const weightChangeKg = predictedWeightKg - currentWeightKg;
-
-          // Can't predict composition without baseline - use fallback if height is available
-          const currentBodyFat = bodyFatPercent ||
-            (latestDexaScan ? (latestDexaScan.fat_mass_kg / latestDexaScan.weight_kg) * 100 : null) ||
-            (heightCm ? 15 : null); // Default 15% if we have height but no body fat data
-
-          if (!currentBodyFat) {
-            return null;
-          }
-
-          const currentLeanMassKg = currentWeightKg * (1 - currentBodyFat / 100);
-
-          // Calculate energy balance for P-ratio
-          if (!activeEstimate) {
-            return null;
-          }
-          
-          const dailyDeficit = activeEstimate.estimatedTDEE - (targetCalories || prediction.assumedDailyCalories);
-          // Energy balance: negative = deficit, positive = surplus
-          const energyBalancePercent = (dailyDeficit / activeEstimate.estimatedTDEE) * 100;
-          
-          // Build P-ratio inputs from available data
-          const pRatioInputs: PRatioInputs = {
-            avgDailyProteinGrams: avgDailyProteinGrams || 150, // Fallback
-            avgDailyProteinPerKgBW: (avgDailyProteinGrams || 150) / currentWeightKg,
-            avgWeeklyTrainingSets: avgWeeklyTrainingSets || 10, // Fallback
-            avgDailyDeficitCals: dailyDeficit,
-            energyBalancePercent, // Negative = deficit, positive = surplus
-            currentBodyFatPercent: currentBodyFat,
-            currentLeanMassKg,
-            trainingAge: trainingAge || 'intermediate',
-            isEnhanced: isEnhanced || false,
-            biologicalSex: biologicalSex || 'male',
-            chronologicalAge,
-            personalPRatioHistory: undefined, // TODO: Calculate from DEXA scan history if available
-          };
-          
-          // Handle weight gain differently
-          if (weightChangeKg > 0) {
-            return predictWeightGainComposition(
-              currentWeightKg,
-              predictedWeightKg,
-              currentBodyFat,
-              heightCm,
-              pRatioInputs
-            );
-          }
-          
-          // Weight loss projection
-          const pRatioResult = calculatePRatio(pRatioInputs);
-          const [pRatioLow, pRatioHigh] = pRatioResult.confidenceRange;
-          const pRatioMid = pRatioResult.finalPRatio;
-          
-          const currentFatMassKg = currentWeightKg * (currentBodyFat / 100);
-          
-          // Pessimistic (low P-ratio = more muscle loss)
-          const pessimisticFatLoss = weightChangeKg * pRatioLow;
-          const pessimisticLeanLoss = weightChangeKg * (1 - pRatioLow);
-          const pessimisticFatMass = currentFatMassKg + pessimisticFatLoss;
-          const pessimisticLeanMass = currentLeanMassKg + pessimisticLeanLoss;
-          const pessimisticBF = (pessimisticFatMass / predictedWeightKg) * 100;
-          const pessimisticFFMI = calculateFFMI(pessimisticLeanMass, heightCm);
-          
-          // Expected (mid P-ratio)
-          const expectedFatLoss = weightChangeKg * pRatioMid;
-          const expectedLeanLoss = weightChangeKg * (1 - pRatioMid);
-          const expectedFatMass = currentFatMassKg + expectedFatLoss;
-          const expectedLeanMass = currentLeanMassKg + expectedLeanLoss;
-          const expectedBF = (expectedFatMass / predictedWeightKg) * 100;
-          const expectedFFMI = calculateFFMI(expectedLeanMass, heightCm);
-          
-          // Optimistic (high P-ratio = mostly fat loss)
-          const optimisticFatLoss = weightChangeKg * pRatioHigh;
-          const optimisticLeanLoss = weightChangeKg * (1 - pRatioHigh);
-          const optimisticFatMass = currentFatMassKg + optimisticFatLoss;
-          const optimisticLeanMass = currentLeanMassKg + optimisticLeanLoss;
-          const optimisticBF = (optimisticFatMass / predictedWeightKg) * 100;
-          const optimisticFFMI = calculateFFMI(optimisticLeanMass, heightCm);
-          
-          const rangeSpread = pRatioResult.confidenceRange[1] - pRatioResult.confidenceRange[0];
-          const confidenceLevel = rangeSpread < 0.12
-            ? 'high'      // Very narrow range, have DEXA calibration
-            : rangeSpread < 0.18
-            ? 'reasonable'
-            : 'low';
-          
-          return {
-            ffmi: {
-              pessimistic: pessimisticFFMI.normalizedFfmi,
-              expected: expectedFFMI.normalizedFfmi,
-              optimistic: optimisticFFMI.normalizedFfmi,
-            },
-            bodyFatPercent: {
-              pessimistic: pessimisticBF,
-              expected: expectedBF,
-              optimistic: optimisticBF,
-            },
-            pRatioUsed: pRatioMid,
-            confidenceLevel,
-            factors: pRatioResult.factors,
-          };
-        };
+        const fmt = (n: number) => (Number.isInteger(n) ? n.toString() : n.toFixed(1));
 
         return (
-          <Card className="p-6">
-            <div className="flex items-start justify-between mb-4">
-              <div>
-                <h3 className="text-base font-semibold text-surface-100">Weight Projection</h3>
-                <p className="text-xs text-surface-500">
-                  At {targetCalories?.toLocaleString() || predictions[0]?.assumedDailyCalories.toLocaleString()} cal/day
+          <Card className="p-6" data-testid="weight-projection">
+            {/* Header + single-line summary (collapsed by default) */}
+            <div className="flex items-start justify-between gap-3">
+              <button
+                type="button"
+                onClick={toggleProjection}
+                aria-expanded={projectionExpanded}
+                data-testid="weight-projection-toggle"
+                className="flex-1 min-w-0 text-left group"
+              >
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-semibold text-surface-100">Weight Projection</h3>
+                  <svg
+                    className={`w-4 h-4 text-surface-500 transition-transform ${projectionExpanded ? 'rotate-180' : ''}`}
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+                <p
+                  className="text-xs text-surface-400 mt-1 truncate"
+                  data-testid="weight-projection-summary"
+                >
+                  Projected: {fmt(headline.predictedWeightLbs)} lbs by {headlineDate} (±
+                  {fmt(headline.marginLbs)}) · at {usedCalories.toLocaleString()} cal/day
                 </p>
-              </div>
+              </button>
               {onSetTarget && (
                 <Button variant="ghost" size="sm" onClick={onSetTarget}>
                   Adjust
@@ -715,116 +693,109 @@ export function TDEEDashboard({
               )}
             </div>
 
-            <div className="space-y-3">
-              {/* Current */}
-              <div className="py-2 border-b border-surface-800">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm text-surface-400">Current</span>
-                  <span className="text-sm font-semibold text-surface-100">
-                    {currentWeight.toFixed(1)} lbs
-                  </span>
+            {/* Direction sanity check — surfaced whether collapsed or expanded */}
+            {mismatchNote && (
+              <div
+                className="mt-3 p-3 bg-warning-500/10 border border-warning-500/20 rounded-lg"
+                data-testid="weight-projection-mismatch"
+              >
+                <p className="text-xs text-warning-300 flex items-start gap-2">
+                  <span aria-hidden>⚠</span>
+                  <span>{mismatchNote}</span>
+                </p>
+              </div>
+            )}
+
+            {projectionExpanded && (
+              <>
+                {/* Consolidated horizon table: one row per horizon */}
+                <div className="mt-4 overflow-x-auto">
+                  <table className="w-full text-sm" data-testid="weight-projection-table">
+                    <thead>
+                      <tr className="text-xs text-surface-500 text-left">
+                        <th className="font-normal pb-2">When</th>
+                        <th className="font-normal pb-2 text-right">Weight</th>
+                        <th className="font-normal pb-2 text-right">BF%</th>
+                        <th className="font-normal pb-2 text-right">FFMI</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="border-t border-surface-800">
+                        <td className="py-2 text-surface-400">Current</td>
+                        <td className="py-2 text-right font-semibold text-surface-100">
+                          {currentWeight.toFixed(1)} lbs
+                        </td>
+                        <td className="py-2 text-right text-surface-300">
+                          {currentBF != null ? `${currentBF.toFixed(1)}%` : '—'}
+                        </td>
+                        <td className="py-2 text-right text-surface-300">
+                          {currentFFMI != null ? currentFFMI.toFixed(1) : '—'}
+                        </td>
+                      </tr>
+                      {projection.horizons.map((h) => (
+                        <tr key={h.targetDate} className="border-t border-surface-800">
+                          <td className="py-2 text-surface-400">
+                            {h.daysFromNow}d
+                            <span className="text-xs text-surface-500 ml-1">
+                              (
+                              {new Date(h.targetDate).toLocaleDateString('en-US', {
+                                month: 'short',
+                                day: 'numeric',
+                              })}
+                              )
+                            </span>
+                          </td>
+                          <td className="py-2 text-right font-semibold text-surface-100">
+                            {fmt(h.predictedWeightLbs)}
+                            <span className="text-xs text-surface-500 ml-1">
+                              (±{fmt(h.marginLbs)})
+                            </span>
+                          </td>
+                          <td className="py-2 text-right text-surface-300">
+                            {h.bodyFatPercent != null ? `${h.bodyFatPercent.toFixed(1)}%` : '—'}
+                          </td>
+                          <td className="py-2 text-right text-surface-300">
+                            {h.ffmi != null ? h.ffmi.toFixed(1) : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-                {currentFFMI && currentBodyFatPercent && (
-                  <div className="flex items-center justify-between mt-2 text-xs">
-                    <span className="text-surface-500">FFMI:</span>
-                    <span className="text-surface-300">{currentFFMI.normalizedFfmi.toFixed(1)}</span>
-                    <span className="text-surface-500 ml-3">BF%:</span>
-                    <span className="text-surface-300">{currentBodyFatPercent.toFixed(1)}%</span>
+
+                {targetWeight && activeEstimate.confidence !== 'unstable' && !projection.directionMismatch && (
+                  <div className="mt-4 p-3 bg-primary-500/10 border border-primary-500/20 rounded-lg">
+                    <p className="text-xs text-primary-300">
+                      <span className="font-semibold">Target {targetWeight} lbs:</span>{' '}
+                      Estimated in{' '}
+                      {Math.ceil(
+                        Math.abs(currentWeight - targetWeight) /
+                          Math.abs(projection.dailyWeightChangeLbs || Infinity)
+                      )}{' '}
+                      days
+                    </p>
                   </div>
                 )}
-              </div>
 
-              {/* Projections */}
-              {predictions.slice(0, 4).map((prediction) => {
-                const bodyComp = projectBodyComposition(prediction);
-                return (
-                  <div
-                    key={prediction.targetDate}
-                    className="py-2 border-b border-surface-800 last:border-0"
+                {/* One uncertainty warning for the whole card */}
+                {(projection.confidenceLevel === 'low' || !composition) && (
+                  <p
+                    className="mt-3 text-xs text-surface-500"
+                    data-testid="weight-projection-uncertainty"
                   >
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm text-surface-400">
-                        In {prediction.daysFromNow} days
-                        <span className="text-xs text-surface-500 ml-1">
-                          ({new Date(prediction.targetDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})
-                        </span>
-                      </span>
-                      <div className="text-right">
-                        <span className="text-sm font-semibold text-surface-100">
-                          {prediction.predictedWeight} lbs
-                        </span>
-                        <span className="text-xs text-surface-500 ml-1">
-                          (±{((prediction.confidenceRange[1] - prediction.confidenceRange[0]) / 2).toFixed(1)})
-                        </span>
-                      </div>
-                    </div>
-                    {bodyComp ? (
-                      <div className="mt-2 p-2 bg-surface-800/30 rounded text-xs">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-surface-500">Body Fat %</span>
-                          <div className="flex items-center gap-1">
-                            <span className="text-surface-500">{bodyComp.bodyFatPercent.pessimistic.toFixed(0)}%</span>
-                            <span className="text-surface-400">→</span>
-                            <span className="text-surface-200 font-medium">{bodyComp.bodyFatPercent.expected.toFixed(0)}%</span>
-                            <span className="text-surface-400">→</span>
-                            <span className="text-success-400">{bodyComp.bodyFatPercent.optimistic.toFixed(0)}%</span>
-                          </div>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-surface-500">FFMI</span>
-                          <div className="flex items-center gap-1">
-                            <span className="text-surface-500">{bodyComp.ffmi.pessimistic.toFixed(1)}</span>
-                            <span className="text-surface-400">→</span>
-                            <span className="text-surface-200 font-medium">{bodyComp.ffmi.expected.toFixed(1)}</span>
-                            <span className="text-surface-400">→</span>
-                            <span className="text-success-400">{bodyComp.ffmi.optimistic.toFixed(1)}</span>
-                          </div>
-                        </div>
-                        {bodyComp.confidenceLevel === 'low' && (
-                          <p className="text-surface-500 mt-1 text-[10px]">
-                            ⚠️ Wide uncertainty range - log DEXA scans to improve
-                          </p>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="mt-2 p-2 bg-surface-800/30 rounded text-xs text-surface-500">
-                        <p className="text-[10px]">
-                          Body composition projection unavailable. 
-                          {!heightCm && ' Height required.'}
-                          {!activeEstimate && ' TDEE estimate required.'}
-                          {!bodyFatPercent && !latestDexaScan && heightCm && ' Using default body fat estimate.'}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+                    ⚠️ Wide uncertainty range — log DEXA scans to improve accuracy.
+                    {!composition && !heightCm && ' Add your height to project body composition.'}
+                  </p>
+                )}
 
-            {targetWeight && activeEstimate.confidence !== 'unstable' && (
-            <div className="mt-4 p-3 bg-primary-500/10 border border-primary-500/20 rounded-lg">
-              <p className="text-xs text-primary-300">
-                <span className="font-semibold">Target {targetWeight} lbs:</span>{' '}
-                Estimated in{' '}
-                {Math.ceil(
-                  Math.abs(currentWeight - targetWeight) /
-                    Math.abs(
-                      ((targetCalories || predictions[0]?.assumedDailyCalories || activeEstimate.estimatedTDEE) -
-                        activeEstimate.estimatedTDEE) /
-                        3500
-                    )
-                )}{' '}
-                days
-              </p>
-            </div>
-          )}
-
-            <Link
-              href="/dashboard/learn/adaptive-tdee"
-              className="block mt-4 text-center text-xs text-surface-500 hover:text-surface-400 transition-colors"
-            >
-              How accurate is this? →
-            </Link>
+                <Link
+                  href="/dashboard/learn/adaptive-tdee"
+                  className="block mt-4 text-center text-xs text-surface-500 hover:text-surface-400 transition-colors"
+                >
+                  How accurate is this? →
+                </Link>
+              </>
+            )}
           </Card>
         );
       })()}

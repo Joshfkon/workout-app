@@ -1947,6 +1947,7 @@ function NutritionPageContent() {
           latestDexaScan={latestDexaScan}
           regressionAnalysis={tdeeData.regressionAnalysis}
           targetCalories={nutritionTargets?.calories}
+          phase={currentPhase}
           onRefresh={() => {
             void queryClient.invalidateQueries({ queryKey: NUTRITION_GLOBAL_KEY });
             if (selectedDate) {
