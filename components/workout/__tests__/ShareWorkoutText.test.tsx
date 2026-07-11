@@ -22,10 +22,12 @@ const input: Omit<WorkoutShareTextInput, 'cryptic'> = {
       name: 'Bench Press',
       primaryMuscle: 'chest',
       targetSets: 2,
+      targetRepRange: [8, 12],
+      targetRir: 2,
       hasPR: true,
       sets: [
-        { quality: 'stimulative', reps: 10, weightKg: 100 },
-        { quality: 'effective', reps: 8, weightKg: 100 },
+        { reps: 10, weightKg: 100, rpe: 8 }, // hit → 🟩
+        { reps: 8, weightKg: 100, rpe: 9 }, // harder than planned (1 RIR < 2) → 🟨
       ],
     },
   ],
@@ -56,8 +58,8 @@ describe('ShareWorkoutText', () => {
     await user.click(screen.getByRole('button', { name: 'Share 📋' }));
 
     expect(screen.getByText(/HyperTrack 💪 Push/)).toBeInTheDocument();
-    expect(screen.getByText(/🟩🟨\s+Bench Press 🔥/)).toBeInTheDocument();
-    expect(screen.getByText(/2 sets · 1,800 kg · 30 min · 🔥1 PR/)).toBeInTheDocument();
+    expect(screen.getByText(/🟩🟨\s+Bench Press 🏆/)).toBeInTheDocument();
+    expect(screen.getByText(/2 sets · 1,800 kg · 30 min · 🏆 1 PR/)).toBeInTheDocument();
   });
 
   it('uses the Capacitor Share plugin on native', async () => {
@@ -140,6 +142,6 @@ describe('ShareWorkoutText', () => {
     await user.click(screen.getByRole('switch'));
 
     expect(screen.queryByText(/Bench Press/)).not.toBeInTheDocument();
-    expect(screen.getByText(/🟩🟨\s+🏋️ 🔥/)).toBeInTheDocument();
+    expect(screen.getByText(/🟩🟨\s+🏋️ 🏆/)).toBeInTheDocument();
   });
 });
