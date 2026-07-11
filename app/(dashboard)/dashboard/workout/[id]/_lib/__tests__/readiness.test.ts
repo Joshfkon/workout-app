@@ -5,11 +5,12 @@ import {
 } from '../readiness';
 import type { RecoverySession } from '@/services/muscleRecovery';
 import type { StandardMuscleGroup } from '@/types/schema';
+import { COARSE_MUSCLES, type MuscleVolumeStats } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 
 const NOW = new Date('2026-07-11T12:00:00.000Z');
 
-function hoursAgo(hours: number): Date {
-  return new Date(NOW.getTime() - hours * 60 * 60 * 1000);
+function stat(muscle: string, sets: number): MuscleVolumeStats {
+  return { muscle, sets, target: 0, status: 'optimal', exercises: [{ id: muscle, name: `${muscle} ex`, sets }] };
 }
 
 function session(
@@ -21,94 +22,98 @@ function session(
   return {
     performedAt,
     exercises: [
-      {
-        primaryMuscle,
-        secondaryMuscles: [],
-        sets: Array.from({ length: setCount }, () => ({ repsInTank })),
-      },
+      { primaryMuscle, secondaryMuscles: [], sets: Array.from({ length: setCount }, () => ({ repsInTank })) },
     ],
   };
 }
 
-function rowFor(rows: ReadinessRow[], muscle: StandardMuscleGroup): ReadinessRow {
+function rowFor(rows: ReadinessRow[], muscle: string): ReadinessRow {
   const row = rows.find((r) => r.muscle === muscle);
   if (!row) throw new Error(`no row for ${muscle}`);
   return row;
 }
 
-describe('buildReadinessRows', () => {
-  it('emits exactly one row per standard muscle group', () => {
-    const rows = buildReadinessRows({}, [], NOW);
-    expect(rows).toHaveLength(20);
+describe('buildReadinessRows (coarse rows)', () => {
+  it('emits exactly one row per coarse muscle group', () => {
+    const rows = buildReadinessRows([], [], NOW);
+    expect(rows).toHaveLength(COARSE_MUSCLES.length);
   });
 
-  it('places a Fresh, under-volume muscle above a Fatigued, under-volume muscle', () => {
-    // calves: no recent training → Fresh, 0 sets (well under MEV 6).
-    // quads: trained now → Fatigued, also 0 weekly sets vs MEV 6.
-    const history = [session(NOW, 'quads', 4, 2)];
-    const rows = buildReadinessRows({}, history, NOW);
-
-    const calvesIdx = rows.findIndex((r) => r.muscle === 'calves');
-    const quadsIdx = rows.findIndex((r) => r.muscle === 'quads');
+  it('places a Fresh, under-volume group above a Fatigued, under-volume group', () => {
+    const history = [session(NOW, 'quads', 4, 2)]; // quads trained now → Fatigued
+    const rows = buildReadinessRows([], history, NOW);
 
     expect(rowFor(rows, 'calves').recovery.status).toBe('fresh');
     expect(rowFor(rows, 'quads').recovery.status).toBe('fatigued');
-    expect(calvesIdx).toBeLessThan(quadsIdx);
+    expect(rows.findIndex((r) => r.muscle === 'calves')).toBeLessThan(
+      rows.findIndex((r) => r.muscle === 'quads')
+    );
   });
 
-  it('within Fresh muscles, ranks the bigger volume gap first', () => {
-    // Both Fresh (untrained). lateral_delts MEV 6, biceps MEV 4 → delts have a
-    // bigger gap, so they should rank above biceps.
-    const rows = buildReadinessRows({}, [], NOW);
-    const deltsIdx = rows.findIndex((r) => r.muscle === 'lateral_delts');
-    const bicepsIdx = rows.findIndex((r) => r.muscle === 'biceps');
-    expect(deltsIdx).toBeLessThan(bicepsIdx);
+  it('within Fresh groups, ranks the bigger volume gap first', () => {
+    // Both Fresh (untrained). shoulders MEV 8, biceps MEV 6 → shoulders first.
+    const rows = buildReadinessRows([], [], NOW);
+    expect(rows.findIndex((r) => r.muscle === 'shoulders')).toBeLessThan(
+      rows.findIndex((r) => r.muscle === 'biceps')
+    );
   });
 
-  it('a muscle already at target ranks below an equally-recovered muscle behind target', () => {
-    // biceps at MEV (4 sets) vs triceps at 0 — both Fresh. triceps ranks higher.
-    const rows = buildReadinessRows({ biceps: 4 }, [], NOW);
-    const bicepsIdx = rows.findIndex((r) => r.muscle === 'biceps');
-    const tricepsIdx = rows.findIndex((r) => r.muscle === 'triceps');
+  it('a group at MEV ranks below an equally-recovered group behind target', () => {
+    const rows = buildReadinessRows([stat('biceps', 6)], [], NOW); // biceps MEV 6 → gap 0
     expect(rowFor(rows, 'biceps').volumeGap).toBe(0);
-    expect(tricepsIdx).toBeLessThan(bicepsIdx);
+    expect(rows.findIndex((r) => r.muscle === 'triceps')).toBeLessThan(
+      rows.findIndex((r) => r.muscle === 'biceps')
+    );
   });
 
-  it('reflects merged weekly sets in the row count and volume status', () => {
-    const rows = buildReadinessRows({ chest_upper: 5 }, [], NOW);
-    const chest = rowFor(rows, 'chest_upper');
+  it('rolls fine standard sets into the coarse row with the shared band + zone', () => {
+    const rows = buildReadinessRows([stat('chest_upper', 5)], [], NOW);
+    const chest = rowFor(rows, 'chest');
     expect(chest.sets).toBe(5);
-    expect(chest.target).toBe(4); // MEV for chest_upper
-    expect(chest.volumeStatus).toBe('optimal');
-    expect(chest.volumeGap).toBe(0);
+    expect(chest.band).toEqual({ mev: 8, mrv: 22 });
+    expect(chest.zone).toBe('below_mev'); // 5 < MEV 8
+    expect(chest.volumeGap).toBe(3);
+  });
+
+  it('surfaces a reachable, lagging fine child under an on-target parent', () => {
+    // Glutes at MEV via glute max; glute_med reachable but untrained (0 < MEV 2).
+    const reachable = new Set<StandardMuscleGroup>(['glutes', 'glute_med']);
+    const rows = buildReadinessRows([stat('glutes', 16)], [], NOW, reachable);
+    const glutes = rowFor(rows, 'glutes');
+    expect(glutes.zone).toBe('in_zone'); // parent is fine
+    const child = glutes.children.find((c) => c.muscle === 'glute_med');
+    expect(child).toBeDefined();
+    expect(child!.belowMev).toBe(true);
   });
 });
 
 describe('topTargets', () => {
-  it('returns up to N recovered, under-volume muscles in order', () => {
-    const rows = buildReadinessRows({}, [], NOW);
-    const top = topTargets(rows, 3);
+  it('returns up to N recovered, under-volume targets (coarse + fine children)', () => {
+    const top = topTargets(buildReadinessRows([], [], NOW), 3);
     expect(top).toHaveLength(3);
-    top.forEach((r) => {
-      expect(r.recovery.status).not.toBe('fatigued');
-      expect(r.volumeGap).toBeGreaterThan(0);
-    });
-    // Ordered by actionability — matches the head of the sorted rows.
-    expect(top.map((r) => r.muscle)).toEqual(rows.slice(0, 3).map((r) => r.muscle));
+    top.forEach((t) => expect(t.score).toBeGreaterThan(0));
   });
 
-  it('excludes fatigued muscles even when they are far below target', () => {
-    // Fatigue every muscle by "training" each right now with a big dose.
-    const history: RecoverySession[] = [
-      {
-        performedAt: NOW,
-        exercises: [
-          { primaryMuscle: 'quads', secondaryMuscles: [], sets: Array.from({ length: 10 }, () => ({ repsInTank: 0 })) },
-        ],
-      },
+  it('a lagging fine child appears in targets even when its parent is on target', () => {
+    // Every coarse group at/above MEV so no coarse candidates remain; only the
+    // reachable, untrained fine child glute_med lags → it is the top target.
+    const fullyTrained = [
+      stat('chest_upper', 12), stat('lats', 14), stat('front_delts', 12),
+      stat('biceps', 12), stat('triceps', 12), stat('quads', 14),
+      stat('hamstrings', 12), stat('glutes', 16), stat('calves', 12),
+      stat('abs', 12), stat('traps', 10), stat('forearms', 10),
+      stat('adductors', 10), stat('erectors', 8),
     ];
-    const rows = buildReadinessRows({}, history, NOW);
-    const top = topTargets(rows, 3);
-    expect(top.every((r) => r.muscle !== 'quads')).toBe(true);
+    const reachable = new Set<StandardMuscleGroup>(['glutes', 'glute_med']);
+    const top = topTargets(buildReadinessRows(fullyTrained, [], NOW, reachable), 3);
+    expect(top.some((t) => t.muscle === 'glute_med' && t.isChild)).toBe(true);
+  });
+
+  it('excludes fatigued groups even when far below target', () => {
+    const history: RecoverySession[] = [
+      { performedAt: NOW, exercises: [{ primaryMuscle: 'quads', secondaryMuscles: [], sets: Array.from({ length: 10 }, () => ({ repsInTank: 0 })) }] },
+    ];
+    const top = topTargets(buildReadinessRows([], history, NOW), 3);
+    expect(top.every((t) => t.muscle !== 'quads')).toBe(true);
   });
 });

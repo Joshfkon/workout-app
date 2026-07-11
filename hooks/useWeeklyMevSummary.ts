@@ -3,21 +3,34 @@
 import { useEffect, useState } from 'react';
 import { createUntypedClient } from '@/lib/supabase/client';
 import {
-  summarizeWeeklyVolume,
+  computeWeeklyMuscleVolume,
+  computeReachableMuscles,
   weeklyVolumeWindowStartISO,
-  type WeeklyMevSummary,
+  type MuscleVolumeStats,
 } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
+import type { StandardMuscleGroup } from '@/types/schema';
+
+export interface UseWeeklyMevSummaryResult {
+  /** Shared per-muscle credited stats (for the coarse-row presentation model). */
+  stats: MuscleVolumeStats[];
+  /** Muscles the user's exercises can credit (gates fine-muscle rows/warnings). */
+  reachable: Set<StandardMuscleGroup>;
+  loaded: boolean;
+}
 
 /**
- * Single source of truth for the weekly (rolling 7 local days) per-muscle MEV
- * rollup on the client. Both the "This Week vs MEV" card and the "Insufficient
- * Volume" atrophy-risk warning consume this hook, so they query the exact same
- * window through the exact same pipeline and can never report divergent
- * below-MEV counts. Pair with `selectMusclesBelowMev` /
- * `mevSummaryToVolumeData` to derive each card's view of the shared summary.
+ * Single source of truth for the weekly (rolling 7 local days) per-muscle
+ * volume on the client. Every surface — the "This Week vs MEV" card, the
+ * insufficient-volume warning and the volume page bars — consumes `stats` +
+ * `reachable` through the shared `buildVolumeRows` coarse-row model, so they
+ * query the exact same window through the exact same counter and can never
+ * report divergent counts or zone-status.
  */
-export function useWeeklyMevSummary(): { summary: WeeklyMevSummary | null; loaded: boolean } {
-  const [summary, setSummary] = useState<WeeklyMevSummary | null>(null);
+export function useWeeklyMevSummary(): UseWeeklyMevSummaryResult {
+  const [result, setResult] = useState<Omit<UseWeeklyMevSummaryResult, 'loaded'>>({
+    stats: [],
+    reachable: new Set(),
+  });
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -39,7 +52,10 @@ export function useWeeklyMevSummary(): { summary: WeeklyMevSummary | null; loade
           .gte('workout_sessions.completed_at', weeklyVolumeWindowStartISO());
 
         if (cancelled) return;
-        setSummary(summarizeWeeklyVolume((data as any) || []));
+        const blocks = (data as any) || [];
+        const stats = computeWeeklyMuscleVolume(blocks);
+        const reachable = computeReachableMuscles(blocks);
+        setResult({ stats, reachable });
       } catch (err) {
         console.error('Failed to load weekly MEV summary:', err);
       } finally {
@@ -51,5 +67,5 @@ export function useWeeklyMevSummary(): { summary: WeeklyMevSummary | null; loade
     };
   }, []);
 
-  return { summary, loaded };
+  return { ...result, loaded };
 }

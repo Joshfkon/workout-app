@@ -279,6 +279,30 @@ export function getAdjustedBaseline(
 }
 
 /**
+ * Volume-counter version. Bumped when the set counter changes in a way that
+ * invalidates learned MEV/MRV thresholds. v2 = the shared 0.5-secondary-credit,
+ * reachability-gated counter. Profiles stored below this version are reset to
+ * research baselines and relearn under the new counter (see the reset migration
+ * and useAdaptiveVolume).
+ */
+export const VOLUME_COUNTER_VERSION = 2;
+
+/**
+ * Reset a profile's learned tolerances to research baselines (dataPoints 0,
+ * confidence low) while preserving the user's context (training age, enhanced
+ * flag, recovery multiplier). Used when migrating a profile onto a new counter:
+ * the stale primary-only-calibrated thresholds are discarded and relearning
+ * restarts from defaults.
+ */
+export function resetVolumeProfileToBaseline(profile: UserVolumeProfile): UserVolumeProfile {
+  const baseline = createInitialVolumeProfile(profile.userId, profile.trainingAge, profile.isEnhanced);
+  return {
+    ...baseline,
+    globalRecoveryMultiplier: profile.globalRecoveryMultiplier,
+  };
+}
+
+/**
  * Create initial user volume profile with research-based defaults
  */
 export function createInitialVolumeProfile(

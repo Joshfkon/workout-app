@@ -14,9 +14,10 @@ import { toStandardMuscleForVolume } from '@/lib/migrations/muscle-groups';
 import { AtrophyRiskAlert } from '@/components/analytics/AtrophyRiskAlert';
 import {
   computeWeeklyMuscleVolume,
-  computeWeeklyMevSummary,
   computeReachableMuscles,
-  mevSummaryToVolumeData,
+  buildVolumeRows,
+  coarseMevTiles,
+  belowMevVolumeData,
   weeklyVolumeWindowStartISO,
   type MuscleVolumeStats,
 } from './_lib/weeklyVolume';
@@ -607,11 +608,15 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
     () => (reachableMuscles ? new Set(reachableMuscles) : undefined),
     [reachableMuscles]
   );
-  const glanceSummary = useMemo(
-    () => computeWeeklyMevSummary(muscleVolume, reachableSet),
+  // Coarse-row presentation model (shared with the volume page, readiness sheet
+  // and warning) — so the glance tile's "N below MEV" and the atrophy card can
+  // never diverge from the bars.
+  const volumeRows = useMemo(
+    () => buildVolumeRows(muscleVolume, reachableSet),
     [muscleVolume, reachableSet]
   );
-  const glanceVolume: GlanceVolumeSummary | null = glanceSummary;
+  const glanceVolume: GlanceVolumeSummary | null =
+    muscleVolume.length > 0 ? coarseMevTiles(volumeRows) : null;
 
   const [frequentFoods, setFrequentFoods] = useState<FrequentFood[]>([]);
   const [systemFoods, setSystemFoods] = useState<SystemFood[]>([]);
@@ -701,13 +706,12 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
     }
   }, []);
 
-  // Muscles below MEV for the atrophy-risk alert. Derived from the SAME shared
-  // summary the "This Week vs MEV" card and volume page use (reachability-gated,
-  // legacy-normalized, with per-exercise breakdown) instead of an inline loop —
-  // so the home card, the volume page card, and the glance tile can't diverge.
+  // Muscles below MEV for the atrophy-risk alert — the coarse below-MEV rows
+  // (plus lagging fine children) from the SAME model the bars and glance tile
+  // use, with the per-exercise breakdown, so nothing can diverge.
   const musclesBelowMev = useMemo(
-    (): MuscleVolumeData[] => mevSummaryToVolumeData(glanceSummary),
-    [glanceSummary]
+    (): MuscleVolumeData[] => belowMevVolumeData(volumeRows),
+    [volumeRows]
   );
 
   // Normalize goal to the Goal type expected by AtrophyRiskAlert

@@ -10,14 +10,18 @@ import type { SetLog } from '@/types/schema';
 import type { ExerciseBlockWithExercise } from '@/app/(dashboard)/dashboard/workout/[id]/_lib/types';
 import {
   accumulateExerciseVolume,
+  volumeAccumulatorToStats,
   weeklyVolumeWindowStartISO,
   type VolumeAccumulator,
+  type MuscleVolumeStats,
 } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
+import { resolveMuscleToStandard } from '@/types/schema';
 import type { RecoverySession, RecoveryExercise } from '@/services/muscleRecovery';
 import {
   buildReadinessRows,
   topTargets,
   type ReadinessRow,
+  type ReadinessTarget,
 } from '@/app/(dashboard)/dashboard/workout/[id]/_lib/readiness';
 
 /**
@@ -86,7 +90,7 @@ export interface UseMuscleReadinessArgs {
 
 export interface UseMuscleReadinessResult {
   rows: ReadinessRow[];
-  targets: ReadinessRow[];
+  targets: ReadinessTarget[];
   isLoading: boolean;
   error: string | null;
 }
@@ -164,10 +168,19 @@ export function useMuscleReadiness({
     return map;
   }, [liveSets]);
 
-  // Merged weekly sets per muscle: DB history + live session, via the shared
-  // volume accumulator so credits match the volume card exactly.
-  const weeklySetsByMuscle = useMemo(() => {
+  // Merged weekly volume: DB history + live session, via the shared volume
+  // accumulator so credits (and the resulting coarse rows / zones) match the
+  // volume card and warning exactly. Also derive the reachability set from the
+  // same exercises so fine children gate identically.
+  const { stats, reachable } = useMemo((): { stats: MuscleVolumeStats[]; reachable: Set<StandardMuscleGroup> } => {
     const acc: VolumeAccumulator = {};
+    const reachableSet = new Set<StandardMuscleGroup>();
+    const markReachable = (primary: string | null, secondary: string[]) => {
+      for (const token of [primary, ...secondary]) {
+        if (!token) continue;
+        for (const std of resolveMuscleToStandard(token)) reachableSet.add(std);
+      }
+    };
 
     // DB history.
     for (const s of historyRows) {
@@ -177,12 +190,14 @@ export function useMuscleReadiness({
           { id: ex.primaryMuscle || 'x', name: ex.primaryMuscle || 'x', primary_muscle: ex.primaryMuscle, secondary_muscles: ex.secondaryMuscles },
           ex.sets.length
         );
+        markReachable(ex.primaryMuscle, ex.secondaryMuscles);
       }
     }
 
     // Live session.
     for (const block of liveBlocks) {
       const workingSets = liveWorkingSetsByBlock.get(block.id)?.length ?? 0;
+      markReachable(block.exercise.primaryMuscle, block.exercise.secondaryMuscles);
       if (workingSets === 0) continue;
       accumulateExerciseVolume(
         acc,
@@ -196,11 +211,7 @@ export function useMuscleReadiness({
       );
     }
 
-    const out: Partial<Record<StandardMuscleGroup, number>> = {};
-    for (const [muscle, data] of Object.entries(acc)) {
-      out[muscle as StandardMuscleGroup] = data.sets;
-    }
-    return out;
+    return { stats: volumeAccumulatorToStats(acc), reachable: reachableSet };
   }, [historyRows, liveBlocks, liveWorkingSetsByBlock]);
 
   // Recovery history: DB sessions + the live session (timestamped `now`).
@@ -236,8 +247,8 @@ export function useMuscleReadiness({
   }, [historyRows, liveBlocks, liveWorkingSetsByBlock, now]);
 
   const rows = useMemo(
-    () => buildReadinessRows(weeklySetsByMuscle, recoveryHistory, now),
-    [weeklySetsByMuscle, recoveryHistory, now]
+    () => buildReadinessRows(stats, recoveryHistory, now, reachable),
+    [stats, recoveryHistory, now, reachable]
   );
 
   const targets = useMemo(() => topTargets(rows, 3), [rows]);

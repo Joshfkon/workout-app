@@ -52,7 +52,7 @@ describe('fractional set credit (shared counter — every surface)', () => {
     expect(acc.hamstrings.sets).toBeCloseTo(0.5, 6);
     expect(acc.erectors.sets).toBeCloseTo(0.5, 6);
     // The debug breakdown records the exercise that fed each muscle.
-    expect([...acc.erectors.exercises.values()][0]).toMatchObject({ name: 'Back Extension' });
+    expect(Array.from(acc.erectors.exercises.values())[0]).toMatchObject({ name: 'Back Extension' });
   });
 
   it('scales linearly with working sets (3 sets → 1.5 secondary credit)', () => {
@@ -123,7 +123,7 @@ describe('reachability gating (never warn on an unsatisfiable muscle)', () => {
     const reachable = new Set<StandardMuscleGroup>(['lats', 'glutes']);
     expect(isMuscleWarnable('quads', reachable)).toBe(true); // coarse-reachable always
     expect(isMuscleWarnable('erectors', reachable)).toBe(false); // fine + unreachable
-    expect(isMuscleWarnable('glute_med', new Set(['glute_med']))).toBe(true);
+    expect(isMuscleWarnable('glute_med', new Set<StandardMuscleGroup>(['glute_med']))).toBe(true);
     // No reachability info → preserve legacy "warn on all" behaviour.
     expect(isMuscleWarnable('erectors', undefined)).toBe(true);
   });
@@ -158,7 +158,7 @@ describe('cross-surface agreement on one fixture', () => {
     const readiness = readinessSetsByMuscle(blocks);
 
     // Every muscle either surface reports must match the other exactly.
-    const muscles = new Set([...Object.keys(statsByMuscle), ...Object.keys(readiness)]);
+    const muscles = Array.from(new Set([...Object.keys(statsByMuscle), ...Object.keys(readiness)]));
     for (const m of muscles) {
       expect(readiness[m] ?? 0).toBe(statsByMuscle[m] ?? 0);
     }

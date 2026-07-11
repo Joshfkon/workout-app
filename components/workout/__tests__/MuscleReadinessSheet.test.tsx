@@ -113,8 +113,11 @@ describe('MuscleReadinessSheet', () => {
 
     // Sheet is present.
     expect(await screen.findByTestId('readiness-sheet')).toBeInTheDocument();
-    // Rows appear after the mocked history resolves.
-    await waitFor(() => expect(screen.getByTestId('readiness-row-quads')).toBeInTheDocument());
+    // Coarse rows appear after the mocked history resolves (cap shows top 6).
+    await waitFor(() => expect(screen.getByTestId('readiness-show-more')).toBeInTheDocument());
+    // Reveal all coarse rows (fatigued quads sits below the cap).
+    await userEvent.click(screen.getByTestId('readiness-show-more'));
+    expect(screen.getByTestId('readiness-row-quads')).toBeInTheDocument();
 
     // Dismiss.
     await userEvent.click(screen.getByLabelText('Close'));
@@ -127,7 +130,8 @@ describe('MuscleReadinessSheet', () => {
       { wrapper }
     );
 
-    await waitFor(() => expect(screen.getByTestId('readiness-row-quads')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId('readiness-show-more')).toBeInTheDocument());
+    await userEvent.click(screen.getByTestId('readiness-show-more'));
 
     // Quads were maxed 30h ago → Fatigued; calves untrained → Fresh. Both under MEV.
     expect(screen.getByTestId('readiness-badge-quads')).toHaveTextContent('Fatigued');
@@ -155,8 +159,11 @@ describe('MuscleReadinessSheet', () => {
       <MuscleReadinessSheet isOpen onClose={jest.fn()} liveBlocks={[block]} liveSets={sets} />
     );
 
+    // Just trained → Fatigued, so calves sinks below the 6-row cap; reveal all.
+    await waitFor(() => expect(screen.getByTestId('readiness-show-more')).toBeInTheDocument());
+    await userEvent.click(screen.getByTestId('readiness-show-more'));
+
     await waitFor(() => expect(screen.getByTestId('readiness-sets-calves')).toHaveTextContent('3'));
-    // Just trained → immediately Fatigued.
     expect(screen.getByTestId('readiness-badge-calves')).toHaveTextContent('Fatigued');
   });
 
