@@ -13,6 +13,9 @@ export async function fetchAllExercises(): Promise<{
   const { data, error } = await supabase
     .from('exercises')
     .select('*')
+    // Hide exercises soft-deleted by a merge (deleted_at/merged_into set in
+    // migration 20260711000002).
+    .is('deleted_at', null)
     .order('name');
 
   return { data: data as Record<string, unknown>[] | null, error };

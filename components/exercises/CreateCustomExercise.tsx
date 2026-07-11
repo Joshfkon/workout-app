@@ -170,6 +170,10 @@ export function CreateCustomExercise({
           onCancel={onCancel}
           isLoading={isLoading}
           initialData={basicInput || (initialName ? { name: initialName } : undefined)}
+          // Picking an existing match routes through the same success handler
+          // the caller uses for a freshly created exercise (fetch-by-id then
+          // swap/add/select), so "Use this instead" just selects it.
+          onUseExisting={onSuccess}
         />
       )}
 
