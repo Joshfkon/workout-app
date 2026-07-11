@@ -10,6 +10,22 @@ interface WorkoutTimerState {
   isPaused: boolean;
 }
 
+/**
+ * The single source of truth for "how long has this workout been active".
+ *
+ * Paused time is excluded: on resume the hook rewinds `startTime` so
+ * `now - startTime` stays equal to real active seconds, and while paused the
+ * frozen `pausedAt` is returned. Both the live header timer AND the duration
+ * snapshotted at finish go through this one function, so the summary/history
+ * can never disagree with the timer the user watched.
+ */
+export function elapsedFromState(state: WorkoutTimerState, nowMs: number): number {
+  if (state.isPaused && state.pausedAt !== null) {
+    return Math.max(0, Math.floor(state.pausedAt));
+  }
+  return Math.max(0, Math.floor((nowMs - state.startTime) / 1000));
+}
+
 interface UseWorkoutTimerOptions {
   sessionId: string;
   startedAt: string | null; // ISO date string from session
@@ -36,27 +52,22 @@ export function useWorkoutTimer({ sessionId, startedAt }: UseWorkoutTimerOptions
 
         if (state.isPaused && state.pausedAt !== null) {
           // Was paused - restore paused state
-          setElapsedSeconds(state.pausedAt);
+          setElapsedSeconds(elapsedFromState(state, Date.now()));
           setIsPaused(true);
         } else {
           // Was running - calculate current elapsed
-          const now = Date.now();
-          const elapsed = Math.floor((now - state.startTime) / 1000);
-          setElapsedSeconds(elapsed);
+          setElapsedSeconds(elapsedFromState(state, Date.now()));
           setIsPaused(false);
         }
       } else {
         // No saved state - initialize from session startedAt
         const startTime = new Date(startedAt).getTime();
-        const now = Date.now();
-        const elapsed = Math.floor((now - startTime) / 1000);
-
         stateRef.current = {
           startTime,
           pausedAt: null,
           isPaused: false,
         };
-        setElapsedSeconds(elapsed);
+        setElapsedSeconds(elapsedFromState(stateRef.current, Date.now()));
         setIsPaused(false);
 
         // Save initial state
@@ -89,9 +100,7 @@ export function useWorkoutTimer({ sessionId, startedAt }: UseWorkoutTimerOptions
       const state = stateRef.current;
       if (!state || state.isPaused) return;
 
-      const now = Date.now();
-      const elapsed = Math.floor((now - state.startTime) / 1000);
-      setElapsedSeconds(elapsed);
+      setElapsedSeconds(elapsedFromState(state, Date.now()));
     }, 1000);
 
     return () => {
@@ -146,16 +155,13 @@ export function useWorkoutTimer({ sessionId, startedAt }: UseWorkoutTimerOptions
     if (!startedAt) return;
 
     const startTime = new Date(startedAt).getTime();
-    const now = Date.now();
-    const elapsed = Math.floor((now - startTime) / 1000);
-
     const newState: WorkoutTimerState = {
       startTime,
       pausedAt: null,
       isPaused: false,
     };
     stateRef.current = newState;
-    setElapsedSeconds(elapsed);
+    setElapsedSeconds(elapsedFromState(newState, Date.now()));
     setIsPaused(false);
 
     localStorage.setItem(storageKey, JSON.stringify(newState));

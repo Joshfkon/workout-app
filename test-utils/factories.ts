@@ -29,6 +29,7 @@ export function makeWorkoutSession(
     plannedDate: '2024-01-15',
     startedAt: null,
     completedAt: null,
+    durationSeconds: null,
     preWorkoutCheckIn: null,
     sessionRpe: null,
     pumpRating: null,

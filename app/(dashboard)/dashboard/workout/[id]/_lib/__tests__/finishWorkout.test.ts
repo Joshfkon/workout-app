@@ -152,6 +152,30 @@ describe('submitFinishOptimistic', () => {
     expect(await outboxCount()).toBe(0);
   });
 
+  it('persists the frozen duration snapshot in the completion patch', async () => {
+    const { client } = makeGatedSupabase();
+
+    await submitFinishOptimistic(
+      { supabase: client, sessionId: 's1', session: makeSession(), navigate: jest.fn() },
+      { ...SUMMARY_DATA, durationSeconds: 1215 }
+    );
+
+    const finish = (await listOutbox()).find((e) => e.id === sessionFinishEntryId('s1'))!;
+    expect(finish.row).toMatchObject({ duration_seconds: 1215 });
+  });
+
+  it('omits duration_seconds when no snapshot is provided', async () => {
+    const { client } = makeGatedSupabase();
+
+    await submitFinishOptimistic(
+      { supabase: client, sessionId: 's1', session: makeSession(), navigate: jest.fn() },
+      SUMMARY_DATA
+    );
+
+    const finish = (await listOutbox()).find((e) => e.id === sessionFinishEntryId('s1'))!;
+    expect(finish.row).not.toHaveProperty('duration_seconds');
+  });
+
   it('responds in under 100ms even when the network never answers', async () => {
     // Requests are gated and never released — a fully dead connection.
     const { client } = makeGatedSupabase();

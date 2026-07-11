@@ -164,6 +164,49 @@ export function formatDuration(seconds: number): string {
 }
 
 /**
+ * Format a whole *workout* duration for display. Under an hour reads as a
+ * stopwatch ("42:05"); an hour or more switches to "2h 57m" so long sessions
+ * don't render as a confusing "177:05". Use this everywhere a completed
+ * workout's total duration is shown (summary, history, share).
+ */
+export function formatWorkoutDuration(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) {
+    return '0:00';
+  }
+  const totalMinutes = Math.floor(seconds / 60);
+  if (totalMinutes >= 60) {
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    return `${hours}h ${minutes}m`;
+  }
+  const secs = Math.floor(seconds % 60);
+  return `${totalMinutes}:${secs.toString().padStart(2, '0')}`;
+}
+
+/**
+ * Resolve a completed workout's duration in seconds from the single frozen
+ * snapshot (`durationSeconds`), falling back to the wall-clock span for legacy
+ * sessions that predate the snapshot column. Keeps every read-side surface on
+ * one computation.
+ */
+export function resolveWorkoutDurationSeconds(
+  durationSeconds: number | null | undefined,
+  startedAt: string | null | undefined,
+  completedAt: string | null | undefined
+): number {
+  if (typeof durationSeconds === 'number' && Number.isFinite(durationSeconds) && durationSeconds >= 0) {
+    return Math.floor(durationSeconds);
+  }
+  if (startedAt && completedAt) {
+    return Math.max(
+      0,
+      Math.floor((new Date(completedAt).getTime() - new Date(startedAt).getTime()) / 1000)
+    );
+  }
+  return 0;
+}
+
+/**
  * Convert weight between kg and lb
  */
 export function convertWeight(weight: number, from: 'kg' | 'lb', to: 'kg' | 'lb'): number {

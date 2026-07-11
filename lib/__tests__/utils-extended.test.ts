@@ -7,6 +7,8 @@ import {
   getLocalDateString,
   formatDate,
   formatDuration,
+  formatWorkoutDuration,
+  resolveWorkoutDurationSeconds,
   formatWeight,
   formatWeightValue,
   inputWeightToKg,
@@ -169,6 +171,48 @@ describe('Date Utilities', () => {
     it('handles large durations', () => {
       expect(formatDuration(3600)).toBe('60:00');
       expect(formatDuration(3665)).toBe('61:05');
+    });
+  });
+
+  describe('formatWorkoutDuration', () => {
+    it('formats sub-hour durations as m:ss', () => {
+      expect(formatWorkoutDuration(0)).toBe('0:00');
+      expect(formatWorkoutDuration(5)).toBe('0:05');
+      expect(formatWorkoutDuration(2525)).toBe('42:05'); // 42m 5s
+      expect(formatWorkoutDuration(3599)).toBe('59:59');
+    });
+
+    it('switches to "Xh Ym" at one hour and above', () => {
+      expect(formatWorkoutDuration(3600)).toBe('1h 0m');
+      expect(formatWorkoutDuration(3665)).toBe('1h 1m');
+      expect(formatWorkoutDuration(10625)).toBe('2h 57m'); // ~177 min
+    });
+
+    it('guards against invalid values', () => {
+      expect(formatWorkoutDuration(-10)).toBe('0:00');
+      expect(formatWorkoutDuration(NaN)).toBe('0:00');
+    });
+  });
+
+  describe('resolveWorkoutDurationSeconds', () => {
+    it('prefers the frozen snapshot when present', () => {
+      expect(
+        resolveWorkoutDurationSeconds(
+          1234,
+          '2026-07-07T10:00:00Z',
+          '2026-07-07T13:00:00Z' // wall clock would be 10800s
+        )
+      ).toBe(1234);
+    });
+
+    it('falls back to the wall-clock span for legacy sessions', () => {
+      expect(
+        resolveWorkoutDurationSeconds(null, '2026-07-07T10:00:00Z', '2026-07-07T10:30:00Z')
+      ).toBe(1800);
+    });
+
+    it('returns 0 when nothing is available', () => {
+      expect(resolveWorkoutDurationSeconds(null, null, null)).toBe(0);
     });
   });
 });

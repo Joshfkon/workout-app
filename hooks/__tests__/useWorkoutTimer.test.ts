@@ -4,7 +4,25 @@
  */
 
 import { renderHook, act } from '@testing-library/react';
-import { useWorkoutTimer } from '../useWorkoutTimer';
+import { useWorkoutTimer, elapsedFromState } from '../useWorkoutTimer';
+
+describe('elapsedFromState', () => {
+  it('excludes paused time by returning the frozen pausedAt while paused', () => {
+    const state = { startTime: 0, pausedAt: 1215, isPaused: true };
+    // Wall clock says ~2h but the active elapsed is the frozen 1215s.
+    expect(elapsedFromState(state, 7200_000)).toBe(1215);
+  });
+
+  it('computes now - startTime while running', () => {
+    const state = { startTime: 1_000_000, pausedAt: null, isPaused: false };
+    expect(elapsedFromState(state, 1_000_000 + 90_000)).toBe(90);
+  });
+
+  it('never returns a negative elapsed', () => {
+    const state = { startTime: 5_000_000, pausedAt: null, isPaused: false };
+    expect(elapsedFromState(state, 4_000_000)).toBe(0);
+  });
+});
 
 // Mock localStorage
 const localStorageMock = (() => {

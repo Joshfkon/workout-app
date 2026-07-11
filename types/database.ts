@@ -206,6 +206,7 @@ export interface Database {
           pump_rating: number | null;
           session_notes: string | null;
           completion_percent: number;
+          duration_seconds: number | null;
           auto_discarded_at: string | null;
           origin: 'scheduled' | 'empty' | 'ai_suggested' | 'repeat' | null;
         };
@@ -222,6 +223,7 @@ export interface Database {
           pump_rating?: number | null;
           session_notes?: string | null;
           completion_percent?: number;
+          duration_seconds?: number | null;
           auto_discarded_at?: string | null;
           origin?: 'scheduled' | 'empty' | 'ai_suggested' | 'repeat' | null;
         };
@@ -238,6 +240,7 @@ export interface Database {
           pump_rating?: number | null;
           session_notes?: string | null;
           completion_percent?: number;
+          duration_seconds?: number | null;
           auto_discarded_at?: string | null;
           origin?: 'scheduled' | 'empty' | 'ai_suggested' | 'repeat' | null;
         };

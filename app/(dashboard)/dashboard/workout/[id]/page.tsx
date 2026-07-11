@@ -512,6 +512,13 @@ export default function WorkoutPage() {
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [showFinishConfirm, setShowFinishConfirm] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
+  // Duration + completion timestamp frozen once when the user hits Finish, so
+  // the summary shows a fixed value (excludes paused time) instead of a clock
+  // that keeps ticking, and the SAME number is persisted with the completion.
+  const [finishSnapshot, setFinishSnapshot] = useState<{
+    durationSeconds: number;
+    completedAt: string;
+  } | null>(null);
 
   // Dropset chain state - tracks pending drops after a main set
   const [pendingDropset, setPendingDropset] = useState<{
@@ -3666,6 +3673,13 @@ export default function WorkoutPage() {
 
   const confirmFinishWorkout = () => {
     setShowFinishConfirm(false);
+    // Snapshot the duration ONCE, from the same elapsed value the header timer
+    // has been showing (paused time already excluded). Frozen here so the
+    // summary never re-derives a live, still-ticking duration.
+    setFinishSnapshot({
+      durationSeconds: workoutTimer.elapsedSeconds,
+      completedAt: new Date().toISOString(),
+    });
     setPhase('summary');
   };
 
@@ -3727,7 +3741,8 @@ export default function WorkoutPage() {
         navigate: finishToDashboard,
         showClaimPrompt: claimArmed ? () => setShowClaimPrompt(true) : null,
       },
-      data
+      // Persist the same frozen duration the summary is showing.
+      { ...data, durationSeconds: finishSnapshot?.durationSeconds ?? null }
     );
   };
 
@@ -3832,7 +3847,9 @@ export default function WorkoutPage() {
           session={isViewingCompleted ? session : {
             ...session,
             state: 'completed',
-            completedAt: new Date().toISOString(),
+            // Frozen once at Finish — using Date.now() here would re-render a
+            // new completion time every tick.
+            completedAt: finishSnapshot?.completedAt ?? session.completedAt,
           }}
           exerciseBlocks={blocks.filter((b) => !skippedBlockIds.has(b.id))}
           skippedBlocks={blocks.filter((b) => skippedBlockIds.has(b.id))}
@@ -3841,6 +3858,9 @@ export default function WorkoutPage() {
           amrapCalibrations={sessionCalibrations}
           enhancedAthleteMode={enhancedAthleteModeActive}
           unit={preferences.units}
+          durationSeconds={
+            isViewingCompleted ? session.durationSeconds : finishSnapshot?.durationSeconds ?? null
+          }
           onSubmit={isViewingCompleted ? undefined : handleSummarySubmit}
           readOnly={isViewingCompleted}
         />

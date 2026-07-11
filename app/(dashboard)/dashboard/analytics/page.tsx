@@ -36,7 +36,7 @@ import {
   getStrengthLevelColor,
   generatePercentileSegments
 } from '@/services/coachingEngine';
-import { kgToLbs, roundToIncrement, formatWeight, formatDuration, estimateE1RM, getLocalDateString } from '@/lib/utils';
+import { kgToLbs, roundToIncrement, formatWeight, formatWorkoutDuration, resolveWorkoutDurationSeconds, estimateE1RM, getLocalDateString } from '@/lib/utils';
 // Recharts components still used inline - these will be gradually migrated
 import {
   LineChart,
@@ -1041,6 +1041,7 @@ function AnalyticsPageContent() {
             id,
             started_at,
             completed_at,
+            duration_seconds,
             session_rpe,
             exercise_blocks!inner (
               id,
@@ -1097,11 +1098,14 @@ function AnalyticsPageContent() {
         const exerciseNameMap = new Map<string, string>();
 
         workoutSessions.forEach((session: any) => {
-          if (session.started_at && session.completed_at) {
-            const duration = Math.floor(
-              (new Date(session.completed_at).getTime() - new Date(session.started_at).getTime()) / 1000
+          if (session.duration_seconds != null || (session.started_at && session.completed_at)) {
+            durations.push(
+              resolveWorkoutDurationSeconds(
+                session.duration_seconds,
+                session.started_at,
+                session.completed_at
+              )
             );
-            durations.push(duration);
           }
 
           if (session.session_rpe) {
@@ -1266,9 +1270,11 @@ function AnalyticsPageContent() {
             });
           }
 
-          const duration = session.started_at && session.completed_at
-            ? Math.floor((new Date(session.completed_at).getTime() - new Date(session.started_at).getTime()) / 1000)
-            : 0;
+          const duration = resolveWorkoutDurationSeconds(
+            session.duration_seconds,
+            session.started_at,
+            session.completed_at
+          );
 
           return {
             id: session.id,
@@ -2077,7 +2083,7 @@ function AnalyticsPageContent() {
                 <Card className="p-4">
                   <p className="text-xs text-surface-500 uppercase tracking-wider">Avg Duration</p>
                   <p className="text-2xl font-bold text-primary-400 mt-1">
-                    {formatDuration(analytics.avgWorkoutDuration)}
+                    {formatWorkoutDuration(analytics.avgWorkoutDuration)}
                   </p>
                 </Card>
                 <Card className="p-4">
@@ -2413,7 +2419,7 @@ function AnalyticsPageContent() {
                                   RPE {workout.sessionRpe}
                                 </Badge>
                               )}
-                              <span className="text-xs text-surface-500">{formatDuration(workout.duration)}</span>
+                              <span className="text-xs text-surface-500">{formatWorkoutDuration(workout.duration)}</span>
                             </div>
                           </div>
                         </div>
