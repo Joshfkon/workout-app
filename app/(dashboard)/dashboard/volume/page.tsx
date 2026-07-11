@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Card } from '@/components/ui/Card';
 import { useAdaptiveVolume } from '@/hooks/useAdaptiveVolume';
@@ -8,94 +8,14 @@ import { useUserStore } from '@/stores';
 import { FatigueAlertList } from '@/components/workout/FatigueAlertBanner';
 import { AtrophyRiskAlert } from '@/components/analytics/AtrophyRiskAlert';
 import { WeeklyMevSummary } from '@/components/dashboard/WeeklyMevSummary';
+import { VolumeZoneBar } from '@/components/analytics/VolumeZoneBar';
 import { EnhancedAthleteModeCard } from '@/components/settings/EnhancedAthleteModeCard';
-import { BASELINE_VOLUME_RECOMMENDATIONS } from '@/src/lib/training/adaptive-volume';
-import type { MuscleGroup } from '@/types/schema';
 import { useWeeklyMevSummary } from '@/hooks/useWeeklyMevSummary';
-import { mevSummaryToVolumeData } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
-
-function VolumeProgressBar({
-  muscle,
-  currentSets,
-  mev,
-  optimal,
-  mrv,
-  confidence,
-}: {
-  muscle: MuscleGroup;
-  currentSets: number;
-  mev: number;
-  optimal: number;
-  mrv: number;
-  confidence: 'low' | 'medium' | 'high';
-}) {
-  const muscleName = muscle.charAt(0).toUpperCase() + muscle.slice(1);
-
-  // Calculate positions as percentages
-  const maxDisplay = mrv * 1.2;
-  const mevPos = (mev / maxDisplay) * 100;
-  const optimalPos = (optimal / maxDisplay) * 100;
-  const mrvPos = (mrv / maxDisplay) * 100;
-  const currentPos = Math.min((currentSets / maxDisplay) * 100, 100);
-
-  // Determine bar color based on current position
-  const barColor = useMemo(() => {
-    if (currentSets < mev) return 'bg-surface-500';
-    if (currentSets <= optimal) return 'bg-success-500';
-    if (currentSets <= mrv) return 'bg-warning-500';
-    return 'bg-danger-500';
-  }, [currentSets, mev, optimal, mrv]);
-
-  const confidenceLabel = {
-    low: 'Research defaults',
-    medium: 'Learning',
-    high: 'Personalized',
-  };
-
-  return (
-    <div className="py-3 border-b border-surface-800 last:border-b-0">
-      <div className="flex items-center justify-between mb-2">
-        <span className="font-medium text-surface-200">{muscleName}</span>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-surface-500">{confidenceLabel[confidence]}</span>
-          <span className="text-sm text-surface-400">
-            {currentSets}/{mrv} sets
-          </span>
-        </div>
-      </div>
-
-      {/* Progress bar with zones */}
-      <div className="relative h-4 bg-surface-800 rounded-full overflow-hidden">
-        {/* MEV zone marker */}
-        <div
-          className="absolute top-0 bottom-0 w-px bg-surface-600"
-          style={{ left: `${mevPos}%` }}
-        />
-        {/* Optimal zone highlight */}
-        <div
-          className="absolute top-0 bottom-0 bg-success-500/10"
-          style={{ left: `${mevPos}%`, width: `${optimalPos - mevPos}%` }}
-        />
-        {/* MRV zone marker */}
-        <div
-          className="absolute top-0 bottom-0 w-px bg-danger-500/50"
-          style={{ left: `${mrvPos}%` }}
-        />
-        {/* Current volume bar */}
-        <div
-          className={`absolute top-0 bottom-0 left-0 ${barColor} transition-all duration-300`}
-          style={{ width: `${currentPos}%` }}
-        />
-      </div>
-
-      {/* Labels */}
-      <div className="flex justify-between text-xs text-surface-500 mt-1">
-        <span style={{ marginLeft: `${mevPos - 2}%` }}>MEV</span>
-        <span style={{ marginRight: `${100 - mrvPos - 2}%` }}>MRV</span>
-      </div>
-    </div>
-  );
-}
+import {
+  buildVolumeRows,
+  belowMevVolumeData,
+  type CoarseMuscle,
+} from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 
 function CompareToResearchCard() {
   return (
@@ -131,7 +51,6 @@ function CompareToResearchCard() {
 export default function VolumeProfilePage() {
   const {
     volumeProfile,
-    volumeSummary,
     fatigueAlerts,
     latestAnalysis,
     isLoading,
@@ -141,11 +60,19 @@ export default function VolumeProfilePage() {
   const { user } = useUserStore();
   const userGoal = user?.goal ?? 'maintenance';
 
-  // Below-MEV muscles for the atrophy-risk warning come from the SAME shared
-  // rolling-7-day source as the "This Week vs MEV" card above, so both cards
-  // always agree on the count (previously this list was derived from a separate
-  // adaptive-volume pipeline with a different taxonomy, which under-reported).
-  const { summary: mevSummary } = useWeeklyMevSummary();
+  // Which coarse groups the user expanded to reveal all fine children.
+  const [expandedRows, setExpandedRows] = useState<Set<CoarseMuscle>>(new Set());
+  const toggleRow = (muscle: CoarseMuscle) =>
+    setExpandedRows((prev) => {
+      const next = new Set(prev);
+      next.has(muscle) ? next.delete(muscle) : next.add(muscle);
+      return next;
+    });
+
+  // Below-MEV muscles for the atrophy-risk warning come from the SAME coarse
+  // rows the bars render (shared counter + band), so the warning, the bars and
+  // the "This Week vs MEV" card can never disagree on count or zone-status.
+  const { stats: volumeStats, reachable } = useWeeklyMevSummary();
 
   // Calculate confidence summary
   const confidenceSummary = useMemo(() => {
@@ -166,15 +93,19 @@ export default function VolumeProfilePage() {
     };
   }, [volumeProfile]);
 
-  // Sort muscles by current usage (highest first)
-  const sortedMuscles = useMemo(() => {
-    return [...volumeSummary].sort((a, b) => b.percentOfMRV - a.percentOfMRV);
-  }, [volumeSummary]);
+  // Coarse-row presentation model over the SHARED secondary-credit counter —
+  // the same rows the readiness sheet, widget and warning render, so counts and
+  // zone-status agree everywhere. The volume page's old primary-only counting
+  // (and its separate MEV/MRV taxonomy) is retired.
+  const volumeRows = useMemo(
+    () => buildVolumeRows(volumeStats, reachable, { expandedParents: expandedRows }),
+    [volumeStats, reachable, expandedRows]
+  );
 
-  // Find muscles below MEV (for atrophy risk alert) — shared source, see above.
+  // Find muscles below MEV (for atrophy risk alert) — same coarse rows as bars.
   const musclesBelowMev = useMemo(
-    () => mevSummaryToVolumeData(mevSummary),
-    [mevSummary]
+    () => belowMevVolumeData(volumeRows),
+    [volumeRows]
   );
 
   if (isLoading) {
@@ -251,33 +182,27 @@ export default function VolumeProfilePage() {
         </div>
       )}
 
-      {/* Volume Bars */}
+      {/* Volume Bars — shared coarse-row model. Green spans the whole MEV–MRV
+          band; a bar only turns red past MRV. Tap a group to reveal its fine
+          muscles; lagging (below-MEV) fine muscles surface automatically. */}
       <Card className="p-4 mb-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold text-surface-100">This Week&apos;s Volume</h3>
           <div className="flex items-center gap-2 text-xs text-surface-500">
             <span className="w-3 h-3 rounded bg-success-500/20 border border-success-500/40" />
-            <span>Optimal zone</span>
+            <span>MEV–MRV zone</span>
           </div>
         </div>
 
-        <div className="divide-y divide-surface-800">
-          {sortedMuscles.map(summary => {
-            const tolerance = volumeProfile?.muscleTolerance[summary.muscle];
-            const baseline = BASELINE_VOLUME_RECOMMENDATIONS[summary.muscle];
-
-            return (
-              <VolumeProgressBar
-                key={summary.muscle}
-                muscle={summary.muscle}
-                currentSets={summary.currentSets}
-                mev={tolerance?.estimatedMEV ?? baseline.mev}
-                optimal={Math.round(((tolerance?.estimatedMEV ?? baseline.mev) + (tolerance?.estimatedMRV ?? baseline.mrv)) / 2)}
-                mrv={tolerance?.estimatedMRV ?? baseline.mrv}
-                confidence={tolerance?.confidence ?? 'low'}
-              />
-            );
-          })}
+        <div>
+          {volumeRows.map((row) => (
+            <VolumeZoneBar
+              key={row.key}
+              row={row}
+              expanded={expandedRows.has(row.muscle as CoarseMuscle)}
+              onToggle={() => toggleRow(row.muscle as CoarseMuscle)}
+            />
+          ))}
         </div>
       </Card>
 

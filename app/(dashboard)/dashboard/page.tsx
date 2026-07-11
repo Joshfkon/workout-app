@@ -64,7 +64,8 @@ export default async function DashboardPage() {
         weightUnit: weightData.preferredUnit,
         userGoal: userGoal as any,
         completedWorkoutsCount,
-        muscleVolume,
+        muscleVolume: muscleVolume.stats,
+        reachableMuscles: muscleVolume.reachable,
         liftTrends,
         bodyCompGlance,
       }}

@@ -18,6 +18,7 @@ import {
   legacyToStandardMuscles,
   resolveMuscleToStandard,
   STANDARD_MUSCLE_GROUPS,
+  STANDARD_MUSCLE_DISPLAY_NAMES,
   type StandardMuscleGroup,
 } from '@/types/schema';
 import { toStandardMuscleForVolume } from '@/lib/migrations/muscle-groups';
@@ -51,6 +52,73 @@ export const MEV_TARGETS: Record<StandardMuscleGroup, number> = {
 };
 
 export const ALL_MUSCLE_GROUPS: readonly StandardMuscleGroup[] = STANDARD_MUSCLE_GROUPS;
+
+// ============================================
+// FINE-GRAINED MUSCLE REACHABILITY (warning gating)
+// ============================================
+//
+// Of the 20 standard muscles, exactly three have NO coarse legacy tag that can
+// credit them: the runtime resolver is standard-first, so a set tagged with a
+// coarse token ('glutes','abs') or a legacy coarse token ('back') resolves to
+// [glutes] / [abs] / [lats,upper_back] respectively — it never leaks credit to
+// glute_med / obliques / erectors. These "fine" muscles are therefore only
+// reachable when the user logs an exercise tagged at fine grain for them.
+//
+// Their coarse "parent" region (below) is where that work physiologically
+// lands. When a user's data is entirely coarse (e.g. only 'glutes'/'back'/'abs'
+// work), a fine child gets zero credit and its MEV warning can NEVER clear —
+// which is worse than no warning. So we treat a fine muscle as warnable only
+// when at least one of the user's own exercises can feed it (see
+// `computeReachableMuscles`); otherwise its target rolls up into the coarse
+// parent and no standalone warning is rendered (ticket policy: never warn on a
+// muscle no logged-exercise tagging could satisfy).
+export const FINE_MUSCLE_PARENTS: Partial<Record<StandardMuscleGroup, StandardMuscleGroup[]>> = {
+  erectors: ['lats', 'upper_back'], // legacy 'back'
+  glute_med: ['glutes'], // legacy 'glutes'
+  obliques: ['abs'], // legacy 'abs'
+};
+
+/** The standard muscles that only a fine-grained tag can credit. */
+export const FINE_MUSCLES = Object.keys(FINE_MUSCLE_PARENTS) as StandardMuscleGroup[];
+const FINE_MUSCLE_SET = new Set<StandardMuscleGroup>(FINE_MUSCLES);
+
+/**
+ * The set of standard muscles that ANY of the user's logged exercises can
+ * credit (primary or secondary), resolved through the same standard-first
+ * resolver the volume counter uses. This is what determines whether a
+ * fine-grained muscle's MEV warning is satisfiable by the user's exercise
+ * tagging: a library of purely coarse 'glutes'/'back'/'abs' work yields a set
+ * WITHOUT glute_med / erectors / obliques.
+ */
+export function computeReachableMuscles(blocks: WeeklyVolumeBlockRow[]): Set<StandardMuscleGroup> {
+  const reachable = new Set<StandardMuscleGroup>();
+  for (const block of blocks) {
+    const exercise = block.exercises;
+    if (!exercise) continue;
+    const tokens = [exercise.primary_muscle, ...(exercise.secondary_muscles || [])];
+    for (const token of tokens) {
+      if (!token) continue;
+      for (const standard of resolveMuscleToStandard(token)) reachable.add(standard);
+    }
+  }
+  return reachable;
+}
+
+/**
+ * Whether an untrained standard muscle should surface a below-MEV warning.
+ * Coarse-reachable muscles (17 of 20) always can. The three fine muscles only
+ * warn when the user's exercise tagging can actually feed them; when
+ * `reachable` is omitted we preserve the pre-reachability behaviour (warn on
+ * all) so callers that don't have the raw blocks are unchanged.
+ */
+export function isMuscleWarnable(
+  muscle: StandardMuscleGroup,
+  reachable?: Set<StandardMuscleGroup>
+): boolean {
+  if (!FINE_MUSCLE_SET.has(muscle)) return true;
+  if (!reachable) return true;
+  return reachable.has(muscle);
+}
 
 export function getMevForMuscle(muscle: string): number {
   const standardMuscle = toStandardMuscleForVolume(muscle);
@@ -160,6 +228,12 @@ export interface MuscleMevEntry {
   sets: number;
   mev: number;
   belowMev: boolean;
+  /**
+   * Which exercises fed this muscle and how many (fractional-credit) sets each
+   * contributed — the debug view behind the warning copy (e.g. "Hamstrings
+   * 3/4: RDL ×2, Back Extension ×1(½)"). Empty for untrained muscles.
+   */
+  exercises: ExerciseVolume[];
 }
 
 /**
@@ -185,7 +259,10 @@ export interface WeeklyMevSummary {
  * first would leave the rest counted as untrained. Returns null when no
  * volume has been logged yet (callers show their own empty state).
  */
-export function computeWeeklyMevSummary(muscleVolume: MuscleVolumeStats[]): WeeklyMevSummary | null {
+export function computeWeeklyMevSummary(
+  muscleVolume: MuscleVolumeStats[],
+  reachable?: Set<StandardMuscleGroup>
+): WeeklyMevSummary | null {
   if (muscleVolume.length === 0) return null;
 
   const trainedMuscles = new Set<StandardMuscleGroup>(
@@ -201,7 +278,15 @@ export function computeWeeklyMevSummary(muscleVolume: MuscleVolumeStats[]): Week
       return single ? [single] : [];
     })
   );
-  const untrained = ALL_MUSCLE_GROUPS.filter((m) => !trainedMuscles.has(m));
+  // Untrained (0-set) muscles surface as below-MEV warnings — EXCEPT the three
+  // fine muscles (erectors / glute_med / obliques) when the user's own exercise
+  // tagging can't feed them: warning on a muscle no logged exercise could
+  // satisfy is a permanent, un-clearable nag (worse than no warning). Coarse
+  // muscles are always warnable; a fine muscle is dropped here (its target rolls
+  // up into its coarse parent implicitly) unless it is reachable.
+  const untrained = ALL_MUSCLE_GROUPS.filter(
+    (m) => !trainedMuscles.has(m) && isMuscleWarnable(m, reachable)
+  );
 
   const totalSets = muscleVolume.reduce((s, mv) => s + mv.sets, 0);
   const totalTarget =
@@ -215,16 +300,31 @@ export function computeWeeklyMevSummary(muscleVolume: MuscleVolumeStats[]): Week
       sets: mv.sets,
       mev: getMevForMuscle(mv.muscle),
       belowMev: mv.status === 'low',
+      exercises: mv.exercises,
     })),
     ...untrained.map((m) => ({
       muscle: m as string,
       sets: 0,
       mev: getMevForMuscle(m),
       belowMev: true,
+      exercises: [],
     })),
   ].sort((a, b) => Number(b.belowMev) - Number(a.belowMev) || b.sets - a.sets);
 
   return { totalSets, totalTarget, lowCount, entries };
+}
+
+/**
+ * One-call convenience: raw weekly-volume blocks → the shared MEV summary with
+ * reachability gating applied. Every surface that has the raw blocks (home
+ * server + client fetch, the "This Week vs MEV" widget, both AtrophyRiskAlerts)
+ * should use this so the fine-muscle warnings are gated identically everywhere.
+ */
+export function summarizeWeeklyVolume(blocks: WeeklyVolumeBlockRow[]): WeeklyMevSummary | null {
+  return computeWeeklyMevSummary(
+    computeWeeklyMuscleVolume(blocks),
+    computeReachableMuscles(blocks)
+  );
 }
 
 /**
@@ -263,7 +363,386 @@ export function mevSummaryToVolumeData(summary: WeeklyMevSummary | null): Muscle
         landmarks: { mev: entry.mev, mav: entry.mev, mrv: entry.mev },
         status: 'below_mev',
         percentOfMrv: 0,
+        contributingExercises: entry.exercises,
       };
     })
     .filter((d): d is MuscleVolumeData => d !== null);
+}
+
+// ============================================
+// UNIFIED PRESENTATION MODEL (one model for every surface)
+// ============================================
+//
+// Volume page bars, the Home/Train widget, the readiness sheet and the
+// insufficient-volume warning all render from THIS model, so they can never
+// again disagree on count (they share the 0.5-secondary reachability-gated
+// counter), denominator (the MEV–MRV band below) or taxonomy (coarse rows with
+// fine children). See buildVolumeRows.
+
+/** The 13 coarse muscle groups that are the default ROW in every surface. */
+export const COARSE_MUSCLES = [
+  'chest', 'back', 'shoulders', 'biceps', 'triceps', 'quads', 'hamstrings',
+  'glutes', 'calves', 'abs', 'traps', 'forearms', 'adductors',
+] as const;
+export type CoarseMuscle = (typeof COARSE_MUSCLES)[number];
+
+/**
+ * Coarse group → the standard muscles it aggregates. A coarse row's set count
+ * is the sum of its children's credited sets; the "fine" children (subdivisions
+ * — see FINE_CHILD_MUSCLES) render as indented rows only where reachable AND
+ * informative (below-MEV or expanded).
+ */
+export const COARSE_CHILDREN: Record<CoarseMuscle, StandardMuscleGroup[]> = {
+  chest: ['chest_upper', 'chest_lower'],
+  back: ['lats', 'upper_back', 'erectors'],
+  shoulders: ['front_delts', 'lateral_delts', 'rear_delts'],
+  biceps: ['biceps'],
+  triceps: ['triceps'],
+  quads: ['quads'],
+  hamstrings: ['hamstrings'],
+  glutes: ['glutes', 'glute_med'],
+  calves: ['calves'],
+  abs: ['abs', 'obliques'],
+  traps: ['traps'],
+  forearms: ['forearms'],
+  adductors: ['adductors'],
+};
+
+/** Reverse map: every standard muscle to its coarse display parent. */
+export const STANDARD_TO_COARSE: Record<StandardMuscleGroup, CoarseMuscle> = (() => {
+  const map = {} as Record<StandardMuscleGroup, CoarseMuscle>;
+  for (const coarse of COARSE_MUSCLES) {
+    for (const child of COARSE_CHILDREN[coarse]) map[child] = coarse;
+  }
+  return map;
+})();
+
+/**
+ * Standard muscles that render as INDENTED child rows under their coarse parent
+ * (anatomical subdivisions). The single-muscle coarse groups (biceps, quads, …)
+ * have no fine children and never expand.
+ */
+export const FINE_CHILD_MUSCLES = new Set<StandardMuscleGroup>([
+  'chest_upper', 'chest_lower',
+  'front_delts', 'lateral_delts', 'rear_delts',
+  'lats', 'upper_back', 'erectors',
+  'glute_med', 'obliques',
+]);
+
+/**
+ * Research-based coarse MEV–MRV bands (Israetel / Schoenfeld), expressed in
+ * inclusive direct+indirect set terms so they sit sensibly against the
+ * secondary-credit counter. This is the SINGLE shared denominator: a bar is
+ * gray/amber below MEV, green across the MEV–MRV zone, red only past MRV — so
+ * hitting MEV is never punished with a red bar. Per-user learning may nudge the
+ * volume page's band; these are the defaults every glance surface uses (and the
+ * baseline the learned table resets to).
+ */
+export const RESEARCH_VOLUME_BANDS: Record<CoarseMuscle, { mev: number; mrv: number }> = {
+  chest: { mev: 8, mrv: 22 },
+  back: { mev: 10, mrv: 25 },
+  shoulders: { mev: 8, mrv: 22 },
+  biceps: { mev: 6, mrv: 20 },
+  triceps: { mev: 6, mrv: 18 },
+  quads: { mev: 8, mrv: 20 },
+  hamstrings: { mev: 6, mrv: 16 },
+  glutes: { mev: 4, mrv: 16 },
+  calves: { mev: 8, mrv: 20 },
+  abs: { mev: 6, mrv: 20 },
+  traps: { mev: 4, mrv: 16 },
+  forearms: { mev: 4, mrv: 14 },
+  adductors: { mev: 4, mrv: 12 },
+};
+
+/** MEV target for a fine child row (its own subdivision-level threshold). */
+export function fineChildMev(muscle: StandardMuscleGroup): number {
+  return MEV_TARGETS[muscle];
+}
+
+export type VolumeZone = 'below_mev' | 'in_zone' | 'over_mrv';
+
+export interface VolumeBand {
+  mev: number;
+  mrv: number;
+}
+
+/**
+ * The one zone rule everywhere: below MEV, inside the MEV–MRV band, or past MRV.
+ * Green is the WHOLE band (MEV..MRV) — the bar only turns red past MRV, so
+ * hitting the target is rewarded, not punished.
+ */
+export function volumeZone(sets: number, band: VolumeBand): VolumeZone {
+  if (sets < band.mev) return 'below_mev';
+  if (sets <= band.mrv) return 'in_zone';
+  return 'over_mrv';
+}
+
+/** Bar fill colour for a zone. Untrained (0 sets, below MEV) reads gray. */
+export function zoneBarClass(zone: VolumeZone, sets: number): string {
+  if (zone === 'over_mrv') return 'bg-danger-500';
+  if (zone === 'in_zone') return 'bg-success-500';
+  return sets <= 0 ? 'bg-surface-600' : 'bg-warning-500';
+}
+
+/** Text/emphasis colour matching a zone. */
+export function zoneTextClass(zone: VolumeZone, sets: number): string {
+  if (zone === 'over_mrv') return 'text-danger-400';
+  if (zone === 'in_zone') return 'text-success-400';
+  return sets <= 0 ? 'text-surface-400' : 'text-warning-400';
+}
+
+/** Denominator label: the MEV–MRV band, never n/MEV. e.g. "zone 8–20". */
+export function zoneBandLabel(band: VolumeBand): string {
+  return `zone ${band.mev}–${band.mrv}`;
+}
+
+/** Display name for a coarse group. */
+export function coarseDisplayName(muscle: CoarseMuscle): string {
+  return muscle.charAt(0).toUpperCase() + muscle.slice(1);
+}
+
+/** One row (coarse group, or a fine child of one) in the shared model. */
+export interface VolumeRow {
+  /** Stable key: the coarse id, or `${parent}:${muscle}` for a child. */
+  key: string;
+  /** The muscle id (coarse or standard). */
+  muscle: string;
+  displayName: string;
+  isChild: boolean;
+  parent: CoarseMuscle | null;
+  /** Credited (0.5-secondary) working sets, rounded. */
+  sets: number;
+  band: VolumeBand;
+  zone: VolumeZone;
+  belowMev: boolean;
+  /** Whether the user's exercises can feed this muscle (children only gate). */
+  reachable: boolean;
+  exercises: ExerciseVolume[];
+  /** Fine children to render under a coarse row (already gated). */
+  children: VolumeRow[];
+}
+
+export interface BuildVolumeRowsOptions {
+  /** Per-coarse band overrides (e.g. the reset/learned table). */
+  bands?: Partial<Record<CoarseMuscle, VolumeBand>>;
+  /** Coarse groups the user expanded — forces all their fine children visible. */
+  expandedParents?: Set<CoarseMuscle>;
+}
+
+/** Accumulate credited sets + contributing exercises per standard muscle. */
+function setsByStandardMuscle(
+  stats: MuscleVolumeStats[]
+): Map<StandardMuscleGroup, { sets: number; exercises: ExerciseVolume[] }> {
+  const out = new Map<StandardMuscleGroup, { sets: number; exercises: ExerciseVolume[] }>();
+  const add = (m: StandardMuscleGroup, sets: number, exercises: ExerciseVolume[]) => {
+    const cur = out.get(m) ?? { sets: 0, exercises: [] };
+    cur.sets += sets;
+    for (const ex of exercises) {
+      const existing = cur.exercises.find((e) => e.id === ex.id);
+      if (existing) existing.sets += ex.sets;
+      else cur.exercises.push({ ...ex });
+    }
+    out.set(m, cur);
+  };
+  for (const stat of stats) {
+    const standards = isStandardMuscle(stat.muscle.toLowerCase().trim())
+      ? [stat.muscle.toLowerCase().trim() as StandardMuscleGroup]
+      : resolveMuscleToStandard(stat.muscle);
+    if (standards.length === 0) continue;
+    // Split a legacy-keyed stat evenly across the standards it covers.
+    for (const std of standards) add(std, stat.sets / standards.length, stat.exercises);
+  }
+  return out;
+}
+
+/**
+ * THE shared row model. Given the shared counter's per-muscle stats and the
+ * reachability set, produce coarse rows (below-MEV first) each carrying the
+ * fine children that should render (reachable AND below-MEV-or-expanded).
+ * Every surface renders from this so counts and zone-status always agree.
+ */
+export function buildVolumeRows(
+  stats: MuscleVolumeStats[],
+  reachable?: Set<StandardMuscleGroup>,
+  opts: BuildVolumeRowsOptions = {}
+): VolumeRow[] {
+  const byStd = setsByStandardMuscle(stats);
+  const expanded = opts.expandedParents ?? new Set<CoarseMuscle>();
+
+  const rows: VolumeRow[] = COARSE_MUSCLES.map((coarse) => {
+    const children = COARSE_CHILDREN[coarse];
+    const band = opts.bands?.[coarse] ?? RESEARCH_VOLUME_BANDS[coarse];
+
+    let coarseSetsRaw = 0;
+    const coarseExercises: ExerciseVolume[] = [];
+    const childRows: VolumeRow[] = [];
+
+    for (const child of children) {
+      const data = byStd.get(child) ?? { sets: 0, exercises: [] };
+      coarseSetsRaw += data.sets;
+      for (const ex of data.exercises) {
+        const existing = coarseExercises.find((e) => e.id === ex.id);
+        if (existing) existing.sets = Math.round((existing.sets + ex.sets) * 10) / 10;
+        else coarseExercises.push({ ...ex, sets: Math.round(ex.sets * 10) / 10 });
+      }
+
+      if (!FINE_CHILD_MUSCLES.has(child)) continue;
+
+      const childSets = Math.round(data.sets);
+      const childMev = fineChildMev(child);
+      // A fine child renders only where the user's own exercises can feed it
+      // (reachable) AND it's informative (below its MEV, or the parent is
+      // expanded). When no reachability is supplied, don't gate (back-compat).
+      const childReachable = !reachable || reachable.has(child);
+      const childBelowMev = childSets < childMev;
+      if (!childReachable) continue;
+      if (!childBelowMev && !expanded.has(coarse)) continue;
+
+      // A fine child's band is a proportional slice of the coarse band, floored
+      // at its own MEV, so its zone reads sensibly on the same scale.
+      const childBand: VolumeBand = { mev: childMev, mrv: Math.max(childMev + 2, Math.round(band.mrv / children.length)) };
+      childRows.push({
+        key: `${coarse}:${child}`,
+        muscle: child,
+        displayName: STANDARD_MUSCLE_DISPLAY_NAMES[child],
+        isChild: true,
+        parent: coarse,
+        sets: childSets,
+        band: childBand,
+        zone: volumeZone(childSets, childBand),
+        belowMev: childBelowMev,
+        reachable: true,
+        exercises: data.exercises.map((e) => ({ ...e, sets: Math.round(e.sets * 10) / 10 })),
+        children: [],
+      });
+    }
+
+    const coarseSets = Math.round(coarseSetsRaw);
+    return {
+      key: coarse,
+      muscle: coarse,
+      displayName: coarseDisplayName(coarse),
+      isChild: false,
+      parent: null,
+      sets: coarseSets,
+      band,
+      zone: volumeZone(coarseSets, band),
+      belowMev: coarseSets < band.mev,
+      reachable: true,
+      exercises: coarseExercises.sort((a, b) => b.sets - a.sets),
+      children: childRows.sort((a, b) => Number(b.belowMev) - Number(a.belowMev) || b.sets - a.sets),
+    };
+  });
+
+  // Below-MEV coarse rows first, then by how full the bar is (sets desc).
+  return rows.sort(
+    (a, b) => Number(b.belowMev) - Number(a.belowMev) || b.sets - a.sets || a.displayName.localeCompare(b.displayName)
+  );
+}
+
+/**
+ * Home/Train glance-tile numbers derived from the SAME coarse rows the volume
+ * page and readiness sheet render, so "N below MEV" and the totals can't
+ * diverge from the bars. totalTarget sums the coarse MEV floors; lowCount is the
+ * coarse groups whose bar is below MEV.
+ */
+export interface CoarseMevTiles {
+  totalSets: number;
+  totalTarget: number;
+  lowCount: number;
+}
+export function coarseMevTiles(rows: VolumeRow[]): CoarseMevTiles {
+  let totalSets = 0;
+  let totalTarget = 0;
+  let lowCount = 0;
+  for (const row of rows) {
+    totalSets += row.sets;
+    totalTarget += row.band.mev;
+    if (row.zone === 'below_mev') lowCount++;
+  }
+  return { totalSets, totalTarget, lowCount };
+}
+
+/**
+ * Below-MEV muscles for the insufficient-volume warning, derived from the
+ * coarse rows so the warning, the bars and the glance tile all agree on WHICH
+ * muscles are below MEV and by how much (same band, same zone rule). Coarse
+ * groups whose bar is below MEV come first, each followed by any lagging fine
+ * child. Shaped as MuscleVolumeData for the existing AtrophyRiskAlert; the
+ * muscleGroup carries a coarse or fine id (the alert renders it as a label).
+ */
+export function belowMevVolumeData(rows: VolumeRow[]): MuscleVolumeData[] {
+  const out: MuscleVolumeData[] = [];
+  const push = (
+    muscle: string,
+    sets: number,
+    band: VolumeBand,
+    exercises: ExerciseVolume[]
+  ) =>
+    out.push({
+      muscleGroup: muscle as StandardMuscleGroup,
+      totalSets: sets,
+      directSets: sets,
+      indirectSets: 0,
+      landmarks: { mev: band.mev, mav: Math.round((band.mev + band.mrv) / 2), mrv: band.mrv },
+      status: 'below_mev',
+      percentOfMrv: band.mrv > 0 ? Math.round((sets / band.mrv) * 100) : 0,
+      contributingExercises: exercises,
+    });
+
+  for (const row of rows) {
+    if (row.zone === 'below_mev') push(row.muscle, row.sets, row.band, row.exercises);
+    for (const child of row.children) {
+      if (child.belowMev) push(child.muscle, child.sets, child.band, child.exercises);
+    }
+  }
+  return out;
+}
+
+/**
+ * Trailing-window secondary-credit ratio per coarse muscle: credited sets
+ * (primary + 0.5×secondary) over primary-only sets. Reference metric for the
+ * learned-MEV reconciliation (the "reset to defaults + relearn" path uses the
+ * research bands directly; a rescale path would multiply learned thresholds by
+ * this). Muscles with no primary work are omitted (ratio undefined).
+ */
+export function computeSecondaryCreditRatio(
+  blocks: WeeklyVolumeBlockRow[]
+): Partial<Record<CoarseMuscle, number>> {
+  const primary = {} as Record<CoarseMuscle, number>;
+  const credited = {} as Record<CoarseMuscle, number>;
+  for (const c of COARSE_MUSCLES) { primary[c] = 0; credited[c] = 0; }
+
+  for (const block of blocks) {
+    const ex = block.exercises;
+    if (!ex?.primary_muscle) continue;
+    const working = (block.set_logs || []).filter((s) => !s.is_warmup).length;
+    if (working === 0) continue;
+
+    const primaryCredits = resolvePrimaryMuscleCredits(ex.primary_muscle);
+    const primaryStd = new Set(primaryCredits.map((c) => c.muscle));
+    for (const { muscle, weight } of primaryCredits) {
+      const coarse = STANDARD_TO_COARSE[muscle];
+      if (!coarse) continue;
+      primary[coarse] += working * weight;
+      credited[coarse] += working * weight;
+    }
+    for (const secondary of ex.secondary_muscles || []) {
+      const standards = resolveMuscleToStandard(secondary);
+      if (standards.length === 0) continue;
+      const per = SECONDARY_MUSCLE_CREDIT / standards.length;
+      for (const std of standards) {
+        if (primaryStd.has(std)) continue;
+        const coarse = STANDARD_TO_COARSE[std];
+        if (!coarse) continue;
+        credited[coarse] += working * per;
+      }
+    }
+  }
+
+  const ratios: Partial<Record<CoarseMuscle, number>> = {};
+  for (const c of COARSE_MUSCLES) {
+    if (primary[c] > 0) ratios[c] = Math.round((credited[c] / primary[c]) * 100) / 100;
+  }
+  return ratios;
 }

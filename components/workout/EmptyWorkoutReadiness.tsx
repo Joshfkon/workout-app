@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { MuscleReadinessContent } from './MuscleReadinessSheet';
 import { useMuscleReadiness } from '@/hooks/useMuscleReadiness';
 import { resolvePrimaryMuscleCredits } from '@/services/volumeTracker';
+import { COARSE_CHILDREN, type CoarseMuscle } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 import type { StandardMuscleGroup } from '@/types/schema';
 import type { AvailableExercise } from '@/app/(dashboard)/dashboard/workout/[id]/_lib/types';
 
@@ -44,10 +45,19 @@ export function EmptyWorkoutReadiness({
     enabled: true,
   });
 
-  // Per-standard-muscle actionability score for chip re-ordering.
+  // Per-standard-muscle actionability score for chip re-ordering. Rows are now
+  // coarse, so spread each coarse row's score across its standard children;
+  // a lagging fine child (bigger gap) can raise its own muscle's score.
   const scoreByMuscle = useMemo(() => {
     const map = {} as Record<StandardMuscleGroup, number>;
-    for (const row of rows) map[row.muscle] = row.score;
+    for (const row of rows) {
+      for (const child of COARSE_CHILDREN[row.muscle as CoarseMuscle] ?? []) {
+        map[child] = Math.max(map[child] ?? 0, row.score);
+      }
+      for (const child of row.children) {
+        map[child.muscle] = Math.max(map[child.muscle] ?? 0, child.volumeGap);
+      }
+    }
     return map;
   }, [rows]);
 

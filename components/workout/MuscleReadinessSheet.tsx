@@ -3,19 +3,28 @@
 import { useState } from 'react';
 import { BottomSheet } from './BottomSheet';
 import { useMuscleReadiness } from '@/hooks/useMuscleReadiness';
-import type { ReadinessRow, VolumeStatus } from '@/app/(dashboard)/dashboard/workout/[id]/_lib/readiness';
+import type {
+  ReadinessRow,
+  ReadinessChild,
+  ReadinessTarget,
+} from '@/app/(dashboard)/dashboard/workout/[id]/_lib/readiness';
+import { zoneBarClass, zoneTextClass, zoneBandLabel } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 import type { RecoveryStatus } from '@/services/muscleRecovery';
 import type { SetLog } from '@/types/schema';
 import type { ExerciseBlockWithExercise } from '@/app/(dashboard)/dashboard/workout/[id]/_lib/types';
+
+/** Default number of coarse rows shown before the "+N more" expander. */
+const DEFAULT_ROW_CAP = 6;
 
 /**
  * MuscleReadinessSheet — the in-workout "which muscles should I hit today?"
  * overlay. Lazy-mounted (the page renders it only once opened), READ-ONLY over
  * workout history and the live session: it never touches the workout store.
  *
- * Each row pairs weekly volume (sets vs MEV, with a zone-colored bar) with a
- * recovery badge, sorted so the best targets (behind on volume AND recovered)
- * float to the top.
+ * Each coarse row pairs weekly volume (sets vs the shared MEV–MRV band, with a
+ * zone-colored bar) with a recovery badge, sorted so the best targets (behind
+ * on volume AND recovered) float to the top; lagging fine muscles surface as
+ * indented children.
  */
 
 interface MuscleReadinessSheetProps {
@@ -33,12 +42,6 @@ const RECOVERY_BADGE: Record<RecoveryStatus, { label: string; className: string 
   fatigued: { label: 'Fatigued', className: 'bg-surface-700 text-surface-400' },
 };
 
-const VOLUME_BAR_COLOR: Record<VolumeStatus, string> = {
-  low: 'bg-warning-500',
-  optimal: 'bg-success-500',
-  high: 'bg-danger-500',
-};
-
 /** "ready in ~Xh" — coarse, human-readable time until Fresh. */
 function formatReadyIn(hours: number): string {
   if (hours <= 0) return '';
@@ -48,40 +51,71 @@ function formatReadyIn(hours: number): string {
   return `ready in ~${days}d`;
 }
 
-export function ReadinessRowView({ row }: { row: ReadinessRow }) {
-  const badge = RECOVERY_BADGE[row.recovery.status];
-  const fillPct = row.target > 0 ? Math.min(100, Math.round((row.sets / row.target) * 100)) : 0;
-  const readyIn = row.recovery.status === 'fresh' ? '' : formatReadyIn(row.recovery.hoursUntilReady);
+/** Fill fraction within the band scale (MRV at ~83%, headroom for overrun). */
+function barFillPct(sets: number, mrv: number): number {
+  const maxDisplay = mrv * 1.2;
+  return Math.min(100, Math.max(0, (sets / maxDisplay) * 100));
+}
 
+function RecoveryBadge({ status, hoursUntilReady, muscle }: { status: RecoveryStatus; hoursUntilReady: number; muscle: string }) {
+  const badge = RECOVERY_BADGE[status];
+  const readyIn = status === 'fresh' ? '' : formatReadyIn(hoursUntilReady);
   return (
-    <div
-      className="flex items-center gap-3 py-2.5"
-      data-testid={`readiness-row-${row.muscle}`}
-    >
+    <div className="flex flex-col items-end gap-0.5 flex-shrink-0 w-[92px]">
+      <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${badge.className}`} data-testid={`readiness-badge-${muscle}`}>
+        {badge.label}
+      </span>
+      {readyIn && <span className="text-[10px] text-surface-500">{readyIn}</span>}
+    </div>
+  );
+}
+
+function ChildRowView({ child }: { child: ReadinessChild }) {
+  return (
+    <div className="flex items-center gap-3 py-1.5 pl-4" data-testid={`readiness-row-${child.muscle}`}>
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-sm text-surface-100 truncate">{row.displayName}</span>
-          <span className="text-[11px] tabular-nums text-surface-400 flex-shrink-0">
-            <span data-testid={`readiness-sets-${row.muscle}`}>{row.sets}</span>
-            <span className="text-surface-600">/{row.target}</span>
+          <span className="text-xs text-surface-400 truncate">{child.displayName}</span>
+          <span className="text-[10px] tabular-nums text-surface-500 flex-shrink-0">
+            <span className={zoneTextClass(child.zone, child.sets)} data-testid={`readiness-sets-${child.muscle}`}>{child.sets}</span>
+            <span className="text-surface-600"> · {zoneBandLabel(child.band)}</span>
           </span>
         </div>
-        <div className="mt-1.5 h-1 rounded-full bg-surface-800 overflow-hidden">
-          <div
-            className={`h-full rounded-full ${VOLUME_BAR_COLOR[row.volumeStatus]}`}
-            style={{ width: `${fillPct}%` }}
-          />
+        <div className="mt-1 h-1 rounded-full bg-surface-800 overflow-hidden">
+          <div className={`h-full rounded-full ${zoneBarClass(child.zone, child.sets)}`} style={{ width: `${barFillPct(child.sets, child.band.mrv)}%` }} />
         </div>
       </div>
-      <div className="flex flex-col items-end gap-0.5 flex-shrink-0 w-[92px]">
-        <span
-          className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${badge.className}`}
-          data-testid={`readiness-badge-${row.muscle}`}
-        >
-          {badge.label}
-        </span>
-        {readyIn && <span className="text-[10px] text-surface-500">{readyIn}</span>}
+      <RecoveryBadge status={child.recovery.status} hoursUntilReady={child.recovery.hoursUntilReady} muscle={child.muscle} />
+    </div>
+  );
+}
+
+function ReadinessRowView({ row }: { row: ReadinessRow }) {
+  return (
+    <div data-testid={`readiness-row-${row.muscle}`}>
+      <div className="flex items-center gap-3 py-2.5">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm text-surface-100 truncate">{row.displayName}</span>
+            <span className="text-[11px] tabular-nums flex-shrink-0">
+              <span className={zoneTextClass(row.zone, row.sets)} data-testid={`readiness-sets-${row.muscle}`}>{row.sets}</span>
+              <span className="text-surface-600"> · {zoneBandLabel(row.band)}</span>
+            </span>
+          </div>
+          <div className="mt-1.5 h-1 rounded-full bg-surface-800 overflow-hidden">
+            <div className={`h-full rounded-full ${zoneBarClass(row.zone, row.sets)}`} style={{ width: `${barFillPct(row.sets, row.band.mrv)}%` }} />
+          </div>
+        </div>
+        <RecoveryBadge status={row.recovery.status} hoursUntilReady={row.recovery.hoursUntilReady} muscle={row.muscle} />
       </div>
+      {/* Lagging fine children surface under their parent. */}
+      {row.children.length > 0 && (
+        <div className="border-l border-surface-800/80 ml-1 mb-1">
+          {row.children.map((child) => (
+            <ChildRowView key={child.muscle} child={child} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -89,31 +123,41 @@ export function ReadinessRowView({ row }: { row: ReadinessRow }) {
 /**
  * MuscleReadinessContent — the read-only "good targets + per-muscle rows" body
  * shared by the bottom sheet and the empty-workout inline placement. Purely
- * presentational: it takes already-assembled rows/targets (from
+ * presentational: it takes already-assembled coarse rows/targets (from
  * `useMuscleReadiness`) so both surfaces render identical UI off the same data
- * path. `maxRows` trims the list for the compact inline variant.
+ * path.
+ *
+ * `maxRows` hard-trims the list for the compact inline variant. `collapsible`
+ * (the sheet) instead shows a 6-row cap with a "+N more" / "Show less" toggle so
+ * fatigued muscles that sink to the bottom stay reachable.
  */
 export function MuscleReadinessContent({
   rows,
   targets,
   isLoading,
   maxRows,
+  collapsible = false,
   loadingTestId = 'readiness-sheet-loading',
   showFootnote = true,
 }: {
   rows: ReadinessRow[];
-  targets: ReadinessRow[];
+  targets: ReadinessTarget[];
   isLoading: boolean;
   maxRows?: number;
+  collapsible?: boolean;
   loadingTestId?: string;
   showFootnote?: boolean;
 }) {
+  const [showAll, setShowAll] = useState(false);
   const targetNames = targets.map((t) => t.displayName).join(', ');
-  const visibleRows = typeof maxRows === 'number' ? rows.slice(0, maxRows) : rows;
+
+  const capped = collapsible && !showAll ? rows.slice(0, DEFAULT_ROW_CAP) : rows;
+  const visibleRows = typeof maxRows === 'number' ? capped.slice(0, maxRows) : capped;
+  const hiddenCount = rows.length - visibleRows.length;
 
   return (
     <>
-      {/* Top strip: the answer at a glance. */}
+      {/* Top strip: the answer at a glance (fine children surface here). */}
       <div className="mb-2 rounded-lg bg-surface-800/60 px-3 py-2.5">
         <p className="text-[11px] uppercase tracking-wide text-surface-500">Good targets today</p>
         <p className="text-sm text-surface-100 mt-0.5" data-testid="readiness-targets">
@@ -128,11 +172,31 @@ export function MuscleReadinessContent({
           Loading readiness…
         </div>
       ) : (
-        <div className="divide-y divide-surface-800/70">
-          {visibleRows.map((row) => (
-            <ReadinessRowView key={row.muscle} row={row} />
-          ))}
-        </div>
+        <>
+          <div className="divide-y divide-surface-800/70">
+            {visibleRows.map((row) => (
+              <ReadinessRowView key={row.muscle} row={row} />
+            ))}
+          </div>
+          {collapsible && hiddenCount > 0 && (
+            <button
+              onClick={() => setShowAll(true)}
+              className="mt-2 w-full py-2 text-xs font-medium text-primary-400 hover:text-primary-300"
+              data-testid="readiness-show-more"
+            >
+              +{hiddenCount} more
+            </button>
+          )}
+          {collapsible && showAll && rows.length > DEFAULT_ROW_CAP && (
+            <button
+              onClick={() => setShowAll(false)}
+              className="mt-2 w-full py-2 text-xs font-medium text-surface-500 hover:text-surface-300"
+              data-testid="readiness-show-less"
+            >
+              Show less
+            </button>
+          )}
+        </>
       )}
 
       {showFootnote && (
@@ -166,7 +230,7 @@ export function MuscleReadinessSheet({
   return (
     <BottomSheet isOpen={isOpen} onClose={onClose} title="Muscle readiness">
       <div data-testid="readiness-sheet">
-        <MuscleReadinessContent rows={rows} targets={targets} isLoading={isLoading} />
+        <MuscleReadinessContent rows={rows} targets={targets} isLoading={isLoading} collapsible />
       </div>
     </BottomSheet>
   );

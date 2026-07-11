@@ -17,10 +17,14 @@ import {
   getVolumeSummary,
   analyzeMesocycle,
   updateVolumeProfile,
+  resetVolumeProfileToBaseline,
+  VOLUME_COUNTER_VERSION,
   BASELINE_VOLUME_RECOMMENDATIONS,
 } from '@/src/lib/training/adaptive-volume';
 import type { MuscleGroup } from '@/types/schema';
-import { MUSCLE_GROUPS } from '@/types/schema';
+import { MUSCLE_GROUPS, resolveMuscleToStandard } from '@/types/schema';
+import { resolvePrimaryMuscleCredits, SECONDARY_MUSCLE_CREDIT } from '@/services/volumeTracker';
+import { STANDARD_TO_COARSE } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 import type {
   ExerciseBlockFull,
   WeeklyMuscleVolumeRow,
@@ -136,73 +140,78 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
           .eq('workout_sessions.state', 'completed');
 
         if (blocks && blocks.length > 0) {
-          
-          // Calculate volume from blocks
-          const volumeByMuscle = new Map<string, { totalSets: number; effectiveSets: number; totalRIR: number; rirCount: number }>();
-          let processedBlocks = 0;
-          let skippedBlocks = 0;
-          
+
+          // Calculate volume with the SHARED counter (retiring the old
+          // primary-only tally): full credit to each coarse primary muscle,
+          // 0.5x to coarse secondaries, so the learned table relearns on the
+          // same counts every other surface displays. effectiveSets / RIR stay
+          // primary-attributed (they gauge stimulus quality, not volume).
+          const volumeByMuscle = new Map<MuscleGroup, { totalSets: number; effectiveSets: number; totalRIR: number; rirCount: number }>();
+          const bump = (muscle: MuscleGroup) => {
+            if (!volumeByMuscle.has(muscle)) {
+              volumeByMuscle.set(muscle, { totalSets: 0, effectiveSets: 0, totalRIR: 0, rirCount: 0 });
+            }
+            return volumeByMuscle.get(muscle)!;
+          };
+
           blocks.forEach((block: ExerciseBlockFull) => {
             const exercise = block.exercises;
-            if (!exercise) {
-              skippedBlocks++;
-              return;
-            }
+            if (!exercise?.primary_muscle) return;
 
-            const allSets = block.set_logs || [];
-            const workingSets = allSets.filter((s: SetLogRow) => !s.is_warmup);
+            const workingSets = (block.set_logs || []).filter((s: SetLogRow) => !s.is_warmup);
+            if (workingSets.length === 0) return;
 
-            if (workingSets.length === 0) {
-              skippedBlocks++;
-              return;
-            }
-
-            const primaryMuscle = exercise.primary_muscle?.toLowerCase();
-            if (!primaryMuscle) {
-              skippedBlocks++;
-              return;
-            }
-
-            if (!volumeByMuscle.has(primaryMuscle)) {
-              volumeByMuscle.set(primaryMuscle, { totalSets: 0, effectiveSets: 0, totalRIR: 0, rirCount: 0 });
-            }
-            const data = volumeByMuscle.get(primaryMuscle)!;
-            data.totalSets += workingSets.length;
-            
-            // Count effective sets (RPE 7+ or RIR 0-3 with clean/some_breakdown form)
             const effective = workingSets.filter((s: SetLogRow) => {
               const feedback = s.feedback as { repsInTank?: number; form?: string } | undefined;
               const rir = feedback?.repsInTank ?? (s.rpe ? 10 - s.rpe : 3);
               const form = feedback?.form ?? 'clean';
               return rir <= 3 && (form === 'clean' || form === 'some_breakdown');
-            });
-            data.effectiveSets += effective.length;
+            }).length;
+            const rirValues = workingSets.map((s: SetLogRow) => s.feedback?.repsInTank ?? (s.rpe ? 10 - s.rpe : 2));
 
-            // Calculate average RIR
-            workingSets.forEach((s: SetLogRow) => {
-              const rir = s.feedback?.repsInTank ?? (s.rpe ? 10 - s.rpe : 2);
-              data.totalRIR += rir;
-              data.rirCount += 1;
-            });
-            
-            processedBlocks++;
+            // Primary → coarse credit (weighted split for legacy coarse tags).
+            const primaryCredits = resolvePrimaryMuscleCredits(exercise.primary_muscle);
+            const primaryStd = new Set(primaryCredits.map((c) => c.muscle));
+            const creditedCoarse = new Set<MuscleGroup>();
+            for (const { muscle, weight } of primaryCredits) {
+              const coarse = STANDARD_TO_COARSE[muscle] as MuscleGroup | undefined;
+              if (!coarse) continue;
+              const data = bump(coarse);
+              data.totalSets += workingSets.length * weight;
+              data.effectiveSets += effective * weight;
+              for (const rir of rirValues) { data.totalRIR += rir * weight; data.rirCount += weight; }
+              creditedCoarse.add(coarse);
+            }
+
+            // Secondary → 0.5x coarse credit (volume only), skipping any coarse
+            // group the primary already fed.
+            for (const secondary of exercise.secondary_muscles || []) {
+              const standards = resolveMuscleToStandard(secondary);
+              if (standards.length === 0) continue;
+              const per = SECONDARY_MUSCLE_CREDIT / standards.length;
+              for (const std of standards) {
+                if (primaryStd.has(std)) continue;
+                const coarse = STANDARD_TO_COARSE[std] as MuscleGroup | undefined;
+                if (!coarse || creditedCoarse.has(coarse)) continue;
+                bump(coarse).totalSets += workingSets.length * per;
+              }
+            }
           });
 
-          // Convert to MuscleVolumeData format
           const calculatedData: MuscleVolumeData[] = Array.from(volumeByMuscle.entries()).map(([muscle, data]) => ({
             id: `${muscle}-${weekStartStr}`,
-            muscle: muscle as MuscleGroup,
+            muscle,
             weekNumber: 1,
             mesocycleId: '',
-            totalSets: data.totalSets,
-            workingSets: data.totalSets,
-            effectiveSets: data.effectiveSets,
+            totalSets: Math.round(data.totalSets),
+            workingSets: Math.round(data.totalSets),
+            effectiveSets: Math.round(data.effectiveSets),
             totalVolume: 0,
             averageRIR: data.rirCount > 0 ? data.totalRIR / data.rirCount : 2,
             averageFormScore: 0.8,
             exercisePerformance: [],
           }));
-          
+
           setVolumeData(calculatedData);
         }
       } else {
@@ -310,7 +319,23 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
           isEnhanced: profileData.is_enhanced || false,
           trainingAge: profileData.training_age || 'intermediate',
         };
-        setVolumeProfile(profile);
+
+        // One-time reset onto the secondary-credit counter: a profile stored
+        // below the current counter version (or cleared to {} by the reset
+        // migration) carries primary-only-calibrated thresholds. Rebuild
+        // research baselines (preserving training age / enhanced flag) and
+        // relearn from there, then persist so it happens once.
+        const storedVersion = (profileData as { counter_version?: number }).counter_version ?? 0;
+        const needsReset =
+          storedVersion < VOLUME_COUNTER_VERSION ||
+          Object.keys(profile.muscleTolerance).length === 0;
+        if (needsReset) {
+          const reset = resetVolumeProfileToBaseline(profile);
+          setVolumeProfile(reset);
+          await saveProfile(reset);
+        } else {
+          setVolumeProfile(profile);
+        }
       } else {
         // Create initial profile based on user's experience level, seeded
         // with the canonical Enhanced Athlete Mode flag from the users row.
@@ -357,6 +382,7 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
           global_recovery_multiplier: profile.globalRecoveryMultiplier,
           is_enhanced: profile.isEnhanced,
           training_age: profile.trainingAge,
+          counter_version: VOLUME_COUNTER_VERSION,
           updated_at: new Date().toISOString(),
         });
     } catch (err: unknown) {

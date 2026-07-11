@@ -23,6 +23,11 @@ export function AtrophyRiskAlert({
   const isOnCut = userGoal === 'cut';
   const severityLevel = isOnCut ? 'high' : 'moderate';
 
+  // Credited sets per exercise: whole for a direct contributor, fractional for
+  // a secondary (½ credit) so a "×1.5" reads as "1 direct + 1 half" at a glance.
+  const formatSetCredit = (sets: number) =>
+    Number.isInteger(sets) ? `×${sets}` : `×${sets.toFixed(1)}`;
+
   const getSeverityStyles = () => {
     if (isOnCut) {
       return 'border-danger-500/50 bg-danger-500/5';
@@ -171,6 +176,15 @@ export function AtrophyRiskAlert({
                     <span className={`text-xs ml-1 ${isOnCut ? 'text-danger-400' : 'text-warning-400'}`}>
                       (+{deficit} needed)
                     </span>
+                    {/* Which exercises fed this muscle, so a miscount is visible
+                        at a glance (e.g. "RDL 2 · Back Extension 1.5"). */}
+                    {muscle.contributingExercises && muscle.contributingExercises.length > 0 && (
+                      <div className="mt-0.5 text-[11px] text-surface-500">
+                        {muscle.contributingExercises
+                          .map((ex) => `${ex.name} ${formatSetCredit(ex.sets)}`)
+                          .join(' · ')}
+                      </div>
+                    )}
                   </div>
                 );
               })}
