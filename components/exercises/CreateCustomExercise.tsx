@@ -103,9 +103,14 @@ export function CreateCustomExercise({
           setupNote: '',
           movementPattern: data.pattern,
           equipmentRequired: [data.equipment],
-          // Bodyweight exercise flags - derived from equipment type
+          // Bodyweight exercise flags. The loading type comes from the
+          // review-form selector (defaulted, user-adjustable, and validated as
+          // required) so a new custom can never silently lack it.
           isBodyweight: data.equipment === 'bodyweight',
-          bodyweightType: data.equipment === 'bodyweight' ? 'weighted_possible' : undefined,
+          bodyweightType:
+            data.equipment === 'bodyweight'
+              ? data.bodyweightType ?? 'weighted_possible'
+              : undefined,
         },
         userId
       );

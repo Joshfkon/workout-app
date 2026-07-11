@@ -17,6 +17,7 @@ import type {
   HypertrophyRating,
   StandardMuscleGroup,
   DetailedMuscleGroup,
+  BodyweightType,
 } from '@/types/schema';
 
 import { STANDARD_MUSCLE_GROUPS, STANDARD_MUSCLE_DISPLAY_NAMES } from '@/types/schema';
@@ -118,6 +119,15 @@ export interface CompletedExerciseData {
   equipment: Equipment;
   description?: string;
   variationOf?: string;
+
+  /**
+   * How a bodyweight exercise is loaded. Only meaningful when
+   * `equipment === 'bodyweight'`; required in that case so a new custom can
+   * never silently lack it (which previously left the set logger unsure
+   * whether to offer added weight / assistance). Undefined for non-bodyweight
+   * equipment.
+   */
+  bodyweightType?: BodyweightType;
 
   // === AI Completed ===
   /** AI's detailed classification of the primary muscle */

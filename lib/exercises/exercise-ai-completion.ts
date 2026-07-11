@@ -9,7 +9,7 @@
  * - StandardMuscleGroup (20 muscles) for volume tracking (converted automatically)
  */
 
-import type { MovementPattern, DetailedMuscleGroup, StandardMuscleGroup } from '@/types/schema';
+import type { MovementPattern, DetailedMuscleGroup, StandardMuscleGroup, BodyweightType } from '@/types/schema';
 import { DETAILED_MUSCLE_GROUPS, isDetailedMuscle, toStandardMuscle } from '@/types/schema';
 import type {
   BasicExerciseInput,
@@ -413,6 +413,7 @@ function parseAIResponse(
     equipment: input.equipment,
     description: input.description,
     variationOf: input.variationOf,
+    bodyweightType: defaultBodyweightType(input.equipment, input.name),
 
     // AI's detailed classification of the primary muscle
     primaryMuscleDetailed,
@@ -477,6 +478,37 @@ function parseAIResponse(
   };
 }
 
+/**
+ * Best-guess bodyweight loading type from the exercise name, so the review
+ * form's selector starts on a sensible option instead of empty. The user can
+ * always override; this only picks the default. Non-bodyweight equipment
+ * returns undefined.
+ */
+export function defaultBodyweightType(
+  equipment: BasicExerciseInput['equipment'],
+  name: string
+): BodyweightType | undefined {
+  if (equipment !== 'bodyweight') return undefined;
+  const n = name.toLowerCase();
+
+  // Assisted machines are assistance-only. Checked first so "Assisted Pull-Up
+  // Machine" resolves to assisted rather than the both/pull-up branch below.
+  if (/assist/.test(n)) return 'assisted_possible';
+
+  // Pull-ups, chin-ups, dips, muscle-ups: commonly weighted OR assisted.
+  if (/pull[-\s]?up|chin[-\s]?up|muscle[-\s]?up|\bdip(s)?\b/.test(n)) return 'both';
+
+  // Isometric holds / planks: no practical load modification. `hang\b` matches
+  // "Dead Hang" without catching "Hanging Leg Raise" (a loadable movement).
+  if (/plank|hold|hang\b|dead bug|bird ?dog|superman|hollow|l[-\s]?sit/.test(n)) {
+    return 'pure';
+  }
+
+  // Everything else (push-ups, back extensions, leg raises, glute bridges,
+  // squats, rows…) can typically take added weight.
+  return 'weighted_possible';
+}
+
 // ============================================
 // FALLBACK DEFAULTS
 // ============================================
@@ -529,6 +561,7 @@ export function getDefaultsByEquipment(input: BasicExerciseInput): CompletedExer
     equipment: input.equipment,
     description: input.description,
     variationOf: input.variationOf,
+    bodyweightType: defaultBodyweightType(input.equipment, input.name),
     primaryMuscleDetailed, // AI's detailed classification
     secondaryMuscles: [],
     stabilizers: [],
@@ -616,6 +649,11 @@ export function validateCompletedExercise(exercise: CompletedExerciseData): Vali
   }
   if (!exercise.hypertrophyScore?.tier) {
     errors.push('Hypertrophy tier is required');
+  }
+  // Bodyweight exercises must declare how they're loaded so the set logger
+  // knows whether to offer added weight / assistance (or neither).
+  if (exercise.equipment === 'bodyweight' && !exercise.bodyweightType) {
+    errors.push('Select how this bodyweight exercise is loaded');
   }
 
   // Logical checks (warnings only)

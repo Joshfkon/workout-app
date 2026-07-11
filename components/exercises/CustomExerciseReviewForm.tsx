@@ -119,6 +119,36 @@ export function CustomExerciseReviewForm({
         </div>
       </div>
 
+      {/* Bodyweight loading type — always visible for bodyweight exercises so a
+          new custom can never silently lack it. Drives whether the set logger
+          offers added weight / assistance. */}
+      {formData.equipment === 'bodyweight' && (
+        <div className="bg-surface-800 rounded-lg p-4 space-y-2">
+          <div>
+            <p className="text-sm font-medium text-surface-200">How is it loaded?</p>
+            <p className="text-xs text-surface-500">
+              Controls the weight options shown when you log this exercise.
+            </p>
+          </div>
+          <Select
+            options={[
+              { value: '', label: 'Select loading type…' },
+              { value: 'pure', label: 'Pure bodyweight (no weight, e.g. plank)' },
+              { value: 'weighted_possible', label: 'Can add weight (e.g. back extension, push-up)' },
+              { value: 'assisted_possible', label: 'Can use assistance (e.g. assisted machine)' },
+              { value: 'both', label: 'Weighted or assisted (e.g. pull-up, dip)' },
+            ]}
+            value={formData.bodyweightType || ''}
+            onChange={(e) =>
+              updateField(
+                'bodyweightType',
+                (e.target.value || undefined) as CompletedExerciseData['bodyweightType']
+              )
+            }
+          />
+        </div>
+      )}
+
       {/* Plain-language summary */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {summaryFacts.map(({ label, value }) => (
