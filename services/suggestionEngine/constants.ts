@@ -25,8 +25,12 @@
  *       bug — feeder sets graded as working sets).
  *  v2 = set roles + e1RM-anchored working prescription + ramp %-of-top +
  *       ±10% sanity clamp + honest rep-range banner.
+ *  v3 = within-session hold math honors the LOGGED RIR: the maintain-branch rep
+ *       prediction shifts by the effort-vs-target gap (11 @ 3 RIR vs a 2 RIR
+ *       target → 11, not 10) instead of shaving fatigue alone, so identical
+ *       inputs can produce different reps than a v2 record.
  */
-export const SUGGESTION_ENGINE_VERSION = 2;
+export const SUGGESTION_ENGINE_VERSION = 3;
 
 // ============================================================
 // SET ROLES (Phase 2)
