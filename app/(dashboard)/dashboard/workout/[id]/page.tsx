@@ -3134,7 +3134,10 @@ export default function WorkoutPage() {
     const supabase = createUntypedClient();
     let query = supabase
       .from('exercises')
-      .select('id, name, primary_muscle, mechanic, equipment_required, default_rep_range, default_rir, is_bodyweight')
+      // Keep these columns in sync with the mount-time loadAvailableExercises
+      // query — this refetch overwrites the same availableExercises state, and
+      // the swap "Similar" tab needs movement_pattern/secondary_muscles to score.
+      .select('id, name, primary_muscle, secondary_muscles, movement_pattern, mechanic, equipment_required, default_rep_range, default_rir, is_bodyweight, hypertrophy_tier')
       .is('deleted_at', null) // hide merge-soft-deleted duplicates
       .order('name');
 
