@@ -34,6 +34,18 @@ async function getClient() {
       'Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in the environment.'
     );
   }
+  // Masked diagnostic so truncation/wrong-key-type is visible without leaking
+  // the secret. A valid secret key starts with `sb_secret_` or `eyJ` and is long.
+  const prefix = key.slice(0, 10);
+  console.error(
+    `[creds] url=${url} | key prefix="${prefix}…" length=${key.length}`
+  );
+  if (!key.startsWith('sb_secret_') && !key.startsWith('eyJ')) {
+    console.error(
+      '[creds] WARNING: key does not look like a service/secret key (expected sb_secret_… or eyJ…). ' +
+        'You may have pasted the publishable key or the JWT signing secret.'
+    );
+  }
   const { createClient } = await import('@supabase/supabase-js');
   return createClient(url, key, { auth: { persistSession: false } });
 }
