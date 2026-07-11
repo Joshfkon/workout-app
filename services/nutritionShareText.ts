@@ -3,29 +3,43 @@
  *
  * The Eat-tab sibling of services/workoutShareText.ts. Produces a compact,
  * emoji-encoded macro summary that survives pasting into iMessage/Slack/
- * anywhere without the app:
+ * anywhere without the app. Three rendering modes share ONE set of computed
+ * band/pace/phase statuses — only the layout differs:
  *
- *   HyperTrack 🍽️ Thu Jul 10
- *   Bulk · Wk 1
+ *   full     — the full macro grid (protein/carbs/fat/kcal) with targets:
  *
- *   🟩🟩🟩🟩🟩 Protein 212 / 200g ✅
- *   🟩🟩🟩🟩⬜ Carbs 310 / 380g
- *   🟩🟩🟩🟩🟩 Fat 88 / 85g ✅
- *   🟩🟩🟩🟩⬜ 2,940 / 3,100 kcal
+ *     HyperTrack 🍽️ Jul 10 · Bulk
  *
- *   4 meals · 95% to target
+ *     🟩🟩🟩🟩🟩 Protein 175/155g✅
+ *     🟩🟩🟩🟩⬜ Carbs 280/345g
+ *     🟨🟨🟨🟨🟨 Fat 74/62g
+ *     🟩🟩🟩🟩🟩 2,477 kcal
  *
- * Mid-window shares are graded against pace (see rule 6 in the feature spec):
+ *     4 meals · 97% to target
  *
- *   HyperTrack 🍽️ Thu Jul 10
- *   Bulk · Wk 1
+ *   compact  — one line per row, single-letter labels, no target values:
  *
- *   🟩🟩🟩⬜⬜ Protein 118 / 200g
- *   🟩🟩🟩⬜⬜ Carbs 190 / 380g
- *   🟩🟩🟩⬜⬜ Fat 44 / 85g
- *   🟩🟩🟩⬜⬜ 1,610 / 3,100 kcal
+ *     HyperTrack 🍽️ Jul 10 · Bulk
+ *     🟩🟩🟩🟩🟩 P 175g✅
+ *     🟩🟩🟩🟩⬜ C 280g
+ *     🟨🟨🟨🟨🟨 F 74g
+ *     🟩🟩🟩🟩🟩 2,477 kcal
+ *     97% to target
  *
- *   ⏱️ On pace · 52% at 2:15 PM
+ *   minimal  — calories + protein only, one status square each:
+ *
+ *     HyperTrack 🍽️ Jul 10 · Bulk
+ *     🟩 2,477 kcal · 97%
+ *     🟩 175g protein✅
+ *
+ * Mid-window shares are graded against pace, not the full-day target (being at
+ * 50% of calories at 2 PM is on pace). The pace marker rides the footer in
+ * full/compact and the calorie line in minimal.
+ *
+ * Line width: every line must fit an iMessage bubble at iOS default text size.
+ * `shareLineWidth` (emoji = 2 units, latin char = 1) makes that testable; the
+ * design budget for the value rows is ~24 units (≈ 5 squares + 14 latin), with
+ * the branded header the widest allowed element.
  *
  * Pure module: no DB calls, no side effects. All emoji are plain Unicode so
  * alignment survives proportional fonts. Nutrition data only — the mirror
@@ -57,7 +71,37 @@ const BAR_SEGMENTS = 5;
 /** A macro target hit ≥95% of calories (or window closed) reads as done. */
 const END_OF_DAY_CALORIE_FRACTION = 0.95;
 
+/**
+ * Emoji-aware width budget for an optional header suffix (the " · Wk N"
+ * fragment): only appended when the header still fits an iMessage bubble.
+ */
+const HEADER_WIDTH_BUDGET = 30;
+
 type Square = typeof GREEN | typeof YELLOW | typeof RED;
+
+/** The three share layouts. All share the same band/pace/phase computation. */
+export type NutritionShareMode = 'full' | 'compact' | 'minimal';
+
+/** Every glyph counted as two width units by `shareLineWidth`. */
+const WIDE_GLYPHS = [GREEN, YELLOW, RED, WHITE, '🍽️', HIT_SUFFIX, '⏱️', '📈', '📉'];
+
+/**
+ * Emoji-aware rendered width of one line: each emoji square / pictograph
+ * counts as 2 units, every other code point as 1. Mirrors how an iMessage
+ * bubble at default text size fills — the basis for the line-width guardrail.
+ */
+export function shareLineWidth(line: string): number {
+  let rest = line;
+  let width = 0;
+  for (const glyph of WIDE_GLYPHS) {
+    const parts = rest.split(glyph);
+    width += (parts.length - 1) * 2;
+    rest = parts.join('');
+  }
+  // Everything left is latin / digits / punctuation / spaces — 1 unit each.
+  width += Array.from(rest).length;
+  return width;
+}
 
 /** Totals consumed so far today. Same shape as DailyMacroTotals. */
 export interface NutritionShareTotals {
@@ -86,10 +130,12 @@ export interface NutritionShareOptions {
   now: Date;
   /** Eating window driving intraday pacing. Defaults to 07:00–21:00. */
   window?: EatingWindow;
-  /** Current mesocycle week for header line 2 (e.g. "Wk 1"). */
+  /** Current mesocycle week for the header (e.g. "Wk 1"), when it fits. */
   phaseWeek?: number | null;
   /** Privacy mode: strip every absolute number (see rule 7). */
   noNumbers?: boolean;
+  /** Layout. Defaults to 'full'. */
+  mode?: NutritionShareMode;
 }
 
 /** Which side of the target works against the phase goal. */
@@ -197,7 +243,10 @@ function pctOf(actual: number, target: number | null): number {
 
 interface MacroRow {
   key: 'protein' | 'carbs' | 'fat' | 'calories';
+  /** Full label ("Protein") for full mode. */
   label: string;
+  /** Single-letter label ("P") for compact mode. */
+  letter: string;
   actual: number;
   target: number | null;
   color: Square;
@@ -209,15 +258,64 @@ function timeLabel(now: Date): string {
   return now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
 
-function dateLabel(now: Date): string {
-  const weekday = now.toLocaleDateString('en-US', { weekday: 'short' });
+/** "Jul 10" — month + day, no weekday (weekday drops for line width). */
+function monthDayLabel(now: Date): string {
   const month = now.toLocaleDateString('en-US', { month: 'short' });
-  return `${weekday} ${month} ${now.getDate()}`;
+  return `${month} ${now.getDate()}`;
+}
+
+/** "Fri" — weekday only, the digit-free header date for no-numbers mode. */
+function weekdayLabel(now: Date): string {
+  return now.toLocaleDateString('en-US', { weekday: 'short' });
+}
+
+function roundedLocale(value: number): string {
+  return Math.round(value).toLocaleString('en-US');
+}
+
+/**
+ * The one-line header, shared by every mode:
+ *   HyperTrack 🍽️ Jul 10 · Bulk
+ * The weekday is dropped for width; the phase week is appended only when the
+ * line still fits an iMessage bubble (it usually doesn't, given the brand).
+ * No-numbers mode swaps the date for the digit-free weekday.
+ */
+function buildHeader(
+  now: Date,
+  phase: PacingPhase | null,
+  phaseWeek: number | null,
+  noNumbers: boolean
+): string {
+  const datePart = noNumbers ? weekdayLabel(now) : monthDayLabel(now);
+  let header = `${APP_NAME} 🍽️ ${datePart}`;
+  if (phase) {
+    header += ` · ${capitalize(phase)}`;
+    // Week carries a digit (dropped in no-numbers) and only rides along when
+    // the header still fits — the phase word alone is enough otherwise.
+    if (phaseWeek && !noNumbers) {
+      const withWeek = `${header} · Wk ${phaseWeek}`;
+      if (shareLineWidth(withWeek) <= HEADER_WIDTH_BUDGET) header = withWeek;
+    }
+  }
+  return header;
+}
+
+interface ShareContext {
+  rows: MacroRow[];
+  byKey: Record<MacroRow['key'], MacroRow>;
+  header: string;
+  canPace: boolean;
+  calorieRatio: number;
+  mealsLogged: number;
+  now: Date;
+  fraction: number;
+  noNumbers: boolean;
 }
 
 /**
  * Single source of truth for the nutrition share encoding. Deterministic:
- * same input, same output.
+ * same input, same output. Band statuses, the pace ratio, and phase logic are
+ * computed ONCE here; `mode` only changes how they render.
  */
 export function formatNutritionShareText(
   dayLog: NutritionShareDayLog,
@@ -225,7 +323,13 @@ export function formatNutritionShareText(
   phase: PacingPhase | null,
   options: NutritionShareOptions
 ): string {
-  const { now, window = DEFAULT_EATING_WINDOW, phaseWeek = null, noNumbers = false } = options;
+  const {
+    now,
+    window = DEFAULT_EATING_WINDOW,
+    phaseWeek = null,
+    noNumbers = false,
+    mode = 'full',
+  } = options;
   const { totals, mealsLogged } = dayLog;
 
   const calorieTarget = targets.calories;
@@ -244,14 +348,20 @@ export function formatNutritionShareText(
 
   const gradingPhase: PacingPhase = phase ?? 'maintenance';
 
-  const macroDefs: { key: MacroRow['key']; label: string; actual: number; target: number | null }[] = [
-    { key: 'protein', label: 'Protein', actual: totals.protein, target: targets.protein },
-    { key: 'carbs', label: 'Carbs', actual: totals.carbs, target: targets.carbs },
-    { key: 'fat', label: 'Fat', actual: totals.fat, target: targets.fat },
-    { key: 'calories', label: 'Calories', actual: totals.calories, target: calorieTarget },
+  const macroDefs: {
+    key: MacroRow['key'];
+    label: string;
+    letter: string;
+    actual: number;
+    target: number | null;
+  }[] = [
+    { key: 'protein', label: 'Protein', letter: 'P', actual: totals.protein, target: targets.protein },
+    { key: 'carbs', label: 'Carbs', letter: 'C', actual: totals.carbs, target: targets.carbs },
+    { key: 'fat', label: 'Fat', letter: 'F', actual: totals.fat, target: targets.fat },
+    { key: 'calories', label: 'Calories', letter: 'kcal', actual: totals.calories, target: calorieTarget },
   ];
 
-  const rows: MacroRow[] = macroDefs.map(({ key, label, actual, target }) => {
+  const rows: MacroRow[] = macroDefs.map(({ key, label, letter, actual, target }) => {
     let color: Square;
     if (!target || target <= 0) {
       color = GREEN;
@@ -262,55 +372,120 @@ export function formatNutritionShareText(
       color = fullDayColor(key, pctOf(actual, target), gradingPhase);
     }
     const hit = !!target && target > 0 && actual >= target && color === GREEN;
-    return { key, label, actual, target, color, hit };
+    return { key, label, letter, actual, target, color, hit };
   });
 
-  const lines: string[] = [`${APP_NAME} 🍽️ ${noNumbers ? now.toLocaleDateString('en-US', { weekday: 'short' }) : dateLabel(now)}`];
+  const byKey = rows.reduce(
+    (acc, row) => ({ ...acc, [row.key]: row }),
+    {} as Record<MacroRow['key'], MacroRow>
+  );
 
-  if (phase) {
-    // Week carries a digit, so drop it in no-numbers mode.
-    lines.push(phaseWeek && !noNumbers ? `${capitalize(phase)} · Wk ${phaseWeek}` : capitalize(phase));
+  const ctx: ShareContext = {
+    rows,
+    byKey,
+    header: buildHeader(now, phase, phaseWeek, noNumbers),
+    canPace,
+    calorieRatio,
+    mealsLogged,
+    now,
+    fraction,
+    noNumbers,
+  };
+
+  switch (mode) {
+    case 'minimal':
+      return renderMinimal(ctx).join('\n');
+    case 'compact':
+      return renderCompact(ctx).join('\n');
+    case 'full':
+    default:
+      return renderFull(ctx).join('\n');
   }
+}
 
-  lines.push('');
+/** ✅ tacked directly onto the preceding token (no space), when hit. */
+function hitTag(hit: boolean): string {
+  return hit ? HIT_SUFFIX : '';
+}
+
+/** Full macro-grid rendering (protein/carbs/fat/kcal with targets). */
+function renderFull(ctx: ShareContext): string[] {
+  const { rows, noNumbers } = ctx;
+  const lines: string[] = [ctx.header, ''];
+
   for (const row of rows) {
     const bar = buildBar(row.actual, row.target, row.color);
     if (noNumbers) {
-      // Bars + macro names + ✅ only — no digits anywhere.
-      const label = row.key === 'calories' ? 'Calories' : row.label;
-      lines.push(`${bar} ${label}${row.hit ? ` ${HIT_SUFFIX}` : ''}`);
+      lines.push(`${bar} ${row.label}${hitTag(row.hit)}`);
       continue;
     }
     if (row.key === 'calories') {
-      const value =
-        row.target != null
-          ? `${Math.round(row.actual).toLocaleString('en-US')} / ${Math.round(row.target).toLocaleString('en-US')} kcal`
-          : `${Math.round(row.actual).toLocaleString('en-US')} kcal`;
-      lines.push(`${bar} ${value}${row.hit ? ` ${HIT_SUFFIX}` : ''}`);
+      // Target lives in the footer %, so the kcal row carries the count only.
+      lines.push(`${bar} ${roundedLocale(row.actual)} kcal${hitTag(row.hit)}`);
     } else {
       const value =
         row.target != null
-          ? `${row.label} ${Math.round(row.actual)} / ${Math.round(row.target)}g`
+          ? `${row.label} ${Math.round(row.actual)}/${Math.round(row.target)}g`
           : `${row.label} ${Math.round(row.actual)}g`;
-      lines.push(`${bar} ${value}${row.hit ? ` ${HIT_SUFFIX}` : ''}`);
+      lines.push(`${bar} ${value}${hitTag(row.hit)}`);
     }
   }
 
   lines.push('');
-  lines.push(buildFooter({ rows, canPace, calorieRatio, mealsLogged, now, phase: gradingPhase, fraction, noNumbers }));
-
-  return lines.join('\n');
+  lines.push(buildGridFooter(ctx, true));
+  return lines;
 }
 
-interface FooterInput {
-  rows: MacroRow[];
-  canPace: boolean;
-  calorieRatio: number;
-  mealsLogged: number;
-  now: Date;
-  phase: PacingPhase;
-  fraction: number;
-  noNumbers: boolean;
+/** Compact rendering: single-letter labels, no target values, no blank lines. */
+function renderCompact(ctx: ShareContext): string[] {
+  const { rows, noNumbers } = ctx;
+  const lines: string[] = [ctx.header];
+
+  for (const row of rows) {
+    const bar = buildBar(row.actual, row.target, row.color);
+    if (noNumbers) {
+      const label = row.key === 'calories' ? 'kcal' : row.letter;
+      lines.push(`${bar} ${label}${hitTag(row.hit)}`);
+      continue;
+    }
+    if (row.key === 'calories') {
+      lines.push(`${bar} ${roundedLocale(row.actual)} kcal${hitTag(row.hit)}`);
+    } else {
+      lines.push(`${bar} ${row.letter} ${Math.round(row.actual)}g${hitTag(row.hit)}`);
+    }
+  }
+
+  lines.push(buildGridFooter(ctx, false));
+  return lines;
+}
+
+/** Minimal rendering: calories + protein only, one status square each. */
+function renderMinimal(ctx: ShareContext): string[] {
+  const { byKey, canPace, calorieRatio, fraction, noNumbers } = ctx;
+  const cal = byKey.calories;
+  const protein = byKey.protein;
+
+  let calorieLine: string;
+  if (noNumbers) {
+    const word = canPace
+      ? paceStatus(calorieRatio, fraction).word.toLowerCase()
+      : cal.color === GREEN
+        ? 'on track'
+        : 'in progress';
+    calorieLine = `${cal.color} kcal ${word}`;
+  } else if (canPace) {
+    const { emoji, word } = paceStatus(calorieRatio, fraction);
+    calorieLine = `${cal.color} ${roundedLocale(cal.actual)} kcal · ${emoji} ${word.toLowerCase()}`;
+  } else {
+    const pct = Math.round(calorieRatio * 100);
+    calorieLine = `${cal.color} ${roundedLocale(cal.actual)} kcal · ${pct}%`;
+  }
+
+  const proteinLine = noNumbers
+    ? `${protein.color} protein${hitTag(protein.hit)}`
+    : `${protein.color} ${Math.round(protein.actual)}g protein${hitTag(protein.hit)}`;
+
+  return [ctx.header, calorieLine, proteinLine];
 }
 
 /** ⏱️ On pace / 📈 Ahead / 📉 Behind from the calorie pace ratio. */
@@ -321,25 +496,28 @@ function paceStatus(calorieRatio: number, fraction: number): { emoji: string; wo
   return { emoji: '⏱️', word: 'On pace' };
 }
 
-function buildFooter(input: FooterInput): string {
-  const { rows, canPace, calorieRatio, mealsLogged, now, fraction, noNumbers } = input;
+/**
+ * Footer for the full/compact grids. `withMeals` prepends the meal count
+ * (full only — compact drops it). Midday shows the pace marker; end-of-day
+ * shows percent-to-target; no-numbers keeps the words, drops the digits.
+ */
+function buildGridFooter(ctx: ShareContext, withMeals: boolean): string {
+  const { rows, canPace, calorieRatio, mealsLogged, now, fraction, noNumbers } = ctx;
 
   if (canPace) {
     const { emoji, word } = paceStatus(calorieRatio, fraction);
-    if (noNumbers) {
-      // Keep the pace word; the time carries digits, so drop it.
-      return `${emoji} ${word}`;
-    }
+    if (noNumbers) return `${emoji} ${word}`;
     const pct = Math.round(calorieRatio * 100);
     return `${emoji} ${word} · ${pct}% at ${timeLabel(now)}`;
   }
 
-  // End-of-day footer.
   if (noNumbers) {
     const allGreen = rows.every((r) => r.color === GREEN);
     return allGreen ? 'on track' : 'in progress';
   }
-  const mealWord = `${mealsLogged} meal${mealsLogged === 1 ? '' : 's'}`;
+
   const pct = Math.round(calorieRatio * 100);
+  if (!withMeals) return `${pct}% to target`;
+  const mealWord = `${mealsLogged} meal${mealsLogged === 1 ? '' : 's'}`;
   return `${mealWord} · ${pct}% to target`;
 }
