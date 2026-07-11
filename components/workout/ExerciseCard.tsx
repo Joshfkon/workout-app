@@ -4,7 +4,8 @@ import React, { useState, useEffect, useMemo, memo, useRef, useCallback } from '
 import { Card, Badge, Button, ConfirmModal } from '@/components/ui';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/Accordion';
 import type { Exercise, ExerciseBlock, SetLog, WeightUnit, SetQuality, SetFeedback, BodyweightData, ExercisePerformanceSnapshot } from '@/types/schema';
-import { rpeToRir, muscleMatchesGroup } from '@/types/schema';
+import { rpeToRir } from '@/types/schema';
+import { filterExercises, dedupeExercisesById } from '@/services/exerciseFilter';
 import { convertWeight, formatMuscleName, formatWeightValue, convertWeightForDisplay, inputWeightToKg, roundToPlateIncrement } from '@/lib/utils';
 import { recommendSet, recommendSessionStart, estimateRepsForWeight, predictAmrapReps, recommendSeedForSlot, type SeedRecommendation } from '@/services/setRecommender';
 import { inferSetRole, type SetRole } from '@/services/suggestionEngine/setRoles';
@@ -352,13 +353,23 @@ export const ExerciseCard = memo(function ExerciseCard({
     isSwiping: boolean;
   }>({ setId: null, startX: 0, currentX: 0, isSwiping: false });
 
+  // Shared, de-duped candidate pool for BOTH swap tabs. The page feeds
+  // availableExercises as blocks.map(b => b.exercise).concat(fullLibrary), so an
+  // exercise both in the workout and the library appears twice — de-dupe by id
+  // once here so neither the Similar nor the Browse list can render a row (or a
+  // React key) twice.
+  const swapCandidates = useMemo(
+    () => dedupeExercisesById(availableExercises).filter(ex => ex.id !== exercise.id),
+    [availableExercises, exercise.id]
+  );
+
   // Calculate similar exercises for swap suggestions, filtering out injury-risky
   // ones and exercises the current location has no equipment for
   const similarExercises = useMemo(() => {
-    if (availableExercises.length === 0) return [];
+    if (swapCandidates.length === 0) return [];
 
     const equipmentFeasible = filterExercisesByEquipment(
-      availableExercises.map(ex => ({ ...ex, equipment: ex.equipmentRequired })),
+      swapCandidates.map(ex => ({ ...ex, equipment: ex.equipmentRequired })),
       unavailableEquipmentIds
     );
 
@@ -385,11 +396,25 @@ export const ExerciseCard = memo(function ExerciseCard({
       // Then by similarity score
       return b.score - a.score;
     }).slice(0, 8);
-  }, [exercise, availableExercises, unavailableEquipmentIds, currentInjuries]);
+  }, [exercise, swapCandidates, unavailableEquipmentIds, currentInjuries]);
   
   // Count safe alternatives
   const safeAlternatives = similarExercises.filter(s => !s.injuryRisk.isRisky);
   const hasInjuries = currentInjuries.length > 0;
+
+  // Browse-tab results: the shared filter (query composes with the muscle chip;
+  // query matches name/muscles/equipment case-insensitively), then frequency /
+  // A-Z sort. Fed from the de-duped pool so rows and keys stay unique. An empty
+  // result renders a proper empty state — never the unfiltered list.
+  const swapBrowseResults = filterExercises(swapCandidates, {
+    query: swapSearch,
+    muscleGroup: swapMuscleFilter || null,
+  }).sort((a, b) => {
+    const freqA = frequentExerciseIds.get(a.id) || 0;
+    const freqB = frequentExerciseIds.get(b.id) || 0;
+    if (freqA !== freqB) return freqB - freqA;
+    return a.name.localeCompare(b.name);
+  });
 
   // State for pending set inputs (one per pending set)
   const [pendingInputs, setPendingInputs] = useState<{
@@ -2579,24 +2604,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                       </p>
                     </div>
                   )}
-                  {availableExercises
-                    .filter(ex => {
-                      // Don't show the current exercise
-                      if (ex.id === exercise.id) return false;
-                      // Search filter
-                      if (swapSearch && !ex.name.toLowerCase().includes(swapSearch.toLowerCase())) return false;
-                      // Muscle filter (normalized: tolerate camel/snake + casing)
-                      if (swapMuscleFilter && !muscleMatchesGroup(exercisePrimaryMuscle(ex), swapMuscleFilter)) return false;
-                      return true;
-                    })
-                    .sort((a, b) => {
-                      // Sort by frequency (most used first)
-                      const freqA = frequentExerciseIds.get(a.id) || 0;
-                      const freqB = frequentExerciseIds.get(b.id) || 0;
-                      if (freqA !== freqB) return freqB - freqA;
-                      // Then alphabetically
-                      return a.name.localeCompare(b.name);
-                    })
+                  {swapBrowseResults
                     .map((alt) => {
                       const altInjuryRisk = getExerciseInjuryRiskFromService({ name: alt.name, primaryMuscle: alt.primaryMuscle }, currentInjuries);
                       const usageCount = frequentExerciseIds.get(alt.id) || 0;
@@ -2605,6 +2613,8 @@ export const ExerciseCard = memo(function ExerciseCard({
                       return (
                         <button
                           key={alt.id}
+                          data-testid="swap-browse-row"
+                          data-exercise-id={alt.id}
                           onClick={() => {
                             if (onExerciseSwap) {
                               onExerciseSwap(alt);
@@ -2612,8 +2622,8 @@ export const ExerciseCard = memo(function ExerciseCard({
                             }
                           }}
                           className={`w-full p-3 text-left rounded-lg transition-colors flex items-center gap-3 ${
-                            altInjuryRisk.isRisky 
-                              ? 'hover:bg-danger-500/10 opacity-60' 
+                            altInjuryRisk.isRisky
+                              ? 'hover:bg-danger-500/10 opacity-60'
                               : 'hover:bg-surface-800'
                           }`}
                         >
@@ -2647,13 +2657,8 @@ export const ExerciseCard = memo(function ExerciseCard({
                         </button>
                       );
                     })}
-                  {availableExercises.filter(ex => {
-                    if (ex.id === exercise.id) return false;
-                    if (swapSearch && !ex.name.toLowerCase().includes(swapSearch.toLowerCase())) return false;
-                    if (swapMuscleFilter && !muscleMatchesGroup(exercisePrimaryMuscle(ex), swapMuscleFilter)) return false;
-                    return true;
-                  }).length === 0 && (
-                    <p className="p-8 text-center text-surface-500">
+                  {swapBrowseResults.length === 0 && (
+                    <p className="p-8 text-center text-surface-500" data-testid="swap-browse-empty">
                       {swapSearch || swapMuscleFilter ? 'No matching exercises found' : 'No exercises available'}
                     </p>
                   )}

@@ -31,6 +31,11 @@ import type { AvailableExercise, GymLocation } from '../_lib/types';
 import { formatMuscleName } from '@/lib/utils';
 import { useKeyboardInset } from '@/hooks/useKeyboardInset';
 import { checkExerciseEquipment } from '@/services/equipmentFilter';
+import {
+  dedupeExercisesById,
+  exerciseMatchesMuscleGroup,
+  exerciseMatchesQuery,
+} from '@/services/exerciseFilter';
 
 // Normalize exercise search terms for better matching
 // Handles variations like "situps" vs "sit up" vs "sit-up"
@@ -190,13 +195,11 @@ export function AddExercisePicker({
 
   /** Muscle chip filter applied; location availability only flags and sorts. */
   const getBasePool = (): AvailableExercise[] => {
-    let filteredExercises = availableExercises;
-
-    if (selectedMuscleFilter) {
-      filteredExercises = filteredExercises.filter(ex => ex.primary_muscle === selectedMuscleFilter);
-    }
-
-    return filteredExercises;
+    // De-dupe (shared with the library + replace pickers) then apply the
+    // group-aware muscle chip so a coarse chip also matches sub-muscle tags.
+    return dedupeExercisesById(availableExercises).filter(ex =>
+      exerciseMatchesMuscleGroup(ex, selectedMuscleFilter)
+    );
   };
 
   const sortByOption = (exercises: AvailableExercise[]): AvailableExercise[] => {
@@ -232,7 +235,14 @@ export function AddExercisePicker({
   const getSearchResults = (): AvailableExercise[] => {
     const normalizedSearch = normalizeForSearch(exerciseSearch);
     return getBasePool()
-      .filter(ex => normalizeForSearch(ex.name).includes(normalizedSearch))
+      // Name match keeps the plural/hyphen normalization ("situps" -> "Sit-Up");
+      // the shared query matcher adds muscle + equipment matching so a search
+      // like "cable" or "quads" also surfaces results.
+      .filter(
+        ex =>
+          normalizeForSearch(ex.name).includes(normalizedSearch) ||
+          exerciseMatchesQuery(ex, exerciseSearch)
+      )
       .sort((a, b) => {
         const availabilityDiff = availabilityRank(a) - availabilityRank(b);
         if (availabilityDiff !== 0) return availabilityDiff;
@@ -328,6 +338,8 @@ export function AddExercisePicker({
     return (
       <button
         key={exercise.id}
+        data-testid="add-exercise-row"
+        data-exercise-id={exercise.id}
         onClick={() => onToggleExerciseSelection(exercise)}
         disabled={isAddingExercise}
         className={`w-full flex items-center justify-between gap-3 px-4 py-1.5 min-h-[44px] transition-colors text-left disabled:opacity-50 border-b border-surface-800/50 ${

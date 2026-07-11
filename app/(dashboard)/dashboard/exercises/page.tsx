@@ -13,7 +13,13 @@ import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 const EXERCISE_CATALOG_KEY = ['exercises', 'catalog'] as const;
 const EXERCISE_CATALOG_COLUMNS =
   'id, name, primary_muscle, secondary_muscles, mechanic, form_cues, common_mistakes, equipment_required, equipment, movement_pattern, is_bodyweight, bodyweight_type, assistance_type, is_custom, hypertrophy_tier, stretch_under_load, resistance_profile, progression_ease, demo_gif_url, demo_thumbnail_url, youtube_video_id';
-import { MUSCLE_GROUPS, muscleMatchesGroup } from '@/types/schema';
+import { MUSCLE_GROUPS } from '@/types/schema';
+import {
+  dedupeExercisesById,
+  exerciseMatchesEquipment,
+  exerciseMatchesMuscleGroup,
+  exerciseMatchesQuery,
+} from '@/services/exerciseFilter';
 import { EQUIPMENT_OPTIONS } from '@/lib/exercises/types';
 import { formatWeight, convertWeight, estimateE1RM } from '@/lib/utils';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
@@ -517,20 +523,15 @@ export default function ExercisesPage() {
     }
   };
 
-  const filteredExercises = exercises.filter((ex) => {
-    const matchesSearch = ex.name.toLowerCase().includes(search.toLowerCase());
-    // Group-aware so a legacy chip ('back', 'shoulders', 'glutes') also matches
-    // exercises tagged with standard sub-muscles ('lats', 'rear_delts',
-    // 'glute_med'), not just an exact string equal. Without this, delt/lat/
-    // upper-chest and adductor/glute_med/upper_back exercises are unreachable.
-    const matchesMuscle = !selectedMuscle || muscleMatchesGroup(ex.primary_muscle, selectedMuscle);
-
-    // Equipment filtering - check both equipment field and equipment_required array
-    const matchesEquipment = !selectedEquipment ||
-      ex.equipment === selectedEquipment ||
-      (ex.equipment_required && ex.equipment_required.some(eq =>
-        eq.toLowerCase() === selectedEquipment.toLowerCase()
-      ));
+  const filteredExercises = dedupeExercisesById(exercises).filter((ex) => {
+    // Shared filter (same as the add-exercise and replace pickers): the text
+    // query matches name / muscles / equipment case-insensitively, the muscle
+    // chip is group-aware so a coarse chip ('back') also matches sub-muscle
+    // tags ('lats', 'lower_back'), and the equipment chip matches either
+    // equipment field. All compose.
+    const matchesSearch = exerciseMatchesQuery(ex, search);
+    const matchesMuscle = exerciseMatchesMuscleGroup(ex, selectedMuscle);
+    const matchesEquipment = exerciseMatchesEquipment(ex, selectedEquipment);
 
     const status = getExerciseStatus ? getExerciseStatus(ex.id) : 'active';
 
@@ -831,7 +832,7 @@ export default function ExercisesPage() {
                     className="flex-1 text-left"
                   >
                     <div className="flex items-center gap-2">
-                      <h3 className="font-medium text-surface-100">{exercise.name}</h3>
+                      <h3 className="font-medium text-surface-100" data-testid="library-exercise-name" data-exercise-id={exercise.id}>{exercise.name}</h3>
                       {exercise.hypertrophy_tier && (
                         <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${getTierColorClasses(exercise.hypertrophy_tier)}`}>
                           {exercise.hypertrophy_tier}
