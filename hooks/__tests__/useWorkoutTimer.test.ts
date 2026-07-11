@@ -4,7 +4,28 @@
  */
 
 import { renderHook, act } from '@testing-library/react';
-import { useWorkoutTimer, elapsedFromState } from '../useWorkoutTimer';
+import { useWorkoutTimer, elapsedFromState, firstLoggedSetTime } from '../useWorkoutTimer';
+
+describe('firstLoggedSetTime', () => {
+  it('returns null for an empty session (no sets)', () => {
+    expect(firstLoggedSetTime([])).toBeNull();
+  });
+
+  it('returns null when no set carries a loggedAt', () => {
+    expect(firstLoggedSetTime([{ loggedAt: null }, {}])).toBeNull();
+  });
+
+  it('returns the earliest loggedAt regardless of array order', () => {
+    const early = '2026-01-01T10:00:00.000Z';
+    const late = '2026-01-01T11:30:00.000Z';
+    expect(firstLoggedSetTime([{ loggedAt: late }, { loggedAt: early }])).toBe(early);
+  });
+
+  it('ignores unparseable timestamps', () => {
+    const valid = '2026-01-01T10:00:00.000Z';
+    expect(firstLoggedSetTime([{ loggedAt: 'nonsense' }, { loggedAt: valid }])).toBe(valid);
+  });
+});
 
 describe('elapsedFromState', () => {
   it('excludes paused time by returning the frozen pausedAt while paused', () => {
@@ -119,6 +140,38 @@ describe('useWorkoutTimer', () => {
       // Should be approximately 120 seconds
       expect(result.current.elapsedSeconds).toBeGreaterThanOrEqual(120);
       expect(result.current.isPaused).toBe(false);
+    });
+  });
+
+  describe('empty-session anchoring', () => {
+    it('counts elapsed from the first logged set, not session creation', () => {
+      // Empty session: no set logged yet, so no anchor.
+      const { result, rerender } = renderHook(
+        ({ startedAt }: { startedAt: string | null }) =>
+          useWorkoutTimer({ sessionId: 'anchor-session', startedAt }),
+        { initialProps: { startedAt: null as string | null } }
+      );
+
+      expect(result.current.elapsedSeconds).toBe(0);
+
+      // 90 minutes pass with nothing logged — an idle, open session.
+      act(() => {
+        jest.advanceTimersByTime(90 * 60 * 1000);
+      });
+      expect(result.current.elapsedSeconds).toBe(0);
+
+      // First set lands now → the timer anchors here.
+      const firstSetAt = new Date(Date.now()).toISOString();
+      rerender({ startedAt: firstSetAt });
+
+      // Elapsed reflects the set, not the 90-minutes-ago session start.
+      expect(result.current.elapsedSeconds).toBeLessThanOrEqual(1);
+
+      act(() => {
+        jest.advanceTimersByTime(5000);
+      });
+      expect(result.current.elapsedSeconds).toBeGreaterThanOrEqual(5);
+      expect(result.current.elapsedSeconds).toBeLessThanOrEqual(6);
     });
   });
 

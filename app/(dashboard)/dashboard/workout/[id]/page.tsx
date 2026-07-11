@@ -32,7 +32,7 @@ const ExerciseCard = dynamic(
     )
   }
 );
-import { useWorkoutTimer } from '@/hooks/useWorkoutTimer';
+import { useWorkoutTimer, firstLoggedSetTime } from '@/hooks/useWorkoutTimer';
 
 // Dynamic imports for components not needed on initial render
 const WarmupProtocol = dynamic(() => import('@/components/workout').then(m => m.WarmupProtocol), { ssr: false });
@@ -41,6 +41,11 @@ const ReadinessCheckIn = dynamic(() => import('@/components/workout').then(m => 
 // hook only load/run the first time the user opens it, so it costs the workout
 // screen nothing on load.
 const MuscleReadinessSheet = dynamic(() => import('@/components/workout/MuscleReadinessSheet').then(m => m.MuscleReadinessSheet), { ssr: false });
+// Inline readiness for the EMPTY workout state (0 exercises): renders the same
+// read-only readiness body as the sheet plus readiness-ranked Quick Add chips.
+// Lazy so the hook + assembly stay out of the workout screen's initial bundle;
+// it only mounts while the workout is empty, then unmounts once a block exists.
+const EmptyWorkoutReadiness = dynamic(() => import('@/components/workout/EmptyWorkoutReadiness').then(m => m.EmptyWorkoutReadiness), { ssr: false });
 // The summary chunk loads over the network the first time the user finishes
 // a workout — without a loading fallback the screen renders BLANK until it
 // arrives (looks frozen on a slow connection), so show a matching skeleton.
@@ -573,10 +578,18 @@ export default function WorkoutPage() {
   // Rest timer hook
   const restTimer = useRestTimer(restTimerOptions);
 
-  // Workout timer hook - tracks total workout duration with pause/resume
+  // Workout timer hook - tracks total workout duration with pause/resume.
+  // Anchored at the FIRST LOGGED SET, not session creation: an empty session
+  // has no meaningful elapsed time, so until a set lands the timer sits at 0:00
+  // and a finish snapshots 0 duration. (Repro from the wild: a session left
+  // open on the add-exercise bug reopened later reading 1:20:00 with no sets.)
+  const timerStartedAt = useMemo(
+    () => firstLoggedSetTime(completedSets),
+    [completedSets]
+  );
   const workoutTimer = useWorkoutTimer({
     sessionId,
-    startedAt: session?.startedAt ?? null,
+    startedAt: timerStartedAt,
   });
 
   // Clear any stale timer when a DIFFERENT session mounts. Deliberately no
@@ -4028,26 +4041,15 @@ export default function WorkoutPage() {
           Add exercises
         </button>
 
-        {/* Quick add: the user's most frequent exercises as one-tap chips */}
-        {quickAddExercises.length > 0 && (
-          <div className="mt-8">
-            <p className="text-xs font-semibold uppercase tracking-[0.15em] text-surface-500 mb-3">
-              Quick add · Your frequent exercises
-            </p>
-            <div className="flex flex-wrap gap-2.5">
-              {quickAddExercises.map((exercise) => (
-                <button
-                  key={exercise.id}
-                  onClick={() => handleAddExercise(exercise)}
-                  disabled={isAddingExercise || isCopyingLastWorkout}
-                  className="px-4 py-2.5 rounded-full border border-surface-700 bg-surface-900 text-surface-200 font-medium hover:border-surface-500 hover:text-surface-100 disabled:opacity-50 transition-colors"
-                >
-                  + {exercise.name}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+        {/* Inline readiness (between Add exercises and Quick Add) + the Quick
+            Add chips re-ordered by readiness. Same read-only data path as the
+            header's readiness sheet; collapses back to the icon-only entry
+            point once the first exercise is added (this branch unmounts). */}
+        <EmptyWorkoutReadiness
+          quickAddExercises={quickAddExercises}
+          onAddExercise={handleAddExercise}
+          disabled={isAddingExercise || isCopyingLastWorkout}
+        />
 
         {/* Alternative: copy the previous workout wholesale */}
         <button

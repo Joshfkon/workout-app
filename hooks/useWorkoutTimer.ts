@@ -26,6 +26,31 @@ export function elapsedFromState(state: WorkoutTimerState, nowMs: number): numbe
   return Math.max(0, Math.floor((nowMs - state.startTime) / 1000));
 }
 
+/**
+ * The timer anchor for a session: the `loggedAt` of the FIRST logged set, or
+ * null when nothing has been logged yet.
+ *
+ * A session with zero logged sets has no meaningful elapsed time — it may have
+ * been created hours ago and left open. So the header timer (and the duration
+ * snapshotted at finish) count from the first set, NOT from session creation.
+ * Pass the result as `startedAt`: null keeps the timer at 0:00 until the user
+ * actually logs something.
+ */
+export function firstLoggedSetTime(
+  sets: ReadonlyArray<{ loggedAt?: string | null }>
+): string | null {
+  let earliestMs = Infinity;
+  let earliest: string | null = null;
+  for (const s of sets) {
+    if (!s.loggedAt) continue;
+    const ms = new Date(s.loggedAt).getTime();
+    if (Number.isNaN(ms) || ms >= earliestMs) continue;
+    earliestMs = ms;
+    earliest = s.loggedAt;
+  }
+  return earliest;
+}
+
 interface UseWorkoutTimerOptions {
   sessionId: string;
   startedAt: string | null; // ISO date string from session

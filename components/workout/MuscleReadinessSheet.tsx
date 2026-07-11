@@ -3,7 +3,11 @@
 import { useState } from 'react';
 import { BottomSheet } from './BottomSheet';
 import { useMuscleReadiness } from '@/hooks/useMuscleReadiness';
-import type { ReadinessRow, ReadinessChild } from '@/app/(dashboard)/dashboard/workout/[id]/_lib/readiness';
+import type {
+  ReadinessRow,
+  ReadinessChild,
+  ReadinessTarget,
+} from '@/app/(dashboard)/dashboard/workout/[id]/_lib/readiness';
 import { zoneBarClass, zoneTextClass, zoneBandLabel } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 import type { RecoveryStatus } from '@/services/muscleRecovery';
 import type { SetLog } from '@/types/schema';
@@ -17,9 +21,10 @@ const DEFAULT_ROW_CAP = 6;
  * overlay. Lazy-mounted (the page renders it only once opened), READ-ONLY over
  * workout history and the live session: it never touches the workout store.
  *
- * Each row pairs weekly volume (sets vs MEV, with a zone-colored bar) with a
- * recovery badge, sorted so the best targets (behind on volume AND recovered)
- * float to the top.
+ * Each coarse row pairs weekly volume (sets vs the shared MEV–MRV band, with a
+ * zone-colored bar) with a recovery badge, sorted so the best targets (behind
+ * on volume AND recovered) float to the top; lagging fine muscles surface as
+ * indented children.
  */
 
 interface MuscleReadinessSheetProps {
@@ -115,6 +120,96 @@ function ReadinessRowView({ row }: { row: ReadinessRow }) {
   );
 }
 
+/**
+ * MuscleReadinessContent — the read-only "good targets + per-muscle rows" body
+ * shared by the bottom sheet and the empty-workout inline placement. Purely
+ * presentational: it takes already-assembled coarse rows/targets (from
+ * `useMuscleReadiness`) so both surfaces render identical UI off the same data
+ * path.
+ *
+ * `maxRows` hard-trims the list for the compact inline variant. `collapsible`
+ * (the sheet) instead shows a 6-row cap with a "+N more" / "Show less" toggle so
+ * fatigued muscles that sink to the bottom stay reachable.
+ */
+export function MuscleReadinessContent({
+  rows,
+  targets,
+  isLoading,
+  maxRows,
+  collapsible = false,
+  loadingTestId = 'readiness-sheet-loading',
+  showFootnote = true,
+}: {
+  rows: ReadinessRow[];
+  targets: ReadinessTarget[];
+  isLoading: boolean;
+  maxRows?: number;
+  collapsible?: boolean;
+  loadingTestId?: string;
+  showFootnote?: boolean;
+}) {
+  const [showAll, setShowAll] = useState(false);
+  const targetNames = targets.map((t) => t.displayName).join(', ');
+
+  const capped = collapsible && !showAll ? rows.slice(0, DEFAULT_ROW_CAP) : rows;
+  const visibleRows = typeof maxRows === 'number' ? capped.slice(0, maxRows) : capped;
+  const hiddenCount = rows.length - visibleRows.length;
+
+  return (
+    <>
+      {/* Top strip: the answer at a glance (fine children surface here). */}
+      <div className="mb-2 rounded-lg bg-surface-800/60 px-3 py-2.5">
+        <p className="text-[11px] uppercase tracking-wide text-surface-500">Good targets today</p>
+        <p className="text-sm text-surface-100 mt-0.5" data-testid="readiness-targets">
+          {targets.length > 0
+            ? targetNames
+            : "You're on top of volume — nothing behind and recovered right now."}
+        </p>
+      </div>
+
+      {isLoading ? (
+        <div className="py-8 text-center text-sm text-surface-500" data-testid={loadingTestId}>
+          Loading readiness…
+        </div>
+      ) : (
+        <>
+          <div className="divide-y divide-surface-800/70">
+            {visibleRows.map((row) => (
+              <ReadinessRowView key={row.muscle} row={row} />
+            ))}
+          </div>
+          {collapsible && hiddenCount > 0 && (
+            <button
+              onClick={() => setShowAll(true)}
+              className="mt-2 w-full py-2 text-xs font-medium text-primary-400 hover:text-primary-300"
+              data-testid="readiness-show-more"
+            >
+              +{hiddenCount} more
+            </button>
+          )}
+          {collapsible && showAll && rows.length > DEFAULT_ROW_CAP && (
+            <button
+              onClick={() => setShowAll(false)}
+              className="mt-2 w-full py-2 text-xs font-medium text-surface-500 hover:text-surface-300"
+              data-testid="readiness-show-less"
+            >
+              Show less
+            </button>
+          )}
+        </>
+      )}
+
+      {showFootnote && (
+        <p className="mt-3 text-[11px] leading-relaxed text-surface-600">
+          Sorted by what to train now: recovered muscles behind on weekly volume
+          come first; fatigued muscles sink to the bottom. Recovery is a simple
+          planning estimate, not a medical readout.
+        </p>
+      )}
+    </>
+  );
+}
+
 export function MuscleReadinessSheet({
   isOpen,
   onClose,
@@ -124,7 +219,6 @@ export function MuscleReadinessSheet({
   // Stamp the clock once when the sheet mounts so every muscle is evaluated
   // against the same instant (and re-stamped on each fresh open).
   const [now] = useState(() => new Date());
-  const [showAll, setShowAll] = useState(false);
 
   const { rows, targets, isLoading } = useMuscleReadiness({
     liveBlocks,
@@ -133,61 +227,10 @@ export function MuscleReadinessSheet({
     enabled: isOpen,
   });
 
-  const targetNames = targets.map((t) => t.displayName).join(', ');
-  // Coarse rows by default, capped; "+N more" reveals the rest.
-  const visibleRows = showAll ? rows : rows.slice(0, DEFAULT_ROW_CAP);
-  const hiddenCount = rows.length - visibleRows.length;
-
   return (
     <BottomSheet isOpen={isOpen} onClose={onClose} title="Muscle readiness">
       <div data-testid="readiness-sheet">
-        {/* Top strip: the answer at a glance (fine children surface here). */}
-        <div className="mb-2 rounded-lg bg-surface-800/60 px-3 py-2.5">
-          <p className="text-[11px] uppercase tracking-wide text-surface-500">Good targets today</p>
-          <p className="text-sm text-surface-100 mt-0.5" data-testid="readiness-targets">
-            {targets.length > 0
-              ? targetNames
-              : "You're on top of volume — nothing behind and recovered right now."}
-          </p>
-        </div>
-
-        {isLoading ? (
-          <div className="py-8 text-center text-sm text-surface-500" data-testid="readiness-sheet-loading">
-            Loading readiness…
-          </div>
-        ) : (
-          <>
-            <div className="divide-y divide-surface-800/70">
-              {visibleRows.map((row) => (
-                <ReadinessRowView key={row.muscle} row={row} />
-              ))}
-            </div>
-            {hiddenCount > 0 && (
-              <button
-                onClick={() => setShowAll(true)}
-                className="mt-2 w-full py-2 text-xs font-medium text-primary-400 hover:text-primary-300"
-                data-testid="readiness-show-more"
-              >
-                +{hiddenCount} more
-              </button>
-            )}
-            {showAll && rows.length > DEFAULT_ROW_CAP && (
-              <button
-                onClick={() => setShowAll(false)}
-                className="mt-2 w-full py-2 text-xs font-medium text-surface-500 hover:text-surface-300"
-                data-testid="readiness-show-less"
-              >
-                Show less
-              </button>
-            )}
-          </>
-        )}
-
-        <p className="mt-3 text-[11px] leading-relaxed text-surface-600">
-          Sorted by what to train now: recovered muscles behind on weekly volume
-          come first; fatigued muscles sink to the bottom. Recovery is a simple
-          planning estimate, not a medical readout.
-        </p>
+        <MuscleReadinessContent rows={rows} targets={targets} isLoading={isLoading} collapsible />
       </div>
     </BottomSheet>
   );
