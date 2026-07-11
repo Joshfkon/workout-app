@@ -128,6 +128,28 @@ async function main() {
 
   const result = await mergeExercises(survivor, duplicates, { dryRun: isDryRun });
 
+  // In dry-run the duplicates still own their blocks, so we can report the
+  // number of individual set logs that will move — this matches the audit's
+  // "Set logs" column (the counts.exercise_blocks below is workout instances,
+  // a smaller number). Best-effort: skip silently if the helper isn't present.
+  if (isDryRun && result.active?.length) {
+    try {
+      const supabase = await getClient();
+      const { data: setLogCount, error } = await supabase.rpc(
+        'count_setlogs_for_exercises',
+        { p_ids: result.active }
+      );
+      if (!error && setLogCount != null) {
+        console.log('');
+        console.log(
+          `Set logs that will move (matches audit "Set logs" column): ${setLogCount}`
+        );
+      }
+    } catch {
+      /* helper migration not applied yet — ignore */
+    }
+  }
+
   console.log('');
   console.log(`Survivor : ${result.survivorName} (${result.survivor})`);
   console.log(`Active   : ${result.active.join(', ') || '(none)'}`);
