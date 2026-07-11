@@ -8,9 +8,11 @@ import { getBodyCompLayout } from '@/services/compositionSpace';
 import { type WorkoutDay } from '@/types/schema';
 import {
   computeWeeklyMuscleVolume,
+  computeReachableMuscles,
   weeklyVolumeWindowStartISO,
   type MuscleVolumeStats,
 } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
+import type { StandardMuscleGroup } from '@/types/schema';
 import {
   computeLiftTrends,
   LIFT_TREND_WINDOW_DAYS,
@@ -380,7 +382,17 @@ export async function fetchLiftTrends(userId: string): Promise<LiftTrendsSummary
  * server-side so the card — the dashboard's LCP element — ships in the HTML
  * instead of waiting on a post-hydration fetch.
  */
-export async function fetchWeeklyMuscleVolume(userId: string): Promise<MuscleVolumeStats[]> {
+export interface WeeklyMuscleVolumeResult {
+  stats: MuscleVolumeStats[];
+  /**
+   * Standard muscles the user's own logged exercises can credit — drives the
+   * fine-muscle (erectors / glute_med / obliques) warning gate so the home
+   * card never nags about a muscle no logged exercise could satisfy.
+   */
+  reachable: StandardMuscleGroup[];
+}
+
+export async function fetchWeeklyMuscleVolume(userId: string): Promise<WeeklyMuscleVolumeResult> {
   const supabase = await createUntypedServerClient();
   // Shared local-day-anchored window (see weeklyVolumeWindowStartISO) so this
   // server first-paint value matches the client fast-path and the volume page.
@@ -394,5 +406,9 @@ export async function fetchWeeklyMuscleVolume(userId: string): Promise<MuscleVol
     .eq('workout_sessions.state', 'completed')
     .gte('workout_sessions.completed_at', weekStartIso);
 
-  return computeWeeklyMuscleVolume((data as any) || []);
+  const blocks = (data as any) || [];
+  return {
+    stats: computeWeeklyMuscleVolume(blocks),
+    reachable: Array.from(computeReachableMuscles(blocks)),
+  };
 }

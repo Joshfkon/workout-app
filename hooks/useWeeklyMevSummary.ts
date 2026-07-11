@@ -3,8 +3,7 @@
 import { useEffect, useState } from 'react';
 import { createUntypedClient } from '@/lib/supabase/client';
 import {
-  computeWeeklyMuscleVolume,
-  computeWeeklyMevSummary,
+  summarizeWeeklyVolume,
   weeklyVolumeWindowStartISO,
   type WeeklyMevSummary,
 } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
@@ -40,7 +39,7 @@ export function useWeeklyMevSummary(): { summary: WeeklyMevSummary | null; loade
           .gte('workout_sessions.completed_at', weeklyVolumeWindowStartISO());
 
         if (cancelled) return;
-        setSummary(computeWeeklyMevSummary(computeWeeklyMuscleVolume((data as any) || [])));
+        setSummary(summarizeWeeklyVolume((data as any) || []));
       } catch (err) {
         console.error('Failed to load weekly MEV summary:', err);
       } finally {

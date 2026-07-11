@@ -98,6 +98,13 @@ export interface MuscleVolumeData {
   landmarks: VolumeLandmarks;
   status: VolumeStatus;
   percentOfMrv: number;
+  /**
+   * Optional per-exercise breakdown of the sets that fed this muscle (name +
+   * fractional-credit set count), for the "which exercises fed this?" debug
+   * view in the insufficient-volume warning. Populated by the shared weekly
+   * MEV pipeline; omitted by the raw landmark-based calculators.
+   */
+  contributingExercises?: Array<{ id: string; name: string; sets: number }>;
 }
 
 export interface VolumeRecommendation {

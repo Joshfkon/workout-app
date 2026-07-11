@@ -8,15 +8,15 @@ import { Modal } from '@/components/ui/Modal';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { getLocalDateString } from '@/lib/utils';
 import type { FrequentFood, SystemFood, MealType } from '@/types/nutrition';
-import { resolvePrimaryMuscleCredits, SECONDARY_MUSCLE_CREDIT, type MuscleVolumeData } from '@/services/volumeTracker';
-import { STANDARD_MUSCLE_GROUPS, STANDARD_MUSCLE_DISPLAY_NAMES, legacyToStandardMuscles, isStandardMuscle, resolveMuscleToStandard, type StandardMuscleGroup, type WorkoutDay, type Rating } from '@/types/schema';
+import { type MuscleVolumeData } from '@/services/volumeTracker';
+import { STANDARD_MUSCLE_DISPLAY_NAMES, legacyToStandardMuscles, isStandardMuscle, type StandardMuscleGroup, type WorkoutDay, type Rating } from '@/types/schema';
 import { toStandardMuscleForVolume } from '@/lib/migrations/muscle-groups';
 import { AtrophyRiskAlert } from '@/components/analytics/AtrophyRiskAlert';
 import {
-  MEV_TARGETS,
-  ALL_MUSCLE_GROUPS,
   computeWeeklyMuscleVolume,
   computeWeeklyMevSummary,
+  computeReachableMuscles,
+  mevSummaryToVolumeData,
   weeklyVolumeWindowStartISO,
   type MuscleVolumeStats,
 } from './_lib/weeklyVolume';
@@ -199,6 +199,8 @@ interface DashboardInitialData {
   completedWorkoutsCount: number;
   /** Weekly per-muscle volume (item 6): seeds the atrophy card server-side. */
   muscleVolume?: MuscleVolumeStats[];
+  /** Standard muscles the user's exercises can credit — gates fine-muscle warnings. */
+  reachableMuscles?: StandardMuscleGroup[];
   /** Lift trend summary for the "Lifts" glance tile. */
   liftTrends?: LiftTrendsSummary | null;
   /** Body-comp glance tile (≥2 DEXA scans + height); null hides the tile. */
@@ -302,6 +304,10 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   // post-hydration weekly-volume fetch. The client fetch below still runs to
   // refresh, but no longer gates first paint.
   const [muscleVolume, setMuscleVolume] = useState<MuscleVolumeStats[]>(initialData?.muscleVolume ?? []);
+  // Standard muscles the user's exercises can credit — gates the three fine
+  // muscles (erectors/glute_med/obliques) so the atrophy card never nags about
+  // a muscle no logged exercise could satisfy. Undefined until the first fetch.
+  const [reachableMuscles, setReachableMuscles] = useState<StandardMuscleGroup[] | undefined>(initialData?.reachableMuscles);
   const [liftTrends, setLiftTrends] = useState<LiftTrendsSummary | null>(initialData?.liftTrends ?? null);
   const [weightUnit, setWeightUnit] = useState<'lb' | 'kg'>(initialData?.weightUnit ?? 'lb');
   const [todaysWeight, setTodaysWeight] = useState<{ weight: number; unit: string } | null>(initialData?.todaysWeight ?? null);
@@ -597,7 +603,15 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   // Weekly-volume summary for the glance "Weekly volume" tile (null = no
   // volume yet). Computed by the same shared helper the volume page's
   // "this week vs MEV" breakdown uses, so tile and destination agree.
-  const glanceVolume: GlanceVolumeSummary | null = computeWeeklyMevSummary(muscleVolume);
+  const reachableSet = useMemo(
+    () => (reachableMuscles ? new Set(reachableMuscles) : undefined),
+    [reachableMuscles]
+  );
+  const glanceSummary = useMemo(
+    () => computeWeeklyMevSummary(muscleVolume, reachableSet),
+    [muscleVolume, reachableSet]
+  );
+  const glanceVolume: GlanceVolumeSummary | null = glanceSummary;
 
   const [frequentFoods, setFrequentFoods] = useState<FrequentFood[]>([]);
   const [systemFoods, setSystemFoods] = useState<SystemFood[]>([]);
@@ -687,43 +701,14 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
     }
   }, []);
 
-  // Find muscles below MEV (for atrophy risk alert) - use muscleVolume from dashboard query
-  const musclesBelowMev = useMemo((): MuscleVolumeData[] => {
-    // Create a map of muscle -> sets from muscleVolume for quick lookup
-    const volumeMap = new Map<string, number>();
-    muscleVolume.forEach(mv => {
-      volumeMap.set(mv.muscle, mv.sets);
-    });
-
-    // Check ALL muscle groups, including those with 0 sets
-    const result: MuscleVolumeData[] = [];
-
-    ALL_MUSCLE_GROUPS.forEach(muscle => {
-      const sets = volumeMap.get(muscle) || 0;
-      const mev = MEV_TARGETS[muscle] || 8;
-      const isBelowMev = sets < mev;
-
-      if (isBelowMev) {
-        const mrv = mev * 2.5; // Rough estimate: MRV is typically 2-3x MEV
-
-        result.push({
-          muscleGroup: muscle,
-          totalSets: sets,
-          directSets: sets,
-          indirectSets: 0,
-          landmarks: {
-            mev: mev,
-            mav: Math.round((mev + mrv) / 2),
-            mrv: mrv,
-          },
-          status: 'below_mev' as const,
-          percentOfMrv: Math.round((sets / mrv) * 100),
-        });
-      }
-    });
-
-    return result;
-  }, [muscleVolume]);
+  // Muscles below MEV for the atrophy-risk alert. Derived from the SAME shared
+  // summary the "This Week vs MEV" card and volume page use (reachability-gated,
+  // legacy-normalized, with per-exercise breakdown) instead of an inline loop —
+  // so the home card, the volume page card, and the glance tile can't diverge.
+  const musclesBelowMev = useMemo(
+    (): MuscleVolumeData[] => mevSummaryToVolumeData(glanceSummary),
+    [glanceSummary]
+  );
 
   // Normalize goal to the Goal type expected by AtrophyRiskAlert
   const normalizedGoal = useMemo(() => {
@@ -1146,6 +1131,8 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         const weeklyBlocks = weeklyBlocksResult.data;
         if (weeklyBlocks && weeklyBlocks.length > 0) {
           setMuscleVolume(computeWeeklyMuscleVolume(weeklyBlocks as any));
+          // Refresh the fine-muscle warning gate from the same blocks.
+          setReachableMuscles(Array.from(computeReachableMuscles(weeklyBlocks as any)));
         }
 
         // Lift trends for the "Lifts" glance tile (same pure helper the

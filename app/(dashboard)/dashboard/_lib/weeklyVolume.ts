@@ -52,6 +52,73 @@ export const MEV_TARGETS: Record<StandardMuscleGroup, number> = {
 
 export const ALL_MUSCLE_GROUPS: readonly StandardMuscleGroup[] = STANDARD_MUSCLE_GROUPS;
 
+// ============================================
+// FINE-GRAINED MUSCLE REACHABILITY (warning gating)
+// ============================================
+//
+// Of the 20 standard muscles, exactly three have NO coarse legacy tag that can
+// credit them: the runtime resolver is standard-first, so a set tagged with a
+// coarse token ('glutes','abs') or a legacy coarse token ('back') resolves to
+// [glutes] / [abs] / [lats,upper_back] respectively — it never leaks credit to
+// glute_med / obliques / erectors. These "fine" muscles are therefore only
+// reachable when the user logs an exercise tagged at fine grain for them.
+//
+// Their coarse "parent" region (below) is where that work physiologically
+// lands. When a user's data is entirely coarse (e.g. only 'glutes'/'back'/'abs'
+// work), a fine child gets zero credit and its MEV warning can NEVER clear —
+// which is worse than no warning. So we treat a fine muscle as warnable only
+// when at least one of the user's own exercises can feed it (see
+// `computeReachableMuscles`); otherwise its target rolls up into the coarse
+// parent and no standalone warning is rendered (ticket policy: never warn on a
+// muscle no logged-exercise tagging could satisfy).
+export const FINE_MUSCLE_PARENTS: Partial<Record<StandardMuscleGroup, StandardMuscleGroup[]>> = {
+  erectors: ['lats', 'upper_back'], // legacy 'back'
+  glute_med: ['glutes'], // legacy 'glutes'
+  obliques: ['abs'], // legacy 'abs'
+};
+
+/** The standard muscles that only a fine-grained tag can credit. */
+export const FINE_MUSCLES = Object.keys(FINE_MUSCLE_PARENTS) as StandardMuscleGroup[];
+const FINE_MUSCLE_SET = new Set<StandardMuscleGroup>(FINE_MUSCLES);
+
+/**
+ * The set of standard muscles that ANY of the user's logged exercises can
+ * credit (primary or secondary), resolved through the same standard-first
+ * resolver the volume counter uses. This is what determines whether a
+ * fine-grained muscle's MEV warning is satisfiable by the user's exercise
+ * tagging: a library of purely coarse 'glutes'/'back'/'abs' work yields a set
+ * WITHOUT glute_med / erectors / obliques.
+ */
+export function computeReachableMuscles(blocks: WeeklyVolumeBlockRow[]): Set<StandardMuscleGroup> {
+  const reachable = new Set<StandardMuscleGroup>();
+  for (const block of blocks) {
+    const exercise = block.exercises;
+    if (!exercise) continue;
+    const tokens = [exercise.primary_muscle, ...(exercise.secondary_muscles || [])];
+    for (const token of tokens) {
+      if (!token) continue;
+      for (const standard of resolveMuscleToStandard(token)) reachable.add(standard);
+    }
+  }
+  return reachable;
+}
+
+/**
+ * Whether an untrained standard muscle should surface a below-MEV warning.
+ * Coarse-reachable muscles (17 of 20) always can. The three fine muscles only
+ * warn when the user's exercise tagging can actually feed them; when
+ * `reachable` is omitted we preserve the pre-reachability behaviour (warn on
+ * all) so callers that don't have the raw blocks are unchanged.
+ */
+export function isMuscleWarnable(
+  muscle: StandardMuscleGroup,
+  reachable?: Set<StandardMuscleGroup>
+): boolean {
+  if (!FINE_MUSCLE_SET.has(muscle)) return true;
+  if (!reachable) return true;
+  return reachable.has(muscle);
+}
+
 export function getMevForMuscle(muscle: string): number {
   const standardMuscle = toStandardMuscleForVolume(muscle);
   if (standardMuscle && standardMuscle in MEV_TARGETS) {
@@ -160,6 +227,12 @@ export interface MuscleMevEntry {
   sets: number;
   mev: number;
   belowMev: boolean;
+  /**
+   * Which exercises fed this muscle and how many (fractional-credit) sets each
+   * contributed — the debug view behind the warning copy (e.g. "Hamstrings
+   * 3/4: RDL ×2, Back Extension ×1(½)"). Empty for untrained muscles.
+   */
+  exercises: ExerciseVolume[];
 }
 
 /**
@@ -185,7 +258,10 @@ export interface WeeklyMevSummary {
  * first would leave the rest counted as untrained. Returns null when no
  * volume has been logged yet (callers show their own empty state).
  */
-export function computeWeeklyMevSummary(muscleVolume: MuscleVolumeStats[]): WeeklyMevSummary | null {
+export function computeWeeklyMevSummary(
+  muscleVolume: MuscleVolumeStats[],
+  reachable?: Set<StandardMuscleGroup>
+): WeeklyMevSummary | null {
   if (muscleVolume.length === 0) return null;
 
   const trainedMuscles = new Set<StandardMuscleGroup>(
@@ -201,7 +277,15 @@ export function computeWeeklyMevSummary(muscleVolume: MuscleVolumeStats[]): Week
       return single ? [single] : [];
     })
   );
-  const untrained = ALL_MUSCLE_GROUPS.filter((m) => !trainedMuscles.has(m));
+  // Untrained (0-set) muscles surface as below-MEV warnings — EXCEPT the three
+  // fine muscles (erectors / glute_med / obliques) when the user's own exercise
+  // tagging can't feed them: warning on a muscle no logged exercise could
+  // satisfy is a permanent, un-clearable nag (worse than no warning). Coarse
+  // muscles are always warnable; a fine muscle is dropped here (its target rolls
+  // up into its coarse parent implicitly) unless it is reachable.
+  const untrained = ALL_MUSCLE_GROUPS.filter(
+    (m) => !trainedMuscles.has(m) && isMuscleWarnable(m, reachable)
+  );
 
   const totalSets = muscleVolume.reduce((s, mv) => s + mv.sets, 0);
   const totalTarget =
@@ -215,16 +299,31 @@ export function computeWeeklyMevSummary(muscleVolume: MuscleVolumeStats[]): Week
       sets: mv.sets,
       mev: getMevForMuscle(mv.muscle),
       belowMev: mv.status === 'low',
+      exercises: mv.exercises,
     })),
     ...untrained.map((m) => ({
       muscle: m as string,
       sets: 0,
       mev: getMevForMuscle(m),
       belowMev: true,
+      exercises: [],
     })),
   ].sort((a, b) => Number(b.belowMev) - Number(a.belowMev) || b.sets - a.sets);
 
   return { totalSets, totalTarget, lowCount, entries };
+}
+
+/**
+ * One-call convenience: raw weekly-volume blocks → the shared MEV summary with
+ * reachability gating applied. Every surface that has the raw blocks (home
+ * server + client fetch, the "This Week vs MEV" widget, both AtrophyRiskAlerts)
+ * should use this so the fine-muscle warnings are gated identically everywhere.
+ */
+export function summarizeWeeklyVolume(blocks: WeeklyVolumeBlockRow[]): WeeklyMevSummary | null {
+  return computeWeeklyMevSummary(
+    computeWeeklyMuscleVolume(blocks),
+    computeReachableMuscles(blocks)
+  );
 }
 
 /**
@@ -263,6 +362,7 @@ export function mevSummaryToVolumeData(summary: WeeklyMevSummary | null): Muscle
         landmarks: { mev: entry.mev, mav: entry.mev, mrv: entry.mev },
         status: 'below_mev',
         percentOfMrv: 0,
+        contributingExercises: entry.exercises,
       };
     })
     .filter((d): d is MuscleVolumeData => d !== null);
