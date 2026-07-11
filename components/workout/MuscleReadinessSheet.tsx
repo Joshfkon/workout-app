@@ -3,10 +3,12 @@
 import { useState } from 'react';
 import { BottomSheet } from './BottomSheet';
 import { useMuscleReadiness } from '@/hooks/useMuscleReadiness';
-import type {
-  ReadinessRow,
-  ReadinessChild,
-  ReadinessTarget,
+import {
+  formatReadyEta,
+  type ReadinessRow,
+  type ReadinessChild,
+  type ReadinessTarget,
+  type NextReadyTarget,
 } from '@/app/(dashboard)/dashboard/workout/[id]/_lib/readiness';
 import { zoneBarClass, zoneTextClass, zoneBandLabel } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 import type { MuscleRecoveryResult } from '@/services/muscleRecovery';
@@ -166,6 +168,7 @@ function ReadinessRowView({ row }: { row: ReadinessRow }) {
 export function MuscleReadinessContent({
   rows,
   targets,
+  nextUp = null,
   isLoading,
   collapsible = false,
   loadingTestId = 'readiness-sheet-loading',
@@ -174,6 +177,7 @@ export function MuscleReadinessContent({
 }: {
   rows: ReadinessRow[];
   targets: ReadinessTarget[];
+  nextUp?: NextReadyTarget | null;
   isLoading: boolean;
   collapsible?: boolean;
   loadingTestId?: string;
@@ -185,20 +189,40 @@ export function MuscleReadinessContent({
     setShowAllState(value);
     persistShowAll(persistKey, value);
   };
-  const targetNames = targets.map((t) => t.displayName).join(', ');
 
   const visibleRows = collapsible && !showAll ? rows.slice(0, DEFAULT_ROW_CAP) : rows;
   const hiddenCount = rows.length - visibleRows.length;
 
   return (
     <>
-      {/* Top strip: the answer at a glance (fine children surface here). */}
+      {/* Top strip: the answer at a glance (fine children surface here). This is
+          derived from the SAME rows the badges below show, so a muscle can never
+          appear here as ready-now while its row reads Recovering. */}
       <div className="mb-2 rounded-lg bg-surface-800/60 px-3 py-2.5">
         <p className="text-[11px] uppercase tracking-wide text-surface-500">Good targets today</p>
         <p className="text-sm text-surface-100 mt-0.5" data-testid="readiness-targets">
-          {targets.length > 0
-            ? targetNames
-            : "You're on top of volume — nothing behind and recovered right now."}
+          {targets.length > 0 ? (
+            targets.map((t, i) => (
+              <span key={`${t.muscle}-${t.isChild ? 'c' : 'r'}`}>
+                {i > 0 && <span className="text-surface-500">, </span>}
+                {t.tier === 'soon' ? (
+                  // Ready-soon pick: muted + parenthetical ETA, visibly distinct
+                  // from fully-Fresh picks (a legitimate target for a session
+                  // planned a little ahead, not a ready-now recommendation).
+                  <span className="text-surface-400">
+                    {t.displayName}{' '}
+                    <span className="text-surface-500">(ready {formatReadyEta(t.readyInHours)})</span>
+                  </span>
+                ) : (
+                  t.displayName
+                )}
+              </span>
+            ))
+          ) : nextUp ? (
+            `Nothing urgent — lagging muscles are still recovering. Next up: ${nextUp.displayName} in ${formatReadyEta(nextUp.hoursUntilReady)}.`
+          ) : (
+            "You're on top of volume — nothing behind and recovered right now."
+          )}
         </p>
       </div>
 
@@ -255,7 +279,7 @@ export function MuscleReadinessSheet({
   // against the same instant (and re-stamped on each fresh open).
   const [now] = useState(() => new Date());
 
-  const { rows, targets, isLoading } = useMuscleReadiness({
+  const { rows, targets, nextUp, isLoading } = useMuscleReadiness({
     liveBlocks,
     liveSets,
     now,
@@ -265,7 +289,7 @@ export function MuscleReadinessSheet({
   return (
     <BottomSheet isOpen={isOpen} onClose={onClose} title="Muscle readiness">
       <div data-testid="readiness-sheet">
-        <MuscleReadinessContent rows={rows} targets={targets} isLoading={isLoading} collapsible />
+        <MuscleReadinessContent rows={rows} targets={targets} nextUp={nextUp} isLoading={isLoading} collapsible />
       </div>
     </BottomSheet>
   );

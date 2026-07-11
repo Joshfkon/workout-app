@@ -19,9 +19,10 @@ import { resolveMuscleToStandard } from '@/types/schema';
 import type { RecoverySession, RecoveryExercise } from '@/services/muscleRecovery';
 import {
   buildReadinessRows,
-  topTargets,
+  selectGoodTargets,
   type ReadinessRow,
   type ReadinessTarget,
+  type NextReadyTarget,
 } from '@/app/(dashboard)/dashboard/workout/[id]/_lib/readiness';
 
 /**
@@ -91,6 +92,8 @@ export interface UseMuscleReadinessArgs {
 export interface UseMuscleReadinessResult {
   rows: ReadinessRow[];
   targets: ReadinessTarget[];
+  /** Soonest-ready lagging muscle, set only when `targets` is empty. */
+  nextUp: NextReadyTarget | null;
   isLoading: boolean;
   error: string | null;
 }
@@ -251,11 +254,12 @@ export function useMuscleReadiness({
     [stats, recoveryHistory, now, reachable]
   );
 
-  const targets = useMemo(() => topTargets(rows, 3), [rows]);
+  const { targets, nextUp } = useMemo(() => selectGoodTargets(rows, 3), [rows]);
 
   return {
     rows,
     targets,
+    nextUp,
     isLoading: historyQuery.isLoading,
     error: historyQuery.error ? (historyQuery.error as Error).message : null,
   };
