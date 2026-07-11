@@ -168,7 +168,8 @@ describe('useWorkoutTimer', () => {
           localStorageMock.setItem.mock.calls.length - 1
         ][1]
       );
-      expect(savedState.isPaused).toBe(true);
+      // New model persists a pause timestamp (not an isPaused flag).
+      expect(typeof savedState.pausedAt).toBe('number');
     });
 
     it('does nothing if already paused', () => {
@@ -248,6 +249,90 @@ describe('useWorkoutTimer', () => {
       });
 
       expect(localStorageMock.setItem.mock.calls.length).toBe(callCount);
+    });
+  });
+
+  describe('robust model (regression)', () => {
+    it('restores from the new pausedTotalMs shape', () => {
+      const startTime = Date.now() - 200000; // 200s ago
+      localStorageMock.setItem(
+        `workout_timer_state_${mockSessionId}`,
+        JSON.stringify({ startTime, pausedTotalMs: 30000, pausedAt: null }) // 30s paused
+      );
+
+      const { result } = renderHook(() =>
+        useWorkoutTimer({ sessionId: mockSessionId, startedAt: mockStartedAt })
+      );
+
+      // 200s wall − 30s paused ≈ 170s
+      expect(result.current.elapsedSeconds).toBeGreaterThanOrEqual(169);
+      expect(result.current.elapsedSeconds).toBeLessThanOrEqual(171);
+      expect(result.current.isPaused).toBe(false);
+    });
+
+    it('does not discard accumulated time on pause/resume (the 1:21:15 bug)', () => {
+      // Persisted running session already at ~4875s (1:21:15).
+      const startTime = Date.now() - 4875000;
+      localStorageMock.setItem(
+        `workout_timer_state_${mockSessionId}`,
+        JSON.stringify({ startTime, pausedTotalMs: 0, pausedAt: null })
+      );
+
+      const { result } = renderHook(() =>
+        useWorkoutTimer({ sessionId: mockSessionId, startedAt: mockStartedAt })
+      );
+
+      expect(result.current.elapsedSeconds).toBeGreaterThanOrEqual(4875);
+
+      // Immediately pause and resume — no wall time elapses in between.
+      act(() => { result.current.pause(); });
+      const paused = result.current.elapsedSeconds;
+      expect(paused).toBeGreaterThanOrEqual(4875);
+
+      act(() => { result.current.resume(); });
+      // Must NOT collapse toward zero — the whole point of the fix.
+      expect(result.current.elapsedSeconds).toBe(paused);
+    });
+
+    it('loses no time across many pause/resume cycles', () => {
+      const { result } = renderHook(() =>
+        useWorkoutTimer({ sessionId: mockSessionId, startedAt: mockStartedAt })
+      );
+
+      const before = result.current.elapsedSeconds;
+
+      for (let i = 0; i < 5; i++) {
+        act(() => { result.current.pause(); });
+        act(() => { jest.advanceTimersByTime(30000); }); // 30s paused (should NOT count)
+        act(() => { result.current.resume(); });
+        act(() => { jest.advanceTimersByTime(2000); }); // 2s running (should count)
+      }
+
+      // Only the 5 × 2s of running time is added; paused time is excluded.
+      expect(result.current.elapsedSeconds).toBe(before + 10);
+    });
+
+    it('freezes elapsed across an app-kill/restore while paused', () => {
+      const startTime = Date.now() - 600000; // 10 min ago
+      const pausedAt = Date.now() - 60000; // paused 1 min ago (at elapsed ≈ 540s)
+      localStorageMock.setItem(
+        `workout_timer_state_${mockSessionId}`,
+        JSON.stringify({ startTime, pausedTotalMs: 0, pausedAt })
+      );
+
+      const { result } = renderHook(() =>
+        useWorkoutTimer({ sessionId: mockSessionId, startedAt: mockStartedAt })
+      );
+
+      // Elapsed frozen at the pause moment (≈540s), regardless of the 60s the
+      // app was closed while paused.
+      expect(result.current.isPaused).toBe(true);
+      expect(result.current.elapsedSeconds).toBeGreaterThanOrEqual(539);
+      expect(result.current.elapsedSeconds).toBeLessThanOrEqual(541);
+
+      // More real time passes while still paused — elapsed stays frozen.
+      act(() => { jest.advanceTimersByTime(120000); });
+      expect(result.current.elapsedSeconds).toBeLessThanOrEqual(541);
     });
   });
 
