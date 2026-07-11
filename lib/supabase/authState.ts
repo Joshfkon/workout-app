@@ -40,12 +40,16 @@ export type AuthState =
  * A network / server-side failure that must NOT be read as "logged out".
  * supabase-js wraps unreachable-auth-server / 5xx failures in
  * `AuthRetryableFetchError`; anything with no status or a 5xx status is a
- * transport/server problem, not a rejected token.
+ * transport/server problem, not a rejected token. A thrown value (e.g. a raw
+ * fetch TypeError, or a failed client init) is transient too.
  */
-function isRetryableAuthError(error: { name?: string; status?: number } | null): boolean {
+export function isRetryableAuthError(error: unknown): boolean {
   if (!error) return false;
-  if (error.name === 'AuthRetryableFetchError') return true;
-  const status = error.status;
+  const name = (error as { name?: string }).name;
+  const status = (error as { status?: number }).status;
+  if (name === 'AuthRetryableFetchError') return true;
+  // A thrown error with no HTTP status is a transport/init failure, not a
+  // rejected token.
   if (status === undefined || status === 0) return true;
   return status >= 500;
 }
