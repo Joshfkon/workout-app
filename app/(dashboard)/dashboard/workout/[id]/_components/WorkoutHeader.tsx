@@ -4,12 +4,18 @@
  * WorkoutHeader.tsx
  *
  * Slim sticky header for an in-progress workout (Phase 2.3, per mockup):
- * - left: workout name over "{elapsed} · exercise {n} of {total}"
- * - right: per-exercise progress segments (completed / active / pending),
- *   compact Finish button, and an overflow menu holding the secondary
- *   actions (Add exercise, collapse-all, injuries, readiness, plates, Cancel).
+ * - top row: workout name + "exercise {n} of {total}", a tappable timer
+ *   pill, a compact Finish button, and an overflow menu holding the
+ *   secondary actions (Add exercise, collapse-all, injuries, readiness,
+ *   plates, Cancel).
+ * - progress row: full-width per-exercise progress that can never collide
+ *   with the timer/count text (own row). ≤8 exercises render as individual
+ *   segments; >8 collapse to a single continuous fill bar (completed/total),
+ *   because a dozen tiny dashes aren't readable progress.
  *
- * Purely presentational; all state stays in the page.
+ * Purely presentational; all state stays in the page. The timer pill toggles
+ * pause/resume through the existing `workoutTimer.toggle` — no new
+ * session-state logic here.
  */
 
 import {
@@ -72,6 +78,10 @@ const SEGMENT_CLASS: Record<ExerciseSegmentStatus, string> = {
   pending: 'bg-surface-800',
 };
 
+// Above this many exercises, individual dashes stop reading as progress —
+// switch to a single continuous fill bar (completed / total).
+const MAX_SEGMENTED_EXERCISES = 8;
+
 export function WorkoutHeader({
   workoutName,
   exerciseNumber,
@@ -96,10 +106,18 @@ export function WorkoutHeader({
   const menuItemClass =
     'w-full flex items-center gap-2.5 px-3 py-2 text-sm text-surface-200 hover:bg-surface-700 transition-colors text-left';
 
+  const useSegments = exerciseTotal <= MAX_SEGMENTED_EXERCISES;
+  const completedCount = segments.filter((s) => s === 'completed').length;
+  const fillPct =
+    exerciseTotal > 0
+      ? Math.min(100, Math.round((completedCount / exerciseTotal) * 100))
+      : 0;
+
   return (
     // z-30: must sit above ExerciseCard's sticky header (z-10) and its menus (z-20) so the overflow menu isn't clipped
     <div className="sticky top-0 z-30 bg-surface-950/95 backdrop-blur py-3 -mx-4 px-4">
-      <div className="flex items-center gap-3">
+      {/* Top row: back · name + count · timer pill · Finish · menu */}
+      <div className="flex items-center gap-2.5">
         {/* Minimize (back) — leaves the session running and returns to Train */}
         <button
           onClick={onMinimize}
@@ -110,47 +128,49 @@ export function WorkoutHeader({
           <IconChevronLeft size={22} stroke={2.25} />
         </button>
 
-        {/* Left: name + elapsed / position meta */}
+        {/* Left: name + position meta */}
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-surface-100 truncate">{workoutName}</p>
-          <div className="flex items-center gap-1 text-[11px] text-surface-500">
-            {startedAt && (
-              <>
-                <button
-                  onClick={workoutTimer.toggle}
-                  className={`inline-flex items-center gap-1 tabular-nums transition-colors ${
-                    workoutTimer.isPaused
-                      ? 'text-warning-400 hover:text-warning-300'
-                      : 'hover:text-surface-300'
-                  }`}
-                  title={workoutTimer.isPaused ? 'Resume timer' : 'Pause timer'}
-                >
-                  {workoutTimer.isPaused ? (
-                    <IconPlayerPlay size={11} stroke={2} />
-                  ) : (
-                    <IconPlayerPause size={11} stroke={2} />
-                  )}
-                  {workoutTimer.formattedTime}
-                </button>
-                <span aria-hidden="true">·</span>
-              </>
-            )}
-            <span>
-              exercise {exerciseNumber} of {exerciseTotal}
-            </span>
-          </div>
+          <p className="text-[11px] text-surface-500 truncate">
+            exercise {exerciseNumber} of {exerciseTotal}
+          </p>
         </div>
 
-        {/* Right: progress segments + Finish + overflow menu */}
+        {/* Timer pill — tappable pause/resume, ≥44pt hit area. Paused state is
+            unmistakable: amber fill, ▶ icon, "Paused · m:ss". */}
+        {startedAt && (
+          <button
+            onClick={workoutTimer.toggle}
+            data-testid="workout-timer-pill"
+            data-paused={workoutTimer.isPaused ? 'true' : 'false'}
+            aria-pressed={workoutTimer.isPaused}
+            className={`inline-flex items-center gap-1.5 flex-shrink-0 min-h-[44px] px-3 rounded-full border text-sm font-medium tabular-nums transition-colors ${
+              workoutTimer.isPaused
+                ? 'bg-warning-500/20 border-warning-500/50 text-warning-400 hover:bg-warning-500/30'
+                : 'bg-surface-800/70 border-surface-700 text-surface-200 hover:bg-surface-700 hover:border-surface-600'
+            }`}
+            title={workoutTimer.isPaused ? 'Resume timer' : 'Pause timer'}
+            aria-label={
+              workoutTimer.isPaused
+                ? `Paused at ${workoutTimer.formattedTime}. Resume timer.`
+                : `Elapsed ${workoutTimer.formattedTime}. Pause timer.`
+            }
+          >
+            {workoutTimer.isPaused ? (
+              <IconPlayerPlay size={16} stroke={2.25} />
+            ) : (
+              <IconPlayerPause size={16} stroke={2.25} />
+            )}
+            <span>
+              {workoutTimer.isPaused
+                ? `Paused · ${workoutTimer.formattedTime}`
+                : workoutTimer.formattedTime}
+            </span>
+          </button>
+        )}
+
+        {/* Right: Finish + overflow menu */}
         <div className="flex items-center gap-2.5 flex-shrink-0">
-          <div className="hidden min-[360px]:flex items-center gap-1" aria-hidden="true">
-            {segments.map((status, i) => (
-              <span
-                key={i}
-                className={`w-3.5 h-1 rounded-full ${SEGMENT_CLASS[status]}`}
-              />
-            ))}
-          </div>
           <button
             onClick={onFinishWorkout}
             className="px-4 min-h-[44px] rounded-lg bg-primary-500 text-white text-sm font-medium hover:bg-primary-400 active:bg-primary-600 transition-colors"
@@ -241,6 +261,40 @@ export function WorkoutHeader({
           </div>
         </div>
       </div>
+
+      {/* Progress row — its own row so per-exercise progress can never collide
+          with the timer/count text above. ≤8 exercises: individual segments;
+          >8: a single continuous fill bar (completed / total). */}
+      {exerciseTotal > 0 && (
+        useSegments ? (
+          <div
+            data-testid="workout-progress-segments"
+            className="flex items-center gap-1 mt-2"
+            role="img"
+            aria-label={`Progress: ${completedCount} of ${exerciseTotal} exercises complete`}
+          >
+            {segments.map((status, i) => (
+              <span
+                key={i}
+                className={`flex-1 h-1.5 rounded-full ${SEGMENT_CLASS[status]}`}
+              />
+            ))}
+          </div>
+        ) : (
+          <div
+            data-testid="workout-progress-bar"
+            className="mt-2 h-1.5 rounded-full bg-surface-800 overflow-hidden"
+            role="img"
+            aria-label={`Progress: ${completedCount} of ${exerciseTotal} exercises complete`}
+          >
+            <div
+              data-testid="workout-progress-bar-fill"
+              className="h-full rounded-full bg-success-500 transition-[width] duration-300"
+              style={{ width: `${fillPct}%` }}
+            />
+          </div>
+        )
+      )}
     </div>
   );
 }
