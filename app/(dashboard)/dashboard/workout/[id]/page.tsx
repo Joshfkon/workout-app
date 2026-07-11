@@ -32,7 +32,7 @@ const ExerciseCard = dynamic(
     )
   }
 );
-import { useWorkoutTimer } from '@/hooks/useWorkoutTimer';
+import { useWorkoutTimer, firstLoggedSetTime } from '@/hooks/useWorkoutTimer';
 
 // Dynamic imports for components not needed on initial render
 const WarmupProtocol = dynamic(() => import('@/components/workout').then(m => m.WarmupProtocol), { ssr: false });
@@ -573,10 +573,18 @@ export default function WorkoutPage() {
   // Rest timer hook
   const restTimer = useRestTimer(restTimerOptions);
 
-  // Workout timer hook - tracks total workout duration with pause/resume
+  // Workout timer hook - tracks total workout duration with pause/resume.
+  // Anchored at the FIRST LOGGED SET, not session creation: an empty session
+  // has no meaningful elapsed time, so until a set lands the timer sits at 0:00
+  // and a finish snapshots 0 duration. (Repro from the wild: a session left
+  // open on the add-exercise bug reopened later reading 1:20:00 with no sets.)
+  const timerStartedAt = useMemo(
+    () => firstLoggedSetTime(completedSets),
+    [completedSets]
+  );
   const workoutTimer = useWorkoutTimer({
     sessionId,
-    startedAt: session?.startedAt ?? null,
+    startedAt: timerStartedAt,
   });
 
   // Clear any stale timer when a DIFFERENT session mounts. Deliberately no
