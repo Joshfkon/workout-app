@@ -41,6 +41,21 @@ export function weeklyVolumeWindowStartISO(now: Date = new Date()): string {
   return rollingWindowStartISO(WEEKLY_VOLUME_WINDOW_DAYS, now);
 }
 
+/**
+ * Reachability looks back FURTHER than the 7-day volume window: which fine
+ * muscles a warning can legitimately flag depends on the exercises the user
+ * actually trains, not only what they did this week. A trailing 12 weeks
+ * captures "exercises in the user's rotation" so an occasionally-trained fine
+ * muscle (e.g. glute_med via Cable Hip Abduction) is still warnable at 0 sets
+ * this week, while a muscle no logged exercise can feed stays suppressed.
+ */
+export const REACHABILITY_WINDOW_DAYS = 84;
+
+/** ISO lower bound for the reachability DB range filter. Pass `now` in tests. */
+export function reachabilityWindowStartISO(now: Date = new Date()): string {
+  return rollingWindowStartISO(REACHABILITY_WINDOW_DAYS, now);
+}
+
 // MEV per standard muscle (20 muscles) — the threshold for the 'low' status.
 export const MEV_TARGETS: Record<StandardMuscleGroup, number> = {
   chest_upper: 4, chest_lower: 4,
@@ -90,7 +105,9 @@ const FINE_MUSCLE_SET = new Set<StandardMuscleGroup>(FINE_MUSCLES);
  * tagging: a library of purely coarse 'glutes'/'back'/'abs' work yields a set
  * WITHOUT glute_med / erectors / obliques.
  */
-export function computeReachableMuscles(blocks: WeeklyVolumeBlockRow[]): Set<StandardMuscleGroup> {
+export function computeReachableMuscles(
+  blocks: Array<{ exercises: { primary_muscle?: string | null; secondary_muscles?: string[] | null } | null }>
+): Set<StandardMuscleGroup> {
   const reachable = new Set<StandardMuscleGroup>();
   for (const block of blocks) {
     const exercise = block.exercises;

@@ -19,6 +19,8 @@ import {
   computeWeeklyMevSummary,
   summarizeWeeklyVolume,
   isMuscleWarnable,
+  reachabilityWindowStartISO,
+  weeklyVolumeWindowStartISO,
   FINE_MUSCLES,
   type VolumeAccumulator,
   type WeeklyVolumeBlockRow,
@@ -117,6 +119,30 @@ describe('reachability gating (never warn on an unsatisfiable muscle)', () => {
     expect(gm).toBeDefined();
     // 1 set < MEV(2) → still flagged, but now it's clearable.
     expect(gm).toMatchObject({ sets: 1, belowMev: true });
+  });
+
+  it('reachability window looks back further than the 7-day volume window', () => {
+    const now = new Date('2026-07-11T12:00:00.000Z');
+    // A wider window is what keeps an occasionally-trained fine muscle warnable
+    // at 0 sets this week (reachability from history, not just this week).
+    expect(new Date(reachabilityWindowStartISO(now)).getTime()).toBeLessThan(
+      new Date(weeklyVolumeWindowStartISO(now)).getTime()
+    );
+  });
+
+  it('a fine muscle reachable from history but untrained this week is still warned', () => {
+    // This week: only coarse chest work → 0 glute_med. But the (wider-window)
+    // reachable set includes glute_med, so it must NOT be suppressed — the user
+    // trains it occasionally and is at 0 this week.
+    const thisWeek = [block('press', 'chest', ['front_delts', 'triceps'], 4, 'Bench')];
+    const stats = computeWeeklyMuscleVolume(thisWeek);
+    const reachable = new Set<StandardMuscleGroup>([
+      ...computeReachableMuscles(thisWeek),
+      'glutes',
+      'glute_med', // from the 12-week history, not this week
+    ]);
+    const summary = computeWeeklyMevSummary(stats, reachable)!;
+    expect(summary.entries.some((e) => e.muscle === 'glute_med')).toBe(true);
   });
 
   it('coarse muscles are always warnable; fine muscles gate on reachability', () => {

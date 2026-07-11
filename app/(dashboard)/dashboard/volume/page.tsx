@@ -72,7 +72,7 @@ export default function VolumeProfilePage() {
   // Below-MEV muscles for the atrophy-risk warning come from the SAME coarse
   // rows the bars render (shared counter + band), so the warning, the bars and
   // the "This Week vs MEV" card can never disagree on count or zone-status.
-  const { stats: volumeStats, reachable } = useWeeklyMevSummary();
+  const { stats: volumeStats, reachable, loaded: volumeLoaded } = useWeeklyMevSummary();
 
   // Calculate confidence summary
   const confidenceSummary = useMemo(() => {
@@ -103,9 +103,11 @@ export default function VolumeProfilePage() {
   );
 
   // Find muscles below MEV (for atrophy risk alert) — same coarse rows as bars.
+  // Gate on the weekly-volume load: before it resolves, stats are [] and every
+  // muscle would falsely read below MEV (spurious atrophy alert).
   const musclesBelowMev = useMemo(
-    () => belowMevVolumeData(volumeRows),
-    [volumeRows]
+    () => (volumeLoaded ? belowMevVolumeData(volumeRows) : []),
+    [volumeLoaded, volumeRows]
   );
 
   if (isLoading) {
@@ -194,16 +196,24 @@ export default function VolumeProfilePage() {
           </div>
         </div>
 
-        <div>
-          {volumeRows.map((row) => (
-            <VolumeZoneBar
-              key={row.key}
-              row={row}
-              expanded={expandedRows.has(row.muscle as CoarseMuscle)}
-              onToggle={() => toggleRow(row.muscle as CoarseMuscle)}
-            />
-          ))}
-        </div>
+        {volumeLoaded ? (
+          <div>
+            {volumeRows.map((row) => (
+              <VolumeZoneBar
+                key={row.key}
+                row={row}
+                expanded={expandedRows.has(row.muscle as CoarseMuscle)}
+                onToggle={() => toggleRow(row.muscle as CoarseMuscle)}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-3 animate-pulse" aria-hidden="true">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="h-10 bg-surface-800 rounded" />
+            ))}
+          </div>
+        )}
       </Card>
 
       {/* Enhanced Mode Toggle — same persisted profile field as Settings.

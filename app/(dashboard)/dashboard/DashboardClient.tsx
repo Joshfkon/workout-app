@@ -708,10 +708,11 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
 
   // Muscles below MEV for the atrophy-risk alert — the coarse below-MEV rows
   // (plus lagging fine children) from the SAME model the bars and glance tile
-  // use, with the per-exercise breakdown, so nothing can diverge.
+  // use, with the per-exercise breakdown, so nothing can diverge. Guarded on
+  // non-empty volume so an unloaded/empty week doesn't flash "all below MEV".
   const musclesBelowMev = useMemo(
-    (): MuscleVolumeData[] => belowMevVolumeData(volumeRows),
-    [volumeRows]
+    (): MuscleVolumeData[] => (muscleVolume.length > 0 ? belowMevVolumeData(volumeRows) : []),
+    [muscleVolume, volumeRows]
   );
 
   // Normalize goal to the Goal type expected by AtrophyRiskAlert
@@ -1135,8 +1136,11 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         const weeklyBlocks = weeklyBlocksResult.data;
         if (weeklyBlocks && weeklyBlocks.length > 0) {
           setMuscleVolume(computeWeeklyMuscleVolume(weeklyBlocks as any));
-          // Refresh the fine-muscle warning gate from the same blocks.
-          setReachableMuscles(Array.from(computeReachableMuscles(weeklyBlocks as any)));
+          // UNION this week's reachable muscles into the gate — never narrow the
+          // server's 12-week reachability (which keeps occasionally-trained fine
+          // muscles warnable), only widen it with anything new logged today.
+          const thisWeek = Array.from(computeReachableMuscles(weeklyBlocks as any));
+          setReachableMuscles((prev) => Array.from(new Set([...(prev ?? []), ...thisWeek])));
         }
 
         // Lift trends for the "Lifts" glance tile (same pure helper the

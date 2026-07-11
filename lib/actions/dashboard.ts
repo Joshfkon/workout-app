@@ -10,6 +10,7 @@ import {
   computeWeeklyMuscleVolume,
   computeReachableMuscles,
   weeklyVolumeWindowStartISO,
+  reachabilityWindowStartISO,
   type MuscleVolumeStats,
 } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 import type { StandardMuscleGroup } from '@/types/schema';
@@ -397,18 +398,31 @@ export async function fetchWeeklyMuscleVolume(userId: string): Promise<WeeklyMus
   // Shared local-day-anchored window (see weeklyVolumeWindowStartISO) so this
   // server first-paint value matches the client fast-path and the volume page.
   const weekStartIso = weeklyVolumeWindowStartISO();
+  // Reachability looks back further (12 weeks) so a fine muscle the user trains
+  // occasionally is still warnable at 0 sets this week (see reachabilityWindow).
+  const reachStartIso = reachabilityWindowStartISO();
 
-  const { data } = await supabase
-    .from('exercise_blocks')
-    .select(`id, exercises (id, name, primary_muscle, secondary_muscles), set_logs (id, is_warmup),
-      workout_sessions!inner (user_id, completed_at, state)`)
-    .eq('workout_sessions.user_id', userId)
-    .eq('workout_sessions.state', 'completed')
-    .gte('workout_sessions.completed_at', weekStartIso);
+  const [volumeRes, reachRes] = await Promise.all([
+    supabase
+      .from('exercise_blocks')
+      .select(`id, exercises (id, name, primary_muscle, secondary_muscles), set_logs (id, is_warmup),
+        workout_sessions!inner (user_id, completed_at, state)`)
+      .eq('workout_sessions.user_id', userId)
+      .eq('workout_sessions.state', 'completed')
+      .gte('workout_sessions.completed_at', weekStartIso),
+    supabase
+      .from('exercise_blocks')
+      .select(`exercises (primary_muscle, secondary_muscles),
+        workout_sessions!inner (user_id, completed_at, state)`)
+      .eq('workout_sessions.user_id', userId)
+      .eq('workout_sessions.state', 'completed')
+      .gte('workout_sessions.completed_at', reachStartIso),
+  ]);
 
-  const blocks = (data as any) || [];
+  const blocks = (volumeRes.data as any) || [];
+  const reachBlocks = (reachRes.data as any) || [];
   return {
     stats: computeWeeklyMuscleVolume(blocks),
-    reachable: Array.from(computeReachableMuscles(blocks)),
+    reachable: Array.from(computeReachableMuscles(reachBlocks)),
   };
 }

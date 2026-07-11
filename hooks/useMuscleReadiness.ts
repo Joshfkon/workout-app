@@ -11,7 +11,9 @@ import type { ExerciseBlockWithExercise } from '@/app/(dashboard)/dashboard/work
 import {
   accumulateExerciseVolume,
   volumeAccumulatorToStats,
+  computeReachableMuscles,
   weeklyVolumeWindowStartISO,
+  reachabilityWindowStartISO,
   type VolumeAccumulator,
   type MuscleVolumeStats,
 } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
@@ -156,6 +158,30 @@ export function useMuscleReadiness({
 
   const historyRows = useMemo(() => historyQuery.data ?? [], [historyQuery.data]);
 
+  // Reachability looks back 12 weeks (vs the 7-day volume window) so a fine
+  // muscle the user trains occasionally is still warnable at 0 sets this week.
+  const reachStart = useMemo(() => reachabilityWindowStartISO(now), [now]);
+  const reachabilityQuery = useQuery<StandardMuscleGroup[]>({
+    queryKey: ['muscle-readiness-reachable', userId, reachStart],
+    enabled: enabled && !!userId,
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const supabase = createUntypedClient();
+      const { data, error } = await supabase
+        .from('exercise_blocks')
+        .select(`exercises!inner ( primary_muscle, secondary_muscles ),
+          workout_sessions!inner ( user_id, completed_at, state )`)
+        .eq('workout_sessions.user_id', userId)
+        .eq('workout_sessions.state', 'completed')
+        .gte('workout_sessions.completed_at', reachStart);
+      if (error) throw error;
+      const blocks = ((data as Array<{ exercises: { primary_muscle: string | null; secondary_muscles: string[] | null } | null }> | null) ?? []).map(
+        (b) => ({ exercises: b.exercises ? { primary_muscle: b.exercises.primary_muscle, secondary_muscles: b.exercises.secondary_muscles } : null })
+      );
+      return Array.from(computeReachableMuscles(blocks));
+    },
+  });
+
   // Working (non-warmup) live sets grouped by block.
   const liveWorkingSetsByBlock = useMemo(() => {
     const map = new Map<string, SetLog[]>();
@@ -168,21 +194,12 @@ export function useMuscleReadiness({
     return map;
   }, [liveSets]);
 
-  // Merged weekly volume: DB history + live session, via the shared volume
-  // accumulator so credits (and the resulting coarse rows / zones) match the
-  // volume card and warning exactly. Also derive the reachability set from the
-  // same exercises so fine children gate identically.
-  const { stats, reachable } = useMemo((): { stats: MuscleVolumeStats[]; reachable: Set<StandardMuscleGroup> } => {
+  // Merged weekly volume (7-day): DB history + live session, via the shared
+  // volume accumulator so credits (and the resulting coarse rows / zones) match
+  // the volume card and warning exactly.
+  const stats = useMemo((): MuscleVolumeStats[] => {
     const acc: VolumeAccumulator = {};
-    const reachableSet = new Set<StandardMuscleGroup>();
-    const markReachable = (primary: string | null, secondary: string[]) => {
-      for (const token of [primary, ...secondary]) {
-        if (!token) continue;
-        for (const std of resolveMuscleToStandard(token)) reachableSet.add(std);
-      }
-    };
 
-    // DB history.
     for (const s of historyRows) {
       for (const ex of s.exercises) {
         accumulateExerciseVolume(
@@ -190,14 +207,11 @@ export function useMuscleReadiness({
           { id: ex.primaryMuscle || 'x', name: ex.primaryMuscle || 'x', primary_muscle: ex.primaryMuscle, secondary_muscles: ex.secondaryMuscles },
           ex.sets.length
         );
-        markReachable(ex.primaryMuscle, ex.secondaryMuscles);
       }
     }
 
-    // Live session.
     for (const block of liveBlocks) {
       const workingSets = liveWorkingSetsByBlock.get(block.id)?.length ?? 0;
-      markReachable(block.exercise.primaryMuscle, block.exercise.secondaryMuscles);
       if (workingSets === 0) continue;
       accumulateExerciseVolume(
         acc,
@@ -211,8 +225,21 @@ export function useMuscleReadiness({
       );
     }
 
-    return { stats: volumeAccumulatorToStats(acc), reachable: reachableSet };
+    return volumeAccumulatorToStats(acc);
   }, [historyRows, liveBlocks, liveWorkingSetsByBlock]);
+
+  // Reachability (12-week window + the live session's exercises), so fine
+  // children gate on what the user actually trains, not just this week.
+  const reachable = useMemo((): Set<StandardMuscleGroup> => {
+    const set = new Set<StandardMuscleGroup>(reachabilityQuery.data ?? []);
+    for (const block of liveBlocks) {
+      for (const token of [block.exercise.primaryMuscle, ...block.exercise.secondaryMuscles]) {
+        if (!token) continue;
+        for (const std of resolveMuscleToStandard(token)) set.add(std);
+      }
+    }
+    return set;
+  }, [reachabilityQuery.data, liveBlocks]);
 
   // Recovery history: DB sessions + the live session (timestamped `now`).
   const recoveryHistory = useMemo<RecoverySession[]>(() => {
