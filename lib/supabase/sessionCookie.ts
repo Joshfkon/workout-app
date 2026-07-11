@@ -40,14 +40,20 @@ function readAuthTokenRaw(cookies: SimpleCookie[]): string | null {
   const auth = cookies.filter((c) => c.name.includes('-auth-token'));
   if (auth.length === 0) return null;
 
+  // Match @supabase/ssr's combineChunks precedence: prefer the current
+  // (unchunked) base cookie, and only reconstruct from `.0`, `.1`, ... chunks
+  // when the base is absent. During a chunked<->unchunked transition, stale
+  // chunk cookies can linger alongside a fresh base cookie — reading chunks
+  // first would validate that stale value instead of the live session.
+  const base = auth.find((c) => !isChunkName(c.name));
+  if (base?.value) return base.value;
+
   const chunks = auth
     .filter((c) => isChunkName(c.name))
     .sort((a, b) => Number(a.name.split('.').pop()) - Number(b.name.split('.').pop()));
-
   if (chunks.length > 0) return chunks.map((c) => c.value).join('');
 
-  const base = auth.find((c) => !isChunkName(c.name)) ?? auth[0];
-  return base.value || null;
+  return null;
 }
 
 function base64UrlDecode(b64url: string): string {

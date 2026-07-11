@@ -53,6 +53,31 @@ describe('isSessionCookieValid', () => {
     expect(isSessionCookieValid(cookies, NOW)).toBe(true);
   });
 
+  it('prefers the current base cookie over lingering stale chunks (chunk<->unchunk transition)', () => {
+    // Matches @supabase/ssr combineChunks precedence: base cookie wins.
+    const fresh = encodeSession({ expires_at: nowSec + 3600, user: { id: 'fresh' } });
+    const staleExpired = encodeSession({ expires_at: nowSec - 3600, user: { id: 'stale' } });
+    const mid = Math.floor(staleExpired.length / 2);
+    const cookies = [
+      cookie('sb-abcdef-auth-token.0', staleExpired.slice(0, mid)),
+      cookie('sb-abcdef-auth-token.1', staleExpired.slice(mid)),
+      cookie('sb-abcdef-auth-token', fresh),
+    ];
+    // Reading chunks first would see the expired session and return false; the
+    // fresh base cookie must win.
+    expect(isSessionCookieValid(cookies, NOW)).toBe(true);
+  });
+
+  it('falls back to chunks only when the base cookie is absent', () => {
+    const value = encodeSession({ access_token: 'a'.repeat(200), expires_at: nowSec + 3600, user: { id: 'u1' } });
+    const mid = Math.floor(value.length / 2);
+    const cookies = [
+      cookie('sb-abcdef-auth-token.0', value.slice(0, mid)),
+      cookie('sb-abcdef-auth-token.1', value.slice(mid)),
+    ];
+    expect(isSessionCookieValid(cookies, NOW)).toBe(true);
+  });
+
   it('returns false when no auth cookie is present (genuinely signed out)', () => {
     expect(isSessionCookieValid([cookie('other', 'x')], NOW)).toBe(false);
     expect(isSessionCookieValid([], NOW)).toBe(false);
