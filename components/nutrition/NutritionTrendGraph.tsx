@@ -15,7 +15,12 @@ import {
   ReferenceLine,
 } from 'recharts';
 import { createUntypedClient } from '@/lib/supabase/client';
-import { getLocalDateString, formatDate } from '@/lib/utils';
+import {
+  getLocalDateString,
+  formatChartTickDate,
+  dateTickStep,
+  showDateTick,
+} from '@/lib/utils';
 import type { FoodLogEntry, NutritionTargets } from '@/types/nutrition';
 
 interface DailyData {
@@ -163,13 +168,16 @@ export function NutritionTrendGraph({ targets }: NutritionTrendGraphProps) {
     const startDate = new Date();
     startDate.setDate(today.getDate() - days + 1);
 
+    // Include the year in tick labels only when the range crosses a year boundary.
+    const spansYear = startDate.getFullYear() !== today.getFullYear();
+
     for (let d = new Date(startDate); d <= today; d.setDate(d.getDate() + 1)) {
       const dateStr = getLocalDateString(d);
       const data = dateMap.get(dateStr);
 
       result.push({
         date: dateStr,
-        displayDate: formatDate(dateStr, { month: 'short', day: 'numeric' }),
+        displayDate: formatChartTickDate(dateStr, spansYear),
         calories: data?.calories || 0,
         protein: data?.protein || 0,
         carbs: data?.carbs || 0,
@@ -220,6 +228,11 @@ export function NutritionTrendGraph({ targets }: NutritionTrendGraphProps) {
     const max = Math.max(...allMacros, ...targetMacros);
     return [0, Math.ceil(max * 1.1 / 50) * 50];
   }, [chartData, targets]);
+
+  // Thin x-axis date ticks by range so labels don't overlap on small screens.
+  const tickStep = dateTickStep(days);
+  const formatXAxisTick = (value: string, index: number) =>
+    showDateTick(index, chartData.length, tickStep) ? value : '';
 
   if (isLoading) {
     return (
@@ -323,9 +336,15 @@ export function NutritionTrendGraph({ targets }: NutritionTrendGraphProps) {
                 <XAxis
                   dataKey="displayDate"
                   stroke="#71717a"
-                  fontSize={11}
+                  fontSize={10}
                   tickLine={false}
-                  interval={days <= 14 ? 0 : Math.floor(days / 7)}
+                  interval={0}
+                  minTickGap={0}
+                  tickFormatter={formatXAxisTick}
+                  angle={-35}
+                  textAnchor="end"
+                  height={44}
+                  tickMargin={6}
                 />
                 <YAxis
                   stroke="#71717a"
@@ -343,7 +362,7 @@ export function NutritionTrendGraph({ targets }: NutritionTrendGraphProps) {
                     strokeWidth={2}
                     label={{
                       value: `Target: ${targets.calories}`,
-                      position: 'right',
+                      position: 'insideTopRight',
                       fontSize: 10,
                       fill: '#22c55e',
                     }}
@@ -366,9 +385,15 @@ export function NutritionTrendGraph({ targets }: NutritionTrendGraphProps) {
                 <XAxis
                   dataKey="displayDate"
                   stroke="#71717a"
-                  fontSize={11}
+                  fontSize={10}
                   tickLine={false}
-                  interval={days <= 14 ? 0 : Math.floor(days / 7)}
+                  interval={0}
+                  minTickGap={0}
+                  tickFormatter={formatXAxisTick}
+                  angle={-35}
+                  textAnchor="end"
+                  height={44}
+                  tickMargin={6}
                 />
                 <YAxis
                   stroke="#71717a"
