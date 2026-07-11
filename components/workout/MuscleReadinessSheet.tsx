@@ -9,12 +9,38 @@ import type {
   ReadinessTarget,
 } from '@/app/(dashboard)/dashboard/workout/[id]/_lib/readiness';
 import { zoneBarClass, zoneTextClass, zoneBandLabel } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
-import type { RecoveryStatus } from '@/services/muscleRecovery';
+import type { MuscleRecoveryResult } from '@/services/muscleRecovery';
 import type { SetLog } from '@/types/schema';
 import type { ExerciseBlockWithExercise } from '@/app/(dashboard)/dashboard/workout/[id]/_lib/types';
 
 /** Default number of coarse rows shown before the "+N more" expander. */
 const DEFAULT_ROW_CAP = 6;
+
+/**
+ * Expander state is remembered per browser session so a user who expands the
+ * full list once doesn't have to re-expand it every time the sheet re-mounts
+ * (it's lazy-mounted on each open) or the empty-workout inline placement
+ * re-renders. Both surfaces share the key so "show me everything" carries over.
+ */
+const SHOW_ALL_STORAGE_KEY = 'hypertrack:readiness-show-all';
+
+function readShowAll(key: string): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.sessionStorage.getItem(key) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function persistShowAll(key: string, value: boolean): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.setItem(key, value ? '1' : '0');
+  } catch {
+    /* sessionStorage unavailable (private mode / SSR) — degrade to in-memory. */
+  }
+}
 
 /**
  * MuscleReadinessSheet — the in-workout "which muscles should I hit today?"
@@ -36,11 +62,14 @@ interface MuscleReadinessSheetProps {
   liveSets: SetLog[];
 }
 
-const RECOVERY_BADGE: Record<RecoveryStatus, { label: string; className: string }> = {
+const RECOVERY_BADGE: Record<MuscleRecoveryResult['status'], { label: string; className: string }> = {
   fresh: { label: 'Fresh', className: 'bg-success-500/15 text-success-400' },
   recovering: { label: 'Recovering', className: 'bg-warning-500/15 text-warning-400' },
   fatigued: { label: 'Fatigued', className: 'bg-surface-700 text-surface-400' },
 };
+
+/** Shown for a muscle with no training in the window — no recovery estimate. */
+const NO_DATA_BADGE = { label: 'No recent data', className: 'bg-surface-800 text-surface-500' };
 
 /** "ready in ~Xh" — coarse, human-readable time until Fresh. */
 function formatReadyIn(hours: number): string {
@@ -57,12 +86,15 @@ function barFillPct(sets: number, mrv: number): number {
   return Math.min(100, Math.max(0, (sets / maxDisplay) * 100));
 }
 
-function RecoveryBadge({ status, hoursUntilReady, muscle }: { status: RecoveryStatus; hoursUntilReady: number; muscle: string }) {
-  const badge = RECOVERY_BADGE[status];
-  const readyIn = status === 'fresh' ? '' : formatReadyIn(hoursUntilReady);
+function RecoveryBadge({ recovery, muscle }: { recovery: MuscleRecoveryResult; muscle: string }) {
+  // Never trained in the window → no recovery estimate, just a neutral "no
+  // recent data" chip (the volume bar still shows the 0-set target).
+  const noData = recovery.lastTrainedAt === null;
+  const badge = noData ? NO_DATA_BADGE : RECOVERY_BADGE[recovery.status];
+  const readyIn = noData || recovery.status === 'fresh' ? '' : formatReadyIn(recovery.hoursUntilReady);
   return (
     <div className="flex flex-col items-end gap-0.5 flex-shrink-0 w-[92px]">
-      <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${badge.className}`} data-testid={`readiness-badge-${muscle}`}>
+      <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium text-right ${badge.className}`} data-testid={`readiness-badge-${muscle}`}>
         {badge.label}
       </span>
       {readyIn && <span className="text-[10px] text-surface-500">{readyIn}</span>}
@@ -85,7 +117,7 @@ function ChildRowView({ child }: { child: ReadinessChild }) {
           <div className={`h-full rounded-full ${zoneBarClass(child.zone, child.sets)}`} style={{ width: `${barFillPct(child.sets, child.band.mrv)}%` }} />
         </div>
       </div>
-      <RecoveryBadge status={child.recovery.status} hoursUntilReady={child.recovery.hoursUntilReady} muscle={child.muscle} />
+      <RecoveryBadge recovery={child.recovery} muscle={child.muscle} />
     </div>
   );
 }
@@ -106,7 +138,7 @@ function ReadinessRowView({ row }: { row: ReadinessRow }) {
             <div className={`h-full rounded-full ${zoneBarClass(row.zone, row.sets)}`} style={{ width: `${barFillPct(row.sets, row.band.mrv)}%` }} />
           </div>
         </div>
-        <RecoveryBadge status={row.recovery.status} hoursUntilReady={row.recovery.hoursUntilReady} muscle={row.muscle} />
+        <RecoveryBadge recovery={row.recovery} muscle={row.muscle} />
       </div>
       {/* Lagging fine children surface under their parent. */}
       {row.children.length > 0 && (
@@ -127,32 +159,35 @@ function ReadinessRowView({ row }: { row: ReadinessRow }) {
  * `useMuscleReadiness`) so both surfaces render identical UI off the same data
  * path.
  *
- * `maxRows` hard-trims the list for the compact inline variant. `collapsible`
- * (the sheet) instead shows a 6-row cap with a "+N more" / "Show less" toggle so
- * fatigued muscles that sink to the bottom stay reachable.
+ * `collapsible` shows a 6-row cap with a "+N more" / "Show less" toggle so
+ * fatigued muscles that sink to the bottom stay reachable; the toggle state is
+ * remembered per session (see SHOW_ALL_STORAGE_KEY).
  */
 export function MuscleReadinessContent({
   rows,
   targets,
   isLoading,
-  maxRows,
   collapsible = false,
   loadingTestId = 'readiness-sheet-loading',
   showFootnote = true,
+  persistKey = SHOW_ALL_STORAGE_KEY,
 }: {
   rows: ReadinessRow[];
   targets: ReadinessTarget[];
   isLoading: boolean;
-  maxRows?: number;
   collapsible?: boolean;
   loadingTestId?: string;
   showFootnote?: boolean;
+  persistKey?: string;
 }) {
-  const [showAll, setShowAll] = useState(false);
+  const [showAll, setShowAllState] = useState(() => readShowAll(persistKey));
+  const setShowAll = (value: boolean) => {
+    setShowAllState(value);
+    persistShowAll(persistKey, value);
+  };
   const targetNames = targets.map((t) => t.displayName).join(', ');
 
-  const capped = collapsible && !showAll ? rows.slice(0, DEFAULT_ROW_CAP) : rows;
-  const visibleRows = typeof maxRows === 'number' ? capped.slice(0, maxRows) : capped;
+  const visibleRows = collapsible && !showAll ? rows.slice(0, DEFAULT_ROW_CAP) : rows;
   const hiddenCount = rows.length - visibleRows.length;
 
   return (
