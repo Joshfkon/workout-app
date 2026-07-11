@@ -10,6 +10,7 @@
 import {
   estimateIntervalTDEE,
   computeTrendWeights,
+  detectPhaseBoundaries,
   type WeighIn,
   type IntakeDay,
 } from '../interval-tdee';
@@ -180,46 +181,93 @@ describe('estimateIntervalTDEE — single weigh-in', () => {
   });
 });
 
-describe('estimateIntervalTDEE — phase transition (cut → bulk)', () => {
-  it('a 4 lb water jump over the boundary is excluded, no TDEE collapse', () => {
-    // 30 days of maintenance intake at 2600. A cut→bulk phase change happens on
-    // day -20 with a 4 lb water jump over the following 5 days. Without phase
-    // handling, the boundary interval would read intake 2600 - (4*3500/5) ≈ -200
-    // → an absurd TDEE collapse.
-    const intakeDays = dailyIntake(NOW, -30, 0, 2600);
+// Shared fixture for the phase-transition scenario: 30 days of maintenance
+// intake at 2600, a cut→bulk change on day -20 with a 4 lb water jump over the
+// following 5 days, then a stable higher level. Without phase handling the
+// boundary interval reads intake 2600 - (4*3500/5) ≈ -200 → an absurd collapse.
+function phaseScenario() {
+  const intakeDays = dailyIntake(NOW, -30, 0, 2600);
+  const weighIns: WeighIn[] = [];
+  for (let k = -30; k <= -20; k += 5) weighIns.push({ date: dateAt(NOW, k), weightLb: 180 });
+  weighIns.push({ date: dateAt(NOW, -15), weightLb: 184 }); // water jump
+  for (let k = -10; k <= 0; k += 5) weighIns.push({ date: dateAt(NOW, k), weightLb: 184 });
+  return { intakeDays, weighIns };
+}
 
-    const weighIns: WeighIn[] = [];
-    // Pre-change: flat 180.
-    for (let k = -30; k <= -20; k += 5) weighIns.push({ date: dateAt(NOW, k), weightLb: 180 });
-    // Water jump over 5 days after the change.
-    weighIns.push({ date: dateAt(NOW, -15), weightLb: 184 });
-    // Post-change stabilized around 184.
-    for (let k = -10; k <= 0; k += 5) weighIns.push({ date: dateAt(NOW, k), weightLb: 184 });
-
-    const phaseChanges = [dateAt(NOW, -20)];
-
+describe('estimateIntervalTDEE — phase transition from the phase setting', () => {
+  it('an explicit boundary excludes the water-jump window, no TDEE collapse', () => {
+    const { intakeDays, weighIns } = phaseScenario();
     const withPhase = estimateIntervalTDEE({
       now: NOW,
       weighIns,
       intakeDays,
       formulaTDEE: 2600,
       formulaWeightLb: 182,
-      phaseChanges,
+      phaseChanges: [dateAt(NOW, -20)],
+      // Isolate the setting-driven path from data-driven detection.
+      options: { detectPhaseChangesFromData: false },
     });
 
-    // Estimate must NOT collapse — should stay in a sane band near 2600.
     expect(withPhase.estimatedTDEE).toBeGreaterThan(2300);
     expect(withPhase.warnings.some((w) => w.kind === 'phase_transition')).toBe(true);
 
-    // Sanity: without phase handling the boundary interval drags it far lower.
-    const withoutPhase = estimateIntervalTDEE({
+    // With no boundary at all, the jump interval drags the estimate far lower.
+    const noHandling = estimateIntervalTDEE({
+      now: NOW,
+      weighIns,
+      intakeDays,
+      formulaTDEE: 2600,
+      formulaWeightLb: 182,
+      options: { detectPhaseChangesFromData: false },
+    });
+    expect(withPhase.estimatedTDEE).toBeGreaterThan(noHandling.estimatedTDEE);
+  });
+});
+
+describe('estimateIntervalTDEE — phase transition inferred from the data', () => {
+  it('detects the boundary with no phase setting and avoids the collapse', () => {
+    const { intakeDays, weighIns } = phaseScenario();
+
+    // No phaseChanges passed — detection is on by default.
+    const detected = estimateIntervalTDEE({
       now: NOW,
       weighIns,
       intakeDays,
       formulaTDEE: 2600,
       formulaWeightLb: 182,
     });
-    expect(withPhase.estimatedTDEE).toBeGreaterThan(withoutPhase.estimatedTDEE);
+
+    expect(detected.inferredPhaseChanges).toContain(dateAt(NOW, -20));
+    expect(detected.estimatedTDEE).toBeGreaterThan(2300);
+    expect(detected.warnings.some((w) => w.kind === 'phase_transition')).toBe(true);
+
+    // Turning detection off (and passing no setting) lets it collapse — proving
+    // the data-driven detector is what prevents the crash here.
+    const undetected = estimateIntervalTDEE({
+      now: NOW,
+      weighIns,
+      intakeDays,
+      formulaTDEE: 2600,
+      formulaWeightLb: 182,
+      options: { detectPhaseChangesFromData: false },
+    });
+    expect(detected.estimatedTDEE).toBeGreaterThan(undetected.estimatedTDEE);
+  });
+
+  it('does NOT flag reverting scale noise as a phase change', () => {
+    // ±1.5 lb noise around a flat 200 lb, daily intake at maintenance. Steps
+    // are small and revert, so nothing should be inferred.
+    const intakeDays = dailyIntake(NOW, -42, 0, 2700);
+    const noise = [0.8, -1.3, 1.5, -0.6, 1.1, -1.5, 0.4, -0.9, 1.2, -1.1, 0.6, -0.3, 1.4, -1.2, 0.9];
+    const weighIns: WeighIn[] = [];
+    let idx = 0;
+    for (let k = -42; k <= 0; k += 3) {
+      weighIns.push({ date: dateAt(NOW, k), weightLb: 200 + noise[idx % noise.length] });
+      idx++;
+    }
+
+    const intakeMap = new Map(intakeDays.map((d) => [d.date, d.calories]));
+    expect(detectPhaseBoundaries(weighIns, intakeMap, 200, 0.85)).toEqual([]);
   });
 });
 
@@ -242,10 +290,14 @@ describe('estimateIntervalTDEE — noise robustness', () => {
       now: NOW,
       weighIns,
       intakeDays,
-      formulaTDEE: 2700,
+      // Prior deliberately off-target: staying within 150 kcal of the truth
+      // requires the observed intervals to survive (i.e. NOT be falsely excluded
+      // as noise-driven phase boundaries) and pull the estimate toward 2700.
+      formulaTDEE: 2450,
       formulaWeightLb: 200,
     });
 
+    expect(result.inferredPhaseChanges).toEqual([]);
     expect(Math.abs(result.estimatedTDEE - trueTDEE)).toBeLessThan(150);
   });
 });

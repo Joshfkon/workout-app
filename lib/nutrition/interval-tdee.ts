@@ -57,6 +57,33 @@ const PRIOR_EQUIVALENT_DAYS = 14;
  *  Intervals overlapping this window are excluded. */
 const PHASE_BOUNDARY_DAYS = 14;
 
+// --- Data-driven phase-boundary detection ---
+// A phase boundary shows up as an ABRUPT, PERSISTENT weight step that implies a
+// physiologically impossible burn rate over the jump. That triple signature is
+// what separates a real cut→bulk water shift from (a) random scale noise, which
+// reverts, and (b) a genuinely low/high metabolism, which moves gradually.
+
+/** Implied burn rate (cal/lb) below/above which an interval is "impossible" and
+ *  therefore a water/glycogen artifact rather than metabolism. Wider than the
+ *  reporting clamp so only true artifacts trip it. */
+const ANOMALY_BURN_MIN = 6;
+const ANOMALY_BURN_MAX = 26;
+
+/** Minimum abrupt step (lb) over a single weigh-in gap to be a boundary
+ *  candidate. Above the reach of typical ±1–2 lb daily water noise. */
+const MIN_STEP_LB = 3.0;
+
+/** A boundary jump must occur over a gap no longer than this (days); longer
+ *  gaps describe gradual change, not an abrupt water shift. */
+const MAX_RAPID_GAP_DAYS = 8;
+
+/** Window (days) over which the post-jump level must persist to confirm the
+ *  step is a real level change and not reverting noise. */
+const PERSIST_WINDOW_DAYS = 14;
+
+/** Fraction of the jump that must be retained afterward to count as persistent. */
+const PERSIST_RATIO = 0.6;
+
 /** Default analysis window in days (matches the data-fetch window). */
 const DEFAULT_WINDOW_DAYS = 35;
 
@@ -97,12 +124,16 @@ export interface IntervalTDEEInput {
   currentWeightLb?: number;
   /** Body weight (lbs) the formula TDEE was computed at (for burn rate). */
   formulaWeightLb?: number;
-  /** ISO dates on which the caloric phase changed (cut↔bulk↔maintenance). */
+  /** ISO dates on which the caloric phase changed (cut↔bulk↔maintenance).
+   *  Sourced from the user's phase setting when available. */
   phaseChanges?: string[];
   options?: {
     windowDays?: number;
     minIntervalDays?: number;
     intakeCompletenessMin?: number;
+    /** Infer phase boundaries from abrupt, persistent weight steps when the
+     *  phase setting doesn't record one (default: true). */
+    detectPhaseChangesFromData?: boolean;
   };
 }
 
@@ -153,6 +184,9 @@ export interface IntervalTDEEResult {
   warnings: TDEEWarning[];
   /** Per-interval breakdown (usable + excluded) for debugging / display. */
   intervals: IntervalDetail[];
+  /** Phase-change dates inferred from the weight data (in addition to any from
+   *  the user's phase setting). Empty when none were detected. */
+  inferredPhaseChanges: string[];
   /** Current weight used for the burn-rate figure. */
   currentWeight: number;
 }
@@ -304,6 +338,13 @@ export function estimateIntervalTDEE(input: IntervalTDEEInput): IntervalTDEEResu
     input.formulaWeightLb ??
     0;
 
+  // --- Phase boundaries: explicit (from setting) + data-inferred ---
+  const detectFromData = options.detectPhaseChangesFromData ?? true;
+  const inferredPhaseChanges = detectFromData
+    ? detectPhaseBoundaries(winWeighIns, intakeByDate, currentWeight, completenessMin)
+    : [];
+  const allPhaseChanges = [...phaseChanges, ...inferredPhaseChanges];
+
   // --- Trend weights + interval segmentation ---
   const trend = computeTrendWeights(winWeighIns);
   const segments = trend.length >= 2 ? segmentIntervals(trend, minIntervalDays) : [];
@@ -346,7 +387,7 @@ export function estimateIntervalTDEE(input: IntervalTDEEInput): IntervalTDEEResu
       detail.excludedReason = 'short';
     } else if (intakeCompleteness < completenessMin) {
       detail.excludedReason = 'incomplete_intake';
-    } else if (spansPhaseBoundary(seg.start.date, seg.end.date, phaseChanges)) {
+    } else if (spansPhaseBoundary(seg.start.date, seg.end.date, allPhaseChanges)) {
       detail.excludedReason = 'phase_boundary';
     } else if (meanIntake <= 0) {
       detail.excludedReason = 'incomplete_intake';
@@ -436,6 +477,7 @@ export function estimateIntervalTDEE(input: IntervalTDEEInput): IntervalTDEEResu
     intakeCompleteness: Math.round(intakeCompleteness * 100) / 100,
     warnings,
     intervals: details,
+    inferredPhaseChanges,
     currentWeight: Math.round(currentWeight * 10) / 10,
   };
 }
@@ -559,6 +601,72 @@ function buildPersonalizationLabel(usableIntervalDays: number): string {
 }
 
 // === PHASE + INTAKE HELPERS ===
+
+/**
+ * Infer phase-change dates from the weight data when the phase setting doesn't
+ * record one (e.g. a bulk started after a long cut — the app only persists a
+ * start date for aggressive cuts). A boundary is flagged only when all three
+ * hold for a single weigh-in gap, which is what a glycogen/water shift looks
+ * like and random noise / gradual metabolism do not:
+ *
+ *   1. Abrupt: a raw step of ≥ MIN_STEP_LB over a gap ≤ MAX_RAPID_GAP_DAYS.
+ *   2. Impossible: the step implies a burn rate outside [MIN, MAX] cal/lb once
+ *      intake over the gap is accounted for (so it can't be real tissue change).
+ *   3. Persistent: the new level holds over the following weeks rather than
+ *      reverting (which is what separates a phase shift from scale noise).
+ *
+ * Requires reasonably complete intake over the gap so the implied burn rate is
+ * trustworthy, and at least one subsequent weigh-in to confirm persistence.
+ */
+export function detectPhaseBoundaries(
+  weighIns: WeighIn[],
+  intakeByDate: Map<string, number>,
+  currentWeight: number,
+  completenessMin: number
+): string[] {
+  const boundaries: string[] = [];
+  const w = [...weighIns].sort((a, b) => a.date.localeCompare(b.date));
+  const refWeight = currentWeight > 0 ? currentWeight : 180;
+
+  for (let i = 0; i < w.length - 1; i++) {
+    const gapDays = daysBetween(w[i].date, w[i + 1].date);
+    if (gapDays < 1 || gapDays > MAX_RAPID_GAP_DAYS) continue;
+
+    const step = w[i + 1].weightLb - w[i].weightLb;
+    if (Math.abs(step) < MIN_STEP_LB) continue; // 1. abrupt enough?
+
+    // Intake over the gap [date_i, date_{i+1}) — must be reliable.
+    let logged = 0;
+    let intakeSum = 0;
+    for (let k = 0; k < gapDays; k++) {
+      const dStr = toDateStr(addDays(toDate(w[i].date), k));
+      const cals = intakeByDate.get(dStr);
+      if (cals !== undefined && cals > 0) {
+        logged++;
+        intakeSum += cals;
+      }
+    }
+    if (logged === 0 || logged / gapDays < completenessMin) continue;
+    const meanIntake = intakeSum / logged;
+
+    // 2. Does the step imply a physiologically impossible burn rate?
+    const impliedTDEE = meanIntake - (step * CALORIES_PER_LB) / gapDays;
+    const impliedBurn = impliedTDEE / refWeight;
+    if (impliedBurn >= ANOMALY_BURN_MIN && impliedBurn <= ANOMALY_BURN_MAX) continue;
+
+    // 3. Does the new level persist (vs. reverting noise)?
+    const postEndStr = toDateStr(addDays(toDate(w[i + 1].date), PERSIST_WINDOW_DAYS));
+    const post = w.filter((x) => x.date > w[i + 1].date && x.date <= postEndStr);
+    if (post.length === 0) continue; // can't confirm — stay conservative
+    const postMean = post.reduce((s, x) => s + x.weightLb, 0) / post.length;
+    const persistRatio = step !== 0 ? (postMean - w[i].weightLb) / step : 0;
+    if (persistRatio >= PERSIST_RATIO) {
+      boundaries.push(w[i].date);
+    }
+  }
+
+  return boundaries;
+}
 
 function spansPhaseBoundary(
   startDate: string,
