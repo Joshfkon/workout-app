@@ -113,18 +113,24 @@ export default function AdaptiveTDEEArticle() {
               <p className="text-surface-200">Weight_change = (Calories_in - TDEE) / 3500</p>
             </div>
             <div>
-              <p className="text-surface-500">Rearranged to solve for TDEE:</p>
-              <p className="text-surface-200">TDEE = Calories_in - (Weight_change × 3500)</p>
-            </div>
-            <div>
-              <p className="text-surface-500">Where TDEE relates to body weight by:</p>
-              <p className="text-surface-200">TDEE = α × Body_Weight</p>
+              <p className="text-surface-500">
+                Over any interval between two weigh-ins, solve for TDEE:
+              </p>
+              <p className="text-surface-200">
+                TDEE = mean_daily_intake − (ΔWeight × 3500) / interval_days
+              </p>
             </div>
           </Card>
+          <p className="text-sm text-surface-500 mb-4">
+            This is the key: the math works over an <strong className="text-surface-300">interval</strong>,
+            not a single day. It needs your <strong className="text-surface-300">intake logged
+            consistently</strong> and just two weigh-ins far enough apart — not a weigh-in every
+            single day. Weighing more often only sharpens the picture.
+          </p>
           <p className="text-sm text-surface-500">
-            The variable <strong className="text-surface-300">α (alpha)</strong> is your personal
-            burn rate, typically 13-16 cal/lb for most people. We find YOUR α value using
-            least-squares regression.
+            We smooth your weigh-ins into a <strong className="text-surface-300">trend weight</strong>{' '}
+            first (a single scale reading carries ±1–2 lb of water and glycogen noise), then average
+            several intervals — weighting recent ones more, because metabolism adapts.
           </p>
         </section>
 
@@ -146,9 +152,10 @@ export default function AdaptiveTDEEArticle() {
                 <span className="text-primary-400 font-bold">2</span>
               </div>
               <div>
-                <p className="font-medium text-surface-200">Weigh daily</p>
+                <p className="font-medium text-surface-200">Weigh in 2–3× a week</p>
                 <p className="text-sm text-surface-500">
-                  Same time, same conditions (morning, after bathroom)
+                  Same time, same conditions (morning, after bathroom). Daily is welcome but not
+                  required — a couple of weigh-ins a week is enough.
                 </p>
               </div>
             </div>
@@ -159,7 +166,8 @@ export default function AdaptiveTDEEArticle() {
               <div>
                 <p className="font-medium text-surface-200">We run the math</p>
                 <p className="text-sm text-surface-500">
-                  Least-squares regression finds your personal &quot;burn rate&quot;
+                  We measure energy balance over the interval between your weigh-ins, using your
+                  smoothed trend weight
                 </p>
               </div>
             </div>
@@ -168,9 +176,10 @@ export default function AdaptiveTDEEArticle() {
                 <span className="text-success-400 font-bold">4</span>
               </div>
               <div>
-                <p className="font-medium text-surface-200">Estimate stabilizes</p>
+                <p className="font-medium text-surface-200">A number from day one</p>
                 <p className="text-sm text-surface-500">
-                  Usually 2-3 weeks for a confident number
+                  You start with the formula estimate and it personalizes toward your measured
+                  reality with every interval — no waiting for the feature to &quot;unlock&quot;
                 </p>
               </div>
             </div>
@@ -181,8 +190,10 @@ export default function AdaptiveTDEEArticle() {
         <section>
           <h2 className="text-xl font-bold text-surface-100 mb-4">The Convergence Graph</h2>
           <p className="mb-4">
-            When you start, your estimate bounces around. This is normal—we need data to separate
-            signal from noise (water weight, sodium, etc.).
+            On day one the number is the formula estimate. As each weigh-in interval closes, the
+            estimate is nudged from that starting point toward your measured reality — a smooth,
+            gradual drift, never a sudden switch. Early on it leans on the formula; over a few weeks
+            it becomes almost entirely your own data.
           </p>
           <Card className="p-6 bg-surface-800/30 mb-4">
             <div className="text-center text-surface-500 text-sm mb-4">
@@ -206,12 +217,13 @@ export default function AdaptiveTDEEArticle() {
               <span>Day 14</span>
             </div>
             <p className="text-center text-xs text-surface-500 mt-4">
-              Burn rate stabilizes around day 12-14
+              The estimate drifts from formula toward your data as intervals close
             </p>
           </Card>
           <p className="text-sm text-surface-500">
-            After ~14-21 days of consistent logging, your estimate converges to a stable value.
-            This is YOUR actual metabolism, not a formula&apos;s guess.
+            After a few weeks of consistent food logging plus a couple of weigh-ins each week, the
+            number is almost entirely your own data. This is YOUR actual metabolism, not a
+            formula&apos;s guess.
           </p>
         </section>
 
@@ -255,9 +267,9 @@ export default function AdaptiveTDEEArticle() {
             <Card className="p-4 bg-success-500/10 border-success-500/20">
               <p className="font-medium text-success-300 mb-2">Do:</p>
               <ul className="space-y-1 text-sm text-surface-400">
-                <li>• Weigh daily at the same time</li>
-                <li>• Log everything you eat</li>
-                <li>• Be patient—it takes 2-3 weeks</li>
+                <li>• Weigh in 2–3× a week at the same time</li>
+                <li>• Log everything you eat, every day</li>
+                <li>• Keep logging through a phase change (we handle the water jump)</li>
                 <li>• Use a food scale when possible</li>
               </ul>
             </Card>

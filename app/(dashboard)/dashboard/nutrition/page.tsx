@@ -1780,7 +1780,7 @@ function NutritionPageContent() {
             <span className="block text-[12px] text-surface-400 truncate">
               {hasLoggedWeightToday
                 ? `Logged today: ${todayWeightDisplay} ${weightUnit}`
-                : 'Daily weigh-ins keep your adaptive TDEE accurate'}
+                : 'A few weigh-ins a week keep your adaptive TDEE accurate'}
             </span>
           </span>
         </span>
@@ -1933,6 +1933,7 @@ function NutritionPageContent() {
         <TDEEDashboard
           estimate={tdeeData.adaptiveEstimate}
           formulaEstimate={tdeeData.formulaEstimate}
+          intervalEstimate={tdeeData.intervalEstimate}
           predictions={tdeeData.predictions}
           dataQuality={tdeeData.dataQuality}
           currentWeight={tdeeData.currentWeight}
