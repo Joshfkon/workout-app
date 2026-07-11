@@ -71,6 +71,8 @@ function chipOrder(): string[] {
 }
 
 beforeEach(() => {
+  // Expander state persists in sessionStorage across mounts — reset per test.
+  window.sessionStorage.clear();
   mockBlocks = [
     {
       exercises: { id: 'ex-squat', name: 'Squat', primary_muscle: 'quads', secondary_muscles: [] },
@@ -96,14 +98,33 @@ describe('EmptyWorkoutReadiness', () => {
     expect(screen.getByTestId('readiness-targets').textContent).toBeTruthy();
   });
 
-  it('trims the inline rows to the top 5', async () => {
+  it('caps the inline list at 6 rows with a "+N more" expander that reveals all coarse groups', async () => {
     render(
       <EmptyWorkoutReadiness quickAddExercises={[]} onAddExercise={jest.fn()} />,
       { wrapper }
     );
+
+    // 6 coarse rows visible, the rest behind "+N more" (13 coarse groups total).
     await waitFor(() =>
-      expect(document.querySelectorAll('[data-testid^="readiness-row-"]').length).toBe(5)
+      expect(document.querySelectorAll('[data-testid^="readiness-row-"]').length).toBe(6)
     );
+    expect(screen.getByTestId('readiness-show-more')).toHaveTextContent('+7 more');
+
+    // Expanding reveals the full list inline.
+    await userEvent.click(screen.getByTestId('readiness-show-more'));
+    await waitFor(() =>
+      expect(document.querySelectorAll('[data-testid^="readiness-row-"]').length).toBe(13)
+    );
+
+    // Fatigued quads (trained 30h ago) is present at the bottom, not vanished.
+    const order = Array.from(document.querySelectorAll('[data-testid^="readiness-row-"]')).map((el) =>
+      (el.getAttribute('data-testid') || '').replace('readiness-row-', '')
+    );
+    expect(screen.getByTestId('readiness-badge-quads')).toHaveTextContent('Fatigued');
+    expect(order[order.length - 1]).toBe('quads');
+
+    // A never-trained coarse group shows the no-data state.
+    expect(screen.getByTestId('readiness-badge-chest')).toHaveTextContent('No recent data');
   });
 
   it('re-orders Quick Add chips by readiness (recovered + under-volume first)', async () => {
