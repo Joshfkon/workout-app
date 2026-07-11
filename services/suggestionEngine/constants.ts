@@ -97,6 +97,14 @@ export const RECAL_MAX_FRESHNESS_CORRECTION = 0.08;
 
 /** How far the last set's RIR must miss target before we touch the weight. */
 export const DEADBAND_RIR = 2;
+/**
+ * Tolerance for calling a hold set's effort "on target". Inside ±this of the
+ * target RIR the last set is treated as matching; outside it the set was
+ * genuinely easier / harder and both the rep prediction and the banner copy say
+ * so. 0.5 keeps integer-RIR chips (3 vs 2 -> easier) decisive while absorbing
+ * the half-step from the RIR-2 "good" bucket (rpe 7.5).
+ */
+export const EFFORT_MATCH_TOLERANCE = 0.5;
 /** Cap on per-set load increase. */
 export const MAX_STEP_PCT = 0.10;
 /**

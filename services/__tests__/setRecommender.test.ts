@@ -8,6 +8,7 @@ import {
   recommendSessionStart,
   estimateRepsForWeight,
   predictAmrapReps,
+  resolveLastRir,
   type SetRecommenderInput,
   type SessionStartInput,
 } from '../setRecommender';
@@ -25,11 +26,23 @@ const base = (over: Partial<SetRecommenderInput> = {}): SetRecommenderInput => (
 
 describe('recommendSet', () => {
   describe('HOLD (default — straight sets)', () => {
-    it('holds weight and shaves a rep for fatigue when in range at ~target effort', () => {
+    it('holds weight but adds reps when the last set was EASIER than target (RIR bug repro)', () => {
+      // The reported bug: 190×11 @ 3 RIR against an 8-12 @ 2 RIR target. 11 reps
+      // @ 3 RIR means ~12 were available @ 2 RIR, so a hold should suggest 11-12
+      // (not 10) and the effort must read as EASIER than target, never "matched".
       const r = recommendSet(base({ lastWeightKg: 100, lastReps: 11, lastRir: 3 }));
       expect(r.rationale).toBe('maintain');
       expect(r.weightKg).toBe(100);
-      expect(r.reps).toBe(10); // 11 - max(1, round(11*0.07))
+      expect(r.reps).toBeGreaterThanOrEqual(11); // 11 + dev(1) - fatigue(1)
+      expect(r.effortVsTarget).toBe('easier');
+    });
+
+    it('holds and shaves a rep when the last set landed EXACTLY at target effort', () => {
+      const r = recommendSet(base({ lastWeightKg: 100, lastReps: 11, lastRir: 2 }));
+      expect(r.rationale).toBe('maintain');
+      expect(r.weightKg).toBe(100);
+      expect(r.reps).toBe(10); // dev 0 -> 11 - max(1, round(11*0.07))
+      expect(r.effortVsTarget).toBe('on_target');
     });
 
     it('does NOT bump weight for a slightly-easy in-range set (deadband)', () => {
@@ -37,15 +50,18 @@ describe('recommendSet', () => {
       const r = recommendSet(base({ lastReps: 10, lastRir: 3 }));
       expect(r.rationale).toBe('maintain');
       expect(r.weightKg).toBe(100);
+      expect(r.effortVsTarget).toBe('easier');
     });
 
-    it('predicts declining reps deep into the exercise (fatigue tracks last set)', () => {
-      // Set 5 (4 done), did 9 reps last -> expect ~8, never more than last.
+    it('backs off reps deep into the exercise when the last set ran harder than target', () => {
+      // Set 5 (4 done), did 9 reps @ 1 RIR (1 harder than target) -> fewer reps,
+      // weight held, effort reads as harder.
       const r = recommendSet(base({ lastReps: 9, lastRir: 1, setsCompletedThisExercise: 4 }));
       expect(r.rationale).toBe('maintain');
       expect(r.weightKg).toBe(100);
-      expect(r.reps).toBe(8);
+      expect(r.reps).toBe(7); // 9 + dev(-1) - fatigue(1)
       expect(r.reps).toBeLessThan(9);
+      expect(r.effortVsTarget).toBe('harder');
     });
 
     it('does NOT drop weight just because a normal-fatigue set felt hard (in range)', () => {
@@ -158,6 +174,53 @@ describe('recommendSet', () => {
       expect(r.reps).toBeGreaterThanOrEqual(1);
       expect(r.reps).toBeLessThanOrEqual(12 + 5);
     });
+  });
+});
+
+describe('resolveLastRir — engine input comes from the STORED set, never UI state', () => {
+  it('reads the logged RIR chip (feedback.repsInTank) as the source of truth', () => {
+    // Persisted set: logged 3 RIR ("easy" chip). rpe was stored as 7 (rirToRpe(3)).
+    // The engine must grade it as 3, not the target/default 2.
+    expect(resolveLastRir({ rpe: 7, feedback: { repsInTank: 3 } }, 2)).toBe(3);
+  });
+
+  it('prefers the stored RIR over a divergent rpe (RIR-2 "good" chip is rpe 7.5)', () => {
+    // 10 - 7.5 = 2.5 (the old lossy read); the stored chip value 2 is exact.
+    expect(resolveLastRir({ rpe: 7.5, feedback: { repsInTank: 2 } }, 3)).toBe(2);
+  });
+
+  it('falls back to rpe->rir when only rpe was stored', () => {
+    expect(resolveLastRir({ rpe: 7 }, 2)).toBe(3); // rpeToRir(7) === 3
+  });
+
+  it('falls back to target ONLY when the set carries no effort signal at all', () => {
+    expect(resolveLastRir({}, 2)).toBe(2);
+    expect(resolveLastRir({ rpe: null, feedback: null }, 2)).toBe(2);
+  });
+
+  it('feeds recommendSet so a logged-easier set is graded easier, not "matched"', () => {
+    // End-to-end: stored RIR 3 vs target 2 -> the recommender sees dev +1.
+    const storedRir = resolveLastRir({ rpe: 7, feedback: { repsInTank: 3 } }, 2);
+    const r = recommendSet(base({ lastWeightKg: 100, lastReps: 11, lastRir: storedRir }));
+    expect(r.effortVsTarget).toBe('easier');
+    expect(r.reps).toBeGreaterThanOrEqual(11);
+  });
+});
+
+describe('BACK OFF (last set 0-1 RIR vs 2 target)', () => {
+  it('holds weight but shaves extra reps at 1 RIR (inside deadband)', () => {
+    const r = recommendSet(base({ lastReps: 11, lastRir: 1 }));
+    expect(r.rationale).toBe('maintain');
+    expect(r.weightKg).toBe(100);
+    expect(r.reps).toBeLessThan(11); // 11 + dev(-1) - fatigue(1) = 9
+    expect(r.effortVsTarget).toBe('harder');
+  });
+
+  it('reduces the weight at 0 RIR (2 harder than target -> outside deadband)', () => {
+    const r = recommendSet(base({ lastReps: 11, lastRir: 0 }));
+    expect(r.rationale).toBe('reduce_load');
+    expect(r.weightKg).toBeLessThan(100);
+    expect(r.effortVsTarget).toBe('harder');
   });
 });
 
