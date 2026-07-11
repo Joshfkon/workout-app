@@ -22,6 +22,7 @@ import type {
   RegressionAnalysis,
 } from '@/lib/nutrition/adaptive-tdee';
 import type { EnhancedTDEEEstimate } from '@/types/wearable';
+import type { IntervalTDEEResult } from '@/lib/nutrition/interval-tdee';
 import { TDEERegressionGraph } from './TDEERegressionGraph';
 import { calculateFFMI } from '@/services/bodyCompEngine';
 import {
@@ -60,6 +61,9 @@ interface ResetResult {
 interface TDEEDashboardProps {
   estimate: TDEEEstimate | EnhancedTDEEEstimate | null;
   formulaEstimate: TDEEEstimate | null;
+  /** Interval-based estimate that drives the card's headline, subtitle,
+   *  confidence framing and correctly-attributed warnings. */
+  intervalEstimate?: IntervalTDEEResult | null;
   predictions: WeightPrediction[];
   dataQuality: DataQualityCheck;
   currentWeight: number | null;
@@ -88,6 +92,7 @@ interface TDEEDashboardProps {
 export function TDEEDashboard({
   estimate,
   formulaEstimate,
+  intervalEstimate,
   predictions,
   dataQuality,
   currentWeight,
@@ -147,7 +152,13 @@ export function TDEEDashboard({
   };
 
   const activeEstimate = estimate || formulaEstimate;
-  const isAdaptive = estimate?.source === 'regression';
+  // "Adaptive" now means the estimate is informed by the user's own data — the
+  // interval blend or the legacy regression. Formula-only is the exception.
+  const hasPersonalData =
+    (intervalEstimate ? intervalEstimate.source === 'blended' : false) ||
+    estimate?.source === 'regression' ||
+    estimate?.source === 'blended';
+  const isAdaptive = hasPersonalData;
 
   const confidenceColor = useMemo(() => {
     if (!activeEstimate) return 'text-surface-500';
@@ -157,25 +168,41 @@ export function TDEEDashboard({
       case 'stabilizing':
         return 'text-warning-400';
       case 'unstable':
-        return 'text-danger-400';
+        return 'text-surface-400';
       default:
         return 'text-surface-500';
     }
   }, [activeEstimate]);
 
+  // Confidence is a statement of how personalized the number is — NOT a
+  // progress bar toward the feature unlocking. Low confidence still ships a
+  // real (formula-leaning) answer, so the copy never says "collecting data".
   const confidenceLabel = useMemo(() => {
     if (!activeEstimate) return 'No data';
     switch (activeEstimate.confidence) {
       case 'stable':
-        return 'Estimate stabilized';
+        return 'Highly personalized';
       case 'stabilizing':
-        return 'Estimate stabilizing...';
+        return 'Personalizing as you log';
       case 'unstable':
-        return 'Collecting data...';
+        return 'Personalizing as you log';
       default:
-        return 'Unknown';
+        return 'Personalizing as you log';
     }
   }, [activeEstimate]);
+
+  // Prefer the interval estimate for the headline figures; fall back to the
+  // legacy estimate for callers that don't pass one.
+  const displayTDEE = intervalEstimate?.estimatedTDEE ?? activeEstimate?.estimatedTDEE ?? 0;
+  const displayBurnRate = intervalEstimate?.burnRatePerLb ?? activeEstimate?.burnRatePerLb ?? 0;
+  const displayConfidenceScore =
+    intervalEstimate?.confidenceScore ?? activeEstimate?.confidenceScore ?? 0;
+  const subtitle =
+    intervalEstimate?.personalizationLabel ??
+    (isAdaptive ? 'Personalized from your data' : 'Estimated from formula');
+  // Correctly-attributed warnings (calories vs weight) take precedence over the
+  // legacy generic data-quality issues.
+  const cardWarnings = intervalEstimate?.warnings ?? [];
 
   if (!activeEstimate) {
     return (
@@ -211,9 +238,7 @@ export function TDEEDashboard({
             </div>
             <div>
               <h3 className="text-lg font-semibold text-surface-100">Your Metabolism</h3>
-              <p className="text-xs text-surface-500">
-                {isAdaptive ? 'Personalized from your data' : 'Estimated from formula'}
-              </p>
+              <p className="text-xs text-surface-500">{subtitle}</p>
             </div>
           </div>
           <Link
@@ -231,7 +256,7 @@ export function TDEEDashboard({
               Estimated TDEE
             </p>
             <p className="text-3xl font-bold text-surface-100">
-              {activeEstimate.estimatedTDEE.toLocaleString()}
+              {displayTDEE.toLocaleString()}
               <span className="text-lg font-normal text-surface-400 ml-1">cal/day</span>
             </p>
           </div>
@@ -240,7 +265,7 @@ export function TDEEDashboard({
           <div>
             <p className="text-xs text-surface-500 uppercase tracking-wide mb-1">Burn Rate</p>
             <p className="text-2xl font-bold text-surface-100">
-              {activeEstimate.burnRatePerLb.toFixed(1)}
+              {displayBurnRate.toFixed(1)}
               <span className="text-sm font-normal text-surface-400 ml-1">cal/lb</span>
             </p>
           </div>
@@ -249,9 +274,9 @@ export function TDEEDashboard({
         {/* Confidence Indicator */}
         <div className="mt-6">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-surface-500">Confidence</span>
+            <span className="text-xs text-surface-500">Personalization</span>
             <span className={`text-xs font-medium ${confidenceColor}`}>
-              {activeEstimate.confidenceScore}%
+              {displayConfidenceScore}%
             </span>
           </div>
           <div className="h-2 bg-surface-800 rounded-full overflow-hidden">
@@ -261,22 +286,22 @@ export function TDEEDashboard({
                   ? 'bg-success-500'
                   : activeEstimate.confidence === 'stabilizing'
                     ? 'bg-warning-500'
-                    : 'bg-danger-500'
+                    : 'bg-primary-500'
               }`}
-              style={{ width: `${activeEstimate.confidenceScore}%` }}
+              style={{ width: `${Math.max(displayConfidenceScore, 4)}%` }}
             />
           </div>
           <div className="flex items-center justify-between mt-2">
             <p className={`text-xs ${confidenceColor}`}>{confidenceLabel}</p>
-            {isAdaptive && (
+            {intervalEstimate && intervalEstimate.usableIntervalDays > 0 && (
               <p className="text-xs text-surface-500">
-                Based on {activeEstimate.dataPointsUsed} days
+                {intervalEstimate.weighInCount} weigh-ins · {intervalEstimate.usableIntervalDays} interval-days
               </p>
             )}
           </div>
         </div>
 
-        {/* Formula Comparison */}
+        {/* Formula Comparison — shown once the blend is informed by real data */}
         {isAdaptive && formulaEstimate && (
           <div className="mt-4 p-3 bg-surface-800/50 rounded-lg">
             <div className="flex items-center justify-between">
@@ -285,37 +310,45 @@ export function TDEEDashboard({
                 {formulaEstimate.estimatedTDEE.toLocaleString()} cal/day
               </span>
             </div>
-            {Math.abs(activeEstimate.estimatedTDEE - formulaEstimate.estimatedTDEE) > 100 && (
+            {Math.abs(displayTDEE - formulaEstimate.estimatedTDEE) > 100 && (
               <p className="text-xs text-surface-500 mt-1">
                 Your actual metabolism is{' '}
-                {activeEstimate.estimatedTDEE > formulaEstimate.estimatedTDEE
-                  ? 'higher'
-                  : 'lower'}{' '}
+                {displayTDEE > formulaEstimate.estimatedTDEE ? 'higher' : 'lower'}{' '}
                 than formulas predict by{' '}
-                {Math.abs(activeEstimate.estimatedTDEE - formulaEstimate.estimatedTDEE)} cal
+                {Math.abs(displayTDEE - formulaEstimate.estimatedTDEE)} cal
               </p>
             )}
           </div>
         )}
 
-        {/* Data Quality Warnings */}
-        {dataQuality.issues.length > 0 && (
-          <div className="mt-4 p-3 bg-warning-500/10 border border-warning-500/20 rounded-lg">
-            <div className="flex items-start gap-2">
-              <span className="text-warning-400">⚠</span>
-              <div className="flex-1">
-                <p className="text-xs text-warning-300">
-                  {dataQuality.issues[0]}
-                </p>
-                {dataQuality.suggestions[0] && (
-                  <p className="text-xs text-surface-400 mt-1">
-                    Tip: {dataQuality.suggestions[0]}
-                  </p>
-                )}
+        {/* Warnings — correctly attributed (missing calories vs missing weight) */}
+        {cardWarnings.length > 0
+          ? cardWarnings.slice(0, 2).map((warning, i) => (
+              <div
+                key={`${warning.kind}-${i}`}
+                className="mt-4 p-3 bg-warning-500/10 border border-warning-500/20 rounded-lg"
+              >
+                <div className="flex items-start gap-2">
+                  <span className="text-warning-400">
+                    {warning.kind === 'missing_calories' ? '🍽️' : warning.kind === 'missing_weight' ? '⚖️' : 'ℹ️'}
+                  </span>
+                  <p className="flex-1 text-xs text-warning-300">{warning.message}</p>
+                </div>
               </div>
-            </div>
-          </div>
-        )}
+            ))
+          : !intervalEstimate && dataQuality.issues.length > 0 && (
+              <div className="mt-4 p-3 bg-warning-500/10 border border-warning-500/20 rounded-lg">
+                <div className="flex items-start gap-2">
+                  <span className="text-warning-400">⚠</span>
+                  <div className="flex-1">
+                    <p className="text-xs text-warning-300">{dataQuality.issues[0]}</p>
+                    {dataQuality.suggestions[0] && (
+                      <p className="text-xs text-surface-400 mt-1">Tip: {dataQuality.suggestions[0]}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
 
         {/* View Details Toggle */}
         <button
@@ -829,8 +862,9 @@ export function TDEEDashboard({
         );
       })()}
 
-      {/* Data Collection Progress (when not enough data) */}
-      {!isAdaptive && (
+      {/* Data Collection Progress (legacy unlock framing) — suppressed when the
+          interval estimator is active, since it always ships a usable number. */}
+      {!isAdaptive && !intervalEstimate && (
         <Card className="p-4 bg-surface-900/50">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-primary-500/10 flex items-center justify-center">

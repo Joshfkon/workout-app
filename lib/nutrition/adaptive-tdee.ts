@@ -45,7 +45,7 @@ export interface TDEEEstimate {
   /** When this estimate was calculated */
   lastUpdated: Date;
   /** Source of the estimate */
-  source: 'regression' | 'formula';
+  source: 'regression' | 'formula' | 'blended';
   /** History of burn rate estimates for convergence chart */
   estimateHistory: BurnRateHistoryPoint[];
   /** Current weight used for TDEE calculation */

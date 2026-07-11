@@ -7,7 +7,6 @@ import {
   getFormulaTDEE,
   predictFutureWeight,
   checkDataQuality,
-  getBestTDEEEstimate,
   getRegressionAnalysis,
   type TDEEEstimate,
   type WeightPrediction,
@@ -16,10 +15,13 @@ import {
   type BurnRateHistoryPoint,
   type RegressionAnalysis,
 } from '@/lib/nutrition/adaptive-tdee';
+import { calculateEnhancedTDEE } from '@/lib/nutrition/enhanced-tdee';
 import {
-  calculateEnhancedTDEE,
-  getBestEnhancedEstimate,
-} from '@/lib/nutrition/enhanced-tdee';
+  estimateIntervalTDEE,
+  type IntervalTDEEResult,
+  type WeighIn,
+  type IntakeDay,
+} from '@/lib/nutrition/interval-tdee';
 import type { EnhancedTDEEEstimate } from '@/types/wearable';
 import { getEnhancedDailyDataPoints } from '@/lib/actions/wearable';
 import type { UserStats, ActivityConfig } from '@/lib/nutrition/macroCalculator';
@@ -29,6 +31,13 @@ export interface TDEEData {
   adaptiveEstimate: TDEEEstimate | EnhancedTDEEEstimate | null;
   formulaEstimate: TDEEEstimate;
   bestEstimate: TDEEEstimate | EnhancedTDEEEstimate;
+  /**
+   * Interval-based estimate that works with sparse weigh-ins (food-daily,
+   * weigh-in-2-3x/week). This is the primary driver of the "Your Metabolism"
+   * card: it always returns a number (formula on day zero) and blends smoothly
+   * from formula toward the user's measured reality.
+   */
+  intervalEstimate: IntervalTDEEResult;
   predictions: WeightPrediction[];
   dataQuality: DataQualityCheck;
   currentWeight: number | null;
@@ -220,18 +229,104 @@ export async function getAdaptiveTDEE(
 
   const formulaEstimate = getFormulaTDEE(userStats, activityConfig);
 
-  // Get best estimate (handle both basic and enhanced)
-  let bestEstimate: TDEEEstimate | EnhancedTDEEEstimate;
-  if (isEnhanced && adaptiveEstimate) {
-    // Use enhanced estimate if available
-    bestEstimate = adaptiveEstimate;
-  } else if (adaptiveEstimate) {
-    // Use basic estimate
-    bestEstimate = getBestTDEEEstimate(adaptiveEstimate as TDEEEstimate, formulaEstimate);
-  } else {
-    // Fall back to formula
-    bestEstimate = formulaEstimate;
+  // === INTERVAL-BASED ESTIMATE (sparse weigh-in friendly) ===
+  // This is the primary driver of the "Your Metabolism" card. Unlike the
+  // regression path it does NOT need daily paired data: complete *intake* plus
+  // bracketing weigh-ins over ≥5-day intervals is enough. It always returns a
+  // number (formula on day zero) and blends smoothly toward measured reality.
+  const intervalWindowDays = 35;
+  const intervalCutoff = new Date();
+  intervalCutoff.setDate(intervalCutoff.getDate() - intervalWindowDays);
+  const intervalCutoffStr = getLocalDateString(intervalCutoff);
+
+  // All logged intake days (every day with food, regardless of a weigh-in).
+  const { data: foodRows } = await supabase
+    .from('food_log')
+    .select('logged_at, calories')
+    .eq('user_id', user.id)
+    .gte('logged_at', intervalCutoffStr) as {
+      data: Array<{ logged_at: string; calories: number }> | null;
+    };
+
+  const intakeByDate = new Map<string, number>();
+  foodRows?.forEach((f) => {
+    if (!f.calories || f.calories <= 0) return;
+    intakeByDate.set(f.logged_at, (intakeByDate.get(f.logged_at) || 0) + f.calories);
+  });
+  const intakeDays: IntakeDay[] = Array.from(intakeByDate.entries()).map(([date, calories]) => ({
+    date,
+    calories,
+  }));
+
+  // All weigh-ins (sparse cadence is fine).
+  const { data: weightRows } = await supabase
+    .from('weight_log')
+    .select('logged_at, weight, unit')
+    .eq('user_id', user.id)
+    .gte('logged_at', intervalCutoffStr)
+    .order('logged_at', { ascending: true }) as {
+      data: Array<{ logged_at: string; weight: number; unit?: string | null }> | null;
+    };
+
+  const weighIns: WeighIn[] = [];
+  weightRows?.forEach((w) => {
+    if (!w.weight || w.weight <= 0) return;
+    const validated = validateWeightEntry(w.weight, w.unit as 'lb' | 'kg' | null);
+    const weightLb = validated.unit === 'kg' ? validated.weight * 2.20462 : validated.weight;
+    if (weightLb < 30 || weightLb > 600) return; // reject impossible values
+    weighIns.push({ date: w.logged_at, weightLb });
+  });
+
+  // Derive phase-change dates so cut→bulk water/glycogen jumps aren't read as a
+  // metabolic crash. The v3.3 macro calculator stores the current phase's start.
+  const { data: phaseTargets } = await supabase
+    .from('nutrition_targets')
+    .select('phase_status')
+    .eq('user_id', user.id)
+    .maybeSingle() as {
+      data: { phase_status?: { phaseStartDate?: string } | null } | null;
+    };
+  const phaseChanges: string[] = [];
+  const phaseStart = phaseTargets?.phase_status?.phaseStartDate;
+  if (phaseStart) {
+    const phaseStartStr = phaseStart.slice(0, 10);
+    if (phaseStartStr >= intervalCutoffStr) phaseChanges.push(phaseStartStr);
   }
+
+  const intervalEstimate = estimateIntervalTDEE({
+    now: new Date(),
+    weighIns,
+    intakeDays,
+    formulaTDEE: formulaEstimate.estimatedTDEE,
+    formulaWeightLb: userStats.weightKg * 2.20462,
+    currentWeightLb: currentWeight ?? undefined,
+    phaseChanges,
+    options: { windowDays: intervalWindowDays },
+  });
+
+  // Represent the blended interval estimate as a TDEEEstimate so the existing
+  // prediction / projection / sync machinery consumes it unchanged.
+  const blendedEstimate: TDEEEstimate = {
+    burnRatePerLb: intervalEstimate.burnRatePerLb || formulaEstimate.burnRatePerLb,
+    estimatedTDEE: intervalEstimate.estimatedTDEE,
+    confidence: intervalEstimate.confidence,
+    confidenceScore: intervalEstimate.confidenceScore,
+    dataPointsUsed: intervalEstimate.usableIntervalDays,
+    dataPointsAfterOutlierExclusion: intervalEstimate.intervalsUsed,
+    windowDays: intervalWindowDays,
+    // Confidence → prediction band width: more confident = tighter range.
+    standardError: Math.max(50, Math.min(300, 300 - (intervalEstimate.confidenceScore / 100) * 250)),
+    lastUpdated: new Date(),
+    source: intervalEstimate.source === 'formula' ? 'formula' : 'blended',
+    estimateHistory: [],
+    currentWeight: intervalEstimate.currentWeight || currentWeight || formulaEstimate.currentWeight,
+  };
+
+  // The blended estimate is what the card and downstream predictions use.
+  // The enhanced/regression estimate (computed above) is retained only via the
+  // `isEnhanced` flag for the body-composition projection and the detail graph.
+  adaptiveEstimate = blendedEstimate;
+  const bestEstimate: TDEEEstimate | EnhancedTDEEEstimate = blendedEstimate;
 
   // Calculate predictions
   const predictions: WeightPrediction[] = [];
@@ -254,6 +349,7 @@ export async function getAdaptiveTDEE(
     adaptiveEstimate,
     formulaEstimate,
     bestEstimate,
+    intervalEstimate,
     predictions,
     dataQuality,
     currentWeight,
@@ -360,7 +456,7 @@ export async function getStoredTDEEEstimate(): Promise<TDEEEstimate | null> {
     standardError: data.standard_error,
     dataPointsUsed: data.data_points_used,
     windowDays: data.window_days,
-    source: data.source as 'regression' | 'formula',
+    source: data.source as 'regression' | 'formula' | 'blended',
     estimateHistory: (data.estimate_history || []) as BurnRateHistoryPoint[],
     lastUpdated: new Date(data.updated_at),
   };
