@@ -41,6 +41,7 @@ import {
   IconTrendingUp,
 } from '@tabler/icons-react';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { resolveAuthState } from '@/lib/supabase/authState';
 import { getLocalDateString } from '@/lib/utils';
 import {
   startMesocycleWorkoutSession,
@@ -503,12 +504,18 @@ export default function TrainPage() {
     setIsStartingEmpty(true);
     setError(null);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      const auth = await resolveAuthState(supabase);
+      if (auth.status === 'unauthenticated') {
         router.push('/login');
         return;
       }
-      const { sessionId } = await getOrCreateTodaySession(supabase, user.id);
+      if (auth.status === 'error') {
+        // Verify failed transiently — keep the session, let them retry.
+        setError("Couldn't verify your session. Check your connection and try again.");
+        setIsStartingEmpty(false);
+        return;
+      }
+      const { sessionId } = await getOrCreateTodaySession(supabase, auth.userId);
       router.push(`/dashboard/workout/${sessionId}?fromCreate=true`);
     } catch (err) {
       console.error('Failed to start empty workout:', err);
@@ -530,12 +537,17 @@ export default function TrainPage() {
     setRepeatingId(workout.id);
     setError(null);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      const auth = await resolveAuthState(supabase);
+      if (auth.status === 'unauthenticated') {
         router.push('/login');
         return;
       }
-      const { sessionId } = await createRepeatSession(supabase, user.id, workout.exercises);
+      if (auth.status === 'error') {
+        setError("Couldn't verify your session. Check your connection and try again.");
+        setRepeatingId(null);
+        return;
+      }
+      const { sessionId } = await createRepeatSession(supabase, auth.userId, workout.exercises);
       router.push(`/dashboard/workout/${sessionId}`);
     } catch (err) {
       console.error('Failed to repeat workout:', err);
