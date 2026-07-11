@@ -482,7 +482,14 @@ export interface WorkoutSession {
   
   startedAt: string | null;
   completedAt: string | null;
-  
+
+  /**
+   * Active workout duration in seconds, snapshotted once at finish (excludes
+   * paused time). Null for legacy sessions completed before this was tracked —
+   * fall back to (completedAt - startedAt) for those.
+   */
+  durationSeconds: number | null;
+
   /** Pre-workout readiness check-in */
   preWorkoutCheckIn: PreWorkoutCheckIn | null;
   

@@ -50,6 +50,7 @@ export interface WorkoutSessionRow {
   planned_date: string;
   started_at: string | null;
   completed_at: string | null;
+  duration_seconds: number | null;
   pre_workout_check_in: PreWorkoutCheckIn | null;
   session_rpe: number | null;
   pump_rating: number | null;
@@ -140,6 +141,7 @@ export function mapWorkoutSessionRow(sessionData: WorkoutSessionRow): WorkoutSes
     plannedDate: sessionData.planned_date,
     startedAt: sessionData.started_at,
     completedAt: sessionData.completed_at,
+    durationSeconds: sessionData.duration_seconds,
     preWorkoutCheckIn: sessionData.pre_workout_check_in,
     sessionRpe: sessionData.session_rpe,
     pumpRating: sessionData.pump_rating,

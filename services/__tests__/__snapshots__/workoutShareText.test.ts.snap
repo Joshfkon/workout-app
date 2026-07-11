@@ -9,7 +9,7 @@ Jul 8
 🟩🟩🟩  Lat Pulldown 🔥
 🟩🟩🟩  Curl (EZ bar)
 
-12 sets · 12,000 kg · 72 min · 🔥2 PRs"
+12 sets · 12,000 kg · 1h 12m · 🔥2 PRs"
 `;
 
 exports[`formatWorkoutShareText matches snapshot for a session with partial and full skips 1`] = `
@@ -19,7 +19,7 @@ exports[`formatWorkoutShareText matches snapshot for a session with partial and 
 ⬛⬛⬛  Leg Press
 ⬛⬛  Leg Curl
 
-2 sets · 2,000 kg · 60 min"
+2 sets · 2,000 kg · 1h"
 `;
 
 exports[`formatWorkoutShareText matches snapshot in cryptic mode 1`] = `
@@ -29,7 +29,7 @@ exports[`formatWorkoutShareText matches snapshot in cryptic mode 1`] = `
 🟩🟩🟩  🦵
 🟩🟩🟩  💪
 
-9 sets · 9,000 kg · 60 min · 🔥1 PR"
+9 sets · 9,000 kg · 1h · 🔥1 PR"
 `;
 
 exports[`formatWorkoutShareText with more than 8 exercises matches snapshot 1`] = `
@@ -44,5 +44,5 @@ exports[`formatWorkoutShareText with more than 8 exercises matches snapshot 1`] 
 🟩🟩  Exercise 7
 +3 more · 🟩🟩🟩🟩🟩🟩
 
-20 sets · 11,000 kg · 60 min"
+20 sets · 11,000 kg · 1h"
 `;

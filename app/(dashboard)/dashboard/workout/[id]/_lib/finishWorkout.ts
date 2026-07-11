@@ -84,6 +84,12 @@ export interface FinishSummaryData {
   pumpRating: number;
   notes: string;
   muscleFeedback: SessionMuscleFeedbackEntry[];
+  /**
+   * Active workout duration in seconds, snapshotted at finish (excludes paused
+   * time). Persisted so history / read-only views show the same frozen value.
+   * Null on legacy callers that don't pass it.
+   */
+  durationSeconds?: number | null;
 }
 
 export interface FinishFlowDeps {
@@ -99,7 +105,7 @@ export interface FinishFlowDeps {
 }
 
 function completionPatch(data: FinishSummaryData): Record<string, unknown> {
-  return {
+  const patch: Record<string, unknown> = {
     state: 'completed',
     completed_at: new Date().toISOString(),
     session_rpe: data.sessionRpe,
@@ -107,6 +113,10 @@ function completionPatch(data: FinishSummaryData): Record<string, unknown> {
     session_notes: data.notes,
     completion_percent: 100,
   };
+  if (typeof data.durationSeconds === 'number' && Number.isFinite(data.durationSeconds)) {
+    patch.duration_seconds = Math.max(0, Math.round(data.durationSeconds));
+  }
+  return patch;
 }
 
 function feedbackRows(userId: string, sessionId: string, data: FinishSummaryData) {

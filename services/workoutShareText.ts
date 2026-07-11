@@ -160,18 +160,30 @@ function buildExerciseLines(exercises: ShareExercise[], cryptic: boolean): strin
 
 const KG_TO_LB = 2.20462;
 
+/**
+ * Minute-granular duration for the compact footer: "58 min" under an hour,
+ * "2h 57m" (or "3h" on the hour) at or above it, so a long session never
+ * reads as "177 min".
+ */
+function formatFooterDuration(durationSeconds: number): string {
+  const minutes = Math.max(0, Math.round(durationSeconds / 60));
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  return mins === 0 ? `${hours}h` : `${hours}h ${mins}m`;
+}
+
 function buildFooter(input: WorkoutShareTextInput): string {
   const performedSets = input.exercises.reduce((sum, e) => sum + e.sets.length, 0);
   const volumeKg = input.exercises.reduce((sum, e) => sum + exerciseVolumeKg(e), 0);
   const volume = input.unit === 'lb' ? volumeKg * KG_TO_LB : volumeKg;
   const volumeStr = Math.round(volume).toLocaleString('en-US');
-  const minutes = Math.round(input.durationSeconds / 60);
   const prCount = input.exercises.filter((e) => e.hasPR).length;
 
   const parts = [
     `${performedSets} set${performedSets === 1 ? '' : 's'}`,
     `${volumeStr} ${input.unit}`,
-    `${minutes} min`,
+    formatFooterDuration(input.durationSeconds),
   ];
   if (prCount > 0) parts.push(`${PR_SUFFIX}${prCount} PR${prCount === 1 ? '' : 's'}`);
   if (input.streakWeeks && input.streakWeeks > 1) {

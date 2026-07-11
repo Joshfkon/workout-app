@@ -20,7 +20,13 @@ import {
   isStandardMuscle,
   legacyToStandardMuscles,
 } from '@/types/schema';
-import { formatDuration, formatWeight, estimateE1RM, deriveWorkoutLabel } from '@/lib/utils';
+import {
+  formatWorkoutDuration,
+  formatWeight,
+  estimateE1RM,
+  deriveWorkoutLabel,
+  resolveWorkoutDurationSeconds,
+} from '@/lib/utils';
 import { getFormLabel, getFormColorClass } from '@/services/progressionEngine';
 import { getCalibrationVerdict, type CalibrationMethod } from '@/services/rpeCalibration';
 import type { ShareExercise, WorkoutShareTextInput } from '@/services/workoutShareText';
@@ -95,6 +101,13 @@ interface SessionSummaryProps {
   amrapCalibrations?: AMRAPCalibration[];
   enhancedAthleteMode?: boolean;
   unit?: WeightUnit;
+  /**
+   * Frozen workout duration in seconds, snapshotted once at finish (excludes
+   * paused time). The summary renders THIS — never a live clock. Omit only for
+   * legacy completed sessions with no snapshot; then the wall-clock span
+   * (completedAt - startedAt) is used as a fallback.
+   */
+  durationSeconds?: number | null;
   onSubmit?: (data: {
     sessionRpe: number;
     pumpRating: number;
@@ -125,6 +138,7 @@ export function SessionSummary({
   amrapCalibrations = [],
   enhancedAthleteMode,
   unit = 'kg',
+  durationSeconds,
   onSubmit,
   readOnly = false,
 }: SessionSummaryProps) {
@@ -161,13 +175,15 @@ export function SessionSummary({
     ? Math.round((workingSets.reduce((sum, s) => sum + s.rpe, 0) / totalSets) * 10) / 10
     : 0;
 
-  // Duration - use completedAt for completed workouts, otherwise current time
-  const endTime = session.completedAt ? new Date(session.completedAt).getTime() : Date.now();
-  const duration = session.startedAt
-    ? Math.floor(
-        (endTime - new Date(session.startedAt).getTime()) / 1000
-      )
-    : 0;
+  // Duration is the frozen snapshot taken at finish (excludes paused time).
+  // Never derived from Date.now(), so this screen shows a fixed value rather
+  // than a live-ticking clock. Legacy completed sessions with no snapshot fall
+  // back to the wall-clock span.
+  const duration = resolveWorkoutDurationSeconds(
+    durationSeconds,
+    session.startedAt,
+    session.completedAt
+  );
   const durationMinutes = Math.round(duration / 60);
 
   // Estimated calories burned
@@ -691,7 +707,7 @@ export function SessionSummary({
           </div>
           <div className="text-center p-3 bg-surface-800/50 rounded-lg">
             <p className="text-2xl font-bold text-primary-400">
-              {formatDuration(duration)}
+              {formatWorkoutDuration(duration)}
             </p>
             <p className="text-xs text-surface-500">Duration</p>
           </div>
