@@ -1,6 +1,7 @@
 import {
   dedupeExercisesById,
   exerciseMatchesEquipment,
+  exerciseMatchesMuscleChip,
   exerciseMatchesMuscleGroup,
   exerciseMatchesQuery,
   filterExercises,
@@ -110,6 +111,30 @@ describe('exerciseMatchesMuscleGroup', () => {
   it('rejects off-target muscles', () => {
     expect(exerciseMatchesMuscleGroup(cableCrunch, 'back')).toBe(false);
     expect(exerciseMatchesMuscleGroup(hipAdduction, 'back')).toBe(false);
+  });
+});
+
+describe('exerciseMatchesMuscleChip (raw primary_muscle chips)', () => {
+  const lats = rowCamel; // primaryMuscle 'lats'
+  const backCoarse = backExtSnake; // primary_muscle 'back'
+
+  it('empty chip matches everything', () => {
+    expect(exerciseMatchesMuscleChip(lats, null)).toBe(true);
+    expect(exerciseMatchesMuscleChip(lats, '')).toBe(true);
+  });
+
+  it('coarse/legacy chip expands to sub-muscles', () => {
+    // 'back' chip catches both back and lats
+    expect(exerciseMatchesMuscleChip(backCoarse, 'back')).toBe(true);
+    expect(exerciseMatchesMuscleChip(lats, 'back')).toBe(true);
+  });
+
+  it('precise chip matches exactly and does NOT widen to coarse rows', () => {
+    // tapping 'lats' shows lats, but NOT a generic 'back'-tagged row —
+    // even though muscleMatchesGroup('back','lats') is true.
+    expect(exerciseMatchesMuscleChip(lats, 'lats')).toBe(true);
+    expect(exerciseMatchesMuscleChip(backCoarse, 'lats')).toBe(false);
+    expect(exerciseMatchesMuscleChip(rearDeltRaise, 'rear_delts')).toBe(true);
   });
 });
 

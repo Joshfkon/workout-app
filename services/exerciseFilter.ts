@@ -26,7 +26,7 @@
  * (primaryMuscle, equipmentRequired).
  */
 
-import { muscleMatchesGroup } from '@/types/schema';
+import { isLegacyMuscle, muscleMatchesGroup, normalizeMuscleToken } from '@/types/schema';
 import { formatMuscleName } from '@/lib/utils';
 
 /**
@@ -111,6 +111,26 @@ export function exerciseMatchesMuscleGroup(
 ): boolean {
   if (!muscleGroup) return true;
   return muscleMatchesGroup(getPrimaryMuscle(ex), muscleGroup);
+}
+
+/**
+ * Muscle-CHIP match for chip rows built from raw `primary_muscle` values (the
+ * add-exercise picker), which can be precise tokens ('lats', 'rear_delts').
+ *
+ * A coarse/legacy chip ('back', 'shoulders') expands to its sub-muscles
+ * (group-aware). A precise chip matches ONLY that exact token, so tapping
+ * 'lats' does not pull in generic 'back' rows — muscleMatchesGroup is
+ * bidirectional (muscleMatchesGroup('back', 'lats') is true), which would
+ * otherwise widen a specific chip. Empty chip matches everything.
+ */
+export function exerciseMatchesMuscleChip(
+  ex: FilterableExercise,
+  chip: string | null | undefined
+): boolean {
+  if (!chip) return true;
+  const token = normalizeMuscleToken(chip);
+  if (isLegacyMuscle(token)) return muscleMatchesGroup(getPrimaryMuscle(ex), chip);
+  return normalizeMuscleToken(getPrimaryMuscle(ex)) === token;
 }
 
 /** Exact-ish equipment chip match. Empty value matches all. */

@@ -82,6 +82,19 @@ async function run() {
   assert(shown.includes('ex-backext2') && shown.includes('ex-row'), 'Back chip (browse all) shows Back Extension + Seated Cable Row (lats)');
   assert(!shown.some((id) => ['ex-cable', 'ex-glute', 'ex-bench'].includes(id)), 'Back chip hides off-target muscles');
 
+  // 2b. A PRECISE chip ("Lats") must NOT widen to generic back rows.
+  await page.getByRole('button', { name: 'Lats', exact: true }).click();
+  await page.waitForTimeout(200);
+  const browseAll2 = page.getByRole('button', { name: /Browse all \d+ exercises/ });
+  if (await browseAll2.count()) { await browseAll2.click(); await page.waitForTimeout(200); }
+  shown = await ids();
+  assert(shown.includes('ex-row'), 'Lats chip shows Seated Cable Row');
+  assert(!shown.includes('ex-backext2'), 'Lats chip does NOT widen to the generic Back Extension');
+
+  // back to Back chip for the compose check
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
+  await page.waitForTimeout(200);
+
   // 3. Chip + query compose.
   await search.fill('extension');
   await page.waitForTimeout(250);

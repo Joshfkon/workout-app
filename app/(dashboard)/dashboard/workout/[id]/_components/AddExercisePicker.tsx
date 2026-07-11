@@ -33,7 +33,7 @@ import { useKeyboardInset } from '@/hooks/useKeyboardInset';
 import { checkExerciseEquipment } from '@/services/equipmentFilter';
 import {
   dedupeExercisesById,
-  exerciseMatchesMuscleGroup,
+  exerciseMatchesMuscleChip,
   exerciseMatchesQuery,
 } from '@/services/exerciseFilter';
 
@@ -195,10 +195,12 @@ export function AddExercisePicker({
 
   /** Muscle chip filter applied; location availability only flags and sorts. */
   const getBasePool = (): AvailableExercise[] => {
-    // De-dupe (shared with the library + replace pickers) then apply the
-    // group-aware muscle chip so a coarse chip also matches sub-muscle tags.
+    // De-dupe (shared with the library + replace pickers) then apply the muscle
+    // chip. These chips are built from raw primary_muscle values so they may be
+    // precise ('lats'): a coarse chip expands to sub-muscles, a precise chip
+    // matches exactly (so tapping 'lats' doesn't pull in generic 'back' rows).
     return dedupeExercisesById(availableExercises).filter(ex =>
-      exerciseMatchesMuscleGroup(ex, selectedMuscleFilter)
+      exerciseMatchesMuscleChip(ex, selectedMuscleFilter)
     );
   };
 
