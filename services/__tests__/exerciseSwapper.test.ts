@@ -38,88 +38,146 @@ function createExercise(overrides: Partial<Exercise> = {}): Exercise {
 
 describe('exerciseSwapper', () => {
   describe('calculateSimilarityScore', () => {
-    it('returns high score for identical exercises (excluding ID)', () => {
+    it('returns a high score for near-identical exercises', () => {
       const source = createExercise();
       const candidate = createExercise({ id: 'ex-2', name: 'Barbell Bench Press' });
 
+      // 30 (muscle) + 22 (pattern) + 14 (equipment) + 8 (mechanic)
+      // + 6 (secondary) + name similarity — comfortably in the 90s.
       const score = calculateSimilarityScore(source, candidate);
-      // 40 (muscle) + 30 (pattern) + 15 (mechanic) + 6 (2 secondary * 3) + 5 (rep range) = 96
-      expect(score).toBe(96);
+      expect(score).toBeGreaterThanOrEqual(90);
+      expect(score).toBeLessThanOrEqual(100);
     });
 
-    it('scores 40 points for same primary muscle', () => {
-      const source = createExercise({ primaryMuscle: 'chest' });
-      const candidate = createExercise({
-        id: 'ex-2',
+    it('awards more for an exact primary-muscle tag than a group overlap', () => {
+      const base = {
+        movementPattern: 'vertical_push',
+        mechanic: 'isolation' as const,
+        secondaryMuscles: [],
+        equipmentRequired: ['cable'],
+        defaultRepRange: [15, 20] as [number, number],
+        name: 'Some Movement',
+      };
+      const source = createExercise({ ...base, primaryMuscle: 'chest' });
+      const exact = createExercise({ ...base, id: 'ex-exact', primaryMuscle: 'chest' });
+      const groupOverlap = createExercise({ ...base, id: 'ex-grp', primaryMuscle: 'chest_upper' });
+      const unrelated = createExercise({ ...base, id: 'ex-none', primaryMuscle: 'quads' });
+
+      expect(calculateSimilarityScore(source, exact)).toBeGreaterThan(
+        calculateSimilarityScore(source, groupOverlap)
+      );
+      expect(calculateSimilarityScore(source, groupOverlap)).toBeGreaterThan(
+        calculateSimilarityScore(source, unrelated)
+      );
+    });
+
+    it('does NOT reward a blank movement pattern matching another blank one', () => {
+      // Regression: call sites pass movementPattern: '' as a placeholder. Two
+      // blanks must not count as a pattern match (the "everything ~60%" bug).
+      const source = createExercise({
+        name: 'A',
         primaryMuscle: 'chest',
-        movementPattern: 'vertical_push', // Different
-        mechanic: 'isolation', // Different
+        movementPattern: '',
+        equipmentRequired: [],
         secondaryMuscles: [],
-        defaultRepRange: [15, 20] as [number, number],
+        mechanic: 'compound',
       });
-
-      const score = calculateSimilarityScore(source, candidate);
-      expect(score).toBe(40); // Only primary muscle matches
-    });
-
-    it('scores 30 points for same movement pattern', () => {
-      const source = createExercise({ movementPattern: 'horizontal_push' });
-      const candidate = createExercise({
+      const blankCandidate = createExercise({
         id: 'ex-2',
-        primaryMuscle: 'shoulders', // Different
-        movementPattern: 'horizontal_push', // Same
-        mechanic: 'isolation', // Different
+        name: 'B',
+        primaryMuscle: 'chest',
+        movementPattern: '',
+        equipmentRequired: [],
         secondaryMuscles: [],
-        defaultRepRange: [15, 20] as [number, number],
-      });
-
-      const score = calculateSimilarityScore(source, candidate);
-      expect(score).toBe(30);
-    });
-
-    it('scores 15 points for same mechanic', () => {
-      const source = createExercise({ mechanic: 'compound' });
-      const candidate = createExercise({
-        id: 'ex-2',
-        primaryMuscle: 'back', // Different
-        movementPattern: 'vertical_pull', // Different
-        mechanic: 'compound', // Same
-        secondaryMuscles: [],
-        defaultRepRange: [15, 20] as [number, number],
-      });
-
-      const score = calculateSimilarityScore(source, candidate);
-      expect(score).toBe(15);
-    });
-
-    it('scores up to 10 points for overlapping secondary muscles', () => {
-      const source = createExercise({ secondaryMuscles: ['triceps', 'shoulders', 'core'] });
-      const candidate = createExercise({
-        id: 'ex-2',
-        primaryMuscle: 'back',
-        movementPattern: 'vertical_pull',
         mechanic: 'isolation',
-        secondaryMuscles: ['triceps', 'shoulders'], // 2 overlapping = 6 points
-        defaultRepRange: [15, 20] as [number, number],
+      });
+      const realPatternCandidate = createExercise({
+        id: 'ex-3',
+        name: 'A', // identical name to isolate the pattern effect
+        primaryMuscle: 'chest',
+        movementPattern: 'horizontal_push',
+        equipmentRequired: [],
+        secondaryMuscles: [],
+        mechanic: 'compound',
+      });
+      const sourceReal = createExercise({
+        name: 'A',
+        primaryMuscle: 'chest',
+        movementPattern: 'horizontal_push',
+        equipmentRequired: [],
+        secondaryMuscles: [],
+        mechanic: 'compound',
       });
 
-      const score = calculateSimilarityScore(source, candidate);
-      expect(score).toBe(6); // 2 * 3 = 6 points
+      // Blank↔blank gets muscle (30) + name, but NO pattern points.
+      const blankScore = calculateSimilarityScore(source, blankCandidate);
+      // Known-equal patterns DO add points.
+      const realScore = calculateSimilarityScore(sourceReal, realPatternCandidate);
+      expect(realScore).toBeGreaterThan(blankScore);
     });
 
-    it('scores 5 points for similar rep range', () => {
-      const source = createExercise({ defaultRepRange: [8, 12] as [number, number] });
-      const candidate = createExercise({
-        id: 'ex-2',
-        primaryMuscle: 'back',
-        movementPattern: 'vertical_pull',
-        mechanic: 'isolation',
+    it('rewards matching equipment class', () => {
+      const base = {
+        primaryMuscle: 'chest',
+        movementPattern: 'horizontal_push',
+        mechanic: 'compound' as const,
         secondaryMuscles: [],
-        defaultRepRange: [6, 10] as [number, number], // Within 2 of source
+        name: 'Chest Move',
+      };
+      const source = createExercise({ ...base, equipmentRequired: ['machine'] });
+      const sameClass = createExercise({
+        ...base,
+        id: 'ex-2',
+        equipmentRequired: ['seated chest press machine'],
+      });
+      const diffClass = createExercise({
+        ...base,
+        id: 'ex-3',
+        equipmentRequired: ['barbell'],
       });
 
-      const score = calculateSimilarityScore(source, candidate);
-      expect(score).toBe(5);
+      expect(calculateSimilarityScore(source, sameClass)).toBeGreaterThan(
+        calculateSimilarityScore(source, diffClass)
+      );
+    });
+
+    it('ranks a near-identical name far above a merely same-muscle movement (Task 4)', () => {
+      const source = createExercise({
+        name: 'Seated Calf Raise (Plate Loaded)',
+        primaryMuscle: 'calves',
+        movementPattern: 'calf_raise',
+        mechanic: 'isolation',
+        equipmentRequired: ['machine'],
+        secondaryMuscles: [],
+        defaultRepRange: [12, 20] as [number, number],
+      });
+      const nearIdentical = createExercise({
+        id: 'ex-machine',
+        name: 'Seated Calf Raise (Machine)',
+        primaryMuscle: 'calves',
+        movementPattern: 'calf_raise',
+        mechanic: 'isolation',
+        equipmentRequired: ['machine'],
+        secondaryMuscles: [],
+        defaultRepRange: [12, 20] as [number, number],
+      });
+      const distantSameMuscle = createExercise({
+        id: 'ex-ext',
+        name: 'Calf Extension',
+        primaryMuscle: 'calves',
+        movementPattern: 'calf_raise',
+        mechanic: 'isolation',
+        equipmentRequired: ['machine'],
+        secondaryMuscles: [],
+        defaultRepRange: [12, 20] as [number, number],
+      });
+
+      const near = calculateSimilarityScore(source, nearIdentical);
+      const distant = calculateSimilarityScore(source, distantSameMuscle);
+      expect(near).toBeGreaterThan(distant);
+      // "Far above" — the name signal opens a clear gap even when every
+      // structured field is identical between the two candidates.
+      expect(near - distant).toBeGreaterThanOrEqual(10);
     });
 
     it('caps score at 100', () => {

@@ -13,6 +13,7 @@ export interface AvailableExercise {
   name: string;
   primary_muscle: string;
   secondary_muscles?: string[];
+  movement_pattern?: string;
   mechanic: 'compound' | 'isolation';
   equipment_required?: string[];
   default_rep_range?: [number, number];

@@ -1167,7 +1167,8 @@ export default function WorkoutPage() {
       const supabase = createUntypedClient();
       const { data } = await supabase
         .from('exercises')
-        .select('id, name, primary_muscle, mechanic, equipment_required, default_rep_range, default_rir, is_bodyweight, hypertrophy_tier')
+        .select('id, name, primary_muscle, secondary_muscles, movement_pattern, mechanic, equipment_required, default_rep_range, default_rir, is_bodyweight, hypertrophy_tier')
+        .is('deleted_at', null) // hide merge-soft-deleted duplicates
         .order('name');
       if (data) {
         setAvailableExercises(data);
@@ -3134,6 +3135,7 @@ export default function WorkoutPage() {
     let query = supabase
       .from('exercises')
       .select('id, name, primary_muscle, mechanic, equipment_required, default_rep_range, default_rir, is_bodyweight')
+      .is('deleted_at', null) // hide merge-soft-deleted duplicates
       .order('name');
 
     if (muscle) {
@@ -4538,15 +4540,18 @@ export default function WorkoutPage() {
                         id: ex.id,
                         name: ex.name,
                         primaryMuscle: ex.primary_muscle,
-                        secondaryMuscles: [],
+                        // Real metadata so the "Similar" tab can actually
+                        // differentiate candidates (blank placeholders here made
+                        // every result score the same).
+                        secondaryMuscles: ex.secondary_muscles || [],
                         mechanic: ex.mechanic,
-                        defaultRepRange: [8, 12] as [number, number],
-                        defaultRir: 2,
+                        defaultRepRange: ex.default_rep_range || [8, 12] as [number, number],
+                        defaultRir: ex.default_rir ?? 2,
                         minWeightIncrementKg: 2.5,
                         formCues: [],
                         commonMistakes: [],
                         setupNote: '',
-                        movementPattern: '',
+                        movementPattern: ex.movement_pattern || '',
                         equipmentRequired: ex.equipment_required || [],
                         isBodyweight: ex.is_bodyweight ?? undefined,
                       }))

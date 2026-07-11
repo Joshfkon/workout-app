@@ -570,6 +570,7 @@ function NewWorkoutContent() {
         .from('exercises')
         .select('id, name, primary_muscle, mechanic, hypertrophy_tier, movement_pattern, equipment_required, is_bodyweight')
         .in('primary_muscle', suggestedMuscles.flatMap(expandMuscleGroupForFilter))
+        .is('deleted_at', null) // hide merge-soft-deleted duplicates
         .order('name');
 
       if (!exercisesData || exercisesData.length === 0) {
@@ -1054,6 +1055,7 @@ function NewWorkoutContent() {
           .from('exercises')
           .select('id, name, primary_muscle, mechanic, hypertrophy_tier, equipment_required, is_bodyweight')
           .in('primary_muscle', selectedMuscles.flatMap(expandMuscleGroupForFilter))
+          .is('deleted_at', null) // hide merge-soft-deleted duplicates
           .order('name');
 
         if (data && !error) {

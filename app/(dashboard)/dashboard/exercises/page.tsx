@@ -184,6 +184,7 @@ export default function ExercisesPage() {
       const { data, error } = await supabase
         .from('exercises')
         .select(EXERCISE_CATALOG_COLUMNS)
+        .is('deleted_at', null) // hide merge-soft-deleted duplicates
         .order('name');
       if (error) throw error;
       return (data ?? []) as Exercise[];
@@ -596,7 +597,7 @@ export default function ExercisesPage() {
               
               // Refresh exercises list
               const supabase = createUntypedClient();
-              const { data } = await supabase.from('exercises').select('*').order('name');
+              const { data } = await supabase.from('exercises').select('*').is('deleted_at', null).order('name');
               if (data) {
                 mutateExercises(data as Exercise[]);
               }

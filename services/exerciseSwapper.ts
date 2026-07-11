@@ -12,6 +12,7 @@ import type {
 } from '@/types/schema';
 import { muscleMatchesGroup } from '@/types/schema';
 import { BASE_SFR } from './fatigueBudgetEngine';
+import { exerciseNameSimilarity } from './exerciseNameMatch';
 
 // ============================================
 // STIMULUS-TO-FATIGUE (SFR)
@@ -50,7 +51,63 @@ export interface SwapContext {
 // ============================================
 
 /**
- * Calculate similarity score between two exercises (0-100)
+ * Read an exercise's movement pattern regardless of which Exercise shape it
+ * came from. The DB-mapped shape (services/exerciseService) stores it on
+ * `pattern`; the schema shape stores it on `movementPattern`; some call sites
+ * pass a blank placeholder. Returns '' when we genuinely have no pattern —
+ * which the scorer treats as "unknown", never as a match.
+ */
+function getPattern(ex: Exercise): string {
+  const raw = ex.movementPattern || (ex as { pattern?: string }).pattern || '';
+  return raw.toString().trim().toLowerCase();
+}
+
+/**
+ * Collapse an exercise's equipment down to a coarse class so that, e.g., a
+ * "plate loaded machine" and a "machine" count as the same class. Returns ''
+ * (unknown) when there is no equipment info, which never matches.
+ */
+function equipmentClass(ex: Exercise): string {
+  const tokens =
+    (ex.equipmentRequired && ex.equipmentRequired.length
+      ? ex.equipmentRequired
+      : [(ex as { equipment?: string }).equipment ?? '']
+    )
+      .join(' ')
+      .toLowerCase();
+  if (!tokens.trim()) return '';
+  if (tokens.includes('bodyweight') || tokens.includes('body weight')) return 'bodyweight';
+  if (tokens.includes('cable')) return 'cable';
+  if (tokens.includes('smith') || tokens.includes('machine') || tokens.includes('press machine'))
+    return 'machine';
+  if (tokens.includes('barbell') || tokens.includes('ez')) return 'barbell';
+  if (tokens.includes('dumbbell')) return 'dumbbell';
+  if (tokens.includes('kettlebell')) return 'kettlebell';
+  if (tokens.includes('band')) return 'band';
+  return tokens.split(' ')[0]; // fall back to the first descriptor
+}
+
+/**
+ * Calculate similarity score between two exercises (0-100).
+ *
+ * Composite of independent signals. Each component contributes ONLY when we
+ * have real data for both exercises — a missing/blank field scores 0 rather
+ * than falsely matching another blank field. (The previous formula compared
+ * `movementPattern === movementPattern`, and call sites pass a blank
+ * placeholder for that field, so every candidate collected a free +30 and the
+ * scores collapsed to a narrow band — the "everything is ~60%" bug.)
+ *
+ * Weights (max 100):
+ *   Primary muscle .... 30 exact tag / 22 same standard-muscle group
+ *   Movement pattern .. 22
+ *   Equipment class ... 14
+ *   Mechanic ..........  8
+ *   Secondary muscles . up to 6  (3 per shared muscle, capped)
+ *   Name similarity ... up to 20  (normalized trigram+token, 0..1 → 0..20)
+ *
+ * Name similarity is what separates near-identical variants ("Seated Calf
+ * Raise (Machine)" vs "Seated Calf Raise (Plate Loaded)") from merely
+ * same-muscle movements ("Calf Extension") when the structured fields agree.
  */
 export function calculateSimilarityScore(
   source: Exercise,
@@ -58,36 +115,43 @@ export function calculateSimilarityScore(
 ): number {
   let score = 0;
 
-  // Same primary muscle: 40 points (exact tag), 30 points when the tags
-  // overlap at the standard-muscle level (e.g. legacy 'chest' vs 'chest_upper')
+  // Primary muscle: exact tag (30) or same standard-muscle group (22)
+  // (e.g. legacy 'chest' vs detailed 'chest_upper').
   if (source.primaryMuscle === candidate.primaryMuscle) {
-    score += 40;
+    score += 30;
   } else if (muscleMatchesGroup(candidate.primaryMuscle, source.primaryMuscle)) {
-    score += 30;
+    score += 22;
   }
 
-  // Same movement pattern: 30 points
-  if (source.movementPattern === candidate.movementPattern) {
-    score += 30;
+  // Movement pattern: 22 points, only when both are known and equal.
+  const srcPattern = getPattern(source);
+  const candPattern = getPattern(candidate);
+  if (srcPattern && candPattern && srcPattern === candPattern) {
+    score += 22;
   }
 
-  // Same mechanic: 15 points
+  // Equipment class: 14 points, only when both are known and equal.
+  const srcEquip = equipmentClass(source);
+  const candEquip = equipmentClass(candidate);
+  if (srcEquip && candEquip && srcEquip === candEquip) {
+    score += 14;
+  }
+
+  // Same mechanic: 8 points.
   if (source.mechanic === candidate.mechanic) {
-    score += 15;
+    score += 8;
   }
 
-  // Overlapping secondary muscles: up to 10 points
-  const secondaryOverlap = source.secondaryMuscles.filter((m) =>
-    candidate.secondaryMuscles.includes(m)
+  // Overlapping secondary muscles: up to 6 points.
+  const secondaryOverlap = (source.secondaryMuscles || []).filter((m) =>
+    (candidate.secondaryMuscles || []).includes(m)
   ).length;
-  score += Math.min(10, secondaryOverlap * 3);
+  score += Math.min(6, secondaryOverlap * 3);
 
-  // Similar rep range: 5 points
-  const [srcMin, srcMax] = source.defaultRepRange;
-  const [candMin, candMax] = candidate.defaultRepRange;
-  if (Math.abs(srcMin - candMin) <= 2 && Math.abs(srcMax - candMax) <= 2) {
-    score += 5;
-  }
+  // Name similarity: up to 20 points. Always available (names are real even
+  // when structured metadata is a placeholder), so it also keeps the score
+  // meaningful for candidates whose pattern/equipment are unknown.
+  score += Math.round(exerciseNameSimilarity(source.name, candidate.name) * 20);
 
   return Math.min(100, score);
 }
@@ -145,8 +209,10 @@ export function findSimilarExercises(
   // Sort by score descending
   scored.sort((a, b) => b.score - a.score);
 
-  // Return exercises with score > 50
-  return scored.filter((s) => s.score > 50).map((s) => s.exercise);
+  // Return plausible alternatives. Threshold is lower than the old 50 because
+  // the rebalanced formula no longer hands out a free movement-pattern match;
+  // a genuine same-muscle swap that differs in equipment now lands in the 40s.
+  return scored.filter((s) => s.score >= 40).map((s) => s.exercise);
 }
 
 // ============================================

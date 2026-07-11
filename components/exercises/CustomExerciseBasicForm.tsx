@@ -24,6 +24,7 @@ import type { BasicExerciseInput } from '@/lib/exercises/types';
 import { MUSCLE_GROUP_OPTIONS, EQUIPMENT_OPTIONS } from '@/lib/exercises/types';
 import type { MuscleGroup, Equipment } from '@/types/schema';
 import { getExercises, type Exercise } from '@/services/exerciseService';
+import { findNameMatches, type NameMatch } from '@/services/exerciseNameMatch';
 import { createUntypedClient } from '@/lib/supabase/client';
 
 interface GymLocation {
@@ -37,6 +38,12 @@ interface CustomExerciseBasicFormProps {
   onCancel?: () => void;
   isLoading?: boolean;
   initialData?: Partial<BasicExerciseInput>;
+  /**
+   * Called when the user picks an already-existing exercise from the inline
+   * duplicate suggestions instead of creating a new one. When omitted the
+   * suggestions are hidden (nothing to select into).
+   */
+  onUseExisting?: (exerciseId: string) => void;
 }
 
 export function CustomExerciseBasicForm({
@@ -44,6 +51,7 @@ export function CustomExerciseBasicForm({
   onCancel,
   isLoading = false,
   initialData,
+  onUseExisting,
 }: CustomExerciseBasicFormProps) {
   const [name, setName] = useState(initialData?.name || '');
   const [primaryMuscle, setPrimaryMuscle] = useState<string>(
@@ -58,6 +66,12 @@ export function CustomExerciseBasicForm({
 
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Inline duplicate detection: as the user types a name (debounced), surface
+  // existing exercises with the same/normalized-or-similar name so they can
+  // reuse one instead of creating a near-duplicate. Never blocks creation —
+  // gym-specific variants are legitimate.
+  const [dupMatches, setDupMatches] = useState<NameMatch<Exercise>[]>([]);
 
   const [gymLocations, setGymLocations] = useState<GymLocation[]>([]);
   const [locationsLoaded, setLocationsLoaded] = useState(false);
@@ -78,6 +92,26 @@ export function CustomExerciseBasicForm({
     }
     loadExercises();
   }, []);
+
+  // Debounced duplicate check against the loaded library. Only runs when a
+  // selection handler is wired (otherwise there's nothing to select into).
+  useEffect(() => {
+    if (!onUseExisting) return;
+    const trimmed = name.trim();
+    if (trimmed.length < 3 || exercises.length === 0) {
+      setDupMatches([]);
+      return;
+    }
+    const handle = setTimeout(() => {
+      setDupMatches(
+        findNameMatches(trimmed, exercises, {
+          primaryMuscle: primaryMuscle || undefined,
+          limit: 4,
+        })
+      );
+    }, 300);
+    return () => clearTimeout(handle);
+  }, [name, primaryMuscle, exercises, onUseExisting]);
 
   // Load gym locations so the user can say where this exercise is available
   useEffect(() => {
@@ -186,6 +220,42 @@ export function CustomExerciseBasicForm({
           error={errors.name}
           required
         />
+
+        {/* Inline duplicate suggestions — advisory, never blocks creation. */}
+        {onUseExisting && dupMatches.length > 0 && (
+          <div
+            className="rounded-lg border border-warning-700/60 bg-warning-900/20 p-3"
+            data-testid="dup-exercise-suggestions"
+          >
+            <p className="text-sm font-medium text-warning-200 mb-2">
+              Similar existing {dupMatches.length === 1 ? 'exercise' : 'exercises'} — reuse one to
+              keep your history together?
+            </p>
+            <ul className="space-y-1.5">
+              {dupMatches.map((match) => (
+                <li
+                  key={match.exercise.id}
+                  className="flex items-center justify-between gap-3"
+                >
+                  <span className="text-sm text-surface-200 truncate">
+                    {match.exercise.name}
+                    {match.exercise.isCustom && (
+                      <span className="text-xs text-surface-500 ml-1">(custom)</span>
+                    )}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => onUseExisting(match.exercise.id)}
+                    className="flex-shrink-0 text-xs font-medium text-primary-400 hover:text-primary-300
+                      rounded-md border border-primary-700/60 px-2.5 py-1 transition-colors"
+                  >
+                    Use this instead
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         <Select
           label="Primary Muscle"
