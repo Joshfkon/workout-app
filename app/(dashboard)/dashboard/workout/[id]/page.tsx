@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Card, Button, Badge, Input, LoadingAnimation, SkeletonExercise, ConfirmModal, ToastContainer, useToasts } from '@/components/ui';
 import {
+  enqueueRowUpdate,
   enqueueSetInsert,
   flushSetOutbox,
   isMissingColumnError,
@@ -3836,6 +3837,40 @@ export default function WorkoutPage() {
     router.push('/dashboard');
   };
 
+  // Toggle the deload flag mid-workout (from the header ⋮ menu). Durable +
+  // optimistic: the header/banner reflect it immediately and the choice is
+  // queued in the IndexedDB outbox — the same durable path the finish flow
+  // uses for workout_sessions updates. We deliberately DON'T roll back the
+  // local flag on a connectivity failure: a lifter who marks a deload offline
+  // and finishes offline must keep it (the summary seeds from session.isDeload,
+  // and the finish patch re-persists the same value), otherwise a light session
+  // would silently leak back into PR/e1RM data. A stable entryId coalesces
+  // repeated toggles to the latest value.
+  const handleToggleDeloadSession = async () => {
+    if (!session) return;
+    const next = !session.isDeload;
+    setSession((prev) => (prev ? { ...prev, isDeload: next } : prev));
+    try {
+      await enqueueRowUpdate(`deload:${sessionId}`, 'workout_sessions', sessionId, {
+        is_deload: next,
+      });
+      // Best-effort immediate sync; if offline it stays queued and the existing
+      // outbox flushers (dashboard mount / 'online' / page poll) push it later.
+      void flushSetOutbox(createUntypedClient());
+    } catch (err) {
+      // Outbox unavailable (broken IndexedDB) — fall back to a direct write.
+      // The local flag stays set regardless; the finish patch is the backstop.
+      console.error('Failed to queue deload flag, attempting direct write:', err);
+      void createUntypedClient()
+        .from('workout_sessions')
+        .update({ is_deload: next })
+        .eq('id', sessionId)
+        .then(({ error }: { error: unknown }) => {
+          if (error) console.error('Direct deload flag write failed:', error);
+        });
+    }
+  };
+
   const handleDeclineClaim = () => {
     setShowClaimPrompt(false);
     finishToDashboard();
@@ -4262,6 +4297,8 @@ export default function WorkoutPage() {
         onOpenReadinessModal={() => setShowReadinessModal(true)}
         onOpenMuscleReadiness={() => setShowMuscleReadinessSheet(true)}
         onOpenPlateCalculator={() => setShowPlateCalculator(true)}
+        isDeload={session?.isDeload ?? false}
+        onToggleDeload={handleToggleDeloadSession}
         onCancelWorkout={() => setShowCancelModal(true)}
         onAddExercise={handleOpenAddExercise}
         onFinishWorkout={handleWorkoutComplete}

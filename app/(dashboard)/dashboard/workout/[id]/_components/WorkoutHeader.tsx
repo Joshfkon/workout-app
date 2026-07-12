@@ -27,6 +27,7 @@ import {
   IconChevronsUp,
   IconDotsVertical,
   IconGauge,
+  IconMoon,
   IconPlayerPause,
   IconPlayerPlay,
   IconPlus,
@@ -64,6 +65,10 @@ export interface WorkoutHeaderProps {
   /** Opens the "which muscles should I hit today?" volume + recovery sheet. */
   onOpenMuscleReadiness: () => void;
   onOpenPlateCalculator: () => void;
+  /** Whether this session is currently flagged as a deload (light) session. */
+  isDeload: boolean;
+  /** Toggle the deload flag for this session (held light, excluded from PRs/trends). */
+  onToggleDeload: () => void;
   onCancelWorkout: () => void;
   onAddExercise: () => void;
   onFinishWorkout: () => void;
@@ -102,6 +107,8 @@ export function WorkoutHeader({
   onOpenReadinessModal,
   onOpenMuscleReadiness,
   onOpenPlateCalculator,
+  isDeload,
+  onToggleDeload,
   onCancelWorkout,
   onAddExercise,
   onFinishWorkout,
@@ -258,6 +265,18 @@ export function WorkoutHeader({
                   >
                     <IconBarbell size={16} className="text-surface-400" />
                     Plate calculator
+                  </button>
+                  <button
+                    onClick={() => { onToggleDeload(); onCloseToolsMenu(); }}
+                    className={menuItemClass}
+                    role="menuitemcheckbox"
+                    aria-checked={isDeload}
+                  >
+                    <IconMoon
+                      size={16}
+                      className={isDeload ? 'text-primary-400' : 'text-surface-400'}
+                    />
+                    {isDeload ? 'Deload session ✓' : 'Mark as deload'}
                   </button>
                   <div className="my-1 border-t border-surface-700" />
                   <button
