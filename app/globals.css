@@ -41,6 +41,15 @@
   --surface-800: 39 39 42;
   --surface-900: 24 24 27;
   --surface-950: 9 9 11;
+
+  /* Meal-section accent tokens (RGB channels, like the surface ramp).
+     400-weight hues on the dark surface; the light theme overrides with
+     600-weight so contrast vs the white card stays >= 3:1. Keep in sync with
+     MEAL_ACCENTS in lib/nutrition/mealAccents.ts (contrast-tested there). */
+  --meal-breakfast: 251 191 36; /* amber-400 */
+  --meal-lunch: 96 165 250;     /* blue-400 */
+  --meal-dinner: 167 139 250;   /* violet-400 */
+  --meal-snack: 45 212 191;     /* teal-400 */
 }
 
 /* Light theme — opt-in via data-theme="light" on <html>. Inverts the surface ramp
@@ -71,6 +80,12 @@
   --surface-800: 228 228 231;
   --surface-900: 255 255 255;
   --surface-950: 248 250 252;
+
+  /* Meal accents on light surfaces: 600-weight for >= 3:1 contrast on white. */
+  --meal-breakfast: 217 119 6;  /* amber-600 */
+  --meal-lunch: 37 99 235;      /* blue-600 */
+  --meal-dinner: 124 58 237;    /* violet-600 */
+  --meal-snack: 13 148 136;     /* teal-600 */
 }
 
 @layer base {

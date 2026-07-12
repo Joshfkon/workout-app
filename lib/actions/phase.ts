@@ -98,6 +98,52 @@ async function getCurrentWeightKg(
 }
 
 /**
+ * Append the phase switch to phase_history so date-scoped features (the
+ * nutrition calendar's phase-aware rings) can resolve which phase was active
+ * on any past day. Best-effort: a failure (e.g. the table not yet migrated)
+ * never blocks the phase change itself.
+ *
+ * On the FIRST recorded change we also backfill a baseline row for the
+ * previous phase (started_on epoch) so every date before the switch resolves
+ * to the phase the user was actually in, not the new one.
+ */
+async function recordPhaseChange(
+  supabase: Awaited<ReturnType<typeof createUntypedServerClient>>,
+  userId: string,
+  previousPhase: TrainingPhase,
+  nextPhase: TrainingPhase
+): Promise<void> {
+  if (previousPhase === nextPhase) return;
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const { count, error: countError } = await supabase
+      .from('phase_history')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId);
+    if (countError) throw countError;
+
+    if (!count) {
+      await supabase.from('phase_history').insert({
+        user_id: userId,
+        phase: previousPhase,
+        started_on: '1970-01-01',
+      });
+    }
+
+    // One row per day: switching twice in a day keeps the final choice.
+    const { error: upsertError } = await supabase
+      .from('phase_history')
+      .upsert(
+        { user_id: userId, phase: nextPhase, started_on: today },
+        { onConflict: 'user_id,started_on' }
+      );
+    if (upsertError) throw upsertError;
+  } catch (error) {
+    console.error('[updateTrainingPhase] phase_history write failed (non-fatal):', error);
+  }
+}
+
+/**
  * Set the user's current phase (bulk / cut / maintain).
  *
  * Always updates users.goal. If the user has macro settings (i.e. has used the
@@ -117,6 +163,17 @@ export async function updateTrainingPhase(
       return { success: false, macrosSynced: false, message: 'Not authenticated' };
     }
 
+    // Previous phase (read BEFORE the update) — needed to seed phase_history
+    // with a baseline row so past dates stay resolvable after the first change.
+    const { data: profileBefore } = await supabase
+      .from('users')
+      .select('goal')
+      .eq('id', user.id)
+      .maybeSingle();
+    const previousGoal = profileBefore?.goal as string | null | undefined;
+    const previousPhase: TrainingPhase =
+      previousGoal === 'bulk' || previousGoal === 'cut' ? previousGoal : 'maintenance';
+
     // 1. Profile goal — the value training logic reads
     const { error: goalError } = await supabase
       .from('users')
@@ -126,6 +183,8 @@ export async function updateTrainingPhase(
       console.error('[updateTrainingPhase] users.goal update failed:', goalError);
       return { success: false, macrosSynced: false, message: 'Failed to update training phase' };
     }
+
+    await recordPhaseChange(supabase, user.id, previousPhase, phase);
 
     // Active mesocycle check (same detection as the dashboard): its program was
     // built for the old phase, so callers can offer a rebuild. Fetched alongside

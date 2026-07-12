@@ -1,0 +1,136 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`foodEmoji maps the top-30 fixture (snapshot) 1`] = `
+[
+  {
+    "emoji": "🍗",
+    "name": "Chicken Breast, Grilled",
+  },
+  {
+    "emoji": "🍚",
+    "name": "Jasmine White Rice, Cooked",
+  },
+  {
+    "brand": "Fage",
+    "emoji": "🥣",
+    "name": "GREEK YOGURT, PLAIN, NONFAT",
+  },
+  {
+    "brand": "Optimum Nutrition",
+    "emoji": "🥤",
+    "name": "Whey Protein Powder",
+  },
+  {
+    "brand": "Quest",
+    "emoji": "🍫",
+    "name": "Protein Bar, Chocolate Chip Cookie Dough",
+  },
+  {
+    "emoji": "🍳",
+    "name": "Eggs, Whole, Scrambled",
+  },
+  {
+    "emoji": "🍳",
+    "name": "Egg Whites",
+  },
+  {
+    "brand": "Quaker",
+    "emoji": "🥣",
+    "name": "Oatmeal, Old Fashioned Oats",
+  },
+  {
+    "emoji": "🍌",
+    "name": "Banana, Raw",
+  },
+  {
+    "emoji": "🍎",
+    "name": "Apple, Honeycrisp",
+  },
+  {
+    "emoji": "🐟",
+    "name": "Salmon, Atlantic, Baked",
+  },
+  {
+    "emoji": "🥩",
+    "name": "Ground Beef, 93/7, Cooked",
+  },
+  {
+    "emoji": "🥦",
+    "name": "Broccoli, Steamed",
+  },
+  {
+    "emoji": "🥔",
+    "name": "Sweet Potato, Baked",
+  },
+  {
+    "brand": "Jif",
+    "emoji": "🥜",
+    "name": "Peanut Butter, Creamy",
+  },
+  {
+    "brand": "Dave’s Killer Bread",
+    "emoji": "🍞",
+    "name": "Bread, Whole Wheat",
+  },
+  {
+    "emoji": "🫐",
+    "name": "Blueberries, Raw",
+  },
+  {
+    "emoji": "🥜",
+    "name": "Almonds, Raw",
+  },
+  {
+    "brand": "Good Culture",
+    "emoji": "🧀",
+    "name": "Cottage Cheese, 2%",
+  },
+  {
+    "brand": "Premier Protein",
+    "emoji": "🥤",
+    "name": "Protein Shake, Chocolate",
+  },
+  {
+    "emoji": "🍕",
+    "name": "Pizza, Pepperoni, 14" Slice",
+  },
+  {
+    "emoji": "🍔",
+    "name": "Cheeseburger",
+  },
+  {
+    "emoji": "🍝",
+    "name": "Spaghetti with Marinara Sauce",
+  },
+  {
+    "emoji": "🐟",
+    "name": "TUNA, CANNED IN WATER, DRAINED",
+  },
+  {
+    "emoji": "🥑",
+    "name": "Avocado, Raw",
+  },
+  {
+    "emoji": "🍓",
+    "name": "Strawberries, Raw",
+  },
+  {
+    "brand": "Starbucks",
+    "emoji": "☕",
+    "name": "Latte, Nonfat Milk",
+  },
+  {
+    "emoji": "🍚",
+    "name": "White Cheddar Rice Cakes",
+  },
+  {
+    "brand": "Breyers",
+    "emoji": "🍦",
+    "name": "Ice Cream, Vanilla",
+  },
+  {
+    "emoji": "🍗",
+    "name": "Mixed Greens Salad with Grilled Chicken",
+  },
+]
+`;

@@ -11,6 +11,8 @@ import { searchFoodsAction, getFoodDetailsAction } from '@/lib/actions/food-sear
 import { lookupBarcode as lookupBarcodeOFF } from '@/services/openFoodFactsService';
 import dynamic from 'next/dynamic';
 import { ServingAmountEditor, type ServingAmountValue } from './ServingAmountEditor';
+import { FoodEmojiAvatar } from './FoodEmoji';
+import { foodEmoji } from '@/lib/nutrition/foodEmoji';
 import {
   computeServing,
   weightBasedModel,
@@ -211,17 +213,20 @@ function RecentFoodRow({
       <button
         type="button"
         onClick={onSelect}
-        className="flex-1 min-w-0 p-2 text-left rounded-lg hover:bg-surface-700 transition-colors"
+        className="flex-1 min-w-0 p-2 text-left rounded-lg hover:bg-surface-700 transition-colors flex items-center gap-2"
       >
-        <p className="text-sm font-medium text-surface-200 truncate">{recent.food_name}</p>
-        <p className="text-xs text-surface-500 flex items-center gap-1.5">
-          <span className="truncate">{subtitle}</span>
-          <span className="text-surface-600" aria-hidden="true">·</span>
-          <span className="flex-shrink-0 flex items-center gap-0.5 text-surface-500">
-            <IconClock size={11} aria-hidden="true" />
-            {dayLabel(recent.loggedAt)}
+        <FoodEmojiAvatar name={recent.food_name} size="sm" />
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-medium text-surface-200 truncate">{recent.food_name}</span>
+          <span className="text-xs text-surface-500 flex items-center gap-1.5">
+            <span className="truncate">{subtitle}</span>
+            <span className="text-surface-600" aria-hidden="true">·</span>
+            <span className="flex-shrink-0 flex items-center gap-0.5 text-surface-500">
+              <IconClock size={11} aria-hidden="true" />
+              {dayLabel(recent.loggedAt)}
+            </span>
           </span>
-        </p>
+        </span>
       </button>
       <QuickAddButton
         onClick={onQuickAdd}
@@ -1034,11 +1039,14 @@ export function AddFoodModal({
                                   className="flex items-center gap-2 bg-surface-900/40 rounded-lg pr-2"
                                   data-testid="prior-meal-food"
                                 >
-                                  <div className="flex-1 min-w-0 p-2">
-                                    <p className="text-sm text-surface-200 truncate">{entry.food_name}</p>
-                                    <p className="text-xs text-surface-500 truncate">
-                                      {Math.round(entry.calories || 0)} cal · {entry.serving_size || '1 serving'}
-                                    </p>
+                                  <div className="flex-1 min-w-0 p-2 flex items-center gap-2">
+                                    <FoodEmojiAvatar name={entry.food_name} size="sm" />
+                                    <div className="min-w-0">
+                                      <p className="text-sm text-surface-200 truncate">{entry.food_name}</p>
+                                      <p className="text-xs text-surface-500 truncate">
+                                        {Math.round(entry.calories || 0)} cal · {entry.serving_size || '1 serving'}
+                                      </p>
+                                    </div>
                                   </div>
                                   <QuickAddButton
                                     onClick={() => handleQuickAdd(entry, `meal-item:${entry.id}`)}
@@ -1122,11 +1130,14 @@ export function AddFoodModal({
                           disabled={isSubmitting}
                           className="w-full p-2 bg-surface-800/50 hover:bg-surface-700 rounded-lg text-left transition-colors flex justify-between items-center disabled:opacity-50"
                         >
-                          <div>
-                            <p className="text-sm font-medium text-surface-200">{food.food_name}</p>
-                            <p className="text-xs text-surface-500">
-                              {Math.round(food.avg_calories)} cal · logged {food.times_logged}x
-                            </p>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <FoodEmojiAvatar name={food.food_name} size="sm" />
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-surface-200 truncate">{food.food_name}</p>
+                              <p className="text-xs text-surface-500">
+                                {Math.round(food.avg_calories)} cal · logged {food.times_logged}x
+                              </p>
+                            </div>
                           </div>
                           <span className="text-primary-400 text-sm flex-shrink-0">+ Add</span>
                         </button>
@@ -1137,13 +1148,16 @@ export function AddFoodModal({
                           onClick={() => handleSelectCustomFood(food)}
                           className="w-full p-2 bg-surface-800/50 hover:bg-surface-700 rounded-lg text-left transition-colors flex justify-between items-center"
                         >
-                          <div>
-                            <p className="text-sm font-medium text-surface-200">{food.food_name}</p>
-                            <p className="text-xs text-surface-500">
-                              {food.is_per_weight
-                                ? `${food.calories_per_ref} cal per ${food.reference_amount}${food.reference_unit || 'g'}`
-                                : `${food.calories} cal · ${food.serving_size}`}
-                            </p>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <FoodEmojiAvatar name={food.food_name} size="sm" />
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-surface-200 truncate">{food.food_name}</p>
+                              <p className="text-xs text-surface-500">
+                                {food.is_per_weight
+                                  ? `${food.calories_per_ref} cal per ${food.reference_amount}${food.reference_unit || 'g'}`
+                                  : `${food.calories} cal · ${food.serving_size}`}
+                              </p>
+                            </div>
                           </div>
                           <span className="text-xs text-surface-500 flex-shrink-0">Custom</span>
                         </button>
@@ -1165,7 +1179,10 @@ export function AddFoodModal({
                           onClick={() => handleSelectSystemFood(food)}
                           className="w-full p-2 bg-surface-800/50 hover:bg-surface-700 rounded-lg text-left transition-colors flex justify-between items-center"
                         >
-                          <span className="text-sm text-surface-200">{food.name}</span>
+                          <span className="flex items-center gap-2 min-w-0">
+                            <FoodEmojiAvatar name={food.name} size="sm" />
+                            <span className="text-sm text-surface-200 truncate">{food.name}</span>
+                          </span>
                           <span className="text-xs text-surface-500 flex-shrink-0">
                             {food.calories_per_100g} cal | {food.protein_per_100g}g P
                           </span>
@@ -1185,7 +1202,10 @@ export function AddFoodModal({
                               onClick={() => handleSelectSystemFood(food)}
                               className="w-full p-2 bg-surface-800/50 hover:bg-surface-700 rounded-lg text-left transition-colors flex justify-between items-center"
                             >
-                              <span className="text-sm text-surface-200">{food.name}</span>
+                              <span className="flex items-center gap-2 min-w-0">
+                                <FoodEmojiAvatar name={food.name} size="sm" />
+                                <span className="text-sm text-surface-200 truncate">{food.name}</span>
+                              </span>
                               <span className="text-xs text-surface-500 flex-shrink-0">
                                 {food.calories_per_100g} cal | {food.protein_per_100g}g P
                               </span>
@@ -1218,9 +1238,12 @@ export function AddFoodModal({
                           onClick={() => handleSelectFood(food)}
                           className="w-full p-2 bg-surface-800/50 hover:bg-surface-700 rounded-lg text-left transition-colors flex justify-between items-center gap-2"
                         >
-                          <div className="min-w-0">
-                            <p className="text-sm text-surface-200 truncate">{food.name}</p>
-                            <p className="text-xs text-surface-500">{food.servingSize}</p>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <FoodEmojiAvatar name={food.name} size="sm" />
+                            <div className="min-w-0">
+                              <p className="text-sm text-surface-200 truncate">{food.name}</p>
+                              <p className="text-xs text-surface-500">{food.servingSize}</p>
+                            </div>
                           </div>
                           <span className="text-xs text-surface-500 flex-shrink-0">
                             {food.calories} cal | {food.protein}g P
@@ -1279,8 +1302,11 @@ export function AddFoodModal({
                         />
                       </div>
                     ) : (
-                      <div className="w-20 h-20 bg-surface-700 rounded-lg flex items-center justify-center">
-                        <IconToolsKitchen2 size={28} className="text-surface-400" aria-hidden="true" />
+                      <div
+                        className="w-20 h-20 bg-surface-700 rounded-lg flex items-center justify-center text-3xl"
+                        aria-hidden="true"
+                      >
+                        {foodEmoji(scannedProduct.name, scannedProduct.brand)}
                       </div>
                     )}
                     <div className="flex-1 min-w-0">
