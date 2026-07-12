@@ -21,7 +21,9 @@ const mockUserData = {
   },
 };
 
-const mockGetUser = jest.fn();
+// useAuthUser reads the locally persisted session (getSession), not the
+// getUser() network round trip — see hooks/useAuthUser.ts.
+const mockGetSession = jest.fn();
 const mockSelect = jest.fn();
 const mockUpdate = jest.fn();
 const mockEq = jest.fn();
@@ -30,7 +32,7 @@ const mockSingle = jest.fn();
 jest.mock('@/lib/supabase/client', () => ({
   createUntypedClient: () => ({
     auth: {
-      getUser: mockGetUser,
+      getSession: mockGetSession,
     },
     from: () => ({
       select: mockSelect,
@@ -49,7 +51,7 @@ describe('useUserPreferences', () => {
     jest.spyOn(console, 'error').mockImplementation(() => {});
 
     // Reset mock chain
-    mockGetUser.mockResolvedValue({ data: { user: mockUser } });
+    mockGetSession.mockResolvedValue({ data: { session: { user: mockUser } } });
     mockSelect.mockReturnValue({ eq: mockEq });
     mockEq.mockReturnValue({ single: mockSingle });
     mockSingle.mockResolvedValue({ data: mockUserData });
@@ -63,14 +65,14 @@ describe('useUserPreferences', () => {
   describe('initial state and loading', () => {
     it('starts with isLoading true', async () => {
       // Use a promise that never resolves to test initial state
-      mockGetUser.mockReturnValue(new Promise(() => {}));
+      mockGetSession.mockReturnValue(new Promise(() => {}));
 
       const { result } = renderHook(() => useUserPreferences());
       expect(result.current.isLoading).toBe(true);
     });
 
     it('has default preferences structure', async () => {
-      mockGetUser.mockReturnValue(new Promise(() => {}));
+      mockGetSession.mockReturnValue(new Promise(() => {}));
 
       const { result } = renderHook(() => useUserPreferences());
 
@@ -94,12 +96,12 @@ describe('useUserPreferences', () => {
       renderHook(() => useUserPreferences());
 
       await waitFor(() => {
-        expect(mockGetUser).toHaveBeenCalled();
+        expect(mockGetSession).toHaveBeenCalled();
       });
     });
 
     it('uses default values when no user is logged in', async () => {
-      mockGetUser.mockResolvedValue({ data: { user: null } });
+      mockGetSession.mockResolvedValue({ data: { session: null } });
 
       const { result } = renderHook(() => useUserPreferences());
 
@@ -200,7 +202,7 @@ describe('useUserPreferences', () => {
 
   describe('updatePreference behavior', () => {
     it('does not call update when no user is logged in', async () => {
-      mockGetUser.mockResolvedValue({ data: { user: null } });
+      mockGetSession.mockResolvedValue({ data: { session: null } });
 
       const { result } = renderHook(() => useUserPreferences());
 

@@ -42,14 +42,17 @@ const config: CapacitorConfig & { ios?: IOSConfig } = {
   // Plugin configuration
   plugins: {
     SplashScreen: {
-      // Reduced from 2000ms - web splash provides the branded experience
       launchShowDuration: 500,
       backgroundColor: '#0a0a0a',
       showSpinner: false,
       splashFullScreen: true,
       splashImmersive: true,
-      // Auto-hide once web view is ready
-      launchAutoHide: true,
+      // ONE loading surface on cold start: the native splash stays up until
+      // the web app paints real content, then SplashProvider hides it (on
+      // boot:home-paint, with a 2.5s fallback). Auto-hide dropped the splash
+      // as soon as the webview loaded, handing off to a SECOND branded web
+      // splash — the "two consecutive loading animations".
+      launchAutoHide: false,
     },
     StatusBar: {
       style: 'DARK',
