@@ -187,6 +187,29 @@ async function fetchLogHomeData(): Promise<LogHomeData | null> {
   ]);
   bootMark('data-first-batch');
 
+  // Supabase queries resolve with { data: null, error } instead of throwing.
+  // When EVERY query errored (offline, dead token, outage), the batch is a
+  // failed fetch — not a user with no data. Throw so React Query keeps the
+  // last good (persisted) payload and retries, instead of committing an
+  // all-empty "success" over it. (fetchEatingWindow never errors — it
+  // resolves to a default — so it's excluded from the check.)
+  const results = [
+    inProgressRes,
+    mesoRes,
+    checkInRes,
+    goalRes,
+    foodRes,
+    targetsRes,
+    activityRes,
+    lastWeightRes,
+    prefsRes,
+  ];
+  if (results.every((r) => r.error)) {
+    throw new Error(
+      `[Log] boot fetch failed entirely: ${mesoRes.error?.message ?? 'unknown error'}`
+    );
+  }
+
   const ipRow = inProgressRes.data?.[0];
   let inProgress: LogInProgressSummary | null = null;
   if (ipRow) {
