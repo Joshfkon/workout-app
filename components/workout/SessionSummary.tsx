@@ -114,6 +114,8 @@ interface SessionSummaryProps {
     notes: string;
     /** Per-muscle pump/workload chips (defaults 1/1 submit as-is when untouched). */
     muscleFeedback: SessionMuscleFeedbackEntry[];
+    /** Whether the user marked this as a deload session. */
+    isDeload: boolean;
   }) => void;
   readOnly?: boolean;
 }
@@ -155,6 +157,10 @@ export function SessionSummary({
   const [sessionRpe, setSessionRpe] = useState(session.sessionRpe || 7);
   const [pumpRating, setPumpRating] = useState(session.pumpRating || 3);
   const [notes, setNotes] = useState(session.sessionNotes || '');
+  // "This was a deload session" — seeded from the stored flag (auto-set for
+  // programmed deload weeks) so an already-flagged session shows the toggle on.
+  // Drives PR suppression + the share tag live, and is persisted on submit.
+  const [isDeload, setIsDeload] = useState<boolean>(session.isDeload ?? false);
   // Per-muscle pump/workload overrides; muscles not in the map use the 1/1 default.
   const [muscleRatings, setMuscleRatings] = useState<
     Partial<Record<StandardMuscleGroup, { pump: PumpRating0to3; workload: WorkloadRating }>>
@@ -221,6 +227,11 @@ export function SessionSummary({
       form?: FormRating;
       formNote?: string;
     }[] = [];
+
+    // A deload session is intentionally light — no PR can fire from it, even if
+    // reps happen to exceed a stale e1RM. Excluded so a light week never reads
+    // as a record.
+    if (isDeload) return prs;
 
     // Group sets by exercise
     const setsByExercise = new Map<string, SetLog[]>();
@@ -321,7 +332,7 @@ export function SessionSummary({
     });
 
     return prs;
-  }, [workingSets, exerciseBlocks, exerciseHistories]);
+  }, [workingSets, exerciseBlocks, exerciseHistories, isDeload]);
 
   // Wordle-style text share input (performed order, skipped blocks included)
   const shareInput = useMemo<Omit<WorkoutShareTextInput, 'cryptic'>>(() => {
@@ -387,9 +398,13 @@ export function SessionSummary({
 
     const completedDate = session.completedAt ? new Date(session.completedAt) : new Date();
 
+    const dateLabel = completedDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+
     return {
       title: deriveWorkoutLabel(performedMuscles),
-      subtitle: completedDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+      // Tag deload sessions so a light week doesn't read as a failed week to
+      // the group chat.
+      subtitle: isDeload ? `${dateLabel} · Deload` : dateLabel,
       exercises: entries.map((e) => e.exercise),
       durationSeconds: duration,
       unit,
@@ -403,6 +418,7 @@ export function SessionSummary({
     session.completedAt,
     duration,
     unit,
+    isDeload,
   ]);
 
   // Volume by muscle group
@@ -468,10 +484,10 @@ export function SessionSummary({
         ? Math.max(...sets.map(s => estimateE1RM(s.weightKg, s.reps))) 
         : 0;
       
-      // Check if this exercise had a PR
+      // Check if this exercise had a PR (never on a deload session).
       const history = exerciseHistories?.[block.exerciseId || ''];
-      const hasPR = history?.previousBest && bestE1RM > history.previousBest.e1rm;
-      
+      const hasPR = !isDeload && history?.previousBest && bestE1RM > history.previousBest.e1rm;
+
       return {
         blockId: block.id,
         exerciseId: block.exerciseId,
@@ -490,7 +506,7 @@ export function SessionSummary({
         targetRepsMax: (block as any).targetRepsMax,
       };
     }).filter(e => e.sets.length > 0); // Only show exercises with completed sets
-  }, [exerciseBlocks, workingSets, allSets, exerciseHistories]);
+  }, [exerciseBlocks, workingSets, allSets, exerciseHistories, isDeload]);
 
   // Muscles trained this session (blocks with at least one working set),
   // resolved to standard muscle groups — drives the per-muscle feedback rows.
@@ -547,6 +563,7 @@ export function SessionSummary({
           muscleGroup: muscle,
           ...getMuscleRating(muscle),
         })),
+        isDeload,
       });
     }
   };
@@ -1257,6 +1274,52 @@ export function SessionSummary({
             />
           )}
         </Card>
+      )}
+
+      {/* Deload toggle — mark a light session so it's excluded from
+          progression suggestions, e1RM/PR trends and stagnation baselines
+          (but still counts toward volume, history and streaks). */}
+      {!readOnly ? (
+        <Card>
+          <label className="flex items-center justify-between gap-4 cursor-pointer">
+            <span className="flex-1">
+              <span className="block text-sm font-medium text-surface-200">
+                This was a deload session
+              </span>
+              <span className="block text-xs text-surface-400 mt-0.5">
+                Holds light — still counts toward volume, but won&apos;t set PRs or
+                anchor next session&apos;s weights.
+              </span>
+            </span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={isDeload}
+              aria-label="This was a deload session"
+              onClick={() => setIsDeload((v) => !v)}
+              className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${
+                isDeload ? 'bg-primary-500' : 'bg-surface-700'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  isDeload ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </label>
+        </Card>
+      ) : (
+        isDeload && (
+          <Card>
+            <div className="flex items-center gap-2">
+              <Badge variant="info" size="sm">Deload</Badge>
+              <span className="text-sm text-surface-400">
+                Logged as a deload session — held light on purpose.
+              </span>
+            </div>
+          </Card>
+        )
       )}
 
       {/* Submit - only shown when not in read-only mode */}

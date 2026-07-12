@@ -75,9 +75,21 @@ export function checkDeloadTriggers(
   }
   
   // === TRIGGER 6: Time since last deload (backup trigger) ===
-  const weeksSinceStart = lastWeek.weekNumber;
-  if (weeksSinceStart >= periodization.deloadFrequency + 2) {
-    reasons.push(`${weeksSinceStart} weeks since mesocycle start - overdue for deload`);
+  // A deload-flagged week resets accumulation: measure from the most recent
+  // deload week rather than mesocycle start, so a light week the user just took
+  // (auto-flagged, toggled at finish, or applied retroactively) doesn't leave
+  // the detector still nagging "overdue for deload". When no deload is on
+  // record, this falls back to weeks since start (weekNumber).
+  const lastDeload = [...recentPerformance].reverse().find((w) => w.isDeload);
+  const weeksSinceLastDeload = lastDeload
+    ? lastWeek.weekNumber - lastDeload.weekNumber
+    : lastWeek.weekNumber;
+  if (weeksSinceLastDeload >= periodization.deloadFrequency + 2) {
+    reasons.push(
+      lastDeload
+        ? `${weeksSinceLastDeload} weeks since last deload - overdue for deload`
+        : `${weeksSinceLastDeload} weeks since mesocycle start - overdue for deload`
+    );
     shouldDeload = true;
   }
   

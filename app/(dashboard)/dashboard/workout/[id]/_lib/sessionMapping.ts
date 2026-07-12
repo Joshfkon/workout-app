@@ -56,6 +56,7 @@ export interface WorkoutSessionRow {
   pump_rating: number | null;
   session_notes: string | null;
   completion_percent: number;
+  is_deload?: boolean | null;
 }
 
 /** Raw exercises row as joined in the exercise_blocks query. */
@@ -147,6 +148,7 @@ export function mapWorkoutSessionRow(sessionData: WorkoutSessionRow): WorkoutSes
     pumpRating: sessionData.pump_rating,
     sessionNotes: sessionData.session_notes,
     completionPercent: sessionData.completion_percent,
+    isDeload: sessionData.is_deload ?? false,
   };
 }
 

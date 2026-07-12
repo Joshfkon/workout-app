@@ -498,10 +498,46 @@ export async function runMesocycleCompletionAnalysis(
       return false;
     }
 
-    const rows = (weeklyRows as WeeklyMuscleVolumeRow[]) || [];
+    let rows = (weeklyRows as WeeklyMuscleVolumeRow[]) || [];
     if (rows.length === 0) {
       // No aggregated volume for this meso yet -> nothing to learn from.
       return false;
+    }
+
+    // Deload weeks must be excluded from MEV/MRV *learning* (a light week would
+    // bias the learned landmarks downward), even though those same sets still
+    // count on the volume displays. weekly_muscle_volume carries no deload
+    // flag, so identify deload weeks from the sessions themselves: a week_start
+    // bucket (its rolling 7-day window) whose completed sessions are ALL
+    // deload-flagged is dropped from the learning input.
+    const { data: windowSessions } = await supabase
+      .from('workout_sessions')
+      .select('completed_at, is_deload')
+      .eq('user_id', userId)
+      .eq('state', 'completed')
+      .not('completed_at', 'is', null);
+
+    const deloadWeekStarts = new Set<string>();
+    const allWeekStarts = Array.from(new Set(rows.map((r) => r.week_start))).sort();
+    if (windowSessions && windowSessions.length > 0) {
+      for (const ws of allWeekStarts) {
+        const start = new Date(`${ws}T00:00:00`);
+        const end = new Date(start);
+        end.setDate(end.getDate() + 6);
+        end.setHours(23, 59, 59, 999);
+        const inWeek = windowSessions.filter((s: { completed_at: string | null; is_deload?: boolean | null }) => {
+          if (!s.completed_at) return false;
+          const t = new Date(s.completed_at);
+          return t >= start && t <= end;
+        });
+        if (inWeek.length > 0 && inWeek.every((s: { is_deload?: boolean | null }) => s.is_deload)) {
+          deloadWeekStarts.add(ws);
+        }
+      }
+    }
+    if (deloadWeekStarts.size > 0) {
+      rows = rows.filter((r) => !deloadWeekStarts.has(r.week_start));
+      if (rows.length === 0) return false;
     }
 
     // Build Record<MuscleGroup, MuscleVolumeData[]> grouped by muscle, in week order.

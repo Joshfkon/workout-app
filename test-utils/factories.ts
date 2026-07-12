@@ -35,6 +35,7 @@ export function makeWorkoutSession(
     pumpRating: null,
     sessionNotes: null,
     completionPercent: 0,
+    isDeload: false,
     ...overrides,
   };
 }

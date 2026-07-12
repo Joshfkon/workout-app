@@ -132,12 +132,15 @@ export function useBestLifts(userId: string): UseBestLiftsReturn {
             exercise:exercises(name),
             workout_sessions!inner(
               user_id,
-              state
+              state,
+              is_deload
             )
           )
         `)
         .eq('exercise_block.workout_sessions.user_id', userId)
         .eq('exercise_block.workout_sessions.state', 'completed')
+        // Deload sessions are held light — never let them set an auto best-lift.
+        .eq('exercise_block.workout_sessions.is_deload', false)
         .is('is_warmup', false)
         .not('weight_kg', 'is', null)
         .not('reps', 'is', null)

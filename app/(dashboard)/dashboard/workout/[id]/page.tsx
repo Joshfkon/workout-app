@@ -950,7 +950,8 @@ export default function WorkoutPage() {
                     id,
                     completed_at,
                     state,
-                    user_id
+                    user_id,
+                    is_deload
                   ),
                   set_logs (
                     weight_kg,
@@ -3804,6 +3805,7 @@ export default function WorkoutPage() {
     pumpRating: number;
     notes: string;
     muscleFeedback: SessionMuscleFeedbackEntry[];
+    isDeload: boolean;
   }) => {
     if (!session) {
       finishToDashboard();
@@ -4599,6 +4601,7 @@ export default function WorkoutPage() {
                       : block
                     }
                     enhancedAthleteMode={enhancedAthleteModeActive}
+                    isDeloadSession={session?.isDeload ?? false}
                     sets={blockSets}
                     onSetComplete={async (data) => {
                       const setId = await handleSetComplete(data);

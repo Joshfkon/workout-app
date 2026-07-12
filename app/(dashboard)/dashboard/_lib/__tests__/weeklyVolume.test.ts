@@ -1,14 +1,43 @@
 import {
   computeWeeklyMevSummary,
+  computeWeeklyMuscleVolume,
   selectMusclesBelowMev,
   mevSummaryToVolumeData,
   ALL_MUSCLE_GROUPS,
   type MuscleVolumeStats,
+  type WeeklyVolumeBlockRow,
 } from '../weeklyVolume';
 
 function stat(muscle: string, sets: number, target: number, status: 'low' | 'optimal' | 'high'): MuscleVolumeStats {
   return { muscle, sets, target, status, exercises: [] };
 }
+
+function volumeBlock(exerciseId: string, primaryMuscle: string, workingSets: number): WeeklyVolumeBlockRow {
+  return {
+    exercises: { id: exerciseId, name: exerciseId, primary_muscle: primaryMuscle, secondary_muscles: [] },
+    set_logs: Array.from({ length: workingSets }, (_, i) => ({ id: `${exerciseId}-${i}`, is_warmup: false })),
+  };
+}
+
+describe('computeWeeklyMuscleVolume — deload sets still count (data hygiene)', () => {
+  it('counts a deload session\'s working sets toward weekly volume like any other', () => {
+    // The weekly-volume display path is deload-agnostic by design: a deload set
+    // still fatigues tissue and is real work done, so it counts. The block row
+    // carries no deload flag and the function applies no deload filter — both a
+    // normal and a deload session's blocks contribute their sets.
+    const normalBlock = volumeBlock('bench', 'chest', 3); // normal session
+    const deloadBlock = volumeBlock('bench', 'chest', 2); // deload session (lighter)
+
+    const withDeload = computeWeeklyMuscleVolume([normalBlock, deloadBlock]);
+    const normalOnly = computeWeeklyMuscleVolume([normalBlock]);
+
+    const totalSets = (stats: typeof withDeload) => stats.reduce((sum, s) => sum + s.sets, 0);
+
+    // The deload block adds its 2 sets on top of the normal block's 3 — it is
+    // not filtered out of the volume display.
+    expect(totalSets(withDeload)).toBe(totalSets(normalOnly) + 2);
+  });
+});
 
 describe('computeWeeklyMevSummary', () => {
   it('returns null with no logged volume (callers show their own empty state)', () => {

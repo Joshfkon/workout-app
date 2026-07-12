@@ -421,6 +421,22 @@ export async function startMesocycleWorkoutSession(
     mesocycle.current_week
   );
 
+  // Auto-flag as a deload session when it's generated during a programmed
+  // deload week, so all the deload-exclusion consumers (suggestions, e1RM/PR
+  // trends, stagnation baselines, adaptive volume) skip it without the user
+  // having to remember to toggle it. The user can still override via the
+  // finish/summary toggle or retroactively from history.
+  if (progressionModifiers.isDeload) {
+    const { error: deloadFlagError } = await supabase
+      .from('workout_sessions')
+      .update({ is_deload: true })
+      .eq('id', sessionId);
+    if (deloadFlagError) {
+      // Non-fatal: the session is still usable, it just won't be auto-excluded.
+      console.error('Failed to flag session as deload:', deloadFlagError);
+    }
+  }
+
   // Weekly auto-regulation (Phase 1.2): react to last week's per-muscle
   // feedback (session_muscle_feedback) + performance trend by adding or
   // removing one set on the last exercise targeting each muscle in this

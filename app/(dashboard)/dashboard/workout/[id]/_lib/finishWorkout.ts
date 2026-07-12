@@ -90,6 +90,12 @@ export interface FinishSummaryData {
    * Null on legacy callers that don't pass it.
    */
   durationSeconds?: number | null;
+  /**
+   * Whether the user marked this as a deload session on the summary screen.
+   * Persisted so the deload-exclusion consumers skip it. Omit on legacy callers
+   * that don't surface the toggle (leaves the stored flag untouched).
+   */
+  isDeload?: boolean;
 }
 
 export interface FinishFlowDeps {
@@ -115,6 +121,9 @@ function completionPatch(data: FinishSummaryData): Record<string, unknown> {
   };
   if (typeof data.durationSeconds === 'number' && Number.isFinite(data.durationSeconds)) {
     patch.duration_seconds = Math.max(0, Math.round(data.durationSeconds));
+  }
+  if (typeof data.isDeload === 'boolean') {
+    patch.is_deload = data.isDeload;
   }
   return patch;
 }
