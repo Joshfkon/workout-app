@@ -17,8 +17,10 @@
  * safe utility) — no new date math here.
  */
 
-import { useQuery, keepPreviousData } from '@tanstack/react-query';
+import { useEffect } from 'react';
+import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { getLocalUserId } from '@/lib/supabase/authState';
 import { getLocalDateString } from '@/lib/utils';
 import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 import { getAdaptiveTDEE, type TDEEData } from '@/lib/actions/tdee';
@@ -39,12 +41,14 @@ export const NUTRITION_GLOBAL_KEY = ['nutrition', 'global'] as const;
 
 export async function fetchFoodLog(dateKey: string): Promise<FoodLogEntry[]> {
   const supabase = createUntypedClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return [];
+  // Local-session identity (no auth round trip) — RLS validates the token on
+  // the actual query. See lib/supabase/authState.ts.
+  const userId = await getLocalUserId(supabase);
+  if (!userId) return [];
   const { data, error } = await supabase
     .from('food_log')
     .select('*')
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .eq('logged_at', dateKey)
     .order('created_at', { ascending: true });
   if (error) throw error;
@@ -105,8 +109,10 @@ export interface NutritionGlobalBundle {
 
 async function fetchNutritionGlobal(): Promise<NutritionGlobalBundle | null> {
   const supabase = createUntypedClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
+  // Local-session identity (no auth round trip) — RLS validates the token on
+  // the actual queries. See lib/supabase/authState.ts.
+  const userId = await getLocalUserId(supabase);
+  if (!userId) return null;
 
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -125,48 +131,48 @@ async function fetchNutritionGlobal(): Promise<NutritionGlobalBundle | null> {
     proteinResult,
     trainingSetsResult,
   ] = await Promise.all([
-    supabase.from('nutrition_targets').select('*').eq('user_id', user.id).maybeSingle(),
+    supabase.from('nutrition_targets').select('*').eq('user_id', userId).maybeSingle(),
     supabase
       .from('weight_log')
       .select('*')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .gte('logged_at', thirtyDaysAgoStr)
       .order('logged_at', { ascending: false }),
     supabase
       .from('custom_foods')
       .select('*')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .order('created_at', { ascending: false }),
     supabase
       .from('food_log')
       .select('meal_type, food_name, serving_size, calories, protein, carbs, fat, servings')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .order('logged_at', { ascending: false })
       .limit(200),
-    supabase.from('users').select('height_cm, age, sex, goal').eq('id', user.id).maybeSingle(),
+    supabase.from('users').select('height_cm, age, sex, goal').eq('id', userId).maybeSingle(),
     supabase
       .from('dexa_scans')
       .select('body_fat_percent, weight_kg')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .order('scan_date', { ascending: false })
       .limit(1)
       .maybeSingle(),
     supabase
       .from('mesocycles')
       .select('days_per_week, current_week')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .eq('state', 'active')
       .maybeSingle(),
-    supabase.from('user_preferences').select('weight_unit').eq('user_id', user.id).maybeSingle(),
+    supabase.from('user_preferences').select('weight_unit').eq('user_id', userId).maybeSingle(),
     supabase
       .from('user_volume_profiles')
       .select('training_age, is_enhanced')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .maybeSingle(),
     supabase
       .from('food_log')
       .select('protein, logged_at')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .gte('logged_at', thirtyDaysAgoStr)
       .order('logged_at', { ascending: false }),
     supabase
@@ -175,7 +181,7 @@ async function fetchNutritionGlobal(): Promise<NutritionGlobalBundle | null> {
         set_logs!inner (id, is_warmup),
         workout_sessions!inner (completed_at, state)
       `)
-      .eq('workout_sessions.user_id', user.id)
+      .eq('workout_sessions.user_id', userId)
       .eq('workout_sessions.state', 'completed')
       .gte('workout_sessions.completed_at', thirtyDaysAgo.toISOString()),
   ]);
@@ -188,7 +194,7 @@ async function fetchNutritionGlobal(): Promise<NutritionGlobalBundle | null> {
   }
 
   return {
-    userId: user.id,
+    userId: userId,
     targets: targetsResult.data ?? null,
     targetsError: !!targetsResult.error,
     weight: (weightResult.data ?? []) as WeightLogEntry[],
@@ -214,4 +220,39 @@ export function useNutritionGlobal(enabled: boolean) {
     staleTime: TODAY_STALE_TIME,
     gcTime: IMMUTABLE_GC_TIME,
   });
+}
+
+/**
+ * Warm the Eat tab's queries from another surface (the Log landing page calls
+ * this once its own boot data has painted). Without it, the first tap on Eat
+ * in a session with no cached entry for TODAY — a new day, a first install,
+ * or a persisted cache past its maxAge — lands on the full-screen
+ * `nutrition-full-loading` branch. Prefetching while the user is still on the
+ * landing page means the tap finds warm data instead.
+ *
+ * Deferred slightly so it never competes with the landing page's own paint;
+ * `prefetchQuery` dedupes against fresh cache entries, so warm revisits are a
+ * no-op.
+ */
+export function usePrefetchNutrition(enabled: boolean) {
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    if (!enabled) return;
+    const timer = setTimeout(() => {
+      const today = getLocalDateString();
+      void queryClient.prefetchQuery({
+        queryKey: NUTRITION_GLOBAL_KEY,
+        queryFn: fetchNutritionGlobal,
+        staleTime: TODAY_STALE_TIME,
+        gcTime: IMMUTABLE_GC_TIME,
+      });
+      void queryClient.prefetchQuery({
+        queryKey: nutritionDayKey(today),
+        queryFn: () => fetchFoodLog(today),
+        staleTime: TODAY_STALE_TIME,
+        gcTime: IMMUTABLE_GC_TIME,
+      });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [enabled, queryClient]);
 }
