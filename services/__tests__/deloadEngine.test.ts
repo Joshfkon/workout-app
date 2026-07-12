@@ -262,6 +262,45 @@ describe('checkDeloadTriggers', () => {
       expect(result.shouldDeload).toBe(true);
       expect(result.reasons.some((r) => r.includes('overdue'))).toBe(true);
     });
+
+    it('a deload-flagged week resets the overdue clock', () => {
+      // Weeks 6, 7, 8 with deloadFrequency 4 → the backup trigger (>= 4 + 2 = 6
+      // weeks) would normally fire on the raw week number. But week 7 was a
+      // deload, so accumulation resets: only 1 week since the last deload, not
+      // overdue.
+      const performance = [
+        createMockPerformanceData({ weekNumber: 6 }),
+        createMockPerformanceData({ weekNumber: 7, isDeload: true }),
+        createMockPerformanceData({ weekNumber: 8 }),
+      ];
+
+      const result = checkDeloadTriggers(
+        performance,
+        createMockProfile(),
+        createMockPeriodization({ deloadFrequency: 4 })
+      );
+
+      expect(result.reasons.some((r) => r.includes('overdue'))).toBe(false);
+    });
+
+    it('still fires the overdue clock counting from the last deload week', () => {
+      // Deload at week 2, now week 8 → 6 weeks since last deload, which is
+      // >= deloadFrequency (4) + 2, so the backup trigger fires again.
+      const performance = [
+        createMockPerformanceData({ weekNumber: 2, isDeload: true }),
+        createMockPerformanceData({ weekNumber: 7 }),
+        createMockPerformanceData({ weekNumber: 8 }),
+      ];
+
+      const result = checkDeloadTriggers(
+        performance,
+        createMockProfile(),
+        createMockPeriodization({ deloadFrequency: 4 })
+      );
+
+      expect(result.shouldDeload).toBe(true);
+      expect(result.reasons.some((r) => r.includes('since last deload'))).toBe(true);
+    });
   });
 
   describe('experience adjustment', () => {

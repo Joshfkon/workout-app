@@ -48,6 +48,7 @@ interface WorkoutHistory {
   session_rpe: number | null;
   session_notes: string | null;
   pump_rating: number | null;
+  is_deload: boolean;
   exercises: ExerciseDetail[];
   totalSets: number;
   totalVolume: number;
@@ -92,6 +93,7 @@ function transformSessions(data: any[]): WorkoutHistory[] {
       session_rpe: workout.session_rpe,
       session_notes: workout.session_notes,
       pump_rating: workout.pump_rating,
+      is_deload: workout.is_deload ?? false,
       exercises,
       totalSets,
       totalVolume,
@@ -314,6 +316,7 @@ function HistoryPageContent() {
   >(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [repeatingId, setRepeatingId] = useState<string | null>(null);
+  const [togglingDeloadId, setTogglingDeloadId] = useState<string | null>(null);
   const [expandedWorkout, setExpandedWorkout] = useState<string | null>(null);
   const [selectedExercise, setSelectedExercise] = useState<ExerciseHistoryData | null>(null);
   const [loadingExercise, setLoadingExercise] = useState(false);
@@ -418,6 +421,50 @@ function HistoryPageContent() {
     }
   };
 
+  // Retroactively flag / unflag a past workout as a deload. Persists the
+  // session flag and mirrors it onto that day's performance snapshots so the
+  // e1RM-trend reads (which read snapshots) exclude it too — this is what
+  // removes a false "regression" a light week would otherwise show.
+  const handleToggleDeload = async (workout: WorkoutHistory) => {
+    const next = !workout.is_deload;
+    setTogglingDeloadId(workout.id);
+    // Optimistic — the badge/label flips immediately.
+    mutateWorkouts(prev =>
+      prev.map(w => (w.id === workout.id ? { ...w, is_deload: next } : w))
+    );
+    try {
+      const supabase = createUntypedClient();
+      const { data: { user } } = await supabase.auth.getUser();
+
+      const { error } = await supabase
+        .from('workout_sessions')
+        .update({ is_deload: next })
+        .eq('id', workout.id);
+      if (error) throw error;
+
+      // Keep derived snapshots in step (keyed by user + local session day).
+      const snapshotDate = workout.completed_at
+        ? getLocalDateString(new Date(workout.completed_at))
+        : workout.planned_date;
+      if (user && snapshotDate) {
+        await supabase
+          .from('exercise_performance_snapshots')
+          .update({ is_deload: next })
+          .eq('user_id', user.id)
+          .eq('session_date', snapshotDate);
+      }
+    } catch (err) {
+      console.error('Failed to update deload flag:', err);
+      setActionError('Failed to update deload flag. Please try again.');
+      // Roll back the optimistic flip.
+      mutateWorkouts(prev =>
+        prev.map(w => (w.id === workout.id ? { ...w, is_deload: !next } : w))
+      );
+    } finally {
+      setTogglingDeloadId(null);
+    }
+  };
+
   const handleRepeatWorkout = async (workout: WorkoutHistory) => {
     if (workout.exercises.length === 0) {
       setActionError('This workout has no exercises to repeat.');
@@ -474,7 +521,8 @@ function HistoryPageContent() {
             id,
             completed_at,
             state,
-            user_id
+            user_id,
+            is_deload
           ),
           set_logs (
             id,
@@ -488,6 +536,9 @@ function HistoryPageContent() {
         .eq('exercise_id', exerciseId)
         .eq('workout_sessions.user_id', user.id)
         .eq('workout_sessions.state', 'completed')
+        // Deload sessions are held light on purpose — exclude them so a light
+        // week doesn't read as an e1RM regression / PR in the trend.
+        .eq('workout_sessions.is_deload', false)
         .order('workout_sessions(completed_at)', { ascending: true });
 
       if (!blocks || blocks.length === 0) {
@@ -621,6 +672,7 @@ function HistoryPageContent() {
           session_rpe,
           session_notes,
           pump_rating,
+          is_deload,
           exercise_blocks (
             id,
             order,
@@ -1057,6 +1109,32 @@ function HistoryPageContent() {
                 {/* Action buttons - top right (hidden in select mode) */}
                 {!isSelectMode && (
                   <div className="absolute top-3 right-3 flex items-center gap-1 z-10">
+                    {/* Deload toggle - only for completed workouts */}
+                    {workout.state === 'completed' && (
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleToggleDeload(workout);
+                        }}
+                        disabled={togglingDeloadId === workout.id}
+                        className={`p-1.5 rounded-lg transition-all ${
+                          workout.is_deload
+                            ? 'bg-primary-500/20 text-primary-300 hover:text-primary-200'
+                            : 'text-surface-500 hover:bg-primary-500/20 hover:text-primary-400'
+                        }`}
+                        title={workout.is_deload ? 'Unmark as deload session' : 'Mark as deload session'}
+                        aria-pressed={workout.is_deload}
+                      >
+                        {togglingDeloadId === workout.id ? (
+                          <div className="w-4 h-4 border-2 border-primary-400 border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+                          </svg>
+                        )}
+                      </button>
+                    )}
                     {/* Repeat button - only for completed workouts */}
                     {workout.state === 'completed' && (
                       <button
@@ -1122,6 +1200,11 @@ function HistoryPageContent() {
                             >
                               {workout.state === 'completed' ? 'Completed' : 'In Progress'}
                             </Badge>
+                            {workout.is_deload && (
+                              <Badge variant="info" size="sm">
+                                Deload
+                              </Badge>
+                            )}
                           </div>
                           <div className="flex flex-wrap gap-4 text-sm text-surface-400">
                             {workout.completed_at && (
@@ -1156,6 +1239,11 @@ function HistoryPageContent() {
                           {workout.state === 'in_progress' && (
                             <Badge variant="info" size="sm">
                               Continue →
+                            </Badge>
+                          )}
+                          {workout.is_deload && (
+                            <Badge variant="info" size="sm">
+                              Deload
                             </Badge>
                           )}
                         </div>

@@ -75,6 +75,8 @@ export interface HistoryBlockRow {
     completed_at: string | null;
     state: string;
     user_id: string;
+    /** Deload sessions are excluded from suggestions (see computeHistoryFromBlocks). */
+    is_deload?: boolean | null;
   } | null;
   set_logs: HistorySetLogRow[] | null;
 }
@@ -147,6 +149,12 @@ function computeHistoryFromBlocks(
   let estimatedFromOtherLocation = false;
   let calibrationNote: string | undefined;
   let scope: ProgressionScope | undefined;
+
+  // Deload sessions are held light on purpose, so they must not anchor the
+  // next session's suggestion or the estimated E1RM / PR: "last session"
+  // resolves to the most recent NON-deload session (else next week anchors to
+  // deload weights). Drop them before any last-session / best-set logic.
+  historyBlocks = historyBlocks.filter((block) => !block.workout_sessions?.is_deload);
 
   if (scopeConfig) {
     scope = scopeConfig.scope;
@@ -346,7 +354,8 @@ export async function fetchExerciseHistory(
         id,
         completed_at,
         state,
-        user_id
+        user_id,
+        is_deload
       ),
       set_logs (
         weight_kg,

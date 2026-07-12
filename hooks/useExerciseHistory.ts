@@ -33,6 +33,8 @@ export function useExerciseHistory({ exerciseId, limit = 20 }: UseExerciseHistor
         .from('exercise_performance_snapshots')
         .select('*')
         .eq('exercise_id', exerciseId)
+        // Deload sessions are excluded from e1RM trend / PR reads.
+        .eq('is_deload', false)
         .order('session_date', { ascending: false })
         .limit(limit);
 

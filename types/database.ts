@@ -209,6 +209,7 @@ export interface Database {
           duration_seconds: number | null;
           auto_discarded_at: string | null;
           origin: 'scheduled' | 'empty' | 'ai_suggested' | 'repeat' | null;
+          is_deload: boolean;
         };
         Insert: {
           id?: string;
@@ -226,6 +227,7 @@ export interface Database {
           duration_seconds?: number | null;
           auto_discarded_at?: string | null;
           origin?: 'scheduled' | 'empty' | 'ai_suggested' | 'repeat' | null;
+          is_deload?: boolean;
         };
         Update: {
           id?: string;
@@ -243,6 +245,7 @@ export interface Database {
           duration_seconds?: number | null;
           auto_discarded_at?: string | null;
           origin?: 'scheduled' | 'empty' | 'ai_suggested' | 'repeat' | null;
+          is_deload?: boolean;
         };
         Relationships: [];
       };
@@ -455,6 +458,7 @@ export interface Database {
           top_set_rpe: number;
           total_working_sets: number;
           estimated_e1rm: number;
+          is_deload: boolean;
         };
         Insert: {
           id?: string;
@@ -466,6 +470,7 @@ export interface Database {
           top_set_rpe?: number;
           total_working_sets?: number;
           estimated_e1rm?: number;
+          is_deload?: boolean;
         };
         Update: {
           id?: string;
@@ -477,6 +482,7 @@ export interface Database {
           top_set_rpe?: number;
           total_working_sets?: number;
           estimated_e1rm?: number;
+          is_deload?: boolean;
         };
         Relationships: [];
       };

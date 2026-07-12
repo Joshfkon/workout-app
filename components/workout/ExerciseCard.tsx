@@ -225,6 +225,9 @@ interface ExerciseCardProps {
   // surfaces an inline note when the joint-stress RIR floor binds (the
   // floor itself never reads this flag; see services/exerciseSafety.ts).
   enhancedAthleteMode?: boolean;
+  // Deload session: the banner holds light instead of prescribing progression,
+  // and the rationale copy says so ("deload — holding light").
+  isDeloadSession?: boolean;
 }
 
 /** Write status of a logged set (offline outbox, P0-2). */
@@ -280,6 +283,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   onPlateCalculatorOpen,
   onActiveSuggestionChange,
   enhancedAthleteMode = false,
+  isDeloadSession = false,
 }: ExerciseCardProps) {
   // Prescribed RIR: calibration-adjusted target when available, eased further
   // by the session's readiness modulation (Phase 1.3/1.5 fold-in).
@@ -1290,6 +1294,17 @@ export const ExerciseCard = memo(function ExerciseCard({
     }
     if (isAmrap) {
       explanation.push('Last set: push to failure (AMRAP) so the app can calibrate how you rate effort.');
+    }
+
+    // Deload session: the weight/reps still come from the (already-reduced)
+    // deload prescription, but the rationale holds light rather than pushing
+    // progression — and this session is excluded from PRs, e1RM trends and
+    // next-week anchoring.
+    if (isDeloadSession) {
+      reason = 'deload — holding light';
+      explanation.unshift(
+        'Deload session: keeping the load easy to shed fatigue. This session is held out of PRs, e1RM trends and next session’s weight suggestion.'
+      );
     }
 
     return { weight, reps: String(reps), repsLabel, reason, explanation, showRir, role };
@@ -2917,6 +2932,7 @@ export const ExerciseCard = memo(function ExerciseCard({
     prevProps.isAmrapSuggested === nextProps.isAmrapSuggested &&
     prevProps.userBodyweightKg === nextProps.userBodyweightKg &&
     prevProps.enhancedAthleteMode === nextProps.enhancedAthleteMode &&
+    prevProps.isDeloadSession === nextProps.isDeloadSession &&
     // Write-status (P0-2): compare only THIS card's own sets' statuses, not the
     // whole shared map by reference. setSyncStatus is one object shared by every
     // card, so a reference check would re-render all cards whenever any set's

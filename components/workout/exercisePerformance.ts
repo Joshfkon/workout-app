@@ -25,6 +25,8 @@ export interface SnapshotSourceBlock {
     id: string;
     completed_at: string | null;
     user_id?: string;
+    /** Deload sessions are excluded from plateau/e1RM trend analysis. */
+    is_deload?: boolean | null;
   } | null;
   set_logs: SnapshotSourceSet[] | null;
 }
@@ -45,6 +47,8 @@ export function buildPerformanceSnapshots(
   for (const block of blocks || []) {
     const session = block.workout_sessions;
     if (!session?.completed_at) continue;
+    // Deload sessions are held light — exclude from plateau / e1RM trend input.
+    if (session.is_deload) continue;
 
     const workingSets = (block.set_logs || []).filter(
       (s) => !s.is_warmup && s.weight_kg > 0 && s.reps > 0

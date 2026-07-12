@@ -31,6 +31,12 @@ export interface PerformanceSetLog {
   reportedRIR: number;
   wasAMRAP: boolean;
   timestamp: Date;
+  /**
+   * True when this set came from a deload session. Deload sets are excluded
+   * from effort-creep / stagnation baselines (a light week must not read as a
+   * plateau or drag the trend), so they are never added to the tracker.
+   */
+  isDeload?: boolean;
 }
 
 /**
@@ -149,6 +155,11 @@ export class PerformanceTracker {
    * Add a set result and evaluate for performance patterns
    */
   addSetResult(result: PerformanceSetLog): void {
+    // Deload sets are held light on purpose — excluding them keeps effort-creep
+    // and stagnation baselines honest (a deload week isn't a plateau) and lets a
+    // deload break a stagnation streak instead of extending it.
+    if (result.isDeload) return;
+
     this.setHistory.push(result);
 
     // Keep history size bounded
@@ -542,7 +553,8 @@ export function createPerformanceSetLog(
   reportedRIR: number,
   wasAMRAP: boolean,
   prescribedMin: number,
-  prescribedMax: number | null = null
+  prescribedMax: number | null = null,
+  isDeload = false
 ): PerformanceSetLog {
   return {
     exerciseId,
@@ -553,6 +565,7 @@ export function createPerformanceSetLog(
     reportedRIR,
     wasAMRAP,
     timestamp: new Date(),
+    isDeload,
   };
 }
 

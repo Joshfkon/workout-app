@@ -42,9 +42,11 @@ export async function writePerformanceSnapshots(
     sessionDate: string; // YYYY-MM-DD (local)
     blocks: ExerciseBlockWithExercise[];
     sets: SetLog[];
+    /** Mirror the session's deload flag so e1RM-trend reads can exclude it. */
+    isDeload?: boolean;
   }
 ): Promise<SnapshotWriteResult> {
-  const { userId, sessionDate, blocks, sets } = args;
+  const { userId, sessionDate, blocks, sets, isDeload = false } = args;
   const result: SnapshotWriteResult = { inserted: 0, errors: [] };
 
   // Build one snapshot per *exercise* (an exercise can appear in multiple
@@ -91,6 +93,7 @@ export async function writePerformanceSnapshots(
       top_set_rpe: topSet.rpe ?? 0,
       total_working_sets: working.length,
       estimated_e1rm: bestE1rm,
+      is_deload: isDeload,
     });
   }
 

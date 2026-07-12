@@ -504,6 +504,17 @@ export interface WorkoutSession {
   
   /** Percentage of planned sets completed (0-100) */
   completionPercent: number;
+
+  /**
+   * True when this was a deload (light) session. Set automatically when the
+   * session is generated during a programmed deload week, manually via the
+   * finish/summary toggle, or retroactively from history. Deload sessions are
+   * still real training (they count toward volume, recovery, history, streaks
+   * and shares) but are excluded from progression suggestions, e1RM/PR trends,
+   * stagnation baselines and adaptive volume learning, and count as deloads for
+   * the deload-detector clock. Defaults to false for legacy sessions.
+   */
+  isDeload: boolean;
 }
 
 /**
@@ -1485,6 +1496,13 @@ export interface WeeklyPerformanceData {
   motivationLevel: Rating;
   jointPain: boolean;
   strengthDecline: boolean;
+  /**
+   * True when this week was a deload (light) week. Deload weeks reset the
+   * deload-detector's time-since-last-deload clock, so the "overdue for deload"
+   * backup trigger measures from the most recent deload rather than mesocycle
+   * start. Optional/undefined = not a deload (legacy callers).
+   */
+  isDeload?: boolean;
 }
 
 /**
