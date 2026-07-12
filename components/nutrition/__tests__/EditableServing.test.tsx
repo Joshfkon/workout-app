@@ -220,7 +220,118 @@ describe('add sheet and edit sheet render identical controls', () => {
     await user.click(screen.getByRole('button', { name: /save changes/i }));
     expect(onSave).toHaveBeenCalledWith(
       'log-1',
-      expect.objectContaining({ calories: 234 })
+      expect.objectContaining({ calories: 234, servingSize: '300g' })
     );
+  });
+});
+
+describe('edit corruption regression (Giant Eagle fries)', () => {
+  // 140 cal / P3 / C21 / F5 per 1 serving (85 g)
+  const friesEntry: FoodLogEntry = {
+    id: 'log-fries',
+    user_id: 'u1',
+    logged_at: '2026-07-12',
+    meal_type: 'breakfast',
+    food_name: 'Giant Eagle French Fried Potatoes',
+    serving_size: '1 serving (85g)',
+    servings: 1,
+    calories: 140,
+    protein: 3,
+    carbs: 21,
+    fat: 5,
+    source: 'nutritionix',
+    food_id: null,
+    nutritionix_id: null,
+    created_at: '2026-07-12T00:00:00Z',
+  };
+
+  function renderEdit(entry: FoodLogEntry, onSave = jest.fn().mockResolvedValue(undefined)) {
+    render(
+      <EditFoodModal
+        isOpen
+        onClose={jest.fn()}
+        onSave={onSave}
+        onDelete={jest.fn()}
+        entry={entry}
+      />
+    );
+    return onSave;
+  }
+
+  it('mistaken "180 servings" save persists serving_size and never mutates the food record', async () => {
+    const user = userEvent.setup();
+    const onSave = renderEdit(friesEntry);
+
+    expect(screen.getByTestId('edit-food-per-serving')).toHaveTextContent('Per serving: 140 cal');
+
+    const amount = screen.getByTestId('edit-food-amount');
+    await user.clear(amount);
+    await user.type(amount, '180'); // unit still "serving" — the user's mistake
+
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    expect(onSave).toHaveBeenCalledTimes(1);
+    const [, updates] = onSave.mock.calls[0];
+    expect(updates).toMatchObject({
+      servings: 180,
+      servingSize: '180 serving (15300g)',
+      calories: 25200,
+    });
+    // The food record (per-serving nutrition) must NOT be rewritten by an
+    // amount-only edit — only the pencil "edit nutrition" path may do that.
+    expect(updates).not.toHaveProperty('perServing');
+  });
+
+  it('reopening the mistaken entry still shows 140 cal / 85 g per serving (no corruption)', () => {
+    // The entry as it would be persisted after the 180-servings save above.
+    const savedEntry: FoodLogEntry = {
+      ...friesEntry,
+      servings: 180,
+      serving_size: '180 serving (15300g)',
+      calories: 25200,
+      protein: 540,
+      carbs: 3780,
+      fat: 900,
+    };
+    renderEdit(savedEntry);
+    expect(screen.getByTestId('edit-food-per-serving')).toHaveTextContent('Per serving: 140 cal');
+    // Reopens in servings, showing "180", not a fraction.
+    expect(screen.getByTestId('edit-food-amount')).toHaveValue(180);
+  });
+
+  it('grams path against a clean record computes ~296 cal for 180 g', async () => {
+    const user = userEvent.setup();
+    const onSave = renderEdit(friesEntry);
+
+    await user.selectOptions(screen.getByTestId('edit-food-unit'), 'g');
+    const amount = screen.getByTestId('edit-food-amount');
+    await user.clear(amount);
+    await user.type(amount, '180');
+
+    // 180 / 85 × 140 ≈ 296
+    expect(screen.getByTestId('edit-food-calories')).toHaveTextContent('296');
+
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+    const [, updates] = onSave.mock.calls[0];
+    expect(updates).toMatchObject({ servingSize: '180g', calories: 296 });
+    expect(updates).not.toHaveProperty('perServing');
+  });
+
+  it('a grams entry reopens displaying grams, not a serving fraction', () => {
+    const gramsEntry: FoodLogEntry = {
+      ...friesEntry,
+      servings: 180 / 85,
+      serving_size: '180g',
+      calories: 296,
+      protein: 6.4,
+      carbs: 44.5,
+      fat: 10.6,
+    };
+    renderEdit(gramsEntry);
+    expect(screen.getByTestId('edit-food-amount')).toHaveValue(180);
+    // Grams unit selected → serving hint is not shown for the weight unit.
+    expect(screen.queryByTestId('edit-food-serving-hint')).not.toBeInTheDocument();
+    // Per-serving reference recovered cleanly.
+    expect(screen.getByTestId('edit-food-per-serving')).toHaveTextContent('Per serving: 140 cal');
   });
 });

@@ -15,6 +15,9 @@ import { useMemo } from 'react';
 import {
   computeServing,
   getUnit,
+  round2,
+  DEFAULT_WEIGHT_CHIPS,
+  DEFAULT_SERVING_CHIPS,
   type FoodAmountModel,
 } from '@/lib/nutrition/servingScaling';
 
@@ -56,16 +59,25 @@ export function ServingAmountEditor({
     [model, value.amount, value.unitId]
   );
 
-  // Default chips for the current unit, plus the user's recent distinct
-  // amounts (deduped, last-2-first), so one tap beats typing on mobile.
+  // Default chips depend on the SELECTED unit: gram presets when weighing,
+  // ×-multiples when counting servings. (A serving-based food switched to grams
+  // must not show "0.5g / 1g / 1.5g / 2g" — useless sub-gram amounts.) Then the
+  // user's recent distinct amounts are appended, so one tap beats typing.
   const chips = useMemo(() => {
-    const base = unit.kind === 'weight' ? model.quickChips : model.quickChips;
+    const base = unit.kind === 'weight' ? DEFAULT_WEIGHT_CHIPS : DEFAULT_SERVING_CHIPS;
     const merged: number[] = [...base];
     for (const amt of recentAmounts) {
       if (!merged.includes(amt)) merged.push(amt);
     }
     return merged;
-  }, [unit.kind, model.quickChips, recentAmounts]);
+  }, [unit.kind, recentAmounts]);
+
+  // For a serving unit backed by a known gram weight, surface the equivalence
+  // as helper text instead of inside the dropdown label.
+  const servingGramsHint =
+    unit.kind === 'serving' && unit.gramsPerUnit && unit.gramsPerUnit > 0
+      ? `1 ${unit.noun} = ${round2(unit.gramsPerUnit)} g`
+      : null;
 
   const setAmount = (amount: string) => onChange({ ...value, amount });
   const setUnit = (unitId: string) => onChange({ ...value, unitId });
@@ -112,6 +124,13 @@ export function ServingAmountEditor({
           </span>
         )}
       </div>
+
+      {/* Serving-weight helper text (keeps grams out of the ambiguous label) */}
+      {servingGramsHint && (
+        <p className="text-xs text-surface-500" data-testid={`${testIdPrefix}-serving-hint`}>
+          {servingGramsHint} · switch the unit to enter grams
+        </p>
+      )}
 
       {/* Quick-amount chips */}
       {chips.length > 0 && (

@@ -9,6 +9,7 @@ import {
   customPerRefModel,
   servingOptionsModel,
   modelFromLoggedEntry,
+  initialAmountForEntry,
 } from '../servingScaling';
 
 describe('scaleMacros', () => {
@@ -62,8 +63,10 @@ describe('packaged food (per serving of known grams)', () => {
   // A 397g bottle at ~200 cal
   const model = packagedModel({ calories: 200, protein: 10, carbs: 30, fat: 4 }, 397, 'bottle');
 
-  it('unit selector shows "bottle (397g)" and grams', () => {
-    expect(model.units.find((u) => u.id === 'serving')?.label).toBe('bottle (397g)');
+  it('unit selector shows a plain "bottle" label and grams (weight lives in helper text)', () => {
+    expect(model.units.find((u) => u.id === 'serving')?.label).toBe('bottle');
+    // gram weight is still known on the unit so the editor can show helper text
+    expect(model.units.find((u) => u.id === 'serving')?.gramsPerUnit).toBe(397);
     expect(model.units.find((u) => u.id === 'g')?.label).toBe('grams');
   });
 
@@ -159,5 +162,79 @@ describe('modelFromLoggedEntry (edit round-trip)', () => {
     expect(gUnit).toBeDefined();
     // 160g == 1 serving == 120 cal
     expect(computeServing(model, 160, 'g').macros.calories).toBe(120);
+  });
+});
+
+describe('initialAmountForEntry (reopen shows amount as entered)', () => {
+  it('reopens a grams entry in grams, not a serving fraction', () => {
+    // "180 g" was logged against an 85 g serving → servings column ~= 2.1176
+    expect(initialAmountForEntry('180g', 180 / 85)).toEqual({ amount: '180', unitId: 'g' });
+  });
+
+  it('reopens an oz entry in oz', () => {
+    expect(initialAmountForEntry('6oz', 2)).toEqual({ amount: '6', unitId: 'oz' });
+  });
+
+  it('reopens a serving entry in servings (rounded to 2dp)', () => {
+    expect(initialAmountForEntry('1 serving (85g)', 1)).toEqual({ amount: '1', unitId: 'serving' });
+    expect(initialAmountForEntry('180 serving (15300g)', 180)).toEqual({
+      amount: '180',
+      unitId: 'serving',
+    });
+    // A messy servings float is not shown raw
+    expect(initialAmountForEntry('1 serving (85g)', 2.1176470588235294)).toEqual({
+      amount: '2.12',
+      unitId: 'serving',
+    });
+  });
+
+  it('falls back to 1 serving when serving_size is empty', () => {
+    expect(initialAmountForEntry(null, 0)).toEqual({ amount: '1', unitId: 'serving' });
+  });
+});
+
+describe('edit corruption regression: serving reference survives a save→reopen', () => {
+  // The Giant Eagle fries: 140 cal / P3 / C21 / F5 per 1 serving (85 g).
+  const clean = { calories: 140, protein: 3, carbs: 21, fat: 5 };
+  const SERVING_GRAMS = 85;
+  const model = packagedModel(clean, SERVING_GRAMS, 'serving');
+
+  /** Simulate persisting a computed portion, then reconstructing the food's
+   *  per-serving reference the way the edit sheet does on reopen. */
+  function saveThenRecover(amount: number, unitId: string) {
+    const r = computeServing(model, amount, unitId);
+    const entry = {
+      servings: r.servings,
+      serving_size: r.servingSize,
+      calories: r.macros.calories,
+      protein: r.macros.protein,
+      carbs: r.macros.carbs,
+      fat: r.macros.fat,
+    };
+    const perServing = {
+      calories: entry.calories / entry.servings,
+      protein: entry.protein / entry.servings,
+      carbs: entry.carbs / entry.servings,
+      fat: entry.fat / entry.servings,
+    };
+    const { grams } = parseServingWeight(entry.serving_size);
+    const perServingGrams = grams != null ? grams / entry.servings : null;
+    return { entry, perServing, perServingGrams };
+  }
+
+  it('mistaken 180-servings save reopens to the same 140 cal / 85 g reference', () => {
+    const { perServing, perServingGrams } = saveThenRecover(180, 'serving');
+    expect(Math.round(perServing.calories)).toBe(140);
+    expect(Math.round(perServing.protein)).toBe(3);
+    expect(perServingGrams).toBeCloseTo(85, 5);
+  });
+
+  it('180-grams save reopens to the same 140 cal / 85 g reference (grams path is clean)', () => {
+    const { entry, perServing, perServingGrams } = saveThenRecover(180, 'g');
+    // 180 g of an 85 g/140 cal serving ≈ 296 cal
+    expect(entry.calories).toBe(296);
+    expect(entry.serving_size).toBe('180g');
+    expect(Math.round(perServing.calories)).toBe(140);
+    expect(perServingGrams).toBeCloseTo(85, 5);
   });
 });

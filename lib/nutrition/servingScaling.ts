@@ -72,6 +72,11 @@ export function round1(n: number): number {
   return Math.round(n * 10) / 10;
 }
 
+/** Round to 2 decimals — used for any converted amount ever shown to the user. */
+export function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
 export function scaleMacros(perUnit: UnitMacros, amount: number): UnitMacros {
   return {
     calories: Math.round(perUnit.calories * amount),
@@ -82,7 +87,7 @@ export function scaleMacros(perUnit: UnitMacros, amount: number): UnitMacros {
 }
 
 /** Trim trailing zeros so "150.0" renders as "150" but "0.5" stays "0.5". */
-function trimNum(n: number): string {
+export function trimNum(n: number): string {
   return Number(n.toFixed(2)).toString();
 }
 
@@ -162,8 +167,10 @@ export function parseServingWeight(
 // shared editor can drive without knowing where the food came from.
 // ---------------------------------------------------------------------------
 
-const DEFAULT_WEIGHT_CHIPS = [50, 100, 150, 200];
-const DEFAULT_SERVING_CHIPS = [0.5, 1, 1.5, 2];
+/** Gram quick-chips shown when a weight unit is selected. */
+export const DEFAULT_WEIGHT_CHIPS = [50, 100, 150, 200];
+/** ×-multiple quick-chips shown when a serving unit is selected. */
+export const DEFAULT_SERVING_CHIPS = [0.5, 1, 1.5, 2];
 
 function gramsAndOzUnits(perGram: UnitMacros): ServingUnitDef[] {
   return [
@@ -251,7 +258,10 @@ export function packagedModel(
   const servingUnit: ServingUnitDef = {
     id: 'serving',
     kind: 'serving',
-    label: `${servingNoun} (${Math.round(servingGrams)}g)`,
+    // Plain noun in the dropdown; the gram weight is surfaced as helper text
+    // below the field (see ServingAmountEditor) rather than crammed next to the
+    // number input, where "(85g)" invited users to type a gram amount.
+    label: servingNoun,
     noun: servingNoun,
     gramsPerUnit: servingGrams,
     perUnit: perServing,
@@ -369,4 +379,26 @@ export function modelFromLoggedEntry(entry: {
   const perServingGrams = grams != null && grams > 0 ? grams / servings : null;
   const model = perServingModel(perServing, 'serving', perServingGrams);
   return { model, defaultUnitId: 'serving', defaultAmount: servings };
+}
+
+/**
+ * Recover the {amount, unit} the user actually entered from a logged entry, so
+ * the edit sheet reopens showing "180 g" rather than a serving fraction like
+ * "2.1176470588235294". A pure-weight serving_size ("180g", "6oz") re-opens in
+ * that weight unit; anything else re-opens in servings (the leading count in
+ * "N serving (Xg)" equals the servings column). Converted amounts round to 2dp.
+ */
+export function initialAmountForEntry(
+  servingSize: string | null | undefined,
+  servings: number
+): { amount: string; unitId: string } {
+  const s = (servingSize ?? '').trim();
+  const weightMatch = s.match(/^([\d.]+)\s*(g|oz)$/i);
+  if (weightMatch) {
+    return {
+      amount: trimNum(parseFloat(weightMatch[1])),
+      unitId: weightMatch[2].toLowerCase(),
+    };
+  }
+  return { amount: String(round2(servings || 1)), unitId: 'serving' };
 }
