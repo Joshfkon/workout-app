@@ -9,6 +9,7 @@ import {
   computeServing,
   perServingModel,
   parseServingWeight,
+  initialAmountForEntry,
   type FoodAmountModel,
 } from '@/lib/nutrition/servingScaling';
 import {
@@ -19,6 +20,10 @@ import {
 
 export interface EditFoodUpdates {
   servings: number;
+  /** Round-trippable portion string (e.g. "180g", "1 serving (85g)"). Persisted
+   * so a re-edit recovers the same grams-per-serving and shows the amount as
+   * entered — never derived from a stale serving_size + a new servings count. */
+  servingSize: string;
   calories: number;
   protein: number;
   carbs: number;
@@ -124,7 +129,9 @@ export function EditFoodModal({
   // Reset form when entry changes
   useEffect(() => {
     if (entry) {
-      setAmountValue({ amount: (entry.servings || 1).toString(), unitId: 'serving' });
+      // Reopen showing the amount/unit as it was logged (grams stay grams),
+      // not always coerced to a servings count.
+      setAmountValue(initialAmountForEntry(entry.serving_size, entry.servings));
       const entryServings = entry.servings || 1;
       setEditedMacros({
         calories: Math.round((entry.calories || 0) / entryServings).toString(),
@@ -153,6 +160,7 @@ export function EditFoodModal({
     try {
       await onSave(entry.id, {
         servings: result.servings,
+        servingSize: result.servingSize,
         calories: result.macros.calories,
         protein: result.macros.protein,
         carbs: result.macros.carbs,
@@ -216,7 +224,7 @@ export function EditFoodModal({
               {entry.serving_size || '1 serving'}
             </p>
             <div className="flex items-center justify-between gap-2 mt-2">
-              <p className="text-xs text-surface-500">
+              <p className="text-xs text-surface-500" data-testid="edit-food-per-serving">
                 Per serving: {Math.round(baseNutrition.calories)} cal ·
                 P: {Math.round(baseNutrition.protein)}g ·
                 C: {Math.round(baseNutrition.carbs)}g ·

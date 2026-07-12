@@ -979,18 +979,23 @@ function NutritionPageContent() {
 
   async function handleUpdateFood(id: string, updates: {
     servings: number;
+    servingSize: string;
     calories: number;
     protein: number;
     carbs: number;
     fat: number;
     perServing?: { calories: number; protein: number; carbs: number; fat: number };
   }) {
-    const { perServing, ...logUpdates } = updates;
+    const { perServing, servingSize, ...logUpdates } = updates;
 
     const { error } = await supabase
       .from('food_log')
       .update({
         servings: logUpdates.servings,
+        // Persist serving_size alongside servings/totals so a re-edit recovers
+        // the same grams-per-serving instead of dividing a stale gram total by
+        // the new servings count (the source of the food-record corruption).
+        serving_size: servingSize,
         calories: logUpdates.calories,
         protein: logUpdates.protein,
         carbs: logUpdates.carbs,
@@ -1004,7 +1009,9 @@ function NutritionPageContent() {
     }
 
     const entry = foodEntries.find((e) => e.id === id);
-    mutateFoodEntries((prev) => prev.map((e) => (e.id === id ? { ...e, ...logUpdates } : e)));
+    mutateFoodEntries((prev) =>
+      prev.map((e) => (e.id === id ? { ...e, ...logUpdates, serving_size: servingSize } : e))
+    );
 
     // The user hand-corrected per-serving nutrition (e.g. a barcode lookup
     // that returned calories but zero macros). Propagate the fix to the
