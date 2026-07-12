@@ -91,7 +91,20 @@ function liveSet(id: string, blockId: string): SetLog {
   } as unknown as SetLog;
 }
 
+// The recovery heuristic reads the REAL clock to age each session, but the
+// fixtures pin "30h ago" to a fixed NOW — so without freezing the clock these
+// tests rot (a session dated 2026-07-10 reads as days old on any later run,
+// flipping Fatigued → Recovering). Fake ONLY Date (leave timers real so
+// userEvent/waitFor behave) so the fixtures' relative ages hold forever.
+const REAL_TIMER_APIS = [
+  'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval',
+  'setImmediate', 'clearImmediate', 'queueMicrotask',
+  'requestAnimationFrame', 'cancelAnimationFrame',
+  'requestIdleCallback', 'cancelIdleCallback', 'hrtime', 'nextTick', 'performance',
+] as const;
+
 beforeEach(() => {
+  jest.useFakeTimers({ now: NOW, doNotFake: [...REAL_TIMER_APIS] });
   // Expander state persists in sessionStorage across mounts — reset per test.
   window.sessionStorage.clear();
   mockBlocks = [
@@ -101,6 +114,10 @@ beforeEach(() => {
       set_logs: Array.from({ length: 8 }, (_, i) => ({ id: `sl${i}`, is_warmup: false, rpe: 10, feedback: { repsInTank: 0 } })),
     },
   ];
+});
+
+afterEach(() => {
+  jest.useRealTimers();
 });
 
 // --- Tests ------------------------------------------------------------------
