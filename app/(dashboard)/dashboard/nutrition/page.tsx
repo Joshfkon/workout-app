@@ -45,6 +45,7 @@ import {
   NUTRITION_GLOBAL_KEY,
   type NutritionGlobalBundle,
 } from '@/hooks/useNutritionData';
+import { useRecentFoods, RECENT_FOODS_KEY } from '@/hooks/useRecentFoods';
 import { recalculateMacrosForWeight } from '@/lib/actions/nutrition';
 import { getAdaptiveTDEE, onWeightLoggedRecalculateTDEE, resetAndRecalculateTDEE, type TDEEData } from '@/lib/actions/tdee';
 import { TDEEDashboard } from '@/components/nutrition/TDEEDashboard';
@@ -313,6 +314,12 @@ function NutritionPageContent() {
   const yesterdayQuery = useNutritionDay(yesterdayKey);
   const globalQuery = useNutritionGlobal(isMounted);
 
+  // Recents/Meals query (add-food flow). Gated behind the first open of the
+  // add-food sheet — it reads a wider 90-day slice than the per-day query, so
+  // we don't pay for it on every Eat page mount.
+  const [recentsEnabled, setRecentsEnabled] = useState(false);
+  const recentFoodsQuery = useRecentFoods(recentsEnabled);
+
   // True while React Query rehydrates its cache from IndexedDB on a cold reload.
   // During this window queries are paused (no data yet) but the cache is warm —
   // so we must NOT show the full-screen heart; skeletons cover the gap instead.
@@ -354,6 +361,17 @@ function NutritionPageContent() {
       );
     },
     [queryClient, selectedDate]
+  );
+
+  // Optimistic writer for the recents/meals cache, so the add-food sheet's
+  // Recent list reflects a quick-add without waiting for a refetch.
+  const mutateRecentFoodsCache = useCallback(
+    (updater: FoodLogEntry[] | ((prev: FoodLogEntry[]) => FoodLogEntry[])) => {
+      queryClient.setQueryData<FoodLogEntry[]>(RECENT_FOODS_KEY, (prev = []) =>
+        typeof updater === 'function' ? updater(prev) : updater
+      );
+    },
+    [queryClient]
   );
 
   // Prefetch the NEXT day so forward navigation is instant too (day-1 is
@@ -748,6 +766,45 @@ function NutritionPageContent() {
         }
       }
     }
+  }
+
+  /**
+   * Quick-add from the Recent / Meals views: re-log a snapshot into the
+   * selected day WITHOUT closing the sheet, with an undo toast. Keeps the
+   * per-day and recents caches consistent optimistically.
+   */
+  async function handleQuickAddFood(food: FoodLogInsert) {
+    const inserted = await insertFoodEntry(food);
+    applyInsertedEntries([inserted]);
+    mutateRecentFoodsCache((prev) => [inserted, ...prev]);
+    addToast('success', `Added ${toTitleCase(food.food_name)}`, 5000, {
+      label: 'Undo',
+      onClick: () => { void undoQuickAdd([inserted]); },
+    });
+  }
+
+  /** "Add all" from a prior meal — one insert per item, one combined undo. */
+  async function handleQuickAddManyFoods(foods: FoodLogInsert[]) {
+    if (foods.length === 0) return;
+    const inserted = await Promise.all(foods.map((f) => insertFoodEntry(f)));
+    applyInsertedEntries(inserted);
+    mutateRecentFoodsCache((prev) => [...inserted, ...prev]);
+    addToast('success', `Added ${inserted.length} item${inserted.length === 1 ? '' : 's'}`, 6000, {
+      label: 'Undo',
+      onClick: () => { void undoQuickAdd(inserted); },
+    });
+  }
+
+  /** Undo a quick-add: delete the inserted rows and roll back both caches. */
+  async function undoQuickAdd(rows: FoodLogEntry[]) {
+    const ids = rows.map((r) => r.id);
+    const { error } = await supabase.from('food_log').delete().in('id', ids);
+    if (error) {
+      console.error('Error undoing quick-add:', error);
+      return;
+    }
+    mutateFoodEntries((prev) => prev.filter((e) => !ids.includes(e.id)));
+    mutateRecentFoodsCache((prev) => prev.filter((e) => !ids.includes(e.id)));
   }
 
   /** Describe flow: log all AI-parsed items to the chosen meal in parallel */
@@ -1264,6 +1321,7 @@ function NutritionPageContent() {
 
   function openAddFood(mealType: MealType, tab: AddFoodTab = 'search') {
     void ensureSystemFoodsLoaded();
+    setRecentsEnabled(true); // latch on the recents/meals query
     setSelectedMealType(mealType);
     setAddFoodTab(tab);
     setShowAddFood(true);
@@ -2000,6 +2058,12 @@ function NutritionPageContent() {
         customFoods={customFoods}
         frequentFoods={frequentFoods}
         systemFoods={systemFoods}
+        recentEntries={recentFoodsQuery.data ?? []}
+        recentsLoading={recentFoodsQuery.isLoading}
+        mealNames={nutritionTargets?.meal_names ?? null}
+        selectedDay={selectedDate}
+        onQuickAdd={handleQuickAddFood}
+        onQuickAddMany={handleQuickAddManyFoods}
       />
 
       <DescribeMealModal
