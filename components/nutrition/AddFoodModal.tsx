@@ -19,6 +19,7 @@ import {
   customPerRefModel,
   servingOptionsModel,
   parseServingWeight,
+  modelFromLoggedEntry,
   type FoodAmountModel,
 } from '@/lib/nutrition/servingScaling';
 import {
@@ -27,6 +28,17 @@ import {
   getRecentAmounts,
   recordLastUsedServing,
 } from '@/lib/nutrition/lastUsedServing';
+import {
+  dedupeRecentFoods,
+  filterRecentFoods,
+  groupPriorMeals,
+  limitPriorMealsByDays,
+  dayLabel,
+  MEALS_INITIAL_DAYS,
+  MEALS_LOAD_MORE_DAYS,
+  type RecentFood,
+  type PriorMeal,
+} from '@/lib/nutrition/recentFoods';
 
 // P1-2 (perf): html5-qrcode is ~90KB gz and only needed when the Barcode tab
 // is actually opened — load it on demand instead of in nutrition's first-load.
@@ -41,8 +53,8 @@ const BarcodeScanner = dynamic(
     ),
   }
 );
-import { IconSearch, IconScan, IconPencil, IconX, IconToolsKitchen2 } from '@tabler/icons-react';
-import type { MealType, CustomFood, FrequentFood, SystemFood } from '@/types/nutrition';
+import { IconSearch, IconScan, IconPencil, IconX, IconToolsKitchen2, IconPlus, IconChevronRight, IconClock } from '@tabler/icons-react';
+import type { MealType, CustomFood, FrequentFood, SystemFood, FoodLogEntry, MealNames, FoodSource } from '@/types/nutrition';
 
 interface ScannedProduct {
   name: string;
@@ -84,7 +96,40 @@ interface AddFoodModalProps {
   customFoods?: CustomFood[];
   frequentFoods?: FrequentFood[];
   systemFoods?: SystemFood[];
+  /**
+   * Raw food_log rows (last ~90d, newest first) powering the Recent + Meals
+   * views. Deduped/grouped in-component so all localDay labeling lives here.
+   */
+  recentEntries?: FoodLogEntry[];
+  recentsLoading?: boolean;
+  /** User meal-name overrides for the Meals browser labels. */
+  mealNames?: MealNames | null;
+  /** Currently-selected day (YYYY-MM-DD) — excluded from the Meals browser. */
+  selectedDay?: string | null;
+  /**
+   * Instant re-log of a recent/prior-meal food WITHOUT closing the sheet (so the
+   * user can grab several). The parent shows the undo toast + updates totals.
+   */
+  onQuickAdd?: (food: QuickAddFood) => Promise<void>;
+  /** Batch variant for a meal's "Add all" — one combined undo. */
+  onQuickAddMany?: (foods: QuickAddFood[]) => Promise<void>;
 }
+
+export interface QuickAddFood {
+  food_name: string;
+  serving_size: string;
+  servings: number;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  meal_type: MealType;
+  source?: 'usda' | 'fatsecret' | 'nutritionix' | 'custom' | 'manual';
+  food_id?: string;
+}
+
+/** Sub-view of the Search tab shown before the user types a query. */
+type SearchView = 'recent' | 'meals';
 
 const CATEGORY_LABELS: Record<string, string> = {
   protein: 'Proteins',
@@ -107,6 +152,84 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
     <p className="text-[11px] font-medium text-surface-500 uppercase tracking-wide mb-1.5">
       {children}
     </p>
+  );
+}
+
+/** A round quick-add (+) affordance shared by Recent + Meals rows. */
+function QuickAddButton({
+  onClick,
+  disabled,
+  loading,
+  label,
+}: {
+  onClick: () => void;
+  disabled?: boolean;
+  loading?: boolean;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      className="flex-shrink-0 w-8 h-8 rounded-full bg-primary-500/15 text-primary-400 flex items-center justify-center hover:bg-primary-500/25 transition-colors disabled:opacity-40"
+    >
+      {loading ? (
+        <span className="w-3.5 h-3.5 border-2 border-primary-400/40 border-t-primary-400 rounded-full animate-spin" />
+      ) : (
+        <IconPlus size={16} aria-hidden="true" />
+      )}
+    </button>
+  );
+}
+
+/**
+ * One recent food: tap the body to open the detail/edit panel, tap + to
+ * instant-add with the last-logged serving. Reused for the search-filtered
+ * recents section too.
+ */
+function RecentFoodRow({
+  recent,
+  onSelect,
+  onQuickAdd,
+  adding,
+  disabled,
+}: {
+  recent: RecentFood;
+  onSelect: () => void;
+  onQuickAdd: () => void;
+  adding: boolean;
+  disabled: boolean;
+}) {
+  const subtitle = [
+    `${Math.round(recent.calories)} cal`,
+    recent.serving_size || '1 serving',
+  ].join(' · ');
+  return (
+    <div className="flex items-center gap-2 bg-surface-800/50 rounded-lg pr-2" data-testid="recent-food-row">
+      <button
+        type="button"
+        onClick={onSelect}
+        className="flex-1 min-w-0 p-2 text-left rounded-lg hover:bg-surface-700 transition-colors"
+      >
+        <p className="text-sm font-medium text-surface-200 truncate">{recent.food_name}</p>
+        <p className="text-xs text-surface-500 flex items-center gap-1.5">
+          <span className="truncate">{subtitle}</span>
+          <span className="text-surface-600" aria-hidden="true">·</span>
+          <span className="flex-shrink-0 flex items-center gap-0.5 text-surface-500">
+            <IconClock size={11} aria-hidden="true" />
+            {dayLabel(recent.loggedAt)}
+          </span>
+        </p>
+      </button>
+      <QuickAddButton
+        onClick={onQuickAdd}
+        disabled={disabled}
+        loading={adding}
+        label={`Quick-add ${recent.food_name}`}
+      />
+    </div>
   );
 }
 
@@ -173,8 +296,15 @@ export function AddFoodModal({
   customFoods = [],
   frequentFoods = [],
   systemFoods = [],
+  recentEntries = [],
+  recentsLoading = false,
+  mealNames = null,
+  selectedDay = null,
+  onQuickAdd,
+  onQuickAddMany,
 }: AddFoodModalProps) {
   const [activeTab, setActiveTab] = useState<AddFoodTab>('search');
+  const [searchView, setSearchView] = useState<SearchView>('recent');
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [usdaResults, setUsdaResults] = useState<FoodSearchResult[]>([]);
@@ -183,6 +313,13 @@ export function AddFoodModal({
   const [selectedFood, setSelectedFood] = useState<FoodSearchResult | FoodSearchResultWithServings | null>(null);
   const [selectedCustomFood, setSelectedCustomFood] = useState<CustomFood | null>(null);
   const [selectedSystemFood, setSelectedSystemFood] = useState<SystemFood | null>(null);
+  const [selectedRecent, setSelectedRecent] = useState<FoodLogEntry | null>(null);
+
+  // Meals browser expand state + client-side "load more" window.
+  const [expandedMeals, setExpandedMeals] = useState<Set<string>>(new Set());
+  const [mealsVisibleDays, setMealsVisibleDays] = useState(MEALS_INITIAL_DAYS);
+  // Key of the row currently being quick-added (disables its + while in flight).
+  const [quickAddingKey, setQuickAddingKey] = useState<string | null>(null);
 
   // Unified AMOUNT + UNIT state, shared by every food source and the barcode
   // result. The model below tells the editor which units/chips to offer.
@@ -216,6 +353,9 @@ export function AddFoodModal({
     if (isOpen) {
       setMealType(defaultMealType);
       setActiveTab(initialTab ?? 'search');
+      setSearchView('recent');
+      setExpandedMeals(new Set());
+      setMealsVisibleDays(MEALS_INITIAL_DAYS);
     }
   }, [isOpen, defaultMealType, initialTab]);
 
@@ -298,9 +438,35 @@ export function AddFoodModal({
     return groups;
   }, [filteredSystemFoods]);
 
+  // Deduped recents + grouped prior meals, derived once from the raw log rows.
+  const recentFoods = useMemo(() => dedupeRecentFoods(recentEntries), [recentEntries]);
+  const filteredRecents = useMemo(
+    () => filterRecentFoods(recentFoods, debouncedQuery),
+    [recentFoods, debouncedQuery]
+  );
+  const priorMeals = useMemo(
+    () => groupPriorMeals(recentEntries, { excludeDay: selectedDay, mealNames }),
+    [recentEntries, selectedDay, mealNames]
+  );
+  const { visible: visibleMeals, hasMore: hasMoreMeals } = useMemo(
+    () => limitPriorMealsByDays(priorMeals, mealsVisibleDays),
+    [priorMeals, mealsVisibleDays]
+  );
+
   // The currently active selection (search selection or scanned product),
   // normalised so a single detail panel + add handler serves every source.
   const activeSelection = useMemo(() => {
+    if (selectedRecent) {
+      const { model } = modelFromLoggedEntry(selectedRecent);
+      return {
+        model,
+        foodKey: foodKeyFor({ foodId: selectedRecent.food_id, name: selectedRecent.food_name }),
+        name: selectedRecent.food_name,
+        subtitle: selectedRecent.serving_size || '1 serving',
+        source: (selectedRecent.source ?? 'manual') as FoodSource,
+        food_id: selectedRecent.food_id ?? undefined,
+      };
+    }
     if (scannedProduct) {
       return {
         model: packagedModel(
@@ -356,7 +522,7 @@ export function AddFoodModal({
       };
     }
     return null;
-  }, [scannedProduct, selectedFood, selectedCustomFood, selectedSystemFood]);
+  }, [scannedProduct, selectedFood, selectedCustomFood, selectedSystemFood, selectedRecent]);
 
   // Prefill the amount/unit from the last-used value for a food (falls back to
   // the model's default serving), and load the recent-amount quick-chips.
@@ -412,6 +578,7 @@ export function AddFoodModal({
     setSelectedFood(food);
     setSelectedCustomFood(null);
     setSelectedSystemFood(null);
+    setSelectedRecent(null);
     primeAmountForFood(buildUsdaModel(food), foodKeyFor({ foodId: food.foodId, name: food.name }));
 
     // If the food has a foodId, fetch detailed info with serving options
@@ -436,6 +603,7 @@ export function AddFoodModal({
     setSelectedCustomFood(food);
     setSelectedFood(null);
     setSelectedSystemFood(null);
+    setSelectedRecent(null);
     primeAmountForFood(buildCustomModel(food), foodKeyFor({ id: food.id, name: food.food_name }));
   };
 
@@ -443,6 +611,7 @@ export function AddFoodModal({
     setSelectedSystemFood(food);
     setSelectedFood(null);
     setSelectedCustomFood(null);
+    setSelectedRecent(null);
     const model = weightBasedModel({
       calories: food.calories_per_100g,
       protein: food.protein_per_100g,
@@ -450,6 +619,78 @@ export function AddFoodModal({
       fat: food.fat_per_100g,
     });
     primeAmountForFood(model, foodKeyFor({ id: food.id, name: food.name }));
+  };
+
+  // Tap a recent's row body → open the shared detail panel primed with the
+  // last-logged serving, so it can be adjusted before adding.
+  const handleSelectRecent = (entry: FoodLogEntry) => {
+    setSelectedRecent(entry);
+    setSelectedFood(null);
+    setSelectedCustomFood(null);
+    setSelectedSystemFood(null);
+    const { model, defaultAmount, defaultUnitId } = modelFromLoggedEntry(entry);
+    const foodKey = foodKeyFor({ foodId: entry.food_id, name: entry.food_name });
+    const lastUsed = getLastUsedServing(foodKey);
+    const unitExists = lastUsed && model.units.some((u) => u.id === lastUsed.unitId);
+    const unitId = unitExists ? lastUsed!.unitId : defaultUnitId;
+    const amount = unitExists ? lastUsed!.amount : defaultAmount;
+    setAmountValue({ amount: amount.toString(), unitId });
+    setRecentAmounts(getRecentAmounts(foodKey, unitId, 2));
+  };
+
+  // Re-log a logged snapshot as-is into the currently selected meal, keeping the
+  // same serving/quantity. Used by every quick-add (+) in Recent and Meals.
+  const snapshotOf = (entry: FoodLogEntry): QuickAddFood => ({
+    food_name: entry.food_name,
+    serving_size: entry.serving_size || '1 serving',
+    servings: entry.servings || 1,
+    calories: entry.calories || 0,
+    protein: entry.protein || 0,
+    carbs: entry.carbs || 0,
+    fat: entry.fat || 0,
+    meal_type: mealType,
+    source: entry.source ?? 'manual',
+    food_id: entry.food_id ?? undefined,
+  });
+
+  // Instant quick-add — does NOT close the sheet, so several can be grabbed.
+  const handleQuickAdd = async (entry: FoodLogEntry, rowKey: string) => {
+    if (!onQuickAdd) return;
+    setQuickAddingKey(rowKey);
+    try {
+      await onQuickAdd(snapshotOf(entry));
+    } catch {
+      setError('Failed to add food. Please try again.');
+    } finally {
+      setQuickAddingKey(null);
+    }
+  };
+
+  // "Add all" for a prior meal — copies every item into the selected meal.
+  const handleAddAllFromMeal = async (meal: PriorMeal) => {
+    const foods = meal.entries.map(snapshotOf);
+    if (foods.length === 0) return;
+    setQuickAddingKey(`all:${meal.key}`);
+    try {
+      if (onQuickAddMany) {
+        await onQuickAddMany(foods);
+      } else if (onQuickAdd) {
+        for (const food of foods) await onQuickAdd(food);
+      }
+    } catch {
+      setError('Failed to add meal. Please try again.');
+    } finally {
+      setQuickAddingKey(null);
+    }
+  };
+
+  const toggleMealExpanded = (key: string) => {
+    setExpandedMeals((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   };
 
   // Single add handler for every selectable / scanned food.
@@ -556,6 +797,7 @@ export function AddFoodModal({
     setSelectedFood(null);
     setSelectedCustomFood(null);
     setSelectedSystemFood(null);
+    setSelectedRecent(null);
   };
 
   const resetAndClose = () => {
@@ -589,7 +831,7 @@ export function AddFoodModal({
     setNotFoundBarcode(null);
   };
 
-  const hasSelection = !!(selectedFood || selectedCustomFood || selectedSystemFood);
+  const hasSelection = !!(selectedFood || selectedCustomFood || selectedSystemFood || selectedRecent);
   const showUsdaSection = debouncedQuery.length >= 3;
 
   return (
@@ -702,9 +944,168 @@ export function AddFoodModal({
               </div>
             )}
 
-            {/* Search result sections */}
-            {!hasSelection && (
+            {/* Recent | Meals segmented control — the default views shown
+                before the user commits to a full search. */}
+            {!hasSelection && !debouncedQuery && (
+              <div className="flex gap-1 p-1 bg-surface-800/60 rounded-lg" role="tablist" aria-label="Recent or meals">
+                {(['recent', 'meals'] as SearchView[]).map((view) => (
+                  <button
+                    key={view}
+                    type="button"
+                    role="tab"
+                    aria-selected={searchView === view}
+                    onClick={() => setSearchView(view)}
+                    data-testid={`add-food-view-${view}`}
+                    className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                      searchView === view
+                        ? 'bg-surface-700 text-surface-100'
+                        : 'text-surface-400 hover:text-surface-200'
+                    }`}
+                  >
+                    {view === 'recent' ? 'Recent' : 'Meals'}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Default view: MEALS (browse & pick from prior logged meals) */}
+            {!hasSelection && !debouncedQuery && searchView === 'meals' && (
+              <div className="space-y-2 max-h-96 overflow-y-auto" data-testid="prior-meals-list">
+                {recentsLoading && priorMeals.length === 0 ? (
+                  <>
+                    {[0, 1, 2].map((i) => (
+                      <div key={i} className="h-14 rounded-lg bg-surface-800/60 animate-pulse" />
+                    ))}
+                  </>
+                ) : visibleMeals.length === 0 ? (
+                  <div className="py-8 text-center" data-testid="prior-meals-empty">
+                    <IconToolsKitchen2 size={28} className="mx-auto text-surface-600 mb-2" aria-hidden="true" />
+                    <p className="text-sm text-surface-400">No prior meals yet</p>
+                    <p className="text-xs text-surface-500 mt-1">
+                      Meals you log will appear here so you can grab foods from them.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    {visibleMeals.map((meal) => {
+                      const isExpanded = expandedMeals.has(meal.key);
+                      return (
+                        <div
+                          key={meal.key}
+                          className="bg-surface-800/50 rounded-lg overflow-hidden"
+                          data-testid="prior-meal"
+                        >
+                          <div className="flex items-center gap-2 pr-2">
+                            <button
+                              type="button"
+                              onClick={() => toggleMealExpanded(meal.key)}
+                              aria-expanded={isExpanded}
+                              className="flex-1 min-w-0 p-3 text-left flex items-center gap-2 hover:bg-surface-700 transition-colors"
+                            >
+                              <IconChevronRight
+                                size={16}
+                                aria-hidden="true"
+                                className={`flex-shrink-0 text-surface-500 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                              />
+                              <span className="min-w-0">
+                                <span className="block text-sm font-medium text-surface-200 truncate">
+                                  {meal.dayLabel} · {meal.mealLabel}
+                                </span>
+                                <span className="block text-xs text-surface-500">
+                                  {Math.round(meal.totalCalories)} cal · {meal.itemCount} item{meal.itemCount === 1 ? '' : 's'}
+                                </span>
+                              </span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleAddAllFromMeal(meal)}
+                              disabled={isSubmitting || quickAddingKey !== null}
+                              className="flex-shrink-0 text-xs font-semibold text-primary-400 px-2 py-1 rounded-md hover:bg-primary-500/15 transition-colors disabled:opacity-40"
+                              data-testid="prior-meal-add-all"
+                            >
+                              {quickAddingKey === `all:${meal.key}` ? 'Adding…' : 'Add all'}
+                            </button>
+                          </div>
+                          {isExpanded && (
+                            <div className="px-2 pb-2 space-y-1">
+                              {meal.entries.map((entry) => (
+                                <div
+                                  key={entry.id}
+                                  className="flex items-center gap-2 bg-surface-900/40 rounded-lg pr-2"
+                                  data-testid="prior-meal-food"
+                                >
+                                  <div className="flex-1 min-w-0 p-2">
+                                    <p className="text-sm text-surface-200 truncate">{entry.food_name}</p>
+                                    <p className="text-xs text-surface-500 truncate">
+                                      {Math.round(entry.calories || 0)} cal · {entry.serving_size || '1 serving'}
+                                    </p>
+                                  </div>
+                                  <QuickAddButton
+                                    onClick={() => handleQuickAdd(entry, `meal-item:${entry.id}`)}
+                                    disabled={isSubmitting || quickAddingKey !== null}
+                                    loading={quickAddingKey === `meal-item:${entry.id}`}
+                                    label={`Add ${entry.food_name}`}
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                    {hasMoreMeals && (
+                      <button
+                        type="button"
+                        onClick={() => setMealsVisibleDays((d) => d + MEALS_LOAD_MORE_DAYS)}
+                        className="w-full py-2 text-sm text-primary-400 hover:text-primary-300 transition-colors"
+                        data-testid="prior-meals-load-more"
+                      >
+                        Load more
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* RECENT view (default) + full search results. Recents rank above
+                the global DB results — matching Lose It: before a query the
+                deduped recents list shows on top of the browse sections; once a
+                query is typed, filtered recents rank above Your foods / Common /
+                USDA. The Meals view (above) replaces this when selected. */}
+            {!hasSelection && (debouncedQuery || searchView === 'recent') && (
               <div className="space-y-4 max-h-96 overflow-y-auto">
+                {/* Recent — deduped recently-logged foods (full when no query,
+                    filtered above the DB results while searching). */}
+                <section data-testid="recent-foods-list">
+                  <SectionLabel>Recent</SectionLabel>
+                  {recentsLoading && recentFoods.length === 0 ? (
+                    <div className="space-y-1">
+                      {[0, 1, 2, 3].map((i) => (
+                        <div key={i} className="h-12 rounded-lg bg-surface-800/60 animate-pulse" />
+                      ))}
+                    </div>
+                  ) : filteredRecents.length === 0 ? (
+                    <p className="text-[13px] text-surface-500 py-1" data-testid="recent-foods-empty">
+                      {debouncedQuery
+                        ? 'No matches in recent foods'
+                        : 'No recent foods yet — search or scan to log your first food.'}
+                    </p>
+                  ) : (
+                    <div className="space-y-1">
+                      {(debouncedQuery ? filteredRecents.slice(0, 8) : filteredRecents).map((recent) => (
+                        <RecentFoodRow
+                          key={recent.key}
+                          recent={recent}
+                          onSelect={() => handleSelectRecent(recent.entry)}
+                          onQuickAdd={() => handleQuickAdd(recent.entry, recent.key)}
+                          adding={quickAddingKey === recent.key}
+                          disabled={isSubmitting || quickAddingKey !== null}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </section>
                 {/* Your foods: frequent for this meal + custom foods */}
                 <section>
                   <SectionLabel>Your foods</SectionLabel>
