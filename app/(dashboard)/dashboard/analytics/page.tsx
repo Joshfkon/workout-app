@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useMemo, Suspense } from 'react';
 import { useQuery, useQueryClient, useIsRestoring } from '@tanstack/react-query';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge, FullPageLoading, ErrorRetry } from '@/components/ui';
 import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 import { resolveAuthState } from '@/lib/supabase/authState';
@@ -385,7 +385,6 @@ const AUTH_REQUIRED = { authRequired: true } as const;
 
 function AnalyticsPageContent() {
   const router = useRouter();
-  const pathname = usePathname();
   const searchParams = useSearchParams();
   const { preferences } = useUserPreferences();
   const [activeTab, setActiveTab] = useState<TabType>(
@@ -402,12 +401,14 @@ function AnalyticsPageContent() {
   }, [searchParams]);
 
   const handleTabChange = (tab: TabType) => {
+    // Local state only — deliberately NO URL write. Changing the ?tab= search
+    // param remounts page.tsx (the App Router keys the page segment by its
+    // search params; history.replaceState sync included), and this page still
+    // loads via fetch-in-useEffect, so a remount meant a full refetch behind
+    // a multi-second loading screen on every tab tap. Deep links IN
+    // (?tab=...) keep working via the searchParams read/effect above; the
+    // param just doesn't track subsequent taps.
     setActiveTab(tab);
-    // Keep the URL linkable/shareable without adding history entries per tap.
-    router.replace(
-      tab === 'body-composition' ? pathname : `${pathname}?tab=${tab}`,
-      { scroll: false }
-    );
   };
   const [timeRange, setTimeRange] = useState<'7d' | '30d' | '60d' | '6m' | '1y' | 'all'>('30d');
 
