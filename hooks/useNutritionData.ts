@@ -186,6 +186,32 @@ async function fetchNutritionGlobal(): Promise<NutritionGlobalBundle | null> {
       .gte('workout_sessions.completed_at', thirtyDaysAgo.toISOString()),
   ]);
 
+  // Supabase queries don't throw — they resolve with { data: null, error }.
+  // When EVERY query errored (offline, dead token, Supabase outage) this
+  // isn't "the user has no data", it's a failed fetch: throw so React Query
+  // keeps the last good (persisted) bundle and retries, instead of
+  // committing an all-empty "success" over it. Partial errors still resolve —
+  // the page's targetsError/userError flags handle those — so a persistent
+  // single-table failure can't wedge the query into never updating.
+  const results = [
+    targetsResult,
+    weightResult,
+    customFoodsResult,
+    frequentResult,
+    userResult,
+    dexaResult,
+    mesocycleResult,
+    prefsResult,
+    volumeProfileResult,
+    proteinResult,
+    trainingSetsResult,
+  ];
+  if (results.every((r) => r.error)) {
+    throw new Error(
+      `[Nutrition] global fetch failed entirely: ${targetsResult.error?.message ?? 'unknown error'}`
+    );
+  }
+
   let tdee: TDEEData | null = null;
   try {
     tdee = await getAdaptiveTDEE(targetsResult.data?.calories);
