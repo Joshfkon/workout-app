@@ -3836,6 +3836,25 @@ export default function WorkoutPage() {
     router.push('/dashboard');
   };
 
+  // Toggle the deload flag mid-workout (from the header ⋮ menu). Optimistic:
+  // the header/banner reflect it immediately; on failure we roll back. The
+  // summary toggle stays in sync because it seeds from session.isDeload.
+  const handleToggleDeloadSession = async () => {
+    if (!session) return;
+    const next = !session.isDeload;
+    setSession((prev) => (prev ? { ...prev, isDeload: next } : prev));
+    try {
+      const { error } = await createUntypedClient()
+        .from('workout_sessions')
+        .update({ is_deload: next })
+        .eq('id', sessionId);
+      if (error) throw error;
+    } catch (err) {
+      console.error('Failed to toggle deload flag:', err);
+      setSession((prev) => (prev ? { ...prev, isDeload: !next } : prev));
+    }
+  };
+
   const handleDeclineClaim = () => {
     setShowClaimPrompt(false);
     finishToDashboard();
@@ -4262,6 +4281,8 @@ export default function WorkoutPage() {
         onOpenReadinessModal={() => setShowReadinessModal(true)}
         onOpenMuscleReadiness={() => setShowMuscleReadinessSheet(true)}
         onOpenPlateCalculator={() => setShowPlateCalculator(true)}
+        isDeload={session?.isDeload ?? false}
+        onToggleDeload={handleToggleDeloadSession}
         onCancelWorkout={() => setShowCancelModal(true)}
         onAddExercise={handleOpenAddExercise}
         onFinishWorkout={handleWorkoutComplete}
