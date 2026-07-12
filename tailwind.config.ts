@@ -5,6 +5,8 @@ const config: Config = {
     "./pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
     "./app/**/*.{js,ts,jsx,tsx,mdx}",
+    // Class-name constants live here too (e.g. lib/nutrition/mealAccents.ts)
+    "./lib/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
     extend: {
@@ -68,6 +70,14 @@ const config: Config = {
           400: '#fb923c',
           500: '#f97316',
           600: '#ea580c',
+        },
+        // Meal-section accent identities (theme-aware via CSS vars in
+        // globals.css — 400-weight on dark, 600-weight on light).
+        meal: {
+          breakfast: 'rgb(var(--meal-breakfast) / <alpha-value>)',
+          lunch: 'rgb(var(--meal-lunch) / <alpha-value>)',
+          dinner: 'rgb(var(--meal-dinner) / <alpha-value>)',
+          snack: 'rgb(var(--meal-snack) / <alpha-value>)',
         },
       },
       fontFamily: {

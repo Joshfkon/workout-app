@@ -79,6 +79,15 @@ const HEADER_WIDTH_BUDGET = 30;
 
 type Square = typeof GREEN | typeof YELLOW | typeof RED;
 
+/** Compliance band shared with UI surfaces (nutrition calendar rings). */
+export type ComplianceBand = 'green' | 'yellow' | 'red';
+
+const BAND_SQUARES: Record<ComplianceBand, Square> = {
+  green: GREEN,
+  yellow: YELLOW,
+  red: RED,
+};
+
 /** The three share layouts. All share the same band/pace/phase computation. */
 export type NutritionShareMode = 'full' | 'compact' | 'minimal';
 
@@ -139,7 +148,7 @@ export interface NutritionShareOptions {
 }
 
 /** Which side of the target works against the phase goal. */
-interface HarmDirection {
+export interface HarmDirection {
   under: boolean;
   over: boolean;
 }
@@ -169,20 +178,31 @@ function bandColor(
   greenLimit: number,
   yellowLimit: number,
   harm: HarmDirection
-): Square {
+): ComplianceBand {
   const dev = pct - 100;
-  if (Math.abs(dev) <= greenLimit) return GREEN;
+  if (Math.abs(dev) <= greenLimit) return 'green';
   const harmful = dev < 0 ? harm.under : harm.over;
-  if (!harmful) return GREEN;
-  return Math.abs(dev) <= yellowLimit ? YELLOW : RED;
+  if (!harmful) return 'green';
+  return Math.abs(dev) <= yellowLimit ? 'yellow' : 'red';
 }
 
 /** Calorie harm direction: bulk fears under, cut fears over, maint both. */
-function calorieHarm(phase: PacingPhase): HarmDirection {
+export function calorieHarm(phase: PacingPhase): HarmDirection {
   return {
     under: phase === 'bulk' || phase === 'maintenance',
     over: phase === 'cut' || phase === 'maintenance',
   };
+}
+
+/**
+ * End-of-day calorie compliance band, phase-aware: ±5% of target reads green,
+ * ±10% yellow, beyond red — and only the direction that works against the
+ * phase goal is downgraded (a cut day under target stays green). This is THE
+ * band logic for calorie compliance everywhere: the share text's kcal square
+ * and the nutrition calendar's day rings both call it, so they always agree.
+ */
+export function calorieComplianceBand(pct: number, phase: PacingPhase): ComplianceBand {
+  return bandColor(pct, 5, 10, calorieHarm(phase));
 }
 
 /**
@@ -201,9 +221,9 @@ function fullDayColor(
     return pct >= 85 ? YELLOW : RED;
   }
   if (macro === 'carbs' || macro === 'fat') {
-    return bandColor(pct, 15, 30, { under: false, over: true });
+    return BAND_SQUARES[bandColor(pct, 15, 30, { under: false, over: true })];
   }
-  return bandColor(pct, 5, 10, calorieHarm(phase));
+  return BAND_SQUARES[calorieComplianceBand(pct, phase)];
 }
 
 /**

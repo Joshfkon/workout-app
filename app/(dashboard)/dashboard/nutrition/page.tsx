@@ -18,6 +18,7 @@ const EditFoodModal = dynamic(() => import('@/components/nutrition/EditFoodModal
 const NutritionTrendGraph = dynamic(() => import('@/components/nutrition/NutritionTrendGraph').then(m => ({ default: m.NutritionTrendGraph })), { ssr: false });
 const DescribeMealModal = dynamic(() => import('@/components/nutrition/DescribeMealModal').then(m => ({ default: m.DescribeMealModal })), { ssr: false });
 const SavedMealsModal = dynamic(() => import('@/components/nutrition/SavedMealsModal').then(m => ({ default: m.SavedMealsModal })), { ssr: false });
+const NutritionCalendarSheet = dynamic(() => import('@/components/nutrition/NutritionCalendarSheet').then(m => ({ default: m.NutritionCalendarSheet })), { ssr: false });
 import type {
   FoodLogEntry,
   WeightLogEntry,
@@ -32,6 +33,8 @@ import type { ParsedMealItem } from '@/lib/actions/nutrition-ai';
 import type { SavedMeal, SavedMealItem } from '@/components/nutrition/SavedMealsModal';
 import type { AddFoodTab } from '@/components/nutrition/AddFoodModal';
 import { MacroSummaryCard } from '@/components/nutrition/MacroSummaryCard';
+import { FoodEmojiAvatar } from '@/components/nutrition/FoodEmoji';
+import { MEAL_ACCENTS } from '@/lib/nutrition/mealAccents';
 import { StickyMacroBar } from '@/components/nutrition/StickyMacroBar';
 import { NutritionQuickActions } from '@/components/nutrition/NutritionQuickActions';
 import { ShareNutritionText } from '@/components/nutrition/ShareNutritionText';
@@ -46,6 +49,7 @@ import {
   type NutritionGlobalBundle,
 } from '@/hooks/useNutritionData';
 import { useRecentFoods, RECENT_FOODS_KEY } from '@/hooks/useRecentFoods';
+import { nutritionMonthKey } from '@/hooks/useNutritionMonth';
 import { recalculateMacrosForWeight } from '@/lib/actions/nutrition';
 import { getAdaptiveTDEE, onWeightLoggedRecalculateTDEE, resetAndRecalculateTDEE, type TDEEData } from '@/lib/actions/tdee';
 import { TDEEDashboard } from '@/components/nutrition/TDEEDashboard';
@@ -249,6 +253,7 @@ function NutritionPageContent() {
   const [showEditFood, setShowEditFood] = useState(false);
   const [editingFood, setEditingFood] = useState<FoodLogEntry | null>(null);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
+  const [showCalendar, setShowCalendar] = useState(false);
   const [openMealMenu, setOpenMealMenu] = useState<MealType | null>(null);
   const router = useRouter();
   const pathname = usePathname();
@@ -359,6 +364,13 @@ function NutritionPageContent() {
       queryClient.setQueryData<FoodLogEntry[]>(nutritionDayKey(selectedDate), (prev = []) =>
         typeof updater === 'function' ? updater(prev) : updater
       );
+      // The calendar's month aggregate now disagrees with the day cache. Mark
+      // it stale so the next sheet open refetches — matters for PAST months,
+      // whose immutable-in-practice staleTime would otherwise hide the edit.
+      void queryClient.invalidateQueries({
+        queryKey: nutritionMonthKey(selectedDate.slice(0, 7)),
+        refetchType: 'none',
+      });
     },
     [queryClient, selectedDate]
   );
@@ -1342,9 +1354,6 @@ function NutritionPageContent() {
     setSelectedDate(getLocalDateString(date));
   }
 
-  function goToToday() {
-    setSelectedDate(getLocalDateString());
-  }
 
   // Daily totals + remaining/hit/over verdicts — single source of truth
   // shared by the hero MacroSummaryCard and the sticky bar
@@ -1550,10 +1559,10 @@ function NutritionPageContent() {
             <IconChevronLeft size={18} aria-hidden="true" />
           </button>
           <button
-            onClick={goToToday}
-            disabled={isToday}
-            className="min-w-[84px] text-center text-[13px] font-medium text-surface-100 disabled:cursor-default"
-            title={isToday ? undefined : 'Back to today'}
+            onClick={() => setShowCalendar(true)}
+            className="min-w-[84px] rounded-lg py-1 text-center text-[13px] font-medium text-surface-100 transition-colors hover:bg-surface-800"
+            title="Open calendar"
+            aria-label={`${dateDisplay} — open calendar`}
             suppressHydrationWarning
           >
             {dateDisplay}
@@ -1723,7 +1732,11 @@ function NutritionPageContent() {
           const hasMenuActions = hasEntries || yesterdayHasEntries;
 
           return (
-            <div key={meal.type} className="rounded-2xl border border-surface-800 bg-surface-900 p-4">
+            <div
+              key={meal.type}
+              data-meal-section={meal.type}
+              className={`rounded-2xl border border-surface-800 bg-surface-900 p-4 border-l-2 ${MEAL_ACCENTS[meal.type].borderClass}`}
+            >
               {/* Header: "{Meal}: {kcal} cals" + macro breakdown + overflow menu */}
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
@@ -1802,12 +1815,15 @@ function NutritionPageContent() {
                         }}
                         className="w-full flex items-center justify-between gap-4 py-2 px-1 rounded-lg hover:bg-surface-800/50 active:bg-surface-800 transition-colors text-left"
                       >
-                        <div className="min-w-0">
-                          <div className="text-[14px] text-surface-100 truncate">
-                            {toTitleCase(entry.food_name)}
-                          </div>
-                          <div className="text-[12px] text-surface-500 truncate">
-                            {entry.servings !== 1 ? `${entry.servings} × ` : ''}{entry.serving_size}
+                        <div className="flex min-w-0 items-center gap-2.5">
+                          <FoodEmojiAvatar name={entry.food_name} />
+                          <div className="min-w-0">
+                            <div className="text-[14px] text-surface-100 truncate">
+                              {toTitleCase(entry.food_name)}
+                            </div>
+                            <div className="text-[12px] text-surface-500 truncate">
+                              {entry.servings !== 1 ? `${entry.servings} × ` : ''}{entry.serving_size}
+                            </div>
                           </div>
                         </div>
                         <span className="text-[15px] text-surface-300 flex-shrink-0 tabular-nums">
@@ -2051,6 +2067,21 @@ function NutritionPageContent() {
       {/* ---- end Insights tab ---- */}
 
       {/* Modals */}
+      <NutritionCalendarSheet
+        isOpen={showCalendar}
+        onClose={() => setShowCalendar(false)}
+        selectedDate={selectedDate}
+        onSelectDate={setSelectedDate}
+        calorieTarget={nutritionTargets?.calories ?? null}
+        currentPhase={currentPhase ?? 'maintenance'}
+        todayCalories={
+          isToday && foodEntries.length > 0 && !dayQuery.isPlaceholderData
+            ? dailyTotals.calories
+            : undefined
+        }
+        eatingWindow={eatingWindow}
+      />
+
       <AddFoodModal
         isOpen={showAddFood}
         onClose={() => setShowAddFood(false)}
