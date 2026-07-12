@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import dynamic from 'next/dynamic';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Card, Button, Badge, Input, LoadingAnimation, SkeletonExercise, ConfirmModal, ToastContainer, useToasts } from '@/components/ui';
@@ -5192,13 +5193,17 @@ export default function WorkoutPage() {
         </div>
       )}
 
-      {/* Optional readiness logger (no longer gates the workout) */}
-      {showReadinessModal && (
+      {/* Optional readiness logger (no longer gates the workout). The panel
+          scrolls internally (sticky header/footer) so the scrim stays exposed
+          and tappable; scrim tap / X / Escape all cancel without submitting.
+          Portaled to <body> (like components/ui/Modal) so the scrim covers
+          the dashboard header instead of painting beneath it. */}
+      {showReadinessModal && typeof window !== 'undefined' && createPortal(
         <div
-          className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-black/50 backdrop-blur-sm overflow-y-auto py-6"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
           onClick={() => setShowReadinessModal(false)}
         >
-          <div className="max-w-lg w-full mx-4" onClick={(e) => e.stopPropagation()}>
+          <div className="max-w-lg w-full max-h-full min-h-0 flex flex-col" onClick={(e) => e.stopPropagation()}>
             <ReadinessCheckIn
               onSubmit={async (data, sorenessRatings) => {
                 await handleCheckInComplete(data, { startSession: false });
@@ -5208,6 +5213,7 @@ export default function WorkoutPage() {
                 setShowReadinessModal(false);
               }}
               onSkip={() => setShowReadinessModal(false)}
+              onClose={() => setShowReadinessModal(false)}
               unit={preferences.units}
               todayNutrition={todayNutrition || undefined}
               userGoal={userGoal}
@@ -5215,7 +5221,8 @@ export default function WorkoutPage() {
               initialValues={todayCheckInData || undefined}
             />
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Muscle Readiness sheet (volume + recovery). Lazy-mounted on first open;
