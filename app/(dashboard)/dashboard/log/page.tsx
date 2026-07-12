@@ -60,6 +60,7 @@ import {
   useLogHeroInfoQuery,
   useLogHomeMutator,
 } from '@/hooks/useLogPageData';
+import { usePrefetchNutrition } from '@/hooks/useNutritionData';
 import {
   LogHeroCard,
   QuickLogRow,
@@ -170,6 +171,11 @@ export default function LogPage() {
   const [showAiSheet, setShowAiSheet] = useState(false);
 
   const [showWeightSheet, setShowWeightSheet] = useState(false);
+
+  // Warm the Eat tab's queries once this page has its own data — the most
+  // common next tap. Kills the nutrition full-loading flash on new-day /
+  // fresh-cache sessions (see usePrefetchNutrition).
+  usePrefetchNutrition(!isLoading);
 
   // Boot timeline: first paint of the Log page with real data. Double-rAF so
   // the mark lands after the browser actually painted the post-fetch render.

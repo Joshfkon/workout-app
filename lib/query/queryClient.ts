@@ -44,6 +44,15 @@ export function shouldPersistQueryKey(queryKey: readonly unknown[]): boolean {
 /** gcTime for persisted, immutable-in-practice data: keep it warm for hours. */
 export const IMMUTABLE_GC_TIME = 1000 * 60 * 60 * 24; // 24h
 
+/**
+ * How long the on-disk (IndexedDB) snapshot stays restorable. Deliberately
+ * longer than the in-memory gcTime: a user coming back after a weekend should
+ * still cold-start from cached content (stale data + background revalidate)
+ * rather than a spinner — with 24h the whole persisted cache was discarded
+ * after one skipped day.
+ */
+export const PERSIST_MAX_AGE = 1000 * 60 * 60 * 24 * 7; // 7 days
+
 export function makeQueryClient(): QueryClient {
   return new QueryClient({
     defaultOptions: {

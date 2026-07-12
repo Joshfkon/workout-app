@@ -13,7 +13,7 @@
 import { get, set, del } from 'idb-keyval';
 import type { PersistQueryClientOptions } from '@tanstack/react-query-persist-client';
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
-import { shouldPersistQueryKey, IMMUTABLE_GC_TIME } from './queryClient';
+import { shouldPersistQueryKey, PERSIST_MAX_AGE } from './queryClient';
 
 export const IDB_KEY = 'hypertrack-rq-cache';
 
@@ -61,7 +61,10 @@ export function buildPersistOptions(): Omit<PersistQueryClientOptions, 'queryCli
   if (!persister) return null;
   return {
     persister,
-    maxAge: IMMUTABLE_GC_TIME,
+    // Longer than the in-memory gcTime on purpose: a boot after a skipped day
+    // (or weekend) must still restore last-seen content and revalidate in the
+    // background instead of cold-starting to spinners.
+    maxAge: PERSIST_MAX_AGE,
     buster: CACHE_BUSTER,
     dehydrateOptions: {
       shouldDehydrateQuery: (query) =>
