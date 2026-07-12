@@ -19,6 +19,7 @@ import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client
 import { makeQueryClient } from '@/lib/query/queryClient';
 import { buildPersistOptions, clearPersistedQueryCache } from '@/lib/query/idbPersister';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { getLocalUserId } from '@/lib/supabase/authState';
 
 export function QueryProvider({ children }: { children: React.ReactNode }) {
   // One client per browser tab, created lazily so it isn't shared across
@@ -35,8 +36,12 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
   const lastUserIdRef = useRef<string | null | undefined>(undefined);
   useEffect(() => {
     const supabase = createUntypedClient();
-    void supabase.auth.getUser().then(({ data }: { data: { user: { id?: string } | null } }) => {
-      lastUserIdRef.current = data.user?.id ?? null;
+    // Seed from the locally persisted session (no network). This only needs
+    // IDENTITY for the user-switch cache purge; verification isn't required,
+    // and a boot-time getUser() round trip here serializes with every other
+    // auth read behind supabase-js's auth lock, delaying first data fetch.
+    void getLocalUserId(supabase).then((userId) => {
+      lastUserIdRef.current = userId;
     });
     const { data: sub } = supabase.auth.onAuthStateChange(
       (_event: string, session: { user?: { id?: string } | null } | null) => {

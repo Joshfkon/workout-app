@@ -23,6 +23,7 @@ import { QueryClient } from '@tanstack/react-query';
  * in-practice data (past nutrition days, completed history) benefits most.
  */
 export const PERSISTED_QUERY_PREFIXES = [
+  'log',            // the /dashboard/log landing surface — cold-start paint
   'nutrition',      // per-day food log — past days are immutable
   'history',        // completed workout sessions
   'analytics',      // DEXA / lift-trend history

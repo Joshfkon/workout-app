@@ -59,7 +59,12 @@ async function run() {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, serviceWorkers: 'block' });
   await context.addCookies([
     { name: 'aaa-auth-token', value: jwt, domain: 'localhost', path: '/', httpOnly: false, secure: false },
+    // The supabase clients' storage key is sb-<first host label of
+    // NEXT_PUBLIC_SUPABASE_URL>-auth-token; plant both common local setups so
+    // the session parses whether the build points at placeholder.supabase.co
+    // or a localhost mock (same as lib.mjs#authCookies).
     { name: 'sb-placeholder-auth-token', value: sessionCookie, domain: 'localhost', path: '/', httpOnly: false, secure: false },
+    { name: 'sb-localhost-auth-token', value: sessionCookie, domain: 'localhost', path: '/', httpOnly: false, secure: false },
   ]);
 
   const page = await context.newPage();

@@ -21,7 +21,12 @@ export function authCookies() {
     user,
     cookies: [
       { name: 'aaa-auth-token', value: jwt, domain: 'localhost', path: '/', httpOnly: false, secure: false },
+      // The browser client's storage key is derived from NEXT_PUBLIC_SUPABASE_URL
+      // (sb-<first host label>-auth-token). Plant both common local setups so
+      // getSession() — which the app reads identity from at boot — works whether
+      // the build points at placeholder.supabase.co or a localhost mock.
       { name: 'sb-placeholder-auth-token', value: sessionCookie, domain: 'localhost', path: '/', httpOnly: false, secure: false },
+      { name: 'sb-localhost-auth-token', value: sessionCookie, domain: 'localhost', path: '/', httpOnly: false, secure: false },
     ],
   };
 }

@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
+import { isSessionCookieValid } from "@/lib/supabase/sessionCookie";
 
 export default async function Home({
   searchParams,
@@ -17,9 +19,18 @@ export default async function Home({
     redirect(`/login?error=${encodeURIComponent(searchParams.error)}&error_code=${encodeURIComponent(searchParams.error_code || '')}`);
   }
 
+  // Fast path (same trick as the middleware): a valid-looking session cookie
+  // means a signed-in user — redirect to the app immediately instead of
+  // spending a ~250ms auth-server round trip on the cold-start critical path.
+  // The dashboard's own auth guards handle a session that turns out dead.
+  const cookieStore = await cookies();
+  if (isSessionCookieValid(cookieStore.getAll())) {
+    redirect("/dashboard/log");
+  }
+
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  
+
   if (user) {
     redirect("/dashboard/log");
   }

@@ -54,6 +54,30 @@ export function isRetryableAuthError(error: unknown): boolean {
   return status >= 500;
 }
 
+/**
+ * The signed-in user's id from the LOCALLY persisted session — no network
+ * round trip, no auth-server validation. Returns null when no session is
+ * stored (genuinely signed out).
+ *
+ * Use this to decide WHAT to fetch on boot: every Supabase REST call still
+ * carries the access token and is enforced by RLS server-side, so trusting
+ * the local session for identity here can't leak anything — a stale/revoked
+ * token just makes those calls fail. Cold-start perf work: the app used to
+ * make several `getUser()` network round trips before its first data fetch,
+ * and supabase-js serializes them (and the REST calls' token reads) behind
+ * one auth lock, so each extra getUser() pushed first paint back by a full
+ * round trip. Keep `resolveAuthState` for sensitive, user-initiated actions
+ * that should verify the session before proceeding.
+ */
+export async function getLocalUserId(supabase: AuthCapableClient): Promise<string | null> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    return (session as { user?: { id?: string } } | null)?.user?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function resolveAuthState(supabase: AuthCapableClient): Promise<AuthState> {
   try {
     // Local, offline read of the persisted session — the source of truth for

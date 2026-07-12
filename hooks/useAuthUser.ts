@@ -12,7 +12,15 @@ interface AuthUserState {
 
 /**
  * Shared hook for getting the currently authenticated Supabase user.
- * Deduplicates the auth.getUser() pattern used across many hooks.
+ * Deduplicates the session-read pattern used across many hooks.
+ *
+ * Reads the LOCALLY persisted session (`getSession()`) instead of the
+ * `getUser()` network round trip: several of this hook's consumers mount at
+ * boot, and supabase-js serializes every auth read (including the token reads
+ * REST calls make) behind one lock — so each getUser() here pushed the app's
+ * first data fetch back by a full auth-server round trip. Consumers only use
+ * this for identity (what to fetch / whose id to write); RLS still validates
+ * the token on every actual request.
  *
  * Usage:
  *   const { user, isLoading } = useAuthUser();
@@ -33,17 +41,12 @@ export function useAuthUser(): AuthUserState {
       try {
         const supabase = createUntypedClient();
         const {
-          data: { user },
-          error,
-        } = await supabase.auth.getUser();
+          data: { session },
+        } = await supabase.auth.getSession();
 
         if (cancelled) return;
 
-        if (error) {
-          setState({ user: null, isLoading: false, error: error.message });
-        } else {
-          setState({ user, isLoading: false, error: null });
-        }
+        setState({ user: session?.user ?? null, isLoading: false, error: null });
       } catch (err) {
         if (cancelled) return;
         setState({

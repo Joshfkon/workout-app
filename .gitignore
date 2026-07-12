@@ -48,3 +48,4 @@ next-env.d.ts
 ux-audit/auth-state.json
 # Raw audit crawl screenshots (36MB) stay local; per-fix evidence is committed
 ux-audit/screenshots/
+/ux-audit/perf/boot-shots/
