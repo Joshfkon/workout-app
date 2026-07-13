@@ -193,19 +193,53 @@ export function subjectiveVerdictNudges(
  * SubjectiveVolumeSignals. Ratings use the 0-3 scales from types/schema.ts:
  * pump 0 none…3 extreme; workload 0 too easy…3 too much; soreness 0 none…3
  * still sore at next session.
+ *
+ * Counters are per SESSION, so rows are first merged per (muscle, session):
+ * collapsing standard subdivisions to coarse groups can hand this two rows
+ * for one workout (chest_upper + chest_lower → chest), and counting both
+ * would let a single session masquerade as a repeated pattern. Within a
+ * session, pump keeps the best evidence of stimulus (max) while workload and
+ * soreness keep the worst-case recovery signal (max) — mirroring the weekly
+ * engine's aggregation semantics.
  */
 export function aggregateSubjectiveSignals(
   rows: {
+    sessionId: string;
     muscle: MuscleGroup;
     pump: number | null;
     workload: number | null;
     sorenessBefore: number | null;
   }[]
 ): Partial<Record<MuscleGroup, SubjectiveVolumeSignals>> {
-  const byMuscle: Partial<Record<MuscleGroup, SubjectiveVolumeSignals>> = {};
+  // 1. Merge rows into one entry per (muscle, session).
+  const maxRating = (a: number | null, b: number | null): number | null =>
+    a === null ? b : b === null ? a : Math.max(a, b);
+  const perMuscleSession = new Map<
+    string,
+    { muscle: MuscleGroup; pump: number | null; workload: number | null; sorenessBefore: number | null }
+  >();
   for (const row of rows) {
     if (row.pump === null && row.workload === null && row.sorenessBefore === null) continue;
-    const entry = (byMuscle[row.muscle] ??= {
+    const key = `${row.muscle}|${row.sessionId}`;
+    const merged = perMuscleSession.get(key);
+    if (!merged) {
+      perMuscleSession.set(key, {
+        muscle: row.muscle,
+        pump: row.pump,
+        workload: row.workload,
+        sorenessBefore: row.sorenessBefore,
+      });
+    } else {
+      merged.pump = maxRating(merged.pump, row.pump);
+      merged.workload = maxRating(merged.workload, row.workload);
+      merged.sorenessBefore = maxRating(merged.sorenessBefore, row.sorenessBefore);
+    }
+  }
+
+  // 2. Count sessions per muscle.
+  const byMuscle: Partial<Record<MuscleGroup, SubjectiveVolumeSignals>> = {};
+  perMuscleSession.forEach((sessionEntry) => {
+    const entry = (byMuscle[sessionEntry.muscle] ??= {
       ratedSessions: 0,
       lowPumpSessions: 0,
       easyWorkloadSessions: 0,
@@ -213,11 +247,11 @@ export function aggregateSubjectiveSignals(
       stillSoreSessions: 0,
     });
     entry.ratedSessions += 1;
-    if (row.pump !== null && row.pump <= 1) entry.lowPumpSessions += 1;
-    if (row.workload === 0) entry.easyWorkloadSessions += 1;
-    if (row.workload === 3) entry.tooMuchWorkloadSessions += 1;
-    if (row.sorenessBefore === 3) entry.stillSoreSessions += 1;
-  }
+    if (sessionEntry.pump !== null && sessionEntry.pump <= 1) entry.lowPumpSessions += 1;
+    if (sessionEntry.workload === 0) entry.easyWorkloadSessions += 1;
+    if (sessionEntry.workload === 3) entry.tooMuchWorkloadSessions += 1;
+    if (sessionEntry.sorenessBefore === 3) entry.stillSoreSessions += 1;
+  });
   return byMuscle;
 }
 

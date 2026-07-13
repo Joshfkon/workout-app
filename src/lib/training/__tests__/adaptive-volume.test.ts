@@ -312,10 +312,10 @@ describe('determineVolumeVerdict with subjective signals', () => {
 describe('aggregateSubjectiveSignals', () => {
   it('counts per-session ratings per muscle with the documented thresholds', () => {
     const rows = [
-      { muscle: 'chest' as const, pump: 1, workload: 0, sorenessBefore: null },
-      { muscle: 'chest' as const, pump: 0, workload: 0, sorenessBefore: 3 },
-      { muscle: 'chest' as const, pump: 3, workload: 3, sorenessBefore: 2 },
-      { muscle: 'quads' as const, pump: null, workload: null, sorenessBefore: null }, // unrated
+      { sessionId: 's1', muscle: 'chest' as const, pump: 1, workload: 0, sorenessBefore: null },
+      { sessionId: 's2', muscle: 'chest' as const, pump: 0, workload: 0, sorenessBefore: 3 },
+      { sessionId: 's3', muscle: 'chest' as const, pump: 3, workload: 3, sorenessBefore: 2 },
+      { sessionId: 's1', muscle: 'quads' as const, pump: null, workload: null, sorenessBefore: null }, // unrated
     ];
     const result = aggregateSubjectiveSignals(rows);
 
@@ -327,6 +327,35 @@ describe('aggregateSubjectiveSignals', () => {
       stillSoreSessions: 1, // soreness === 3
     });
     expect(result.quads).toBeUndefined();
+  });
+
+  it('merges coarse-collapsed subdivision rows into ONE rated session', () => {
+    // chest_upper + chest_lower from the SAME workout both collapse to
+    // 'chest' — one session, not two. Without the merge, a single workout
+    // with both subdivisions marked "too much" would hit the repeated-event
+    // threshold (>=2 overreach events → +20) on its own.
+    const rows = [
+      { sessionId: 's1', muscle: 'chest' as const, pump: 1, workload: 3, sorenessBefore: null },
+      { sessionId: 's1', muscle: 'chest' as const, pump: 2, workload: 3, sorenessBefore: null },
+    ];
+    const result = aggregateSubjectiveSignals(rows);
+
+    expect(result.chest).toEqual({
+      ratedSessions: 1,
+      lowPumpSessions: 0, // pump merges best-case: max(1, 2) = 2
+      easyWorkloadSessions: 0,
+      tooMuchWorkloadSessions: 1, // one session, however many subdivision rows
+      stillSoreSessions: 0,
+    });
+
+    // The dedup is what keeps a single workout at the weak nudge (+10);
+    // the same answers across two sessions reach the repeated-pattern +20.
+    expect(subjectiveVerdictNudges(result.chest).tooHighScore).toBe(10);
+    const twoSessions = aggregateSubjectiveSignals([
+      ...rows,
+      { sessionId: 's2', muscle: 'chest' as const, pump: 2, workload: 3, sorenessBefore: null },
+    ]);
+    expect(subjectiveVerdictNudges(twoSessions.chest).tooHighScore).toBe(20);
   });
 });
 

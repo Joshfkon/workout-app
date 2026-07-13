@@ -46,12 +46,16 @@ export async function insertJointPainEvent(
   }
 }
 
-/** Event write derived from a set's discomfort feedback. */
+/**
+ * Event write derived from a set's discomfort feedback. `setLogId` must be
+ * null unless the set row already exists in set_logs — the FK would reject
+ * a reference to a set that is still queued in the offline outbox.
+ */
 export function eventFromSetDiscomfort(args: {
   userId: string;
   sessionId: string;
   exerciseId: string;
-  setLogId: string;
+  setLogId: string | null;
   discomfort: SetDiscomfort;
 }): JointPainEventWrite {
   return {

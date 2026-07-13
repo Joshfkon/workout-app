@@ -603,14 +603,17 @@ export async function runMesocycleCompletionAnalysis(
       windowEnd.setDate(windowEnd.getDate() + 7); // include the last week's sessions
       const { data: feedbackRows } = await supabase
         .from('session_muscle_feedback')
-        .select('muscle_group, pump, workload, soreness_before, workout_sessions!inner(completed_at, is_deload, state)')
+        .select('session_id, muscle_group, pump, workload, soreness_before, workout_sessions!inner(completed_at, is_deload, state)')
         .eq('user_id', userId)
         .eq('workout_sessions.state', 'completed')
         .gte('workout_sessions.completed_at', `${startDate}T00:00:00`)
         .lte('workout_sessions.completed_at', windowEnd.toISOString());
 
       if (feedbackRows && feedbackRows.length > 0) {
+        // session_id rides along so the aggregation can merge subdivision rows
+        // (chest_upper + chest_lower → chest) into ONE rated session each.
         const collapsed = (feedbackRows as {
+          session_id: string;
           muscle_group: string;
           pump: number | null;
           workload: number | null;
@@ -622,6 +625,7 @@ export async function runMesocycleCompletionAnalysis(
             const coarse = STANDARD_TO_COARSE[r.muscle_group as keyof typeof STANDARD_TO_COARSE];
             if (!coarse) return [];
             return [{
+              sessionId: r.session_id,
               muscle: coarse as MuscleGroup,
               pump: r.pump,
               workload: r.workload,

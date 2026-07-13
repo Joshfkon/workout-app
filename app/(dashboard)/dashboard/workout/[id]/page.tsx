@@ -2154,20 +2154,10 @@ export default function WorkoutPage() {
         }
       }
 
-      // Joint pain flagged on this set (inline picker or feedback sheet) →
-      // record the event for the deload advisor + exercise pattern detection.
-      if (data.feedback?.discomfort && session) {
-        void insertJointPainEvent(
-          supabase,
-          eventFromSetDiscomfort({
-            userId: session.userId,
-            sessionId: session.id,
-            exerciseId: currentBlock.exerciseId,
-            setLogId: setId,
-            discomfort: data.feedback.discomfort,
-          })
-        );
-      }
+      // Whether the set row exists in the DB yet — decides if the joint pain
+      // event below may carry the set_log_id FK or must omit it (queued sets
+      // haven't been inserted, so referencing them would violate the FK).
+      let setRowPersisted = false;
 
       if (!online) {
         await enqueueSetInsert(setId, row);
@@ -2207,8 +2197,28 @@ export default function WorkoutPage() {
           showError('Failed to save set - please try again');
           return null;
         } else {
+          setRowPersisted = true;
           setSetSync(prev => ({ ...prev, [setId]: 'saved' }));
         }
+      }
+
+      // Joint pain flagged on this set (inline picker or feedback sheet) →
+      // record the event for the deload advisor + exercise pattern detection.
+      // Runs only AFTER the set write settled: a saved set is referenced via
+      // set_log_id; a queued (offline) set isn't in set_logs yet, so the event
+      // omits the FK rather than racing the insert. Best-effort either way —
+      // the discomfort also rides the set's feedback JSONB.
+      if (data.feedback?.discomfort && session) {
+        void insertJointPainEvent(
+          supabase,
+          eventFromSetDiscomfort({
+            userId: session.userId,
+            sessionId: session.id,
+            exerciseId: currentBlock.exerciseId,
+            setLogId: setRowPersisted ? setId : null,
+            discomfort: data.feedback.discomfort,
+          })
+        );
       }
 
       // Undo toast (P1-4) — same pattern as nutrition's delete-undo.
@@ -2476,6 +2486,8 @@ export default function WorkoutPage() {
     }
 
     // Discomfort newly added to an already-logged set → record the pain event.
+    // A set still queued in the offline outbox has no set_logs row yet, so the
+    // event omits the set_log_id FK rather than referencing a missing row.
     if (feedback.discomfort && !setToUpdate?.feedback?.discomfort && session && setToUpdate) {
       const block = blocks.find((b) => b.id === setToUpdate.exerciseBlockId);
       if (block) {
@@ -2485,7 +2497,7 @@ export default function WorkoutPage() {
             userId: session.userId,
             sessionId: session.id,
             exerciseId: block.exerciseId,
-            setLogId: setId,
+            setLogId: patchedQueued ? null : setId,
             discomfort: feedback.discomfort,
           })
         );
