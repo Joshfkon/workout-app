@@ -205,6 +205,40 @@ export function recommendWeeklySetAdjustment(
 }
 
 /**
+ * Roll per-exercise pump/workload chip answers up to per-muscle entries for
+ * session_muscle_feedback — the SAME rows this engine (and the adaptive-volume
+ * learner) already ingests, so per-exercise chips flow through the existing
+ * update path rather than a parallel one. Aggregation mirrors `maxRating`:
+ * pump keeps the best evidence of stimulus, workload keeps the worst-case
+ * recovery signal.
+ */
+export function rollUpExerciseFeedback(
+  entries: {
+    muscle: StandardMuscleGroup;
+    pump: PumpRating0to3 | null;
+    workload: WorkloadRating | null;
+  }[]
+): Partial<Record<StandardMuscleGroup, { pump?: PumpRating0to3; workload?: WorkloadRating }>> {
+  const byMuscle: Partial<
+    Record<StandardMuscleGroup, { pump?: PumpRating0to3; workload?: WorkloadRating }>
+  > = {};
+  for (const entry of entries) {
+    if (entry.pump === null && entry.workload === null) continue;
+    const current = (byMuscle[entry.muscle] ??= {});
+    if (entry.pump !== null && (current.pump === undefined || entry.pump > current.pump)) {
+      current.pump = entry.pump;
+    }
+    if (
+      entry.workload !== null &&
+      (current.workload === undefined || entry.workload > current.workload)
+    ) {
+      current.workload = entry.workload;
+    }
+  }
+  return byMuscle;
+}
+
+/**
  * Convenience: apply an adjustment with landmark clamping (defensive — the
  * recommendation already respects landmarks, but callers may pass stale sets).
  */

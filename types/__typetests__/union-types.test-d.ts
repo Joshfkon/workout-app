@@ -301,6 +301,7 @@ expectNotAssignable<ExerciseType>('time');
 expectAssignable<DiscomfortSeverity>('twinge');
 expectAssignable<DiscomfortSeverity>('discomfort');
 expectAssignable<DiscomfortSeverity>('pain');
+expectAssignable<DiscomfortSeverity>('stop');
 
 expectNotAssignable<DiscomfortSeverity>('mild');
 expectNotAssignable<DiscomfortSeverity>('severe');

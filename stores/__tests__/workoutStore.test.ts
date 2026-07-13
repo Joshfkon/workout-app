@@ -664,3 +664,78 @@ describe('Workout Flow Integration', () => {
     expect(stats.totalVolume).toBe(1900); // 100*10 + 100*9
   });
 });
+
+describe('subjective feedback (additive fields)', () => {
+  beforeEach(() => {
+    useWorkoutStore.getState().endSession();
+  });
+
+  it('records a soreness ask once and never overwrites it (once per session)', () => {
+    const store = useWorkoutStore.getState();
+    store.recordSorenessAsked('hamstrings', 3);
+
+    let ask = useWorkoutStore.getState().muscleSorenessAsked.hamstrings;
+    expect(ask.rating).toBe(3);
+    expect(typeof ask.askedAt).toBe('string');
+
+    // A second ask (answer or dismissal) is ignored.
+    useWorkoutStore.getState().recordSorenessAsked('hamstrings', 0);
+    ask = useWorkoutStore.getState().muscleSorenessAsked.hamstrings;
+    expect(ask.rating).toBe(3);
+  });
+
+  it('records a dismissal as rating null', () => {
+    useWorkoutStore.getState().recordSorenessAsked('quads', null);
+    expect(useWorkoutStore.getState().muscleSorenessAsked.quads.rating).toBeNull();
+  });
+
+  it('clears soreness asks on endSession', () => {
+    useWorkoutStore.getState().recordSorenessAsked('quads', 2);
+    useWorkoutStore.getState().endSession();
+    expect(useWorkoutStore.getState().muscleSorenessAsked).toEqual({});
+  });
+
+  it('setBlockFeedback stamps pump/workload on the block', () => {
+    const session = {
+      id: 'session-1',
+      userId: 'user-1',
+      mesocycleId: null,
+      state: 'in_progress' as const,
+      plannedDate: '2026-07-13',
+      startedAt: new Date().toISOString(),
+      completedAt: null,
+      durationSeconds: null,
+      preWorkoutCheckIn: null,
+      sessionRpe: null,
+      pumpRating: null,
+      sessionNotes: null,
+      completionPercent: 0,
+      isDeload: false,
+    };
+    const block = {
+      id: 'block-1',
+      workoutSessionId: 'session-1',
+      exerciseId: 'ex-1',
+      order: 1,
+      supersetGroupId: null,
+      supersetOrder: null,
+      targetSets: 3,
+      targetRepRange: [8, 12] as [number, number],
+      targetRir: 2,
+      targetWeightKg: 100,
+      targetRestSeconds: 120,
+      progressionType: null,
+      suggestionReason: '',
+      warmupProtocol: [],
+      note: null,
+      dropsetsPerSet: 0,
+      dropPercentage: 0.25,
+    };
+    useWorkoutStore.getState().startSession(session, [block], []);
+    useWorkoutStore.getState().setBlockFeedback('block-1', { pump: 3, workload: 1 });
+
+    const updated = useWorkoutStore.getState().exerciseBlocks[0];
+    expect(updated.pump).toBe(3);
+    expect(updated.workload).toBe(1);
+  });
+});

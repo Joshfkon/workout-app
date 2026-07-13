@@ -11,6 +11,11 @@ import {
   calculateFatigueScore,
   assessFatigueScore,
   analyzeFatigueTrend,
+  computeJointPainSignal,
+  JOINT_PAIN_SEVERITY_WEIGHTS,
+  JOINT_PAIN_WINDOW_DAYS,
+  JOINT_PAIN_MAX_SCORE,
+  JOINT_PAIN_TRIGGER_THRESHOLD,
 } from '../deloadEngine';
 
 import type {
@@ -243,6 +248,38 @@ describe('checkDeloadTriggers', () => {
       expect(result.shouldDeload).toBe(true);
       expect(result.suggestedDeloadType).toBe('intensity');
       expect(result.reasons.some((r) => r.includes('Joint pain'))).toBe(true);
+    });
+
+    it('triggers on a severity-weighted event score at/above the threshold', () => {
+      const performance = [
+        createMockPerformanceData(),
+        createMockPerformanceData({ jointPainScore: JOINT_PAIN_TRIGGER_THRESHOLD }),
+      ];
+
+      const result = checkDeloadTriggers(
+        performance,
+        createMockProfile(),
+        createMockPeriodization()
+      );
+
+      expect(result.shouldDeload).toBe(true);
+      expect(result.suggestedDeloadType).toBe('intensity');
+      expect(result.reasons.some((r) => r.includes('Joint pain'))).toBe(true);
+    });
+
+    it('does not trigger on a sub-threshold event score', () => {
+      const performance = [
+        createMockPerformanceData(),
+        createMockPerformanceData({ jointPainScore: JOINT_PAIN_TRIGGER_THRESHOLD - 1 }),
+      ];
+
+      const result = checkDeloadTriggers(
+        performance,
+        createMockProfile(),
+        createMockPeriodization()
+      );
+
+      expect(result.reasons.some((r) => r.includes('Joint pain'))).toBe(false);
     });
   });
 
@@ -605,5 +642,90 @@ describe('analyzeFatigueTrend', () => {
     const result = analyzeFatigueTrend(performances);
 
     expect(result.recommendation).toContain('deload');
+  });
+});
+
+// ============================================
+// JOINT PAIN SIGNAL (SIGNAL 5) TESTS
+// ============================================
+
+describe('computeJointPainSignal', () => {
+  const NOW = new Date('2026-07-13T12:00:00.000Z');
+  const daysAgo = (days: number) =>
+    new Date(NOW.getTime() - days * 24 * 60 * 60 * 1000);
+
+  it('returns 0 with no events', () => {
+    expect(computeJointPainSignal([], NOW)).toBe(0);
+  });
+
+  it('weights events by severity (stop > pain > twinge)', () => {
+    const twinge = computeJointPainSignal(
+      [{ severity: 'twinge', occurredAt: daysAgo(1) }],
+      NOW
+    );
+    const pain = computeJointPainSignal(
+      [{ severity: 'pain', occurredAt: daysAgo(1) }],
+      NOW
+    );
+    const stop = computeJointPainSignal(
+      [{ severity: 'stop', occurredAt: daysAgo(1) }],
+      NOW
+    );
+
+    expect(twinge).toBe(JOINT_PAIN_SEVERITY_WEIGHTS.twinge * 2);
+    expect(pain).toBe(JOINT_PAIN_SEVERITY_WEIGHTS.pain * 2);
+    expect(stop).toBe(JOINT_PAIN_SEVERITY_WEIGHTS.stop * 2);
+    expect(stop).toBeGreaterThan(pain);
+    expect(pain).toBeGreaterThan(twinge);
+  });
+
+  it('ignores events outside the trailing window (and future events)', () => {
+    const score = computeJointPainSignal(
+      [
+        { severity: 'stop', occurredAt: daysAgo(JOINT_PAIN_WINDOW_DAYS + 1) },
+        { severity: 'stop', occurredAt: daysAgo(-1) }, // future
+      ],
+      NOW
+    );
+    expect(score).toBe(0);
+  });
+
+  it('caps the contribution at JOINT_PAIN_MAX_SCORE regardless of event count', () => {
+    const events = Array.from({ length: 40 }, (_, i) => ({
+      severity: 'stop' as const,
+      occurredAt: daysAgo((i % 13) + 0.5),
+    }));
+    expect(computeJointPainSignal(events, NOW)).toBe(JOINT_PAIN_MAX_SCORE);
+  });
+
+  it('a single true pain event reaches the deload trigger threshold', () => {
+    const score = computeJointPainSignal(
+      [{ severity: 'pain', occurredAt: daysAgo(3) }],
+      NOW
+    );
+    expect(score).toBeGreaterThanOrEqual(JOINT_PAIN_TRIGGER_THRESHOLD);
+  });
+});
+
+describe('calculateFatigueScore with jointPainScore', () => {
+  it('uses the weighted score instead of the boolean flat 10 when present', () => {
+    const base = createMockPerformanceData({ jointPain: false });
+    const withScore = createMockPerformanceData({ jointPain: false, jointPainScore: 4 });
+
+    expect(calculateFatigueScore(withScore) - calculateFatigueScore(base)).toBe(4);
+  });
+
+  it('caps the jointPainScore contribution at the boolean\'s 10 points', () => {
+    const boolPain = createMockPerformanceData({ jointPain: true });
+    const hugeScore = createMockPerformanceData({ jointPain: false, jointPainScore: 999 });
+
+    expect(calculateFatigueScore(hugeScore)).toBe(calculateFatigueScore(boolPain));
+  });
+
+  it('falls back to the legacy boolean when jointPainScore is absent', () => {
+    const base = createMockPerformanceData({ jointPain: false });
+    const boolPain = createMockPerformanceData({ jointPain: true });
+
+    expect(calculateFatigueScore(boolPain) - calculateFatigueScore(base)).toBe(10);
   });
 });

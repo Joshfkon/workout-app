@@ -107,6 +107,8 @@ export interface LoadedBlockRow {
   note: string | null;
   dropsets_per_set: number | null;
   drop_percentage: number | null;
+  pump?: number | null;
+  workload?: number | null;
   created_at?: string | null;
   exercises: LoadedExerciseRow | null;
 }
@@ -215,6 +217,8 @@ export function mapLoadedBlockRow(
     note: block.note,
     dropsetsPerSet: block.dropsets_per_set ?? 0,
     dropPercentage: block.drop_percentage ?? 0.25,
+    pump: (block.pump ?? null) as ExerciseBlockWithExercise['pump'],
+    workload: (block.workload ?? null) as ExerciseBlockWithExercise['workload'],
     // When the block's targets were computed — P1-3 stale-target detection
     // compares this against set_logs.edited_at.
     createdAt: block.created_at ?? undefined,

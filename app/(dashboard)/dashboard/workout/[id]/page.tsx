@@ -68,12 +68,12 @@ const SessionSummary = dynamic(() => import('@/components/workout').then(m => m.
 });
 const ExerciseDetailsModal = dynamic(() => import('@/components/workout').then(m => m.ExerciseDetailsModal), { ssr: false });
 const PlateCalculatorModal = dynamic(() => import('@/components/workout').then(m => m.PlateCalculatorModal), { ssr: false });
-import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaRegionalData, TemporaryInjury, PreWorkoutCheckIn, SetFeedback, Rating, BodyweightData, ExerciseType, StandardMuscleGroup, ExercisePerformanceSnapshot, RepsInTank } from '@/types/schema';
+import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaRegionalData, TemporaryInjury, PreWorkoutCheckIn, SetFeedback, Rating, BodyweightData, ExerciseType, StandardMuscleGroup, ExercisePerformanceSnapshot, RepsInTank, SorenessRating, PumpRating0to3, WorkloadRating, SetDiscomfort, JointPainJoint } from '@/types/schema';
 import type { SessionMuscleFeedbackEntry } from '@/components/workout/SessionSummary';
 import type { MuscleSorenessRatings } from '@/components/workout/ReadinessCheckIn';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { generateWarmupProtocol, isMuscleWarmedUp } from '@/services/progressionEngine';
-import { MUSCLE_GROUPS, muscleMatchesGroup, rirToRpe } from '@/types/schema';
+import { MUSCLE_GROUPS, muscleMatchesGroup, rirToRpe, rpeToRir, STANDARD_MUSCLE_DISPLAY_NAMES } from '@/types/schema';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { quickWeightEstimate, quickWeightEstimateWithCalibration, type WorkingWeightRecommendation } from '@/services/weightEstimationEngine';
 import { inferSetRole, sessionTopSetWeightKg } from '@/services/suggestionEngine/setRoles';
@@ -123,6 +123,17 @@ import {
   upsertSessionMuscleFeedback,
   type RecentMuscleSession,
 } from './_lib/muscleFeedbackWrites';
+import {
+  insertJointPainEvent,
+  eventFromSetDiscomfort,
+  getPainNoticeDismissedAt,
+  setPainNoticeDismissed,
+} from './_lib/jointPainWrites';
+import { getExercisePainPattern, jointToBodyPart, type ExercisePainEvent } from '@/services/discomfortTracker';
+import { rollUpExerciseFeedback } from '@/services/weeklyProgressionEngine';
+import { computeMuscleRecovery, recoveryConfigFor } from '@/services/muscleRecovery';
+import { useRecoveryHistory } from '@/hooks/useMuscleReadiness';
+import { useRecoveryMultipliers } from '@/hooks/useRecoveryMultipliers';
 import { isStaleEmptyAdhocSession, discardStaleSession } from '../_lib/adhocSession';
 import { computeSupersetAdvance } from './_lib/supersetFlow';
 import {
@@ -260,6 +271,17 @@ export default function WorkoutPage() {
   const updateSetInStore = useWorkoutStore((state) => state.updateSet);
   const deleteSetFromStore = useWorkoutStore((state) => state.deleteSet);
   const setStoreBlockIndex = useWorkoutStore((state) => state.setCurrentBlock);
+  const muscleSorenessAsked = useWorkoutStore((state) => state.muscleSorenessAsked);
+  const recordSorenessAsked = useWorkoutStore((state) => state.recordSorenessAsked);
+  const setBlockFeedbackInStore = useWorkoutStore((state) => state.setBlockFeedback);
+
+  // Recovery model inputs for the soreness-answer learning step: the shared
+  // completed-session history (same React Query cache as the readiness sheet)
+  // plus the per-muscle learned multipliers. `recoveryNow` is stamped once so
+  // the model status at ask time is stable within the session.
+  const [recoveryNow] = useState(() => new Date());
+  const { sessions: recoveryHistorySessions } = useRecoveryHistory(recoveryNow, true);
+  const { multipliers: recoveryMultipliers, applySorenessAdjustment } = useRecoveryMultipliers();
 
   // Toast notifications for errors
   const { toasts, dismissToast, showError, showSuccess, addToast } = useToasts();
@@ -478,11 +500,19 @@ export default function WorkoutPage() {
   // In-workout Muscle Readiness sheet (volume + recovery). Separate from the
   // pre-workout readiness CHECK-IN above.
   const [showMuscleReadinessSheet, setShowMuscleReadinessSheet] = useState(false);
-  // Per-muscle "previous session" lookup for the check-in soreness rows:
-  // muscles on today's menu that a completed session trained in the last 4 days.
+  // Per-muscle "previous session" lookup for the soreness asks (check-in rows
+  // AND the inline exercise-card chips): muscles on today's menu that a
+  // completed session trained in the last 5 days. Muscles idle longer have
+  // nothing to be sore from and are never asked.
   const [recentMuscleSessions, setRecentMuscleSessions] = useState<
     Partial<Record<StandardMuscleGroup, RecentMuscleSession>>
   >({});
+  // Joint pain events per exercise over the trailing 6 weeks (pattern notice).
+  const [painEventsByExercise, setPainEventsByExercise] = useState<
+    Record<string, ExercisePainEvent[]>
+  >({});
+  // Bumps when a pain notice is dismissed so the memoized notices recompute.
+  const [painNoticeDismissTick, setPainNoticeDismissTick] = useState(0);
   const [showToolsMenu, setShowToolsMenu] = useState(false);
   const [showPlateCalculator, setShowPlateCalculator] = useState(false);
   const [plateCalculatorWeight, setPlateCalculatorWeight] = useState<number | undefined>(undefined);
@@ -1638,11 +1668,12 @@ export default function WorkoutPage() {
     }
   };
 
-  // When the readiness check-in opens, look up which of today's muscles were
-  // trained in a completed session in the last 4 days — those get "How sore
-  // is X?" rows, written back onto the PREVIOUS session's feedback row.
+  // Look up which of today's muscles were trained in a completed session in
+  // the last 5 days — those get soreness asks (check-in rows and the inline
+  // exercise-card chips), written back onto the PREVIOUS session's feedback
+  // row. Loads for the check-in AND for the live workout phase.
   useEffect(() => {
-    if (!showReadinessModal || !session || blocks.length === 0) return;
+    if ((!showReadinessModal && phase !== 'workout') || !session || blocks.length === 0) return;
 
     const todayMuscles = Array.from(
       new Set(
@@ -1660,6 +1691,7 @@ export default function WorkoutPage() {
       userId: session.userId,
       muscles: todayMuscles,
       excludeSessionId: session.id,
+      withinDays: 5,
     }).then(({ byMuscle, error: fetchError }) => {
       if (fetchError) {
         console.error('Failed to load recent muscle sessions:', fetchError);
@@ -1670,7 +1702,7 @@ export default function WorkoutPage() {
     return () => {
       cancelled = true;
     };
-  }, [showReadinessModal, session, blocks, skippedBlockIds]);
+  }, [showReadinessModal, phase, session, blocks, skippedBlockIds]);
 
   // Persist check-in soreness ratings onto each muscle's PREVIOUS session row.
   const saveSorenessFeedback = async (sorenessRatings: MuscleSorenessRatings) => {
@@ -1693,6 +1725,158 @@ export default function WorkoutPage() {
       console.error('Failed to save muscle soreness feedback:', errors);
     }
   };
+
+  // ---- Inline soreness chips (start-of-session, once per muscle) ----------
+  // Only the FIRST non-skipped block per primary muscle carries the ask.
+  const firstBlockIdByMuscle = useMemo(() => {
+    const map: Partial<Record<StandardMuscleGroup, string>> = {};
+    for (const b of blocks) {
+      if (skippedBlockIds.has(b.id)) continue;
+      const muscle = resolvePrimaryMuscle(b.exercise?.primaryMuscle);
+      if (muscle && !map[muscle]) map[muscle] = b.id;
+    }
+    return map;
+  }, [blocks, skippedBlockIds]);
+
+  /**
+   * The soreness prompt for a block, or null. Shown only on the first block
+   * of a muscle that was trained within the past 5 days and hasn't been asked
+   * (or answered at check-in) this session. A dismissed ask (rating null)
+   * renders nothing; an answered ask renders the collapsed ✓ line.
+   */
+  const sorenessPromptForBlock = useCallback(
+    (
+      block: ExerciseBlockWithExercise
+    ): { muscle: StandardMuscleGroup; displayName: string; answered?: SorenessRating | null } | null => {
+      const muscle = resolvePrimaryMuscle(block.exercise?.primaryMuscle);
+      if (!muscle) return null;
+      if (firstBlockIdByMuscle[muscle] !== block.id) return null;
+      // Never shown for muscles not trained in the last 5 days.
+      if (!recentMuscleSessions[muscle]) return null;
+      const asked = muscleSorenessAsked[muscle];
+      if (asked && asked.rating === null) return null; // dismissed by logging a set
+      return {
+        muscle,
+        displayName: STANDARD_MUSCLE_DISPLAY_NAMES[muscle],
+        answered: asked ? asked.rating : undefined,
+      };
+    },
+    [firstBlockIdByMuscle, recentMuscleSessions, muscleSorenessAsked]
+  );
+
+  const handleSorenessAnswer = useCallback(
+    (muscle: StandardMuscleGroup, rating: SorenessRating) => {
+      recordSorenessAsked(muscle, rating);
+
+      // Persist onto the PREVIOUS session's feedback row (it describes
+      // recovery from that session).
+      const previous = recentMuscleSessions[muscle];
+      if (session && previous) {
+        const supabase = createUntypedClient();
+        void upsertSessionMuscleFeedback(supabase, session.userId, [
+          { sessionId: previous.sessionId, muscleGroup: muscle, sorenessBefore: rating },
+        ]).then(({ errors }) => {
+          if (errors.length > 0) console.error('Failed to save soreness answer:', errors);
+        });
+      }
+
+      // Learning step: disagreement between the report and the model's status
+      // at ask time nudges the per-muscle recovery multiplier (±0.05, 0.7–1.5).
+      const report = rating === 0 ? 'none' : rating === 3 ? 'still_sore' : 'recovered';
+      const config = recoveryConfigFor(enhancedAthleteModeActive, recoveryMultipliers);
+      const statusAtAsk = computeMuscleRecovery(
+        recoveryHistorySessions,
+        muscle,
+        new Date(),
+        config
+      ).status;
+      void applySorenessAdjustment(muscle, report, statusAtAsk);
+    },
+    [
+      recordSorenessAsked,
+      recentMuscleSessions,
+      session,
+      enhancedAthleteModeActive,
+      recoveryMultipliers,
+      recoveryHistorySessions,
+      applySorenessAdjustment,
+    ]
+  );
+
+  // Muscles reported "still sore" today — the readiness sheet renders them
+  // Fatigued for the rest of the session (subjective report outranks the
+  // time model same-day).
+  const stillSoreMuscles = useMemo(() => {
+    const result = new Set<StandardMuscleGroup>();
+    for (const [muscle, ask] of Object.entries(muscleSorenessAsked)) {
+      if (ask?.rating === 3) result.add(muscle as StandardMuscleGroup);
+    }
+    return result;
+  }, [muscleSorenessAsked]);
+
+  // ---- Per-exercise pump/workload chips ------------------------------------
+  const handleExerciseFeedback = useCallback(
+    (blockId: string, feedback: { pump?: PumpRating0to3; workload?: WorkloadRating }) => {
+      setBlocks((prev) => prev.map((b) => (b.id === blockId ? { ...b, ...feedback } : b)));
+      setBlockFeedbackInStore(blockId, feedback);
+      // Best-effort persist per (workout, exercise); the finish-time rollup
+      // into session_muscle_feedback is what the learner reads.
+      const supabase = createUntypedClient();
+      void supabase
+        .from('exercise_blocks')
+        .update(feedback)
+        .eq('id', blockId)
+        .then(({ error }: { error: { message: string } | null }) => {
+          if (error) console.error('Failed to save exercise feedback:', error.message);
+        });
+    },
+    [setBlockFeedbackInStore]
+  );
+
+  // ---- Joint pain: pattern notices per exercise ----------------------------
+  useEffect(() => {
+    if (phase !== 'workout' || !session) return;
+    let cancelled = false;
+    const supabase = createUntypedClient();
+    const cutoff = new Date(Date.now() - 42 * 24 * 60 * 60 * 1000).toISOString();
+    supabase
+      .from('joint_pain_events')
+      .select('exercise_id, joint, created_at')
+      .eq('user_id', session.userId)
+      .not('exercise_id', 'is', null)
+      .gte('created_at', cutoff)
+      .then(({ data, error: fetchError }: {
+        data: { exercise_id: string; joint: string; created_at: string }[] | null;
+        error: { message: string } | null;
+      }) => {
+        if (cancelled) return;
+        if (fetchError) {
+          // Table may not exist yet (migration lag) — the notice is optional.
+          return;
+        }
+        const grouped: Record<string, ExercisePainEvent[]> = {};
+        for (const row of data ?? []) {
+          (grouped[row.exercise_id] ??= []).push({
+            joint: row.joint,
+            occurredAt: new Date(row.created_at),
+          });
+        }
+        setPainEventsByExercise(grouped);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [phase, session]);
+
+  const painNoticeForExercise = useCallback(
+    (exerciseId: string): { joint: string; count: number } | null => {
+      void painNoticeDismissTick; // recompute after a dismissal
+      const events = painEventsByExercise[exerciseId];
+      if (!events || events.length === 0) return null;
+      return getExercisePainPattern(events, getPainNoticeDismissedAt(exerciseId), new Date());
+    },
+    [painEventsByExercise, painNoticeDismissTick]
+  );
 
   const handleCheckInComplete = async (
     checkInData?: PreWorkoutCheckIn,
@@ -1938,6 +2122,35 @@ export default function WorkoutPage() {
       setCurrentSetNumber(nextSetNumber + 1);
       logSetToStore(currentBlock.id, newSet);
       setSetSync(prev => ({ ...prev, [setId]: 'saving' }));
+
+      // Logging a set past a pending soreness ask dismisses it for the
+      // session (records null; the muscle is never re-asked). Zero extra taps.
+      {
+        const blockMuscle = resolvePrimaryMuscle(currentBlock.exercise?.primaryMuscle);
+        if (
+          blockMuscle &&
+          firstBlockIdByMuscle[blockMuscle] === currentBlock.id &&
+          recentMuscleSessions[blockMuscle] &&
+          !muscleSorenessAsked[blockMuscle]
+        ) {
+          recordSorenessAsked(blockMuscle, null);
+        }
+      }
+
+      // Joint pain flagged on this set (inline picker or feedback sheet) →
+      // record the event for the deload advisor + exercise pattern detection.
+      if (data.feedback?.discomfort && session) {
+        void insertJointPainEvent(
+          supabase,
+          eventFromSetDiscomfort({
+            userId: session.userId,
+            sessionId: session.id,
+            exerciseId: currentBlock.exerciseId,
+            setLogId: setId,
+            discomfort: data.feedback.discomfort,
+          })
+        );
+      }
 
       if (!online) {
         await enqueueSetInsert(setId, row);
@@ -2244,7 +2457,38 @@ export default function WorkoutPage() {
     if (setToUpdate) {
       updateSetInStore(setToUpdate.exerciseBlockId, setId, { feedback, quality, qualityReason, rpe });
     }
+
+    // Discomfort newly added to an already-logged set → record the pain event.
+    if (feedback.discomfort && !setToUpdate?.feedback?.discomfort && session && setToUpdate) {
+      const block = blocks.find((b) => b.id === setToUpdate.exerciseBlockId);
+      void insertJointPainEvent(
+        supabase,
+        eventFromSetDiscomfort({
+          userId: session.userId,
+          sessionId: session.id,
+          exerciseId: block?.exerciseId ?? '',
+          setLogId: setId,
+          discomfort: feedback.discomfort,
+        })
+      );
+    }
   };
+
+  // Two-tap joint picker on a COMPLETED set row: merge the discomfort into the
+  // set's existing feedback (or synthesize one from the logged RPE) and reuse
+  // the standard feedback-update path, which also records the pain event.
+  const handleSetJointPain = useCallback(
+    (setId: string, discomfort: SetDiscomfort) => {
+      const target = completedSets.find((s) => s.id === setId);
+      if (!target) return;
+      const feedback: SetFeedback = target.feedback
+        ? { ...target.feedback, discomfort }
+        : { repsInTank: Math.max(0, Math.min(4, Math.round(rpeToRir(target.rpe)))) as RepsInTank, form: 'clean', discomfort };
+      void handleSetFeedbackUpdate(setId, feedback);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [completedSets, session, blocks]
+  );
 
   const handleSetEdit = async (setId: string, data: { weightKg: number; reps: number; rpe: number; bodyweightData?: BodyweightData }) => {
     const quality = data.rpe >= 7.5 && data.rpe <= 9.5 ? 'stimulative' : data.rpe <= 5 ? 'junk' : 'effective' as const;
@@ -3808,10 +4052,28 @@ export default function WorkoutPage() {
     notes: string;
     muscleFeedback: SessionMuscleFeedbackEntry[];
     isDeload: boolean;
+    jointReport?: { severity: 'minor' | 'significant'; joints: JointPainJoint[] } | null;
   }) => {
     if (!session) {
       finishToDashboard();
       return;
+    }
+
+    // "Any joint issues today?" — record session-level pain events (no
+    // exercise/set attribution). Best-effort; never blocks the finish flow.
+    if (data.jointReport) {
+      const severity = data.jointReport.severity === 'significant' ? 'pain' : 'twinge';
+      const joints: JointPainJoint[] =
+        data.jointReport.joints.length > 0 ? data.jointReport.joints : ['other'];
+      const supabase = createUntypedClient();
+      for (const joint of joints) {
+        void insertJointPainEvent(supabase, {
+          userId: session.userId,
+          sessionId: session.id,
+          joint,
+          severity,
+        });
+      }
     }
 
     // B1: ad-hoc workout that matches the mesocycle's next pending session —
@@ -3983,6 +4245,16 @@ export default function WorkoutPage() {
             isViewingCompleted ? session.durationSeconds : finishSnapshot?.durationSeconds ?? null
           }
           onSubmit={isViewingCompleted ? undefined : handleSummarySubmit}
+          initialMuscleRatings={rollUpExerciseFeedback(
+            blocks
+              .filter((b) => !skippedBlockIds.has(b.id))
+              .flatMap((b) => {
+                const muscle = resolvePrimaryMuscle(b.exercise?.primaryMuscle);
+                return muscle
+                  ? [{ muscle, pump: b.pump ?? null, workload: b.workload ?? null }]
+                  : [];
+              })
+          )}
           readOnly={isViewingCompleted}
         />
         <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
@@ -4655,6 +4927,15 @@ export default function WorkoutPage() {
                     onSetEdit={handleSetEdit}
                     onSetDelete={handleDeleteSet}
                     onSetFeedbackUpdate={handleSetFeedbackUpdate}
+                    onSetJointPain={handleSetJointPain}
+                    sorenessPrompt={sorenessPromptForBlock(block)}
+                    onSorenessAnswer={handleSorenessAnswer}
+                    onExerciseFeedbackChange={(feedback) => handleExerciseFeedback(block.id, feedback)}
+                    painNotice={painNoticeForExercise(block.exerciseId)}
+                    onPainNoticeDismiss={() => {
+                      setPainNoticeDismissed(block.exerciseId, new Date());
+                      setPainNoticeDismissTick((tick) => tick + 1);
+                    }}
                     onTargetSetsChange={(newSets) => handleTargetSetsChange(block.id, newSets)}
                     onExerciseSwap={(newEx) => {
                       handleExerciseSwap(block.id, newEx);
@@ -5210,6 +5491,13 @@ export default function WorkoutPage() {
                 await handleCheckInComplete(data, { startSession: false });
                 if (sorenessRatings) {
                   await saveSorenessFeedback(sorenessRatings);
+                  // A muscle answered at check-in is never re-asked by the
+                  // inline exercise-card chips this session.
+                  for (const [muscle, rating] of Object.entries(sorenessRatings)) {
+                    if (rating !== undefined) {
+                      recordSorenessAsked(muscle, rating as SorenessRating);
+                    }
+                  }
                 }
                 setShowReadinessModal(false);
               }}
@@ -5235,6 +5523,7 @@ export default function WorkoutPage() {
           onClose={() => setShowMuscleReadinessSheet(false)}
           liveBlocks={activeBlocks}
           liveSets={completedSets}
+          sorenessOverrides={stillSoreMuscles}
         />
       )}
 

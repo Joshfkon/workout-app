@@ -12,6 +12,7 @@ import type {
   StandardMuscleGroup,
   PumpRating0to3,
   WorkloadRating,
+  JointPainJoint,
 } from '@/types/schema';
 import {
   STANDARD_MUSCLE_DISPLAY_NAMES,
@@ -19,7 +20,9 @@ import {
   isDetailedMuscle,
   isStandardMuscle,
   legacyToStandardMuscles,
+  JOINT_PAIN_JOINTS,
 } from '@/types/schema';
+import { getJointDisplayName } from '@/services/discomfortTracker';
 import {
   formatWorkoutDuration,
   formatWeight,
@@ -116,7 +119,19 @@ interface SessionSummaryProps {
     muscleFeedback: SessionMuscleFeedbackEntry[];
     /** Whether the user marked this as a deload session. */
     isDeload: boolean;
+    /**
+     * "Any joint issues today?" — the only place joint pain is proactively
+     * asked, once per session. null = not answered (skipped).
+     */
+    jointReport: { severity: 'minor' | 'significant'; joints: JointPainJoint[] } | null;
   }) => void;
+  /**
+   * Per-muscle seed from the in-workout per-exercise pump/workload chips,
+   * so muscles already rated during the session arrive pre-filled here.
+   */
+  initialMuscleRatings?: Partial<
+    Record<StandardMuscleGroup, { pump?: PumpRating0to3; workload?: WorkloadRating }>
+  >;
   readOnly?: boolean;
 }
 
@@ -142,6 +157,7 @@ export function SessionSummary({
   unit = 'kg',
   durationSeconds,
   onSubmit,
+  initialMuscleRatings,
   readOnly = false,
 }: SessionSummaryProps) {
   // Helper to display weight in user's preferred unit
@@ -161,10 +177,30 @@ export function SessionSummary({
   // programmed deload weeks) so an already-flagged session shows the toggle on.
   // Drives PR suppression + the share tag live, and is persisted on submit.
   const [isDeload, setIsDeload] = useState<boolean>(session.isDeload ?? false);
-  // Per-muscle pump/workload overrides; muscles not in the map use the 1/1 default.
+  // Per-muscle pump/workload overrides; muscles not in the map use the 1/1
+  // default. Seeded from the in-workout per-exercise chips so an answer given
+  // on the exercise card is never re-asked here.
   const [muscleRatings, setMuscleRatings] = useState<
     Partial<Record<StandardMuscleGroup, { pump: PumpRating0to3; workload: WorkloadRating }>>
-  >({});
+  >(() => {
+    if (!initialMuscleRatings) return {};
+    const seeded: Partial<
+      Record<StandardMuscleGroup, { pump: PumpRating0to3; workload: WorkloadRating }>
+    > = {};
+    for (const [muscle, fb] of Object.entries(initialMuscleRatings)) {
+      if (!fb || (fb.pump === undefined && fb.workload === undefined)) continue;
+      seeded[muscle as StandardMuscleGroup] = {
+        pump: fb.pump ?? DEFAULT_MUSCLE_RATING.pump,
+        workload: fb.workload ?? DEFAULT_MUSCLE_RATING.workload,
+      };
+    }
+    return seeded;
+  });
+  // "Any joint issues today?" — null until the user taps a chip (skippable).
+  const [jointIssueSeverity, setJointIssueSeverity] = useState<
+    'none' | 'minor' | 'significant' | null
+  >(null);
+  const [jointIssueJoints, setJointIssueJoints] = useState<JointPainJoint[]>([]);
   const [showAllPRs, setShowAllPRs] = useState(false);
   const [showExerciseDetails, setShowExerciseDetails] = useState(true);
   const [expandedExercises, setExpandedExercises] = useState<Set<string>>(new Set());
@@ -564,6 +600,10 @@ export function SessionSummary({
           ...getMuscleRating(muscle),
         })),
         isDeload,
+        jointReport:
+          jointIssueSeverity === 'minor' || jointIssueSeverity === 'significant'
+            ? { severity: jointIssueSeverity, joints: jointIssueJoints }
+            : null,
       });
     }
   };
@@ -1253,6 +1293,62 @@ export function SessionSummary({
               );
             })}
           </div>
+        </Card>
+      )}
+
+      {/* Joint issues — the ONLY proactive joint-pain ask, once per session.
+          Skippable by not tapping; a "none" tap records nothing but confirms. */}
+      {!readOnly && (
+        <Card data-testid="joint-issues-card">
+          <h3 className="text-[15px] font-medium text-surface-200 mb-1">
+            Any joint issues today?
+          </h3>
+          <div className="flex items-center gap-1.5 mt-2">
+            {(['none', 'minor', 'significant'] as const).map((option) => (
+              <button
+                key={option}
+                type="button"
+                onClick={() => {
+                  setJointIssueSeverity(option);
+                  if (option === 'none') setJointIssueJoints([]);
+                }}
+                className={`rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors ${
+                  jointIssueSeverity === option
+                    ? 'bg-primary-500 text-white'
+                    : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
+                }`}
+                data-testid={`joint-issue-${option}`}
+              >
+                {option}
+              </button>
+            ))}
+          </div>
+          {(jointIssueSeverity === 'minor' || jointIssueSeverity === 'significant') && (
+            <div className="flex flex-wrap items-center gap-1.5 mt-2">
+              <span className="text-[11px] text-surface-500">Which:</span>
+              {JOINT_PAIN_JOINTS.map((joint) => {
+                const selected = jointIssueJoints.includes(joint);
+                return (
+                  <button
+                    key={joint}
+                    type="button"
+                    onClick={() =>
+                      setJointIssueJoints((prev) =>
+                        selected ? prev.filter((j) => j !== joint) : [...prev, joint]
+                      )
+                    }
+                    className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                      selected
+                        ? 'bg-danger-500/20 text-danger-300 border border-danger-500/50'
+                        : 'bg-surface-800 text-surface-400 hover:bg-surface-700 border border-transparent'
+                    }`}
+                  >
+                    {getJointDisplayName(joint)}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </Card>
       )}
 

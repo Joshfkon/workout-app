@@ -130,6 +130,98 @@ export interface MuscleOutcome {
 export type ProgressionTrend = 'improving' | 'maintaining' | 'declining';
 
 /**
+ * Subjective per-muscle feedback aggregated over a mesocycle from the
+ * session_muscle_feedback chip rows (pump / workload / next-session soreness).
+ * These are additional INPUTS to `determineVolumeVerdict`'s existing scoring —
+ * NOT a parallel adjustment path. RP semantics:
+ *  - chronic low pump + easy workload at current volume → MEV is likely above
+ *    current (contributes to the too_low score)
+ *  - "too much" workload / still-sore-at-next-session pattern → MRV is likely
+ *    below current (contributes to the too_high score)
+ */
+export interface SubjectiveVolumeSignals {
+  /** Sessions in the meso with at least one rating for this muscle. */
+  ratedSessions: number;
+  /** Sessions where pump was rated low (0-1 on the 0-3 scale). */
+  lowPumpSessions: number;
+  /** Sessions where workload was rated too easy (0). */
+  easyWorkloadSessions: number;
+  /** Sessions where workload was rated too much (3). */
+  tooMuchWorkloadSessions: number;
+  /** Sessions the muscle was still sore going into the NEXT session (soreness 3). */
+  stillSoreSessions: number;
+}
+
+/**
+ * Score contributions of the subjective signals, capped so chip answers can
+ * nudge but never dominate the performance-derived indicators (each side of
+ * `determineVolumeVerdict`'s scoring needs >= 50 to flip a verdict; subjective
+ * evidence alone maxes out at 20).
+ */
+export const SUBJECTIVE_SIGNAL_MAX_SCORE = 20;
+
+export function subjectiveVerdictNudges(
+  signals: SubjectiveVolumeSignals | undefined
+): { tooHighScore: number; tooLowScore: number } {
+  if (!signals || signals.ratedSessions <= 0) {
+    return { tooHighScore: 0, tooLowScore: 0 };
+  }
+
+  // Too high: recovery debt the user actually felt.
+  const overreachEvents = signals.tooMuchWorkloadSessions + signals.stillSoreSessions;
+  const tooHighScore = Math.min(
+    SUBJECTIVE_SIGNAL_MAX_SCORE,
+    overreachEvents >= 2 ? 20 : overreachEvents === 1 ? 10 : 0
+  );
+
+  // Too low: chronic low pump AND easy workload — both required, per RP the
+  // combination (not either alone) suggests the stimulus isn't landing.
+  const majority = Math.max(2, Math.ceil(signals.ratedSessions / 2));
+  const chronicLowPump = signals.lowPumpSessions >= majority;
+  const easyWorkload = signals.easyWorkloadSessions >= majority;
+  const tooLowScore = Math.min(
+    SUBJECTIVE_SIGNAL_MAX_SCORE,
+    chronicLowPump && easyWorkload ? 20 : chronicLowPump && signals.easyWorkloadSessions > 0 ? 10 : 0
+  );
+
+  return { tooHighScore, tooLowScore };
+}
+
+/**
+ * Fold session_muscle_feedback rows (already collapsed to the 13-group
+ * MuscleGroup vocabulary this learner uses) into per-muscle
+ * SubjectiveVolumeSignals. Ratings use the 0-3 scales from types/schema.ts:
+ * pump 0 none…3 extreme; workload 0 too easy…3 too much; soreness 0 none…3
+ * still sore at next session.
+ */
+export function aggregateSubjectiveSignals(
+  rows: {
+    muscle: MuscleGroup;
+    pump: number | null;
+    workload: number | null;
+    sorenessBefore: number | null;
+  }[]
+): Partial<Record<MuscleGroup, SubjectiveVolumeSignals>> {
+  const byMuscle: Partial<Record<MuscleGroup, SubjectiveVolumeSignals>> = {};
+  for (const row of rows) {
+    if (row.pump === null && row.workload === null && row.sorenessBefore === null) continue;
+    const entry = (byMuscle[row.muscle] ??= {
+      ratedSessions: 0,
+      lowPumpSessions: 0,
+      easyWorkloadSessions: 0,
+      tooMuchWorkloadSessions: 0,
+      stillSoreSessions: 0,
+    });
+    entry.ratedSessions += 1;
+    if (row.pump !== null && row.pump <= 1) entry.lowPumpSessions += 1;
+    if (row.workload === 0) entry.easyWorkloadSessions += 1;
+    if (row.workload === 3) entry.tooMuchWorkloadSessions += 1;
+    if (row.sorenessBefore === 3) entry.stillSoreSessions += 1;
+  }
+  return byMuscle;
+}
+
+/**
  * Confidence level for volume estimates
  */
 export type VolumeConfidence = 'low' | 'medium' | 'high';
@@ -897,7 +989,8 @@ export function determineVolumeVerdict(
   rirDrift: RirDriftResult,
   formTrend: FormTrendResult,
   currentSets: number,
-  tolerance: MuscleTolerance
+  tolerance: MuscleTolerance,
+  subjective?: SubjectiveVolumeSignals
 ): VerdictResult {
   if (progression.status === 'insufficient_data') {
     return { verdict: 'insufficient_data', confidence: 0, adjustment: 0 };
@@ -907,29 +1000,35 @@ export function determineVolumeVerdict(
   let adjustment = 0;
   let confidence = 50;
 
+  const subjectiveNudges = subjectiveVerdictNudges(subjective);
+
   // TOO HIGH indicators:
   // - Declining progression
   // - High RIR drift
   // - Form degradation
   // - Current sets > estimated MRV
+  // - Subjective overreach ("too much" workload / still-sore pattern, capped)
 
   const tooHighScore =
     (progression.progressionTrend === 'declining' ? 30 : 0) +
     (rirDrift.significance === 'concerning' ? 30 : rirDrift.significance === 'elevated' ? 15 : 0) +
     (formTrend.avgDegradation > 0.3 ? 25 : formTrend.avgDegradation > 0.15 ? 10 : 0) +
-    (currentSets > tolerance.estimatedMRV ? 15 : 0);
+    (currentSets > tolerance.estimatedMRV ? 15 : 0) +
+    subjectiveNudges.tooHighScore;
 
   // TOO LOW indicators:
   // - Strong progression (leaving gains on table)
   // - No RIR drift (not challenging enough)
   // - Perfect form throughout (could push harder)
   // - Current sets < estimated MEV
+  // - Subjective under-stimulus (chronic low pump + easy workload, capped)
 
   const tooLowScore =
     (progression.progressionTrend === 'improving' && (progression.avgProgressionRate ?? 0) > 2 ? 25 : 0) +
     (rirDrift.drift < 0.3 ? 20 : 0) +
     (formTrend.avgDegradation < 0.05 ? 15 : 0) +
-    (currentSets < tolerance.estimatedMEV ? 30 : 0);
+    (currentSets < tolerance.estimatedMEV ? 30 : 0) +
+    subjectiveNudges.tooLowScore;
 
   if (tooHighScore >= 50) {
     verdict = 'too_high';
@@ -982,7 +1081,8 @@ export function analyzeMesocycle(
   muscleData: Record<MuscleGroup, MuscleVolumeData[]>,
   currentProfile: UserVolumeProfile,
   startDate: string,
-  endDate: string
+  endDate: string,
+  subjectiveByMuscle?: Partial<Record<MuscleGroup, SubjectiveVolumeSignals>>
 ): MesocycleAnalysis {
   const muscleOutcomes: Record<MuscleGroup, MuscleOutcome> = {} as Record<MuscleGroup, MuscleOutcome>;
   const muscleVolumes: MesocycleAnalysis['muscleVolumes'] = {} as MesocycleAnalysis['muscleVolumes'];
@@ -1043,7 +1143,8 @@ export function analyzeMesocycle(
       rirDrift,
       formTrend,
       avgWeeklySets,
-      tolerance
+      tolerance,
+      subjectiveByMuscle?.[muscleGroup]
     );
 
     muscleOutcomes[muscleGroup] = {

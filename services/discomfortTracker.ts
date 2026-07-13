@@ -5,7 +5,12 @@
  * Detects patterns and suggests logging as formal injuries when appropriate.
  */
 
-import type { SetDiscomfort, DiscomfortBodyPart, DiscomfortSeverity } from '@/types/schema';
+import type {
+  SetDiscomfort,
+  DiscomfortBodyPart,
+  DiscomfortSeverity,
+  JointPainJoint,
+} from '@/types/schema';
 import { INJURY_TYPES, type InjuryType } from '@/lib/training/injury-types';
 
 /**
@@ -113,6 +118,8 @@ function getSeverityScore(severity: DiscomfortSeverity): number {
       return 2;
     case 'pain':
       return 3;
+    case 'stop':
+      return 4;
   }
 }
 
@@ -122,7 +129,8 @@ function getSeverityScore(severity: DiscomfortSeverity): number {
 function getSeverityFromScore(score: number): DiscomfortSeverity {
   if (score < 1.5) return 'twinge';
   if (score < 2.5) return 'discomfort';
-  return 'pain';
+  if (score < 3.5) return 'pain';
+  return 'stop';
 }
 
 /**
@@ -172,7 +180,9 @@ export function detectDiscomfortPatterns(
     const exercises = Array.from(new Set(bodyPartEntries.map((e) => e.exerciseName)));
 
     // Pattern is concerning if 3+ occurrences or any pain-level severity
-    const hasPain = bodyPartEntries.some((e) => e.discomfort.severity === 'pain');
+    const hasPain = bodyPartEntries.some(
+      (e) => e.discomfort.severity === 'pain' || e.discomfort.severity === 'stop'
+    );
     const suggestsInjury = bodyPartEntries.length >= 3 || hasPain;
 
     // Get suggested injury type
@@ -217,7 +227,7 @@ export function processDiscomfortLog(
   } = {};
 
   // Check for pain severity - immediate warning
-  if (discomfort.severity === 'pain') {
+  if (discomfort.severity === 'pain' || discomfort.severity === 'stop') {
     result.painWarning = {
       title: 'Pain Logged',
       message:
@@ -251,6 +261,147 @@ export function processDiscomfortLog(
   }
 
   return result;
+}
+
+// ============================================================
+// EXERCISE-LEVEL PAIN PATTERN (variation-suggestion notice)
+// ============================================================
+
+/** Pain events on one exercise within this window trigger the notice. */
+export const EXERCISE_PAIN_PATTERN_WINDOW_DAYS = 42; // 6 weeks
+
+/** Minimum events on one exercise within the window. */
+export const EXERCISE_PAIN_PATTERN_THRESHOLD = 3;
+
+/** After dismissal the notice stays hidden for this long. */
+export const EXERCISE_PAIN_NOTICE_SUPPRESS_DAYS = 28; // 4 weeks
+
+/** Minimal event shape for the pattern check (a joint_pain_events row). */
+export interface ExercisePainEvent {
+  joint: string;
+  occurredAt: Date;
+}
+
+export interface ExercisePainPattern {
+  /** The most-flagged joint within the window (for the notice copy). */
+  joint: string;
+  /** Events on this exercise within the window. */
+  count: number;
+}
+
+/**
+ * Detect the "≥3 pain events on one exercise within 6 weeks" pattern and
+ * honor the 4-week dismissal window. Returns the pattern to show, or null.
+ *
+ * @param events      pain events for ONE exercise (any order)
+ * @param dismissedAt when the user last dismissed this exercise's notice, or null
+ * @param now         injected clock
+ */
+export function getExercisePainPattern(
+  events: ExercisePainEvent[],
+  dismissedAt: Date | null,
+  now: Date
+): ExercisePainPattern | null {
+  if (
+    dismissedAt &&
+    now.getTime() - dismissedAt.getTime() <
+      EXERCISE_PAIN_NOTICE_SUPPRESS_DAYS * 24 * 60 * 60 * 1000
+  ) {
+    return null;
+  }
+
+  const cutoff = now.getTime() - EXERCISE_PAIN_PATTERN_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+  const recent = events.filter((e) => {
+    const t = e.occurredAt.getTime();
+    return Number.isFinite(t) && t >= cutoff && t <= now.getTime();
+  });
+  if (recent.length < EXERCISE_PAIN_PATTERN_THRESHOLD) return null;
+
+  // Most-flagged joint wins the notice copy.
+  const counts = new Map<string, number>();
+  for (const e of recent) counts.set(e.joint, (counts.get(e.joint) ?? 0) + 1);
+  let topJoint = recent[0].joint;
+  let topCount = 0;
+  counts.forEach((count, joint) => {
+    if (count > topCount) {
+      topJoint = joint;
+      topCount = count;
+    }
+  });
+
+  return { joint: topJoint, count: recent.length };
+}
+
+/**
+ * Map the two-tap picker's joint vocabulary onto the existing per-set
+ * DiscomfortBodyPart values, so joint picks ride SetFeedback.discomfort
+ * unchanged.
+ */
+export function jointToBodyPart(joint: JointPainJoint): DiscomfortBodyPart {
+  switch (joint) {
+    case 'elbow':
+      return 'elbows';
+    case 'shoulder':
+      return 'shoulders';
+    case 'knee':
+      return 'knees';
+    case 'hip':
+      return 'hips';
+    case 'wrist':
+      return 'wrists';
+    case 'lower_back':
+      return 'lower_back';
+    case 'other':
+      return 'other';
+  }
+}
+
+/**
+ * Collapse any DiscomfortBodyPart (incl. sided variants from the bottom-sheet
+ * logger) to the joint_pain_events joint vocabulary. Non-joint parts (neck,
+ * upper back) fall to 'other'.
+ */
+export function bodyPartToJoint(bodyPart: DiscomfortBodyPart): JointPainJoint {
+  switch (bodyPart) {
+    case 'left_elbow':
+    case 'right_elbow':
+    case 'elbows':
+      return 'elbow';
+    case 'left_shoulder':
+    case 'right_shoulder':
+    case 'shoulders':
+      return 'shoulder';
+    case 'left_knee':
+    case 'right_knee':
+    case 'knees':
+      return 'knee';
+    case 'left_hip':
+    case 'right_hip':
+    case 'hips':
+      return 'hip';
+    case 'left_wrist':
+    case 'right_wrist':
+    case 'wrists':
+      return 'wrist';
+    case 'lower_back':
+      return 'lower_back';
+    default:
+      return 'other';
+  }
+}
+
+/** Display name for a joint_pain_events joint value. */
+export function getJointDisplayName(joint: string): string {
+  const names: Record<string, string> = {
+    elbow: 'elbow',
+    shoulder: 'shoulder',
+    knee: 'knee',
+    hip: 'hip',
+    wrist: 'wrist',
+    lower_back: 'lower back',
+    other: 'joint',
+  };
+  return names[joint] ?? joint.replace(/_/g, ' ');
 }
 
 /**
@@ -295,6 +446,8 @@ export function getSeverityInfo(severity: DiscomfortSeverity): {
     case 'discomfort':
       return { label: 'Discomfort (Moderate)', color: 'text-orange-400', icon: '!' };
     case 'pain':
-      return { label: 'Pain (Stop)', color: 'text-danger-400', icon: '!!' };
+      return { label: 'Painful', color: 'text-danger-400', icon: '!!' };
+    case 'stop':
+      return { label: 'Had to Stop', color: 'text-danger-400', icon: '!!!' };
   }
 }
