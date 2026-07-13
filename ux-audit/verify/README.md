@@ -54,3 +54,21 @@ across rebuilds.
 - A quick-add (frequent-food chip) updates the macro totals immediately
   (630 → 930 kcal) — the optimistic-write path.
 - A warm reload (persisted IndexedDB cache) renders without the full loader.
+
+## label-scan.mjs — what it asserts (24 checks)
+
+Drives the Add Food → Scan Label flow with OCR injected via the
+`window.__hypertrackMockLabelOcr` test hook (LabelScanner skips the
+tesseract.js WASM run when it's set):
+
+- High-confidence scan lands directly in the create-food form with macros +
+  serving size prefilled, "Scanned" badges on scanned fields, and a
+  review-before-saving banner; editing a field and saving produces a
+  `custom_foods` insert with the edited value.
+- A low-confidence scan (protein misread → Atwater mismatch) stops at the
+  review step, names the suspect field, and offers the user-triggered
+  "Try AI scan"; going offline disables the AI button with explanatory copy
+  while manual entry stays reachable; "use anyway" carries the amber "Check"
+  mark into the form.
+- The barcode tab still renders its scanner (shared Add Food sheet, no
+  regression).

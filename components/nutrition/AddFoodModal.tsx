@@ -55,7 +55,21 @@ const BarcodeScanner = dynamic(
     ),
   }
 );
-import { IconSearch, IconScan, IconPencil, IconX, IconToolsKitchen2, IconPlus, IconChevronRight, IconClock } from '@tabler/icons-react';
+
+// Label scanner pulls in tesseract.js — load only when the tab is opened.
+const LabelScanner = dynamic(
+  () => import('./LabelScanner').then((m) => m.LabelScanner),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex items-center justify-center py-10 text-sm text-surface-400">
+        Loading scanner…
+      </div>
+    ),
+  }
+);
+import type { LabelScanPrefill } from './LabelScanner';
+import { IconSearch, IconScan, IconTextScan2, IconPencil, IconX, IconToolsKitchen2, IconPlus, IconChevronRight, IconClock } from '@tabler/icons-react';
 import type { MealType, CustomFood, FrequentFood, SystemFood, FoodLogEntry, MealNames, FoodSource } from '@/types/nutrition';
 
 interface ScannedProduct {
@@ -71,7 +85,7 @@ interface ScannedProduct {
   barcode: string;
 }
 
-export type AddFoodTab = 'search' | 'barcode' | 'manual';
+export type AddFoodTab = 'search' | 'barcode' | 'label' | 'manual';
 
 interface AddFoodModalProps {
   isOpen: boolean;
@@ -95,6 +109,8 @@ interface AddFoodModalProps {
   initialTab?: AddFoodTab;
   /** Called when a scanned barcode isn't found and the user wants to create a custom food */
   onCreateCustomFood?: (barcode: string) => void;
+  /** Called with parsed nutrition-label fields for review in the create-food form */
+  onLabelScanned?: (prefill: LabelScanPrefill) => void;
   customFoods?: CustomFood[];
   frequentFoods?: FrequentFood[];
   systemFoods?: SystemFood[];
@@ -298,6 +314,7 @@ export function AddFoodModal({
   defaultMealType,
   initialTab,
   onCreateCustomFood,
+  onLabelScanned,
   customFoods = [],
   frequentFoods = [],
   systemFoods = [],
@@ -869,6 +886,7 @@ export function AddFoodModal({
           {([
             { id: 'search' as AddFoodTab, label: 'Search', icon: IconSearch },
             { id: 'barcode' as AddFoodTab, label: 'Barcode', icon: IconScan },
+            { id: 'label' as AddFoodTab, label: 'Scan Label', icon: IconTextScan2 },
             { id: 'manual' as AddFoodTab, label: 'Manual', icon: IconPencil },
           ]).map((tab) => (
             <button
@@ -1359,6 +1377,19 @@ export function AddFoodModal({
               />
             )}
           </div>
+        )}
+
+        {/* Scan Label Tab: photo → on-device OCR → create-food form review */}
+        {activeTab === 'label' && (
+          <LabelScanner
+            onClose={() => setActiveTab('search')}
+            onParsed={(prefill) => {
+              if (onLabelScanned) {
+                resetAndClose();
+                onLabelScanned(prefill);
+              }
+            }}
+          />
         )}
 
         {/* Manual Entry Tab */}
