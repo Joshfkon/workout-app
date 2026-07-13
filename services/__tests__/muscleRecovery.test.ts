@@ -1,5 +1,6 @@
 import {
   computeMuscleRecovery,
+  computeSleepWindowMultiplier,
   recoveryConfigFor,
   adjustRecoveryMultiplier,
   clampRecoveryMultiplier,
@@ -8,6 +9,7 @@ import {
   RECOVERY_MULTIPLIER_STEP,
   type RecoverySession,
   type RecoveryStatus,
+  type SleepNight,
   type SorenessReport,
 } from '@/services/muscleRecovery';
 import { ENHANCED_RECOVERY_MULTIPLIER } from '@/services/shared/fatigueConstants';
@@ -333,5 +335,128 @@ describe('adjustRecoveryMultiplier', () => {
   it('moves in RECOVERY_MULTIPLIER_STEP increments', () => {
     const upped = adjustRecoveryMultiplier(1.0, 'still_sore', 'fresh');
     expect(upped - 1.0).toBeCloseTo(RECOVERY_MULTIPLIER_STEP, 10);
+  });
+});
+
+// ============================================
+// SLEEP → RECOVERY WINDOW WIRING
+// ============================================
+
+/** YYYY-MM-DD local-day string for NOW minus `days` (mirrors the module's own helper). */
+function localDayAgo(days: number): string {
+  const d = new Date(NOW.getTime() - days * 24 * 60 * 60 * 1000);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${dd}`;
+}
+
+describe('computeSleepWindowMultiplier', () => {
+  it('trailing-2-night average under 6h stretches windows by the short multiplier', () => {
+    const nights: SleepNight[] = [
+      { localDay: localDayAgo(0), hours: 5.5, quality: 'poor' },
+      { localDay: localDayAgo(1), hours: 6.0, quality: 'ok' },
+    ];
+    expect(computeSleepWindowMultiplier(nights, NOW)).toBe(
+      RECOVERY_CONFIG.sleepShortWindowMultiplier
+    );
+  });
+
+  it('≥8h average with GOOD quality on every night shrinks windows', () => {
+    const nights: SleepNight[] = [
+      { localDay: localDayAgo(0), hours: 8, quality: 'good' },
+      { localDay: localDayAgo(1), hours: 8.5, quality: 'good' },
+    ];
+    expect(computeSleepWindowMultiplier(nights, NOW)).toBe(
+      RECOVERY_CONFIG.sleepGoodWindowMultiplier
+    );
+  });
+
+  it('≥8h average without good quality is neutral', () => {
+    const nights: SleepNight[] = [
+      { localDay: localDayAgo(0), hours: 9, quality: 'ok' },
+      { localDay: localDayAgo(1), hours: 8.5, quality: 'good' },
+    ];
+    expect(computeSleepWindowMultiplier(nights, NOW)).toBe(1);
+  });
+
+  it('a normal night is neutral', () => {
+    const nights: SleepNight[] = [
+      { localDay: localDayAgo(0), hours: 7, quality: 'ok' },
+      { localDay: localDayAgo(1), hours: 7.5, quality: 'good' },
+    ];
+    expect(computeSleepWindowMultiplier(nights, NOW)).toBe(1);
+  });
+
+  it('no recent nights (or none at all) is neutral — a stale entry never counts as last night', () => {
+    expect(computeSleepWindowMultiplier([], NOW)).toBe(1);
+    const stale: SleepNight[] = [
+      { localDay: localDayAgo(20), hours: 4, quality: 'poor' },
+      { localDay: localDayAgo(21), hours: 4, quality: 'poor' },
+    ];
+    expect(computeSleepWindowMultiplier(stale, NOW)).toBe(1);
+  });
+
+  it('only the two most recent nights inside the lookback drive the average', () => {
+    // Recent nights are fine; an awful night 2 days back is outside the pair.
+    const nights: SleepNight[] = [
+      { localDay: localDayAgo(0), hours: 7.5, quality: 'ok' },
+      { localDay: localDayAgo(1), hours: 7.5, quality: 'ok' },
+      { localDay: localDayAgo(2), hours: 3, quality: 'poor' },
+    ];
+    expect(computeSleepWindowMultiplier(nights, NOW)).toBe(1);
+  });
+});
+
+describe('sleep multiplier applied to recovery windows', () => {
+  it('short sleep (<6h trailing avg) extends a muscle ready-time by 15%', () => {
+    // High-dose chest session 24h ago → base window 48 + 24 = 72h.
+    const history = [session(hoursAgo(24), 'chest_upper', 10, 0)];
+
+    const shortNights: SleepNight[] = [
+      { localDay: localDayAgo(0), hours: 5, quality: 'poor' },
+      { localDay: localDayAgo(1), hours: 5.5, quality: 'ok' },
+    ];
+    const config = recoveryConfigFor(
+      false,
+      undefined,
+      computeSleepWindowMultiplier(shortNights, NOW)
+    );
+
+    const baseline = computeMuscleRecovery(history, 'chest_upper', NOW);
+    const shortSleep = computeMuscleRecovery(history, 'chest_upper', NOW, config);
+
+    expect(baseline.windowHours).toBe(72);
+    expect(shortSleep.windowHours).toBeCloseTo(72 * 1.15, 5);
+    // Ready-time (time-until-fresh from the last session) extends by exactly 15%.
+    expect(shortSleep.estimatedReadyAt!.getTime() - shortSleep.lastTrainedAt!.getTime()).toBeCloseTo(
+      (baseline.estimatedReadyAt!.getTime() - baseline.lastTrainedAt!.getTime()) * 1.15,
+      -3
+    );
+  });
+
+  it('long good-quality sleep shrinks the window by 5%', () => {
+    const history = [session(hoursAgo(24), 'chest_upper', 10, 0)];
+    const goodNights: SleepNight[] = [
+      { localDay: localDayAgo(0), hours: 8.5, quality: 'good' },
+      { localDay: localDayAgo(1), hours: 8, quality: 'good' },
+    ];
+    const config = recoveryConfigFor(
+      false,
+      undefined,
+      computeSleepWindowMultiplier(goodNights, NOW)
+    );
+    const result = computeMuscleRecovery(history, 'chest_upper', NOW, config);
+    expect(result.windowHours).toBeCloseTo(72 * 0.95, 5);
+  });
+
+  it('composes with the enhanced-athlete windowScale and learned multipliers', () => {
+    const history = [session(hoursAgo(24), 'chest_upper', 10, 0)];
+    const config = recoveryConfigFor(true, { chest_upper: 1.2 }, 1.15);
+    const result = computeMuscleRecovery(history, 'chest_upper', NOW, config);
+    expect(result.windowHours).toBeCloseTo(
+      (72 / ENHANCED_RECOVERY_MULTIPLIER) * 1.2 * 1.15,
+      5
+    );
   });
 });

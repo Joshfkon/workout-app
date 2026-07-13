@@ -1,10 +1,20 @@
 'use client';
 
 import { useState, useEffect, memo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Button, Card, Badge } from '@/components/ui';
-import type { Rating, DailyCheckIn as DailyCheckInType } from '@/types/schema';
+import {
+  SLEEP_QUALITY_TO_RATING,
+  ratingToSleepQuality,
+  type Rating,
+  type SleepQuality,
+  type DailyCheckIn as DailyCheckInType,
+} from '@/types/schema';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { getLocalDateString } from '@/lib/utils';
+import { fetchLastSleepEntry, upsertSleepEntry } from '@/lib/sleep/sleepLog';
+import { SleepFields, clampSleepHours } from '@/components/dashboard/SleepQuickLog';
+import { SLEEP_LOG_QUERY_KEY_PREFIX } from '@/hooks/useSleepLog';
 
 interface DailyCheckInProps {
   userId: string;
@@ -13,6 +23,7 @@ interface DailyCheckInProps {
 }
 
 export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onComplete }: DailyCheckInProps) {
+  const queryClient = useQueryClient();
   const [step, setStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [alreadyCheckedIn, setAlreadyCheckedIn] = useState(false);
@@ -21,7 +32,7 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
   
   // Check-in values
   const [sleepHours, setSleepHours] = useState(7);
-  const [sleepQuality, setSleepQuality] = useState<Rating>(3);
+  const [sleepQuality, setSleepQuality] = useState<SleepQuality>('ok');
   const [energyLevel, setEnergyLevel] = useState<Rating>(3);
   const [moodRating, setMoodRating] = useState<Rating>(3);
   const [focusRating, setFocusRating] = useState<Rating>(3);
@@ -34,27 +45,16 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
   // Define questions based on user goal
   const baseQuestions = [
     {
+      // Two-field sleep step: hours (0.5-step stepper, defaulting to the last
+      // sleep_log entry) + poor/ok/good quality chips — the same pair the
+      // home Sleep card's inline sheet edits.
       id: 'sleep',
       title: 'Sleep',
       icon: '😴',
       question: 'How did you sleep last night?',
-      type: 'slider' as const,
+      type: 'sleep' as const,
       value: sleepHours,
       onChange: (v: number) => setSleepHours(v),
-      min: 3,
-      max: 12,
-      step: 0.5,
-      format: (v: number) => `${v} hours`,
-    },
-    {
-      id: 'sleepQuality',
-      title: 'Sleep Quality',
-      icon: '💤',
-      question: 'How was your sleep quality?',
-      type: 'rating' as const,
-      value: sleepQuality,
-      onChange: (v: Rating) => setSleepQuality(v),
-      labels: ['Terrible', 'Poor', 'Okay', 'Good', 'Great'],
     },
     {
       id: 'energy',
@@ -131,26 +131,36 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
   const questions = [...baseQuestions, ...cutQuestions, ...extraQuestions];
   const currentQuestion = questions[step];
   
-  // Check if already checked in today
+  // Check if already checked in today, and seed the sleep fields: today's
+  // check-in values win, else default hours/quality to the LAST sleep_log
+  // entry so re-logging a typical night is one tap.
   useEffect(() => {
     async function checkTodaysCheckIn() {
       const supabase = createUntypedClient();
       const todayStr = getLocalDateString();
-      
-      const { data } = await supabase
-        .from('daily_check_ins')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('date', todayStr)
-        .single();
-      
+
+      const [{ data }, lastSleep] = await Promise.all([
+        supabase
+          .from('daily_check_ins')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('date', todayStr)
+          .single(),
+        fetchLastSleepEntry(supabase, userId).catch(() => null),
+      ]);
+
       if (data) {
         setAlreadyCheckedIn(true);
         setTodaysCheckIn(data);
+        if (typeof data.sleep_hours === 'number') setSleepHours(clampSleepHours(data.sleep_hours));
+        setSleepQuality(ratingToSleepQuality(data.sleep_quality));
+      } else if (lastSleep) {
+        setSleepHours(clampSleepHours(lastSleep.hours));
+        setSleepQuality(lastSleep.quality);
       }
       setIsLoading(false);
     }
-    
+
     checkTodaysCheckIn();
   }, [userId]);
   
@@ -210,7 +220,9 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
         user_id: userId,
         date: todayStr,
         sleep_hours: sleepHours,
-        sleep_quality: sleepQuality,
+        // The 1-5 rating column stays (readiness scorer input); the chips map
+        // onto it via the shared bridge.
+        sleep_quality: SLEEP_QUALITY_TO_RATING[sleepQuality],
         energy_level: energyLevel,
         mood_rating: moodRating,
         focus_rating: isOnCut ? focusRating : null,
@@ -218,13 +230,29 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
         soreness_level: sorenessLevel,
         hunger_level: isOnCut ? hungerLevel : null,
       };
-      
+
       const { error } = await supabase
         .from('daily_check_ins')
         .upsert(checkInData, { onConflict: 'user_id,date' });
-      
+
       if (error) throw error;
-      
+
+      // Dual-write the sleep pair to sleep_log (one row per local day; a
+      // repeat check-in EDITS it) — the home Sleep card, recovery windows and
+      // the deload advisor all read from there.
+      try {
+        await upsertSleepEntry(supabase, userId, {
+          localDay: todayStr,
+          hours: sleepHours,
+          quality: sleepQuality,
+        });
+        // Refresh the shared sleep cache (home Sleep card, recovery hooks).
+        queryClient.invalidateQueries({ queryKey: [SLEEP_LOG_QUERY_KEY_PREFIX] });
+      } catch (sleepError) {
+        // Best-effort: a sleep_log hiccup must not fail the check-in itself.
+        console.error('Failed to save sleep entry from check-in:', sleepError);
+      }
+
       setAlreadyCheckedIn(true);
       setTodaysCheckIn(checkInData);
       onComplete?.();
@@ -351,27 +379,16 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
         <div className="space-y-4">
           <p className="text-surface-200">{currentQuestion.question}</p>
           
-          {currentQuestion.type === 'slider' && (
-            <div className="space-y-2">
-              <input
-                type="range"
-                min={currentQuestion.min}
-                max={currentQuestion.max}
-                step={currentQuestion.step}
-                value={currentQuestion.value as number}
-                onChange={(e) => currentQuestion.onChange(parseFloat(e.target.value))}
-                className="w-full accent-primary-500"
-              />
-              <div className="flex justify-between text-sm">
-                <span className="text-surface-500">{currentQuestion.min}h</span>
-                <span className="text-lg font-bold text-primary-400">
-                  {currentQuestion.format?.(currentQuestion.value as number)}
-                </span>
-                <span className="text-surface-500">{currentQuestion.max}h</span>
-              </div>
-            </div>
+          {currentQuestion.type === 'sleep' && (
+            <SleepFields
+              hours={sleepHours}
+              quality={sleepQuality}
+              onHoursChange={setSleepHours}
+              onQualityChange={setSleepQuality}
+            />
           )}
-          
+
+
           {currentQuestion.type === 'rating' && (
             <div className="space-y-2">
               <div className="flex gap-2">

@@ -6,6 +6,7 @@ import type { LiftTrendsSummary } from '@/app/(dashboard)/dashboard/_lib/liftTre
 import type { BodyCompGlance } from '@/lib/actions/dashboard';
 import { BODY_COMP_TREND_SECTION_ID } from '@/services/compositionSpace';
 import { MetricTile } from './MetricTile';
+import { SleepTile, type SleepGlance } from './SleepTile';
 import { intakePaceVerdict } from './intakePace';
 import type { EatingWindow, PacingPhase } from '@/services/intakePacing';
 
@@ -47,6 +48,11 @@ interface MetricTileGridProps {
   weightRate: GlanceWeightRate | null;
   /** Latest anchored BF% + FFMI (≥2 DEXA scans); null hides the tile. */
   bodyComp?: BodyCompGlance | null;
+  /** Sleep glance data; tile renders (with a quiet empty state) whenever
+   *  onLogSleep is provided. */
+  sleep?: SleepGlance | null;
+  /** Opens the sleep quick-log sheet (tap anywhere on the Sleep tile). */
+  onLogSleep?: () => void;
   /** Opens the weight-log modal ("+ log" on the Weight tile). */
   onLogWeight: () => void;
   /** Training phase — flips which pacing direction warns (default maintenance). */
@@ -111,6 +117,8 @@ export function MetricTileGrid({
   weightHistory,
   weightRate,
   bodyComp = null,
+  sleep = null,
+  onLogSleep,
   onLogWeight,
   phase = 'maintenance',
   eatingWindow,
@@ -118,8 +126,11 @@ export function MetricTileGrid({
   // Show the tile when anything was classified OR lifts are accruing history
   // (a brand-new program should read "rebuilding", not vanish).
   const showLifts = !!liftTrends && (liftTrends.lifts.length > 0 || liftTrends.insufficientData > 0);
+  // The Sleep tile fills the grid's empty slot whenever it can open its log
+  // sheet — its empty state IS the "Log sleep" affordance, so no data gate.
+  const showSleep = !!sleep && !!onLogSleep;
   const hasAnyTile =
-    volume !== null || !!nutritionTargets || !!latestWeight || showLifts || !!bodyComp;
+    volume !== null || !!nutritionTargets || !!latestWeight || showLifts || !!bodyComp || showSleep;
   // Confident lifts drive the headline; low-confidence lifts (window spans a
   // program switch) are "rebuilding" and shouldn't read as stagnation.
   const confidentLifts = liftTrends ? liftTrends.rising + liftTrends.flat + liftTrends.down : 0;
@@ -322,6 +333,7 @@ export function MetricTileGrid({
           })()}
         </MetricTile>
       )}
+      {showSleep && sleep && onLogSleep && <SleepTile sleep={sleep} onLog={onLogSleep} />}
     </div>
   );
 }
