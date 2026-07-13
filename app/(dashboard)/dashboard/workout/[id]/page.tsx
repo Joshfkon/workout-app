@@ -2442,6 +2442,7 @@ export default function WorkoutPage() {
       const { data: allExercises } = await supabase
         .from('exercises')
         .select('id, name, primary_muscle, secondary_muscles, mechanic, equipment_required, default_rep_range, default_rir, is_bodyweight, hypertrophy_tier')
+        .is('deleted_at', null) // hide merge-soft-deleted duplicates
         .order('name');
 
       if (allExercises) {

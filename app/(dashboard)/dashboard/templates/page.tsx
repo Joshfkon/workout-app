@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient, useIsRestoring } from '@tanstack/react-query';
 import { Card, CardContent, Button, LoadingAnimation } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { getLocalUserId } from '@/lib/supabase/authState';
 import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 import type { WorkoutFolder, WorkoutTemplate, WorkoutTemplateExercise } from '@/types/templates';
 
@@ -68,12 +69,14 @@ export default function TemplatesPage() {
   const listQuery = useQuery({
     queryKey: TEMPLATES_LIST_KEY,
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return { folders: [] as FolderWithTemplates[], unfoldered: [] as (WorkoutTemplate & { exercises: WorkoutTemplateExercise[] })[] };
+      // Local-session identity (no auth round trip) — a transient getUser()
+      // failure must not be cached as an empty template list.
+      const userId = await getLocalUserId(supabase);
+      if (!userId) return { folders: [] as FolderWithTemplates[], unfoldered: [] as (WorkoutTemplate & { exercises: WorkoutTemplateExercise[] })[] };
 
       const [foldersResult, templatesResult, exercisesResult] = await Promise.all([
-        supabase.from('workout_folders').select('*').eq('user_id', user.id).order('sort_order', { ascending: true }),
-        supabase.from('workout_templates').select('*').eq('user_id', user.id).order('sort_order', { ascending: true }),
+        supabase.from('workout_folders').select('*').eq('user_id', userId).order('sort_order', { ascending: true }),
+        supabase.from('workout_templates').select('*').eq('user_id', userId).order('sort_order', { ascending: true }),
         supabase.from('workout_template_exercises').select('*').order('sort_order', { ascending: true }),
       ]);
 

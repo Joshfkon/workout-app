@@ -20,6 +20,7 @@
 
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { getLocalUserId } from '@/lib/supabase/authState';
 import { getLocalDateString } from '@/lib/utils';
 import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 import { normalizePacingPhase } from '@/services/intakePacing';
@@ -54,13 +55,15 @@ function monthEndKey(monthKey: string): string {
  */
 export async function fetchNutritionMonth(monthKey: string): Promise<NutritionMonthData> {
   const supabase = createUntypedClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { dayCalories: {} };
+  // Local-session identity (no auth round trip) — a transient getUser()
+  // failure must not be cached as an empty month. See lib/supabase/authState.
+  const userId = await getLocalUserId(supabase);
+  if (!userId) return { dayCalories: {} };
 
   const { data, error } = await supabase
     .from('food_log')
     .select('logged_at, calories')
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .gte('logged_at', `${monthKey}-01`)
     .lte('logged_at', monthEndKey(monthKey));
   if (error) throw error;
@@ -89,13 +92,13 @@ export function useNutritionMonth(monthKey: string | null, enabled: boolean) {
 
 export async function fetchPhaseHistory(): Promise<PhaseHistoryEntry[]> {
   const supabase = createUntypedClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return [];
+  const userId = await getLocalUserId(supabase);
+  if (!userId) return [];
 
   const { data, error } = await supabase
     .from('phase_history')
     .select('phase, started_on')
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .order('started_on', { ascending: true });
   // Degrade gracefully (e.g. table not migrated yet): no history means the
   // calendar grades every day against the current phase.
