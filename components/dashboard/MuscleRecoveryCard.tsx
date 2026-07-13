@@ -5,7 +5,15 @@ import { Card, CardHeader, CardTitle, CardContent, Button } from '@/components/u
 import { useDashboardMuscleReadiness } from '@/hooks/useMuscleReadiness';
 import { MuscleMap } from '@/components/muscleMap/MuscleMap';
 import { readinessRowsToMapData } from '@/lib/muscleMap/adapters';
-import type { ReadinessRow } from '@/app/(dashboard)/dashboard/workout/[id]/_lib/readiness';
+import {
+  MuscleGroupList,
+  useMuscleRowExpansion,
+  withVisibleChildren,
+} from '@/components/muscle/MuscleGroupList';
+import type {
+  ReadinessRow,
+  ReadinessChild,
+} from '@/app/(dashboard)/dashboard/workout/[id]/_lib/readiness';
 import type { MuscleRecoveryResult } from '@/services/muscleRecovery';
 
 /**
@@ -13,7 +21,11 @@ import type { MuscleRecoveryResult } from '@/services/muscleRecovery';
  * unified readiness rows (and the same recovery heuristic, muscle map and
  * status vocabulary) as the in-workout Muscle Readiness sheet, minus the live
  * session — so this card can never disagree with the sheet or the map about a
- * muscle's status. The history fetch shares the sheet's React Query key.
+ * muscle's status. The history fetch shares the sheet's React Query key, and
+ * the muscle hierarchy renders through the shared MuscleGroupList: one coarse
+ * row per group (status = its LEAST-recovered member, per buildReadinessRows),
+ * fine members behind the chevron with their own timers, divergent parents
+ * self-revealing.
  */
 
 /** Same color families as the readiness badges + map's RECOVERY_FILL. */
@@ -44,7 +56,8 @@ function recoveryPercent(recovery: MuscleRecoveryResult): number {
   );
 }
 
-function RecoveryRow({ row }: { row: ReadinessRow }) {
+/** Coarse-row content: group name, aggregate (least-recovered) status, bar. */
+function RecoveryRowContent({ row }: { row: ReadinessRow }) {
   const { recovery } = row;
   const noData = recovery.lastTrainedAt === null;
   const presentation = STATUS_PRESENTATION[recovery.status];
@@ -53,7 +66,7 @@ function RecoveryRow({ row }: { row: ReadinessRow }) {
     noData || recovery.status === 'fresh' ? '' : formatReadyIn(recovery.hoursUntilReady);
 
   return (
-    <div className="space-y-1" data-testid={`recovery-row-${row.muscle}`}>
+    <div className="space-y-1">
       <div className="flex justify-between items-baseline text-sm">
         <span className="text-surface-300">{row.displayName}</span>
         <span
@@ -65,6 +78,37 @@ function RecoveryRow({ row }: { row: ReadinessRow }) {
         </span>
       </div>
       <div className="h-2 bg-surface-800 rounded-full overflow-hidden">
+        <div
+          className={`h-full transition-all duration-300 ${noData ? 'bg-surface-700' : presentation.barClass}`}
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+/** Fine-member content: the member's OWN status and timer (not the parent's). */
+function RecoveryChildContent({ child }: { child: ReadinessChild }) {
+  const { recovery } = child;
+  const noData = recovery.lastTrainedAt === null;
+  const presentation = STATUS_PRESENTATION[recovery.status];
+  const percent = recoveryPercent(recovery);
+  const readyIn =
+    noData || recovery.status === 'fresh' ? '' : formatReadyIn(recovery.hoursUntilReady);
+
+  return (
+    <div className="space-y-1">
+      <div className="flex justify-between items-baseline text-xs">
+        <span className="text-surface-400">{child.displayName}</span>
+        <span
+          className={noData ? 'text-surface-500' : presentation.textClass}
+          data-testid={`recovery-status-${child.muscle}`}
+        >
+          {noData ? 'No recent data' : presentation.label}
+          {readyIn && <span className="text-[10px] text-surface-500 ml-1">({readyIn})</span>}
+        </span>
+      </div>
+      <div className="h-1.5 bg-surface-800 rounded-full overflow-hidden">
         <div
           className={`h-full transition-all duration-300 ${noData ? 'bg-surface-700' : presentation.barClass}`}
           style={{ width: `${percent}%` }}
@@ -102,14 +146,27 @@ export const MuscleRecoveryCard = memo(function MuscleRecoveryCard({
     return [...recovering, ...fresh, ...noData];
   }, [rows]);
 
-  const recoveringCount = useMemo(
-    () =>
-      rows.filter((r) => r.recovery.lastTrainedAt !== null && r.recovery.status !== 'fresh')
-        .length,
+  // Headline: coarse groups only — fine members inform their parent's status
+  // (least-recovered wins) but never inflate the denominator. A never-trained
+  // group counts as ready (there's nothing to recover from).
+  const readyCount = useMemo(
+    () => rows.filter((r) => r.recovery.status === 'fresh').length,
     [rows]
   );
 
-  const mapData = useMemo(() => readinessRowsToMapData(rows), [rows]);
+  // Shared hierarchy expansion (persisted per user for this surface).
+  // Divergent parents (e.g. Shoulders Fatigued off the side delts while
+  // front/rear are Fresh) self-reveal via the rows' autoExpand flag.
+  const expansion = useMuscleRowExpansion('recovery-card', sortedRows);
+
+  // The map paints from the same rows the list shows — fine-member overrides
+  // only for members actually visible (expanded parents).
+  const mapRows = useMemo(
+    () => withVisibleChildren(sortedRows, expansion.expanded),
+    [sortedRows, expansion.expanded]
+  );
+  const mapData = useMemo(() => readinessRowsToMapData(mapRows), [mapRows]);
+
   const displayRows = showAll ? sortedRows : sortedRows.slice(0, limit);
   const hasMore = sortedRows.length > limit;
 
@@ -151,9 +208,10 @@ export const MuscleRecoveryCard = memo(function MuscleRecoveryCard({
         <div className="flex items-center justify-between">
           <CardTitle>Muscle Recovery</CardTitle>
           <span
-            className={`text-xs ${recoveringCount > 0 ? 'text-surface-500' : 'text-success-400'}`}
+            className={`text-xs ${readyCount < rows.length ? 'text-surface-500' : 'text-success-400'}`}
+            data-testid="muscle-recovery-headline"
           >
-            {recoveringCount > 0 ? `${recoveringCount} recovering` : 'All fresh'}
+            {readyCount} of {rows.length} ready
           </span>
         </div>
       </CardHeader>
@@ -168,9 +226,14 @@ export const MuscleRecoveryCard = memo(function MuscleRecoveryCard({
         />
 
         <div className="space-y-3">
-          {displayRows.map((row) => (
-            <RecoveryRow key={row.muscle} row={row} />
-          ))}
+          <MuscleGroupList
+            rows={displayRows}
+            expansion={expansion}
+            renderRow={(row) => <RecoveryRowContent row={row} />}
+            renderChild={(child) => <RecoveryChildContent child={child} />}
+            testIdPrefix="recovery-row"
+            childrenClassName="mt-2 space-y-2 pl-3 ml-5 border-l border-surface-800/80"
+          />
         </div>
 
         {hasMore && (

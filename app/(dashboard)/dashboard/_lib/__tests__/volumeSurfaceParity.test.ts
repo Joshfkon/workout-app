@@ -65,6 +65,13 @@ describe('cross-surface parity (one fixture, four surfaces)', () => {
     }
   });
 
+  it('volume page and readiness sheet carry the IDENTICAL hierarchy (same fine children per parent)', () => {
+    for (const vr of volumeRows) {
+      const rr = readinessRows.find((r) => r.muscle === vr.muscle)!;
+      expect(rr.children.map((c) => c.muscle)).toEqual(vr.children.map((c) => c.muscle));
+    }
+  });
+
   it('the widget lowCount equals the number of below-MEV coarse rows', () => {
     const belowRows = volumeRows.filter((r) => r.zone === 'below_mev');
     expect(tiles.lowCount).toBe(belowRows.length);
@@ -164,7 +171,7 @@ describe('cross-surface parity (one fixture, four surfaces)', () => {
     }
   });
 
-  it('child sets roll up to the parent exactly once (no double-count, all groups expanded)', () => {
+  it('child sets roll up to the parent exactly once (no double-count)', () => {
     // Mixed coarse + fine tagging in the same week: coarse 'calves'/'traps'
     // credit stays on the coarse standard bucket; fine tags credit the fine
     // member. The parent row is the sum of its standard children — a set can
@@ -178,9 +185,8 @@ describe('cross-surface parity (one fixture, four surfaces)', () => {
     ];
     const s = computeWeeklyMuscleVolume(mixed);
     const r = computeReachableMuscles(mixed);
-    const rows = buildVolumeRows(s, r, {
-      expandedParents: new Set<CoarseMuscle>(['calves', 'traps']),
-    });
+    // Rows carry ALL fine children of expandable groups — no expansion needed.
+    const rows = buildVolumeRows(s, r);
 
     const calves = rows.find((x) => x.muscle === 'calves')!;
     const calvesChildren = new Map(calves.children.map((c) => [c.muscle, c]));

@@ -86,7 +86,7 @@ describe('Exercise Library muscle-chip coverage', () => {
 
   it('every muscle-group chip surfaces >= 1 exercise', () => {
     const empty = MUSCLE_GROUPS.filter(
-      (chip) => ![...library.values()].some((primary) => muscleMatchesGroup(primary, chip))
+      (chip) => !Array.from(library.values()).some((primary) => muscleMatchesGroup(primary, chip))
     );
     expect(empty).toEqual([]);
   });
@@ -109,7 +109,7 @@ describe('Exercise Library muscle-chip coverage', () => {
 
   it('Forearms and Adductors chips are populated (the reported gaps)', () => {
     const under = (chip: string) =>
-      [...library.entries()].filter(([, p]) => muscleMatchesGroup(p, chip)).map(([n]) => n);
+      Array.from(library.entries()).filter(([, p]) => muscleMatchesGroup(p, chip)).map(([n]) => n);
     const forearms = under('forearms');
     expect(forearms).toEqual(
       expect.arrayContaining(['Plate Pinch Hold', 'Dead Hang', 'Wrist Roller', "Farmer's Carry"])

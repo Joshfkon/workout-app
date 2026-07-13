@@ -3,7 +3,6 @@
 import { useMemo, useState } from 'react';
 import { MuscleReadinessContent } from './MuscleReadinessSheet';
 import { useMuscleReadiness } from '@/hooks/useMuscleReadiness';
-import { useExpandedVolumeRows } from '@/hooks/useExpandedVolumeRows';
 import { resolvePrimaryMuscleCredits } from '@/services/volumeTracker';
 import { COARSE_CHILDREN, type CoarseMuscle } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 import type { StandardMuscleGroup } from '@/types/schema';
@@ -39,16 +38,14 @@ export function EmptyWorkoutReadiness({
   // Stamp the clock once so every muscle is evaluated against the same instant.
   const [now] = useState(() => new Date());
 
-  // Shared, per-user persisted expansion — same state as volume page + sheet.
-  const { expandedRows, toggleRow } = useExpandedVolumeRows();
-
   // Empty workout: no live blocks/sets yet, so readiness is purely history-based.
+  // Hierarchy expansion lives inside MuscleReadinessContent (shared
+  // MuscleGroupList state, persisted per user for the readiness surface).
   const { rows, targets, nextUp, isLoading } = useMuscleReadiness({
     liveBlocks: [],
     liveSets: [],
     now,
     enabled: true,
-    expandedParents: expandedRows,
   });
 
   // Per-standard-muscle actionability score for chip re-ordering. Rows are now
@@ -99,8 +96,6 @@ export function EmptyWorkoutReadiness({
           isLoading={isLoading}
           collapsible
           loadingTestId="readiness-inline-loading"
-          expandedRows={expandedRows}
-          onToggleRow={toggleRow}
         />
       </div>
 

@@ -26,8 +26,10 @@ import {
 } from '../weeklyVolume';
 import { isMuscleWarnable } from '../weeklyVolume';
 import { buildReadinessRows, selectGoodTargets } from '../../workout/[id]/_lib/readiness';
+import { withVisibleChildren } from '@/components/muscle/MuscleGroupList';
 import { resolvePrimaryMuscleCredits, SECONDARY_MUSCLE_CREDIT } from '@/services/volumeTracker';
 import { resolveMuscleToStandard, type StandardMuscleGroup } from '@/types/schema';
+import type { VolumeRow } from '../weeklyVolume';
 
 const NOW = new Date('2026-07-13T12:00:00.000Z');
 
@@ -44,14 +46,23 @@ function block(
   };
 }
 
-function rowsFor(blocks: WeeklyVolumeBlockRow[], expandedParents?: Set<CoarseMuscle>) {
+function rowsFor(blocks: WeeklyVolumeBlockRow[]) {
   const stats = computeWeeklyMuscleVolume(blocks);
   const reachable = computeReachableMuscles(blocks);
   return {
     stats,
     reachable,
-    rows: buildVolumeRows(stats, reachable, { expandedParents }),
+    rows: buildVolumeRows(stats, reachable),
   };
+}
+
+/** The shared pinned rule every volume surface uses (reachable AND lagging). */
+const pinLagging = (child: VolumeRow) => child.belowMev && child.reachable;
+
+/** Children VISIBLE on screen for a given persisted expansion — the same
+ *  presentation-layer filter the surfaces apply via MuscleGroupList. */
+function visibleFor(rows: VolumeRow[], expanded: Set<CoarseMuscle> = new Set()) {
+  return withVisibleChildren(rows, expanded as ReadonlySet<string>, pinLagging);
 }
 
 describe('shoulders fixture: lateral raises only', () => {
@@ -62,13 +73,16 @@ describe('shoulders fixture: lateral raises only', () => {
     const shoulders = rows.find((r) => r.muscle === 'shoulders')!;
     expect(shoulders.expandable).toBe(true);
     // Side delts are fed to their MEV, front/rear are unreachable — nothing
-    // auto-surfaces while collapsed.
-    expect(shoulders.children).toHaveLength(0);
+    // auto-surfaces (pins open) while collapsed.
+    const collapsed = visibleFor(rows).find((r) => r.muscle === 'shoulders')!;
+    expect(collapsed.children).toHaveLength(0);
   });
 
   it('expanded: side delts show fed, front/rear delts show at 0', () => {
-    const { rows } = rowsFor(blocks, new Set<CoarseMuscle>(['shoulders']));
-    const shoulders = rows.find((r) => r.muscle === 'shoulders')!;
+    const { rows } = rowsFor(blocks);
+    const shoulders = visibleFor(rows, new Set<CoarseMuscle>(['shoulders'])).find(
+      (r) => r.muscle === 'shoulders'
+    )!;
     expect(shoulders.children.map((c) => c.muscle).sort()).toEqual([
       'front_delts',
       'lateral_delts',
@@ -86,20 +100,12 @@ describe('shoulders fixture: lateral raises only', () => {
   });
 
   it('…and unreachable context rows never become warnings or training targets', () => {
-    const { stats, reachable, rows } = rowsFor(blocks, new Set<CoarseMuscle>(['shoulders']));
+    const { stats, reachable, rows } = rowsFor(blocks);
     const warned = belowMevVolumeData(rows).map((d) => d.muscleGroup as string);
     expect(warned).not.toContain('front_delts');
     expect(warned).not.toContain('rear_delts');
 
-    const readiness = buildReadinessRows(
-      stats,
-      [],
-      NOW,
-      reachable,
-      undefined,
-      undefined, // sorenessOverrides
-      new Set<CoarseMuscle>(['shoulders'])
-    );
+    const readiness = buildReadinessRows(stats, [], NOW, reachable);
     const { targets } = selectGoodTargets(readiness, 50);
     const targetMuscles = targets.map((t) => t.muscle);
     expect(targetMuscles).not.toContain('front_delts');
@@ -116,7 +122,7 @@ describe('calves fixture: seated + standing raises split soleus/gastrocnemius', 
   ];
 
   it('fractional secondaries credit the sibling head, parent counts each set once', () => {
-    const { rows } = rowsFor(blocks, new Set<CoarseMuscle>(['calves']));
+    const { rows } = rowsFor(blocks);
     const calves = rows.find((r) => r.muscle === 'calves')!;
     const byMuscle = new Map(calves.children.map((c) => [c.muscle, c]));
 
@@ -133,8 +139,8 @@ describe('calves fixture: seated + standing raises split soleus/gastrocnemius', 
 
   it('a lagging soleus auto-surfaces without expansion (standing-only week)', () => {
     const { rows } = rowsFor([block('standing', 'gastrocnemius', ['soleus'], 4, 'Standing Calf Raise')]);
-    const calves = rows.find((r) => r.muscle === 'calves')!;
-    // soleus: 2 credited sets < MEV 3 → auto-surfaced warning row.
+    // soleus: 2 credited sets < MEV 3 → pinned (visible while collapsed).
+    const calves = visibleFor(rows).find((r) => r.muscle === 'calves')!;
     const soleus = calves.children.find((c) => c.muscle === 'soleus');
     expect(soleus).toBeDefined();
     expect(soleus!.sets).toBe(2);
@@ -151,7 +157,7 @@ describe('traps fixture: shrugs and face pulls feed the fine members', () => {
   ];
 
   it('fine tags feed fine members; a coarse traps tag stays on the coarse bucket', () => {
-    const { rows } = rowsFor(blocks, new Set<CoarseMuscle>(['traps']));
+    const { rows } = rowsFor(blocks);
     const traps = rows.find((r) => r.muscle === 'traps')!;
     const byMuscle = new Map(traps.children.map((c) => [c.muscle, c]));
 
@@ -201,7 +207,7 @@ describe('property: parent total == fine-child credits + coarse-tagged credits, 
 
   it('every coarse row equals the rounded sum of its standard children — no set counted twice', () => {
     const raw = rawCredits(blocks);
-    const { rows } = rowsFor(blocks, new Set<CoarseMuscle>(COARSE_MUSCLES));
+    const { rows } = rowsFor(blocks);
 
     for (const row of rows) {
       const expected = COARSE_CHILDREN[row.muscle as CoarseMuscle].reduce(
@@ -251,9 +257,13 @@ describe('unfeedable libraries: no fine row, no chevron, no warning', () => {
   });
 
   it('a stale persisted expansion cannot resurrect an unfeedable fine row', () => {
-    const { rows } = rowsFor(blocks, new Set<CoarseMuscle>(['calves', 'traps', 'glutes', 'abs']));
+    const { rows } = rowsFor(blocks);
+    // Non-expandable rows carry no children at all — so even a stale persisted
+    // expansion (presentation layer) has nothing to reveal.
+    const stale = visibleFor(rows, new Set<CoarseMuscle>(['calves', 'traps', 'glutes', 'abs']));
     for (const muscle of ['calves', 'traps', 'glutes', 'abs'] as const) {
       expect(rows.find((r) => r.muscle === muscle)!.children).toHaveLength(0);
+      expect(stale.find((r) => r.muscle === muscle)!.children).toHaveLength(0);
     }
   });
 

@@ -95,12 +95,6 @@ export interface UseMuscleReadinessArgs {
    * model — the subjective report outranks the heuristic same-day.
    */
   sorenessOverrides?: ReadonlySet<StandardMuscleGroup>;
-  /**
-   * Coarse groups the user expanded (shared, persisted per user via
-   * useExpandedVolumeRows) — all their fine children render, exactly as on
-   * the volume page.
-   */
-  expandedParents?: Set<CoarseMuscle>;
 }
 
 export interface UseMuscleReadinessResult {
@@ -217,7 +211,6 @@ export function useMuscleReadiness({
   now,
   enabled,
   sorenessOverrides,
-  expandedParents,
 }: UseMuscleReadinessArgs): UseMuscleReadinessResult {
   const { user: storeUser } = useUserStore();
   const { historyRows, sessions, isLoading, error, refetch } = useRecoveryHistory(now, enabled);
@@ -309,8 +302,8 @@ export function useMuscleReadiness({
   );
 
   const rows = useMemo(
-    () => buildReadinessRows(stats, recoveryHistory, now, reachable, recoveryConfig, sorenessOverrides, expandedParents),
-    [stats, recoveryHistory, now, reachable, recoveryConfig, sorenessOverrides, expandedParents]
+    () => buildReadinessRows(stats, recoveryHistory, now, reachable, recoveryConfig, sorenessOverrides),
+    [stats, recoveryHistory, now, reachable, recoveryConfig, sorenessOverrides]
   );
 
   const { targets, nextUp } = useMemo(() => selectGoodTargets(rows, 3), [rows]);

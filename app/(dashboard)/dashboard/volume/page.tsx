@@ -8,18 +8,22 @@ import { useUserStore } from '@/stores';
 import { FatigueAlertList } from '@/components/workout/FatigueAlertBanner';
 import { AtrophyRiskAlert } from '@/components/analytics/AtrophyRiskAlert';
 import { WeeklyMevSummary } from '@/components/dashboard/WeeklyMevSummary';
-import { VolumeZoneBar } from '@/components/analytics/VolumeZoneBar';
+import { VolumeRowContent, VolumeChildContent } from '@/components/analytics/VolumeZoneBar';
+import {
+  MuscleGroupList,
+  useMuscleRowExpansion,
+  withVisibleChildren,
+} from '@/components/muscle/MuscleGroupList';
 import { EnhancedAthleteModeCard } from '@/components/settings/EnhancedAthleteModeCard';
 import { MuscleMap } from '@/components/muscleMap/MuscleMap';
 import { volumeRowsToMapData } from '@/lib/muscleMap/adapters';
 import type { MuscleId } from '@/lib/muscleMap/taxonomy';
 import { useWeeklyMevSummary } from '@/hooks/useWeeklyMevSummary';
-import { useExpandedVolumeRows } from '@/hooks/useExpandedVolumeRows';
 import {
   buildVolumeRows,
   belowMevVolumeData,
   STANDARD_TO_COARSE,
-  type CoarseMuscle,
+  type VolumeRow,
 } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 import {
   compareProfileToResearch,
@@ -181,10 +185,6 @@ export default function VolumeProfilePage() {
   const { user } = useUserStore();
   const userGoal = user?.goal ?? 'maintenance';
 
-  // Which coarse groups the user expanded to reveal all fine children —
-  // persisted per user and shared with the readiness surfaces.
-  const { expandedRows, toggleRow } = useExpandedVolumeRows();
-
   // Below-MEV muscles for the atrophy-risk warning come from the SAME coarse
   // rows the bars render (shared counter + band), so the warning, the bars and
   // the "This Week vs MEV" card can never disagree on count or zone-status.
@@ -214,8 +214,20 @@ export default function VolumeProfilePage() {
   // zone-status agree everywhere. The volume page's old primary-only counting
   // (and its separate MEV/MRV taxonomy) is retired.
   const volumeRows = useMemo(
-    () => buildVolumeRows(volumeStats, reachable, { expandedParents: expandedRows }),
-    [volumeStats, reachable, expandedRows]
+    () => buildVolumeRows(volumeStats, reachable),
+    [volumeStats, reachable]
+  );
+
+  // Shared hierarchy expansion (persisted per user for this surface); lagging
+  // (below-MEV) fine children stay pinned visible even while collapsed.
+  const expansion = useMuscleRowExpansion('volume', volumeRows);
+  // Pinned = reachable AND lagging; unreachable context rows only show on expand.
+  const pinLaggingChild = useCallback((child: VolumeRow) => child.belowMev && child.reachable, []);
+  // Rows narrowed to the children actually on screen — the body map and the
+  // tap-to-scroll targets must match the visible bars, not the full hierarchy.
+  const visibleRows = useMemo(
+    () => withVisibleChildren(volumeRows, expansion.expanded, pinLaggingChild),
+    [volumeRows, expansion.expanded, pinLaggingChild]
   );
 
   // Find muscles below MEV (for atrophy risk alert) — same coarse rows as bars.
@@ -231,12 +243,12 @@ export default function VolumeProfilePage() {
     setMapCollapsedState(value);
     persistMapCollapsed(value);
   };
-  const mapData = useMemo(() => volumeRowsToMapData(volumeRows), [volumeRows]);
+  const mapData = useMemo(() => volumeRowsToMapData(visibleRows), [visibleRows]);
   // Standard muscles that have their own (fine child) bar row on screen —
   // taps on those scroll to the child row, everything else to the coarse row.
   const renderedChildMuscles = useMemo(
-    () => new Set(volumeRows.flatMap((row) => row.children.map((c) => c.muscle))),
-    [volumeRows]
+    () => new Set(visibleRows.flatMap((row) => row.children.map((c) => c.muscle))),
+    [visibleRows]
   );
   const scrollToMuscleRow = useCallback(
     (muscle: MuscleId) => {
@@ -361,14 +373,15 @@ export default function VolumeProfilePage() {
         </div>
 
         <div>
-          {volumeRows.map((row) => (
-            <VolumeZoneBar
-              key={row.key}
-              row={row}
-              expanded={expandedRows.has(row.muscle as CoarseMuscle)}
-              onToggle={() => toggleRow(row.muscle as CoarseMuscle)}
-            />
-          ))}
+          <MuscleGroupList
+            rows={volumeRows}
+            expansion={expansion}
+            renderRow={(row) => <VolumeRowContent row={row} />}
+            renderChild={(child) => <VolumeChildContent child={child} />}
+            pinChild={pinLaggingChild}
+            testIdPrefix="volume-row"
+            rowClassName="py-3 border-b border-surface-800 last:border-b-0"
+          />
         </div>
       </Card>
 

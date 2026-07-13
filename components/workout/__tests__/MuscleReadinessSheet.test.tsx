@@ -105,8 +105,10 @@ const REAL_TIMER_APIS = [
 
 beforeEach(() => {
   jest.useFakeTimers({ now: NOW, doNotFake: [...REAL_TIMER_APIS] });
-  // Expander state persists in sessionStorage across mounts — reset per test.
+  // Expander state persists in sessionStorage across mounts, and hierarchy
+  // expansion persists in localStorage per user per surface — reset per test.
   window.sessionStorage.clear();
+  window.localStorage.clear();
   mockBlocks = [
     {
       exercises: { id: 'ex-squat', name: 'Squat', primary_muscle: 'quads', secondary_muscles: ['glutes'] },
