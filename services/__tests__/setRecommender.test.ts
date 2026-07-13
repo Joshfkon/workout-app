@@ -177,6 +177,50 @@ describe('recommendSet', () => {
   });
 });
 
+describe('trigger — each weight decision names the exact rule that fired', () => {
+  it('rep_overshoot: reps alone prove under-load (> repMax + overshoot)', () => {
+    const r = recommendSet(base({ lastWeightKg: 110, lastReps: 20, lastRir: 4 }));
+    expect(r.rationale).toBe('increase_load');
+    expect(r.trigger).toBe('rep_overshoot');
+  });
+
+  it('top_range_reserve: hit the top of the range with >= deadband RIR spare', () => {
+    // 12 reps (== repMax, not > 14) at 4 RIR vs 2 target.
+    const r = recommendSet(base({ lastReps: 12, lastRir: 4 }));
+    expect(r.rationale).toBe('increase_load');
+    expect(r.trigger).toBe('top_range_reserve');
+  });
+
+  it('below_rep_min: reps under the range names the rep trigger even at 0 RIR', () => {
+    const r = recommendSet(base({ lastWeightKg: 100, lastReps: 6, lastRir: 0 }));
+    expect(r.rationale).toBe('reduce_load');
+    expect(r.trigger).toBe('below_rep_min');
+  });
+
+  it('rir_deficit: in-range reps but RIR >= deadband under target', () => {
+    const r = recommendSet(base({ lastReps: 10, lastRir: 0 }));
+    expect(r.rationale).toBe('reduce_load');
+    expect(r.trigger).toBe('rir_deficit');
+  });
+
+  it('none: holds inside the deadband and on the degenerate-input guard', () => {
+    expect(recommendSet(base({ lastReps: 10, lastRir: 2 })).trigger).toBe('none');
+    expect(recommendSet(base({ lastWeightKg: 0, lastReps: 0 })).trigger).toBe('none');
+  });
+
+  it('flows through recommendSessionStart (live bug: 20 reps @ 4 RIR vs 10-15 @ 2)', () => {
+    const r = recommendSessionStart({
+      prevWeightKg: 9.07,
+      prevReps: 20,
+      prevRir: 4,
+      targetRepRange: [10, 15],
+      targetRir: 2,
+      minIncrementKg: 1.13,
+    });
+    expect(r.trigger).toBe('rep_overshoot');
+  });
+});
+
 describe('resolveLastRir — engine input comes from the STORED set, never UI state', () => {
   it('reads the logged RIR chip (feedback.repsInTank) as the source of truth', () => {
     // Persisted set: logged 3 RIR ("easy" chip). rpe was stored as 7 (rirToRpe(3)).

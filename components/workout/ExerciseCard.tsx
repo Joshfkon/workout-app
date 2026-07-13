@@ -225,8 +225,9 @@ interface ExerciseCardProps {
   // surfaces an inline note when the joint-stress RIR floor binds (the
   // floor itself never reads this flag; see services/exerciseSafety.ts).
   enhancedAthleteMode?: boolean;
-  // Deload session: the banner holds light instead of prescribing progression,
-  // and the rationale copy says so ("deload — holding light").
+  // Deload session: the banner holds the reduced deload load instead of
+  // prescribing progression, and the rationale copy says so
+  // ("deload — reduced load this session").
   isDeloadSession?: boolean;
 }
 
@@ -1192,6 +1193,10 @@ export const ExerciseCard = memo(function ExerciseCard({
       return delta > 0 ? `${delta} ${weightLabel}` : '';
     };
 
+    // Observed RIR for the reason string. Half-step values are real data (the
+    // RIR-2 "good" chip stores RPE 7.5) — show one decimal, not a rounded lie.
+    const fmtRir = (r: number) => (Number.isInteger(r) ? String(r) : r.toFixed(1));
+
     if (lastCompleted) {
       // Within-session: anchor to the just-completed set. This path already re-
       // anchors on whatever the user actually logged, so a logged override (Phase 4)
@@ -1208,18 +1213,34 @@ export const ExerciseCard = memo(function ExerciseCard({
       // show it as the single predicted number.
       repsLabel = String(reps);
       const deltaText = deltaLabel(lastCompleted.weightKg, weight);
+      // Each engine trigger gets its own factual string: observed reps/RIR vs
+      // the target, then the load action — no shared "too light/heavy" copy.
+      const lastRir = fmtRir(resolveLastRir(lastSetData, effectiveTargetRir));
+      const loadUp = deltaText ? `load +${deltaText}` : 'load up';
+      const loadDown = deltaText ? `load -${deltaText}` : 'load down';
+      const hasEffortSignal = lastCompleted.feedback?.repsInTank != null || lastCompleted.rpe != null;
       if (rec.rationale === 'increase_load') {
-        reason = `up ${deltaText || 'slightly'} — last set was clearly too light`;
+        reason =
+          rec.trigger === 'rep_overshoot'
+            ? `${lastCompleted.reps} reps over ${rangeLabel} target — ${loadUp}`
+            : `${lastCompleted.reps} reps @ ${lastRir} RIR vs ${effectiveTargetRir} target — ${loadUp}`;
       } else if (rec.rationale === 'reduce_load') {
-        reason = `down ${deltaText || 'slightly'} — last set was harder than the target effort`;
+        reason =
+          rec.trigger === 'below_rep_min'
+            ? `${lastCompleted.reps} reps under ${rangeLabel} target — ${loadDown}`
+            : `hit ${lastRir} RIR vs ${effectiveTargetRir} target — ${loadDown}`;
+      } else if (lastCompleted.weightKg <= 0 || lastCompleted.reps <= 0) {
+        // Engine guard branch: no usable load/rep reference — no rule matched.
+        reason = 'no load reference — holding targets';
+      } else if (!hasEffortSignal) {
+        // No RIR/RPE logged on the reference set — no effort rule can match.
+        reason = 'no effort logged — holding load';
       } else if (rec.effortVsTarget === 'easier') {
-        // Held the weight, but the logged effort was BELOW target (more reps in
-        // reserve than asked) — say so and aim a little higher, never "matched".
-        reason = 'holding the weight — last set was easier than target, so aim for a rep or two more';
+        reason = `${lastRir} RIR vs ${effectiveTargetRir} target — holding load, rep estimate raised`;
       } else if (rec.effortVsTarget === 'harder') {
-        reason = 'holding the weight — last set ran a bit harder than target';
+        reason = `${lastRir} RIR vs ${effectiveTargetRir} target — holding load, rep estimate lowered`;
       } else {
-        reason = 'holding the weight — your last set matched the target effort';
+        reason = `${lastRir} RIR matched ${effectiveTargetRir} target — holding load`;
       }
       explanation.push(
         `Anchored to your last set: ${displayWeight(lastCompleted.weightKg, true)} ${weightLabel} × ${lastCompleted.reps} at RPE ${lastCompleted.rpe}. Its estimated 1RM sets the capacity this prescription works back from.`
@@ -1242,7 +1263,7 @@ export const ExerciseCard = memo(function ExerciseCard({
 
       if (seed.role === 'ramp') {
         const pct = Math.round(RAMP_LOAD_FRACTION * 100);
-        reason = 'ramp set — light feeder for your working sets';
+        reason = `ramp set — ~${pct}% of today's top working set`;
         explanation.push(
           `This is a ramp/feeder set (~${pct}% of today's top working set), so there's no RIR target and it isn't counted as junk volume.`
         );
@@ -1253,7 +1274,7 @@ export const ExerciseCard = memo(function ExerciseCard({
         }
       } else if (seed.anchorSource === 'e1rm') {
         reason = seed.clamped
-          ? `working weight from your ~${displayWeight(anchorE1RMKg)} ${weightLabel} est. 1RM (held near recent working weight)`
+          ? `working weight from your ~${displayWeight(anchorE1RMKg)} ${weightLabel} est. 1RM (capped ±${Math.round(WORKING_WEIGHT_CLAMP_FRACTION * 100)}% of recent working weight)`
           : `working weight from your ~${displayWeight(anchorE1RMKg)} ${weightLabel} est. 1RM`;
         explanation.push(
           `Prescribed from your best estimated 1RM (${displayWeight(anchorE1RMKg)} ${weightLabel}) for ${seed.repRange[0]}–${seed.repRange[1]} reps at ${effectiveTargetRir} RIR.`
@@ -1265,7 +1286,22 @@ export const ExerciseCard = memo(function ExerciseCard({
         }
       } else if (seed.anchorSource === 'last_session' && prevSet) {
         const prevRir = prevSet.rpe != null ? rpeToRir(prevSet.rpe) : null;
-        reason = 'starting from last session';
+        // Same trigger→string mapping as the within-session banner, phrased
+        // against last session's set (the seed's reference).
+        const prevDelta = deltaLabel(prevSet.weightKg, weight);
+        const seedUp = prevDelta ? `load +${prevDelta}` : 'load up';
+        const seedDown = prevDelta ? `load -${prevDelta}` : 'load down';
+        if (seed.trigger === 'rep_overshoot') {
+          reason = `${prevSet.reps} reps over ${rangeLabel} target last session — ${seedUp}`;
+        } else if (seed.trigger === 'top_range_reserve') {
+          reason = `${prevSet.reps} reps @ ${fmtRir(prevRir ?? effectiveTargetRir)} RIR vs ${effectiveTargetRir} target last session — ${seedUp}`;
+        } else if (seed.trigger === 'below_rep_min') {
+          reason = `${prevSet.reps} reps under ${rangeLabel} target last session — ${seedDown}`;
+        } else if (seed.trigger === 'rir_deficit') {
+          reason = `hit ${fmtRir(prevRir ?? effectiveTargetRir)} RIR vs ${effectiveTargetRir} target last session — ${seedDown}`;
+        } else {
+          reason = 'repeating last session';
+        }
         explanation.push(
           `No estimated 1RM on record yet, so the load is anchored to last session: ${displayWeight(prevSet.weightKg, true)} ${weightLabel} × ${prevSet.reps}${prevRir != null ? ` at ${prevRir} RIR` : ''}.`
         );
@@ -1301,7 +1337,7 @@ export const ExerciseCard = memo(function ExerciseCard({
     // progression — and this session is excluded from PRs, e1RM trends and
     // next-week anchoring.
     if (isDeloadSession) {
-      reason = 'deload — holding light';
+      reason = 'deload — reduced load this session';
       explanation.unshift(
         'Deload session: keeping the load easy to shed fatigue. This session is held out of PRs, e1RM trends and next session’s weight suggestion.'
       );

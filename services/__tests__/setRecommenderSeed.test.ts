@@ -83,6 +83,22 @@ describe('recommendSeedForSlot — anchors & clamps', () => {
     const r = recommendSeedForSlot(seed({ anchorE1RMKg: 0 }));
     expect(r.anchorSource).toBe('last_session');
     expect(r.repRange).toEqual(RANGE);
+    // 13 reps clears the 8–12 top with 2 RIR spare (4 vs 2 target); 13 is not
+    // past the +2 rep-overshoot line, so the named rule is top_range_reserve.
+    expect(r.trigger).toBe('top_range_reserve');
+  });
+
+  it('reports trigger "none" when the seed just repeats last session', () => {
+    const r = recommendSeedForSlot(
+      seed({ anchorE1RMKg: 0, prevWeightKg: 160, prevReps: 10, prevRir: 2 })
+    );
+    expect(r.anchorSource).toBe('last_session');
+    expect(r.trigger).toBe('none');
+  });
+
+  it('e1RM and ramp anchors always carry trigger "none" (no adjustment vs a reference set)', () => {
+    expect(recommendSeedForSlot(seed({ role: 'working' })).trigger).toBe('none');
+    expect(recommendSeedForSlot(seed({ role: 'ramp' })).trigger).toBe('none');
   });
 
   it('does not clamp when the e1RM prescription is within ±10% of recent working weight', () => {
