@@ -9,7 +9,6 @@
  *
  *   🟩🟩🟩🟨  Incline Press 🏆
  *   🟩🟩🟩⬜  Lateral Raise
- *   ⬛⬛⬛  Nordic Curl
  *
  *   18 sets · 21,340 lb · 58 min · 🏆 2 PRs
  *   🟩 hit · 🟨 grind
@@ -18,6 +17,8 @@
  * alignment survives proportional fonts (the layout must read well ragged —
  * no space-padding beyond simple separators). Training data only: never
  * include body weight, body composition, calories, or nutrition data.
+ * Fully skipped exercises (no performed sets) are omitted — the share shows
+ * only what was done.
  *
  * Square encoding is a single binary judgment per working set, using the same
  * band logic the rest of the app grades sets by:
@@ -54,7 +55,7 @@ export interface ShareExercise {
   targetRir: number;
   /** Performed working sets in order. Empty when the exercise was skipped. */
   sets: ShareSet[];
-  /** Exercise skipped entirely — rendered as up to 3 ⬛ squares. */
+  /** Exercise skipped entirely — omitted from the share output. */
   skipped?: boolean;
   hasPR?: boolean;
 }
@@ -82,13 +83,10 @@ const MAX_EXERCISE_ROWS = 8;
 const ROWS_WHEN_COLLAPSED = 7;
 /** Cap on squares shown in the "+N more" collapse line. */
 const MAX_COLLAPSE_SQUARES = 12;
-/** Max ⬛ squares rendered for a fully skipped exercise. */
-const MAX_SKIPPED_SQUARES = 3;
 
 const GREEN = '🟩';
 const YELLOW = '🟨';
 const WHITE = '⬜';
-const BLACK = '⬛';
 const AMRAP_SUFFIX = '⚡';
 const PR_MARKER = '🏆';
 
@@ -123,11 +121,13 @@ export function isSetHit(set: ShareSet, targetRepMin: number, targetRir: number)
   return rir >= targetRir;
 }
 
+/** True when the exercise was skipped outright — no working sets performed. */
+function isSkipped(exercise: ShareExercise): boolean {
+  return Boolean(exercise.skipped) || exercise.sets.length === 0;
+}
+
 /** Squares row for one exercise (no name). */
 function buildSquares(exercise: ShareExercise): string {
-  if (exercise.skipped || exercise.sets.length === 0) {
-    return BLACK.repeat(Math.max(1, Math.min(MAX_SKIPPED_SQUARES, exercise.targetSets)));
-  }
   const [targetRepMin] = exercise.targetRepRange;
   const countedSets = exercise.sets.filter((s) => !s.isDropset);
   let squares = countedSets
@@ -217,7 +217,7 @@ function buildFooter(input: WorkoutShareTextInput): string {
 }
 
 /** Every glyph counted as two width units by `shareLineWidth`. */
-const WIDE_GLYPHS = [GREEN, YELLOW, WHITE, BLACK, AMRAP_SUFFIX, PR_MARKER, '💪', '🏋️', '🦵', '📅'];
+const WIDE_GLYPHS = [GREEN, YELLOW, WHITE, AMRAP_SUFFIX, PR_MARKER, '💪', '🏋️', '🦵', '📅'];
 
 /**
  * Emoji-aware rendered width of one line: each emoji square / pictograph counts
@@ -244,12 +244,16 @@ export function shareLineWidth(line: string): number {
  * same output.
  */
 export function formatWorkoutShareText(input: WorkoutShareTextInput): string {
-  const exerciseLines = buildExerciseLines(input.exercises, input.cryptic ?? false);
+  // Skipped exercises never make the share — only performed work is shown.
+  const performed = input.exercises.filter((e) => !isSkipped(e));
+  const exerciseLines = buildExerciseLines(performed, input.cryptic ?? false);
 
   const lines: string[] = [`${APP_NAME} 💪 ${input.title}`];
   if (input.subtitle) lines.push(input.subtitle);
-  lines.push('');
-  lines.push(...exerciseLines);
+  if (exerciseLines.length > 0) {
+    lines.push('');
+    lines.push(...exerciseLines);
+  }
   lines.push('');
   lines.push(buildFooter(input));
   // The legend answers "why yellow?" — shown only when a miss exists, so an
