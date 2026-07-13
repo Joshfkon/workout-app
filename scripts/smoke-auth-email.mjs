@@ -18,6 +18,13 @@
  *               the admin API and follows its redirect chain, asserting it
  *               lands on <APP_URL>/auth/callback. Verifies redirect config
  *               without needing an inbox.
+ *   --ci        Fully non-interactive (for GitHub Actions): uniquifies the
+ *               mailbox with a +ci-<timestamp> tag, runs the link redirect
+ *               assertion, performs a real signup, and asserts the message
+ *               appears in Resend's sent log within 2 minutes (REQUIRES
+ *               RESEND_API_KEY — Supabase's own send reports nothing, the
+ *               sent log is the only place a silent drop is visible). Cleans
+ *               up all throwaway users. Non-zero exit on any failure.
  *
  * Optional env:
  *   NEXT_PUBLIC_APP_URL  Expected app origin (default https://hypertrack.app)
@@ -37,8 +44,9 @@ const CONFIRM_WAIT_MS = 10 * 60 * 1000; // wait for the human to click the link
 const POLL_MS = 5000;
 
 const args = process.argv.slice(2);
-const email = args.find((a) => !a.startsWith('--'));
+const emailArg = args.find((a) => !a.startsWith('--'));
 const linkOnly = args.includes('--link-only');
+const ciMode = args.includes('--ci');
 const keep = args.includes('--keep');
 
 function fail(msg) {
@@ -46,7 +54,7 @@ function fail(msg) {
   process.exit(1);
 }
 
-if (!email || !email.includes('@')) {
+if (!emailArg || !emailArg.includes('@')) {
   fail('pass a throwaway email you control, e.g. you+smoke1@gmail.com');
 }
 if (!SUPABASE_URL || !SERVICE_KEY || (!linkOnly && !ANON_KEY)) {
@@ -55,6 +63,16 @@ if (!SUPABASE_URL || !SERVICE_KEY || (!linkOnly && !ANON_KEY)) {
       (linkOnly ? '' : ', NEXT_PUBLIC_SUPABASE_ANON_KEY')
   );
 }
+if (ciMode && !RESEND_KEY) {
+  fail(
+    '--ci requires RESEND_API_KEY: without the Resend sent-log there is no way to detect a silent drop (Supabase signUp/resend report success either way).'
+  );
+}
+
+// In CI, uniquify the mailbox with plus-addressing so reruns never collide
+// with a leftover user, and delivery still lands in the base inbox.
+const plusTag = (addr, tag) => addr.replace('@', `+${tag}@`);
+const email = ciMode ? plusTag(emailArg, `ci-${Date.now()}`) : emailArg;
 
 const REDIRECT_TO = `${APP_URL}/auth/callback?next=/onboarding`;
 const PASSWORD = `Smoke-${Math.random().toString(36).slice(2)}-Aa1!`;
@@ -118,6 +136,90 @@ async function checkResendSentLog(addr) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * Generate a signup confirmation link via the admin API and assert its verify
+ * redirect lands on <APP_URL>/auth/callback. Catches Redirect-URLs allow-list
+ * problems (Supabase silently falls back to the Site URL) without an inbox.
+ * Creates — and deletes — a throwaway user for the given address.
+ */
+async function assertLinkRedirect(addr) {
+  console.log(`Generating signup confirmation link for ${addr} (redirect-config check)...`);
+  const { status, json } = await api('/auth/v1/admin/generate_link', {
+    method: 'POST',
+    admin: true,
+    body: { type: 'signup', email: addr, password: PASSWORD, options: { redirect_to: REDIRECT_TO } },
+  });
+  if (status >= 300) fail(`generate_link failed (${status}): ${JSON.stringify(json)}`);
+  const link = json.action_link || json.properties?.action_link;
+  if (!link) fail(`no action_link in response: ${JSON.stringify(json)}`);
+  console.log(`Action link: ${link}`);
+
+  // GET consumes the token — fine, this is a throwaway user.
+  const res = await fetch(link, { redirect: 'manual' });
+  const location = res.headers.get('location') || '(none)';
+  console.log(`Verify endpoint responded ${res.status}, Location: ${location}`);
+
+  const ok = location.startsWith(`${APP_URL}/auth/callback`);
+  const user = await findUserByEmail(addr);
+  if (user && !keep) await deleteUser(user.id);
+  if (!ok) {
+    fail(
+      `confirmation link redirects to "${location}" — expected it to start with ${APP_URL}/auth/callback.\n` +
+        'Likely cause: redirect_to not in the dashboard Redirect URLs allow-list (silent fallback to Site URL), or Site URL misconfigured.'
+    );
+  }
+}
+
+/**
+ * CI delivery check: real signup, then poll Resend's sent log until the
+ * message to `addr` shows up (bounded by EMAIL_WAIT_MS). A signup that
+ * "succeeds" while nothing reaches the sent log IS the silent-drop incident
+ * this job exists to catch.
+ */
+async function runCiDeliveryCheck(addr) {
+  console.log(`Signing up throwaway user ${addr} (delivery check)...`);
+  const { status, json } = await api('/auth/v1/signup', {
+    method: 'POST',
+    body: { email: addr, password: PASSWORD, options: { email_redirect_to: REDIRECT_TO } },
+  });
+  if (status >= 300) fail(`signup failed (${status}): ${JSON.stringify(json)}`);
+
+  let userId = null;
+  let hit = null;
+  let bounced = null;
+  try {
+    if (json.access_token || json.session) {
+      fail('signup returned a session immediately — email confirmation is DISABLED, so no confirmation email is ever sent. Re-enable it in Authentication → Sign In / Providers → Email.');
+    }
+
+    const start = Date.now();
+    while (Date.now() - start < EMAIL_WAIT_MS) {
+      hit = await checkResendSentLog(addr);
+      if (hit) break;
+      console.log(`[${Math.round((Date.now() - start) / 1000)}s] not in Resend sent log yet...`);
+      await sleep(POLL_MS);
+    }
+    if (hit) {
+      console.log(`Resend sent log: message ${hit.id}, status: ${hit.last_event || 'unknown'}`);
+      if (['bounced', 'complained'].includes(hit.last_event)) bounced = hit.last_event;
+    }
+  } finally {
+    const user = await findUserByEmail(addr);
+    userId = user?.id ?? null;
+    if (userId && !keep) await deleteUser(userId);
+  }
+
+  if (!hit) {
+    fail(
+      `signup succeeded but NO message to ${addr} appeared in the Resend sent log within ${EMAIL_WAIT_MS / 1000}s — confirmation emails are being silently dropped ` +
+        '(rate limit, SMTP misconfig, or Supabase is back on the built-in sender). See docs/AUTH_EMAIL_DELIVERY_AUDIT.md §4.'
+    );
+  }
+  if (bounced) {
+    fail(`message reached Resend but its status is "${bounced}" — check domain verification and the suppression list.`);
+  }
+}
+
 async function main() {
   console.log(`Target project : ${SUPABASE_URL}`);
   console.log(`App origin     : ${APP_URL}`);
@@ -127,34 +229,18 @@ async function main() {
   if (existing) fail(`user ${email} already exists (${existing.id}) — pick a fresh plus-address or delete it first`);
 
   if (linkOnly) {
-    // ---- Link-only mode: verify the confirmation link's redirect target ----
-    console.log('Generating signup confirmation link via admin API (no email is sent in this mode on hosted projects when SMTP is absent; the link itself is what we test)...');
-    const { status, json } = await api('/auth/v1/admin/generate_link', {
-      method: 'POST',
-      admin: true,
-      body: { type: 'signup', email, password: PASSWORD, options: { redirect_to: REDIRECT_TO } },
-    });
-    if (status >= 300) fail(`generate_link failed (${status}): ${JSON.stringify(json)}`);
-    const link = json.action_link || json.properties?.action_link;
-    if (!link) fail(`no action_link in response: ${JSON.stringify(json)}`);
-    console.log(`Action link: ${link}`);
-
-    // Follow the verify redirect WITHOUT consuming... note: GET does consume
-    // the token, which is fine — this is a throwaway user.
-    const res = await fetch(link, { redirect: 'manual' });
-    const location = res.headers.get('location') || '(none)';
-    console.log(`Verify endpoint responded ${res.status}, Location: ${location}`);
-
-    const ok = location.startsWith(`${APP_URL}/auth/callback`);
-    const user = await findUserByEmail(email);
-    if (user && !keep) await deleteUser(user.id);
-    if (!ok) {
-      fail(
-        `confirmation link redirects to "${location}" — expected it to start with ${APP_URL}/auth/callback.\n` +
-          'Likely cause: redirect_to not in the dashboard Redirect URLs allow-list (silent fallback to Site URL), or Site URL misconfigured.'
-      );
-    }
+    await assertLinkRedirect(email);
     console.log('\nPASS: confirmation link redirects to the app callback correctly.');
+    return;
+  }
+
+  if (ciMode) {
+    // Redirect-config assertion on a second throwaway address (generate_link
+    // creates a user too), then the real delivery check.
+    await assertLinkRedirect(plusTag(emailArg, `ci-${Date.now()}-link`));
+    console.log('Link redirect check passed.\n');
+    await runCiDeliveryCheck(email);
+    console.log('\nPASS: confirmation email reached the Resend sent log — no silent drop.');
     return;
   }
 

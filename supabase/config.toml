@@ -220,6 +220,18 @@ otp_expiry = 3600
 # admin_email = "admin@email.com"
 # sender_name = "Admin"
 
+# Custom auth email templates. Both include the 6-digit {{ .Token }} so users
+# who open the email on a different device can finish via /verify-code instead
+# of the (device-bound) link. Production templates must be pasted into the
+# dashboard by hand — see supabase/templates/README.md.
+[auth.email.template.confirmation]
+subject = "Confirm your HyperTrack account"
+content_path = "./supabase/templates/confirmation.html"
+
+[auth.email.template.recovery]
+subject = "Reset your HyperTrack password"
+content_path = "./supabase/templates/recovery.html"
+
 # Uncomment to customize email template
 # [auth.email.template.invite]
 # subject = "You have been invited"

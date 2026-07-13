@@ -3,6 +3,20 @@
 Date: 2026-07-13 · Scope: read-only code/config audit + manual checklist.
 No configuration was changed.
 
+> **Addendum (2026-07-13, hardening shipped):** the failure modes described
+> below have since been mitigated in code — completing a recovery/magiclink/
+> invite link now backfills `email_confirmed_at` (`app/(auth)/auth/callback/
+> route.ts`), all callback failure paths route to the new `/verify-code` OTP
+> screen instead of "Authentication failed" (kills the PKCE cross-device
+> trap), login shows a single amber confirm-email state with a 60s-cooldown
+> resend, registration shows the sent-to address with a change-email
+> affordance, and `.github/workflows/auth-email-smoke.yml` runs
+> `scripts/smoke-auth-email.mjs --ci` weekly + on auth-touching PRs. Two
+> manual dashboard steps remain: paste the email templates
+> (see `supabase/templates/README.md` — they add the `{{ .Token }}` code the
+> OTP screen needs) and configure the `SMOKE_*` repo secrets listed in the
+> workflow header. §5's SMTP checklist still applies unchanged.
+
 ---
 
 ## 1. Code + env inventory

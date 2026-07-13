@@ -16,6 +16,12 @@ export default function RegisterPage() {
   const [experience, setExperience] = useState<Experience>('intermediate');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  // Address a confirmation email was sent to. Renders the post-signup screen
+  // in place instead of bouncing to /login, so the user can see exactly which
+  // address it went to and fix a typo (a typo'd signup email is otherwise an
+  // unrecoverable dead account — the confirmation goes to a mailbox nobody
+  // owns).
+  const [sentTo, setSentTo] = useState<string | null>(null);
   const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -64,14 +70,14 @@ export default function RegisterPage() {
 
       // If email confirmation is required
       if (data.user && !data.session) {
-        // Hand the email to the login page via sessionStorage, not the URL —
-        // a query param would put PII in browser history and access logs.
+        // Hand the email to login/verify-code via sessionStorage, not the
+        // URL — a query param would put PII in browser history and access logs.
         try {
           sessionStorage.setItem('ht-pending-confirmation-email', email);
         } catch {
-          // Storage unavailable (private mode etc.) — login just won't prefill.
+          // Storage unavailable (private mode etc.) — those pages just won't prefill.
         }
-        router.push(`/login?message=${encodeURIComponent('Check your email to confirm your account')}`);
+        setSentTo(email);
         return;
       }
 
@@ -99,6 +105,44 @@ export default function RegisterPage() {
         </Link>
       </div>
 
+      {sentTo ? (
+        <Card variant="elevated" className="p-6">
+          <div className="text-center space-y-4" data-testid="confirmation-sent">
+            <div className="w-16 h-16 mx-auto rounded-full bg-success-500/20 flex items-center justify-center">
+              <svg className="w-8 h-8 text-success-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+            </div>
+            <h2 className="text-xl font-bold text-surface-100">Confirm your email</h2>
+            <p className="text-surface-400">
+              We sent a confirmation link to{' '}
+              <span className="text-surface-200 font-medium">{sentTo}</span>
+            </p>
+            <p className="text-sm text-surface-500">
+              Not there after a couple of minutes? Check your spam folder. You can also enter the
+              6-digit code from the email instead of clicking the link.
+            </p>
+            <div className="space-y-3 pt-2">
+              <Link href="/verify-code?type=signup">
+                <Button className="w-full">Enter code instead</Button>
+              </Link>
+              <button
+                type="button"
+                onClick={() => setSentTo(null)}
+                className="text-sm text-primary-400 hover:text-primary-300 font-medium underline"
+              >
+                Wrong address? Change email
+              </button>
+            </div>
+            <p className="text-sm text-surface-400 pt-2">
+              Already confirmed?{' '}
+              <Link href="/login" className="text-primary-400 hover:text-primary-300 font-medium">
+                Sign in
+              </Link>
+            </p>
+          </div>
+        </Card>
+      ) : (
       <Card variant="elevated" className="p-6">
         <div className="text-center mb-6">
           <h1 className="text-2xl font-bold text-surface-100">Create your account</h1>
@@ -197,6 +241,7 @@ export default function RegisterPage() {
           </p>
         </div>
       </Card>
+      )}
 
       <div className="mt-4 text-center">
         <p className="text-xs text-surface-600">
