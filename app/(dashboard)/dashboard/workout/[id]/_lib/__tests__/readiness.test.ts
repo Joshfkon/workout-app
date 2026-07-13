@@ -130,7 +130,7 @@ describe('selectGoodTargets', () => {
     // (a "Fresh, mid-zone" muscle has gap 0, so it isn't eligible either).
     const triceps = { ...stat('triceps', 12), sets: 0, exercises: [{ id: 'triceps', name: 'triceps ex', sets: 0 }] };
     const stats = [triceps, ...ALL_AT_MEV.filter((s) => s.muscle !== 'triceps')];
-    // Trained 30h ago (window 48h) → Recovering, ~18h until Fresh (> soon window).
+    // Trained 30h ago (window 36h) → Recovering, ~6h until Fresh (> soon window).
     const history = [session(hoursBefore(NOW, 30), 'triceps', 5, 2)];
     // Empty reachable → no fine children surface; the coarse triceps row is the
     // sole lagging candidate, keeping the fixture focused on the reported bug.
@@ -144,14 +144,14 @@ describe('selectGoodTargets', () => {
     // honest empty state naming triceps as the soonest-ready lagging muscle.
     expect(targets).toHaveLength(0);
     expect(nextUp?.muscle).toBe('triceps');
-    expect(Math.round(nextUp!.hoursUntilReady)).toBe(18);
+    expect(Math.round(nextUp!.hoursUntilReady)).toBe(6);
   });
 
   it('offers a lagging, nearly-ready muscle as a muted "ready soon" pick, not ready-now', () => {
     const triceps = { ...stat('triceps', 12), sets: 0, exercises: [{ id: 'triceps', name: 'triceps ex', sets: 0 }] };
     const stats = [triceps, ...ALL_AT_MEV.filter((s) => s.muscle !== 'triceps')];
-    // Trained 46h ago (window 48h) → Recovering, ~2h until Fresh (within soon window).
-    const history = [session(hoursBefore(NOW, 46), 'triceps', 5, 2)];
+    // Trained 34h ago (window 36h) → Recovering, ~2h until Fresh (within soon window).
+    const history = [session(hoursBefore(NOW, 34), 'triceps', 5, 2)];
     const noChildren = new Set<StandardMuscleGroup>();
 
     const { targets, nextUp } = selectGoodTargets(buildReadinessRows(stats, history, NOW, noChildren), 3);

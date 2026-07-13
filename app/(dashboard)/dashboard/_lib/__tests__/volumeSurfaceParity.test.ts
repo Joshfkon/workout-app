@@ -136,7 +136,7 @@ describe('cross-surface parity (one fixture, four surfaces)', () => {
       { performedAt: hoursAgo(6), exercises: [{ primaryMuscle: 'quads', secondaryMuscles: ['glutes'], sets: sets(5) }] },
       // chest 40h ago → recovering (0.6×48h ≤ 40h < 48h window).
       { performedAt: hoursAgo(40), exercises: [{ primaryMuscle: 'chest', secondaryMuscles: [], sets: sets(4) }] },
-      // biceps 60h ago → fresh (past the 48h window), lastTrainedAt set.
+      // biceps 60h ago → fresh (past the 36h window), lastTrainedAt set.
       { performedAt: hoursAgo(60), exercises: [{ primaryMuscle: 'biceps', secondaryMuscles: [], sets: sets(4) }] },
     ];
     const rRows = buildReadinessRows(stats, history, NOW, reachable);

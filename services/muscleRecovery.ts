@@ -17,6 +17,7 @@
  */
 
 import { resolveMuscleToStandard, type StandardMuscleGroup } from '@/types/schema';
+import { ENHANCED_RECOVERY_MULTIPLIER } from '@/services/shared/fatigueConstants';
 
 // ---------------------------------------------------------------------------
 // Tunable heuristic constants — edit here to re-tune the whole model.
@@ -26,11 +27,12 @@ export interface RecoveryConfig {
   /** Base recovery window (hours) for a muscle with no per-muscle override. */
   defaultWindowHours: number;
   /**
-   * Optional per-muscle window overrides. Empty in v1 → a flat 48h window for
-   * every muscle (explicitly sanctioned by the ticket, and what keeps the
-   * secondary-only "glutes via RDL @ 24h → Recovering" case honest). To enable
-   * the large-group refinement later, set e.g. `{ quads: 72, hamstrings: 72,
-   * glutes: 72, lats: 72, upper_back: 72 }`.
+   * Per-muscle window overrides — the large-group refinement over the flat v1
+   * window. Values are deliberately TEMPERED versus the retired dashboard
+   * card's 72h table: that model ignored intensity, so its windows did double
+   * duty. Here the dose adjustments below already stretch a hard session
+   * (+24h), so stacking them on 72h bases would tell a twice-a-week leg-day
+   * user their quads are never Fresh.
    */
   windowHoursByMuscle: Partial<Record<StandardMuscleGroup, number>>;
   /** A last session at/above this effective set dose adds recovery time. */
@@ -52,11 +54,30 @@ export interface RecoveryConfig {
    * full window → Fresh; past this fraction → Recovering; under it → Fatigued.
    */
   recoveringThreshold: number;
+  /**
+   * Multiplier applied to every resolved window (base + dose adjustment).
+   * 1 for natural athletes; Enhanced Athlete Mode passes < 1 so muscular
+   * recovery windows shrink — see `recoveryConfigFor`.
+   */
+  windowScale: number;
 }
 
 export const RECOVERY_CONFIG: RecoveryConfig = {
   defaultWindowHours: 48,
-  windowHoursByMuscle: {},
+  windowHoursByMuscle: {
+    // Large groups — more tissue, slower to clear fatigue.
+    quads: 60,
+    hamstrings: 60,
+    glutes: 60,
+    lats: 60,
+    upper_back: 60,
+    erectors: 60,
+    // Small/fast recoverers.
+    biceps: 36,
+    triceps: 36,
+    forearms: 36,
+    calves: 36,
+  },
   highDoseSetThreshold: 8,
   highDoseHardSetThreshold: 2,
   hardRirThreshold: 1,
@@ -65,7 +86,19 @@ export const RECOVERY_CONFIG: RecoveryConfig = {
   lowDoseReducedHours: 12,
   secondaryDoseFactor: 0.5,
   recoveringThreshold: 0.6,
+  windowScale: 1,
 };
+
+/**
+ * The config for a given athlete profile. Enhanced athletes dissipate muscular
+ * fatigue faster, so every recovery window shrinks by the shared multiplier
+ * (~22.5% faster) — the same constant the fatigue model uses, and the same
+ * scaling the retired dashboard recovery card applied.
+ */
+export function recoveryConfigFor(enhancedAthleteMode: boolean): RecoveryConfig {
+  if (!enhancedAthleteMode) return RECOVERY_CONFIG;
+  return { ...RECOVERY_CONFIG, windowScale: 1 / ENHANCED_RECOVERY_MULTIPLIER };
+}
 
 // ---------------------------------------------------------------------------
 // Input / output shapes
@@ -184,13 +217,16 @@ function windowForSession(
   const isHighDose =
     involvement.dose >= config.highDoseSetThreshold ||
     involvement.hardSets >= config.highDoseHardSetThreshold;
-  if (isHighDose) return base + config.highDoseExtraHours;
-
   const isLowDose =
     involvement.dose <= config.lowDoseSetThreshold && involvement.hardSets === 0;
-  if (isLowDose) return Math.max(0, base - config.lowDoseReducedHours);
 
-  return base;
+  const window = isHighDose
+    ? base + config.highDoseExtraHours
+    : isLowDose
+      ? Math.max(0, base - config.lowDoseReducedHours)
+      : base;
+
+  return window * config.windowScale;
 }
 
 /**
