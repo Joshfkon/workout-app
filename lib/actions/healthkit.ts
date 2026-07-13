@@ -95,14 +95,14 @@ export async function getHealthKitSyncContext(): Promise<HealthKitSyncContext> {
  */
 export async function saveHealthKitSleepDays(
   days: HealthKitSleepDay[]
-): Promise<{ saved: number }> {
-  if (days.length === 0) return { saved: 0 };
+): Promise<{ saved: number; success: boolean }> {
+  if (days.length === 0) return { saved: 0, success: true };
   const supabase = await createUntypedServerClient();
 
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return { saved: 0 };
+  if (!user) return { saved: 0, success: false };
 
   const dates = days.map((d) => d.date);
   const { data: existingRows } = await supabase
@@ -123,7 +123,7 @@ export async function saveHealthKitSleepDays(
       sleepSource: row.sleep_source,
     }))
   );
-  if (writable.length === 0) return { saved: 0 };
+  if (writable.length === 0) return { saved: 0, success: true };
 
   const { error } = await supabase.from('daily_check_ins').upsert(
     writable.map((day) => ({
@@ -138,23 +138,23 @@ export async function saveHealthKitSleepDays(
 
   if (error) {
     console.error('Failed to save HealthKit sleep:', error);
-    return { saved: 0 };
+    return { saved: 0, success: false };
   }
-  return { saved: writable.length };
+  return { saved: writable.length, success: true };
 }
 
 /** Upsert per-day HRV / resting HR rows (source 'healthkit'). */
 export async function saveHealthKitWellness(
   days: HealthKitWellnessDay[]
-): Promise<{ saved: number }> {
+): Promise<{ saved: number; success: boolean }> {
   const rows = days.filter((d) => d.hrvSdnnMs != null || d.restingHrBpm != null);
-  if (rows.length === 0) return { saved: 0 };
+  if (rows.length === 0) return { saved: 0, success: true };
   const supabase = await createUntypedServerClient();
 
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return { saved: 0 };
+  if (!user) return { saved: 0, success: false };
 
   const { error } = await supabase.from('daily_wellness_metrics').upsert(
     rows.map((day) => ({
@@ -170,50 +170,85 @@ export async function saveHealthKitWellness(
 
   if (error) {
     console.error('Failed to save HealthKit wellness metrics:', error);
-    return { saved: 0 };
+    return { saved: 0, success: false };
   }
-  return { saved: rows.length };
+  return { saved: rows.length, success: true };
 }
 
 /**
  * Upsert per-day steps / active energy from HealthKit into
  * daily_activity_data. HealthKit is the top-priority step source (matching
- * lib/integrations/activity-sync.ts), so it overwrites manual counts.
+ * lib/integrations/activity-sync.ts), so a measured step count overwrites a
+ * manual one — but a day with ONLY energy (steps denied or not yet written)
+ * must never touch the step columns, or it would zero out an existing count
+ * and corrupt the steps-informed TDEE prior. Step and energy-only days are
+ * therefore upserted separately with disjoint column sets.
  */
 export async function saveHealthKitDailyActivity(
   days: HealthKitActivityDay[]
-): Promise<{ saved: number }> {
-  const rows = days.filter((d) => (d.steps ?? 0) > 0 || (d.activeCalories ?? 0) > 0);
-  if (rows.length === 0) return { saved: 0 };
+): Promise<{ saved: number; success: boolean }> {
+  const withSteps = days.filter((d) => (d.steps ?? 0) > 0);
+  const energyOnly = days.filter(
+    (d) => (d.steps ?? 0) <= 0 && (d.activeCalories ?? 0) > 0
+  );
+  if (withSteps.length === 0 && energyOnly.length === 0) {
+    return { saved: 0, success: true };
+  }
   const supabase = await createUntypedServerClient();
 
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return { saved: 0 };
+  if (!user) return { saved: 0, success: false };
 
-  const { error } = await supabase.from('daily_activity_data').upsert(
-    rows.map((day) => ({
-      user_id: user.id,
-      date: day.date,
-      steps_total: Math.max(0, Math.round(day.steps ?? 0)),
-      steps_source: 'apple_healthkit',
-      steps_confidence: 'measured',
-      wearable_active_calories:
-        day.activeCalories != null ? Math.round(day.activeCalories) : null,
-      wearable_active_calories_source:
-        day.activeCalories != null ? 'apple_healthkit' : null,
-      activity_level: getActivityLevelFromSteps(Math.round(day.steps ?? 0)),
-      updated_at: new Date().toISOString(),
-    })),
-    { onConflict: 'user_id,date' }
-  );
+  let success = true;
 
-  if (error) {
-    console.error('Failed to save HealthKit activity:', error);
-    return { saved: 0 };
+  if (withSteps.length > 0) {
+    const { error } = await supabase.from('daily_activity_data').upsert(
+      withSteps.map((day) => ({
+        user_id: user.id,
+        date: day.date,
+        steps_total: Math.round(day.steps ?? 0),
+        steps_source: 'apple_healthkit',
+        steps_confidence: 'measured',
+        wearable_active_calories:
+          day.activeCalories != null ? Math.round(day.activeCalories) : null,
+        wearable_active_calories_source:
+          day.activeCalories != null ? 'apple_healthkit' : null,
+        activity_level: getActivityLevelFromSteps(Math.round(day.steps ?? 0)),
+        updated_at: new Date().toISOString(),
+      })),
+      { onConflict: 'user_id,date' }
+    );
+    if (error) {
+      console.error('Failed to save HealthKit steps/activity:', error);
+      success = false;
+    }
   }
-  return { saved: rows.length };
+
+  if (energyOnly.length > 0) {
+    // Energy columns only — existing step data (manual or otherwise) is
+    // preserved untouched.
+    const { error } = await supabase.from('daily_activity_data').upsert(
+      energyOnly.map((day) => ({
+        user_id: user.id,
+        date: day.date,
+        wearable_active_calories: Math.round(day.activeCalories ?? 0),
+        wearable_active_calories_source: 'apple_healthkit',
+        updated_at: new Date().toISOString(),
+      })),
+      { onConflict: 'user_id,date' }
+    );
+    if (error) {
+      console.error('Failed to save HealthKit active energy:', error);
+      success = false;
+    }
+  }
+
+  return {
+    saved: success ? withSteps.length + energyOnly.length : 0,
+    success,
+  };
 }
 
 /** Persist sync anchors and stamp the connection's last_sync_at. */

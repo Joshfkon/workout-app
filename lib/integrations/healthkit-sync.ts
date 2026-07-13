@@ -151,7 +151,7 @@ export async function runHealthKitSync(
     const sleepResult =
       nights.length > 0
         ? await deps.saveSleep(nights.map((n) => ({ date: n.localDay, hours: n.hours })))
-        : { saved: 0 };
+        : { saved: 0, success: true };
 
     // --- HRV + RHR: merge per local day into wellness rows. ---
     const wellnessByDay = new Map<string, { hrv: number | null; rhr: number | null }>();
@@ -172,7 +172,7 @@ export async function runHealthKitSync(
               restingHrBpm: v.rhr,
             }))
           )
-        : { saved: 0 };
+        : { saved: 0, success: true };
 
     // --- Steps + active energy: merge per local day. ---
     const activityByDay = new Map<string, { steps: number | null; energy: number | null }>();
@@ -193,11 +193,14 @@ export async function runHealthKitSync(
               activeCalories: v.energy,
             }))
           )
-        : { saved: 0 };
+        : { saved: 0, success: true };
 
-    // --- Advance anchors to the newest ingested moment per type. Daily
-    // buckets anchor at now (their partial today-bucket is inside the
-    // lookback re-pull next time); sleep anchors at its newest sample end. ---
+    // --- Advance anchors to the newest ingested moment per type — but ONLY
+    // for types whose write succeeded. A failed write must leave its anchor
+    // behind so the next sync re-pulls the same window (upserts are
+    // idempotent, so re-pulling is free; skipping data is not). Daily buckets
+    // anchor at now (their partial today-bucket is inside the lookback
+    // re-pull next time); sleep anchors at its newest sample end. ---
     const nowIso = now.toISOString();
     let sleepAnchor = context.anchors.sleep ?? null;
     for (const sample of sleepSamples) {
@@ -205,9 +208,16 @@ export async function runHealthKitSync(
     }
 
     const anchorUpdates: { dataType: HealthKitDataType; lastSampleEndAt: string }[] = [];
-    if (sleepAnchor) anchorUpdates.push({ dataType: 'sleep', lastSampleEndAt: sleepAnchor });
-    for (const dataType of ['hrv', 'resting_heart_rate', 'steps', 'active_energy'] as const) {
-      anchorUpdates.push({ dataType, lastSampleEndAt: nowIso });
+    if (sleepResult.success && sleepAnchor) {
+      anchorUpdates.push({ dataType: 'sleep', lastSampleEndAt: sleepAnchor });
+    }
+    if (wellnessResult.success) {
+      anchorUpdates.push({ dataType: 'hrv', lastSampleEndAt: nowIso });
+      anchorUpdates.push({ dataType: 'resting_heart_rate', lastSampleEndAt: nowIso });
+    }
+    if (activityResult.success) {
+      anchorUpdates.push({ dataType: 'steps', lastSampleEndAt: nowIso });
+      anchorUpdates.push({ dataType: 'active_energy', lastSampleEndAt: nowIso });
     }
     await deps.saveAnchors(anchorUpdates);
 

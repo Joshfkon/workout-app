@@ -66,15 +66,15 @@ function makeDeps(overrides: Partial<HealthKitSyncDeps> = {}) {
     ],
     saveSleep: async (days) => {
       calls.savedSleep.push(days);
-      return { saved: days.length };
+      return { saved: days.length, success: true };
     },
     saveWellness: async (days) => {
       calls.savedWellness.push(days);
-      return { saved: days.length };
+      return { saved: days.length, success: true };
     },
     saveActivity: async (days) => {
       calls.savedActivity.push(days);
-      return { saved: days.length };
+      return { saved: days.length, success: true };
     },
     saveAnchors: async (anchors) => {
       calls.savedAnchors.push(anchors);
@@ -169,6 +169,20 @@ describe('runHealthKitSync', () => {
     expect(first.status).toBe('synced');
     const second = await runHealthKitSync({}, deps);
     expect(second).toEqual({ status: 'skipped', reason: 'throttled' });
+  });
+
+  it('a failed write leaves its anchor behind so the window is re-pulled next sync', async () => {
+    const { deps, calls } = makeDeps({
+      saveActivity: async () => ({ saved: 0, success: false }),
+    });
+    const outcome = await runHealthKitSync({ force: true }, deps);
+    expect(outcome.status).toBe('synced');
+
+    const anchors = calls.savedAnchors[0];
+    const advancedTypes = anchors.map((a) => a.dataType).sort();
+    // Sleep + wellness writes succeeded and advance; steps/active_energy
+    // must NOT advance past the unsaved data.
+    expect(advancedTypes).toEqual(['hrv', 'resting_heart_rate', 'sleep']);
   });
 
   it('a fetch failure degrades to a skip, never a crash', async () => {

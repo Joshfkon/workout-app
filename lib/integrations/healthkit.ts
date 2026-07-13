@@ -320,12 +320,53 @@ class HealthKitService {
     }
   }
 
-  /** Daily average HRV (SDNN, ms) per local day. Empty when never recorded. */
+  /**
+   * Daily median HRV (SDNN, ms) per local day. Empty when never recorded.
+   *
+   * HRV is NOT supported by the plugin's queryAggregated (per its docs — only
+   * steps/distance/calories/heart rate/weight/resting HR aggregate), so raw
+   * samples are read and reduced to a per-local-day median here. Median over
+   * mean: a single artifact reading shouldn't drag a day's value.
+   */
   async getDailyHrv(startDate: Date, endDate: Date): Promise<DailyMetricSample[]> {
-    return this.getDailyAverage('heartRateVariability', startDate, endDate);
+    const plugin = await this.getPlugin();
+    if (!plugin) return [];
+
+    try {
+      const { samples } = await plugin.readSamples({
+        dataType: 'heartRateVariability',
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+        limit: SAMPLE_READ_LIMIT,
+        ascending: true,
+      });
+
+      const byDay = new Map<string, number[]>();
+      for (const sample of samples) {
+        if (!Number.isFinite(sample.value) || sample.value <= 0) continue;
+        const day = getLocalDateString(new Date(sample.startDate));
+        const values = byDay.get(day);
+        if (values) values.push(sample.value);
+        else byDay.set(day, [sample.value]);
+      }
+
+      return Array.from(byDay.entries())
+        .map(([date, values]) => {
+          const sorted = values.sort((a, b) => a - b);
+          const mid = Math.floor(sorted.length / 2);
+          const median =
+            sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+          return { date, value: median };
+        })
+        .sort((a, b) => a.date.localeCompare(b.date));
+    } catch (error) {
+      // Per-type absence (e.g. no HRV source) is normal — return empty.
+      console.warn('HealthKit HRV query returned nothing usable:', error);
+      return [];
+    }
   }
 
-  /** Daily average resting heart rate (bpm) per local day. */
+  /** Daily average resting heart rate (bpm) per local day (aggregation IS supported for RHR). */
   async getDailyRestingHeartRate(
     startDate: Date,
     endDate: Date

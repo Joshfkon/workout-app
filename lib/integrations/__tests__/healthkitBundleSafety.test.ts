@@ -17,13 +17,14 @@ const ROOT = path.resolve(__dirname, '../../..');
 const SOURCE_DIRS = ['app', 'components', 'hooks', 'lib', 'services', 'stores', 'types'];
 const SOURCE_EXT = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs']);
 
-function* walk(dir: string): Generator<string> {
+function walk(dir: string, out: string[] = []): string[] {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     if (entry.name === 'node_modules' || entry.name.startsWith('.')) continue;
     const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) yield* walk(full);
-    else if (SOURCE_EXT.has(path.extname(entry.name))) yield full;
+    if (entry.isDirectory()) walk(full, out);
+    else if (SOURCE_EXT.has(path.extname(entry.name))) out.push(full);
   }
+  return out;
 }
 
 describe('HealthKit web-bundle safety', () => {
