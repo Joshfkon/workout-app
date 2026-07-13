@@ -25,6 +25,7 @@ import {
   IconChevronLeft,
   IconChevronsDown,
   IconChevronsUp,
+  IconClock,
   IconDotsVertical,
   IconGauge,
   IconMoon,
@@ -53,6 +54,12 @@ export interface WorkoutHeaderProps {
   segments: ExerciseSegmentStatus[];
   /** session.startedAt — elapsed time renders only when the session has started */
   startedAt: string | null;
+  /**
+   * Whether the workout timer has its anchor (the first set has been logged).
+   * Until then the pill is a muted, non-interactive "starts with first set"
+   * hint — there is no elapsed time to show or pause.
+   */
+  timerStarted: boolean;
   workoutTimer: WorkoutTimerView;
   allCollapsed: boolean;
   onToggleAllCollapsed: () => void;
@@ -96,6 +103,7 @@ export function WorkoutHeader({
   exerciseTotal,
   segments,
   startedAt,
+  timerStarted,
   workoutTimer,
   allCollapsed,
   onToggleAllCollapsed,
@@ -147,9 +155,22 @@ export function WorkoutHeader({
           </p>
         </div>
 
-        {/* Timer pill — tappable pause/resume, ≥44pt hit area. Paused state is
-            unmistakable: amber fill, ▶ icon, "Paused · m:ss". */}
-        {startedAt && (
+        {/* Timer pill — before the first set logs there is no elapsed time,
+            so render a muted non-interactive hint instead of "⏸ 0:00" (no
+            pause affordance for a timer that isn't running). Once set 1 lands
+            it becomes the tappable pause/resume pill, ≥44pt hit area; paused
+            state is unmistakable: amber fill, ▶ icon, "Paused · m:ss". */}
+        {startedAt && !timerStarted && (
+          <div
+            data-testid="workout-timer-pill-idle"
+            className="inline-flex items-center gap-1.5 flex-shrink-0 min-h-[44px] px-3 rounded-full border border-surface-800 bg-surface-900/60 text-xs font-medium text-surface-500"
+            title="Timer starts with your first set"
+          >
+            <IconClock size={16} stroke={2} />
+            <span>starts with first set</span>
+          </div>
+        )}
+        {startedAt && timerStarted && (
           <button
             onClick={workoutTimer.toggle}
             data-testid="workout-timer-pill"
