@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Card } from '@/components/ui/Card';
 import { useAdaptiveVolume } from '@/hooks/useAdaptiveVolume';
@@ -10,12 +10,40 @@ import { AtrophyRiskAlert } from '@/components/analytics/AtrophyRiskAlert';
 import { WeeklyMevSummary } from '@/components/dashboard/WeeklyMevSummary';
 import { VolumeZoneBar } from '@/components/analytics/VolumeZoneBar';
 import { EnhancedAthleteModeCard } from '@/components/settings/EnhancedAthleteModeCard';
+import { MuscleMap } from '@/components/muscleMap/MuscleMap';
+import { volumeRowsToMapData } from '@/lib/muscleMap/adapters';
+import type { MuscleId } from '@/lib/muscleMap/taxonomy';
 import { useWeeklyMevSummary } from '@/hooks/useWeeklyMevSummary';
 import {
   buildVolumeRows,
   belowMevVolumeData,
+  STANDARD_TO_COARSE,
   type CoarseMuscle,
 } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
+
+/**
+ * The body-map section is collapsible so bar-preferrers lose nothing; the
+ * choice is remembered across visits (localStorage, default expanded).
+ */
+const MAP_COLLAPSED_STORAGE_KEY = 'hypertrack:volume-map-collapsed';
+
+function readMapCollapsed(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.localStorage.getItem(MAP_COLLAPSED_STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function persistMapCollapsed(value: boolean): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(MAP_COLLAPSED_STORAGE_KEY, value ? '1' : '0');
+  } catch {
+    /* localStorage unavailable — degrade to in-memory. */
+  }
+}
 
 function CompareToResearchCard() {
   return (
@@ -108,6 +136,30 @@ export default function VolumeProfilePage() {
     [volumeRows]
   );
 
+  // Body map over the SAME rows the bars render (zone per coarse row, rendered
+  // fine children override) — the map is a view, it computes nothing itself.
+  const [mapCollapsed, setMapCollapsedState] = useState(() => readMapCollapsed());
+  const setMapCollapsed = (value: boolean) => {
+    setMapCollapsedState(value);
+    persistMapCollapsed(value);
+  };
+  const mapData = useMemo(() => volumeRowsToMapData(volumeRows), [volumeRows]);
+  // Standard muscles that have their own (fine child) bar row on screen —
+  // taps on those scroll to the child row, everything else to the coarse row.
+  const renderedChildMuscles = useMemo(
+    () => new Set(volumeRows.flatMap((row) => row.children.map((c) => c.muscle))),
+    [volumeRows]
+  );
+  const scrollToMuscleRow = useCallback(
+    (muscle: MuscleId) => {
+      const target = renderedChildMuscles.has(muscle) ? muscle : STANDARD_TO_COARSE[muscle];
+      document
+        .querySelector(`[data-testid="volume-row-${target}"]`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    },
+    [renderedChildMuscles]
+  );
+
   if (isLoading) {
     return (
       <div className="max-w-3xl mx-auto pb-12">
@@ -181,6 +233,32 @@ export default function VolumeProfilePage() {
           />
         </div>
       )}
+
+      {/* Body map — the same rows as the bars below, painted on the figure.
+          Tapping a muscle scrolls to its bar row. */}
+      <Card className="p-4 mb-6">
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold text-surface-100">Body Map</h3>
+          <button
+            onClick={() => setMapCollapsed(!mapCollapsed)}
+            className="text-xs font-medium text-surface-500 hover:text-surface-300 transition-colors"
+            data-testid="volume-map-toggle"
+            aria-expanded={!mapCollapsed}
+          >
+            {mapCollapsed ? 'Show' : 'Hide'}
+          </button>
+        </div>
+        {!mapCollapsed && (
+          <MuscleMap
+            data={mapData}
+            mode="volume"
+            view="both"
+            onMuscleTap={scrollToMuscleRow}
+            className="h-64 mt-3"
+            data-testid="volume-muscle-map"
+          />
+        )}
+      </Card>
 
       {/* Volume Bars — shared coarse-row model. Green spans the whole MEV–MRV
           band; a bar only turns red past MRV. Tap a group to reveal its fine

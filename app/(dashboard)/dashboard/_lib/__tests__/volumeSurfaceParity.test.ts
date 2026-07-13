@@ -14,11 +14,17 @@ import {
   coarseMevTiles,
   belowMevVolumeData,
   volumeZone,
+  zoneBarClass,
+  zoneFillClass,
+  zoneColorToken,
   RESEARCH_VOLUME_BANDS,
+  COARSE_CHILDREN,
   type WeeklyVolumeBlockRow,
   type CoarseMuscle,
 } from '../weeklyVolume';
 import { buildReadinessRows } from '../../workout/[id]/_lib/readiness';
+import { volumeRowsToMapData, readinessRowsToMapData } from '@/lib/muscleMap/adapters';
+import type { RecoverySession } from '@/services/muscleRecovery';
 
 const NOW = new Date('2026-07-11T12:00:00.000Z');
 
@@ -82,6 +88,79 @@ describe('cross-surface parity (one fixture, four surfaces)', () => {
   it('every surface uses the shared research band (no per-surface MEV/MRV table)', () => {
     for (const row of volumeRows) {
       expect(row.band).toEqual(RESEARCH_VOLUME_BANDS[row.muscle as CoarseMuscle]);
+    }
+  });
+
+  it('the muscle map paints every region with the SAME zone/sets as its bar (fifth surface)', () => {
+    const mapData = volumeRowsToMapData(volumeRows);
+    for (const row of volumeRows) {
+      const childByMuscle = new Map(row.children.map((c) => [c.muscle, c]));
+      for (const std of COARSE_CHILDREN[row.muscle as CoarseMuscle]) {
+        const datum = mapData[std];
+        expect(datum).toBeDefined();
+        // A rendered fine-child bar overrides its own region; every other
+        // region shows its coarse bar's zone. Either way the map's datum is
+        // byte-identical to a bar on the same screen — same zone, same sets,
+        // and therefore the same color token from the same shared helper.
+        const source = childByMuscle.get(std) ?? row;
+        expect(datum!.zone).toBe(source.zone);
+        expect(datum!.value).toBe(source.sets);
+        expect(zoneColorToken(datum!.zone!, datum!.value)).toBe(
+          zoneColorToken(source.zone, source.sets)
+        );
+      }
+    }
+  });
+
+  it('biceps mid-band is green on the map AND the bar, via the same zone helper', () => {
+    // 10 sets sits inside the biceps 6–20 band.
+    const midBand = [block('curl', 'biceps', [], 10, 'Dumbbell Curl')];
+    const s = computeWeeklyMuscleVolume(midBand);
+    const r = computeReachableMuscles(midBand);
+    const rows = buildVolumeRows(s, r);
+    const bicepsRow = rows.find((x) => x.muscle === 'biceps')!;
+    expect(bicepsRow.zone).toBe('in_zone');
+
+    const datum = volumeRowsToMapData(rows).biceps!;
+    expect(datum.zone).toBe('in_zone');
+    // Same helper family, same token: bar green ⇔ map region green.
+    expect(zoneBarClass(bicepsRow.zone, bicepsRow.sets)).toBe('bg-success-500');
+    expect(zoneFillClass(datum.zone!, datum.value)).toBe('fill-success-500');
+  });
+
+  it('recovery map matches the readiness rows on a shared fixture (asserted, not by construction)', () => {
+    const hoursAgo = (h: number) => new Date(NOW.getTime() - h * 3600 * 1000);
+    const sets = (n: number) => Array.from({ length: n }, () => ({ repsInTank: 2 }));
+    const history: RecoverySession[] = [
+      // quads 6h ago → fatigued; secondary glutes credit recovers faster.
+      { performedAt: hoursAgo(6), exercises: [{ primaryMuscle: 'quads', secondaryMuscles: ['glutes'], sets: sets(5) }] },
+      // chest 40h ago → recovering (0.6×48h ≤ 40h < 48h window).
+      { performedAt: hoursAgo(40), exercises: [{ primaryMuscle: 'chest', secondaryMuscles: [], sets: sets(4) }] },
+      // biceps 60h ago → fresh (past the 48h window), lastTrainedAt set.
+      { performedAt: hoursAgo(60), exercises: [{ primaryMuscle: 'biceps', secondaryMuscles: [], sets: sets(4) }] },
+    ];
+    const rRows = buildReadinessRows(stats, history, NOW, reachable);
+    const rMap = readinessRowsToMapData(rRows);
+
+    // Spot-check the fixture produced all three statuses (guards against a
+    // vacuous loop below if the recovery heuristic changes).
+    expect(rRows.find((r) => r.muscle === 'quads')!.recovery.status).toBe('fatigued');
+    expect(rRows.find((r) => r.muscle === 'chest')!.recovery.status).toBe('recovering');
+    expect(rRows.find((r) => r.muscle === 'biceps')!.recovery.status).toBe('fresh');
+
+    for (const row of rRows) {
+      const childByMuscle = new Map(row.children.map((c) => [c.muscle, c]));
+      for (const std of COARSE_CHILDREN[row.muscle]) {
+        const datum = rMap[std];
+        const source = childByMuscle.get(std) ?? row;
+        if (source.recovery.lastTrainedAt === null) {
+          // "No recent data" badge ⇒ neutral region, never a status color.
+          expect(datum).toBeUndefined();
+        } else {
+          expect(datum).toBeDefined();
+          expect(datum!.status).toBe(source.recovery.status);
+        }
+      }
     }
   });
 

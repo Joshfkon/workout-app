@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { BottomSheet } from './BottomSheet';
 import { useMuscleReadiness } from '@/hooks/useMuscleReadiness';
 import {
@@ -10,7 +10,11 @@ import {
   type ReadinessTarget,
   type NextReadyTarget,
 } from '@/app/(dashboard)/dashboard/workout/[id]/_lib/readiness';
-import { zoneBarClass, zoneTextClass, zoneBandLabel } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
+import { zoneBarClass, zoneTextClass, zoneBandLabel, STANDARD_TO_COARSE } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
+import { MuscleMap } from '@/components/muscleMap/MuscleMap';
+import { readinessRowsToMapData } from '@/lib/muscleMap/adapters';
+import type { MuscleId } from '@/lib/muscleMap/taxonomy';
+import type { BodyView } from '@/lib/muscleMap/paths';
 import type { MuscleRecoveryResult } from '@/services/muscleRecovery';
 import type { SetLog } from '@/types/schema';
 import type { ExerciseBlockWithExercise } from '@/app/(dashboard)/dashboard/workout/[id]/_lib/types';
@@ -86,6 +90,68 @@ function formatReadyIn(hours: number): string {
 function barFillPct(sets: number, mrv: number): number {
   const maxDisplay = mrv * 1.2;
   return Math.min(100, Math.max(0, (sets / maxDisplay) * 100));
+}
+
+/**
+ * Compact recovery body map for the sheet: one view at a time (sheet height),
+ * front/back toggle, painted from the SAME rows the badges below render (via
+ * readinessRowsToMapData — coarse status per group, rendered fine children
+ * override). Tapping a muscle scrolls to its row.
+ */
+function ReadinessMap({ rows, onRevealAll }: { rows: ReadinessRow[]; onRevealAll?: () => void }) {
+  const [view, setView] = useState<BodyView>('front');
+  const mapData = useMemo(() => readinessRowsToMapData(rows), [rows]);
+  const renderedChildMuscles = useMemo(
+    () => new Set(rows.flatMap((row) => row.children.map((c) => c.muscle))),
+    [rows]
+  );
+  const scrollToRow = useCallback(
+    (muscle: MuscleId) => {
+      const target = renderedChildMuscles.has(muscle) ? muscle : STANDARD_TO_COARSE[muscle];
+      const selector = `[data-testid="readiness-row-${target}"]`;
+      const el = document.querySelector(selector);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+      // Row hidden behind the "+N more" cap — reveal, then scroll next frame.
+      onRevealAll?.();
+      requestAnimationFrame(() => {
+        document.querySelector(selector)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+    },
+    [renderedChildMuscles, onRevealAll]
+  );
+
+  return (
+    <div className="mb-2" data-testid="readiness-map">
+      <div className="flex justify-center gap-1 mb-1.5">
+        {(['front', 'back'] as const).map((v) => (
+          <button
+            key={v}
+            onClick={() => setView(v)}
+            className={`px-2.5 py-1 rounded text-[11px] font-medium transition-colors ${
+              view === v
+                ? 'bg-surface-700 text-surface-100'
+                : 'text-surface-500 hover:text-surface-300'
+            }`}
+            data-testid={`readiness-map-view-${v}`}
+            aria-pressed={view === v}
+          >
+            {v === 'front' ? 'Front' : 'Back'}
+          </button>
+        ))}
+      </div>
+      <MuscleMap
+        data={mapData}
+        mode="recovery"
+        view={view}
+        onMuscleTap={scrollToRow}
+        className="h-44"
+        data-testid="readiness-muscle-map"
+      />
+    </div>
+  );
 }
 
 function RecoveryBadge({ recovery, muscle }: { recovery: MuscleRecoveryResult; muscle: string }) {
@@ -232,6 +298,7 @@ export function MuscleReadinessContent({
         </div>
       ) : (
         <>
+          {rows.length > 0 && <ReadinessMap rows={rows} onRevealAll={() => setShowAll(true)} />}
           <div className="divide-y divide-surface-800/70">
             {visibleRows.map((row) => (
               <ReadinessRowView key={row.muscle} row={row} />

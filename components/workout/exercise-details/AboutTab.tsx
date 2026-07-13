@@ -9,6 +9,8 @@ import { parseYouTubeVideoId } from '@/lib/youtube';
 import { shouldCollapseGuides } from '@/services/exerciseDetailAnalytics';
 import { YouTubeEmbed } from '../YouTubeEmbed';
 import { MuscleWikiVideo } from '../MuscleWikiVideo';
+import { MuscleMap } from '@/components/muscleMap/MuscleMap';
+import { exerciseHighlightData } from '@/lib/muscleMap/adapters';
 import { getExerciseProp } from './helpers';
 
 interface AboutTabProps {
@@ -202,6 +204,60 @@ function CompleteWithAIButton({ exerciseId }: { exerciseId: string }) {
   );
 }
 
+interface MusclesWorkedProps {
+  primaryMuscle: string | null;
+  secondaryMuscles: string[];
+  repRange: number[];
+}
+
+/**
+ * Highlight body map (primary full accent, secondaries dimmed), with the
+ * chips as the accessible text representation and the default rep range on
+ * the same row.
+ */
+function MusclesWorked({ primaryMuscle, secondaryMuscles, repRange }: MusclesWorkedProps) {
+  if (!primaryMuscle && secondaryMuscles.length === 0 && repRange.length < 2) return null;
+
+  return (
+    <div>
+      {(primaryMuscle || secondaryMuscles.length > 0) && (
+        <>
+          <p className="text-xs font-medium text-surface-400 uppercase tracking-wider mb-2">
+            Muscles Worked
+          </p>
+          <MuscleMap
+            data={exerciseHighlightData(primaryMuscle, secondaryMuscles)}
+            mode="highlight"
+            view="both"
+            className="h-40 mb-2"
+            data-testid="exercise-muscle-map"
+          />
+        </>
+      )}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <div className="flex flex-wrap items-center gap-1">
+          {primaryMuscle && (
+            <Badge variant="info" size="sm">
+              {String(primaryMuscle).replace(/_/g, ' ')}
+            </Badge>
+          )}
+          {secondaryMuscles.map((muscle, idx) => (
+            <Badge key={idx} variant="default" size="sm">
+              {String(muscle).replace(/_/g, ' ')}
+            </Badge>
+          ))}
+        </div>
+        {repRange.length >= 2 && (
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-surface-500 uppercase tracking-wider">Rep range</span>
+            <span className="text-sm text-surface-200">{repRange[0]}-{repRange[1]}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function exerciseHasMissingFields(exercise: Exercise, hasFormCues: boolean, hasTier: boolean): boolean {
   const stabilizers = getExerciseProp(exercise, 'stabilizers', 'stabilizers');
   const hasStabilizers = Array.isArray(stabilizers) && stabilizers.length > 0;
@@ -215,6 +271,7 @@ export function AboutTab({ exercise, sessionCount }: AboutTabProps) {
   const demoGifUrl = getExerciseProp(exercise, 'demoGifUrl', 'demo_gif_url');
   const youtubeVideoId = getExerciseProp(exercise, 'youtubeVideoId', 'youtube_video_id');
   const hypertrophyScore = getExerciseProp(exercise, 'hypertrophyScore', 'hypertrophy_score');
+  const primaryMuscle = getExerciseProp(exercise, 'primaryMuscle', 'primary_muscle');
   const secondaryMusclesRaw = getExerciseProp(exercise, 'secondaryMuscles', 'secondary_muscles');
   const repRangeRaw = getExerciseProp(exercise, 'defaultRepRange', 'default_rep_range');
   const formCuesRaw = getExerciseProp(exercise, 'formCues', 'form_cues');
@@ -251,25 +308,11 @@ export function AboutTab({ exercise, sessionCount }: AboutTabProps) {
 
       <HypertrophyBlock score={hypertrophyScore} />
 
-      {/* Secondary muscles + default rep range, one row */}
-      {(secondaryMuscles.length > 0 || repRange.length >= 2) && (
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          {secondaryMuscles.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-xs text-surface-500 uppercase tracking-wider">Also works</span>
-              {secondaryMuscles.map((muscle, idx) => (
-                <Badge key={idx} variant="default" size="sm">{muscle}</Badge>
-              ))}
-            </div>
-          )}
-          {repRange.length >= 2 && (
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs text-surface-500 uppercase tracking-wider">Rep range</span>
-              <span className="text-sm text-surface-200">{repRange[0]}-{repRange[1]}</span>
-            </div>
-          )}
-        </div>
-      )}
+      <MusclesWorked
+        primaryMuscle={primaryMuscle || null}
+        secondaryMuscles={secondaryMuscles}
+        repRange={repRange}
+      />
 
       {/* How-to sections: collapsed once the user knows the lift */}
       <GuideSections
