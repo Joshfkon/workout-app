@@ -20,6 +20,11 @@ import {
   STANDARD_TO_COARSE,
   type CoarseMuscle,
 } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
+import {
+  compareProfileToResearch,
+  type ResearchComparisonStatus,
+  type UserVolumeProfile,
+} from '@/src/lib/training/adaptive-volume';
 
 /**
  * The body-map section is collapsible so bar-preferrers lose nothing; the
@@ -45,27 +50,114 @@ function persistMapCollapsed(value: boolean): void {
   }
 }
 
-function CompareToResearchCard() {
+const COMPARISON_BUCKETS: {
+  status: ResearchComparisonStatus;
+  label: string;
+  valueClass: string;
+  activeClass: string;
+}[] = [
+  {
+    status: 'lower',
+    label: 'Lower than avg',
+    valueClass: 'text-primary-400',
+    activeClass: 'ring-1 ring-primary-500/60 bg-primary-500/10',
+  },
+  {
+    status: 'average',
+    label: 'At average',
+    valueClass: 'text-success-400',
+    activeClass: 'ring-1 ring-success-500/60 bg-success-500/10',
+  },
+  {
+    status: 'higher',
+    label: 'Higher than avg',
+    valueClass: 'text-warning-400',
+    activeClass: 'ring-1 ring-warning-500/60 bg-warning-500/10',
+  },
+];
+
+const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+function CompareToResearchCard({ volumeProfile }: { volumeProfile: UserVolumeProfile | null }) {
+  const [openBucket, setOpenBucket] = useState<ResearchComparisonStatus | null>(null);
+
+  const comparison = useMemo(
+    () => (volumeProfile ? compareProfileToResearch(volumeProfile) : null),
+    [volumeProfile]
+  );
+  if (!comparison) return null;
+
+  const openEntries = openBucket ? comparison[openBucket] : [];
+
   return (
     <Card className="p-4 mt-4">
       <h4 className="font-medium text-surface-200 mb-3">Research Comparison</h4>
       <p className="text-sm text-surface-400 mb-3">
-        Your personalized volume recommendations compared to research averages:
+        Your personalized volume recommendations compared to research averages.
+        Tap a category to see which muscles and why:
       </p>
       <div className="grid grid-cols-3 gap-2 text-sm">
-        <div className="text-center p-2 bg-surface-800/50 rounded">
-          <p className="text-surface-500 text-xs">Lower than avg</p>
-          <p className="text-primary-400 font-medium">3 muscles</p>
-        </div>
-        <div className="text-center p-2 bg-surface-800/50 rounded">
-          <p className="text-surface-500 text-xs">At average</p>
-          <p className="text-success-400 font-medium">7 muscles</p>
-        </div>
-        <div className="text-center p-2 bg-surface-800/50 rounded">
-          <p className="text-surface-500 text-xs">Higher than avg</p>
-          <p className="text-warning-400 font-medium">3 muscles</p>
-        </div>
+        {COMPARISON_BUCKETS.map(({ status, label, valueClass, activeClass }) => (
+          <button
+            key={status}
+            onClick={() => setOpenBucket((prev) => (prev === status ? null : status))}
+            aria-expanded={openBucket === status}
+            data-testid={`research-comparison-${status}`}
+            className={`text-center p-2 rounded transition-colors ${
+              openBucket === status ? activeClass : 'bg-surface-800/50 hover:bg-surface-800'
+            }`}
+          >
+            <p className="text-surface-500 text-xs">{label}</p>
+            <p className={`${valueClass} font-medium`}>
+              {comparison[status].length} muscle{comparison[status].length === 1 ? '' : 's'}
+            </p>
+          </button>
+        ))}
       </div>
+
+      {openBucket && (
+        <div className="mt-3 space-y-2" data-testid="research-comparison-detail">
+          {openEntries.length === 0 ? (
+            <p className="text-sm text-surface-500 text-center py-2">
+              No muscles in this category right now.
+            </p>
+          ) : (
+            openEntries.map((entry) => (
+              <div key={entry.muscle} className="p-3 bg-surface-800/50 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-surface-200">
+                    {capitalize(entry.muscle)}
+                  </span>
+                  <span
+                    className={`text-xs font-medium ${
+                      entry.status === 'average'
+                        ? 'text-success-400'
+                        : entry.percentDiff > 0
+                          ? 'text-warning-400'
+                          : 'text-primary-400'
+                    }`}
+                  >
+                    {entry.status === 'average'
+                      ? 'At average'
+                      : `${entry.percentDiff > 0 ? '+' : ''}${entry.percentDiff}% vs research`}
+                  </span>
+                </div>
+                <p className="text-xs text-surface-400 mt-1">
+                  You: {entry.personalMev}&ndash;{entry.personalMrv} sets/wk
+                  <span className="text-surface-600"> &middot; </span>
+                  Research: {entry.researchMev}&ndash;{entry.researchMrv} sets/wk
+                </p>
+                {entry.reasons.map((reason) => (
+                  <p key={reason} className="text-xs text-surface-500 mt-0.5">
+                    {reason}
+                  </p>
+                ))}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
       <Link
         href="/dashboard/learn/adaptive-volume"
         className="block mt-3 text-xs text-primary-400 hover:text-primary-300 text-center transition-colors"
@@ -292,7 +384,7 @@ export default function VolumeProfilePage() {
       </div>
 
       {/* Compare to Research */}
-      <CompareToResearchCard />
+      <CompareToResearchCard volumeProfile={volumeProfile} />
 
       {/* Recent Mesocycle Review Link */}
       {latestAnalysis && (

@@ -2,6 +2,7 @@ import {
   createInitialVolumeProfile,
   getAdjustedBaseline,
   setEnhancedStatus,
+  compareProfileToResearch,
   BASELINE_VOLUME_RECOMMENDATIONS,
 } from '@/src/lib/training/adaptive-volume';
 import { MUSCLE_GROUPS, ENHANCED_SCALING } from '@/types/schema';
@@ -73,6 +74,80 @@ describe('setEnhancedStatus', () => {
     const updated = setEnhancedStatus(profile, true);
     expect(updated.muscleTolerance.chest.dataPoints).toBe(5);
     expect(updated.muscleTolerance.chest.confidence).toBe('high');
+  });
+});
+
+describe('compareProfileToResearch', () => {
+  it('classifies a fresh intermediate natural profile as all at-average', () => {
+    const profile = createInitialVolumeProfile('user-1', 'intermediate', false);
+    const comparison = compareProfileToResearch(profile);
+
+    expect(comparison.entries).toHaveLength(MUSCLE_GROUPS.length);
+    expect(comparison.average).toHaveLength(MUSCLE_GROUPS.length);
+    expect(comparison.lower).toHaveLength(0);
+    expect(comparison.higher).toHaveLength(0);
+  });
+
+  it('bucket lists partition the entries exactly', () => {
+    const profile = createInitialVolumeProfile('user-1', 'novice', true);
+    const comparison = compareProfileToResearch(profile);
+
+    expect(
+      comparison.lower.length + comparison.average.length + comparison.higher.length
+    ).toBe(comparison.entries.length);
+  });
+
+  it('classifies a novice profile as lower than research averages', () => {
+    const profile = createInitialVolumeProfile('user-1', 'novice', false);
+    const comparison = compareProfileToResearch(profile);
+
+    expect(comparison.lower).toHaveLength(MUSCLE_GROUPS.length);
+    for (const entry of comparison.entries) {
+      expect(entry.percentDiff).toBeLessThan(0);
+      expect(entry.reasons.join(' ')).toMatch(/novice/i);
+    }
+  });
+
+  it('classifies an enhanced intermediate profile as higher than research averages', () => {
+    const profile = createInitialVolumeProfile('user-1', 'intermediate', true);
+    const comparison = compareProfileToResearch(profile);
+
+    expect(comparison.higher).toHaveLength(MUSCLE_GROUPS.length);
+    for (const entry of comparison.entries) {
+      expect(entry.reasons.join(' ')).toMatch(/enhanced/i);
+    }
+  });
+
+  it('surfaces learned per-muscle deviations with a learned-data reason', () => {
+    const profile = createInitialVolumeProfile('user-1', 'intermediate', false);
+    profile.muscleTolerance.chest.estimatedMRV = Math.round(
+      BASELINE_VOLUME_RECOMMENDATIONS.chest.mrv * 1.4
+    );
+    profile.muscleTolerance.chest.dataPoints = 3;
+    profile.muscleTolerance.chest.confidence = 'medium';
+
+    const comparison = compareProfileToResearch(profile);
+    const chest = comparison.entries.find((e) => e.muscle === 'chest')!;
+
+    expect(chest.status).toBe('higher');
+    expect(chest.percentDiff).toBeGreaterThan(0);
+    expect(chest.reasons[0]).toMatch(/learned from 3 mesocycles/i);
+    expect(chest.reasons[0]).toMatch(/medium confidence/i);
+    // Other muscles stay at research defaults with the default reason.
+    const back = comparison.entries.find((e) => e.muscle === 'back')!;
+    expect(back.status).toBe('average');
+    expect(back.reasons.join(' ')).toMatch(/research default/i);
+  });
+
+  it('reports both bands so the UI can show "you vs research"', () => {
+    const profile = createInitialVolumeProfile('user-1', 'advanced', false);
+    const comparison = compareProfileToResearch(profile);
+    const chest = comparison.entries.find((e) => e.muscle === 'chest')!;
+
+    expect(chest.researchMev).toBe(BASELINE_VOLUME_RECOMMENDATIONS.chest.mev);
+    expect(chest.researchMrv).toBe(BASELINE_VOLUME_RECOMMENDATIONS.chest.mrv);
+    expect(chest.personalMev).toBe(profile.muscleTolerance.chest.estimatedMEV);
+    expect(chest.personalMrv).toBe(profile.muscleTolerance.chest.estimatedMRV);
   });
 });
 
