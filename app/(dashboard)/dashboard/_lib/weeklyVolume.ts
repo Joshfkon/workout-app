@@ -477,18 +477,54 @@ export function volumeZone(sets: number, band: VolumeBand): VolumeZone {
   return 'over_mrv';
 }
 
+/**
+ * The one zone→color decision, shared by bars, text and the SVG muscle map.
+ * 'neutral' is the untrained case (0 sets below MEV) that reads gray instead
+ * of amber. Every zone*Class helper below is a pure token→utility lookup over
+ * this, so a surface can never disagree on which color a zone gets.
+ */
+export type ZoneColorToken = 'success' | 'warning' | 'danger' | 'neutral';
+
+export function zoneColorToken(zone: VolumeZone, sets: number): ZoneColorToken {
+  if (zone === 'over_mrv') return 'danger';
+  if (zone === 'in_zone') return 'success';
+  return sets <= 0 ? 'neutral' : 'warning';
+}
+
+const ZONE_BAR_CLASSES: Record<ZoneColorToken, string> = {
+  danger: 'bg-danger-500',
+  success: 'bg-success-500',
+  warning: 'bg-warning-500',
+  neutral: 'bg-surface-600',
+};
+
+const ZONE_TEXT_CLASSES: Record<ZoneColorToken, string> = {
+  danger: 'text-danger-400',
+  success: 'text-success-400',
+  warning: 'text-warning-400',
+  neutral: 'text-surface-400',
+};
+
+const ZONE_FILL_CLASSES: Record<ZoneColorToken, string> = {
+  danger: 'fill-danger-500',
+  success: 'fill-success-500',
+  warning: 'fill-warning-500',
+  neutral: 'fill-surface-600',
+};
+
 /** Bar fill colour for a zone. Untrained (0 sets, below MEV) reads gray. */
 export function zoneBarClass(zone: VolumeZone, sets: number): string {
-  if (zone === 'over_mrv') return 'bg-danger-500';
-  if (zone === 'in_zone') return 'bg-success-500';
-  return sets <= 0 ? 'bg-surface-600' : 'bg-warning-500';
+  return ZONE_BAR_CLASSES[zoneColorToken(zone, sets)];
 }
 
 /** Text/emphasis colour matching a zone. */
 export function zoneTextClass(zone: VolumeZone, sets: number): string {
-  if (zone === 'over_mrv') return 'text-danger-400';
-  if (zone === 'in_zone') return 'text-success-400';
-  return sets <= 0 ? 'text-surface-400' : 'text-warning-400';
+  return ZONE_TEXT_CLASSES[zoneColorToken(zone, sets)];
+}
+
+/** SVG fill colour matching a zone — the muscle-map twin of zoneBarClass. */
+export function zoneFillClass(zone: VolumeZone, sets: number): string {
+  return ZONE_FILL_CLASSES[zoneColorToken(zone, sets)];
 }
 
 /** Denominator label: the MEV–MRV band, never n/MEV. e.g. "zone 8–20". */
