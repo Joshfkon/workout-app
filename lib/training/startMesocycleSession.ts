@@ -51,7 +51,8 @@ import {
 } from '@/lib/training/weeklyRollover';
 import { sessionIndexFromCompleted } from '@/lib/training/mesocycleProgress';
 import { insertWorkoutSessions } from '@/lib/training/sessionOrigin';
-import { quickWeightEstimate } from '@/services/weightEstimationEngine';
+import { quickWeightEstimate, type TransferCandidate } from '@/services/weightEstimationEngine';
+import { fetchTransferCandidates } from '@/lib/training/transferCandidates';
 import { toLegacyMuscleGroup } from '@/types/schema';
 import type {
   Experience,
@@ -363,6 +364,11 @@ export async function startMesocycleWorkoutSession(
   const completedSessions =
     input.completedSessions ?? (await countCompletedSessions(supabase, mesocycle.id));
 
+  // Cross-exercise strength summary for cold-start weight estimation: a
+  // never-trained exercise seeds from a related exercise's logged e1RM
+  // (same pattern → same muscle) before falling back to profile heuristics.
+  const transferCandidates: TransferCandidate[] = await fetchTransferCandidates(user.id, supabase);
+
   // Create new workout session (or claim today's blockless planned shell)
   let sessionId: string;
   if (claimedShellId) {
@@ -493,10 +499,11 @@ export async function startMesocycleWorkoutSession(
       const isCompound = exercise.primaryMuscle && ['chest', 'back', 'quads', 'hamstrings', 'glutes'].includes(exercise.primaryMuscle);
       const isFirstForMuscle = !seenMuscles.has(exercise.primaryMuscle);
 
-      // Look up exercise_id from database by name
+      // Look up exercise_id from database by name (metadata feeds cold-start
+      // transfer matching)
       const { data: dbExercise } = await supabase
         .from('exercises')
-        .select('id, mechanic, default_rep_range, default_rir')
+        .select('id, mechanic, default_rep_range, default_rir, primary_muscle, movement_pattern, equipment_required')
         .eq('name', exercise.exerciseName)
         // Hide merge-soft-deleted duplicates: without this, a name shared with
         // a merged loser returns 2+ rows and .single() errors -> block skipped.
@@ -522,7 +529,18 @@ export async function startMesocycleWorkoutSession(
           userData.weight_kg,
           userData.height_cm,
           userData.body_fat_percent || 20,
-          userExperience
+          userExperience,
+          undefined,
+          'kg',
+          undefined,
+          {
+            transferCandidates,
+            targetMeta: {
+              primaryMuscle: dbExercise?.primary_muscle ?? exercise.primaryMuscle,
+              movementPattern: dbExercise?.movement_pattern,
+              equipmentRequired: dbExercise?.equipment_required,
+            },
+          }
         );
         const baseWeight = weightRec.recommendedWeight || 0;
 
@@ -596,7 +614,7 @@ export async function startMesocycleWorkoutSession(
       .is('deleted_at', null); // hide merge-soft-deleted duplicates
 
     if (exercises && exercises.length > 0) {
-      type ExerciseRow = { id: string; name: string; primary_muscle: string; mechanic: string; default_rep_range: number[]; default_rir: number };
+      type ExerciseRow = { id: string; name: string; primary_muscle: string; mechanic: string; default_rep_range: number[]; default_rir: number; movement_pattern?: string | null; equipment_required?: string[] | null };
       const exercisesByMuscle: Record<string, ExerciseRow[]> = {};
       (exercises as ExerciseRow[]).forEach((ex: ExerciseRow) => {
         if (!exercisesByMuscle[ex.primary_muscle]) {
@@ -625,7 +643,18 @@ export async function startMesocycleWorkoutSession(
               userData.weight_kg,
               userData.height_cm,
               userData.body_fat_percent || 20,
-              userExperience
+              userExperience,
+              undefined,
+              'kg',
+              undefined,
+              {
+                transferCandidates,
+                targetMeta: {
+                  primaryMuscle: exercise.primary_muscle,
+                  movementPattern: exercise.movement_pattern,
+                  equipmentRequired: exercise.equipment_required,
+                },
+              }
             );
             const baseWeight = weightRec.recommendedWeight || 0;
             // Apply progressive overload intensity modifier

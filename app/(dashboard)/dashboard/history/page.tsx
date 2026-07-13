@@ -15,7 +15,7 @@ import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 // v2: evicts entries poisoned by the old queryFn, which cached an EMPTY page
 // for 24h whenever the network getUser() round trip failed on a cold reload.
 const HISTORY_FIRST_PAGE_KEY = ['history', 'sessions', 'page0', 'v2'] as const;
-import { formatWeight, convertWeight, convertWeightForDisplay, inputWeightToKg, estimateE1RM, getLocalDateString } from '@/lib/utils';
+import { formatWeight, convertWeight, convertWeightForDisplay, inputWeightToKg, estimateE1RM, getLocalDateString, muscleDisplayName } from '@/lib/utils';
 import { createRepeatSession } from '@/lib/training/repeatWorkout';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import HistoryCalendar from './_components/HistoryCalendar';
@@ -832,7 +832,7 @@ function HistoryPageContent() {
           <div className="p-4 border-b border-surface-800 flex items-center justify-between">
             <div>
               <h2 className="text-xl font-bold text-surface-100">{selectedExercise.exerciseName}</h2>
-              <p className="text-sm text-surface-400 capitalize">{selectedExercise.primaryMuscle}</p>
+              <p className="text-sm text-surface-400">{muscleDisplayName(selectedExercise.primaryMuscle)}</p>
             </div>
             <button
               onClick={() => setSelectedExercise(null)}
@@ -941,6 +941,28 @@ function HistoryPageContent() {
       </div>
     );
   };
+
+  // First-page fetch failed with nothing cached to fall back on: show a retry
+  // state. Without this, the queryFn's throw (correct — a failed fetch must
+  // not be cached as an empty history) would leave the loader below up forever,
+  // since the seed effect only clears isLoading when data arrives.
+  if (firstPageQuery.isError && !firstPageQuery.data && workouts.length === 0) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-surface-100">Workout History</h1>
+          <p className="text-surface-400 mt-1">Your past training sessions</p>
+        </div>
+        <Card className="text-center py-12" data-testid="history-load-error">
+          <p className="text-surface-300 font-medium">Couldn&apos;t load your workout history</p>
+          <p className="text-surface-500 text-sm mt-2">Check your connection and try again.</p>
+          <Button className="mt-6" onClick={() => firstPageQuery.refetch()}>
+            Retry
+          </Button>
+        </Card>
+      </div>
+    );
+  }
 
   // Full-screen loader only on first-ever load with an empty cache. A revisit
   // (warm in-memory cache) or reload (IndexedDB restore) has first-page data

@@ -138,6 +138,15 @@ export function formatMuscleName(muscle: string): string {
 }
 
 /**
+ * Canonical muscle-label formatter for UI rendering: "glute_med" → "Glute
+ * Med". Every place a muscle key reaches the screen must go through this (or
+ * a display-name map) — never render the raw snake_case key.
+ */
+export function muscleDisplayName(muscle: string): string {
+  return formatMuscleName(muscle);
+}
+
+/**
  * Derive a workout display label ("Upper Body", "Push", "Chest & Triceps")
  * from the primary muscles of its exercises. Shared by the live workout
  * header and the resume pill so both surfaces show the same name.

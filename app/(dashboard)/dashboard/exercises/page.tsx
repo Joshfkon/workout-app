@@ -21,7 +21,7 @@ import {
   exerciseMatchesQuery,
 } from '@/services/exerciseFilter';
 import { EQUIPMENT_OPTIONS } from '@/lib/exercises/types';
-import { formatWeight, convertWeight, estimateE1RM } from '@/lib/utils';
+import { formatWeight, convertWeight, estimateE1RM, muscleDisplayName } from '@/lib/utils';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { useExercisePreferences } from '@/hooks/useExercisePreferences';
 import { ExerciseOptionsMenu } from '@/components/exercises/ExerciseOptionsMenu';
@@ -1507,7 +1507,7 @@ export default function ExercisesPage() {
                                   }}
                                   className="w-4 h-4 text-primary-500 bg-surface-700 border-surface-600 rounded focus:ring-primary-500"
                                 />
-                                <span className="text-xs text-surface-300 capitalize">{muscle}</span>
+                                <span className="text-xs text-surface-300">{muscleDisplayName(muscle)}</span>
                               </label>
                             ))}
                           </div>

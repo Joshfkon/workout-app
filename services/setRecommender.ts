@@ -22,6 +22,8 @@
 import { roundToIncrement, clamp } from '@/lib/utils';
 import { rpeToRir } from '@/types/schema';
 import {
+  COLD_START_EASY_RIR,
+  COLD_START_STEP_PCT,
   DEADBAND_RIR,
   EFFORT_MATCH_TOLERANCE,
   MAX_STEP_PCT,
@@ -64,6 +66,13 @@ export interface SetRecommenderInput {
   targetRir: number;
   /** Smallest load increment for this exercise (kg). */
   minIncrementKg?: number;
+  /**
+   * True on the exercise's FIRST-EVER session (no logged history): the weight
+   * was a cold-start estimate, expected to be wrong low. An easy-rated set
+   * (RIR >= COLD_START_EASY_RIR) bumps the load even mid-range, and the step
+   * cap widens to COLD_START_STEP_PCT so the session converges fast.
+   */
+  coldStart?: boolean;
 }
 
 export interface SetRecommendation {
@@ -177,13 +186,27 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
   let weightKg: number;
   let rationale: SetRecommendation['rationale'];
 
+  // Cold-start sets adapt aggressively: the starting weight was an estimate,
+  // expected to be wrong low. The step cap widens, and an easy-rated set bumps
+  // the load even when the reps landed mid-range.
+  // (An easy rating on a below-range set is contradictory input — hold instead.)
+  const coldStartEasy = !!input.coldStart && safeRir >= COLD_START_EASY_RIR && lastReps >= repMin;
+  const stepCap = input.coldStart ? COLD_START_STEP_PCT : MAX_STEP_PCT;
+
   if (lastReps > repMax + REP_OVERSHOOT || (lastReps >= repMax && dev >= DEADBAND_RIR)) {
     // Too light — either an unambiguous rep-overshoot (reps prove it regardless
     // of RIR — checked BEFORE the effort branch, so a rep range moved down by
     // the one-tap plateau switch reprices upward even off a near-failure set)
     // OR cleared the top of the range with >= DEADBAND reserve.
     const ideal = weightForReps(e1rm, repMax, targetRir);
-    weightKg = roundToIncrement(Math.min(ideal, lastWeightKg * (1 + MAX_STEP_PCT)), inc);
+    weightKg = roundToIncrement(Math.min(ideal, lastWeightKg * (1 + stepCap)), inc);
+    if (weightKg <= lastWeightKg) weightKg = lastWeightKg + inc;
+    rationale = 'increase_load';
+  } else if (coldStartEasy) {
+    // Cold-start "easy" rating: the RIR chip caps at 4+, so Epley can't see
+    // the real headroom — a rated-easy first set means the estimate was low.
+    // Bump by the full cold-start step rather than deriving from reported RIR.
+    weightKg = roundToIncrement(lastWeightKg * (1 + COLD_START_STEP_PCT), inc);
     if (weightKg <= lastWeightKg) weightKg = lastWeightKg + inc;
     rationale = 'increase_load';
   } else if (lastReps < repMin || dev <= -DEADBAND_RIR) {

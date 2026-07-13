@@ -89,7 +89,6 @@ describe('formatWorkoutShareText', () => {
         '',
         '🟩🟩🟩🟨  Incline Press 🏆',
         '🟩🟩🟩⬜  Lateral Raise',
-        '⬛⬛⬛  Nordic Curl',
         '',
         '7 sets · 4,450 kg · 58 min · 🏆 1 PR',
         '🟩 hit · 🟨 grind',
@@ -200,17 +199,34 @@ describe('formatWorkoutShareText', () => {
     expect(formatWorkoutShareText(input)).toContain('🟩🟩⬜⬜⬜  Bench Press');
   });
 
-  it('renders a skipped exercise as at most 3 ⬛ squares', () => {
+  it('omits skipped exercises from the share entirely', () => {
     const text = formatWorkoutShareText(
       createInput({
         exercises: [
+          createExercise({ name: 'Squat', targetSets: 2, sets: [createSet(), createSet()] }),
           createExercise({ name: 'Nordic Curl', targetSets: 5, skipped: true, sets: [] }),
-          createExercise({ name: 'Leg Curl', targetSets: 2, skipped: true, sets: [] }),
+          // No performed sets counts as skipped even without the flag.
+          createExercise({ name: 'Leg Curl', targetSets: 2, sets: [] }),
         ],
       })
     );
-    expect(text).toContain('⬛⬛⬛  Nordic Curl');
-    expect(text).toContain('⬛⬛  Leg Curl');
+    expect(text).toContain('🟩🟩  Squat');
+    expect(text).not.toContain('Nordic Curl');
+    expect(text).not.toContain('Leg Curl');
+    expect(text).not.toContain('⬛');
+  });
+
+  it('keeps the layout tight when every exercise was skipped', () => {
+    const text = formatWorkoutShareText(
+      createInput({
+        durationSeconds: 600,
+        exercises: [
+          createExercise({ name: 'Nordic Curl', skipped: true, sets: [] }),
+          createExercise({ name: 'Leg Curl', sets: [] }),
+        ],
+      })
+    );
+    expect(text).toBe(['HyperTrack 💪 Push', '', '0 sets · 0 kg · 10 min'].join('\n'));
   });
 
   it('renders AMRAP sets as their earned color plus ⚡', () => {
@@ -562,7 +578,7 @@ describe('line-width guardrail (wrap check)', () => {
     }),
   ];
 
-  const SQUARE_GLYPHS = ['🟩', '🟨', '⬜', '⬛'];
+  const SQUARE_GLYPHS = ['🟩', '🟨', '⬜'];
 
   it('keeps every emoji square grid inside one bubble line', () => {
     for (const fixture of fixtures) {

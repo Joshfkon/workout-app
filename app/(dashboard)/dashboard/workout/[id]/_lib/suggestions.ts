@@ -17,6 +17,7 @@ import { createUntypedClient } from '@/lib/supabase/client';
 import {
   quickWeightEstimate,
   quickWeightEstimateWithCalibration,
+  type TransferCandidate,
   type WorkingWeightRecommendation,
 } from '@/services/weightEstimationEngine';
 import {
@@ -396,7 +397,8 @@ export function generateCoachMessage(
   userProfile?: UserProfileForWeights,
   userContext?: UserContext,
   unit: 'kg' | 'lb' = 'kg',
-  exerciseHistories?: Record<string, ExerciseHistoryData>
+  exerciseHistories?: Record<string, ExerciseHistoryData>,
+  transferCandidates?: TransferCandidate[]
 ): CoachMessage {
   if (blocks.length === 0) {
     return {
@@ -554,6 +556,18 @@ export function generateCoachMessage(
         const exerciseHistory = exerciseHistories?.[block.exerciseId];
         const knownE1RM = exerciseHistory?.estimatedE1RM;
 
+        // Cold-start transfer inputs: with no direct history, the engine can
+        // seed this exercise from the user's logged e1RM on a related one
+        // (same muscle/pattern/equipment class) instead of profile heuristics.
+        const estimateOpts = {
+          transferCandidates,
+          targetMeta: {
+            primaryMuscle: ex.primaryMuscle,
+            movementPattern: ex.movementPattern,
+            equipmentRequired: ex.equipmentRequired,
+          },
+        };
+
         // Use calibration data if available for more accurate estimates
         if (userProfile.calibratedLifts && userProfile.calibratedLifts.length > 0) {
           weightRec = quickWeightEstimateWithCalibration(
@@ -567,7 +581,8 @@ export function generateCoachMessage(
             userProfile.calibratedLifts,
             userProfile.regionalData,
             unit,
-            knownE1RM
+            knownE1RM,
+            estimateOpts
           );
         } else {
           weightRec = quickWeightEstimate(
@@ -580,7 +595,8 @@ export function generateCoachMessage(
             userProfile.experience,
             userProfile.regionalData,
             unit,
-            knownE1RM
+            knownE1RM,
+            estimateOpts
           );
         }
       } catch (e) {

@@ -228,6 +228,21 @@ interface ExerciseCardProps {
   // Deload session: the banner holds light instead of prescribing progression,
   // and the rationale copy says so ("deload — holding light").
   isDeloadSession?: boolean;
+  // Cold start (no logged history for this exercise): the transfer-aware
+  // estimate computed by the page. Supersedes the block's stored target (which
+  // may predate transfer estimation) and names its source rung in the banner
+  // ("estimated from your Lying Leg Curl strength" vs "from your training
+  // profile"), so the user knows where the number came from.
+  coldStartSuggestion?: ColdStartSuggestion;
+}
+
+/** Cold-start estimate + provenance for a no-history exercise. */
+export interface ColdStartSuggestion {
+  weightKg: number;
+  /** Short banner reason naming the estimation source. */
+  reason: string;
+  /** Full rationale sentence for the info sheet. */
+  explanation: string;
 }
 
 /** Write status of a logged set (offline outbox, P0-2). */
@@ -284,6 +299,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   onActiveSuggestionChange,
   enhancedAthleteMode = false,
   isDeloadSession = false,
+  coldStartSuggestion,
 }: ExerciseCardProps) {
   // Prescribed RIR: calibration-adjusted target when available, eased further
   // by the session's readiness modulation (Phase 1.3/1.5 fold-in).
@@ -453,6 +469,11 @@ export const ExerciseCard = memo(function ExerciseCard({
   // Grade the next set against the effort ACTUALLY logged on `last` — read from
   // the persisted set record (feedback.repsInTank first, then rpe), never the
   // prescribed/target RIR. `resolveLastRir` is the single read-path source.
+  // Cold start = first-ever session of this exercise (no logged history). The
+  // starting weight was an estimate, so within-session adaptation is aggressive:
+  // an easy-rated set bumps the load even mid-range (services/setRecommender).
+  const isColdStartExercise = (exerciseHistory?.totalSessions ?? 0) === 0;
+
   const recommendNext = (last: { weightKg: number; reps: number; rpe?: number; feedback?: SetFeedback }) =>
     recommendSet({
       lastWeightKg: last.weightKg,
@@ -463,6 +484,7 @@ export const ExerciseCard = memo(function ExerciseCard({
       targetRepRange: block.targetRepRange,
       targetRir: effectiveTargetRir,
       minIncrementKg: exercise.minWeightIncrementKg,
+      coldStart: isColdStartExercise,
     });
 
   // RPE→RIR adapter for the recommender's AMRAP prediction.
@@ -551,10 +573,14 @@ export const ExerciseCard = memo(function ExerciseCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weightMode, isBodyweightExercise, completedSets.length, unit]);
 
-  // Determine suggested weight
-  const suggestedWeight = block.targetWeightKg > 0 
-    ? block.targetWeightKg 
-    : (recommendedWeight && recommendedWeight > 0 ? recommendedWeight : 0);
+  // Determine suggested weight. On a cold start, the page's transfer-aware
+  // estimate supersedes the block's stored target — the stored number may be a
+  // stale profile-only guess from when the workout was built.
+  const suggestedWeight = isColdStartExercise && coldStartSuggestion && coldStartSuggestion.weightKg > 0
+    ? coldStartSuggestion.weightKg
+    : block.targetWeightKg > 0
+      ? block.targetWeightKg
+      : (recommendedWeight && recommendedWeight > 0 ? recommendedWeight : 0);
 
   // Format weight for display - use exact conversion for completed sets, rounded for suggestions
   // For completed sets, preserve exact user input; for suggestions, round to plate increments
@@ -644,6 +670,12 @@ export const ExerciseCard = memo(function ExerciseCard({
   // This allows canceling the debounced calculation if user manually edits reps
   const repsCalcTimeoutsRef = useRef<Map<number, NodeJS.Timeout>>(new Map());
 
+  // Dirty-field tracking per pending set index (field-edit rules): once the
+  // user manually types/steps a field, it is user-owned — no automatic
+  // recompute (weight-edit rep estimate, feedback-driven recalc) may overwrite
+  // it. Cleared when a set is logged so the next set starts fresh.
+  const manualEditsRef = useRef<Map<number, { weight?: boolean; reps?: boolean }>>(new Map());
+
   // Cleanup pending reps calculation timeouts on unmount
   useEffect(() => {
     return () => {
@@ -667,27 +699,34 @@ export const ExerciseCard = memo(function ExerciseCard({
     const smartWeight = rec.weightKg;
     const smartReps = rec.reps;
 
-    // Update all pending inputs
-    const updatedInputs: { weight: string; reps: string; rpe: string }[] = [];
-    for (let i = 0; i < pendingSetsCount; i++) {
-      const isLastSet = i === pendingSetsCount - 1;
-      // If this is the last set and AMRAP is suggested, use 9.5 for RPE
-      const setRpe = (isLastSet && isAmrapSuggested) ? 9.5 : targetRpe;
+    // Update all pending inputs. Functional update so fields the user manually
+    // edited (dirty-field rules) survive the recalc instead of being clobbered.
+    setPendingInputs(prev => {
+      const updatedInputs: { weight: string; reps: string; rpe: string }[] = [];
+      for (let i = 0; i < pendingSetsCount; i++) {
+        const isLastSet = i === pendingSetsCount - 1;
+        // If this is the last set and AMRAP is suggested, use 9.5 for RPE
+        const setRpe = (isLastSet && isAmrapSuggested) ? 9.5 : targetRpe;
 
-      // For AMRAP sets, use bounded prediction instead of uncapped formula
-      let setReps = smartReps;
-      if (isLastSet && isAmrapSuggested && lastCompleted?.rpe) {
-        setReps = Math.max(amrapReps(lastSetData), smartReps);
+        // For AMRAP sets, use bounded prediction instead of uncapped formula
+        let setReps = smartReps;
+        if (isLastSet && isAmrapSuggested && lastCompleted?.rpe) {
+          setReps = Math.max(amrapReps(lastSetData), smartReps);
+        }
+
+        const dirty = manualEditsRef.current.get(i);
+        const existing = prev[i];
+        updatedInputs.push({
+          weight:
+            dirty?.weight && existing
+              ? existing.weight
+              : seedWeightString(smartWeight, lastCompleted.weightKg),
+          reps: dirty?.reps && existing ? existing.reps : String(setReps),
+          rpe: String(setRpe),
+        });
       }
-
-      updatedInputs.push({
-        weight: seedWeightString(smartWeight, lastCompleted.weightKg),
-        reps: String(setReps),
-        rpe: String(setRpe),
-      });
-    }
-
-    setPendingInputs(updatedInputs);
+      return updatedInputs;
+    });
   }, [completedSets, pendingSetsCount, effectiveTargetRir, block.targetRepRange, seedWeightString, isAmrapSuggested]);
   
   // Initialize pending inputs when component mounts or when we need a full reset
@@ -700,6 +739,12 @@ export const ExerciseCard = memo(function ExerciseCard({
     // If a set was just completed (count increased), update all pending inputs
     // based on the just-completed set's performance
     if (currentCount > prevCount) {
+      // Logging resets the field-edit state for the next set: dirty flags are
+      // per-set, and any in-flight weight-edit recalc refers to the old set.
+      manualEditsRef.current.clear();
+      repsCalcTimeoutsRef.current.forEach((timeout) => clearTimeout(timeout));
+      repsCalcTimeoutsRef.current.clear();
+
       const targetRpe = 10 - effectiveTargetRir;
       const lastCompleted = completedSets[completedSets.length - 1];
       
@@ -841,8 +886,9 @@ export const ExerciseCard = memo(function ExerciseCard({
         predictedReps = amrapReps(lastSetData);
       }
 
-      // Only prefill reps if we have a prediction (don't check current value - this is initial prefill)
-      const needsRepsUpdate = predictedReps !== null;
+      // Only prefill reps if we have a prediction (don't check current value -
+      // this is initial prefill) AND the user hasn't already typed their own.
+      const needsRepsUpdate = predictedReps !== null && !manualEditsRef.current.get(lastIndex)?.reps;
 
       if (needsRpeUpdate || needsRepsUpdate) {
         setPendingInputs(prev => {
@@ -942,6 +988,13 @@ export const ExerciseCard = memo(function ExerciseCard({
   };
 
   const updatePendingInput = (index: number, field: 'weight' | 'reps' | 'rpe', value: string) => {
+    // Mark the field user-owned before anything else (dirty-field rules).
+    if (field === 'weight' || field === 'reps') {
+      const dirty = manualEditsRef.current.get(index) ?? {};
+      dirty[field] = true;
+      manualEditsRef.current.set(index, dirty);
+    }
+
     // If user manually edits reps, cancel any pending debounced reps calculation
     // This prevents overwriting the user's manual input
     if (field === 'reps') {
@@ -957,8 +1010,10 @@ export const ExerciseCard = memo(function ExerciseCard({
       if (updated[index]) {
         updated[index] = { ...updated[index], [field]: value };
 
-        // If weight changed, schedule debounced auto-adjust of reps
-        if (field === 'weight' && value) {
+        // If weight changed, schedule debounced auto-adjust of reps — but only
+        // while the reps field still holds the suggested value. Once the user
+        // has manually edited reps for this set, weight edits never touch it.
+        if (field === 'weight' && value && !manualEditsRef.current.get(index)?.reps) {
           const newWeightDisplay = parseFloat(value);
           if (!isNaN(newWeightDisplay) && newWeightDisplay > 0) {
             const newWeightKg = inputWeightToKg(newWeightDisplay, unit);
@@ -982,12 +1037,25 @@ export const ExerciseCard = memo(function ExerciseCard({
               refWeight = prevSet.weightKg;
               refReps = prevSet.reps;
               refRir = resolveLastRir(prevSet, effectiveTargetRir);
-            } else if (suggestedWeight > 0) {
-              refWeight = suggestedWeight;
-              refReps = Math.round((block.targetRepRange[0] + block.targetRepRange[1]) / 2);
             }
 
-            if (refWeight > 0 && Math.abs(newWeightKg - refWeight) > 0.5) {
+            // Capacity anchor for the estimate: the same session-best E1RM the
+            // banner's recommendSet uses, falling back to the stored e1RM at
+            // session start. A planned target weight is NOT an anchor — with no
+            // real e1RM observed (cold start) the estimate would collapse to a
+            // constant, so weight edits must leave the reps field untouched.
+            const anchorE1RM = sessionBestE1RM ?? (anchorE1RMKg > 0 ? anchorE1RMKg : undefined);
+            const hasE1RM = anchorE1RM !== undefined || (refWeight > 0 && refReps > 0);
+
+            // An AMRAP row predicts reps to failure (RIR 0) — matching its
+            // prescribed 9.5 RPE — not reps at the working-set RIR target.
+            const rowTargetRir =
+              isAmrapSuggested && index === pendingSetsCount - 1 ? 0 : effectiveTargetRir;
+
+            const weightChanged =
+              refWeight > 0 ? Math.abs(newWeightKg - refWeight) > 0.5 : true;
+
+            if (hasE1RM && weightChanged) {
               // Weight changed significantly - schedule debounced reps recalculation
               // Clear any existing timeout for this index
               const existingTimeout = repsCalcTimeoutsRef.current.get(index);
@@ -1001,6 +1069,9 @@ export const ExerciseCard = memo(function ExerciseCard({
               // Schedule debounced reps update (400ms delay)
               const timeout = setTimeout(() => {
                 repsCalcTimeoutsRef.current.delete(index);
+                // Re-check at fire time: a manual reps edit in the meantime
+                // makes the field user-owned.
+                if (manualEditsRef.current.get(index)?.reps) return;
                 setPendingInputs(prevInputs => {
                   const newInputs = [...prevInputs];
                   // Only update reps if user hasn't manually changed it since we scheduled
@@ -1012,9 +1083,9 @@ export const ExerciseCard = memo(function ExerciseCard({
                       lastReps: refReps,
                       lastRir: refRir,
                       setsCompletedThisExercise: completedSets.length,
-                      sessionBestE1RMKg: sessionBestE1RM,
+                      sessionBestE1RMKg: anchorE1RM,
                       targetRepRange: block.targetRepRange,
-                      targetRir: effectiveTargetRir,
+                      targetRir: rowTargetRir,
                     });
                     newInputs[index] = { ...newInputs[index], reps: String(newReps) };
                   }
@@ -1269,6 +1340,12 @@ export const ExerciseCard = memo(function ExerciseCard({
         explanation.push(
           `No estimated 1RM on record yet, so the load is anchored to last session: ${displayWeight(prevSet.weightKg, true)} ${weightLabel} × ${prevSet.reps}${prevRir != null ? ` at ${prevRir} RIR` : ''}.`
         );
+      } else if (weight && coldStartSuggestion) {
+        // Name the estimation rung that produced the number (transfer from a
+        // logged related exercise vs profile heuristic) — the user should know
+        // which source fired.
+        reason = coldStartSuggestion.reason;
+        explanation.push(coldStartSuggestion.explanation);
       } else if (weight) {
         reason = 'starting point estimated from your training profile';
         explanation.push('No history for this exercise yet — the starting weight is estimated from your profile and calibrated lifts.');

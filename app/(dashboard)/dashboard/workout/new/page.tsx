@@ -10,7 +10,7 @@ import { generateWarmupProtocol } from '@/services/progressionEngine';
 import { useMuscleRecovery, type MuscleRecoveryStatus } from '@/hooks/useMuscleRecovery';
 import { useWeeklyVolume } from '@/hooks/useWeeklyVolume';
 import type { MuscleVolumeData } from '@/services/volumeTracker';
-import { getLocalDateString } from '@/lib/utils';
+import { getLocalDateString, muscleDisplayName } from '@/lib/utils';
 import { insertWorkoutSessions } from '@/lib/training/sessionOrigin';
 import { getUserExercisePreferences } from '@/lib/data/exercisePreferencesService';
 import { getVarietyPreferences, saveVarietyPreferences } from '@/services/exerciseVarietyService';
@@ -1543,8 +1543,8 @@ function NewWorkoutContent() {
                     <div className="mt-2 flex flex-wrap gap-2">
                       <span className="text-xs text-surface-500">Muscles:</span>
                       {suggestions.muscles.map((muscle) => (
-                        <span key={muscle} className="px-2 py-1 bg-primary-500/20 text-primary-400 rounded text-xs capitalize">
-                          {muscle}
+                        <span key={muscle} className="px-2 py-1 bg-primary-500/20 text-primary-400 rounded text-xs">
+                          {muscleDisplayName(muscle)}
                         </span>
                       ))}
                     </div>
@@ -1738,7 +1738,7 @@ function NewWorkoutContent() {
                           <p className="text-xs font-medium text-surface-500 uppercase mb-2">Muscles Skipped (Recovery)</p>
                           {suggestions.skippedMuscles.map((item, idx) => (
                             <div key={idx} className="text-sm text-surface-400 mb-1">
-                              <span className="capitalize font-medium text-surface-300">{item.muscle}</span>: {item.reason}
+                              <span className="font-medium text-surface-300">{muscleDisplayName(item.muscle)}</span>: {item.reason}
                             </div>
                           ))}
                         </div>
@@ -1903,7 +1903,7 @@ function NewWorkoutContent() {
               return (
               <Card key={muscle}>
                 <CardHeader>
-                  <CardTitle className="capitalize">{muscle}</CardTitle>
+                  <CardTitle>{muscleDisplayName(muscle)}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   {muscleExercises.length > 0 ? (
@@ -2201,7 +2201,7 @@ function NewWorkoutContent() {
                             }}
                             className="w-4 h-4 text-primary-500 bg-surface-700 border-surface-600 rounded focus:ring-primary-500"
                           />
-                          <span className="text-xs text-surface-300 capitalize">{muscle}</span>
+                          <span className="text-xs text-surface-300">{muscleDisplayName(muscle)}</span>
                         </label>
                       ))}
                     </div>

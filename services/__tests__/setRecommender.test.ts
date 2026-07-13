@@ -175,6 +175,57 @@ describe('recommendSet', () => {
       expect(r.reps).toBeLessThanOrEqual(12 + 5);
     });
   });
+
+  describe('COLD START (first-ever session — estimate expected wrong low)', () => {
+    // Cold-start seated leg curl: estimated 20 kg, set 1 lands mid-range but
+    // rated easy (RIR 4). A warm exercise would hold (Epley says 12 @ 4 RIR ≈
+    // 13 @ 3 RIR at the same load); a cold start must bump aggressively.
+    const coldBase = (over: Partial<SetRecommenderInput> = {}) =>
+      base({
+        lastWeightKg: 20,
+        lastReps: 12,
+        lastRir: 4,
+        targetRepRange: [10, 15],
+        targetRir: 3,
+        setsCompletedThisExercise: 1,
+        coldStart: true,
+        ...over,
+      });
+
+    it('bumps +10-15% off a set-1 "easy" rating even when reps landed in range', () => {
+      const r = recommendSet(coldBase());
+      expect(r.rationale).toBe('increase_load');
+      expect(r.weightKg).toBeGreaterThan(20);
+      // +15% cap (22.5 after 2.5 kg increment rounding, i.e. +12.5%)
+      expect(r.weightKg).toBeLessThanOrEqual(20 * 1.15 + 1.25);
+    });
+
+    it('the same set on a NON-cold-start exercise holds (deadband unchanged)', () => {
+      const r = recommendSet(coldBase({ coldStart: false }));
+      expect(r.rationale).toBe('maintain');
+      expect(r.weightKg).toBe(20);
+    });
+
+    it('does not bump off an easy rating when reps fell below the range (contradictory input)', () => {
+      const r = recommendSet(coldBase({ lastReps: 8 }));
+      expect(r.rationale).not.toBe('increase_load');
+    });
+
+    it('cold-start rep overshoot uses the wider +15% step cap', () => {
+      // 20 reps against 10-15: overshoot branch. Warm cap is +10%; cold is +15%.
+      const cold = recommendSet(coldBase({ lastReps: 20 }));
+      const warm = recommendSet(coldBase({ lastReps: 20, coldStart: false }));
+      expect(cold.rationale).toBe('increase_load');
+      expect(cold.weightKg).toBeGreaterThanOrEqual(warm.weightKg);
+      expect(cold.weightKg).toBeLessThanOrEqual(20 * 1.15 + 1.25);
+    });
+
+    it('a hard-rated cold-start set still reduces normally', () => {
+      const r = recommendSet(coldBase({ lastReps: 8, lastRir: 0 }));
+      expect(r.rationale).toBe('reduce_load');
+      expect(r.weightKg).toBeLessThan(20);
+    });
+  });
 });
 
 describe('resolveLastRir — engine input comes from the STORED set, never UI state', () => {

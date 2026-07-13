@@ -11,7 +11,7 @@ const SETTINGS_KEY = ['settings', 'user'] as const;
 import { STANDARD_MUSCLE_GROUPS, STANDARD_MUSCLE_DISPLAY_NAMES, DEFAULT_VOLUME_LANDMARKS, MUSCLE_GROUPS } from '@/types/schema';
 import type { Goal, Experience, WeightUnit, Equipment, StandardMuscleGroup, MuscleGroup, Rating } from '@/types/schema';
 import { createUntypedClient } from '@/lib/supabase/client';
-import { convertWeight } from '@/lib/utils';
+import { convertWeight, muscleDisplayName } from '@/lib/utils';
 import { getDisplayWeight, validateWeightEntry } from '@/lib/weightUtils';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { useSubscription } from '@/hooks/useSubscription';
@@ -707,7 +707,7 @@ export default function SettingsPage() {
                     }}
                     className="w-4 h-4 rounded border-surface-600 bg-surface-800 text-warning-500 focus:ring-warning-500"
                   />
-                  <span className="text-sm text-surface-200 capitalize">{muscle}</span>
+                  <span className="text-sm text-surface-200">{muscleDisplayName(muscle)}</span>
                 </label>
               ))}
             </div>

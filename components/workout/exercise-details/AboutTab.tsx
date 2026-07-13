@@ -11,6 +11,7 @@ import { YouTubeEmbed } from '../YouTubeEmbed';
 import { MuscleWikiVideo } from '../MuscleWikiVideo';
 import { MuscleMap } from '@/components/muscleMap/MuscleMap';
 import { exerciseHighlightData } from '@/lib/muscleMap/adapters';
+import { muscleDisplayName } from '@/lib/utils';
 import { getExerciseProp } from './helpers';
 
 interface AboutTabProps {
@@ -238,12 +239,12 @@ function MusclesWorked({ primaryMuscle, secondaryMuscles, repRange }: MusclesWor
         <div className="flex flex-wrap items-center gap-1">
           {primaryMuscle && (
             <Badge variant="info" size="sm">
-              {String(primaryMuscle).replace(/_/g, ' ')}
+              {muscleDisplayName(String(primaryMuscle))}
             </Badge>
           )}
           {secondaryMuscles.map((muscle, idx) => (
             <Badge key={idx} variant="default" size="sm">
-              {String(muscle).replace(/_/g, ' ')}
+              {muscleDisplayName(String(muscle))}
             </Badge>
           ))}
         </div>
