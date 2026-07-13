@@ -11,6 +11,11 @@ import {
 } from '@/services/volumeTracker';
 import type { WeeklyMuscleVolumeRow } from '@/types/database-queries';
 import { STANDARD_MUSCLE_GROUPS, resolveMuscleToStandard, type StandardMuscleGroup } from '@/types/schema';
+import {
+  computeReachableMuscles,
+  isMuscleWarnable,
+  type WeeklyVolumeBlockRow,
+} from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 import { getLocalDateString } from '@/lib/utils';
 
 interface UseWeeklyVolumeOptions {
@@ -149,8 +154,15 @@ export function useWeeklyVolume(options: UseWeeklyVolumeOptions = {}) {
             });
           });
 
-          // Convert to MuscleVolumeData format with all standard muscles
-          const calculatedData: MuscleVolumeData[] = STANDARD_MUSCLE_GROUPS.map((muscle) => {
+          // Convert to MuscleVolumeData format with all standard muscles —
+          // EXCEPT fine members (glute_med, erectors, upper_traps, soleus, …)
+          // the user's own exercise tagging can't feed: a coarse-only
+          // 'traps'/'calves' logger must never see an un-clearable fine-muscle
+          // below-MEV row here. Same reachability gate as buildVolumeRows.
+          const reachable = computeReachableMuscles(blocks as WeeklyVolumeBlockRow[]);
+          const calculatedData: MuscleVolumeData[] = STANDARD_MUSCLE_GROUPS.filter((muscle) =>
+            isMuscleWarnable(muscle, reachable)
+          ).map((muscle) => {
             const directSets = Math.round(directByMuscle.get(muscle) ?? 0);
             const indirectSets = Math.round(indirectByMuscle.get(muscle) ?? 0);
             const totalSets = directSets + indirectSets;
@@ -168,8 +180,12 @@ export function useWeeklyVolume(options: UseWeeklyVolumeOptions = {}) {
 
           setVolumeData(calculatedData);
         } else {
-          // No data found - return empty defaults
-          const defaultData: MuscleVolumeData[] = STANDARD_MUSCLE_GROUPS.map((muscle) => {
+          // No data found - return empty defaults. With no logged blocks,
+          // NOTHING is reachable, so every fine member is dropped (an empty
+          // reachable set gates them all).
+          const defaultData: MuscleVolumeData[] = STANDARD_MUSCLE_GROUPS.filter((muscle) =>
+            isMuscleWarnable(muscle, new Set<StandardMuscleGroup>())
+          ).map((muscle) => {
             const landmarks = getVolumeLandmarks(muscle);
             return {
               muscleGroup: muscle,

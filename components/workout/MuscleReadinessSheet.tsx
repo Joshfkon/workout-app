@@ -222,8 +222,9 @@ function ReadinessRowContent({ row }: { row: ReadinessRow }) {
   );
 }
 
-/** Lagging fine children stay visible even while their parent is collapsed. */
-const pinLaggingChild = (child: ReadinessChild) => child.belowMev;
+/** Pinned = reachable AND lagging children stay visible while collapsed;
+ *  unreachable context rows only show on an explicit expand. */
+const pinLaggingChild = (child: ReadinessChild) => child.belowMev && child.reachable;
 
 /**
  * MuscleReadinessContent — the read-only "good targets + per-muscle rows" body

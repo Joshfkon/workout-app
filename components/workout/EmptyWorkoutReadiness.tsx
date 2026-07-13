@@ -39,6 +39,8 @@ export function EmptyWorkoutReadiness({
   const [now] = useState(() => new Date());
 
   // Empty workout: no live blocks/sets yet, so readiness is purely history-based.
+  // Hierarchy expansion lives inside MuscleReadinessContent (shared
+  // MuscleGroupList state, persisted per user for the readiness surface).
   const { rows, targets, nextUp, isLoading } = useMuscleReadiness({
     liveBlocks: [],
     liveSets: [],

@@ -41,13 +41,14 @@ export function weeklyVolumeWindowStartISO(now: Date = new Date()): string {
   return rollingWindowStartISO(WEEKLY_VOLUME_WINDOW_DAYS, now);
 }
 
-// MEV per standard muscle (20 muscles) — the threshold for the 'low' status.
+// MEV per standard muscle (24 muscles) — the threshold for the 'low' status.
 export const MEV_TARGETS: Record<StandardMuscleGroup, number> = {
   chest_upper: 4, chest_lower: 4,
   front_delts: 4, lateral_delts: 6, rear_delts: 4,
-  lats: 6, upper_back: 4, traps: 4,
+  lats: 6, upper_back: 4, traps: 4, upper_traps: 3, mid_lower_traps: 2,
   biceps: 4, triceps: 4, forearms: 4,
-  quads: 6, hamstrings: 4, glutes: 4, glute_med: 2, adductors: 4, calves: 6,
+  quads: 6, hamstrings: 4, glutes: 4, glute_med: 2, adductors: 4,
+  calves: 6, gastrocnemius: 4, soleus: 3,
   abs: 6, obliques: 4, erectors: 4,
 };
 
@@ -57,12 +58,14 @@ export const ALL_MUSCLE_GROUPS: readonly StandardMuscleGroup[] = STANDARD_MUSCLE
 // FINE-GRAINED MUSCLE REACHABILITY (warning gating)
 // ============================================
 //
-// Of the 20 standard muscles, exactly three have NO coarse legacy tag that can
+// Of the 24 standard muscles, seven have NO coarse legacy tag that can
 // credit them: the runtime resolver is standard-first, so a set tagged with a
-// coarse token ('glutes','abs') or a legacy coarse token ('back') resolves to
-// [glutes] / [abs] / [lats,upper_back] respectively — it never leaks credit to
-// glute_med / obliques / erectors. These "fine" muscles are therefore only
-// reachable when the user logs an exercise tagged at fine grain for them.
+// coarse token ('glutes','abs','traps','calves') or a legacy coarse token
+// ('back') resolves to [glutes] / [abs] / [traps] / [calves] /
+// [lats,upper_back] respectively — it never leaks credit into glute_med /
+// obliques / erectors / upper_traps / mid_lower_traps / gastrocnemius /
+// soleus. These "fine" muscles are therefore only reachable when the user
+// logs an exercise tagged at fine grain for them.
 //
 // Their coarse "parent" region (below) is where that work physiologically
 // lands. When a user's data is entirely coarse (e.g. only 'glutes'/'back'/'abs'
@@ -76,6 +79,10 @@ export const FINE_MUSCLE_PARENTS: Partial<Record<StandardMuscleGroup, StandardMu
   erectors: ['lats', 'upper_back'], // legacy 'back'
   glute_med: ['glutes'], // legacy 'glutes'
   obliques: ['abs'], // legacy 'abs'
+  upper_traps: ['traps'], // coarse 'traps'
+  mid_lower_traps: ['traps'], // coarse 'traps'
+  gastrocnemius: ['calves'], // coarse 'calves'
+  soleus: ['calves'], // coarse 'calves'
 };
 
 /** The standard muscles that only a fine-grained tag can credit. */
@@ -401,9 +408,9 @@ export const COARSE_CHILDREN: Record<CoarseMuscle, StandardMuscleGroup[]> = {
   quads: ['quads'],
   hamstrings: ['hamstrings'],
   glutes: ['glutes', 'glute_med'],
-  calves: ['calves'],
+  calves: ['calves', 'gastrocnemius', 'soleus'],
   abs: ['abs', 'obliques'],
-  traps: ['traps'],
+  traps: ['traps', 'upper_traps', 'mid_lower_traps'],
   forearms: ['forearms'],
   adductors: ['adductors'],
 };
@@ -427,6 +434,8 @@ export const FINE_CHILD_MUSCLES = new Set<StandardMuscleGroup>([
   'front_delts', 'lateral_delts', 'rear_delts',
   'lats', 'upper_back', 'erectors',
   'glute_med', 'obliques',
+  'upper_traps', 'mid_lower_traps',
+  'gastrocnemius', 'soleus',
 ]);
 
 /**
@@ -553,10 +562,18 @@ export interface VolumeRow {
   belowMev: boolean;
   /** Whether the user's exercises can feed this muscle (children only gate). */
   reachable: boolean;
+  /**
+   * Coarse rows only: whether the row can be expanded — it has at least one
+   * fine child the user's own exercise tagging can feed. This is what gates
+   * the chevron on every surface; a group whose library can't feed any fine
+   * member never expands (and so never renders a fine row).
+   */
+  expandable: boolean;
   exercises: ExerciseVolume[];
   /**
-   * ALL reachable fine children of a coarse row (each flagged belowMev).
-   * Visibility (pinned-lagging vs behind-the-chevron) is decided by the shared
+   * ALL fine children of an expandable coarse row (each flagged belowMev and
+   * reachable; unreachable ones are expand-only context rows). Visibility
+   * (pinned-lagging vs behind-the-chevron) is decided by the shared
    * MuscleGroupList component / withVisibleChildren helper, not here.
    */
   children: VolumeRow[];
@@ -595,10 +612,11 @@ function setsByStandardMuscle(
 
 /**
  * THE shared row model. Given the shared counter's per-muscle stats and the
- * reachability set, produce coarse rows (below-MEV first) each carrying ALL
- * their reachable fine children (each flagged belowMev). Which children are
+ * reachability set, produce coarse rows (below-MEV first). An expandable row
+ * (≥1 reachable fine child) carries ALL its fine children — unreachable ones
+ * flagged reachable:false as expand-only context rows. Which children are
  * VISIBLE is a presentation concern — the shared MuscleGroupList component
- * shows pinned (lagging) children always and the rest behind the chevron.
+ * pins reachable lagging children open and puts the rest behind the chevron.
  * Every surface renders from this so counts and zone-status always agree.
  */
 export function buildVolumeRows(
@@ -611,6 +629,13 @@ export function buildVolumeRows(
   const rows: VolumeRow[] = COARSE_MUSCLES.map((coarse) => {
     const children = COARSE_CHILDREN[coarse];
     const band = opts.bands?.[coarse] ?? RESEARCH_VOLUME_BANDS[coarse];
+
+    // The chevron rule: a coarse row is expandable when the user's own exercise
+    // tagging can feed at least one of its fine children. When no reachability
+    // is supplied, don't gate (back-compat: all fine children count).
+    const expandable = children.some(
+      (c) => FINE_CHILD_MUSCLES.has(c) && (!reachable || reachable.has(c))
+    );
 
     let coarseSetsRaw = 0;
     const coarseExercises: ExerciseVolume[] = [];
@@ -629,12 +654,17 @@ export function buildVolumeRows(
 
       const childSets = Math.round(data.sets);
       const childMev = fineChildMev(child);
-      // A fine child is carried only where the user's own exercises can feed it
-      // (reachable) — an unreachable child's target rolls up into the parent.
-      // When no reachability is supplied, don't gate (back-compat).
+      // Children are carried only on EXPANDABLE rows (≥1 reachable fine child —
+      // the chevron rule above). An expandable row carries ALL its fine
+      // children, including unreachable ones at 0: those are context rows the
+      // user can reveal by expanding; they carry reachable:false so the
+      // warning/target selectors skip them and the pinned (always-visible)
+      // rule — reachable AND below-MEV — never surfaces them uninvited.
+      // Which children are VISIBLE (pinned vs behind the chevron) is the
+      // shared MuscleGroupList / withVisibleChildren layer's decision.
+      if (!expandable) continue;
       const childReachable = !reachable || reachable.has(child);
       const childBelowMev = childSets < childMev;
-      if (!childReachable) continue;
 
       // A fine child's band is a proportional slice of the coarse band, floored
       // at its own MEV, so its zone reads sensibly on the same scale.
@@ -649,7 +679,8 @@ export function buildVolumeRows(
         band: childBand,
         zone: volumeZone(childSets, childBand),
         belowMev: childBelowMev,
-        reachable: true,
+        reachable: childReachable,
+        expandable: false,
         exercises: data.exercises.map((e) => ({ ...e, sets: Math.round(e.sets * 10) / 10 })),
         children: [],
       });
@@ -667,6 +698,7 @@ export function buildVolumeRows(
       zone: volumeZone(coarseSets, band),
       belowMev: coarseSets < band.mev,
       reachable: true,
+      expandable,
       exercises: coarseExercises.sort((a, b) => b.sets - a.sets),
       children: childRows.sort((a, b) => Number(b.belowMev) - Number(a.belowMev) || b.sets - a.sets),
     };
@@ -731,7 +763,9 @@ export function belowMevVolumeData(rows: VolumeRow[]): MuscleVolumeData[] {
   for (const row of rows) {
     if (row.zone === 'below_mev') push(row.muscle, row.sets, row.band, row.exercises);
     for (const child of row.children) {
-      if (child.belowMev) push(child.muscle, child.sets, child.band, child.exercises);
+      // Unreachable children can be present when the user expanded the parent
+      // (context rows) — never warn on those; the warning stays satisfiable.
+      if (child.belowMev && child.reachable) push(child.muscle, child.sets, child.band, child.exercises);
     }
   }
   return out;

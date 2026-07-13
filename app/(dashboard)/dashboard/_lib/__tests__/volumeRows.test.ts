@@ -52,15 +52,20 @@ describe('buildVolumeRows — coarse rows + fine children', () => {
     expect(rows).toHaveLength(COARSE_MUSCLES.length);
   });
 
-  it('carries a fine child only when the user\'s exercises can feed it (reachable)', () => {
+  it('carries an unreachable fine child only as an expand-only context row', () => {
     // Coarse back trained via lats; erectors untrained (0) and unreachable.
     const blocks = [block('pd', 'lats', [], 10, 'Lat Pulldown')];
     const stats = computeWeeklyMuscleVolume(blocks);
     const reachable = computeReachableMuscles(blocks);
     const back = buildVolumeRows(stats, reachable).find((r) => r.muscle === 'back')!;
-    // erectors is a fine child but unreachable from coarse-ish lat work → dropped
-    // from the hierarchy entirely (its target rolls up into the parent).
-    expect(back.children.some((c) => c.muscle === 'erectors')).toBe(false);
+    // The back row is expandable (lats is reachable), so it carries ALL its
+    // fine children — but unreachable erectors are flagged reachable:false:
+    // context rows the shared list only shows on an explicit expand, and the
+    // warning/target selectors skip (its target rolls up into the parent).
+    expect(back.expandable).toBe(true);
+    const erectors = back.children.find((c) => c.muscle === 'erectors');
+    expect(erectors).toBeDefined();
+    expect(erectors!.reachable).toBe(false);
   });
 
   it('surfaces a reachable, lagging fine child under its parent', () => {

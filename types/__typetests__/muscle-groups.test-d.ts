@@ -27,7 +27,7 @@ import {
 } from '../schema';
 
 // ============================================================================
-// StandardMuscleGroup Type Tests (20 groups)
+// StandardMuscleGroup Type Tests (24 groups)
 // ============================================================================
 
 // Valid StandardMuscleGroup values
@@ -39,6 +39,10 @@ expectAssignable<StandardMuscleGroup>('rear_delts');
 expectAssignable<StandardMuscleGroup>('lats');
 expectAssignable<StandardMuscleGroup>('upper_back');
 expectAssignable<StandardMuscleGroup>('traps');
+expectAssignable<StandardMuscleGroup>('upper_traps');
+expectAssignable<StandardMuscleGroup>('mid_lower_traps');
+expectAssignable<StandardMuscleGroup>('gastrocnemius');
+expectAssignable<StandardMuscleGroup>('soleus');
 expectAssignable<StandardMuscleGroup>('biceps');
 expectAssignable<StandardMuscleGroup>('triceps');
 expectAssignable<StandardMuscleGroup>('forearms');
@@ -259,8 +263,10 @@ expectType<VolumeLandmarks>(quadsLandmarks);
 // Array should be readonly
 expectType<readonly [
   'chest_upper', 'chest_lower', 'front_delts', 'lateral_delts', 'rear_delts',
-  'lats', 'upper_back', 'traps', 'biceps', 'triceps', 'forearms',
-  'quads', 'hamstrings', 'glutes', 'glute_med', 'adductors', 'calves',
+  'lats', 'upper_back', 'traps', 'upper_traps', 'mid_lower_traps',
+  'biceps', 'triceps', 'forearms',
+  'quads', 'hamstrings', 'glutes', 'glute_med', 'adductors',
+  'calves', 'gastrocnemius', 'soleus',
   'abs', 'obliques', 'erectors'
 ]>(STANDARD_MUSCLE_GROUPS);
 

@@ -35,11 +35,22 @@ const SOURCES_IN_APPLY_ORDER = [
 ];
 
 // primary_muscle UPDATEs that run after the inserts (kept in sync with the
-// reclassify block in 20260710000001). Applied last, like the real migration.
+// reclassify blocks in 20260710000001 and 20260713000001). Applied last, like
+// the real migrations.
 const RECLASSIFY: Record<string, string> = {
   'Hip Adduction Machine': 'adductors',
   'Hip Abduction Machine': 'glute_med',
   "Farmer's Carry": 'forearms',
+  // 20260713000001 — fine traps/calves retag.
+  'Dumbbell Shrug': 'upper_traps',
+  'Barbell Shrug': 'upper_traps',
+  'Seated Calf Raise': 'soleus',
+  'Standing Calf Raise': 'gastrocnemius',
+  'Smith Machine Calf Raise': 'gastrocnemius',
+  'Donkey Calf Raise': 'gastrocnemius',
+  'Single Leg Calf Raise': 'gastrocnemius',
+  'Leg Press Calf Raise': 'gastrocnemius',
+  'Calf Press Machine': 'gastrocnemius',
 };
 
 function buildFinalLibrary(): Map<string, string> {
@@ -75,7 +86,7 @@ describe('Exercise Library muscle-chip coverage', () => {
 
   it('every muscle-group chip surfaces >= 1 exercise', () => {
     const empty = MUSCLE_GROUPS.filter(
-      (chip) => ![...library.values()].some((primary) => muscleMatchesGroup(primary, chip))
+      (chip) => !Array.from(library.values()).some((primary) => muscleMatchesGroup(primary, chip))
     );
     expect(empty).toEqual([]);
   });
@@ -90,11 +101,15 @@ describe('Exercise Library muscle-chip coverage', () => {
     expect(reach('Incline Dumbbell Press', 'chest')).toBe(true);
     expect(reach('Clamshell', 'glutes')).toBe(true); // glute_med primary
     expect(reach('Seal Row', 'back')).toBe(true); // upper_back primary
+    // 20260713000001 fine retags roll up to their coarse chips.
+    expect(reach('Barbell Shrug', 'traps')).toBe(true); // upper_traps primary
+    expect(reach('Seated Calf Raise', 'calves')).toBe(true); // soleus primary
+    expect(reach('Standing Calf Raise', 'calves')).toBe(true); // gastrocnemius primary
   });
 
   it('Forearms and Adductors chips are populated (the reported gaps)', () => {
     const under = (chip: string) =>
-      [...library.entries()].filter(([, p]) => muscleMatchesGroup(p, chip)).map(([n]) => n);
+      Array.from(library.entries()).filter(([, p]) => muscleMatchesGroup(p, chip)).map(([n]) => n);
     const forearms = under('forearms');
     expect(forearms).toEqual(
       expect.arrayContaining(['Plate Pinch Hold', 'Dead Hang', 'Wrist Roller', "Farmer's Carry"])

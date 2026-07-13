@@ -221,7 +221,8 @@ export default function VolumeProfilePage() {
   // Shared hierarchy expansion (persisted per user for this surface); lagging
   // (below-MEV) fine children stay pinned visible even while collapsed.
   const expansion = useMuscleRowExpansion('volume', volumeRows);
-  const pinLaggingChild = useCallback((child: VolumeRow) => child.belowMev, []);
+  // Pinned = reachable AND lagging; unreachable context rows only show on expand.
+  const pinLaggingChild = useCallback((child: VolumeRow) => child.belowMev && child.reachable, []);
   // Rows narrowed to the children actually on screen — the body map and the
   // tap-to-scroll targets must match the visible bars, not the full hierarchy.
   const visibleRows = useMemo(

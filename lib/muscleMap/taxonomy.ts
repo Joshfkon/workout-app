@@ -21,8 +21,14 @@ import type { StandardMuscleGroup } from '@/types/schema';
  * Muscle → vendored region ids.
  *
  * Non-obvious choices, mirroring DETAILED_TO_STANDARD_MAP semantics:
- * - `traps` (standard) covers upper_traps + lower_traps detailed muscles, so
- *   it takes the artwork's traps-upper-* AND traps-lower-* regions.
+ * - The fine traps members own the artwork's existing trap regions — nothing
+ *   newly carved: `upper_traps` takes traps-upper-*, `mid_lower_traps` takes
+ *   traps-lower-*. The coarse `traps` standard muscle therefore has NO region
+ *   of its own; coarse traps data brightens the whole area via
+ *   REGIONLESS_COARSE_MEMBERS (adapters paint the fine owners with the coarse
+ *   value, and a rendered fine row overrides its own sub-region).
+ * - Same for calves: `gastrocnemius` takes the calves-gastroc-* regions,
+ *   `soleus` takes calves-soleus-*, and the coarse `calves` id is regionless.
  * - `upper_back` (standard) covers rhomboids / mid-back, so it takes the
  *   traps-mid-* regions (the between-the-shoulder-blades area).
  * - `erectors` includes the lower-back-ql-* (quadratus lumborum) regions:
@@ -47,12 +53,11 @@ export const MUSCLE_TO_REGIONS = {
     'lats-lower-right',
   ],
   upper_back: ['traps-mid-left', 'traps-mid-right'],
-  traps: [
-    'traps-upper-left',
-    'traps-upper-right',
-    'traps-lower-left',
-    'traps-lower-right',
-  ],
+  // Regionless coarse id — its area is owned by the fine members below (see
+  // REGIONLESS_COARSE_MEMBERS; the artwork has no single whole-trap path).
+  traps: [],
+  upper_traps: ['traps-upper-left', 'traps-upper-right'],
+  mid_lower_traps: ['traps-lower-left', 'traps-lower-right'],
   biceps: ['biceps-left', 'biceps-right'],
   triceps: [
     'triceps-long-left',
@@ -78,14 +83,15 @@ export const MUSCLE_TO_REGIONS = {
   glutes: ['gluteus-maximus-left', 'gluteus-maximus-right'],
   glute_med: ['gluteus-medius-left', 'gluteus-medius-right'],
   adductors: ['adductors-left', 'adductors-right'],
-  calves: [
+  // Regionless coarse id — area owned by gastrocnemius + soleus below.
+  calves: [],
+  gastrocnemius: [
     'calves-gastroc-medial-left',
     'calves-gastroc-lateral-left',
-    'calves-soleus-left',
     'calves-gastroc-medial-right',
     'calves-gastroc-lateral-right',
-    'calves-soleus-right',
   ],
+  soleus: ['calves-soleus-left', 'calves-soleus-right'],
   abs: ['abs-upper-left', 'abs-upper-right', 'abs-lower-left', 'abs-lower-right'],
   obliques: ['obliques-left', 'obliques-right'],
   erectors: [
@@ -113,3 +119,17 @@ export const REGION_TO_MUSCLE: ReadonlyMap<string, MuscleId> = new Map(
     MUSCLE_TO_REGIONS[muscle].map((region): [string, MuscleId] => [region, muscle])
   )
 );
+
+/**
+ * Coarse standard muscles that own NO region because their whole visual area
+ * is partitioned among fine members. When an adapter paints one of these ids
+ * it must ALSO paint the listed members with the same datum, so a coarse
+ * 'traps'/'calves' tag still brightens the full parent region (the existing
+ * gap-fallback rule: a member without its own true region falls back to the
+ * parent's area — here inverted, the parent falls back onto its members).
+ * Fine-member data applied AFTER the coarse paint overrides its own sub-region.
+ */
+export const REGIONLESS_COARSE_MEMBERS: Partial<Record<MuscleId, readonly MuscleId[]>> = {
+  traps: ['upper_traps', 'mid_lower_traps'],
+  calves: ['gastrocnemius', 'soleus'],
+};

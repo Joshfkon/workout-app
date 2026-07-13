@@ -14,6 +14,7 @@ import {
   weeklyVolumeWindowStartISO,
   type VolumeAccumulator,
   type MuscleVolumeStats,
+  type CoarseMuscle,
 } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 import { resolveMuscleToStandard } from '@/types/schema';
 import { recoveryConfigFor, type RecoverySession, type RecoveryExercise } from '@/services/muscleRecovery';

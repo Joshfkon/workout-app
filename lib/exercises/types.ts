@@ -360,8 +360,8 @@ export const STANDARD_MUSCLE_GROUP_OPTIONS: { value: StandardMuscleGroup; label:
 export const STANDARD_MUSCLE_GROUPS_BY_REGION: Record<string, StandardMuscleGroup[]> = {
   'Chest': ['chest_upper', 'chest_lower'],
   'Shoulders': ['front_delts', 'lateral_delts', 'rear_delts'],
-  'Back': ['lats', 'upper_back', 'traps'],
+  'Back': ['lats', 'upper_back', 'traps', 'upper_traps', 'mid_lower_traps'],
   'Arms': ['biceps', 'triceps', 'forearms'],
-  'Legs': ['quads', 'hamstrings', 'glutes', 'glute_med', 'adductors', 'calves'],
+  'Legs': ['quads', 'hamstrings', 'glutes', 'glute_med', 'adductors', 'calves', 'gastrocnemius', 'soleus'],
   'Core & Spine': ['abs', 'obliques', 'erectors'],
 };

@@ -40,9 +40,9 @@ const RECOVERED_FACTOR: Record<MuscleRecoveryResult['status'], number> = {
   fatigued: 0,
 };
 
-/** A reachable fine child of a coarse readiness row (visibility is the shared
- *  list component's concern — lagging children pin open, the rest sit behind
- *  the chevron). */
+/** A fine child of a coarse readiness row. Visibility is the shared list
+ *  component's concern — reachable lagging children pin open, the rest
+ *  (including unreachable context rows) sit behind the chevron. */
 export interface ReadinessChild {
   muscle: StandardMuscleGroup;
   displayName: string;
@@ -51,6 +51,12 @@ export interface ReadinessChild {
   zone: VolumeZone;
   belowMev: boolean;
   volumeGap: number;
+  /**
+   * Whether the user's own exercise tagging can feed this muscle. Unreachable
+   * children appear only under an explicit expansion (context rows) and are
+   * never offered as training targets.
+   */
+  reachable: boolean;
   recovery: MuscleRecoveryResult;
 }
 
@@ -71,7 +77,9 @@ export interface ReadinessRow {
   recovery: MuscleRecoveryResult;
   /** Actionability score — higher = better target today. */
   score: number;
-  /** ALL reachable fine children of this row, each with its own recovery. */
+  /** Whether the row has ≥1 reachable fine child (gates the chevron). */
+  expandable: boolean;
+  /** ALL fine children of an expandable row, each with its own recovery. */
   children: ReadinessChild[];
   /**
    * Divergence flag: a trained child's status differs from the parent's
@@ -241,6 +249,7 @@ export function buildReadinessRows(
         zone: child.zone,
         belowMev: child.belowMev,
         volumeGap: Math.max(0, child.band.mev - child.sets),
+        reachable: child.reachable,
         recovery: childRecovery,
       };
     });
@@ -266,6 +275,7 @@ export function buildReadinessRows(
       volumeStatus: volumeStatusForZone(vr.zone),
       recovery,
       score,
+      expandable: vr.expandable,
       children,
       autoExpand,
     };
@@ -286,7 +296,9 @@ interface TargetCandidate {
 /**
  * Flatten rows + their reachable fine children into a single candidate list
  * (the gap>0 filter downstream keeps only lagging ones). A lagging fine child
- * surfaces even when its coarse parent is on target.
+ * surfaces even when its coarse parent is on target. Unreachable children
+ * (expand-only context rows) are never target candidates — no exercise in the
+ * user's library could act on the recommendation.
  */
 function flattenCandidates(rows: ReadinessRow[]): TargetCandidate[] {
   const out: TargetCandidate[] = [];
@@ -299,6 +311,7 @@ function flattenCandidates(rows: ReadinessRow[]): TargetCandidate[] {
       recovery: row.recovery,
     });
     for (const child of row.children) {
+      if (!child.reachable) continue;
       out.push({
         muscle: child.muscle,
         displayName: child.displayName,
