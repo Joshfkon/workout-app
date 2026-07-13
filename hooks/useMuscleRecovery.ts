@@ -13,6 +13,7 @@ import {
   type MuscleRecoveryResult,
 } from '@/services/muscleRecovery';
 import { useRecoveryHistory } from '@/hooks/useMuscleReadiness';
+import { useRecoveryMultipliers } from '@/hooks/useRecoveryMultipliers';
 
 /**
  * useMuscleRecovery — per-STANDARD-muscle recovery statuses for surfaces that
@@ -123,7 +124,11 @@ export function useMuscleRecovery(): UseMuscleRecoveryResult {
 
   const { user: storeUser } = useUserStore();
   const enhancedAthleteMode = storeUser?.enhancedAthleteMode === true;
-  const config = useMemo(() => recoveryConfigFor(enhancedAthleteMode), [enhancedAthleteMode]);
+  const { multipliers } = useRecoveryMultipliers();
+  const config = useMemo(
+    () => recoveryConfigFor(enhancedAthleteMode, multipliers),
+    [enhancedAthleteMode, multipliers]
+  );
 
   const recoveryStatus = useMemo(
     (): MuscleRecoveryStatus[] =>

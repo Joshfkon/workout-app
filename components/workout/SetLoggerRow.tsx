@@ -1,10 +1,12 @@
 'use client';
 
 import { useEffect, useId, useMemo, useState } from 'react';
-import { IconBarbell, IconMinus, IconPlus, IconMessagePlus } from '@tabler/icons-react';
+import { IconBarbell, IconMinus, IconPlus, IconMessagePlus, IconBone } from '@tabler/icons-react';
 import { BottomSheet } from './BottomSheet';
 import { FormRatingSelector } from './FormRatingSelector';
 import { DiscomfortLogger } from './DiscomfortLogger';
+import { JointPainPicker } from './FeedbackChips';
+import { getBodyPartDisplayName, getSeverityInfo, jointToBodyPart } from '@/services/discomfortTracker';
 import type {
   WeightUnit,
   SetFeedback,
@@ -110,6 +112,7 @@ export function SetLoggerRow({
   const [selectedRir, setSelectedRir] = useState<RepsInTank>(() => clampToChip(targetRir));
   const [editingField, setEditingField] = useState<'weight' | 'reps' | null>(null);
   const [showFeedbackSheet, setShowFeedbackSheet] = useState(false);
+  const [showJointPicker, setShowJointPicker] = useState(false);
   const [form, setForm] = useState<FormRating | null>(null);
   const [discomfort, setDiscomfort] = useState<SetDiscomfort | undefined>(undefined);
   const [note, setNote] = useState('');
@@ -125,6 +128,7 @@ export function SetLoggerRow({
     setForm(null);
     setDiscomfort(undefined);
     setNote('');
+    setShowJointPicker(false);
   }, [setNumber]);
 
   const unitLabel = unit === 'lb' ? 'lbs' : 'kg';
@@ -398,6 +402,26 @@ export function SetLoggerRow({
         ))}
         <button
           type="button"
+          onClick={() => setShowJointPicker((prev) => !prev)}
+          disabled={disabled}
+          aria-label="Log joint pain"
+          data-testid="joint-pain-trigger"
+          className={`relative min-w-[52px] min-h-[52px] rounded-xl flex items-center justify-center transition-colors ${
+            discomfort
+              ? 'text-danger-400 bg-danger-500/10'
+              : 'text-surface-400 hover:text-surface-200 bg-surface-800/50 hover:bg-surface-800'
+          }`}
+        >
+          <IconBone size={20} />
+          {discomfort && (
+            <span
+              className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-danger-400"
+              aria-hidden="true"
+            />
+          )}
+        </button>
+        <button
+          type="button"
           onClick={() => setShowFeedbackSheet(true)}
           disabled={disabled}
           aria-label="Add set feedback"
@@ -412,6 +436,36 @@ export function SetLoggerRow({
           )}
         </button>
       </div>
+
+      {/* Inline joint pain picker — two taps (joint, then severity), no modal.
+          The pick rides feedback.discomfort and is saved with the set. */}
+      {showJointPicker && !discomfort && (
+        <JointPainPicker
+          onPick={(joint, severity) => {
+            setDiscomfort({ bodyPart: jointToBodyPart(joint), severity });
+            setShowJointPicker(false);
+          }}
+          onCancel={() => setShowJointPicker(false)}
+        />
+      )}
+      {showJointPicker && discomfort && (
+        <div className="flex items-center gap-2 rounded-lg bg-surface-800/70 border border-surface-700 px-2.5 py-1.5 text-[12px]">
+          <span className={getSeverityInfo(discomfort.severity).color}>
+            {getBodyPartDisplayName(discomfort.bodyPart)} — {getSeverityInfo(discomfort.severity).label}
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              setDiscomfort(undefined);
+              setShowJointPicker(false);
+            }}
+            className="ml-auto text-surface-500 hover:text-surface-300"
+            aria-label="Remove joint pain flag"
+          >
+            Remove
+          </button>
+        </div>
+      )}
 
       {/* Row 3: one-tap log */}
       <button

@@ -3,8 +3,9 @@
 import React, { useState, useEffect, useMemo, memo, useRef, useCallback } from 'react';
 import { Card, Badge, Button, ConfirmModal } from '@/components/ui';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/Accordion';
-import type { Exercise, ExerciseBlock, SetLog, WeightUnit, SetQuality, SetFeedback, BodyweightData, ExercisePerformanceSnapshot } from '@/types/schema';
+import type { Exercise, ExerciseBlock, SetLog, WeightUnit, SetQuality, SetFeedback, BodyweightData, ExercisePerformanceSnapshot, StandardMuscleGroup, SorenessRating, PumpRating0to3, WorkloadRating, SetDiscomfort } from '@/types/schema';
 import { rpeToRir } from '@/types/schema';
+import { SorenessChipRow, ExerciseFeedbackChips, JointPainPicker } from './FeedbackChips';
 import { filterExercises, dedupeExercisesById } from '@/services/exerciseFilter';
 import { convertWeight, formatMuscleName, formatWeightValue, convertWeightForDisplay, inputWeightToKg, roundToPlateIncrement } from '@/lib/utils';
 import { recommendSet, recommendSessionStart, estimateRepsForWeight, predictAmrapReps, recommendSeedForSlot, resolveLastRir, type SeedRecommendation } from '@/services/setRecommender';
@@ -19,7 +20,7 @@ import type { AdjustedRIRResult } from '@/services/rpeCalibration';
 import type { ReadinessModulation } from '@/services/fatigueEngine';
 import { lightHaptic } from '@/lib/integrations/notifications';
 import { Input } from '@/components/ui';
-import { IconCheck, IconChevronDown, IconCloudPause, IconInfoCircle } from '@tabler/icons-react';
+import { IconBone, IconCheck, IconChevronDown, IconCloudPause, IconInfoCircle } from '@tabler/icons-react';
 import { InlineRestTimerBar } from './InlineRestTimerBar';
 import { DropsetPrompt } from './DropsetPrompt';
 import { BodyweightSetEditRow } from './BodyweightSetEditRow';
@@ -80,6 +81,7 @@ import {
 } from '@/services/injuryAwareSwapper';
 import { SafetyTierBadge } from './SafetyTierBadge';
 import { getFailureSafetyTier, getRIRFloor } from '@/services/exerciseSafety';
+import { getBodyPartDisplayName, getJointDisplayName, jointToBodyPart } from '@/services/discomfortTracker';
 import { CONNECTIVE_TISSUE_CAP_NOTE } from '@/services/setPrescription';
 
 interface TemporaryInjury {
@@ -228,6 +230,25 @@ interface ExerciseCardProps {
   // Deload session: the banner holds light instead of prescribing progression,
   // and the rationale copy says so ("deload — holding light").
   isDeloadSession?: boolean;
+  // Start-of-session soreness prompt for this exercise's primary muscle
+  // (first exercise per muscle only; parent enforces the once-per-session cap).
+  // `answered` renders the collapsed ✓ line instead of the chips.
+  sorenessPrompt?: {
+    muscle: StandardMuscleGroup;
+    displayName: string;
+    answered?: SorenessRating | null;
+  } | null;
+  onSorenessAnswer?: (muscle: StandardMuscleGroup, rating: SorenessRating) => void;
+  // Per-exercise pump/workload chips on the card's completed state. Values
+  // are read from block.pump / block.workload.
+  onExerciseFeedbackChange?: (feedback: { pump?: PumpRating0to3; workload?: WorkloadRating }) => void;
+  // Exercise-level pain pattern notice (≥3 flags in 6 weeks): one-time,
+  // dismissible, links to the swap picker's Similar tab.
+  painNotice?: { joint: string; count: number } | null;
+  onPainNoticeDismiss?: () => void;
+  // Set-level joint pain on COMPLETED rows: parent persists the feedback and
+  // records the pain event.
+  onSetJointPain?: (setId: string, discomfort: SetDiscomfort) => void;
   // Cold start (no logged history for this exercise): the transfer-aware
   // estimate computed by the page. Supersedes the block's stored target (which
   // may predate transfer estimation) and names its source rung in the banner
@@ -300,6 +321,12 @@ export const ExerciseCard = memo(function ExerciseCard({
   enhancedAthleteMode = false,
   isDeloadSession = false,
   coldStartSuggestion,
+  sorenessPrompt = null,
+  onSorenessAnswer,
+  onExerciseFeedbackChange,
+  painNotice = null,
+  onPainNoticeDismiss,
+  onSetJointPain,
 }: ExerciseCardProps) {
   // Prescribed RIR: calibration-adjusted target when available, eased further
   // by the session's readiness modulation (Phase 1.3/1.5 fold-in).
@@ -310,6 +337,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   );
 
   const [editingSetId, setEditingSetId] = useState<string | null>(null);
+  const [jointPickerSetId, setJointPickerSetId] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [completedWarmups, setCompletedWarmups] = useState<Set<number>>(new Set());
   const [editingWarmupId, setEditingWarmupId] = useState<number | null>(null);
@@ -1384,6 +1412,27 @@ export const ExerciseCard = memo(function ExerciseCard({
       );
     }
 
+    // 'Stop'-severity joint pain flagged on any set of THIS exercise this
+    // session immediately softens the next suggestion: never progress — hold
+    // at −10% of the flagged working weight instead.
+    const stopFlaggedSet = [...completedSets]
+      .reverse()
+      .find((s) => s.feedback?.discomfort?.severity === 'stop');
+    if (stopFlaggedSet && !isDeloadSession) {
+      const flaggedPart = stopFlaggedSet.feedback?.discomfort?.bodyPart;
+      const partLabel = flaggedPart
+        ? getBodyPartDisplayName(flaggedPart).toLowerCase()
+        : 'joint';
+      const anchorKg = stopFlaggedSet.weightKg;
+      if (anchorKg > 0) {
+        weight = seedWeightString(anchorKg * 0.9);
+      }
+      reason = `easing off — you flagged ${partLabel} pain here`;
+      explanation.unshift(
+        `You stopped a set for ${partLabel} pain, so the load is backed off ~10% instead of progressing. If it still hurts, swap to a variation (⋯ menu → Swap).`
+      );
+    }
+
     return { weight, reps: String(reps), repsLabel, reason, explanation, showRir, role };
   };
 
@@ -1948,6 +1997,47 @@ export const ExerciseCard = memo(function ExerciseCard({
 
       {/* Set list — compact completed lines, one-tap active logger, muted pending targets (mockup 2.1) */}
       <div className="px-3 py-3 space-y-1.5">
+        {/* Exercise-level pain pattern notice (≥3 flags in 6 weeks) — one-time,
+            dismissible, non-blocking. Links to the swap picker's Similar tab. */}
+        {painNotice && (
+          <div
+            className="flex items-start gap-2 rounded-lg bg-warning-500/10 border border-warning-500/30 px-2.5 py-2 text-[12px] text-warning-300"
+            data-testid="pain-pattern-notice"
+          >
+            <span className="flex-1">
+              You&apos;ve flagged {getJointDisplayName(painNotice.joint)} pain on this {painNotice.count}× recently — consider a variation.{' '}
+              <button
+                type="button"
+                onClick={() => {
+                  setSwapTab('similar');
+                  setShowSwapModal(true);
+                }}
+                className="underline font-medium"
+              >
+                See similar
+              </button>
+            </span>
+            <button
+              type="button"
+              onClick={onPainNoticeDismiss}
+              aria-label="Dismiss pain notice"
+              className="text-warning-400/70 hover:text-warning-300 flex-shrink-0 px-1"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
+        {/* Start-of-session soreness ask — one tap, collapses to a ✓ line.
+            Ignoring it and logging a set dismisses it for the session. */}
+        {sorenessPrompt && onSorenessAnswer && (
+          <SorenessChipRow
+            muscleLabel={sorenessPrompt.displayName}
+            answered={sorenessPrompt.answered}
+            onAnswer={(rating) => onSorenessAnswer(sorenessPrompt.muscle, rating)}
+          />
+        )}
+
         {/* Completed working sets */}
         {completedSets.map((set, setIndex) => {
           const isDropsetSet = set.setType === 'dropset';
@@ -2095,7 +2185,36 @@ export const ExerciseCard = memo(function ExerciseCard({
                   )}
                   {rirValue} RIR · <span className={qualityTextClass(set.quality)}>{set.quality}</span>
                 </span>
+                {onSetJointPain && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setJointPickerSetId((prev) => (prev === set.id ? null : set.id));
+                    }}
+                    aria-label={`Log joint pain on set ${set.setNumber}`}
+                    data-testid={`set-joint-pain-${set.setNumber}`}
+                    className={`flex-shrink-0 min-w-[32px] min-h-[32px] -my-1 flex items-center justify-center rounded-lg transition-colors ${
+                      set.feedback?.discomfort
+                        ? 'text-danger-400'
+                        : 'text-surface-600 hover:text-surface-300'
+                    }`}
+                  >
+                    <IconBone size={15} />
+                  </button>
+                )}
               </div>
+
+              {/* Inline joint pain picker for this completed set (two taps) */}
+              {jointPickerSetId === set.id && onSetJointPain && (
+                <JointPainPicker
+                  onPick={(joint, severity) => {
+                    onSetJointPain(set.id, { bodyPart: jointToBodyPart(joint), severity });
+                    setJointPickerSetId(null);
+                  }}
+                  onCancel={() => setJointPickerSetId(null)}
+                />
+              )}
 
               {/* Add Dropset affordance after the final completed set */}
               {isActive && isLastCompletedSet && !dropsetMode && !isDropsetSet && !pendingDropset &&
@@ -2300,6 +2419,20 @@ export const ExerciseCard = memo(function ExerciseCard({
             </div>
           );
         })}
+
+        {/* Completed-state pump/workload chips (RP stimulus-quality question,
+            once per exercise). Shown when the last planned set is logged, or
+            when a partially-done exercise is no longer the active one. Both
+            optional — the card completes visually regardless. */}
+        {onExerciseFeedbackChange &&
+          completedSets.length > 0 &&
+          (pendingSetsCount === 0 || !isActive) && (
+            <ExerciseFeedbackChips
+              pump={block.pump}
+              workload={block.workload}
+              onChange={onExerciseFeedbackChange}
+            />
+          )}
       </div>
 
       {/* Footer actions - prominent "Add set" (mockup style) + quiet secondary links */}
@@ -2976,6 +3109,22 @@ export const ExerciseCard = memo(function ExerciseCard({
     prevProps.block.targetRepRange[0] === nextProps.block.targetRepRange[0] &&
     prevProps.block.targetRepRange[1] === nextProps.block.targetRepRange[1] &&
     prevProps.block.targetRir === nextProps.block.targetRir &&
+    // Per-exercise feedback chips (pump/workload live on the block)
+    prevProps.block.pump === nextProps.block.pump &&
+    prevProps.block.workload === nextProps.block.workload &&
+    // Subjective-feedback prompts arrive ASYNC after mount (previous-session
+    // lookup, pain-event fetch) — without these comparisons the card would
+    // never re-render to show them.
+    (prevProps.sorenessPrompt === null) === (nextProps.sorenessPrompt === null) &&
+    prevProps.sorenessPrompt?.muscle === nextProps.sorenessPrompt?.muscle &&
+    prevProps.sorenessPrompt?.answered === nextProps.sorenessPrompt?.answered &&
+    (prevProps.painNotice === null) === (nextProps.painNotice === null) &&
+    prevProps.painNotice?.joint === nextProps.painNotice?.joint &&
+    prevProps.painNotice?.count === nextProps.painNotice?.count &&
+    // Set-level discomfort flags drive the 'stop' suggestion softening + row icons
+    prevProps.sets.every(
+      (s, i) => s.feedback?.discomfort?.severity === nextProps.sets[i]?.feedback?.discomfort?.severity
+    ) &&
     prevProps.sets.length === nextProps.sets.length &&
     // Compare set content (RPE, form, weight, reps) to detect feedback updates
     prevProps.sets.every((s, i) =>

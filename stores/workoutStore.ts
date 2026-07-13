@@ -6,7 +6,20 @@ import type {
   SetLog,
   PreWorkoutCheckIn,
   Exercise,
+  SorenessRating,
+  PumpRating0to3,
+  WorkloadRating,
 } from '@/types/schema';
+
+/**
+ * One start-of-session soreness ask (additive feedback field on the workout
+ * record). `rating` is null when the prompt was dismissed by logging a set
+ * without answering — the muscle is never re-asked this session either way.
+ */
+export interface SorenessAskRecord {
+  rating: SorenessRating | null;
+  askedAt: string; // ISO timestamp
+}
 
 interface WorkoutState {
   // Current session
@@ -25,6 +38,9 @@ interface WorkoutState {
   // Timer state
   restTimerEnd: number | null;
 
+  // Subjective feedback (additive) — soreness asks keyed by StandardMuscleGroup
+  muscleSorenessAsked: Record<string, SorenessAskRecord>;
+
   // Actions
   startSession: (session: WorkoutSession, blocks: ExerciseBlock[], exercises: Exercise[]) => void;
   endSession: () => void;
@@ -42,6 +58,13 @@ interface WorkoutState {
   updateSet: (blockId: string, setId: string, data: Partial<SetLog>) => void;
   deleteSet: (blockId: string, setId: string) => void;
   getSetsForBlock: (blockId: string) => SetLog[];
+
+  // Subjective feedback
+  recordSorenessAsked: (muscle: string, rating: SorenessRating | null) => void;
+  setBlockFeedback: (
+    blockId: string,
+    feedback: { pump?: PumpRating0to3; workload?: WorkloadRating }
+  ) => void;
 
   // Timer
   startRestTimer: (seconds: number) => void;
@@ -67,6 +90,7 @@ export const useWorkoutStore = create<WorkoutState>()(
       pausedAt: null,
       exercises: {},
       restTimerEnd: null,
+      muscleSorenessAsked: {},
 
       startSession: (session, blocks, exercises) => {
         const exerciseRecord: Record<string, Exercise> = {};
@@ -86,6 +110,7 @@ export const useWorkoutStore = create<WorkoutState>()(
           pausedAt: null,
           exercises: exerciseRecord,
           restTimerEnd: null,
+          muscleSorenessAsked: isSameSession ? get().muscleSorenessAsked : {},
         });
       },
 
@@ -99,6 +124,7 @@ export const useWorkoutStore = create<WorkoutState>()(
           pausedAt: null,
           exercises: {},
           restTimerEnd: null,
+          muscleSorenessAsked: {},
         });
       },
 
@@ -178,6 +204,27 @@ export const useWorkoutStore = create<WorkoutState>()(
         return setLogs[blockId] || [];
       },
 
+      recordSorenessAsked: (muscle, rating) => {
+        const { muscleSorenessAsked } = get();
+        // Once asked (answered or dismissed), never re-ask this session.
+        if (muscleSorenessAsked[muscle]) return;
+        set({
+          muscleSorenessAsked: {
+            ...muscleSorenessAsked,
+            [muscle]: { rating, askedAt: new Date().toISOString() },
+          },
+        });
+      },
+
+      setBlockFeedback: (blockId, feedback) => {
+        const { exerciseBlocks } = get();
+        set({
+          exerciseBlocks: exerciseBlocks.map((b) =>
+            b.id === blockId ? { ...b, ...feedback } : b
+          ),
+        });
+      },
+
       startRestTimer: (seconds) => {
         set({ restTimerEnd: Date.now() + seconds * 1000 });
       },
@@ -226,6 +273,8 @@ export const useWorkoutStore = create<WorkoutState>()(
         // doesn't drop an in-flight timer. It's an absolute epoch-ms value, so
         // remaining time is recomputed from Date.now() on rehydrate.
         restTimerEnd: state.restTimerEnd,
+        // Soreness asks survive reloads so a muscle is never re-asked.
+        muscleSorenessAsked: state.muscleSorenessAsked,
       }),
       // Migrate stale persisted shapes forward. A pre-versioned (version 0)
       // payload predates restTimerEnd persistence; default it so old data

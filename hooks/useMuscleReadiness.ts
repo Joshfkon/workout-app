@@ -17,6 +17,7 @@ import {
 } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 import { resolveMuscleToStandard } from '@/types/schema';
 import { recoveryConfigFor, type RecoverySession, type RecoveryExercise } from '@/services/muscleRecovery';
+import { useRecoveryMultipliers } from '@/hooks/useRecoveryMultipliers';
 import {
   buildReadinessRows,
   selectGoodTargets,
@@ -87,6 +88,12 @@ export interface UseMuscleReadinessArgs {
   now: Date;
   /** Only fetch history while the sheet is open (lazy). */
   enabled: boolean;
+  /**
+   * Muscles the user reported "still sore" TODAY (start-of-session chips).
+   * They render Fatigued for the rest of the session regardless of the time
+   * model — the subjective report outranks the heuristic same-day.
+   */
+  sorenessOverrides?: ReadonlySet<StandardMuscleGroup>;
 }
 
 export interface UseMuscleReadinessResult {
@@ -202,9 +209,11 @@ export function useMuscleReadiness({
   liveSets,
   now,
   enabled,
+  sorenessOverrides,
 }: UseMuscleReadinessArgs): UseMuscleReadinessResult {
   const { user: storeUser } = useUserStore();
   const { historyRows, sessions, isLoading, error, refetch } = useRecoveryHistory(now, enabled);
+  const { multipliers } = useRecoveryMultipliers();
 
   // Working (non-warmup) live sets grouped by block.
   const liveWorkingSetsByBlock = useMemo(() => {
@@ -283,14 +292,17 @@ export function useMuscleReadiness({
     return [...sessions, { performedAt: now, exercises: liveExercises }];
   }, [sessions, liveBlocks, liveWorkingSetsByBlock, now]);
 
-  // Enhanced athletes get shorter recovery windows (shared windowScale). Read
-  // from the persisted user store — the same profile every fatigue surface uses.
+  // Enhanced athletes get shorter recovery windows (shared windowScale), and
+  // the learned per-muscle soreness multipliers scale each muscle's window.
   const enhancedAthleteMode = storeUser?.enhancedAthleteMode === true;
-  const recoveryConfig = useMemo(() => recoveryConfigFor(enhancedAthleteMode), [enhancedAthleteMode]);
+  const recoveryConfig = useMemo(
+    () => recoveryConfigFor(enhancedAthleteMode, multipliers),
+    [enhancedAthleteMode, multipliers]
+  );
 
   const rows = useMemo(
-    () => buildReadinessRows(stats, recoveryHistory, now, reachable, recoveryConfig),
-    [stats, recoveryHistory, now, reachable, recoveryConfig]
+    () => buildReadinessRows(stats, recoveryHistory, now, reachable, recoveryConfig, sorenessOverrides),
+    [stats, recoveryHistory, now, reachable, recoveryConfig, sorenessOverrides]
   );
 
   const { targets, nextUp } = useMemo(() => selectGoodTargets(rows, 3), [rows]);

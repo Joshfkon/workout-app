@@ -138,15 +138,32 @@ const RECOVERY_RANK: Record<MuscleRecoveryResult['status'], number> = {
   recovering: 1,
   fresh: 0,
 };
+/**
+ * Same-day subjective override: a muscle the user reported "still sore" today
+ * renders Fatigued for the rest of the session regardless of the time model —
+ * the user's report outranks the heuristic on the day it was given.
+ */
+function applySorenessOverride(
+  rec: MuscleRecoveryResult,
+  overridden: boolean
+): MuscleRecoveryResult {
+  if (!overridden || rec.status === 'fatigued') return rec;
+  return { ...rec, status: 'fatigued' };
+}
+
 function coarseRecovery(
   coarse: CoarseMuscle,
   history: RecoverySession[],
   now: Date,
-  config: RecoveryConfig
+  config: RecoveryConfig,
+  sorenessOverrides?: ReadonlySet<StandardMuscleGroup>
 ): MuscleRecoveryResult {
   let worst: MuscleRecoveryResult | null = null;
   for (const child of COARSE_CHILDREN[coarse]) {
-    const rec = computeMuscleRecovery(history, child, now, config);
+    const rec = applySorenessOverride(
+      computeMuscleRecovery(history, child, now, config),
+      sorenessOverrides?.has(child) ?? false
+    );
     if (
       !worst ||
       RECOVERY_RANK[rec.status] > RECOVERY_RANK[worst.status] ||
@@ -181,24 +198,30 @@ export function compareByActionability(a: ReadinessRow, b: ReadinessRow): number
  * @param history   sessions for the recovery heuristic (incl. live)
  * @param now       injected clock
  * @param reachable muscles the user's exercises can feed (gates fine children)
+ * @param config    recovery heuristic config
+ * @param sorenessOverrides muscles reported "still sore" today — forced Fatigued
  */
 export function buildReadinessRows(
   stats: MuscleVolumeStats[],
   history: RecoverySession[],
   now: Date,
   reachable?: Set<StandardMuscleGroup>,
-  config: RecoveryConfig = RECOVERY_CONFIG
+  config: RecoveryConfig = RECOVERY_CONFIG,
+  sorenessOverrides?: ReadonlySet<StandardMuscleGroup>
 ): ReadinessRow[] {
   const volumeRows = buildVolumeRows(stats, reachable);
 
   const rows = volumeRows.map((vr: VolumeRow): ReadinessRow => {
     const coarse = vr.muscle as CoarseMuscle;
-    const recovery = coarseRecovery(coarse, history, now, config);
+    const recovery = coarseRecovery(coarse, history, now, config, sorenessOverrides);
     const volumeGap = Math.max(0, vr.band.mev - vr.sets);
     const score = volumeGap * RECOVERED_FACTOR[recovery.status];
 
     const children: ReadinessChild[] = vr.children.map((child) => {
-      const childRecovery = computeMuscleRecovery(history, child.muscle as StandardMuscleGroup, now, config);
+      const childRecovery = applySorenessOverride(
+        computeMuscleRecovery(history, child.muscle as StandardMuscleGroup, now, config),
+        sorenessOverrides?.has(child.muscle as StandardMuscleGroup) ?? false
+      );
       return {
         muscle: child.muscle as StandardMuscleGroup,
         displayName: child.displayName,

@@ -60,7 +60,22 @@ export interface RecoveryConfig {
    * recovery windows shrink — see `recoveryConfigFor`.
    */
   windowScale: number;
+  /**
+   * Per-user, per-muscle LEARNED multiplier on that muscle's window, driven by
+   * start-of-session soreness answers (user_muscle_recovery_multipliers table):
+   * "still sore" when the model said Fresh/Recovering → +RECOVERY_MULTIPLIER_STEP;
+   * "wasn't sore" when the model said Fatigued → −RECOVERY_MULTIPLIER_STEP.
+   * Always clamped to RECOVERY_MULTIPLIER_BOUNDS. Muscles absent here use 1.
+   * Applied on top of `windowScale` (the global athlete-profile scalar).
+   */
+  recoveryMultiplierByMuscle: Partial<Record<StandardMuscleGroup, number>>;
 }
+
+/** Hard bounds for the learned per-muscle recovery multiplier. */
+export const RECOVERY_MULTIPLIER_BOUNDS = { min: 0.7, max: 1.5 } as const;
+
+/** Step applied per corrective soreness answer. */
+export const RECOVERY_MULTIPLIER_STEP = 0.05;
 
 export const RECOVERY_CONFIG: RecoveryConfig = {
   defaultWindowHours: 48,
@@ -87,6 +102,7 @@ export const RECOVERY_CONFIG: RecoveryConfig = {
   secondaryDoseFactor: 0.5,
   recoveringThreshold: 0.6,
   windowScale: 1,
+  recoveryMultiplierByMuscle: {},
 };
 
 /**
@@ -95,9 +111,59 @@ export const RECOVERY_CONFIG: RecoveryConfig = {
  * (~22.5% faster) — the same constant the fatigue model uses, and the same
  * scaling the retired dashboard recovery card applied.
  */
-export function recoveryConfigFor(enhancedAthleteMode: boolean): RecoveryConfig {
-  if (!enhancedAthleteMode) return RECOVERY_CONFIG;
-  return { ...RECOVERY_CONFIG, windowScale: 1 / ENHANCED_RECOVERY_MULTIPLIER };
+export function recoveryConfigFor(
+  enhancedAthleteMode: boolean,
+  recoveryMultiplierByMuscle?: Partial<Record<StandardMuscleGroup, number>>
+): RecoveryConfig {
+  const config = enhancedAthleteMode
+    ? { ...RECOVERY_CONFIG, windowScale: 1 / ENHANCED_RECOVERY_MULTIPLIER }
+    : RECOVERY_CONFIG;
+  if (!recoveryMultiplierByMuscle || Object.keys(recoveryMultiplierByMuscle).length === 0) {
+    return config;
+  }
+  return { ...config, recoveryMultiplierByMuscle };
+}
+
+/** Clamp a learned multiplier into its hard bounds. */
+export function clampRecoveryMultiplier(value: number): number {
+  if (!Number.isFinite(value)) return 1;
+  return Math.min(
+    RECOVERY_MULTIPLIER_BOUNDS.max,
+    Math.max(RECOVERY_MULTIPLIER_BOUNDS.min, value)
+  );
+}
+
+/**
+ * The subjective soreness report from the start-of-session chip row, reduced
+ * to the three options the user actually sees.
+ */
+export type SorenessReport = 'none' | 'recovered' | 'still_sore';
+
+/**
+ * Learning update for the per-muscle recovery multiplier.
+ *
+ * Only DISAGREEMENT between the user's report and what the model believed at
+ * ask time moves the multiplier:
+ *  - "still sore" while the model said Fresh or Recovering → the window was
+ *    too short → +RECOVERY_MULTIPLIER_STEP
+ *  - "wasn't sore" while the model said Fatigued → the window was too long
+ *    → −RECOVERY_MULTIPLIER_STEP
+ * Agreement (or the ambiguous "sore, recovered") leaves it unchanged. The
+ * result is always inside RECOVERY_MULTIPLIER_BOUNDS regardless of input.
+ */
+export function adjustRecoveryMultiplier(
+  current: number,
+  report: SorenessReport,
+  statusAtAsk: RecoveryStatus
+): number {
+  const base = clampRecoveryMultiplier(current);
+  if (report === 'still_sore' && (statusAtAsk === 'fresh' || statusAtAsk === 'recovering')) {
+    return clampRecoveryMultiplier(base + RECOVERY_MULTIPLIER_STEP);
+  }
+  if (report === 'none' && statusAtAsk === 'fatigued') {
+    return clampRecoveryMultiplier(base - RECOVERY_MULTIPLIER_STEP);
+  }
+  return base;
 }
 
 // ---------------------------------------------------------------------------
@@ -226,7 +292,13 @@ function windowForSession(
       ? Math.max(0, base - config.lowDoseReducedHours)
       : base;
 
-  return window * config.windowScale;
+  // Learned per-muscle multiplier (soreness feedback), clamped defensively so
+  // an out-of-range persisted value can never distort the window.
+  const learned = clampRecoveryMultiplier(
+    config.recoveryMultiplierByMuscle[muscle] ?? 1
+  );
+
+  return window * config.windowScale * learned;
 }
 
 /**
