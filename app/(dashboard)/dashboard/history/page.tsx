@@ -6,12 +6,15 @@ import { Card, Badge, Button, FullPageLoading, LoadingAnimation, ConfirmModal } 
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { getLocalUserId } from '@/lib/supabase/authState';
 import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 
 // Completed workout history is immutable-in-practice: cache the first page
 // long and persist it so returning to History renders instantly instead of
 // re-blocking on the full-screen loader. Edits/deletes write through the cache.
-const HISTORY_FIRST_PAGE_KEY = ['history', 'sessions', 'page0'] as const;
+// v2: evicts entries poisoned by the old queryFn, which cached an EMPTY page
+// for 24h whenever the network getUser() round trip failed on a cold reload.
+const HISTORY_FIRST_PAGE_KEY = ['history', 'sessions', 'page0', 'v2'] as const;
 import { formatWeight, convertWeight, convertWeightForDisplay, inputWeightToKg, estimateE1RM, getLocalDateString } from '@/lib/utils';
 import { createRepeatSession } from '@/lib/training/repeatWorkout';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
@@ -146,15 +149,19 @@ function HistoryPageContent() {
     queryKey: HISTORY_FIRST_PAGE_KEY,
     queryFn: async () => {
       const supabase = createUntypedClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return [] as WorkoutHistory[];
-      const { data } = await supabase
+      // Local-session identity (no auth round trip): a transient getUser()
+      // failure must not be cached as "no workouts". See lib/supabase/authState.
+      const userId = await getLocalUserId(supabase);
+      if (!userId) return [] as WorkoutHistory[];
+      const { data, error } = await supabase
         .from('workout_sessions')
         .select(SESSION_SELECT)
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .in('state', ['completed', 'in_progress'])
         .order('completed_at', { ascending: false, nullsFirst: false })
         .range(0, PAGE_SIZE - 1);
+      // A failed fetch is an error to retry, NOT an empty history to cache.
+      if (error) throw error;
       return data ? transformSessions(data) : [];
     },
     staleTime: IMMUTABLE_GC_TIME,
@@ -695,9 +702,11 @@ function HistoryPageContent() {
 
   const fetchHistoryPage = async (pageIndex: number) => {
       const supabase = createUntypedClient();
-      const { data: { user } } = await supabase.auth.getUser();
+      // Local-session identity: the old network getUser() here rendered the
+      // "No workout history yet" empty state on any transient auth blip.
+      const userId = await getLocalUserId(supabase);
 
-      if (!user) {
+      if (!userId) {
         setIsLoading(false);
         return;
       }
@@ -705,7 +714,7 @@ function HistoryPageContent() {
       const { data } = await supabase
         .from('workout_sessions')
         .select(SESSION_SELECT)
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .in('state', ['completed', 'in_progress'])
         .order('completed_at', { ascending: false, nullsFirst: false })
         .range(pageIndex * PAGE_SIZE, pageIndex * PAGE_SIZE + PAGE_SIZE - 1);
