@@ -321,6 +321,10 @@ export default function SettingsPage() {
           height_cm: heightToSave,
           weight_kg: weightToSave,
           preferences: {
+            // Spread the loaded prefs first so keys managed elsewhere
+            // (theme via useTheme, body-hub reminder settings, …) survive
+            // this whole-object JSONB write.
+            ...((settingsQuery.data?.userRow?.preferences as Record<string, unknown>) ?? {}),
             units,
             restTimer,
             showFormCues,
@@ -455,7 +459,9 @@ export default function SettingsPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-surface-100">Theme</p>
-              <p className="text-xs text-surface-400">Choose light or dark.</p>
+              <p className="text-xs text-surface-400">
+                Light, dark, or match your device. Synced to your account.
+              </p>
             </div>
             <ThemeToggle />
           </div>

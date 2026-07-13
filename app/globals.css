@@ -3,6 +3,10 @@
 @tailwind utilities;
 
 :root {
+  /* Tell the browser which theme native UI (form controls, scrollbars,
+     pickers) should use, so it follows the app's theme instead of the OS. */
+  color-scheme: dark;
+
   /* System font stacks for instant text rendering */
   --font-inter: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
@@ -56,6 +60,8 @@
    (high numbers, used as backgrounds, become light; low numbers, used as text,
    become dark) so existing surface-* classes flip automatically. */
 :root[data-theme="light"] {
+  color-scheme: light;
+
   --background: #f8fafc;
   --foreground: #18181b;
   --card: #ffffff;

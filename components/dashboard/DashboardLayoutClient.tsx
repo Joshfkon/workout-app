@@ -8,6 +8,7 @@ import { Sidebar } from './Sidebar';
 import { BottomNavigation } from './BottomNavigation';
 import { SubscriptionBadge } from './SubscriptionBadge';
 import { SignOutButton } from './SignOutButton';
+import { ThemeToggleCompact } from '@/components/settings/ThemeToggle';
 import { ResumeWorkoutBanner } from '@/components/workout';
 import { flushSetOutbox } from '@/lib/offline/setOutbox';
 import { useWeeklyVolume } from '@/hooks/useWeeklyVolume';
@@ -72,6 +73,7 @@ export function DashboardLayoutClient({ children }: DashboardLayoutClientProps) 
 
           {/* Header actions */}
           <div className="flex items-center gap-3">
+            <ThemeToggleCompact />
             <SubscriptionBadge />
             <Link
               href="/dashboard/science"
