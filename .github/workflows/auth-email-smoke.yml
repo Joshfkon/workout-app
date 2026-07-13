@@ -18,7 +18,14 @@ on:
     # Weekly, Mondays 13:00 UTC.
     - cron: '0 13 * * 1'
   workflow_dispatch:
-  pull_request:
+  # pull_request_target, NOT pull_request: this job holds production secrets,
+  # and a plain pull_request run executes the PR's version of the workflow and
+  # smoke script — letting any PR that edits them exfiltrate the keys.
+  # pull_request_target runs the BASE branch's workflow, and the checkout
+  # below pins the base SHA, so only already-merged (trusted) code ever sees
+  # the secrets. The smoke test exercises production config, not PR code, so
+  # testing with the trusted script loses nothing.
+  pull_request_target:
     paths:
       - 'app/(auth)/**'
       - 'lib/supabase/**'
@@ -46,7 +53,12 @@ jobs:
       RESEND_API_KEY: ${{ secrets.SMOKE_RESEND_API_KEY }}
       SMOKE_EMAIL: ${{ secrets.SMOKE_EMAIL }}
     steps:
+      # Explicitly pin the trusted base-branch code (github.sha is the base
+      # head on pull_request_target). NEVER check out the PR head here — that
+      # would hand the secrets to PR-authored code.
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
 
       - uses: actions/setup-node@v4
         with:

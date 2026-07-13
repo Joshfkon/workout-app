@@ -144,11 +144,17 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
  */
 async function assertLinkRedirect(addr) {
   console.log(`Generating signup confirmation link for ${addr} (redirect-config check)...`);
-  const { status, json } = await api('/auth/v1/admin/generate_link', {
-    method: 'POST',
-    admin: true,
-    body: { type: 'signup', email: addr, password: PASSWORD, options: { redirect_to: REDIRECT_TO } },
-  });
+  // redirect_to is a QUERY param in GoTrue's REST API (the SDK's
+  // options.redirectTo maps to it); a body field would be silently ignored
+  // and the link would fall back to the Site URL.
+  const { status, json } = await api(
+    `/auth/v1/admin/generate_link?redirect_to=${encodeURIComponent(REDIRECT_TO)}`,
+    {
+      method: 'POST',
+      admin: true,
+      body: { type: 'signup', email: addr, password: PASSWORD },
+    }
+  );
   if (status >= 300) fail(`generate_link failed (${status}): ${JSON.stringify(json)}`);
   const link = json.action_link || json.properties?.action_link;
   if (!link) fail(`no action_link in response: ${JSON.stringify(json)}`);
@@ -178,10 +184,16 @@ async function assertLinkRedirect(addr) {
  */
 async function runCiDeliveryCheck(addr) {
   console.log(`Signing up throwaway user ${addr} (delivery check)...`);
-  const { status, json } = await api('/auth/v1/signup', {
-    method: 'POST',
-    body: { email: addr, password: PASSWORD, options: { email_redirect_to: REDIRECT_TO } },
-  });
+  // redirect_to is a query param on /signup too (see assertLinkRedirect) —
+  // this makes the emailed link the same /auth/callback?next=/onboarding
+  // link the register page produces.
+  const { status, json } = await api(
+    `/auth/v1/signup?redirect_to=${encodeURIComponent(REDIRECT_TO)}`,
+    {
+      method: 'POST',
+      body: { email: addr, password: PASSWORD },
+    }
+  );
   if (status >= 300) fail(`signup failed (${status}): ${JSON.stringify(json)}`);
 
   let userId = null;
@@ -246,14 +258,13 @@ async function main() {
 
   // ---- Full delivery mode ----
   console.log('Signing up throwaway user via public API (triggers the real confirmation email)...');
-  const { status, json } = await api('/auth/v1/signup', {
-    method: 'POST',
-    body: {
-      email,
-      password: PASSWORD,
-      options: { email_redirect_to: REDIRECT_TO },
-    },
-  });
+  const { status, json } = await api(
+    `/auth/v1/signup?redirect_to=${encodeURIComponent(REDIRECT_TO)}`,
+    {
+      method: 'POST',
+      body: { email, password: PASSWORD },
+    }
+  );
   if (status >= 300) fail(`signup failed (${status}): ${JSON.stringify(json)}`);
   if (json.access_token || json.session) {
     const user = await findUserByEmail(email);
