@@ -35,6 +35,13 @@ export default function ForgotPasswordPage() {
       if (error) {
         setError(error.message);
       } else {
+        // Hand the email to /verify-code via sessionStorage, not the URL —
+        // a query param would put PII in browser history and access logs.
+        try {
+          sessionStorage.setItem('ht-pending-recovery-email', email);
+        } catch {
+          // Storage unavailable — verify-code just won't prefill.
+        }
         setSuccess(true);
       }
     } catch (err) {
@@ -71,11 +78,17 @@ export default function ForgotPasswordPage() {
               We&apos;ve sent a password reset link to <span className="text-surface-200 font-medium">{email}</span>
             </p>
             <p className="text-sm text-surface-500">
-              Didn&apos;t receive the email? Check your spam folder or try again.
+              Didn&apos;t receive the email? Check your spam folder or try again. Reading the email
+              on a different device? Enter the 6-digit code from it instead of clicking the link.
             </p>
-            <Button variant="outline" onClick={() => setSuccess(false)} className="mt-4">
-              Try another email
-            </Button>
+            <div className="space-y-3 pt-2">
+              <Link href="/verify-code?type=recovery">
+                <Button className="w-full">Enter code instead</Button>
+              </Link>
+              <Button variant="outline" onClick={() => setSuccess(false)} className="w-full">
+                Try another email
+              </Button>
+            </div>
           </div>
         ) : (
           <>

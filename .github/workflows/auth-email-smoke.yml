@@ -1,0 +1,91 @@
+# Auth email delivery smoke test — catches SILENT confirmation-email drops
+# (Supabase signUp/resend report success even when nothing is sent; only
+# Resend's sent log shows the truth). Runs against PRODUCTION auth config.
+#
+# Required repository secrets (Settings → Secrets and variables → Actions):
+#   SMOKE_SUPABASE_URL          production NEXT_PUBLIC_SUPABASE_URL
+#   SMOKE_SUPABASE_ANON_KEY     production anon key
+#   SMOKE_SUPABASE_SERVICE_ROLE_KEY  service role key (user cleanup)
+#   SMOKE_RESEND_API_KEY        Resend key for the sent-log check
+#   SMOKE_EMAIL                 mailbox you control, e.g. you@gmail.com
+#                               (the script adds a unique +ci-<ts> tag)
+# Until they're configured the job skips with a notice instead of failing.
+
+name: Auth Email Smoke
+
+on:
+  schedule:
+    # Weekly, Mondays 13:00 UTC.
+    - cron: '0 13 * * 1'
+  workflow_dispatch:
+  # pull_request_target, NOT pull_request: this job holds production secrets,
+  # and a plain pull_request run executes the PR's version of the workflow and
+  # smoke script — letting any PR that edits them exfiltrate the keys.
+  # pull_request_target runs the BASE branch's workflow, and the checkout
+  # below pins the base SHA, so only already-merged (trusted) code ever sees
+  # the secrets. The smoke test exercises production config, not PR code, so
+  # testing with the trusted script loses nothing.
+  pull_request_target:
+    paths:
+      - 'app/(auth)/**'
+      - 'lib/supabase/**'
+      - 'supabase/config.toml'
+      - 'supabase/templates/**'
+      - 'scripts/smoke-auth-email.mjs'
+      - '.github/workflows/auth-email-smoke.yml'
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: auth-email-smoke
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SMOKE_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.SMOKE_SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SMOKE_SUPABASE_SERVICE_ROLE_KEY }}
+      RESEND_API_KEY: ${{ secrets.SMOKE_RESEND_API_KEY }}
+      SMOKE_EMAIL: ${{ secrets.SMOKE_EMAIL }}
+    steps:
+      # Explicitly pin the trusted base-branch code (github.sha is the base
+      # head on pull_request_target). NEVER check out the PR head here — that
+      # would hand the secrets to PR-authored code.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Run auth email smoke test
+        run: |
+          if [ -z "$NEXT_PUBLIC_SUPABASE_URL" ] || [ -z "$SMOKE_EMAIL" ]; then
+            echo "::notice::SMOKE_* secrets not configured — skipping auth email smoke test. See the header of .github/workflows/auth-email-smoke.yml."
+            exit 0
+          fi
+          node scripts/smoke-auth-email.mjs "$SMOKE_EMAIL" --ci
+
+      # Scheduled runs fail invisibly unless someone is watching the Actions
+      # tab — open/refresh an issue so a silent-drop regression pings a human.
+      - name: Open issue on failure
+        if: failure() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TITLE="Auth email smoke test failing — confirmation emails may be silently dropped"
+          BODY="@Joshfkon the scheduled auth email delivery check failed: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+          Most likely causes (docs/AUTH_EMAIL_DELIVERY_AUDIT.md §4): Supabase auth email rate limit, SMTP misconfiguration, Resend domain/suppression problem, or the project fell back to the built-in sender."
+          EXISTING=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "in:title \"Auth email smoke test failing\"" --json number --jq '.[0].number // empty')
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --repo "$GITHUB_REPOSITORY" --body "$BODY"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body "$BODY"
+          fi
