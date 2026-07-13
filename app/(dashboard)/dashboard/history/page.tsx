@@ -12,7 +12,7 @@ import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 // long and persist it so returning to History renders instantly instead of
 // re-blocking on the full-screen loader. Edits/deletes write through the cache.
 const HISTORY_FIRST_PAGE_KEY = ['history', 'sessions', 'page0'] as const;
-import { formatWeight, convertWeight, convertWeightForDisplay, inputWeightToKg, estimateE1RM, getLocalDateString } from '@/lib/utils';
+import { formatWeight, convertWeight, convertWeightForDisplay, inputWeightToKg, estimateE1RM, getLocalDateString, muscleDisplayName } from '@/lib/utils';
 import { createRepeatSession } from '@/lib/training/repeatWorkout';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import HistoryCalendar from './_components/HistoryCalendar';
@@ -823,7 +823,7 @@ function HistoryPageContent() {
           <div className="p-4 border-b border-surface-800 flex items-center justify-between">
             <div>
               <h2 className="text-xl font-bold text-surface-100">{selectedExercise.exerciseName}</h2>
-              <p className="text-sm text-surface-400 capitalize">{selectedExercise.primaryMuscle}</p>
+              <p className="text-sm text-surface-400">{muscleDisplayName(selectedExercise.primaryMuscle)}</p>
             </div>
             <button
               onClick={() => setSelectedExercise(null)}

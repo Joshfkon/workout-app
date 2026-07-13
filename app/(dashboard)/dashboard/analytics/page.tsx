@@ -37,7 +37,7 @@ import {
   getStrengthLevelColor,
   generatePercentileSegments
 } from '@/services/coachingEngine';
-import { kgToLbs, roundToIncrement, formatWeight, formatWorkoutDuration, resolveWorkoutDurationSeconds, estimateE1RM, getLocalDateString } from '@/lib/utils';
+import { kgToLbs, roundToIncrement, formatWeight, formatWorkoutDuration, resolveWorkoutDurationSeconds, estimateE1RM, getLocalDateString, muscleDisplayName } from '@/lib/utils';
 // Recharts components still used inline - these will be gradually migrated
 import {
   LineChart,
@@ -2171,7 +2171,7 @@ function AnalyticsPageContent() {
                                   >
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                                   </svg>
-                                  <span className="text-sm font-medium text-surface-200 capitalize">{muscle.muscle}</span>
+                                  <span className="text-sm font-medium text-surface-200">{muscleDisplayName(muscle.muscle)}</span>
                                 </div>
                                 <div className="flex items-center gap-2">
                                   <span className={`text-xs px-1.5 py-0.5 rounded ${

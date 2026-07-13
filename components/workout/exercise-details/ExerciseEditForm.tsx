@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import type { Exercise } from '@/types/schema';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { parseYouTubeVideoId } from '@/lib/youtube';
+import { muscleDisplayName } from '@/lib/utils';
 import { getExerciseProp } from './helpers';
 
 import { MOVEMENT_PATTERN_OPTIONS, MUSCLE_OPTIONS, EQUIPMENT_OPTIONS } from './editFormOptions';
@@ -462,7 +463,7 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
                     }}
                     className="w-4 h-4 text-primary-500 bg-surface-700 border-surface-600 rounded focus:ring-primary-500"
                   />
-                  <span className="text-xs text-surface-300 capitalize">{muscle}</span>
+                  <span className="text-xs text-surface-300">{muscleDisplayName(muscle)}</span>
                 </label>
               ))}
             </div>
