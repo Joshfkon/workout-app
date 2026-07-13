@@ -23,6 +23,8 @@ import { useKeyboardInset } from '@/hooks/useKeyboardInset';
 import { YouTubeEmbed } from './YouTubeEmbed';
 import { MuscleWikiVideo } from './MuscleWikiVideo';
 import { parseYouTubeVideoId } from '@/lib/youtube';
+import { MuscleMap } from '@/components/muscleMap/MuscleMap';
+import { exerciseHighlightData } from '@/lib/muscleMap/adapters';
 
 interface ExerciseDetailsModalProps {
   exercise: Exercise | null;
@@ -1114,20 +1116,40 @@ export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }:
 
           {/* Exercise Details Grid */}
           <div className="grid sm:grid-cols-2 gap-4">
-            {/* Secondary Muscles */}
+            {/* Muscles Worked — highlight body map (primary full color,
+                secondaries dimmed) from the exercise record; the chips below
+                stay as the accessible text representation.
+                NOTE: the planned exercise-detail-v2 About tab hasn't landed, so
+                this integrates into the current details grid instead. */}
             {(() => {
+              const primary = getExerciseProp(exercise, 'primaryMuscle', 'primary_muscle');
               const secondary = getExerciseProp(exercise, 'secondaryMuscles', 'secondary_muscles');
-              return secondary && secondary.length > 0 && (
+              const hasSecondary = secondary && secondary.length > 0;
+              if (!primary && !hasSecondary) return null;
+              return (
                 <div>
                   <p className="text-xs font-medium text-surface-400 uppercase tracking-wider mb-2">
-                    Secondary Muscles
+                    Muscles Worked
                   </p>
+                  <MuscleMap
+                    data={exerciseHighlightData(primary, secondary)}
+                    mode="highlight"
+                    view="both"
+                    className="h-40 mb-2"
+                    data-testid="exercise-muscle-map"
+                  />
                   <div className="flex flex-wrap gap-1">
-                    {secondary.map((muscle: string, idx: number) => (
-                      <Badge key={idx} variant="default" size="sm">
-                        {muscle}
+                    {primary && (
+                      <Badge variant="info" size="sm">
+                        {String(primary).replace(/_/g, ' ')}
                       </Badge>
-                    ))}
+                    )}
+                    {hasSecondary &&
+                      secondary.map((muscle: string, idx: number) => (
+                        <Badge key={idx} variant="default" size="sm">
+                          {String(muscle).replace(/_/g, ' ')}
+                        </Badge>
+                      ))}
                   </div>
                 </div>
               );
