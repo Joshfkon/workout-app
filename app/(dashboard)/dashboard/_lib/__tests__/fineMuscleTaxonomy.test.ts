@@ -24,6 +24,7 @@ import {
   type WeeklyVolumeBlockRow,
   type CoarseMuscle,
 } from '../weeklyVolume';
+import { isMuscleWarnable } from '../weeklyVolume';
 import { buildReadinessRows, selectGoodTargets } from '../../workout/[id]/_lib/readiness';
 import { resolvePrimaryMuscleCredits, SECONDARY_MUSCLE_CREDIT } from '@/services/volumeTracker';
 import { resolveMuscleToStandard, type StandardMuscleGroup } from '@/types/schema';
@@ -253,6 +254,14 @@ describe('unfeedable libraries: no fine row, no chevron, no warning', () => {
     const { rows } = rowsFor(blocks, new Set<CoarseMuscle>(['calves', 'traps', 'glutes', 'abs']));
     for (const muscle of ['calves', 'traps', 'glutes', 'abs'] as const) {
       expect(rows.find((r) => r.muscle === muscle)!.children).toHaveLength(0);
+    }
+  });
+
+  it('every fine member is gated by isMuscleWarnable — the shared gate legacy volume consumers (useWeeklyVolume) apply too', () => {
+    const none = new Set<StandardMuscleGroup>();
+    for (const fine of Object.keys(FINE_MUSCLE_PARENTS) as StandardMuscleGroup[]) {
+      expect(isMuscleWarnable(fine, none)).toBe(false);
+      expect(isMuscleWarnable(fine, new Set<StandardMuscleGroup>([fine]))).toBe(true);
     }
   });
 
