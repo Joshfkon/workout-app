@@ -69,6 +69,14 @@ import {
   LIFT_TREND_WINDOW_DAYS,
   type LiftTrendsSummary,
 } from '@/app/(dashboard)/dashboard/_lib/liftTrends';
+import { listOutbox } from '@/lib/offline/setOutbox';
+import {
+  rangeStartLocalDay,
+  pendingCompletionsFromOutbox,
+  pendingSetsFromOutbox,
+  mergeLocalPendingWorkouts,
+  type RawWorkoutSession,
+} from '@/services/volumeTrendsData';
 // Dynamic imports for heavy chart components - only loaded when needed
 const FFMIGauge = dynamic(() => import('@/components/analytics/FFMIGauge').then(m => m.FFMIGauge), { ssr: false });
 const GoalsTab = dynamic(() => import('@/components/analytics/GoalsTab').then(m => m.GoalsTab), { ssr: false });
@@ -447,6 +455,11 @@ function AnalyticsPageContent() {
 
   // Analytics state
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
+  // Volume-tab fetch lifecycle. The empty state renders ONLY on a successful
+  // fetch that truly found zero workouts in range — a failed fetch gets an
+  // error+retry state instead of masquerading as "No workout data yet".
+  const [analyticsStatus, setAnalyticsStatus] = useState<'loading' | 'error' | 'ready'>('loading');
+  const [analyticsRetryNonce, setAnalyticsRetryNonce] = useState(0);
   // Per-time-range result cache (P1-2) — lives for the page's lifetime.
   const analyticsRangeCacheRef = useRef(
     new Map<string, { analytics: AnalyticsData; plateauAlerts: Array<{ exerciseId: string; exerciseName: string; result: PlateauDetectionResult }>; progressionRaw: ProgressionRawData | null }>()
@@ -1029,27 +1042,27 @@ function AnalyticsPageContent() {
           setAnalytics(cached.analytics);
           setPlateauAlerts(cached.plateauAlerts);
           setProgressionRaw(cached.progressionRaw);
+          setAnalyticsStatus('ready');
           return;
         }
 
+        setAnalyticsStatus('loading');
         const supabase = createUntypedClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-
-        const now = new Date();
-        let startDate: Date | null = null;
-        const dayMs = 24 * 60 * 60 * 1000;
-        if (timeRange === '7d') {
-          startDate = new Date(now.getTime() - 7 * dayMs);
-        } else if (timeRange === '30d') {
-          startDate = new Date(now.getTime() - 30 * dayMs);
-        } else if (timeRange === '60d') {
-          startDate = new Date(now.getTime() - 60 * dayMs);
-        } else if (timeRange === '6m') {
-          startDate = new Date(now.getTime() - 180 * dayMs);
-        } else if (timeRange === '1y') {
-          startDate = new Date(now.getTime() - 365 * dayMs);
+        // Same auth semantics as the main query: only a confirmed signed-out
+        // state bails (the main query's effect redirects to /login); a
+        // transient verify failure is a retryable error, never faux-emptiness.
+        const auth = await resolveAuthState(supabase);
+        if (auth.status === 'unauthenticated') return;
+        if (auth.status === 'error') {
+          setAnalyticsStatus('error');
+          return;
         }
+        const user = { id: auth.userId };
+
+        // Range lower bound at local midnight so a range means whole local
+        // calendar days — never a rolling UTC-instant window (this bug class
+        // has shipped twice; see services/volumeTrendsData).
+        const startDate = rangeStartLocalDay(timeRange);
 
         let query = supabase
           .from('workout_sessions')
@@ -1092,13 +1105,72 @@ function AnalyticsPageContent() {
           .eq('id', user.id)
           .single();
 
-        const [{ data: workoutSessions, error }, { data: goalRow }] =
-          await Promise.all([query, goalPromise]);
+        // Locally-finished workouts whose completion patch (and possibly set
+        // rows) are still queued in the offline outbox: the server row is
+        // still `in_progress`, so the state='completed' query above can't see
+        // them. Unsynced must not mean invisible — the finish screen, Home
+        // card, and history all already show these.
+        const outboxEntries = await listOutbox().catch(() => []);
+        const pendingCompletions = pendingCompletionsFromOutbox(outboxEntries);
+        const pendingSetsByBlock = pendingSetsFromOutbox(outboxEntries);
 
-        if (error || !workoutSessions || workoutSessions.length === 0) {
+        // Left joins here (unlike the main query): blocks whose sets are all
+        // still queued locally must come back so the queued sets can be
+        // merged in.
+        const pendingPromise = pendingCompletions.size > 0
+          ? supabase
+              .from('workout_sessions')
+              .select(`
+                id,
+                started_at,
+                completed_at,
+                duration_seconds,
+                session_rpe,
+                exercise_blocks (
+                  id,
+                  exercises (
+                    id,
+                    name,
+                    primary_muscle
+                  ),
+                  set_logs (
+                    id,
+                    weight_kg,
+                    reps,
+                    is_warmup,
+                    logged_at
+                  )
+                )
+              `)
+              .eq('user_id', user.id)
+              .in('id', Array.from(pendingCompletions.keys()))
+          : Promise.resolve({ data: [] as RawWorkoutSession[], error: null });
+
+        const [{ data: serverSessions, error }, { data: goalRow }, { data: pendingData, error: pendingError }] =
+          await Promise.all([query, goalPromise, pendingPromise]);
+
+        if (error || pendingError) {
+          // A failed fetch is an error state with retry — NEVER rendered as
+          // "no workout data".
+          console.error('Failed to fetch analytics:', error ?? pendingError);
+          setAnalyticsStatus('error');
+          return;
+        }
+
+        const workoutSessions = mergeLocalPendingWorkouts({
+          serverSessions: (serverSessions ?? []) as RawWorkoutSession[],
+          pendingSessions: (pendingData ?? []) as RawWorkoutSession[],
+          pendingCompletions,
+          pendingSetsByBlock,
+          rangeStart: startDate,
+        });
+
+        if (workoutSessions.length === 0) {
+          // Genuinely zero workouts in range (server AND local outbox agree).
           setAnalytics(null);
           setPlateauAlerts([]);
           setProgressionRaw(null);
+          setAnalyticsStatus('ready');
           return;
         }
 
@@ -1323,7 +1395,8 @@ function AnalyticsPageContent() {
           const today = new Date();
           today.setHours(0, 0, 0, 0);
 
-          const lastWorkoutDate = new Date(workoutSessions[0].completed_at);
+          // merge guarantees completed_at is non-null on every returned session
+          const lastWorkoutDate = new Date(workoutSessions[0].completed_at!);
           lastWorkoutDate.setHours(0, 0, 0, 0);
 
           const daysSinceLastWorkout = Math.floor((today.getTime() - lastWorkoutDate.getTime()) / (24 * 60 * 60 * 1000));
@@ -1332,8 +1405,8 @@ function AnalyticsPageContent() {
             currentStreak = 1;
 
             for (let i = 1; i < workoutSessions.length; i++) {
-              const prevDate = new Date(workoutSessions[i - 1].completed_at);
-              const currDate = new Date(workoutSessions[i].completed_at);
+              const prevDate = new Date(workoutSessions[i - 1].completed_at!);
+              const currDate = new Date(workoutSessions[i].completed_at!);
               prevDate.setHours(0, 0, 0, 0);
               currDate.setHours(0, 0, 0, 0);
 
@@ -1360,6 +1433,7 @@ function AnalyticsPageContent() {
           currentStreak,
         };
         setAnalytics(analyticsResult);
+        setAnalyticsStatus('ready');
         analyticsRangeCacheRef.current.set(timeRange, {
           analytics: analyticsResult,
           plateauAlerts: detectedPlateauAlerts,
@@ -1367,11 +1441,12 @@ function AnalyticsPageContent() {
         });
       } catch (error) {
         console.error('Failed to fetch analytics:', error);
+        setAnalyticsStatus('error');
       }
     }
 
     fetchAnalytics();
-  }, [timeRange]);
+  }, [timeRange, analyticsRetryNonce]);
 
   // Muscle-group progression classification (services/progressionInsights).
   // Recomputes when the profile loads so pace is judged against the right
@@ -2087,7 +2162,32 @@ function AnalyticsPageContent() {
 
       {activeTab === 'volume' && (
         <div className="space-y-6">
-          {analytics && analytics.totalWorkouts > 0 ? (
+          {analyticsStatus === 'error' ? (
+            // A failed fetch must never render as authoritative emptiness —
+            // stale/absent data gets an explicit retry, not "No workout data".
+            <Card>
+              <ErrorRetry
+                title="Couldn't load volume data"
+                message="Your workouts are safe — we just couldn't load them right now. Check your connection and try again."
+                onRetry={() => setAnalyticsRetryNonce((n) => n + 1)}
+                isRetrying={false}
+              />
+            </Card>
+          ) : analyticsStatus === 'loading' && !analytics ? (
+            // First load only — a range switch keeps the previous range's data
+            // on screen until the new result lands (cached-first doctrine).
+            <div className="space-y-6" data-testid="volume-tab-loading">
+              <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="h-20 animate-pulse bg-surface-800 rounded-xl" />
+                ))}
+              </div>
+              <div className="grid lg:grid-cols-2 gap-6">
+                <div className="h-64 animate-pulse bg-surface-800 rounded-xl" />
+                <div className="h-64 animate-pulse bg-surface-800 rounded-xl" />
+              </div>
+            </div>
+          ) : analytics && analytics.totalWorkouts > 0 ? (
             <>
               {/* Quick Stats */}
               <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">

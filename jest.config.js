@@ -44,6 +44,12 @@ const customJestConfig = {
       branches: 75,
       statements: 55,
     },
+    'services/volumeTrendsData.ts': {
+      lines: 70,
+      functions: 60,
+      branches: 50,
+      statements: 70,
+    },
     'services/exerciseFilter.ts': {
       lines: 70,
       functions: 60,
