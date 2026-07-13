@@ -77,6 +77,8 @@ export const RECOVERY_CONFIG: RecoveryConfig = {
     triceps: 36,
     forearms: 36,
     calves: 36,
+    gastrocnemius: 36,
+    soleus: 36,
   },
   highDoseSetThreshold: 8,
   highDoseHardSetThreshold: 2,

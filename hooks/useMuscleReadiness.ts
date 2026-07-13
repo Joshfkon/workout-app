@@ -14,6 +14,7 @@ import {
   weeklyVolumeWindowStartISO,
   type VolumeAccumulator,
   type MuscleVolumeStats,
+  type CoarseMuscle,
 } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 import { resolveMuscleToStandard } from '@/types/schema';
 import { recoveryConfigFor, type RecoverySession, type RecoveryExercise } from '@/services/muscleRecovery';
@@ -87,6 +88,12 @@ export interface UseMuscleReadinessArgs {
   now: Date;
   /** Only fetch history while the sheet is open (lazy). */
   enabled: boolean;
+  /**
+   * Coarse groups the user expanded (shared, persisted per user via
+   * useExpandedVolumeRows) — all their fine children render, exactly as on
+   * the volume page.
+   */
+  expandedParents?: Set<CoarseMuscle>;
 }
 
 export interface UseMuscleReadinessResult {
@@ -202,6 +209,7 @@ export function useMuscleReadiness({
   liveSets,
   now,
   enabled,
+  expandedParents,
 }: UseMuscleReadinessArgs): UseMuscleReadinessResult {
   const { user: storeUser } = useUserStore();
   const { historyRows, sessions, isLoading, error, refetch } = useRecoveryHistory(now, enabled);
@@ -289,8 +297,8 @@ export function useMuscleReadiness({
   const recoveryConfig = useMemo(() => recoveryConfigFor(enhancedAthleteMode), [enhancedAthleteMode]);
 
   const rows = useMemo(
-    () => buildReadinessRows(stats, recoveryHistory, now, reachable, recoveryConfig),
-    [stats, recoveryHistory, now, reachable, recoveryConfig]
+    () => buildReadinessRows(stats, recoveryHistory, now, reachable, recoveryConfig, expandedParents),
+    [stats, recoveryHistory, now, reachable, recoveryConfig, expandedParents]
   );
 
   const { targets, nextUp } = useMemo(() => selectGoodTargets(rows, 3), [rows]);

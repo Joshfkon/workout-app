@@ -50,16 +50,21 @@ export function VolumeZoneBar({
   onToggle?: () => void;
 }) {
   const hasChildren = row.children.length > 0;
+  // Chevron whenever the group CAN expand (≥1 reachable fine child), not just
+  // when children are currently rendered — otherwise an on-target group could
+  // never be opened.
+  const canToggle = row.expandable && Boolean(onToggle);
 
   return (
     <div className="py-3 border-b border-surface-800 last:border-b-0" data-testid={`volume-row-${row.muscle}`}>
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5 min-w-0">
-          {hasChildren && onToggle ? (
+          {canToggle ? (
             <button
               onClick={onToggle}
               className="flex items-center gap-1.5 text-surface-200 hover:text-surface-100"
               aria-expanded={expanded}
+              data-testid={`volume-row-toggle-${row.muscle}`}
             >
               <svg
                 className={`w-3.5 h-3.5 text-surface-500 transition-transform ${expanded ? 'rotate-90' : ''}`}

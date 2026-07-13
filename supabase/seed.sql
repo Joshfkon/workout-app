@@ -116,7 +116,7 @@ INSERT INTO exercises (name, primary_muscle, secondary_muscles, mechanic, defaul
   'Start with arms at sides, palms facing body',
   'shoulder_isolation', ARRAY['dumbbells']),
 
-('Face Pull', 'rear_delts', ARRAY['upper_back', 'traps'], 'isolation', ARRAY[15, 20], 2, 2.5,
+('Face Pull', 'rear_delts', ARRAY['upper_back', 'mid_lower_traps'], 'isolation', ARRAY[15, 20], 2, 2.5,
   ARRAY['Pull to face level', 'Externally rotate at end', 'Squeeze rear delts'],
   ARRAY['Pulling too low', 'Using too much weight', 'Not rotating'],
   'Set cable at face height, use rope attachment',
@@ -134,13 +134,13 @@ INSERT INTO exercises (name, primary_muscle, secondary_muscles, mechanic, defaul
   'Can use dumbbells, barbell, or cable',
   'shoulder_isolation', ARRAY['dumbbells']),
 
-('Dumbbell Shrug', 'traps', ARRAY[]::TEXT[], 'isolation', ARRAY[12, 15], 2, 2.0,
+('Dumbbell Shrug', 'upper_traps', ARRAY[]::TEXT[], 'isolation', ARRAY[12, 15], 2, 2.0,
   ARRAY['Shrug straight up', 'Hold at top briefly', 'Full stretch at bottom', 'Keep arms straight'],
   ARRAY['Rolling shoulders', 'Using momentum', 'Shrugging forward'],
   'Let arms hang at sides, palms facing body',
   'shoulder_isolation', ARRAY['dumbbells']),
 
-('Barbell Shrug', 'traps', ARRAY[]::TEXT[], 'isolation', ARRAY[10, 15], 2, 5.0,
+('Barbell Shrug', 'upper_traps', ARRAY[]::TEXT[], 'isolation', ARRAY[10, 15], 2, 5.0,
   ARRAY['Shrug straight up toward ears', 'Squeeze at top', 'Control the descent', 'Keep arms straight'],
   ARRAY['Rolling shoulders', 'Using momentum', 'Bending elbows'],
   'Grip slightly wider than shoulders, can use straps for heavy weight',
@@ -332,19 +332,19 @@ INSERT INTO exercises (name, primary_muscle, secondary_muscles, mechanic, defaul
 -- ============================================
 -- CALF EXERCISES
 -- ============================================
-('Standing Calf Raise', 'calves', ARRAY[]::TEXT[], 'isolation', ARRAY[12, 20], 2, 5.0,
+('Standing Calf Raise', 'gastrocnemius', ARRAY['soleus'], 'isolation', ARRAY[12, 20], 2, 5.0,
   ARRAY['Full stretch at bottom', 'Pause at top', 'Keep legs straight'],
   ARRAY['Bouncing', 'Bending knees', 'Cutting range short'],
   'Toes on platform, heels hanging off',
   'calf_raise', ARRAY['calf raise machine']),
 
-('Seated Calf Raise', 'calves', ARRAY[]::TEXT[], 'isolation', ARRAY[12, 20], 2, 5.0,
+('Seated Calf Raise', 'soleus', ARRAY['gastrocnemius'], 'isolation', ARRAY[12, 20], 2, 5.0,
   ARRAY['Full stretch at bottom', 'Pause at peak contraction', 'Control tempo'],
   ARRAY['Bouncing', 'Partial reps', 'Going too fast'],
   'Pad on lower thighs, balls of feet on platform',
   'calf_raise', ARRAY['seated calf raise machine']),
 
-('Leg Press Calf Raise', 'calves', ARRAY[]::TEXT[], 'isolation', ARRAY[15, 25], 2, 10.0,
+('Leg Press Calf Raise', 'gastrocnemius', ARRAY['soleus'], 'isolation', ARRAY[15, 25], 2, 10.0,
   ARRAY['Only balls of feet on platform', 'Full range of motion', 'Don''t lock knees'],
   ARRAY['Using too much weight', 'Partial reps'],
   'Feet at bottom edge of platform, push through toes',
