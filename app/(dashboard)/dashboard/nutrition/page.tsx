@@ -32,6 +32,7 @@ import type {
 import type { ParsedMealItem } from '@/lib/actions/nutrition-ai';
 import type { SavedMeal, SavedMealItem } from '@/components/nutrition/SavedMealsModal';
 import type { AddFoodTab } from '@/components/nutrition/AddFoodModal';
+import type { LabelScanPrefill } from '@/components/nutrition/LabelScanner';
 import { MacroSummaryCard } from '@/components/nutrition/MacroSummaryCard';
 import { FoodEmojiAvatar } from '@/components/nutrition/FoodEmoji';
 import { MEAL_ACCENTS } from '@/lib/nutrition/mealAccents';
@@ -259,6 +260,7 @@ function NutritionPageContent() {
   const [showMacroCalculator, setShowMacroCalculator] = useState(false);
   const [showCreateCustomFood, setShowCreateCustomFood] = useState(false);
   const [customFoodBarcode, setCustomFoodBarcode] = useState<string | undefined>(undefined);
+  const [labelScanPrefill, setLabelScanPrefill] = useState<LabelScanPrefill | null>(null);
   const [editingCustomFood, setEditingCustomFood] = useState<CustomFood | null>(null);
   const [showEditFood, setShowEditFood] = useState(false);
   const [editingFood, setEditingFood] = useState<FoodLogEntry | null>(null);
@@ -2108,6 +2110,11 @@ function NutritionPageContent() {
           setCustomFoodBarcode(barcode);
           setShowCreateCustomFood(true);
         }}
+        onLabelScanned={(prefill) => {
+          setShowAddFood(false);
+          setLabelScanPrefill(prefill);
+          setShowCreateCustomFood(true);
+        }}
         customFoods={customFoods}
         frequentFoods={frequentFoods}
         systemFoods={systemFoods}
@@ -2139,10 +2146,12 @@ function NutritionPageContent() {
           setShowCreateCustomFood(false);
           setEditingCustomFood(null);
           setCustomFoodBarcode(undefined);
+          setLabelScanPrefill(null);
         }}
         onSave={handleSaveCustomFood}
         editingFood={editingCustomFood}
         initialBarcode={customFoodBarcode}
+        initialScan={labelScanPrefill}
       />
 
       <WeightLogModal

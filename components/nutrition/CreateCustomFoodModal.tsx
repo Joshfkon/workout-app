@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Toggle } from '@/components/ui/Toggle';
 import type { CustomFood } from '@/types/nutrition';
+import type { LabelScanPrefill } from './LabelScanner';
 
 interface CreateCustomFoodModalProps {
   isOpen: boolean;
@@ -14,7 +15,14 @@ interface CreateCustomFoodModalProps {
   editingFood?: CustomFood | null;
   /** Prefill the barcode field (barcode scan not-found flow) */
   initialBarcode?: string;
+  /** Prefill macros + serving from a scanned nutrition label (Scan Label flow) */
+  initialScan?: LabelScanPrefill | null;
 }
+
+/** Which create-form inputs a label scan fills, keyed to parser fields. */
+type ScannedFormField = 'calories' | 'protein' | 'carbs' | 'fat' | 'servingSize';
+
+const scanValue = (v: number | null): string => (v === null ? '' : String(v));
 
 export function CreateCustomFoodModal({
   isOpen,
@@ -22,6 +30,7 @@ export function CreateCustomFoodModal({
   onSave,
   editingFood,
   initialBarcode,
+  initialScan,
 }: CreateCustomFoodModalProps) {
   const [isPerWeight, setIsPerWeight] = useState(editingFood?.is_per_weight ?? false);
   const [foodName, setFoodName] = useState(editingFood?.food_name ?? '');
@@ -71,6 +80,62 @@ export function CreateCustomFoodModal({
       setBarcode(initialBarcode);
     }
   }, [isOpen, editingFood, initialBarcode]);
+
+  // Prefill from a scanned nutrition label (only for new foods). Values are
+  // NEVER saved silently — they land here for review, with scanned fields
+  // marked and low-confidence ones highlighted.
+  useEffect(() => {
+    if (isOpen && !editingFood && initialScan) {
+      const { fields } = initialScan;
+      setIsPerWeight(false);
+      if (fields.servingSizeText) setServingSize(fields.servingSizeText);
+      setCalories(scanValue(fields.calories));
+      setProtein(scanValue(fields.proteinG));
+      setCarbs(scanValue(fields.totalCarbsG));
+      setFat(scanValue(fields.totalFatG));
+    }
+  }, [isOpen, editingFood, initialScan]);
+
+  /** 'high' | 'low' | null (null = not from a scan) for one form input. */
+  const scanConfidenceFor = (field: ScannedFormField): 'high' | 'low' | null => {
+    if (!initialScan || editingFood) return null;
+    const { fields, fieldConfidence } = initialScan;
+    switch (field) {
+      case 'calories':
+        return fields.calories === null ? null : fieldConfidence.calories ?? 'high';
+      case 'protein':
+        return fields.proteinG === null ? null : fieldConfidence.proteinG ?? 'high';
+      case 'carbs':
+        return fields.totalCarbsG === null ? null : fieldConfidence.totalCarbsG ?? 'high';
+      case 'fat':
+        return fields.totalFatG === null ? null : fieldConfidence.totalFatG ?? 'high';
+      case 'servingSize':
+        return fields.servingSizeText === null ? null : 'high';
+    }
+  };
+
+  /** Amber highlight for low-confidence scanned values. */
+  const scanInputClass = (field: ScannedFormField): string =>
+    scanConfidenceFor(field) === 'low'
+      ? 'border-warning-500 focus:ring-warning-500'
+      : '';
+
+  const ScanBadge = ({ field }: { field: ScannedFormField }) => {
+    const confidence = scanConfidenceFor(field);
+    if (!confidence) return null;
+    return (
+      <span
+        className={`ml-1.5 inline-block align-middle text-[10px] font-medium px-1.5 py-0.5 rounded ${
+          confidence === 'low'
+            ? 'bg-warning-500/15 text-warning-400'
+            : 'bg-primary-500/15 text-primary-400'
+        }`}
+        data-testid={`scan-badge-${field}`}
+      >
+        {confidence === 'low' ? 'Check' : 'Scanned'}
+      </span>
+    );
+  };
 
   const handleSubmit = async () => {
     if (!foodName.trim()) {
@@ -148,6 +213,28 @@ export function CreateCustomFoodModal({
         {error && (
           <div className="p-3 text-sm text-danger-400 bg-danger-500/10 border border-danger-500/20 rounded-lg">
             {error}
+          </div>
+        )}
+
+        {/* Scanned-label review banner: values are prefilled, never auto-saved */}
+        {initialScan && !editingFood && (
+          <div
+            className={`p-3 text-sm rounded-lg border space-y-1 ${
+              initialScan.confidence === 'low' || initialScan.warnings.length > 0
+                ? 'bg-warning-500/10 border-warning-500/20 text-warning-400'
+                : 'bg-primary-500/10 border-primary-500/20 text-primary-400'
+            }`}
+            data-testid="label-scan-banner"
+          >
+            <p className="font-medium">
+              {initialScan.source === 'ai' ? 'Read by AI scan' : 'Scanned from label'} — review before saving
+            </p>
+            {initialScan.warnings.map((warning) => (
+              <p key={warning} className="text-xs opacity-90">
+                {warning}
+              </p>
+            ))}
+            <p className="text-xs opacity-75">Add a name of your own — brand names aren&apos;t scanned.</p>
           </div>
         )}
 
@@ -275,11 +362,13 @@ export function CreateCustomFoodModal({
             <div>
               <label className="block text-sm font-medium text-surface-300 mb-1">
                 Serving Size
+                <ScanBadge field="servingSize" />
               </label>
               <Input
                 value={servingSize}
                 onChange={(e) => setServingSize(e.target.value)}
                 placeholder="e.g., 1 cup, 1 bar, 4 oz"
+                data-testid="custom-food-serving-size"
               />
             </div>
 
@@ -287,6 +376,7 @@ export function CreateCustomFoodModal({
               <div>
                 <label className="block text-sm font-medium text-surface-300 mb-1">
                   Calories *
+                  <ScanBadge field="calories" />
                 </label>
                 <Input
                   type="number"
@@ -295,11 +385,14 @@ export function CreateCustomFoodModal({
                   value={calories}
                   onChange={(e) => setCalories(e.target.value)}
                   placeholder="0"
+                  className={scanInputClass('calories')}
+                  data-testid="custom-food-calories"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-surface-300 mb-1">
                   Protein (g)
+                  <ScanBadge field="protein" />
                 </label>
                 <Input
                   type="number"
@@ -308,11 +401,14 @@ export function CreateCustomFoodModal({
                   value={protein}
                   onChange={(e) => setProtein(e.target.value)}
                   placeholder="0"
+                  className={scanInputClass('protein')}
+                  data-testid="custom-food-protein"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-surface-300 mb-1">
                   Carbs (g)
+                  <ScanBadge field="carbs" />
                 </label>
                 <Input
                   type="number"
@@ -321,11 +417,14 @@ export function CreateCustomFoodModal({
                   value={carbs}
                   onChange={(e) => setCarbs(e.target.value)}
                   placeholder="0"
+                  className={scanInputClass('carbs')}
+                  data-testid="custom-food-carbs"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-surface-300 mb-1">
                   Fat (g)
+                  <ScanBadge field="fat" />
                 </label>
                 <Input
                   type="number"
@@ -334,6 +433,8 @@ export function CreateCustomFoodModal({
                   value={fat}
                   onChange={(e) => setFat(e.target.value)}
                   placeholder="0"
+                  className={scanInputClass('fat')}
+                  data-testid="custom-food-fat"
                 />
               </div>
             </div>

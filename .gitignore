@@ -49,3 +49,7 @@ ux-audit/auth-state.json
 # Raw audit crawl screenshots (36MB) stay local; per-fix evidence is committed
 ux-audit/screenshots/
 /ux-audit/perf/boot-shots/
+
+# tesseract.js OCR assets copied from node_modules on postinstall
+# (public/tessdata/eng.traineddata.gz IS committed)
+/public/tesseract/
