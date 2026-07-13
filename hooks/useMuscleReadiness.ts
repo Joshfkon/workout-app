@@ -16,7 +16,7 @@ import {
   type MuscleVolumeStats,
 } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 import { resolveMuscleToStandard } from '@/types/schema';
-import type { RecoverySession, RecoveryExercise } from '@/services/muscleRecovery';
+import { recoveryConfigFor, type RecoverySession, type RecoveryExercise } from '@/services/muscleRecovery';
 import {
   buildReadinessRows,
   selectGoodTargets,
@@ -96,14 +96,28 @@ export interface UseMuscleReadinessResult {
   nextUp: NextReadyTarget | null;
   isLoading: boolean;
   error: string | null;
+  /** Re-run the history fetch (error retry). */
+  refetch: () => void;
 }
 
-export function useMuscleReadiness({
-  liveBlocks,
-  liveSets,
-  now,
-  enabled,
-}: UseMuscleReadinessArgs): UseMuscleReadinessResult {
+/**
+ * The shared completed-session history feed for every recovery surface: the
+ * in-workout readiness sheet, the analytics recovery card and the legacy
+ * per-standard-muscle adapter (`useMuscleRecovery`) all read THIS query — one
+ * key, one cache — and run the same pure recovery heuristic over its rows.
+ */
+export function useRecoveryHistory(
+  now: Date,
+  enabled: boolean
+): {
+  /** Raw grouped rows (feeds the weekly-volume accumulator). */
+  historyRows: HistorySessionRow[];
+  /** The same rows shaped for the pure recovery heuristic. */
+  sessions: RecoverySession[];
+  isLoading: boolean;
+  error: string | null;
+  refetch: () => void;
+} {
   const { user: storeUser } = useUserStore();
   const { user: authUser } = useAuthUser();
   const userId = storeUser?.id || authUser?.id || null;
@@ -158,6 +172,39 @@ export function useMuscleReadiness({
   });
 
   const historyRows = useMemo(() => historyQuery.data ?? [], [historyQuery.data]);
+
+  const sessions = useMemo<RecoverySession[]>(
+    () =>
+      historyRows.map((s) => ({
+        performedAt: new Date(s.completedAt),
+        exercises: s.exercises.map(
+          (ex): RecoveryExercise => ({
+            primaryMuscle: ex.primaryMuscle,
+            secondaryMuscles: ex.secondaryMuscles,
+            sets: ex.sets,
+          })
+        ),
+      })),
+    [historyRows]
+  );
+
+  return {
+    historyRows,
+    sessions,
+    isLoading: historyQuery.isLoading,
+    error: historyQuery.error ? (historyQuery.error as Error).message : null,
+    refetch: historyQuery.refetch,
+  };
+}
+
+export function useMuscleReadiness({
+  liveBlocks,
+  liveSets,
+  now,
+  enabled,
+}: UseMuscleReadinessArgs): UseMuscleReadinessResult {
+  const { user: storeUser } = useUserStore();
+  const { historyRows, sessions, isLoading, error, refetch } = useRecoveryHistory(now, enabled);
 
   // Working (non-warmup) live sets grouped by block.
   const liveWorkingSetsByBlock = useMemo(() => {
@@ -219,17 +266,6 @@ export function useMuscleReadiness({
 
   // Recovery history: DB sessions + the live session (timestamped `now`).
   const recoveryHistory = useMemo<RecoverySession[]>(() => {
-    const sessions: RecoverySession[] = historyRows.map((s) => ({
-      performedAt: new Date(s.completedAt),
-      exercises: s.exercises.map(
-        (ex): RecoveryExercise => ({
-          primaryMuscle: ex.primaryMuscle,
-          secondaryMuscles: ex.secondaryMuscles,
-          sets: ex.sets,
-        })
-      ),
-    }));
-
     const liveExercises: RecoveryExercise[] = liveBlocks
       .map((block): RecoveryExercise => {
         const sets = (liveWorkingSetsByBlock.get(block.id) || []).map((s) => ({
@@ -243,15 +279,18 @@ export function useMuscleReadiness({
       })
       .filter((ex) => ex.sets.length > 0);
 
-    if (liveExercises.length > 0) {
-      sessions.push({ performedAt: now, exercises: liveExercises });
-    }
-    return sessions;
-  }, [historyRows, liveBlocks, liveWorkingSetsByBlock, now]);
+    if (liveExercises.length === 0) return sessions;
+    return [...sessions, { performedAt: now, exercises: liveExercises }];
+  }, [sessions, liveBlocks, liveWorkingSetsByBlock, now]);
+
+  // Enhanced athletes get shorter recovery windows (shared windowScale). Read
+  // from the persisted user store — the same profile every fatigue surface uses.
+  const enhancedAthleteMode = storeUser?.enhancedAthleteMode === true;
+  const recoveryConfig = useMemo(() => recoveryConfigFor(enhancedAthleteMode), [enhancedAthleteMode]);
 
   const rows = useMemo(
-    () => buildReadinessRows(stats, recoveryHistory, now, reachable),
-    [stats, recoveryHistory, now, reachable]
+    () => buildReadinessRows(stats, recoveryHistory, now, reachable, recoveryConfig),
+    [stats, recoveryHistory, now, reachable, recoveryConfig]
   );
 
   const { targets, nextUp } = useMemo(() => selectGoodTargets(rows, 3), [rows]);
@@ -260,7 +299,27 @@ export function useMuscleReadiness({
     rows,
     targets,
     nextUp,
-    isLoading: historyQuery.isLoading,
-    error: historyQuery.error ? (historyQuery.error as Error).message : null,
+    isLoading,
+    error,
+    refetch,
   };
 }
+
+/**
+ * Dashboard variant for surfaces OUTSIDE an active workout (the analytics
+ * Muscle Recovery card): the same unified rows — same fetch, same query key
+ * (shared React Query cache with the in-workout sheet), same volume + recovery
+ * pairing — with no live session to merge.
+ */
+export function useDashboardMuscleReadiness(now: Date): UseMuscleReadinessResult {
+  return useMuscleReadiness({
+    liveBlocks: EMPTY_BLOCKS,
+    liveSets: EMPTY_SETS,
+    now,
+    enabled: true,
+  });
+}
+
+// Stable empty references so the no-live-session hook variant never re-memoizes.
+const EMPTY_BLOCKS: ExerciseBlockWithExercise[] = [];
+const EMPTY_SETS: SetLog[] = [];

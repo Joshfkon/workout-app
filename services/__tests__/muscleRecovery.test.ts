@@ -1,8 +1,10 @@
 import {
   computeMuscleRecovery,
+  recoveryConfigFor,
   RECOVERY_CONFIG,
   type RecoverySession,
 } from '@/services/muscleRecovery';
+import { ENHANCED_RECOVERY_MULTIPLIER } from '@/services/shared/fatigueConstants';
 
 // A fixed clock injected into every call — no ambient Date reads anywhere.
 const NOW = new Date('2026-07-11T12:00:00.000Z');
@@ -48,26 +50,26 @@ describe('computeMuscleRecovery', () => {
   });
 
   it('trained 80h ago, light session → Fresh', () => {
-    // 3 sets, nothing below 2 RIR → low dose → 48 - 12 = 36h window.
+    // 3 sets, nothing below 2 RIR → low dose → biceps base 36 - 12 = 24h window.
     const history = [session(hoursAgo(80), 'biceps', 3, 3)];
     const result = computeMuscleRecovery(history, 'biceps', NOW);
 
     expect(result.status).toBe('fresh');
-    expect(result.windowHours).toBe(36);
+    expect(result.windowHours).toBe(24);
     expect(result.hoursUntilReady).toBe(0);
     expect(result.hoursSinceLast).toBeCloseTo(80, 5);
   });
 
-  it('secondary-only involvement 24h ago (glutes via RDL) → half dose → Recovering not Fatigued', () => {
+  it('secondary-only involvement 30h ago (glutes via RDL) → half dose → Recovering not Fatigued', () => {
     // RDL: primary hamstrings, secondary glutes. 3 non-hard sets.
-    // Glutes see half dose (1.5) → light → 36h window. 24h ≥ 0.6×36 (21.6) and
-    // < 36 → Recovering.
-    const history = [session(hoursAgo(24), 'hamstrings', 3, 2, ['glutes'])];
+    // Glutes see half dose (1.5) → light → 60 - 12 = 48h window. 30h ≥ 0.6×48
+    // (28.8) and < 48 → Recovering.
+    const history = [session(hoursAgo(30), 'hamstrings', 3, 2, ['glutes'])];
     const result = computeMuscleRecovery(history, 'glutes', NOW);
 
     expect(result.status).toBe('recovering');
     expect(result.dose).toBeCloseTo(1.5, 5);
-    expect(result.windowHours).toBe(36);
+    expect(result.windowHours).toBe(48);
 
     // The secondary muscle carries exactly half the primary's dose.
     const hams = computeMuscleRecovery(history, 'hamstrings', NOW);
@@ -103,8 +105,9 @@ describe('computeMuscleRecovery', () => {
     ];
     const result = computeMuscleRecovery(history, 'quads', NOW);
 
-    // Should key off the recent light session: 2 sets, no hard → 36h window.
-    expect(result.windowHours).toBe(36);
+    // Should key off the recent light session: 2 sets, no hard → quads base
+    // 60 - 12 = 48h window.
+    expect(result.windowHours).toBe(48);
     expect(result.hoursSinceLast).toBeCloseTo(20, 5);
     expect(result.lastTrainedAt).toEqual(hoursAgo(20));
   });
@@ -122,8 +125,9 @@ describe('computeMuscleRecovery', () => {
     const history = [session(hoursAgo(40), 'triceps', 3, null)];
     const result = computeMuscleRecovery(history, 'triceps', NOW);
 
-    // 3 sets, no rated-hard sets → light → 36h window; 40 ≥ 36 → Fresh.
-    expect(result.windowHours).toBe(36);
+    // 3 sets, no rated-hard sets → light → triceps base 36 - 12 = 24h window;
+    // 40 ≥ 24 → Fresh.
+    expect(result.windowHours).toBe(24);
     expect(result.status).toBe('fresh');
   });
 
@@ -137,9 +141,9 @@ describe('computeMuscleRecovery', () => {
     };
     const result = computeMuscleRecovery([multi], 'quads', NOW);
 
-    // 8 total sets → high dose → 72h window.
+    // 8 total sets → high dose → quads base 60 + 24 = 84h window.
     expect(result.dose).toBeCloseTo(8, 5);
-    expect(result.windowHours).toBe(72);
+    expect(result.windowHours).toBe(84);
   });
 
   it('respects a per-muscle window override from config', () => {
@@ -153,5 +157,55 @@ describe('computeMuscleRecovery', () => {
     // Override base 72, moderate dose (no adjustment) → 72h; 50 < 72 → not Fresh.
     expect(result.windowHours).toBe(72);
     expect(result.status).toBe('recovering'); // 50 ≥ 0.6×72 (43.2)
+  });
+
+  it('large muscle groups get a longer default window than small ones', () => {
+    // Identical moderate sessions (5 sets, RIR 2, no dose adjustment): the
+    // per-muscle table separates quads (60h) from biceps (36h) and leaves an
+    // unlisted muscle (lateral_delts) on the 48h default.
+    const at = hoursAgo(50);
+    const quads = computeMuscleRecovery([session(at, 'quads', 5, 2)], 'quads', NOW);
+    const biceps = computeMuscleRecovery([session(at, 'biceps', 5, 2)], 'biceps', NOW);
+    const delts = computeMuscleRecovery(
+      [session(at, 'lateral_delts', 5, 2)],
+      'lateral_delts',
+      NOW
+    );
+
+    expect(quads.windowHours).toBe(60);
+    expect(biceps.windowHours).toBe(36);
+    expect(delts.windowHours).toBe(RECOVERY_CONFIG.defaultWindowHours);
+
+    // Same session age, different verdicts: 50h is inside the quads window but
+    // past the biceps one.
+    expect(quads.status).toBe('recovering');
+    expect(biceps.status).toBe('fresh');
+  });
+
+  it('recoveryConfigFor(true) shrinks every window by the shared enhanced multiplier', () => {
+    const enhanced = recoveryConfigFor(true);
+    const history = [session(hoursAgo(52), 'quads', 5, 2)]; // moderate → base 60h
+
+    const natural = computeMuscleRecovery(history, 'quads', NOW);
+    const scaled = computeMuscleRecovery(history, 'quads', NOW, enhanced);
+
+    // 60 / 1.225 ≈ 48.98h — the enhanced athlete is Fresh at 52h while the
+    // natural athlete is still Recovering.
+    expect(scaled.windowHours).toBeCloseTo(60 / ENHANCED_RECOVERY_MULTIPLIER, 5);
+    expect(natural.status).toBe('recovering');
+    expect(scaled.status).toBe('fresh');
+  });
+
+  it('windowScale applies to dose adjustments too, not just the base window', () => {
+    const enhanced = recoveryConfigFor(true);
+    const history = [session(hoursAgo(10), 'chest_upper', 10, 0)]; // high dose → 48+24
+
+    const result = computeMuscleRecovery(history, 'chest_upper', NOW, enhanced);
+    expect(result.windowHours).toBeCloseTo(72 / ENHANCED_RECOVERY_MULTIPLIER, 5);
+  });
+
+  it('recoveryConfigFor(false) is the unscaled default config', () => {
+    expect(recoveryConfigFor(false)).toBe(RECOVERY_CONFIG);
+    expect(RECOVERY_CONFIG.windowScale).toBe(1);
   });
 });
