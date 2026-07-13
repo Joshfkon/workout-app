@@ -11,8 +11,62 @@ import type {
   DeloadTriggers,
   MesocycleWeek,
   ExtendedUserProfile,
+  DiscomfortSeverity,
 } from '@/types/schema';
 import { DELOAD_MODIFIERS } from '@/services/shared/fatigueConstants';
+
+// ============================================================
+// JOINT PAIN SIGNAL (deload signal 5)
+// ============================================================
+
+/**
+ * Severity weights for user-initiated joint pain events. A 'stop' (had to
+ * abandon the set) counts triple a passing twinge.
+ */
+export const JOINT_PAIN_SEVERITY_WEIGHTS: Record<DiscomfortSeverity, number> = {
+  twinge: 1,
+  discomfort: 1,
+  pain: 2,
+  stop: 3,
+};
+
+/** Trailing window over which pain events feed the deload signal. */
+export const JOINT_PAIN_WINDOW_DAYS = 14;
+
+/**
+ * Cap on the joint-pain contribution to the fatigue score — the same 10 points
+ * the legacy boolean contributed, so pain can nudge a deload but never force
+ * one single-handedly.
+ */
+export const JOINT_PAIN_MAX_SCORE = 10;
+
+/** A weighted score at/above this trips deload TRIGGER 5 (≈ one true pain event). */
+export const JOINT_PAIN_TRIGGER_THRESHOLD = 4;
+
+/** One joint pain event, as read from joint_pain_events. */
+export interface JointPainSignalEvent {
+  severity: DiscomfortSeverity;
+  occurredAt: Date;
+}
+
+/**
+ * Deload signal 5: severity-weighted count of joint-pain events in the
+ * trailing JOINT_PAIN_WINDOW_DAYS, scaled onto the fatigue score's 0-10 band
+ * and capped at JOINT_PAIN_MAX_SCORE.
+ */
+export function computeJointPainSignal(
+  events: JointPainSignalEvent[],
+  now: Date
+): number {
+  const cutoff = now.getTime() - JOINT_PAIN_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+  let weighted = 0;
+  for (const event of events) {
+    const t = event.occurredAt.getTime();
+    if (!Number.isFinite(t) || t < cutoff || t > now.getTime()) continue;
+    weighted += JOINT_PAIN_SEVERITY_WEIGHTS[event.severity] ?? 1;
+  }
+  return Math.min(JOINT_PAIN_MAX_SCORE, weighted * 2);
+}
 
 // ============================================================
 // REACTIVE DELOAD DETECTION
@@ -68,7 +122,9 @@ export function checkDeloadTriggers(
   }
   
   // === TRIGGER 5: Joint pain ===
-  if (lastWeek.jointPain) {
+  // Either the legacy weekly boolean, or a severity-weighted event score at/
+  // above the trigger threshold (≈ one genuine pain event in the window).
+  if (lastWeek.jointPain || (lastWeek.jointPainScore ?? 0) >= JOINT_PAIN_TRIGGER_THRESHOLD) {
     reasons.push('Joint pain reported - reduce intensity');
     shouldDeload = true;
     suggestedDeloadType = 'intensity';
@@ -327,8 +383,13 @@ export function calculateFatigueScore(performance: WeeklyPerformanceData): numbe
   // Missed reps (0-15 points)
   score += Math.min(15, performance.missedReps * 3);
   
-  // Joint pain (0-10 points)
-  if (performance.jointPain) score += 10;
+  // Joint pain (0-10 points) — the severity-weighted event score when
+  // available (signal 5, capped), else the legacy boolean's flat 10.
+  if (performance.jointPainScore !== undefined) {
+    score += Math.min(JOINT_PAIN_MAX_SCORE, Math.max(0, performance.jointPainScore));
+  } else if (performance.jointPain) {
+    score += 10;
+  }
   
   // Strength decline (0-5 points)
   if (performance.strengthDecline) score += 5;

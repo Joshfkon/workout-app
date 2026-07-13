@@ -347,6 +347,8 @@ export interface Database {
           dropsets_per_set: number;
           drop_percentage: number;
           skipped_at: string | null;
+          pump: number | null;
+          workload: number | null;
         };
         Insert: {
           id?: string;
@@ -367,6 +369,8 @@ export interface Database {
           dropsets_per_set?: number;
           drop_percentage?: number;
           skipped_at?: string | null;
+          pump?: number | null;
+          workload?: number | null;
         };
         Update: {
           id?: string;
@@ -387,6 +391,68 @@ export interface Database {
           dropsets_per_set?: number;
           drop_percentage?: number;
           skipped_at?: string | null;
+          pump?: number | null;
+          workload?: number | null;
+        };
+        Relationships: [];
+      };
+      joint_pain_events: {
+        Row: {
+          id: string;
+          user_id: string;
+          session_id: string;
+          exercise_id: string | null;
+          set_log_id: string | null;
+          joint: string;
+          severity: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          session_id: string;
+          exercise_id?: string | null;
+          set_log_id?: string | null;
+          joint: string;
+          severity: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          session_id?: string;
+          exercise_id?: string | null;
+          set_log_id?: string | null;
+          joint?: string;
+          severity?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      user_muscle_recovery_multipliers: {
+        Row: {
+          id: string;
+          user_id: string;
+          muscle_group: string;
+          recovery_multiplier: number;
+          updated_at: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          muscle_group: string;
+          recovery_multiplier?: number;
+          updated_at?: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          muscle_group?: string;
+          recovery_multiplier?: number;
+          updated_at?: string;
+          created_at?: string;
         };
         Relationships: [];
       };

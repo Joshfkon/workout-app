@@ -1,8 +1,14 @@
 import {
   computeMuscleRecovery,
   recoveryConfigFor,
+  adjustRecoveryMultiplier,
+  clampRecoveryMultiplier,
   RECOVERY_CONFIG,
+  RECOVERY_MULTIPLIER_BOUNDS,
+  RECOVERY_MULTIPLIER_STEP,
   type RecoverySession,
+  type RecoveryStatus,
+  type SorenessReport,
 } from '@/services/muscleRecovery';
 import { ENHANCED_RECOVERY_MULTIPLIER } from '@/services/shared/fatigueConstants';
 
@@ -207,5 +213,125 @@ describe('computeMuscleRecovery', () => {
   it('recoveryConfigFor(false) is the unscaled default config', () => {
     expect(recoveryConfigFor(false)).toBe(RECOVERY_CONFIG);
     expect(RECOVERY_CONFIG.windowScale).toBe(1);
+  });
+});
+
+describe('per-muscle learned recovery multiplier', () => {
+  it('scales that muscle\'s window (and only that muscle\'s)', () => {
+    const config = recoveryConfigFor(false, { quads: 1.2 });
+    const at = hoursAgo(50);
+
+    const quads = computeMuscleRecovery([session(at, 'quads', 5, 2)], 'quads', NOW, config);
+    const hams = computeMuscleRecovery(
+      [session(at, 'hamstrings', 5, 2)],
+      'hamstrings',
+      NOW,
+      config
+    );
+
+    expect(quads.windowHours).toBeCloseTo(60 * 1.2, 5); // 72h
+    expect(hams.windowHours).toBe(60); // untouched
+  });
+
+  it('composes with the enhanced-athlete windowScale', () => {
+    const config = recoveryConfigFor(true, { quads: 1.2 });
+    const result = computeMuscleRecovery(
+      [session(hoursAgo(50), 'quads', 5, 2)],
+      'quads',
+      NOW,
+      config
+    );
+    expect(result.windowHours).toBeCloseTo((60 * 1.2) / ENHANCED_RECOVERY_MULTIPLIER, 5);
+  });
+
+  it('an out-of-range persisted multiplier is clamped before it can distort the window', () => {
+    const config = recoveryConfigFor(false, { quads: 9 });
+    const result = computeMuscleRecovery(
+      [session(hoursAgo(50), 'quads', 5, 2)],
+      'quads',
+      NOW,
+      config
+    );
+    expect(result.windowHours).toBeCloseTo(60 * RECOVERY_MULTIPLIER_BOUNDS.max, 5);
+  });
+
+  it('a "still sore" report can flip the same-hours verdict after learning', () => {
+    // 66h after a moderate quads session: with multiplier 1 (60h window) the
+    // model says Fresh; after the window learns +10% (66h window) it says
+    // Recovering — the learning loop actually changes behavior.
+    const history = [session(hoursAgo(66), 'quads', 5, 2)];
+    const before = computeMuscleRecovery(history, 'quads', NOW);
+    const after = computeMuscleRecovery(
+      history,
+      'quads',
+      NOW,
+      recoveryConfigFor(false, { quads: 1.15 })
+    );
+    expect(before.status).toBe('fresh');
+    expect(after.status).toBe('recovering');
+  });
+});
+
+describe('adjustRecoveryMultiplier', () => {
+  it('"still sore" when the model said fresh/recovering moves +0.05', () => {
+    expect(adjustRecoveryMultiplier(1.0, 'still_sore', 'fresh')).toBeCloseTo(1.05, 10);
+    expect(adjustRecoveryMultiplier(1.0, 'still_sore', 'recovering')).toBeCloseTo(1.05, 10);
+  });
+
+  it('"wasn\'t sore" when the model said fatigued moves −0.05', () => {
+    expect(adjustRecoveryMultiplier(1.0, 'none', 'fatigued')).toBeCloseTo(0.95, 10);
+  });
+
+  it('agreement and the ambiguous "recovered" answer leave it unchanged', () => {
+    expect(adjustRecoveryMultiplier(1.0, 'still_sore', 'fatigued')).toBe(1.0); // agreement
+    expect(adjustRecoveryMultiplier(1.0, 'none', 'fresh')).toBe(1.0); // agreement
+    expect(adjustRecoveryMultiplier(1.0, 'recovered', 'fresh')).toBe(1.0);
+    expect(adjustRecoveryMultiplier(1.0, 'recovered', 'fatigued')).toBe(1.0);
+  });
+
+  it('clamps at both bounds', () => {
+    expect(adjustRecoveryMultiplier(RECOVERY_MULTIPLIER_BOUNDS.max, 'still_sore', 'fresh')).toBe(
+      RECOVERY_MULTIPLIER_BOUNDS.max
+    );
+    expect(adjustRecoveryMultiplier(RECOVERY_MULTIPLIER_BOUNDS.min, 'none', 'fatigued')).toBe(
+      RECOVERY_MULTIPLIER_BOUNDS.min
+    );
+  });
+
+  it('sanitizes garbage input via clampRecoveryMultiplier', () => {
+    // Non-finite values reset to the neutral 1; finite outliers clamp.
+    expect(clampRecoveryMultiplier(Number.NaN)).toBe(1);
+    expect(clampRecoveryMultiplier(Number.POSITIVE_INFINITY)).toBe(1);
+    expect(clampRecoveryMultiplier(9)).toBe(RECOVERY_MULTIPLIER_BOUNDS.max);
+    expect(clampRecoveryMultiplier(-3)).toBe(RECOVERY_MULTIPLIER_BOUNDS.min);
+  });
+
+  it('stays within [0.7, 1.5] over ANY input sequence (property test)', () => {
+    // Deterministic LCG so the sequence is reproducible without Math.random.
+    let seed = 0x2f6e2b1;
+    const nextRandom = () => {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      return seed / 0xffffffff;
+    };
+    const reports: SorenessReport[] = ['none', 'recovered', 'still_sore'];
+    const statuses: RecoveryStatus[] = ['fresh', 'recovering', 'fatigued'];
+
+    for (let run = 0; run < 50; run++) {
+      // Occasionally start from a corrupt persisted value on purpose.
+      let multiplier =
+        run % 10 === 0 ? (nextRandom() - 0.5) * 10 : 0.5 + nextRandom() * 1.5;
+      for (let step = 0; step < 500; step++) {
+        const report = reports[Math.floor(nextRandom() * reports.length)];
+        const status = statuses[Math.floor(nextRandom() * statuses.length)];
+        multiplier = adjustRecoveryMultiplier(multiplier, report, status);
+        expect(multiplier).toBeGreaterThanOrEqual(RECOVERY_MULTIPLIER_BOUNDS.min);
+        expect(multiplier).toBeLessThanOrEqual(RECOVERY_MULTIPLIER_BOUNDS.max);
+      }
+    }
+  });
+
+  it('moves in RECOVERY_MULTIPLIER_STEP increments', () => {
+    const upped = adjustRecoveryMultiplier(1.0, 'still_sore', 'fresh');
+    expect(upped - 1.0).toBeCloseTo(RECOVERY_MULTIPLIER_STEP, 10);
   });
 });

@@ -11,6 +11,7 @@ import type {
   StandardMuscleGroup,
   PumpRating0to3,
   WorkloadRating,
+  JointPainJoint,
 } from '@/types/schema';
 import {
   STANDARD_MUSCLE_DISPLAY_NAMES,
@@ -18,7 +19,9 @@ import {
   isDetailedMuscle,
   isStandardMuscle,
   legacyToStandardMuscles,
+  JOINT_PAIN_JOINTS,
 } from '@/types/schema';
+import { getJointDisplayName } from '@/services/discomfortTracker';
 import {
   formatWorkoutDuration,
   estimateE1RM,
@@ -94,6 +97,11 @@ export interface SessionSummarySubmitData {
   muscleFeedback: SessionMuscleFeedbackEntry[];
   /** Whether the user marked this as a deload session. */
   isDeload: boolean;
+  /**
+   * "Any joint issues today?" — the only place joint pain is proactively
+   * asked, once per session. null = not answered (skipped).
+   */
+  jointReport: { severity: 'minor' | 'significant'; joints: JointPainJoint[] } | null;
 }
 
 interface SessionSummaryProps {
@@ -120,6 +128,15 @@ interface SessionSummaryProps {
    * the "View full report →" link and the noteworthy PR/calibration chip.
    */
   onSaveAndViewReport?: (data: SessionSummarySubmitData) => void;
+  /**
+   * Per-muscle seed from the in-workout per-exercise pump/workload chips.
+   * Workload answers pre-fill the finish card's workload chips; pump answers
+   * (no longer asked here) ride the submit payload so the learner still
+   * receives them through session_muscle_feedback.
+   */
+  initialMuscleRatings?: Partial<
+    Record<StandardMuscleGroup, { pump?: PumpRating0to3; workload?: WorkloadRating }>
+  >;
   readOnly?: boolean;
 }
 
@@ -146,6 +163,7 @@ export function SessionSummary({
   durationSeconds,
   onSubmit,
   onSaveAndViewReport,
+  initialMuscleRatings,
   readOnly = false,
 }: SessionSummaryProps) {
   // Helper to display weight in user's preferred unit
@@ -183,10 +201,24 @@ export function SessionSummary({
   // programmed deload weeks) so an already-flagged session shows the toggle on.
   // Drives PR suppression + the share tag live, and is persisted on submit.
   const [isDeload, setIsDeload] = useState<boolean>(session.isDeload ?? false);
-  // Per-muscle workload overrides; muscles not in the map use the "Just right" default.
+  // Per-muscle workload overrides; muscles not in the map use the "Just right"
+  // default. Seeded from the in-workout per-exercise chips so an answer given
+  // on the exercise card is never re-asked here.
   const [muscleWorkloads, setMuscleWorkloads] = useState<
     Partial<Record<StandardMuscleGroup, WorkloadRating>>
-  >({});
+  >(() => {
+    if (!initialMuscleRatings) return {};
+    const seeded: Partial<Record<StandardMuscleGroup, WorkloadRating>> = {};
+    for (const [muscle, fb] of Object.entries(initialMuscleRatings)) {
+      if (fb?.workload !== undefined) seeded[muscle as StandardMuscleGroup] = fb.workload;
+    }
+    return seeded;
+  });
+  // "Any joint issues today?" — null until the user taps a chip (skippable).
+  const [jointIssueSeverity, setJointIssueSeverity] = useState<
+    'none' | 'minor' | 'significant' | null
+  >(null);
+  const [jointIssueJoints, setJointIssueJoints] = useState<JointPainJoint[]>([]);
   const [showAllPRs, setShowAllPRs] = useState(false);
   const [showExerciseDetails, setShowExerciseDetails] = useState(true);
   const [expandedExercises, setExpandedExercises] = useState<Set<string>>(new Set());
@@ -561,11 +593,22 @@ export function SessionSummary({
   const buildSubmitData = (): SessionSummarySubmitData => ({
     sessionRpe,
     notes,
-    muscleFeedback: trainedMuscles.map((muscle) => ({
-      muscleGroup: muscle,
-      workload: getMuscleWorkload(muscle),
-    })),
+    // Pump is captured per-exercise in-workout (not asked here); a rolled-up
+    // answer rides that muscle's entry so the learner still receives it. The
+    // key is omitted entirely when nothing was rated.
+    muscleFeedback: trainedMuscles.map((muscle) => {
+      const pump = initialMuscleRatings?.[muscle]?.pump;
+      return {
+        muscleGroup: muscle,
+        ...(pump !== undefined ? { pump } : {}),
+        workload: getMuscleWorkload(muscle),
+      };
+    }),
     isDeload,
+    jointReport:
+      jointIssueSeverity === 'minor' || jointIssueSeverity === 'significant'
+        ? { severity: jointIssueSeverity, joints: jointIssueJoints }
+        : null,
   });
 
   const handleSubmit = () => {
@@ -745,6 +788,60 @@ export function SessionSummary({
             </div>
           </Card>
         )}
+
+        {/* Joint issues — the ONLY proactive joint-pain ask, once per session.
+            Skippable by not tapping; a "none" tap records nothing but confirms. */}
+        <Card className="!p-3" data-testid="joint-issues-card">
+          <h3 className="text-sm font-medium text-surface-200 mb-0.5">
+            Any joint issues today?
+          </h3>
+          <div className="flex items-center gap-1.5 mt-2">
+            {(['none', 'minor', 'significant'] as const).map((option) => (
+              <button
+                key={option}
+                type="button"
+                onClick={() => {
+                  setJointIssueSeverity(option);
+                  if (option === 'none') setJointIssueJoints([]);
+                }}
+                className={`rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors ${
+                  jointIssueSeverity === option
+                    ? 'bg-primary-500 text-white'
+                    : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
+                }`}
+                data-testid={`joint-issue-${option}`}
+              >
+                {option}
+              </button>
+            ))}
+          </div>
+          {(jointIssueSeverity === 'minor' || jointIssueSeverity === 'significant') && (
+            <div className="flex flex-wrap items-center gap-1.5 mt-2">
+              <span className="text-[11px] text-surface-500">Which:</span>
+              {JOINT_PAIN_JOINTS.map((joint) => {
+                const selected = jointIssueJoints.includes(joint);
+                return (
+                  <button
+                    key={joint}
+                    type="button"
+                    onClick={() =>
+                      setJointIssueJoints((prev) =>
+                        selected ? prev.filter((j) => j !== joint) : [...prev, joint]
+                      )
+                    }
+                    className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                      selected
+                        ? 'bg-danger-500/20 text-danger-300 border border-danger-500/50'
+                        : 'bg-surface-800 text-surface-400 hover:bg-surface-700 border border-transparent'
+                    }`}
+                  >
+                    {getJointDisplayName(joint)}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </Card>
 
         {/* Deload toggle — mark a light session so it's excluded from
             progression suggestions, e1RM/PR trends and stagnation baselines

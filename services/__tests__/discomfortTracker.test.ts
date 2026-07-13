@@ -534,8 +534,15 @@ describe('getSeverityInfo', () => {
     const info = getSeverityInfo('pain');
 
     expect(info.label).toContain('Pain');
-    expect(info.label).toContain('Stop');
     expect(info.color).toBeDefined();
+    expect(info.icon).toBeDefined();
+  });
+
+  it('returns info for stop severity', () => {
+    const info = getSeverityInfo('stop');
+
+    expect(info.label).toContain('Stop');
+    expect(info.color).toContain('danger');
     expect(info.icon).toBeDefined();
   });
 
@@ -629,5 +636,95 @@ describe('edge cases', () => {
     ]);
 
     expect(patterns[0].bodyPart).toBe('left_knee');
+  });
+});
+
+// ============================================
+// EXERCISE-LEVEL PAIN PATTERN + JOINT MAPPING
+// ============================================
+
+import {
+  getExercisePainPattern,
+  getJointDisplayName,
+  jointToBodyPart,
+  bodyPartToJoint,
+  EXERCISE_PAIN_PATTERN_THRESHOLD,
+  EXERCISE_PAIN_PATTERN_WINDOW_DAYS,
+  EXERCISE_PAIN_NOTICE_SUPPRESS_DAYS,
+} from '../discomfortTracker';
+import { JOINT_PAIN_JOINTS } from '@/types/schema';
+
+describe('getExercisePainPattern', () => {
+  const NOW = new Date('2026-07-13T12:00:00.000Z');
+  const daysAgo = (days: number) =>
+    new Date(NOW.getTime() - days * 24 * 60 * 60 * 1000);
+  const event = (joint: string, days: number) => ({ joint, occurredAt: daysAgo(days) });
+
+  it('returns null below the 3-event threshold', () => {
+    expect(getExercisePainPattern([event('elbow', 1), event('elbow', 5)], null, NOW)).toBeNull();
+  });
+
+  it('detects >=3 events on one exercise within 6 weeks and names the top joint', () => {
+    const pattern = getExercisePainPattern(
+      [event('elbow', 2), event('elbow', 10), event('shoulder', 20), event('elbow', 30)],
+      null,
+      NOW
+    );
+    expect(pattern).toEqual({ joint: 'elbow', count: 4 });
+    expect(EXERCISE_PAIN_PATTERN_THRESHOLD).toBe(3);
+  });
+
+  it('ignores events older than the 6-week window', () => {
+    const pattern = getExercisePainPattern(
+      [
+        event('knee', 1),
+        event('knee', 2),
+        event('knee', EXERCISE_PAIN_PATTERN_WINDOW_DAYS + 1),
+      ],
+      null,
+      NOW
+    );
+    expect(pattern).toBeNull();
+  });
+
+  it('a dismissal suppresses the notice for 4 weeks, then it may return', () => {
+    const events = [event('knee', 1), event('knee', 2), event('knee', 3)];
+
+    const recentlyDismissed = getExercisePainPattern(
+      events,
+      daysAgo(EXERCISE_PAIN_NOTICE_SUPPRESS_DAYS - 1),
+      NOW
+    );
+    expect(recentlyDismissed).toBeNull();
+
+    const dismissalExpired = getExercisePainPattern(
+      events,
+      daysAgo(EXERCISE_PAIN_NOTICE_SUPPRESS_DAYS + 1),
+      NOW
+    );
+    expect(dismissalExpired).toEqual({ joint: 'knee', count: 3 });
+  });
+});
+
+describe('joint <-> body part mapping', () => {
+  it('round-trips every picker joint through the body-part vocabulary', () => {
+    for (const joint of JOINT_PAIN_JOINTS) {
+      expect(bodyPartToJoint(jointToBodyPart(joint))).toBe(joint);
+    }
+  });
+
+  it('collapses sided body parts to their joint', () => {
+    expect(bodyPartToJoint('left_elbow')).toBe('elbow');
+    expect(bodyPartToJoint('right_knee')).toBe('knee');
+    expect(bodyPartToJoint('lower_back')).toBe('lower_back');
+    // Non-joint parts fall to 'other'.
+    expect(bodyPartToJoint('neck')).toBe('other');
+    expect(bodyPartToJoint('upper_back')).toBe('other');
+  });
+
+  it('has a display name for every picker joint', () => {
+    for (const joint of JOINT_PAIN_JOINTS) {
+      expect(getJointDisplayName(joint).length).toBeGreaterThan(0);
+    }
   });
 });

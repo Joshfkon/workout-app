@@ -164,3 +164,38 @@ describe('selectGoodTargets', () => {
     expect(nextUp).toBeNull();
   });
 });
+
+describe('buildReadinessRows soreness overrides ("still sore" today)', () => {
+  it('forces an otherwise-Fresh muscle to Fatigued for the session', () => {
+    // Hamstrings trained 5 days ago → time model says Fresh.
+    const history = [session(new Date(NOW.getTime() - 5 * 24 * 3600 * 1000), 'hamstrings', 4, 2)];
+
+    const without = buildReadinessRows([], history, NOW);
+    expect(rowFor(without, 'hamstrings').recovery.status).toBe('fresh');
+
+    const overrides = new Set<StandardMuscleGroup>(['hamstrings']);
+    const rows = buildReadinessRows([], history, NOW, undefined, undefined, overrides);
+    expect(rowFor(rows, 'hamstrings').recovery.status).toBe('fatigued');
+  });
+
+  it('the override zeroes the muscle\'s actionability score (never a "good target")', () => {
+    const history = [session(new Date(NOW.getTime() - 5 * 24 * 3600 * 1000), 'hamstrings', 4, 2)];
+    const overrides = new Set<StandardMuscleGroup>(['hamstrings']);
+    const rows = buildReadinessRows([], history, NOW, undefined, undefined, overrides);
+
+    expect(rowFor(rows, 'hamstrings').score).toBe(0);
+    const { targets } = selectGoodTargets(rows);
+    expect(targets.every((t) => t.muscle !== 'hamstrings')).toBe(true);
+  });
+
+  it('does not touch other muscles', () => {
+    const history = [
+      session(new Date(NOW.getTime() - 5 * 24 * 3600 * 1000), 'hamstrings', 4, 2),
+      session(new Date(NOW.getTime() - 5 * 24 * 3600 * 1000), 'biceps', 4, 2),
+    ];
+    const overrides = new Set<StandardMuscleGroup>(['hamstrings']);
+    const rows = buildReadinessRows([], history, NOW, undefined, undefined, overrides);
+
+    expect(rowFor(rows, 'biceps').recovery.status).toBe('fresh');
+  });
+});

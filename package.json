@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "postinstall": "node scripts/copy-tesseract-assets.mjs",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
@@ -58,6 +59,7 @@
     "recharts": "^2.15.0",
     "stripe": "^20.0.0",
     "tailwind-merge": "^3.6.0",
+    "tesseract.js": "^7.0.0",
     "zustand": "^5.0.2"
   },
   "tsd": {

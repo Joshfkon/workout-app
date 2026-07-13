@@ -14,8 +14,13 @@
 
 import { computeCurrentWeekFromSessions } from '@/lib/training/mesocycleProgress';
 import { countCompletedSessions } from '@/lib/training/startMesocycleSession';
+import {
+  computeJointPainSignal,
+  JOINT_PAIN_WINDOW_DAYS,
+  JOINT_PAIN_TRIGGER_THRESHOLD,
+} from '@/services/deloadEngine';
 import { upsertWeeklyFatigueLog } from './sessionWrites';
-import type { Rating } from '@/types/schema';
+import type { DiscomfortSeverity, Rating } from '@/types/schema';
 
 type UntypedSupabase = ReturnType<typeof import('@/lib/supabase/client').createUntypedClient>;
 
@@ -76,6 +81,31 @@ export async function runPostSessionMesoUpdates(
       storedWeek
     );
 
+    // Deload signal 5: severity-weighted joint-pain events in the trailing
+    // window drive this week's joint_pain flag (ProgramEngine trigger 5).
+    // Best-effort — a missing table or query error must not block the finish.
+    let jointPain = false;
+    try {
+      const now = new Date();
+      const cutoff = new Date(
+        now.getTime() - JOINT_PAIN_WINDOW_DAYS * 24 * 60 * 60 * 1000
+      ).toISOString();
+      const { data: painEvents } = await supabase
+        .from('joint_pain_events')
+        .select('severity, created_at')
+        .eq('user_id', userId)
+        .gte('created_at', cutoff);
+      const painScore = computeJointPainSignal(
+        ((painEvents ?? []) as { severity: DiscomfortSeverity; created_at: string }[]).map(
+          (e) => ({ severity: e.severity, occurredAt: new Date(e.created_at) })
+        ),
+        now
+      );
+      jointPain = painScore >= JOINT_PAIN_TRIGGER_THRESHOLD;
+    } catch (painErr) {
+      console.error('Joint pain signal lookup failed:', painErr);
+    }
+
     const fatigueResult = await upsertWeeklyFatigueLog(supabase, {
       userId,
       mesocycleId,
@@ -84,6 +114,7 @@ export async function runPostSessionMesoUpdates(
       sleepQuality: checkIn?.sleepQuality ?? null,
       stressLevel: checkIn?.stressLevel ?? null,
       sessionAvgRpe: sessionRpe,
+      jointPain,
     });
     if (!fatigueResult.ok) {
       console.error('Failed to save weekly fatigue log:', fatigueResult.error);

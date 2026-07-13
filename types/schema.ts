@@ -56,8 +56,12 @@ export type DiscomfortBodyPart =
   | 'hips'
   | 'other';
 
-/** Discomfort severity levels */
-export type DiscomfortSeverity = 'twinge' | 'discomfort' | 'pain';
+/**
+ * Discomfort severity levels.
+ * 'stop' = pain forced the user to stop the set/exercise — the strongest
+ * signal; it also immediately softens that exercise's next-set suggestion.
+ */
+export type DiscomfortSeverity = 'twinge' | 'discomfort' | 'pain' | 'stop';
 
 /**
  * Discomfort logged during a set
@@ -324,6 +328,37 @@ export interface MuscleFeedback {
   sorenessBefore: SorenessRating | null;
   pump: PumpRating0to3 | null;
   workload: WorkloadRating | null;
+  createdAt: Date;
+}
+
+// ============ JOINT PAIN EVENTS ============
+
+/** Joints offered by the two-tap in-workout pain picker. */
+export const JOINT_PAIN_JOINTS = [
+  'elbow',
+  'shoulder',
+  'knee',
+  'hip',
+  'wrist',
+  'lower_back',
+  'other',
+] as const;
+
+export type JointPainJoint = (typeof JOINT_PAIN_JOINTS)[number];
+
+/**
+ * A user-initiated joint pain event (joint_pain_events table).
+ * Set-level events carry exerciseId + setLogId; the once-per-session
+ * finish-summary report carries neither.
+ */
+export interface JointPainEvent {
+  id: string;
+  userId: string;
+  sessionId: string;
+  exerciseId: string | null;
+  setLogId: string | null;
+  joint: JointPainJoint;
+  severity: DiscomfortSeverity;
   createdAt: Date;
 }
 
@@ -669,6 +704,14 @@ export interface ExerciseBlock {
 
   /** Weight reduction percentage for each drop (0.25 = 25% reduction) */
   dropPercentage: number;
+
+  // === Per-exercise subjective feedback (optional one-tap chips) ===
+
+  /** Pump felt on this exercise (1 low · 2 good · 3 great), null = not rated */
+  pump?: PumpRating0to3 | null;
+
+  /** Workload felt on this exercise (0 easy · 1 right · 3 too much), null = not rated */
+  workload?: WorkloadRating | null;
 }
 
 /**
@@ -1526,6 +1569,13 @@ export interface WeeklyPerformanceData {
   sleepQuality: Rating;
   motivationLevel: Rating;
   jointPain: boolean;
+  /**
+   * Severity-weighted joint-pain signal for the week (deload signal 5),
+   * from joint_pain_events over the trailing window — see
+   * `computeJointPainSignal` in services/deloadEngine.ts. 0-10 (capped).
+   * When present it replaces the boolean's flat 10-point contribution.
+   */
+  jointPainScore?: number;
   strengthDecline: boolean;
   /**
    * True when this week was a deload (light) week. Deload weeks reset the

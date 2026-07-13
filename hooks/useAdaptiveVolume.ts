@@ -16,10 +16,12 @@ import {
   assessCurrentFatigueStatus,
   getVolumeSummary,
   analyzeMesocycle,
+  aggregateSubjectiveSignals,
   updateVolumeProfile,
   resetVolumeProfileToBaseline,
   VOLUME_COUNTER_VERSION,
   BASELINE_VOLUME_RECOMMENDATIONS,
+  type SubjectiveVolumeSignals,
 } from '@/src/lib/training/adaptive-volume';
 import type { MuscleGroup } from '@/types/schema';
 import { MUSCLE_GROUPS, resolveMuscleToStandard } from '@/types/schema';
@@ -590,8 +592,62 @@ export async function runMesocycleCompletionAnalysis(
     const startDate = options?.startDate || orderedStarts[0];
     const endDate = options?.endDate || orderedStarts[orderedStarts.length - 1];
 
+    // 2b. Subjective chip feedback (pump / workload / next-session soreness)
+    //     for this meso's non-deload sessions — additional INPUTS to the same
+    //     verdict scoring (see subjectiveVerdictNudges), not a separate path.
+    //     session_muscle_feedback is keyed on the 20-group standard vocabulary;
+    //     collapse to this learner's 13 coarse groups before aggregating.
+    let subjectiveByMuscle: Partial<Record<MuscleGroup, SubjectiveVolumeSignals>> | undefined;
+    try {
+      const windowEnd = new Date(`${endDate}T00:00:00`);
+      windowEnd.setDate(windowEnd.getDate() + 7); // include the last week's sessions
+      const { data: feedbackRows } = await supabase
+        .from('session_muscle_feedback')
+        .select('session_id, muscle_group, pump, workload, soreness_before, workout_sessions!inner(completed_at, is_deload, state)')
+        .eq('user_id', userId)
+        .eq('workout_sessions.state', 'completed')
+        .gte('workout_sessions.completed_at', `${startDate}T00:00:00`)
+        .lte('workout_sessions.completed_at', windowEnd.toISOString());
+
+      if (feedbackRows && feedbackRows.length > 0) {
+        // session_id rides along so the aggregation can merge subdivision rows
+        // (chest_upper + chest_lower → chest) into ONE rated session each.
+        const collapsed = (feedbackRows as {
+          session_id: string;
+          muscle_group: string;
+          pump: number | null;
+          workload: number | null;
+          soreness_before: number | null;
+          workout_sessions: { is_deload?: boolean | null } | null;
+        }[])
+          .filter((r) => !r.workout_sessions?.is_deload)
+          .flatMap((r) => {
+            const coarse = STANDARD_TO_COARSE[r.muscle_group as keyof typeof STANDARD_TO_COARSE];
+            if (!coarse) return [];
+            return [{
+              sessionId: r.session_id,
+              muscle: coarse as MuscleGroup,
+              pump: r.pump,
+              workload: r.workload,
+              sorenessBefore: r.soreness_before,
+            }];
+          });
+        subjectiveByMuscle = aggregateSubjectiveSignals(collapsed);
+      }
+    } catch (feedbackErr) {
+      // Subjective signals are optional inputs — never block the analysis.
+      console.error('runMesocycleCompletionAnalysis: failed to load muscle feedback:', feedbackErr);
+    }
+
     // 3. Pure service: analyze the mesocycle.
-    const analysis = analyzeMesocycle(mesocycleId, muscleData, currentProfile, startDate, endDate);
+    const analysis = analyzeMesocycle(
+      mesocycleId,
+      muscleData,
+      currentProfile,
+      startDate,
+      endDate,
+      subjectiveByMuscle
+    );
 
     // Persist analysis (UNIQUE(user_id, mesocycle_id) -> upsert is idempotent).
     const { error: analysisError } = await supabase

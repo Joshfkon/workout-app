@@ -17,7 +17,7 @@ import { readinessRowsToMapData } from '@/lib/muscleMap/adapters';
 import type { MuscleId } from '@/lib/muscleMap/taxonomy';
 import type { BodyView } from '@/lib/muscleMap/paths';
 import type { MuscleRecoveryResult } from '@/services/muscleRecovery';
-import type { SetLog } from '@/types/schema';
+import type { SetLog, StandardMuscleGroup } from '@/types/schema';
 import type { ExerciseBlockWithExercise } from '@/app/(dashboard)/dashboard/workout/[id]/_lib/types';
 
 /** Default number of coarse rows shown before the "+N more" expander. */
@@ -67,6 +67,11 @@ interface MuscleReadinessSheetProps {
   liveBlocks: ExerciseBlockWithExercise[];
   /** Sets logged so far in the live session (read-only). */
   liveSets: SetLog[];
+  /**
+   * Muscles reported "still sore" today — rendered Fatigued for the rest of
+   * the session regardless of the time model.
+   */
+  sorenessOverrides?: ReadonlySet<StandardMuscleGroup>;
 }
 
 const RECOVERY_BADGE: Record<MuscleRecoveryResult['status'], { label: string; className: string }> = {
@@ -382,6 +387,7 @@ export function MuscleReadinessSheet({
   onClose,
   liveBlocks,
   liveSets,
+  sorenessOverrides,
 }: MuscleReadinessSheetProps) {
   // Stamp the clock once when the sheet mounts so every muscle is evaluated
   // against the same instant (and re-stamped on each fresh open).
@@ -395,6 +401,7 @@ export function MuscleReadinessSheet({
     liveSets,
     now,
     enabled: isOpen,
+    sorenessOverrides,
     expandedParents: expandedRows,
   });
 

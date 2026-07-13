@@ -289,3 +289,61 @@ describe('computePerformanceTrend', () => {
     ).toBe('declining');
   });
 });
+
+// ============================================
+// PER-EXERCISE CHIP ROLLUP (existing update path)
+// ============================================
+
+import { rollUpExerciseFeedback } from '../weeklyProgressionEngine';
+
+describe('rollUpExerciseFeedback', () => {
+  it('aggregates per-exercise chips per muscle: pump best-case, workload worst-case', () => {
+    const result = rollUpExerciseFeedback([
+      { muscle: 'chest_upper', pump: 1, workload: 1 },
+      { muscle: 'chest_upper', pump: 3, workload: 0 },
+      { muscle: 'chest_upper', pump: 2, workload: 3 },
+    ]);
+
+    expect(result.chest_upper).toEqual({ pump: 3, workload: 3 });
+  });
+
+  it('skips fully-unrated exercises and preserves partial ratings', () => {
+    const result = rollUpExerciseFeedback([
+      { muscle: 'quads', pump: null, workload: null },
+      { muscle: 'lats', pump: 2, workload: null },
+    ]);
+
+    expect(result.quads).toBeUndefined();
+    expect(result.lats).toEqual({ pump: 2 });
+  });
+
+  it('produces entries the weekly engine ingests through its normal feedback input (call shape)', () => {
+    const rolled = rollUpExerciseFeedback([
+      { muscle: 'chest_upper', pump: 1, workload: 3 }, // "too much"
+    ]);
+    const entry = rolled.chest_upper!;
+
+    // The rolled-up values feed session_muscle_feedback, which reaches the
+    // engine as MuscleWeekFeedback rows — the SAME input path as the summary
+    // chips. "Too much" workload must drive a remove, exactly as if it had
+    // been answered on the finish screen.
+    const adjustment = recommendWeeklySetAdjustment({
+      muscle: 'chest_upper',
+      currentWeeklySets: 12,
+      landmarks: { mev: 8, mav: 14, mrv: 18 },
+      feedback: [
+        {
+          sorenessBefore: null,
+          pump: entry.pump ?? null,
+          workload: entry.workload ?? null,
+        },
+      ],
+      performanceTrend: 'flat',
+      weekInMeso: 2,
+      isDeloadWeek: false,
+    });
+
+    expect(adjustment.action).toBe('remove');
+    expect(adjustment.delta).toBe(-1);
+  });
+});

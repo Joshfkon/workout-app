@@ -96,6 +96,7 @@ describe('shoulders fixture: lateral raises only', () => {
       NOW,
       reachable,
       undefined,
+      undefined, // sorenessOverrides
       new Set<CoarseMuscle>(['shoulders'])
     );
     const { targets } = selectGoodTargets(readiness, 50);
