@@ -389,8 +389,8 @@ export type CoarseMuscle = (typeof COARSE_MUSCLES)[number];
 /**
  * Coarse group → the standard muscles it aggregates. A coarse row's set count
  * is the sum of its children's credited sets; the "fine" children (subdivisions
- * — see FINE_CHILD_MUSCLES) render as indented rows only where reachable AND
- * informative (below-MEV or expanded).
+ * — see FINE_CHILD_MUSCLES) are carried on the row wherever reachable, and the
+ * shared list component decides which are VISIBLE (pinned-lagging or expanded).
  */
 export const COARSE_CHILDREN: Record<CoarseMuscle, StandardMuscleGroup[]> = {
   chest: ['chest_upper', 'chest_lower'],
@@ -554,15 +554,17 @@ export interface VolumeRow {
   /** Whether the user's exercises can feed this muscle (children only gate). */
   reachable: boolean;
   exercises: ExerciseVolume[];
-  /** Fine children to render under a coarse row (already gated). */
+  /**
+   * ALL reachable fine children of a coarse row (each flagged belowMev).
+   * Visibility (pinned-lagging vs behind-the-chevron) is decided by the shared
+   * MuscleGroupList component / withVisibleChildren helper, not here.
+   */
   children: VolumeRow[];
 }
 
 export interface BuildVolumeRowsOptions {
   /** Per-coarse band overrides (e.g. the reset/learned table). */
   bands?: Partial<Record<CoarseMuscle, VolumeBand>>;
-  /** Coarse groups the user expanded — forces all their fine children visible. */
-  expandedParents?: Set<CoarseMuscle>;
 }
 
 /** Accumulate credited sets + contributing exercises per standard muscle. */
@@ -593,8 +595,10 @@ function setsByStandardMuscle(
 
 /**
  * THE shared row model. Given the shared counter's per-muscle stats and the
- * reachability set, produce coarse rows (below-MEV first) each carrying the
- * fine children that should render (reachable AND below-MEV-or-expanded).
+ * reachability set, produce coarse rows (below-MEV first) each carrying ALL
+ * their reachable fine children (each flagged belowMev). Which children are
+ * VISIBLE is a presentation concern — the shared MuscleGroupList component
+ * shows pinned (lagging) children always and the rest behind the chevron.
  * Every surface renders from this so counts and zone-status always agree.
  */
 export function buildVolumeRows(
@@ -603,7 +607,6 @@ export function buildVolumeRows(
   opts: BuildVolumeRowsOptions = {}
 ): VolumeRow[] {
   const byStd = setsByStandardMuscle(stats);
-  const expanded = opts.expandedParents ?? new Set<CoarseMuscle>();
 
   const rows: VolumeRow[] = COARSE_MUSCLES.map((coarse) => {
     const children = COARSE_CHILDREN[coarse];
@@ -626,13 +629,12 @@ export function buildVolumeRows(
 
       const childSets = Math.round(data.sets);
       const childMev = fineChildMev(child);
-      // A fine child renders only where the user's own exercises can feed it
-      // (reachable) AND it's informative (below its MEV, or the parent is
-      // expanded). When no reachability is supplied, don't gate (back-compat).
+      // A fine child is carried only where the user's own exercises can feed it
+      // (reachable) — an unreachable child's target rolls up into the parent.
+      // When no reachability is supplied, don't gate (back-compat).
       const childReachable = !reachable || reachable.has(child);
       const childBelowMev = childSets < childMev;
       if (!childReachable) continue;
-      if (!childBelowMev && !expanded.has(coarse)) continue;
 
       // A fine child's band is a proportional slice of the coarse band, floored
       // at its own MEV, so its zone reads sensibly on the same scale.

@@ -14,7 +14,6 @@ import {
   COARSE_MUSCLES,
   type MuscleVolumeStats,
   type WeeklyVolumeBlockRow,
-  type CoarseMuscle,
 } from '../weeklyVolume';
 
 function stat(muscle: string, sets: number): MuscleVolumeStats {
@@ -53,13 +52,14 @@ describe('buildVolumeRows — coarse rows + fine children', () => {
     expect(rows).toHaveLength(COARSE_MUSCLES.length);
   });
 
-  it('shows a fine child only when reachable AND below its MEV', () => {
+  it('carries a fine child only when the user\'s exercises can feed it (reachable)', () => {
     // Coarse back trained via lats; erectors untrained (0) and unreachable.
     const blocks = [block('pd', 'lats', [], 10, 'Lat Pulldown')];
     const stats = computeWeeklyMuscleVolume(blocks);
     const reachable = computeReachableMuscles(blocks);
     const back = buildVolumeRows(stats, reachable).find((r) => r.muscle === 'back')!;
-    // erectors is a fine child but unreachable from coarse-ish lat work → hidden.
+    // erectors is a fine child but unreachable from coarse-ish lat work → dropped
+    // from the hierarchy entirely (its target rolls up into the parent).
     expect(back.children.some((c) => c.muscle === 'erectors')).toBe(false);
   });
 
@@ -77,18 +77,18 @@ describe('buildVolumeRows — coarse rows + fine children', () => {
     expect(erectors!.belowMev).toBe(true);
   });
 
-  it('hides an in-zone fine child unless its parent is expanded', () => {
+  it('carries an in-zone fine child (flagged not-lagging) — visibility is the list component\'s job', () => {
     const blocks = [block('ab', 'glute_med', [], 5, 'Cable Hip Abduction')]; // 5 > MEV(2)
     const stats = computeWeeklyMuscleVolume(blocks);
     const reachable = computeReachableMuscles(blocks);
 
-    const collapsed = buildVolumeRows(stats, reachable).find((r) => r.muscle === 'glutes')!;
-    expect(collapsed.children.some((c) => c.muscle === 'glute_med')).toBe(false);
-
-    const expanded = buildVolumeRows(stats, reachable, { expandedParents: new Set<CoarseMuscle>(['glutes']) }).find(
-      (r) => r.muscle === 'glutes'
-    )!;
-    expect(expanded.children.some((c) => c.muscle === 'glute_med')).toBe(true);
+    // The data layer always carries reachable children; whether an in-zone
+    // child is shown (behind the chevron) or pinned (lagging) is decided by
+    // the shared MuscleGroupList / withVisibleChildren, not here.
+    const glutes = buildVolumeRows(stats, reachable).find((r) => r.muscle === 'glutes')!;
+    const gluteMed = glutes.children.find((c) => c.muscle === 'glute_med');
+    expect(gluteMed).toBeDefined();
+    expect(gluteMed!.belowMev).toBe(false);
   });
 
   it('sorts below-MEV coarse rows first', () => {

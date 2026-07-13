@@ -65,6 +65,13 @@ describe('cross-surface parity (one fixture, four surfaces)', () => {
     }
   });
 
+  it('volume page and readiness sheet carry the IDENTICAL hierarchy (same fine children per parent)', () => {
+    for (const vr of volumeRows) {
+      const rr = readinessRows.find((r) => r.muscle === vr.muscle)!;
+      expect(rr.children.map((c) => c.muscle)).toEqual(vr.children.map((c) => c.muscle));
+    }
+  });
+
   it('the widget lowCount equals the number of below-MEV coarse rows', () => {
     const belowRows = volumeRows.filter((r) => r.zone === 'below_mev');
     expect(tiles.lowCount).toBe(belowRows.length);

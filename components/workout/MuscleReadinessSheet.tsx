@@ -11,6 +11,11 @@ import {
   type NextReadyTarget,
 } from '@/app/(dashboard)/dashboard/workout/[id]/_lib/readiness';
 import { zoneBarClass, zoneTextClass, zoneBandLabel, STANDARD_TO_COARSE } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
+import {
+  MuscleGroupList,
+  useMuscleRowExpansion,
+  withVisibleChildren,
+} from '@/components/muscle/MuscleGroupList';
 import { MuscleMap } from '@/components/muscleMap/MuscleMap';
 import { readinessRowsToMapData } from '@/lib/muscleMap/adapters';
 import type { MuscleId } from '@/lib/muscleMap/taxonomy';
@@ -175,9 +180,10 @@ function RecoveryBadge({ recovery, muscle }: { recovery: MuscleRecoveryResult; m
   );
 }
 
-function ChildRowView({ child }: { child: ReadinessChild }) {
+/** Fine-child content for the shared MuscleGroupList (chrome lives there). */
+function ReadinessChildContent({ child }: { child: ReadinessChild }) {
   return (
-    <div className="flex items-center gap-3 py-1.5 pl-4" data-testid={`readiness-row-${child.muscle}`}>
+    <div className="flex items-center gap-3 py-1.5">
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2">
           <span className="text-xs text-surface-400 truncate">{child.displayName}</span>
@@ -195,35 +201,29 @@ function ChildRowView({ child }: { child: ReadinessChild }) {
   );
 }
 
-function ReadinessRowView({ row }: { row: ReadinessRow }) {
+/** Coarse-row content for the shared MuscleGroupList (chrome lives there). */
+function ReadinessRowContent({ row }: { row: ReadinessRow }) {
   return (
-    <div data-testid={`readiness-row-${row.muscle}`}>
-      <div className="flex items-center gap-3 py-2.5">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-sm text-surface-100 truncate">{row.displayName}</span>
-            <span className="text-[11px] tabular-nums flex-shrink-0">
-              <span className={zoneTextClass(row.zone, row.sets)} data-testid={`readiness-sets-${row.muscle}`}>{row.sets}</span>
-              <span className="text-surface-600"> · {zoneBandLabel(row.band)}</span>
-            </span>
-          </div>
-          <div className="mt-1.5 h-1 rounded-full bg-surface-800 overflow-hidden">
-            <div className={`h-full rounded-full ${zoneBarClass(row.zone, row.sets)}`} style={{ width: `${barFillPct(row.sets, row.band.mrv)}%` }} />
-          </div>
+    <div className="flex items-center gap-3 py-2.5">
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-sm text-surface-100 truncate">{row.displayName}</span>
+          <span className="text-[11px] tabular-nums flex-shrink-0">
+            <span className={zoneTextClass(row.zone, row.sets)} data-testid={`readiness-sets-${row.muscle}`}>{row.sets}</span>
+            <span className="text-surface-600"> · {zoneBandLabel(row.band)}</span>
+          </span>
         </div>
-        <RecoveryBadge recovery={row.recovery} muscle={row.muscle} />
+        <div className="mt-1.5 h-1 rounded-full bg-surface-800 overflow-hidden">
+          <div className={`h-full rounded-full ${zoneBarClass(row.zone, row.sets)}`} style={{ width: `${barFillPct(row.sets, row.band.mrv)}%` }} />
+        </div>
       </div>
-      {/* Lagging fine children surface under their parent. */}
-      {row.children.length > 0 && (
-        <div className="border-l border-surface-800/80 ml-1 mb-1">
-          {row.children.map((child) => (
-            <ChildRowView key={child.muscle} child={child} />
-          ))}
-        </div>
-      )}
+      <RecoveryBadge recovery={row.recovery} muscle={row.muscle} />
     </div>
   );
 }
+
+/** Lagging fine children stay visible even while their parent is collapsed. */
+const pinLaggingChild = (child: ReadinessChild) => child.belowMev;
 
 /**
  * MuscleReadinessContent — the read-only "good targets + per-muscle rows" body
@@ -264,6 +264,17 @@ export function MuscleReadinessContent({
   const visibleRows = collapsible && !showAll ? rows.slice(0, DEFAULT_ROW_CAP) : rows;
   const hiddenCount = rows.length - visibleRows.length;
 
+  // Shared hierarchy expansion (persisted per user; the sheet and the
+  // empty-workout inline placement share the 'readiness' surface, like the
+  // show-all expander). Divergent parents (autoExpand) self-reveal.
+  const expansion = useMuscleRowExpansion('readiness', rows);
+  // The map paints from the same rows the list shows: fine-child overrides
+  // only for children actually visible (pinned-lagging or expanded).
+  const mapRows = useMemo(
+    () => withVisibleChildren(rows, expansion.expanded, pinLaggingChild),
+    [rows, expansion.expanded]
+  );
+
   return (
     <>
       {/* Top strip: the answer at a glance (fine children surface here). This is
@@ -303,11 +314,17 @@ export function MuscleReadinessContent({
         </div>
       ) : (
         <>
-          {rows.length > 0 && <ReadinessMap rows={rows} onRevealAll={() => setShowAll(true)} />}
+          {rows.length > 0 && <ReadinessMap rows={mapRows} onRevealAll={() => setShowAll(true)} />}
           <div className="divide-y divide-surface-800/70">
-            {visibleRows.map((row) => (
-              <ReadinessRowView key={row.muscle} row={row} />
-            ))}
+            <MuscleGroupList
+              rows={visibleRows}
+              expansion={expansion}
+              renderRow={(row) => <ReadinessRowContent row={row} />}
+              renderChild={(child) => <ReadinessChildContent child={child} />}
+              pinChild={pinLaggingChild}
+              testIdPrefix="readiness-row"
+              childrenClassName="border-l border-surface-800/80 ml-5 mb-1 pl-2"
+            />
           </div>
           {collapsible && hiddenCount > 0 && (
             <button

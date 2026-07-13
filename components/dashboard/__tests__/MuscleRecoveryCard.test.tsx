@@ -18,7 +18,7 @@ const hoursAgo = (h: number) => new Date(NOW.getTime() - h * 3600 * 1000).toISOS
 
 // quads maxed 30h ago → Fatigued (84h window); biceps light 40h ago → Fresh
 // (36h base window); everything else untrained → "No recent data".
-const mockBlocks: unknown[] = [
+const DEFAULT_BLOCKS: unknown[] = [
   {
     exercises: { id: 'ex-squat', name: 'Squat', primary_muscle: 'quads', secondary_muscles: [] },
     workout_sessions: { id: 's1', completed_at: hoursAgo(30), user_id: 'u1', state: 'completed' },
@@ -30,6 +30,7 @@ const mockBlocks: unknown[] = [
     set_logs: Array.from({ length: 3 }, (_, i) => ({ id: `cl${i}`, is_warmup: false, rpe: 7, feedback: { repsInTank: 3 } })),
   },
 ];
+let mockBlocks: unknown[] = DEFAULT_BLOCKS;
 
 function makeBuilder(result: unknown) {
   const builder: Record<string, unknown> = {
@@ -75,6 +76,9 @@ const REAL_TIMER_APIS = [
 
 beforeEach(() => {
   jest.useFakeTimers({ now: NOW, doNotFake: [...REAL_TIMER_APIS] });
+  // Hierarchy expansion persists per user per surface — reset between tests.
+  window.localStorage.clear();
+  mockBlocks = DEFAULT_BLOCKS;
 });
 
 afterEach(() => {
@@ -98,8 +102,8 @@ describe('MuscleRecoveryCard', () => {
     // The map renders from the same rows.
     expect(screen.getByTestId('muscle-recovery-map')).toBeInTheDocument();
 
-    // Header summarizes the one still-recovering group.
-    expect(screen.getByText('1 recovering')).toBeInTheDocument();
+    // Headline counts COARSE groups only: 13 total, quads the sole not-ready.
+    expect(screen.getByTestId('muscle-recovery-headline')).toHaveTextContent('12 of 13 ready');
   });
 
   it('sorts recovering muscles first and expands to all coarse groups', async () => {
@@ -118,5 +122,43 @@ describe('MuscleRecoveryCard', () => {
     // Expanding reveals all 13 coarse groups.
     await userEvent.click(screen.getByTestId('muscle-recovery-toggle'));
     expect(rowMuscles()).toHaveLength(13);
+  });
+
+  it('aggregates a divergent group conservatively and self-reveals its members', async () => {
+    // Side delts maxed 6h ago → Fatigued; front/rear light 5 days ago → Fresh.
+    mockBlocks = [
+      {
+        exercises: { id: 'ex-lat-raise', name: 'Lateral Raise', primary_muscle: 'lateral_delts', secondary_muscles: [] },
+        workout_sessions: { id: 's-side', completed_at: hoursAgo(6), user_id: 'u1', state: 'completed' },
+        set_logs: Array.from({ length: 8 }, (_, i) => ({ id: `lr${i}`, is_warmup: false, rpe: 10, feedback: { repsInTank: 0 } })),
+      },
+      {
+        exercises: { id: 'ex-front', name: 'Front Raise', primary_muscle: 'front_delts', secondary_muscles: [] },
+        workout_sessions: { id: 's-front', completed_at: hoursAgo(120), user_id: 'u1', state: 'completed' },
+        set_logs: Array.from({ length: 4 }, (_, i) => ({ id: `fr${i}`, is_warmup: false, rpe: 8, feedback: { repsInTank: 2 } })),
+      },
+      {
+        exercises: { id: 'ex-rear', name: 'Reverse Fly', primary_muscle: 'rear_delts', secondary_muscles: [] },
+        workout_sessions: { id: 's-rear', completed_at: hoursAgo(120), user_id: 'u1', state: 'completed' },
+        set_logs: Array.from({ length: 4 }, (_, i) => ({ id: `rf${i}`, is_warmup: false, rpe: 8, feedback: { repsInTank: 2 } })),
+      },
+    ];
+
+    render(<MuscleRecoveryCard />, { wrapper });
+    await waitFor(() => expect(screen.getByTestId('muscle-recovery-card')).toBeInTheDocument());
+
+    // Parent = least-recovered member: Shoulders reads Fatigued, never Fresh.
+    await waitFor(() =>
+      expect(screen.getByTestId('recovery-status-shoulders')).toHaveTextContent('Fatigued')
+    );
+
+    // Divergence (Fresh members under a Fatigued parent) self-reveals the
+    // children WITHOUT any tap — each showing its own status/timer.
+    expect(screen.getByTestId('recovery-status-lateral_delts')).toHaveTextContent('Fatigued');
+    expect(screen.getByTestId('recovery-status-front_delts')).toHaveTextContent('Fresh');
+    expect(screen.getByTestId('recovery-status-rear_delts')).toHaveTextContent('Fresh');
+
+    // Headline counts shoulders ONCE (coarse only): 12 of 13 ready.
+    expect(screen.getByTestId('muscle-recovery-headline')).toHaveTextContent('12 of 13 ready');
   });
 });

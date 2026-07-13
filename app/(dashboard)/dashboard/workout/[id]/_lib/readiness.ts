@@ -40,7 +40,9 @@ const RECOVERED_FACTOR: Record<MuscleRecoveryResult['status'], number> = {
   fatigued: 0,
 };
 
-/** A fine child of a coarse readiness row (reachable + lagging or expanded). */
+/** A reachable fine child of a coarse readiness row (visibility is the shared
+ *  list component's concern — lagging children pin open, the rest sit behind
+ *  the chevron). */
 export interface ReadinessChild {
   muscle: StandardMuscleGroup;
   displayName: string;
@@ -69,8 +71,16 @@ export interface ReadinessRow {
   recovery: MuscleRecoveryResult;
   /** Actionability score — higher = better target today. */
   score: number;
-  /** Reachable lagging fine children to surface under this row. */
+  /** ALL reachable fine children of this row, each with its own recovery. */
   children: ReadinessChild[];
+  /**
+   * Divergence flag: a trained child's status differs from the parent's
+   * (worst-of-children) status by at least one full level — e.g. Shoulders
+   * reads Fatigued off the side delts while front/rear are Fresh. Surfaces
+   * default such a parent to expanded so the aggregate can never silently
+   * hide WHICH member drove it; an explicit user collapse still overrides.
+   */
+  autoExpand: boolean;
 }
 
 /**
@@ -191,8 +201,9 @@ export function compareByActionability(a: ReadinessRow, b: ReadinessRow): number
 
 /**
  * Build one coarse row per muscle group, sorted by actionability, each carrying
- * its reachable lagging fine children. Untrained groups (0 sets) are included on
- * purpose — they're the strongest targets.
+ * ALL its reachable fine children (with per-child recovery) plus the divergence
+ * autoExpand flag. Untrained groups (0 sets) are included on purpose — they're
+ * the strongest targets.
  *
  * @param stats     shared per-muscle credited stats (DB + live session)
  * @param history   sessions for the recovery heuristic (incl. live)
@@ -234,6 +245,16 @@ export function buildReadinessRows(
       };
     });
 
+    // Auto-expand on divergence: the parent shows the LEAST-recovered member
+    // (coarseRecovery), so a trained child a full status level fresher than
+    // the parent means the aggregate is hiding useful detail. No-data children
+    // are ignored — "never trained" isn't a divergence worth self-revealing.
+    const autoExpand = children.some(
+      (c) =>
+        c.recovery.lastTrainedAt !== null &&
+        RECOVERY_RANK[recovery.status] - RECOVERY_RANK[c.recovery.status] >= 1
+    );
+
     return {
       muscle: coarse,
       displayName: vr.displayName,
@@ -246,6 +267,7 @@ export function buildReadinessRows(
       recovery,
       score,
       children,
+      autoExpand,
     };
   });
 
@@ -262,8 +284,9 @@ interface TargetCandidate {
 }
 
 /**
- * Flatten rows + their reachable lagging children into a single candidate list.
- * A lagging fine child surfaces even when its coarse parent is on target.
+ * Flatten rows + their reachable fine children into a single candidate list
+ * (the gap>0 filter downstream keeps only lagging ones). A lagging fine child
+ * surfaces even when its coarse parent is on target.
  */
 function flattenCandidates(rows: ReadinessRow[]): TargetCandidate[] {
   const out: TargetCandidate[] = [];

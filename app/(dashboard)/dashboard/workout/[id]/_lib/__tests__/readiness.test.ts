@@ -75,6 +75,16 @@ describe('buildReadinessRows (coarse rows)', () => {
     expect(chest.volumeGap).toBe(3);
   });
 
+  it('carries every reachable fine child with its own recovery (visibility is the list component\'s job)', () => {
+    const reachable = new Set<StandardMuscleGroup>(['glutes', 'glute_med']);
+    // glute_med in-zone (5 ≥ MEV 2) — still carried, flagged not-lagging.
+    const rows = buildReadinessRows([stat('glutes', 10), stat('glute_med', 5)], [], NOW, reachable);
+    const child = rowFor(rows, 'glutes').children.find((c) => c.muscle === 'glute_med');
+    expect(child).toBeDefined();
+    expect(child!.belowMev).toBe(false);
+    expect(child!.recovery.status).toBe('fresh');
+  });
+
   it('surfaces a reachable, lagging fine child under an on-target parent', () => {
     // Glutes at MEV via glute max; glute_med reachable but untrained (0 < MEV 2).
     const reachable = new Set<StandardMuscleGroup>(['glutes', 'glute_med']);
@@ -84,6 +94,63 @@ describe('buildReadinessRows (coarse rows)', () => {
     const child = glutes.children.find((c) => c.muscle === 'glute_med');
     expect(child).toBeDefined();
     expect(child!.belowMev).toBe(true);
+  });
+});
+
+describe('recovery aggregation + divergence auto-expand (shoulders fixture)', () => {
+  const DELTS = new Set<StandardMuscleGroup>(['front_delts', 'lateral_delts', 'rear_delts']);
+
+  it('side delts Fatigued + front/rear Fresh → parent Fatigued, auto-expands, counted once', () => {
+    const history: RecoverySession[] = [
+      session(NOW, 'lateral_delts', 8, 0), // just maxed → Fatigued
+      session(hoursBefore(NOW, 120), 'front_delts', 4, 2), // 5d ago → Fresh
+      session(hoursBefore(NOW, 120), 'rear_delts', 4, 2), // 5d ago → Fresh
+    ];
+    const rows = buildReadinessRows([], history, NOW, DELTS);
+    const shoulders = rowFor(rows, 'shoulders');
+
+    // Conservative parent: the LEAST-recovered member wins — never Fresh
+    // while a member is Fatigued.
+    expect(shoulders.recovery.status).toBe('fatigued');
+
+    // Members keep their OWN recovery for the expanded view.
+    const childStatus = (m: string) =>
+      shoulders.children.find((c) => c.muscle === m)!.recovery.status;
+    expect(childStatus('lateral_delts')).toBe('fatigued');
+    expect(childStatus('front_delts')).toBe('fresh');
+    expect(childStatus('rear_delts')).toBe('fresh');
+
+    // A Fresh member a full status level away from the Fatigued parent →
+    // the parent self-reveals.
+    expect(shoulders.autoExpand).toBe(true);
+
+    // Headline math: coarse groups only — shoulders appears once in the
+    // universe and once among the not-ready, regardless of its three members.
+    expect(rows).toHaveLength(COARSE_MUSCLES.length);
+    expect(rows.filter((r) => r.muscle === 'shoulders')).toHaveLength(1);
+    const notReady = rows.filter((r) => r.recovery.status !== 'fresh');
+    expect(notReady.map((r) => r.muscle)).toEqual(['shoulders']);
+  });
+
+  it('does not auto-expand when every trained member matches the parent status', () => {
+    const history: RecoverySession[] = [
+      session(NOW, 'lateral_delts', 8, 0),
+      session(NOW, 'front_delts', 8, 0),
+      session(NOW, 'rear_delts', 8, 0),
+    ];
+    const rows = buildReadinessRows([], history, NOW, DELTS);
+    const shoulders = rowFor(rows, 'shoulders');
+    expect(shoulders.recovery.status).toBe('fatigued');
+    expect(shoulders.autoExpand).toBe(false);
+  });
+
+  it('never-trained (no-data) members do not count as divergence', () => {
+    // Only the side delts have ever been trained; front/rear have no data.
+    const history: RecoverySession[] = [session(NOW, 'lateral_delts', 8, 0)];
+    const rows = buildReadinessRows([], history, NOW, DELTS);
+    const shoulders = rowFor(rows, 'shoulders');
+    expect(shoulders.recovery.status).toBe('fatigued');
+    expect(shoulders.autoExpand).toBe(false);
   });
 });
 
