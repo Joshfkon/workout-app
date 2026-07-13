@@ -228,6 +228,21 @@ interface ExerciseCardProps {
   // Deload session: the banner holds light instead of prescribing progression,
   // and the rationale copy says so ("deload — holding light").
   isDeloadSession?: boolean;
+  // Cold start (no logged history for this exercise): the transfer-aware
+  // estimate computed by the page. Supersedes the block's stored target (which
+  // may predate transfer estimation) and names its source rung in the banner
+  // ("estimated from your Lying Leg Curl strength" vs "from your training
+  // profile"), so the user knows where the number came from.
+  coldStartSuggestion?: ColdStartSuggestion;
+}
+
+/** Cold-start estimate + provenance for a no-history exercise. */
+export interface ColdStartSuggestion {
+  weightKg: number;
+  /** Short banner reason naming the estimation source. */
+  reason: string;
+  /** Full rationale sentence for the info sheet. */
+  explanation: string;
 }
 
 /** Write status of a logged set (offline outbox, P0-2). */
@@ -284,6 +299,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   onActiveSuggestionChange,
   enhancedAthleteMode = false,
   isDeloadSession = false,
+  coldStartSuggestion,
 }: ExerciseCardProps) {
   // Prescribed RIR: calibration-adjusted target when available, eased further
   // by the session's readiness modulation (Phase 1.3/1.5 fold-in).
@@ -453,6 +469,11 @@ export const ExerciseCard = memo(function ExerciseCard({
   // Grade the next set against the effort ACTUALLY logged on `last` — read from
   // the persisted set record (feedback.repsInTank first, then rpe), never the
   // prescribed/target RIR. `resolveLastRir` is the single read-path source.
+  // Cold start = first-ever session of this exercise (no logged history). The
+  // starting weight was an estimate, so within-session adaptation is aggressive:
+  // an easy-rated set bumps the load even mid-range (services/setRecommender).
+  const isColdStartExercise = (exerciseHistory?.totalSessions ?? 0) === 0;
+
   const recommendNext = (last: { weightKg: number; reps: number; rpe?: number; feedback?: SetFeedback }) =>
     recommendSet({
       lastWeightKg: last.weightKg,
@@ -463,6 +484,7 @@ export const ExerciseCard = memo(function ExerciseCard({
       targetRepRange: block.targetRepRange,
       targetRir: effectiveTargetRir,
       minIncrementKg: exercise.minWeightIncrementKg,
+      coldStart: isColdStartExercise,
     });
 
   // RPE→RIR adapter for the recommender's AMRAP prediction.
@@ -551,10 +573,14 @@ export const ExerciseCard = memo(function ExerciseCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weightMode, isBodyweightExercise, completedSets.length, unit]);
 
-  // Determine suggested weight
-  const suggestedWeight = block.targetWeightKg > 0 
-    ? block.targetWeightKg 
-    : (recommendedWeight && recommendedWeight > 0 ? recommendedWeight : 0);
+  // Determine suggested weight. On a cold start, the page's transfer-aware
+  // estimate supersedes the block's stored target — the stored number may be a
+  // stale profile-only guess from when the workout was built.
+  const suggestedWeight = isColdStartExercise && coldStartSuggestion && coldStartSuggestion.weightKg > 0
+    ? coldStartSuggestion.weightKg
+    : block.targetWeightKg > 0
+      ? block.targetWeightKg
+      : (recommendedWeight && recommendedWeight > 0 ? recommendedWeight : 0);
 
   // Format weight for display - use exact conversion for completed sets, rounded for suggestions
   // For completed sets, preserve exact user input; for suggestions, round to plate increments
@@ -1314,6 +1340,12 @@ export const ExerciseCard = memo(function ExerciseCard({
         explanation.push(
           `No estimated 1RM on record yet, so the load is anchored to last session: ${displayWeight(prevSet.weightKg, true)} ${weightLabel} × ${prevSet.reps}${prevRir != null ? ` at ${prevRir} RIR` : ''}.`
         );
+      } else if (weight && coldStartSuggestion) {
+        // Name the estimation rung that produced the number (transfer from a
+        // logged related exercise vs profile heuristic) — the user should know
+        // which source fired.
+        reason = coldStartSuggestion.reason;
+        explanation.push(coldStartSuggestion.explanation);
       } else if (weight) {
         reason = 'starting point estimated from your training profile';
         explanation.push('No history for this exercise yet — the starting weight is estimated from your profile and calibrated lifts.');

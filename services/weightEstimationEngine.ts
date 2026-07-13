@@ -9,7 +9,8 @@
 
 import type { Experience, MuscleGroup, DexaRegionalData, RegionalAnalysis } from '@/types/schema';
 import { analyzeRegionalComposition, getAverageRegionalLeanMass } from './regionalAnalysis';
-import { normalizeExerciseName, findExerciseMatch } from './exerciseCanonical';
+import { normalizeExerciseName, findExerciseMatch, isSameExercise } from './exerciseCanonical';
+import { deriveProgressionScope } from './progressionScope';
 import {
   rpeToRIR,
   calculateWorkingWeight,
@@ -42,8 +43,222 @@ export interface EstimatedMax {
   exercise: string;
   estimated1RM: number;
   confidence: 'high' | 'medium' | 'low' | 'extrapolated';
-  source: 'direct_history' | 'related_exercise' | 'strength_standards' | 'bodyweight_ratio' | 'calibration';
+  source: 'direct_history' | 'related_exercise' | 'strength_standards' | 'bodyweight_ratio' | 'calibration' | 'exercise_transfer';
   lastUpdated?: Date;
+  /** Present when source === 'exercise_transfer': which logged exercise the estimate carried over from. */
+  transfer?: TransferEstimate;
+}
+
+// ============================================================
+// CROSS-EXERCISE TRANSFER (cold-start estimation ladder)
+// ============================================================
+
+/**
+ * A logged exercise the user has real history on, summarized for cold-start
+ * transfer. Built by the caller from the user's set history (see
+ * lib/training/transferCandidates); deload sessions and soft-deleted exercises
+ * must be excluded upstream, but the flags let the engine defend anyway.
+ */
+export interface TransferCandidate {
+  exerciseName: string;
+  primaryMuscle: string;
+  movementPattern?: string | null;
+  equipmentRequired?: string[] | null;
+  /** Best e1RM (kg) from the user's logged non-deload history on this exercise. */
+  bestE1RMKg: number;
+  /** Defensive flags — a flagged candidate is never used for transfer. */
+  fromDeload?: boolean;
+  softDeleted?: boolean;
+}
+
+/** Metadata for the TARGET exercise, needed to match transfer candidates. */
+export interface TransferTargetMeta {
+  primaryMuscle?: string | null;
+  movementPattern?: string | null;
+  equipmentRequired?: string[] | null;
+}
+
+export interface TransferEstimate {
+  fromExercise: string;
+  sourceE1RMKg: number;
+  factor: number;
+  rung: 'same_pattern' | 'same_muscle';
+}
+
+/** One completed set row (any exercise) for building transfer candidates. */
+export interface TransferSourceRow {
+  weightKg: number;
+  reps: number;
+  rpe?: number | null;
+  isWarmup?: boolean | null;
+  /** True when the set's session was a deload — never feeds a transfer. */
+  isDeload?: boolean | null;
+  exercise: {
+    id?: string;
+    name: string;
+    primaryMuscle: string;
+    movementPattern?: string | null;
+    equipmentRequired?: string[] | null;
+    /** Soft-delete timestamp (exercises.deleted_at) — set → never feeds a transfer. */
+    deletedAt?: string | null;
+  };
+}
+
+/**
+ * Reduce raw set rows to one TransferCandidate per exercise (best e1RM).
+ * Warmups, deload-session sets, and soft-deleted exercises are dropped here —
+ * the DB fetch also filters them, but the exclusion must hold even if a caller
+ * feeds unfiltered rows. Pure.
+ */
+export function buildTransferCandidatesFromRows(rows: TransferSourceRow[]): TransferCandidate[] {
+  const byExercise = new Map<string, TransferCandidate>();
+
+  for (const row of rows) {
+    if (row.isWarmup || row.isDeload || row.exercise?.deletedAt) continue;
+    if (!row.exercise?.name || !(row.weightKg > 0) || !(row.reps > 0)) continue;
+
+    const e1rm = estimate1RM(row.weightKg, row.reps, row.rpe ?? undefined);
+    if (!(e1rm > 0)) continue;
+
+    const key = (row.exercise.id || row.exercise.name).toLowerCase();
+    const existing = byExercise.get(key);
+    if (!existing) {
+      byExercise.set(key, {
+        exerciseName: row.exercise.name,
+        primaryMuscle: row.exercise.primaryMuscle,
+        movementPattern: row.exercise.movementPattern,
+        equipmentRequired: row.exercise.equipmentRequired,
+        bestE1RMKg: e1rm,
+      });
+    } else if (e1rm > existing.bestE1RMKg) {
+      existing.bestE1RMKg = e1rm;
+    }
+  }
+
+  return Array.from(byExercise.values());
+}
+
+/**
+ * Known-pair transfer factors (symmetric). These override the defaults for
+ * common variant pairs where the carryover is well understood. Conservative
+ * on purpose — a cold start should land slightly light, then the first
+ * session's feedback corrects upward fast.
+ */
+export const TRANSFER_PAIR_FACTORS: ReadonlyArray<{ pair: [string, string]; factor: number }> = [
+  { pair: ['Seated Leg Curl', 'Lying Leg Curl'], factor: 0.9 },
+  { pair: ['Seated Cable Row', 'Chest-Supported Row'], factor: 0.85 },
+  { pair: ['Machine Chest Press', 'Barbell Bench Press'], factor: 0.8 },
+  { pair: ['Incline Barbell Press', 'Barbell Bench Press'], factor: 0.8 },
+  { pair: ['Dumbbell Shoulder Press', 'Overhead Press'], factor: 0.8 },
+  { pair: ['Hack Squat', 'Leg Press'], factor: 0.7 },
+];
+
+/** Default carryover for same muscle + same movement pattern (no known pair). */
+export const DEFAULT_SAME_PATTERN_TRANSFER_FACTOR = 0.7;
+/** Carryover when only the primary muscle matches (pattern differs) — lower confidence. */
+export const SAME_MUSCLE_TRANSFER_FACTOR = 0.6;
+
+function pairTransferFactor(exerciseA: string, exerciseB: string): number | null {
+  for (const { pair, factor } of TRANSFER_PAIR_FACTORS) {
+    if (
+      (isSameExercise(exerciseA, pair[0]) && isSameExercise(exerciseB, pair[1])) ||
+      (isSameExercise(exerciseA, pair[1]) && isSameExercise(exerciseB, pair[0]))
+    ) {
+      return factor;
+    }
+  }
+  return null;
+}
+
+/**
+ * Coarse equipment class for transfer matching: 'local' = machine / cable /
+ * plate-loaded stack, 'global' = free weight / bodyweight (progressionScope's
+ * classification, reused so "equipment class" means the same thing everywhere).
+ */
+function equipmentClass(name: string, equipmentRequired?: string[] | null): 'local' | 'global' {
+  return deriveProgressionScope({ equipmentRequired, name });
+}
+
+const normalizeToken = (s?: string | null) => (s ?? '').trim().toLowerCase();
+
+/**
+ * Cold-start estimation ladder rungs 1–2: estimate a never-trained exercise's
+ * e1RM from the user's STRONGEST logged e1RM on a related exercise.
+ *
+ *  Rung 1 (same_pattern): shares primary muscle + movement pattern + equipment
+ *    class (or is a known variant pair). Factor from the pair table, else the
+ *    conservative same-pattern default.
+ *  Rung 2 (same_muscle): shares only the primary muscle. Lower factor, and the
+ *    caller flags lower confidence.
+ *
+ * Deload-flagged and soft-deleted candidates never transfer. Pure.
+ */
+export function estimateFromTransferCandidates(
+  targetName: string,
+  targetMeta: TransferTargetMeta | undefined,
+  candidates: TransferCandidate[] | undefined
+): TransferEstimate | null {
+  if (!candidates || candidates.length === 0) return null;
+
+  const usable = candidates.filter(
+    (c) =>
+      c.bestE1RMKg > 0 &&
+      !c.fromDeload &&
+      !c.softDeleted &&
+      !isSameExercise(c.exerciseName, targetName)
+  );
+  if (usable.length === 0) return null;
+
+  const targetMuscle = normalizeToken(targetMeta?.primaryMuscle);
+  const targetPattern = normalizeToken(targetMeta?.movementPattern);
+  const targetClass = equipmentClass(targetName, targetMeta?.equipmentRequired);
+
+  const sameMuscle = (c: TransferCandidate) =>
+    !!targetMuscle && normalizeToken(c.primaryMuscle) === targetMuscle;
+
+  // Rung 1: known variant pair, or same muscle + pattern + equipment class.
+  let best: { candidate: TransferCandidate; factor: number } | null = null;
+  for (const c of usable) {
+    const paired = pairTransferFactor(targetName, c.exerciseName);
+    let factor: number | null = paired;
+    if (factor === null) {
+      const patternMatch =
+        sameMuscle(c) &&
+        !!targetPattern &&
+        normalizeToken(c.movementPattern) === targetPattern &&
+        equipmentClass(c.exerciseName, c.equipmentRequired) === targetClass;
+      if (patternMatch) factor = DEFAULT_SAME_PATTERN_TRANSFER_FACTOR;
+    }
+    if (factor !== null && (!best || c.bestE1RMKg > best.candidate.bestE1RMKg)) {
+      best = { candidate: c, factor };
+    }
+  }
+  if (best) {
+    return {
+      fromExercise: best.candidate.exerciseName,
+      sourceE1RMKg: best.candidate.bestE1RMKg,
+      factor: best.factor,
+      rung: 'same_pattern',
+    };
+  }
+
+  // Rung 2: same primary muscle only (pattern differs) — strongest wins.
+  let muscleBest: TransferCandidate | null = null;
+  for (const c of usable) {
+    if (sameMuscle(c) && (!muscleBest || c.bestE1RMKg > muscleBest.bestE1RMKg)) {
+      muscleBest = c;
+    }
+  }
+  if (muscleBest) {
+    return {
+      fromExercise: muscleBest.exerciseName,
+      sourceE1RMKg: muscleBest.bestE1RMKg,
+      factor: SAME_MUSCLE_TRANSFER_FACTOR,
+      rung: 'same_muscle',
+    };
+  }
+
+  return null;
 }
 
 export interface WorkingWeightRecommendation {
@@ -57,7 +272,18 @@ export interface WorkingWeightRecommendation {
   rationale: string;
   warmupProtocol?: WarmupSet[];
   findingWeightProtocol?: FindingWeightProtocol;
+  /** Which estimation rung produced the number (so the UI can name its source). */
+  estimateSource?: EstimatedMax['source'];
+  /** For exercise_transfer estimates: the logged exercise the strength carried over from. */
+  transferFrom?: string;
 }
+
+/**
+ * First-session (cold start) prescriptions target at least this many reps in
+ * reserve, whatever the block asked for — calibration headroom, since a cold
+ * start is expected to be wrong (usually low) until the first sets grade it.
+ */
+export const COLD_START_TARGET_RIR = 3;
 
 export interface WarmupSet {
   percentOfWorking: number;
@@ -82,6 +308,12 @@ export interface UserStrengthProfile {
   knownMaxes: EstimatedMax[];
   regionalData?: DexaRegionalData;
   regionalAnalysis?: RegionalAnalysis;
+  /**
+   * Cross-exercise transfer candidates: the user's logged e1RMs on OTHER
+   * exercises (non-deload, non-deleted), used by the cold-start estimation
+   * ladder before falling back to profile heuristics.
+   */
+  transferCandidates?: TransferCandidate[];
   /**
    * Persisted lower session counts for hysteresis.
    * Maps exercise name (lowercase) to consecutive lower session count.
@@ -410,6 +642,132 @@ function validateRelationshipGraph(): void {
 validateRelationshipGraph();
 
 // ============================================================
+// BODYWEIGHT-RATIO PROFILE HEURISTIC (ladder rung 3)
+// ============================================================
+
+/**
+ * Muscle group based e1RM/bodyweight ratios — ultimate fallback when nothing
+ * exercise-specific matches.
+ */
+const MUSCLE_GROUP_BW_RATIOS: Record<string, number> = {
+  'chest': 0.75,      // Based on bench press
+  'back': 0.60,       // Based on row
+  'shoulders': 0.45,  // Based on OHP
+  'biceps': 0.25,     // Based on curl
+  'triceps': 0.30,    // Based on pushdown
+  'quads': 0.90,      // Based on squat
+  'hamstrings': 0.50, // Based on RDL
+  'glutes': 0.80,     // Based on hip thrust
+  'calves': 0.50,     // Based on calf raise
+};
+
+/**
+ * Exercise-specific e1RM/bodyweight ratios. These are the "training profile"
+ * cold-start coefficients — each one must clear the equipment-class floors
+ * below (see resolveBodyweightRatio). The leg curls were 0.30 (below even the
+ * generic hamstrings fallback), which put a machine-isolation cold start at
+ * ~25 lb for an adult lifter — a broken coefficient, not a conservative one.
+ */
+const EXERCISE_BW_RATIOS: Record<string, number> = {
+  'Barbell Curl': 0.25,
+  'Dumbbell Curl': 0.10,
+  'Hammer Curl': 0.12,
+  'Cable Curl': 0.25,
+  'Preacher Curl': 0.20,
+  'Incline Dumbbell Curl': 0.08,
+  'EZ Bar Curl': 0.25,
+  'Concentration Curl': 0.10,
+  'Tricep Pushdown': 0.30,
+  'Cable Tricep Pushdown': 0.30,
+  'Overhead Tricep Extension': 0.20,
+  'Cable Overhead Tricep Extension': 0.20,
+  'Triceps Extension (Dumbbell)': 0.15,
+  'Dumbbell Kickback': 0.10,
+  'Skull Crusher': 0.35,
+  'Dips': 0.30,
+  'Lateral Raise': 0.06,
+  'Cable Lateral Raise': 0.08,
+  'Cable Cross Body Lateral Raise': 0.08,
+  'Face Pull': 0.25,
+  'Rear Delt Fly': 0.06,
+  'Cable Fly': 0.15,
+  'Leg Extension': 0.85,
+  'Lying Leg Curl': 0.55,
+  'Seated Leg Curl': 0.55,
+  'Standing Calf Raise': 0.80,
+  'Calf Machine': 0.80,
+  'Cable Crunch': 0.40,
+  'Hip Abduction Machine': 0.50,
+};
+
+/**
+ * Sanity floor for LOWER-BODY MACHINE ISOLATION cold starts: even a novice's
+ * leg curl / leg extension e1RM is a meaningful fraction of bodyweight (leg
+ * muscles are large). Any coefficient below this is treated as data entry
+ * error, not conservatism.
+ */
+export const LOWER_BODY_MACHINE_ISOLATION_RATIO_FLOOR = 0.45;
+
+const LOWER_BODY_MACHINE_ISOLATION_PATTERNS = [
+  'leg curl', 'leg extension', 'calf', 'hip abduction', 'hip adduction', 'glute kickback',
+];
+
+export function isLowerBodyMachineIsolation(exerciseName: string): boolean {
+  const lower = exerciseName.toLowerCase();
+  return LOWER_BODY_MACHINE_ISOLATION_PATTERNS.some((p) => lower.includes(p));
+}
+
+/**
+ * Resolve the e1RM/bodyweight ratio for a never-trained exercise (profile
+ * heuristic, ladder rung 3): exercise-specific ratio → fuzzy name match →
+ * muscle-group fallback, then equipment-class sanity floors. Pure; exported so
+ * tests can audit the coefficients directly.
+ */
+export function resolveBodyweightRatio(exerciseName: string): number {
+  const lowerName = exerciseName.toLowerCase();
+
+  // Detect muscle group from exercise name
+  const getMuscleGroupRatio = (name: string): number => {
+    if (name.includes('chest') || name.includes('bench') || name.includes('fly') || name.includes('push')) return MUSCLE_GROUP_BW_RATIOS.chest;
+    if (name.includes('back') || name.includes('row') || name.includes('pull') || name.includes('lat')) return MUSCLE_GROUP_BW_RATIOS.back;
+    if (name.includes('shoulder') || name.includes('delt') || name.includes('raise') || name.includes('press')) return MUSCLE_GROUP_BW_RATIOS.shoulders;
+    if (name.includes('bicep') || name.includes('curl')) return MUSCLE_GROUP_BW_RATIOS.biceps;
+    if (name.includes('tricep') || name.includes('pushdown') || name.includes('extension')) return MUSCLE_GROUP_BW_RATIOS.triceps;
+    if (name.includes('quad') || name.includes('squat') || name.includes('leg press') || name.includes('lunge')) return MUSCLE_GROUP_BW_RATIOS.quads;
+    if (name.includes('hamstring') || name.includes('rdl') || name.includes('leg curl')) return MUSCLE_GROUP_BW_RATIOS.hamstrings;
+    if (name.includes('glute') || name.includes('hip')) return MUSCLE_GROUP_BW_RATIOS.glutes;
+    if (name.includes('calf') || name.includes('calves')) return MUSCLE_GROUP_BW_RATIOS.calves;
+    return 0.30; // Default fallback
+  };
+
+  // Try direct match first, then fuzzy match, then muscle group fallback
+  let ratio = EXERCISE_BW_RATIOS[exerciseName];
+
+  if (!ratio) {
+    // Try fuzzy matching against keys ('leg curl' input matches 'Lying Leg Curl')
+    for (const [key, value] of Object.entries(EXERCISE_BW_RATIOS)) {
+      if (lowerName.includes(key.toLowerCase()) || key.toLowerCase().includes(lowerName)) {
+        ratio = value;
+        break;
+      }
+    }
+  }
+
+  if (!ratio) {
+    // Use muscle group based fallback
+    ratio = getMuscleGroupRatio(lowerName);
+  }
+
+  // Equipment-class sanity floor: a lower-body machine-isolation coefficient
+  // below the floor is a broken number, not a conservative one.
+  if (isLowerBodyMachineIsolation(lowerName)) {
+    ratio = Math.max(ratio, LOWER_BODY_MACHINE_ISOLATION_RATIO_FLOOR);
+  }
+
+  return ratio;
+}
+
+// ============================================================
 // STRENGTH STANDARDS BY FFMI AND EXPERIENCE
 // ============================================================
 
@@ -514,21 +872,35 @@ export class WeightEstimationEngine {
     exerciseName: string,
     targetReps: { min: number; max: number },
     targetRIR: number,
-    previousRecommendation?: number
+    previousRecommendation?: number,
+    targetMeta?: TransferTargetMeta
   ): WorkingWeightRecommendation {
-    const estimatedMax = this.getEstimated1RM(exerciseName);
+    const estimatedMax = this.getEstimated1RM(exerciseName, targetMeta);
+
+    // Cold start (no direct history / calibration for THIS exercise): prescribe
+    // with calibration headroom — at least COLD_START_TARGET_RIR in reserve —
+    // since the estimate is a starting point, not a measured capacity.
+    const isColdStart =
+      estimatedMax.source !== 'direct_history' && estimatedMax.source !== 'calibration';
+    const effectiveRIR = isColdStart ? Math.max(targetRIR, COLD_START_TARGET_RIR) : targetRIR;
 
     let recommendation: WorkingWeightRecommendation;
 
     if (estimatedMax.confidence === 'high' || estimatedMax.confidence === 'medium') {
-      recommendation = this.calculateFromKnownMax(exerciseName, estimatedMax, targetReps, targetRIR);
+      recommendation = this.calculateFromKnownMax(exerciseName, estimatedMax, targetReps, effectiveRIR);
     } else if (estimatedMax.confidence === 'low') {
-      recommendation = this.calculateFromLowConfidenceMax(exerciseName, estimatedMax, targetReps, targetRIR);
+      recommendation = this.calculateFromLowConfidenceMax(exerciseName, estimatedMax, targetReps, effectiveRIR);
     } else if (estimatedMax.confidence === 'extrapolated') {
       // Extrapolated estimates (from strength standards) get wider ranges
-      recommendation = this.calculateFromExtrapolatedMax(exerciseName, estimatedMax, targetReps, targetRIR);
+      recommendation = this.calculateFromExtrapolatedMax(exerciseName, estimatedMax, targetReps, effectiveRIR);
     } else {
-      return this.generateFindingWeightProtocol(exerciseName, targetReps, targetRIR);
+      return this.generateFindingWeightProtocol(exerciseName, targetReps, effectiveRIR);
+    }
+
+    recommendation.estimateSource = estimatedMax.source;
+    recommendation.transferFrom = estimatedMax.transfer?.fromExercise;
+    if (isColdStart && effectiveRIR > targetRIR) {
+      recommendation.rationale += ` First session: prescribed at ${effectiveRIR} RIR for calibration headroom.`;
     }
 
     // Apply week-to-week smoothing if we have a previous recommendation
@@ -550,7 +922,7 @@ export class WeightEstimationEngine {
     return recommendation;
   }
   
-  private getEstimated1RM(exerciseName: string): EstimatedMax {
+  private getEstimated1RM(exerciseName: string, targetMeta?: TransferTargetMeta): EstimatedMax {
     // Canonicalize the exercise name for consistent lookups
     const canonicalName = findExerciseMatch(exerciseName) || exerciseName;
     const cacheKey = canonicalName.toLowerCase();
@@ -579,6 +951,28 @@ export class WeightEstimationEngine {
     if (directEstimate) {
       this.estimatedMaxes.set(cacheKey, directEstimate);
       return directEstimate;
+    }
+
+    // Cold-start ladder rungs 1–2: transfer from the user's LOGGED history on a
+    // related exercise (same pattern, then same muscle) before any static
+    // ratios or population heuristics.
+    const transfer = estimateFromTransferCandidates(
+      canonicalName,
+      targetMeta,
+      this.profile.transferCandidates
+    );
+    if (transfer) {
+      const transferEstimate: EstimatedMax = {
+        exercise: canonicalName,
+        estimated1RM: Math.round(transfer.sourceE1RMKg * transfer.factor * 10) / 10,
+        // Same-pattern transfer prescribes directly at the rep range; a
+        // cross-pattern (same-muscle) transfer is flagged lower confidence.
+        confidence: transfer.rung === 'same_pattern' ? 'medium' : 'low',
+        source: 'exercise_transfer',
+        transfer,
+      };
+      this.estimatedMaxes.set(cacheKey, transferEstimate);
+      return transferEstimate;
     }
 
     const relatedEstimate = this.estimateFromRelatedExercises(canonicalName);
@@ -805,85 +1199,8 @@ export class WeightEstimationEngine {
   }
   
   private estimateFromBodyweight(exerciseName: string): EstimatedMax {
-    const lowerName = exerciseName.toLowerCase();
-    
-    // Muscle group based ratios as ultimate fallback
-    const muscleGroupRatios: Record<string, number> = {
-      'chest': 0.75,      // Based on bench press
-      'back': 0.60,       // Based on row
-      'shoulders': 0.45,  // Based on OHP
-      'biceps': 0.25,     // Based on curl
-      'triceps': 0.30,    // Based on pushdown
-      'quads': 0.90,      // Based on squat
-      'hamstrings': 0.50, // Based on RDL
-      'glutes': 0.80,     // Based on hip thrust
-      'calves': 0.50,     // Based on calf raise
-    };
-    
-    // Detect muscle group from exercise name
-    const getMuscleGroupRatio = (name: string): number => {
-      if (name.includes('chest') || name.includes('bench') || name.includes('fly') || name.includes('push')) return muscleGroupRatios.chest;
-      if (name.includes('back') || name.includes('row') || name.includes('pull') || name.includes('lat')) return muscleGroupRatios.back;
-      if (name.includes('shoulder') || name.includes('delt') || name.includes('raise') || name.includes('press')) return muscleGroupRatios.shoulders;
-      if (name.includes('bicep') || name.includes('curl')) return muscleGroupRatios.biceps;
-      if (name.includes('tricep') || name.includes('pushdown') || name.includes('extension')) return muscleGroupRatios.triceps;
-      if (name.includes('quad') || name.includes('squat') || name.includes('leg press') || name.includes('lunge')) return muscleGroupRatios.quads;
-      if (name.includes('hamstring') || name.includes('rdl') || name.includes('leg curl')) return muscleGroupRatios.hamstrings;
-      if (name.includes('glute') || name.includes('hip')) return muscleGroupRatios.glutes;
-      if (name.includes('calf') || name.includes('calves')) return muscleGroupRatios.calves;
-      return 0.30; // Default fallback
-    };
-    
-    const bwRatios: Record<string, number> = {
-      'Barbell Curl': 0.25,
-      'Dumbbell Curl': 0.10,
-      'Hammer Curl': 0.12,
-      'Cable Curl': 0.25,
-      'Preacher Curl': 0.20,
-      'Incline Dumbbell Curl': 0.08,
-      'EZ Bar Curl': 0.25,
-      'Concentration Curl': 0.10,
-      'Tricep Pushdown': 0.30,
-      'Cable Tricep Pushdown': 0.30,
-      'Overhead Tricep Extension': 0.20,
-      'Cable Overhead Tricep Extension': 0.20,
-      'Triceps Extension (Dumbbell)': 0.15,
-      'Dumbbell Kickback': 0.10,
-      'Skull Crusher': 0.35,
-      'Dips': 0.30,
-      'Lateral Raise': 0.06,
-      'Cable Lateral Raise': 0.08,
-      'Cable Cross Body Lateral Raise': 0.08,
-      'Face Pull': 0.25,
-      'Rear Delt Fly': 0.06,
-      'Cable Fly': 0.15,
-      'Leg Extension': 0.85,
-      'Lying Leg Curl': 0.30,
-      'Seated Leg Curl': 0.30,
-      'Standing Calf Raise': 0.80,
-      'Calf Machine': 0.80,
-      'Cable Crunch': 0.40,
-      'Hip Abduction Machine': 0.50,
-    };
-    
-    // Try direct match first, then fuzzy match, then muscle group fallback
-    let ratio = bwRatios[exerciseName];
-    
-    if (!ratio) {
-      // Try fuzzy matching against keys
-      for (const [key, value] of Object.entries(bwRatios)) {
-        if (lowerName.includes(key.toLowerCase()) || key.toLowerCase().includes(lowerName)) {
-          ratio = value;
-          break;
-        }
-      }
-    }
-    
-    if (!ratio) {
-      // Use muscle group based fallback
-      ratio = getMuscleGroupRatio(lowerName);
-    }
-    
+    const ratio = resolveBodyweightRatio(exerciseName);
+
     return {
       exercise: exerciseName,
       estimated1RM: Math.round(this.profile.bodyComposition.totalWeightKg * ratio * 10) / 10,
@@ -984,7 +1301,10 @@ export class WeightEstimationEngine {
         high: this.roundToNearestPlate(this.unit, workingWeight)
       },
       confidence: 'low',
-      rationale: `Estimated from ${estimatedMax.source.replace(/_/g, ' ')}. Start conservative and adjust based on feel.`,
+      rationale:
+        estimatedMax.source === 'exercise_transfer' && estimatedMax.transfer
+          ? `Estimated from your ${estimatedMax.transfer.fromExercise} strength (different movement pattern, so ${Math.round(estimatedMax.transfer.factor * 100)}% carryover). Start conservative and adjust based on feel.`
+          : `Estimated from ${estimatedMax.source.replace(/_/g, ' ')}. Start conservative and adjust based on feel.`,
       warmupProtocol: this.generateWarmupSets(conservativeWeight, exerciseName),
       findingWeightProtocol: {
         startingWeight: startWeight,
@@ -1171,11 +1491,14 @@ export class WeightEstimationEngine {
       'related_exercise': 'Estimated from similar exercises you\'ve done',
       'strength_standards': 'Based on typical strength for your experience level',
       'bodyweight_ratio': 'Rough estimate based on bodyweight',
-      'calibration': 'Based on your strength calibration test'
+      'calibration': 'Based on your strength calibration test',
+      'exercise_transfer': estimatedMax.transfer
+        ? `Estimated from your ${estimatedMax.transfer.fromExercise} strength (${Math.round(estimatedMax.transfer.factor * 100)}% carryover)`
+        : 'Estimated from a related exercise you\'ve logged'
     };
-    
+
     const percentage = Math.round(((37 - (targetReps + targetRIR)) / 36) * 100);
-    
+
     return `${sourceExplanation[estimatedMax.source]}. Est. 1RM: ${estimatedMax.estimated1RM}kg → ${percentage}% for ${targetReps} reps @ ${targetRIR} RIR.`;
   }
   
@@ -1435,6 +1758,17 @@ export function createStrengthProfile(
 // QUICK ESTIMATE FOR UI (without full history)
 // ============================================================
 
+/**
+ * Cold-start inputs for the estimation ladder: the user's logged e1RMs on
+ * other exercises (rungs 1–2) plus the target exercise's metadata needed to
+ * match them. Without these, a no-history exercise falls straight to the
+ * profile heuristic (rung 3).
+ */
+export interface QuickEstimateOptions {
+  transferCandidates?: TransferCandidate[];
+  targetMeta?: TransferTargetMeta;
+}
+
 export function quickWeightEstimate(
   exerciseName: string,
   targetReps: { min: number; max: number },
@@ -1445,7 +1779,8 @@ export function quickWeightEstimate(
   experience: Experience,
   regionalData?: DexaRegionalData,
   unit: 'kg' | 'lb' = 'kg',
-  knownE1RM?: number
+  knownE1RM?: number,
+  opts?: QuickEstimateOptions
 ): WorkingWeightRecommendation {
   const profile = createStrengthProfile(
     heightCm,
@@ -1471,8 +1806,10 @@ export function quickWeightEstimate(
     });
   }
 
+  profile.transferCandidates = opts?.transferCandidates;
+
   const engine = new WeightEstimationEngine(profile, unit);
-  return engine.getWorkingWeight(exerciseName, targetReps, targetRIR);
+  return engine.getWorkingWeight(exerciseName, targetReps, targetRIR, undefined, opts?.targetMeta);
 }
 
 // ============================================================
@@ -1517,7 +1854,8 @@ export function quickWeightEstimateWithCalibration(
   }>,
   regionalData?: DexaRegionalData,
   unit: 'kg' | 'lb' = 'kg',
-  knownE1RM?: number
+  knownE1RM?: number,
+  opts?: QuickEstimateOptions
 ): WorkingWeightRecommendation {
   // Create estimated maxes from calibrated lifts
   const calibratedMaxes = createEstimatedMaxesFromCalibration(calibratedLifts);
@@ -1545,10 +1883,11 @@ export function quickWeightEstimateWithCalibration(
     exerciseHistory: [],
     knownMaxes: calibratedMaxes,
     regionalData,
-    regionalAnalysis: regionalData ? analyzeRegionalComposition(regionalData, bodyComposition.leanMassKg) : undefined
+    regionalAnalysis: regionalData ? analyzeRegionalComposition(regionalData, bodyComposition.leanMassKg) : undefined,
+    transferCandidates: opts?.transferCandidates
   };
 
   const engine = new WeightEstimationEngine(profile, unit);
-  return engine.getWorkingWeight(exerciseName, targetReps, targetRIR);
+  return engine.getWorkingWeight(exerciseName, targetReps, targetRIR, undefined, opts?.targetMeta);
 }
 

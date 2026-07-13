@@ -131,3 +131,22 @@ export const OVERSHOOT_CEILING = 5;
  * self-reported RIR.
  */
 export const REP_OVERSHOOT = 2;
+
+// ============================================================
+// COLD-START (first-ever session of an exercise) DIALS
+// ============================================================
+
+/**
+ * On a COLD-START exercise (no logged history), an "easy" rating — this many
+ * or more reps in reserve — bumps the next set's load even when the reps
+ * landed inside the range. Cold-start estimates are expected to be wrong low,
+ * so the first session converges aggressively instead of holding a bad guess.
+ */
+export const COLD_START_EASY_RIR = 4;
+
+/**
+ * Per-set load increase cap on a cold-start exercise (vs MAX_STEP_PCT
+ * elsewhere). +15% lets an under-estimated first set correct within the same
+ * session; from set two onward the normal history-anchored math takes over.
+ */
+export const COLD_START_STEP_PCT = 0.15;
