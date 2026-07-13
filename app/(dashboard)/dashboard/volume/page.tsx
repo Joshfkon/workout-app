@@ -14,6 +14,7 @@ import { MuscleMap } from '@/components/muscleMap/MuscleMap';
 import { volumeRowsToMapData } from '@/lib/muscleMap/adapters';
 import type { MuscleId } from '@/lib/muscleMap/taxonomy';
 import { useWeeklyMevSummary } from '@/hooks/useWeeklyMevSummary';
+import { useExpandedVolumeRows } from '@/hooks/useExpandedVolumeRows';
 import {
   buildVolumeRows,
   belowMevVolumeData,
@@ -180,14 +181,9 @@ export default function VolumeProfilePage() {
   const { user } = useUserStore();
   const userGoal = user?.goal ?? 'maintenance';
 
-  // Which coarse groups the user expanded to reveal all fine children.
-  const [expandedRows, setExpandedRows] = useState<Set<CoarseMuscle>>(new Set());
-  const toggleRow = (muscle: CoarseMuscle) =>
-    setExpandedRows((prev) => {
-      const next = new Set(prev);
-      next.has(muscle) ? next.delete(muscle) : next.add(muscle);
-      return next;
-    });
+  // Which coarse groups the user expanded to reveal all fine children —
+  // persisted per user and shared with the readiness surfaces.
+  const { expandedRows, toggleRow } = useExpandedVolumeRows();
 
   // Below-MEV muscles for the atrophy-risk warning come from the SAME coarse
   // rows the bars render (shared counter + band), so the warning, the bars and

@@ -10,7 +10,8 @@ import {
   type ReadinessTarget,
   type NextReadyTarget,
 } from '@/app/(dashboard)/dashboard/workout/[id]/_lib/readiness';
-import { zoneBarClass, zoneTextClass, zoneBandLabel, STANDARD_TO_COARSE } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
+import { zoneBarClass, zoneTextClass, zoneBandLabel, STANDARD_TO_COARSE, type CoarseMuscle } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
+import { useExpandedVolumeRows } from '@/hooks/useExpandedVolumeRows';
 import { MuscleMap } from '@/components/muscleMap/MuscleMap';
 import { readinessRowsToMapData } from '@/lib/muscleMap/adapters';
 import type { MuscleId } from '@/lib/muscleMap/taxonomy';
@@ -195,13 +196,43 @@ function ChildRowView({ child }: { child: ReadinessChild }) {
   );
 }
 
-function ReadinessRowView({ row }: { row: ReadinessRow }) {
+function ReadinessRowView({
+  row,
+  expanded,
+  onToggle,
+}: {
+  row: ReadinessRow;
+  expanded?: boolean;
+  onToggle?: () => void;
+}) {
+  // Chevron whenever the group CAN expand (≥1 reachable fine child) — same
+  // rule as the volume page's bars, driven by the same persisted state.
+  const canToggle = row.expandable && Boolean(onToggle);
   return (
     <div data-testid={`readiness-row-${row.muscle}`}>
       <div className="flex items-center gap-3 py-2.5">
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-sm text-surface-100 truncate">{row.displayName}</span>
+            {canToggle ? (
+              <button
+                onClick={onToggle}
+                className="flex items-center gap-1 min-w-0 text-left"
+                aria-expanded={expanded}
+                data-testid={`readiness-row-toggle-${row.muscle}`}
+              >
+                <svg
+                  className={`w-3 h-3 flex-shrink-0 text-surface-500 transition-transform ${expanded ? 'rotate-90' : ''}`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+                <span className="text-sm text-surface-100 truncate">{row.displayName}</span>
+              </button>
+            ) : (
+              <span className="text-sm text-surface-100 truncate">{row.displayName}</span>
+            )}
             <span className="text-[11px] tabular-nums flex-shrink-0">
               <span className={zoneTextClass(row.zone, row.sets)} data-testid={`readiness-sets-${row.muscle}`}>{row.sets}</span>
               <span className="text-surface-600"> · {zoneBandLabel(row.band)}</span>
@@ -245,6 +276,8 @@ export function MuscleReadinessContent({
   loadingTestId = 'readiness-sheet-loading',
   showFootnote = true,
   persistKey = SHOW_ALL_STORAGE_KEY,
+  expandedRows,
+  onToggleRow,
 }: {
   rows: ReadinessRow[];
   targets: ReadinessTarget[];
@@ -254,6 +287,9 @@ export function MuscleReadinessContent({
   loadingTestId?: string;
   showFootnote?: boolean;
   persistKey?: string;
+  /** Coarse groups the user expanded (shared persisted state) — enables the chevron. */
+  expandedRows?: Set<CoarseMuscle>;
+  onToggleRow?: (muscle: CoarseMuscle) => void;
 }) {
   const [showAll, setShowAllState] = useState(() => readShowAll(persistKey));
   const setShowAll = (value: boolean) => {
@@ -306,7 +342,12 @@ export function MuscleReadinessContent({
           {rows.length > 0 && <ReadinessMap rows={rows} onRevealAll={() => setShowAll(true)} />}
           <div className="divide-y divide-surface-800/70">
             {visibleRows.map((row) => (
-              <ReadinessRowView key={row.muscle} row={row} />
+              <ReadinessRowView
+                key={row.muscle}
+                row={row}
+                expanded={expandedRows?.has(row.muscle)}
+                onToggle={onToggleRow ? () => onToggleRow(row.muscle) : undefined}
+              />
             ))}
           </div>
           {collapsible && hiddenCount > 0 && (
@@ -352,18 +393,30 @@ export function MuscleReadinessSheet({
   // against the same instant (and re-stamped on each fresh open).
   const [now] = useState(() => new Date());
 
+  // Shared, per-user persisted expansion — the same state the volume page uses.
+  const { expandedRows, toggleRow } = useExpandedVolumeRows();
+
   const { rows, targets, nextUp, isLoading } = useMuscleReadiness({
     liveBlocks,
     liveSets,
     now,
     enabled: isOpen,
     sorenessOverrides,
+    expandedParents: expandedRows,
   });
 
   return (
     <BottomSheet isOpen={isOpen} onClose={onClose} title="Muscle readiness">
       <div data-testid="readiness-sheet">
-        <MuscleReadinessContent rows={rows} targets={targets} nextUp={nextUp} isLoading={isLoading} collapsible />
+        <MuscleReadinessContent
+          rows={rows}
+          targets={targets}
+          nextUp={nextUp}
+          isLoading={isLoading}
+          collapsible
+          expandedRows={expandedRows}
+          onToggleRow={toggleRow}
+        />
       </div>
     </BottomSheet>
   );

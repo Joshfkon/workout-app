@@ -40,7 +40,7 @@ const RECOVERED_FACTOR: Record<MuscleRecoveryResult['status'], number> = {
   fatigued: 0,
 };
 
-/** A fine child of a coarse readiness row (reachable + lagging or expanded). */
+/** A fine child of a coarse readiness row (reachable + lagging, or expanded). */
 export interface ReadinessChild {
   muscle: StandardMuscleGroup;
   displayName: string;
@@ -49,6 +49,12 @@ export interface ReadinessChild {
   zone: VolumeZone;
   belowMev: boolean;
   volumeGap: number;
+  /**
+   * Whether the user's own exercise tagging can feed this muscle. Unreachable
+   * children appear only under an explicit expansion (context rows) and are
+   * never offered as training targets.
+   */
+  reachable: boolean;
   recovery: MuscleRecoveryResult;
 }
 
@@ -69,7 +75,9 @@ export interface ReadinessRow {
   recovery: MuscleRecoveryResult;
   /** Actionability score — higher = better target today. */
   score: number;
-  /** Reachable lagging fine children to surface under this row. */
+  /** Whether the row has ≥1 reachable fine child (gates the chevron). */
+  expandable: boolean;
+  /** Fine children to surface under this row (lagging, or all on expand). */
   children: ReadinessChild[];
 }
 
@@ -200,6 +208,8 @@ export function compareByActionability(a: ReadinessRow, b: ReadinessRow): number
  * @param reachable muscles the user's exercises can feed (gates fine children)
  * @param config    recovery heuristic config
  * @param sorenessOverrides muscles reported "still sore" today — forced Fatigued
+ * @param expandedParents coarse groups the user expanded — all their fine
+ *                  children render, exactly as on the volume page
  */
 export function buildReadinessRows(
   stats: MuscleVolumeStats[],
@@ -207,9 +217,10 @@ export function buildReadinessRows(
   now: Date,
   reachable?: Set<StandardMuscleGroup>,
   config: RecoveryConfig = RECOVERY_CONFIG,
-  sorenessOverrides?: ReadonlySet<StandardMuscleGroup>
+  sorenessOverrides?: ReadonlySet<StandardMuscleGroup>,
+  expandedParents?: Set<CoarseMuscle>
 ): ReadinessRow[] {
-  const volumeRows = buildVolumeRows(stats, reachable);
+  const volumeRows = buildVolumeRows(stats, reachable, { expandedParents });
 
   const rows = volumeRows.map((vr: VolumeRow): ReadinessRow => {
     const coarse = vr.muscle as CoarseMuscle;
@@ -230,6 +241,7 @@ export function buildReadinessRows(
         zone: child.zone,
         belowMev: child.belowMev,
         volumeGap: Math.max(0, child.band.mev - child.sets),
+        reachable: child.reachable,
         recovery: childRecovery,
       };
     });
@@ -245,6 +257,7 @@ export function buildReadinessRows(
       volumeStatus: volumeStatusForZone(vr.zone),
       recovery,
       score,
+      expandable: vr.expandable,
       children,
     };
   });
@@ -264,6 +277,9 @@ interface TargetCandidate {
 /**
  * Flatten rows + their reachable lagging children into a single candidate list.
  * A lagging fine child surfaces even when its coarse parent is on target.
+ * Unreachable children (present only under an explicit expansion) are context
+ * rows, never target candidates — no exercise in the user's library could act
+ * on the recommendation.
  */
 function flattenCandidates(rows: ReadinessRow[]): TargetCandidate[] {
   const out: TargetCandidate[] = [];
@@ -276,6 +292,7 @@ function flattenCandidates(rows: ReadinessRow[]): TargetCandidate[] {
       recovery: row.recovery,
     });
     for (const child of row.children) {
+      if (!child.reachable) continue;
       out.push({
         muscle: child.muscle,
         displayName: child.displayName,

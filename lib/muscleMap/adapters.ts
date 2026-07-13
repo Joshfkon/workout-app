@@ -16,7 +16,7 @@ import {
 } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 import type { ReadinessRow } from '@/app/(dashboard)/dashboard/workout/[id]/_lib/readiness';
 import type { RecoveryStatus } from '@/services/muscleRecovery';
-import type { MuscleId } from './taxonomy';
+import { REGIONLESS_COARSE_MEMBERS, type MuscleId } from './taxonomy';
 
 /** Per-muscle datum the map renders. Which field matters depends on mode. */
 export interface MuscleMapDatum {
@@ -95,14 +95,22 @@ export function exerciseHighlightData(
   secondaryMuscles: readonly string[] | null | undefined
 ): MuscleMapData {
   const out: MuscleMapData = {};
+  // A regionless coarse id ('traps', 'calves') owns no artwork path of its
+  // own — brighten its fine members so the whole parent region lights up.
+  const paint = (std: MuscleId, datum: MuscleMapDatum) => {
+    out[std] = datum;
+    for (const member of REGIONLESS_COARSE_MEMBERS[std] ?? []) {
+      out[member] = datum;
+    }
+  };
   for (const secondary of secondaryMuscles ?? []) {
     for (const std of resolveMuscleToStandard(secondary)) {
-      out[std] = { value: SECONDARY_HIGHLIGHT_EMPHASIS };
+      paint(std, { value: SECONDARY_HIGHLIGHT_EMPHASIS });
     }
   }
   if (primaryMuscle) {
     for (const std of resolveMuscleToStandard(primaryMuscle)) {
-      out[std] = { value: 1 };
+      paint(std, { value: 1 });
     }
   }
   return out;

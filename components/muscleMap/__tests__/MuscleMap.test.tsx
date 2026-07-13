@@ -34,6 +34,9 @@ describe('MuscleMap', () => {
     for (const muscle of MUSCLE_IDS) {
       const paths = musclePaths(container, muscle);
       expect(paths.length).toBe(MUSCLE_TO_REGIONS[muscle].length);
+      // Regionless coarse ids ('traps','calves') own no paths — their area is
+      // painted through their fine members (covered by their own iterations).
+      if (MUSCLE_TO_REGIONS[muscle].length === 0) continue;
       const looks = new Set(
         paths.map((p) => `${p.getAttribute('class')}|${p.getAttribute('fill-opacity')}`)
       );
@@ -58,7 +61,7 @@ describe('MuscleMap', () => {
     expect(musclePaths(container, 'chest_upper')[0]!.getAttribute('class')).toContain('fill-surface-600');
     expect(musclePaths(container, 'lats')[0]!.getAttribute('class')).toContain('fill-danger-500');
     // No data → neutral base tone.
-    expect(musclePaths(container, 'calves')[0]!.getAttribute('class')).toContain('fill-surface-800');
+    expect(musclePaths(container, 'gastrocnemius')[0]!.getAttribute('class')).toContain('fill-surface-800');
   });
 
   it('recovery mode: fresh green / recovering amber / fatigued gray, matching the badges', () => {

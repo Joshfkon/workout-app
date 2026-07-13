@@ -1058,6 +1058,19 @@ export interface SwapSuggestion {
  * - Glute_med and obliques have MEV of 0 because they're often hit indirectly
  * - Erectors get hit by hip hinges and squats, so direct work MEV is low
  * - Based on Renaissance Periodization guidelines adapted to split muscle groups
+ *
+ * Fine traps/calves members (same RP-derived source, split out of the coarse
+ * traps/calves bands the way chest_upper/chest_lower split coarse chest):
+ * - Upper traps carry the direct work (shrugs, upright rows) plus heavy
+ *   isometric fill from hinges/carries, so they take the erectors-like low-MEV
+ *   pattern and most of the coarse traps band.
+ * - Mid/lower traps are fed indirectly by nearly all horizontal pulling and
+ *   face-pull/Y-raise work, so like glute_med/obliques they get MEV 0 with a
+ *   small direct band.
+ * - Gastrocnemius does the straight-knee work (standing/donkey/leg-press
+ *   raises) and takes the bulk of the coarse calves band.
+ * - Soleus needs bent-knee (seated) work for direct sets but picks up half
+ *   credit from every straight-knee raise, so its band sits lower.
  */
 export const DEFAULT_VOLUME_LANDMARKS: Record<Experience, Record<StandardMuscleGroup, VolumeLandmarks>> = {
   novice: {
@@ -1069,6 +1082,8 @@ export const DEFAULT_VOLUME_LANDMARKS: Record<Experience, Record<StandardMuscleG
     lats: { mev: 6, mav: 10, mrv: 16 },
     upper_back: { mev: 4, mav: 8, mrv: 14 },
     traps: { mev: 3, mav: 8, mrv: 14 },
+    upper_traps: { mev: 2, mav: 6, mrv: 10 },
+    mid_lower_traps: { mev: 0, mav: 4, mrv: 8 },
     biceps: { mev: 4, mav: 10, mrv: 14 },
     triceps: { mev: 4, mav: 10, mrv: 14 },
     forearms: { mev: 2, mav: 6, mrv: 12 },
@@ -1078,6 +1093,8 @@ export const DEFAULT_VOLUME_LANDMARKS: Record<Experience, Record<StandardMuscleG
     glute_med: { mev: 0, mav: 4, mrv: 8 },
     adductors: { mev: 2, mav: 6, mrv: 10 },
     calves: { mev: 6, mav: 12, mrv: 18 },
+    gastrocnemius: { mev: 4, mav: 8, mrv: 14 },
+    soleus: { mev: 2, mav: 6, mrv: 10 },
     abs: { mev: 3, mav: 8, mrv: 14 },
     obliques: { mev: 0, mav: 4, mrv: 8 },
     erectors: { mev: 2, mav: 6, mrv: 10 },
@@ -1091,6 +1108,8 @@ export const DEFAULT_VOLUME_LANDMARKS: Record<Experience, Record<StandardMuscleG
     lats: { mev: 8, mav: 14, mrv: 20 },
     upper_back: { mev: 6, mav: 10, mrv: 16 },
     traps: { mev: 4, mav: 10, mrv: 16 },
+    upper_traps: { mev: 3, mav: 8, mrv: 12 },
+    mid_lower_traps: { mev: 0, mav: 6, mrv: 10 },
     biceps: { mev: 6, mav: 12, mrv: 18 },
     triceps: { mev: 6, mav: 12, mrv: 18 },
     forearms: { mev: 3, mav: 8, mrv: 14 },
@@ -1100,6 +1119,8 @@ export const DEFAULT_VOLUME_LANDMARKS: Record<Experience, Record<StandardMuscleG
     glute_med: { mev: 0, mav: 6, mrv: 10 },
     adductors: { mev: 3, mav: 8, mrv: 12 },
     calves: { mev: 8, mav: 14, mrv: 22 },
+    gastrocnemius: { mev: 6, mav: 10, mrv: 16 },
+    soleus: { mev: 3, mav: 8, mrv: 12 },
     abs: { mev: 4, mav: 10, mrv: 18 },
     obliques: { mev: 0, mav: 6, mrv: 10 },
     erectors: { mev: 3, mav: 8, mrv: 12 },
@@ -1113,6 +1134,8 @@ export const DEFAULT_VOLUME_LANDMARKS: Record<Experience, Record<StandardMuscleG
     lats: { mev: 10, mav: 18, mrv: 26 },
     upper_back: { mev: 8, mav: 14, mrv: 20 },
     traps: { mev: 6, mav: 12, mrv: 20 },
+    upper_traps: { mev: 4, mav: 10, mrv: 14 },
+    mid_lower_traps: { mev: 0, mav: 8, mrv: 12 },
     biceps: { mev: 8, mav: 16, mrv: 22 },
     triceps: { mev: 8, mav: 16, mrv: 22 },
     forearms: { mev: 4, mav: 10, mrv: 16 },
@@ -1122,6 +1145,8 @@ export const DEFAULT_VOLUME_LANDMARKS: Record<Experience, Record<StandardMuscleG
     glute_med: { mev: 0, mav: 8, mrv: 12 },
     adductors: { mev: 4, mav: 10, mrv: 14 },
     calves: { mev: 10, mav: 18, mrv: 26 },
+    gastrocnemius: { mev: 8, mav: 14, mrv: 20 },
+    soleus: { mev: 4, mav: 10, mrv: 14 },
     abs: { mev: 6, mav: 14, mrv: 22 },
     obliques: { mev: 0, mav: 8, mrv: 12 },
     erectors: { mev: 4, mav: 10, mrv: 14 },
@@ -1573,8 +1598,15 @@ export interface DeloadTriggers {
 // ============ TWO-TIER MUSCLE GROUP SYSTEM ============
 
 /**
- * Standard Muscle Groups (20) - UI Display & Volume Tracking
+ * Standard Muscle Groups (24) - UI Display & Volume Tracking
  * These are what users see in the interface and what volume landmarks are defined against.
+ *
+ * Four of these are FINE members of a coarse group that is ITSELF a standard
+ * muscle ('traps', 'calves'): upper_traps / mid_lower_traps and
+ * gastrocnemius / soleus. Like glute_med under 'glutes', a coarse 'traps' or
+ * 'calves' tag stays valid and NEVER leaks credit into the fine members — only
+ * an exercise tagged at fine grain feeds them (see FINE_MUSCLE_PARENTS in
+ * app/(dashboard)/dashboard/_lib/weeklyVolume.ts).
  */
 export const STANDARD_MUSCLE_GROUPS = [
   'chest_upper',
@@ -1585,6 +1617,8 @@ export const STANDARD_MUSCLE_GROUPS = [
   'lats',
   'upper_back',
   'traps',
+  'upper_traps',
+  'mid_lower_traps',
   'biceps',
   'triceps',
   'forearms',
@@ -1594,6 +1628,8 @@ export const STANDARD_MUSCLE_GROUPS = [
   'glute_med',
   'adductors',
   'calves',
+  'gastrocnemius',
+  'soleus',
   'abs',
   'obliques',
   'erectors',
@@ -1673,8 +1709,8 @@ export const DETAILED_TO_STANDARD_MAP: Record<DetailedMuscleGroup, StandardMuscl
   lats: 'lats',
   upper_back: 'upper_back',
   rhomboids: 'upper_back',
-  lower_traps: 'traps',
-  upper_traps: 'traps',
+  lower_traps: 'mid_lower_traps',
+  upper_traps: 'upper_traps',
   // Spine
   erectors: 'erectors',
   // Triceps
@@ -1702,8 +1738,8 @@ export const DETAILED_TO_STANDARD_MAP: Record<DetailedMuscleGroup, StandardMuscl
   adductors: 'adductors',
   abductors: 'glute_med', // Abductors perform hip abduction, same as glute_med
   // Calves
-  calves_gastrocnemius: 'calves',
-  calves_soleus: 'calves',
+  calves_gastrocnemius: 'gastrocnemius',
+  calves_soleus: 'soleus',
   // Core
   abs_rectus: 'abs',
   abs_obliques: 'obliques',
@@ -1721,11 +1757,11 @@ export const LEGACY_TO_STANDARD_MAP: Record<string, StandardMuscleGroup[]> = {
   'quads': ['quads'],
   'hamstrings': ['hamstrings'],
   'glutes': ['glutes', 'glute_med'],
-  'calves': ['calves'],
+  'calves': ['calves', 'gastrocnemius', 'soleus'],
   'abs': ['abs', 'obliques'],
   'adductors': ['adductors'],
   'forearms': ['forearms'],
-  'traps': ['traps'],
+  'traps': ['traps', 'upper_traps', 'mid_lower_traps'],
 };
 
 /**
@@ -1932,6 +1968,8 @@ export const STANDARD_MUSCLE_DISPLAY_NAMES: Record<StandardMuscleGroup, string> 
   lats: 'Lats',
   upper_back: 'Upper Back',
   traps: 'Traps',
+  upper_traps: 'Upper Traps',
+  mid_lower_traps: 'Mid/Lower Traps',
   biceps: 'Biceps',
   triceps: 'Triceps',
   forearms: 'Forearms',
@@ -1941,6 +1979,8 @@ export const STANDARD_MUSCLE_DISPLAY_NAMES: Record<StandardMuscleGroup, string> 
   glute_med: 'Glute Med',
   adductors: 'Adductors',
   calves: 'Calves',
+  gastrocnemius: 'Gastrocnemius',
+  soleus: 'Soleus',
   abs: 'Abs',
   obliques: 'Obliques',
   erectors: 'Erectors',

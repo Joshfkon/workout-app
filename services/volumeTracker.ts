@@ -44,7 +44,10 @@ export const SECONDARY_MUSCLE_CREDIT = 0.5;
  *
  * 'glutes' and 'abs' intentionally do NOT split: crediting glute_med/obliques
  * from every glute/ab exercise would over-credit muscles that usually need
- * direct work, and their MEV defaults already assume indirect fill.
+ * direct work, and their MEV defaults already assume indirect fill. 'traps'
+ * and 'calves' follow the same rule — a coarse tag stays on the coarse
+ * standard muscle and never leaks into upper_traps/mid_lower_traps or
+ * gastrocnemius/soleus (only fine-grained tagging feeds those).
  */
 const LEGACY_PRIMARY_VOLUME_WEIGHTS: Record<string, Partial<Record<StandardMuscleGroup, number>>> = {
   chest: { chest_upper: 0.5, chest_lower: 0.5 },
@@ -52,6 +55,8 @@ const LEGACY_PRIMARY_VOLUME_WEIGHTS: Record<string, Partial<Record<StandardMuscl
   shoulders: { front_delts: 1 / 3, lateral_delts: 1 / 3, rear_delts: 1 / 3 },
   glutes: { glutes: 1 },
   abs: { abs: 1 },
+  traps: { traps: 1 },
+  calves: { calves: 1 },
 };
 
 /** One standard muscle's share of an exercise's primary (direct) credit. */

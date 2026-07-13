@@ -164,6 +164,38 @@ describe('cross-surface parity (one fixture, four surfaces)', () => {
     }
   });
 
+  it('child sets roll up to the parent exactly once (no double-count, all groups expanded)', () => {
+    // Mixed coarse + fine tagging in the same week: coarse 'calves'/'traps'
+    // credit stays on the coarse standard bucket; fine tags credit the fine
+    // member. The parent row is the sum of its standard children — a set can
+    // never appear both as fine-child credit AND again as coarse credit.
+    const mixed = [
+      block('coarse-calf', 'calves', [], 5, 'Old Coarse Calf Raise'),
+      block('standing', 'gastrocnemius', ['soleus'], 4, 'Standing Calf Raise'),
+      block('seated', 'soleus', ['gastrocnemius'], 2, 'Seated Calf Raise'),
+      block('shrug', 'upper_traps', [], 3, 'Barbell Shrug'),
+      block('carry', 'forearms', ['traps'], 2, "Farmer's Carry"),
+    ];
+    const s = computeWeeklyMuscleVolume(mixed);
+    const r = computeReachableMuscles(mixed);
+    const rows = buildVolumeRows(s, r, {
+      expandedParents: new Set<CoarseMuscle>(['calves', 'traps']),
+    });
+
+    const calves = rows.find((x) => x.muscle === 'calves')!;
+    const calvesChildren = new Map(calves.children.map((c) => [c.muscle, c]));
+    // gastroc 4 + 0.5×2 = 5, soleus 2 + 0.5×4 = 4, coarse bucket 5 → parent 14.
+    expect(calvesChildren.get('gastrocnemius')!.sets).toBe(5);
+    expect(calvesChildren.get('soleus')!.sets).toBe(4);
+    expect(calves.sets).toBe(14);
+
+    const traps = rows.find((x) => x.muscle === 'traps')!;
+    const trapsChildren = new Map(traps.children.map((c) => [c.muscle, c]));
+    // upper 3, mid/lower 0, coarse bucket 0.5×2 = 1 → parent 4.
+    expect(trapsChildren.get('upper_traps')!.sets).toBe(3);
+    expect(traps.sets).toBe(4);
+  });
+
   it('a muscle at exactly MEV is in-zone (green) on every surface — target not punished', () => {
     // chest: bench 4 (chest) + no other chest work = 4 sets. Force it to MEV.
     const atMev = [block('press', 'chest', [], RESEARCH_VOLUME_BANDS.chest.mev, 'Press')];

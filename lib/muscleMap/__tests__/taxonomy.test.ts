@@ -1,15 +1,32 @@
 import { STANDARD_MUSCLE_GROUPS } from '@/types/schema';
 import { ALL_REGION_IDS, FRONT_REGIONS, BACK_REGIONS } from '../paths';
-import { MUSCLE_TO_REGIONS, MUSCLE_IDS, REGION_TO_MUSCLE } from '../taxonomy';
+import {
+  MUSCLE_TO_REGIONS,
+  MUSCLE_IDS,
+  REGION_TO_MUSCLE,
+  REGIONLESS_COARSE_MEMBERS,
+} from '../taxonomy';
 
 describe('muscleMap taxonomy', () => {
   it('covers every standard muscle group', () => {
     expect([...MUSCLE_IDS].sort()).toEqual([...STANDARD_MUSCLE_GROUPS].sort());
   });
 
-  it('maps every taxonomy member to at least one region', () => {
+  it('maps every taxonomy member to regions — directly, or via regionless-coarse members', () => {
     for (const muscle of MUSCLE_IDS) {
-      expect(MUSCLE_TO_REGIONS[muscle].length).toBeGreaterThanOrEqual(1);
+      const members = REGIONLESS_COARSE_MEMBERS[muscle];
+      if (members) {
+        // A regionless coarse id ('traps','calves') owns no path itself but its
+        // fine members must fully cover the area (≥1 region each), so a coarse
+        // tag still brightens the parent region through the adapters.
+        expect(MUSCLE_TO_REGIONS[muscle]).toHaveLength(0);
+        expect(members.length).toBeGreaterThanOrEqual(2);
+        for (const member of members) {
+          expect(MUSCLE_TO_REGIONS[member].length).toBeGreaterThanOrEqual(1);
+        }
+      } else {
+        expect(MUSCLE_TO_REGIONS[muscle].length).toBeGreaterThanOrEqual(1);
+      }
     }
   });
 
