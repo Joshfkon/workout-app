@@ -288,6 +288,7 @@ export async function programSessionHasUsableExercises(
     .from('exercises')
     .select('id')
     .in('name', unresolvedNames)
+    .is('deleted_at', null) // hide merge-soft-deleted duplicates
     .limit(1);
   return (data?.length ?? 0) > 0;
 }
@@ -497,6 +498,9 @@ export async function startMesocycleWorkoutSession(
         .from('exercises')
         .select('id, mechanic, default_rep_range, default_rir')
         .eq('name', exercise.exerciseName)
+        // Hide merge-soft-deleted duplicates: without this, a name shared with
+        // a merged loser returns 2+ rows and .single() errors -> block skipped.
+        .is('deleted_at', null)
         .single();
 
       // Use program_data's exerciseId ONLY if it's a real UUID — a placeholder
@@ -588,7 +592,8 @@ export async function startMesocycleWorkoutSession(
     const { data: exercises } = await supabase
       .from('exercises')
       .select('*')
-      .in('primary_muscle', muscleList);
+      .in('primary_muscle', muscleList)
+      .is('deleted_at', null); // hide merge-soft-deleted duplicates
 
     if (exercises && exercises.length > 0) {
       type ExerciseRow = { id: string; name: string; primary_muscle: string; mechanic: string; default_rep_range: number[]; default_rir: number };

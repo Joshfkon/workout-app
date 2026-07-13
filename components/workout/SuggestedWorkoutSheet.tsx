@@ -161,6 +161,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
             .select(
               'id, name, primary_muscle, secondary_muscles, movement_pattern, mechanic, default_rep_range, default_rir, hypertrophy_tier, equipment_required, is_bodyweight'
             )
+            .is('deleted_at', null) // hide merge-soft-deleted duplicates
             .order('name'),
           supabase
             .from('exercise_blocks')
