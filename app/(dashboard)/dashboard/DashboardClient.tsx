@@ -26,6 +26,7 @@ import type { BodyCompGlance } from '@/lib/actions/dashboard';
 import { computeWeightRate } from './_lib/weightRate';
 import { computeWeekSessions } from './_lib/weekSessions';
 import { useMuscleRecovery } from '@/hooks/useMuscleRecovery';
+import { useSleepLog } from '@/hooks/useSleepLog';
 import { calculateReadinessScore } from '@/services/fatigueEngine';
 import {
   applyDeloadToUpcomingWeek,
@@ -70,6 +71,11 @@ const HydrationTracker = dynamic(
 
 const CardioTracker = dynamic(
   () => import('@/components/dashboard/CardioTracker').then(mod => ({ default: mod.CardioTracker })),
+  { ssr: false, loading: () => <CardSkeleton /> }
+);
+
+const SleepQuickLog = dynamic(
+  () => import('@/components/dashboard/SleepQuickLog').then(mod => ({ default: mod.SleepQuickLog })),
   { ssr: false, loading: () => <CardSkeleton /> }
 );
 
@@ -275,7 +281,7 @@ function getWorkoutForDay(
   return { ...schedule[workoutIndex], dayNumber: dayIndex + 1 };
 }
 
-type QuickLogModal = 'weight' | 'water' | 'food' | 'cardio' | 'checkin';
+type QuickLogModal = 'weight' | 'water' | 'food' | 'cardio' | 'checkin' | 'sleep';
 
 export function DashboardClient({ initialData }: DashboardClientProps) {
   // If we have server-fetched initialData, skip loading state entirely
@@ -380,6 +386,10 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   // loading, the hook reports every muscle as ready (empty training map), so
   // the note is suppressed until real data arrives.
   const { recoveringMuscles, isLoading: recoveryLoading } = useMuscleRecovery();
+
+  // Sleep glance data for the grid's Sleep tile (last night + 7-day average +
+  // trailing-week sparkline). Same shared cache the quick-log sheet writes to.
+  const { entries: sleepEntries, lastNight, sevenDayAvgHours } = useSleepLog();
 
   // Time-based greeting + date — computed client-side after mount so the server render
   // (possibly a different timezone/hour, or across noon/midnight) doesn't cause a
@@ -1415,6 +1425,8 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         weightHistory={weightHistory}
         weightRate={weightRate}
         bodyComp={initialData?.bodyCompGlance ?? null}
+        sleep={{ entries: sleepEntries, lastNight, sevenDayAvgHours }}
+        onLogSleep={userId ? () => setActiveModal('sleep') : undefined}
         onLogWeight={() => setActiveModal('weight')}
         phase={normalizedGoal}
         eatingWindow={eatingWindow}
@@ -1471,6 +1483,12 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
       {activeModal === 'cardio' && userId && cardioPrescription && (
         <Modal isOpen onClose={() => setActiveModal(null)} title="Zone 2 cardio">
           <CardioTracker userId={userId} prescription={cardioPrescription} />
+        </Modal>
+      )}
+
+      {activeModal === 'sleep' && userId && (
+        <Modal isOpen onClose={() => setActiveModal(null)} title="Log sleep">
+          <SleepQuickLog onSaved={() => setActiveModal(null)} />
         </Modal>
       )}
 

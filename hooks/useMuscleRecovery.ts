@@ -9,11 +9,13 @@ import {
 } from '@/types/schema';
 import {
   computeMuscleRecovery,
+  computeSleepWindowMultiplier,
   recoveryConfigFor,
   type MuscleRecoveryResult,
 } from '@/services/muscleRecovery';
 import { useRecoveryHistory } from '@/hooks/useMuscleReadiness';
 import { useRecoveryMultipliers } from '@/hooks/useRecoveryMultipliers';
+import { useSleepLog } from '@/hooks/useSleepLog';
 
 /**
  * useMuscleRecovery — per-STANDARD-muscle recovery statuses for surfaces that
@@ -125,9 +127,17 @@ export function useMuscleRecovery(): UseMuscleRecoveryResult {
   const { user: storeUser } = useUserStore();
   const enhancedAthleteMode = storeUser?.enhancedAthleteMode === true;
   const { multipliers } = useRecoveryMultipliers();
+  // Recent sleep scales every window: trailing-2-night avg <6h stretches
+  // recovery ×1.15; ≥8h of good-quality sleep shrinks it ×0.95.
+  const { entries: sleepEntries } = useSleepLog();
   const config = useMemo(
-    () => recoveryConfigFor(enhancedAthleteMode, multipliers),
-    [enhancedAthleteMode, multipliers]
+    () =>
+      recoveryConfigFor(
+        enhancedAthleteMode,
+        multipliers,
+        computeSleepWindowMultiplier(sleepEntries, now)
+      ),
+    [enhancedAthleteMode, multipliers, sleepEntries, now]
   );
 
   const recoveryStatus = useMemo(

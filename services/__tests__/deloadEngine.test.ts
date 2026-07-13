@@ -12,10 +12,14 @@ import {
   assessFatigueScore,
   analyzeFatigueTrend,
   computeJointPainSignal,
+  computeSleepDebtSignal,
   JOINT_PAIN_SEVERITY_WEIGHTS,
   JOINT_PAIN_WINDOW_DAYS,
   JOINT_PAIN_MAX_SCORE,
   JOINT_PAIN_TRIGGER_THRESHOLD,
+  SLEEP_DEBT_AVG_THRESHOLD_HOURS,
+  SLEEP_DEBT_MAX_SCORE,
+  SLEEP_DEBT_WINDOW_DAYS,
 } from '../deloadEngine';
 
 import type {
@@ -727,5 +731,137 @@ describe('calculateFatigueScore with jointPainScore', () => {
     const boolPain = createMockPerformanceData({ jointPain: true });
 
     expect(calculateFatigueScore(boolPain) - calculateFatigueScore(base)).toBe(10);
+  });
+});
+
+// ============================================
+// CHRONIC SHORT SLEEP SIGNAL (SIGNAL 7)
+// ============================================
+
+const SLEEP_NOW = new Date('2026-07-11T12:00:00');
+
+/** YYYY-MM-DD local-day string for SLEEP_NOW minus `days`. */
+function sleepDayAgo(days: number): string {
+  const d = new Date(SLEEP_NOW.getTime() - days * 24 * 60 * 60 * 1000);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${dd}`;
+}
+
+/** A full week of nights at the given hours (index 0 = last night). */
+function weekOfNights(hoursPerNight: number[]): { localDay: string; hours: number }[] {
+  return hoursPerNight.map((hours, i) => ({ localDay: sleepDayAgo(i), hours }));
+}
+
+describe('computeSleepDebtSignal', () => {
+  it('a 5.9h weekly average yields a small score and the labeled evidence line', () => {
+    const signal = computeSleepDebtSignal(
+      weekOfNights([5.5, 6, 6.5, 5.5, 6, 6, 5.8]), // avg ≈ 5.9
+      SLEEP_NOW
+    );
+
+    expect(signal.avgHours).toBeCloseTo(5.9, 1);
+    expect(signal.evidence).toBe(
+      `Averaging ${signal.avgHours!.toFixed(1)}h sleep over the last week`
+    );
+    expect(signal.evidence).toContain('5.9h sleep');
+    expect(signal.score).toBeGreaterThan(0);
+    expect(signal.score).toBeLessThanOrEqual(SLEEP_DEBT_MAX_SCORE);
+  });
+
+  it('an average at/above the 6.5h threshold produces no signal', () => {
+    const signal = computeSleepDebtSignal(weekOfNights([6.5, 7, 6.5, 7, 8, 7, 6.5]), SLEEP_NOW);
+    expect(signal.score).toBe(0);
+    expect(signal.evidence).toBeNull();
+    expect(signal.avgHours).toBeGreaterThanOrEqual(SLEEP_DEBT_AVG_THRESHOLD_HOURS);
+  });
+
+  it('fewer than SLEEP_DEBT_MIN_NIGHTS logged nights is not "chronic" — no signal', () => {
+    const signal = computeSleepDebtSignal(weekOfNights([4, 4]), SLEEP_NOW);
+    expect(signal.score).toBe(0);
+    expect(signal.avgHours).toBeNull();
+    expect(signal.evidence).toBeNull();
+  });
+
+  it('caps the score at SLEEP_DEBT_MAX_SCORE for extreme deprivation', () => {
+    const signal = computeSleepDebtSignal(weekOfNights([2, 2, 2, 2, 2, 2, 2]), SLEEP_NOW);
+    expect(signal.score).toBe(SLEEP_DEBT_MAX_SCORE);
+  });
+
+  it('ignores nights outside the trailing window (and future days)', () => {
+    const signal = computeSleepDebtSignal(
+      [
+        { localDay: sleepDayAgo(SLEEP_DEBT_WINDOW_DAYS + 2), hours: 2 },
+        { localDay: sleepDayAgo(SLEEP_DEBT_WINDOW_DAYS + 3), hours: 2 },
+        { localDay: sleepDayAgo(-1), hours: 2 }, // future
+        { localDay: sleepDayAgo(0), hours: 8 },
+        { localDay: sleepDayAgo(1), hours: 8 },
+        { localDay: sleepDayAgo(2), hours: 8 },
+      ],
+      SLEEP_NOW
+    );
+    expect(signal.score).toBe(0);
+    expect(signal.avgHours).toBeCloseTo(8, 5);
+  });
+});
+
+describe('checkDeloadTriggers with chronic short sleep', () => {
+  const sleepSignal = { sleepDebtScore: 2, sleepDebtEvidence: 'Averaging 5.9h sleep over the last week' };
+
+  it('appends the evidence line when a real trigger fires', () => {
+    const result = checkDeloadTriggers(
+      [
+        createMockPerformanceData({ weekNumber: 1, perceivedFatigue: 3 }),
+        createMockPerformanceData({ weekNumber: 2, perceivedFatigue: 4, ...sleepSignal }),
+      ],
+      createMockProfile(),
+      createMockPeriodization()
+    );
+
+    expect(result.shouldDeload).toBe(true);
+    expect(result.reasons).toContain('Averaging 5.9h sleep over the last week');
+  });
+
+  it('never forces a deload on its own — even for novices', () => {
+    const calm = [
+      createMockPerformanceData({ weekNumber: 1 }),
+      createMockPerformanceData({ weekNumber: 2, ...sleepSignal }),
+    ];
+
+    expect(
+      checkDeloadTriggers(calm, createMockProfile(), createMockPeriodization()).shouldDeload
+    ).toBe(false);
+    expect(
+      checkDeloadTriggers(calm, createMockProfile({ experience: 'novice' }), createMockPeriodization())
+        .shouldDeload
+    ).toBe(false);
+  });
+
+  it('does not count toward the advanced two-trigger requirement', () => {
+    // One real trigger + the sleep evidence: advanced lifters still need 2 REAL markers.
+    const result = checkDeloadTriggers(
+      [
+        createMockPerformanceData({ weekNumber: 1, perceivedFatigue: 3 }),
+        createMockPerformanceData({ weekNumber: 2, perceivedFatigue: 4, ...sleepSignal }),
+      ],
+      createMockProfile({ experience: 'advanced' }),
+      createMockPeriodization()
+    );
+    expect(result.shouldDeload).toBe(false);
+  });
+});
+
+describe('calculateFatigueScore with sleepDebtScore', () => {
+  it('adds the capped sleep bump to the score', () => {
+    const base = createMockPerformanceData();
+    const withSleepDebt = createMockPerformanceData({ sleepDebtScore: 5 });
+    expect(calculateFatigueScore(withSleepDebt) - calculateFatigueScore(base)).toBe(5);
+  });
+
+  it('caps the contribution at SLEEP_DEBT_MAX_SCORE', () => {
+    const base = createMockPerformanceData();
+    const huge = createMockPerformanceData({ sleepDebtScore: 999 });
+    expect(calculateFatigueScore(huge) - calculateFatigueScore(base)).toBe(SLEEP_DEBT_MAX_SCORE);
   });
 });
