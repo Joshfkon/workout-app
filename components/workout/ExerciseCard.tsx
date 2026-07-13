@@ -3032,6 +3032,22 @@ export const ExerciseCard = memo(function ExerciseCard({
     prevProps.block.targetRepRange[0] === nextProps.block.targetRepRange[0] &&
     prevProps.block.targetRepRange[1] === nextProps.block.targetRepRange[1] &&
     prevProps.block.targetRir === nextProps.block.targetRir &&
+    // Per-exercise feedback chips (pump/workload live on the block)
+    prevProps.block.pump === nextProps.block.pump &&
+    prevProps.block.workload === nextProps.block.workload &&
+    // Subjective-feedback prompts arrive ASYNC after mount (previous-session
+    // lookup, pain-event fetch) — without these comparisons the card would
+    // never re-render to show them.
+    (prevProps.sorenessPrompt === null) === (nextProps.sorenessPrompt === null) &&
+    prevProps.sorenessPrompt?.muscle === nextProps.sorenessPrompt?.muscle &&
+    prevProps.sorenessPrompt?.answered === nextProps.sorenessPrompt?.answered &&
+    (prevProps.painNotice === null) === (nextProps.painNotice === null) &&
+    prevProps.painNotice?.joint === nextProps.painNotice?.joint &&
+    prevProps.painNotice?.count === nextProps.painNotice?.count &&
+    // Set-level discomfort flags drive the 'stop' suggestion softening + row icons
+    prevProps.sets.every(
+      (s, i) => s.feedback?.discomfort?.severity === nextProps.sets[i]?.feedback?.discomfort?.severity
+    ) &&
     prevProps.sets.length === nextProps.sets.length &&
     // Compare set content (RPE, form, weight, reps) to detect feedback updates
     prevProps.sets.every((s, i) =>

@@ -57,15 +57,17 @@ async function main() {
         },
       ]);
     }
-    return json(r, [
-      {
-        id: SESSION_ID,
-        user_id: 'test-user-id',
-        state: 'in_progress',
-        started_at: new Date(Date.now() - 60_000).toISOString(),
-        completed_at: null,
-      },
-    ]);
+    // The page loads the live session with .single() — serve an object when
+    // PostgREST's single-object Accept header is present, else an array.
+    const row = {
+      id: SESSION_ID,
+      user_id: 'test-user-id',
+      state: 'in_progress',
+      started_at: new Date(Date.now() - 60_000).toISOString(),
+      completed_at: null,
+    };
+    const wantsObject = (r.request().headers()['accept'] ?? '').includes('object');
+    return json(r, wantsObject ? row : [row]);
   });
 
   await page.route('**/rest/v1/exercise_blocks**', (r) => {
@@ -131,9 +133,11 @@ async function main() {
   await page.goto(`${BASE}/dashboard/workout/${SESSION_ID}`, { waitUntil: 'domcontentloaded' });
   await page.getByText('Back Squat').first().waitFor({ timeout: 15000 });
 
-  // 1. Soreness chips render inline (quads trained 2 days ago).
+  // 1. Soreness chips render inline (quads trained 2 days ago). The ask is
+  //    armed by an async previous-session lookup, so allow it time to land
+  //    before logging anything.
   const sorenessRow = page.getByTestId('soreness-chip-row');
-  await sorenessRow.waitFor({ state: 'visible', timeout: 10000 }).catch(() => {});
+  await sorenessRow.waitFor({ state: 'visible', timeout: 30000 }).catch(() => {});
   assert(await sorenessRow.isVisible().catch(() => false), 'soreness chip row renders inline on the first quads exercise');
   assert((await page.locator('[role="dialog"], .modal').count()) === 0, 'no modal/popup anywhere');
   await page.screenshot({ path: `${out}feedback-1-soreness-row.png` });
@@ -145,6 +149,7 @@ async function main() {
   await logButton.click(); // <-- the ONLY tap
   await page.getByText(/Set 1 ·/).waitFor({ timeout: 10000 });
   assert(true, 'one tap on "Log set" logged the set with all prompts ignored');
+  await sorenessRow.waitFor({ state: 'detached', timeout: 5000 }).catch(() => {});
   assert(!(await sorenessRow.isVisible().catch(() => false)), 'ignored soreness ask dismissed by logging (records null, never re-asked)');
   await page.screenshot({ path: `${out}feedback-2-logged-ignoring.png` });
 
