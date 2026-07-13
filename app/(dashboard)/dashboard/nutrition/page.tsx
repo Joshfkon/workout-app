@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback, useMemo, Suspense } from 'react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { useQueryClient, useIsRestoring } from '@tanstack/react-query';
 import dynamic from 'next/dynamic';
 import { Card, CardHeader, CardTitle, CardContent, Button, LoadingAnimation, SwipeableRow, ToastContainer, useToasts } from '@/components/ui';
@@ -212,8 +212,18 @@ function MealSectionSkeleton() {
 
 function NutritionPageContent() {
   // Defer date initialization to client to prevent hydration mismatches
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [isMounted, setIsMounted] = useState(false);
+  // Lazily initialized on the client so a REMOUNT never flashes the
+  // full-screen loader: changing the ?tab= search param remounts page.tsx
+  // (the App Router keys the page segment by its search params — true for
+  // history.replaceState sync and router.replace alike), and with these
+  // starting null/false the first frames rendered the isColdStart branch
+  // even with a warm cache. Server-side they stay null/false, which is safe:
+  // this page suspends at prerender (useSearchParams), so its HTML is never
+  // server-rendered and there's nothing to mismatch on hydration.
+  const [selectedDate, setSelectedDate] = useState<string | null>(() =>
+    typeof window === 'undefined' ? null : getLocalDateString()
+  );
+  const [isMounted, setIsMounted] = useState(() => typeof window !== 'undefined');
   const [weightEntries, setWeightEntries] = useState<WeightLogEntry[]>([]);
   const [nutritionTargets, setNutritionTargets] = useState<NutritionTargets | null>(null);
   const [customFoods, setCustomFoods] = useState<CustomFood[]>([]);
@@ -255,7 +265,6 @@ function NutritionPageContent() {
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
   const [openMealMenu, setOpenMealMenu] = useState<MealType | null>(null);
-  const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<NutritionTab>(
@@ -271,8 +280,14 @@ function NutritionPageContent() {
 
   const handleTabChange = (tab: NutritionTab) => {
     setActiveTab(tab);
-    // Keep the URL linkable without stacking history entries per tap.
-    router.replace(tab === 'log' ? pathname : `${pathname}?tab=${tab}`, { scroll: false });
+    // Keep the URL linkable without stacking history entries per tap — via
+    // the native History API (shallow; supported by Next 14.1+, which keeps
+    // useSearchParams in sync). router.replace with a searchParams change is
+    // a REAL navigation: it re-fetches the route's RSC payload, shows the
+    // route's loading.tsx skeleton while it's in flight, and remounts the
+    // page — a full-page loading flash on every tab tap. The tab panes
+    // already switch via CSS; nothing needs the server.
+    window.history.replaceState(null, '', tab === 'log' ? pathname : `${pathname}?tab=${tab}`);
   };
 
   // Notification for macro updates
