@@ -16,7 +16,7 @@
  *    so the heuristic can be re-tuned in one place.
  */
 
-import { resolveMuscleToStandard, type StandardMuscleGroup } from '@/types/schema';
+import { resolveMuscleToStandard, type StandardMuscleGroup, type SleepQuality } from '@/types/schema';
 import { ENHANCED_RECOVERY_MULTIPLIER } from '@/services/shared/fatigueConstants';
 import { composeGlobalRecoveryScale } from '@/services/wearableRecovery';
 
@@ -70,6 +70,25 @@ export interface RecoveryConfig {
    * Applied on top of `windowScale` (the global athlete-profile scalar).
    */
   recoveryMultiplierByMuscle: Partial<Record<StandardMuscleGroup, number>>;
+  /**
+   * Global multiplier from recent SLEEP, applied to every muscle's window on
+   * top of `windowScale` and the learned per-muscle multiplier. Resolve it
+   * from logged sleep with `computeSleepWindowMultiplier` (trailing-2-night
+   * average): short sleep stretches windows ×`sleepShortWindowMultiplier`,
+   * long good-quality sleep shrinks them ×`sleepGoodWindowMultiplier`.
+   * 1 when no recent sleep is logged.
+   */
+  sleepWindowMultiplier: number;
+  /** Trailing-2-night average BELOW this (hours) reads as short sleep. */
+  sleepShortAvgHours: number;
+  /** Window multiplier for short sleep (modest, documented: +15%). */
+  sleepShortWindowMultiplier: number;
+  /** Trailing-2-night average AT/ABOVE this (hours) can read as good sleep… */
+  sleepGoodAvgHours: number;
+  /** …when every considered night's quality is 'good' (−5%). */
+  sleepGoodWindowMultiplier: number;
+  /** Only nights this many local days back count as "recent" sleep. */
+  sleepLookbackDays: number;
 }
 
 /** Hard bounds for the learned per-muscle recovery multiplier. */
@@ -106,6 +125,12 @@ export const RECOVERY_CONFIG: RecoveryConfig = {
   recoveringThreshold: 0.6,
   windowScale: 1,
   recoveryMultiplierByMuscle: {},
+  sleepWindowMultiplier: 1,
+  sleepShortAvgHours: 6,
+  sleepShortWindowMultiplier: 1.15,
+  sleepGoodAvgHours: 8,
+  sleepGoodWindowMultiplier: 0.95,
+  sleepLookbackDays: 2,
 };
 
 /**
@@ -123,18 +148,83 @@ export const RECOVERY_CONFIG: RecoveryConfig = {
 export function recoveryConfigFor(
   enhancedAthleteMode: boolean,
   recoveryMultiplierByMuscle?: Partial<Record<StandardMuscleGroup, number>>,
+  sleepWindowMultiplier?: number,
   wearableRecoveryScale?: number
 ): RecoveryConfig {
   const baseScale = enhancedAthleteMode ? 1 / ENHANCED_RECOVERY_MULTIPLIER : 1;
   const windowScale = composeGlobalRecoveryScale(baseScale, wearableRecoveryScale ?? 1);
-  const config =
+  let config =
     windowScale === RECOVERY_CONFIG.windowScale
       ? RECOVERY_CONFIG
       : { ...RECOVERY_CONFIG, windowScale };
-  if (!recoveryMultiplierByMuscle || Object.keys(recoveryMultiplierByMuscle).length === 0) {
-    return config;
+  if (recoveryMultiplierByMuscle && Object.keys(recoveryMultiplierByMuscle).length > 0) {
+    config = { ...config, recoveryMultiplierByMuscle };
   }
-  return { ...config, recoveryMultiplierByMuscle };
+  if (sleepWindowMultiplier !== undefined && sleepWindowMultiplier !== config.sleepWindowMultiplier) {
+    config = { ...config, sleepWindowMultiplier };
+  }
+  return config;
+}
+
+// ---------------------------------------------------------------------------
+// Sleep adjustment
+// ---------------------------------------------------------------------------
+
+/** One logged night, as read from sleep_log. */
+export interface SleepNight {
+  /** YYYY-MM-DD local day the night was logged against. */
+  localDay: string;
+  hours: number;
+  quality: SleepQuality;
+}
+
+/** YYYY-MM-DD for a Date in LOCAL time (matches lib/utils.getLocalDateString). */
+function localDayString(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+/**
+ * Resolve the global sleep window multiplier from recent logged nights
+ * (trailing-2-night average, per the ticket's documented constants):
+ *  - average < sleepShortAvgHours (6h)            → ×1.15 (windows stretch)
+ *  - average ≥ sleepGoodAvgHours (8h), all 'good' → ×0.95 (windows shrink)
+ *  - anything else, or no night logged within sleepLookbackDays → ×1
+ *
+ * Pure: `now` is injected like everywhere else in this module. Only nights
+ * within the lookback window count, so a stale entry from last month can
+ * never masquerade as "last night".
+ */
+export function computeSleepWindowMultiplier(
+  nights: SleepNight[],
+  now: Date,
+  config: RecoveryConfig = RECOVERY_CONFIG
+): number {
+  const cutoff = localDayString(
+    new Date(now.getTime() - config.sleepLookbackDays * 24 * MS_PER_HOUR)
+  );
+  const today = localDayString(now);
+  const recent = nights
+    .filter(
+      (n) =>
+        n.localDay >= cutoff &&
+        n.localDay <= today &&
+        Number.isFinite(n.hours) &&
+        n.hours >= 0
+    )
+    .sort((a, b) => b.localDay.localeCompare(a.localDay))
+    .slice(0, 2);
+
+  if (recent.length === 0) return 1;
+
+  const avg = recent.reduce((sum, n) => sum + n.hours, 0) / recent.length;
+  if (avg < config.sleepShortAvgHours) return config.sleepShortWindowMultiplier;
+  if (avg >= config.sleepGoodAvgHours && recent.every((n) => n.quality === 'good')) {
+    return config.sleepGoodWindowMultiplier;
+  }
+  return 1;
 }
 
 /** Clamp a learned multiplier into its hard bounds. */
@@ -311,7 +401,15 @@ function windowForSession(
     config.recoveryMultiplierByMuscle[muscle] ?? 1
   );
 
-  return window * config.windowScale * learned;
+  // Global scalars compose multiplicatively — athlete profile × wearable
+  // (already folded into windowScale) × sleep — with the combined global
+  // effect clamped (×1.25 cap) so stacked bad signals whisper, never shout.
+  const globalScale = composeGlobalRecoveryScale(
+    config.windowScale,
+    config.sleepWindowMultiplier
+  );
+
+  return window * globalScale * learned;
 }
 
 /**

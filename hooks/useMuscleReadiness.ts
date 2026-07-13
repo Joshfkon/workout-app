@@ -17,9 +17,15 @@ import {
   type CoarseMuscle,
 } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 import { resolveMuscleToStandard } from '@/types/schema';
-import { recoveryConfigFor, type RecoverySession, type RecoveryExercise } from '@/services/muscleRecovery';
+import {
+  computeSleepWindowMultiplier,
+  recoveryConfigFor,
+  type RecoverySession,
+  type RecoveryExercise,
+} from '@/services/muscleRecovery';
 import { useRecoveryMultipliers } from '@/hooks/useRecoveryMultipliers';
 import { useWearableRecovery } from '@/hooks/useWearableRecovery';
+import { useSleepLog } from '@/hooks/useSleepLog';
 import {
   buildReadinessRows,
   selectGoodTargets,
@@ -297,12 +303,20 @@ export function useMuscleReadiness({
 
   // Enhanced athletes get shorter recovery windows (shared windowScale), the
   // learned per-muscle soreness multipliers scale each muscle's window, and
-  // the wearable HRV/RHR modifier stretches/shrinks all windows globally
-  // (bounded + composed in recoveryConfigFor).
+  // recent sleep scales ALL windows (trailing-2-night avg <6h → ×1.15;
+  // ≥8h good quality → ×0.95), and the wearable HRV/RHR modifier layers on
+  // top (bounded, composed + clamped globally in recoveryConfigFor).
   const enhancedAthleteMode = storeUser?.enhancedAthleteMode === true;
+  const { entries: sleepEntries } = useSleepLog();
   const recoveryConfig = useMemo(
-    () => recoveryConfigFor(enhancedAthleteMode, multipliers, wearableRecovery.scale),
-    [enhancedAthleteMode, multipliers, wearableRecovery.scale]
+    () =>
+      recoveryConfigFor(
+        enhancedAthleteMode,
+        multipliers,
+        computeSleepWindowMultiplier(sleepEntries, now),
+        wearableRecovery.scale
+      ),
+    [enhancedAthleteMode, multipliers, sleepEntries, now, wearableRecovery.scale]
   );
 
   const rows = useMemo(

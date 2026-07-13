@@ -37,6 +37,10 @@ import type {
 } from '@/types/training';
 import type { MuscleGroup } from '@/types/schema';
 import {
+  computeSleepDebtSignal,
+  SLEEP_DEBT_WINDOW_DAYS,
+} from '@/services/deloadEngine';
+import {
   EXERCISE_DATABASE,
   MUSCLE_FIBER_PROFILE,
   STRENGTH_STANDARDS,
@@ -1465,6 +1469,33 @@ export class ProgramEngine {
 
     if (profile.experience === 'novice' && reasons.length < 2) {
       shouldDeload = false;
+    }
+
+    // Signal 7: chronic short sleep (sleep_log 7-day average). A contributing
+    // evidence line only — appended after the trigger/experience logic so it
+    // labels the recommendation ("Averaging 5.9h sleep over the last week")
+    // but can never trip a deload on its own.
+    if (shouldDeload) {
+      try {
+        const now = new Date();
+        const cutoff = new Date(now);
+        cutoff.setDate(cutoff.getDate() - (SLEEP_DEBT_WINDOW_DAYS - 1));
+        const { data: sleepRows } = await this.supabase
+          .from('sleep_log')
+          .select('local_day, hours')
+          .eq('user_id', this.userId)
+          .gte('local_day', getLocalDateString(cutoff));
+        const sleep = computeSleepDebtSignal(
+          ((sleepRows ?? []) as { local_day: string; hours: number }[]).map((row) => ({
+            localDay: row.local_day,
+            hours: Number(row.hours),
+          })),
+          now
+        );
+        if (sleep.evidence) reasons.push(sleep.evidence);
+      } catch {
+        // Sleep evidence is best-effort — never block the deload check on it.
+      }
     }
 
     // Supporting signal only: a sustained HRV/RHR deviation streak from Apple

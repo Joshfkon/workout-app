@@ -104,26 +104,31 @@ describe('selectWritableSleepDays (manual entry always wins)', () => {
     { date: '2026-07-13', hours: 8.1 },
   ];
 
-  it('skips days with a manual entry, overwrites prior auto-fills, fills empty days', () => {
+  it('skips days with a manual sleep_log row, overwrites prior imports, fills empty days', () => {
     const writable = selectWritableSleepDays(days, [
-      { date: '2026-07-11', sleepHours: 6, sleepSource: 'manual' }, // user-entered — untouchable
-      { date: '2026-07-12', sleepHours: 7, sleepSource: 'healthkit' }, // own auto-fill — updatable
+      { localDay: '2026-07-11', source: 'manual' }, // user-entered — untouchable
+      { localDay: '2026-07-12', source: 'healthkit' }, // own import — updatable
       // 2026-07-13 has no row — writable
     ]);
     expect(writable.map((d) => d.date)).toEqual(['2026-07-12', '2026-07-13']);
   });
 
-  it('treats legacy rows (hours set, no source) as manual', () => {
+  it('treats rows with an unknown/missing source as manual (defensive)', () => {
     const writable = selectWritableSleepDays(days, [
-      { date: '2026-07-11', sleepHours: 6, sleepSource: null },
+      { localDay: '2026-07-11', source: null },
     ]);
     expect(writable.map((d) => d.date)).toEqual(['2026-07-12', '2026-07-13']);
   });
 
-  it('a row without sleep hours does not block auto-fill', () => {
-    const writable = selectWritableSleepDays(days, [
-      { date: '2026-07-11', sleepHours: null, sleepSource: null },
-    ]);
-    expect(writable).toHaveLength(3);
+  it('drops junk hours instead of writing them', () => {
+    const writable = selectWritableSleepDays(
+      [
+        { date: '2026-07-11', hours: 0 },
+        { date: '2026-07-12', hours: 25 },
+        { date: '2026-07-13', hours: 8 },
+      ],
+      []
+    );
+    expect(writable.map((d) => d.date)).toEqual(['2026-07-13']);
   });
 });

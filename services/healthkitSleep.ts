@@ -179,29 +179,28 @@ export function aggregateSleepSamples(samples: SleepSampleInput[]): NightSleep[]
   return result.sort((a, b) => a.localDay.localeCompare(b.localDay));
 }
 
-/** Existing daily_check_ins sleep state for the days a sync wants to write. */
+/** Existing sleep_log row state for the days a sync wants to write. */
 export interface ExistingSleepRow {
-  date: string;
-  sleepHours: number | null;
-  /** 'manual' | 'healthkit' | null (legacy manual rows have null). */
-  sleepSource: string | null;
+  /** Local day (YYYY-MM-DD) of the row. */
+  localDay: string;
+  /** 'manual' | 'healthkit' (defensively: unknown/null blocks like manual). */
+  source: string | null;
 }
 
 /**
- * Manual-correction-wins filter: HealthKit may only write days that are empty
- * or that it auto-filled itself. A row whose hours were set by the user
- * ('manual' source, or a legacy row with hours and no source) is untouchable.
+ * Manual-entry-wins filter: HealthKit may only write days that are empty or
+ * that it imported itself. Any row not explicitly tagged 'healthkit' was put
+ * there by the user (the quick-log sheet and check-in stamp 'manual') and is
+ * untouchable.
  */
 export function selectWritableSleepDays<T extends { date: string; hours: number }>(
   days: T[],
   existing: ExistingSleepRow[]
 ): T[] {
   const manualDates = new Set(
-    existing
-      .filter((row) => row.sleepHours != null && row.sleepSource !== 'healthkit')
-      .map((row) => row.date)
+    existing.filter((row) => row.source !== 'healthkit').map((row) => row.localDay)
   );
   return days.filter(
-    (day) => !manualDates.has(day.date) && day.hours > 0 && day.hours < 100
+    (day) => !manualDates.has(day.date) && day.hours > 0 && day.hours < 24
   );
 }

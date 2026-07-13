@@ -9,6 +9,9 @@ interface MetricTileProps {
   label: string;
   /** When set, the tile becomes a tap-through link to the detail page. */
   href?: string;
+  /** When set (and no href), the whole tile is a tap target — e.g. the Sleep
+   *  tile opening its inline log sheet instead of navigating. */
+  onClick?: () => void;
   /** Header-right action (e.g. the Weight tile's "+ log" button). With href,
    *  clicks on the action are kept from triggering the tile navigation. */
   action?: ReactNode;
@@ -18,7 +21,7 @@ interface MetricTileProps {
 }
 
 /** Shared shell for the dashboard glance tiles: bordered card + icon label row. */
-export function MetricTile({ icon: TileIcon, label, href, action, accent, children }: MetricTileProps) {
+export function MetricTile({ icon: TileIcon, label, href, onClick, action, accent, children }: MetricTileProps) {
   const borderClass = accent === 'warning' ? 'border-warning-500/40' : 'border-surface-800';
   const inner = (
     <>
@@ -49,6 +52,18 @@ export function MetricTile({ icon: TileIcon, label, href, action, accent, childr
       <Link href={href} className={`block bg-surface-900 border ${borderClass} rounded-xl p-3 hover:bg-surface-800/50 transition-colors`}>
         {inner}
       </Link>
+    );
+  }
+
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className={`block w-full text-left bg-surface-900 border ${borderClass} rounded-xl p-3 hover:bg-surface-800/50 transition-colors`}
+      >
+        {inner}
+      </button>
     );
   }
 

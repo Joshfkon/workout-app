@@ -86,12 +86,14 @@ export async function getHealthKitSyncContext(): Promise<HealthKitSyncContext> {
 }
 
 /**
- * Write HealthKit sleep nights into daily check-ins.
+ * Write HealthKit sleep nights into sleep_log (one row per local day).
  *
- * Manual entries ALWAYS win: a row whose sleep_hours was set by the user
- * (sleep_source 'manual', or a legacy row with hours and no source) is left
- * untouched. Only empty days and previous auto-fills are written, tagged
- * sleep_source='healthkit'.
+ * Manual entries ALWAYS win: a day whose sleep_log row was saved by the user
+ * (source 'manual' — the quick-log sheet and daily check-in both stamp it) is
+ * left untouched. Only empty days and previous HealthKit imports are written,
+ * with source='healthkit'. Quality is user-perceived and HealthKit has no
+ * signal for it, so imports use the neutral 'ok' — a later manual save
+ * replaces the whole row anyway.
  */
 export async function saveHealthKitSleepDays(
   days: HealthKitSleepDay[]
@@ -106,34 +108,29 @@ export async function saveHealthKitSleepDays(
 
   const dates = days.map((d) => d.date);
   const { data: existingRows } = await supabase
-    .from('daily_check_ins')
-    .select('date, sleep_hours, sleep_source')
+    .from('sleep_log')
+    .select('local_day, source')
     .eq('user_id', user.id)
-    .in('date', dates);
+    .in('local_day', dates);
 
   const writable = selectWritableSleepDays(
     days,
-    ((existingRows ?? []) as {
-      date: string;
-      sleep_hours: number | null;
-      sleep_source: string | null;
-    }[]).map((row) => ({
-      date: row.date,
-      sleepHours: row.sleep_hours,
-      sleepSource: row.sleep_source,
-    }))
+    ((existingRows ?? []) as { local_day: string; source: string | null }[]).map(
+      (row) => ({ localDay: row.local_day, source: row.source })
+    )
   );
   if (writable.length === 0) return { saved: 0, success: true };
 
-  const { error } = await supabase.from('daily_check_ins').upsert(
+  const { error } = await supabase.from('sleep_log').upsert(
     writable.map((day) => ({
       user_id: user.id,
-      date: day.date,
-      sleep_hours: Math.round(day.hours * 10) / 10,
-      sleep_source: 'healthkit',
+      local_day: day.date,
+      hours: Math.round(day.hours * 10) / 10,
+      quality: 'ok',
+      source: 'healthkit',
       updated_at: new Date().toISOString(),
     })),
-    { onConflict: 'user_id,date' }
+    { onConflict: 'user_id,local_day' }
   );
 
   if (error) {

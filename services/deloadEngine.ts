@@ -73,6 +73,102 @@ export function computeJointPainSignal(
 }
 
 // ============================================================
+// CHRONIC SHORT SLEEP SIGNAL (deload signal 7)
+// ============================================================
+
+/** Trailing window over which logged sleep feeds the deload signal. */
+export const SLEEP_DEBT_WINDOW_DAYS = 7;
+
+/** A trailing average BELOW this many hours reads as chronic short sleep. */
+export const SLEEP_DEBT_AVG_THRESHOLD_HOURS = 6.5;
+
+/**
+ * Cap on the sleep contribution to the fatigue score — a SMALL bump (under
+ * the joint-pain signal's 10) so chronic short sleep can strengthen a deload
+ * case but never force one single-handedly.
+ */
+export const SLEEP_DEBT_MAX_SCORE = 8;
+
+/** Fatigue points per hour of average shortfall below the threshold. */
+export const SLEEP_DEBT_POINTS_PER_HOUR = 4;
+
+/** Nights required inside the window before the average is trusted. */
+export const SLEEP_DEBT_MIN_NIGHTS = 3;
+
+/** One logged night, as read from sleep_log. */
+export interface SleepSignalNight {
+  /** YYYY-MM-DD local day the night was logged against. */
+  localDay: string;
+  hours: number;
+}
+
+export interface SleepDebtSignal {
+  /** Capped 0-SLEEP_DEBT_MAX_SCORE fatigue-score contribution. */
+  score: number;
+  /** Trailing average (hours) over the window, or null with too few nights. */
+  avgHours: number | null;
+  /** Evidence line for the deload reasons list, or null when not triggered. */
+  evidence: string | null;
+}
+
+/** YYYY-MM-DD for a Date in LOCAL time (matches lib/utils.getLocalDateString). */
+function localDayString(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+/**
+ * Deload signal 7: chronic short sleep. Averages the logged nights in the
+ * trailing SLEEP_DEBT_WINDOW_DAYS; an average under
+ * SLEEP_DEBT_AVG_THRESHOLD_HOURS yields a small capped score bump plus a
+ * labeled evidence line ("Averaging 5.9h sleep over the last week"). Fewer
+ * than SLEEP_DEBT_MIN_NIGHTS logged nights → no signal (one rough night is
+ * not "chronic").
+ */
+export function computeSleepDebtSignal(
+  nights: SleepSignalNight[],
+  now: Date
+): SleepDebtSignal {
+  const today = localDayString(now);
+  const cutoff = localDayString(
+    new Date(now.getTime() - (SLEEP_DEBT_WINDOW_DAYS - 1) * 24 * 60 * 60 * 1000)
+  );
+  // One entry per local day by construction (sleep_log unique constraint);
+  // dedupe defensively anyway so a bad feed can't double-count a night.
+  const byDay = new Map<string, number>();
+  for (const night of nights) {
+    if (night.localDay < cutoff || night.localDay > today) continue;
+    if (!Number.isFinite(night.hours) || night.hours < 0) continue;
+    byDay.set(night.localDay, night.hours);
+  }
+
+  if (byDay.size < SLEEP_DEBT_MIN_NIGHTS) {
+    return { score: 0, avgHours: null, evidence: null };
+  }
+
+  const hours = Array.from(byDay.values());
+  const avgHours = hours.reduce((a, b) => a + b, 0) / hours.length;
+  if (avgHours >= SLEEP_DEBT_AVG_THRESHOLD_HOURS) {
+    return { score: 0, avgHours, evidence: null };
+  }
+
+  const score = Math.min(
+    SLEEP_DEBT_MAX_SCORE,
+    Math.max(
+      1,
+      Math.round((SLEEP_DEBT_AVG_THRESHOLD_HOURS - avgHours) * SLEEP_DEBT_POINTS_PER_HOUR)
+    )
+  );
+  return {
+    score,
+    avgHours,
+    evidence: `Averaging ${avgHours.toFixed(1)}h sleep over the last week`,
+  };
+}
+
+// ============================================================
 // REACTIVE DELOAD DETECTION
 // ============================================================
 
@@ -164,6 +260,14 @@ export function checkDeloadTriggers(
   // movement patterns. They can handle more fatigue markers before needing deload.
   if (profile.experience === 'advanced' && reasons.length < 2) {
     shouldDeload = false;
+  }
+
+  // === SIGNAL 7: Chronic short sleep (contributing evidence, never forcing) ===
+  // Appended AFTER the trigger/experience logic so it can label the evidence
+  // list ("Averaging 5.9h sleep…") and bump the fatigue score (see
+  // calculateFatigueScore) without ever tripping a deload on its own.
+  if (lastWeek.sleepDebtEvidence && (lastWeek.sleepDebtScore ?? 0) > 0) {
+    reasons.push(lastWeek.sleepDebtEvidence);
   }
 
   // === SUPPORTING SIGNAL: sustained wearable deviation (HRV low / RHR high) ===
@@ -407,6 +511,12 @@ export function calculateFatigueScore(performance: WeeklyPerformanceData): numbe
   
   // Strength decline (0-5 points)
   if (performance.strengthDecline) score += 5;
+
+  // Chronic short sleep (0-8 points) — the capped signal-7 bump from
+  // computeSleepDebtSignal (7d avg under 6.5h). Absent = no contribution.
+  if (performance.sleepDebtScore !== undefined) {
+    score += Math.min(SLEEP_DEBT_MAX_SCORE, Math.max(0, performance.sleepDebtScore));
+  }
 
   // Sustained wearable deviation (0-8 points, capped) — HRV below / resting
   // HR above baseline for 5+ straight days. See services/wearableRecovery.ts.

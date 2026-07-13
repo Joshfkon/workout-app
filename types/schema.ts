@@ -618,13 +618,6 @@ export interface DailyCheckIn {
   /** Hours of sleep */
   sleepHours?: number | null;
 
-  /**
-   * Where sleepHours came from: 'healthkit' = auto-filled from Apple Health
-   * (safe to overwrite on the next sync), 'manual'/null = user-entered
-   * (always wins over auto-fill).
-   */
-  sleepSource?: 'manual' | 'healthkit' | null;
-
   /** Sleep quality (1-5) */
   sleepQuality?: Rating | null;
   
@@ -651,9 +644,49 @@ export interface DailyCheckIn {
   
   /** Free-form notes */
   notes?: string;
-  
+
   /** Timestamp */
   createdAt: string;
+}
+
+// ============ SLEEP LOG ============
+
+/** Three-level sleep quality captured by the check-in / Sleep card. */
+export const SLEEP_QUALITIES = ['poor', 'ok', 'good'] as const;
+export type SleepQuality = (typeof SLEEP_QUALITIES)[number];
+
+/** Where a sleep entry came from. Phase 2 adds 'healthkit' (Apple Health import). */
+export type SleepSource = 'manual' | 'healthkit';
+
+/**
+ * One night of sleep — one entry per user per LOCAL day (the morning it was
+ * logged against), editable. Maps to the sleep_log table.
+ */
+export interface SleepLogEntry {
+  /** YYYY-MM-DD in the user's local timezone (getLocalDateString). */
+  localDay: string;
+  /** Hours slept, 0.5 increments in the UI. */
+  hours: number;
+  quality: SleepQuality;
+  source: SleepSource;
+}
+
+/**
+ * Bridge between the three sleep-quality chips and the 1-5 Rating scale the
+ * daily check-in / readiness scorer already use (daily_check_ins.sleep_quality).
+ */
+export const SLEEP_QUALITY_TO_RATING: Record<SleepQuality, Rating> = {
+  poor: 2,
+  ok: 3,
+  good: 4,
+};
+
+/** Inverse bridge for prefills from a stored 1-5 rating. */
+export function ratingToSleepQuality(rating: Rating | null | undefined): SleepQuality {
+  if (rating == null) return 'ok';
+  if (rating <= 2) return 'poor';
+  if (rating >= 4) return 'good';
+  return 'ok';
 }
 
 // ============ EXERCISE BLOCK ============
@@ -1583,6 +1616,18 @@ export interface WeeklyPerformanceData {
    * When present it replaces the boolean's flat 10-point contribution.
    */
   jointPainScore?: number;
+  /**
+   * Chronic-short-sleep signal for the week (deload signal 7), from sleep_log
+   * over the trailing window — see `computeSleepDebtSignal` in
+   * services/deloadEngine.ts. 0-SLEEP_DEBT_MAX_SCORE (capped) fatigue-score
+   * contribution; never forces a deload on its own.
+   */
+  sleepDebtScore?: number;
+  /**
+   * Human-readable evidence for the sleep signal ("Averaging 5.9h sleep over
+   * the last week"), appended to the deload reasons list when present.
+   */
+  sleepDebtEvidence?: string | null;
   strengthDecline: boolean;
   /**
    * True when this week was a deload (light) week. Deload weeks reset the

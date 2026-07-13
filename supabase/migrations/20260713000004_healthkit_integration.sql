@@ -1,21 +1,11 @@
--- HealthKit (Apple Health) read-only integration: sleep auto-fill source,
--- daily wellness metrics (HRV / resting HR), and per-type sync anchors.
--- All changes are additive; no existing rows are modified.
+-- HealthKit (Apple Health) read-only integration: daily wellness metrics
+-- (HRV / resting HR) and per-type sync anchors. All changes are additive.
+-- Sleep needs no schema change here: HealthKit sleep imports write to the
+-- sleep_log table (20260714000001_sleep_log.sql), whose `source` column
+-- ('manual' | 'healthkit') already encodes manual-entry-wins semantics.
 
 -- ---------------------------------------------------------------------------
--- 1. Sleep source on daily_check_ins
---    NULL / 'manual'  -> user-entered (manual ALWAYS wins over auto-fill)
---    'healthkit'      -> auto-filled from Apple Health, safe to overwrite
--- ---------------------------------------------------------------------------
-ALTER TABLE daily_check_ins
-  ADD COLUMN IF NOT EXISTS sleep_source TEXT
-  CHECK (sleep_source IN ('manual', 'healthkit'));
-
-COMMENT ON COLUMN daily_check_ins.sleep_source IS
-  'Origin of sleep_hours: NULL/manual = user-entered (always wins), healthkit = auto-filled from Apple Health';
-
--- ---------------------------------------------------------------------------
--- 2. Daily wellness metrics (HRV SDNN, resting heart rate), keyed by local day
+-- 1. Daily wellness metrics (HRV SDNN, resting heart rate), keyed by local day
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS daily_wellness_metrics (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -62,7 +52,7 @@ COMMENT ON TABLE daily_wellness_metrics IS
   'Per-local-day wearable wellness metrics (HRV SDNN, resting HR) used for the global recovery modifier. Additive; per-type absence is expected.';
 
 -- ---------------------------------------------------------------------------
--- 3. Sync anchors: incremental foreground pulls fetch only samples newer than
+-- 2. Sync anchors: incremental foreground pulls fetch only samples newer than
 --    the persisted anchor (minus a lookback window handled in app code).
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS healthkit_sync_anchors (
@@ -98,7 +88,7 @@ COMMENT ON TABLE healthkit_sync_anchors IS
   'Per-user, per-data-type anchor (newest ingested sample end time) for incremental HealthKit foreground sync.';
 
 -- ---------------------------------------------------------------------------
--- 4. updated_at maintenance (reuses the shared trigger fn if present)
+-- 3. updated_at maintenance (reuses the shared trigger fn if present)
 -- ---------------------------------------------------------------------------
 DO $$
 BEGIN
