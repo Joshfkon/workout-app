@@ -30,6 +30,7 @@ import { IconArrowsExchange, IconLoader2, IconPlus, IconX } from '@tabler/icons-
 import { createUntypedClient } from '@/lib/supabase/client';
 import { generateWarmupProtocol } from '@/services/progressionEngine';
 import { quickWeightEstimate } from '@/services/weightEstimationEngine';
+import { fetchTransferCandidates } from '@/lib/training/transferCandidates';
 import {
   buildSuggestedWorkout,
   maxExercisesForDuration,
@@ -440,6 +441,11 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
         selectedLocationId
       );
 
+      // Cross-exercise strength summary for cold-start weight estimation:
+      // never-trained exercises (incl. first-time substitutes) seed from a
+      // related exercise's logged e1RM before profile heuristics.
+      const transferCandidates = await fetchTransferCandidates(user.id, supabase);
+
       let order = 1;
       if (!isNewSession) {
         const { data: maxOrderResult } = await supabase
@@ -474,7 +480,18 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
             profile.weight_kg,
             profile.height_cm,
             profile.body_fat_percent || 20,
-            (profile.experience || 'intermediate') as Experience
+            (profile.experience || 'intermediate') as Experience,
+            undefined,
+            'kg',
+            undefined,
+            {
+              transferCandidates,
+              targetMeta: {
+                primaryMuscle: exercise.primary_muscle,
+                movementPattern: exercise.movement_pattern,
+                equipmentRequired: exercise.equipment_required,
+              },
+            }
           );
           suggestedWeight =
             weightRec.confidence === 'find_working_weight'

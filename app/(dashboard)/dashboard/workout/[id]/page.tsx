@@ -75,7 +75,8 @@ import { createUntypedClient } from '@/lib/supabase/client';
 import { generateWarmupProtocol, isMuscleWarmedUp } from '@/services/progressionEngine';
 import { MUSCLE_GROUPS, muscleMatchesGroup, rirToRpe } from '@/types/schema';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
-import { quickWeightEstimate, quickWeightEstimateWithCalibration, type WorkingWeightRecommendation } from '@/services/weightEstimationEngine';
+import { quickWeightEstimate, quickWeightEstimateWithCalibration, type WorkingWeightRecommendation, type TransferCandidate } from '@/services/weightEstimationEngine';
+import { fetchTransferCandidates } from '@/lib/training/transferCandidates';
 import { inferSetRole, sessionTopSetWeightKg } from '@/services/suggestionEngine/setRoles';
 import { SUGGESTION_ENGINE_VERSION } from '@/services/suggestionEngine/constants';
 import { addExerciseOverride, getSessionFromProgramData, applyExerciseOverrides, type ExerciseOverride } from '@/services/mesocycleHelpers';
@@ -372,6 +373,9 @@ export default function WorkoutPage() {
   const [readinessBannerDismissed, setReadinessBannerDismissed] = useState(false);
   const [readinessOverridden, setReadinessOverridden] = useState(false);
   const [exerciseHistories, setExerciseHistories] = useState<Record<string, ExerciseHistoryData>>({});
+  // Cross-exercise strength summary for cold-start transfer estimation
+  // (a never-trained exercise seeds from a related exercise's logged e1RM).
+  const [transferCandidates, setTransferCandidates] = useState<TransferCandidate[]>([]);
   // Per-session performance snapshots per exercise (plateau detection input)
   const [performanceSnapshots, setPerformanceSnapshots] = useState<Record<string, ExercisePerformanceSnapshot[]>>({});
   const [allCollapsed, setAllCollapsed] = useState(false);
@@ -683,18 +687,27 @@ export default function WorkoutPage() {
     if (!block || !userProfile?.weightKg || !userProfile?.heightCm) return 0;
     const knownE1RM = exerciseHistories[block.exerciseId]?.estimatedE1RM;
     const repRange = { min: block.targetRepRange[0], max: block.targetRepRange[1] };
+    const estimateOpts = {
+      transferCandidates,
+      targetMeta: {
+        primaryMuscle: block.exercise.primaryMuscle,
+        movementPattern: block.exercise.movementPattern,
+        equipmentRequired: block.exercise.equipmentRequired,
+      },
+    };
     const rec =
       userProfile.calibratedLifts && userProfile.calibratedLifts.length > 0
         ? quickWeightEstimateWithCalibration(
             block.exercise.name, repRange, block.targetRir,
             userProfile.weightKg, userProfile.heightCm, userProfile.bodyFatPercent,
             userProfile.experience, userProfile.calibratedLifts, userProfile.regionalData,
-            preferences.units, knownE1RM
+            preferences.units, knownE1RM, estimateOpts
           )
         : quickWeightEstimate(
             block.exercise.name, repRange, block.targetRir,
             userProfile.weightKg, userProfile.heightCm, userProfile.bodyFatPercent,
-            userProfile.experience, userProfile.regionalData, preferences.units, knownE1RM
+            userProfile.experience, userProfile.regionalData, preferences.units, knownE1RM,
+            estimateOpts
           );
     if (!rec || rec.confidence === 'find_working_weight' || !rec.recommendedWeight) return 0;
     return inputWeightToKg(rec.recommendedWeight, preferences.units);
@@ -907,7 +920,7 @@ export default function WorkoutPage() {
         // Also fetch exercise history for all exercises (moved here from later in the function)
         const exerciseIds = transformedBlocks.map((b: ExerciseBlockWithExercise) => b.exerciseId);
 
-        const [userResult, dexaResult, calibratedResult, mesocycleResult, completedCountResult, historyResult] = await Promise.all([
+        const [userResult, dexaResult, calibratedResult, mesocycleResult, completedCountResult, historyResult, fetchedTransferCandidates] = await Promise.all([
           // User profile for weight estimation (including preferences for AI coach notes setting)
           supabase
             .from('users')
@@ -975,6 +988,9 @@ export default function WorkoutPage() {
                 // (~10 recent blocks per exercise is ample for E1RM/last-time).
                 .limit(Math.min(exerciseIds.length * 10, 120))
             : Promise.resolve({ data: null }),
+          // Cross-exercise strength summary for cold-start transfer estimation
+          // (never-trained exercises seed from a related exercise's e1RM).
+          fetchTransferCandidates(sessionData.user_id),
         ]);
 
         const userData = userResult.data;
@@ -983,6 +999,7 @@ export default function WorkoutPage() {
         const mesocycleData = mesocycleResult.data;
         const completedWorkoutsCount = completedCountResult.count ?? 0;
         const allHistoryBlocks = historyResult.data;
+        setTransferCandidates(fetchedTransferCandidates);
         
         const profile: UserProfileForWeights | undefined = userData ? {
           weightKg: userData.weight_kg || 70,
@@ -1147,10 +1164,10 @@ export default function WorkoutPage() {
           setPerformanceSnapshots(buildPerformanceSnapshots(allHistoryBlocks as SnapshotSourceBlock[]));
 
           // Generate coach message with exercise history for accurate weight suggestions
-          setCoachMessage(generateCoachMessage(transformedBlocks, profile, userContext, preferences.units, histories));
+          setCoachMessage(generateCoachMessage(transformedBlocks, profile, userContext, preferences.units, histories, fetchedTransferCandidates));
         } else {
           // No exercise history available, generate coach message without it
-          setCoachMessage(generateCoachMessage(transformedBlocks, profile, userContext, preferences.units));
+          setCoachMessage(generateCoachMessage(transformedBlocks, profile, userContext, preferences.units, undefined, fetchedTransferCandidates));
         }
 
         // Set phase based on workout state
@@ -3332,6 +3349,17 @@ export default function WorkoutPage() {
         }
         const knownE1RM = exerciseHistory?.estimatedE1RM;
 
+        // Cold-start transfer inputs: no direct history → seed from a related
+        // logged exercise's e1RM before profile heuristics.
+        const estimateOpts = {
+          transferCandidates,
+          targetMeta: {
+            primaryMuscle: exercise.primary_muscle,
+            movementPattern: exercise.movement_pattern,
+            equipmentRequired: exercise.equipment_required,
+          },
+        };
+
         // Use calibration data if available
         if (userProfile.calibratedLifts && userProfile.calibratedLifts.length > 0) {
           weightRec = quickWeightEstimateWithCalibration(
@@ -3345,7 +3373,8 @@ export default function WorkoutPage() {
             userProfile.calibratedLifts,
             userProfile.regionalData,
             preferences.units,
-            knownE1RM
+            knownE1RM,
+            estimateOpts
           );
         } else {
           weightRec = quickWeightEstimate(
@@ -3358,7 +3387,8 @@ export default function WorkoutPage() {
             userProfile.experience,
             userProfile.regionalData,
             preferences.units,
-            knownE1RM
+            knownE1RM,
+            estimateOpts
           );
         }
 
@@ -4625,7 +4655,30 @@ export default function WorkoutPage() {
                 const aiRecommendedWeightKg = aiRecommendedWeight > 0
                   ? inputWeightToKg(aiRecommendedWeight, preferences.units)
                   : 0;
-                const effectiveWorkingWeight = block.targetWeightKg > 0 ? block.targetWeightKg : aiRecommendedWeightKg;
+
+                // Cold start (no logged history): hand the card the estimate +
+                // its provenance so the banner shows the transfer-aware number
+                // and names the rung that produced it (weightEstimationEngine
+                // ladder), instead of a stale stored target and generic copy.
+                const blockHistory = exerciseHistories[block.exerciseId];
+                const weightRec = exerciseNote?.weightRec;
+                const coldStartSuggestion =
+                  (blockHistory?.totalSessions ?? 0) === 0 &&
+                  weightRec &&
+                  weightRec.confidence !== 'find_working_weight' &&
+                  weightRec.recommendedWeight > 0
+                    ? {
+                        weightKg: inputWeightToKg(weightRec.recommendedWeight, preferences.units),
+                        reason: weightRec.transferFrom
+                          ? `starting point estimated from your ${weightRec.transferFrom} strength`
+                          : 'starting point estimated from your training profile',
+                        explanation: weightRec.rationale,
+                      }
+                    : undefined;
+
+                const effectiveWorkingWeight = block.targetWeightKg > 0
+                  ? block.targetWeightKg
+                  : (coldStartSuggestion?.weightKg ?? aiRecommendedWeightKg);
                 
                 return (
                   // Exercise group container — ExerciseCard renders its own
@@ -4693,6 +4746,7 @@ export default function WorkoutPage() {
                     onActiveSuggestionChange={isCurrent ? setActiveSuggestionLabel : undefined}
                     unit={preferences.units}
                     recommendedWeight={aiRecommendedWeightKg}
+                    coldStartSuggestion={coldStartSuggestion}
                     userBodyweightKg={todayCheckInData?.bodyweightKg || undefined}
                     exerciseHistory={exerciseHistories[block.exerciseId]}
                     previousSets={exerciseHistories[block.exerciseId]?.lastWorkoutSets ?? []}
