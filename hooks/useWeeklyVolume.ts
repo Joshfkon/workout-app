@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { assertLiveSession } from '@/lib/supabase/sessionGate';
 import { useUserStore } from '@/stores';
 import {
   assessVolumeStatus,
@@ -40,11 +41,13 @@ export function useWeeklyVolume(options: UseWeeklyVolumeOptions = {}) {
     try {
       const supabase = createUntypedClient();
 
-      // Try to get pre-computed volume from database first
+      // Try to get pre-computed volume from database first. A failed query
+      // must surface as an error, not fall through as "no stored volume".
       const { data: storedVolume, error: volumeError } = await supabase
         .from('weekly_muscle_volume')
         .select('*')
         .eq('week_start', weekStart);
+      if (volumeError) throw volumeError;
 
       if (storedVolume && storedVolume.length > 0) {
         // Use stored volume data - convert to standard muscle groups.
@@ -80,7 +83,7 @@ export function useWeeklyVolume(options: UseWeeklyVolumeOptions = {}) {
         const weekEndStr = weekEnd.toISOString();
 
         // Fetch exercise blocks and sets for current week
-        const { data: blocks } = await supabase
+        const { data: blocks, error: blocksError } = await supabase
           .from('exercise_blocks')
           .select(`
             id,
@@ -108,6 +111,7 @@ export function useWeeklyVolume(options: UseWeeklyVolumeOptions = {}) {
           .gte('workout_sessions.completed_at', weekStart)
           .lte('workout_sessions.completed_at', weekEndStr)
           .eq('workout_sessions.state', 'completed');
+        if (blocksError) throw blocksError;
 
         if (blocks && blocks.length > 0) {
           // Calculate volume from blocks: weighted direct credit for the
@@ -168,7 +172,12 @@ export function useWeeklyVolume(options: UseWeeklyVolumeOptions = {}) {
 
           setVolumeData(calculatedData);
         } else {
-          // No data found - return empty defaults
+          // No data found. These queries rely on RLS for user scoping, so a
+          // dead token returns zero rows with NO error — verify the session
+          // is live before committing "trained nothing this week" defaults.
+          // Throws into the catch → error state, never faux-emptiness.
+          await assertLiveSession(supabase);
+
           const defaultData: MuscleVolumeData[] = STANDARD_MUSCLE_GROUPS.map((muscle) => {
             const landmarks = getVolumeLandmarks(muscle);
             return {

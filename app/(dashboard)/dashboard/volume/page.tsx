@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Card } from '@/components/ui/Card';
+import { DataErrorState } from '@/components/ui/SessionExpiredState';
 import { useAdaptiveVolume } from '@/hooks/useAdaptiveVolume';
 import { useUserStore } from '@/stores';
 import { FatigueAlertList } from '@/components/workout/FatigueAlertBanner';
@@ -192,7 +193,13 @@ export default function VolumeProfilePage() {
   // Below-MEV muscles for the atrophy-risk warning come from the SAME coarse
   // rows the bars render (shared counter + band), so the warning, the bars and
   // the "This Week vs MEV" card can never disagree on count or zone-status.
-  const { stats: volumeStats, reachable } = useWeeklyMevSummary();
+  const {
+    stats: volumeStats,
+    reachable,
+    loaded: volumeStatsLoaded,
+    error: volumeStatsError,
+    refetch: refetchVolumeStats,
+  } = useWeeklyMevSummary();
 
   // Calculate confidence summary
   const confidenceSummary = useMemo(() => {
@@ -252,7 +259,7 @@ export default function VolumeProfilePage() {
     [renderedChildMuscles]
   );
 
-  if (isLoading) {
+  if (isLoading || !volumeStatsLoaded) {
     return (
       <div className="max-w-3xl mx-auto pb-12">
         <div className="animate-pulse space-y-6">
@@ -264,6 +271,18 @@ export default function VolumeProfilePage() {
             ))}
           </div>
         </div>
+      </div>
+    );
+  }
+
+  // A failed weekly-volume load (expired session, dead token, network) must
+  // never render as all-below-MEV bars — that reads as "you trained nothing".
+  if (volumeStatsError) {
+    return (
+      <div className="max-w-3xl mx-auto pb-12">
+        <Card>
+          <DataErrorState error={volumeStatsError} onRetry={refetchVolumeStats} />
+        </Card>
       </div>
     );
   }

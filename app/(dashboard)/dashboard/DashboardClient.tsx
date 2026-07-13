@@ -6,6 +6,7 @@ import { IconAlertTriangle } from '@tabler/icons-react';
 import { Button, LoadingAnimation } from '@/components/ui';
 import { Modal } from '@/components/ui/Modal';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { requireAuthUserId } from '@/lib/supabase/sessionGate';
 import { getLocalDateString } from '@/lib/utils';
 import type { FrequentFood, SystemFood, MealType } from '@/types/nutrition';
 import { type MuscleVolumeData } from '@/services/volumeTracker';
@@ -743,8 +744,11 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
     async function fetchDashboardData() {
       try {
         const supabase = createUntypedClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
+        // Throws when there is no session (instead of a silent bail that
+        // leaves the dashboard rendering placeholders as if the user had no
+        // data) — the catch below keeps existing state, and the layout's
+        // AuthSessionRecovery surfaces re-auth for a genuinely dead session.
+        const user = { id: await requireAuthUserId(supabase) };
 
         // Eating window for pacing verdicts (defaults inside the helper when
         // unset/unmigrated). Loaded here — before the initial-data fast path
@@ -897,6 +901,27 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
             .gte('completed_at', new Date(today.getTime() - LIFT_TREND_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString())
             .order('completed_at', { ascending: true }),
         ]);
+
+        // When EVERY critical query errored (dead token, offline, outage)
+        // this is a failed fetch, not a user with no data — bail before any
+        // of the per-section processing below wipes rendered values to
+        // zero/null "rollover" defaults. (Same guard as useLogPageData.)
+        const criticalResults = [
+          userProfileResult,
+          mesocyclesResult,
+          nutritionResult,
+          targetsResult,
+          prefsResult,
+          weightResult,
+          weightHistoryResult,
+          weeklyBlocksResult,
+          liftSessionsResult,
+        ];
+        if (criticalResults.every((r) => r.error)) {
+          throw new Error(
+            `[Dashboard] boot fetch failed entirely: ${mesocyclesResult.error?.message ?? 'unknown error'}`
+          );
+        }
 
         // Deferred queries - load in background, only needed for food logging
         // These don't block initial render
@@ -1061,8 +1086,10 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
             { calories: 0, protein: 0, carbs: 0, fat: 0 }
           );
           setNutritionTotals(totals);
-        } else {
-          // No food logged today — reset stale totals from the previous day (rollover refetch)
+        } else if (!nutritionResult.error) {
+          // No food logged today (confirmed by a SUCCESSFUL query) — reset
+          // stale totals from the previous day (rollover refetch). A failed
+          // query keeps what's on screen.
           setNutritionTotals({ calories: 0, protein: 0, carbs: 0, fat: 0 });
         }
 
@@ -1096,8 +1123,9 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
             weight: weightResult.data.weight,
             unit: weightResult.data.unit || userPreferredUnit
           });
-        } else {
-          // No weight logged today — clear yesterday's value (rollover refetch)
+        } else if (!weightResult.error) {
+          // No weight logged today (successful query) — clear yesterday's
+          // value (rollover refetch). A failed query keeps what's on screen.
           setTodaysWeight(null);
         }
 
@@ -1142,14 +1170,19 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         // Lift trends for the "Lifts" glance tile (same pure helper the
         // server initial-data path uses). The active program's start date
         // gates confidence for lifts whose window spans the program switch.
-        setLiftTrends(
-          computeLiftTrends(
-            (liftSessionsResult.data as any) || [],
-            userProfileResult.data?.goal ?? undefined,
-            new Date(),
-            { programStartDate: mesocycle?.start_date ?? null }
-          )
-        );
+        // Only recompute from a SUCCESSFUL query — feeding an errored
+        // result's empty rows into computeLiftTrends is what made the tile
+        // read like a fresh account ("logout" symptom) on a lapsed session.
+        if (!liftSessionsResult.error) {
+          setLiftTrends(
+            computeLiftTrends(
+              (liftSessionsResult.data as any) || [],
+              userProfileResult.data?.goal ?? undefined,
+              new Date(),
+              { programStartDate: mesocycle?.start_date ?? null }
+            )
+          );
+        }
 
         // NOTE: Frequent foods and system foods are loaded via deferred queries above
         // They don't block initial render and are processed in the background

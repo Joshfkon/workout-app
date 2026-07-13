@@ -3,8 +3,9 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Card, CardHeader, CardTitle, CardContent, Badge, Button, Slider, Input } from '@/components/ui';
+import { Card, CardHeader, CardTitle, CardContent, Badge, Button, Slider, Input, DataErrorState } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { assertLiveSession } from '@/lib/supabase/sessionGate';
 import { generateFullMesocycleWithFatigue } from '@/services/sessionBuilderWithFatigue';
 import { calculateRecoveryFactors } from '@/services/mesocycleBuilder';
 import { analyzeRegionalComposition } from '@/services/regionalAnalysis';
@@ -141,6 +142,10 @@ export default function MesocyclePage() {
   const router = useRouter();
   const [mesocycles, setMesocycles] = useState<Mesocycle[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  // Failed list load (expired session, network) — must render an error/
+  // re-auth state, never the "no mesocycle yet" empty layout.
+  const [loadError, setLoadError] = useState<unknown>(null);
+  const [fetchNonce, setFetchNonce] = useState(0);
   const [isStartingWorkout, setIsStartingWorkout] = useState(false);
   const [todayWorkout, setTodayWorkout] = useState<TodayWorkout | null>(null);
   const [completedSessions, setCompletedSessions] = useState<number>(0);
@@ -474,13 +479,22 @@ export default function MesocyclePage() {
 
   useEffect(() => {
     async function fetchMesocycles() {
+      try {
       const supabase = createUntypedClient();
       const { data, error } = await supabase
         .from('mesocycles')
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (data && !error) {
+      // Empty-state auth gate: this query relies on RLS for user scoping, so
+      // a dead token returns zero rows with NO error — verify before letting
+      // "no mesocycles" render, and surface failed queries as errors.
+      if (error) throw error;
+      if (!data || data.length === 0) {
+        await assertLiveSession(supabase);
+      }
+
+      if (data) {
         setMesocycles(data);
 
         // Calculate today's workout for active mesocycle
@@ -518,10 +532,17 @@ export default function MesocyclePage() {
           }
         }
       }
-      setIsLoading(false);
+      } catch (err) {
+        console.error('Failed to load mesocycles:', err);
+        setLoadError(err);
+      } finally {
+        setIsLoading(false);
+      }
     }
+    setLoadError(null);
+    setIsLoading(true);
     fetchMesocycles();
-  }, []);
+  }, [fetchNonce]);
 
   const activeMesocycle = mesocycles.find(m => m.state === 'active');
   const pastMesocycles = mesocycles.filter(m => m.state !== 'active');
@@ -629,6 +650,15 @@ export default function MesocyclePage() {
             </CardContent>
           </Card>
         </>
+      ) : loadError ? (
+        // Failed load (expired session / network) — explicit error, never
+        // the "No active mesocycle" empty state for a user who has one.
+        <Card>
+          <DataErrorState
+            error={loadError}
+            onRetry={() => setFetchNonce((n) => n + 1)}
+          />
+        </Card>
       ) : !activeMesocycle ? (
         <Card className="text-center py-12">
           <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-surface-800 flex items-center justify-center">

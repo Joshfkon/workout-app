@@ -2,10 +2,11 @@
 
 import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import { useQuery, useQueryClient, useIsRestoring } from '@tanstack/react-query';
-import { Card, Badge, Button, FullPageLoading, LoadingAnimation, ConfirmModal } from '@/components/ui';
+import { Card, Badge, Button, FullPageLoading, LoadingAnimation, ConfirmModal, DataErrorState } from '@/components/ui';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { requireAuthUserId, gateEmptyRows } from '@/lib/supabase/sessionGate';
 import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 
 // Completed workout history is immutable-in-practice: cache the first page
@@ -146,16 +147,19 @@ function HistoryPageContent() {
     queryKey: HISTORY_FIRST_PAGE_KEY,
     queryFn: async () => {
       const supabase = createUntypedClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return [] as WorkoutHistory[];
-      const { data } = await supabase
+      // Empty-state auth gate: an invalid/expired session THROWS (re-auth or
+      // retry state) instead of masquerading as "no workout history yet",
+      // and an empty result is only trusted from a verified-live session.
+      const userId = await requireAuthUserId(supabase);
+      const result = await supabase
         .from('workout_sessions')
         .select(SESSION_SELECT)
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .in('state', ['completed', 'in_progress'])
         .order('completed_at', { ascending: false, nullsFirst: false })
         .range(0, PAGE_SIZE - 1);
-      return data ? transformSessions(data) : [];
+      const rows = await gateEmptyRows<Record<string, unknown>>(supabase, result);
+      return transformSessions(rows);
     },
     staleTime: IMMUTABLE_GC_TIME,
     gcTime: IMMUTABLE_GC_TIME,
@@ -507,12 +511,10 @@ function HistoryPageContent() {
     setLoadingExercise(true);
     try {
       const supabase = createUntypedClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) return;
+      const userId = await requireAuthUserId(supabase);
 
       // Fetch all exercise blocks for this exercise
-      const { data: blocks } = await supabase
+      const { data: blocks, error: blocksError } = await supabase
         .from('exercise_blocks')
         .select(`
           id,
@@ -534,12 +536,16 @@ function HistoryPageContent() {
           )
         `)
         .eq('exercise_id', exerciseId)
-        .eq('workout_sessions.user_id', user.id)
+        .eq('workout_sessions.user_id', userId)
         .eq('workout_sessions.state', 'completed')
         // Deload sessions are held light on purpose — exclude them so a light
         // week doesn't read as an e1RM regression / PR in the trend.
         .eq('workout_sessions.is_deload', false)
         .order('workout_sessions(completed_at)', { ascending: true });
+
+      // A failed load must not open the modal onto a fake "No history found"
+      // empty state — surface it as a dismissible error instead.
+      if (blocksError) throw blocksError;
 
       if (!blocks || blocks.length === 0) {
         setSelectedExercise({
@@ -654,6 +660,7 @@ function HistoryPageContent() {
       });
     } catch (err) {
       console.error('Failed to fetch exercise history:', err);
+      setActionError('Could not load exercise history. Please try again.');
     } finally {
       setLoadingExercise(false);
     }
@@ -694,32 +701,35 @@ function HistoryPageContent() {
         `;
 
   const fetchHistoryPage = async (pageIndex: number) => {
-      const supabase = createUntypedClient();
-      const { data: { user } } = await supabase.auth.getUser();
+      try {
+        const supabase = createUntypedClient();
+        const userId = await requireAuthUserId(supabase);
 
-      if (!user) {
+        const { data, error } = await supabase
+          .from('workout_sessions')
+          .select(SESSION_SELECT)
+          .eq('user_id', userId)
+          .in('state', ['completed', 'in_progress'])
+          .order('completed_at', { ascending: false, nullsFirst: false })
+          .range(pageIndex * PAGE_SIZE, pageIndex * PAGE_SIZE + PAGE_SIZE - 1);
+
+        if (!error && data) {
+          const transformed = transformSessions(data);
+          setWorkouts(prev => (pageIndex === 0 ? transformed : [...prev, ...transformed]));
+          setHasMore(transformed.length === PAGE_SIZE);
+        } else if (!error) {
+          setHasMore(false);
+        } else {
+          // Failed page load: keep the button so the user can retry — a dead
+          // token or a blip must not silently truncate the list.
+          setActionError('Could not load older workouts. Please try again.');
+        }
+      } catch {
+        setActionError('Could not load older workouts. Please try again.');
+      } finally {
         setIsLoading(false);
-        return;
+        setIsLoadingMore(false);
       }
-
-      const { data } = await supabase
-        .from('workout_sessions')
-        .select(SESSION_SELECT)
-        .eq('user_id', user.id)
-        .in('state', ['completed', 'in_progress'])
-        .order('completed_at', { ascending: false, nullsFirst: false })
-        .range(pageIndex * PAGE_SIZE, pageIndex * PAGE_SIZE + PAGE_SIZE - 1);
-
-      if (data) {
-        const transformed = transformSessions(data);
-        setWorkouts(prev => (pageIndex === 0 ? transformed : [...prev, ...transformed]));
-        setHasMore(transformed.length === PAGE_SIZE);
-      } else {
-        setHasMore(false);
-      }
-
-      setIsLoading(false);
-      setIsLoadingMore(false);
   };
 
   // Seed the accumulated list from the cached first page exactly once per
@@ -932,6 +942,28 @@ function HistoryPageContent() {
       </div>
     );
   };
+
+  // A failed first-page load with nothing cached renders the re-auth (expired
+  // session) or retry state — NEVER the "No workout history yet" empty state
+  // below, and never an endless loader. With cached data present we keep
+  // rendering it instead (stale beats blank).
+  if (firstPageQuery.isError && !firstPageQuery.data && workouts.length === 0) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-surface-100">Workout History</h1>
+          <p className="text-surface-400 mt-1">Your past training sessions</p>
+        </div>
+        <Card>
+          <DataErrorState
+            error={firstPageQuery.error}
+            onRetry={() => firstPageQuery.refetch()}
+            isRetrying={firstPageQuery.isRefetching}
+          />
+        </Card>
+      </div>
+    );
+  }
 
   // Full-screen loader only on first-ever load with an empty cache. A revisit
   // (warm in-memory cache) or reload (IndexedDB restore) has first-page data

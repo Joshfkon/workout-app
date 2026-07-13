@@ -47,6 +47,10 @@ try {
 // Re-export Capacitor for platform detection
 export const Capacitor = CapacitorCore;
 
+// Re-export the App plugin (appStateChange / appUrlOpen / backButton). On web
+// builds without Capacitor this is the no-op fallback above.
+export const CapacitorApp = App;
+
 /**
  * Check if running on a native platform (iOS/Android)
  */

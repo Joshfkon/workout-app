@@ -21,7 +21,7 @@
 
 // Minimal shape we rely on — the app's `createUntypedClient()` returns `any`,
 // so we avoid a hard dependency on the full SupabaseClient generic here.
-interface AuthCapableClient {
+export interface AuthCapableClient {
   auth: {
     getSession: () => Promise<{ data: { session: unknown | null } }>;
     getUser: () => Promise<{

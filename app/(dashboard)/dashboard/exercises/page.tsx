@@ -6,6 +6,7 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { Card, Input, Badge, Button, LoadingAnimation, SkeletonExercise } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { requireAuthUserId, assertLiveSession } from '@/lib/supabase/sessionGate';
 import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 
 // Immutable-in-practice catalog: cache it long and persist to IndexedDB so
@@ -124,6 +125,9 @@ export default function ExercisesPage() {
   const [expandedExercise, setExpandedExercise] = useState<string | null>(null);
   const [exerciseHistories, setExerciseHistories] = useState<Record<string, ExerciseHistory>>({});
   const [loadingHistory, setLoadingHistory] = useState<string | null>(null);
+  // Exercises whose history FAILED to load (expired session, network) — the
+  // card must show a retryable error, never "No workout history yet".
+  const [historyErrors, setHistoryErrors] = useState<Record<string, boolean>>({});
   const [activeChart, setActiveChart] = useState<'e1rm' | 'volume' | 'best'>('e1rm');
   const { preferences } = useUserPreferences();
   const unit = preferences?.units || 'kg'; // Default fallback
@@ -223,16 +227,14 @@ export default function ExercisesPage() {
     if (exerciseHistories[exerciseId]) return; // Already loaded
     
     setLoadingHistory(exerciseId);
+    setHistoryErrors(prev => ({ ...prev, [exerciseId]: false }));
     try {
       const supabase = createUntypedClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) {
-        setLoadingHistory(null);
-        return;
-      }
+      // Throws when there is no session — handled by the catch below as an
+      // error state (never a silent "no history").
+      const userId = await requireAuthUserId(supabase);
 
-      const { data: historyBlocks } = await supabase
+      const { data: historyBlocks, error: historyError } = await supabase
         .from('exercise_blocks')
         .select(`
           id,
@@ -251,10 +253,12 @@ export default function ExercisesPage() {
           )
         `)
         .eq('exercise_id', exerciseId)
-        .eq('workout_sessions.user_id', user.id)
+        .eq('workout_sessions.user_id', userId)
         .eq('workout_sessions.state', 'completed')
         .order('workout_sessions(completed_at)', { ascending: true })
         .limit(50);
+
+      if (historyError) throw historyError;
 
       if (historyBlocks && historyBlocks.length > 0) {
         let bestE1RM = 0;
@@ -350,7 +354,9 @@ export default function ExercisesPage() {
           },
         }));
       } else {
-        // No history found
+        // No history found — only trust the emptiness from a verified-live
+        // session (a dead token RLS-filters to zero rows without an error).
+        await assertLiveSession(supabase);
         setExerciseHistories(prev => ({
           ...prev,
           [exerciseId]: {
@@ -365,6 +371,7 @@ export default function ExercisesPage() {
       }
     } catch (err) {
       console.error('Failed to fetch exercise history:', err);
+      setHistoryErrors(prev => ({ ...prev, [exerciseId]: true }));
     } finally {
       setLoadingHistory(null);
     }
@@ -1043,8 +1050,23 @@ export default function ExercisesPage() {
                       </div>
                     )}
 
+                    {/* Failed history load — retryable, never mistaken for
+                        "no history yet" (an expired session returns zero
+                        rows for a user with plenty of history) */}
+                    {!isLoadingThis && historyErrors[exercise.id] && (
+                      <div className="text-center py-6" role="alert">
+                        <p className="text-surface-400 text-sm">Couldn&apos;t load this exercise&apos;s history right now</p>
+                        <button
+                          onClick={() => fetchExerciseHistory(exercise.id)}
+                          className="mt-2 text-sm text-primary-400 hover:text-primary-300 font-medium min-h-[44px]"
+                        >
+                          Try again
+                        </button>
+                      </div>
+                    )}
+
                     {/* No history message */}
-                    {!isLoadingThis && (!history || history.totalSessions === 0) && (
+                    {!isLoadingThis && !historyErrors[exercise.id] && (!history || history.totalSessions === 0) && (
                       <div className="text-center py-6">
                         <svg className="w-12 h-12 mx-auto text-surface-700 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient, useIsRestoring } from '@tanstack/react-query';
 import { Card, CardContent, Button, LoadingAnimation } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { requireAuthUserId, assertLiveSession, isSessionExpiredError } from '@/lib/supabase/sessionGate';
 import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 import type { WorkoutFolder, WorkoutTemplate, WorkoutTemplateExercise } from '@/types/templates';
 
@@ -68,18 +69,29 @@ export default function TemplatesPage() {
   const listQuery = useQuery({
     queryKey: TEMPLATES_LIST_KEY,
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return { folders: [] as FolderWithTemplates[], unfoldered: [] as (WorkoutTemplate & { exercises: WorkoutTemplateExercise[] })[] };
+      // Empty-state auth gate (lib/supabase/sessionGate.ts): an expired
+      // session throws instead of committing an empty "no templates" list.
+      const userId = await requireAuthUserId(supabase);
 
       const [foldersResult, templatesResult, exercisesResult] = await Promise.all([
-        supabase.from('workout_folders').select('*').eq('user_id', user.id).order('sort_order', { ascending: true }),
-        supabase.from('workout_templates').select('*').eq('user_id', user.id).order('sort_order', { ascending: true }),
+        supabase.from('workout_folders').select('*').eq('user_id', userId).order('sort_order', { ascending: true }),
+        supabase.from('workout_templates').select('*').eq('user_id', userId).order('sort_order', { ascending: true }),
         supabase.from('workout_template_exercises').select('*').order('sort_order', { ascending: true }),
       ]);
+
+      // A failed query is an error state, not an empty library.
+      const firstError = foldersResult.error || templatesResult.error || exercisesResult.error;
+      if (firstError) throw new Error(firstError.message || 'Failed to load templates');
 
       const foldersData = foldersResult.data || [];
       const templatesData = templatesResult.data || [];
       const exercisesData = exercisesResult.data || [];
+
+      // Zero folders AND zero templates is only the truth from a
+      // verified-live session (RLS silently returns no rows on a dead token).
+      if (foldersData.length === 0 && templatesData.length === 0) {
+        await assertLiveSession(supabase);
+      }
 
       const templatesWithExercises = templatesData.map((template: WorkoutTemplate) => ({
         ...template,
@@ -109,10 +121,14 @@ export default function TemplatesPage() {
       setUnfolderedTemplates(listQuery.data.unfoldered);
       setIsLoading(false);
     } else if (listQuery.isError) {
-      setError('Failed to load templates');
+      setError(
+        isSessionExpiredError(listQuery.error)
+          ? 'Your session has expired — sign in again to see your templates.'
+          : 'Failed to load templates'
+      );
       setIsLoading(false);
     }
-  }, [listQuery.data, listQuery.isError]);
+  }, [listQuery.data, listQuery.isError, listQuery.error]);
 
   // Mutations call this to refresh; refetches the cached query → re-syncs.
   const loadData = useCallback(async () => {
@@ -444,8 +460,10 @@ export default function TemplatesPage() {
           </div>
         )}
 
-        {/* Empty State */}
-        {folders.length === 0 && unfolderedTemplates.length === 0 && (
+        {/* Empty State — never rendered off the back of a failed load (the
+            error banner above owns that; an expired session must not read
+            as "No Templates Yet") */}
+        {!error && folders.length === 0 && unfolderedTemplates.length === 0 && (
           <Card>
             <CardContent className="py-12 text-center">
               <span className="text-5xl mb-4 block">📋</span>

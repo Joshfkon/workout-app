@@ -1,5 +1,6 @@
 import { DashboardLayoutClient } from '@/components/dashboard/DashboardLayoutClient';
 import { QueryProvider } from '@/components/providers/QueryProvider';
+import { AuthSessionRecovery } from '@/components/providers/AuthSessionRecovery';
 
 export default function DashboardLayout({
   children,
@@ -8,6 +9,7 @@ export default function DashboardLayout({
 }) {
   return (
     <QueryProvider>
+      <AuthSessionRecovery />
       <DashboardLayoutClient>{children}</DashboardLayoutClient>
     </QueryProvider>
   );

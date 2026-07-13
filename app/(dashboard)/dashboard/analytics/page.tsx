@@ -8,6 +8,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge, FullPageLoading, ErrorRetry } from '@/components/ui';
 import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 import { resolveAuthState } from '@/lib/supabase/authState';
+import { SESSION_EXPIRED_LOGIN_URL } from '@/lib/supabase/sessionRecovery';
 import { BodyMeasurements } from '@/components/dashboard/BodyMeasurements';
 import { useMusclePriorities } from '@/components/settings/MusclePrioritySettings';
 import { createUntypedClient } from '@/lib/supabase/client';
@@ -568,6 +569,16 @@ function AnalyticsPageContent() {
           .order('created_at', { ascending: false })
           .limit(1),
       ]);
+      // Auth verified above, but if EVERY query still errored (token died
+      // in-flight, outage) this is a failed fetch — throw so React Query
+      // keeps cached data + retries instead of committing an all-empty
+      // "success" that renders as a user with no scans/sessions.
+      const results = [profileResult, scanResult, photoResult, sessionsResult];
+      if (results.every((r) => r.error)) {
+        throw new Error(
+          `[Analytics] fetch failed entirely: ${profileResult.error?.message ?? 'unknown error'}`
+        );
+      }
       return {
         userId: user.id,
         profile: profileResult.data,
@@ -585,7 +596,9 @@ function AnalyticsPageContent() {
   useEffect(() => {
     if (!mainQuery.data) return;
     if ('authRequired' in mainQuery.data) {
-      router.push('/login');
+      // Explicit re-auth, never silent: land on login WITH the
+      // session-expired banner so the user knows why they're here.
+      router.push(SESSION_EXPIRED_LOGIN_URL);
       return;
     }
 

@@ -11,6 +11,7 @@ const SETTINGS_KEY = ['settings', 'user'] as const;
 import { STANDARD_MUSCLE_GROUPS, STANDARD_MUSCLE_DISPLAY_NAMES, DEFAULT_VOLUME_LANDMARKS, MUSCLE_GROUPS } from '@/types/schema';
 import type { Goal, Experience, WeightUnit, Equipment, StandardMuscleGroup, MuscleGroup, Rating } from '@/types/schema';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { markExplicitSignOut } from '@/lib/supabase/sessionRecovery';
 import { convertWeight, muscleDisplayName } from '@/lib/utils';
 import { getDisplayWeight, validateWeightEntry } from '@/lib/weightUtils';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
@@ -1178,6 +1179,7 @@ function DeleteAccountCard() {
 
       // Account is gone — clear the now-invalid session and leave the app.
       const supabase = createUntypedClient();
+      markExplicitSignOut();
       await supabase.auth.signOut();
       window.location.href = '/login';
     } catch (err) {

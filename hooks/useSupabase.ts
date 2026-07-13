@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react';
 import { createClient, createUntypedClient } from '@/lib/supabase/client';
+import { markExplicitSignOut } from '@/lib/supabase/sessionRecovery';
 
 /**
  * Hook to get a Supabase client for use in client components
@@ -30,6 +31,7 @@ export function useAuth() {
   };
 
   const signOut = async () => {
+    markExplicitSignOut();
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
   };

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { assertLiveSession } from '@/lib/supabase/sessionGate';
 import { getErrorMessage } from '@/lib/errors';
 import { estimateE1RM, getLocalDateString } from '@/lib/utils';
 import type { UserLifts } from '@/services/measurementImbalanceEngine';
@@ -147,11 +148,12 @@ export function useBestLifts(userId: string): UseBestLiftsReturn {
         .order('logged_at', { ascending: false })
         .limit(500);
       
-      if (setLogsError) {
-        console.error('Error fetching set logs for best lifts:', setLogsError);
-      }
+      // A failed history query must NOT be swallowed into "no auto lifts" —
+      // on a dead token both queries come back empty/errored and the card
+      // used to render as if the user had never lifted.
+      if (setLogsError) throw setLogsError;
 
-      if (!setLogsError && setLogs) {
+      if (setLogs) {
         // Calculate best E1RM for each key exercise from history
         const exerciseBests = new Map<string, BestLiftRecord>();
 
@@ -197,6 +199,13 @@ export function useBestLifts(userId: string): UseBestLiftsReturn {
             records.push(lift);
           }
         });
+      }
+
+      // Empty-state auth gate: zero lifts is only the truth when a live
+      // session says so — an expired session silently RLS-filters every row.
+      // Throws SessionExpiredError/SessionVerifyError → error state below.
+      if (records.length === 0) {
+        await assertLiveSession(supabase);
       }
 
       setBestLiftRecords(records);

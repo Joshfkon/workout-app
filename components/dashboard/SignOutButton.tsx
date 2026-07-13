@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { markExplicitSignOut } from '@/lib/supabase/sessionRecovery';
 
 interface SignOutButtonProps {
   className?: string;
@@ -13,6 +14,7 @@ export function SignOutButton({ className, showOnMobile = false }: SignOutButton
 
   const handleSignOut = async () => {
     const supabase = createUntypedClient();
+    markExplicitSignOut();
     await supabase.auth.signOut();
     router.push('/login');
     router.refresh();

@@ -42,6 +42,7 @@ import {
 } from '@tabler/icons-react';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { resolveAuthState } from '@/lib/supabase/authState';
+import { requireAuthUserId } from '@/lib/supabase/sessionGate';
 import { getLocalDateString } from '@/lib/utils';
 import {
   startMesocycleWorkoutSession,
@@ -237,8 +238,9 @@ export default function TrainPage() {
   useEffect(() => {
     async function fetchAll() {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
+        // Throws when there is no session — never a silent bail that leaves
+        // the Train tab rendering "no completed workouts yet" placeholders.
+        const user = { id: await requireAuthUserId(supabase) };
 
         const today = getLocalDateString();
         // Same rolling 7-day window as useWeeklyVolume, so the sets and
@@ -280,6 +282,16 @@ export default function TrainPage() {
             .eq('state', 'completed')
             .gte('completed_at', weekStart),
         ]);
+
+        // A batch where EVERY query errored is a failed fetch (dead token,
+        // offline) — not a user with no program and no history. Bail before
+        // committing empty placeholders. (Same guard as useLogPageData.)
+        const results = [inProgressRes, mesoRes, recentRes, weekCountRes];
+        if (results.every((r) => r.error)) {
+          throw new Error(
+            `[Train] fetch failed entirely: ${mesoRes.error?.message ?? 'unknown error'}`
+          );
+        }
 
         const ipRow = inProgressRes.data?.[0];
         if (ipRow) {

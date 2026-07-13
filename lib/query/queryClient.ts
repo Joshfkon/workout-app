@@ -15,6 +15,7 @@
  */
 
 import { QueryClient } from '@tanstack/react-query';
+import { isSessionExpiredError } from '@/lib/supabase/sessionGate';
 
 /**
  * First segment of a query key that is safe to persist to disk. Anything not
@@ -62,7 +63,10 @@ export function makeQueryClient(): QueryClient {
         gcTime: IMMUTABLE_GC_TIME,
         refetchOnWindowFocus: false,
         refetchOnReconnect: true,
-        retry: 1,
+        // A rejected session won't fix itself on retry — fail fast into the
+        // re-auth state (SessionVerifyError and friends keep the one retry).
+        retry: (failureCount, error) =>
+          !isSessionExpiredError(error) && failureCount < 1,
       },
     },
   });

@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { markExplicitSignOut } from '@/lib/supabase/sessionRecovery';
 import { Sidebar } from './Sidebar';
 import { BottomNavigation } from './BottomNavigation';
 import { SubscriptionBadge } from './SubscriptionBadge';
@@ -38,6 +39,7 @@ export function DashboardLayoutClient({ children }: DashboardLayoutClientProps) 
 
   const handleSignOut = async () => {
     const supabase = createUntypedClient();
+    markExplicitSignOut();
     await supabase.auth.signOut();
     router.push('/login');
     router.refresh();
