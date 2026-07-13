@@ -94,7 +94,7 @@ interface AMRAPCalibration {
 interface SessionSummaryProps {
   session: WorkoutSession;
   exerciseBlocks: ExerciseBlock[];
-  /** Blocks the user skipped entirely — rendered as ⬛ rows in the text share. */
+  /** Blocks the user skipped entirely — omitted from the text share. */
   skippedBlocks?: ExerciseBlock[];
   allSets: SetLog[];
   exerciseHistories?: Record<string, ExerciseWithHistory>;
@@ -334,7 +334,8 @@ export function SessionSummary({
     return prs;
   }, [workingSets, exerciseBlocks, exerciseHistories, isDeload]);
 
-  // Wordle-style text share input (performed order, skipped blocks included)
+  // Wordle-style text share input (performed order; the formatter drops
+  // skipped blocks so the share shows only performed work)
   const shareInput = useMemo<Omit<WorkoutShareTextInput, 'cryptic'>>(() => {
     const entries: { order: number; exercise: ShareExercise }[] = [];
 

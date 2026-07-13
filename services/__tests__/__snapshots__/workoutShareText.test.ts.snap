@@ -16,8 +16,6 @@ exports[`formatWorkoutShareText matches snapshot for a session with partial and 
 "HyperTrack 💪 Push
 
 🟩🟩⬜⬜⬜  Squat
-⬛⬛⬛  Leg Press
-⬛⬛  Leg Curl
 
 2 sets · 2,000 kg · 1h"
 `;
