@@ -1,8 +1,15 @@
 /**
- * Apple HealthKit Integration
+ * Apple HealthKit Integration (read-only)
  *
- * Provides step data, active energy, and workout data from Apple HealthKit
- * for iOS devices via Capacitor native bridge.
+ * Wraps `@capgo/capacitor-health` for iOS devices via the Capacitor native
+ * bridge. Provides daily steps, active energy, workouts, sleep samples, and
+ * daily HRV (SDNN) / resting heart rate.
+ *
+ * Web-bundle safety: the plugin is loaded through a Function-constructed
+ * dynamic import so webpack never sees (or bundles) the dependency — web/PWA
+ * builds contain zero HealthKit code and every entry point returns empty data
+ * off-iOS. Nothing is ever written to HealthKit (write permissions are never
+ * requested).
  */
 
 import { Capacitor } from './capacitor-stub';
@@ -14,76 +21,118 @@ import type {
   WearablePermission,
   HealthUpdate,
 } from '@/types/wearable';
+import type { SleepSampleInput } from '@/services/healthkitSleep';
+import { getLocalDateString } from '@/lib/utils';
 
-// === TYPES ===
+// === PLUGIN TYPES (structural subset of @capgo/capacitor-health) ===
 
-interface HealthKitPlugin {
-  isAvailable(): Promise<{ available: boolean }>;
-  requestAuthorization(options: {
-    read: string[];
-    write: string[];
-  }): Promise<{ granted: boolean; grantedPermissions?: string[] }>;
-  queryQuantitySamples(options: {
-    sampleType: string;
-    startDate: string;
-    endDate: string;
-    aggregation?: 'day' | 'hour' | 'none';
-  }): Promise<QuantitySample[]>;
-  queryWorkouts(options: {
-    startDate: string;
-    endDate: string;
-  }): Promise<WorkoutSample[]>;
-  subscribeToUpdates(options: {
-    sampleTypes: string[];
-  }): Promise<void>;
-  addListener(
-    eventName: 'healthKitUpdate',
-    callback: (event: { type: string; data: unknown }) => void
-  ): { remove: () => void };
+type HealthDataType =
+  | 'steps'
+  | 'calories'
+  | 'sleep'
+  | 'heartRateVariability'
+  | 'restingHeartRate'
+  | 'workouts';
+
+interface HealthSample {
+  dataType: string;
+  value: number;
+  unit: string;
+  startDate: string;
+  endDate: string;
+  sourceName?: string;
+  sourceId?: string;
+  platformId?: string;
+  sleepState?: string;
+  stages?: { startDate: string; endDate: string; stage: string }[];
+  hasStageData?: boolean;
 }
 
-interface QuantitySample {
+interface AggregatedSample {
   startDate: string;
   endDate: string;
   value: number;
   unit: string;
-  sourceName?: string;
-  sourceId?: string;
 }
 
 interface WorkoutSample {
-  id: string;
-  startDate: string;
-  endDate: string;
-  workoutActivityType: string;
+  workoutType: string;
+  duration: number;
   totalEnergyBurned?: number;
   totalDistance?: number;
-  averageHeartRate?: number;
-  maxHeartRate?: number;
+  startDate: string;
+  endDate: string;
   sourceName?: string;
+  platformId?: string;
 }
 
-// HealthKit sample types
-const SAMPLE_TYPES = {
-  stepCount: 'HKQuantityTypeIdentifierStepCount',
-  activeEnergyBurned: 'HKQuantityTypeIdentifierActiveEnergyBurned',
-  basalEnergyBurned: 'HKQuantityTypeIdentifierBasalEnergyBurned',
-  workoutType: 'HKWorkoutType',
-  heartRate: 'HKQuantityTypeIdentifierHeartRate',
-} as const;
+interface HealthPlugin {
+  isAvailable(): Promise<{ available: boolean }>;
+  requestAuthorization(options: {
+    read?: HealthDataType[];
+    write?: HealthDataType[];
+  }): Promise<{ readAuthorized: string[]; readDenied: string[] }>;
+  checkAuthorization(options: {
+    read?: HealthDataType[];
+    write?: HealthDataType[];
+  }): Promise<{ readAuthorized: string[]; readDenied: string[] }>;
+  readSamples(options: {
+    dataType: HealthDataType;
+    startDate?: string;
+    endDate?: string;
+    limit?: number;
+    ascending?: boolean;
+  }): Promise<{ samples: HealthSample[] }>;
+  queryAggregated(options: {
+    dataType: HealthDataType;
+    startDate?: string;
+    endDate?: string;
+    bucket?: 'hour' | 'day' | 'week' | 'month';
+    aggregation?: 'sum' | 'average' | 'min' | 'max';
+  }): Promise<{ samples: AggregatedSample[] }>;
+  queryWorkouts(options: {
+    startDate?: string;
+    endDate?: string;
+    limit?: number;
+    ascending?: boolean;
+  }): Promise<{ workouts: WorkoutSample[] }>;
+}
+
+/** Kept in one place so the bundle-safety test can assert on it. */
+export const HEALTHKIT_PLUGIN_PACKAGE = '@capgo/capacitor-health';
+
+/**
+ * The read types this app ever requests — sleep, HRV, resting HR, steps,
+ * active energy. Read-only by design: the write array is always empty.
+ */
+export const HEALTHKIT_READ_TYPES: HealthDataType[] = [
+  'sleep',
+  'heartRateVariability',
+  'restingHeartRate',
+  'steps',
+  'calories',
+];
+
+/** One local day of a per-day metric (value semantics depend on the metric). */
+export interface DailyMetricSample {
+  /** Local day, YYYY-MM-DD. */
+  date: string;
+  value: number;
+}
+
+const SAMPLE_READ_LIMIT = 2000;
 
 // === SERVICE ===
 
 /**
- * HealthKit service for iOS devices
+ * HealthKit service for iOS devices. Every entry point is capability-gated;
+ * off native iOS everything resolves empty/false so callers need no platform
+ * branching.
  */
 class HealthKitService {
-  private plugin: HealthKitPlugin | null = null;
-  private updateListeners: Map<string, (data: HealthUpdate) => void> = new Map();
+  private plugin: HealthPlugin | null = null;
 
-  /**
-   * Check if HealthKit is available on this device
-   */
+  /** Check if HealthKit is available on this device. */
   async isAvailable(): Promise<boolean> {
     if (!Capacitor.isNativePlatform() || Capacitor.getPlatform() !== 'ios') {
       return false;
@@ -102,10 +151,15 @@ class HealthKitService {
   }
 
   /**
-   * Request HealthKit permissions
+   * Request read-only HealthKit permissions for our read types.
+   *
+   * HealthKit deliberately does not reveal per-type READ denial (denied types
+   * simply return no data), so `granted` here only means the permission sheet
+   * flow completed. Callers must treat empty query results as absence — never
+   * as an error, and never re-prompt in a loop.
    */
   async requestPermissions(
-    permissions: WearablePermission[] = ['steps', 'active_energy', 'workouts']
+    permissions: WearablePermission[] = ['steps', 'active_energy', 'sleep', 'heart_rate']
   ): Promise<PermissionResult> {
     if (!Capacitor.isNativePlatform() || Capacitor.getPlatform() !== 'ios') {
       return { granted: false, reason: 'not_ios' };
@@ -117,56 +171,48 @@ class HealthKitService {
         return { granted: false, reason: 'plugin_not_available' };
       }
 
-      const readTypes = this.mapPermissionsToSampleTypes(permissions);
-
-      const result = await plugin.requestAuthorization({
+      const readTypes = this.mapPermissionsToDataTypes(permissions);
+      await plugin.requestAuthorization({
         read: readTypes,
-        write: [], // We don't write to HealthKit
+        write: [], // We never write to HealthKit
       });
 
-      return {
-        granted: result.granted,
-        permissions: result.grantedPermissions?.map((p) =>
-          this.mapSampleTypeToPermission(p)
-        ) as WearablePermission[],
-      };
+      return { granted: true, permissions };
     } catch (error) {
       console.error('HealthKit permission request failed:', error);
       return { granted: false, reason: String(error) };
     }
   }
 
-  /**
-   * Get step data for a date range
-   */
+  /** Daily step totals per local day (HealthKit day buckets are device-local). */
   async getSteps(startDate: Date, endDate: Date): Promise<StepData[]> {
     const plugin = await this.getPlugin();
     if (!plugin) return [];
 
     try {
-      const samples = await plugin.queryQuantitySamples({
-        sampleType: SAMPLE_TYPES.stepCount,
+      const { samples } = await plugin.queryAggregated({
+        dataType: 'steps',
         startDate: startDate.toISOString(),
         endDate: endDate.toISOString(),
-        aggregation: 'day',
+        bucket: 'day',
+        aggregation: 'sum',
       });
 
-      return samples.map((sample) => ({
-        date: sample.startDate.split('T')[0],
-        steps: Math.round(sample.value),
-        source: 'apple_healthkit' as const,
-        deviceName: sample.sourceName,
-        confidence: 'measured' as const,
-      }));
+      return samples
+        .filter((sample) => sample.value > 0)
+        .map((sample) => ({
+          date: getLocalDateString(new Date(sample.startDate)),
+          steps: Math.round(sample.value),
+          source: 'apple_healthkit' as const,
+          confidence: 'measured' as const,
+        }));
     } catch (error) {
       console.error('Failed to fetch HealthKit steps:', error);
       return [];
     }
   }
 
-  /**
-   * Get hourly step breakdown for a specific date
-   */
+  /** Get hourly step breakdown for a specific date. */
   async getHourlySteps(date: Date): Promise<number[]> {
     const plugin = await this.getPlugin();
     if (!plugin) return new Array(24).fill(0);
@@ -178,15 +224,15 @@ class HealthKitService {
       const endOfDay = new Date(date);
       endOfDay.setHours(23, 59, 59, 999);
 
-      const samples = await plugin.queryQuantitySamples({
-        sampleType: SAMPLE_TYPES.stepCount,
+      const { samples } = await plugin.queryAggregated({
+        dataType: 'steps',
         startDate: startOfDay.toISOString(),
         endDate: endOfDay.toISOString(),
-        aggregation: 'hour',
+        bucket: 'hour',
+        aggregation: 'sum',
       });
 
       const hourlyData: number[] = new Array(24).fill(0);
-
       for (const sample of samples) {
         const hour = new Date(sample.startDate).getHours();
         hourlyData[hour] = Math.round(sample.value);
@@ -199,26 +245,27 @@ class HealthKitService {
     }
   }
 
-  /**
-   * Get active energy (calories) for a date range
-   */
+  /** Daily active energy (kcal) per local day. */
   async getActiveEnergy(startDate: Date, endDate: Date): Promise<EnergyData[]> {
     const plugin = await this.getPlugin();
     if (!plugin) return [];
 
     try {
-      const samples = await plugin.queryQuantitySamples({
-        sampleType: SAMPLE_TYPES.activeEnergyBurned,
+      const { samples } = await plugin.queryAggregated({
+        dataType: 'calories',
         startDate: startDate.toISOString(),
         endDate: endDate.toISOString(),
-        aggregation: 'day',
+        bucket: 'day',
+        aggregation: 'sum',
       });
 
-      return samples.map((sample) => ({
-        date: sample.startDate.split('T')[0],
-        activeCalories: Math.round(sample.value),
-        source: 'apple_healthkit' as const,
-      }));
+      return samples
+        .filter((sample) => sample.value > 0)
+        .map((sample) => ({
+          date: getLocalDateString(new Date(sample.startDate)),
+          activeCalories: Math.round(sample.value),
+          source: 'apple_healthkit' as const,
+        }));
     } catch (error) {
       console.error('Failed to fetch HealthKit active energy:', error);
       return [];
@@ -226,28 +273,85 @@ class HealthKitService {
   }
 
   /**
-   * Get workouts for a date range
+   * Raw sleep samples for a window, flattened to one entry per stage segment
+   * when the platform emitted stage data. Feed these to
+   * services/healthkitSleep.ts#aggregateSleepSamples for per-night hours with
+   * source dedupe.
    */
+  async getSleepSamples(startDate: Date, endDate: Date): Promise<SleepSampleInput[]> {
+    const plugin = await this.getPlugin();
+    if (!plugin) return [];
+
+    try {
+      const { samples } = await plugin.readSamples({
+        dataType: 'sleep',
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+        limit: SAMPLE_READ_LIMIT,
+        ascending: true,
+      });
+
+      const flattened: SleepSampleInput[] = [];
+      for (const sample of samples) {
+        if (sample.stages && sample.stages.length > 0) {
+          for (const stage of sample.stages) {
+            flattened.push({
+              startDate: stage.startDate,
+              endDate: stage.endDate,
+              sleepState: stage.stage,
+              sourceName: sample.sourceName,
+              sourceId: sample.sourceId,
+            });
+          }
+        } else {
+          flattened.push({
+            startDate: sample.startDate,
+            endDate: sample.endDate,
+            sleepState: sample.sleepState ?? 'asleep',
+            sourceName: sample.sourceName,
+            sourceId: sample.sourceId,
+          });
+        }
+      }
+      return flattened;
+    } catch (error) {
+      console.error('Failed to fetch HealthKit sleep:', error);
+      return [];
+    }
+  }
+
+  /** Daily average HRV (SDNN, ms) per local day. Empty when never recorded. */
+  async getDailyHrv(startDate: Date, endDate: Date): Promise<DailyMetricSample[]> {
+    return this.getDailyAverage('heartRateVariability', startDate, endDate);
+  }
+
+  /** Daily average resting heart rate (bpm) per local day. */
+  async getDailyRestingHeartRate(
+    startDate: Date,
+    endDate: Date
+  ): Promise<DailyMetricSample[]> {
+    return this.getDailyAverage('restingHeartRate', startDate, endDate);
+  }
+
+  /** Get workouts for a date range. */
   async getWorkouts(startDate: Date, endDate: Date): Promise<WearableWorkoutData[]> {
     const plugin = await this.getPlugin();
     if (!plugin) return [];
 
     try {
-      const workouts = await plugin.queryWorkouts({
+      const { workouts } = await plugin.queryWorkouts({
         startDate: startDate.toISOString(),
         endDate: endDate.toISOString(),
+        limit: SAMPLE_READ_LIMIT,
+        ascending: true,
       });
 
       return workouts.map((workout) => ({
-        id: workout.id,
+        id: workout.platformId ?? `${workout.workoutType}-${workout.startDate}`,
         startTime: new Date(workout.startDate),
         endTime: new Date(workout.endDate),
-        workoutType: this.mapWorkoutType(workout.workoutActivityType),
+        workoutType: this.mapWorkoutType(workout.workoutType),
         calories: Math.round(workout.totalEnergyBurned || 0),
-        heartRateAvg: workout.averageHeartRate
-          ? Math.round(workout.averageHeartRate)
-          : undefined,
-        heartRateMax: workout.maxHeartRate ? Math.round(workout.maxHeartRate) : undefined,
         source: 'apple_healthkit' as const,
       }));
     } catch (error) {
@@ -257,40 +361,47 @@ class HealthKitService {
   }
 
   /**
-   * Subscribe to HealthKit updates
+   * `@capgo/capacitor-health` exposes no HealthKit observer/background
+   * delivery API, so live update subscriptions are a no-op — data flows via
+   * the anchored foreground sync instead (lib/integrations/healthkit-sync.ts).
    */
-  async subscribeToUpdates(callback: (data: HealthUpdate) => void): Promise<() => void> {
-    const plugin = await this.getPlugin();
-    if (!plugin) return () => {};
-
-    try {
-      const listenerId = crypto.randomUUID();
-      this.updateListeners.set(listenerId, callback);
-
-      await plugin.subscribeToUpdates({
-        sampleTypes: [SAMPLE_TYPES.stepCount, SAMPLE_TYPES.activeEnergyBurned],
-      });
-
-      const listener = plugin.addListener('healthKitUpdate', (event) => {
-        const update = this.parseHealthKitUpdate(event);
-        if (update) {
-          this.updateListeners.forEach((cb) => cb(update));
-        }
-      });
-
-      return () => {
-        this.updateListeners.delete(listenerId);
-        listener.remove();
-      };
-    } catch (error) {
-      console.error('Failed to subscribe to HealthKit updates:', error);
-      return () => {};
-    }
+  async subscribeToUpdates(_callback: (data: HealthUpdate) => void): Promise<() => void> {
+    return () => {};
   }
 
   // === PRIVATE METHODS ===
 
-  private async getPlugin(): Promise<HealthKitPlugin | null> {
+  private async getDailyAverage(
+    dataType: HealthDataType,
+    startDate: Date,
+    endDate: Date
+  ): Promise<DailyMetricSample[]> {
+    const plugin = await this.getPlugin();
+    if (!plugin) return [];
+
+    try {
+      const { samples } = await plugin.queryAggregated({
+        dataType,
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+        bucket: 'day',
+        aggregation: 'average',
+      });
+
+      return samples
+        .filter((sample) => Number.isFinite(sample.value) && sample.value > 0)
+        .map((sample) => ({
+          date: getLocalDateString(new Date(sample.startDate)),
+          value: sample.value,
+        }));
+    } catch (error) {
+      // Per-type absence (e.g. no HRV source) is normal — return empty.
+      console.warn(`HealthKit ${dataType} query returned nothing usable:`, error);
+      return [];
+    }
+  }
+
+  private async getPlugin(): Promise<HealthPlugin | null> {
     if (this.plugin) return this.plugin;
 
     // Only attempt to load plugin on native iOS
@@ -299,12 +410,11 @@ class HealthKitService {
     }
 
     try {
-      // Use Function constructor to hide import from webpack's static analysis
-      // This prevents build errors when the native module isn't installed
-      const modulePath = '@nickcis/capacitor-healthkit';
+      // Use Function constructor to hide the import from webpack's static
+      // analysis so the native plugin never enters the web bundle.
       const importFn = new Function('modulePath', 'return import(modulePath)');
-      const healthKitModule = await importFn(modulePath);
-      this.plugin = healthKitModule.HealthKit as unknown as HealthKitPlugin;
+      const healthModule = await importFn(HEALTHKIT_PLUGIN_PACKAGE);
+      this.plugin = healthModule.Health as HealthPlugin;
       return this.plugin;
     } catch (error) {
       console.warn('HealthKit plugin not available:', error);
@@ -312,80 +422,40 @@ class HealthKitService {
     }
   }
 
-  private mapPermissionsToSampleTypes(permissions: WearablePermission[]): string[] {
-    const typeMap: Record<WearablePermission, string[]> = {
-      steps: [SAMPLE_TYPES.stepCount],
-      active_energy: [SAMPLE_TYPES.activeEnergyBurned, SAMPLE_TYPES.basalEnergyBurned],
-      workouts: [SAMPLE_TYPES.workoutType],
-      heart_rate: [SAMPLE_TYPES.heartRate],
-      sleep: [], // Not implemented yet
+  private mapPermissionsToDataTypes(permissions: WearablePermission[]): HealthDataType[] {
+    const typeMap: Record<WearablePermission, HealthDataType[]> = {
+      steps: ['steps'],
+      active_energy: ['calories'],
+      workouts: ['workouts'],
+      heart_rate: ['heartRateVariability', 'restingHeartRate'],
+      sleep: ['sleep'],
     };
 
-    return permissions.flatMap((p) => typeMap[p] || []);
+    const types = permissions.flatMap((p) => typeMap[p] || []);
+    return Array.from(new Set(types));
   }
 
-  private mapSampleTypeToPermission(sampleType: string): WearablePermission {
-    if (sampleType.includes('StepCount')) return 'steps';
-    if (sampleType.includes('EnergyBurned')) return 'active_energy';
-    if (sampleType.includes('Workout')) return 'workouts';
-    if (sampleType.includes('HeartRate')) return 'heart_rate';
-    return 'steps';
-  }
-
-  private mapWorkoutType(activityType: string): string {
-    // Map HealthKit workout activity types to readable names
+  private mapWorkoutType(workoutType: string): string {
     const typeMap: Record<string, string> = {
-      HKWorkoutActivityTypeTraditionalStrengthTraining: 'strength_training',
-      HKWorkoutActivityTypeFunctionalStrengthTraining: 'functional_training',
-      HKWorkoutActivityTypeRunning: 'running',
-      HKWorkoutActivityTypeWalking: 'walking',
-      HKWorkoutActivityTypeCycling: 'cycling',
-      HKWorkoutActivityTypeSwimming: 'swimming',
-      HKWorkoutActivityTypeYoga: 'yoga',
-      HKWorkoutActivityTypePilates: 'pilates',
-      HKWorkoutActivityTypeHighIntensityIntervalTraining: 'hiit',
-      HKWorkoutActivityTypeCrossTraining: 'cross_training',
+      traditionalStrengthTraining: 'strength_training',
+      strengthTraining: 'strength_training',
+      weightlifting: 'strength_training',
+      functionalStrengthTraining: 'functional_training',
+      running: 'running',
+      runningTreadmill: 'running',
+      walking: 'walking',
+      cycling: 'cycling',
+      bikingStationary: 'cycling',
+      swimming: 'swimming',
+      swimmingPool: 'swimming',
+      swimmingOpenWater: 'swimming',
+      yoga: 'yoga',
+      pilates: 'pilates',
+      highIntensityIntervalTraining: 'hiit',
+      crossTraining: 'cross_training',
     };
 
-    return typeMap[activityType] || 'other';
-  }
-
-  private parseHealthKitUpdate(event: {
-    type: string;
-    data: unknown;
-  }): HealthUpdate | null {
-    try {
-      if (event.type === 'stepCount') {
-        const sample = event.data as QuantitySample;
-        return {
-          type: 'steps',
-          date: sample.startDate.split('T')[0],
-          data: {
-            date: sample.startDate.split('T')[0],
-            steps: Math.round(sample.value),
-            source: 'apple_healthkit' as const,
-            confidence: 'measured' as const,
-          },
-        };
-      }
-
-      if (event.type === 'activeEnergyBurned') {
-        const sample = event.data as QuantitySample;
-        return {
-          type: 'calories',
-          date: sample.startDate.split('T')[0],
-          data: {
-            date: sample.startDate.split('T')[0],
-            activeCalories: Math.round(sample.value),
-            source: 'apple_healthkit' as const,
-          },
-        };
-      }
-
-      return null;
-    } catch {
-      return null;
-    }
+    return typeMap[workoutType] || 'other';
   }
 }
 
@@ -419,6 +489,27 @@ export async function fetchHealthKitActiveEnergy(
   endDate: Date
 ): Promise<EnergyData[]> {
   return healthKitService.getActiveEnergy(startDate, endDate);
+}
+
+export async function fetchHealthKitSleepSamples(
+  startDate: Date,
+  endDate: Date
+): Promise<SleepSampleInput[]> {
+  return healthKitService.getSleepSamples(startDate, endDate);
+}
+
+export async function fetchHealthKitDailyHrv(
+  startDate: Date,
+  endDate: Date
+): Promise<DailyMetricSample[]> {
+  return healthKitService.getDailyHrv(startDate, endDate);
+}
+
+export async function fetchHealthKitDailyRestingHeartRate(
+  startDate: Date,
+  endDate: Date
+): Promise<DailyMetricSample[]> {
+  return healthKitService.getDailyRestingHeartRate(startDate, endDate);
 }
 
 export async function fetchHealthKitWorkouts(

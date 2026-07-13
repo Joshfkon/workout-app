@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { BottomSheet } from './BottomSheet';
 import { useMuscleReadiness } from '@/hooks/useMuscleReadiness';
+import { useWearableRecovery } from '@/hooks/useWearableRecovery';
 import {
   formatReadyEta,
   type ReadinessRow,
@@ -246,6 +247,7 @@ export function MuscleReadinessContent({
   loadingTestId = 'readiness-sheet-loading',
   showFootnote = true,
   persistKey = SHOW_ALL_STORAGE_KEY,
+  wearableNotice = null,
 }: {
   rows: ReadinessRow[];
   targets: ReadinessTarget[];
@@ -255,6 +257,12 @@ export function MuscleReadinessContent({
   loadingTestId?: string;
   showFootnote?: boolean;
   persistKey?: string;
+  /**
+   * Quiet one-liner when the wearable HRV/RHR modifier is stretching
+   * recovery windows (e.g. "Recovery slowed — HRV below your baseline.").
+   * Null when neutral or without data — then nothing renders.
+   */
+  wearableNotice?: string | null;
 }) {
   const [showAll, setShowAllState] = useState(() => readShowAll(persistKey));
   const setShowAll = (value: boolean) => {
@@ -348,6 +356,15 @@ export function MuscleReadinessContent({
         </>
       )}
 
+      {wearableNotice && !isLoading && (
+        <p
+          className="mt-3 text-[11px] leading-relaxed text-surface-500"
+          data-testid="readiness-wearable-notice"
+        >
+          {wearableNotice}
+        </p>
+      )}
+
       {showFootnote && (
         <p className="mt-3 text-[11px] leading-relaxed text-surface-600">
           Sorted by what to train now: recovered muscles behind on weekly volume
@@ -377,11 +394,19 @@ export function MuscleReadinessSheet({
     enabled: isOpen,
     sorenessOverrides,
   });
+  const { state: wearableRecovery } = useWearableRecovery();
 
   return (
     <BottomSheet isOpen={isOpen} onClose={onClose} title="Muscle readiness">
       <div data-testid="readiness-sheet">
-        <MuscleReadinessContent rows={rows} targets={targets} nextUp={nextUp} isLoading={isLoading} collapsible />
+        <MuscleReadinessContent
+          rows={rows}
+          targets={targets}
+          nextUp={nextUp}
+          isLoading={isLoading}
+          collapsible
+          wearableNotice={wearableRecovery.reason}
+        />
       </div>
     </BottomSheet>
   );

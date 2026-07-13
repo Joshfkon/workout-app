@@ -14,6 +14,10 @@ import type {
   DiscomfortSeverity,
 } from '@/types/schema';
 import { DELOAD_MODIFIERS } from '@/services/shared/fatigueConstants';
+import {
+  wearableDeloadEvidence,
+  wearableDeloadPoints,
+} from '@/services/wearableRecovery';
 
 // ============================================================
 // JOINT PAIN SIGNAL (deload signal 5)
@@ -161,7 +165,17 @@ export function checkDeloadTriggers(
   if (profile.experience === 'advanced' && reasons.length < 2) {
     shouldDeload = false;
   }
-  
+
+  // === SUPPORTING SIGNAL: sustained wearable deviation (HRV low / RHR high) ===
+  // Named in evidence when a deload already fired, but never a trigger on its
+  // own — the wearable signal whispers (its weight lives in
+  // calculateFatigueScore's small capped contribution). Added after the
+  // experience adjustment so it can't flip those decisions.
+  const wearableEvidence = wearableDeloadEvidence(lastWeek.wearableDeviationDays ?? 0);
+  if (shouldDeload && wearableEvidence) {
+    reasons.push(wearableEvidence);
+  }
+
   return { shouldDeload, reasons, suggestedDeloadType };
 }
 
@@ -393,7 +407,11 @@ export function calculateFatigueScore(performance: WeeklyPerformanceData): numbe
   
   // Strength decline (0-5 points)
   if (performance.strengthDecline) score += 5;
-  
+
+  // Sustained wearable deviation (0-8 points, capped) — HRV below / resting
+  // HR above baseline for 5+ straight days. See services/wearableRecovery.ts.
+  score += wearableDeloadPoints(performance.wearableDeviationDays ?? 0);
+
   return Math.min(100, Math.round(score));
 }
 

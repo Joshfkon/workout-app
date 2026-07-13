@@ -14,6 +14,7 @@ import {
 } from '@/services/muscleRecovery';
 import { useRecoveryHistory } from '@/hooks/useMuscleReadiness';
 import { useRecoveryMultipliers } from '@/hooks/useRecoveryMultipliers';
+import { useWearableRecovery } from '@/hooks/useWearableRecovery';
 
 /**
  * useMuscleRecovery — per-STANDARD-muscle recovery statuses for surfaces that
@@ -125,9 +126,10 @@ export function useMuscleRecovery(): UseMuscleRecoveryResult {
   const { user: storeUser } = useUserStore();
   const enhancedAthleteMode = storeUser?.enhancedAthleteMode === true;
   const { multipliers } = useRecoveryMultipliers();
+  const { state: wearableRecovery } = useWearableRecovery();
   const config = useMemo(
-    () => recoveryConfigFor(enhancedAthleteMode, multipliers),
-    [enhancedAthleteMode, multipliers]
+    () => recoveryConfigFor(enhancedAthleteMode, multipliers, wearableRecovery.scale),
+    [enhancedAthleteMode, multipliers, wearableRecovery.scale]
   );
 
   const recoveryStatus = useMemo(

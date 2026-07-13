@@ -617,7 +617,14 @@ export interface DailyCheckIn {
   
   /** Hours of sleep */
   sleepHours?: number | null;
-  
+
+  /**
+   * Where sleepHours came from: 'healthkit' = auto-filled from Apple Health
+   * (safe to overwrite on the next sync), 'manual'/null = user-entered
+   * (always wins over auto-fill).
+   */
+  sleepSource?: 'manual' | 'healthkit' | null;
+
   /** Sleep quality (1-5) */
   sleepQuality?: Rating | null;
   
@@ -1584,6 +1591,15 @@ export interface WeeklyPerformanceData {
    * start. Optional/undefined = not a deload (legacy callers).
    */
   isDeload?: boolean;
+  /**
+   * Consecutive days (ending in this week) with HRV meaningfully below /
+   * resting HR meaningfully above the user's wearable baselines — see
+   * `computeWearableRecoveryState` in services/wearableRecovery.ts. A
+   * sustained streak (5+ days) adds a small capped fatigue-score contribution
+   * and supporting deload evidence. Absent/0 = no wearable data or no
+   * deviation (normal).
+   */
+  wearableDeviationDays?: number;
 }
 
 /**

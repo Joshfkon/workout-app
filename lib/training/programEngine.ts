@@ -1462,11 +1462,44 @@ export class ProgramEngine {
       shouldDeload = true;
       suggestedDeloadType = 'intensity';
     }
-    
+
     if (profile.experience === 'novice' && reasons.length < 2) {
       shouldDeload = false;
     }
-    
+
+    // Supporting signal only: a sustained HRV/RHR deviation streak from Apple
+    // Health is named in the evidence when a deload already fired, but never
+    // triggers one on its own. Missing wellness data is normal — skip quietly.
+    if (shouldDeload) {
+      try {
+        const { computeWearableRecoveryState } = await import(
+          '@/services/wearableRecovery'
+        );
+        const today = getLocalDateString();
+        const { data: wellnessRows } = await this.supabase
+          .from('daily_wellness_metrics')
+          .select('date, hrv_sdnn_ms, resting_hr_bpm')
+          .eq('user_id', this.userId)
+          .order('date', { ascending: false })
+          .limit(35);
+        if (wellnessRows && wellnessRows.length > 0) {
+          const history = (wellnessRows as {
+            date: string;
+            hrv_sdnn_ms: number | null;
+            resting_hr_bpm: number | null;
+          }[]).map((row) => ({
+            date: row.date,
+            hrvSdnnMs: row.hrv_sdnn_ms,
+            restingHrBpm: row.resting_hr_bpm,
+          }));
+          const state = computeWearableRecoveryState(history, today);
+          if (state.deloadEvidence) reasons.push(state.deloadEvidence);
+        }
+      } catch {
+        // Wellness metrics unavailable — the other triggers stand on their own.
+      }
+    }
+
     return { shouldDeload, reasons, suggestedDeloadType };
   }
   

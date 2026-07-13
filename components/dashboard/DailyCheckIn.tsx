@@ -5,11 +5,32 @@ import { Button, Card, Badge } from '@/components/ui';
 import type { Rating, DailyCheckIn as DailyCheckInType } from '@/types/schema';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { getLocalDateString } from '@/lib/utils';
+import { isNativePlatform, getPlatform } from '@/lib/integrations/capacitor-stub';
 
 interface DailyCheckInProps {
   userId: string;
   userGoal?: 'bulk' | 'cut' | 'recomp' | 'maintain' | 'maintenance';
   onComplete?: () => void;
+}
+
+/** One-time "Auto-fill from Apple Health" offer — dismissed forever once acted on. */
+const HEALTH_OFFER_DISMISSED_KEY = 'hypertrack:healthkit-sleep-offer-dismissed';
+
+function readHealthOfferDismissed(): boolean {
+  if (typeof window === 'undefined') return true;
+  try {
+    return window.localStorage.getItem(HEALTH_OFFER_DISMISSED_KEY) === '1';
+  } catch {
+    return true;
+  }
+}
+
+function persistHealthOfferDismissed(): void {
+  try {
+    window.localStorage.setItem(HEALTH_OFFER_DISMISSED_KEY, '1');
+  } catch {
+    // Storage unavailable — the offer just shows again next time.
+  }
 }
 
 export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onComplete }: DailyCheckInProps) {
@@ -19,6 +40,14 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
   const [todaysCheckIn, setTodaysCheckIn] = useState<Partial<DailyCheckInType> | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   
+  // Apple Health sleep auto-fill (iOS native only; absent everywhere else)
+  const [sleepSource, setSleepSource] = useState<'manual' | 'healthkit' | null>(null);
+  const [prefilledSleepHours, setPrefilledSleepHours] = useState<number | null>(null);
+  const [isIOSNative, setIsIOSNative] = useState(false);
+  const [healthKitConnected, setHealthKitConnected] = useState<boolean | null>(null);
+  const [healthOfferDismissed, setHealthOfferDismissed] = useState(true);
+  const [isConnectingHealth, setIsConnectingHealth] = useState(false);
+
   // Check-in values
   const [sleepHours, setSleepHours] = useState(7);
   const [sleepQuality, setSleepQuality] = useState<Rating>(3);
@@ -136,23 +165,90 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
     async function checkTodaysCheckIn() {
       const supabase = createUntypedClient();
       const todayStr = getLocalDateString();
-      
+
       const { data } = await supabase
         .from('daily_check_ins')
         .select('*')
         .eq('user_id', userId)
         .eq('date', todayStr)
         .single();
-      
+
       if (data) {
-        setAlreadyCheckedIn(true);
+        // A HealthKit sleep auto-fill creates a row with ONLY sleep fields;
+        // that must not read as a completed check-in. A user-answered field
+        // (energy) marks true completion.
+        const completed = data.energy_level != null;
+        setAlreadyCheckedIn(completed);
         setTodaysCheckIn(data);
+        if (data.sleep_hours != null) {
+          const hours = Number(data.sleep_hours);
+          setSleepHours(hours);
+          setSleepSource((data.sleep_source as 'manual' | 'healthkit' | null) ?? 'manual');
+          if (data.sleep_source === 'healthkit') setPrefilledSleepHours(hours);
+        }
       }
       setIsLoading(false);
     }
-    
+
     checkTodaysCheckIn();
   }, [userId]);
+
+  // Apple Health inline offer: iOS native app only, once, and only while not
+  // connected. Web/PWA/Android never load any HealthKit code from here.
+  useEffect(() => {
+    if (!isNativePlatform() || getPlatform() !== 'ios') return;
+    setIsIOSNative(true);
+    setHealthOfferDismissed(readHealthOfferDismissed());
+    import('@/lib/actions/healthkit')
+      .then((m) => m.getHealthKitSyncContext())
+      .then((ctx) => setHealthKitConnected(ctx.connected))
+      .catch(() => setHealthKitConnected(false));
+  }, []);
+
+  const handleDismissHealthOffer = () => {
+    setHealthOfferDismissed(true);
+    persistHealthOfferDismissed();
+  };
+
+  const handleConnectAppleHealth = async () => {
+    setIsConnectingHealth(true);
+    try {
+      const healthkit = await import('@/lib/integrations/healthkit');
+      const result = await healthkit.requestHealthKitPermissions();
+      if (!result.granted) return;
+
+      const { upsertWearableConnection } = await import('@/lib/actions/wearable');
+      await upsertWearableConnection({
+        source: 'apple_healthkit',
+        permissions: ['steps', 'active_energy', 'sleep', 'heart_rate'],
+        deviceName: 'Apple Health',
+      });
+      setHealthKitConnected(true);
+
+      const sync = await import('@/lib/integrations/healthkit-sync');
+      await sync.runHealthKitSync({ force: true });
+
+      // Pull the freshly-synced night into the slider (if one landed).
+      const supabase = createUntypedClient();
+      const { data } = await supabase
+        .from('daily_check_ins')
+        .select('sleep_hours, sleep_source')
+        .eq('user_id', userId)
+        .eq('date', getLocalDateString())
+        .maybeSingle();
+      if (data?.sleep_hours != null && data.sleep_source === 'healthkit') {
+        const hours = Number(data.sleep_hours);
+        setSleepHours(hours);
+        setSleepSource('healthkit');
+        setPrefilledSleepHours(hours);
+      }
+    } catch (error) {
+      console.warn('Apple Health connect failed:', error);
+    } finally {
+      setIsConnectingHealth(false);
+      handleDismissHealthOffer();
+    }
+  };
   
   // Calculate refeed recommendation for cuts
   const getRefeedStatus = () => {
@@ -206,10 +302,19 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
       const supabase = createUntypedClient();
       const todayStr = getLocalDateString();
       
+      // Manual correction wins: touching the auto-filled value re-tags the day
+      // as manual so HealthKit never overwrites it again. Submitting an
+      // untouched auto-fill keeps the healthkit tag (and future corrections).
+      const submittedSleepSource =
+        sleepSource === 'healthkit' && prefilledSleepHours === sleepHours
+          ? 'healthkit'
+          : 'manual';
+
       const checkInData = {
         user_id: userId,
         date: todayStr,
         sleep_hours: sleepHours,
+        sleep_source: submittedSleepSource,
         sleep_quality: sleepQuality,
         energy_level: energyLevel,
         mood_rating: moodRating,
@@ -224,9 +329,11 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
         .upsert(checkInData, { onConflict: 'user_id,date' });
       
       if (error) throw error;
-      
+
       setAlreadyCheckedIn(true);
       setTodaysCheckIn(checkInData);
+      setSleepSource(submittedSleepSource);
+      if (submittedSleepSource === 'manual') setPrefilledSleepHours(null);
       onComplete?.();
     } catch (error) {
       console.error('Failed to save check-in:', error);
@@ -284,7 +391,9 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
           <div className="p-2 bg-surface-800 rounded-lg">
             <p className="text-lg">😴</p>
             <p className="text-sm font-medium text-surface-100">{displayData.sleepHours}h</p>
-            <p className="text-xs text-surface-500">Sleep</p>
+            <p className="text-xs text-surface-500">
+              {(todaysCheckIn as any).sleep_source === 'healthkit' ? 'Sleep ⌚' : 'Sleep'}
+            </p>
           </div>
           <div className="p-2 bg-surface-800 rounded-lg">
             <p className="text-lg">⚡</p>
@@ -369,6 +478,46 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
                 </span>
                 <span className="text-surface-500">{currentQuestion.max}h</span>
               </div>
+
+              {/* Auto-filled from Apple Health (untouched values keep the tag) */}
+              {currentQuestion.id === 'sleep' &&
+                sleepSource === 'healthkit' &&
+                prefilledSleepHours === sleepHours && (
+                  <p
+                    className="text-xs text-surface-500 text-center"
+                    data-testid="sleep-healthkit-tag"
+                  >
+                    ⌚ from Apple Health — adjust if it looks off
+                  </p>
+                )}
+
+              {/* One-time inline offer (iOS native, not yet connected) */}
+              {currentQuestion.id === 'sleep' &&
+                isIOSNative &&
+                healthKitConnected === false &&
+                !healthOfferDismissed && (
+                  <div
+                    className="flex items-center justify-between gap-2 p-2 bg-surface-800 rounded-lg"
+                    data-testid="sleep-healthkit-offer"
+                  >
+                    <button
+                      onClick={handleConnectAppleHealth}
+                      disabled={isConnectingHealth}
+                      className="flex-1 text-left text-xs text-primary-400 hover:text-primary-300 disabled:opacity-50"
+                    >
+                      {isConnectingHealth
+                        ? 'Connecting to Apple Health…'
+                        : '⌚ Auto-fill from Apple Health'}
+                    </button>
+                    <button
+                      onClick={handleDismissHealthOffer}
+                      aria-label="Dismiss Apple Health offer"
+                      className="text-surface-500 hover:text-surface-300 text-xs px-1"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
             </div>
           )}
           

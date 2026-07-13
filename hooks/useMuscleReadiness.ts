@@ -19,6 +19,7 @@ import {
 import { resolveMuscleToStandard } from '@/types/schema';
 import { recoveryConfigFor, type RecoverySession, type RecoveryExercise } from '@/services/muscleRecovery';
 import { useRecoveryMultipliers } from '@/hooks/useRecoveryMultipliers';
+import { useWearableRecovery } from '@/hooks/useWearableRecovery';
 import {
   buildReadinessRows,
   selectGoodTargets,
@@ -215,6 +216,7 @@ export function useMuscleReadiness({
   const { user: storeUser } = useUserStore();
   const { historyRows, sessions, isLoading, error, refetch } = useRecoveryHistory(now, enabled);
   const { multipliers } = useRecoveryMultipliers();
+  const { state: wearableRecovery } = useWearableRecovery();
 
   // Working (non-warmup) live sets grouped by block.
   const liveWorkingSetsByBlock = useMemo(() => {
@@ -293,12 +295,14 @@ export function useMuscleReadiness({
     return [...sessions, { performedAt: now, exercises: liveExercises }];
   }, [sessions, liveBlocks, liveWorkingSetsByBlock, now]);
 
-  // Enhanced athletes get shorter recovery windows (shared windowScale), and
-  // the learned per-muscle soreness multipliers scale each muscle's window.
+  // Enhanced athletes get shorter recovery windows (shared windowScale), the
+  // learned per-muscle soreness multipliers scale each muscle's window, and
+  // the wearable HRV/RHR modifier stretches/shrinks all windows globally
+  // (bounded + composed in recoveryConfigFor).
   const enhancedAthleteMode = storeUser?.enhancedAthleteMode === true;
   const recoveryConfig = useMemo(
-    () => recoveryConfigFor(enhancedAthleteMode, multipliers),
-    [enhancedAthleteMode, multipliers]
+    () => recoveryConfigFor(enhancedAthleteMode, multipliers, wearableRecovery.scale),
+    [enhancedAthleteMode, multipliers, wearableRecovery.scale]
   );
 
   const rows = useMemo(
