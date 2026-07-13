@@ -373,6 +373,105 @@ export function setEnhancedStatus(
 }
 
 // ============================================
+// RESEARCH COMPARISON
+// ============================================
+
+export type ResearchComparisonStatus = 'lower' | 'average' | 'higher';
+
+/**
+ * One muscle's personalized MEV–MRV band compared against the unadjusted
+ * research baseline, with the reasons the two differ (or don't).
+ */
+export interface ResearchComparisonEntry {
+  muscle: MuscleGroup;
+  status: ResearchComparisonStatus;
+  /** The user's personalized band (learned or context-adjusted), sets/week. */
+  personalMev: number;
+  personalMrv: number;
+  /** The raw research baseline band (intermediate, natural), sets/week. */
+  researchMev: number;
+  researchMrv: number;
+  /** Midpoint-vs-midpoint difference, rounded percent (e.g. -30, 0, +15). */
+  percentDiff: number;
+  /** Human-readable basis for the personalization, most specific first. */
+  reasons: string[];
+}
+
+export interface ResearchComparison {
+  entries: ResearchComparisonEntry[];
+  lower: ResearchComparisonEntry[];
+  average: ResearchComparisonEntry[];
+  higher: ResearchComparisonEntry[];
+}
+
+/**
+ * A muscle counts as "at average" while its band midpoint is within ±10% of
+ * the research midpoint — the training-age multipliers (0.7 / 1.15) and the
+ * enhanced-mode scaling both land outside this window, so any deliberate
+ * adjustment is classified, while rounding noise is not.
+ */
+export const RESEARCH_COMPARISON_TOLERANCE = 0.1;
+
+/**
+ * Compare a user's personalized volume profile against the unadjusted
+ * research baselines, per muscle. Classification compares band midpoints
+ * ((MEV+MRV)/2) so a raised ceiling and a raised floor both count toward
+ * "higher" without double-weighting either landmark.
+ */
+export function compareProfileToResearch(profile: UserVolumeProfile): ResearchComparison {
+  const entries: ResearchComparisonEntry[] = MUSCLE_GROUPS.map((muscle) => {
+    const baseline = BASELINE_VOLUME_RECOMMENDATIONS[muscle];
+    const tolerance = profile.muscleTolerance[muscle];
+    const personalMev = tolerance?.estimatedMEV ?? baseline.mev;
+    const personalMrv = tolerance?.estimatedMRV ?? baseline.mrv;
+
+    const researchMid = (baseline.mev + baseline.mrv) / 2;
+    const personalMid = (personalMev + personalMrv) / 2;
+    const diff = researchMid > 0 ? (personalMid - researchMid) / researchMid : 0;
+
+    let status: ResearchComparisonStatus = 'average';
+    if (diff > RESEARCH_COMPARISON_TOLERANCE) status = 'higher';
+    else if (diff < -RESEARCH_COMPARISON_TOLERANCE) status = 'lower';
+
+    const reasons: string[] = [];
+    if (tolerance && tolerance.dataPoints > 0) {
+      reasons.push(
+        `Learned from ${tolerance.dataPoints} mesocycle${tolerance.dataPoints === 1 ? '' : 's'} of your training (${tolerance.confidence} confidence)`
+      );
+    }
+    if (profile.trainingAge === 'novice') {
+      reasons.push('Novice training age — research volumes scaled to 70%');
+    } else if (profile.trainingAge === 'advanced') {
+      reasons.push('Advanced training age — research volumes scaled to 115%');
+    }
+    if (profile.isEnhanced) {
+      reasons.push('Enhanced athlete mode — recoverable-volume ceiling raised');
+    }
+    if (reasons.length === 0) {
+      reasons.push('Research default — personalizes as you complete mesocycles');
+    }
+
+    return {
+      muscle,
+      status,
+      personalMev,
+      personalMrv,
+      researchMev: baseline.mev,
+      researchMrv: baseline.mrv,
+      percentDiff: Math.round(diff * 100),
+      reasons,
+    };
+  });
+
+  return {
+    entries,
+    lower: entries.filter((e) => e.status === 'lower'),
+    average: entries.filter((e) => e.status === 'average'),
+    higher: entries.filter((e) => e.status === 'higher'),
+  };
+}
+
+// ============================================
 // UTILITY FUNCTIONS
 // ============================================
 
