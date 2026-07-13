@@ -27,6 +27,7 @@ function renderHeader(overrides: Partial<WorkoutHeaderProps> = {}) {
     exerciseTotal: total,
     segments: makeSegments(total, 2),
     startedAt: '2026-07-11T10:00:00.000Z',
+    timerStarted: true,
     workoutTimer: { isPaused: false, formattedTime: '5:13', toggle },
     allCollapsed: false,
     onToggleAllCollapsed: jest.fn(),
@@ -88,6 +89,31 @@ describe('WorkoutHeader timer pill', () => {
   it('is hidden until the session has started', () => {
     renderHeader({ startedAt: null });
     expect(screen.queryByTestId('workout-timer-pill')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('workout-timer-pill-idle')).not.toBeInTheDocument();
+  });
+
+  it('shows a muted non-interactive hint before the first set logs (no ⏸ 0:00, no pause affordance)', async () => {
+    const user = userEvent.setup();
+    const toggle = jest.fn();
+    renderHeader({
+      timerStarted: false,
+      workoutTimer: { isPaused: false, formattedTime: '0:00', toggle },
+    });
+    expect(screen.queryByTestId('workout-timer-pill')).not.toBeInTheDocument();
+    const idle = screen.getByTestId('workout-timer-pill-idle');
+    expect(idle).toHaveTextContent('starts with first set');
+    expect(idle).not.toHaveTextContent('0:00');
+    // Not a button and no pause icon — nothing to pause yet.
+    expect(idle.tagName).not.toBe('BUTTON');
+    expect(idle.querySelector('.tabler-icon-player-pause')).not.toBeInTheDocument();
+    await user.click(idle);
+    expect(toggle).not.toHaveBeenCalled();
+  });
+
+  it('switches to the live pause/resume pill once the timer has started', () => {
+    renderHeader({ timerStarted: true });
+    expect(screen.getByTestId('workout-timer-pill')).toBeInTheDocument();
+    expect(screen.queryByTestId('workout-timer-pill-idle')).not.toBeInTheDocument();
   });
 
   it('reserves a ≥44pt hit area', () => {

@@ -4287,6 +4287,7 @@ export default function WorkoutPage() {
         exerciseTotal={activeBlocks.length}
         segments={headerSegments}
         startedAt={session?.startedAt ?? null}
+        timerStarted={timerStartedAt !== null}
         workoutTimer={workoutTimer}
         allCollapsed={allCollapsed}
         onToggleAllCollapsed={() => setAllCollapsed(!allCollapsed)}
