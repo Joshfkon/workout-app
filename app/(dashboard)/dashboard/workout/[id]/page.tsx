@@ -2461,16 +2461,18 @@ export default function WorkoutPage() {
     // Discomfort newly added to an already-logged set → record the pain event.
     if (feedback.discomfort && !setToUpdate?.feedback?.discomfort && session && setToUpdate) {
       const block = blocks.find((b) => b.id === setToUpdate.exerciseBlockId);
-      void insertJointPainEvent(
-        supabase,
-        eventFromSetDiscomfort({
-          userId: session.userId,
-          sessionId: session.id,
-          exerciseId: block?.exerciseId ?? '',
-          setLogId: setId,
-          discomfort: feedback.discomfort,
-        })
-      );
+      if (block) {
+        void insertJointPainEvent(
+          supabase,
+          eventFromSetDiscomfort({
+            userId: session.userId,
+            sessionId: session.id,
+            exerciseId: block.exerciseId,
+            setLogId: setId,
+            discomfort: feedback.discomfort,
+          })
+        );
+      }
     }
   };
 
