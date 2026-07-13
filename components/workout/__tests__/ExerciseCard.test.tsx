@@ -7,7 +7,7 @@
  */
 
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ExerciseCard } from '../ExerciseCard';
 import type {
@@ -506,6 +506,221 @@ describe('ExerciseCard', () => {
         'aria-pressed',
         'true'
       );
+    });
+  });
+
+  describe('Weight-edit reps recompute (field-edit rules)', () => {
+    // The reps auto-adjust after a weight edit is debounced by 400ms, so these
+    // tests drive time explicitly.
+    beforeEach(() => {
+      jest.useFakeTimers();
+    });
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    const setupUser = () => userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+
+    const flushDebounce = () => {
+      act(() => {
+        jest.advanceTimersByTime(450);
+      });
+    };
+
+    /** One completed working set: 100 kg × 10 @ RPE 8 (2 RIR) against 8-12 @ 2. */
+    const completedSet = () =>
+      createMockSetLog({ id: 'set-1', setNumber: 1, weightKg: 100, reps: 10, rpe: 8 });
+
+    const editWeight = async (user: ReturnType<typeof setupUser>, current: RegExp, value: string) => {
+      await user.click(screen.getByRole('button', { name: current }));
+      const input = screen.getByRole('spinbutton', { name: 'Weight' });
+      await user.clear(input);
+      await user.type(input, value);
+    };
+
+    it('recomputes reps from the suggestion e1RM when the weight is edited', async () => {
+      const user = setupUser();
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          sets={[completedSet()]}
+          isActive={true}
+          onSetComplete={jest.fn().mockResolvedValue('id')}
+        />
+      );
+
+      // Suggestion prefill off the completed set: hold 100 kg, predict 9 reps.
+      expect(screen.getByRole('button', { name: /Reps: 9 reps/ })).toBeInTheDocument();
+
+      await editWeight(user, /Weight: 100 kg/, '90');
+      flushDebounce();
+
+      // Same e1RM the suggestion used: 100×10 @ 2 RIR → 140 kg. At 90 kg:
+      // 30·(140/90 − 1) − 2 = 14.7, de-rated ×0.95 (one set done) → 14.
+      // A real prediction — NOT the rep-range max (12) or the display cap (17).
+      expect(screen.getByRole('button', { name: /Reps: 14 reps/ })).toBeInTheDocument();
+    });
+
+    it('predicts fewer reps for a heavier edit (same anchor, smooth curve)', async () => {
+      const user = setupUser();
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          sets={[completedSet()]}
+          isActive={true}
+          onSetComplete={jest.fn().mockResolvedValue('id')}
+        />
+      );
+
+      await editWeight(user, /Weight: 100 kg/, '110');
+      flushDebounce();
+
+      // 30·(140/110 − 1) − 2 = 6.2 → ×0.95 → 6.
+      expect(screen.getByRole('button', { name: /Reps: 6 reps/ })).toBeInTheDocument();
+    });
+
+    it('AMRAP row: weight edits recompute reps at RIR 0 and stay near the suggestion', async () => {
+      const user = setupUser();
+      // Last set 142.5×7 @ RPE 8 (2 RIR) against 5-10 @ 2 → AMRAP suggestion
+      // holds 142.5 and predicts 7 + 2 = 9 reps to failure.
+      const sets = [
+        createMockSetLog({ id: 'set-1', setNumber: 1, weightKg: 142.5, reps: 7, rpe: 8 }),
+      ];
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          block={createMockBlock({ targetSets: 2, targetRepRange: [5, 10] as [number, number] })}
+          sets={sets}
+          isActive={true}
+          isAmrapSuggested={true}
+          onSetComplete={jest.fn().mockResolvedValue('id')}
+        />
+      );
+
+      expect(screen.getByRole('button', { name: /Reps: 9 reps/ })).toBeInTheDocument();
+
+      await editWeight(user, /Weight: 142\.5 kg/, '140');
+      flushDebounce();
+
+      // e1RM 142.5×7 @ 2 RIR → 185.25 kg. AMRAP predicts to failure (RIR 0):
+      // 30·(185.25/140 − 1) = 9.7 → ×0.95 → 9. A visibly small move from 9,
+      // never a reset to the range cap.
+      expect(screen.getByRole('button', { name: /Reps: 9 reps/ })).toBeInTheDocument();
+    });
+
+    it('AMRAP row: a heavier edit predicts proportionally fewer reps', async () => {
+      const user = setupUser();
+      const sets = [
+        createMockSetLog({ id: 'set-1', setNumber: 1, weightKg: 142.5, reps: 7, rpe: 8 }),
+      ];
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          block={createMockBlock({ targetSets: 2, targetRepRange: [5, 10] as [number, number] })}
+          sets={sets}
+          isActive={true}
+          isAmrapSuggested={true}
+          onSetComplete={jest.fn().mockResolvedValue('id')}
+        />
+      );
+
+      await editWeight(user, /Weight: 142\.5 kg/, '150');
+      flushDebounce();
+
+      // 30·(185.25/150 − 1) = 7.05 → ×0.95 → 7.
+      expect(screen.getByRole('button', { name: /Reps: 7 reps/ })).toBeInTheDocument();
+    });
+
+    it('never touches reps the user edited manually, even on later weight edits', async () => {
+      const user = setupUser();
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          sets={[completedSet()]}
+          isActive={true}
+          onSetComplete={jest.fn().mockResolvedValue('id')}
+        />
+      );
+
+      // User types their own rep count first...
+      await user.click(screen.getByRole('button', { name: /Reps: 9 reps/ }));
+      const repsInput = screen.getByRole('spinbutton', { name: 'Reps' });
+      await user.clear(repsInput);
+      await user.type(repsInput, '12');
+
+      // ...then edits the weight. The recompute must not fire on a dirty field.
+      await editWeight(user, /Weight: 100 kg/, '90');
+      flushDebounce();
+
+      expect(screen.getByRole('button', { name: /Reps: 12 reps/ })).toBeInTheDocument();
+    });
+
+    it('cold start (no e1RM anywhere): weight edits leave reps untouched', async () => {
+      const user = setupUser();
+      // No completed sets, no previous session, no exercise history — only the
+      // planned block target (60 kg, mid-range 10 reps). There is no observed
+      // e1RM, so a weight edit must not recompute (and must not reset) reps.
+      render(
+        <ExerciseCard {...defaultProps} isActive={true} onSetComplete={jest.fn().mockResolvedValue('id')} />
+      );
+
+      expect(screen.getByRole('button', { name: /Reps: 10 reps/ })).toBeInTheDocument();
+
+      await editWeight(user, /Weight: 60 kg/, '40');
+      flushDebounce();
+
+      expect(screen.getByRole('button', { name: /Reps: 10 reps/ })).toBeInTheDocument();
+    });
+
+    it('logging the set clears the dirty flags for the next set', async () => {
+      const user = setupUser();
+      const onSetComplete = jest.fn().mockResolvedValue('new-set-id');
+      const { rerender } = render(
+        <ExerciseCard
+          {...defaultProps}
+          sets={[completedSet()]}
+          isActive={true}
+          onSetComplete={onSetComplete}
+        />
+      );
+
+      // Dirty the reps field on the active set, then log it.
+      await user.click(screen.getByRole('button', { name: /Reps: 9 reps/ }));
+      const repsInput = screen.getByRole('spinbutton', { name: 'Reps' });
+      await user.clear(repsInput);
+      await user.type(repsInput, '12');
+      await user.click(screen.getByRole('button', { name: 'Log set' }));
+      act(() => {
+        jest.advanceTimersByTime(150); // release the double-tap lock
+      });
+
+      // Parent persists the set and re-renders with it appended.
+      const loggedSet = createMockSetLog({
+        id: 'set-2',
+        setNumber: 2,
+        weightKg: 100,
+        reps: 9,
+        rpe: 8,
+      });
+      rerender(
+        <ExerciseCard
+          {...defaultProps}
+          sets={[completedSet(), loggedSet]}
+          isActive={true}
+          onSetComplete={onSetComplete}
+        />
+      );
+
+      // Fresh prefill for set 3: hold 100 kg, predict 8 reps.
+      expect(screen.getByRole('button', { name: /Reps: 8 reps/ })).toBeInTheDocument();
+
+      // The old set's manual-reps flag must be gone: a weight edit on the NEW
+      // set recomputes again. Session-best e1RM is still 140 (set 1); at 90 kg
+      // with two sets done: (30·(140/90 − 1) − 2) × 0.9 = 13.2 → 13.
+      await editWeight(user, /Weight: 100 kg/, '90');
+      flushDebounce();
+
+      expect(screen.getByRole('button', { name: /Reps: 13 reps/ })).toBeInTheDocument();
     });
   });
 
