@@ -69,13 +69,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark" style={{ backgroundColor: '#09090b' }}>
+    <html lang="en" data-theme="dark" style={{ backgroundColor: '#09090b' }} suppressHydrationWarning>
       <head>
-        {/* No-FOUC theme: apply the saved theme before first paint. Default is dark
-            (no attribute); only light needs the data-theme set. */}
+        {/* No-FOUC theme: resolve the saved preference (dark | light | system)
+            and stamp an explicit data-theme before first paint. SSR default is
+            dark (attribute above); suppressHydrationWarning on <html> covers
+            this pre-hydration mutation. Kept in sync with hooks/useTheme.ts. */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('theme');if(t==='light'){document.documentElement.setAttribute('data-theme','light');}}catch(e){}})();`,
+            __html: `(function(){try{var t=localStorage.getItem('theme');var light=t==='light'||(t==='system'&&window.matchMedia('(prefers-color-scheme: light)').matches);document.documentElement.setAttribute('data-theme',light?'light':'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();`,
           }}
         />
         {/* DNS prefetch for Supabase - loaded dynamically */}

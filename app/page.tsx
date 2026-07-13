@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { isSessionCookieValid } from "@/lib/supabase/sessionCookie";
+import { ThemeToggleCompact } from "@/components/settings/ThemeToggle";
 
 export default async function Home({
   searchParams,
@@ -47,6 +48,7 @@ export default async function Home({
           <span className="text-lg font-bold text-surface-100 tracking-tight">HyperTrack</span>
         </div>
         <div className="flex items-center gap-2 sm:gap-3">
+          <ThemeToggleCompact />
           <Link
             href="/login"
             className="px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium text-surface-300 hover:text-surface-100 transition-colors"

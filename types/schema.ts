@@ -239,6 +239,12 @@ export interface UserPreferences {
 
   /** Body hub: the user said "no thanks" to the DEXA reminder suggestion. */
   dexaReminderDeclined?: boolean;
+
+  /**
+   * Color theme preference. 'system' follows the OS. Unset = 'dark'.
+   * Managed by hooks/useTheme.ts (localStorage cache + server sync).
+   */
+  theme?: 'dark' | 'light' | 'system';
 }
 
 /**

@@ -1,6 +1,11 @@
 import type { Config } from "tailwindcss";
 
 const config: Config = {
+  // Bind dark: variants to the app's own theme attribute (set pre-paint by
+  // the script in app/layout.tsx and managed by hooks/useTheme.ts). Without
+  // this, Tailwind defaults to the `media` strategy and dark: classes follow
+  // the OS setting, flipping independently of the in-app theme choice.
+  darkMode: ['selector', '[data-theme="dark"]'],
   content: [
     "./pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
