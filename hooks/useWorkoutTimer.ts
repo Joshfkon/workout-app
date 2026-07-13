@@ -1,29 +1,40 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 
 const WORKOUT_TIMER_STORAGE_KEY = 'workout_timer_state';
 
+/**
+ * Persisted pause bookkeeping — the ONLY timer state that is ever written.
+ *
+ * The timer's start is NOT stored here: it is derived from the first logged
+ * set's `loggedAt` (see `firstLoggedSetTime`), which lives with the set data
+ * itself and survives navigation, backgrounding, and app kills. Because
+ * elapsed time is recomputed from that durable anchor, losing or corrupting
+ * this record can never reset the timer — at worst it forgets pause credit.
+ */
 interface WorkoutTimerState {
-  startTime: number;       // When the workout started (or resumed from)
-  pausedAt: number | null; // When paused, the elapsed time at that point
-  isPaused: boolean;
+  /** Total ms spent in completed pauses (excluded from elapsed). */
+  pausedTotalMs: number;
+  /** Epoch ms when the current pause began, or null while running. */
+  pausedAt: number | null;
 }
 
 /**
  * The single source of truth for "how long has this workout been active".
  *
- * Paused time is excluded: on resume the hook rewinds `startTime` so
- * `now - startTime` stays equal to real active seconds, and while paused the
- * frozen `pausedAt` is returned. Both the live header timer AND the duration
- * snapshotted at finish go through this one function, so the summary/history
- * can never disagree with the timer the user watched.
+ * Running: `now - anchor - pausedTotalMs`. Paused: the same formula frozen at
+ * `pausedAt`. Both the live header timer AND the duration snapshotted at
+ * finish go through this one function, so the summary/history can never
+ * disagree with the timer the user watched.
  */
-export function elapsedFromState(state: WorkoutTimerState, nowMs: number): number {
-  if (state.isPaused && state.pausedAt !== null) {
-    return Math.max(0, Math.floor(state.pausedAt));
-  }
-  return Math.max(0, Math.floor((nowMs - state.startTime) / 1000));
+export function elapsedFromAnchor(
+  anchorMs: number,
+  state: WorkoutTimerState,
+  nowMs: number
+): number {
+  const end = state.pausedAt ?? nowMs;
+  return Math.max(0, Math.floor((end - anchorMs - state.pausedTotalMs) / 1000));
 }
 
 /**
@@ -51,9 +62,62 @@ export function firstLoggedSetTime(
   return earliest;
 }
 
+/**
+ * Interpret whatever is in storage as pause bookkeeping. Read-time only —
+ * this never writes back; a legacy record is re-persisted in the new shape
+ * the next time pause/resume runs.
+ *
+ * - Current shape (`pausedTotalMs` present): fields default ONLY when
+ *   absent — an existing 0 or a real pausedAt passes through untouched.
+ * - Legacy shape ({startTime, pausedAt-in-seconds, isPaused}): the old code
+ *   rewound `startTime` forward on every resume, so `startTime - anchor` is
+ *   exactly the accumulated pause credit. A legacy paused record froze the
+ *   display at `pausedAt` seconds; reproduce that frozen value against the
+ *   anchor.
+ * - Anything unreadable: no pause credit (elapsed still correct via anchor).
+ */
+export function normalizeStoredState(
+  parsed: unknown,
+  anchorMs: number,
+  nowMs: number
+): WorkoutTimerState {
+  const fresh: WorkoutTimerState = { pausedTotalMs: 0, pausedAt: null };
+  if (typeof parsed !== 'object' || parsed === null) return fresh;
+  const raw = parsed as Record<string, unknown>;
+
+  if (raw.pausedTotalMs !== undefined) {
+    // Current shape. Default a field only when it is absent.
+    const pausedTotalMs =
+      typeof raw.pausedTotalMs === 'number' && raw.pausedTotalMs >= 0
+        ? raw.pausedTotalMs
+        : 0;
+    const pausedAt =
+      typeof raw.pausedAt === 'number'
+        ? Math.min(raw.pausedAt, nowMs) // clock skew: a future pause start clamps to now
+        : null;
+    return { pausedTotalMs, pausedAt };
+  }
+
+  if (typeof raw.startTime === 'number') {
+    // Legacy shape (pausedAt was elapsed SECONDS at the moment of pause).
+    if (raw.isPaused === true && typeof raw.pausedAt === 'number') {
+      return {
+        pausedTotalMs: Math.max(0, nowMs - anchorMs - raw.pausedAt * 1000),
+        pausedAt: nowMs,
+      };
+    }
+    return {
+      pausedTotalMs: Math.max(0, raw.startTime - anchorMs),
+      pausedAt: null,
+    };
+  }
+
+  return fresh;
+}
+
 interface UseWorkoutTimerOptions {
   sessionId: string;
-  startedAt: string | null; // ISO date string from session
+  startedAt: string | null; // loggedAt of the first logged set
 }
 
 export function useWorkoutTimer({ sessionId, startedAt }: UseWorkoutTimerOptions) {
@@ -65,53 +129,47 @@ export function useWorkoutTimer({ sessionId, startedAt }: UseWorkoutTimerOptions
   // Generate storage key per session
   const storageKey = `${WORKOUT_TIMER_STORAGE_KEY}_${sessionId}`;
 
-  // Load saved state or initialize from startedAt
-  useEffect(() => {
-    if (!sessionId || !startedAt) return;
+  // The derived timer start. Never persisted, never written by an effect —
+  // it IS the first logged set's timestamp.
+  const anchorMs = useMemo(() => {
+    if (!startedAt) return null;
+    const ms = new Date(startedAt).getTime();
+    return Number.isNaN(ms) ? null : ms;
+  }, [startedAt]);
+  const anchorRef = useRef<number | null>(anchorMs);
+  anchorRef.current = anchorMs;
 
+  // Mount/return/rehydrate: READ pause bookkeeping and render. This effect
+  // must never write timer state — a mount-time write is exactly the
+  // "correct on first open, destructive on every return" trap.
+  useEffect(() => {
+    if (!sessionId || anchorMs === null) {
+      stateRef.current = null;
+      setElapsedSeconds(0);
+      setIsPaused(false);
+      return;
+    }
+
+    let state: WorkoutTimerState = { pausedTotalMs: 0, pausedAt: null };
     try {
       const stored = localStorage.getItem(storageKey);
       if (stored) {
-        const state: WorkoutTimerState = JSON.parse(stored);
-        stateRef.current = state;
-
-        if (state.isPaused && state.pausedAt !== null) {
-          // Was paused - restore paused state
-          setElapsedSeconds(elapsedFromState(state, Date.now()));
-          setIsPaused(true);
-        } else {
-          // Was running - calculate current elapsed
-          setElapsedSeconds(elapsedFromState(state, Date.now()));
-          setIsPaused(false);
-        }
-      } else {
-        // No saved state - initialize from session startedAt
-        const startTime = new Date(startedAt).getTime();
-        stateRef.current = {
-          startTime,
-          pausedAt: null,
-          isPaused: false,
-        };
-        setElapsedSeconds(elapsedFromState(stateRef.current, Date.now()));
-        setIsPaused(false);
-
-        // Save initial state
-        localStorage.setItem(storageKey, JSON.stringify(stateRef.current));
+        state = normalizeStoredState(JSON.parse(stored), anchorMs, Date.now());
       }
     } catch (e) {
-      console.error('Failed to restore workout timer state:', e);
-      // Fallback to startedAt
-      if (startedAt) {
-        const startTime = new Date(startedAt).getTime();
-        const elapsed = Math.floor((Date.now() - startTime) / 1000);
-        setElapsedSeconds(elapsed);
-      }
+      // Unreadable storage forfeits pause credit only; elapsed stays anchored.
+      console.error('Failed to restore workout timer pause state:', e);
     }
-  }, [sessionId, startedAt, storageKey]);
 
-  // Countdown/up interval - depends on isPaused and startedAt so it starts when session loads
+    stateRef.current = state;
+    setElapsedSeconds(elapsedFromAnchor(anchorMs, state, Date.now()));
+    setIsPaused(state.pausedAt !== null);
+  }, [sessionId, anchorMs, storageKey]);
+
+  // Tick while running. Recomputes from the anchor each second, so a frozen
+  // interval (backgrounded app) catches up on the next tick.
   useEffect(() => {
-    if (isPaused || !startedAt) {
+    if (isPaused || anchorMs === null) {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
@@ -123,9 +181,10 @@ export function useWorkoutTimer({ sessionId, startedAt }: UseWorkoutTimerOptions
 
     intervalRef.current = setInterval(() => {
       const state = stateRef.current;
-      if (!state || state.isPaused) return;
+      const anchor = anchorRef.current;
+      if (!state || state.pausedAt !== null || anchor === null) return;
 
-      setElapsedSeconds(elapsedFromState(state, Date.now()));
+      setElapsedSeconds(elapsedFromAnchor(anchor, state, Date.now()));
     }, 1000);
 
     return () => {
@@ -134,39 +193,45 @@ export function useWorkoutTimer({ sessionId, startedAt }: UseWorkoutTimerOptions
         intervalRef.current = null;
       }
     };
-  }, [isPaused, startedAt]);
+  }, [isPaused, anchorMs]);
+
+  const persist = useCallback(
+    (state: WorkoutTimerState) => {
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(state));
+      } catch (e) {
+        console.error('Failed to persist workout timer pause state:', e);
+      }
+    },
+    [storageKey]
+  );
 
   const pause = useCallback(() => {
-    if (!stateRef.current || isPaused) return;
+    const anchor = anchorRef.current;
+    const state = stateRef.current;
+    if (anchor === null || !state || state.pausedAt !== null) return;
 
-    const newState: WorkoutTimerState = {
-      ...stateRef.current,
-      pausedAt: elapsedSeconds,
-      isPaused: true,
-    };
+    const newState: WorkoutTimerState = { ...state, pausedAt: Date.now() };
     stateRef.current = newState;
     setIsPaused(true);
-
-    localStorage.setItem(storageKey, JSON.stringify(newState));
-  }, [isPaused, elapsedSeconds, storageKey]);
+    setElapsedSeconds(elapsedFromAnchor(anchor, newState, Date.now()));
+    persist(newState);
+  }, [persist]);
 
   const resume = useCallback(() => {
-    if (!stateRef.current || !isPaused) return;
-
-    // Calculate new startTime to maintain elapsed time
-    const pausedElapsed = stateRef.current.pausedAt ?? 0;
-    const newStartTime = Date.now() - (pausedElapsed * 1000);
+    const anchor = anchorRef.current;
+    const state = stateRef.current;
+    if (anchor === null || !state || state.pausedAt === null) return;
 
     const newState: WorkoutTimerState = {
-      startTime: newStartTime,
+      pausedTotalMs: state.pausedTotalMs + Math.max(0, Date.now() - state.pausedAt),
       pausedAt: null,
-      isPaused: false,
     };
     stateRef.current = newState;
     setIsPaused(false);
-
-    localStorage.setItem(storageKey, JSON.stringify(newState));
-  }, [isPaused, storageKey]);
+    setElapsedSeconds(elapsedFromAnchor(anchor, newState, Date.now()));
+    persist(newState);
+  }, [persist]);
 
   const toggle = useCallback(() => {
     if (isPaused) {
@@ -177,20 +242,15 @@ export function useWorkoutTimer({ sessionId, startedAt }: UseWorkoutTimerOptions
   }, [isPaused, pause, resume]);
 
   const reset = useCallback(() => {
-    if (!startedAt) return;
+    const anchor = anchorRef.current;
+    if (anchor === null) return;
 
-    const startTime = new Date(startedAt).getTime();
-    const newState: WorkoutTimerState = {
-      startTime,
-      pausedAt: null,
-      isPaused: false,
-    };
+    const newState: WorkoutTimerState = { pausedTotalMs: 0, pausedAt: null };
     stateRef.current = newState;
-    setElapsedSeconds(elapsedFromState(newState, Date.now()));
+    setElapsedSeconds(elapsedFromAnchor(anchor, newState, Date.now()));
     setIsPaused(false);
-
-    localStorage.setItem(storageKey, JSON.stringify(newState));
-  }, [startedAt, storageKey]);
+    persist(newState);
+  }, [persist]);
 
   const clearStorage = useCallback(() => {
     localStorage.removeItem(storageKey);
