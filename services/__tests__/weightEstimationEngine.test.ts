@@ -12,10 +12,19 @@ import {
   quickWeightEstimate,
   createEstimatedMaxesFromCalibration,
   quickWeightEstimateWithCalibration,
+  estimateFromTransferCandidates,
+  buildTransferCandidatesFromRows,
+  resolveBodyweightRatio,
+  isLowerBodyMachineIsolation,
+  LOWER_BODY_MACHINE_ISOLATION_RATIO_FLOOR,
+  SAME_MUSCLE_TRANSFER_FACTOR,
+  DEFAULT_SAME_PATTERN_TRANSFER_FACTOR,
   type BodyComposition,
   type ExerciseHistoryEntry,
   type UserStrengthProfile,
   type EstimatedMax,
+  type TransferCandidate,
+  type TransferSourceRow,
 } from '../weightEstimationEngine';
 import type { Experience } from '@/types/schema';
 import { makeRegionalAnalysis, makeBodyPartAnalysis } from '@/test-utils/factories';
@@ -848,6 +857,304 @@ describe('history recency', () => {
 
     // Old data should result in low confidence
     expect(result.confidence).toBe('low');
+  });
+});
+
+// ============================================
+// COLD-START ESTIMATION LADDER (transfer rungs)
+// ============================================
+
+const lyingLegCurlCandidate = (bestE1RMKg: number, over: Partial<TransferCandidate> = {}): TransferCandidate => ({
+  exerciseName: 'Lying Leg Curl',
+  primaryMuscle: 'hamstrings',
+  movementPattern: 'knee_flexion',
+  equipmentRequired: ['leg curl machine'],
+  bestE1RMKg,
+  ...over,
+});
+
+const seatedLegCurlMeta = {
+  primaryMuscle: 'hamstrings',
+  movementPattern: 'knee_flexion',
+  equipmentRequired: ['seated leg curl machine'],
+};
+
+describe('estimateFromTransferCandidates (ladder rungs 1–2)', () => {
+  it('rung 1: transfers from a known variant pair (seated ↔ lying leg curl @ 0.9)', () => {
+    const result = estimateFromTransferCandidates('Seated Leg Curl', seatedLegCurlMeta, [
+      lyingLegCurlCandidate(90),
+    ]);
+
+    expect(result).not.toBeNull();
+    expect(result!.rung).toBe('same_pattern');
+    expect(result!.fromExercise).toBe('Lying Leg Curl');
+    expect(result!.factor).toBe(0.9);
+  });
+
+  it('rung 1: same muscle + pattern + equipment class without a pair entry uses the default factor', () => {
+    const result = estimateFromTransferCandidates('Seated Leg Curl', seatedLegCurlMeta, [
+      {
+        // Canonicalizes to nothing paired with Seated Leg Curl, but matches on
+        // muscle + pattern + (machine) equipment class.
+        exerciseName: 'Nordic Ham Machine',
+        primaryMuscle: 'hamstrings',
+        movementPattern: 'knee_flexion',
+        equipmentRequired: ['leg curl machine'],
+        bestE1RMKg: 80,
+      },
+    ]);
+
+    expect(result).not.toBeNull();
+    expect(result!.rung).toBe('same_pattern');
+    expect(result!.factor).toBe(DEFAULT_SAME_PATTERN_TRANSFER_FACTOR);
+  });
+
+  it('rung 1 picks the STRONGEST matching e1RM', () => {
+    const result = estimateFromTransferCandidates('Seated Leg Curl', seatedLegCurlMeta, [
+      lyingLegCurlCandidate(70),
+      lyingLegCurlCandidate(95),
+    ]);
+
+    expect(result!.sourceE1RMKg).toBe(95);
+  });
+
+  it('rung 2: same muscle but different pattern transfers at the lower factor', () => {
+    const result = estimateFromTransferCandidates('Seated Leg Curl', seatedLegCurlMeta, [
+      {
+        exerciseName: 'Romanian Deadlift',
+        primaryMuscle: 'hamstrings',
+        movementPattern: 'hip_hinge',
+        equipmentRequired: ['barbell'],
+        bestE1RMKg: 180,
+      },
+    ]);
+
+    expect(result).not.toBeNull();
+    expect(result!.rung).toBe('same_muscle');
+    expect(result!.fromExercise).toBe('Romanian Deadlift');
+    expect(result!.factor).toBe(SAME_MUSCLE_TRANSFER_FACTOR);
+  });
+
+  it('prefers rung 1 over a stronger rung-2 candidate', () => {
+    const result = estimateFromTransferCandidates('Seated Leg Curl', seatedLegCurlMeta, [
+      lyingLegCurlCandidate(90),
+      {
+        exerciseName: 'Romanian Deadlift',
+        primaryMuscle: 'hamstrings',
+        movementPattern: 'hip_hinge',
+        equipmentRequired: ['barbell'],
+        bestE1RMKg: 200,
+      },
+    ]);
+
+    expect(result!.rung).toBe('same_pattern');
+    expect(result!.fromExercise).toBe('Lying Leg Curl');
+  });
+
+  it('never transfers from deload-flagged or soft-deleted candidates', () => {
+    const flagged = [
+      lyingLegCurlCandidate(90, { fromDeload: true }),
+      lyingLegCurlCandidate(95, { softDeleted: true }),
+    ];
+
+    expect(estimateFromTransferCandidates('Seated Leg Curl', seatedLegCurlMeta, flagged)).toBeNull();
+  });
+
+  it('never transfers from the target exercise itself or unrelated muscles', () => {
+    const result = estimateFromTransferCandidates('Seated Leg Curl', seatedLegCurlMeta, [
+      { exerciseName: 'Seated Leg Curl', primaryMuscle: 'hamstrings', movementPattern: 'knee_flexion', bestE1RMKg: 90 },
+      { exerciseName: 'Barbell Bench Press', primaryMuscle: 'chest', movementPattern: 'horizontal_press', bestE1RMKg: 140 },
+    ]);
+
+    expect(result).toBeNull();
+  });
+});
+
+describe('buildTransferCandidatesFromRows', () => {
+  const row = (over: Partial<TransferSourceRow> = {}): TransferSourceRow => ({
+    weightKg: 60,
+    reps: 10,
+    rpe: 8,
+    exercise: {
+      id: 'ex-1',
+      name: 'Lying Leg Curl',
+      primaryMuscle: 'hamstrings',
+      movementPattern: 'knee_flexion',
+      equipmentRequired: ['leg curl machine'],
+    },
+    ...over,
+  });
+
+  it('reduces rows to one best-e1RM candidate per exercise', () => {
+    const candidates = buildTransferCandidatesFromRows([
+      row({ weightKg: 50 }),
+      row({ weightKg: 70 }),
+      row({ weightKg: 60 }),
+    ]);
+
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0].exerciseName).toBe('Lying Leg Curl');
+    expect(candidates[0].bestE1RMKg).toBe(estimate1RM(70, 10, 8));
+  });
+
+  it('drops warmup, deload-session, and soft-deleted-exercise rows', () => {
+    const candidates = buildTransferCandidatesFromRows([
+      row({ isWarmup: true }),
+      row({ isDeload: true }),
+      row({ exercise: { ...row().exercise, deletedAt: '2026-07-01T00:00:00Z' } }),
+    ]);
+
+    expect(candidates).toHaveLength(0);
+  });
+});
+
+describe('cold-start ladder end-to-end (quickWeightEstimate)', () => {
+  // The reported bug: 100+ logged sets of Lying Leg Curl (~200 lb e1RM),
+  // Seated Leg Curl cold start suggested 25 lb × 10-15.
+  const legCurlOpts = {
+    transferCandidates: [lyingLegCurlCandidate(90)], // 90 kg ≈ 198 lb e1RM
+    targetMeta: seatedLegCurlMeta,
+  };
+
+  it('seats leg curl cold start ≈ a 12-15 rep load off ~180 lb e1RM, NOT 25 lb', () => {
+    const result = quickWeightEstimate(
+      'Seated Leg Curl',
+      { min: 10, max: 15 },
+      2,
+      90, // 90 kg user
+      178,
+      20,
+      'intermediate',
+      undefined,
+      'lb',
+      undefined,
+      legCurlOpts
+    );
+
+    // 90 kg × 0.9 = 81 kg (~178 lb) discounted e1RM → ~13 reps @ 3 RIR ≈ 105 lb
+    expect(result.recommendedWeight).toBeGreaterThanOrEqual(90);
+    expect(result.recommendedWeight).toBeLessThanOrEqual(120);
+    expect(result.estimateSource).toBe('exercise_transfer');
+    expect(result.transferFrom).toBe('Lying Leg Curl');
+  });
+
+  it('names the transfer source in the rationale (rung 1)', () => {
+    const result = quickWeightEstimate(
+      'Seated Leg Curl', { min: 10, max: 15 }, 2, 90, 178, 20, 'intermediate',
+      undefined, 'lb', undefined, legCurlOpts
+    );
+
+    expect(result.rationale).toContain('Lying Leg Curl');
+    expect(result.rationale).not.toContain('bodyweight');
+  });
+
+  it('prescribes the first session at 3 RIR (calibration headroom) on every cold-start rung', () => {
+    const transferResult = quickWeightEstimate(
+      'Seated Leg Curl', { min: 10, max: 15 }, 2, 90, 178, 20, 'intermediate',
+      undefined, 'lb', undefined, legCurlOpts
+    );
+    const profileResult = quickWeightEstimate(
+      'Seated Leg Curl', { min: 10, max: 15 }, 2, 90, 178, 20, 'intermediate',
+      undefined, 'lb'
+    );
+
+    expect(transferResult.targetRIR).toBe(3);
+    expect(profileResult.targetRIR).toBe(3);
+  });
+
+  it('keeps the requested RIR when direct history exists (not a cold start)', () => {
+    const result = quickWeightEstimate(
+      'Seated Leg Curl', { min: 10, max: 15 }, 2, 90, 178, 20, 'intermediate',
+      undefined, 'lb', 80 /* knownE1RM from direct history */, legCurlOpts
+    );
+
+    expect(result.targetRIR).toBe(2);
+    expect(result.estimateSource).toBe('direct_history');
+  });
+
+  it('flags lower confidence + names the source on a same-muscle (rung 2) transfer', () => {
+    const result = quickWeightEstimate(
+      'Seated Leg Curl', { min: 10, max: 15 }, 2, 90, 178, 20, 'intermediate',
+      undefined, 'lb', undefined,
+      {
+        transferCandidates: [{
+          exerciseName: 'Romanian Deadlift',
+          primaryMuscle: 'hamstrings',
+          movementPattern: 'hip_hinge',
+          equipmentRequired: ['barbell'],
+          bestE1RMKg: 180,
+        }],
+        targetMeta: seatedLegCurlMeta,
+      }
+    );
+
+    expect(result.confidence).toBe('low');
+    expect(result.transferFrom).toBe('Romanian Deadlift');
+    expect(result.rationale).toContain('Romanian Deadlift');
+  });
+
+  it('falls to the profile rung when the only candidates are deload/soft-deleted', () => {
+    const result = quickWeightEstimate(
+      'Seated Leg Curl', { min: 10, max: 15 }, 2, 90, 178, 20, 'intermediate',
+      undefined, 'lb', undefined,
+      {
+        transferCandidates: [
+          lyingLegCurlCandidate(90, { fromDeload: true }),
+          lyingLegCurlCandidate(95, { softDeleted: true }),
+        ],
+        targetMeta: seatedLegCurlMeta,
+      }
+    );
+
+    expect(result.estimateSource).not.toBe('exercise_transfer');
+    expect(result.transferFrom).toBeUndefined();
+    expect(result.rationale).not.toContain('Lying Leg Curl');
+  });
+});
+
+// ============================================
+// PROFILE RUNG COEFFICIENT SANITY (rung 3)
+// ============================================
+
+describe('profile-heuristic coefficient sanity', () => {
+  it('machine-isolation lower-body ratios clear the equipment-class floor', () => {
+    const machineIsolationLifts = [
+      'Seated Leg Curl',
+      'Lying Leg Curl',
+      'Leg Extension',
+      'Calf Machine',
+      'Hip Abduction Machine',
+    ];
+
+    for (const name of machineIsolationLifts) {
+      expect(isLowerBodyMachineIsolation(name)).toBe(true);
+      expect(resolveBodyweightRatio(name)).toBeGreaterThanOrEqual(
+        LOWER_BODY_MACHINE_ISOLATION_RATIO_FLOOR
+      );
+    }
+  });
+
+  it('leg curl coefficient is no longer below the generic hamstrings fallback', () => {
+    // The 25-lb bug: leg curls were 0.30×BW while the muscle-group fallback
+    // for hamstrings was 0.50 — the specific coefficient undercut the generic one.
+    expect(resolveBodyweightRatio('Seated Leg Curl')).toBeGreaterThanOrEqual(0.5);
+    expect(resolveBodyweightRatio('Lying Leg Curl')).toBeGreaterThanOrEqual(0.5);
+  });
+
+  it('profile-rung seated leg curl for a 90 kg lifter is a plausible machine load (≥ 40 lb)', () => {
+    const result = quickWeightEstimate(
+      'Seated Leg Curl',
+      { min: 10, max: 15 },
+      2,
+      90,
+      178,
+      20,
+      'intermediate',
+      undefined,
+      'lb'
+    );
+
+    expect(result.recommendedWeight).toBeGreaterThanOrEqual(40);
   });
 });
 
