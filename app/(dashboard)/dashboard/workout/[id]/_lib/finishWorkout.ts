@@ -81,7 +81,12 @@ export function createFinishTimer(label: string): FinishTimer {
 
 export interface FinishSummaryData {
   sessionRpe: number;
-  pumpRating: number;
+  /**
+   * Legacy global pump rating (1-5). The finish card no longer captures it —
+   * pump moved to per-exercise in-workout prompts — so this is only set by
+   * old callers; when absent the stored pump_rating is left untouched.
+   */
+  pumpRating?: number;
   notes: string;
   muscleFeedback: SessionMuscleFeedbackEntry[];
   /**
@@ -115,10 +120,12 @@ function completionPatch(data: FinishSummaryData): Record<string, unknown> {
     state: 'completed',
     completed_at: new Date().toISOString(),
     session_rpe: data.sessionRpe,
-    pump_rating: data.pumpRating,
     session_notes: data.notes,
     completion_percent: 100,
   };
+  if (typeof data.pumpRating === 'number') {
+    patch.pump_rating = data.pumpRating;
+  }
   if (typeof data.durationSeconds === 'number' && Number.isFinite(data.durationSeconds)) {
     patch.duration_seconds = Math.max(0, Math.round(data.durationSeconds));
   }
@@ -129,13 +136,17 @@ function completionPatch(data: FinishSummaryData): Record<string, unknown> {
 }
 
 function feedbackRows(userId: string, sessionId: string, data: FinishSummaryData) {
-  return data.muscleFeedback.map((entry) => ({
-    user_id: userId,
-    session_id: sessionId,
-    muscle_group: entry.muscleGroup,
-    pump: entry.pump,
-    workload: entry.workload,
-  }));
+  return data.muscleFeedback.map((entry) => {
+    const row: Record<string, unknown> = {
+      user_id: userId,
+      session_id: sessionId,
+      muscle_group: entry.muscleGroup,
+      workload: entry.workload,
+    };
+    // Pump only on legacy payloads — the finish card stopped capturing it.
+    if (entry.pump !== undefined) row.pump = entry.pump;
+    return row;
+  });
 }
 
 /**

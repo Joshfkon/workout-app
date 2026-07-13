@@ -18,7 +18,7 @@ import {
   type TodayWorkout,
 } from '@/lib/training/startMesocycleSession';
 import { WorkoutDaySelector } from '@/components/mesocycle';
-import { getLocalDateString } from '@/lib/utils';
+import { getLocalDateString, muscleDisplayName } from '@/lib/utils';
 import { sessionIndexFromCompleted } from '@/lib/training/mesocycleProgress';
 import { insertWorkoutSessions } from '@/lib/training/sessionOrigin';
 import type { MuscleGroup, WorkoutDay, ExtendedUserProfile, DexaRegionalData, Goal as SchemaGoal, Experience, Rating, Equipment, DexaScan, FullProgramRecommendation } from '@/types/schema';
@@ -661,8 +661,8 @@ export default function MesocyclePage() {
                     </div>
                     <div className="flex flex-wrap gap-2 mt-3">
                       {cardMuscles.map(muscle => (
-                        <Badge key={muscle} variant="default" className="capitalize">
-                          {muscle}
+                        <Badge key={muscle} variant="default">
+                          {muscleDisplayName(muscle)}
                         </Badge>
                       ))}
                     </div>

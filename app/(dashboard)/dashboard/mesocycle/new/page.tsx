@@ -10,7 +10,7 @@ import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { useSubscription } from '@/hooks/useSubscription';
 import { useEducationStore } from '@/hooks/useEducationPreferences';
 import { UpgradePrompt } from '@/components/subscription';
-import { formatWeight, getLocalDateString } from '@/lib/utils';
+import { formatWeight, getLocalDateString, muscleDisplayName } from '@/lib/utils';
 import type { Goal, Experience, DexaScan, Equipment, MuscleGroup, Rating, ExtendedUserProfile, FullProgramRecommendation, DexaRegionalData, WorkoutDay } from '@/types/schema';
 import { WorkoutDaySelector, MesocycleLengthGuidance } from '@/components/mesocycle';
 import {
@@ -1287,7 +1287,7 @@ export default function NewMesocyclePage() {
                 <div className="grid grid-cols-5 gap-2 text-center text-xs">
                   {Object.entries(recommendation.volumePerMuscle).slice(0, 10).map(([muscle, sets]) => (
                     <div key={muscle} className="p-2 bg-surface-900/50 rounded">
-                      <p className="text-surface-500 capitalize truncate">{muscle}</p>
+                      <p className="text-surface-500 truncate">{muscleDisplayName(muscle)}</p>
                       <p className="text-surface-200 font-mono font-medium">{sets}</p>
                     </div>
                   ))}

@@ -152,6 +152,34 @@ describe('submitFinishOptimistic', () => {
     expect(await outboxCount()).toBe(0);
   });
 
+  it('omits pump entirely on the new pump-less finish payload', async () => {
+    const { client } = makeGatedSupabase();
+
+    // What the restructured finish card sends: no global pumpRating, and
+    // workload-only per-muscle feedback (pump moved to per-exercise capture).
+    await submitFinishOptimistic(
+      { supabase: client, sessionId: 's1', session: makeSession(), navigate: jest.fn() },
+      {
+        sessionRpe: 8,
+        notes: 'good session',
+        muscleFeedback: [
+          { muscleGroup: 'chest_upper', workload: 1 },
+          { muscleGroup: 'lats', workload: 2 },
+        ],
+      }
+    );
+
+    const entries = await listOutbox();
+    const finish = entries.find((e) => e.id === sessionFinishEntryId('s1'))!;
+    expect(finish.row).not.toHaveProperty('pump_rating');
+    const feedback = entries.filter((e) => e.id.startsWith('feedback:'));
+    expect(feedback).toHaveLength(2);
+    feedback.forEach((entry) => {
+      expect(entry.row).not.toHaveProperty('pump');
+      expect(entry.row).toHaveProperty('workload');
+    });
+  });
+
   it('persists the frozen duration snapshot in the completion patch', async () => {
     const { client } = makeGatedSupabase();
 

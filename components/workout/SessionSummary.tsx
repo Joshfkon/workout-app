@@ -6,7 +6,6 @@ import type {
   WorkoutSession,
   SetLog,
   ExerciseBlock,
-  MuscleGroup,
   WeightUnit,
   FormRating,
   StandardMuscleGroup,
@@ -22,29 +21,26 @@ import {
 } from '@/types/schema';
 import {
   formatWorkoutDuration,
-  formatWeight,
   estimateE1RM,
   deriveWorkoutLabel,
+  muscleDisplayName,
   resolveWorkoutDurationSeconds,
 } from '@/lib/utils';
-import { getFormLabel, getFormColorClass } from '@/services/progressionEngine';
 import { getCalibrationVerdict, type CalibrationMethod } from '@/services/rpeCalibration';
 import type { ShareExercise, WorkoutShareTextInput } from '@/services/workoutShareText';
 import { ShareWorkoutText } from './ShareWorkoutText';
 
-/** Per-muscle end-of-session feedback captured in the summary (0-3 scales). */
+/**
+ * Per-muscle end-of-session feedback captured on the finish card.
+ * Pump capture is moving to per-exercise in-workout prompts (subjective-
+ * feedback ticket) — the finish card no longer asks for it, so `pump` is
+ * optional and only present on legacy payloads.
+ */
 export interface SessionMuscleFeedbackEntry {
   muscleGroup: StandardMuscleGroup;
-  pump: PumpRating0to3;
+  pump?: PumpRating0to3;
   workload: WorkloadRating;
 }
-
-const PUMP_CHIP_OPTIONS: { value: PumpRating0to3; label: string }[] = [
-  { value: 0, label: 'None' },
-  { value: 1, label: 'Mild' },
-  { value: 2, label: 'Good' },
-  { value: 3, label: 'Extreme' },
-];
 
 const WORKLOAD_CHIP_OPTIONS: { value: WorkloadRating; label: string }[] = [
   { value: 0, label: 'Too easy' },
@@ -53,7 +49,7 @@ const WORKLOAD_CHIP_OPTIONS: { value: WorkloadRating; label: string }[] = [
   { value: 3, label: 'Too much' },
 ];
 
-const DEFAULT_MUSCLE_RATING = { pump: 1 as PumpRating0to3, workload: 1 as WorkloadRating };
+const DEFAULT_WORKLOAD: WorkloadRating = 1;
 
 /** Resolve a raw primaryMuscle string (detailed/standard/legacy) to a StandardMuscleGroup. */
 function resolveStandardMuscle(raw: string | undefined): StandardMuscleGroup | null {
@@ -91,6 +87,15 @@ interface AMRAPCalibration {
   weightKg: number;
 }
 
+export interface SessionSummarySubmitData {
+  sessionRpe: number;
+  notes: string;
+  /** Per-muscle workload chips (default 1 "Just right" submits as-is when untouched). */
+  muscleFeedback: SessionMuscleFeedbackEntry[];
+  /** Whether the user marked this as a deload session. */
+  isDeload: boolean;
+}
+
 interface SessionSummaryProps {
   session: WorkoutSession;
   exerciseBlocks: ExerciseBlock[];
@@ -108,15 +113,13 @@ interface SessionSummaryProps {
    * (completedAt - startedAt) is used as a fallback.
    */
   durationSeconds?: number | null;
-  onSubmit?: (data: {
-    sessionRpe: number;
-    pumpRating: number;
-    notes: string;
-    /** Per-muscle pump/workload chips (defaults 1/1 submit as-is when untouched). */
-    muscleFeedback: SessionMuscleFeedbackEntry[];
-    /** Whether the user marked this as a deload session. */
-    isDeload: boolean;
-  }) => void;
+  onSubmit?: (data: SessionSummarySubmitData) => void;
+  /**
+   * Save with the same payload as onSubmit, but land on this workout's full
+   * report (the read-only analytics view) instead of the dashboard. Drives
+   * the "View full report →" link and the noteworthy PR/calibration chip.
+   */
+  onSaveAndViewReport?: (data: SessionSummarySubmitData) => void;
   readOnly?: boolean;
 }
 
@@ -142,6 +145,7 @@ export function SessionSummary({
   unit = 'kg',
   durationSeconds,
   onSubmit,
+  onSaveAndViewReport,
   readOnly = false,
 }: SessionSummaryProps) {
   // Helper to display weight in user's preferred unit
@@ -152,27 +156,11 @@ export function SessionSummary({
     }
     return decimals > 0 ? kg.toFixed(decimals) : Math.round(kg);
   };
-  
-  const weightUnit = unit === 'lb' ? 'lbs' : 'kg';
-  const [sessionRpe, setSessionRpe] = useState(session.sessionRpe || 7);
-  const [pumpRating, setPumpRating] = useState(session.pumpRating || 3);
-  const [notes, setNotes] = useState(session.sessionNotes || '');
-  // "This was a deload session" — seeded from the stored flag (auto-set for
-  // programmed deload weeks) so an already-flagged session shows the toggle on.
-  // Drives PR suppression + the share tag live, and is persisted on submit.
-  const [isDeload, setIsDeload] = useState<boolean>(session.isDeload ?? false);
-  // Per-muscle pump/workload overrides; muscles not in the map use the 1/1 default.
-  const [muscleRatings, setMuscleRatings] = useState<
-    Partial<Record<StandardMuscleGroup, { pump: PumpRating0to3; workload: WorkloadRating }>>
-  >({});
-  const [showAllPRs, setShowAllPRs] = useState(false);
-  const [showExerciseDetails, setShowExerciseDetails] = useState(true);
-  const [expandedExercises, setExpandedExercises] = useState<Set<string>>(new Set());
-  // Guards against double-submits; navigation away happens right after
-  // onSubmit, so the "Finishing…" state is only briefly visible.
-  const [submitting, setSubmitting] = useState(false);
 
-  // Calculate stats
+  const weightUnit = unit === 'lb' ? 'lbs' : 'kg';
+
+  // Calculate stats (before state hooks — the set-derived average seeds the
+  // session-RPE prefill).
   const workingSets = allSets.filter((s) => !s.isWarmup);
   const totalSets = workingSets.length;
   const totalReps = workingSets.reduce((sum, s) => sum + s.reps, 0);
@@ -180,6 +168,31 @@ export function SessionSummary({
   const avgRpe = totalSets > 0
     ? Math.round((workingSets.reduce((sum, s) => sum + s.rpe, 0) / totalSets) * 10) / 10
     : 0;
+
+  // Session RPE prefill: stored value first (completed sessions), otherwise
+  // the computed set average. The user's manual pick sticks — this only seeds
+  // the initial state.
+  const prefillSessionRpe = session.sessionRpe
+    ?? (totalSets > 0 ? Math.min(10, Math.max(1, Math.round(avgRpe))) : 7);
+  const [sessionRpe, setSessionRpe] = useState(prefillSessionRpe);
+  const [notes, setNotes] = useState(session.sessionNotes || '');
+  // Notes stay collapsed to a "+ Add note" line unless the session already has
+  // notes (e.g. resumed finish).
+  const [notesOpen, setNotesOpen] = useState(!!session.sessionNotes);
+  // "This was a deload session" — seeded from the stored flag (auto-set for
+  // programmed deload weeks) so an already-flagged session shows the toggle on.
+  // Drives PR suppression + the share tag live, and is persisted on submit.
+  const [isDeload, setIsDeload] = useState<boolean>(session.isDeload ?? false);
+  // Per-muscle workload overrides; muscles not in the map use the "Just right" default.
+  const [muscleWorkloads, setMuscleWorkloads] = useState<
+    Partial<Record<StandardMuscleGroup, WorkloadRating>>
+  >({});
+  const [showAllPRs, setShowAllPRs] = useState(false);
+  const [showExerciseDetails, setShowExerciseDetails] = useState(true);
+  const [expandedExercises, setExpandedExercises] = useState<Set<string>>(new Set());
+  // Guards against double-submits; navigation away happens right after
+  // onSubmit, so the "Finishing…" state is only briefly visible.
+  const [submitting, setSubmitting] = useState(false);
 
   // Duration is the frozen snapshot taken at finish (excludes paused time).
   // Never derived from Date.now(), so this screen shows a fixed value rather
@@ -210,7 +223,6 @@ export function SessionSummary({
     const stimulative = qualityBreakdown.stimulative || 0;
     const effective = qualityBreakdown.effective || 0;
     const junk = qualityBreakdown.junk || 0;
-    const excessive = qualityBreakdown.excessive || 0;
     // Stimulative = 100pts, Effective = 75pts, Junk = 25pts, Excessive = 0pts
     const score = (stimulative * 100 + effective * 75 + junk * 25) / totalSets;
     return Math.round(score);
@@ -422,18 +434,20 @@ export function SessionSummary({
     isDeload,
   ]);
 
-  // Volume by muscle group
+  // Volume by muscle group (muscles with zero logged sets are dropped — a
+  // skipped exercise must not render an empty 0-set row).
   const volumeByMuscle = useMemo(() => {
     const volumes: Record<string, { sets: number; volume: number }> = {};
-    
+
     exerciseBlocks.forEach(block => {
       const sets = workingSets.filter(s => s.exerciseBlockId === block.id);
+      if (sets.length === 0) return;
       const muscle = (block as any).exercise?.primaryMuscle || 'other';
-      
+
       if (!volumes[muscle]) {
         volumes[muscle] = { sets: 0, volume: 0 };
       }
-      
+
       sets.forEach(set => {
         volumes[muscle].sets += 1;
         volumes[muscle].volume += set.weightKg * set.reps;
@@ -443,6 +457,7 @@ export function SessionSummary({
     // Sort by volume
     return Object.entries(volumes)
       .map(([muscle, data]) => ({ muscle, ...data }))
+      .filter((entry) => entry.sets > 0)
       .sort((a, b) => b.volume - a.volume);
   }, [exerciseBlocks, workingSets]);
 
@@ -473,18 +488,18 @@ export function SessionSummary({
       const exercise = (block as any).exercise;
       const sets = workingSets.filter(s => s.exerciseBlockId === block.id);
       const warmupSets = allSets.filter(s => s.exerciseBlockId === block.id && s.isWarmup);
-      
+
       // Calculate stats for this exercise
       const totalVolume = sets.reduce((sum, s) => sum + s.weightKg * s.reps, 0);
       const maxWeight = sets.length > 0 ? Math.max(...sets.map(s => s.weightKg)) : 0;
       const maxReps = sets.length > 0 ? Math.max(...sets.map(s => s.reps)) : 0;
-      const avgRpe = sets.length > 0 
-        ? Math.round((sets.reduce((sum, s) => sum + s.rpe, 0) / sets.length) * 10) / 10 
+      const avgRpe = sets.length > 0
+        ? Math.round((sets.reduce((sum, s) => sum + s.rpe, 0) / sets.length) * 10) / 10
         : 0;
-      const bestE1RM = sets.length > 0 
-        ? Math.max(...sets.map(s => estimateE1RM(s.weightKg, s.reps))) 
+      const bestE1RM = sets.length > 0
+        ? Math.max(...sets.map(s => estimateE1RM(s.weightKg, s.reps)))
         : 0;
-      
+
       // Check if this exercise had a PR (never on a deload session).
       const history = exerciseHistories?.[block.exerciseId || ''];
       const hasPR = !isDeload && history?.previousBest && bestE1RM > history.previousBest.e1rm;
@@ -510,7 +525,7 @@ export function SessionSummary({
   }, [exerciseBlocks, workingSets, allSets, exerciseHistories, isDeload]);
 
   // Muscles trained this session (blocks with at least one working set),
-  // resolved to standard muscle groups — drives the per-muscle feedback rows.
+  // resolved to standard muscle groups — drives the per-muscle workload chips.
   const trainedMuscles = useMemo<StandardMuscleGroup[]>(() => {
     const seen = new Set<StandardMuscleGroup>();
     const muscles: StandardMuscleGroup[] = [];
@@ -528,18 +543,8 @@ export function SessionSummary({
     return muscles;
   }, [exerciseBlocks, workingSets]);
 
-  const getMuscleRating = (muscle: StandardMuscleGroup) =>
-    muscleRatings[muscle] ?? DEFAULT_MUSCLE_RATING;
-
-  const setMuscleRating = (
-    muscle: StandardMuscleGroup,
-    patch: Partial<{ pump: PumpRating0to3; workload: WorkloadRating }>
-  ) => {
-    setMuscleRatings((prev) => ({
-      ...prev,
-      [muscle]: { ...(prev[muscle] ?? DEFAULT_MUSCLE_RATING), ...patch },
-    }));
-  };
+  const getMuscleWorkload = (muscle: StandardMuscleGroup): WorkloadRating =>
+    muscleWorkloads[muscle] ?? DEFAULT_WORKLOAD;
 
   const toggleExerciseExpanded = (blockId: string) => {
     setExpandedExercises(prev => {
@@ -553,34 +558,279 @@ export function SessionSummary({
     });
   };
 
+  const buildSubmitData = (): SessionSummarySubmitData => ({
+    sessionRpe,
+    notes,
+    muscleFeedback: trainedMuscles.map((muscle) => ({
+      muscleGroup: muscle,
+      workload: getMuscleWorkload(muscle),
+    })),
+    isDeload,
+  });
+
   const handleSubmit = () => {
     if (onSubmit && !submitting) {
       setSubmitting(true);
-      onSubmit({
-        sessionRpe,
-        pumpRating,
-        notes,
-        muscleFeedback: trainedMuscles.map((muscle) => ({
-          muscleGroup: muscle,
-          ...getMuscleRating(muscle),
-        })),
-        isDeload,
-      });
+      onSubmit(buildSubmitData());
     }
   };
 
-  return (
-    <div className="max-w-lg mx-auto space-y-6">
-      {/* Header with celebration animation for PRs */}
-      <div className="text-center relative">
-        {personalRecords.length > 0 && !readOnly && (
-          <div className="absolute -top-4 left-1/2 -translate-x-1/2 animate-bounce">
-            <span className="text-3xl">🎉</span>
+  const handleSaveAndViewReport = () => {
+    if (onSaveAndViewReport && !submitting) {
+      setSubmitting(true);
+      onSaveAndViewReport(buildSubmitData());
+    }
+  };
+
+  // Compact single-row stat strip: sets · reps · duration · volume · kcal.
+  // The one place session totals render on either layer.
+  const statStrip = (
+    <Card data-testid="session-stat-strip" className="!p-3">
+      <div className="flex items-stretch justify-between divide-x divide-surface-800 text-center">
+        <div className="flex-1 px-1">
+          <p className="text-lg font-bold text-primary-400 leading-tight">{totalSets}</p>
+          <p className="text-[11px] text-surface-500">Sets</p>
+        </div>
+        <div className="flex-1 px-1">
+          <p className="text-lg font-bold text-primary-400 leading-tight">{totalReps}</p>
+          <p className="text-[11px] text-surface-500">Reps</p>
+        </div>
+        <div className="flex-1 px-1">
+          <p className="text-lg font-bold text-primary-400 leading-tight">
+            {formatWorkoutDuration(duration)}
+          </p>
+          <p className="text-[11px] text-surface-500">Duration</p>
+        </div>
+        <div className="flex-1 px-1">
+          <p className="text-lg font-bold text-blue-400 leading-tight">
+            {(() => {
+              const vol = unit === 'lb' ? kgToLbs(totalVolume) : totalVolume;
+              return vol >= 1000 ? `${(vol / 1000).toFixed(1)}k` : Math.round(vol);
+            })()}
+          </p>
+          <p className="text-[11px] text-surface-500">Vol ({weightUnit})</p>
+        </div>
+        <div className="flex-1 px-1">
+          <p className="text-lg font-bold text-orange-400 leading-tight">{caloriesBurned}</p>
+          <p className="text-[11px] text-surface-500">kcal</p>
+        </div>
+      </div>
+    </Card>
+  );
+
+  // ---------------------------------------------------------------------------
+  // Layer 1: FINISH CARD — one compact screen of capturable-now inputs.
+  // All analytics live on the full report (the saved workout's read-only view).
+  // ---------------------------------------------------------------------------
+  if (!readOnly) {
+    const calibrationCount = amrapCalibrations.length;
+    const noteworthyParts: string[] = [];
+    if (personalRecords.length > 0) {
+      noteworthyParts.push(
+        `🏆 ${personalRecords.length} Personal Record${personalRecords.length > 1 ? 's' : ''}`
+      );
+    }
+    if (calibrationCount > 0) {
+      noteworthyParts.push('🎯 RPE calibration updated');
+    }
+
+    return (
+      <div className="max-w-lg mx-auto space-y-3" data-testid="finish-card">
+        {/* Header: checkmark · title · share */}
+        <div className="flex items-center gap-3">
+          <div className={`w-10 h-10 flex-shrink-0 rounded-full flex items-center justify-center ${
+            personalRecords.length > 0
+              ? 'bg-gradient-to-br from-yellow-500/30 to-amber-500/30 ring-2 ring-yellow-500/50'
+              : 'bg-success-500/20'
+          }`}>
+            {personalRecords.length > 0 ? (
+              <span className="text-xl">🏆</span>
+            ) : (
+              <svg className="w-5 h-5 text-success-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            )}
           </div>
+          <div className="flex-1 min-w-0">
+            <h2 className="text-xl font-bold text-surface-100 leading-tight">Workout Complete!</h2>
+            {personalRecords.length > 0 && (
+              <p className="text-xs text-yellow-400">
+                {personalRecords.length} PR{personalRecords.length > 1 ? 's' : ''} — you&apos;re getting stronger 💪
+              </p>
+            )}
+          </div>
+          <ShareWorkoutText input={shareInput} />
+        </div>
+
+        {/* One compact stat strip */}
+        {statStrip}
+
+        {/* Noteworthy one-liner → links into the full report */}
+        {noteworthyParts.length > 0 && (
+          <button
+            type="button"
+            data-testid="noteworthy-chip"
+            onClick={handleSaveAndViewReport}
+            disabled={submitting || !onSaveAndViewReport}
+            className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-gradient-to-r from-yellow-500/10 to-amber-500/10 border border-yellow-500/30 text-left disabled:opacity-60"
+          >
+            <span className="text-sm text-yellow-400 truncate">{noteworthyParts.join(' · ')}</span>
+            <span className="text-xs text-yellow-500 flex-shrink-0">→</span>
+          </button>
         )}
+
+        {/* Session RPE — prefilled from the set-derived average */}
+        <Card className="!p-3">
+          <h3 className="text-sm font-medium text-surface-200 mb-2">How hard was this session?</h3>
+          <div className="flex gap-1">
+            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((rpe) => (
+              <button
+                key={rpe}
+                onClick={() => setSessionRpe(rpe)}
+                className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                  sessionRpe === rpe
+                    ? rpe >= 9
+                      ? 'bg-danger-500 text-white'
+                      : rpe >= 7
+                      ? 'bg-warning-500 text-white'
+                      : 'bg-primary-500 text-white'
+                    : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
+                }`}
+              >
+                {rpe}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-surface-500 mt-1.5 text-center">
+            Prefilled from your set average — adjust if it felt different
+          </p>
+        </Card>
+
+        {/* Per-muscle workload chips (drives weekly set progression). Pump is
+            captured per-exercise during the workout, not here. */}
+        {trainedMuscles.length > 0 && (
+          <Card className="!p-3">
+            <h3 className="text-sm font-medium text-surface-200 mb-0.5">Workload by muscle</h3>
+            <p className="text-xs text-surface-500 mb-2">
+              Tunes next week&apos;s sets — defaults are fine if nothing stood out.
+            </p>
+            <div className="space-y-2">
+              {trainedMuscles.map((muscle) => {
+                const workload = getMuscleWorkload(muscle);
+                return (
+                  <div key={muscle} className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-surface-300 w-20 shrink-0 truncate">
+                      {STANDARD_MUSCLE_DISPLAY_NAMES[muscle]}
+                    </span>
+                    <div className="flex flex-1 gap-1">
+                      {WORKLOAD_CHIP_OPTIONS.map((option) => (
+                        <button
+                          key={option.value}
+                          onClick={() =>
+                            setMuscleWorkloads((prev) => ({ ...prev, [muscle]: option.value }))
+                          }
+                          className={`flex-1 rounded-full px-1.5 py-1 text-[11px] font-medium transition-colors ${
+                            workload === option.value
+                              ? 'bg-primary-500 text-white'
+                              : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+        )}
+
+        {/* Deload toggle — mark a light session so it's excluded from
+            progression suggestions, e1RM/PR trends and stagnation baselines
+            (but still counts toward volume, history and streaks). */}
+        <Card className="!p-3">
+          <label className="flex items-center justify-between gap-4 cursor-pointer">
+            <span className="flex-1">
+              <span className="block text-sm font-medium text-surface-200">
+                This was a deload session
+              </span>
+              <span className="block text-xs text-surface-400 mt-0.5">
+                Holds light — still counts toward volume, but won&apos;t set PRs or
+                anchor next session&apos;s weights.
+              </span>
+            </span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={isDeload}
+              aria-label="This was a deload session"
+              onClick={() => setIsDeload((v) => !v)}
+              className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${
+                isDeload ? 'bg-primary-500' : 'bg-surface-700'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  isDeload ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </label>
+        </Card>
+
+        {/* Notes — collapsed to a single line until tapped */}
+        {notesOpen ? (
+          <Card className="!p-3">
+            <h3 className="text-sm font-medium text-surface-200 mb-2">Session Notes</h3>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="How did you feel? Any issues? Wins to celebrate?"
+              rows={2}
+              autoFocus
+              className="w-full px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-sm text-surface-200 placeholder:text-surface-500 focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
+            />
+          </Card>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setNotesOpen(true)}
+            className="w-full text-left px-3 py-2.5 rounded-lg border border-dashed border-surface-700 text-sm text-surface-400 hover:border-surface-500 hover:text-surface-300 transition-colors"
+          >
+            + Add note
+          </button>
+        )}
+
+        <Button onClick={handleSubmit} size="lg" className="w-full" disabled={submitting}>
+          {submitting ? 'Finishing…' : 'Save & Finish'}
+        </Button>
+
+        {onSaveAndViewReport && (
+          <button
+            type="button"
+            onClick={handleSaveAndViewReport}
+            disabled={submitting}
+            className="w-full py-2 text-sm text-primary-400 hover:text-primary-300 transition-colors disabled:opacity-60"
+          >
+            View full report →
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Layer 2: FULL REPORT — the saved workout's permanent analytics view
+  // (rendered from history / post-save).
+  // ---------------------------------------------------------------------------
+  return (
+    <div className="max-w-lg mx-auto space-y-6" data-testid="session-full-report">
+      {/* Header */}
+      <div className="text-center relative">
         <div className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center ${
-          personalRecords.length > 0 
-            ? 'bg-gradient-to-br from-yellow-500/30 to-amber-500/30 ring-2 ring-yellow-500/50' 
+          personalRecords.length > 0
+            ? 'bg-gradient-to-br from-yellow-500/30 to-amber-500/30 ring-2 ring-yellow-500/50'
             : 'bg-success-500/20'
         }`}>
           {personalRecords.length > 0 ? (
@@ -591,21 +841,11 @@ export function SessionSummary({
             </svg>
           )}
         </div>
-        <h2 className="text-2xl font-bold text-surface-100">
-          {personalRecords.length > 0 && !readOnly 
-            ? `${personalRecords.length} Personal Record${personalRecords.length > 1 ? 's' : ''}!` 
-            : readOnly 
-            ? 'Workout Summary' 
-            : 'Workout Complete!'}
-        </h2>
+        <h2 className="text-2xl font-bold text-surface-100">Workout Summary</h2>
         <p className="text-surface-400 mt-1">
-          {readOnly 
-            ? session.completedAt 
-              ? `Completed ${new Date(session.completedAt).toLocaleDateString()}`
-              : 'Viewing past workout'
-            : personalRecords.length > 0
-            ? "You're getting stronger! 💪"
-            : 'Great job finishing your session'}
+          {session.completedAt
+            ? `Completed ${new Date(session.completedAt).toLocaleDateString()}`
+            : 'Viewing past workout'}
         </p>
         <div className="mt-4 flex justify-center">
           <ShareWorkoutText input={shareInput} />
@@ -716,47 +956,8 @@ export function SessionSummary({
         </Card>
       )}
 
-      {/* Main Stats Grid - Enhanced */}
-      <Card>
-        <div className="grid grid-cols-3 gap-3 mb-4">
-          <div className="text-center p-3 bg-surface-800/50 rounded-lg">
-            <p className="text-2xl font-bold text-primary-400">{totalSets}</p>
-            <p className="text-xs text-surface-500">Sets</p>
-          </div>
-          <div className="text-center p-3 bg-surface-800/50 rounded-lg">
-            <p className="text-2xl font-bold text-primary-400">{totalReps}</p>
-            <p className="text-xs text-surface-500">Reps</p>
-          </div>
-          <div className="text-center p-3 bg-surface-800/50 rounded-lg">
-            <p className="text-2xl font-bold text-primary-400">
-              {formatWorkoutDuration(duration)}
-            </p>
-            <p className="text-xs text-surface-500">Duration</p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div className="p-3 bg-gradient-to-br from-blue-500/10 to-cyan-500/10 border border-blue-500/20 rounded-lg">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-sm">⚖️</span>
-              <span className="text-xs text-surface-400">Total Volume</span>
-            </div>
-            <p className="text-xl font-bold text-blue-400">
-              {(() => {
-                const vol = unit === 'lb' ? kgToLbs(totalVolume) : totalVolume;
-                return vol >= 1000 ? `${(vol / 1000).toFixed(1)}k` : Math.round(vol);
-              })()} {weightUnit}
-            </p>
-          </div>
-          <div className="p-3 bg-gradient-to-br from-orange-500/10 to-red-500/10 border border-orange-500/20 rounded-lg">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-sm">🔥</span>
-              <span className="text-xs text-surface-400">Est. Calories</span>
-            </div>
-            <p className="text-xl font-bold text-orange-400">{caloriesBurned}</p>
-          </div>
-        </div>
-      </Card>
+      {/* Session totals — the single stat strip (same one the finish card shows) */}
+      {statStrip}
 
       {/* Quality Score Ring */}
       {totalSets > 0 && (
@@ -854,11 +1055,11 @@ export function SessionSummary({
               return (
                 <div key={muscle}>
                   <div className="flex justify-between text-sm mb-1">
-                    <span className="text-surface-300 capitalize">{muscle}</span>
+                    <span className="text-surface-300">{muscleDisplayName(muscle)}</span>
                     <span className="text-surface-400">{sets} sets · {displayWeight(volume)}{weightUnit}</span>
                   </div>
                   <div className="h-2 bg-surface-800 rounded-full overflow-hidden">
-                    <div 
+                    <div
                       className="h-full bg-gradient-to-r from-primary-500 to-accent-500 rounded-full transition-all duration-500"
                       style={{ width: `${percentage}%` }}
                     />
@@ -880,13 +1081,13 @@ export function SessionSummary({
             {effortTimeline.map((point, idx) => {
               const height = (point.rpe / 10) * 100;
               return (
-                <div 
+                <div
                   key={idx}
                   className="flex-1 min-w-[4px] rounded-t transition-all duration-300 hover:opacity-80"
-                  style={{ 
+                  style={{
                     height: `${height}%`,
-                    backgroundColor: point.rpe >= 9 ? '#ef4444' : 
-                                    point.rpe >= 8 ? '#f97316' : 
+                    backgroundColor: point.rpe >= 9 ? '#ef4444' :
+                                    point.rpe >= 8 ? '#f97316' :
                                     point.rpe >= 7 ? '#eab308' : '#22c55e'
                   }}
                   title={`Set ${point.setNumber}: RPE ${point.rpe}`}
@@ -941,7 +1142,7 @@ export function SessionSummary({
             <h3 className="text-sm font-medium text-surface-200 flex items-center gap-2">
               <span>📋</span> Exercise Details ({exerciseDetails.length})
             </h3>
-            <svg 
+            <svg
               className={`w-5 h-5 text-surface-400 transition-transform ${showExerciseDetails ? 'rotate-180' : ''}`}
               fill="none" viewBox="0 0 24 24" stroke="currentColor"
             >
@@ -954,7 +1155,7 @@ export function SessionSummary({
               {exerciseDetails.map((exercise) => {
                 const isExpanded = expandedExercises.has(exercise.blockId);
                 return (
-                  <div 
+                  <div
                     key={exercise.blockId}
                     className="bg-surface-800/50 rounded-lg overflow-hidden"
                   >
@@ -973,7 +1174,7 @@ export function SessionSummary({
                           )}
                         </div>
                         <div className="flex items-center gap-3 mt-1 text-xs text-surface-400">
-                          <span className="capitalize">{exercise.muscle}</span>
+                          <span>{muscleDisplayName(exercise.muscle)}</span>
                           <span>•</span>
                           <span>{exercise.sets.length} sets</span>
                           <span>•</span>
@@ -988,7 +1189,7 @@ export function SessionSummary({
                         </p>
                         <p className="text-xs text-surface-500">top weight</p>
                       </div>
-                      <svg 
+                      <svg
                         className={`w-4 h-4 text-surface-500 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
                         fill="none" viewBox="0 0 24 24" stroke="currentColor"
                       >
@@ -1040,7 +1241,7 @@ export function SessionSummary({
                                 </tr>
                               )}
                               {exercise.sets.map((set, idx) => (
-                                <tr 
+                                <tr
                                   key={set.id}
                                   className={`border-t border-surface-800 ${
                                     set.quality === 'stimulative' ? 'bg-success-500/5' :
@@ -1106,230 +1307,42 @@ export function SessionSummary({
 
       {/* Session RPE */}
       <Card>
-        <h3 className="text-sm font-medium text-surface-200 mb-3">
-          {readOnly ? 'Session RPE' : 'How hard was this session?'}
-        </h3>
-        {readOnly ? (
-          <div className="flex items-center gap-3">
-            <div className={`px-4 py-2 rounded-lg font-bold text-lg ${
-              sessionRpe >= 9
-                ? 'bg-danger-500/20 text-danger-400'
-                : sessionRpe >= 7
-                ? 'bg-warning-500/20 text-warning-400'
-                : 'bg-primary-500/20 text-primary-400'
-            }`}>
-              {sessionRpe}/10
-            </div>
-            <span className="text-surface-400 text-sm">
-              {sessionRpe >= 9 ? 'Maximum Effort' : sessionRpe >= 7 ? 'Hard' : sessionRpe >= 5 ? 'Moderate' : 'Easy'}
-            </span>
+        <h3 className="text-sm font-medium text-surface-200 mb-3">Session RPE</h3>
+        <div className="flex items-center gap-3">
+          <div className={`px-4 py-2 rounded-lg font-bold text-lg ${
+            sessionRpe >= 9
+              ? 'bg-danger-500/20 text-danger-400'
+              : sessionRpe >= 7
+              ? 'bg-warning-500/20 text-warning-400'
+              : 'bg-primary-500/20 text-primary-400'
+          }`}>
+            {sessionRpe}/10
           </div>
-        ) : (
-          <>
-            <div className="flex gap-1">
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((rpe) => (
-                <button
-                  key={rpe}
-                  onClick={() => setSessionRpe(rpe)}
-                  className={`flex-1 py-3 rounded-lg text-sm font-medium transition-colors ${
-                    sessionRpe === rpe
-                      ? rpe >= 9
-                        ? 'bg-danger-500 text-white'
-                        : rpe >= 7
-                        ? 'bg-warning-500 text-white'
-                        : 'bg-primary-500 text-white'
-                      : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
-                  }`}
-                >
-                  {rpe}
-                </button>
-              ))}
-            </div>
-            <p className="text-xs text-surface-500 mt-2 text-center">
-              Session RPE (1 = Very Easy, 10 = Maximum Effort)
-            </p>
-          </>
-        )}
+          <span className="text-surface-400 text-sm">
+            {sessionRpe >= 9 ? 'Maximum Effort' : sessionRpe >= 7 ? 'Hard' : sessionRpe >= 5 ? 'Moderate' : 'Easy'}
+          </span>
+        </div>
       </Card>
-
-      {/* Pump Rating */}
-      <Card>
-        <h3 className="text-sm font-medium text-surface-200 mb-3">
-          {readOnly ? 'Pump Rating' : 'How was the pump/mind-muscle connection?'}
-        </h3>
-        {readOnly ? (
-          <div className="flex items-center gap-3">
-            <div className="px-4 py-2 rounded-lg bg-accent-500/20 text-accent-400 font-bold text-lg">
-              {pumpRating === 1 && '😐'}
-              {pumpRating === 2 && '🙂'}
-              {pumpRating === 3 && '😊'}
-              {pumpRating === 4 && '😄'}
-              {pumpRating === 5 && '🔥'}
-              {' '}{pumpRating}/5
-            </div>
-            <span className="text-surface-400 text-sm">
-              {pumpRating === 5 ? 'Incredible Pump' : pumpRating >= 3 ? 'Good Connection' : 'Weak Connection'}
-            </span>
-          </div>
-        ) : (
-          <>
-            <div className="flex gap-2">
-              {[1, 2, 3, 4, 5].map((rating) => (
-                <button
-                  key={rating}
-                  onClick={() => setPumpRating(rating)}
-                  className={`flex-1 py-3 rounded-lg text-sm font-medium transition-colors ${
-                    pumpRating === rating
-                      ? 'bg-accent-500 text-white'
-                      : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
-                  }`}
-                >
-                  {rating === 1 && '😐'}
-                  {rating === 2 && '🙂'}
-                  {rating === 3 && '😊'}
-                  {rating === 4 && '😄'}
-                  {rating === 5 && '🔥'}
-                </button>
-              ))}
-            </div>
-            <p className="text-xs text-surface-500 mt-2 text-center">
-              1 = Poor Connection, 5 = Incredible Pump
-            </p>
-          </>
-        )}
-      </Card>
-
-      {/* Per-muscle pump/workload feedback (drives weekly set progression) */}
-      {!readOnly && trainedMuscles.length > 0 && (
-        <Card>
-          <h3 className="text-[15px] font-medium text-surface-200 mb-1">
-            How did each muscle feel?
-          </h3>
-          <p className="text-xs text-surface-500 mb-3">
-            Tunes next week&apos;s sets — defaults are fine if nothing stood out.
-          </p>
-          <div className="space-y-3">
-            {trainedMuscles.map((muscle) => {
-              const rating = getMuscleRating(muscle);
-              return (
-                <div key={muscle} className="space-y-1.5">
-                  <p className="text-xs font-medium text-surface-300">
-                    {STANDARD_MUSCLE_DISPLAY_NAMES[muscle]}
-                  </p>
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
-                    <div className="flex items-center gap-1">
-                      <span className="text-[11px] text-surface-500 w-14 shrink-0">Pump</span>
-                      {PUMP_CHIP_OPTIONS.map((option) => (
-                        <button
-                          key={option.value}
-                          onClick={() => setMuscleRating(muscle, { pump: option.value })}
-                          className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                            rating.pump === option.value
-                              ? 'bg-primary-500 text-white'
-                              : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
-                          }`}
-                        >
-                          {option.label}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <span className="text-[11px] text-surface-500 w-14 shrink-0">Workload</span>
-                      {WORKLOAD_CHIP_OPTIONS.map((option) => (
-                        <button
-                          key={option.value}
-                          onClick={() => setMuscleRating(muscle, { workload: option.value })}
-                          className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                            rating.workload === option.value
-                              ? 'bg-primary-500 text-white'
-                              : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
-                          }`}
-                        >
-                          {option.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </Card>
-      )}
 
       {/* Notes */}
-      {(notes || !readOnly) && (
+      {notes && (
         <Card>
-          <h3 className="text-sm font-medium text-surface-200 mb-3">
-            Session Notes {!readOnly && '(optional)'}
-          </h3>
-          {readOnly ? (
-            <p className="text-surface-300">{notes || 'No notes recorded'}</p>
-          ) : (
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="How did you feel? Any issues? Wins to celebrate?"
-              rows={3}
-              className="w-full px-4 py-3 bg-surface-800 border border-surface-700 rounded-lg text-surface-200 placeholder:text-surface-500 focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
-            />
-          )}
+          <h3 className="text-sm font-medium text-surface-200 mb-3">Session Notes</h3>
+          <p className="text-surface-300">{notes}</p>
         </Card>
       )}
 
-      {/* Deload toggle — mark a light session so it's excluded from
-          progression suggestions, e1RM/PR trends and stagnation baselines
-          (but still counts toward volume, history and streaks). */}
-      {!readOnly ? (
+      {/* Deload flag */}
+      {isDeload && (
         <Card>
-          <label className="flex items-center justify-between gap-4 cursor-pointer">
-            <span className="flex-1">
-              <span className="block text-sm font-medium text-surface-200">
-                This was a deload session
-              </span>
-              <span className="block text-xs text-surface-400 mt-0.5">
-                Holds light — still counts toward volume, but won&apos;t set PRs or
-                anchor next session&apos;s weights.
-              </span>
+          <div className="flex items-center gap-2">
+            <Badge variant="info" size="sm">Deload</Badge>
+            <span className="text-sm text-surface-400">
+              Logged as a deload session — held light on purpose.
             </span>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={isDeload}
-              aria-label="This was a deload session"
-              onClick={() => setIsDeload((v) => !v)}
-              className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${
-                isDeload ? 'bg-primary-500' : 'bg-surface-700'
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  isDeload ? 'translate-x-6' : 'translate-x-1'
-                }`}
-              />
-            </button>
-          </label>
+          </div>
         </Card>
-      ) : (
-        isDeload && (
-          <Card>
-            <div className="flex items-center gap-2">
-              <Badge variant="info" size="sm">Deload</Badge>
-              <span className="text-sm text-surface-400">
-                Logged as a deload session — held light on purpose.
-              </span>
-            </div>
-          </Card>
-        )
-      )}
-
-      {/* Submit - only shown when not in read-only mode */}
-      {!readOnly && (
-        <Button onClick={handleSubmit} size="lg" className="w-full" disabled={submitting}>
-          {submitting ? 'Finishing…' : 'Save & Finish'}
-        </Button>
       )}
     </div>
   );
 }
-

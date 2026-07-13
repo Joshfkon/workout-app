@@ -3832,13 +3832,15 @@ export default function WorkoutPage() {
   // — the old flow awaited two timeout-less network round-trips here, which
   // froze the "Save & Finish" tap for 10-15s on a slow connection and LOST
   // the completion entirely when offline.
-  const handleSummarySubmit = async (data: {
-    sessionRpe: number;
-    pumpRating: number;
-    notes: string;
-    muscleFeedback: SessionMuscleFeedbackEntry[];
-    isDeload: boolean;
-  }) => {
+  const handleSummarySubmit = async (
+    data: {
+      sessionRpe: number;
+      notes: string;
+      muscleFeedback: SessionMuscleFeedbackEntry[];
+      isDeload: boolean;
+    },
+    options?: { viewReport?: boolean }
+  ) => {
     if (!session) {
       finishToDashboard();
       return;
@@ -3855,7 +3857,7 @@ export default function WorkoutPage() {
         supabase: createUntypedClient(),
         sessionId,
         session,
-        navigate: finishToDashboard,
+        navigate: options?.viewReport ? () => finishToReport(data) : finishToDashboard,
         showClaimPrompt: claimArmed ? () => setShowClaimPrompt(true) : null,
       },
       // Persist the same frozen duration the summary is showing.
@@ -3866,6 +3868,30 @@ export default function WorkoutPage() {
   const finishToDashboard = () => {
     endWorkoutSession();
     router.push('/dashboard');
+  };
+
+  // "View full report →": finish exactly like Save & Finish, but stay on this
+  // page — flipping the local session to completed re-renders the summary
+  // phase as the read-only full report (the same view history links to).
+  const finishToReport = (data: {
+    sessionRpe: number;
+    notes: string;
+    isDeload: boolean;
+  }) => {
+    endWorkoutSession();
+    setSession((prev) =>
+      prev
+        ? {
+            ...prev,
+            state: 'completed',
+            completedAt: finishSnapshot?.completedAt ?? new Date().toISOString(),
+            durationSeconds: finishSnapshot?.durationSeconds ?? prev.durationSeconds,
+            sessionRpe: data.sessionRpe,
+            sessionNotes: data.notes,
+            isDeload: data.isDeload,
+          }
+        : prev
+    );
   };
 
   // Toggle the deload flag mid-workout (from the header ⋮ menu). Durable +
@@ -4013,6 +4039,9 @@ export default function WorkoutPage() {
             isViewingCompleted ? session.durationSeconds : finishSnapshot?.durationSeconds ?? null
           }
           onSubmit={isViewingCompleted ? undefined : handleSummarySubmit}
+          onSaveAndViewReport={
+            isViewingCompleted ? undefined : (data) => handleSummarySubmit(data, { viewReport: true })
+          }
           readOnly={isViewingCompleted}
         />
         <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
@@ -5003,7 +5032,7 @@ export default function WorkoutPage() {
               const isSkipped = skippedBlockIds.has(block.id);
               const isBeingDragged = draggedBlockIndex === index;
               const translateY = getDragTranslateY(index, isBeingDragged);
-              const muscleLabel = block.exercise.primaryMuscle.replace(/_/g, ' ');
+              const muscleLabel = formatMuscleName(block.exercise.primaryMuscle);
 
               if (isSkipped) {
                 return (
