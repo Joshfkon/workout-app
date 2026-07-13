@@ -139,6 +139,7 @@ export default function TemplateDetailPage() {
     const { data } = await supabase
       .from('exercises')
       .select('id, name, primary_muscle, equipment')
+      .is('deleted_at', null) // hide merge-soft-deleted duplicates
       .order('name')
       .limit(500);
 

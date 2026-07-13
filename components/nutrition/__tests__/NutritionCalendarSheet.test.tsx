@@ -19,6 +19,10 @@ jest.mock('@/lib/supabase/client', () => ({
   createUntypedClient: () => ({
     auth: {
       getUser: jest.fn().mockResolvedValue({ data: { user: { id: 'user-1' } } }),
+      // getLocalUserId reads the locally persisted session (no network).
+      getSession: jest
+        .fn()
+        .mockResolvedValue({ data: { session: { user: { id: 'user-1' } } } }),
     },
     from: (table: string) => makeBuilder(table),
   }),

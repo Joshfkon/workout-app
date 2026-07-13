@@ -19,6 +19,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { getLocalUserId } from '@/lib/supabase/authState';
 import { getLocalDateString } from '@/lib/utils';
 import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 import { RECENTS_WINDOW_DAYS } from '@/lib/nutrition/recentFoods';
@@ -30,10 +31,10 @@ export const RECENT_FOODS_KEY = ['nutrition', 'recent-foods'] as const;
 
 export async function fetchRecentFoodLog(): Promise<FoodLogEntry[]> {
   const supabase = createUntypedClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return [];
+  // Local-session identity (no auth round trip) — a transient getUser()
+  // failure must not be cached as "no recent foods". See lib/supabase/authState.
+  const userId = await getLocalUserId(supabase);
+  if (!userId) return [];
 
   const windowStart = new Date();
   windowStart.setDate(windowStart.getDate() - (RECENTS_WINDOW_DAYS - 1));
@@ -41,7 +42,7 @@ export async function fetchRecentFoodLog(): Promise<FoodLogEntry[]> {
   const { data, error } = await supabase
     .from('food_log')
     .select('*')
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .gte('logged_at', getLocalDateString(windowStart))
     .order('logged_at', { ascending: false })
     .order('created_at', { ascending: false });

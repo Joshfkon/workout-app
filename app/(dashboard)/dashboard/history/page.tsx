@@ -6,12 +6,15 @@ import { Card, Badge, Button, FullPageLoading, LoadingAnimation, ConfirmModal } 
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { getLocalUserId } from '@/lib/supabase/authState';
 import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 
 // Completed workout history is immutable-in-practice: cache the first page
 // long and persist it so returning to History renders instantly instead of
 // re-blocking on the full-screen loader. Edits/deletes write through the cache.
-const HISTORY_FIRST_PAGE_KEY = ['history', 'sessions', 'page0'] as const;
+// v2: evicts entries poisoned by the old queryFn, which cached an EMPTY page
+// for 24h whenever the network getUser() round trip failed on a cold reload.
+const HISTORY_FIRST_PAGE_KEY = ['history', 'sessions', 'page0', 'v2'] as const;
 import { formatWeight, convertWeight, convertWeightForDisplay, inputWeightToKg, estimateE1RM, getLocalDateString, muscleDisplayName } from '@/lib/utils';
 import { createRepeatSession } from '@/lib/training/repeatWorkout';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
@@ -146,15 +149,19 @@ function HistoryPageContent() {
     queryKey: HISTORY_FIRST_PAGE_KEY,
     queryFn: async () => {
       const supabase = createUntypedClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return [] as WorkoutHistory[];
-      const { data } = await supabase
+      // Local-session identity (no auth round trip): a transient getUser()
+      // failure must not be cached as "no workouts". See lib/supabase/authState.
+      const userId = await getLocalUserId(supabase);
+      if (!userId) return [] as WorkoutHistory[];
+      const { data, error } = await supabase
         .from('workout_sessions')
         .select(SESSION_SELECT)
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .in('state', ['completed', 'in_progress'])
         .order('completed_at', { ascending: false, nullsFirst: false })
         .range(0, PAGE_SIZE - 1);
+      // A failed fetch is an error to retry, NOT an empty history to cache.
+      if (error) throw error;
       return data ? transformSessions(data) : [];
     },
     staleTime: IMMUTABLE_GC_TIME,
@@ -695,9 +702,11 @@ function HistoryPageContent() {
 
   const fetchHistoryPage = async (pageIndex: number) => {
       const supabase = createUntypedClient();
-      const { data: { user } } = await supabase.auth.getUser();
+      // Local-session identity: the old network getUser() here rendered the
+      // "No workout history yet" empty state on any transient auth blip.
+      const userId = await getLocalUserId(supabase);
 
-      if (!user) {
+      if (!userId) {
         setIsLoading(false);
         return;
       }
@@ -705,7 +714,7 @@ function HistoryPageContent() {
       const { data } = await supabase
         .from('workout_sessions')
         .select(SESSION_SELECT)
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .in('state', ['completed', 'in_progress'])
         .order('completed_at', { ascending: false, nullsFirst: false })
         .range(pageIndex * PAGE_SIZE, pageIndex * PAGE_SIZE + PAGE_SIZE - 1);
@@ -932,6 +941,28 @@ function HistoryPageContent() {
       </div>
     );
   };
+
+  // First-page fetch failed with nothing cached to fall back on: show a retry
+  // state. Without this, the queryFn's throw (correct — a failed fetch must
+  // not be cached as an empty history) would leave the loader below up forever,
+  // since the seed effect only clears isLoading when data arrives.
+  if (firstPageQuery.isError && !firstPageQuery.data && workouts.length === 0) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-surface-100">Workout History</h1>
+          <p className="text-surface-400 mt-1">Your past training sessions</p>
+        </div>
+        <Card className="text-center py-12" data-testid="history-load-error">
+          <p className="text-surface-300 font-medium">Couldn&apos;t load your workout history</p>
+          <p className="text-surface-500 text-sm mt-2">Check your connection and try again.</p>
+          <Button className="mt-6" onClick={() => firstPageQuery.refetch()}>
+            Retry
+          </Button>
+        </Card>
+      </div>
+    );
+  }
 
   // Full-screen loader only on first-ever load with an empty cache. A revisit
   // (warm in-memory cache) or reload (IndexedDB restore) has first-page data
