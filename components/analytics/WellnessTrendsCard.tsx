@@ -55,6 +55,7 @@ export interface WellnessTrendsCardProps {
 
 type MetricKey =
   | 'sleepHours'
+  | 'sleepQuality'
   | 'sorenessLevel'
   | 'energyLevel'
   | 'moodRating'
@@ -90,6 +91,14 @@ function metricDefs(hydrationUnit: 'ml' | 'oz'): MetricDef[] {
       lowerIsBetter: false,
       format: (v) => `${v.toFixed(1)} h`,
       targetLine: { y: 7, label: 'Target' },
+    },
+    {
+      key: 'sleepQuality',
+      label: 'Sleep quality',
+      color: '#6366f1',
+      domain: [1, 5],
+      lowerIsBetter: false,
+      format: (v) => `${v.toFixed(1)}/5`,
     },
     {
       key: 'sorenessLevel',

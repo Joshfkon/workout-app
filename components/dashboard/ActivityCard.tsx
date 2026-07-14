@@ -329,10 +329,13 @@ export const ActivityCard = memo(function ActivityCard({ userId }: ActivityCardP
                 Enter steps manually
               </button>
             </div>
-          ) : healthKitCapable ? (
-            // Capable iOS device, nothing connected yet: a real connect flow
-            // exists — offer it honestly.
-            <div className="space-y-4">
+          ) : (
+            // No wearable connected yet. The connect flow (WearableConnections
+            // Screen) supports Apple Health on iOS, Fitbit on web, and Google
+            // Fit on Android, so the Connect button stays available on every
+            // platform — only the copy adapts to the device's likely provider.
+            // Manual entry is always offered alongside it.
+            <div className="space-y-3">
               <div className="flex items-center gap-4 p-4 bg-gradient-to-r from-primary-500/10 to-accent-500/10 rounded-lg border border-primary-500/20">
                 <div className="w-12 h-12 rounded-xl bg-primary-500/20 flex items-center justify-center flex-shrink-0">
                   <span className="text-2xl">⌚</span>
@@ -340,8 +343,9 @@ export const ActivityCard = memo(function ActivityCard({ userId }: ActivityCardP
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-surface-200">Track Your Steps</p>
                   <p className="text-xs text-surface-400 mt-0.5">
-                    Connect Apple Health to sync steps automatically and improve
-                    your TDEE estimate.
+                    {healthKitCapable
+                      ? 'Connect Apple Health to sync steps automatically and improve your TDEE estimate.'
+                      : 'Connect Fitbit or Google Fit to sync steps automatically, or enter them manually.'}
                   </p>
                 </div>
                 <Button size="sm" onClick={handleOpenConnectModal}>
@@ -354,26 +358,6 @@ export const ActivityCard = memo(function ActivityCard({ userId }: ActivityCardP
               >
                 Or enter steps manually
               </button>
-            </div>
-          ) : (
-            // Non-iOS (web/Android): automatic step sync isn't available on
-            // this device — manual entry is the honest, primary path.
-            <div className="space-y-3">
-              <div className="flex items-center gap-4 p-4 bg-surface-800/50 rounded-lg border border-surface-700/50">
-                <div className="w-12 h-12 rounded-xl bg-primary-500/20 flex items-center justify-center flex-shrink-0">
-                  <IconWalk size={24} className="text-primary-400" aria-hidden="true" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-surface-200">Track Your Steps</p>
-                  <p className="text-xs text-surface-400 mt-0.5">
-                    Log today&apos;s steps to improve your TDEE estimate. Automatic
-                    sync uses Apple Health on the iOS app.
-                  </p>
-                </div>
-                <Button size="sm" onClick={handleOpenManualInput}>
-                  Enter steps
-                </Button>
-              </div>
             </div>
           )}
         </CardContent>
