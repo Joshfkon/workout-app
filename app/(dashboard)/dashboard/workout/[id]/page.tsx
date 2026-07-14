@@ -81,7 +81,7 @@ import { inferSetRole, sessionTopSetWeightKg } from '@/services/suggestionEngine
 import { SUGGESTION_ENGINE_VERSION } from '@/services/suggestionEngine/constants';
 import { addExerciseOverride, getSessionFromProgramData, applyExerciseOverrides, type ExerciseOverride } from '@/services/mesocycleHelpers';
 import { computeStapleExerciseIds } from '@/services/exerciseStaples';
-import { deriveWorkoutLabel, formatMuscleName, formatWeight, getLocalDateString, inputWeightToKg } from '@/lib/utils';
+import { convertWeightForDisplay, deriveWorkoutLabel, formatMuscleName, formatWeight, getLocalDateString, inputWeightToKg } from '@/lib/utils';
 import { generateWorkoutCoachNotes, type WorkoutCoachNotesInput } from '@/lib/actions/coaching';
 import { 
   getInjuryRisk, 
@@ -5230,13 +5230,27 @@ export default function WorkoutPage() {
                   onClick={() => {
                     setCurrentBlockIndex(index);
                     setCurrentSetNumber(blockSets.length + 1);
+                    // "Tap to start" must ALWAYS reveal the set-logging UI —
+                    // marking the block current is a no-op when it's already
+                    // current, so we also clear the collapsed state here.
+                    // Otherwise the tap silently does nothing (card stays
+                    // collapsed) and the only responsive target left is the
+                    // name/info button. Collapse UI state only — session state
+                    // is untouched.
+                    setAllCollapsed(false);
+                    setCollapsedBlocks((prev) => {
+                      if (!prev.has(block.id)) return prev;
+                      const next = new Set(prev);
+                      next.delete(block.id);
+                      return next;
+                    });
                   }}
                 >
                   {isComplete ? (
                     <div className="flex flex-col gap-1">
                       <button
                         onClick={(e) => { e.stopPropagation(); setSelectedExerciseForDetails(block.exercise); }}
-                        className="text-sm font-medium text-surface-100 text-left hover:text-primary-400 transition-colors"
+                        className="self-start text-sm font-medium text-surface-100 text-left hover:text-primary-400 transition-colors"
                       >
                         {block.exercise.name}
                       </button>
@@ -5244,7 +5258,7 @@ export default function WorkoutPage() {
                         <div className="flex gap-3 flex-wrap">
                           {blockSets.map((set, setIdx) => (
                             <span key={set.id} className="text-xs text-surface-400">
-                              Set {setIdx + 1}: {set.weightKg}kg × {set.reps}
+                              Set {setIdx + 1}: {convertWeightForDisplay(set.weightKg, preferences.units)} {preferences.units === 'lb' ? 'lbs' : 'kg'} × {set.reps}
                             </span>
                           ))}
                         </div>
@@ -5257,14 +5271,14 @@ export default function WorkoutPage() {
                     <div className="flex flex-col gap-1">
                       <button
                         onClick={(e) => { e.stopPropagation(); setSelectedExerciseForDetails(block.exercise); }}
-                        className="text-sm font-medium text-surface-100 text-left hover:text-primary-400 transition-colors"
+                        className="self-start text-sm font-medium text-surface-100 text-left hover:text-primary-400 transition-colors"
                       >
                         {block.exercise.name}
                       </button>
                       <div className="flex items-center justify-between text-surface-500">
                         <span className="text-sm">
                           {block.targetSets} sets × {block.targetRepRange[0]}-{block.targetRepRange[1]} reps
-                          {block.targetWeightKg > 0 && ` @ ${block.targetWeightKg}kg`}
+                          {block.targetWeightKg > 0 && ` @ ${formatWeight(block.targetWeightKg, preferences.units)}`}
                         </span>
                         <span className="text-xs">Tap to start</span>
                       </div>
