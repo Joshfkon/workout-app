@@ -91,7 +91,7 @@ describe('formatWorkoutShareText', () => {
         '🟩🟩🟩⬜  Lateral Raise',
         '',
         '7 sets · 4,450 kg · 58 min · 🏆 1 PR',
-        '🟩 hit · 🟨 grind',
+        '🟩 hit target · 🟨 tough set',
       ].join('\n')
     );
   });
@@ -298,14 +298,14 @@ describe('formatWorkoutShareText', () => {
   it('appends the legend only when a miss exists', () => {
     const allHits = formatWorkoutShareText(createInput());
     expect(allHits).not.toContain('🟨');
-    expect(allHits).not.toContain('hit · ');
+    expect(allHits).not.toContain('hit target');
 
     const withMiss = formatWorkoutShareText(
       createInput({
         exercises: [createExercise({ targetSets: 1, sets: [createSet({ reps: 5 })] })],
       })
     );
-    expect(withMiss.trimEnd().endsWith('🟩 hit · 🟨 grind')).toBe(true);
+    expect(withMiss.trimEnd().endsWith('🟩 hit target · 🟨 tough set')).toBe(true);
   });
 
   it('shows the legend exactly once and as the final line', () => {
@@ -318,8 +318,8 @@ describe('formatWorkoutShareText', () => {
       })
     );
     const lines = text.split('\n');
-    expect(lines[lines.length - 1]).toBe('🟩 hit · 🟨 grind');
-    expect(lines.filter((l) => l === '🟩 hit · 🟨 grind')).toHaveLength(1);
+    expect(lines[lines.length - 1]).toBe('🟩 hit target · 🟨 tough set');
+    expect(lines.filter((l) => l === '🟩 hit target · 🟨 tough set')).toHaveLength(1);
   });
 
   // ============================================================
@@ -541,7 +541,7 @@ describe('shareLineWidth', () => {
     expect(shareLineWidth('Incline Press')).toBe(13);
     // 🟩🟩(4) + "  Bench Press"(13) + " "(1) + 🏆(2) = 20
     expect(shareLineWidth('🟩🟩  Bench Press 🏆')).toBe(20);
-    expect(shareLineWidth('🟩 hit · 🟨 grind')).toBe(17);
+    expect(shareLineWidth('🟩 hit target · 🟨 tough set')).toBe(28);
   });
 });
 
@@ -584,6 +584,11 @@ describe('line-width guardrail (wrap check)', () => {
     for (const fixture of fixtures) {
       for (const line of formatWorkoutShareText(fixture).split('\n')) {
         if (!SQUARE_GLYPHS.some((s) => line.startsWith(s))) continue;
+        // Real grid rows are "<squares>  <name>" (double-space separator). The
+        // legend also opens with a square but uses single spaces and breaks
+        // cleanly at " · ", so it's exempt from the grid cap (covered by the
+        // LINE_WIDTH_CAP check below instead).
+        if (!line.includes('  ')) continue;
         const grid = line.split('  ')[0];
         expect(shareLineWidth(grid)).toBeLessThanOrEqual(GRID_WIDTH_CAP);
       }

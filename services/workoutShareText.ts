@@ -11,7 +11,7 @@
  *   🟩🟩🟩⬜  Lateral Raise
  *
  *   18 sets · 21,340 lb · 58 min · 🏆 2 PRs
- *   🟩 hit · 🟨 grind
+ *   🟩 hit target · 🟨 tough set
  *
  * Pure module: no DB calls, no side effects. All emoji are plain Unicode so
  * alignment survives proportional fonts (the layout must read well ragged —
@@ -91,7 +91,7 @@ const AMRAP_SUFFIX = '⚡';
 const PR_MARKER = '🏆';
 
 /** One legend line, appended only when the grid contains a miss. */
-const LEGEND = `${GREEN} hit · ${YELLOW} grind`;
+const LEGEND = `${GREEN} hit target · ${YELLOW} tough set`;
 
 const LEG_MUSCLES = ['quad', 'hamstring', 'glute', 'calf', 'calves', 'adductor', 'abductor', 'leg'];
 const ARM_MUSCLES = ['bicep', 'tricep', 'forearm', 'arm'];
