@@ -51,6 +51,7 @@ import {
 } from '@/hooks/useNutritionData';
 import { useRecentFoods, RECENT_FOODS_KEY } from '@/hooks/useRecentFoods';
 import { nutritionMonthKey } from '@/hooks/useNutritionMonth';
+import { LOG_HOME_QUERY_KEY } from '@/hooks/useLogPageData';
 import { recalculateMacrosForWeight } from '@/lib/actions/nutrition';
 import { getAdaptiveTDEE, onWeightLoggedRecalculateTDEE, resetAndRecalculateTDEE, type TDEEData } from '@/lib/actions/tdee';
 import { TDEEDashboard } from '@/components/nutrition/TDEEDashboard';
@@ -388,6 +389,17 @@ function NutritionPageContent() {
         queryKey: nutritionMonthKey(selectedDate.slice(0, 7)),
         refetchType: 'none',
       });
+      // Cross-surface: the Home ('/dashboard/log') "Today so far" card reads
+      // today's totals from a SEPARATE query (['log','home']) that this write
+      // doesn't touch. Home is unmounted while we're on this screen, so a
+      // plain invalidate can only MARK it stale (refetchType 'active' is a
+      // no-op with no observers) — which is exactly what we want: it flips the
+      // query stale so LogPage's refetchOnMount refetches it on return,
+      // instead of showing the pre-log totals until its 30s staleTime lapses.
+      // Only today's edits affect Home (it only ever shows today's totals).
+      if (selectedDate === getLocalDateString()) {
+        void queryClient.invalidateQueries({ queryKey: LOG_HOME_QUERY_KEY });
+      }
     },
     [queryClient, selectedDate]
   );
