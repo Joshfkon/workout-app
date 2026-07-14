@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { MuscleReadinessContent } from './MuscleReadinessSheet';
 import { useMuscleReadiness } from '@/hooks/useMuscleReadiness';
+import { useWearableRecovery } from '@/hooks/useWearableRecovery';
 import { resolvePrimaryMuscleCredits } from '@/services/volumeTracker';
 import { COARSE_CHILDREN, type CoarseMuscle } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 import type { StandardMuscleGroup } from '@/types/schema';
@@ -47,6 +48,7 @@ export function EmptyWorkoutReadiness({
     now,
     enabled: true,
   });
+  const { state: wearableRecovery } = useWearableRecovery();
 
   // Per-standard-muscle actionability score for chip re-ordering. Rows are now
   // coarse, so spread each coarse row's score across its standard children;
@@ -96,6 +98,7 @@ export function EmptyWorkoutReadiness({
           isLoading={isLoading}
           collapsible
           loadingTestId="readiness-inline-loading"
+          wearableNotice={wearableRecovery.reason}
         />
       </div>
 

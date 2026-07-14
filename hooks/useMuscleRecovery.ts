@@ -15,6 +15,7 @@ import {
 } from '@/services/muscleRecovery';
 import { useRecoveryHistory } from '@/hooks/useMuscleReadiness';
 import { useRecoveryMultipliers } from '@/hooks/useRecoveryMultipliers';
+import { useWearableRecovery } from '@/hooks/useWearableRecovery';
 import { useSleepLog } from '@/hooks/useSleepLog';
 
 /**
@@ -127,17 +128,21 @@ export function useMuscleRecovery(): UseMuscleRecoveryResult {
   const { user: storeUser } = useUserStore();
   const enhancedAthleteMode = storeUser?.enhancedAthleteMode === true;
   const { multipliers } = useRecoveryMultipliers();
-  // Recent sleep scales every window: trailing-2-night avg <6h stretches
-  // recovery ×1.15; ≥8h of good-quality sleep shrinks it ×0.95.
+  // Recent sleep scales every window (trailing-2-night avg <6h stretches
+  // recovery ×1.15; ≥8h good quality shrinks it ×0.95), and the wearable
+  // HRV/RHR modifier layers on top — both composed + clamped globally in
+  // recoveryConfigFor/windowForSession.
   const { entries: sleepEntries } = useSleepLog();
+  const { state: wearableRecovery } = useWearableRecovery();
   const config = useMemo(
     () =>
       recoveryConfigFor(
         enhancedAthleteMode,
         multipliers,
-        computeSleepWindowMultiplier(sleepEntries, now)
+        computeSleepWindowMultiplier(sleepEntries, now),
+        wearableRecovery.scale
       ),
-    [enhancedAthleteMode, multipliers, sleepEntries, now]
+    [enhancedAthleteMode, multipliers, sleepEntries, now, wearableRecovery.scale]
   );
 
   const recoveryStatus = useMemo(

@@ -1,10 +1,32 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui';
 import { getLocalDateString } from '@/lib/utils';
-import { useSleepLog } from '@/hooks/useSleepLog';
+import { useSleepLog, SLEEP_LOG_QUERY_KEY_PREFIX } from '@/hooks/useSleepLog';
+import { isNativePlatform, getPlatform } from '@/lib/integrations/capacitor-stub';
 import { SLEEP_QUALITIES, type SleepQuality } from '@/types/schema';
+
+/** One-time "Auto-fill from Apple Health" offer — dismissed forever once acted on. */
+const HEALTH_OFFER_DISMISSED_KEY = 'hypertrack:healthkit-sleep-offer-dismissed';
+
+function readHealthOfferDismissed(): boolean {
+  if (typeof window === 'undefined') return true;
+  try {
+    return window.localStorage.getItem(HEALTH_OFFER_DISMISSED_KEY) === '1';
+  } catch {
+    return true;
+  }
+}
+
+function persistHealthOfferDismissed(): void {
+  try {
+    window.localStorage.setItem(HEALTH_OFFER_DISMISSED_KEY, '1');
+  } catch {
+    // Storage unavailable — the offer just shows again next time.
+  }
+}
 
 /**
  * SleepQuickLog — the two-field inline sheet behind the home Sleep card (and
@@ -114,6 +136,7 @@ interface SleepQuickLogProps {
 
 export function SleepQuickLog({ onSaved }: SleepQuickLogProps) {
   const { entries, lastEntry, isLoading, logSleep } = useSleepLog();
+  const queryClient = useQueryClient();
   const [hours, setHours] = useState<number>(FALLBACK_HOURS);
   const [quality, setQuality] = useState<SleepQuality>('ok');
   const [isSaving, setIsSaving] = useState(false);
@@ -122,8 +145,58 @@ export function SleepQuickLog({ onSaved }: SleepQuickLogProps) {
   // never stomp an in-progress edit.
   const touchedRef = useRef(false);
 
+  // Apple Health inline offer (iOS native app only; hidden everywhere else).
+  const [isIOSNative, setIsIOSNative] = useState(false);
+  const [healthKitConnected, setHealthKitConnected] = useState<boolean | null>(null);
+  const [healthOfferDismissed, setHealthOfferDismissed] = useState(true);
+  const [isConnectingHealth, setIsConnectingHealth] = useState(false);
+
   const todayStr = getLocalDateString();
   const todaysEntry = entries.find((e) => e.localDay === todayStr) ?? null;
+
+  useEffect(() => {
+    if (!isNativePlatform() || getPlatform() !== 'ios') return;
+    setIsIOSNative(true);
+    setHealthOfferDismissed(readHealthOfferDismissed());
+    import('@/lib/actions/healthkit')
+      .then((m) => m.getHealthKitSyncContext())
+      .then((ctx) => setHealthKitConnected(ctx.connected))
+      .catch(() => setHealthKitConnected(false));
+  }, []);
+
+  const handleDismissHealthOffer = () => {
+    setHealthOfferDismissed(true);
+    persistHealthOfferDismissed();
+  };
+
+  const handleConnectAppleHealth = async () => {
+    setIsConnectingHealth(true);
+    try {
+      const healthkit = await import('@/lib/integrations/healthkit');
+      const result = await healthkit.requestHealthKitPermissions();
+      if (!result.granted) return;
+
+      const { upsertWearableConnection } = await import('@/lib/actions/wearable');
+      await upsertWearableConnection({
+        source: 'apple_healthkit',
+        permissions: ['steps', 'active_energy', 'sleep', 'heart_rate'],
+        deviceName: 'Apple Health',
+      });
+      setHealthKitConnected(true);
+
+      const sync = await import('@/lib/integrations/healthkit-sync');
+      await sync.runHealthKitSync({ force: true });
+
+      // The import writes sleep_log server-side — refetch so the freshly
+      // imported night lands in the sheet and the tile.
+      await queryClient.invalidateQueries({ queryKey: [SLEEP_LOG_QUERY_KEY_PREFIX] });
+    } catch (err) {
+      console.warn('Apple Health connect failed:', err);
+    } finally {
+      setIsConnectingHealth(false);
+      handleDismissHealthOffer();
+    }
+  };
 
   useEffect(() => {
     if (touchedRef.current || isLoading) return;
@@ -163,6 +236,39 @@ export function SleepQuickLog({ onSaved }: SleepQuickLogProps) {
           setQuality(q);
         }}
       />
+      {/* Auto-filled from Apple Health — an untouched import keeps its tag;
+          saving here stamps the day manual (manual entries always win). */}
+      {todaysEntry?.source === 'healthkit' && !touchedRef.current && (
+        <p className="text-xs text-surface-500 text-center" data-testid="sleep-healthkit-tag">
+          ⌚ from Apple Health — adjust if it looks off
+        </p>
+      )}
+
+      {/* One-time inline offer (iOS native, not yet connected) */}
+      {isIOSNative && healthKitConnected === false && !healthOfferDismissed && (
+        <div
+          className="flex items-center justify-between gap-2 p-2 bg-surface-800 rounded-lg"
+          data-testid="sleep-healthkit-offer"
+        >
+          <button
+            onClick={handleConnectAppleHealth}
+            disabled={isConnectingHealth}
+            className="flex-1 text-left text-xs text-primary-400 hover:text-primary-300 disabled:opacity-50"
+          >
+            {isConnectingHealth
+              ? 'Connecting to Apple Health…'
+              : '⌚ Auto-fill from Apple Health'}
+          </button>
+          <button
+            onClick={handleDismissHealthOffer}
+            aria-label="Dismiss Apple Health offer"
+            className="text-surface-500 hover:text-surface-300 text-xs px-1"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {error && <p className="text-xs text-danger-400">{error}</p>}
       <Button onClick={handleSave} isLoading={isSaving} className="w-full" data-testid="sleep-save">
         {todaysEntry ? 'Update sleep' : 'Save sleep'}

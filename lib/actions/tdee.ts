@@ -220,11 +220,31 @@ export async function getAdaptiveTDEE(
     bodyFatPercent: userPrefs?.body_fat_percent ?? dexaBodyFatPercent ?? undefined,
   };
 
+  // Steps-informed PRIOR (double-count firewall): a trailing 14-day average
+  // of wearable/manual steps replaces the self-reported activity multiplier
+  // inside the Mifflin-based formula prior — and ONLY there. The observed
+  // intake-vs-weight blend below never reads activity data, so steps sharpen
+  // the estimate exactly where the prior dominates (day zero) and fade out
+  // automatically as observed data accumulates.
+  const STEP_PRIOR_WINDOW_DAYS = 14;
+  const STEP_PRIOR_MIN_DAYS = 5;
+  const stepWindowCutoff = getLocalDateString(
+    new Date(Date.now() - STEP_PRIOR_WINDOW_DAYS * 86_400_000)
+  );
+  const stepDays = enhancedDataPoints.filter(
+    (dp) => dp.date >= stepWindowCutoff && dp.steps > 0
+  );
+  const avgDailySteps =
+    stepDays.length >= STEP_PRIOR_MIN_DAYS
+      ? stepDays.reduce((sum, dp) => sum + dp.steps, 0) / stepDays.length
+      : null;
+
   const activityConfig: ActivityConfig = {
     activityLevel: userPrefs?.activity_level || 'moderate',
     workoutsPerWeek: userPrefs?.workouts_per_week || 4,
     avgWorkoutMinutes: userPrefs?.avg_workout_minutes || 60,
     workoutIntensity: userPrefs?.workout_intensity || 'moderate',
+    avgDailySteps,
   };
 
   const formulaEstimate = getFormulaTDEE(userStats, activityConfig);

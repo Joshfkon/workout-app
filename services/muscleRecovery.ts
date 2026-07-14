@@ -18,6 +18,7 @@
 
 import { resolveMuscleToStandard, type StandardMuscleGroup, type SleepQuality } from '@/types/schema';
 import { ENHANCED_RECOVERY_MULTIPLIER } from '@/services/shared/fatigueConstants';
+import { composeGlobalRecoveryScale } from '@/services/wearableRecovery';
 
 // ---------------------------------------------------------------------------
 // Tunable heuristic constants — edit here to re-tune the whole model.
@@ -137,15 +138,25 @@ export const RECOVERY_CONFIG: RecoveryConfig = {
  * fatigue faster, so every recovery window shrinks by the shared multiplier
  * (~22.5% faster) — the same constant the fatigue model uses, and the same
  * scaling the retired dashboard recovery card applied.
+ *
+ * `wearableRecoveryScale` is the HRV/RHR global modifier from
+ * services/wearableRecovery.ts (bounded 0.95–1.15, neutral 1). It composes
+ * multiplicatively with the athlete-profile scalar; the combined global
+ * effect is clamped by composeGlobalRecoveryScale (×1.25 cap). Per-muscle
+ * learned multipliers stay independent with their own bounds.
  */
 export function recoveryConfigFor(
   enhancedAthleteMode: boolean,
   recoveryMultiplierByMuscle?: Partial<Record<StandardMuscleGroup, number>>,
-  sleepWindowMultiplier?: number
+  sleepWindowMultiplier?: number,
+  wearableRecoveryScale?: number
 ): RecoveryConfig {
-  let config = enhancedAthleteMode
-    ? { ...RECOVERY_CONFIG, windowScale: 1 / ENHANCED_RECOVERY_MULTIPLIER }
-    : RECOVERY_CONFIG;
+  const baseScale = enhancedAthleteMode ? 1 / ENHANCED_RECOVERY_MULTIPLIER : 1;
+  const windowScale = composeGlobalRecoveryScale(baseScale, wearableRecoveryScale ?? 1);
+  let config =
+    windowScale === RECOVERY_CONFIG.windowScale
+      ? RECOVERY_CONFIG
+      : { ...RECOVERY_CONFIG, windowScale };
   if (recoveryMultiplierByMuscle && Object.keys(recoveryMultiplierByMuscle).length > 0) {
     config = { ...config, recoveryMultiplierByMuscle };
   }
@@ -390,7 +401,15 @@ function windowForSession(
     config.recoveryMultiplierByMuscle[muscle] ?? 1
   );
 
-  return window * config.windowScale * learned * config.sleepWindowMultiplier;
+  // Global scalars compose multiplicatively — athlete profile × wearable
+  // (already folded into windowScale) × sleep — with the combined global
+  // effect clamped (×1.25 cap) so stacked bad signals whisper, never shout.
+  const globalScale = composeGlobalRecoveryScale(
+    config.windowScale,
+    config.sleepWindowMultiplier
+  );
+
+  return window * globalScale * learned;
 }
 
 /**

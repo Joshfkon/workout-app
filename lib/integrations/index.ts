@@ -12,9 +12,15 @@ export {
   fetchHealthKitSteps,
   fetchHealthKitHourlySteps,
   fetchHealthKitActiveEnergy,
+  fetchHealthKitSleepSamples,
+  fetchHealthKitDailyHrv,
+  fetchHealthKitDailyRestingHeartRate,
   fetchHealthKitWorkouts,
   subscribeToHealthKitUpdates,
 } from './healthkit';
+
+// HealthKit anchored foreground sync
+export { runHealthKitSync, planSyncWindow, HEALTHKIT_SYNC } from './healthkit-sync';
 
 // Google Fit (Android)
 export {

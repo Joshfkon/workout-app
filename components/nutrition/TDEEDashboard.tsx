@@ -197,9 +197,14 @@ export function TDEEDashboard({
   const displayBurnRate = intervalEstimate?.burnRatePerLb ?? activeEstimate?.burnRatePerLb ?? 0;
   const displayConfidenceScore =
     intervalEstimate?.confidenceScore ?? activeEstimate?.confidenceScore ?? 0;
-  const subtitle =
+  const baseSubtitle =
     intervalEstimate?.personalizationLabel ??
     (isAdaptive ? 'Personalized from your data' : 'Estimated from formula');
+  // Note when wearable steps informed the formula prior's activity multiplier
+  // (steps feed the prior only — never added on top of the blended estimate).
+  const subtitle = formulaEstimate?.activityInformed
+    ? `${baseSubtitle} · activity-informed`
+    : baseSubtitle;
   // Correctly-attributed warnings (calories vs weight) take precedence over the
   // legacy generic data-quality issues.
   const cardWarnings = intervalEstimate?.warnings ?? [];

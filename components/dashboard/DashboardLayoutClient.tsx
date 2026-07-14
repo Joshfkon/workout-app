@@ -12,6 +12,7 @@ import { ThemeToggleCompact } from '@/components/settings/ThemeToggle';
 import { ResumeWorkoutBanner } from '@/components/workout';
 import { flushSetOutbox } from '@/lib/offline/setOutbox';
 import { useWeeklyVolume } from '@/hooks/useWeeklyVolume';
+import { useHealthKitForegroundSync } from '@/hooks/useHealthKitSync';
 
 interface DashboardLayoutClientProps {
   children: React.ReactNode;
@@ -26,6 +27,10 @@ export function DashboardLayoutClient({ children }: DashboardLayoutClientProps) 
   const { summary, isLoading: volumeLoading } = useWeeklyVolume();
   const volumeGoalsMet =
     !volumeLoading && summary.totalSets > 0 && summary.musclesBelowMev.length === 0;
+
+  // Apple Health: anchored pull on entry + every app foreground (iOS native
+  // only; no-op everywhere else).
+  useHealthKitForegroundSync();
 
   // Offline outbox (P0-2): flush queued set writes whenever connectivity
   // returns, from ANY dashboard tab — not just the workout page.

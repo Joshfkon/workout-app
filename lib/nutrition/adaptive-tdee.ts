@@ -50,6 +50,13 @@ export interface TDEEEstimate {
   estimateHistory: BurnRateHistoryPoint[];
   /** Current weight used for TDEE calculation */
   currentWeight: number;
+  /**
+   * True when a formula estimate derived its activity multiplier from
+   * measured wearable steps instead of the self-reported activity level
+   * (see activityMultiplierFromSteps). Display-only flag — activity data
+   * feeds the PRIOR alone, never the observed blend.
+   */
+  activityInformed?: boolean;
 }
 
 export interface BurnRateHistoryPoint {
@@ -226,6 +233,7 @@ export function getFormulaTDEE(
     source: 'formula',
     estimateHistory: [],
     currentWeight: stats.weightKg * 2.20462,
+    activityInformed: activity.avgDailySteps != null && activity.avgDailySteps > 0,
   };
 }
 

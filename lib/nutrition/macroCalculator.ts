@@ -92,6 +92,15 @@ export interface ActivityConfig {
   workoutsPerWeek: number;
   avgWorkoutMinutes: number;
   workoutIntensity: "light" | "moderate" | "intense";
+  /**
+   * Trailing average daily steps from a wearable (e.g. Apple Health). When
+   * present, the formula prior derives its activity multiplier from measured
+   * steps instead of the self-reported activityLevel — see
+   * STEP_ACTIVITY_MULTIPLIER. Activity data feeds ONLY this prior; the
+   * observed intake-vs-weight TDEE blend never reads it (double-count
+   * firewall).
+   */
+  avgDailySteps?: number | null;
 }
 
 export interface GoalConfig {
@@ -239,6 +248,38 @@ const ACTIVITY_MULTIPLIERS: Record<ActivityLevel, number> = {
   very_active: 1.9,
   athlete: 2.1,
 };
+
+/**
+ * Steps-derived activity multiplier for the formula TDEE prior.
+ *
+ * When a wearable supplies a trailing average of daily steps, we map it to an
+ * activity multiplier instead of trusting the self-reported activityLevel:
+ * <=5k steps (sedentary) -> 1.35, >=12k steps (very active) -> 1.7, linear in
+ * between. This sharpens the prior exactly where it dominates (day zero / low
+ * observed confidence) and fades automatically as observed intake-vs-weight
+ * data takes over via the existing precision weighting.
+ */
+export const STEP_ACTIVITY_MULTIPLIER = {
+  /** At or below this many avg daily steps, the multiplier floors. */
+  sedentaryFloorSteps: 5_000,
+  /** At or above this many avg daily steps, the multiplier caps. */
+  veryActiveCeilSteps: 12_000,
+  minMultiplier: 1.35,
+  maxMultiplier: 1.7,
+} as const;
+
+/** Smoothly interpolate avg daily steps into an activity multiplier. */
+export function activityMultiplierFromSteps(avgDailySteps: number): number {
+  const { sedentaryFloorSteps, veryActiveCeilSteps, minMultiplier, maxMultiplier } =
+    STEP_ACTIVITY_MULTIPLIER;
+  if (!Number.isFinite(avgDailySteps) || avgDailySteps <= sedentaryFloorSteps) {
+    return minMultiplier;
+  }
+  if (avgDailySteps >= veryActiveCeilSteps) return maxMultiplier;
+  const t =
+    (avgDailySteps - sedentaryFloorSteps) / (veryActiveCeilSteps - sedentaryFloorSteps);
+  return minMultiplier + t * (maxMultiplier - minMultiplier);
+}
 
 // %BW/week goals
 const GOAL_PERCENT_BW: Record<Goal, { percentBW: number; description: string }> = {
@@ -415,7 +456,11 @@ const WORKOUT_NET_MET: Record<ActivityConfig["workoutIntensity"], number> = {
 
 export function calculateTDEE(stats: UserStats, activity: ActivityConfig): number {
   const bmr = calculateBMR(stats);
-  let tdee = bmr * ACTIVITY_MULTIPLIERS[activity.activityLevel];
+  const activityMultiplier =
+    activity.avgDailySteps != null && activity.avgDailySteps > 0
+      ? activityMultiplierFromSteps(activity.avgDailySteps)
+      : ACTIVITY_MULTIPLIERS[activity.activityLevel];
+  let tdee = bmr * activityMultiplier;
 
   const weeklyWorkoutMinutes = activity.workoutsPerWeek * activity.avgWorkoutMinutes;
   if (weeklyWorkoutMinutes > 0) {

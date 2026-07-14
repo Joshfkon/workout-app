@@ -57,9 +57,9 @@ interface WearableOption {
 const WEARABLE_OPTIONS: WearableOption[] = [
   {
     source: 'apple_healthkit',
-    name: 'Apple Watch',
+    name: 'Apple Health',
     icon: '⌚',
-    description: 'Connect via Apple Health',
+    description: 'Sleep, heart & steps for recovery and calorie estimates',
     platforms: ['ios'],
   },
   {
@@ -145,13 +145,26 @@ export function WearableConnectionsScreen() {
             console.warn('HealthKit not available');
             break;
           }
-          const result = await healthKitModule.requestHealthKitPermissions();
+          const result = await healthKitModule.requestHealthKitPermissions([
+            'steps',
+            'active_energy',
+            'sleep',
+            'heart_rate',
+          ]);
           if (result.granted) {
             await upsertWearableConnection({
               source,
-              permissions: result.permissions || ['steps', 'active_energy'],
-              deviceName: 'Apple Watch',
+              permissions: result.permissions || ['steps', 'active_energy', 'sleep', 'heart_rate'],
+              deviceName: 'Apple Health',
             });
+            // Kick off the first anchored pull right away so sleep/steps show
+            // up without waiting for the next app foreground.
+            try {
+              const sync = await import('@/lib/integrations/healthkit-sync');
+              await sync.runHealthKitSync({ force: true });
+            } catch (error) {
+              console.debug('[WearableConnections] initial HealthKit sync skipped:', error);
+            }
           }
           break;
         }
@@ -336,10 +349,12 @@ export function WearableConnectionsScreen() {
             <div className="text-sm text-surface-400">
               <p className="font-medium mb-1">About wearable connections</p>
               <p>
-                Automatic step sync from wearables isn&apos;t active yet - connecting an
-                account links it for when sync ships, but it won&apos;t pull data into the
-                app today. In the meantime you can enter your steps manually, which already
-                feeds into your TDEE estimate.
+                Apple Health syncs automatically in the iOS app: sleep auto-fills your
+                daily check-in, HRV and resting heart rate quietly tune recovery, and
+                steps sharpen your calorie estimate. Data is read-only and pulled when
+                you open the app. Other providers aren&apos;t wired for automatic sync
+                yet — you can still enter steps manually, which feeds your TDEE
+                estimate the same way.
               </p>
             </div>
           </div>
