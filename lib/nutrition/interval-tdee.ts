@@ -54,8 +54,9 @@ const RECENCY_TAU_DAYS = 28;
 const PRIOR_EQUIVALENT_DAYS = 14;
 
 /** Days after a phase change that are corrupted by glycogen/water shifts.
- *  Intervals overlapping this window are excluded. */
-const PHASE_BOUNDARY_DAYS = 14;
+ *  Intervals overlapping this window are excluded. Exported so other
+ *  trend consumers (e.g. body-comp recommendations) share the same window. */
+export const PHASE_BOUNDARY_DAYS = 14;
 
 // --- Data-driven phase-boundary detection ---
 // A phase boundary shows up as an ABRUPT, PERSISTENT weight step that implies a
@@ -668,7 +669,7 @@ export function detectPhaseBoundaries(
   return boundaries;
 }
 
-function spansPhaseBoundary(
+export function spansPhaseBoundary(
   startDate: string,
   endDate: string,
   phaseChanges: string[]

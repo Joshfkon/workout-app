@@ -327,3 +327,101 @@ describe('display helpers', () => {
     });
   });
 });
+
+// ============================================
+// PROGRAM-BOUNDARY CONFIDENCE GATING
+// ============================================
+
+describe('program-boundary confidence gating', () => {
+  // 8 weekly sessions ending 2026-06-29; a program that started 2026-06-20
+  // leaves only 2 sessions since the boundary (< MIN_SESSIONS_FOR_INSIGHT).
+  const PROGRAM_START = '2026-06-20';
+
+  it('marks a lift straddling the program boundary as calibrating with NO rate', () => {
+    const snapshots = buildSnapshots('ex-1', 8, 100, 2);
+    const result = getExerciseProgression({
+      exerciseId: 'ex-1',
+      snapshots,
+      experience: 'novice',
+      programStartDate: PROGRAM_START,
+    });
+    expect(result.pace).toBe('calibrating');
+    // The number is noise with a decimal point — it must not exist.
+    expect(result.weeklyChangePct).toBe(0);
+    expect(result.weeklyChangeKg).toBe(0);
+    expect(result.isPlateaued).toBe(false);
+  });
+
+  it('keeps full confidence once enough sessions accrue after the boundary', () => {
+    const snapshots = buildSnapshots('ex-1', 8, 100, 2);
+    const result = getExerciseProgression({
+      exerciseId: 'ex-1',
+      snapshots,
+      experience: 'novice',
+      // Program started before all 8 sessions -> no straddle.
+      programStartDate: '2026-05-01',
+    });
+    expect(result.pace).not.toBe('calibrating');
+    expect(result.weeklyChangePct).toBeGreaterThan(0);
+  });
+
+  it('rolls a low-confidence-only muscle up as calibrating with no rate', () => {
+    const snapshotsByExercise = new Map([
+      ['ex-1', buildSnapshots('ex-1', 8, 100, 2)],
+      ['ex-2', buildSnapshots('ex-2', 6, 80, 1)],
+    ]);
+    const muscleByExercise = new Map([
+      ['ex-1', 'chest'],
+      ['ex-2', 'chest'],
+    ]);
+
+    const groups = getMuscleGroupProgression({
+      snapshotsByExercise,
+      muscleByExercise,
+      experience: 'novice',
+      programStartDate: PROGRAM_START,
+    });
+
+    expect(groups).toHaveLength(1);
+    const chest = groups[0];
+    expect(chest.pace).toBe('calibrating');
+    expect(chest.avgWeeklyChangePct).toBe(0);
+    expect(chest.analyzedCount).toBe(0);
+    expect(chest.calibratingCount).toBe(2);
+  });
+
+  it('shows a rate when at least one contributing lift is confident, averaging confident lifts only', () => {
+    // Boundary 2026-06-10. Weekly sessions ending 2026-06-29 give three
+    // post-boundary sessions (6/15, 6/22, 6/29) → confident. Dropping the
+    // last session leaves two post-boundary (6/15, 6/22) → calibrating.
+    const confident = buildSnapshots('ex-conf', 8, 100, 2);
+    const calibrating = buildSnapshots('ex-cal', 8, 80, -5).slice(0, -1);
+    const snapshotsByExercise = new Map([
+      ['ex-conf', confident],
+      ['ex-cal', calibrating],
+    ]);
+    const muscleByExercise = new Map([
+      ['ex-conf', 'back'],
+      ['ex-cal', 'back'],
+    ]);
+
+    const groups = getMuscleGroupProgression({
+      snapshotsByExercise,
+      muscleByExercise,
+      experience: 'novice',
+      programStartDate: '2026-06-10',
+    });
+
+    const back = groups[0];
+    // One confident lift is enough for a real rate; the calibrating lift's
+    // (strongly negative) noise slope must NOT drag the average.
+    expect(back.pace).not.toBe('calibrating');
+    expect(back.analyzedCount).toBe(1);
+    expect(back.calibratingCount).toBe(1);
+    expect(back.avgWeeklyChangePct).toBeGreaterThan(0);
+  });
+
+  it('maps calibrating pace to a muted label', () => {
+    expect(getPaceDisplay('calibrating')).toEqual({ label: 'Calibrating', tone: 'muted' });
+  });
+});

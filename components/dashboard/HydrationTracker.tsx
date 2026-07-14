@@ -128,7 +128,7 @@ export const HydrationTracker = memo(function HydrationTracker({ userId, unit = 
   const trackingStatus = getTrackingStatus();
 
   return (
-    <Card>
+    <Card data-testid="hydration-tracker-card">
       <CardHeader className="pb-2">
         <CardTitle className="text-base flex items-center justify-between">
           <span className="flex items-center gap-2">

@@ -15,11 +15,9 @@ import { useUserPreferences } from '@/hooks/useUserPreferences';
 import type { DexaScan, Goal, Experience, FFMIResult, ProgressPhoto, MuscleGroup, StandardMuscleGroup } from '@/types/schema';
 import { STANDARD_MUSCLE_DISPLAY_NAMES } from '@/types/schema';
 import {
-  computeFFMI,
-  leanMassIncludesBone,
+  selectCanonicalFfmi,
   analyzeBodyCompTrend,
   generateCoachingRecommendations,
-  getFFMILabel,
   getTrendIndicator,
 } from '@/services/bodyCompEngine';
 import { useBodyCompTrend } from '@/hooks/useBodyCompTrend';
@@ -37,21 +35,9 @@ import {
   getStrengthLevelColor,
   generatePercentileSegments
 } from '@/services/coachingEngine';
-import { kgToLbs, roundToIncrement, formatWeight, formatWorkoutDuration, resolveWorkoutDurationSeconds, estimateE1RM, getLocalDateString, muscleDisplayName } from '@/lib/utils';
-// Recharts components still used inline - these will be gradually migrated
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Area,
-  AreaChart,
-  ReferenceLine,
-  Legend,
-} from 'recharts';
+import { kgToLbs, inputWeightToKg, roundToIncrement, formatWeight, formatWorkoutDuration, resolveWorkoutDurationSeconds, estimateE1RM, getLocalDateString, muscleDisplayName } from '@/lib/utils';
+// All charts now render from extracted components (BodyHubTrends,
+// WellnessTrendsCard, ProportionsTargetsCard) — no inline Recharts here.
 import type { Mesocycle, BodyCompositionTarget, ExercisePerformanceSnapshot } from '@/types/schema';
 import type { EnhancedProportionsAnalysis } from '@/services/bodyProportionsAnalytics';
 import { analyzeEnhancedProportions } from '@/services/bodyProportionsAnalytics';
@@ -59,6 +45,18 @@ import { analyzeAllExercises, type PlateauDetectionResult, type PlateauGoal } fr
 import { PlateauAlertList } from '@/components/analytics/PlateauAlert';
 import { getMuscleGroupProgression } from '@/services/progressionInsights';
 import { MuscleProgressionCard } from '@/components/analytics/MuscleProgressionCard';
+import { ProportionsTargetsCard } from '@/components/analytics/ProportionsTargetsCard';
+import { WellnessTrendsCard } from '@/components/analytics/WellnessTrendsCard';
+import {
+  MuscleGroupList,
+  useMuscleRowExpansion,
+} from '@/components/muscle/MuscleGroupList';
+import { VolumeRowContent, VolumeChildContent } from '@/components/analytics/VolumeZoneBar';
+import { useWeeklyMevSummary } from '@/hooks/useWeeklyMevSummary';
+import {
+  buildVolumeRows,
+  type VolumeRow,
+} from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 import { BodyHubTrends } from '@/components/body/BodyHubTrends';
 import { BodyHubNudges } from '@/components/body/BodyHubNudges';
 import { MeasurementTrendCard } from '@/components/body/MeasurementTrendCard';
@@ -78,8 +76,6 @@ import {
   type RawWorkoutSession,
 } from '@/services/volumeTrendsData';
 // Dynamic imports for heavy chart components - only loaded when needed
-const FFMIGauge = dynamic(() => import('@/components/analytics/FFMIGauge').then(m => m.FFMIGauge), { ssr: false });
-const GoalsTab = dynamic(() => import('@/components/analytics/GoalsTab').then(m => m.GoalsTab), { ssr: false });
 const LogBodyDataSheet = dynamic(
   () => import('@/components/body/LogBodyDataSheet').then(m => m.LogBodyDataSheet),
   { ssr: false }
@@ -160,18 +156,24 @@ const MuscleRecoveryCard = dynamic(
   { ssr: false, loading: () => <div className="h-40 animate-pulse bg-surface-700 rounded-xl" /> }
 );
 
-// Tab types
-type TabType = 'body-composition' | 'goals' | 'strength' | 'volume' | 'wellness';
+// Tab types. The 5-tab layout (Body · Goals · Strength · Volume · Wellness)
+// collapsed to four: Goals dissolved into Body (targets editor + projections)
+// and Volume was renamed Training.
+type TabType = 'body-composition' | 'strength' | 'training' | 'wellness';
 
 // Valid ?tab= values — tab targeting is a route parameter so any surface
 // (home tiles, notifications, weekly summary) can deep-link a specific tab,
 // e.g. /dashboard/analytics?tab=strength&section=lift-trends.
-const TAB_IDS: readonly TabType[] = ['body-composition', 'goals', 'strength', 'volume', 'wellness'];
+const TAB_IDS: readonly TabType[] = ['body-composition', 'strength', 'training', 'wellness'];
 
 function parseTabParam(value: string | null): TabType | null {
-  // 'body' is the friendly alias the Home Weight tile links to (the tab is
-  // labelled "Body" — it's the Body data hub).
-  if (value === 'body') return 'body-composition';
+  // Back-compat aliases so existing home tiles / notifications / deep links
+  // keep working after the 5→4 restructure:
+  //   body  → Body (friendly alias the Home Weight tile links to)
+  //   goals → Body (goal-setting + projections moved here)
+  //   volume→ Training (renamed tab)
+  if (value === 'body' || value === 'goals') return 'body-composition';
+  if (value === 'volume') return 'training';
   return value && (TAB_IDS as readonly string[]).includes(value) ? (value as TabType) : null;
 }
 
@@ -306,37 +308,10 @@ function hasReliableStandard(exerciseName: string): boolean {
   );
 }
 
-// Optimal weekly sets by experience level
-const OPTIMAL_WEEKLY_VOLUME: Record<string, Record<string, number>> = {
-  novice: {
-    chest: 10, back: 10, shoulders: 8, biceps: 6, triceps: 6,
-    quads: 10, hamstrings: 8, glutes: 8, calves: 8, abs: 6,
-    adductors: 6, forearms: 4, traps: 6,
-  },
-  intermediate: {
-    chest: 14, back: 16, shoulders: 12, biceps: 10, triceps: 10,
-    quads: 14, hamstrings: 12, glutes: 12, calves: 12, abs: 10,
-    adductors: 8, forearms: 6, traps: 8,
-  },
-  advanced: {
-    chest: 20, back: 22, shoulders: 16, biceps: 14, triceps: 14,
-    quads: 20, hamstrings: 16, glutes: 16, calves: 16, abs: 14,
-    adductors: 10, forearms: 8, traps: 10,
-  },
-};
-
-// Get weeks multiplier for time range
-function getWeeksInRange(range: '7d' | '30d' | '60d' | '6m' | '1y' | 'all'): number {
-  switch (range) {
-    case '7d': return 1;
-    case '30d': return 4;
-    case '60d': return 8;
-    case '6m': return 26;
-    case '1y': return 52;
-    case 'all': return 52; // Default to 1 year for "all" comparison
-    default: return 4;
-  }
-}
+// The Training tab's volume section now reads the adaptive MEV–MRV engine
+// (buildVolumeRows over useWeeklyMevSummary) instead of a hardcoded
+// optimal-sets table, so the old OPTIMAL_WEEKLY_VOLUME map and its
+// getWeeksInRange multiplier were retired.
 
 // Get time range label
 function getTimeRangeLabel(range: '7d' | '30d' | '60d' | '6m' | '1y' | 'all'): string {
@@ -470,7 +445,6 @@ function AnalyticsPageContent() {
   // finishes loading, without refetching workout data.
   const [progressionRaw, setProgressionRaw] = useState<ProgressionRawData | null>(null);
   const [strengthViewMode, setStrengthViewMode] = useState<'absolute' | 'relative'>('absolute');
-  const [expandedMuscles, setExpandedMuscles] = useState<Set<string>>(new Set());
 
   // Wellness state
   const [hydrationData, setHydrationData] = useState<Array<{ date: string; totalMl: number }>>([]);
@@ -764,10 +738,14 @@ function AnalyticsPageContent() {
             .eq('user_id', userId)
             .eq('is_active', true)
             .limit(1),
-          // Weight history from weigh-ins (last 90 days for projection)
+          // Weight history for the projection. The table is `weight_log`
+          // (columns logged_at, weight, unit) — the SAME source Home's weight
+          // trend and the Body-tab chart read. The prior query hit a
+          // nonexistent `weigh_ins`/`weight_kg`, silently returned null, and
+          // the projection always showed "Add more weigh-ins".
           supabase
-            .from('weigh_ins')
-            .select('logged_at, weight_kg')
+            .from('weight_log')
+            .select('logged_at, weight, unit')
             .eq('user_id', userId)
             .gte('logged_at', getLocalDateString(new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)))
             .order('logged_at', { ascending: true }),
@@ -838,12 +816,13 @@ function AnalyticsPageContent() {
           });
         }
 
-        // Process weight history
+        // Process weight history. Weight is stored in the logged unit — convert
+        // to kg (inputWeightToKg), the same conversion useBodyCompTrend uses.
         if (weighInsResult.data && weighInsResult.data.length > 0) {
           setWeightHistory(
-            weighInsResult.data.map((w: { logged_at: string; weight_kg: number }) => ({
+            weighInsResult.data.map((w: { logged_at: string; weight: number; unit: 'lb' | 'kg' | null }) => ({
               date: w.logged_at,
-              weightKg: w.weight_kg,
+              weightKg: inputWeightToKg(w.weight, w.unit ?? 'lb'),
             }))
           );
         }
@@ -1459,37 +1438,61 @@ function AnalyticsPageContent() {
       experience: userProfile?.experience ?? 'intermediate',
       referenceDate: new Date(),
       goal: progressionRaw.goal,
+      // Lifts straddling the current program with too few sessions since it
+      // roll up as "calibrating" (no rate) instead of feeding a real-looking
+      // %/wk — the same gate liftTrends uses.
+      programStartDate: activeMesocycle?.startedAt ?? null,
     });
-  }, [progressionRaw, userProfile?.experience]);
+  }, [progressionRaw, userProfile?.experience, activeMesocycle?.startedAt]);
+
+  // Shared weekly (rolling 7-day) volume for the Training tab's "Volume vs
+  // your targets" section — the SAME hook/counter/band the /volume page and
+  // the Home weekly-volume tile use, so the numbers can never diverge.
+  const { stats: volumeStats, reachable: volumeReachable } = useWeeklyMevSummary();
+  const volumeRows = useMemo(
+    () => buildVolumeRows(volumeStats, volumeReachable),
+    [volumeStats, volumeReachable]
+  );
+  const volumeExpansion = useMuscleRowExpansion('analytics-training', volumeRows);
+  const pinLaggingVolumeChild = useMemo(
+    () => (child: VolumeRow) => child.belowMev && child.reachable,
+    []
+  );
 
   // Calculated values
   const latestScan = scans[0];
-  // FFMI comes from the LAST POINT of the anchored trend (the same series the
-  // Body Composition Trend chart plots) via the shared computeFFMI — not from
-  // the raw latest scan, which goes stale as weigh-ins accumulate after it.
-  // While the trend is still loading, fall back to the latest scan through
-  // the same function (lean + bone) so the value definition never changes.
+  // THE canonical FFMI for every surface (Home tile, this Body stat strip +
+  // gauge, the Strength card). selectCanonicalFfmi prefers the last point of
+  // the DEXA-anchored trend (same series the Body Composition Trend chart
+  // plots) and falls back to the latest scan through the same computeFFMI
+  // while the trend loads — so the number can never differ between surfaces.
   const latestTrendPoint = bodyCompTrend.length > 0
     ? bodyCompTrend[bodyCompTrend.length - 1]
     : null;
-  const ffmiResult = userProfile?.heightCm
-    ? latestTrendPoint
-      ? computeFFMI(latestTrendPoint.leanMassKg, latestTrendPoint.boneMassKg, userProfile.heightCm)
-      : latestScan
-        ? computeFFMI(
-            latestScan.leanMassKg,
-            // Calculated-entry scans store lean = weight − fat (bone already
-            // inside) — adding BMC would double-count it.
-            leanMassIncludesBone(latestScan) ? null : latestScan.boneMassKg,
-            userProfile.heightCm
-          )
-        : null
-    : null;
+  const ffmiResult = selectCanonicalFfmi({
+    trendLastPoint: latestTrendPoint
+      ? { leanMassKg: latestTrendPoint.leanMassKg, boneMassKg: latestTrendPoint.boneMassKg }
+      : null,
+    latestScan: latestScan ?? null,
+    heightCm: userProfile?.heightCm,
+  });
   const trend = userProfile?.heightCm
     ? analyzeBodyCompTrend(scans, userProfile.heightCm)
     : null;
+  // Phase-boundary dates (bulk/cut start) let the recommender suppress
+  // composition advice inside the water-weight window — reuse the active
+  // target's creation date as the current phase's start.
+  const phaseChangeDates = activeTarget?.createdAt
+    ? [activeTarget.createdAt.slice(0, 10)]
+    : [];
   const recommendations = userProfile?.heightCm
-    ? generateCoachingRecommendations(scans, userProfile.heightCm, userProfile.goal, userProfile.experience)
+    ? generateCoachingRecommendations(
+        scans,
+        userProfile.heightCm,
+        userProfile.goal,
+        userProfile.experience,
+        { weightUnit: units, phaseChangeDates }
+      )
     : [];
 
   // A transient failure to load/verify the session (network, 5xx, failed
@@ -1638,45 +1641,52 @@ function AnalyticsPageContent() {
 
   const tabs = [
     { id: 'body-composition' as TabType, label: 'Body', icon: '📊' },
-    { id: 'goals' as TabType, label: 'Goals', icon: '🎯' },
     { id: 'strength' as TabType, label: 'Strength', icon: '💪' },
-    { id: 'volume' as TabType, label: 'Volume & Trends', icon: '📈' },
+    { id: 'training' as TabType, label: 'Training', icon: '📈' },
     { id: 'wellness' as TabType, label: 'Wellness', icon: '💚' },
   ];
 
+  // The global time-range selector genuinely scopes only the Training and
+  // Wellness data (workout aggregates + wellness series). On Body and
+  // Strength it was a dead control, so it renders only where it applies.
+  const rangeAppliesToTab = activeTab === 'training' || activeTab === 'wellness';
+
+  const timeRangeSelector = (
+    <div className="flex gap-1 bg-surface-800 p-1 rounded-lg flex-wrap" data-testid="analytics-range-selector">
+      {([
+        { value: '7d', label: '7d' },
+        { value: '30d', label: '30d' },
+        { value: '60d', label: '60d' },
+        { value: '6m', label: '6mo' },
+        { value: '1y', label: '1yr' },
+        { value: 'all', label: 'All' },
+      ] as const).map((range) => (
+        <button
+          key={range.value}
+          onClick={() => setTimeRange(range.value)}
+          className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
+            timeRange === range.value
+              ? 'bg-primary-500 text-white'
+              : 'text-surface-400 hover:text-surface-200'
+          }`}
+        >
+          {range.label}
+        </button>
+      ))}
+    </div>
+  );
+
   return (
     <div className="space-y-6 animate-fade-in" data-testid="analytics-content">
-      {/* Header */}
+      {/* Header. The page title now matches the "Progress" nav label. The
+          range selector renders here only on tabs it actually scopes
+          (Training / Wellness); Body and Strength carry no dead control. */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-surface-100">Analytics</h1>
+          <h1 className="text-2xl font-bold text-surface-100">Progress</h1>
           <p className="text-surface-400">Track your body composition, strength, and training progress</p>
         </div>
-        <div className="flex gap-2">
-          {/* Time range selector */}
-          <div className="flex gap-1 bg-surface-800 p-1 rounded-lg flex-wrap">
-            {([
-              { value: '7d', label: '7d' },
-              { value: '30d', label: '30d' },
-              { value: '60d', label: '60d' },
-              { value: '6m', label: '6mo' },
-              { value: '1y', label: '1yr' },
-              { value: 'all', label: 'All' },
-            ] as const).map((range) => (
-              <button
-                key={range.value}
-                onClick={() => setTimeRange(range.value)}
-                className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
-                  timeRange === range.value
-                    ? 'bg-primary-500 text-white'
-                    : 'text-surface-400 hover:text-surface-200'
-                }`}
-              >
-                {range.label}
-              </button>
-            ))}
-          </div>
-        </div>
+        {rangeAppliesToTab && <div className="flex gap-2">{timeRangeSelector}</div>}
       </div>
 
       {/* Tab Navigation */}
@@ -1684,6 +1694,7 @@ function AnalyticsPageContent() {
         {tabs.map((tab) => (
           <button
             key={tab.id}
+            data-testid={`analytics-tab-${tab.id}`}
             onClick={() => handleTabChange(tab.id)}
             className={`flex-1 flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-2 px-1 sm:px-4 py-2 sm:py-2.5 min-h-[52px] rounded-lg text-sm font-medium transition-all ${
               activeTab === tab.id
@@ -1701,17 +1712,84 @@ function AnalyticsPageContent() {
       {/* Tab Content */}
       {activeTab === 'body-composition' && (
         <div className="space-y-6">
-          {/* Body hub front door: one Log button for weight / tape / DEXA */}
+          {/* Body hub front door: Log + Edit goals. Goal-setting moved here
+              from the dissolved Goals tab, behind this header action. */}
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-lg font-semibold text-surface-100">Body</h2>
-            <Button size="sm" onClick={() => setLogSegment('weight')}>
-              + Log
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() =>
+                  document
+                    .getElementById('body-targets')
+                    ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                }
+              >
+                Edit goals
+              </Button>
+              <Button size="sm" onClick={() => setLogSegment('weight')}>
+                + Log
+              </Button>
+            </div>
           </div>
+
+          {/* Header stat strip — weight / BF% / lean / FFMI, ALL derived from
+              the same canonical source (the anchored trend's last point via
+              selectCanonicalFfmi + the latest scan), with per-metric trend
+              arrows. One source of truth: these can't disagree with the
+              combined trend chart below. */}
+          {latestScan && (
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3" data-testid="body-stat-strip">
+              <Card className="p-4">
+                <p className="text-xs text-surface-500 uppercase tracking-wider">Weight</p>
+                <p className="text-2xl font-bold text-surface-100 mt-1">
+                  {latestTrendPoint
+                    ? formatWeight(latestTrendPoint.weightKg, units)
+                    : formatWeight(latestScan.weightKg, units)}
+                </p>
+              </Card>
+              <Card className="p-4">
+                <p className="text-xs text-surface-500 uppercase tracking-wider">Body Fat</p>
+                <p className="text-2xl font-bold text-surface-100 mt-1">
+                  {(latestTrendPoint?.bodyFatPercent ?? latestScan.bodyFatPercent).toFixed(1)}%
+                </p>
+                {trend && (
+                  <p className={`text-xs mt-1 ${getTrendIndicator(trend.bodyFatChangeRate).color}`}>
+                    {getTrendIndicator(trend.bodyFatChangeRate).icon} {Math.abs(trend.bodyFatChangeRate).toFixed(1)}%/mo
+                  </p>
+                )}
+              </Card>
+              <Card className="p-4">
+                <p className="text-xs text-surface-500 uppercase tracking-wider">Lean Mass</p>
+                <p className="text-2xl font-bold text-surface-100 mt-1">
+                  {formatWeight(latestTrendPoint?.leanMassKg ?? latestScan.leanMassKg, units)}
+                </p>
+                {trend && (
+                  <p className={`text-xs mt-1 ${getTrendIndicator(trend.leanMassChangeRate).color}`}>
+                    {getTrendIndicator(trend.leanMassChangeRate).icon} {Math.abs(trend.leanMassChangeRate).toFixed(2)} {weightUnit}/mo
+                  </p>
+                )}
+              </Card>
+              <Card className="p-4" data-testid="body-ffmi-stat">
+                <p className="text-xs text-surface-500 uppercase tracking-wider">FFMI</p>
+                <p className="text-2xl font-bold text-surface-100 mt-1" data-testid="body-ffmi-value">
+                  {ffmiResult ? ffmiResult.ffmi.toFixed(1) : '—'}
+                </p>
+                {ffmiResult && (
+                  <p className="text-[11px] text-surface-500 mt-1">
+                    norm {ffmiResult.normalizedFfmi.toFixed(1)}
+                  </p>
+                )}
+              </Card>
+            </div>
+          )}
 
           {/* Prominence (getBodyCompLayout): with ≥2 DEXA scans the trend
               module (incl. the Composition Map) leads the tab; below that
-              the existing order stands plus a subtle log-a-scan prompt. */}
+              the existing order stands plus a subtle log-a-scan prompt. This
+              ONE module is the combined trend chart (weight + BF%/lean/FFMI
+              toggle + map) — the legacy duplicate area chart was deleted. */}
           {bodyCompLayout.trendFirst && bodyTrendModule}
 
           {/* Staleness + DEXA-due nudges */}
@@ -1737,74 +1815,73 @@ function AnalyticsPageContent() {
             </p>
           )}
 
-          {/* Per-site tape trends */}
+          {/* Recommendations — now correctly signed, unit-aware, evidence-cited
+              (deload-advisor style), and suppressed inside the phase-boundary
+              water window. */}
+          {recommendations.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Recommendations</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {recommendations.slice(0, 3).map((rec, index) => (
+                    <div
+                      key={index}
+                      className={`p-3 rounded-lg border ${
+                        rec.type === 'warning'
+                          ? 'bg-warning-500/10 border-warning-500/20'
+                          : rec.type === 'achievement'
+                          ? 'bg-success-500/10 border-success-500/20'
+                          : 'bg-primary-500/10 border-primary-500/20'
+                      }`}
+                    >
+                      <h4 className="font-medium text-surface-200 text-sm">{rec.title}</h4>
+                      <p className="text-xs text-surface-400 mt-1">{rec.message}</p>
+                      {rec.evidence && (
+                        <p className="text-[11px] text-surface-500 mt-1.5 flex items-start gap-1">
+                          <span aria-hidden="true">📊</span>
+                          <span>{rec.evidence}</span>
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Measurements compare grid (null/outlier rules per Phase 1.4) +
+              per-site tape trends, merged into one measurement area. */}
+          {userId && (
+            <BodyMeasurements
+              userId={userId}
+              unit={units === 'lb' ? 'in' : 'cm'}
+              heightCm={userProfile?.heightCm || undefined}
+              showImbalanceAnalysis={true}
+            />
+          )}
           <MeasurementTrendCard
             tapeUnit={units === 'lb' ? 'in' : 'cm'}
             refreshKey={bodyRefreshKey}
           />
 
-          {/* Muscle Priorities Display - Show at top of body comp tab */}
-          {userId ? (
-            <MusclePrioritiesDisplay userId={userId} />
-          ) : (
-            <Card>
-              <CardHeader>
-                <CardTitle>Muscle Group Priorities</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center py-4 text-surface-400 text-sm">Loading user data...</div>
-              </CardContent>
-            </Card>
-          )}
+          {/* Proportions & targets — How You Compare + FFMI ceiling + weight
+              projection, consolidated ONCE (moved in from the dissolved Goals
+              tab). Weight projection reads the same weigh-ins as Home. */}
+          <ProportionsTargetsCard
+            benchmarks={proportionsAnalysis?.benchmarkComparisons ?? []}
+            activeTarget={activeTarget}
+            activeMesocycle={activeMesocycle}
+            currentFfmi={ffmiResult?.ffmi ?? null}
+            experience={userProfile?.experience ?? null}
+            heightCm={userProfile?.heightCm ?? null}
+            displayUnit={units === 'kg' ? 'cm' : 'in'}
+            weightUnit={units === 'kg' ? 'kg' : 'lb'}
+            weightHistory={weightHistory}
+          />
 
-          {/* Quick Stats */}
-          {latestScan && (
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              {ffmiResult && (
-                <Card className="col-span-1">
-                  <CardContent className="pt-4 flex justify-center">
-                    <FFMIGauge ffmiResult={ffmiResult} size="sm" />
-                  </CardContent>
-                </Card>
-              )}
-
-              <Card className="p-4">
-                <p className="text-xs text-surface-500 uppercase tracking-wider">Body Fat</p>
-                <p className="text-2xl font-bold text-surface-100 mt-1">{latestScan.bodyFatPercent}%</p>
-                {trend && (
-                  <p className={`text-xs mt-1 ${getTrendIndicator(trend.bodyFatChangeRate).color}`}>
-                    {getTrendIndicator(trend.bodyFatChangeRate).icon} {Math.abs(trend.bodyFatChangeRate).toFixed(1)}%/mo
-                  </p>
-                )}
-              </Card>
-
-              <Card className="p-4">
-                <p className="text-xs text-surface-500 uppercase tracking-wider">Lean Mass</p>
-                <p className="text-2xl font-bold text-surface-100 mt-1">
-                  {formatWeight(latestScan.leanMassKg, units)}
-                </p>
-                {trend && (
-                  <p className={`text-xs mt-1 ${getTrendIndicator(trend.leanMassChangeRate).color}`}>
-                    {getTrendIndicator(trend.leanMassChangeRate).icon} {Math.abs(trend.leanMassChangeRate).toFixed(2)} {weightUnit}/mo
-                  </p>
-                )}
-              </Card>
-
-              <Card className="p-4">
-                <p className="text-xs text-surface-500 uppercase tracking-wider">Fat Mass</p>
-                <p className="text-2xl font-bold text-surface-100 mt-1">
-                  {formatWeight(latestScan.fatMassKg, units)}
-                </p>
-                {trend && (
-                  <p className={`text-xs mt-1 ${getTrendIndicator(-trend.fatMassChangeRate).color}`}>
-                    {getTrendIndicator(-trend.fatMassChangeRate).icon} {Math.abs(trend.fatMassChangeRate).toFixed(2)} {weightUnit}/mo
-                  </p>
-                )}
-              </Card>
-            </div>
-          )}
-
-          {/* Progress Photos */}
+          {/* Progress Photos + DEXA scan history */}
           {progressPhotos.length > 0 && (
             <Card>
               <CardHeader>
@@ -1841,72 +1918,21 @@ function AnalyticsPageContent() {
             </Card>
           )}
 
-          {/* Body Comp Trends Chart */}
-          {scans.length >= 2 && (
+          {scans.length > 0 && (
             <Card>
               <CardHeader>
-                <CardTitle>Body Composition Trends</CardTitle>
+                <CardTitle>DEXA scan history</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={[...scans].reverse().map(scan => ({
-                      date: new Date(scan.scanDate).toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
-                      leanMass: scan.leanMassKg,
-                      fatMass: scan.fatMassKg,
-                    }))}>
-                      <defs>
-                        <linearGradient id="leanGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3}/>
-                          <stop offset="95%" stopColor="#22c55e" stopOpacity={0}/>
-                        </linearGradient>
-                        <linearGradient id="fatGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3}/>
-                          <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                      <XAxis dataKey="date" stroke="#9ca3af" fontSize={12} />
-                      <YAxis stroke="#9ca3af" fontSize={12} />
-                      <Tooltip 
-                        contentStyle={{ 
-                          backgroundColor: '#1f2937', 
-                          border: '1px solid #374151',
-                          borderRadius: '8px',
-                          color: '#f3f4f6'
-                        }}
-                      />
-                      <Legend />
-                      <Area type="monotone" dataKey="leanMass" name="Lean Mass" stroke="#22c55e" fill="url(#leanGrad)" strokeWidth={2} />
-                      <Area type="monotone" dataKey="fatMass" name="Fat Mass" stroke="#f59e0b" fill="url(#fatGrad)" strokeWidth={2} />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Recommendations */}
-          {recommendations.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Recommendations</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {recommendations.slice(0, 3).map((rec, index) => (
-                    <div
-                      key={index}
-                      className={`p-3 rounded-lg border ${
-                        rec.type === 'warning'
-                          ? 'bg-warning-500/10 border-warning-500/20'
-                          : rec.type === 'achievement'
-                          ? 'bg-success-500/10 border-success-500/20'
-                          : 'bg-primary-500/10 border-primary-500/20'
-                      }`}
-                    >
-                      <h4 className="font-medium text-surface-200 text-sm">{rec.title}</h4>
-                      <p className="text-xs text-surface-400 mt-1">{rec.message}</p>
+                <div className="space-y-2">
+                  {scans.slice(0, 6).map((scan) => (
+                    <div key={scan.id} className="flex items-center justify-between text-sm py-1 border-b border-surface-800 last:border-b-0">
+                      <span className="text-surface-300">
+                        {new Date(scan.scanDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </span>
+                      <span className="text-surface-400 tabular-nums">
+                        {scan.bodyFatPercent}% BF · {formatWeight(scan.leanMassKg, units)} lean
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -1914,14 +1940,23 @@ function AnalyticsPageContent() {
             </Card>
           )}
 
-          {/* Body Measurements */}
+          {/* The target EDITOR (weight / BF% / FFMI — what the Composition
+              Map's goal vector reads). id-anchored so the header "Edit goals"
+              action and the map's "Set a target" prompt both deep-link here.
+              Muscle-priority config is no longer on this tab — it's
+              program-generation settings, reachable in Settings. */}
           {userId && (
-            <BodyMeasurements 
-              userId={userId} 
-              unit={units === 'lb' ? 'in' : 'cm'}
-              heightCm={userProfile?.heightCm || undefined}
-              showImbalanceAnalysis={true}
-            />
+            <div id="body-targets" className="scroll-mt-4">
+              <BodyTargets
+                userId={userId}
+                unit={units === 'lb' ? 'in' : 'cm'}
+                weightUnit={units}
+                currentWeightKg={latestScan?.weightKg}
+                currentBodyFatPercent={latestScan?.bodyFatPercent}
+                currentFfmi={ffmiResult?.ffmi}
+                currentMeasurements={currentMeasurements}
+              />
+            </div>
           )}
 
           {/* No data state */}
@@ -1941,52 +1976,6 @@ function AnalyticsPageContent() {
               </Link>
             </Card>
           )}
-        </div>
-      )}
-
-      {activeTab === 'goals' && (
-        <div className="space-y-6">
-          {/* The target EDITOR (weight / BF% / FFMI — what the Composition
-              Map's goal vector reads). Lives here on Goals, id-anchored so
-              the map's "Set a target" prompt deep-links straight to it. */}
-          {userId && (
-            <div id="body-targets" className="scroll-mt-4">
-              <BodyTargets
-                userId={userId}
-                unit={units === 'lb' ? 'in' : 'cm'}
-                weightUnit={units}
-                currentWeightKg={latestScan?.weightKg}
-                currentBodyFatPercent={latestScan?.bodyFatPercent}
-                currentFfmi={ffmiResult?.ffmi}
-                currentMeasurements={currentMeasurements}
-              />
-            </div>
-          )}
-          <GoalsTab
-            activeMesocycle={activeMesocycle}
-            activeTarget={activeTarget}
-            currentBodyComp={{
-              weightKg: latestScan?.weightKg ?? null,
-              bodyFatPercent: latestScan?.bodyFatPercent ?? null,
-              ffmi: ffmiResult?.ffmi ?? null,
-              leanMassKg: latestScan?.leanMassKg ?? null,
-            }}
-            currentMeasurements={currentMeasurements}
-            weightHistory={weightHistory}
-            proportionsAnalysis={proportionsAnalysis}
-            heightCm={userProfile?.heightCm ?? null}
-            displayUnit={units === 'kg' ? 'cm' : 'in'}
-            weightUnit={units === 'kg' ? 'kg' : 'lb'}
-            onEditGoals={() =>
-              // The editor is on this same tab — scroll to it instead of the
-              // old /dashboard/body-composition?tab=targets route, which
-              // redirects to Analytics and drops the param (dead end).
-              document
-                .getElementById('body-targets')
-                ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-            }
-            onCreateMesocycle={() => router.push('/dashboard/mesocycle/new')}
-          />
         </div>
       )}
 
@@ -2012,8 +2001,8 @@ function AnalyticsPageContent() {
           )}
           {strengthProfile ? (
             <>
-              {/* Overall Score */}
-              <Card className="bg-gradient-to-br from-primary-500/10 to-accent-500/10 border-primary-500/30">
+              {/* Overall Score — rendered exactly ONCE (was duplicated). */}
+              <Card className="bg-gradient-to-br from-primary-500/10 to-accent-500/10 border-primary-500/30" data-testid="strength-score-card">
                 <CardContent className="p-6">
                   <div className="flex flex-col md:flex-row items-center gap-6">
                     <div className="relative">
@@ -2066,7 +2055,13 @@ function AnalyticsPageContent() {
                         </div>
                         <div className="p-2 bg-surface-900/50 rounded-lg">
                           <p className="text-xs text-surface-500">FFMI</p>
-                          <p className="text-lg font-bold text-surface-100">{strengthProfile.bodyComposition.ffmi.toFixed(1)}</p>
+                          {/* Canonical FFMI (selectCanonicalFfmi) — NOT the
+                              stale, normalized-in-one-field value frozen on
+                              the calibration session. Falls back to the frozen
+                              value only when no scan/height exists. */}
+                          <p className="text-lg font-bold text-surface-100" data-testid="strength-ffmi-stat">
+                            {(ffmiResult?.ffmi ?? strengthProfile.bodyComposition.ffmi).toFixed(1)}
+                          </p>
                         </div>
                         <div className="p-2 bg-surface-900/50 rounded-lg">
                           <p className="text-xs text-surface-500">Lean Mass</p>
@@ -2160,14 +2155,53 @@ function AnalyticsPageContent() {
         </div>
       )}
 
-      {activeTab === 'volume' && (
+      {activeTab === 'training' && (
         <div className="space-y-6">
+          {/* The range selector (header) genuinely scopes this tab's workout
+              totals — call the active scope out so it's never a silent
+              control. */}
+          <p className="text-xs text-surface-500">
+            Workout totals below are scoped to{' '}
+            <span className="text-surface-300">{getTimeRangeLabel(timeRange)}</span>.
+          </p>
+
+          {/* Mesocycle progress row (moved in from the dissolved Goals tab —
+              it's training state). Its own scope: the current mesocycle. */}
+          {activeMesocycle && (
+            <Card>
+              <CardContent className="py-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-primary-500/20 flex items-center justify-center">
+                      <span className="text-primary-400">📅</span>
+                    </div>
+                    <div>
+                      <h3 className="font-medium text-surface-200">{activeMesocycle.name}</h3>
+                      <p className="text-xs text-surface-500">
+                        Week {activeMesocycle.currentWeek} of {activeMesocycle.totalWeeks} · this mesocycle
+                      </p>
+                    </div>
+                  </div>
+                  <Link href="/dashboard/mesocycle">
+                    <Button variant="ghost" size="sm">View →</Button>
+                  </Link>
+                </div>
+                <div className="relative h-2 bg-surface-800 rounded-full overflow-hidden">
+                  <div
+                    className="absolute inset-y-0 left-0 bg-gradient-to-r from-primary-600 to-primary-400 rounded-full transition-all duration-500"
+                    style={{ width: `${(activeMesocycle.currentWeek / activeMesocycle.totalWeeks) * 100}%` }}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {analyticsStatus === 'error' ? (
             // A failed fetch must never render as authoritative emptiness —
             // stale/absent data gets an explicit retry, not "No workout data".
             <Card>
               <ErrorRetry
-                title="Couldn't load volume data"
+                title="Couldn't load training data"
                 message="Your workouts are safe — we just couldn't load them right now. Check your connection and try again."
                 onRetry={() => setAnalyticsRetryNonce((n) => n + 1)}
                 isRetrying={false}
@@ -2227,104 +2261,40 @@ function AnalyticsPageContent() {
               </div>
 
               <div className="grid lg:grid-cols-2 gap-6">
-                {/* Volume by Muscle */}
+                {/* Volume vs your targets — the SHARED adaptive MEV–MRV
+                    hierarchy (same buildVolumeRows + MuscleGroupList the
+                    /volume page and Home weekly tile render), replacing the
+                    old hardcoded OPTIMAL_WEEKLY_VOLUME table. Its scope is the
+                    rolling 7 local days (not the range selector), so it's
+                    labeled explicitly rather than silently ignoring it. */}
                 <Card>
                   <CardHeader>
                     <div className="flex items-center justify-between">
-                      <CardTitle>Volume by Muscle Group</CardTitle>
-                      <span className="text-xs text-surface-500">Click to expand</span>
+                      <CardTitle>Volume vs your targets</CardTitle>
+                      <Link href="/dashboard/volume">
+                        <Button variant="ghost" size="sm">Details →</Button>
+                      </Link>
                     </div>
                     <p className="text-xs text-surface-500 mt-1">
-                      Showing {getTimeRangeLabel(timeRange)} • Target = optimal sets for this period
+                      This week · personalized MEV–MRV zone
                     </p>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-3">
-                      {analytics.weeklyMuscleVolume.slice(0, 10).map((muscle) => {
-                        const maxSets = Math.max(...analytics.weeklyMuscleVolume.map(m => m.sets));
-                        const percentage = maxSets > 0 ? (muscle.sets / maxSets) * 100 : 0;
-                        const weeklyOptimal = OPTIMAL_WEEKLY_VOLUME[userProfile?.experience || 'intermediate'][muscle.muscle] || 12;
-                        const weeksMultiplier = getWeeksInRange(timeRange);
-                        const optimalSets = Math.round(weeklyOptimal * weeksMultiplier);
-                        const volumeStatus = muscle.sets >= optimalSets ? 'optimal' : muscle.sets >= optimalSets * 0.7 ? 'good' : 'low';
-                        const isExpanded = expandedMuscles.has(muscle.muscle);
-
-                        return (
-                          <div key={muscle.muscle}>
-                            <button
-                              onClick={() => {
-                                const newExpanded = new Set(expandedMuscles);
-                                if (isExpanded) {
-                                  newExpanded.delete(muscle.muscle);
-                                } else {
-                                  newExpanded.add(muscle.muscle);
-                                }
-                                setExpandedMuscles(newExpanded);
-                              }}
-                              className="w-full text-left cursor-pointer"
-                            >
-                              <div className="flex items-center justify-between mb-1">
-                                <div className="flex items-center gap-2">
-                                  <svg 
-                                    className={`w-4 h-4 text-surface-500 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
-                                    fill="none" viewBox="0 0 24 24" stroke="currentColor"
-                                  >
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                  </svg>
-                                  <span className="text-sm font-medium text-surface-200">{muscleDisplayName(muscle.muscle)}</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <span className={`text-xs px-1.5 py-0.5 rounded ${
-                                    volumeStatus === 'optimal' ? 'bg-success-500/20 text-success-400' :
-                                    volumeStatus === 'good' ? 'bg-warning-500/20 text-warning-400' :
-                                    'bg-surface-700 text-surface-400'
-                                  }`}>
-                                    {muscle.sets}/{optimalSets}
-                                  </span>
-                                  <span className="text-sm text-surface-400">{muscle.sets} sets</span>
-                                </div>
-                              </div>
-                              <div className="h-2 bg-surface-800 rounded-full overflow-hidden relative pointer-events-none">
-                                {/* Optimal target marker */}
-                                <div
-                                  className="absolute top-0 bottom-0 w-0.5 bg-success-500/50"
-                                  style={{ left: `${Math.min((optimalSets / maxSets) * 100, 100)}%` }}
-                                />
-                                <div
-                                  className={`h-full rounded-full transition-all duration-500 ${
-                                    volumeStatus === 'optimal' ? 'bg-gradient-to-r from-success-500 to-success-400' :
-                                    volumeStatus === 'good' ? 'bg-gradient-to-r from-warning-500 to-warning-400' :
-                                    'bg-gradient-to-r from-primary-500 to-accent-500'
-                                  }`}
-                                  style={{ width: `${percentage}%` }}
-                                />
-                              </div>
-                            </button>
-                            
-                            {/* Expanded exercise details */}
-                            {isExpanded && muscle.exercises.length > 0 && (
-                              <div className="mt-2 ml-6 pl-3 border-l-2 border-surface-700 space-y-2">
-                                {muscle.exercises.map((ex) => (
-                                  <Link
-                                    key={ex.id}
-                                    href={`/dashboard/history?exercise=${ex.id}`}
-                                    className="flex items-center justify-between py-1 hover:bg-surface-800/50 rounded px-2 -mx-2 transition-colors"
-                                  >
-                                    <span className="text-xs text-surface-300">{ex.name}</span>
-                                    <div className="flex items-center gap-3 text-xs">
-                                      <span className="text-surface-500">{ex.sets} sets</span>
-                                      <span className="text-primary-400 font-medium">
-                                        {formatWeight(ex.bestE1RM, units)} E1RM
-                                      </span>
-                                    </div>
-                                  </Link>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
+                    {volumeRows.length > 0 ? (
+                      <MuscleGroupList
+                        rows={volumeRows}
+                        expansion={volumeExpansion}
+                        renderRow={(row) => <VolumeRowContent row={row} />}
+                        renderChild={(child) => <VolumeChildContent child={child} />}
+                        pinChild={pinLaggingVolumeChild}
+                        testIdPrefix="analytics-volume-row"
+                        rowClassName="py-3 border-b border-surface-800 last:border-b-0"
+                      />
+                    ) : (
+                      <p className="text-sm text-surface-500 py-4 text-center">
+                        Log a few sets this week to see your volume vs targets.
+                      </p>
+                    )}
                   </CardContent>
                 </Card>
 
@@ -2583,12 +2553,33 @@ function AnalyticsPageContent() {
       {/* Wellness Tab */}
       {activeTab === 'wellness' && (
         <div className="space-y-6">
-          {/* Daily tracking — relocated from the home dashboard (Phase 3.3) */}
+          {/* Muscle recovery — shared component (map + rows), unchanged. */}
+          <MuscleRecoveryCard />
+
+          {/* ONE Wellness Trends card: a single chart with metric chips
+              (sleep / soreness / energy / mood up front, the rest under
+              "More"), plus a 2-col sparkline summary grid. Metrics with no
+              data in range never render as empty full-height cards — they
+              appear only under "More" with an inline log affordance.
+              Inverted-scale metrics plot on a normal axis with a
+              "lower is better" footnote. Replaces the nine stacked charts. */}
+          <WellnessTrendsCard
+            checkInData={checkInData}
+            hydrationData={hydrationData}
+            cardioData={cardioData}
+            hydrationUnit={units === 'kg' ? 'ml' : 'oz'}
+            rangeLabel={getTimeRangeLabel(timeRange)}
+          />
+
+          {/* ONE "Today" card consolidating steps/activity (HealthKit-aware),
+              a SINGLE hydration tracker (one unit honoring the user's pref),
+              and cardio quick-log. The duplicate ml Hydration graph card was
+              deleted; logging stays one tap away instead of four input cards
+              leading the tab. */}
           {userId && (
-            <div className="space-y-3">
-              <h2 className="text-[15px] font-medium text-surface-100">Daily tracking</h2>
+            <div className="space-y-3" data-testid="wellness-today">
+              <h2 className="text-[15px] font-medium text-surface-100">Today</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
-                <MuscleRecoveryCard />
                 <ActivityCard userId={userId} />
                 <HydrationTracker userId={userId} unit={units === 'kg' ? 'ml' : 'oz'} />
                 <Card>
@@ -2599,540 +2590,9 @@ function AnalyticsPageContent() {
                     <CardioTracker userId={userId} />
                   </CardContent>
                 </Card>
-                {/* BodyTargets (the goal editor) moved to the Goals tab —
-                    it was unfindable here under Wellness daily tracking. */}
               </div>
             </div>
           )}
-
-          {/* Hydration Graph */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Hydration</CardTitle>
-              <p className="text-xs text-surface-500 mt-1">Daily water intake (ml)</p>
-            </CardHeader>
-            <CardContent>
-              {hydrationData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={300}>
-                  <AreaChart data={hydrationData}>
-                    <defs>
-                      <linearGradient id="hydrationGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                    <XAxis
-                      dataKey="date"
-                      stroke="#9ca3af"
-                      tick={{ fill: '#9ca3af', fontSize: 12 }}
-                      tickFormatter={(value) => {
-                        const date = new Date(value);
-                        return `${date.getMonth() + 1}/${date.getDate()}`;
-                      }}
-                    />
-                    <YAxis
-                      stroke="#9ca3af"
-                      tick={{ fill: '#9ca3af', fontSize: 12 }}
-                      label={{ value: 'ml', angle: -90, position: 'insideLeft', fill: '#9ca3af' }}
-                    />
-                    <Tooltip
-                      contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
-                      labelFormatter={(value) => {
-                        const date = new Date(value);
-                        return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-                      }}
-                      formatter={(value: number) => [`${value.toFixed(0)} ml`, 'Water Intake']}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="totalMl"
-                      stroke="#3b82f6"
-                      strokeWidth={2}
-                      fill="url(#hydrationGradient)"
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="text-center py-12">
-                  <p className="text-surface-400">No hydration data for this period</p>
-                  <p className="text-sm text-surface-500 mt-1">Start logging your water intake to see trends</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Cardio Graph */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Cardio</CardTitle>
-              <p className="text-xs text-surface-500 mt-1">Daily cardio minutes</p>
-            </CardHeader>
-            <CardContent>
-              {cardioData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={300}>
-                  <AreaChart data={cardioData}>
-                    <defs>
-                      <linearGradient id="cardioGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                    <XAxis
-                      dataKey="date"
-                      stroke="#9ca3af"
-                      tick={{ fill: '#9ca3af', fontSize: 12 }}
-                      tickFormatter={(value) => {
-                        const date = new Date(value);
-                        return `${date.getMonth() + 1}/${date.getDate()}`;
-                      }}
-                    />
-                    <YAxis
-                      stroke="#9ca3af"
-                      tick={{ fill: '#9ca3af', fontSize: 12 }}
-                      label={{ value: 'minutes', angle: -90, position: 'insideLeft', fill: '#9ca3af' }}
-                    />
-                    <Tooltip
-                      contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
-                      labelFormatter={(value) => {
-                        const date = new Date(value);
-                        return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-                      }}
-                      formatter={(value: number, payload: any) => {
-                        const modality = payload?.modality || 'unknown';
-                        return [`${value} min (${modality.replace('_', ' ')})`, 'Cardio'];
-                      }}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="totalMinutes"
-                      stroke="#10b981"
-                      strokeWidth={2}
-                      fill="url(#cardioGradient)"
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="text-center py-12">
-                  <p className="text-surface-400">No cardio data for this period</p>
-                  <p className="text-sm text-surface-500 mt-1">Start logging your cardio sessions to see trends</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Daily Check-In Metrics */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Sleep Hours */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Sleep Hours</CardTitle>
-                <p className="text-xs text-surface-500 mt-1">Hours of sleep per night</p>
-              </CardHeader>
-              <CardContent>
-                {checkInData.filter(d => d.sleepHours !== null).length > 0 ? (
-                  <ResponsiveContainer width="100%" height={200}>
-                    <LineChart data={checkInData.filter(d => d.sleepHours !== null)}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                      <XAxis
-                        dataKey="date"
-                        stroke="#9ca3af"
-                        tick={{ fill: '#9ca3af', fontSize: 10 }}
-                        tickFormatter={(value) => {
-                          const date = new Date(value);
-                          return `${date.getMonth() + 1}/${date.getDate()}`;
-                        }}
-                      />
-                      <YAxis
-                        stroke="#9ca3af"
-                        tick={{ fill: '#9ca3af', fontSize: 10 }}
-                        domain={[0, 12]}
-                        label={{ value: 'hours', angle: -90, position: 'insideLeft', fill: '#9ca3af', fontSize: 10 }}
-                      />
-                      <Tooltip
-                        contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
-                        labelFormatter={(value) => {
-                          const date = new Date(value);
-                          return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-                        }}
-                        formatter={(value: number) => [`${value.toFixed(1)} hours`, 'Sleep']}
-                      />
-                      <ReferenceLine y={7} stroke="#10b981" strokeDasharray="3 3" label={{ value: 'Target', position: 'right', fill: '#10b981' }} />
-                      <Line type="monotone" dataKey="sleepHours" stroke="#8b5cf6" strokeWidth={2} dot={{ r: 3 }} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="text-center py-8">
-                    <p className="text-sm text-surface-500">No sleep data</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Sleep Quality */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Sleep Quality</CardTitle>
-                <p className="text-xs text-surface-500 mt-1">Rating (1-5)</p>
-              </CardHeader>
-              <CardContent>
-                {checkInData.filter(d => d.sleepQuality !== null).length > 0 ? (
-                  <ResponsiveContainer width="100%" height={200}>
-                    <LineChart data={checkInData.filter(d => d.sleepQuality !== null)}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                      <XAxis
-                        dataKey="date"
-                        stroke="#9ca3af"
-                        tick={{ fill: '#9ca3af', fontSize: 10 }}
-                        tickFormatter={(value) => {
-                          const date = new Date(value);
-                          return `${date.getMonth() + 1}/${date.getDate()}`;
-                        }}
-                      />
-                      <YAxis
-                        stroke="#9ca3af"
-                        tick={{ fill: '#9ca3af', fontSize: 10 }}
-                        domain={[1, 5]}
-                        label={{ value: 'rating', angle: -90, position: 'insideLeft', fill: '#9ca3af', fontSize: 10 }}
-                      />
-                      <Tooltip
-                        contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
-                        labelFormatter={(value) => {
-                          const date = new Date(value);
-                          return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-                        }}
-                        formatter={(value: number) => [`${value}/5`, 'Quality']}
-                      />
-                      <Line type="monotone" dataKey="sleepQuality" stroke="#6366f1" strokeWidth={2} dot={{ r: 3 }} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="text-center py-8">
-                    <p className="text-sm text-surface-500">No sleep quality data</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Energy Level */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Energy Level</CardTitle>
-                <p className="text-xs text-surface-500 mt-1">Rating (1-5)</p>
-              </CardHeader>
-              <CardContent>
-                {checkInData.filter(d => d.energyLevel !== null).length > 0 ? (
-                  <ResponsiveContainer width="100%" height={200}>
-                    <LineChart data={checkInData.filter(d => d.energyLevel !== null)}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                      <XAxis
-                        dataKey="date"
-                        stroke="#9ca3af"
-                        tick={{ fill: '#9ca3af', fontSize: 10 }}
-                        tickFormatter={(value) => {
-                          const date = new Date(value);
-                          return `${date.getMonth() + 1}/${date.getDate()}`;
-                        }}
-                      />
-                      <YAxis
-                        stroke="#9ca3af"
-                        tick={{ fill: '#9ca3af', fontSize: 10 }}
-                        domain={[1, 5]}
-                        label={{ value: 'rating', angle: -90, position: 'insideLeft', fill: '#9ca3af', fontSize: 10 }}
-                      />
-                      <Tooltip
-                        contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
-                        labelFormatter={(value) => {
-                          const date = new Date(value);
-                          return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-                        }}
-                        formatter={(value: number) => [`${value}/5`, 'Energy']}
-                      />
-                      <Line type="monotone" dataKey="energyLevel" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="text-center py-8">
-                    <p className="text-sm text-surface-500">No energy data</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Mood Rating */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Mood</CardTitle>
-                <p className="text-xs text-surface-500 mt-1">Rating (1-5)</p>
-              </CardHeader>
-              <CardContent>
-                {checkInData.filter(d => d.moodRating !== null).length > 0 ? (
-                  <ResponsiveContainer width="100%" height={200}>
-                    <LineChart data={checkInData.filter(d => d.moodRating !== null)}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                      <XAxis
-                        dataKey="date"
-                        stroke="#9ca3af"
-                        tick={{ fill: '#9ca3af', fontSize: 10 }}
-                        tickFormatter={(value) => {
-                          const date = new Date(value);
-                          return `${date.getMonth() + 1}/${date.getDate()}`;
-                        }}
-                      />
-                      <YAxis
-                        stroke="#9ca3af"
-                        tick={{ fill: '#9ca3af', fontSize: 10 }}
-                        domain={[1, 5]}
-                        label={{ value: 'rating', angle: -90, position: 'insideLeft', fill: '#9ca3af', fontSize: 10 }}
-                      />
-                      <Tooltip
-                        contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
-                        labelFormatter={(value) => {
-                          const date = new Date(value);
-                          return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-                        }}
-                        formatter={(value: number) => [`${value}/5`, 'Mood']}
-                      />
-                      <Line type="monotone" dataKey="moodRating" stroke="#ec4899" strokeWidth={2} dot={{ r: 3 }} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="text-center py-8">
-                    <p className="text-sm text-surface-500">No mood data</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Focus Rating */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Focus</CardTitle>
-                <p className="text-xs text-surface-500 mt-1">Rating (1-5)</p>
-              </CardHeader>
-              <CardContent>
-                {checkInData.filter(d => d.focusRating !== null).length > 0 ? (
-                  <ResponsiveContainer width="100%" height={200}>
-                    <LineChart data={checkInData.filter(d => d.focusRating !== null)}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                      <XAxis
-                        dataKey="date"
-                        stroke="#9ca3af"
-                        tick={{ fill: '#9ca3af', fontSize: 10 }}
-                        tickFormatter={(value) => {
-                          const date = new Date(value);
-                          return `${date.getMonth() + 1}/${date.getDate()}`;
-                        }}
-                      />
-                      <YAxis
-                        stroke="#9ca3af"
-                        tick={{ fill: '#9ca3af', fontSize: 10 }}
-                        domain={[1, 5]}
-                        label={{ value: 'rating', angle: -90, position: 'insideLeft', fill: '#9ca3af', fontSize: 10 }}
-                      />
-                      <Tooltip
-                        contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
-                        labelFormatter={(value) => {
-                          const date = new Date(value);
-                          return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-                        }}
-                        formatter={(value: number) => [`${value}/5`, 'Focus']}
-                      />
-                      <Line type="monotone" dataKey="focusRating" stroke="#06b6d4" strokeWidth={2} dot={{ r: 3 }} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="text-center py-8">
-                    <p className="text-sm text-surface-500">No focus data</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Libido Rating */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Libido</CardTitle>
-                <p className="text-xs text-surface-500 mt-1">Rating (1-5)</p>
-              </CardHeader>
-              <CardContent>
-                {checkInData.filter(d => d.libidoRating !== null).length > 0 ? (
-                  <ResponsiveContainer width="100%" height={200}>
-                    <LineChart data={checkInData.filter(d => d.libidoRating !== null)}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                      <XAxis
-                        dataKey="date"
-                        stroke="#9ca3af"
-                        tick={{ fill: '#9ca3af', fontSize: 10 }}
-                        tickFormatter={(value) => {
-                          const date = new Date(value);
-                          return `${date.getMonth() + 1}/${date.getDate()}`;
-                        }}
-                      />
-                      <YAxis
-                        stroke="#9ca3af"
-                        tick={{ fill: '#9ca3af', fontSize: 10 }}
-                        domain={[1, 5]}
-                        label={{ value: 'rating', angle: -90, position: 'insideLeft', fill: '#9ca3af', fontSize: 10 }}
-                      />
-                      <Tooltip
-                        contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
-                        labelFormatter={(value) => {
-                          const date = new Date(value);
-                          return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-                        }}
-                        formatter={(value: number) => [`${value}/5`, 'Libido']}
-                      />
-                      <Line type="monotone" dataKey="libidoRating" stroke="#f97316" strokeWidth={2} dot={{ r: 3 }} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="text-center py-8">
-                    <p className="text-sm text-surface-500">No libido data</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Stress Level */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Stress Level</CardTitle>
-                <p className="text-xs text-surface-500 mt-1">Rating (1-5, lower is better)</p>
-              </CardHeader>
-              <CardContent>
-                {checkInData.filter(d => d.stressLevel !== null).length > 0 ? (
-                  <ResponsiveContainer width="100%" height={200}>
-                    <LineChart data={checkInData.filter(d => d.stressLevel !== null)}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                      <XAxis
-                        dataKey="date"
-                        stroke="#9ca3af"
-                        tick={{ fill: '#9ca3af', fontSize: 10 }}
-                        tickFormatter={(value) => {
-                          const date = new Date(value);
-                          return `${date.getMonth() + 1}/${date.getDate()}`;
-                        }}
-                      />
-                      <YAxis
-                        stroke="#9ca3af"
-                        tick={{ fill: '#9ca3af', fontSize: 10 }}
-                        domain={[1, 5]}
-                        reversed
-                        label={{ value: 'rating', angle: -90, position: 'insideLeft', fill: '#9ca3af', fontSize: 10 }}
-                      />
-                      <Tooltip
-                        contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
-                        labelFormatter={(value) => {
-                          const date = new Date(value);
-                          return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-                        }}
-                        formatter={(value: number) => [`${value}/5`, 'Stress']}
-                      />
-                      <Line type="monotone" dataKey="stressLevel" stroke="#ef4444" strokeWidth={2} dot={{ r: 3 }} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="text-center py-8">
-                    <p className="text-sm text-surface-500">No stress data</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Soreness Level */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Muscle Soreness</CardTitle>
-                <p className="text-xs text-surface-500 mt-1">Rating (1-5, lower is better)</p>
-              </CardHeader>
-              <CardContent>
-                {checkInData.filter(d => d.sorenessLevel !== null).length > 0 ? (
-                  <ResponsiveContainer width="100%" height={200}>
-                    <LineChart data={checkInData.filter(d => d.sorenessLevel !== null)}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                      <XAxis
-                        dataKey="date"
-                        stroke="#9ca3af"
-                        tick={{ fill: '#9ca3af', fontSize: 10 }}
-                        tickFormatter={(value) => {
-                          const date = new Date(value);
-                          return `${date.getMonth() + 1}/${date.getDate()}`;
-                        }}
-                      />
-                      <YAxis
-                        stroke="#9ca3af"
-                        tick={{ fill: '#9ca3af', fontSize: 10 }}
-                        domain={[1, 5]}
-                        reversed
-                        label={{ value: 'rating', angle: -90, position: 'insideLeft', fill: '#9ca3af', fontSize: 10 }}
-                      />
-                      <Tooltip
-                        contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
-                        labelFormatter={(value) => {
-                          const date = new Date(value);
-                          return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-                        }}
-                        formatter={(value: number) => [`${value}/5`, 'Soreness']}
-                      />
-                      <Line type="monotone" dataKey="sorenessLevel" stroke="#a855f7" strokeWidth={2} dot={{ r: 3 }} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="text-center py-8">
-                    <p className="text-sm text-surface-500">No soreness data</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Hunger Level */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Hunger Level</CardTitle>
-                <p className="text-xs text-surface-500 mt-1">Rating (1-5, lower is better)</p>
-              </CardHeader>
-              <CardContent>
-                {checkInData.filter(d => d.hungerLevel !== null).length > 0 ? (
-                  <ResponsiveContainer width="100%" height={200}>
-                    <LineChart data={checkInData.filter(d => d.hungerLevel !== null)}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                      <XAxis
-                        dataKey="date"
-                        stroke="#9ca3af"
-                        tick={{ fill: '#9ca3af', fontSize: 10 }}
-                        tickFormatter={(value) => {
-                          const date = new Date(value);
-                          return `${date.getMonth() + 1}/${date.getDate()}`;
-                        }}
-                      />
-                      <YAxis
-                        stroke="#9ca3af"
-                        tick={{ fill: '#9ca3af', fontSize: 10 }}
-                        domain={[1, 5]}
-                        reversed
-                        label={{ value: 'rating', angle: -90, position: 'insideLeft', fill: '#9ca3af', fontSize: 10 }}
-                      />
-                      <Tooltip
-                        contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
-                        labelFormatter={(value) => {
-                          const date = new Date(value);
-                          return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-                        }}
-                        formatter={(value: number) => [`${value}/5`, 'Hunger']}
-                      />
-                      <Line type="monotone" dataKey="hungerLevel" stroke="#14b8a6" strokeWidth={2} dot={{ r: 3 }} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="text-center py-8">
-                    <p className="text-sm text-surface-500">No hunger data</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
         </div>
       )}
 

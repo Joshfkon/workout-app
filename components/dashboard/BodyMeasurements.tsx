@@ -177,6 +177,9 @@ export function BodyMeasurements({
   const [displayUnit, setDisplayUnit] = useState<'in' | 'cm'>(unit);
   const [refreshKey, setRefreshKey] = useState(0);
   const [showAnalysis, setShowAnalysis] = useState(false);
+  // "Show all" reveals sites with no current value (hidden from the compare
+  // grid by default) with an add-measurement affordance.
+  const [showAllSites, setShowAllSites] = useState(false);
   
   // Use the useBestLifts hook to fetch user's best lifts (must be called unconditionally)
   // Pass empty string if userId is not available - hook will handle it gracefully
@@ -314,23 +317,29 @@ export function BodyMeasurements({
         console.error('Error fetching today\'s measurements:', todayError);
       }
 
-      // Helper to extract measurements from a database entry
+      // Helper to extract measurements from a database entry. Postgres
+      // returns NULL for un-logged sites — normalize to undefined here so a
+      // strict `=== undefined` check downstream can never let a null through
+      // (null coerces to 0 in arithmetic, which is how "- in ↓23.1" deltas
+      // shipped once).
+      const numOrUndefined = (v: unknown): number | undefined =>
+        typeof v === 'number' && Number.isFinite(v) ? v : undefined;
       const extractMeasurements = (entry: Record<string, unknown>): Measurements => ({
-        neck: entry.neck as number | undefined,
-        shoulders: entry.shoulders as number | undefined,
-        chest: entry.chest as number | undefined,
-        upper_back: entry.upper_back as number | undefined,
-        lower_back: entry.lower_back as number | undefined,
-        left_bicep: entry.left_bicep as number | undefined,
-        right_bicep: entry.right_bicep as number | undefined,
-        left_forearm: entry.left_forearm as number | undefined,
-        right_forearm: entry.right_forearm as number | undefined,
-        waist: entry.waist as number | undefined,
-        hips: entry.hips as number | undefined,
-        left_thigh: entry.left_thigh as number | undefined,
-        right_thigh: entry.right_thigh as number | undefined,
-        left_calf: entry.left_calf as number | undefined,
-        right_calf: entry.right_calf as number | undefined,
+        neck: numOrUndefined(entry.neck),
+        shoulders: numOrUndefined(entry.shoulders),
+        chest: numOrUndefined(entry.chest),
+        upper_back: numOrUndefined(entry.upper_back),
+        lower_back: numOrUndefined(entry.lower_back),
+        left_bicep: numOrUndefined(entry.left_bicep),
+        right_bicep: numOrUndefined(entry.right_bicep),
+        left_forearm: numOrUndefined(entry.left_forearm),
+        right_forearm: numOrUndefined(entry.right_forearm),
+        waist: numOrUndefined(entry.waist),
+        hips: numOrUndefined(entry.hips),
+        left_thigh: numOrUndefined(entry.left_thigh),
+        right_thigh: numOrUndefined(entry.right_thigh),
+        left_calf: numOrUndefined(entry.left_calf),
+        right_calf: numOrUndefined(entry.right_calf),
       });
 
       if (todayData) {
@@ -407,7 +416,9 @@ export function BodyMeasurements({
     if (!lastMeasurement) return null;
     const current = measurements[key];
     const previous = lastMeasurement.measurements[key];
-    if (current === undefined || previous === undefined) return null;
+    // Loose null check on purpose: a delta must NEVER be computed against a
+    // missing (null/undefined) value on either side.
+    if (current == null || previous == null) return null;
 
     const diff = current - previous;
     if (Math.abs(diff) < 0.1) return null;
@@ -419,6 +430,20 @@ export function BodyMeasurements({
       value: formatMeasurementValue(Math.abs(diff), displayUnit),
       isPositive: isWaist ? diff < 0 : diff > 0,
     };
+  };
+
+  /**
+   * Outlier guard: a new entry differing >15% from the prior one is far more
+   * likely a typo/unit slip (the 15" → 12.9" neck) than a real change in a
+   * tape measurement — flag it for review instead of silently charting.
+   */
+  const OUTLIER_CHANGE_RATIO = 0.15;
+  const isOutlierChange = (key: keyof Measurements): boolean => {
+    if (!lastMeasurement) return false;
+    const current = measurements[key];
+    const previous = lastMeasurement.measurements[key];
+    if (current == null || previous == null || previous <= 0) return false;
+    return Math.abs(current - previous) / previous > OUTLIER_CHANGE_RATIO;
   };
 
   const groupedFields = MEASUREMENT_FIELDS.reduce((acc, field) => {
@@ -512,18 +537,40 @@ export function BodyMeasurements({
         ) : hasMeasurements ? (
           <div className="space-y-3">
             {Object.entries(groupedFields).map(([group, fields]) => {
-              const hasGroupData = fields.some(f => measurements[f.key] !== undefined);
-              if (!hasGroupData) return null;
-              
+              // Sites without a current value are HIDDEN from the compare
+              // grid (available under "Show all") — never rendered as
+              // "- in" rows, and never delta'd against nulls.
+              const visibleFields = fields.filter(
+                (f) => measurements[f.key] != null || showAllSites
+              );
+              if (visibleFields.length === 0) return null;
+
               return (
                 <div key={group}>
                   <h4 className="text-xs font-medium text-surface-500 uppercase tracking-wide mb-1.5">{group}</h4>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                    {fields.map(field => {
+                    {visibleFields.map(field => {
                       const value = measurements[field.key];
-                      if (value === undefined) return null;
+                      if (value == null) {
+                        // "Show all" mode: missing site with an add affordance.
+                        return (
+                          <div key={field.key} className="flex items-center justify-between py-0.5" data-testid={`measurement-missing-${field.key}`}>
+                            <span className="text-xs text-surface-500 flex items-center gap-1">
+                              {field.label}
+                              <InfoIcon instructions={field.instructions} />
+                            </span>
+                            <button
+                              onClick={() => setIsEditing(true)}
+                              className="text-[11px] text-primary-400 hover:text-primary-300 transition-colors"
+                            >
+                              + Add
+                            </button>
+                          </div>
+                        );
+                      }
                       const change = getChange(field.key);
-                      
+                      const outlier = isOutlierChange(field.key);
+
                       return (
                         <div key={field.key} className="flex items-center justify-between py-0.5">
                           <span className="text-xs text-surface-400 flex items-center gap-1">
@@ -534,7 +581,17 @@ export function BodyMeasurements({
                             <span className="text-sm font-medium text-surface-200">
                               {getDisplayValue(value)} {displayUnit}
                             </span>
-                            {change && (
+                            {outlier ? (
+                              // >15% jump vs the prior entry: likely a typo or
+                              // unit slip — flag it instead of charting a delta.
+                              <span
+                                className="text-[10px] px-1 py-0.5 rounded bg-warning-500/15 text-warning-400"
+                                data-testid={`measurement-outlier-${field.key}`}
+                                title="This entry differs more than 15% from your previous one — double-check it."
+                              >
+                                ⚠ check entry
+                              </span>
+                            ) : change && (
                               <span className={`text-[10px] ${change.isPositive ? 'text-success-400' : 'text-danger-400'}`}>
                                 {change.isPositive ? '↑' : '↓'}{change.value.toFixed(1)}
                               </span>
@@ -547,7 +604,19 @@ export function BodyMeasurements({
                 </div>
               );
             })}
-            
+
+            {MEASUREMENT_FIELDS.some((f) => measurements[f.key] == null) && (
+              <button
+                onClick={() => setShowAllSites((s) => !s)}
+                className="w-full text-center text-xs text-primary-400 hover:text-primary-300 py-1"
+                data-testid="measurements-show-all-toggle"
+              >
+                {showAllSites
+                  ? 'Hide unmeasured sites'
+                  : `Show all sites (${MEASUREMENT_FIELDS.filter((f) => measurements[f.key] == null).length} unmeasured)`}
+              </button>
+            )}
+
             {lastMeasurement && (
               <p className="text-[10px] text-surface-600 pt-1">
                 Compared to {new Date(lastMeasurement.logged_at).toLocaleDateString()}
