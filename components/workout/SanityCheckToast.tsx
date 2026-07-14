@@ -11,6 +11,14 @@ export interface SanityCheckToastProps {
   onDismiss: () => void;
   /** Auto-dismiss after this many milliseconds (0 = no auto-dismiss) */
   autoDismissMs?: number;
+  /**
+   * How the toast anchors itself.
+   * - 'fixed' (default): self-positions bottom-right as its own fixed layer.
+   * - 'inline': renders in normal flow so a parent can place it inside a
+   *   shared bottom stack (right-aligned, capped width) without it fighting
+   *   the other bottom-anchored chrome for the same fixed band.
+   */
+  layout?: 'fixed' | 'inline';
 }
 
 /**
@@ -21,6 +29,7 @@ export const SanityCheckToast = memo(function SanityCheckToast({
   check,
   onDismiss,
   autoDismissMs = 8000,
+  layout = 'fixed',
 }: SanityCheckToastProps) {
   const [isExiting, setIsExiting] = useState(false);
   const color = getSeverityColor(check.severity);
@@ -88,7 +97,9 @@ export const SanityCheckToast = memo(function SanityCheckToast({
   return (
     <div
       className={cn(
-        'fixed bottom-4 right-4 z-50 max-w-sm',
+        layout === 'fixed'
+          ? 'fixed bottom-4 right-4 z-50 max-w-sm'
+          : 'relative ml-auto w-full max-w-sm',
         'rounded-lg border shadow-lg',
         colors.bg,
         colors.border,
