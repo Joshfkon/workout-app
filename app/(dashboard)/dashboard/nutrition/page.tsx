@@ -51,6 +51,7 @@ import {
 } from '@/hooks/useNutritionData';
 import { useRecentFoods, RECENT_FOODS_KEY } from '@/hooks/useRecentFoods';
 import { nutritionMonthKey } from '@/hooks/useNutritionMonth';
+import { LOG_HOME_QUERY_KEY, type LogHomeData } from '@/hooks/useLogPageData';
 import { recalculateMacrosForWeight } from '@/lib/actions/nutrition';
 import { getAdaptiveTDEE, onWeightLoggedRecalculateTDEE, resetAndRecalculateTDEE, type TDEEData } from '@/lib/actions/tdee';
 import { TDEEDashboard } from '@/components/nutrition/TDEEDashboard';
@@ -378,8 +379,9 @@ function NutritionPageContent() {
   const mutateFoodEntries = useCallback(
     (updater: FoodLogEntry[] | ((prev: FoodLogEntry[]) => FoodLogEntry[])) => {
       if (!selectedDate) return;
-      queryClient.setQueryData<FoodLogEntry[]>(nutritionDayKey(selectedDate), (prev = []) =>
-        typeof updater === 'function' ? updater(prev) : updater
+      const nextEntries = queryClient.setQueryData<FoodLogEntry[]>(
+        nutritionDayKey(selectedDate),
+        (prev = []) => (typeof updater === 'function' ? updater(prev) : updater)
       );
       // The calendar's month aggregate now disagrees with the day cache. Mark
       // it stale so the next sheet open refetches — matters for PAST months,
@@ -388,6 +390,40 @@ function NutritionPageContent() {
         queryKey: nutritionMonthKey(selectedDate.slice(0, 7)),
         refetchType: 'none',
       });
+      // Cross-surface: the Home ('/dashboard/log') "Today so far" card reads
+      // today's totals from a SEPARATE query (['log','home']) that this write
+      // doesn't touch. Only today's edits affect Home (it only ever shows
+      // today's totals).
+      if (selectedDate === getLocalDateString()) {
+        // Patch the Home cache's totals optimistically from the same food-entry
+        // rows we just wrote, THEN invalidate for reconciliation. Invalidation
+        // alone only marks the query stale: React Query keeps serving the old
+        // cached todaySoFar synchronously while it refetches (and would keep it
+        // if that refetch fails — e.g. offline), so the card could still flash
+        // pre-log totals on return. Patching first means Home paints the
+        // correct numbers immediately from cache; the follow-up refetch just
+        // reconciles against the server. Guarded to a same-day cached payload —
+        // a stale-date payload's todaySoFar isn't rendered by LogPage anyway
+        // (it guards on date === today), and the invalidate refreshes it.
+        if (nextEntries) {
+          const sumOf = (key: 'calories' | 'protein' | 'carbs' | 'fat') =>
+            Math.round(nextEntries.reduce((sum, r) => sum + (r[key] || 0), 0));
+          queryClient.setQueryData<LogHomeData | null>(LOG_HOME_QUERY_KEY, (prev) => {
+            if (!prev || prev.date !== selectedDate) return prev;
+            return {
+              ...prev,
+              todaySoFar: {
+                ...prev.todaySoFar,
+                calories: sumOf('calories'),
+                protein: sumOf('protein'),
+                carbs: sumOf('carbs'),
+                fat: sumOf('fat'),
+              },
+            };
+          });
+        }
+        void queryClient.invalidateQueries({ queryKey: LOG_HOME_QUERY_KEY });
+      }
     },
     [queryClient, selectedDate]
   );
