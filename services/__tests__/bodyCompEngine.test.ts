@@ -7,6 +7,7 @@ import {
   calculateFFMI,
   computeFFM,
   computeFFMI,
+  selectCanonicalFfmi,
   leanMassIncludesBone,
   getNaturalFFMILimit,
   getFFMILabel,
@@ -393,6 +394,61 @@ describe('analyzeBodyCompTrend', () => {
 // COACHING RECOMMENDATIONS TESTS
 // ============================================
 
+describe('selectCanonicalFfmi — one FFMI across Home / Body / Strength', () => {
+  const HEIGHT = 180;
+
+  it('returns null without a height', () => {
+    expect(
+      selectCanonicalFfmi({ latestScan: createMockDexaScan(), heightCm: null })
+    ).toBeNull();
+    expect(
+      selectCanonicalFfmi({ latestScan: createMockDexaScan(), heightCm: undefined })
+    ).toBeNull();
+  });
+
+  it('prefers the anchored trend last point and matches the Home computation exactly', () => {
+    // The Home card (lib/actions/dashboard.fetchBodyCompGlance) computes
+    // computeFFMI(latest.leanMassKg, latest.boneMassKg, heightCm).ffmi over
+    // the SAME anchored trend last point. Assert byte-for-byte equality.
+    const trendLastPoint = { leanMassKg: 71.4, boneMassKg: 3.1 };
+    const home = computeFFMI(trendLastPoint.leanMassKg, trendLastPoint.boneMassKg, HEIGHT).ffmi;
+    const canonical = selectCanonicalFfmi({
+      trendLastPoint,
+      latestScan: createMockDexaScan({ leanMassKg: 60 }), // deliberately different — must be ignored
+      heightCm: HEIGHT,
+    });
+    expect(canonical).not.toBeNull();
+    expect(canonical!.ffmi).toBe(home);
+  });
+
+  it('falls back to the latest scan through the same computeFFMI when the trend is empty', () => {
+    const scan = createMockDexaScan({ leanMassKg: 70, boneMassKg: 3, weightKg: 90, fatMassKg: 15 });
+    const canonical = selectCanonicalFfmi({ trendLastPoint: null, latestScan: scan, heightCm: HEIGHT });
+    const direct = computeFFMI(scan.leanMassKg, scan.boneMassKg, HEIGHT);
+    expect(canonical!.ffmi).toBe(direct.ffmi);
+  });
+
+  it('guards against bone double-count on calculated-entry scans (lean already includes bone)', () => {
+    // lean + fat ≈ weight → lean already contains bone; boneMassKg must be
+    // dropped so FFMI matches the bone-null computation.
+    const scan = createMockDexaScan({ leanMassKg: 75, fatMassKg: 15, weightKg: 90, boneMassKg: 3 });
+    expect(leanMassIncludesBone(scan)).toBe(true);
+    const canonical = selectCanonicalFfmi({ trendLastPoint: null, latestScan: scan, heightCm: HEIGHT });
+    const expected = computeFFMI(scan.leanMassKg, null, HEIGHT);
+    expect(canonical!.ffmi).toBe(expected.ffmi);
+  });
+
+  it('exposes normalized FFMI as a labeled secondary, distinct from raw (away from 1.8m)', () => {
+    // The height normalization offset is 6.1 × (1.8 − h); it vanishes at
+    // exactly 1.8 m, so assert with a height where raw ≠ normalized.
+    const canonical = selectCanonicalFfmi({
+      trendLastPoint: { leanMassKg: 71.4, boneMassKg: 3.1 },
+      heightCm: 175,
+    });
+    expect(canonical!.ffmi).not.toBe(canonical!.normalizedFfmi);
+  });
+});
+
 describe('generateCoachingRecommendations', () => {
   it('suggests getting started with no scans', () => {
     const recommendations = generateCoachingRecommendations([], 180, 'bulk', 'intermediate');
@@ -433,8 +489,10 @@ describe('generateCoachingRecommendations', () => {
   });
 
   it('warns about fast fat gain during bulk', () => {
+    // Trend recs need ≥2 DEXA-anchored intervals (3 scans).
     const scans = [
       createMockDexaScan({ scanDate: '2024-01-01', leanMassKg: 70, fatMassKg: 12 }),
+      createMockDexaScan({ scanDate: '2024-01-16', leanMassKg: 70.2, fatMassKg: 13 }),
       createMockDexaScan({ scanDate: '2024-02-01', leanMassKg: 70.5, fatMassKg: 14 }),
     ];
 
@@ -446,6 +504,7 @@ describe('generateCoachingRecommendations', () => {
   it('warns about muscle loss during cut', () => {
     const scans = [
       createMockDexaScan({ scanDate: '2024-01-01', leanMassKg: 72, fatMassKg: 15 }),
+      createMockDexaScan({ scanDate: '2024-01-16', leanMassKg: 71, fatMassKg: 14 }),
       createMockDexaScan({ scanDate: '2024-02-01', leanMassKg: 70, fatMassKg: 13 }),
     ];
 
@@ -457,12 +516,91 @@ describe('generateCoachingRecommendations', () => {
   it('celebrates successful recomp', () => {
     const scans = [
       createMockDexaScan({ scanDate: '2024-01-01', leanMassKg: 69, fatMassKg: 15 }),
+      createMockDexaScan({ scanDate: '2024-01-16', leanMassKg: 70, fatMassKg: 14 }),
       createMockDexaScan({ scanDate: '2024-02-01', leanMassKg: 71, fatMassKg: 13 }),
     ];
 
     const recommendations = generateCoachingRecommendations(scans, 180, 'maintenance', 'intermediate');
 
     expect(recommendations.some((r) => r.type === 'achievement' && r.title.includes('Recomp'))).toBe(true);
+  });
+
+  it('never phrases a negative lean slope as a gain during a bulk (correct sign + lbs unit + evidence)', () => {
+    // Lean mass FALLING while bulking: the old copy said
+    // "You're gaining -0.41 kg of muscle per month".
+    const scans = [
+      createMockDexaScan({ scanDate: '2024-01-01', leanMassKg: 71.5, fatMassKg: 12 }),
+      createMockDexaScan({ scanDate: '2024-02-01', leanMassKg: 71.1, fatMassKg: 12.4 }),
+      createMockDexaScan({ scanDate: '2024-03-01', leanMassKg: 70.7, fatMassKg: 12.8 }),
+    ];
+
+    const recommendations = generateCoachingRecommendations(scans, 180, 'bulk', 'intermediate', {
+      weightUnit: 'lb',
+    });
+
+    const leanRec = recommendations.find((r) => r.title.includes('Lean Mass Trending Down'));
+    expect(leanRec).toBeDefined();
+    // Phrased as a downward trend, never "gaining -X".
+    expect(leanRec!.message).not.toMatch(/gaining -/i);
+    expect(leanRec!.message).toContain('trending down');
+    // Honors the lbs preference — no raw kg figure in an lbs app.
+    expect(leanRec!.message).toContain('lbs');
+    expect(leanRec!.message).not.toMatch(/\d kg/);
+    // Cites its evidence like the deload advisor.
+    expect(leanRec!.evidence).toContain('3 DEXA scans');
+    // No "Muscle Gain Below Expected" phrasing for a negative slope.
+    expect(recommendations.some((r) => r.title.includes('Muscle Gain Below Expected'))).toBe(false);
+  });
+
+  it('suppresses composition-trend advice when the slope rests on fewer than 2 DEXA intervals', () => {
+    const scans = [
+      createMockDexaScan({ scanDate: '2024-01-01', leanMassKg: 71.5, fatMassKg: 12 }),
+      createMockDexaScan({ scanDate: '2024-02-01', leanMassKg: 71.1, fatMassKg: 13.5 }),
+    ];
+
+    const recommendations = generateCoachingRecommendations(scans, 180, 'bulk', 'intermediate', {
+      weightUnit: 'lb',
+    });
+
+    expect(recommendations.some((r) => r.title.includes('Lean Mass Trending Down'))).toBe(false);
+    expect(recommendations.some((r) => r.title.includes('Fat Gain Too Fast'))).toBe(false);
+    // Softened instead: an info rec explains WHY there's no advice.
+    const calibrating = recommendations.find((r) => r.title.includes('Calibrating'));
+    expect(calibrating).toBeDefined();
+    expect(calibrating!.type).toBe('info');
+  });
+
+  it('suppresses composition-trend advice when an endpoint scan sits in the phase-boundary water window', () => {
+    const scans = [
+      createMockDexaScan({ scanDate: '2024-01-01', leanMassKg: 71.5, fatMassKg: 12 }),
+      createMockDexaScan({ scanDate: '2024-02-01', leanMassKg: 71.2, fatMassKg: 12.6 }),
+      // Newest scan 5 days after a bulk started — lean mass here is mostly water/glycogen.
+      createMockDexaScan({ scanDate: '2024-03-05', leanMassKg: 70.7, fatMassKg: 13.2 }),
+    ];
+
+    const recommendations = generateCoachingRecommendations(scans, 180, 'bulk', 'intermediate', {
+      weightUnit: 'lb',
+      phaseChangeDates: ['2024-03-01'],
+    });
+
+    expect(recommendations.some((r) => r.title.includes('Lean Mass Trending Down'))).toBe(false);
+    const paused = recommendations.find((r) => r.title.includes('Calibrating'));
+    expect(paused).toBeDefined();
+    expect(paused!.message).toMatch(/water/i);
+  });
+
+  it('cites evidence on trend recommendations', () => {
+    const scans = [
+      createMockDexaScan({ scanDate: '2024-01-01', leanMassKg: 72, fatMassKg: 15 }),
+      createMockDexaScan({ scanDate: '2024-01-16', leanMassKg: 71, fatMassKg: 14 }),
+      createMockDexaScan({ scanDate: '2024-02-01', leanMassKg: 70, fatMassKg: 13 }),
+    ];
+
+    const recommendations = generateCoachingRecommendations(scans, 180, 'cut', 'intermediate');
+    const rec = recommendations.find((r) => r.title.includes('Muscle Loss Detected'));
+    expect(rec?.evidence).toBeDefined();
+    expect(rec!.evidence).toContain('3 DEXA scans');
+    expect(rec!.evidence).toMatch(/lean mass/);
   });
 
   it('sorts recommendations by priority', () => {

@@ -21,6 +21,4 @@ export {
 } from './ProportionsAnalyticsCards';
 
 // Goals Tab
-export { GoalsTab } from './GoalsTab';
-export type { GoalsTabProps } from './GoalsTab';
 

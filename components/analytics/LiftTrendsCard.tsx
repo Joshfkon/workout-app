@@ -116,7 +116,7 @@ export function LiftTrendsCard({ summary, units }: LiftTrendsCardProps) {
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-medium text-surface-200 truncate">{lift.name}</p>
                     {lift.lowConfidence ? (
-                      <Badge size="sm" variant="default">Low confidence</Badge>
+                      <Badge size="sm" variant="default">Calibrating</Badge>
                     ) : (
                       <Badge
                         size="sm"
@@ -132,10 +132,12 @@ export function LiftTrendsCard({ summary, units }: LiftTrendsCardProps) {
                       </Badge>
                     )}
                   </div>
+                  {/* A calibrating lift shows NO rate — a fitted slope over a
+                      program boundary is noise with a decimal point. */}
                   <p className="text-xs text-surface-500 mt-0.5">
-                    {formatWeight(lift.currentE1RMKg, units)} E1RM · {signedPct(lift.weeklyChangePct)} ·{' '}
-                    {lift.sessionCount} sessions
-                    {lift.lowConfidence ? ' · new program — trend rebuilds over 2–3 sessions' : ''}
+                    {lift.lowConfidence
+                      ? `${formatWeight(lift.currentE1RMKg, units)} E1RM · ${lift.sessionCount} sessions · new program — trend rebuilds over 2–3 sessions`
+                      : `${formatWeight(lift.currentE1RMKg, units)} E1RM · ${signedPct(lift.weeklyChangePct)} · ${lift.sessionCount} sessions`}
                   </p>
                 </div>
                 <TrendSparkline

@@ -35,9 +35,15 @@ function paceBadgeClasses(pace: ProgressionPace): string {
       return 'bg-orange-500/10 text-orange-400';
     case 'plateaued':
       return 'bg-warning-500/10 text-warning-400';
+    case 'calibrating':
     case 'insufficient_data':
       return 'bg-surface-800 text-surface-500';
   }
+}
+
+/** Paces whose fitted rate is trustworthy enough to display. */
+function paceHasRate(pace: ProgressionPace): boolean {
+  return pace !== 'insufficient_data' && pace !== 'calibrating';
 }
 
 function formatWeeklyPct(pct: number): string {
@@ -67,6 +73,14 @@ export function MuscleProgressionCard({ groups, exerciseNames, goal }: MusclePro
 
   if (groups.length === 0) return null;
 
+  // Muscles with at least one confident lift render as full rows; muscles
+  // that are only calibrating (post program switch) or only building history
+  // collapse into single summary lines — a decimal rate is never shown for
+  // them, and ~14 muted rows become two lines.
+  const activeGroups = groups.filter((g) => paceHasRate(g.pace));
+  const calibratingGroups = groups.filter((g) => g.pace === 'calibrating');
+  const buildingGroups = groups.filter((g) => g.pace === 'insufficient_data');
+
   const expectedPct = groups[0].expectedWeeklyPct;
   const normalizedGoal = goal === 'maintain' ? 'maintenance' : goal;
   const subtitle =
@@ -83,7 +97,7 @@ export function MuscleProgressionCard({ groups, exerciseNames, goal }: MusclePro
         <p className="text-xs text-surface-500 mt-0.5">{subtitle}</p>
       </div>
       <ul className="divide-y divide-surface-800">
-        {groups.map((group) => {
+        {activeGroups.map((group) => {
           const isOpen = expanded.has(group.muscleGroup);
           const display = getPaceDisplay(group.pace);
           return (
@@ -96,7 +110,7 @@ export function MuscleProgressionCard({ groups, exerciseNames, goal }: MusclePro
                 <span className="flex-1 min-w-0 text-sm font-medium text-surface-200 truncate">
                   {muscleDisplayName(group.muscleGroup)}
                 </span>
-                {group.pace !== 'insufficient_data' && (
+                {paceHasRate(group.pace) && (
                   <span className="text-xs font-mono text-surface-400">
                     {formatWeeklyPct(group.avgWeeklyChangePct)}
                   </span>
@@ -132,7 +146,7 @@ export function MuscleProgressionCard({ groups, exerciseNames, goal }: MusclePro
                         <span className="flex-1 min-w-0 text-sm text-surface-400 truncate">
                           {exerciseNames?.get(insight.exerciseId) ?? 'Exercise'}
                         </span>
-                        {insight.pace !== 'insufficient_data' && (
+                        {paceHasRate(insight.pace) && (
                           <span className="text-xs font-mono text-surface-500">
                             {formatWeeklyPct(insight.weeklyChangePct)}
                           </span>
@@ -150,6 +164,29 @@ export function MuscleProgressionCard({ groups, exerciseNames, goal }: MusclePro
             </li>
           );
         })}
+        {calibratingGroups.length > 0 && (
+          <li
+            className="px-4 py-3 text-xs text-surface-500"
+            data-testid="muscle-progression-calibrating-summary"
+          >
+            <span className="font-medium text-surface-400">
+              {calibratingGroups.length} calibrating
+            </span>{' '}
+            after program change — {calibratingGroups.map((g) => muscleDisplayName(g.muscleGroup)).join(', ')}.
+            Rates return after 2–3 sessions on the new program.
+          </li>
+        )}
+        {buildingGroups.length > 0 && (
+          <li
+            className="px-4 py-3 text-xs text-surface-500"
+            data-testid="muscle-progression-building-summary"
+          >
+            <span className="font-medium text-surface-400">
+              {buildingGroups.length} building history
+            </span>{' '}
+            — {buildingGroups.map((g) => muscleDisplayName(g.muscleGroup)).join(', ')}.
+          </li>
+        )}
       </ul>
     </Card>
   );

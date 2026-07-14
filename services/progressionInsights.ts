@@ -62,6 +62,12 @@ export type ProgressionPace =
   | 'on_track'
   | 'behind'
   | 'plateaued'
+  /**
+   * Sessions straddle a program boundary with too few since the switch —
+   * the fitted slope is noise (same rule as liftTrends' lowConfidence).
+   * Calibrating insights carry NO rate and never feed a rollup average.
+   */
+  | 'calibrating'
   | 'insufficient_data';
 
 export interface ExerciseProgressionInsight {
@@ -141,6 +147,8 @@ export interface MuscleGroupProgression {
   exerciseCount: number;
   /** Exercises with enough history to classify */
   analyzedCount: number;
+  /** Exercises whose trend is rebuilding after a program switch */
+  calibratingCount: number;
   plateauedCount: number;
   insights: ExerciseProgressionInsight[];
 }
@@ -157,6 +165,14 @@ export interface GetExerciseProgressionInput {
   referenceDate?: string | Date;
   /** Diet phase — forwarded to plateauDetector's goal-aware thresholds */
   goal?: PlateauGoal;
+  /**
+   * Active program (mesocycle) start date, YYYY-MM-DD. When sessions
+   * straddle this boundary and fewer than MIN_SESSIONS_FOR_INSIGHT have
+   * accrued since it, the trend is 'calibrating' — mirrors
+   * liftTrends.computeLiftTrends' lowConfidence rule so the two strength
+   * surfaces can never disagree about which lifts are trustworthy.
+   */
+  programStartDate?: string | null;
 }
 
 /**
@@ -165,7 +181,7 @@ export interface GetExerciseProgressionInput {
 export function getExerciseProgression(
   input: GetExerciseProgressionInput
 ): ExerciseProgressionInsight {
-  const { exerciseId, snapshots, experience, referenceDate, goal } = input;
+  const { exerciseId, snapshots, experience, referenceDate, goal, programStartDate } = input;
   const expected = getExpectedPace(experience, goal);
   const expectedWeeklyPct = expected.expectedWeeklyPct;
 
@@ -199,6 +215,29 @@ export function getExerciseProgression(
       sessionsAnalyzed: sorted.length,
       lastSessionDelta,
     };
+  }
+
+  // Program-boundary gate (same rule as liftTrends' lowConfidence): sessions
+  // from before the current program with too few since it make the fitted
+  // slope noise. Report 'calibrating' with NO rate — a low-confidence rate
+  // must not render anywhere.
+  if (programStartDate) {
+    const boundary = programStartDate.slice(0, 10);
+    const before = sorted.filter((s) => s.sessionDate < boundary).length;
+    const since = sorted.length - before;
+    if (before > 0 && since < MIN_SESSIONS_FOR_INSIGHT) {
+      return {
+        exerciseId,
+        pace: 'calibrating',
+        weeklyChangePct: 0,
+        weeklyChangeKg: 0,
+        expectedWeeklyPct,
+        currentE1RM,
+        isPlateaued: false,
+        sessionsAnalyzed: sorted.length,
+        lastSessionDelta,
+      };
+    }
   }
 
   const trend = analyzeExerciseTrend(sorted, goal);
@@ -249,17 +288,24 @@ export interface GetMuscleGroupProgressionInput {
   referenceDate?: string | Date;
   /** Diet phase — forwarded to plateauDetector's goal-aware thresholds */
   goal?: PlateauGoal;
+  /** Active program start date — see GetExerciseProgressionInput. */
+  programStartDate?: string | null;
 }
 
 /**
  * Roll per-exercise insights up to muscle groups. An exercise contributes
  * to the muscle group given in muscleByExercise; exercises missing from
  * that map are skipped.
+ *
+ * Confidence rule: a muscle's rollup shows a rate ONLY when at least one
+ * contributing lift has a confident (non-calibrating, enough-history)
+ * trend. Otherwise the row is 'calibrating' (or 'insufficient_data' when
+ * nothing has even started building history) and carries no rate.
  */
 export function getMuscleGroupProgression(
   input: GetMuscleGroupProgressionInput
 ): MuscleGroupProgression[] {
-  const { snapshotsByExercise, muscleByExercise, experience, referenceDate, goal } = input;
+  const { snapshotsByExercise, muscleByExercise, experience, referenceDate, goal, programStartDate } = input;
   const expected = getExpectedPace(experience, goal);
   const expectedWeeklyPct = expected.expectedWeeklyPct;
 
@@ -274,6 +320,7 @@ export function getMuscleGroupProgression(
       experience,
       referenceDate,
       goal,
+      programStartDate,
     });
     const list = byMuscle.get(muscle) ?? [];
     list.push(insight);
@@ -283,7 +330,12 @@ export function getMuscleGroupProgression(
   const results: MuscleGroupProgression[] = [];
 
   byMuscle.forEach((insights, muscleGroup) => {
-    const analyzed = insights.filter((i) => i.pace !== 'insufficient_data');
+    // Only CONFIDENT trends may feed the rollup rate — calibrating lifts'
+    // slopes are noise and must not average into a real-looking number.
+    const analyzed = insights.filter(
+      (i) => i.pace !== 'insufficient_data' && i.pace !== 'calibrating'
+    );
+    const calibratingCount = insights.filter((i) => i.pace === 'calibrating').length;
     const plateauedCount = analyzed.filter((i) => i.isPlateaued).length;
     const avgWeeklyChangePct =
       analyzed.length > 0
@@ -296,7 +348,7 @@ export function getMuscleGroupProgression(
     // "plateaued" only when the trend is weak AND most lifts are flagged.
     let pace: ProgressionPace;
     if (analyzed.length === 0) {
-      pace = 'insufficient_data';
+      pace = calibratingCount > 0 ? 'calibrating' : 'insufficient_data';
     } else if (avgWeeklyChangePct >= expected.aheadAtPct) {
       pace = 'ahead';
     } else if (avgWeeklyChangePct >= expected.onTrackAtPct) {
@@ -314,6 +366,7 @@ export function getMuscleGroupProgression(
       expectedWeeklyPct,
       exerciseCount: insights.length,
       analyzedCount: analyzed.length,
+      calibratingCount,
       plateauedCount,
       insights: insights.sort((a, b) => b.weeklyChangePct - a.weeklyChangePct),
     });
@@ -325,7 +378,8 @@ export function getMuscleGroupProgression(
     behind: 1,
     on_track: 2,
     ahead: 3,
-    insufficient_data: 4,
+    calibrating: 4,
+    insufficient_data: 5,
   };
   results.sort(
     (a, b) => paceRank[a.pace] - paceRank[b.pace] || a.muscleGroup.localeCompare(b.muscleGroup)
@@ -354,6 +408,8 @@ export function getPaceDisplay(pace: ProgressionPace): PaceDisplay {
       return { label: 'Behind pace', tone: 'warning' };
     case 'plateaued':
       return { label: 'Plateaued', tone: 'negative' };
+    case 'calibrating':
+      return { label: 'Calibrating', tone: 'muted' };
     case 'insufficient_data':
       return { label: 'Building history', tone: 'muted' };
   }

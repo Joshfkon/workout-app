@@ -2327,9 +2327,16 @@ export interface BodyCompRecommendation {
   
   /** Detailed recommendation */
   message: string;
-  
+
   /** Priority (higher = more important) */
   priority: number;
+
+  /**
+   * The measured data that produced this recommendation (deload-advisor
+   * pattern): scan count, date span, and the rates the advice rests on.
+   * Trend-based recommendations must always carry this.
+   */
+  evidence?: string;
 }
 
 /**

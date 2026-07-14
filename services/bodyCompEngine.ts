@@ -13,6 +13,7 @@ import type {
   Goal,
   Experience,
 } from '@/types/schema';
+import { PHASE_BOUNDARY_DAYS, spansPhaseBoundary } from '@/lib/nutrition/interval-tdee';
 
 // ============ FFMI CALCULATIONS ============
 
@@ -69,6 +70,47 @@ export function computeFFMI(
   heightCm: number
 ): FFMIResult {
   return calculateFFMI(computeFFM(leanMassKg, boneMassKg), heightCm);
+}
+
+/**
+ * THE canonical current-FFMI selector. Every surface that shows "your FFMI"
+ * (Home tile, Body tab stat strip + gauge, Strength card, targets editor)
+ * must derive it through this function so the number can never differ
+ * between surfaces.
+ *
+ * Preference order:
+ *  1. Last point of the DEXA-anchored trend (the same series the Body
+ *     Composition Trend chart plots) — stays current as weigh-ins accumulate
+ *     after the latest scan.
+ *  2. The latest raw scan through the same computeFFMI (with the
+ *     bone-double-count guard) while the trend is loading / absent.
+ *
+ * The height-normalized variant lives on the returned FFMIResult
+ * (`normalizedFfmi`) and may only ever be shown as a clearly-labeled
+ * secondary readout, never silently substituted for `ffmi`.
+ */
+export function selectCanonicalFfmi(input: {
+  /** Last point of the anchored trend (useBodyCompTrend / fetchBodyCompGlance). */
+  trendLastPoint?: { leanMassKg: number; boneMassKg: number | null } | null;
+  /** Latest DEXA scan — fallback while the trend loads. */
+  latestScan?: DexaScan | null;
+  heightCm: number | null | undefined;
+}): FFMIResult | null {
+  const { trendLastPoint, latestScan, heightCm } = input;
+  if (!heightCm) return null;
+  if (trendLastPoint) {
+    return computeFFMI(trendLastPoint.leanMassKg, trendLastPoint.boneMassKg, heightCm);
+  }
+  if (latestScan) {
+    return computeFFMI(
+      latestScan.leanMassKg,
+      // Calculated-entry scans store lean = weight − fat (bone already
+      // inside) — adding BMC would double-count it.
+      leanMassIncludesBone(latestScan) ? null : latestScan.boneMassKg,
+      heightCm
+    );
+  }
+  return null;
 }
 
 /**
@@ -178,9 +220,19 @@ export function analyzeBodyCompTrend(
   const fatMassChange = newest.fatMassKg - oldest.fatMassKg;
   const bodyFatChange = newest.bodyFatPercent - oldest.bodyFatPercent;
   
-  const newestFFMI = calculateFFMI(newest.leanMassKg, heightCm);
-  const oldestFFMI = calculateFFMI(oldest.leanMassKg, heightCm);
-  const ffmiChange = newestFFMI.normalizedFfmi - oldestFFMI.normalizedFfmi;
+  // Canonical FFMI definition (bone-aware) for the rate; raw-vs-normalized is
+  // irrelevant for a CHANGE (the height adjustment is a constant offset).
+  const newestFFMI = computeFFMI(
+    newest.leanMassKg,
+    leanMassIncludesBone(newest) ? null : newest.boneMassKg,
+    heightCm
+  );
+  const oldestFFMI = computeFFMI(
+    oldest.leanMassKg,
+    leanMassIncludesBone(oldest) ? null : oldest.boneMassKg,
+    heightCm
+  );
+  const ffmiChange = newestFFMI.ffmi - oldestFFMI.ffmi;
   
   // Monthly rates
   const leanMassChangeRate = leanMassChange / monthsDiff;
@@ -220,17 +272,79 @@ export function analyzeBodyCompTrend(
 
 // ============ COACHING RECOMMENDATIONS ============
 
+export interface RecommendationOptions {
+  /**
+   * Display unit for mass rates in messages. Storage stays kg; this only
+   * affects formatting. Defaults to 'kg' for back-compat.
+   */
+  weightUnit?: 'kg' | 'lb';
+  /**
+   * Phase-change start dates (YYYY-MM-DD, e.g. bulk started). An endpoint
+   * scan taken inside the water/glycogen window after one of these makes the
+   * two-endpoint slope untrustworthy (same PHASE_BOUNDARY_DAYS window the
+   * TDEE interval estimator excludes), so trend recommendations are
+   * suppressed rather than emitted from corrupted data.
+   */
+  phaseChangeDates?: string[];
+}
+
+const KG_TO_LB = 2.20462;
+
+function formatMassRate(kgPerMonth: number, unit: 'kg' | 'lb', decimals = 1): string {
+  const value = unit === 'lb' ? kgPerMonth * KG_TO_LB : kgPerMonth;
+  return `${value.toFixed(decimals)} ${unit === 'lb' ? 'lbs' : 'kg'}`;
+}
+
+function formatScanDate(date: string): string {
+  return new Date(`${date.slice(0, 10)}T00:00:00`).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
 /**
- * Generate coaching recommendations based on body composition data
+ * Whether either endpoint scan of the trend window falls inside the
+ * post-phase-change water/glycogen window. DEXA lean mass includes water, so
+ * an endpoint inside that window corrupts the endpoint-to-endpoint slope the
+ * same way it corrupts a TDEE interval.
+ */
+export function trendEndpointsInPhaseWindow(
+  scans: DexaScan[],
+  phaseChangeDates: string[]
+): boolean {
+  if (scans.length < 2 || phaseChangeDates.length === 0) return false;
+  const dates = scans.map((s) => s.scanDate.slice(0, 10)).sort();
+  const oldest = dates[0];
+  const newest = dates[dates.length - 1];
+  // Degenerate [date, date] intervals reuse the shared overlap test.
+  return (
+    spansPhaseBoundary(oldest, oldest, phaseChangeDates) ||
+    spansPhaseBoundary(newest, newest, phaseChangeDates)
+  );
+}
+
+/**
+ * Generate coaching recommendations based on body composition data.
+ *
+ * Honesty rules (mirroring the deload advisor):
+ *  - Every trend-based recommendation cites its evidence (scan count, date
+ *    span, measured rate).
+ *  - Trend recommendations are SUPPRESSED when the slope rests on fewer than
+ *    2 DEXA-anchored intervals (<3 scans), or when an endpoint scan sits in
+ *    the post-phase-change water-weight window — a slope from corrupted or
+ *    threadbare data reads as precision it doesn't have.
+ *  - Negative rates are phrased as losses, never "gaining -X".
  */
 export function generateCoachingRecommendations(
   scans: DexaScan[],
   heightCm: number,
   goal: Goal,
-  experience: Experience
+  experience: Experience,
+  options: RecommendationOptions = {}
 ): BodyCompRecommendation[] {
   const recommendations: BodyCompRecommendation[] = [];
-  
+  const unit = options.weightUnit ?? 'kg';
+
   if (scans.length === 0) {
     recommendations.push({
       type: 'info',
@@ -240,22 +354,23 @@ export function generateCoachingRecommendations(
     });
     return recommendations;
   }
-  
+
   const latestScan = scans[0];
-  const ffmiResult = calculateFFMI(latestScan.leanMassKg, heightCm);
+  // Canonical FFMI definition (lean + bone unless bone is baked into lean).
+  const ffmiResult = selectCanonicalFfmi({ latestScan, heightCm })!;
   const trend = analyzeBodyCompTrend(scans, heightCm);
   const naturalLimit = getNaturalFFMILimit(experience);
-  
+
   // FFMI-based recommendations
   if (ffmiResult.normalizedFfmi >= naturalLimit - 1) {
     recommendations.push({
       type: 'achievement',
       title: 'Near Genetic Potential',
-      message: `Your FFMI of ${ffmiResult.normalizedFfmi} is approaching the natural limit. Focus on maintaining your physique and making incremental improvements.`,
+      message: `Your height-normalized FFMI of ${ffmiResult.normalizedFfmi} is approaching the natural limit. Focus on maintaining your physique and making incremental improvements.`,
       priority: 3,
     });
   }
-  
+
   // Body fat recommendations
   if (goal === 'bulk' && latestScan.bodyFatPercent > 20) {
     recommendations.push({
@@ -263,60 +378,102 @@ export function generateCoachingRecommendations(
       title: 'Consider a Mini-Cut',
       message: `At ${latestScan.bodyFatPercent}% body fat, you may want to do a short cut (4-6 weeks) before continuing your bulk. This improves insulin sensitivity and nutrient partitioning.`,
       priority: 5,
+      evidence: `Latest DEXA (${formatScanDate(latestScan.scanDate)}): ${latestScan.bodyFatPercent}% body fat`,
     });
   }
-  
+
   if (goal === 'cut' && latestScan.bodyFatPercent < 10) {
     recommendations.push({
       type: 'warning',
       title: 'Risk of Muscle Loss',
       message: `At ${latestScan.bodyFatPercent}% body fat, the risk of muscle loss increases significantly. Consider transitioning to maintenance or a slower deficit.`,
       priority: 5,
+      evidence: `Latest DEXA (${formatScanDate(latestScan.scanDate)}): ${latestScan.bodyFatPercent}% body fat`,
     });
   }
-  
-  // Trend-based recommendations (need at least 2 scans)
-  if (trend) {
+
+  // Trend-based recommendations. Gating: the two-endpoint slope needs at
+  // least 2 DEXA-anchored intervals (≥3 scans) AND endpoints clear of the
+  // phase-boundary water window before it can drive advice.
+  const intervals = trend ? trend.dataPoints - 1 : 0;
+  const inPhaseWindow = trendEndpointsInPhaseWindow(scans, options.phaseChangeDates ?? []);
+  const trendIsTrustworthy = trend != null && intervals >= 2 && !inPhaseWindow;
+
+  if (trend && !trendIsTrustworthy) {
+    // Soften instead of asserting: say WHY there's no composition advice.
+    recommendations.push({
+      type: 'info',
+      title: 'Composition Trend Still Calibrating',
+      message: inPhaseWindow
+        ? `A recent phase change puts a scan inside the ~${PHASE_BOUNDARY_DAYS}-day water/glycogen shift window, so scan-to-scan changes mostly reflect water — composition advice is paused until a scan lands outside it.`
+        : 'Composition advice needs at least 3 DEXA scans to separate a real trend from scan-to-scan noise. Log your next scan to unlock it.',
+      priority: 1,
+      evidence: `${trend.dataPoints} DEXA scans (${formatScanDate(scans[scans.length - 1].scanDate)} → ${formatScanDate(scans[0].scanDate)})`,
+    });
+  }
+
+  if (trend && trendIsTrustworthy) {
+    const sortedDates = scans.map((s) => s.scanDate).sort();
+    const spanEvidence = `${trend.dataPoints} DEXA scans (${formatScanDate(sortedDates[0])} → ${formatScanDate(sortedDates[sortedDates.length - 1])})`;
+    const leanEvidence = `${spanEvidence}: lean mass ${trend.leanMassChangeRate >= 0 ? '+' : '−'}${formatMassRate(Math.abs(trend.leanMassChangeRate), unit, 1)}/mo`;
+    const fatEvidence = `${spanEvidence}: fat mass ${trend.fatMassChangeRate >= 0 ? '+' : '−'}${formatMassRate(Math.abs(trend.fatMassChangeRate), unit, 1)}/mo`;
+
     if (goal === 'bulk' && trend.fatMassChangeRate > 0.5) {
       recommendations.push({
         type: 'warning',
         title: 'Fat Gain Too Fast',
-        message: `You're gaining ${trend.fatMassChangeRate.toFixed(1)} kg of fat per month. Consider reducing your caloric surplus by 200-300 calories to optimize muscle-to-fat ratio.`,
+        message: `You're gaining ${formatMassRate(trend.fatMassChangeRate, unit)} of fat per month. Consider reducing your caloric surplus by 200-300 calories to optimize muscle-to-fat ratio.`,
         priority: 4,
+        evidence: fatEvidence,
       });
     }
-    
-    if (goal === 'bulk' && trend.leanMassChangeRate < 0.2 && experience !== 'advanced') {
+
+    if (goal === 'bulk' && trend.leanMassChangeRate < -0.1) {
+      // A negative lean slope is a LOSS — never phrased as "gaining -X".
+      recommendations.push({
+        type: 'warning',
+        title: 'Lean Mass Trending Down During Bulk',
+        message: `Your lean mass is trending down ${formatMassRate(Math.abs(trend.leanMassChangeRate), unit)} per month while bulking, which is unusual — check scan conditions (hydration, time of day) and training consistency before changing your diet.`,
+        priority: 4,
+        evidence: leanEvidence,
+      });
+    } else if (goal === 'bulk' && trend.leanMassChangeRate < 0.2 && experience !== 'advanced') {
+      const flat = Math.abs(trend.leanMassChangeRate) < 0.05;
       recommendations.push({
         type: 'suggestion',
         title: 'Muscle Gain Below Expected',
-        message: `You're gaining ${trend.leanMassChangeRate.toFixed(2)} kg of muscle per month. Consider increasing protein intake, training volume, or caloric surplus.`,
+        message: flat
+          ? 'Your lean mass is roughly flat. Consider increasing protein intake, training volume, or caloric surplus.'
+          : `You're gaining ${formatMassRate(trend.leanMassChangeRate, unit, 1)} of muscle per month. Consider increasing protein intake, training volume, or caloric surplus.`,
         priority: 3,
+        evidence: leanEvidence,
       });
     }
-    
+
     if (goal === 'cut' && trend.leanMassChangeRate < -0.2) {
       recommendations.push({
         type: 'warning',
         title: 'Muscle Loss Detected',
-        message: `You're losing ${Math.abs(trend.leanMassChangeRate).toFixed(2)} kg of muscle per month. Consider reducing your deficit, increasing protein to 2.3-3.1g/kg, or increasing training volume.`,
+        message: `You're losing ${formatMassRate(Math.abs(trend.leanMassChangeRate), unit)} of muscle per month. Consider reducing your deficit, increasing protein to 2.3-3.1g/kg, or increasing training volume.`,
         priority: 5,
+        evidence: leanEvidence,
       });
     }
-    
+
     if (trend.trend === 'recomping') {
       recommendations.push({
         type: 'achievement',
         title: 'Successful Recomp',
         message: `Great progress! You're simultaneously gaining muscle and losing fat. Keep up the consistent training and nutrition.`,
         priority: 2,
+        evidence: `${leanEvidence}, fat ${trend.fatMassChangeRate >= 0 ? '+' : '−'}${formatMassRate(Math.abs(trend.fatMassChangeRate), unit, 1)}/mo`,
       });
     }
   }
-  
+
   // Sort by priority (higher = show first)
   recommendations.sort((a, b) => b.priority - a.priority);
-  
+
   return recommendations;
 }
 

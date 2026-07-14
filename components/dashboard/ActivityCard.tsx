@@ -14,6 +14,7 @@ import {
   getDailyActivityData,
 } from '@/lib/actions/wearable';
 import { saveManualSteps } from '@/lib/actions/steps';
+import { isHealthKitAvailable } from '@/lib/integrations';
 import type { WearableConnection, DailyActivityData } from '@/types/wearable';
 
 interface ActivityCardProps {
@@ -39,6 +40,23 @@ export const ActivityCard = memo(function ActivityCard({ userId }: ActivityCardP
   const [manualSteps, setManualSteps] = useState('');
   const [showManualInput, setShowManualInput] = useState(false);
   const [savingSteps, setSavingSteps] = useState(false);
+  // Real device capability (Capacitor iOS + HealthKit plugin), not a promise
+  // of future features: null while probing, then true only on capable iOS.
+  const [healthKitCapable, setHealthKitCapable] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    isHealthKitAvailable()
+      .then((available) => {
+        if (!cancelled) setHealthKitCapable(available);
+      })
+      .catch(() => {
+        if (!cancelled) setHealthKitCapable(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const loadData = useCallback(async () => {
     const today = getLocalDateString();
@@ -298,10 +316,11 @@ export const ActivityCard = memo(function ActivityCard({ userId }: ActivityCardP
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
-              <p className="text-surface-400 text-sm">No steps logged today</p>
+              <p className="text-surface-400 text-sm">No steps synced yet today</p>
               <p className="text-surface-500 text-xs mt-1">
-                Automatic sync from your {connections[0]?.deviceName || 'wearable'} isn&apos;t
-                available yet. Enter your steps manually below.
+                {healthKitCapable
+                  ? `Steps sync automatically from ${connections[0]?.deviceName || 'your wearable'} — open the app later today or enter them manually.`
+                  : `Waiting on ${connections[0]?.deviceName || 'your wearable'} to sync. You can enter steps manually in the meantime.`}
               </p>
               <button
                 onClick={handleOpenManualInput}
@@ -311,7 +330,12 @@ export const ActivityCard = memo(function ActivityCard({ userId }: ActivityCardP
               </button>
             </div>
           ) : (
-            <div className="space-y-4">
+            // No wearable connected yet. The connect flow (WearableConnections
+            // Screen) supports Apple Health on iOS, Fitbit on web, and Google
+            // Fit on Android, so the Connect button stays available on every
+            // platform — only the copy adapts to the device's likely provider.
+            // Manual entry is always offered alongside it.
+            <div className="space-y-3">
               <div className="flex items-center gap-4 p-4 bg-gradient-to-r from-primary-500/10 to-accent-500/10 rounded-lg border border-primary-500/20">
                 <div className="w-12 h-12 rounded-xl bg-primary-500/20 flex items-center justify-center flex-shrink-0">
                   <span className="text-2xl">⌚</span>
@@ -319,8 +343,9 @@ export const ActivityCard = memo(function ActivityCard({ userId }: ActivityCardP
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-surface-200">Track Your Steps</p>
                   <p className="text-xs text-surface-400 mt-0.5">
-                    Log steps to improve your TDEE estimate. Wearable sync is coming
-                    soon; enter steps manually for now.
+                    {healthKitCapable
+                      ? 'Connect Apple Health to sync steps automatically and improve your TDEE estimate.'
+                      : 'Connect Fitbit or Google Fit to sync steps automatically, or enter them manually.'}
                   </p>
                 </div>
                 <Button size="sm" onClick={handleOpenConnectModal}>
