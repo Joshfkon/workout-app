@@ -36,6 +36,26 @@ import {
   exerciseMatchesMuscleGroup,
   exerciseMatchesQuery,
 } from '@/services/exerciseFilter';
+import {
+  deriveEquipmentClass,
+  equipmentClassToGroup,
+  equipmentGroupLabel,
+  exerciseMatchesEquipmentGroups,
+  EQUIPMENT_GROUP_ORDER,
+  type EquipmentGroup,
+} from '@/services/equipmentClass';
+
+/** Read an AvailableExercise's equipment group (stored class, else derived). */
+function exerciseEquipmentGroup(ex: AvailableExercise): EquipmentGroup {
+  return equipmentClassToGroup(
+    deriveEquipmentClass({
+      name: ex.name,
+      equipment_required: ex.equipment_required,
+      is_bodyweight: ex.is_bodyweight,
+      equipment_class: ex.equipment_class ?? null,
+    })
+  );
+}
 
 // Normalize exercise search terms for better matching
 // Handles variations like "situps" vs "sit up" vs "sit-up"
@@ -80,6 +100,12 @@ export interface AddExercisePickerProps {
   onExerciseSearchChange: (value: string) => void;
   selectedMuscleFilter: string | null;
   onSelectedMuscleFilterChange: (value: string | null) => void;
+  /**
+   * Equipment-class filter groups (second, orthogonal axis). Multi-select
+   * UNION within the axis; ANDed with the muscle filter. Empty = no constraint.
+   */
+  selectedEquipmentGroups: string[];
+  onToggleEquipmentGroup: (group: string) => void;
   /** @deprecated Muscle filtering is now a chip row; dropdown state is unused. */
   showMuscleDropdown?: boolean;
   /** @deprecated Muscle filtering is now a chip row; dropdown state is unused. */
@@ -135,6 +161,8 @@ export function AddExercisePicker({
   onExerciseSearchChange,
   selectedMuscleFilter,
   onSelectedMuscleFilterChange,
+  selectedEquipmentGroups,
+  onToggleEquipmentGroup,
   exerciseSortOption,
   onExerciseSortOptionChange,
   showAllExercises,
@@ -193,12 +221,28 @@ export function AddExercisePicker({
   /** Available exercises first; the user may still pick a flagged one. */
   const availabilityRank = (ex: AvailableExercise) => (isUnavailableHere(ex) ? 1 : 0);
 
-  /** Muscle chip filter applied; location availability only flags and sorts. */
+  const equipmentGroups = selectedEquipmentGroups as EquipmentGroup[];
+
+  /**
+   * Muscle chip AND equipment chip(s) applied (two orthogonal axes); location
+   * availability only flags and sorts, never hides.
+   */
   const getBasePool = (): AvailableExercise[] => {
     // De-dupe (shared with the library + replace pickers) then apply the
-    // group-aware muscle chip so a coarse chip also matches sub-muscle tags.
-    return dedupeExercisesById(availableExercises).filter(ex =>
-      exerciseMatchesMuscleGroup(ex, selectedMuscleFilter)
+    // group-aware muscle chip so a coarse chip also matches sub-muscle tags,
+    // ANDed with the equipment-class axis (empty selection = no constraint).
+    return dedupeExercisesById(availableExercises).filter(
+      ex =>
+        exerciseMatchesMuscleGroup(ex, selectedMuscleFilter) &&
+        exerciseMatchesEquipmentGroups(
+          {
+            name: ex.name,
+            equipment_required: ex.equipment_required,
+            is_bodyweight: ex.is_bodyweight,
+            equipment_class: ex.equipment_class ?? null,
+          },
+          equipmentGroups
+        )
     );
   };
 
@@ -362,6 +406,10 @@ export function AddExercisePicker({
             <span className="truncate">{formatMuscleName(exercise.primary_muscle)}</span>
             <span aria-hidden="true">&middot;</span>
             <span className="capitalize">{exercise.mechanic}</span>
+            <span aria-hidden="true">&middot;</span>
+            {/* Normalized equipment class (rolled up to its group), so the
+                implement is scannable instead of hidden in the name suffix. */}
+            <span className="capitalize">{equipmentGroupLabel(exerciseEquipmentGroup(exercise))}</span>
             {exercise.hypertrophy_tier && (
               <span className="px-1 rounded bg-surface-800 border border-surface-700 text-[10px] font-medium text-surface-300">
                 {exercise.hypertrophy_tier}
@@ -462,6 +510,15 @@ export function AddExercisePicker({
   const muscleOptions = Array.from(
     new Set(availableExercises.map(ex => ex.primary_muscle).filter(Boolean))
   ).sort();
+
+  // Equipment groups present in the library, in canonical chip order. Only
+  // groups that actually match something are shown, so the row never offers a
+  // chip that would empty the list; the common six lead by EQUIPMENT_GROUP_ORDER.
+  const equipmentOptions = useMemo(() => {
+    const present = new Set<EquipmentGroup>();
+    for (const ex of availableExercises) present.add(exerciseEquipmentGroup(ex));
+    return EQUIPMENT_GROUP_ORDER.filter(g => present.has(g));
+  }, [availableExercises]);
 
   const adjustmentsActive = selectedLocationFilter !== null || exerciseSortOption !== 'frequency';
 
@@ -566,6 +623,37 @@ export function AddExercisePicker({
               <IconAdjustments size={16} />
             </button>
           </div>
+
+          {/* Equipment chips — a SECOND, orthogonal axis that ANDs with muscle.
+              Multi-select (union within the axis): tapping toggles a group, and
+              "All" clears the whole axis. Rendered only when the library spans
+              more than one equipment group. */}
+          {equipmentOptions.length > 1 && (
+            <div
+              className="mt-1.5 flex items-center gap-1.5 overflow-x-auto"
+              style={{ scrollbarWidth: 'none' }}
+              data-testid="equipment-filter-row"
+            >
+              <button
+                type="button"
+                onClick={() => selectedEquipmentGroups.forEach(onToggleEquipmentGroup)}
+                className={chipClass(selectedEquipmentGroups.length === 0)}
+              >
+                All Gear
+              </button>
+              {equipmentOptions.map(group => (
+                <button
+                  key={group}
+                  type="button"
+                  onClick={() => onToggleEquipmentGroup(group)}
+                  className={chipClass(selectedEquipmentGroups.includes(group))}
+                  aria-pressed={selectedEquipmentGroups.includes(group)}
+                >
+                  {equipmentGroupLabel(group)}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Collapsed-by-default sort + location controls */}
           {showAdjustments && (

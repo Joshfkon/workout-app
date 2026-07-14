@@ -440,6 +440,14 @@ export default function WorkoutPage() {
   // Empty-state "Copy last workout instead" action
   const [isCopyingLastWorkout, setIsCopyingLastWorkout] = useState(false);
   const [selectedMuscleFilter, setSelectedMuscleFilter] = useState<string | null>(null);
+  // Equipment-class filter: second, orthogonal axis (multi-select union, ANDs
+  // with muscle). Lives in the page so it outlives the modal like muscle does.
+  const [selectedEquipmentGroups, setSelectedEquipmentGroups] = useState<string[]>([]);
+  const toggleEquipmentGroup = useCallback((group: string) => {
+    setSelectedEquipmentGroups(prev =>
+      prev.includes(group) ? prev.filter(g => g !== group) : [...prev, group]
+    );
+  }, []);
   const [showMuscleDropdown, setShowMuscleDropdown] = useState(false);
   const [selectedExercisesToAdd, setSelectedExercisesToAdd] = useState<AvailableExercise[]>([]);
   const [exerciseSortOption, setExerciseSortOption] = useState<'frequency' | 'name' | 'recent'>('frequency');
@@ -1286,7 +1294,7 @@ export default function WorkoutPage() {
       const supabase = createUntypedClient();
       const { data } = await supabase
         .from('exercises')
-        .select('id, name, primary_muscle, secondary_muscles, movement_pattern, mechanic, equipment_required, default_rep_range, default_rir, is_bodyweight, hypertrophy_tier')
+        .select('id, name, primary_muscle, secondary_muscles, movement_pattern, mechanic, equipment_required, equipment_class, default_rep_range, default_rir, is_bodyweight, hypertrophy_tier')
         .is('deleted_at', null) // hide merge-soft-deleted duplicates
         .order('name');
       if (data) {
@@ -3823,6 +3831,7 @@ export default function WorkoutPage() {
     setShowAddExercise(false);
     setShowMuscleDropdown(false);
     setSelectedMuscleFilter(null);
+    setSelectedEquipmentGroups([]);
     setExerciseSearch('');
     setIsAddingExercise(false);
   };
@@ -3900,6 +3909,7 @@ export default function WorkoutPage() {
     setShowMuscleDropdown(false);
     setSelectedExercisesToAdd([]);
     setSelectedMuscleFilter(null);
+    setSelectedEquipmentGroups([]);
     setExerciseSearch('');
   };
 
@@ -3977,6 +3987,7 @@ export default function WorkoutPage() {
       setShowMuscleDropdown(false);
       setSelectedExercisesToAdd([]);
       setSelectedMuscleFilter(null);
+      setSelectedEquipmentGroups([]);
       setExerciseSearch('');
     } catch (err) {
       console.error('Failed to add custom exercise to workout:', err);
@@ -4458,6 +4469,8 @@ export default function WorkoutPage() {
             onExerciseSearchChange={setExerciseSearch}
             selectedMuscleFilter={selectedMuscleFilter}
             onSelectedMuscleFilterChange={setSelectedMuscleFilter}
+            selectedEquipmentGroups={selectedEquipmentGroups}
+            onToggleEquipmentGroup={toggleEquipmentGroup}
             showMuscleDropdown={showMuscleDropdown}
             onShowMuscleDropdownChange={setShowMuscleDropdown}
             showSortDropdown={showSortDropdown}
@@ -5499,6 +5512,8 @@ export default function WorkoutPage() {
           onExerciseSearchChange={setExerciseSearch}
           selectedMuscleFilter={selectedMuscleFilter}
           onSelectedMuscleFilterChange={setSelectedMuscleFilter}
+          selectedEquipmentGroups={selectedEquipmentGroups}
+          onToggleEquipmentGroup={toggleEquipmentGroup}
           showMuscleDropdown={showMuscleDropdown}
           onShowMuscleDropdownChange={setShowMuscleDropdown}
           showSortDropdown={showSortDropdown}

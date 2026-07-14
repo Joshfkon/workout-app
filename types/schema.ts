@@ -110,6 +110,27 @@ export type MesocycleState = 'planned' | 'active' | 'completed';
 /** Equipment types available for training */
 export type Equipment = 'barbell' | 'dumbbell' | 'cable' | 'machine' | 'bodyweight' | 'kettlebell';
 
+/**
+ * Normalized per-exercise equipment class (exercises.equipment_class). Distinct
+ * from `Equipment` (the coarse user-inventory enum) and from
+ * `equipment_required` (free-text requirement tags): this is the single
+ * implement an exercise IS, and the axis the exercise-picker equipment filter
+ * runs on. Plate-loaded and pin/selectorized machines are kept SEPARATE on
+ * purpose (load between them is not interchangeable). Derivation + matching
+ * live in services/equipmentClass.ts.
+ */
+export type EquipmentClass =
+  | 'barbell'
+  | 'dumbbell'
+  | 'kettlebell'
+  | 'cable'
+  | 'machine_plate_loaded'
+  | 'machine_pin_loaded'
+  | 'smith'
+  | 'bodyweight'
+  | 'band'
+  | 'other';
+
 /** Training split types */
 export type Split = 'Full Body' | 'Upper/Lower' | 'PPL' | 'Arnold' | 'Bro Split';
 
@@ -422,6 +443,13 @@ export interface Exercise {
   
   /** Equipment needed for this exercise */
   equipmentRequired: string[];
+
+  /**
+   * Normalized equipment class (exercises.equipment_class). Optional: absent on
+   * older rows / freshly-created customs, where services/equipmentClass.ts
+   * derives it on read from equipmentRequired + isBodyweight + name.
+   */
+  equipmentClass?: EquipmentClass;
 
   /** True when the exercise is loaded by bodyweight (exercises.is_bodyweight) */
   isBodyweight?: boolean;

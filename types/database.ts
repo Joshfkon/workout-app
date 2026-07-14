@@ -87,6 +87,7 @@ export interface Database {
           setup_note: string;
           movement_pattern: string;
           equipment_required: string[];
+          equipment_class: string | null;
           demo_gif_url: string | null;
           demo_thumbnail_url: string | null;
           youtube_video_id: string | null;
@@ -106,6 +107,7 @@ export interface Database {
           setup_note?: string;
           movement_pattern?: string;
           equipment_required?: string[];
+          equipment_class?: string | null;
           demo_gif_url?: string | null;
           demo_thumbnail_url?: string | null;
           youtube_video_id?: string | null;
@@ -125,6 +127,7 @@ export interface Database {
           setup_note?: string;
           movement_pattern?: string;
           equipment_required?: string[];
+          equipment_class?: string | null;
           demo_gif_url?: string | null;
           demo_thumbnail_url?: string | null;
           youtube_video_id?: string | null;
