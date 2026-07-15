@@ -7,7 +7,7 @@ import { parseYouTubeVideoId } from '@/lib/youtube';
 import { muscleDisplayName } from '@/lib/utils';
 import { getExerciseProp } from './helpers';
 
-import { MOVEMENT_PATTERN_OPTIONS, MUSCLE_OPTIONS, EQUIPMENT_OPTIONS } from './editFormOptions';
+import { MOVEMENT_PATTERN_OPTIONS, MUSCLE_OPTIONS, SECONDARY_MUSCLE_OPTIONS, EQUIPMENT_OPTIONS } from './editFormOptions';
 
 interface ExerciseEditFormProps {
   exercise: Exercise;
@@ -15,6 +15,7 @@ interface ExerciseEditFormProps {
 }
 
 interface EditData {
+  name: string;
   isBodyweight: boolean;
   bodyweightType: 'pure' | 'weighted_possible' | 'assisted_possible' | 'both' | null;
   assistanceType: 'machine' | 'band' | 'partner' | null;
@@ -76,6 +77,7 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
 
   // Initialize edit data from the exercise row
   useEffect(() => {
+    const name = getExerciseProp(exercise, 'name', 'name') || '';
     const equipment = getExerciseProp(exercise, 'equipment', 'equipment') || 'barbell';
     const equipmentRequired = getExerciseProp(exercise, 'equipmentRequired', 'equipment_required') || [];
     const movementPattern = getExerciseProp(exercise, 'movementPattern', 'movement_pattern') || 'compound';
@@ -92,6 +94,7 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
     const youtubeVideoId = getExerciseProp(exercise, 'youtubeVideoId', 'youtube_video_id');
 
     setEditData({
+      name: typeof name === 'string' ? name : '',
       isBodyweight,
       bodyweightType,
       assistanceType,
@@ -138,6 +141,12 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
   const handleSaveEdit = async () => {
     if (!exercise.id || !editData) return;
 
+    const trimmedName = editData.name.trim();
+    if (!trimmedName) {
+      setSaveError('Exercise name cannot be empty');
+      return;
+    }
+
     setIsSaving(true);
     setSaveError(null);
     setSaveSuccess(false);
@@ -151,6 +160,7 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
       }
 
       const updatePayload: any = {
+        name: trimmedName,
         is_bodyweight: editData.isBodyweight,
         bodyweight_type: editData.bodyweightType,
         assistance_type: editData.assistanceType,
@@ -254,6 +264,18 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
             Cancel
           </button>
         </div>
+      </div>
+
+      {/* Name */}
+      <div>
+        <label className="block text-xs font-medium text-surface-400 mb-1">Name</label>
+        <input
+          type="text"
+          value={editData.name}
+          onChange={(e) => setEditData({ ...editData, name: e.target.value })}
+          placeholder="Exercise name"
+          className="w-full px-3 py-2 bg-surface-900 border border-surface-600 rounded-lg text-surface-100 placeholder-surface-500 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+        />
       </div>
 
       {/* Bodyweight Settings */}
@@ -384,6 +406,33 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
         </select>
       </div>
 
+      {/* Secondary Muscles */}
+      <div>
+        <label className="block text-xs font-medium text-surface-400 mb-1">Secondary Muscles</label>
+        <div className="grid grid-cols-3 gap-2 max-h-32 overflow-y-auto p-2 bg-surface-800/50 rounded-lg">
+          {SECONDARY_MUSCLE_OPTIONS.filter(m => m !== editData.primaryMuscle).map((muscle) => (
+            <label
+              key={muscle}
+              className="flex items-center gap-2 p-1.5 rounded hover:bg-surface-700/50 cursor-pointer"
+            >
+              <input
+                type="checkbox"
+                checked={editData.secondaryMuscles.includes(muscle)}
+                onChange={(e) => {
+                  if (e.target.checked) {
+                    setEditData({ ...editData, secondaryMuscles: [...editData.secondaryMuscles, muscle] });
+                  } else {
+                    setEditData({ ...editData, secondaryMuscles: editData.secondaryMuscles.filter(m => m !== muscle) });
+                  }
+                }}
+                className="w-4 h-4 text-primary-500 bg-surface-700 border-surface-600 rounded focus:ring-primary-500"
+              />
+              <span className="text-xs text-surface-300">{muscleDisplayName(muscle)}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+
       {/* Advanced Fields Toggle */}
       <div className="pt-2 border-t border-surface-700">
         <button
@@ -438,35 +487,6 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
                 Selected: {editData.equipmentRequired.join(', ')}
               </p>
             )}
-          </div>
-
-          {/* Secondary Muscles */}
-          <div>
-            <label className="block text-sm font-medium text-surface-300 mb-2">
-              Secondary Muscles
-            </label>
-            <div className="grid grid-cols-3 gap-2 max-h-32 overflow-y-auto p-2 bg-surface-800/50 rounded-lg">
-              {['chest', 'back', 'shoulders', 'biceps', 'triceps', 'quads', 'hamstrings', 'glutes', 'calves', 'abs', 'traps', 'forearms'].filter(m => m !== editData.primaryMuscle).map((muscle) => (
-                <label
-                  key={muscle}
-                  className="flex items-center gap-2 p-1.5 rounded hover:bg-surface-700/50 cursor-pointer"
-                >
-                  <input
-                    type="checkbox"
-                    checked={editData.secondaryMuscles.includes(muscle)}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setEditData({ ...editData, secondaryMuscles: [...editData.secondaryMuscles, muscle] });
-                      } else {
-                        setEditData({ ...editData, secondaryMuscles: editData.secondaryMuscles.filter(m => m !== muscle) });
-                      }
-                    }}
-                    className="w-4 h-4 text-primary-500 bg-surface-700 border-surface-600 rounded focus:ring-primary-500"
-                  />
-                  <span className="text-xs text-surface-300">{muscleDisplayName(muscle)}</span>
-                </label>
-              ))}
-            </div>
           </div>
 
           {/* Hypertrophy Tier */}
