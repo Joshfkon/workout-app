@@ -4565,9 +4565,14 @@ export default function WorkoutPage() {
   };
 
   const restBarVisible = showRestTimer && !pendingDropset;
+  // Any bottom-anchored chrome present → reserve room below the in-flow action
+  // bar so the fixed stack never covers it. The toast can stack on top of the
+  // timer, so when it's showing reserve the taller amount.
+  const bottomChromeVisible = restBarVisible || !!sanityCheckResult;
+  const bottomPad = sanityCheckResult ? 'pb-56' : restBarVisible ? 'pb-32' : 'pb-8';
 
   return (
-    <div className={`max-w-2xl mx-auto space-y-6 ${restBarVisible ? 'pb-32' : 'pb-8'}`}>
+    <div className={`max-w-2xl mx-auto space-y-6 ${bottomPad}`}>
       {/* Offline banner (P0-2): honest state — nothing is lost, writes queue */}
       {!isOnline && (
         <div
@@ -5459,34 +5464,48 @@ export default function WorkoutPage() {
         </div>
       </Card>
 
-      {/* Sticky rest timer (P0-5): fixed to the bottom so the countdown stays
-          visible while scrolling. Tap the bar to jump back to the current
-          exercise. The container gets pb-32 while this is shown. */}
-      {restBarVisible && (
-        <div className="fixed inset-x-3 bottom-3 z-40 max-w-2xl mx-auto">
-          <RestTimer
-            seconds={restTimer.seconds}
-            initialSeconds={restTimer.initialSeconds}
-            isRunning={restTimer.isRunning}
-            isFinished={restTimer.isFinished}
-            onAddTime={restTimer.addTime}
-            onSkip={() => {
-              restTimer.skip();
-              setShowRestTimer(false);
-            }}
-            nextLabel={
-              activeSuggestionLabel
-                ? `next · ${activeSuggestionLabel}`
-                : currentBlock
-                  ? `next · ${formatWeight(currentBlock.targetWeightKg, preferences.units)} × ${currentBlock.targetRepRange[0]}–${currentBlock.targetRepRange[1]}`
-                  : undefined
-            }
-            onBarTap={() => {
-              document
-                .getElementById(`exercise-${currentBlockIndex}`)
-                ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }}
-          />
+      {/* Bottom chrome stack: a single fixed, safe-area-aware column that owns
+          the bottom band so its layers stack instead of colliding. The
+          transient Performance-Drop toast sits ABOVE the persistent rest timer
+          (P0-5) — previously each was its own independent fixed layer at the
+          same bottom offset and they overlapped. The in-flow action bar above
+          gets matching bottom padding (see restBarVisible / bottomChromeVisible)
+          so nothing here covers it. pointer-events pass through the empty gaps
+          so taps land on the exercise list, not an invisible full-width layer. */}
+      {bottomChromeVisible && (
+        <div className="fixed inset-x-3 bottom-3 z-40 max-w-2xl mx-auto flex flex-col items-stretch gap-2 pointer-events-none [&>*]:pointer-events-auto pb-[env(safe-area-inset-bottom)]">
+          {sanityCheckResult && (
+            <SanityCheckToast
+              layout="inline"
+              check={sanityCheckResult}
+              onDismiss={() => setSanityCheckResult(null)}
+            />
+          )}
+          {restBarVisible && (
+            <RestTimer
+              seconds={restTimer.seconds}
+              initialSeconds={restTimer.initialSeconds}
+              isRunning={restTimer.isRunning}
+              isFinished={restTimer.isFinished}
+              onAddTime={restTimer.addTime}
+              onSkip={() => {
+                restTimer.skip();
+                setShowRestTimer(false);
+              }}
+              nextLabel={
+                activeSuggestionLabel
+                  ? `next · ${activeSuggestionLabel}`
+                  : currentBlock
+                    ? `next · ${formatWeight(currentBlock.targetWeightKg, preferences.units)} × ${currentBlock.targetRepRange[0]}–${currentBlock.targetRepRange[1]}`
+                    : undefined
+              }
+              onBarTap={() => {
+                document
+                  .getElementById(`exercise-${currentBlockIndex}`)
+                  ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }}
+            />
+          )}
         </div>
       )}
 
@@ -6043,13 +6062,9 @@ export default function WorkoutPage() {
         unit={preferences.units}
       />
 
-      {/* Sanity Check Toast */}
-      {sanityCheckResult && (
-        <SanityCheckToast
-          check={sanityCheckResult}
-          onDismiss={() => setSanityCheckResult(null)}
-        />
-      )}
+      {/* Sanity Check "Performance Drop" toast is rendered inside the bottom
+          chrome stack above (so it stacks over the rest timer instead of
+          overlapping it), not as its own independent fixed layer here. */}
 
       {/* Calibration Result Card (modal overlay) */}
       {calibrationResult && (
