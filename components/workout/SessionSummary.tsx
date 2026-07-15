@@ -401,8 +401,6 @@ export function SessionSummary({
           name,
           primaryMuscle: exercise?.primaryMuscle,
           targetSets: block.targetSets,
-          targetRepRange: block.targetRepRange ?? [8, 12],
-          targetRir: block.targetRir ?? 2,
           skipped: sets.length === 0,
           // Match by block, not name — the same exercise can appear in
           // multiple blocks and only the record-setting one gets the 🏆.
@@ -426,8 +424,6 @@ export function SessionSummary({
           name: exercise?.name || 'Exercise',
           primaryMuscle: exercise?.primaryMuscle,
           targetSets: block.targetSets,
-          targetRepRange: block.targetRepRange ?? [8, 12],
-          targetRir: block.targetRir ?? 2,
           skipped: true,
           sets: [],
         },

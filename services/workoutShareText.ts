@@ -7,11 +7,12 @@
  *   HyperTrack 💪 Shoulders & Arms
  *   Jul 8
  *
- *   🟩🟩🟩🟨  Incline Press 🏆
+ *   🟩🟩🟩🟪  Incline Press 🏆
  *   🟩🟩🟩⬜  Lateral Raise
  *
  *   18 sets · 21,340 lb · 58 min · 🏆 2 PRs
- *   🟩 hit · 🟨 grind
+ *   🟪 maxed out · 🟩 on target
+ *   🟨 easy (reps left)
  *
  * Pure module: no DB calls, no side effects. All emoji are plain Unicode so
  * alignment survives proportional fonts (the layout must read well ragged —
@@ -20,11 +21,12 @@
  * Fully skipped exercises (no performed sets) are omitted — the share shows
  * only what was done.
  *
- * Square encoding is a single binary judgment per working set, using the same
- * band logic the rest of the app grades sets by:
- *   🟩 hit  — reps landed in range at (or easier than) the planned effort
- *   🟨 miss — reps fell under range, OR the set was harder than planned
- *             (reps in reserve below target). See `isSetHit`.
+ * Square encoding is a per-set effort heatmap keyed purely on reps-in-reserve
+ * (RIR = 10 − rpe) — how hard the set was, not whether the reps hit a range:
+ *   🟪 maxed out   — 0 RIR (taken to failure)
+ *   🟩 on target   — 1–2 RIR (the hypertrophy sweet spot)
+ *   🟨 easy        — 3+ RIR (reps left in the tank)
+ * See `squareForSet`.
  */
 
 import type { WeightUnit } from '@/types/schema';
@@ -32,9 +34,9 @@ import type { WeightUnit } from '@/types/schema';
 export interface ShareSet {
   reps: number;
   weightKg: number;
-  /** RPE recorded for the set (1–10). RIR = 10 − rpe; drives the hit/miss square. */
+  /** RPE recorded for the set (1–10). RIR = 10 − rpe drives the square color. */
   rpe: number;
-  /** AMRAP set — rendered as its earned color plus a ⚡ suffix. */
+  /** AMRAP set — colored by its RIR like any set, plus a ⚡ suffix. */
   isAmrap?: boolean;
   /**
    * Dropset child (setType 'dropset' hanging off a parent set). Counts
@@ -48,11 +50,8 @@ export interface ShareExercise {
   name: string;
   /** Raw primaryMuscle string; drives the cryptic-mode emoji. */
   primaryMuscle?: string;
+  /** Planned set count — unperformed planned sets pad the row with ⬜. */
   targetSets: number;
-  /** Planned rep range [min, max] — a set under `min` reads as a miss. */
-  targetRepRange: [number, number];
-  /** Planned reps in reserve — a set below it (harder than planned) is a miss. */
-  targetRir: number;
   /** Performed working sets in order. Empty when the exercise was skipped. */
   sets: ShareSet[];
   /** Exercise skipped entirely — omitted from the share output. */
@@ -84,14 +83,21 @@ const ROWS_WHEN_COLLAPSED = 7;
 /** Cap on squares shown in the "+N more" collapse line. */
 const MAX_COLLAPSE_SQUARES = 12;
 
-const GREEN = '🟩';
-const YELLOW = '🟨';
-const WHITE = '⬜';
+const PURPLE = '🟪'; // 0 RIR — taken to failure
+const GREEN = '🟩'; // 1–2 RIR — on target
+const YELLOW = '🟨'; // 3+ RIR — reps left in the tank
+const WHITE = '⬜'; // planned but not performed
 const AMRAP_SUFFIX = '⚡';
 const PR_MARKER = '🏆';
 
-/** One legend line, appended only when the grid contains a miss. */
-const LEGEND = `${GREEN} hit · ${YELLOW} grind`;
+/**
+ * Legend in plain words (no RIR jargon), two short lines so it never wraps
+ * mid-glyph. Appended only when the grid holds a 🟪 or 🟨 — an all-green share
+ * needs no key.
+ */
+const LEGEND = [`${PURPLE} maxed out · ${GREEN} on target`, `${YELLOW} easy (reps left)`].join(
+  '\n'
+);
 
 const LEG_MUSCLES = ['quad', 'hamstring', 'glute', 'calf', 'calves', 'adductor', 'abductor', 'leg'];
 const ARM_MUSCLES = ['bicep', 'tricep', 'forearm', 'arm'];
@@ -105,20 +111,19 @@ export function muscleEmoji(primaryMuscle: string | undefined): string {
 }
 
 /**
- * Binary square judgment for one working set — the same band logic the live
- * app uses to grade a set (see `progressionEngine.calculateSetQuality`):
- *   🟩 hit  ← reps ≥ range min AND reps-in-reserve ≥ target (effort as planned
- *             or easier)
- *   🟨 miss ← reps under range, OR RIR below target (the set was harder than
- *             planned)
- * AMRAP sets are graded on reps alone: maximal effort *is* the plan there, so a
- * low RIR is success, not a grind.
+ * Effort-heatmap color for one working set, keyed purely on reps-in-reserve
+ * (RIR = 10 − rpe). Reps relative to any target range don't change the color —
+ * a set is graded only on how much was left in reserve:
+ *   🟪 ← 0 RIR   (taken to failure)
+ *   🟩 ← 1–2 RIR (on target)
+ *   🟨 ← 3+ RIR  (reps left in the tank)
+ * AMRAP sets follow the same rule — a to-failure AMRAP is 🟪 — and add ⚡.
  */
-export function isSetHit(set: ShareSet, targetRepMin: number, targetRir: number): boolean {
-  if (set.reps < targetRepMin) return false;
-  if (set.isAmrap) return true;
+export function squareForSet(set: ShareSet): string {
   const rir = 10 - set.rpe;
-  return rir >= targetRir;
+  if (rir <= 0) return PURPLE;
+  if (rir <= 2) return GREEN;
+  return YELLOW;
 }
 
 /** True when the exercise was skipped outright — no working sets performed. */
@@ -128,14 +133,9 @@ function isSkipped(exercise: ShareExercise): boolean {
 
 /** Squares row for one exercise (no name). */
 function buildSquares(exercise: ShareExercise): string {
-  const [targetRepMin] = exercise.targetRepRange;
   const countedSets = exercise.sets.filter((s) => !s.isDropset);
   let squares = countedSets
-    .map(
-      (s) =>
-        (isSetHit(s, targetRepMin, exercise.targetRir) ? GREEN : YELLOW) +
-        (s.isAmrap ? AMRAP_SUFFIX : '')
-    )
+    .map((s) => squareForSet(s) + (s.isAmrap ? AMRAP_SUFFIX : ''))
     .join('');
   // Planned sets not performed (partial skip) render as ⬜.
   const missing = exercise.targetSets - countedSets.length;
@@ -217,7 +217,7 @@ function buildFooter(input: WorkoutShareTextInput): string {
 }
 
 /** Every glyph counted as two width units by `shareLineWidth`. */
-const WIDE_GLYPHS = [GREEN, YELLOW, WHITE, AMRAP_SUFFIX, PR_MARKER, '💪', '🏋️', '🦵', '📅'];
+const WIDE_GLYPHS = [PURPLE, GREEN, YELLOW, WHITE, AMRAP_SUFFIX, PR_MARKER, '💪', '🏋️', '🦵', '📅'];
 
 /**
  * Emoji-aware rendered width of one line: each emoji square / pictograph counts
@@ -256,9 +256,9 @@ export function formatWorkoutShareText(input: WorkoutShareTextInput): string {
   }
   lines.push('');
   lines.push(buildFooter(input));
-  // The legend answers "why yellow?" — shown only when a miss exists, so an
-  // all-green share stays tight.
-  if (exerciseLines.some((line) => line.includes(YELLOW))) {
+  // The legend answers "what's the color?" — shown only when a non-green square
+  // exists (🟪 or 🟨), so an all-on-target share stays tight.
+  if (exerciseLines.some((line) => line.includes(YELLOW) || line.includes(PURPLE))) {
     lines.push(LEGEND);
   }
   return lines.join('\n');
