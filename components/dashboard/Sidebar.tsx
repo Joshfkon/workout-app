@@ -13,6 +13,7 @@ import {
   IconSparkles,
   IconSettings,
   IconFlask,
+  IconHeartbeat,
   IconBolt,
   IconMenu2,
   IconLogout,
@@ -44,6 +45,7 @@ const primaryNavigation: SidebarNavItem[] = [
 
 // Secondary links — the "More" section
 const moreNavigation: SidebarNavItem[] = [
+  { name: 'Blood Pressure', href: '/dashboard/blood-pressure', icon: IconHeartbeat },
   { name: 'Social Feed', href: '/dashboard/feed', icon: IconUsers },
   { name: 'AI Coach', href: '/dashboard/ai-coach', icon: IconSparkles },
   { name: 'Settings', href: '/dashboard/settings', icon: IconSettings },

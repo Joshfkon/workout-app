@@ -50,6 +50,10 @@ try {
 // scheduled rest-complete notification automatically replaces any previous one.
 export const REST_TIMER_NOTIFICATION_ID = 1842;
 
+// Fixed id for the daily "log blood pressure" reminder. Reusing one id means
+// re-scheduling (e.g. after the user changes the time) replaces the old one.
+export const BLOOD_PRESSURE_REMINDER_ID = 1843;
+
 let permissionRequested = false;
 
 /**
@@ -122,6 +126,63 @@ export async function cancelRestCompleteNotification(): Promise<void> {
     });
   } catch (error) {
     console.warn('[Notifications] Failed to cancel rest notification:', error);
+  }
+}
+
+/**
+ * Schedule (or reschedule) the daily "log blood pressure" reminder at the
+ * given local time. Repeats every day until cancelled. No-op on web — the
+ * feature is opt-in and only meaningful in the native app. Returns true when a
+ * reminder was actually scheduled (native + permission granted).
+ */
+export async function scheduleBloodPressureReminder(
+  hour: number,
+  minute: number
+): Promise<boolean> {
+  if (!isNativePlatform()) return false;
+
+  try {
+    const granted = await ensureNotificationPermission();
+    if (!granted) return false;
+
+    // Replace any existing reminder first (id reuse also does this, but an
+    // explicit cancel keeps behaviour predictable across plugin versions).
+    await LocalNotifications.cancel({
+      notifications: [{ id: BLOOD_PRESSURE_REMINDER_ID }],
+    });
+
+    await LocalNotifications.schedule({
+      notifications: [
+        {
+          id: BLOOD_PRESSURE_REMINDER_ID,
+          title: 'Log blood pressure',
+          body: 'Take a moment to record today’s reading.',
+          schedule: {
+            on: { hour, minute },
+            allowWhileIdle: true,
+            repeats: true,
+          },
+          sound: 'default',
+        },
+      ],
+    });
+    return true;
+  } catch (error) {
+    console.warn('[Notifications] Failed to schedule BP reminder:', error);
+    return false;
+  }
+}
+
+/** Cancel the daily blood-pressure reminder. No-op on web. */
+export async function cancelBloodPressureReminder(): Promise<void> {
+  if (!isNativePlatform()) return;
+
+  try {
+    await LocalNotifications.cancel({
+      notifications: [{ id: BLOOD_PRESSURE_REMINDER_ID }],
+    });
+  } catch (error) {
+    console.warn('[Notifications] Failed to cancel BP reminder:', error);
   }
 }
 

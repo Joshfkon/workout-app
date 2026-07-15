@@ -155,6 +155,10 @@ const MuscleRecoveryCard = dynamic(
   () => import('@/components/dashboard/MuscleRecoveryCard').then(m => m.MuscleRecoveryCard),
   { ssr: false, loading: () => <div className="h-40 animate-pulse bg-surface-700 rounded-xl" /> }
 );
+const BloodPressureCard = dynamic(
+  () => import('@/components/dashboard/BloodPressureCard').then(m => m.BloodPressureCard),
+  { ssr: false, loading: () => <div className="h-40 animate-pulse bg-surface-700 rounded-xl" /> }
+);
 
 // Tab types. The 5-tab layout (Body · Goals · Strength · Volume · Wellness)
 // collapsed to four: Goals dissolved into Body (targets editor + projections)
@@ -2582,6 +2586,7 @@ function AnalyticsPageContent() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
                 <ActivityCard userId={userId} />
                 <HydrationTracker userId={userId} unit={units === 'kg' ? 'ml' : 'oz'} />
+                <BloodPressureCard />
                 <Card>
                   <CardHeader>
                     <CardTitle>Cardio Log</CardTitle>

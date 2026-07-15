@@ -245,6 +245,19 @@ export interface UserPreferences {
   dexaReminderDeclined?: boolean;
 
   /**
+   * Blood pressure: opt-in daily "log blood pressure" reminder. Unset/false =
+   * off (the default — reminders are never forced on). When true, a local
+   * notification is scheduled for `bloodPressureReminderTime` each day.
+   */
+  bloodPressureReminderEnabled?: boolean;
+
+  /**
+   * Blood pressure: reminder time as "HH:mm" (24h, local). Unset defaults to
+   * '08:00' (morning) — the suggested time for a clean baseline reading.
+   */
+  bloodPressureReminderTime?: string;
+
+  /**
    * Color theme preference. 'system' follows the OS. Unset = 'dark'.
    * Managed by hooks/useTheme.ts (localStorage cache + server sync).
    */
@@ -687,6 +700,71 @@ export function ratingToSleepQuality(rating: Rating | null | undefined): SleepQu
   if (rating <= 2) return 'poor';
   if (rating >= 4) return 'good';
   return 'ok';
+}
+
+// ============ BLOOD PRESSURE ============
+
+/**
+ * Where/when a blood pressure reading was taken. Optional context that helps
+ * the user (and any future trend logic) interpret a reading — a post-workout
+ * spike is expected, a morning reading is the cleanest baseline.
+ */
+export const BLOOD_PRESSURE_CONTEXTS = [
+  'morning',
+  'evening',
+  'pre_workout',
+  'post_workout',
+  'doctor_office',
+  'other',
+] as const;
+export type BloodPressureContext = (typeof BLOOD_PRESSURE_CONTEXTS)[number];
+
+/** Human-readable labels for each context (UI + history rows). */
+export const BLOOD_PRESSURE_CONTEXT_LABELS: Record<BloodPressureContext, string> = {
+  morning: 'Morning',
+  evening: 'Evening',
+  pre_workout: 'Pre-workout',
+  post_workout: 'Post-workout',
+  doctor_office: "Doctor's office",
+  other: 'Other',
+};
+
+/** Where a blood pressure entry came from. Room for a future wearable import. */
+export type BloodPressureSource = 'manual';
+
+/**
+ * One blood pressure reading. Unlike sleep (one row per day) a user may log
+ * several readings per local day; a day's displayed value is the average of
+ * that day's readings. Maps to the blood_pressure_log table.
+ */
+export interface BloodPressureEntry {
+  id: string;
+  /** ISO timestamp of the reading (defaults to now, editable). */
+  measuredAt: string;
+  /** YYYY-MM-DD in the user's local timezone (getLocalDateString). */
+  localDay: string;
+  /** Systolic pressure, mmHg. */
+  systolic: number;
+  /** Diastolic pressure, mmHg. */
+  diastolic: number;
+  /** Optional resting heart rate, bpm. */
+  pulse?: number | null;
+  /** Optional measurement context. */
+  context?: BloodPressureContext | null;
+  /** Optional free-text note. */
+  notes?: string | null;
+  source: BloodPressureSource;
+}
+
+/** Fields a user supplies when logging a reading (id/timestamps are derived). */
+export interface BloodPressureInput {
+  systolic: number;
+  diastolic: number;
+  pulse?: number | null;
+  context?: BloodPressureContext | null;
+  notes?: string | null;
+  /** ISO timestamp; defaults to now if omitted. */
+  measuredAt?: string;
 }
 
 // ============ EXERCISE BLOCK ============

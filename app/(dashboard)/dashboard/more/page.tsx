@@ -13,6 +13,7 @@ import {
   IconBook,
   IconVocabulary,
   IconFlask,
+  IconHeartbeat,
   IconSettings,
   IconChevronRight,
 } from '@tabler/icons-react';
@@ -28,6 +29,7 @@ interface MoreLink {
 // typing the URL — they now have a nav path.
 const moreLinks: MoreLink[] = [
   { name: 'Profile', href: '/dashboard/profile', icon: IconUser },
+  { name: 'Blood Pressure', href: '/dashboard/blood-pressure', icon: IconHeartbeat },
   { name: 'Social Feed', href: '/dashboard/feed', icon: IconUsers },
   { name: 'Discover Workouts', href: '/dashboard/discover', icon: IconCompass },
   { name: 'Leaderboards', href: '/dashboard/leaderboards', icon: IconTrophy },
