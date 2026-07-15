@@ -54,6 +54,7 @@ const navItems: NavItem[] = [
     icon: IconDots,
     matchPaths: [
       '/dashboard/more',
+      '/dashboard/blood-pressure',
       '/dashboard/feed',
       '/dashboard/discover',
       '/dashboard/profile',
