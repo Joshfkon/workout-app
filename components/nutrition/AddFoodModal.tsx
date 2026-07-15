@@ -881,12 +881,13 @@ export function AddFoodModal({
           />
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-2 border-b border-surface-800 overflow-x-auto">
+        {/* Tabs — flex-1 so all four (incl. Manual) fit the modal width on
+            phones instead of overflowing off-screen. */}
+        <div className="flex border-b border-surface-800">
           {([
             { id: 'search' as AddFoodTab, label: 'Search', icon: IconSearch },
             { id: 'barcode' as AddFoodTab, label: 'Barcode', icon: IconScan },
-            { id: 'label' as AddFoodTab, label: 'Scan Label', icon: IconTextScan2 },
+            { id: 'label' as AddFoodTab, label: 'Label', icon: IconTextScan2 },
             { id: 'manual' as AddFoodTab, label: 'Manual', icon: IconPencil },
           ]).map((tab) => (
             <button
@@ -895,7 +896,7 @@ export function AddFoodModal({
                 setActiveTab(tab.id);
                 clearSelection();
               }}
-              className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 whitespace-nowrap flex items-center gap-1.5 ${
+              className={`flex-1 min-w-0 px-1 py-2 text-sm font-medium transition-colors border-b-2 whitespace-nowrap flex items-center justify-center gap-1.5 ${
                 activeTab === tab.id
                   ? 'border-primary-500 text-primary-400'
                   : 'border-transparent text-surface-400 hover:text-surface-200'

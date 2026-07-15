@@ -53,7 +53,7 @@ const TINY_JPEG = Buffer.from(
 
 async function openLabelScanner(page) {
   await page.locator('button:has-text("Add Food")').first().click();
-  await page.locator('button:has-text("Scan Label")').first().click();
+  await page.locator('button:has-text("Label")').first().click();
   await page.locator('[data-testid="label-scanner"]').waitFor({ state: 'visible', timeout: 15000 });
 }
 
