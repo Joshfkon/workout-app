@@ -144,6 +144,56 @@ export function formatReadyEta(hours: number): string {
   return `~${Math.round(hours / 24)}d`;
 }
 
+// ---------------------------------------------------------------------------
+// Scalar readiness score (0–1) — a projection of the SAME recovery heuristic,
+// for surfaces that need a continuous value (status dots, "Ready / ~Nh"
+// microcopy) rather than the Fresh/Recovering/Fatigued tri-state.
+// ---------------------------------------------------------------------------
+
+/** At/above this score a muscle reads "Ready" (green). */
+export const READINESS_READY_THRESHOLD = 0.8;
+/** At/above this (but under ready) a muscle reads amber; below it, red. */
+export const READINESS_AMBER_THRESHOLD = 0.5;
+
+/**
+ * Scalar readiness in [0, 1]: how far through its recovery window a muscle is
+ * (`hoursSinceLast / windowHours`, clamped). Derived from the recovery
+ * heuristic's own outputs — NOT a parallel model: the window already carries
+ * dose, athlete-profile, sleep, wearable and learned-multiplier adjustments.
+ * A never-trained muscle is fully ready (1).
+ */
+export function readinessScore(rec: MuscleRecoveryResult): number {
+  if (rec.lastTrainedAt === null || rec.windowHours === null || rec.windowHours <= 0) return 1;
+  const ratio = (rec.hoursSinceLast ?? 0) / rec.windowHours;
+  return Math.min(1, Math.max(0, ratio));
+}
+
+/**
+ * Estimated hours until the readiness score crosses `threshold` (0 when
+ * already at/above it) — drives the "~{N}h" microcopy.
+ */
+export function hoursUntilReadinessThreshold(
+  rec: MuscleRecoveryResult,
+  threshold: number = READINESS_READY_THRESHOLD
+): number {
+  if (readinessScore(rec) >= threshold) return 0;
+  // score < threshold ≤ 1 implies the muscle was trained, so windowHours is set.
+  return Math.max(0, threshold * (rec.windowHours ?? 0) - (rec.hoursSinceLast ?? 0));
+}
+
+/**
+ * Apply a frozen (per-local-day) ordering to a desired one: keys present in
+ * `frozen` keep their frozen relative order, keys `frozen` doesn't know about
+ * (e.g. a muscle added to the session later in the day) append in `desired`
+ * order. Pure — the caller owns persistence of the frozen list.
+ */
+export function applyFrozenOrder(desired: string[], frozen: string[]): string[] {
+  const present = new Set(desired);
+  const head = frozen.filter((k) => present.has(k));
+  const inFrozen = new Set(head);
+  return [...head, ...desired.filter((k) => !inFrozen.has(k))];
+}
+
 function volumeStatusForZone(zone: VolumeZone): VolumeStatus {
   if (zone === 'below_mev') return 'low';
   if (zone === 'over_mrv') return 'high';
@@ -169,7 +219,11 @@ function applySorenessOverride(
   return { ...rec, status: 'fatigued' };
 }
 
-function coarseRecovery(
+/**
+ * Recovery for a coarse group (exported so the weekly-volume strip can pair
+ * the SAME worst-of-children recovery with its rows as the readiness sheet).
+ */
+export function coarseRecovery(
   coarse: CoarseMuscle,
   history: RecoverySession[],
   now: Date,
