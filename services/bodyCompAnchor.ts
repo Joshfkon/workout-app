@@ -79,6 +79,22 @@ export interface BuildAnchoredTrendOptions {
    * projection beyond the newest scan. Default 0.5.
    */
   pRatio?: number;
+  /**
+   * Optional morning-waist EWMA trend (inches). When supplied and it spans a
+   * between-scan segment, the fat estimate's INTERIOR follows the waist trend
+   * shape instead of the weight-proportional split — so the BF% line "bends"
+   * with observed waist rather than running straight. The rescale still pins
+   * both scan endpoints exactly, so this never changes an absolute anchored
+   * value — waist informs the RATE/shape only, never an absolute BF%.
+   */
+  waistTrend?: WaistTrendInput[];
+}
+
+export interface WaistTrendInput {
+  /** YYYY-MM-DD */
+  date: string;
+  /** EWMA trend value in inches. */
+  trendIn: number;
 }
 
 // ============================================================
@@ -132,6 +148,44 @@ function projectFromAnchor(
 /** BF% consistent with how a scan reports it: fat mass over scan weight. */
 function bfPercent(fatKg: number, weightKg: number): number {
   return weightKg > 0 ? (fatKg / weightKg) * 100 : 0;
+}
+
+/**
+ * Linearly interpolate a waist trend (inches) at an arbitrary day, clamped
+ * flat beyond its ends. Returns null when the trend does not actually bracket
+ * the day — callers fall back to the weight-proportional estimate so a sparse
+ * or non-overlapping waist trend never distorts a segment.
+ */
+function waistTrendInterpolator(
+  waistTrend: WaistTrendInput[] | undefined
+): { spans: (dayA: number, dayB: number) => boolean; at: (day: number) => number } | null {
+  if (!waistTrend || waistTrend.length < 2) return null;
+  const pts = waistTrend
+    .filter((w) => Number.isFinite(w.trendIn))
+    .map((w) => ({ day: dayNumber(w.date), value: w.trendIn }))
+    .sort((a, b) => a.day - b.day);
+  if (pts.length < 2) return null;
+
+  const first = pts[0];
+  const last = pts[pts.length - 1];
+  const at = (day: number): number => {
+    if (day <= first.day) return first.value;
+    if (day >= last.day) return last.value;
+    for (let i = 1; i < pts.length; i++) {
+      if (pts[i].day >= day) {
+        const lo = pts[i - 1];
+        const hi = pts[i];
+        if (hi.day === lo.day) return lo.value;
+        const t = (day - lo.day) / (hi.day - lo.day);
+        return lo.value + t * (hi.value - lo.value);
+      }
+    }
+    return last.value;
+  };
+  // Only shape a segment the trend meaningfully overlaps (its coverage must
+  // reach the segment interior on both ends).
+  const spans = (dayA: number, dayB: number) => first.day <= dayB && last.day >= dayA;
+  return { spans, at };
 }
 
 // ============================================================
@@ -202,6 +256,7 @@ export function buildAnchoredBodyCompTrend(
   options: BuildAnchoredTrendOptions = {}
 ): AnchoredTrendPoint[] {
   const pRatio = Math.min(1, Math.max(0, options.pRatio ?? 0.5));
+  const waist = waistTrendInterpolator(options.waistTrend);
 
   const sortedScans = [...scans]
     .filter((s) => s.leanMassKg > 0 && s.fatMassKg >= 0)
@@ -314,17 +369,39 @@ export function buildAnchoredBodyCompTrend(
     const segment = weightPoints.filter((p) => p.day > dayA && p.day < dayB);
     if (segment.length === 0) continue;
 
-    const base = projectFromAnchor(segment, a, scanWeight(a), pRatio);
+    // Shape the fat interior with the waist trend when it overlaps this
+    // segment; otherwise keep the weight-proportional split. Either way the
+    // rescale below pins both scan endpoints exactly, so only the interior
+    // curvature differs — waist bends the shape, never an anchored value.
+    const useWaist = waist != null && waist.spans(dayA, dayB);
+    const waistAtA = useWaist ? waist!.at(dayA) : 0;
+
+    const shapePoint = (
+      p: { date: string; day: number; weightKg: number }
+    ): BasePoint => {
+      const deltaW = p.weightKg - scanWeight(a);
+      if (useWaist) {
+        // Fat proxy = cumulative waist-trend rise since the segment start
+        // (inches; scale is arbitrary because the rescale renormalizes to the
+        // fat endpoints). Lean carries the remaining weight so lean + fat
+        // still equals the point's soft-tissue weight.
+        const fatEst = a.fatMassKg + (waist!.at(p.day) - waistAtA);
+        const leanEst = a.leanMassKg + a.fatMassKg + deltaW - fatEst;
+        return { ...p, leanEst, fatEst };
+      }
+      return {
+        ...p,
+        leanEst: a.leanMassKg + pRatio * deltaW,
+        fatEst: a.fatMassKg + (1 - pRatio) * deltaW,
+      };
+    };
+
+    const base = segment.map(shapePoint);
 
     // Endpoint-inclusive series for residual measurement: the estimate is
     // exact at A by construction; at B it carries the accumulated error the
     // rescale removes.
-    const baseAtB = projectFromAnchor(
-      [{ date: b.date, day: dayB, weightKg: scanWeight(b) }],
-      a,
-      scanWeight(a),
-      pRatio
-    )[0];
+    const baseAtB = shapePoint({ date: b.date, day: dayB, weightKg: scanWeight(b) });
 
     const leanSeries = [
       { day: dayA, value: a.leanMassKg },

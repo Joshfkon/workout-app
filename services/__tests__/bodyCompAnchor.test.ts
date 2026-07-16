@@ -393,3 +393,65 @@ describe('findLowConfidenceGaps', () => {
     expect(findLowConfidenceGaps(['2026-06-01'])).toEqual([]);
   });
 });
+
+// ============================================================
+// Waist-trend shaping — the BF% interior "bends" with observed
+// waist while both DEXA endpoints stay pinned exactly.
+// ============================================================
+
+describe('buildAnchoredBodyCompTrend waist shaping', () => {
+  // Two scans one month apart with identical fat mass, and a bodyweight that
+  // rises then falls back so weight-driven interior fat is ~flat. A waist
+  // trend that bulges upward mid-segment should push interior fat ABOVE the
+  // straight line — while both scan points remain exact.
+  const scans: ScanAnchor[] = [
+    { date: '2026-01-01', bodyFatPercent: 20, leanMassKg: 60, fatMassKg: 20, weightKg: 80 },
+    { date: '2026-01-31', bodyFatPercent: 20, leanMassKg: 60, fatMassKg: 20, weightKg: 80 },
+  ];
+  const weights: WeightPoint[] = [
+    { date: '2026-01-11', weightKg: 80 },
+    { date: '2026-01-21', weightKg: 80 },
+  ];
+
+  it('keeps both scan endpoints exact with a waist trend applied', () => {
+    const waistTrend = [
+      { date: '2026-01-01', trendIn: 33 },
+      { date: '2026-01-16', trendIn: 34 }, // bulge
+      { date: '2026-01-31', trendIn: 33 },
+    ];
+    const trend = buildAnchoredBodyCompTrend(weights, scans, { waistTrend });
+    const first = trend.find((p) => p.date === '2026-01-01')!;
+    const last = trend.find((p) => p.date === '2026-01-31')!;
+    expect(first.kind).toBe('dexa');
+    expect(last.kind).toBe('dexa');
+    expect(first.fatMassKg).toBe(20);
+    expect(last.fatMassKg).toBe(20);
+  });
+
+  it('bends interior fat away from the straight-line estimate', () => {
+    const straight = buildAnchoredBodyCompTrend(weights, scans);
+    const bent = buildAnchoredBodyCompTrend(weights, scans, {
+      waistTrend: [
+        { date: '2026-01-01', trendIn: 33 },
+        { date: '2026-01-16', trendIn: 34.5 }, // strong mid-segment bulge
+        { date: '2026-01-31', trendIn: 33 },
+      ],
+    });
+    const mid = '2026-01-11';
+    const straightMid = straight.find((p) => p.date === mid)!;
+    const bentMid = bent.find((p) => p.date === mid)!;
+    // Waist bulged up over the first third → interior fat is pushed higher.
+    expect(bentMid.fatMassKg).toBeGreaterThan(straightMid.fatMassKg);
+  });
+
+  it('ignores a waist trend that does not overlap the segment (falls back)', () => {
+    const straight = buildAnchoredBodyCompTrend(weights, scans);
+    const nonOverlapping = buildAnchoredBodyCompTrend(weights, scans, {
+      waistTrend: [
+        { date: '2025-06-01', trendIn: 33 },
+        { date: '2025-06-15', trendIn: 35 },
+      ],
+    });
+    expect(nonOverlapping).toEqual(straight);
+  });
+});

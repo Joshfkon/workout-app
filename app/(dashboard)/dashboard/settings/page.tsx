@@ -103,6 +103,7 @@ export default function SettingsPage() {
   const [showWarmupSuggestions, setShowWarmupSuggestions] = useState(true);
   const [prioritizeHypertrophy, setPrioritizeHypertrophy] = useState(true);
   const [skipPreWorkoutCheckIn, setSkipPreWorkoutCheckIn] = useState(false);
+  const [trackWaistInCheckin, setTrackWaistInCheckin] = useState(true);
   const [showAiCoachNotes, setShowAiCoachNotes] = useState(false);
   const [volumeLandmarks, setVolumeLandmarks] = useState(DEFAULT_VOLUME_LANDMARKS.intermediate);
   const [isLoading, setIsLoading] = useState(true);
@@ -249,6 +250,7 @@ export default function SettingsPage() {
             setShowWarmupSuggestions((prefs.showWarmupSuggestions as boolean) ?? true);
             setPrioritizeHypertrophy((prefs.prioritizeHypertrophy as boolean) ?? true);
             setSkipPreWorkoutCheckIn((prefs.skipPreWorkoutCheckIn as boolean) ?? false);
+            setTrackWaistInCheckin((prefs.trackWaistInCheckin as boolean) ?? true);
             setShowAiCoachNotes((prefs.showAiCoachNotes as boolean) ?? false);
           }
           if (data.volume_landmarks && Object.keys(data.volume_landmarks).length > 0) {
@@ -332,6 +334,7 @@ export default function SettingsPage() {
             showWarmupSuggestions,
             prioritizeHypertrophy,
             skipPreWorkoutCheckIn,
+            trackWaistInCheckin,
             showAiCoachNotes,
           },
           volume_landmarks: volumeLandmarks,
@@ -845,6 +848,17 @@ export default function SettingsPage() {
               <Toggle
                 checked={skipPreWorkoutCheckIn}
                 onChange={setSkipPreWorkoutCheckIn}
+              />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-surface-200">Morning Waist in Check-In</p>
+                <p className="text-xs text-surface-500">Optional waist entry in the daily check-in; feeds your composition trend</p>
+              </div>
+              <Toggle
+                checked={trackWaistInCheckin}
+                onChange={setTrackWaistInCheckin}
               />
             </div>
 

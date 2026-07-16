@@ -17,7 +17,8 @@ import {
   buildAnchoredBodyCompTrend,
   type AnchoredTrendPoint,
 } from '@/services/bodyCompAnchor';
-import { inputWeightToKg } from '@/lib/utils';
+import { computeWaistTrend } from '@/services/waistTrend';
+import { inputWeightToKg, cmToIn } from '@/lib/utils';
 
 interface WeightLogRow {
   logged_at: string;
@@ -52,6 +53,7 @@ export interface BodyCompTrendData {
 export function useBodyCompTrend(refreshKey: number = 0): BodyCompTrendData {
   const [weightRows, setWeightRows] = useState<WeightLogRow[]>([]);
   const [scans, setScans] = useState<DexaRow[]>([]);
+  const [waistRows, setWaistRows] = useState<Array<{ logged_at: string; waist: number | null }>>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -63,7 +65,7 @@ export function useBodyCompTrend(refreshKey: number = 0): BodyCompTrendData {
 
         const yearAgo = new Date();
         yearAgo.setDate(yearAgo.getDate() - 365);
-        const [weightsRes, scansRes] = await Promise.all([
+        const [weightsRes, scansRes, waistRes] = await Promise.all([
           supabase
             .from('weight_log')
             .select('logged_at, weight, unit')
@@ -77,10 +79,22 @@ export function useBodyCompTrend(refreshKey: number = 0): BodyCompTrendData {
             )
             .eq('user_id', user.id)
             .order('scan_date', { ascending: true }),
+          // Waist tape entries (cm) shape the estimated BF% interior between
+          // scans. Non-fatal: if the read fails the trend just runs unbent.
+          supabase
+            .from('body_measurements')
+            .select('logged_at, waist')
+            .eq('user_id', user.id)
+            .gte('logged_at', yearAgo.toISOString().slice(0, 10))
+            .not('waist', 'is', null)
+            .order('logged_at', { ascending: true }),
         ]);
 
         setWeightRows((weightsRes.data ?? []) as WeightLogRow[]);
         setScans((scansRes.data ?? []) as DexaRow[]);
+        setWaistRows(
+          (waistRes.data ?? []) as Array<{ logged_at: string; waist: number | null }>
+        );
       } catch (err) {
         console.error('Failed to load body trend data:', err);
       } finally {
@@ -100,6 +114,19 @@ export function useBodyCompTrend(refreshKey: number = 0): BodyCompTrendData {
     [weightRows]
   );
 
+  const waistTrend = useMemo(
+    () =>
+      computeWaistTrend(
+        waistRows
+          .filter((r) => r.waist != null)
+          .map((r) => ({ date: r.logged_at, waistIn: cmToIn(Number(r.waist)) }))
+      )
+        // Only valid (non-outlier) points shape the interior.
+        .filter((p) => !p.isOutlier)
+        .map((p) => ({ date: p.date, trendIn: p.trendIn })),
+    [waistRows]
+  );
+
   const trend = useMemo(
     () =>
       buildAnchoredBodyCompTrend(
@@ -116,9 +143,10 @@ export function useBodyCompTrend(refreshKey: number = 0): BodyCompTrendData {
           weightKg: scan.weight_kg != null ? Number(scan.weight_kg) : undefined,
           // BMC feeds the FFMI series (FFM = lean + bone when logged).
           boneMassKg: scan.bone_mass_kg != null ? Number(scan.bone_mass_kg) : null,
-        }))
+        })),
+        { waistTrend }
       ),
-    [weightRows, scans]
+    [weightRows, scans, waistTrend]
   );
 
   return { trend, weightHistory, isLoading };

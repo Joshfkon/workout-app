@@ -15,6 +15,8 @@ interface UserPreferences {
   showFormCues: boolean;
   showWarmupSuggestions: boolean;
   skipPreWorkoutCheckIn: boolean;
+  /** Show the optional morning-waist field in the daily check-in. */
+  trackWaistInCheckin: boolean;
 }
 
 const defaultPreferences: UserPreferences = {
@@ -27,6 +29,7 @@ const defaultPreferences: UserPreferences = {
   showFormCues: true,
   showWarmupSuggestions: true,
   skipPreWorkoutCheckIn: false,
+  trackWaistInCheckin: true,
 };
 
 // Global state to share preferences across components
@@ -83,6 +86,7 @@ export function useUserPreferences() {
             showFormCues: (prefs.showFormCues as boolean) ?? true,
             showWarmupSuggestions: (prefs.showWarmupSuggestions as boolean) ?? true,
             skipPreWorkoutCheckIn: (prefs.skipPreWorkoutCheckIn as boolean) ?? false,
+            trackWaistInCheckin: (prefs.trackWaistInCheckin as boolean) ?? true,
           };
           notifyListeners(newPrefs);
         }
@@ -111,7 +115,7 @@ export function useUserPreferences() {
 
     // Persist to database
     try {
-      if (key === 'units' || key === 'restTimerDefault' || key === 'showFormCues' || key === 'showWarmupSuggestions' || key === 'skipPreWorkoutCheckIn') {
+      if (key === 'units' || key === 'restTimerDefault' || key === 'showFormCues' || key === 'showWarmupSuggestions' || key === 'skipPreWorkoutCheckIn' || key === 'trackWaistInCheckin') {
         // These go in the preferences JSONB column
         const { data: currentUser } = await supabase
           .from('users')

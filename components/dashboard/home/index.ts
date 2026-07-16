@@ -9,4 +9,5 @@ export type { SleepGlance } from './SleepTile';
 export { QuickLogRow } from './QuickLogRow';
 export { PhaseSelector } from './PhaseSelector';
 export { VolumeRampBanner } from './VolumeRampBanner';
+export { WaistPaceCheckCard } from './WaistPaceCheckCard';
 export { intakePaceLabel } from './intakePace';
