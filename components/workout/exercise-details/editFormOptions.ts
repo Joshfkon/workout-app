@@ -24,6 +24,13 @@ export const MUSCLE_OPTIONS = [
   'quads', 'hamstrings', 'glutes', 'calves', 'abs',
 ] as const;
 
+/** Broader muscle list for secondary muscle selection (includes traps/forearms). */
+export const SECONDARY_MUSCLE_OPTIONS = [
+  'chest', 'back', 'shoulders', 'biceps', 'triceps',
+  'quads', 'hamstrings', 'glutes', 'calves', 'abs',
+  'traps', 'forearms',
+] as const;
+
 export const EQUIPMENT_OPTIONS = [
   'barbell', 'dumbbell', 'machine', 'cable', 'bodyweight', 'kettlebell', 'band', 'other',
 ] as const;
