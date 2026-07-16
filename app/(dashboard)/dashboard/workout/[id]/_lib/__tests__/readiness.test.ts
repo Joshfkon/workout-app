@@ -1,9 +1,14 @@
 import {
+  applyFrozenOrder,
   buildReadinessRows,
+  hoursUntilReadinessThreshold,
+  readinessScore,
+  READINESS_AMBER_THRESHOLD,
+  READINESS_READY_THRESHOLD,
   selectGoodTargets,
   type ReadinessRow,
 } from '../readiness';
-import type { RecoverySession } from '@/services/muscleRecovery';
+import type { MuscleRecoveryResult, RecoverySession } from '@/services/muscleRecovery';
 import type { StandardMuscleGroup } from '@/types/schema';
 import { COARSE_MUSCLES, type MuscleVolumeStats } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 
@@ -264,5 +269,58 @@ describe('buildReadinessRows soreness overrides ("still sore" today)', () => {
     const rows = buildReadinessRows([], history, NOW, undefined, undefined, overrides);
 
     expect(rowFor(rows, 'biceps').recovery.status).toBe('fresh');
+  });
+});
+
+describe('readinessScore / hoursUntilReadinessThreshold', () => {
+  const rec = (hoursSinceLast: number | null, windowHours: number | null): MuscleRecoveryResult =>
+    ({
+      status: 'recovering',
+      hoursSinceLast,
+      estimatedReadyAt: null,
+      lastTrainedAt: hoursSinceLast === null ? null : NOW,
+      hoursUntilReady: 0,
+      windowHours,
+      dose: 4,
+    }) as MuscleRecoveryResult;
+
+  it('is 1 for a never-trained muscle', () => {
+    expect(readinessScore(rec(null, null))).toBe(1);
+  });
+
+  it('is the clamped fraction of the recovery window elapsed', () => {
+    expect(readinessScore(rec(0, 48))).toBe(0);
+    expect(readinessScore(rec(24, 48))).toBe(0.5);
+    expect(readinessScore(rec(48, 48))).toBe(1);
+    expect(readinessScore(rec(96, 48))).toBe(1); // clamped past the window
+  });
+
+  it('reports 0 hours when already at/above the ready threshold', () => {
+    expect(hoursUntilReadinessThreshold(rec(40, 48))).toBe(0); // 40/48 ≈ 0.83 ≥ 0.8
+    expect(hoursUntilReadinessThreshold(rec(null, null))).toBe(0);
+  });
+
+  it('reports the hours remaining until readiness crosses the threshold', () => {
+    // 0.8 × 48h window = 38.4h; 24h elapsed → 14.4h to go.
+    expect(hoursUntilReadinessThreshold(rec(24, 48))).toBeCloseTo(14.4);
+  });
+
+  it('the thresholds bracket green/amber/red as documented', () => {
+    expect(READINESS_READY_THRESHOLD).toBe(0.8);
+    expect(READINESS_AMBER_THRESHOLD).toBe(0.5);
+  });
+});
+
+describe('applyFrozenOrder', () => {
+  it('keeps the frozen relative order for known keys', () => {
+    expect(applyFrozenOrder(['b', 'a', 'c'], ['a', 'b', 'c'])).toEqual(['a', 'b', 'c']);
+  });
+
+  it('appends keys the frozen order has not seen, in desired order', () => {
+    expect(applyFrozenOrder(['d', 'b', 'a'], ['a', 'b'])).toEqual(['a', 'b', 'd']);
+  });
+
+  it('drops frozen keys absent from the desired set', () => {
+    expect(applyFrozenOrder(['b'], ['a', 'b', 'c'])).toEqual(['b']);
   });
 });

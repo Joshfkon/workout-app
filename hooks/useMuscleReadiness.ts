@@ -80,8 +80,9 @@ function rirFromRow(set: { rpe: number | null; feedback?: { repsInTank?: number 
   return typeof set.rpe === 'number' ? rpeToRir(set.rpe) : null;
 }
 
-/** RIR for a live SetLog: prefer the logged feedback, else derive from RPE. */
-function rirFromSetLog(set: SetLog): number | null {
+/** RIR for a live SetLog: prefer the logged feedback, else derive from RPE.
+ *  Exported so useWorkoutMuscleVolume feeds the recovery model identically. */
+export function rirFromSetLog(set: SetLog): number | null {
   const rir = set.feedback?.repsInTank;
   if (typeof rir === 'number') return rir;
   return typeof set.rpe === 'number' ? rpeToRir(set.rpe) : null;
