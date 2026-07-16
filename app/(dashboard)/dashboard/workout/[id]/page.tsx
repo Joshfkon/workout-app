@@ -105,6 +105,7 @@ import { SanityCheckToast } from '@/components/workout/SanityCheckToast';
 import { CalibrationResultCard } from '@/components/workout/CalibrationResultCard';
 import { useWorkoutStore } from '@/stores/workoutStore';
 import { WorkoutHeader, type ExerciseSegmentStatus } from './_components/WorkoutHeader';
+import { WorkoutVolumeStrip } from './_components/WorkoutVolumeStrip';
 import { AddExercisePicker } from './_components/AddExercisePicker';
 import {
   buildExerciseHistories,
@@ -134,6 +135,7 @@ import { getExercisePainPattern, jointToBodyPart, type ExercisePainEvent } from 
 import { rollUpExerciseFeedback } from '@/services/weeklyProgressionEngine';
 import { computeMuscleRecovery, recoveryConfigFor } from '@/services/muscleRecovery';
 import { useRecoveryHistory } from '@/hooks/useMuscleReadiness';
+import { useWorkoutMuscleVolume } from '@/hooks/useWorkoutMuscleVolume';
 import { useRecoveryMultipliers } from '@/hooks/useRecoveryMultipliers';
 import { isStaleEmptyAdhocSession, discardStaleSession } from '../_lib/adhocSession';
 import { computeSupersetAdvance } from './_lib/supersetFlow';
@@ -1830,6 +1832,26 @@ export default function WorkoutPage() {
     }
     return result;
   }, [muscleSorenessAsked]);
+
+  // ---- Top-of-workout weekly-volume strip ----------------------------------
+  // Stamp the rolling-window clock once on mount so the per-muscle 7-day window
+  // is anchored to a stable local day across re-renders.
+  const [volumeNow] = useState(() => new Date());
+  // Non-skipped blocks, memoized here (before the early returns) so the hook's
+  // internal memos stay stable — the render-body `activeBlocks` is a fresh
+  // array each pass. Feeds the weekly-volume strip and stays a read-only view.
+  const volumeLiveBlocks = useMemo(
+    () => blocks.filter((b) => !skippedBlockIds.has(b.id)),
+    [blocks, skippedBlockIds]
+  );
+  // Rolling-7-day credited sets (history + this session) vs the MEV–MRV band,
+  // for the coarse muscles this workout trains. Shares the readiness sheet's
+  // cached history query and volume model, so the strip and the sheet agree.
+  const { rows: weeklyVolumeRows, isLoading: weeklyVolumeLoading } = useWorkoutMuscleVolume({
+    liveBlocks: volumeLiveBlocks,
+    liveSets: completedSets,
+    now: volumeNow,
+  });
 
   // ---- Per-exercise pump/workload chips ------------------------------------
   const handleExerciseFeedback = useCallback(
@@ -4672,6 +4694,15 @@ export default function WorkoutPage() {
           </button>
         </div>
       )}
+
+      {/* Weekly volume strip: per-muscle rolling-7-day sets (incl. this session)
+          vs the MEV–MRV band, for the muscles this workout trains. Tapping a
+          chip opens the full "What to train" volume + recovery sheet. */}
+      <WorkoutVolumeStrip
+        rows={weeklyVolumeRows}
+        isLoading={weeklyVolumeLoading}
+        onOpenDetail={() => setShowMuscleReadinessSheet(true)}
+      />
 
       {/* First workout guidance */}
       {isFirstWorkout && showBeginnerTips && (
