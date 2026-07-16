@@ -4,10 +4,9 @@ import { useState, useEffect } from 'react';
 import type { Exercise } from '@/types/schema';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { parseYouTubeVideoId } from '@/lib/youtube';
-import { muscleDisplayName } from '@/lib/utils';
 import { getExerciseProp } from './helpers';
 
-import { MOVEMENT_PATTERN_OPTIONS, MUSCLE_OPTIONS, SECONDARY_MUSCLE_OPTIONS, EQUIPMENT_OPTIONS } from './editFormOptions';
+import { MOVEMENT_PATTERN_OPTIONS, MUSCLE_GROUP_OPTIONS, ALL_MUSCLE_TOKENS, EQUIPMENT_OPTIONS } from './editFormOptions';
 
 interface ExerciseEditFormProps {
   exercise: Exercise;
@@ -230,6 +229,24 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
 
   if (!editData) return null;
 
+  const toggleSecondary = (token: string, checked: boolean) => {
+    setEditData((prev) =>
+      prev
+        ? {
+            ...prev,
+            secondaryMuscles: checked
+              ? [...prev.secondaryMuscles.filter((m) => m !== token), token]
+              : prev.secondaryMuscles.filter((m) => m !== token),
+          }
+        : prev
+    );
+  };
+
+  // Show the current primary muscle even if it's a token the option list
+  // doesn't enumerate (e.g. an older detailed tag), so the select never
+  // silently snaps to a different muscle.
+  const primaryInList = ALL_MUSCLE_TOKENS.includes(editData.primaryMuscle);
+
   return (
     <div className="space-y-4 p-4 bg-surface-800/50 rounded-lg border border-surface-700">
       <div className="flex items-center justify-between gap-2">
@@ -398,37 +415,64 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
           onChange={(e) => setEditData({ ...editData, primaryMuscle: e.target.value })}
           className="w-full px-3 py-2 bg-surface-900 border border-surface-600 rounded-lg text-surface-100 text-sm"
         >
-          {MUSCLE_OPTIONS.map((value) => (
-            <option key={value} value={value}>
-              {value.charAt(0).toUpperCase() + value.slice(1)}
+          {!primaryInList && (
+            <option value={editData.primaryMuscle}>
+              {editData.primaryMuscle.charAt(0).toUpperCase() + editData.primaryMuscle.slice(1)}
             </option>
-          ))}
+          )}
+          {MUSCLE_GROUP_OPTIONS.map((group) =>
+            group.subMuscles.length === 0 ? (
+              <option key={group.value} value={group.value}>{group.label}</option>
+            ) : (
+              <optgroup key={group.value} label={group.label}>
+                <option value={group.value}>{group.label} (all)</option>
+                {group.subMuscles.map((s) => (
+                  <option key={s.value} value={s.value}>{s.label}</option>
+                ))}
+              </optgroup>
+            )
+          )}
         </select>
+        <p className="mt-1 text-xs text-surface-500">
+          Pick a specific head (e.g. Side Delts) to target a sub-muscle, or the group for even credit.
+        </p>
       </div>
 
       {/* Secondary Muscles */}
       <div>
         <label className="block text-xs font-medium text-surface-400 mb-1">Secondary Muscles</label>
-        <div className="grid grid-cols-3 gap-2 max-h-32 overflow-y-auto p-2 bg-surface-800/50 rounded-lg">
-          {SECONDARY_MUSCLE_OPTIONS.filter(m => m !== editData.primaryMuscle).map((muscle) => (
-            <label
-              key={muscle}
-              className="flex items-center gap-2 p-1.5 rounded hover:bg-surface-700/50 cursor-pointer"
-            >
-              <input
-                type="checkbox"
-                checked={editData.secondaryMuscles.includes(muscle)}
-                onChange={(e) => {
-                  if (e.target.checked) {
-                    setEditData({ ...editData, secondaryMuscles: [...editData.secondaryMuscles, muscle] });
-                  } else {
-                    setEditData({ ...editData, secondaryMuscles: editData.secondaryMuscles.filter(m => m !== muscle) });
-                  }
-                }}
-                className="w-4 h-4 text-primary-500 bg-surface-700 border-surface-600 rounded focus:ring-primary-500"
-              />
-              <span className="text-xs text-surface-300">{muscleDisplayName(muscle)}</span>
-            </label>
+        <div className="space-y-2 max-h-56 overflow-y-auto p-2 bg-surface-800/50 rounded-lg">
+          {MUSCLE_GROUP_OPTIONS.map((group) => (
+            <div key={group.value}>
+              {group.value !== editData.primaryMuscle && (
+                <label className="flex items-center gap-2 p-1 rounded hover:bg-surface-700/50 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editData.secondaryMuscles.includes(group.value)}
+                    onChange={(e) => toggleSecondary(group.value, e.target.checked)}
+                    className="w-4 h-4 text-primary-500 bg-surface-700 border-surface-600 rounded focus:ring-primary-500"
+                  />
+                  <span className="text-xs font-medium text-surface-200">{group.label}</span>
+                </label>
+              )}
+              {group.subMuscles.length > 0 && (
+                <div className="ml-6 flex flex-wrap gap-x-4 gap-y-1 mt-0.5">
+                  {group.subMuscles
+                    .filter((s) => s.value !== editData.primaryMuscle)
+                    .map((s) => (
+                      <label key={s.value} className="flex items-center gap-1.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={editData.secondaryMuscles.includes(s.value)}
+                          onChange={(e) => toggleSecondary(s.value, e.target.checked)}
+                          className="w-3.5 h-3.5 text-primary-500 bg-surface-700 border-surface-600 rounded focus:ring-primary-500"
+                        />
+                        <span className="text-xs text-surface-400">{s.label}</span>
+                      </label>
+                    ))}
+                </div>
+              )}
+            </div>
           ))}
         </div>
       </div>
