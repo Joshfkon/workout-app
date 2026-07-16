@@ -30,6 +30,7 @@ import {
   inToCm,
   getLocalDateString,
 } from '@/lib/utils';
+import { computeWaistTrend, latestWaistTrendIn } from '@/services/waistTrend';
 
 export interface Measurements {
   neck?: number;
@@ -180,6 +181,11 @@ export function BodyMeasurements({
   // "Show all" reveals sites with no current value (hidden from the compare
   // grid by default) with an add-measurement affordance.
   const [showAllSites, setShowAllSites] = useState(false);
+
+  // Waist EWMA trend (cm) over recent history — the shoulder-to-waist and
+  // other waist ratios read THIS denoised value instead of the last raw
+  // entry. Null until there is history.
+  const [waistTrendCm, setWaistTrendCm] = useState<number | null>(null);
   
   // Use the useBestLifts hook to fetch user's best lifts (must be called unconditionally)
   // Pass empty string if userId is not available - hook will handle it gracefully
@@ -201,14 +207,15 @@ export function BodyMeasurements({
       right_bicep: measurements.right_bicep,
       left_forearm: measurements.left_forearm,
       right_forearm: measurements.right_forearm,
-      waist: measurements.waist,
+      // Ratios read the waist TREND (denoised), not the raw last entry.
+      waist: waistTrendCm ?? measurements.waist,
       hips: measurements.hips,
       left_thigh: measurements.left_thigh,
       right_thigh: measurements.right_thigh,
       left_calf: measurements.left_calf,
       right_calf: measurements.right_calf,
     };
-  }, [measurements]);
+  }, [measurements, waistTrendCm]);
 
   // Calculate imbalance analysis when measurements or lifts change
   const imbalanceAnalysis = useMemo((): ImbalanceAnalysis | null => {
@@ -304,6 +311,25 @@ export function BodyMeasurements({
         .eq('user_id', userId)
         .order('logged_at', { ascending: false })
         .limit(5);
+
+      // Waist history (cm) over 90 days → EWMA trend for the ratio cards.
+      const ninetyAgo = getLocalDateString(new Date(Date.now() - 90 * 24 * 60 * 60 * 1000));
+      const { data: waistHistory } = await supabase
+        .from('body_measurements')
+        .select('logged_at, waist')
+        .eq('user_id', userId)
+        .not('waist', 'is', null)
+        .gte('logged_at', ninetyAgo)
+        .order('logged_at', { ascending: true });
+      if (waistHistory && waistHistory.length > 0) {
+        const trend = computeWaistTrend(
+          (waistHistory as Array<{ logged_at: string; waist: number | null }>)
+            .filter((r) => r.waist != null)
+            .map((r) => ({ date: r.logged_at, waistIn: cmToIn(Number(r.waist)) }))
+        );
+        const latestIn = latestWaistTrendIn(trend);
+        setWaistTrendCm(latestIn != null ? inToCm(latestIn) : null);
+      }
 
       // Get today's measurements
       const { data: todayData, error: todayError } = await supabase

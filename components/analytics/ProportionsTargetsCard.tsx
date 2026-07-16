@@ -38,6 +38,7 @@ import type {
   Experience,
 } from '@/types/schema';
 import type { MeasurementBenchmark } from '@/services/bodyProportionsAnalytics';
+import type { ResolvedPartition } from '@/services/waistTrend';
 import {
   LineChart,
   Line,
@@ -61,6 +62,12 @@ export interface ProportionsTargetsCardProps {
   weightUnit: 'kg' | 'lb';
   /** Weigh-ins in kg — the SAME source the Home weight tile reads. */
   weightHistory: Array<{ date: string; weightKg: number }>;
+  /**
+   * Observed-vs-assumed lean/fat partition for the projected weight change.
+   * When source==='waist' it came from the waist trend; otherwise the fixed
+   * assumption. Undefined until enough data — the card falls back to assumed.
+   */
+  partition?: ResolvedPartition;
 }
 
 // ============================================================
@@ -336,11 +343,13 @@ function WeightProjectionSection({
   targetWeightKg,
   mesocycle,
   weightUnit,
+  partition,
 }: {
   weightHistory: Array<{ date: string; weightKg: number }>;
   targetWeightKg: number | undefined | null;
   mesocycle: Mesocycle | null;
   weightUnit: 'kg' | 'lb';
+  partition?: ResolvedPartition;
 }) {
   const mesocycleWeeks = mesocycle?.totalWeeks ?? DEFAULT_PROJECTION_WEEKS;
   const currentWeek = mesocycle?.currentWeek ?? Math.ceil(DEFAULT_PROJECTION_WEEKS / 2);
@@ -410,6 +419,8 @@ function WeightProjectionSection({
   const lastActual = chartData.filter((d) => d.actual !== null).pop();
   const finalProjected = chartData.filter((d) => d.projected !== null).pop();
   const projectedEndWeight = finalProjected?.projected ?? lastActual?.actual ?? 0;
+  // Net weight the projection adds from the last actual to the horizon end.
+  const projectedGain = projectedEndWeight - (lastActual?.actual ?? projectedEndWeight);
   const currentWeekRate =
     lastActual && chartData.length > 1
       ? (lastActual.actual! - (chartData[0].actual ?? lastActual.actual!)) / currentWeek
@@ -516,6 +527,35 @@ function WeightProjectionSection({
           </div>
         )}
       </div>
+
+      {/*
+        Projected-gain partition: split the projected gain into lean/fat using
+        the OBSERVED waist ratio when available, else the fixed assumption. The
+        label states which is in play. Waist informs the RATE of fat change
+        only — this never asserts an absolute BF%.
+      */}
+      {partition && projectedGain > 0.1 && (
+        <div className="mt-3 pt-3 border-t border-surface-800" data-testid="projection-partition">
+          <div className="flex items-center justify-between">
+            <p className="text-[10px] text-surface-500 uppercase">Projected gain split</p>
+            <span className="text-[10px] text-surface-400" data-testid="projection-partition-source">
+              {partition.label}
+            </span>
+          </div>
+          <p className="text-xs text-surface-300 mt-1">
+            +{projectedGain.toFixed(1)} {unit} → ~{(projectedGain * partition.leanFractionOfGain).toFixed(1)} lean
+            {' / '}~{(projectedGain * (1 - partition.leanFractionOfGain)).toFixed(1)} fat
+          </p>
+          {partition.source === 'waist' && partition.anchor && (
+            <p className="text-[10px] text-surface-500 mt-1">
+              Waist trend {partition.anchor.deltaWaistIn >= 0 ? '+' : ''}
+              {partition.anchor.deltaWaistIn.toFixed(2)}&quot; vs{' '}
+              {partition.anchor.deltaWeightLb >= 0 ? '+' : ''}
+              {partition.anchor.deltaWeightLb.toFixed(1)} lb over {partition.anchor.windowDays} days.
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -534,6 +574,7 @@ export function ProportionsTargetsCard({
   displayUnit,
   weightUnit,
   weightHistory,
+  partition,
 }: ProportionsTargetsCardProps) {
   return (
     <Card data-testid="proportions-targets-card">
@@ -578,6 +619,7 @@ export function ProportionsTargetsCard({
                   targetWeightKg={activeTarget?.targetWeightKg}
                   mesocycle={activeMesocycle}
                   weightUnit={weightUnit}
+                  partition={partition}
                 />
               </div>
             </AccordionContent>

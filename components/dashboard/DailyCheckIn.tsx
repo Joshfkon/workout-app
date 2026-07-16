@@ -11,10 +11,15 @@ import {
   type DailyCheckIn as DailyCheckInType,
 } from '@/types/schema';
 import { createUntypedClient } from '@/lib/supabase/client';
-import { getLocalDateString } from '@/lib/utils';
+import { getLocalDateString, cmToIn, inToCm } from '@/lib/utils';
 import { fetchLastSleepEntry, upsertSleepEntry } from '@/lib/sleep/sleepLog';
+import { saveWaistFromCheckin } from '@/lib/body/bodyLog';
 import { SleepFields, clampSleepHours } from '@/components/dashboard/SleepQuickLog';
 import { SLEEP_LOG_QUERY_KEY_PREFIX } from '@/hooks/useSleepLog';
+import { useUserPreferences } from '@/hooks/useUserPreferences';
+
+/** One-time protocol hint flag (per device). */
+const WAIST_HINT_SEEN_KEY = 'hypertrack_waist_hint_seen';
 
 interface DailyCheckInProps {
   userId: string;
@@ -39,7 +44,17 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
   const [libidoRating, setLibidoRating] = useState<Rating>(3);
   const [sorenessLevel, setSorenessLevel] = useState<Rating>(3);
   const [hungerLevel, setHungerLevel] = useState<Rating>(3);
-  
+
+  // Optional morning waist. Stored empty by default so a skipped entry writes
+  // nothing. `waistInput` is in the user's DISPLAY unit; conversion to cm
+  // happens only at save.
+  const { preferences } = useUserPreferences();
+  const measurementUnit: 'in' | 'cm' = preferences.units === 'kg' ? 'cm' : 'in';
+  const trackWaist = preferences.trackWaistInCheckin;
+  const [waistInput, setWaistInput] = useState('');
+  const [savedWaistCm, setSavedWaistCm] = useState<number | null>(null);
+  const [waistHintSeen, setWaistHintSeen] = useState(true);
+
   const isOnCut = userGoal === 'cut';
 
   // Define questions based on user goal
@@ -128,7 +143,20 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
     },
   ];
   
-  const questions = [...baseQuestions, ...cutQuestions, ...extraQuestions];
+  // Optional, skippable morning-waist step — only when the user keeps it on.
+  const waistQuestions = trackWaist ? [
+    {
+      id: 'waist',
+      title: 'Morning Waist',
+      icon: '📏',
+      question: 'Morning waist (optional)',
+      type: 'waist' as const,
+      value: waistInput,
+      onChange: (v: string) => setWaistInput(v),
+    },
+  ] : [];
+
+  const questions = [...baseQuestions, ...cutQuestions, ...extraQuestions, ...waistQuestions];
   const currentQuestion = questions[step];
   
   // Check if already checked in today, and seed the sleep fields: today's
@@ -139,7 +167,7 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
       const supabase = createUntypedClient();
       const todayStr = getLocalDateString();
 
-      const [{ data }, lastSleep] = await Promise.all([
+      const [{ data }, lastSleep, todaysWaist] = await Promise.all([
         supabase
           .from('daily_check_ins')
           .select('*')
@@ -147,6 +175,16 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
           .eq('date', todayStr)
           .single(),
         fetchLastSleepEntry(supabase, userId).catch(() => null),
+        // Today's waist may already exist (grid or an earlier check-in) — the
+        // check-in edits the SAME body_measurements row, so seed the field.
+        supabase
+          .from('body_measurements')
+          .select('waist')
+          .eq('user_id', userId)
+          .eq('logged_at', todayStr)
+          .maybeSingle()
+          .then(({ data: m }: { data: { waist: number | null } | null }) => m?.waist ?? null)
+          .catch(() => null),
       ]);
 
       if (data) {
@@ -158,12 +196,43 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
         setSleepHours(clampSleepHours(lastSleep.hours));
         setSleepQuality(lastSleep.quality);
       }
+
+      if (typeof todaysWaist === 'number') {
+        setSavedWaistCm(todaysWaist);
+        setWaistInput(
+          measurementUnit === 'in' ? cmToIn(todaysWaist).toFixed(1) : todaysWaist.toFixed(1)
+        );
+      }
+
+      // Protocol hint shows once per device.
+      try {
+        setWaistHintSeen(localStorage.getItem(WAIST_HINT_SEEN_KEY) === '1');
+      } catch {
+        setWaistHintSeen(false);
+      }
+
       setIsLoading(false);
     }
 
     checkTodaysCheckIn();
+    // measurementUnit only formats the prefill string; re-running on a late
+    // units load would needlessly refetch, so it is intentionally omitted.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
-  
+
+  // Persist the "hint seen" flag the first time the waist step is shown, so
+  // the protocol hint appears exactly once (never nags).
+  useEffect(() => {
+    if (currentQuestion?.type === 'waist' && !waistHintSeen) {
+      try {
+        localStorage.setItem(WAIST_HINT_SEEN_KEY, '1');
+      } catch {
+        /* private mode — fine, hint just shows again next time */
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentQuestion?.type]);
+
   // Calculate refeed recommendation for cuts
   const getRefeedStatus = () => {
     if (!isOnCut) return null;
@@ -253,6 +322,22 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
         console.error('Failed to save sleep entry from check-in:', sleepError);
       }
 
+      // Optional morning waist → the SAME body_measurements day-row the Body
+      // grid uses (source='daily_checkin'). Best-effort and non-blocking: a
+      // skipped or malformed entry writes nothing and never fails the check-in.
+      if (trackWaist) {
+        const parsed = parseFloat(waistInput);
+        if (waistInput.trim() !== '' && Number.isFinite(parsed) && parsed > 0) {
+          const waistCm = measurementUnit === 'in' ? inToCm(parsed) : parsed;
+          try {
+            await saveWaistFromCheckin(supabase, userId, todayStr, Math.round(waistCm * 10) / 10);
+            setSavedWaistCm(Math.round(waistCm * 10) / 10);
+          } catch (waistError) {
+            console.error('Failed to save waist from check-in:', waistError);
+          }
+        }
+      }
+
       setAlreadyCheckedIn(true);
       setTodaysCheckIn(checkInData);
       onComplete?.();
@@ -331,6 +416,16 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
           </div>
         </div>
         
+        {/* Morning waist (value only — never a day-over-day delta). */}
+        {trackWaist && savedWaistCm !== null && (
+          <div className="mt-3 flex items-center justify-between px-3 py-2 bg-surface-800 rounded-lg" data-testid="checkin-waist-summary">
+            <span className="text-xs text-surface-400">📏 Morning waist</span>
+            <span className="text-sm font-medium text-surface-100">
+              {measurementUnit === 'in' ? cmToIn(savedWaistCm).toFixed(1) : savedWaistCm.toFixed(1)} {measurementUnit}
+            </span>
+          </div>
+        )}
+
         {/* Refeed alert for cuts */}
         {isOnCut && refeedStatus && refeedStatus.level !== 'low' && (
           <div className={`mt-3 p-3 rounded-lg ${
@@ -389,6 +484,32 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
           )}
 
 
+          {currentQuestion.type === 'waist' && (
+            <div className="space-y-3" data-testid="checkin-waist-field">
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  step="0.1"
+                  min="0"
+                  value={waistInput}
+                  onChange={(e) => setWaistInput(e.target.value)}
+                  placeholder={measurementUnit === 'in' ? 'e.g. 33.5' : 'e.g. 85.0'}
+                  className="flex-1 bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-surface-100 focus:outline-none focus:border-primary-500"
+                />
+                <span className="text-sm text-surface-400 w-8">{measurementUnit}</span>
+              </div>
+              {!waistHintSeen && (
+                <p className="text-xs text-surface-500 leading-snug" data-testid="waist-protocol-hint">
+                  Morning, fasted, after using the bathroom, at navel level — consistency matters more than precision.
+                </p>
+              )}
+              <p className="text-xs text-surface-500">
+                Optional — leave blank to skip. One entry per day; you can edit it anytime.
+              </p>
+            </div>
+          )}
+
           {currentQuestion.type === 'rating' && (
             <div className="space-y-2">
               <div className="flex gap-2">
@@ -417,7 +538,7 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
           )}
           
           {/* Warning for low cut metrics */}
-          {(currentQuestion as any).warning && currentQuestion.value <= 2 && (
+          {(currentQuestion as any).warning && Number(currentQuestion.value) <= 2 && (
             <div className="p-2 bg-amber-500/10 border border-amber-500/20 rounded-lg">
               <p className="text-xs text-amber-400">
                 ⚠️ Low {currentQuestion.title.toLowerCase()} can be a sign of diet fatigue

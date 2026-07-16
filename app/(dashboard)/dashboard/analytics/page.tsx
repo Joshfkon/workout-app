@@ -35,7 +35,14 @@ import {
   getStrengthLevelColor,
   generatePercentileSegments
 } from '@/services/coachingEngine';
-import { kgToLbs, inputWeightToKg, roundToIncrement, formatWeight, formatWorkoutDuration, resolveWorkoutDurationSeconds, estimateE1RM, getLocalDateString, muscleDisplayName } from '@/lib/utils';
+import { kgToLbs, inputWeightToKg, roundToIncrement, formatWeight, formatWorkoutDuration, resolveWorkoutDurationSeconds, estimateE1RM, getLocalDateString, muscleDisplayName, cmToIn, inToCm } from '@/lib/utils';
+import {
+  computeWaistTrend,
+  latestWaistTrendIn,
+  computePartitionAnchor,
+  resolvePartition,
+  type ResolvedPartition,
+} from '@/services/waistTrend';
 // All charts now render from extracted components (BodyHubTrends,
 // WellnessTrendsCard, ProportionsTargetsCard) — no inline Recharts here.
 import type { Mesocycle, BodyCompositionTarget, ExercisePerformanceSnapshot } from '@/types/schema';
@@ -422,6 +429,9 @@ function AnalyticsPageContent() {
   const [activeTarget, setActiveTarget] = useState<BodyCompositionTarget | null>(null);
   const [weightHistory, setWeightHistory] = useState<Array<{ date: string; weightKg: number }>>([]);
   const [currentMeasurements, setCurrentMeasurements] = useState<Record<string, number>>({});
+  // Observed-vs-assumed lean/fat partition for the projection, from the waist
+  // trend when there is enough data (else the fixed assumption).
+  const [partition, setPartition] = useState<ResolvedPartition | undefined>(undefined);
   const [proportionsAnalysis, setProportionsAnalysis] = useState<EnhancedProportionsAnalysis | null>(null);
 
   // Strength state
@@ -726,7 +736,7 @@ function AnalyticsPageContent() {
 
       try {
         // Fetch active mesocycle, active body composition target, weight history, and measurements in parallel
-        const [mesocycleResult, targetResult, weighInsResult, measurementsResult] = await Promise.all([
+        const [mesocycleResult, targetResult, weighInsResult, measurementsResult, waistHistoryResult] = await Promise.all([
           // Active mesocycle
           supabase
             .from('mesocycles')
@@ -760,7 +770,42 @@ function AnalyticsPageContent() {
             .eq('user_id', userId)
             .order('logged_at', { ascending: false })
             .limit(1),
+          // Waist history (cm) for the EWMA trend → proportions denoise +
+          // partition anchor. 90 days covers the trailing window with margin.
+          supabase
+            .from('body_measurements')
+            .select('logged_at, waist')
+            .eq('user_id', userId)
+            .not('waist', 'is', null)
+            .gte('logged_at', getLocalDateString(new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)))
+            .order('logged_at', { ascending: true }),
         ]);
+
+        // Waist EWMA trend (inches internally; the 1.5" outlier guard lives in
+        // the service). Drives BOTH the proportions denoise and the partition
+        // anchor below.
+        const waistRows = (waistHistoryResult.data ?? []) as Array<{ logged_at: string; waist: number | null }>;
+        const waistTrendPoints = computeWaistTrend(
+          waistRows
+            .filter((r) => r.waist != null)
+            .map((r) => ({ date: r.logged_at, waistIn: cmToIn(Number(r.waist)) }))
+        );
+        const trendWaistIn = latestWaistTrendIn(waistTrendPoints);
+        const trendWaistCm = trendWaistIn != null ? inToCm(trendWaistIn) : null;
+
+        // Partition anchor: waist trend vs weight trend (lb) over the window.
+        const weightLbEntries = ((weighInsResult.data ?? []) as Array<{ logged_at: string; weight: number; unit: 'lb' | 'kg' | null }>).map(
+          (w) => ({ date: w.logged_at, weightLb: kgToLbs(inputWeightToKg(w.weight, w.unit ?? 'lb')) })
+        );
+        const anchor = computePartitionAnchor({
+          waist: waistRows
+            .filter((r) => r.waist != null)
+            .map((r) => ({ date: r.logged_at, waistIn: cmToIn(Number(r.waist)) })),
+          weight: weightLbEntries,
+        });
+        // Fixed fallback = 40% of a gain is lean (the base gain assumption in
+        // lib/body-composition/p-ratio predictWeightGainComposition).
+        setPartition(resolvePartition(anchor, 0.4));
 
         // Process mesocycle
         if (mesocycleResult.data && mesocycleResult.data.length > 0) {
@@ -845,7 +890,12 @@ function AnalyticsPageContent() {
           if (m.right_bicep) measurements.rightBicep = m.right_bicep;
           if (m.left_forearm) measurements.leftForearm = m.left_forearm;
           if (m.right_forearm) measurements.rightForearm = m.right_forearm;
-          if (m.waist) measurements.waist = m.waist;
+          // Proportions read the waist EWMA TREND (denoised), not the last raw
+          // entry — daily waist is noisy and a stale single reading skews the
+          // shoulder-to-waist ratio. Falls back to the latest raw value when
+          // there is no trend yet.
+          if (trendWaistCm != null) measurements.waist = Math.round(trendWaistCm * 10) / 10;
+          else if (m.waist) measurements.waist = m.waist;
           if (m.hips) measurements.hips = m.hips;
           if (m.left_thigh) measurements.leftThigh = m.left_thigh;
           if (m.right_thigh) measurements.rightThigh = m.right_thigh;

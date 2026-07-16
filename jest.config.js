@@ -146,6 +146,12 @@ const customJestConfig = {
       branches: 50,
       statements: 70,
     },
+    'services/waistTrend.ts': {
+      lines: 85,
+      functions: 80,
+      branches: 70,
+      statements: 85,
+    },
     'services/intakePacing.ts': {
       lines: 90,
       functions: 80,

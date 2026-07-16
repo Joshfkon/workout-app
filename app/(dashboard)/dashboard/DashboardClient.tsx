@@ -34,7 +34,7 @@ import {
   fetchDeloadRecommendation,
   type DeloadRecommendation,
 } from '@/lib/training/deloadRecommendation';
-import { GlanceHeader, TodayHeroCard, MetricTileGrid, QuickLogRow, PhaseSelector, VolumeRampBanner, intakePaceLabel } from '@/components/dashboard/home';
+import { GlanceHeader, TodayHeroCard, MetricTileGrid, QuickLogRow, PhaseSelector, VolumeRampBanner, WaistPaceCheckCard, intakePaceLabel } from '@/components/dashboard/home';
 import { normalizePacingPhase, type EatingWindow } from '@/services/intakePacing';
 import { fetchEatingWindow } from '@/lib/nutrition/eatingWindow';
 import type { TodaysWorkout, GlanceVolumeSummary, GlanceWeightRate, MealHeroSuggestion } from '@/components/dashboard/home';
@@ -1442,6 +1442,18 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
           {deloadCard}
           {atrophyCard}
         </div>
+      )}
+
+      {/* Bulk pace check — self-hides unless the waist trend is fat-dominant
+          for the current gain rate (once/week, dismissible). */}
+      {userId && (
+        <WaistPaceCheckCard
+          userId={userId}
+          weightHistory={weightHistory}
+          weightRate={weightRate}
+          weightUnit={weightUnit}
+          phase={normalizedGoal}
+        />
       )}
 
       {/* Quick log row — each button opens a modal */}

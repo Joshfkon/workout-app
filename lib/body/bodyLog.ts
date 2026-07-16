@@ -80,28 +80,80 @@ export async function saveWeightLogEntry(
 
 export type MeasurementSiteValues = Record<string, number>;
 
+/** Which surface wrote a body_measurements row (see the source migration). */
+export type MeasurementSource = 'body_grid' | 'daily_checkin' | 'import';
+
+/** The unique key every body_measurements writer conflicts on — one row/day. */
+export const BODY_MEASUREMENTS_CONFLICT = 'user_id,logged_at';
+
+/**
+ * Build the body_measurements upsert payload. Pure and exported so the
+ * single-source invariant (check-in and grid target the SAME day-row) is
+ * unit-testable without a database.
+ */
+export function buildMeasurementUpsert(
+  userId: string,
+  date: string,
+  valuesCm: MeasurementSiteValues,
+  opts: { source?: MeasurementSource; notes?: string } = {}
+): Record<string, unknown> {
+  return {
+    user_id: userId,
+    logged_at: date,
+    ...valuesCm,
+    ...(opts.source ? { source: opts.source } : {}),
+    ...(opts.notes ? { notes: opts.notes } : {}),
+  };
+}
+
+/** True when an error means the `source` column isn't there yet (pre-migrate). */
+function isMissingSourceColumn(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  if (error.code === '42703' || error.code === 'PGRST204') return true;
+  return /column .*source/i.test(error.message ?? '');
+}
+
 /**
  * Upsert the day's tape measurements. `valuesCm` contains only the sites the
  * user actually filled in (partial entry is fine); values must already be in
- * cm. Throws on failure.
+ * cm. `source` records the writing surface (defaults to the grid). Retries
+ * without `source` while the column migration hasn't landed — same
+ * ship-before-migrate pattern as saveDexaScan. Throws on failure.
  */
 export async function saveBodyMeasurements(
   supabase: SupabaseClient,
   userId: string,
   date: string,
   valuesCm: MeasurementSiteValues,
-  notes?: string
+  notes?: string,
+  source: MeasurementSource = 'body_grid'
 ): Promise<void> {
-  const { error } = await supabase.from('body_measurements').upsert(
-    {
-      user_id: userId,
-      logged_at: date,
-      ...valuesCm,
-      ...(notes ? { notes } : {}),
-    },
-    { onConflict: 'user_id,logged_at' }
-  );
-  if (error) throw error;
+  const withSource = buildMeasurementUpsert(userId, date, valuesCm, { source, notes });
+  const first = await supabase
+    .from('body_measurements')
+    .upsert(withSource, { onConflict: BODY_MEASUREMENTS_CONFLICT });
+  if (!first.error) return;
+  if (!isMissingSourceColumn(first.error)) throw first.error;
+
+  const withoutSource = buildMeasurementUpsert(userId, date, valuesCm, { notes });
+  const retry = await supabase
+    .from('body_measurements')
+    .upsert(withoutSource, { onConflict: BODY_MEASUREMENTS_CONFLICT });
+  if (retry.error) throw retry.error;
+}
+
+/**
+ * Fast morning-waist path from the daily check-in. Writes ONLY the waist site
+ * (partial upsert) to the SAME day-row the Body grid uses — never a parallel
+ * store. `waistCm` must already be in cm. Stamps source='daily_checkin'.
+ */
+export async function saveWaistFromCheckin(
+  supabase: SupabaseClient,
+  userId: string,
+  date: string,
+  waistCm: number
+): Promise<void> {
+  await saveBodyMeasurements(supabase, userId, date, { waist: waistCm }, undefined, 'daily_checkin');
 }
 
 // ------------------------------------------------------------
