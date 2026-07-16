@@ -4,9 +4,10 @@ import { useEffect, useId, useMemo, useState } from 'react';
 import { IconBarbell, IconMinus, IconPlus, IconMessagePlus, IconBone } from '@tabler/icons-react';
 import { BottomSheet } from './BottomSheet';
 import { FormRatingSelector } from './FormRatingSelector';
-import { DiscomfortLogger } from './DiscomfortLogger';
 import { JointPainPicker } from './FeedbackChips';
+import { SELECTOR_CHIP_BASE, SELECTOR_CHIP_IDLE, SELECTOR_CHIP_SELECTED } from './selectorChips';
 import { getBodyPartDisplayName, getSeverityInfo, jointToBodyPart } from '@/services/discomfortTracker';
+import { Input } from '@/components/ui';
 import type {
   WeightUnit,
   SetFeedback,
@@ -76,6 +77,32 @@ function clampToChip(rir: number): RepsInTank {
 
 const RIR_CHIPS: RepsInTank[] = [3, 2, 1, 0];
 
+/** Compact neutral summary line for a logged discomfort, with Remove. */
+function DiscomfortSummaryRow({
+  discomfort,
+  onRemove,
+}: {
+  discomfort: SetDiscomfort;
+  onRemove: () => void;
+}) {
+  const severityInfo = getSeverityInfo(discomfort.severity);
+  return (
+    <div className="flex items-center gap-2 rounded-lg bg-surface-800/70 border border-surface-700 px-2.5 py-1.5 text-[12px]">
+      <span className={severityInfo.color}>
+        {getBodyPartDisplayName(discomfort.bodyPart)} — {severityInfo.label}
+      </span>
+      <button
+        type="button"
+        onClick={onRemove}
+        className="ml-auto text-surface-500 hover:text-surface-300"
+        aria-label="Remove discomfort"
+      >
+        Remove
+      </button>
+    </div>
+  );
+}
+
 /** Effort labels under the RIR numbers (matches the set-feedback semantics). */
 const RIR_LABELS: Record<RepsInTank, string> = {
   4: 'easy', // not rendered as a chip (chips clamp to 0-3) but RepsInTank includes it
@@ -113,6 +140,7 @@ export function SetLoggerRow({
   const [editingField, setEditingField] = useState<'weight' | 'reps' | null>(null);
   const [showFeedbackSheet, setShowFeedbackSheet] = useState(false);
   const [showJointPicker, setShowJointPicker] = useState(false);
+  const [showSheetDiscomfortPicker, setShowSheetDiscomfortPicker] = useState(false);
   const [form, setForm] = useState<FormRating | null>(null);
   const [discomfort, setDiscomfort] = useState<SetDiscomfort | undefined>(undefined);
   const [note, setNote] = useState('');
@@ -129,6 +157,7 @@ export function SetLoggerRow({
     setDiscomfort(undefined);
     setNote('');
     setShowJointPicker(false);
+    setShowSheetDiscomfortPicker(false);
   }, [setNumber]);
 
   const unitLabel = unit === 'lb' ? 'lbs' : 'kg';
@@ -224,6 +253,7 @@ export function SetLoggerRow({
     setDiscomfort(undefined);
     setNote('');
     setShowFeedbackSheet(false);
+    setShowSheetDiscomfortPicker(false);
   };
 
   // Gym-proof tap targets (P0-4): every interactive control in this row is
@@ -388,10 +418,8 @@ export function SetLoggerRow({
             disabled={disabled}
             aria-label={`${chip} reps in reserve (${RIR_LABELS[chip]})`}
             aria-pressed={selectedRir === chip}
-            className={`flex-1 min-h-[52px] rounded-xl flex flex-col items-center justify-center gap-0 font-medium transition-colors ${
-              selectedRir === chip
-                ? 'bg-primary-500 text-white'
-                : 'bg-surface-800 text-surface-300 hover:bg-surface-700'
+            className={`${SELECTOR_CHIP_BASE} ${
+              selectedRir === chip ? SELECTOR_CHIP_SELECTED : SELECTOR_CHIP_IDLE
             }`}
           >
             <span className="text-[16px] font-semibold leading-tight">{chip}</span>
@@ -449,22 +477,13 @@ export function SetLoggerRow({
         />
       )}
       {showJointPicker && discomfort && (
-        <div className="flex items-center gap-2 rounded-lg bg-surface-800/70 border border-surface-700 px-2.5 py-1.5 text-[12px]">
-          <span className={getSeverityInfo(discomfort.severity).color}>
-            {getBodyPartDisplayName(discomfort.bodyPart)} — {getSeverityInfo(discomfort.severity).label}
-          </span>
-          <button
-            type="button"
-            onClick={() => {
-              setDiscomfort(undefined);
-              setShowJointPicker(false);
-            }}
-            className="ml-auto text-surface-500 hover:text-surface-300"
-            aria-label="Remove joint pain flag"
-          >
-            Remove
-          </button>
-        </div>
+        <DiscomfortSummaryRow
+          discomfort={discomfort}
+          onRemove={() => {
+            setDiscomfort(undefined);
+            setShowJointPicker(false);
+          }}
+        />
       )}
 
       {/* Row 3: one-tap log */}
@@ -480,28 +499,61 @@ export function SetLoggerRow({
       {/* Optional feedback sheet (absorbs the old SetFeedbackCard content) */}
       <BottomSheet
         isOpen={showFeedbackSheet}
-        onClose={() => setShowFeedbackSheet(false)}
+        onClose={() => {
+          setShowFeedbackSheet(false);
+          setShowSheetDiscomfortPicker(false);
+        }}
         title={`Set ${setNumber} feedback`}
       >
         <div className="space-y-4">
           <FormRatingSelector value={form} onChange={setForm} disabled={disabled} />
-          <DiscomfortLogger value={discomfort} onChange={setDiscomfort} disabled={disabled} />
-          <div className="space-y-1">
-            <label htmlFor={noteInputId} className="block text-sm font-medium text-surface-300">
-              Note
-            </label>
-            <input
-              id={noteInputId}
-              type="text"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="Optional set note"
-              className="w-full px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-sm text-surface-200 placeholder:text-surface-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-            />
+
+          {/* Discomfort — same two-tap joint picker as the inline row,
+              collapsed behind a small neutral row (nothing is wrong, so no
+              warning styling). */}
+          <div className="space-y-2">
+            <span className="block text-sm font-medium text-surface-300">Discomfort</span>
+            {discomfort ? (
+              <DiscomfortSummaryRow
+                discomfort={discomfort}
+                onRemove={() => setDiscomfort(undefined)}
+              />
+            ) : showSheetDiscomfortPicker ? (
+              <JointPainPicker
+                onPick={(joint, severity) => {
+                  setDiscomfort({ bodyPart: jointToBodyPart(joint), severity });
+                  setShowSheetDiscomfortPicker(false);
+                }}
+                onCancel={() => setShowSheetDiscomfortPicker(false)}
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowSheetDiscomfortPicker(true)}
+                disabled={disabled}
+                className="w-full min-h-[44px] flex items-center gap-1.5 rounded-lg bg-surface-800/50 hover:bg-surface-800 px-3 text-[13px] text-surface-400 hover:text-surface-200 transition-colors"
+              >
+                <IconPlus size={14} aria-hidden="true" />
+                Log discomfort (optional)
+              </button>
+            )}
           </div>
+
+          <Input
+            id={noteInputId}
+            label="Note"
+            type="text"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Optional set note"
+            disabled={disabled}
+          />
           <button
             type="button"
-            onClick={() => setShowFeedbackSheet(false)}
+            onClick={() => {
+              setShowFeedbackSheet(false);
+              setShowSheetDiscomfortPicker(false);
+            }}
             className="w-full bg-primary-500 hover:bg-primary-600 text-white rounded-lg py-2.5 text-sm font-medium transition-colors"
           >
             Done
