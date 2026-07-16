@@ -35,10 +35,10 @@ import {
 
 /**
  * useWorkoutMuscleVolume — the data behind the top-of-workout weekly-volume
- * strip. For every coarse muscle group THIS session trains, it reports the
- * rolling-7-day credited set total (completed history + the sets logged so far
- * in the live session) positioned in that muscle's MEV–MRV band, plus a scalar
- * readiness score projected from the shared recovery heuristic.
+ * strip. For EVERY coarse muscle group, it reports the rolling-7-day credited
+ * set total (completed history + the sets logged so far in the live session)
+ * positioned in that muscle's MEV–MRV band, plus a scalar readiness score
+ * projected from the shared recovery heuristic.
  *
  * It reuses the SAME cached history query (`useRecoveryHistory`), the SAME
  * shared volume model (`buildVolumeRows`) and the SAME recovery config
@@ -57,6 +57,11 @@ import {
 export interface WorkoutMuscleVolumeRow extends VolumeRow {
   /** Working sets this muscle receives from the CURRENT session (credited, rounded). */
   sessionSets: number;
+  /**
+   * Whether THIS session's exercises target the muscle (primary or secondary).
+   * The strip shows these by default; the rest sit behind "Show all".
+   */
+  trainedThisSession: boolean;
   /** Scalar readiness in [0, 1] — see readinessScore in _lib/readiness. */
   readiness: number;
   /** Estimated hours until readiness crosses the ready threshold (0 = ready). */
@@ -76,9 +81,9 @@ export interface UseWorkoutMuscleVolumeArgs {
 
 export interface UseWorkoutMuscleVolumeResult {
   /**
-   * Coarse rows for the muscles this session trains, weekly sets vs the MEV–MRV
-   * band, ordered by readiness (frozen once per local day — see module doc).
-   * Present even while `isLoading` (weekly totals fill in once history arrives).
+   * One row per coarse muscle group, weekly sets vs the MEV–MRV band, ordered
+   * by readiness (frozen once per local day — see module doc). Present even
+   * while `isLoading` (weekly totals fill in once history arrives).
    */
   rows: WorkoutMuscleVolumeRow[];
   isLoading: boolean;
@@ -245,9 +250,9 @@ export function useWorkoutMuscleVolume({
     return out;
   }, [liveBlocks, liveWorkingSetsByBlock]);
 
-  // The coarse groups this session TARGETS — derived from the exercises (primary
-  // + secondary), so the strip lists them from the start of the workout, before
-  // any set is logged, and their weekly totals tick up as sets land.
+  // The coarse groups this session TARGETS — derived from the exercises
+  // (primary + secondary). These render by default; the rest of the groups sit
+  // behind the strip's "Show all" expander.
   const trainedCoarse = useMemo(() => {
     const set = new Set<CoarseMuscle>();
     for (const block of liveBlocks) {
@@ -264,11 +269,12 @@ export function useWorkoutMuscleVolume({
   }, [liveBlocks]);
 
   // Rows in DESIRED order: readiness descending; session sets, weekly sets and
-  // name break ties. The frozen daily order is applied on top below.
+  // name break ties. EVERY coarse group is listed — the component decides
+  // which to render (session muscles by default, all behind "Show all"). The
+  // frozen daily order is applied on top below.
   const sortedRows = useMemo<WorkoutMuscleVolumeRow[]>(() => {
     const coarseRows = buildVolumeRows(stats, reachable);
     return coarseRows
-      .filter((row) => trainedCoarse.has(row.muscle as CoarseMuscle))
       .map((row) => {
         const recovery = coarseRecovery(
           row.muscle as CoarseMuscle,
@@ -279,6 +285,7 @@ export function useWorkoutMuscleVolume({
         return {
           ...row,
           sessionSets: sessionSetsByCoarse.get(row.muscle as CoarseMuscle) ?? 0,
+          trainedThisSession: trainedCoarse.has(row.muscle as CoarseMuscle),
           readiness: readinessScore(recovery),
           readyInHours: hoursUntilReadinessThreshold(recovery),
         };

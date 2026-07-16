@@ -1,6 +1,7 @@
 import { renderHook } from '@testing-library/react';
 import { useWorkoutMuscleVolume } from '../useWorkoutMuscleVolume';
-import { RESEARCH_VOLUME_BANDS } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
+import { COARSE_MUSCLES, RESEARCH_VOLUME_BANDS } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
+import { getLocalDateString } from '@/lib/utils';
 import type { ExerciseBlockWithExercise } from '@/app/(dashboard)/dashboard/workout/[id]/_lib/types';
 import type { SetLog } from '@/types/schema';
 import type { RecoverySession } from '@/services/muscleRecovery';
@@ -88,12 +89,13 @@ describe('useWorkoutMuscleVolume', () => {
     window.localStorage.clear();
   });
 
-  it('returns no rows when the session has no blocks', () => {
+  it('lists every coarse muscle group, even with no blocks in the session', () => {
     setHistory([]);
     const { result } = renderHook(() =>
       useWorkoutMuscleVolume({ liveBlocks: [], liveSets: [], now: NOW })
     );
-    expect(result.current.rows).toEqual([]);
+    expect(result.current.rows).toHaveLength(COARSE_MUSCLES.length);
+    expect(result.current.rows.every((r) => r.sets === 0)).toBe(true);
   });
 
   it('sums completed history + live session sets against the coarse MEV–MRV band', () => {
@@ -115,7 +117,21 @@ describe('useWorkoutMuscleVolume', () => {
     expect(biceps!.zone).toBe('in_zone');
   });
 
-  it('lists a muscle the workout targets from the exercises even before any set is logged', () => {
+  it('flags the coarse groups this session trains (primary + secondary)', () => {
+    setHistory([]);
+    const { result } = renderHook(() =>
+      useWorkoutMuscleVolume({
+        liveBlocks: [block('b1', 'biceps', ['forearms'])],
+        liveSets: [],
+        now: NOW,
+      })
+    );
+    const trained = result.current.rows.filter((r) => r.trainedThisSession).map((r) => r.muscle);
+    expect(trained.sort()).toEqual(['biceps', 'forearms']);
+    expect(result.current.rows.find((r) => r.muscle === 'chest')!.trainedThisSession).toBe(false);
+  });
+
+  it('rolls a fine live-session muscle into its coarse row', () => {
     setHistory([]);
     const { result } = renderHook(() =>
       useWorkoutMuscleVolume({ liveBlocks: [block('b1', 'obliques')], liveSets: [], now: NOW })
@@ -198,25 +214,23 @@ describe('useWorkoutMuscleVolume', () => {
     expect(second.result.current.rows.map((r) => r.muscle)).toEqual(frozenOrder); // …but not the order
   });
 
-  it('appends a muscle added later in the day after the frozen order', () => {
-    setHistory([]);
-    const first = renderHook(() =>
-      useWorkoutMuscleVolume({ liveBlocks: [block('curl', 'biceps')], liveSets: [], now: NOW })
-    );
-    expect(first.result.current.rows.map((r) => r.muscle)).toEqual(['biceps']);
-    first.unmount();
+  it('appends muscles the frozen order has not seen (e.g. a partial stored order)', () => {
+    // A stale/partial stored order (say, from a build before every group was
+    // listed) must not hide the other groups — they append after it.
+    const localDay = getLocalDateString(NOW);
+    window.localStorage.setItem(`workout-volume-strip-order:${localDay}`, JSON.stringify(['abs', 'biceps']));
 
-    // Abs would out-rank biceps on readiness alone; frozen order keeps biceps
-    // first and appends the newcomer.
-    setHistory([], false, [recoverySession('biceps', 6)]);
-    const second = renderHook(() =>
-      useWorkoutMuscleVolume({
-        liveBlocks: [block('curl', 'biceps'), block('twist', 'obliques')],
-        liveSets: [],
-        now: NOW,
-      })
+    setHistory([]);
+    const { result } = renderHook(() =>
+      useWorkoutMuscleVolume({ liveBlocks: [], liveSets: [], now: NOW })
     );
-    expect(second.result.current.rows.map((r) => r.muscle)).toEqual(['biceps', 'abs']);
+
+    const muscles = result.current.rows.map((r) => r.muscle);
+    expect(muscles.slice(0, 2)).toEqual(['abs', 'biceps']);
+    expect(muscles).toHaveLength(COARSE_MUSCLES.length);
+    // The persisted order was extended with the appended muscles.
+    const stored = JSON.parse(window.localStorage.getItem(`workout-volume-strip-order:${localDay}`)!);
+    expect(stored).toEqual(muscles);
   });
 
   it('does not freeze an order from a still-loading render', () => {
