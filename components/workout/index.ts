@@ -6,6 +6,7 @@ export { MuscleWikiVideo } from './MuscleWikiVideo';
 export { SetLoggerRow } from './SetLoggerRow';
 export { SuggestionBanner } from './SuggestionBanner';
 export { BottomSheet } from './BottomSheet';
+export { RowOverflowMenu, type RowMenuItem } from './RowOverflowMenu';
 export { RestTimer } from './RestTimer';
 export { InlineRestTimerBar } from './InlineRestTimerBar';
 export { WarmupProtocol } from './WarmupProtocol';

@@ -19,7 +19,7 @@ import {
 } from '@/lib/offline/setOutbox';
 import type { SetSyncStatus } from '@/components/workout/ExerciseCard';
 import { InlineHint } from '@/components/ui/FirstTimeHint';
-import { RestTimer, PauseOverlay } from '@/components/workout';
+import { RestTimer, PauseOverlay, RowOverflowMenu, type RowMenuItem } from '@/components/workout';
 import { IconGripVertical, IconX } from '@tabler/icons-react';
 import { useRestTimer } from '@/hooks/useRestTimer';
 import { useEducationStore } from '@/hooks/useEducationPreferences';
@@ -3415,6 +3415,35 @@ export default function WorkoutPage() {
     }
   };
 
+  // Dissolve an entire superset cluster by its group id. Mirrors the unlink
+  // branch of toggleSuperset (same columns nulled, same DB shape) but selects
+  // by group rather than by two adjacent ids, so "Unlink from superset" works
+  // from any member even if a drag-reorder left the pair non-adjacent.
+  const unlinkSupersetGroup = async (groupId: string) => {
+    if (!groupId) return;
+    const memberIds = blocks.filter((b) => b.supersetGroupId === groupId).map((b) => b.id);
+    if (memberIds.length === 0) return;
+
+    setBlocks((prevBlocks) =>
+      prevBlocks.map((b) =>
+        b.supersetGroupId === groupId
+          ? { ...b, supersetGroupId: null, supersetOrder: null }
+          : b
+      )
+    );
+
+    try {
+      const supabase = createUntypedClient();
+      await supabase
+        .from('exercise_blocks')
+        .update({ superset_group_id: null, superset_order: null })
+        .in('id', memberIds);
+    } catch (err) {
+      console.error('Failed to unlink superset:', err);
+      setError('Failed to unlink superset');
+    }
+  };
+
   const handleNextExercise = () => {
     // Advance to the next non-skipped block
     const nextIndex = blocks.findIndex(
@@ -4548,6 +4577,150 @@ export default function WorkoutPage() {
     .map((block, index) => ({ block, index }))
     .filter(({ index }) => !isBlockInMainList(index));
 
+  // Truncate an interpolated exercise name so the row menu keeps a fixed width.
+  const truncateName = (s: string, n = 24) =>
+    s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s;
+
+  // Superset-cluster adjacency for a main-list row. A "cluster" is two adjacent
+  // blocks sharing a supersetGroupId (v1 is pairs-only). If a drag-reorder left
+  // the pair non-adjacent, neither side reports clustered — the row then renders
+  // the degraded per-row indigo border instead of the continuous cluster chrome.
+  const getClusterInfo = (index: number) => {
+    const block = blocks[index];
+    const group = block?.supersetGroupId ?? null;
+    if (!group) {
+      return { inGroup: false, clustered: false, isFirst: false, isLast: false, slot: null as string | null, restSeconds: 0 };
+    }
+    const prev = blocks[index - 1];
+    const next = blocks[index + 1];
+    const adjPrev = !!prev && prev.supersetGroupId === group;
+    const adjNext = !!next && next.supersetGroupId === group;
+    const clustered = adjPrev || adjNext;
+    // Slot letter by list position among adjacent members (A above B), so a
+    // drag that inverted supersetOrder never shows "B" above "A".
+    const slot = clustered ? (adjPrev ? 'B' : 'A') : null;
+    // Rest shown on the cluster header = the last member's per-set rest (the
+    // round-robin rests after the last block of a round; see supersetFlow).
+    const lastMember = adjNext ? next : block;
+    return {
+      inGroup: true,
+      clustered,
+      isFirst: clustered && !adjPrev,
+      isLast: clustered && !adjNext,
+      slot,
+      restSeconds: lastMember.targetRestSeconds ?? 0,
+    };
+  };
+
+  // Single overflow menu for a main-list row: the one most-relevant link/unlink
+  // action (pairs-only rules), then Swap / Plate calculator / Watch form, then
+  // the destructive Remove below a separator. Reuses the existing mutations
+  // (toggleSuperset / unlinkSupersetGroup / page-level swap / delete-confirm).
+  const buildRowMenuItems = (index: number): RowMenuItem[] => {
+    const block = blocks[index];
+    const items: RowMenuItem[] = [];
+
+    const inCluster = block.supersetGroupId !== null;
+    const next = blocks[index + 1];
+    const prev = blocks[index - 1];
+    const nextInList = index + 1 < blocks.length && isBlockInMainList(index + 1);
+    const prevInList = index - 1 >= 0 && isBlockInMainList(index - 1);
+    const isLastMainRow = !blocks.some((b, i) => i > index && isBlockInMainList(i));
+
+    const linkIcon = (
+      <svg className="h-4 w-4 text-[#a99bff]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 010 5.656l-3 3a4 4 0 01-5.656-5.656l1.5-1.5m8.656-4.328a4 4 0 015.656 5.656l-1.5 1.5" />
+      </svg>
+    );
+
+    // Never show two link options — pick the single most relevant.
+    if (inCluster) {
+      items.push({
+        key: 'unlink',
+        label: 'Unlink from superset',
+        icon: linkIcon,
+        onSelect: () => { if (block.supersetGroupId) void unlinkSupersetGroup(block.supersetGroupId); },
+      });
+    } else if (nextInList && next && next.supersetGroupId === null) {
+      items.push({
+        key: 'link-next',
+        label: `Link with ${truncateName(next.exercise.name)}`,
+        icon: linkIcon,
+        onSelect: () => void toggleSuperset(index),
+      });
+    } else if (isLastMainRow && prevInList && prev && prev.supersetGroupId === null) {
+      items.push({
+        key: 'link-prev',
+        label: `Link with ${truncateName(prev.exercise.name)}`,
+        icon: linkIcon,
+        onSelect: () => void toggleSuperset(index - 1),
+      });
+    }
+
+    items.push({
+      key: 'swap',
+      label: 'Swap exercise',
+      icon: (
+        <svg className="h-4 w-4 text-warning-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+        </svg>
+      ),
+      onSelect: () => {
+        setSwapTargetBlockId(block.id);
+        setSwapSearchQuery('');
+        if (availableExercises.length === 0) fetchExercises();
+        setShowPageLevelSwapModal(true);
+      },
+    });
+
+    items.push({
+      key: 'plates',
+      label: 'Plate calculator',
+      icon: (
+        <svg className="h-4 w-4 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+        </svg>
+      ),
+      onSelect: () => {
+        const initial = block.targetWeightKg > 0 ? block.targetWeightKg : undefined;
+        setPlateCalculatorWeight(initial);
+        setShowPlateCalculator(true);
+      },
+    });
+
+    items.push({
+      key: 'watch',
+      label: 'Watch form',
+      icon: (
+        <svg className="h-4 w-4 text-red-500" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+        </svg>
+      ),
+      onSelect: () => {
+        window.open(
+          `https://www.youtube.com/results?search_query=${encodeURIComponent(block.exercise.name + ' exercise form')}`,
+          '_blank',
+          'noopener,noreferrer'
+        );
+      },
+    });
+
+    items.push({
+      key: 'remove',
+      label: 'Remove',
+      separatorBefore: true,
+      destructive: true,
+      icon: (
+        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+        </svg>
+      ),
+      onSelect: () => setDeleteConfirmBlock({ id: block.id, name: block.exercise.name }),
+    });
+
+    return items;
+  };
+
   // Vertical shift applied to non-dragged rows while a drag is in flight
   const getDragTranslateY = (index: number, isBeingDragged: boolean): number => {
     if (!isDraggingBlock || draggedBlockIndex === null || dragOverBlockIndex === null || isBeingDragged) {
@@ -4791,8 +4964,9 @@ export default function WorkoutPage() {
         </Card>
       )}
 
-      {/* All exercises list */}
-      <div className="space-y-4" ref={exerciseListRef}>
+      {/* All exercises list — tight 7px inter-row gap (adjacent superset
+          members collapse this gap to render as one continuous cluster). */}
+      <div className="space-y-[7px]" ref={exerciseListRef}>
         {blocks.map((block, index) => {
           // Upcoming (not-yet-started, non-active) blocks render in the
           // compact "Up next" list below instead of as full cards.
@@ -4801,24 +4975,37 @@ export default function WorkoutPage() {
           const blockSets = getSetsForBlock(block.id);
           const isComplete = blockSets.length >= block.targetSets;
           const isCurrent = index === currentBlockIndex;
-          const nextBlock = index < blocks.length - 1 ? blocks[index + 1] : null;
-          const isInSuperset = block.supersetGroupId !== null;
-          const isSupersetWithNext = nextBlock && block.supersetGroupId && block.supersetGroupId === nextBlock.supersetGroupId;
           const isBlockCollapsed = collapsedBlocks.has(block.id);
           const isBeingDragged = draggedBlockIndex === index;
+
+          // Superset cluster chrome (indigo, distinct from green "done"/blue
+          // "current"). Adjacent same-group members render as one continuous
+          // bordered cluster; a drag-split pair degrades to a per-row border.
+          const cluster = getClusterInfo(index);
+          const clusterClasses = cluster.clustered
+            ? [
+                'bg-[#6d5ce0]/[0.06] border-l border-r border-[#6d5ce0]/60 px-2.5',
+                cluster.isFirst ? 'border-t rounded-t-xl pt-1' : 'border-t border-[#6d5ce0]/25 !mt-0',
+                cluster.isLast ? 'border-b rounded-b-xl pb-2' : '',
+              ].join(' ')
+            : cluster.inGroup
+              ? 'border-l-2 border-[#6d5ce0]/60 rounded-l pl-2' // degraded (drag-split) fallback
+              : '';
 
           // Calculate if this item should be visually shifted during drag
           const translateY = getDragTranslateY(index, isBeingDragged);
 
           return (
-            <React.Fragment key={block.id}>
             <div
+              key={block.id}
               id={`exercise-${index}`}
               data-block-index={index}
+              data-superset-group={block.supersetGroupId ?? undefined}
+              data-superset-clustered={cluster.clustered ? 'true' : undefined}
               style={{ transform: translateY ? `translateY(${translateY}px)` : undefined }}
               className={`transition-transform duration-200 ease-out ${
                 isCurrent ? '' : 'opacity-80'
-              } ${isInSuperset ? 'border-l-2 border-cyan-500/50 pl-2' : ''} ${
+              } ${clusterClasses} ${
                 isBeingDragged ? 'opacity-0 pointer-events-none' : ''
               }`}
               onClick={(e) => {
@@ -4833,8 +5020,26 @@ export default function WorkoutPage() {
                 }
               }}
             >
+              {/* Superset cluster eyebrow — only on the first member of an
+                  adjacent cluster; names the group and its round rest. */}
+              {cluster.isFirst && (
+                <div
+                  data-testid="superset-eyebrow"
+                  className="flex items-center justify-between px-1 pt-1.5 pb-2 text-[11px] font-semibold uppercase tracking-wide text-[#a99bff]"
+                >
+                  <span className="inline-flex items-center gap-1.5">
+                    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 010 5.656l-3 3a4 4 0 01-5.656-5.656l1.5-1.5m8.656-4.328a4 4 0 015.656 5.656l-1.5 1.5" />
+                    </svg>
+                    Superset
+                  </span>
+                  {cluster.restSeconds > 0 && (
+                    <span className="font-medium normal-case text-[#8f7ff0]">{cluster.restSeconds}s rest</span>
+                  )}
+                </div>
+              )}
               {/* Exercise header with drag handle and collapse - simplified since name is now in grouped container */}
-              <div 
+              <div
                 className={`flex items-center gap-3 mb-3 ${!isCurrent ? 'cursor-pointer' : ''}`}
               >
                 {/* Drag handle - long press here to reorder */}
@@ -4865,7 +5070,19 @@ export default function WorkoutPage() {
                   <div className="w-5 h-0.5 bg-current rounded" />
                   <div className="w-5 h-0.5 bg-current rounded" />
                 </div>
-                
+
+                {/* Superset slot letter (A/B) — sits by the drag handle so a
+                    linked pair reads as one lettered cluster. */}
+                {cluster.slot && (
+                  <div
+                    data-testid="superset-slot"
+                    className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-[#6d5ce0]/25 text-xs font-bold text-[#a99bff]"
+                    aria-label={`Superset position ${cluster.slot}`}
+                  >
+                    {cluster.slot}
+                  </div>
+                )}
+
                 {/* Exercise number indicator */}
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${
                   isComplete 
@@ -4888,9 +5105,8 @@ export default function WorkoutPage() {
                   {isCurrent && (
                     <Badge variant="info" size="sm">Current</Badge>
                   )}
-                  {isComplete && !isCurrent && (
-                    <Badge variant="success" size="sm">Done</Badge>
-                  )}
+                  {/* "Done" badge removed — the green check circle already signals
+                      completion, and dropping it frees the row's horizontal space. */}
                   {/* Exercise name — only in this list row when COLLAPSED; when expanded
                       the richer group-container header below shows the name (avoids duplication) */}
                   {(allCollapsed || isBlockCollapsed) && (
@@ -4927,19 +5143,16 @@ export default function WorkoutPage() {
                   })()}
                 </div>
                 
-                {/* Delete exercise button */}
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setDeleteConfirmBlock({ id: block.id, name: block.exercise.name });
-                  }}
-                  className="p-2 text-surface-500 hover:text-error-400 transition-colors"
-                  title="Remove exercise"
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                </button>
+                {/* Row overflow menu — superset link/unlink, swap, plates,
+                    watch form, and the (now menu-only) destructive Remove. */}
+                <div onClick={(e) => e.stopPropagation()}>
+                  <RowOverflowMenu
+                    testId="row-menu-trigger"
+                    dataBlockId={block.id}
+                    ariaLabel={`Actions for ${block.exercise.name}`}
+                    items={buildRowMenuItems(index)}
+                  />
+                </div>
                 {/* Collapse/expand button */}
                 <button
                   onClick={(e) => {
@@ -5292,42 +5505,6 @@ export default function WorkoutPage() {
                 </div>
               )}
             </div>
-            
-            {/* Superset link button between exercises (only when the next
-                exercise also renders in this list, not in "Up next") */}
-            {index < blocks.length - 1 && isBlockInMainList(index + 1) && (
-              <div className="flex justify-center -my-1">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toggleSuperset(index);
-                  }}
-                  className={`px-3 py-1 text-xs rounded-full transition-all flex items-center gap-1 ${
-                    isSupersetWithNext
-                      ? 'bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30'
-                      : 'bg-surface-800 text-surface-500 hover:bg-surface-700 hover:text-surface-400'
-                  }`}
-                  title={isSupersetWithNext ? 'Remove superset' : 'Link as superset'}
-                >
-                  {isSupersetWithNext ? (
-                    <>
-                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                      </svg>
-                      Superset
-                    </>
-                  ) : (
-                    <>
-                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                      </svg>
-                      Link Superset
-                    </>
-                  )}
-                </button>
-              </div>
-            )}
-          </React.Fragment>
           );
         })}
 
