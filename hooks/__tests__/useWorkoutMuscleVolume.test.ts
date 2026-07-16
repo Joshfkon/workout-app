@@ -117,6 +117,20 @@ describe('useWorkoutMuscleVolume', () => {
     expect(biceps!.zone).toBe('in_zone');
   });
 
+  it('flags the coarse groups this session trains (primary + secondary)', () => {
+    setHistory([]);
+    const { result } = renderHook(() =>
+      useWorkoutMuscleVolume({
+        liveBlocks: [block('b1', 'biceps', ['forearms'])],
+        liveSets: [],
+        now: NOW,
+      })
+    );
+    const trained = result.current.rows.filter((r) => r.trainedThisSession).map((r) => r.muscle);
+    expect(trained.sort()).toEqual(['biceps', 'forearms']);
+    expect(result.current.rows.find((r) => r.muscle === 'chest')!.trainedThisSession).toBe(false);
+  });
+
   it('rolls a fine live-session muscle into its coarse row', () => {
     setHistory([]);
     const { result } = renderHook(() =>

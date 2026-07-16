@@ -11,6 +11,7 @@ import {
   accumulateExerciseVolume,
   buildVolumeRows,
   volumeAccumulatorToStats,
+  STANDARD_TO_COARSE,
   type CoarseMuscle,
   type MuscleVolumeStats,
   type VolumeAccumulator,
@@ -56,6 +57,11 @@ import {
 export interface WorkoutMuscleVolumeRow extends VolumeRow {
   /** Working sets this muscle receives from the CURRENT session (credited, rounded). */
   sessionSets: number;
+  /**
+   * Whether THIS session's exercises target the muscle (primary or secondary).
+   * The strip shows these by default; the rest sit behind "Show all".
+   */
+  trainedThisSession: boolean;
   /** Scalar readiness in [0, 1] — see readinessScore in _lib/readiness. */
   readiness: number;
   /** Estimated hours until readiness crosses the ready threshold (0 = ready). */
@@ -244,11 +250,28 @@ export function useWorkoutMuscleVolume({
     return out;
   }, [liveBlocks, liveWorkingSetsByBlock]);
 
+  // The coarse groups this session TARGETS — derived from the exercises
+  // (primary + secondary). These render by default; the rest of the groups sit
+  // behind the strip's "Show all" expander.
+  const trainedCoarse = useMemo(() => {
+    const set = new Set<CoarseMuscle>();
+    for (const block of liveBlocks) {
+      const tokens = [block.exercise.primaryMuscle, ...(block.exercise.secondaryMuscles || [])];
+      for (const token of tokens) {
+        if (!token) continue;
+        for (const std of resolveMuscleToStandard(token)) {
+          const coarse = STANDARD_TO_COARSE[std];
+          if (coarse) set.add(coarse);
+        }
+      }
+    }
+    return set;
+  }, [liveBlocks]);
+
   // Rows in DESIRED order: readiness descending; session sets, weekly sets and
-  // name break ties. EVERY coarse group is listed — muscles this session
-  // doesn't touch still carry their weekly total + readiness (the strip is
-  // collapsible for users who want it out of the way). The frozen daily order
-  // is applied on top below.
+  // name break ties. EVERY coarse group is listed — the component decides
+  // which to render (session muscles by default, all behind "Show all"). The
+  // frozen daily order is applied on top below.
   const sortedRows = useMemo<WorkoutMuscleVolumeRow[]>(() => {
     const coarseRows = buildVolumeRows(stats, reachable);
     return coarseRows
@@ -262,6 +285,7 @@ export function useWorkoutMuscleVolume({
         return {
           ...row,
           sessionSets: sessionSetsByCoarse.get(row.muscle as CoarseMuscle) ?? 0,
+          trainedThisSession: trainedCoarse.has(row.muscle as CoarseMuscle),
           readiness: readinessScore(recovery),
           readyInHours: hoursUntilReadinessThreshold(recovery),
         };
@@ -273,7 +297,7 @@ export function useWorkoutMuscleVolume({
           b.sets - a.sets ||
           a.displayName.localeCompare(b.displayName)
       );
-  }, [stats, reachable, sessionSetsByCoarse, recoveryHistory, now, recoveryConfig]);
+  }, [stats, reachable, trainedCoarse, sessionSetsByCoarse, recoveryHistory, now, recoveryConfig]);
 
   // ---- Freeze the order once per local day --------------------------------
   const localDay = getLocalDateString(now);

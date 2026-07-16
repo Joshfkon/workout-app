@@ -19,6 +19,7 @@ function row(muscle: string, over: Partial<WorkoutMuscleVolumeRow> = {}): Workou
     exercises: [],
     children: [],
     sessionSets: 0,
+    trainedThisSession: true,
     readiness: 1,
     readyInHours: 0,
     ...over,
@@ -77,6 +78,65 @@ describe('WorkoutVolumeStrip', () => {
 
     await user.click(toggle);
     expect(screen.getByTestId('workout-volume-chip-chest')).toBeInTheDocument();
+  });
+
+  it('shows session muscles by default, the rest behind "Show all (+N)"', async () => {
+    const user = userEvent.setup();
+    render(
+      <WorkoutVolumeStrip
+        rows={[
+          row('quads'),
+          row('chest', { trainedThisSession: false }),
+          row('back', { trainedThisSession: false }),
+        ]}
+        isLoading={false}
+        onOpenDetail={noop}
+      />
+    );
+
+    expect(screen.getByTestId('workout-volume-chip-quads')).toBeInTheDocument();
+    expect(screen.queryByTestId('workout-volume-chip-chest')).not.toBeInTheDocument();
+
+    const expander = screen.getByTestId('workout-volume-strip-show-all');
+    expect(expander).toHaveTextContent('Show all (+2)');
+
+    await user.click(expander);
+    // Session muscles stay first; the rest append.
+    const chips = screen.getAllByTestId(/^workout-volume-chip-/);
+    expect(chips.map((c) => c.getAttribute('data-testid'))).toEqual([
+      'workout-volume-chip-quads',
+      'workout-volume-chip-chest',
+      'workout-volume-chip-back',
+    ]);
+    expect(expander).toHaveTextContent('Show less');
+
+    await user.click(expander);
+    expect(screen.queryByTestId('workout-volume-chip-chest')).not.toBeInTheDocument();
+  });
+
+  it('persists the show-all preference across mounts', async () => {
+    const user = userEvent.setup();
+    const rows = [row('quads'), row('chest', { trainedThisSession: false })];
+    const first = render(<WorkoutVolumeStrip rows={rows} isLoading={false} onOpenDetail={noop} />);
+    await user.click(screen.getByTestId('workout-volume-strip-show-all'));
+    first.unmount();
+
+    render(<WorkoutVolumeStrip rows={rows} isLoading={false} onOpenDetail={noop} />);
+    expect(screen.getByTestId('workout-volume-chip-chest')).toBeInTheDocument();
+    expect(screen.getByTestId('workout-volume-strip-show-all')).toHaveTextContent('Show less');
+  });
+
+  it('shows everything (no expander) when no muscle is session-trained', () => {
+    render(
+      <WorkoutVolumeStrip
+        rows={[row('chest', { trainedThisSession: false }), row('back', { trainedThisSession: false })]}
+        isLoading={false}
+        onOpenDetail={noop}
+      />
+    );
+    expect(screen.getByTestId('workout-volume-chip-chest')).toBeInTheDocument();
+    expect(screen.getByTestId('workout-volume-chip-back')).toBeInTheDocument();
+    expect(screen.queryByTestId('workout-volume-strip-show-all')).not.toBeInTheDocument();
   });
 
   it('persists the collapse preference across mounts', async () => {

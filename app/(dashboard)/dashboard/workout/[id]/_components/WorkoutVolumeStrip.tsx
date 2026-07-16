@@ -3,14 +3,17 @@
 /**
  * WorkoutVolumeStrip.tsx
  *
- * The compact "where am I on volume?" strip under the workout header. For
- * EVERY coarse muscle group it shows the rolling-7-day set total (history +
- * sets logged so far today) positioned in that muscle's MEV–MRV band, with a
- * zone-colored mini bar, a readiness status dot next to the name (green ready
- * / amber part-recovered / red just-trained) and a "Ready" / "~Nh" recovery
- * ETA in the band row. The whole card row is collapsible — the header chevron
- * toggles it and the choice persists across sessions. Tapping any chip opens
- * the full "What to train" sheet for the per-muscle breakdown + recovery.
+ * The compact "where am I on volume?" strip under the workout header. Each
+ * card shows a muscle's rolling-7-day set total (history + sets logged so far
+ * today) positioned in its MEV–MRV band, with a zone-colored mini bar, a
+ * readiness status dot next to the name (green ready / amber part-recovered /
+ * red just-trained) and a "Ready" / "~Nh" recovery ETA in the band row.
+ *
+ * By default only the muscles THIS session trains render; a trailing
+ * "Show all (+N)" card appends the remaining groups (session muscles stay
+ * first). The whole card row is also collapsible via the header chevron.
+ * Both choices persist across sessions. Tapping any muscle chip opens the
+ * full "What to train" sheet for the per-muscle breakdown + recovery.
  *
  * Purely presentational — all data comes from useWorkoutMuscleVolume, which
  * shares the readiness sheet's cached history query and volume model so the
@@ -40,20 +43,22 @@ interface WorkoutVolumeStripProps {
 
 /** Persisted collapse preference (a lasting UI choice, not per-day state). */
 const COLLAPSED_STORAGE_KEY = 'workout-volume-strip-collapsed';
+/** Persisted "show all muscle groups" preference. */
+const SHOW_ALL_STORAGE_KEY = 'workout-volume-strip-show-all';
 
-function readCollapsed(): boolean {
+function readFlag(key: string): boolean {
   if (typeof window === 'undefined') return false;
   try {
-    return window.localStorage.getItem(COLLAPSED_STORAGE_KEY) === '1';
+    return window.localStorage.getItem(key) === '1';
   } catch {
     return false;
   }
 }
 
-function writeCollapsed(collapsed: boolean): void {
+function writeFlag(key: string, value: boolean): void {
   if (typeof window === 'undefined') return;
   try {
-    window.localStorage.setItem(COLLAPSED_STORAGE_KEY, collapsed ? '1' : '0');
+    window.localStorage.setItem(key, value ? '1' : '0');
   } catch {
     // Storage unavailable — the toggle still works for this mount.
   }
@@ -79,16 +84,33 @@ function readyInLabel(readyInHours: number): string {
 }
 
 export function WorkoutVolumeStrip({ rows, isLoading, onOpenDetail }: WorkoutVolumeStripProps) {
-  const [collapsed, setCollapsed] = useState(readCollapsed);
+  const [collapsed, setCollapsed] = useState(() => readFlag(COLLAPSED_STORAGE_KEY));
+  const [showAll, setShowAll] = useState(() => readFlag(SHOW_ALL_STORAGE_KEY));
 
   if (rows.length === 0) return null;
 
   const toggleCollapsed = () => {
     setCollapsed((prev) => {
-      writeCollapsed(!prev);
+      writeFlag(COLLAPSED_STORAGE_KEY, !prev);
       return !prev;
     });
   };
+  const toggleShowAll = () => {
+    setShowAll((prev) => {
+      writeFlag(SHOW_ALL_STORAGE_KEY, !prev);
+      return !prev;
+    });
+  };
+
+  // Session muscles first (their frozen order preserved), the rest behind the
+  // expander — appended in the same frozen order so expanding never reshuffles
+  // the cards already on screen. A session with no tagged muscles (edge case)
+  // just shows everything.
+  const sessionRows = rows.filter((r) => r.trainedThisSession);
+  const restRows = rows.filter((r) => !r.trainedThisSession);
+  const showEverything = showAll || sessionRows.length === 0;
+  const visibleRows = showEverything ? [...sessionRows, ...restRows] : sessionRows;
+  const expanderVisible = sessionRows.length > 0 && restRows.length > 0;
 
   return (
     <div className="-mt-1" data-testid="workout-volume-strip">
@@ -121,7 +143,7 @@ export function WorkoutVolumeStrip({ rows, isLoading, onOpenDetail }: WorkoutVol
           id="workout-volume-strip-cards"
           className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 snap-x"
         >
-          {rows.map((row) => (
+          {visibleRows.map((row) => (
             <button
               key={row.key}
               onClick={onOpenDetail}
@@ -184,6 +206,16 @@ export function WorkoutVolumeStrip({ rows, isLoading, onOpenDetail }: WorkoutVol
               </p>
             </button>
           ))}
+          {expanderVisible && (
+            <button
+              onClick={toggleShowAll}
+              className="flex-shrink-0 snap-start w-[104px] rounded-lg border border-dashed border-surface-700 px-2.5 py-2 text-[11px] font-medium text-surface-400 hover:border-surface-600 hover:text-surface-300 transition-colors"
+              data-testid="workout-volume-strip-show-all"
+              aria-expanded={showAll}
+            >
+              {showAll ? 'Show less' : `Show all (+${restRows.length})`}
+            </button>
+          )}
         </div>
       )}
     </div>
