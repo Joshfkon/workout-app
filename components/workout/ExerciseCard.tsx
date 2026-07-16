@@ -8,7 +8,7 @@ import { rpeToRir } from '@/types/schema';
 import { SorenessChipRow, ExerciseFeedbackChips, JointPainPicker } from './FeedbackChips';
 import { filterExercises, dedupeExercisesById } from '@/services/exerciseFilter';
 import { convertWeight, formatMuscleName, formatWeightValue, convertWeightForDisplay, inputWeightToKg, roundToPlateIncrement } from '@/lib/utils';
-import { recommendSet, recommendSessionStart, estimateRepsForWeight, predictAmrapReps, recommendSeedForSlot, resolveLastRir, type SeedRecommendation } from '@/services/setRecommender';
+import { recommendSet, recommendSessionStart, estimateRepsForWeight, predictAmrapReps, recommendSeedForSlot, resolveLastRir, prescribe, type SeedRecommendation } from '@/services/setRecommender';
 import { inferSetRole, type SetRole } from '@/services/suggestionEngine/setRoles';
 import { RAMP_LOAD_FRACTION, WORKING_WEIGHT_CLAMP_FRACTION } from '@/services/suggestionEngine/constants';
 import { findSimilarExercises, calculateSimilarityScore } from '@/services/exerciseSwapper';
@@ -493,6 +493,35 @@ export const ExerciseCard = memo(function ExerciseCard({
     return best > 0 ? best : undefined;
   }, [completedSets, effectiveTargetRir]);
 
+  // Prescription e1RM ladder (unified prescribe() contract, services/setRecommender):
+  //   1. session-best — a set logged THIS session (sessionBestE1RM above);
+  //   2. last-session resolved — best Epley e1RM from the previous session's
+  //      sets at their logged effort;
+  //   3. cold-start estimate — the e1RM implied by the transfer/profile
+  //      ladder's suggested weight at the mid of the rep range.
+  // The stored all-time estimatedE1RM is for display and the session-start
+  // WEIGHT pick only: it can disagree with the on-screen suggestion (older
+  // era, other implement, different formula), so it never answers a weight
+  // edit — that inconsistency is what saturated the rep estimate into the
+  // constant "× 20". With no rung available, weight edits leave reps untouched.
+  const lastSessionE1RM = useMemo(() => {
+    let best = 0;
+    for (const s of previousSets) {
+      if (s.weightKg > 0 && s.reps > 0) {
+        const rir = s.rpe != null ? Math.max(0, rpeToRir(s.rpe)) : effectiveTargetRir;
+        const e = s.weightKg * (1 + (s.reps + rir) / 30);
+        if (e > best) best = e;
+      }
+    }
+    return best > 0 ? best : undefined;
+  }, [previousSets, effectiveTargetRir]);
+
+  const coldStartE1RM = useMemo(() => {
+    if (!coldStartSuggestion || !(coldStartSuggestion.weightKg > 0)) return undefined;
+    const mid = Math.round((block.targetRepRange[0] + block.targetRepRange[1]) / 2);
+    return coldStartSuggestion.weightKg * (1 + (mid + effectiveTargetRir) / 30);
+  }, [coldStartSuggestion, block.targetRepRange, effectiveTargetRir]);
+
   // Grade the next set against the effort ACTUALLY logged on `last` — read from
   // the persisted set record (feedback.repsInTank first, then rpe), never the
   // prescribed/target RIR. `resolveLastRir` is the single read-path source.
@@ -687,6 +716,52 @@ export const ExerciseCard = memo(function ExerciseCard({
     [previousSets, previousTopSetWeightKg, anchorE1RMKg, block.targetRepRange, effectiveTargetRir, exercise.minWeightIncrementKg]
   );
 
+  // Curve-consistent reps for a session-start seed: answer the seeded weight
+  // on the SAME e1RM ladder the weight-edit recompute uses, so the prefilled
+  // (weight, reps) pair sits on one curve and round-trips through prescribe().
+  // Ramp slots keep the mid-range plan (no effort target → no curve claim);
+  // with no e1RM rung the mid of the range is the plan target, not a curve
+  // answer, and later weight edits leave it alone.
+  const seedRepsForWeight = useCallback(
+    (weightKg: number, seed: SeedRecommendation): number => {
+      const midPlan = Math.round((seed.repRange[0] + seed.repRange[1]) / 2);
+      if (seed.role === 'ramp' || !(weightKg > 0)) return midPlan;
+      const e1rm = lastSessionE1RM ?? coldStartE1RM;
+      if (!e1rm) return midPlan;
+      const p = prescribe({
+        e1RMKg: e1rm,
+        targetRir: effectiveTargetRir,
+        repRange: seed.repRange,
+        weightKg,
+      });
+      return p ? p.reps : midPlan;
+    },
+    [lastSessionE1RM, coldStartE1RM, effectiveTargetRir]
+  );
+
+  // Capacity anchor for a weight-edit recompute — the prescription e1RM
+  // ladder: session-best first (a set logged this session); with no reference
+  // set at all, last-session resolved e1RM, then the cold-start estimate.
+  // NEVER the stored all-time e1RM: it can sit far off the curve the on-screen
+  // suggestion came from, and answering an edit from it is what saturated the
+  // reps into the constant "× 20". A planned target weight is not an anchor
+  // either — with no e1RM rung, weight edits must leave the reps field
+  // untouched.
+  const resolveEditAnchorE1RM = useCallback(
+    (hasReferenceSet: boolean): number | undefined =>
+      sessionBestE1RM ?? (hasReferenceSet ? undefined : lastSessionE1RM ?? coldStartE1RM),
+    [sessionBestE1RM, lastSessionE1RM, coldStartE1RM]
+  );
+
+  // Rationale line for a weight-edit rep recompute ("35 lbs ⇒ ~6 reps @ 2 RIR
+  // (from your 44.5 lbs e1RM)") — the user should see the curve working.
+  const [weightEditNote, setWeightEditNote] = useState<{
+    weightDisplay: string;
+    reps: number;
+    rir: number;
+    e1rmKg: number;
+  } | null>(null);
+
   // Track the last known completed sets count to detect changes
   const prevCompletedCountRef = useRef(completedSets.length);
 
@@ -771,6 +846,7 @@ export const ExerciseCard = memo(function ExerciseCard({
       manualEditsRef.current.clear();
       repsCalcTimeoutsRef.current.forEach((timeout) => clearTimeout(timeout));
       repsCalcTimeoutsRef.current.clear();
+      setWeightEditNote(null);
 
       const targetRpe = 10 - effectiveTargetRir;
       const lastCompleted = completedSets[completedSets.length - 1];
@@ -853,7 +929,7 @@ export const ExerciseCard = memo(function ExerciseCard({
           // (working slots anchor on the e1RM; ramp slots take a % of top).
           const { seed } = buildSlotSeed(setIndex);
           defaultWeight = seed.weightKg > 0 ? seed.weightKg : suggestedWeight;
-          defaultReps = Math.round((seed.repRange[0] + seed.repRange[1]) / 2);
+          defaultReps = seedRepsForWeight(defaultWeight, seed);
         } else {
           defaultWeight = suggestedWeight;
           defaultReps = Math.round((block.targetRepRange[0] + block.targetRepRange[1]) / 2);
@@ -1022,6 +1098,12 @@ export const ExerciseCard = memo(function ExerciseCard({
       manualEditsRef.current.set(index, dirty);
     }
 
+    // A weight keystroke invalidates any recompute note; the debounced
+    // estimate re-issues it if (and only if) the reps actually recompute.
+    if (field === 'weight' && index === 0) {
+      setWeightEditNote(null);
+    }
+
     // If user manually edits reps, cancel any pending debounced reps calculation
     // This prevents overwriting the user's manual input
     if (field === 'reps') {
@@ -1030,6 +1112,9 @@ export const ExerciseCard = memo(function ExerciseCard({
         clearTimeout(existingTimeout);
         repsCalcTimeoutsRef.current.delete(index);
       }
+      // The reps field is user-owned now — the recompute note no longer
+      // describes what's in the field.
+      if (index === 0) setWeightEditNote(null);
     }
 
     setPendingInputs(prev => {
@@ -1066,12 +1151,7 @@ export const ExerciseCard = memo(function ExerciseCard({
               refRir = resolveLastRir(prevSet, effectiveTargetRir);
             }
 
-            // Capacity anchor for the estimate: the same session-best E1RM the
-            // banner's recommendSet uses, falling back to the stored e1RM at
-            // session start. A planned target weight is NOT an anchor — with no
-            // real e1RM observed (cold start) the estimate would collapse to a
-            // constant, so weight edits must leave the reps field untouched.
-            const anchorE1RM = sessionBestE1RM ?? (anchorE1RMKg > 0 ? anchorE1RMKg : undefined);
+            const anchorE1RM = resolveEditAnchorE1RM(refWeight > 0 && refReps > 0);
             const hasE1RM = anchorE1RM !== undefined || (refWeight > 0 && refReps > 0);
 
             // An AMRAP row predicts reps to failure (RIR 0) — matching its
@@ -1114,7 +1194,24 @@ export const ExerciseCard = memo(function ExerciseCard({
                       targetRepRange: block.targetRepRange,
                       targetRir: rowTargetRir,
                     });
-                    newInputs[index] = { ...newInputs[index], reps: String(newReps) };
+                    // null = no e1RM after all — leave the reps field untouched.
+                    if (newReps != null) {
+                      newInputs[index] = { ...newInputs[index], reps: String(newReps) };
+                      // Show the curve working: which e1RM answered this edit.
+                      const referenceE1RM =
+                        refWeight > 0 && refReps > 0
+                          ? refWeight * (1 + (refReps + Math.max(0, refRir)) / 30)
+                          : 0;
+                      const usedE1RM = Math.max(anchorE1RM ?? 0, referenceE1RM);
+                      if (index === 0 && usedE1RM > 0) {
+                        setWeightEditNote({
+                          weightDisplay: value,
+                          reps: newReps,
+                          rir: rowTargetRir,
+                          e1rmKg: usedE1RM,
+                        });
+                      }
+                    }
                   }
                   return newInputs;
                 });
@@ -2282,6 +2379,16 @@ export const ExerciseCard = memo(function ExerciseCard({
                 reason={suggestion.reason}
                 explanation={suggestion.explanation}
               />
+              {weightEditNote && (
+                <p
+                  data-testid="weight-edit-recompute-note"
+                  className="px-1 text-[11px] text-primary-300"
+                >
+                  {weightEditNote.weightDisplay} {weightLabel} ⇒ ~{weightEditNote.reps}{' '}
+                  {isDurationBased ? 'seconds' : 'reps'} @ {weightEditNote.rir} RIR (from your{' '}
+                  {displayWeight(weightEditNote.e1rmKg, true)} {weightLabel} e1RM)
+                </p>
+              )}
               <SetLoggerRow
                 setNumber={activeSetNumber}
                 weight={usesBwLoad ? bwLoadInput : input.weight}

@@ -655,6 +655,45 @@ describe('ExerciseCard', () => {
       expect(screen.getByRole('button', { name: /Reps: 12 reps/ })).toBeInTheDocument();
     });
 
+    it('LIVE REPRO: session-start edit answers from the suggestion curve, not the inflated stored e1RM (32.5→35 lbs ⇒ ~6, never 20)', async () => {
+      const user = setupUser();
+      // Session start, nothing logged yet. Last session: 32.5 lbs × 9 @ 2 RIR
+      // (14.742 kg, RPE 8) ⇒ the on-screen suggestion's curve is a ~44.4 lb
+      // e1RM. The STORED all-time e1RM is stale and inflated (28 kg ≈ 62 lbs).
+      // Old behavior: the edit recompute anchored on the stored 28 kg via
+      // max(), predicted ~21 reps, and saturated at range-max(15)+5 = 20.
+      const prevSet = { weightKg: 14.742, reps: 9, rpe: 8 };
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          unit="lb"
+          block={createMockBlock({ targetRepRange: [10, 15] as [number, number], targetWeightKg: 14.742 })}
+          previousSets={[prevSet]}
+          exerciseHistory={{
+            lastWorkoutDate: weeksAgo(1),
+            lastWorkoutSets: [prevSet],
+            estimatedE1RM: 28, // inflated vs the ~20.1 kg the suggestion implies
+            personalRecord: null,
+            totalSessions: 12,
+          }}
+          isActive={true}
+          onSetComplete={jest.fn().mockResolvedValue('id')}
+        />
+      );
+
+      await editWeight(user, /Weight: /, '35');
+      flushDebounce();
+
+      // 35 lb = 15.876 kg on the 20.15 kg (44.4 lb) curve @ 2 RIR ⇒ 6 reps.
+      expect(screen.getByRole('button', { name: /Reps: 6 reps/ })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Reps: 20 reps/ })).not.toBeInTheDocument();
+
+      // The rationale line shows the curve working, with the e1RM it used.
+      const note = screen.getByTestId('weight-edit-recompute-note');
+      expect(note).toHaveTextContent('35 lbs ⇒ ~6 reps @ 2 RIR');
+      expect(note).toHaveTextContent(/from your 44(\.\d+)? lbs e1RM/);
+    });
+
     it('cold start (no e1RM anywhere): weight edits leave reps untouched', async () => {
       const user = setupUser();
       // No completed sets, no previous session, no exercise history — only the
@@ -715,12 +754,13 @@ describe('ExerciseCard', () => {
       expect(screen.getByRole('button', { name: /Reps: 8 reps/ })).toBeInTheDocument();
 
       // The old set's manual-reps flag must be gone: a weight edit on the NEW
-      // set recomputes again. Session-best e1RM is still 140 (set 1); at 90 kg
-      // with two sets done: (30·(140/90 − 1) − 2) × 0.9 = 13.2 → 13.
+      // set recomputes again. Session-best e1RM is still 140 (set 1); with two
+      // sets done the effective e1RM is 140 × 0.98 = 137.2, so at 90 kg:
+      // 30·(137.2/90 − 1) − 2 = 13.7 → 14.
       await editWeight(user, /Weight: 100 kg/, '90');
       flushDebounce();
 
-      expect(screen.getByRole('button', { name: /Reps: 13 reps/ })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Reps: 14 reps/ })).toBeInTheDocument();
     });
   });
 
