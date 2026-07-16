@@ -861,11 +861,10 @@ describe('ExerciseCard', () => {
       // Form rating
       await user.click(screen.getByText('Some Breakdown'));
 
-      // Discomfort: expand, pick body part + severity, save
+      // Discomfort: expand the joint picker — two taps (joint, then severity)
       await user.click(screen.getByText(/Log discomfort/));
-      await user.click(screen.getByText('Lower Back'));
-      await user.click(screen.getByText('Twinge'));
-      await user.click(screen.getByText('Save Discomfort'));
+      await user.click(screen.getByTestId('joint-chip-lower_back'));
+      await user.click(screen.getByTestId('joint-severity-chip-twinge'));
 
       // Close the sheet and log the set
       await user.click(screen.getByRole('button', { name: 'Done' }));
