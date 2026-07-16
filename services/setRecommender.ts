@@ -29,8 +29,8 @@ import {
   MAX_STEP_PCT,
   MAX_REDUCE_PCT,
   HOLD_DROP_RATE,
-  FATIGUE_PER_SET,
-  FATIGUE_FLOOR,
+  FATIGUE_E1RM_PER_SET,
+  FATIGUE_E1RM_FLOOR,
   OVERSHOOT_CEILING,
   REP_OVERSHOOT,
   RAMP_LOAD_FRACTION,
@@ -126,26 +126,112 @@ function weightForReps(e1rm: number, reps: number, rir: number): number {
   return e1rm / (1 + (reps + rir) / 30);
 }
 
+// ============================================
+// UNIFIED PRESCRIPTION CORE
+// ============================================
+
+/**
+ * Input to the single RIR-invariant weight↔reps function. `e1RMKg` is the
+ * EFFECTIVE capacity: every adjustment layer (within-session fatigue via
+ * `fatigueAdjustedE1RM`, readiness easing via a raised `targetRir`, RPE
+ * calibration via how logged RIR resolved into the e1RM) is applied to the
+ * INPUTS before the curve is evaluated — never to the output reps/weight.
+ */
+export interface PrescribeInput {
+  /** Effective estimated 1RM (kg) — after any input-side adjustments. */
+  e1RMKg: number;
+  /** Effective target reps in reserve. */
+  targetRir: number;
+  /**
+   * Target rep range [min, max]. ADVISORY: only used to pick a weight when
+   * `weightKg` is omitted (aim mid-range). It is never substituted into the
+   * reps answer — a too-heavy or too-light weight shows its honest count.
+   */
+  repRange: [number, number];
+  /** When given, answer "how many reps at THIS weight". When omitted, pick the weight. */
+  weightKg?: number;
+  /** Smallest load increment (kg) for weight picking. */
+  minIncrementKg?: number;
+}
+
+export interface Prescription {
+  weightKg: number;
+  reps: number;
+  rir: number;
+}
+
+/**
+ * THE weight↔reps prescription function (one formula app-wide: Epley with
+ * RIR-adjusted reps, and its inverse).
+ *
+ *  - `weightKg` given  → reps = round(30·(e1RM/weight − 1) − targetRIR),
+ *    clamped to [1, ∞). Reps are strictly the curve answer: monotonically
+ *    non-increasing in weight, and NEVER a range max, range mid, or any other
+ *    constant fallback.
+ *  - `weightKg` omitted → pick the weight so predicted reps land mid rep-range
+ *    at the target RIR, then answer the reps AT the rounded weight so the
+ *    suggested (weight, reps) pair round-trips through this same function.
+ *
+ * Returns null when there is no usable e1RM (or weight ≤ 0): with no capacity
+ * anchor there is no curve, and the caller must leave the reps field untouched
+ * rather than inventing a number.
+ */
+export function prescribe(input: PrescribeInput): Prescription | null {
+  const { e1RMKg, repRange } = input;
+  if (!(e1RMKg > 0)) return null;
+  const rir = Math.max(0, input.targetRir);
+
+  const repsAt = (weightKg: number) => Math.max(1, Math.round(30 * (e1RMKg / weightKg - 1) - rir));
+
+  if (input.weightKg !== undefined) {
+    if (!(input.weightKg > 0)) return null;
+    return { weightKg: input.weightKg, reps: repsAt(input.weightKg), rir };
+  }
+
+  const inc = input.minIncrementKg && input.minIncrementKg > 0 ? input.minIncrementKg : 2.5;
+  const mid = Math.round((repRange[0] + repRange[1]) / 2);
+  const weightKg = roundToIncrement(weightForReps(e1RMKg, mid, rir), inc);
+  if (!(weightKg > 0)) return null;
+  return { weightKg, reps: repsAt(weightKg), rir };
+}
+
+/**
+ * Within-session fatigue as an INPUT adjustment: each completed set shaves a
+ * small slice off the effective e1RM (floored), so later-set prescriptions sit
+ * lower on the same curve instead of the reps being de-rated after the fact.
+ * This is layer 1 of the adjustment stack (see prescriptionLayers.test.ts).
+ */
+export function fatigueAdjustedE1RM(e1RMKg: number, setsCompleted: number): number {
+  const n = Math.max(0, Math.floor(setsCompleted));
+  return e1RMKg * Math.max(FATIGUE_E1RM_FLOOR, 1 - FATIGUE_E1RM_PER_SET * n);
+}
+
 /**
  * Predict achievable reps at a given weight from the capacity anchor, de-rated
  * for sets already done. Single prediction core shared by recommendSet's
  * weight-changed branch and estimateRepsForWeight (manual weight edits), so the
  * banner suggestion and the weight-edit recalc can never disagree.
  *
- * Honest reps (design §7): clamped to [1, repMax + OVERSHOOT_CEILING], never
- * floored up to the range minimum — a too-heavy load must show an out-of-range
- * prediction instead of being silently "fixed" to the plan.
+ * Honest reps (design §7): clamped to [1, ∞) only — never floored up to the
+ * range minimum, never capped to the range maximum. A mis-matched load must
+ * show its honest out-of-range prediction instead of a substituted constant
+ * (the range-max cap here is exactly what used to emit "× 20").
  */
 function predictRepsAtWeight(
   e1rm: number,
   weightKg: number,
   targetRir: number,
   setsCompleted: number,
-  repMax: number
+  repRange: [number, number]
 ): number {
-  const fresh = 30 * (e1rm / weightKg - 1) - targetRir;
-  const fatigue = Math.max(FATIGUE_FLOOR, 1 - FATIGUE_PER_SET * setsCompleted);
-  return clamp(Math.round(fresh * fatigue), 1, repMax + OVERSHOOT_CEILING);
+  const p = prescribe({
+    e1RMKg: fatigueAdjustedE1RM(e1rm, setsCompleted),
+    targetRir,
+    repRange,
+    weightKg,
+  });
+  // Callers guarantee e1rm > 0 and weightKg > 0, so p is always present.
+  return p ? p.reps : 1;
 }
 
 // ============================================
@@ -235,7 +321,7 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
   } else {
     // Weight changed → no "last reps at this weight" to decrement from. Predict from
     // the fresh capacity anchor, de-rated for sets already done.
-    reps = predictRepsAtWeight(e1rm, weightKg, targetRir, n, repMax);
+    reps = predictRepsAtWeight(e1rm, weightKg, targetRir, n, targetRepRange);
   }
 
   return { weightKg, reps, rir: targetRir, rationale, effortVsTarget };
@@ -292,26 +378,30 @@ export function recommendSessionStart(input: SessionStartInput): SetRecommendati
  * recommendSet's weight-changed branch, so re-entering the recommended weight
  * reproduces the recommended reps exactly and nearby weights move the estimate
  * smoothly. Honest reps: never floored up to the range minimum (design §7).
+ *
+ * Returns null when NO e1RM exists (no session anchor and no usable reference
+ * set): a weight edit must then leave the reps field untouched — the range is
+ * a plan, not a curve answer, and writing it here is how the "× 20" bug read.
  */
 export function estimateRepsForWeight(
   newWeightKg: number,
   input: Omit<SetRecommenderInput, 'minIncrementKg'>
-): number {
+): number | null {
   const { lastWeightKg, lastReps, lastRir, targetRepRange, targetRir } = input;
-  const [repMin, repMax] = targetRepRange;
   const n = Math.max(0, Math.floor(input.setsCompletedThisExercise ?? 0));
 
   // Capacity anchor: same rule as recommendSet (§6) — freshest/strongest
-  // session E1RM, falling back to the reference set's estimate.
+  // session E1RM, falling back to the reference set's estimate. The caller is
+  // responsible for passing an anchor that is CONSISTENT with the on-screen
+  // suggestion (session-best, else last-session resolved, else cold-start) —
+  // never a stale all-time record the shown numbers weren't derived from.
   const referenceE1RM =
     lastWeightKg > 0 && lastReps > 0 ? epleyE1RM(lastWeightKg, lastReps, Math.max(0, lastRir)) : 0;
   const e1rm = Math.max(input.sessionBestE1RMKg ?? 0, referenceE1RM);
 
-  if (newWeightKg <= 0 || e1rm <= 0) {
-    return Math.round((repMin + repMax) / 2);
-  }
+  if (newWeightKg <= 0 || e1rm <= 0) return null;
 
-  return predictRepsAtWeight(e1rm, newWeightKg, targetRir, n, repMax);
+  return predictRepsAtWeight(e1rm, newWeightKg, targetRir, n, targetRepRange);
 }
 
 /**

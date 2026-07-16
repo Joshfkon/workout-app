@@ -120,10 +120,29 @@ export const MAX_STEP_PCT = 0.10;
 export const MAX_REDUCE_PCT = 0.30;
 /** Expected rep decline per set at a fixed load (HOLD case). */
 export const HOLD_DROP_RATE = 0.07;
-/** Rep de-rating per already-completed set (weight-CHANGED case). */
+/**
+ * Rep de-rating per already-completed set (weight-CHANGED case).
+ * @deprecated Superseded by FATIGUE_E1RM_PER_SET — within-session fatigue is
+ * now an INPUT adjustment (effective-e1RM decrement, see
+ * setRecommender.fatigueAdjustedE1RM), never a post-hoc de-rating of the
+ * output reps. Kept only for historical reference in the design doc.
+ */
 export const FATIGUE_PER_SET = 0.05;
-/** Lower bound on the fatigue factor. */
+/**
+ * Lower bound on the fatigue factor.
+ * @deprecated See FATIGUE_E1RM_FLOOR.
+ */
 export const FATIGUE_FLOOR = 0.6;
+/**
+ * Within-session fatigue as an e1RM haircut: each completed set reduces the
+ * EFFECTIVE e1RM fed into prescribe() by this fraction. ~1%/set lands the same
+ * rep decline the old rep-space de-rating produced at typical working
+ * intensities (a 1% e1RM drop ≈ 0.4 reps at ~10-rep loads), but lives on the
+ * curve INPUT so weight↔reps stays RIR-invariant within any fixed layer state.
+ */
+export const FATIGUE_E1RM_PER_SET = 0.01;
+/** Floor on the cumulative within-session e1RM haircut (max −8%). */
+export const FATIGUE_E1RM_FLOOR = 0.92;
 /** Max reps shown above repMax (prevents absurd "30 reps", keeps honest under-load). */
 export const OVERSHOOT_CEILING = 5;
 /**

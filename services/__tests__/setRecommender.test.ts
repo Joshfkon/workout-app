@@ -310,19 +310,26 @@ describe('estimateRepsForWeight', () => {
   it('estimates fewer reps at heavier weights and more at lighter weights', () => {
     const heavier = estimateRepsForWeight(110, base());
     const lighter = estimateRepsForWeight(90, base());
-    expect(heavier).toBeLessThan(lighter);
+    expect(heavier).toBeLessThan(lighter!);
   });
 
-  it('caps very light weights at repMax + overshoot ceiling (the 30-rep bug stays fixed)', () => {
-    // e1rm 140 at 40kg predicts ~69 fresh reps — must cap at 12 + 5.
-    expect(estimateRepsForWeight(40, base())).toBe(17);
+  it('answers very light weights honestly from the curve (no range-max cap — the "× 20" constant is banned)', () => {
+    // e1rm 140 at 40 kg honestly predicts ~73 fresh reps. The old repMax +
+    // OVERSHOOT_CEILING cap here is exactly what emitted the constant "× 20"
+    // on weight edits whenever the anchor sat above the typed weight's range.
+    const reps = estimateRepsForWeight(40, base());
+    expect(reps).toBeGreaterThan(12 + 5); // must NOT saturate at the old cap
+    expect(reps).toBe(72); // round(30·(140/40 − 1) − 2)
   });
 
-  it('never predicts below 1 or above repMax + 5 across the weight spectrum', () => {
+  it('never predicts below 1, and stays strictly monotone (no saturation plateau) across the weight spectrum', () => {
+    let prev = Infinity;
     for (const w of [20, 40, 60, 80, 100, 120, 150, 200]) {
       const reps = estimateRepsForWeight(w, base());
-      expect(reps).toBeGreaterThanOrEqual(1);
-      expect(reps).toBeLessThanOrEqual(12 + 5);
+      expect(reps).not.toBeNull();
+      expect(reps!).toBeGreaterThanOrEqual(1);
+      expect(reps!).toBeLessThan(prev === Infinity ? Infinity : prev + 1); // non-increasing
+      prev = reps!;
     }
   });
 
@@ -330,13 +337,13 @@ describe('estimateRepsForWeight', () => {
     const fatigued = base({ lastWeightKg: 100, lastReps: 6, lastRir: 0 });
     const anchored = base({ lastWeightKg: 100, lastReps: 6, lastRir: 0, sessionBestE1RMKg: 160 });
     expect(estimateRepsForWeight(100, anchored)).toBeGreaterThan(
-      estimateRepsForWeight(100, fatigued)
+      estimateRepsForWeight(100, fatigued)!
     );
   });
 
-  it('returns mid-range for degenerate inputs', () => {
-    expect(estimateRepsForWeight(0, base())).toBe(10);
-    expect(estimateRepsForWeight(50, base({ lastWeightKg: 0, lastReps: 0 }))).toBe(10);
+  it('returns null for degenerate inputs so the caller leaves the reps field untouched (no mid-range substitute)', () => {
+    expect(estimateRepsForWeight(0, base())).toBeNull();
+    expect(estimateRepsForWeight(50, base({ lastWeightKg: 0, lastReps: 0 }))).toBeNull();
   });
 });
 
