@@ -43,9 +43,15 @@ import {
   type SubstitutedPick,
   type SubstitutedWorkoutPlan,
 } from '@/services/locationSubstitution';
-import { locationIcon, pickDefaultLocation } from '@/services/locationProfiles';
+import {
+  locationIcon,
+  pickDefaultLocation,
+  LOCATION_PRESETS,
+  type LocationPresetKind,
+} from '@/services/locationProfiles';
 import { fetchUnavailableEquipment } from '@/lib/actions/equipment';
 import {
+  createTrainingLocation,
   fetchTrainingLocations,
   fetchUnavailableEquipmentForLocation,
   touchLocationLastUsed,
@@ -146,6 +152,17 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
   const [error, setError] = useState<string | null>(null);
   /** Pick whose swap options (revert / choose other) are expanded. */
   const [swapOptionsFor, setSwapOptionsFor] = useState<string | null>(null);
+
+  // Inline "add a training location" form (opened from the chip row's "+").
+  // Kept in-sheet so the suggestion, duration and selection survive: cancel
+  // restores the sheet untouched; save selects the new location and (if a
+  // plan is already showing) regenerates the suggestion for it.
+  const [isAddingLocation, setIsAddingLocation] = useState(false);
+  const [newLocationName, setNewLocationName] = useState('');
+  const [newLocationPreset, setNewLocationPreset] = useState<LocationPresetKind | null>(null);
+  const [newDumbbellMax, setNewDumbbellMax] = useState('');
+  const [isSavingLocation, setIsSavingLocation] = useState(false);
+  const [addLocationError, setAddLocationError] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchAll() {
@@ -379,6 +396,61 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
     if (aiPlan) setAiRequested(true);
   };
 
+  const openAddLocation = () => {
+    setNewLocationName('');
+    setNewLocationPreset(null);
+    setNewDumbbellMax('');
+    setAddLocationError(null);
+    setIsAddingLocation(true);
+  };
+
+  const closeAddLocation = () => {
+    // Cancel: leave selection and plan untouched — the sheet is unchanged.
+    setIsAddingLocation(false);
+    setAddLocationError(null);
+  };
+
+  const pickNewLocationPreset = (kind: LocationPresetKind) => {
+    setNewLocationPreset(kind);
+    // Prefill the name from the preset unless the user has typed their own.
+    const preset = LOCATION_PRESETS.find((p) => p.kind === kind);
+    if (preset && (!newLocationName.trim() || LOCATION_PRESETS.some((p) => p.name === newLocationName))) {
+      setNewLocationName(preset.name);
+    }
+  };
+
+  // Create the location inline, select it, and (if a plan is already on
+  // screen) regenerate the suggestion for it. The blocklist-cache effect
+  // picks up the new selectedLocationId and fetches its equipment gaps, so
+  // the plan rebuild waits until they're in before substituting.
+  const handleSaveNewLocation = async () => {
+    const name = newLocationName.trim();
+    if (!name || isSavingLocation) return;
+    setIsSavingLocation(true);
+    setAddLocationError(null);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not signed in');
+
+      const parsedDumbbell = parseFloat(newDumbbellMax);
+      const created = await createTrainingLocation(user.id, {
+        name,
+        presetKind: newLocationPreset,
+        dumbbellMaxKg: Number.isFinite(parsedDumbbell) && parsedDumbbell > 0 ? parsedDumbbell : null,
+      });
+
+      setLocations((prev) => [...prev, created]);
+      setSelectedLocationId(created.id);
+      if (aiPlan) setAiRequested(true);
+      setIsAddingLocation(false);
+    } catch (err) {
+      console.error('Failed to create training location:', err);
+      setAddLocationError('Could not add the location. Please try again.');
+    } finally {
+      setIsSavingLocation(false);
+    }
+  };
+
   /** Swap a substituted pick to another exercise (or back to the original). */
   const handleChooseSwap = (pick: SubstitutedPick, chosenExerciseId: string) => {
     setSwapOptionsFor(null);
@@ -581,7 +653,8 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
 
   // "Where are you training?" chip row. With a single profile the chip is
   // preselected and costs no interaction — the row stays visible so the
-  // feature is discoverable. The + chip manages locations in Settings.
+  // feature is discoverable. The + chip opens the inline add-location form
+  // below (never navigates away — the sheet's state must survive).
   const locationChipRow = locations.length > 0 && (
     <div className="flex gap-1.5 flex-wrap items-center" role="group" aria-label="Training location">
       {locations.map((loc) => (
@@ -600,9 +673,10 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
         </button>
       ))}
       <button
-        onClick={() => router.push('/dashboard/settings#gym-equipment')}
-        className="p-1.5 rounded-full bg-surface-800 text-surface-400 hover:bg-surface-700 hover:text-surface-200 transition-colors"
-        aria-label="Manage training locations"
+        onClick={openAddLocation}
+        disabled={aiRequested || isStarting}
+        className="p-1.5 rounded-full bg-surface-800 text-surface-400 hover:bg-surface-700 hover:text-surface-200 transition-colors disabled:opacity-60"
+        aria-label="Add training location"
       >
         <IconPlus size={14} aria-hidden="true" />
       </button>
@@ -611,12 +685,121 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
 
   const substitutionCount = aiPlan ? aiPlan.exercises.filter(isActiveSubstitution).length : 0;
 
+  // Inline add-location form. Replaces the sheet body while open so the
+  // underlying duration/plan state is preserved untouched behind it.
+  const addLocationForm = (
+    <div className="space-y-4">
+      <p className="text-[13px] text-surface-400">Add a place you train so we can fit the workout to its equipment.</p>
+
+      {addLocationError && (
+        <div className="p-2.5 rounded-lg bg-danger-500/10 border border-danger-500/20 text-danger-400 text-xs">
+          {addLocationError}
+        </div>
+      )}
+
+      <div className="space-y-2">
+        <span className="block text-[12px] font-medium text-surface-300">Start from a preset</span>
+        <div className="flex gap-1.5 flex-wrap">
+          {LOCATION_PRESETS.map((preset) => (
+            <button
+              key={preset.kind}
+              type="button"
+              onClick={() => pickNewLocationPreset(preset.kind)}
+              className={`px-2.5 py-1.5 rounded-full text-[12px] border transition-colors ${
+                newLocationPreset === preset.kind
+                  ? 'bg-primary-500/20 border-primary-500 text-primary-300'
+                  : 'bg-surface-800 border-transparent text-surface-300 hover:bg-surface-700'
+              }`}
+            >
+              <span aria-hidden="true">{preset.icon}</span> {preset.name}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => setNewLocationPreset('custom')}
+            className={`px-2.5 py-1.5 rounded-full text-[12px] border transition-colors ${
+              newLocationPreset === 'custom'
+                ? 'bg-primary-500/20 border-primary-500 text-primary-300'
+                : 'bg-surface-800 border-transparent text-surface-300 hover:bg-surface-700'
+            }`}
+          >
+            Custom
+          </button>
+        </div>
+        <p className="text-[11px] text-surface-500">
+          Presets pre-fill the equipment checklist (edit it later in Settings). Custom starts with everything available.
+        </p>
+      </div>
+
+      <div className="space-y-1.5">
+        <label htmlFor="new-location-name" className="block text-[12px] font-medium text-surface-300">
+          Location name
+        </label>
+        <input
+          id="new-location-name"
+          autoFocus
+          value={newLocationName}
+          onChange={(e) => setNewLocationName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && newLocationName.trim()) handleSaveNewLocation();
+          }}
+          placeholder="e.g., Hotel Gym"
+          className="w-full px-3 py-2 rounded-lg bg-surface-800 border border-surface-700 text-[14px] text-surface-100 placeholder:text-surface-500 focus:outline-none focus:border-primary-500"
+        />
+      </div>
+
+      <div className="space-y-1.5">
+        <label htmlFor="new-location-dumbbell" className="block text-[12px] font-medium text-surface-300">
+          Heaviest dumbbell (kg, optional)
+        </label>
+        <input
+          id="new-location-dumbbell"
+          type="number"
+          value={newDumbbellMax}
+          onChange={(e) => setNewDumbbellMax(e.target.value)}
+          placeholder="e.g., 25"
+          className="w-full px-3 py-2 rounded-lg bg-surface-800 border border-surface-700 text-[14px] text-surface-100 placeholder:text-surface-500 focus:outline-none focus:border-primary-500"
+        />
+      </div>
+
+      <div className="flex gap-2 justify-end pt-1">
+        <button
+          type="button"
+          onClick={closeAddLocation}
+          disabled={isSavingLocation}
+          className="px-4 py-2 rounded-lg text-[13px] font-medium bg-surface-800 text-surface-300 hover:bg-surface-700 transition-colors disabled:opacity-60"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={handleSaveNewLocation}
+          disabled={!newLocationName.trim() || isSavingLocation}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] font-medium bg-primary-500 text-white hover:bg-primary-400 transition-colors disabled:opacity-60"
+        >
+          {isSavingLocation && <IconLoader2 size={14} className="animate-spin" aria-hidden="true" />}
+          Save location
+        </button>
+      </div>
+    </div>
+  );
+
   return (
     <BottomSheet
       isOpen={isOpen}
       onClose={onClose}
-      title={aiPlan ? 'Suggested workout' : 'How much time do you have?'}
+      title={
+        isAddingLocation
+          ? 'Add training location'
+          : aiPlan
+            ? 'Suggested workout'
+            : 'How much time do you have?'
+      }
     >
+      {isAddingLocation ? (
+        addLocationForm
+      ) : (
+      <>
       {error && (
         <div className="mb-3 p-2.5 rounded-lg bg-danger-500/10 border border-danger-500/20 text-danger-400 text-xs">
           {error}
@@ -801,6 +984,8 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
             </button>
           </div>
         </div>
+      )}
+      </>
       )}
     </BottomSheet>
   );

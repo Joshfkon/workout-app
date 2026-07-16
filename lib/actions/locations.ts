@@ -4,6 +4,7 @@ import { createUntypedServerClient } from '@/lib/supabase/server';
 import {
   LOCATION_PRESETS,
   presetUnavailableEquipmentIds,
+  type LocationPresetKind,
 } from '@/services/locationProfiles';
 
 /** gym_locations row as the pre-workout sheet consumes it. */
@@ -111,6 +112,78 @@ export async function fetchTrainingLocations(userId: string): Promise<TrainingLo
     .order('created_at', { ascending: true });
 
   return (seeded ?? []) as TrainingLocationRow[];
+}
+
+/**
+ * Create a new training location and (when seeded from a preset) its
+ * user_equipment blocklist, returning the created row for the caller to
+ * splice into its chip row without a refetch. Mirrors the create branch of
+ * the Settings GymEquipmentSettings form so the pre-workout sheet's inline
+ * "+" add flow produces identical rows. Retries without the profile columns
+ * if the migration hasn't run yet (pre-migration database).
+ */
+export async function createTrainingLocation(
+  userId: string,
+  input: { name: string; presetKind?: LocationPresetKind | null; dumbbellMaxKg?: number | null }
+): Promise<TrainingLocationRow> {
+  const supabase = await createUntypedServerClient();
+
+  const name = input.name.trim();
+  if (!name) throw new Error('Location name is required');
+
+  const preset =
+    input.presetKind && input.presetKind !== 'custom'
+      ? LOCATION_PRESETS.find((p) => p.kind === input.presetKind) ?? null
+      : null;
+
+  // First location becomes the default (matches the Settings form).
+  const { count } = await supabase
+    .from('gym_locations')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId);
+  const isDefault = (count ?? 0) === 0;
+
+  let { data, error } = await supabase
+    .from('gym_locations')
+    .insert({
+      user_id: userId,
+      name,
+      is_default: isDefault,
+      icon: preset?.icon ?? null,
+      preset_kind: input.presetKind ?? 'custom',
+      dumbbell_max_kg: input.dumbbellMaxKg ?? null,
+    })
+    .select(LOCATION_COLUMNS)
+    .single();
+
+  if (error) {
+    ({ data, error } = await supabase
+      .from('gym_locations')
+      .insert({ user_id: userId, name, is_default: isDefault })
+      .select('id, name, is_default')
+      .single());
+  }
+
+  if (error || !data) {
+    throw new Error(`createTrainingLocation failed: ${error?.message ?? 'no row returned'}`);
+  }
+
+  if (preset) {
+    const unavailable = presetUnavailableEquipmentIds(preset);
+    if (unavailable.length > 0) {
+      await supabase.from('user_equipment').upsert(
+        unavailable.map((equipmentId) => ({
+          user_id: userId,
+          equipment_id: equipmentId,
+          is_available: false,
+          location_id: data.id,
+        })),
+        { onConflict: 'user_id,equipment_id,location_id' }
+      );
+    }
+  }
+
+  return toLocationRow(data as Partial<TrainingLocationRow> & { id: string; name: string });
 }
 
 /**
