@@ -55,6 +55,25 @@ across rebuilds.
   (630 → 930 kcal) — the optimistic-write path.
 - A warm reload (persisted IndexedDB cache) renders without the full loader.
 
+## superset-menu.mjs — what it asserts (25 checks)
+
+Drives the active-workout page with six exercises all in the main list (each
+seeded with a logged set) and verifies the per-row overflow (⋮) menu that
+replaced the inter-row "Link Superset" pill:
+
+- `⋮` opens a portaled popover; outside tap and Escape both close it (and the
+  trigger reports `aria-expanded`).
+- `Link with {next}` clusters the two exercises (continuous indigo border,
+  `SUPERSET` eyebrow, `A`/`B` slot letters) **and** persists a
+  `superset_group_id` PATCH to `exercise_blocks`.
+- A clustered row shows `Unlink from superset` and no link option; unlinking
+  dissolves the cluster and its chrome.
+- The last row offers `Link with {prev}`, not `Link with {next}`.
+- `Remove` is absent from the DOM until a menu opens, and deletes exactly one
+  row via the confirm modal.
+- No `Link Superset` text exists in the list.
+- All six rows' `⋮` fit within 390×844 and the last row's menu is unclipped.
+
 ## label-scan.mjs — what it asserts (24 checks)
 
 Drives the Add Food → Scan Label flow with OCR injected via the
