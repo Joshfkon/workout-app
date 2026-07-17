@@ -1851,6 +1851,9 @@ export default function WorkoutPage() {
     liveBlocks: volumeLiveBlocks,
     liveSets: completedSets,
     now: volumeNow,
+    // Don't let a cached history query freeze the day's card order before the
+    // workout itself (blocks + resumed sets) has hydrated.
+    liveDataReady: phase !== 'loading',
   });
 
   // ---- Per-exercise pump/workload chips ------------------------------------

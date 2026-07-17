@@ -233,6 +233,33 @@ describe('useWorkoutMuscleVolume', () => {
     expect(stored).toEqual(muscles);
   });
 
+  it('does not freeze an order before the live workout data has hydrated', () => {
+    // History resolves instantly (cached) while the page is still loading the
+    // workout: blocks/sets empty, liveDataReady false → no freeze yet.
+    setHistory([], false, [recoverySession('biceps', 6)]);
+    const hydrating = renderHook(() =>
+      useWorkoutMuscleVolume({ liveBlocks: [], liveSets: [], now: NOW, liveDataReady: false })
+    );
+    hydrating.unmount();
+    expect(
+      Object.keys(window.localStorage).some((k) => k.startsWith('workout-volume-strip-order:'))
+    ).toBe(false);
+
+    // Once the workout hydrates, the freeze happens WITH the live session's
+    // sets counted: biceps was just trained live, so it pins below abs even
+    // though the history-only order (biceps 6h ago vs fresh abs) matches.
+    const liveBlocks = [block('curl', 'biceps'), block('twist', 'obliques')];
+    const liveSets = Array.from({ length: 4 }, () => workingSet('curl'));
+    const loaded = renderHook(() =>
+      useWorkoutMuscleVolume({ liveBlocks, liveSets, now: NOW, liveDataReady: true })
+    );
+    const muscles = loaded.result.current.rows.map((r) => r.muscle);
+    expect(muscles.indexOf('abs')).toBeLessThan(muscles.indexOf('biceps'));
+    expect(
+      Object.keys(window.localStorage).some((k) => k.startsWith('workout-volume-strip-order:'))
+    ).toBe(true);
+  });
+
   it('does not freeze an order from a still-loading render', () => {
     setHistory([], true);
     const loading = renderHook(() =>
