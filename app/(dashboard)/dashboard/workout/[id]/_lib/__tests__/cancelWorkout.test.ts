@@ -166,4 +166,66 @@ describe('cancelWorkoutSession', () => {
       calls.some((c) => c.table === 'workout_sessions' && c.op === 'delete')
     ).toBe(true);
   });
+
+  it('times out an operation that never settles instead of hanging forever', async () => {
+    // A dead radio / hung proxy: the set_logs delete never resolves. Without
+    // the per-op timeout the returned promise stays pending and the calling
+    // UI is wedged on "Discarding..." with its buttons disabled.
+    const { client, calls } = createMockClient();
+    const base = client as { from: (table: string) => unknown };
+    const hangingClient = {
+      from(table: string) {
+        if (table === 'set_logs') {
+          return {
+            delete: () => ({
+              in: () => new Promise(() => {}), // never settles
+            }),
+          };
+        }
+        return base.from(table);
+      },
+    };
+
+    const result = await cancelWorkoutSession(
+      hangingClient as any,
+      { sessionId, mesocycleId: null, blockIds },
+      { timeoutMs: 20 }
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.errors).toEqual(['request timed out after 20ms']);
+    // The remaining cleanup still ran after the timeout.
+    expect(
+      calls.some((c) => c.table === 'workout_sessions' && c.op === 'delete')
+    ).toBe(true);
+  });
+
+  it('converts a rejected operation into an error result instead of throwing', async () => {
+    const { client, calls } = createMockClient();
+    const base = client as { from: (table: string) => unknown };
+    const rejectingClient = {
+      from(table: string) {
+        if (table === 'amrap_calibrations') {
+          return {
+            delete: () => ({
+              eq: () => Promise.reject(new Error('fetch failed')),
+            }),
+          };
+        }
+        return base.from(table);
+      },
+    };
+
+    const result = await cancelWorkoutSession(rejectingClient as any, {
+      sessionId,
+      mesocycleId: null,
+      blockIds,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.errors).toEqual(['fetch failed']);
+    expect(
+      calls.some((c) => c.table === 'workout_sessions' && c.op === 'delete')
+    ).toBe(true);
+  });
 });

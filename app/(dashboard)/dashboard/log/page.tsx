@@ -267,28 +267,36 @@ export default function LogPage() {
     if (!inProgress || isDiscarding) return;
     setIsDiscarding(true);
     setError(null);
-    const { ok, errors } = await cancelWorkoutSession(supabase, {
-      sessionId: inProgress.id,
-      mesocycleId: inProgress.mesocycleId,
-      blockIds: inProgress.blockIds,
-    });
-    if (ok) {
-      // The workout store persists activeSession (it drives the global
-      // ResumeWorkoutBanner pill), so if the user opened this session before
-      // discarding it here, clear the store too — otherwise the pill keeps
-      // routing to a deleted/reset session. Matches the workout page's
-      // cancel flow, which calls endSession() after the same DB cleanup.
-      const { activeSession, endSession } = useWorkoutStore.getState();
-      if (activeSession?.id === inProgress.id) {
-        endSession();
+    // try/finally so nothing can leave the modal wedged on "Discarding..."
+    // with both buttons disabled — isDiscarding always resets.
+    try {
+      const { ok, errors } = await cancelWorkoutSession(supabase, {
+        sessionId: inProgress.id,
+        mesocycleId: inProgress.mesocycleId,
+        blockIds: inProgress.blockIds,
+      });
+      if (ok) {
+        // The workout store persists activeSession (it drives the global
+        // ResumeWorkoutBanner pill), so if the user opened this session before
+        // discarding it here, clear the store too — otherwise the pill keeps
+        // routing to a deleted/reset session. Matches the workout page's
+        // cancel flow, which calls endSession() after the same DB cleanup.
+        const { activeSession, endSession } = useWorkoutStore.getState();
+        if (activeSession?.id === inProgress.id) {
+          endSession();
+        }
+        mutateHome((d) => ({ ...d, inProgress: null }));
+      } else {
+        console.error('Failed to discard workout:', errors);
+        setError('Failed to discard workout. Please try again.');
       }
-      mutateHome((d) => ({ ...d, inProgress: null }));
-    } else {
-      console.error('Failed to discard workout:', errors);
+    } catch (err) {
+      console.error('Failed to discard workout:', err);
       setError('Failed to discard workout. Please try again.');
+    } finally {
+      setIsDiscarding(false);
+      setShowDiscardConfirm(false);
     }
-    setIsDiscarding(false);
-    setShowDiscardConfirm(false);
   };
 
   const dateLabel = new Date().toLocaleDateString('en-US', {

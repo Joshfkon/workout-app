@@ -21,6 +21,42 @@ export interface CancelWorkoutArgs {
 }
 
 /**
+ * A fetch that never settles (dead radio, hung proxy) must not wedge the
+ * discard flow: without a cap, the awaiting UI stays on "Discarding..."
+ * forever with its buttons disabled. Cap every operation and surface the
+ * timeout (or a rejection) as an ordinary error so the caller resets and
+ * offers a retry. Late server-side success is harmless — every operation
+ * here is idempotent.
+ */
+const OP_TIMEOUT_MS = 10_000;
+
+type OpResult = { error: { message: string } | null };
+
+function settleWithTimeout(
+  op: PromiseLike<OpResult>,
+  ms: number
+): Promise<OpResult> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(
+      () => resolve({ error: { message: `request timed out after ${ms}ms` } }),
+      ms
+    );
+    op.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        resolve({
+          error: { message: err instanceof Error ? err.message : String(err) },
+        });
+      }
+    );
+  });
+}
+
+/**
  * Discard an in-progress workout:
  *   - Ad-hoc session: delete set logs, blocks, and the session itself so it
  *     can't resurface as a pre-loaded "blank" workout later today.
@@ -36,51 +72,59 @@ export interface CancelWorkoutArgs {
  */
 export async function cancelWorkoutSession(
   supabase: UntypedClient,
-  args: CancelWorkoutArgs
+  args: CancelWorkoutArgs,
+  opts?: { timeoutMs?: number }
 ): Promise<{ ok: boolean; errors: string[] }> {
   const { sessionId, mesocycleId, blockIds } = args;
+  const timeoutMs = opts?.timeoutMs ?? OP_TIMEOUT_MS;
   const errors: string[] = [];
 
   // Must run BEFORE the set_logs / workout_sessions deletes below — once those
   // rows are gone the SET NULL FKs make these calibrations unreachable.
   {
-    const { error } = await supabase
-      .from('amrap_calibrations')
-      .delete()
-      .eq('workout_session_id', sessionId);
+    const { error } = await settleWithTimeout(
+      supabase
+        .from('amrap_calibrations')
+        .delete()
+        .eq('workout_session_id', sessionId),
+      timeoutMs
+    );
     if (error) errors.push(error.message);
   }
 
   if (blockIds.length > 0) {
-    const { error } = await supabase
-      .from('set_logs')
-      .delete()
-      .in('exercise_block_id', blockIds);
+    const { error } = await settleWithTimeout(
+      supabase.from('set_logs').delete().in('exercise_block_id', blockIds),
+      timeoutMs
+    );
     if (error) errors.push(error.message);
   }
 
   if (!mesocycleId) {
     if (blockIds.length > 0) {
-      const { error } = await supabase
-        .from('exercise_blocks')
-        .delete()
-        .in('id', blockIds);
+      const { error } = await settleWithTimeout(
+        supabase.from('exercise_blocks').delete().in('id', blockIds),
+        timeoutMs
+      );
       if (error) errors.push(error.message);
     }
-    const { error } = await supabase
-      .from('workout_sessions')
-      .delete()
-      .eq('id', sessionId);
+    const { error } = await settleWithTimeout(
+      supabase.from('workout_sessions').delete().eq('id', sessionId),
+      timeoutMs
+    );
     if (error) errors.push(error.message);
   } else {
-    const { error } = await supabase
-      .from('workout_sessions')
-      .update({
-        state: 'planned',
-        started_at: null,
-        pre_workout_check_in: null,
-      })
-      .eq('id', sessionId);
+    const { error } = await settleWithTimeout(
+      supabase
+        .from('workout_sessions')
+        .update({
+          state: 'planned',
+          started_at: null,
+          pre_workout_check_in: null,
+        })
+        .eq('id', sessionId),
+      timeoutMs
+    );
     if (error) errors.push(error.message);
   }
 
