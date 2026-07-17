@@ -20,7 +20,8 @@ import type { AdjustedRIRResult } from '@/services/rpeCalibration';
 import type { ReadinessModulation } from '@/services/fatigueEngine';
 import { lightHaptic } from '@/lib/integrations/notifications';
 import { Input } from '@/components/ui';
-import { IconBone, IconCheck, IconChevronDown, IconCloudPause, IconInfoCircle } from '@tabler/icons-react';
+import { IconBone, IconCheck, IconChevronDown, IconCloudPause, IconGripVertical } from '@tabler/icons-react';
+import { RowOverflowMenu, type RowMenuItem } from './RowOverflowMenu';
 import { InlineRestTimerBar } from './InlineRestTimerBar';
 import { DropsetPrompt } from './DropsetPrompt';
 import { BodyweightSetEditRow } from './BodyweightSetEditRow';
@@ -255,6 +256,30 @@ interface ExerciseCardProps {
   // ("estimated from your Lying Leg Curl strength" vs "from your training
   // profile"), so the user knows where the number came from.
   coldStartSuggestion?: ColdStartSuggestion;
+  // --- Compact title-row chrome (the page's old standalone header row folded
+  // into the card's own title row). All of these are page-owned wiring; the
+  // card only positions them. ---
+  // "3/8"-style position badge (position among non-skipped exercises / total).
+  positionLabel?: string;
+  // This block's index in the page's block array, passed back to the drag and
+  // menu callbacks below.
+  listIndex?: number;
+  // True while the page shows this block as a collapsed list row and hides the
+  // card with CSS (kept mounted so in-progress set inputs survive collapse).
+  // Gates the controls that would otherwise duplicate the collapsed row's
+  // (row-menu-trigger testid, superset-slot badge).
+  isCollapsed?: boolean;
+  // Superset slot letter (A/B) for an adjacent cluster member.
+  supersetSlot?: string | null;
+  // Drag-activation handlers for the title-row grip. Must be identity-stable
+  // (latest-ref wrappers in the page): the memo comparator ignores them.
+  onDragHandleStart?: (index: number, clientY: number) => void;
+  onDragHandleEnd?: () => void;
+  onDragHandleCancel?: () => void;
+  // Builds the row overflow (⋮) menu items. Identity-stable, called at render.
+  getMenuItems?: (index: number) => RowMenuItem[];
+  // Collapse chevron handler (page collapse UI state). Identity-stable.
+  onToggleCollapse?: (blockId: string) => void;
 }
 
 /** Cold-start estimate + provenance for a no-history exercise. */
@@ -327,6 +352,15 @@ export const ExerciseCard = memo(function ExerciseCard({
   painNotice = null,
   onPainNoticeDismiss,
   onSetJointPain,
+  positionLabel,
+  listIndex,
+  isCollapsed = false,
+  supersetSlot = null,
+  onDragHandleStart,
+  onDragHandleEnd,
+  onDragHandleCancel,
+  getMenuItems,
+  onToggleCollapse,
 }: ExerciseCardProps) {
   // Prescribed RIR: calibration-adjusted target when available, eased further
   // by the session's readiness modulation (Phase 1.3/1.5 fold-in).
@@ -1620,6 +1654,21 @@ export const ExerciseCard = memo(function ExerciseCard({
   // Only badge exercises that need caution — "Safe" is the default and just adds header noise
   const safetyTier = getFailureSafetyTier(exercise.name);
 
+  // Second header line (tier/plateau/pace/superset/safety pills) renders only
+  // when at least one pill exists, so pill-less exercises keep a two-line header.
+  const showPacePill =
+    !plateau &&
+    !!progressionInsight &&
+    (progressionInsight.pace === 'ahead' ||
+      progressionInsight.pace === 'on_track' ||
+      progressionInsight.pace === 'behind');
+  const hasHeaderPills =
+    !!exercise.hypertrophyScore?.tier ||
+    !!plateau ||
+    showPacePill ||
+    !!block.supersetGroupId ||
+    safetyTier !== 'push_freely';
+
   // Enhanced mode: surface (never alter) a binding joint-stress cap. The RIR
   // floor is computed from the exercise alone; when it raises the effective
   // target above the block's prescription, the cap is actively constraining
@@ -1635,56 +1684,133 @@ export const ExerciseCard = memo(function ExerciseCard({
         isActive ? 'ring-2 ring-primary-500/50' : ''
       }`}
     >
-      {/* Header — slim: name + pills on one line, one meta line below (2.4) */}
+      {/* Header — compact: the page's old standalone header row (grip, number,
+          menu, chevron) is folded into the card's own title row. Line 1: grip +
+          position + name + counter/menu/chevron; line 2: pills; line 3: meta. */}
       <div className="p-4 border-b border-surface-800 sticky top-0 bg-surface-900 z-10">
         <div className="flex items-center gap-2">
+          {/* Drag grip — long press to reorder. Visual icon is compact but the
+              hit area stays ≥44×44 via min sizes, pulled back with negative
+              margins so it doesn't inflate the title row. */}
+          {onDragHandleStart && listIndex !== undefined && (
+            <div
+              data-drag-handle
+              aria-label="Hold to reorder exercise"
+              className="-my-2.5 -ml-3 flex min-h-[44px] min-w-[44px] flex-shrink-0 cursor-grab touch-none items-center justify-center text-surface-500 active:cursor-grabbing"
+              onTouchStart={(e) => {
+                e.stopPropagation();
+                onDragHandleStart(listIndex, e.touches[0].clientY);
+              }}
+              onTouchEnd={(e) => {
+                e.stopPropagation();
+                onDragHandleEnd?.();
+              }}
+              onMouseDown={(e) => {
+                e.stopPropagation();
+                onDragHandleStart(listIndex, e.clientY);
+              }}
+              onMouseUp={(e) => {
+                e.stopPropagation();
+                onDragHandleEnd?.();
+              }}
+              onMouseLeave={() => onDragHandleCancel?.()}
+            >
+              <IconGripVertical size={16} stroke={2} />
+            </div>
+          )}
+          {/* Superset slot letter (A/B). Rendered here only while expanded —
+              the collapsed list row renders its own (single source of truth
+              for the superset-slot testid, since the hidden card stays in the
+              DOM). */}
+          {!isCollapsed && supersetSlot && (
+            <div
+              data-testid="superset-slot"
+              className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-[#6d5ce0]/25 text-xs font-bold text-[#a99bff]"
+              aria-label={`Superset position ${supersetSlot}`}
+            >
+              {supersetSlot}
+            </div>
+          )}
+          {/* Position badge — "3/8" (position / total non-skipped exercises).
+              Suppressed while collapsed: the collapsed row shows the block's
+              only badge (keeps one position-badge node per block in the DOM). */}
+          {!isCollapsed && positionLabel && (
+            <span
+              data-testid="position-badge"
+              className={`flex-shrink-0 rounded-md px-1.5 py-1 text-[11px] font-bold leading-none transition-colors ${
+                progressPercent === 100
+                  ? 'bg-success-500/20 text-success-400'
+                  : isActive
+                    ? 'bg-primary-500 text-white'
+                    : 'bg-surface-800 text-surface-400'
+              }`}
+            >
+              {positionLabel}
+            </span>
+          )}
           <button
             onClick={onExerciseNameClick}
-            className="min-w-0 text-[15px] font-medium text-surface-100 break-words hover:text-primary-400 transition-colors text-left"
+            className="min-w-0 flex-1 truncate text-left text-[15px] font-medium text-surface-100 hover:text-primary-400 transition-colors"
           >
             {exercise.name}
           </button>
-          {/* Info affordance: opens the exercise detail sheet. 44x44 hit area
-              via padding, pulled back with negative margins so it doesn't
-              inflate the header height. stopPropagation keeps card handlers
-              (history/warmup toggles, parent taps) from firing. */}
-          {onExerciseNameClick && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onExerciseNameClick();
-              }}
-              className="-m-2.5 flex-shrink-0 inline-flex items-center justify-center min-w-[44px] min-h-[44px] text-surface-500 hover:text-surface-300 transition-colors"
-              title="Exercise details"
-              aria-label="Exercise details"
-            >
-              <IconInfoCircle size={16} stroke={2} />
-            </button>
-          )}
-          {exercise.hypertrophyScore?.tier && (
-            <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium leading-none flex-shrink-0 ${getTierBadgeClasses(exercise.hypertrophyScore.tier)}`}>
-              {exercise.hypertrophyScore.tier}
-            </span>
-          )}
-          {/* Plateau badge (services/plateauDetector) — opens the suggestions sheet */}
-          {plateau && (
-            <button
-              onClick={() => setShowPlateauSheet(true)}
-              className="rounded-full px-2.5 py-1 text-[11px] font-medium leading-none flex-shrink-0 bg-warning-500/10 text-warning-400 hover:bg-warning-500/20 transition-colors"
-              aria-haspopup="dialog"
-            >
-              Plateau
-            </button>
-          )}
-          {/* Progression pace pill (services/progressionInsights) — trend vs
-              the expected rate for the user's experience level. The plateau
-              badge takes precedence when both would show. */}
-          {!plateau &&
-            progressionInsight &&
-            (progressionInsight.pace === 'ahead' ||
-              progressionInsight.pace === 'on_track' ||
-              progressionInsight.pace === 'behind') && (
+          <div className="ml-auto flex items-center gap-0.5 flex-shrink-0">
+            {/* Set add/remove moved to the footer (next to "+ Add Set") to declutter the header */}
+            <Badge variant={progressPercent === 100 ? 'success' : 'default'}>
+              {completedSets.length}/{block.targetSets}
+            </Badge>
+            {/* Row overflow (⋮) menu — page-built items (info, superset
+                link/unlink, swap, plates, watch form, remove). Only while
+                expanded: the collapsed row renders the block's single
+                row-menu-trigger. */}
+            {!isCollapsed && getMenuItems && listIndex !== undefined && (
+              <div className="-my-2.5" onClick={(e) => e.stopPropagation()}>
+                <RowOverflowMenu
+                  testId="row-menu-trigger"
+                  dataBlockId={block.id}
+                  ariaLabel={`Actions for ${exercise.name}`}
+                  items={getMenuItems(listIndex)}
+                />
+              </div>
+            )}
+            {/* Collapse chevron (points up; the collapsed row shows the down twin) */}
+            {onToggleCollapse && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleCollapse(block.id);
+                }}
+                className="-my-2.5 -mr-2 flex min-h-[44px] min-w-[40px] items-center justify-center text-surface-400 hover:text-surface-200 transition-colors"
+                aria-label="Collapse exercise"
+              >
+                <IconChevronDown size={20} className="rotate-180" aria-hidden="true" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Pills line — tier / plateau / pace / superset / safety */}
+        {hasHeaderPills && (
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            {exercise.hypertrophyScore?.tier && (
+              <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium leading-none flex-shrink-0 ${getTierBadgeClasses(exercise.hypertrophyScore.tier)}`}>
+                {exercise.hypertrophyScore.tier}
+              </span>
+            )}
+            {/* Plateau badge (services/plateauDetector) — opens the suggestions sheet */}
+            {plateau && (
+              <button
+                onClick={() => setShowPlateauSheet(true)}
+                className="rounded-full px-2.5 py-1 text-[11px] font-medium leading-none flex-shrink-0 bg-warning-500/10 text-warning-400 hover:bg-warning-500/20 transition-colors"
+                aria-haspopup="dialog"
+              >
+                Plateau
+              </button>
+            )}
+            {/* Progression pace pill (services/progressionInsights) — trend vs
+                the expected rate for the user's experience level. The plateau
+                badge takes precedence when both would show. */}
+            {showPacePill && progressionInsight && (
               <span
                 className={`rounded-full px-2.5 py-1 text-[11px] font-medium leading-none flex-shrink-0 ${
                   progressionInsight.pace === 'ahead'
@@ -1702,24 +1828,16 @@ export const ExerciseCard = memo(function ExerciseCard({
                     : '▼ Behind'}
               </span>
             )}
-          {block.supersetGroupId && (
-            <span className="rounded-full px-2.5 py-1 text-[11px] font-medium leading-none flex-shrink-0 bg-cyan-500/20 text-cyan-400">
-              SS{block.supersetOrder}
-            </span>
-          )}
-          {safetyTier !== 'push_freely' && (
-            <SafetyTierBadge tier={safetyTier} variant="short" showTooltip={true} />
-          )}
-          <div className="ml-auto flex items-center gap-1.5 flex-shrink-0">
-            {/* Set add/remove moved to the footer (next to "+ Add Set") to declutter the header */}
-            {/* Overflow actions (watch form, swap, plates, remove) now live in the
-                single per-row ⋮ menu on the workout page (RowOverflowMenu), so
-                the card no longer renders its own duplicate menu here. */}
-            <Badge variant={progressPercent === 100 ? 'success' : 'default'}>
-              {completedSets.length}/{block.targetSets}
-            </Badge>
+            {block.supersetGroupId && (
+              <span className="rounded-full px-2.5 py-1 text-[11px] font-medium leading-none flex-shrink-0 bg-cyan-500/20 text-cyan-400">
+                SS{block.supersetOrder}
+              </span>
+            )}
+            {safetyTier !== 'push_freely' && (
+              <SafetyTierBadge tier={safetyTier} variant="short" showTooltip={true} />
+            )}
           </div>
-        </div>
+        )}
 
         {/* Meta line — doubles as the history expandable trigger */}
         <button
@@ -3187,6 +3305,18 @@ export const ExerciseCard = memo(function ExerciseCard({
     prevProps.userBodyweightKg === nextProps.userBodyweightKg &&
     prevProps.enhancedAthleteMode === nextProps.enhancedAthleteMode &&
     prevProps.isDeloadSession === nextProps.isDeloadSession &&
+    // Compact title-row chrome. These drive the position badge, the collapsed
+    // gating of the ⋮/slot controls, and the index handed back to the drag and
+    // menu callbacks — a stale listIndex would reorder the wrong block. The
+    // callbacks themselves are identity-stable latest-ref wrappers in the page,
+    // so they are deliberately not compared.
+    prevProps.positionLabel === nextProps.positionLabel &&
+    prevProps.listIndex === nextProps.listIndex &&
+    prevProps.isCollapsed === nextProps.isCollapsed &&
+    prevProps.supersetSlot === nextProps.supersetSlot &&
+    // SS pill on the pills line (covers unlink of a drag-split pair, where the
+    // slot letter is null on both sides of the change)
+    prevProps.block.supersetGroupId === nextProps.block.supersetGroupId &&
     // Write-status (P0-2): compare only THIS card's own sets' statuses, not the
     // whole shared map by reference. setSyncStatus is one object shared by every
     // card, so a reference check would re-render all cards whenever any set's
