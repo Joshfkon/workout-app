@@ -77,6 +77,15 @@ export interface UseWorkoutMuscleVolumeArgs {
   now: Date;
   /** Gate the history fetch (defaults to true — the strip loads eagerly). */
   enabled?: boolean;
+  /**
+   * Whether the LIVE workout data (blocks + logged sets) has hydrated. The
+   * daily order freeze waits for BOTH this and the history query: a cached
+   * history response must not pin the day's order from a render where
+   * `liveBlocks`/`liveSets` are still empty (e.g. resuming a workout), or the
+   * frozen order races page hydration. Defaults to true for callers without a
+   * separate load phase.
+   */
+  liveDataReady?: boolean;
 }
 
 export interface UseWorkoutMuscleVolumeResult {
@@ -172,6 +181,7 @@ export function useWorkoutMuscleVolume({
   liveSets,
   now,
   enabled = true,
+  liveDataReady = true,
 }: UseWorkoutMuscleVolumeArgs): UseWorkoutMuscleVolumeResult {
   const { historyRows, sessions, isLoading } = useRecoveryHistory(now, enabled);
 
@@ -308,9 +318,12 @@ export function useWorkoutMuscleVolume({
 
   const desiredOrderKey = sortedRows.map((r) => r.muscle).join('|');
   useEffect(() => {
-    // Only freeze from a LOADED computation — pre-history readiness is all 1s
-    // and would pin a meaningless order for the rest of the day.
-    if (isLoading || sortedRows.length === 0) return;
+    // Only freeze from a FULLY loaded computation: history still resolving
+    // means readiness is all 1s, and live workout data still hydrating means
+    // today's logged sets are missing — either would pin a wrong order for
+    // the rest of the day (Codex P2 on #503: a cached history query must not
+    // win the race against page hydration).
+    if (isLoading || !liveDataReady || sortedRows.length === 0) return;
     const desired = desiredOrderKey.split('|');
     const current = frozen?.day === localDay ? frozen.order : readFrozenOrder(localDay);
     if (!current) {
@@ -327,7 +340,7 @@ export function useWorkoutMuscleVolume({
       setFrozen({ day: localDay, order: next });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoading, localDay, desiredOrderKey]);
+  }, [isLoading, liveDataReady, localDay, desiredOrderKey]);
 
   const rows = useMemo<WorkoutMuscleVolumeRow[]>(() => {
     if (!frozen || frozen.day !== localDay) return sortedRows;
