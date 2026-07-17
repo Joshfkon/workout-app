@@ -117,6 +117,11 @@ async function fetchNutritionGlobal(): Promise<NutritionGlobalBundle | null> {
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   const thirtyDaysAgoStr = getLocalDateString(thirtyDaysAgo);
+  // Weight goes back 90 days so the Weight tab's 90d chart range (and its
+  // range-scoped trend) has real data, not a 30-day slice.
+  const ninetyDaysAgo = new Date();
+  ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+  const ninetyDaysAgoStr = getLocalDateString(ninetyDaysAgo);
 
   const [
     targetsResult,
@@ -136,7 +141,7 @@ async function fetchNutritionGlobal(): Promise<NutritionGlobalBundle | null> {
       .from('weight_log')
       .select('*')
       .eq('user_id', userId)
-      .gte('logged_at', thirtyDaysAgoStr)
+      .gte('logged_at', ninetyDaysAgoStr)
       .order('logged_at', { ascending: false }),
     supabase
       .from('custom_foods')
