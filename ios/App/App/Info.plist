@@ -49,5 +49,7 @@
 	<true/>
 	<key>NSHealthShareUsageDescription</key>
 	<string>HyperTrack reads sleep, heart, and step data to personalize recovery and calorie estimates.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>HyperTrack uses the camera to scan food barcodes for nutrition logging.</string>
 </dict>
 </plist>
