@@ -31,19 +31,21 @@ export function goalTargetRate(goal: WeightGoal, displayUnit: 'lb' | 'kg'): numb
 }
 
 /**
- * Weekly weight-change rate (linear regression over the last ~3 weeks of
- * entries, falling back to the last two entries when the window is sparse)
- * vs the goal-implied target rate, in the preferred display unit.
+ * Weekly weight-change rate (linear regression over the last `windowDays`
+ * of entries — ~3 weeks by default — falling back to the last two entries
+ * when the window is sparse) vs the goal-implied target rate, in the
+ * preferred display unit.
  */
 export function computeWeightRate(
   weightHistory: WeightHistoryEntry[],
   displayUnit: 'lb' | 'kg',
-  goal: WeightGoal
+  goal: WeightGoal,
+  windowDays: number = 21
 ): WeightRateSummary | null {
   if (weightHistory.length < 2) return null;
   const sorted = [...weightHistory].sort((a, b) => a.date.localeCompare(b.date));
   const latestTs = Date.parse(sorted[sorted.length - 1].date);
-  const windowStart = latestTs - 21 * 24 * 60 * 60 * 1000;
+  const windowStart = latestTs - windowDays * 24 * 60 * 60 * 1000;
   let windowEntries = sorted.filter((w) => Date.parse(w.date) >= windowStart);
   if (windowEntries.length < 2) windowEntries = sorted.slice(-2);
 

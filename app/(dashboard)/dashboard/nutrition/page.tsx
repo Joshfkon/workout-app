@@ -743,15 +743,17 @@ function NutritionPageContent() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    // 90 days to match fetchNutritionGlobal — the Weight tab's 90d chart
+    // range and its range-scoped trend need the full window.
+    const ninetyDaysAgo = new Date();
+    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
     const [weightResult, targetsResult] = await Promise.all([
       supabase
         .from('weight_log')
         .select('*')
         .eq('user_id', user.id)
-        .gte('logged_at', getLocalDateString(thirtyDaysAgo))
+        .gte('logged_at', getLocalDateString(ninetyDaysAgo))
         .order('logged_at', { ascending: false }),
       supabase
         .from('nutrition_targets')
@@ -1492,7 +1494,8 @@ function NutritionPageContent() {
 
   // Weekly trend rate vs the goal-implied target — the SAME shared helper the
   // home "Weight" glance tile uses, so the "+3.8 lb/wk · target +0.5" the
-  // user tapped is the number this tab shows.
+  // user tapped is the number this tab shows. The regression window follows
+  // the chart's 7d/14d/30d/90d toggle so the rate describes what's plotted.
   const weightTrendRate = computeWeightRate(
     weightEntries.map((e) => ({
       date: e.logged_at,
@@ -1500,7 +1503,8 @@ function NutritionPageContent() {
       unit: ((e as any).unit as string | null) || weightUnit,
     })),
     weightUnit,
-    currentPhase ?? 'maintenance'
+    currentPhase ?? 'maintenance',
+    WEIGHT_CHART_RANGE_DAYS[weightChartRange]
   );
   const weightRateOnTrack =
     !weightTrendRate || weightTrendRate.target === null || weightTrendRate.target === 0
@@ -1986,7 +1990,7 @@ function NutritionPageContent() {
                 )}
                 {weightTrendRate && (
                   <div>
-                    <div className="text-sm text-surface-400">Trend</div>
+                    <div className="text-sm text-surface-400">Trend ({weightChartRange})</div>
                     <div
                       className={`text-xl font-semibold ${
                         weightRateOnTrack ? 'text-success-400' : 'text-warning-400'
