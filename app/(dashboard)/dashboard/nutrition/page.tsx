@@ -177,6 +177,14 @@ interface FoodLogInsert {
   nutritionix_id?: string;
 }
 
+const WEIGHT_CHART_RANGE_DAYS = {
+  '7d': 7,
+  '14d': 14,
+  '30d': 30,
+  '90d': 90,
+} as const;
+type WeightChartRange = keyof typeof WEIGHT_CHART_RANGE_DAYS;
+
 /** Skeleton for the macro summary numbers while a never-fetched day loads. */
 function MacroNumbersSkeleton() {
   return (
@@ -256,6 +264,7 @@ function NutritionPageContent() {
   const [showSavedMeals, setShowSavedMeals] = useState(false);
   const [showWeightLog, setShowWeightLog] = useState(false);
   const [showWeightHistory, setShowWeightHistory] = useState(false);
+  const [weightChartRange, setWeightChartRange] = useState<WeightChartRange>('30d');
   const [editingWeight, setEditingWeight] = useState<WeightLogEntry | null>(null);
   const [showTargetsModal, setShowTargetsModal] = useState(false);
   const [showMacroCalculator, setShowMacroCalculator] = useState(false);
@@ -1501,9 +1510,11 @@ function NutritionPageContent() {
 
   // Prepare weight chart data (with unit validation and conversion)
   // Sort by date ascending (oldest first) for proper graph display
+  const weightChartCutoff = new Date();
+  weightChartCutoff.setDate(weightChartCutoff.getDate() - WEIGHT_CHART_RANGE_DAYS[weightChartRange]);
   const weightChartEntries = [...weightEntries]
-    .sort((a, b) => new Date(a.logged_at).getTime() - new Date(b.logged_at).getTime())
-    .slice(-30); // Take last 30 entries (most recent)
+    .filter((entry) => new Date(entry.logged_at) >= weightChartCutoff)
+    .sort((a, b) => new Date(a.logged_at).getTime() - new Date(b.logged_at).getTime());
   // Include the year in tick labels only when the range crosses a year boundary.
   const weightChartSpansYear =
     weightChartEntries.length > 0 &&
@@ -1994,6 +2005,28 @@ function NutritionPageContent() {
               </div>
 
               <div className="md:col-span-2">
+                <div className="flex justify-end mb-2">
+                  <div className="flex gap-1 bg-surface-800 rounded-lg p-0.5">
+                    {(Object.keys(WEIGHT_CHART_RANGE_DAYS) as WeightChartRange[]).map((range) => (
+                      <button
+                        key={range}
+                        onClick={() => setWeightChartRange(range)}
+                        className={`px-2 py-1 text-xs rounded-md transition-colors ${
+                          weightChartRange === range
+                            ? 'bg-primary-500 text-white'
+                            : 'text-surface-400 hover:text-surface-200'
+                        }`}
+                      >
+                        {range}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {weightChartData.length === 0 && (
+                  <div className="flex h-[200px] items-center justify-center">
+                    <p className="text-sm text-surface-400">No weight data for this period</p>
+                  </div>
+                )}
                 {weightChartData.length > 0 && (
                   <ResponsiveContainer width="100%" height={200}>
                     <LineChart data={weightChartData}>
@@ -2008,7 +2041,7 @@ function NutritionPageContent() {
                           showDateTick(
                             index,
                             weightChartData.length,
-                            dateTickStep(weightChartData.length)
+                            dateTickStep(WEIGHT_CHART_RANGE_DAYS[weightChartRange])
                           )
                             ? value
                             : ''

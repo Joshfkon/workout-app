@@ -15,7 +15,7 @@ import { formatDate, formatChartTickDate, dateTickStep, showDateTick } from '@/l
 import { getDisplayWeight } from '@/lib/weightUtils';
 import type { RechartsTooltipProps } from '@/types/database-queries';
 
-type Timeframe = '7d' | '30d' | '90d';
+type Timeframe = '7d' | '14d' | '30d' | '90d';
 
 interface WeightChartDataPoint {
   date: string;
@@ -25,6 +25,7 @@ interface WeightChartDataPoint {
 
 const TIMEFRAME_DAYS: Record<Timeframe, number> = {
   '7d': 7,
+  '14d': 14,
   '30d': 30,
   '90d': 90,
 };
@@ -169,7 +170,7 @@ export const WeightGraph = memo(function WeightGraph({ weightHistory, preferredU
           )}
         </div>
         <div className="flex gap-1 bg-surface-800 rounded-lg p-0.5">
-          {(['7d', '30d', '90d'] as Timeframe[]).map((tf) => (
+          {(['7d', '14d', '30d', '90d'] as Timeframe[]).map((tf) => (
             <button
               key={tf}
               onClick={() => setTimeframe(tf)}
