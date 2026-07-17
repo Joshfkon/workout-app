@@ -23,35 +23,48 @@ export interface CancelWorkoutArgs {
 /**
  * A fetch that never settles (dead radio, hung proxy) must not wedge the
  * discard flow: without a cap, the awaiting UI stays on "Discarding..."
- * forever with its buttons disabled. Cap every operation and surface the
- * timeout (or a rejection) as an ordinary error so the caller resets and
- * offers a retry. Late server-side success is harmless — every operation
- * here is idempotent.
+ * forever with its buttons disabled. On timeout the in-flight request is
+ * ABORTED (not just abandoned) — a delete left running here could otherwise
+ * land much later and hit rows created after the discard flow moved on; see
+ * the mesocycle-path gating below. A backstop timer still guarantees
+ * settlement even if a custom fetch ignores the abort signal.
  */
 const OP_TIMEOUT_MS = 10_000;
+const ABORT_BACKSTOP_MS = 1_000;
 
 type OpResult = { error: { message: string } | null };
 
-function settleWithTimeout(
-  op: PromiseLike<OpResult>,
-  ms: number
-): Promise<OpResult> {
+interface AbortableOp extends PromiseLike<OpResult> {
+  abortSignal(signal: AbortSignal): PromiseLike<OpResult>;
+}
+
+function settleWithTimeout(op: AbortableOp, ms: number): Promise<OpResult> {
   return new Promise((resolve) => {
-    const timer = setTimeout(
+    const controller = new AbortController();
+    const abortTimer = setTimeout(() => controller.abort(), ms);
+    // Abort makes fetch reject immediately, so this backstop only fires if
+    // the op's fetch doesn't honor the signal at all.
+    const backstopTimer = setTimeout(
       () => resolve({ error: { message: `request timed out after ${ms}ms` } }),
-      ms
+      ms + ABORT_BACKSTOP_MS
     );
-    op.then(
-      (value) => {
-        clearTimeout(timer);
-        resolve(value);
-      },
-      (err) => {
-        clearTimeout(timer);
-        resolve({
-          error: { message: err instanceof Error ? err.message : String(err) },
-        });
-      }
+    const settle = (result: OpResult) => {
+      clearTimeout(abortTimer);
+      clearTimeout(backstopTimer);
+      resolve(result);
+    };
+    op.abortSignal(controller.signal).then(
+      (value) => settle(value),
+      (err) =>
+        settle({
+          error: {
+            message: controller.signal.aborted
+              ? `request timed out after ${ms}ms`
+              : err instanceof Error
+                ? err.message
+                : String(err),
+          },
+        })
     );
   });
 }
@@ -101,6 +114,9 @@ export async function cancelWorkoutSession(
   }
 
   if (!mesocycleId) {
+    // Ad-hoc: blocks and the session itself are deleted, so even if an
+    // earlier delete failed, finishing the teardown can't strand anything a
+    // future workout would reuse (a restarted workout gets fresh ids).
     if (blockIds.length > 0) {
       const { error } = await settleWithTimeout(
         supabase.from('exercise_blocks').delete().in('id', blockIds),
@@ -113,7 +129,13 @@ export async function cancelWorkoutSession(
       timeoutMs
     );
     if (error) errors.push(error.message);
-  } else {
+  } else if (errors.length === 0) {
+    // Mesocycle: only make the session restartable when the cleanup above
+    // actually succeeded. The session KEEPS its id and exercise_blocks after
+    // the reset, so if a delete above failed we must not invite a restart:
+    // a delete that somehow still completes server-side later would match
+    // the restarted workout's rows (same block/session ids) and destroy them.
+    // Returning ok=false instead keeps the session in progress for a retry.
     const { error } = await settleWithTimeout(
       supabase
         .from('workout_sessions')

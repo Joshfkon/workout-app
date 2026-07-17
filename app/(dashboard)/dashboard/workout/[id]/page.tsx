@@ -4153,13 +4153,19 @@ export default function WorkoutPage() {
     try {
       const supabase = createUntypedClient();
 
-      const { errors } = await cancelWorkoutSession(supabase, {
+      const { ok, errors } = await cancelWorkoutSession(supabase, {
         sessionId: session.id,
         mesocycleId: session.mesocycleId ?? null,
         blockIds: blocks.map(b => b.id),
       });
-      if (errors.length > 0) {
+      if (!ok) {
+        // Don't tear down and navigate away on a failed/timed-out cleanup: a
+        // mesocycle session is deliberately NOT reset to planned in that case
+        // (see cancelWorkoutSession), so leaving would strand it mid-state.
+        // Keep the workout open and let the user retry.
         console.error('Cancel workout cleanup errors:', errors);
+        setError('Failed to cancel workout. Please try again.');
+        return;
       }
 
       // Clear store state and navigate back to dashboard
