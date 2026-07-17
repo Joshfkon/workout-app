@@ -20,7 +20,7 @@ import {
 import type { SetSyncStatus } from '@/components/workout/ExerciseCard';
 import { InlineHint } from '@/components/ui/FirstTimeHint';
 import { RestTimer, PauseOverlay, RowOverflowMenu, type RowMenuItem } from '@/components/workout';
-import { IconGripVertical, IconX } from '@tabler/icons-react';
+import { IconGripVertical, IconInfoCircle, IconX } from '@tabler/icons-react';
 import { useRestTimer } from '@/hooks/useRestTimer';
 import { useEducationStore } from '@/hooks/useEducationPreferences';
 
@@ -3154,6 +3154,40 @@ export default function WorkoutPage() {
     }
   }, [draggedBlockIndex, dragOverBlockIndex, blocks, currentBlockIndex]);
 
+  // Identity-stable wrappers around the drag handlers and the ⋮ menu builder,
+  // for the grip/menu that now live inside the memoized ExerciseCard header.
+  // The card's memo comparator ignores function props, so these must never
+  // change identity while always calling the freshest logic (latest-ref
+  // pattern). The reorder/collapse logic itself is untouched.
+  const gripHandlersRef = useRef({
+    start: handleBlockLongPressStart,
+    end: handleBlockLongPressEnd,
+    drop: handleBlockDragEnd,
+  });
+  gripHandlersRef.current = {
+    start: handleBlockLongPressStart,
+    end: handleBlockLongPressEnd,
+    drop: handleBlockDragEnd,
+  };
+  const handleGripDragStart = useCallback((index: number, clientY: number) => {
+    gripHandlersRef.current.start(index, clientY);
+  }, []);
+  const handleGripDragEnd = useCallback(() => {
+    gripHandlersRef.current.end();
+    void gripHandlersRef.current.drop();
+  }, []);
+  const handleGripDragCancel = useCallback(() => {
+    gripHandlersRef.current.end();
+  }, []);
+
+  // buildRowMenuItems is defined later in the render body (it reads
+  // render-scope helpers); the ref is (re)assigned right after its definition.
+  const rowMenuItemsBuilderRef = useRef<((index: number) => RowMenuItem[]) | null>(null);
+  const getRowMenuItems = useCallback(
+    (index: number) => rowMenuItemsBuilderRef.current?.(index) ?? [],
+    []
+  );
+
   // Document-level touch/mouse event listeners for drag
   useEffect(() => {
     if (!isDraggingBlock) return;
@@ -4645,6 +4679,15 @@ export default function WorkoutPage() {
     const block = blocks[index];
     const items: RowMenuItem[] = [];
 
+    // Exercise info sheet — formerly the ⓘ button in the card header (the
+    // exercise name still opens the same sheet directly).
+    items.push({
+      key: 'info',
+      label: 'Exercise info',
+      icon: <IconInfoCircle size={16} className="text-surface-400" stroke={2} />,
+      onSelect: () => setSelectedExerciseForDetails(block.exercise),
+    });
+
     const inCluster = block.supersetGroupId !== null;
     const next = blocks[index + 1];
     const prev = blocks[index - 1];
@@ -4744,6 +4787,26 @@ export default function WorkoutPage() {
     });
 
     return items;
+  };
+  // Keep the stable getRowMenuItems wrapper (passed to the memoized
+  // ExerciseCard) pointed at this render's builder.
+  rowMenuItemsBuilderRef.current = buildRowMenuItems;
+
+  // Expand a collapsed exercise row (collapse UI state only — session state is
+  // untouched). Leaving collapse-all mode keeps every other exercise collapsed
+  // so exactly the tapped row expands.
+  const revealBlock = (blockId: string) => {
+    if (allCollapsed) {
+      setAllCollapsed(false);
+      setCollapsedBlocks(new Set(blocks.filter((b) => b.id !== blockId).map((b) => b.id)));
+    } else {
+      setCollapsedBlocks((prev) => {
+        if (!prev.has(blockId)) return prev;
+        const next = new Set(prev);
+        next.delete(blockId);
+        return next;
+      });
+    }
   };
 
   // Vertical shift applied to non-dragged rows while a drag is in flight
@@ -5009,8 +5072,17 @@ export default function WorkoutPage() {
           const blockSets = getSetsForBlock(block.id);
           const isComplete = blockSets.length >= block.targetSets;
           const isCurrent = index === currentBlockIndex;
-          const isBlockCollapsed = collapsedBlocks.has(block.id);
+          const isRowCollapsed = allCollapsed || collapsedBlocks.has(block.id);
           const isBeingDragged = draggedBlockIndex === index;
+
+          // "3/8"-style position badge: position among non-skipped exercises /
+          // their total, so it stays correct after reordering AND after
+          // skipping an exercise. Falls back to the raw index for a skipped
+          // block that still renders in the main list (it has logged sets).
+          const activePos = activeBlocks.findIndex((b) => b.id === block.id);
+          const positionLabel = activePos >= 0
+            ? `${activePos + 1}/${activeBlocks.length}`
+            : `${index + 1}/${blocks.length}`;
 
           // Superset cluster chrome (indigo, distinct from green "done"/blue
           // "current"). Adjacent same-group members render as one continuous
@@ -5072,142 +5144,126 @@ export default function WorkoutPage() {
                   )}
                 </div>
               )}
-              {/* Exercise header with drag handle and collapse - simplified since name is now in grouped container */}
-              <div
-                className={`flex items-center gap-3 mb-3 ${!isCurrent ? 'cursor-pointer' : ''}`}
-              >
-                {/* Drag handle - long press here to reorder */}
+              {/* Collapsed state — a single compact list row (grip · slot ·
+                  position · name · sets/muscle meta · ⋮ · expand chevron),
+                  visually in line with the "Up next" rows; the current
+                  exercise keeps a primary accent ring. The expanded card
+                  below stays MOUNTED (CSS-hidden) so in-progress set inputs
+                  survive collapse/expand. */}
+              {isRowCollapsed && (
                 <div
-                  data-drag-handle
-                  className="flex flex-col gap-0.5 text-surface-500 cursor-grab active:cursor-grabbing p-2 -m-1 touch-none"
-                  onTouchStart={(e) => {
-                    e.stopPropagation();
-                    handleBlockLongPressStart(index, e.touches[0].clientY);
-                  }}
-                  onTouchEnd={(e) => {
-                    e.stopPropagation();
-                    handleBlockLongPressEnd();
-                    handleBlockDragEnd();
-                  }}
-                  onMouseDown={(e) => {
-                    e.stopPropagation();
-                    handleBlockLongPressStart(index, e.clientY);
-                  }}
-                  onMouseUp={(e) => {
-                    e.stopPropagation();
-                    handleBlockLongPressEnd();
-                    handleBlockDragEnd();
-                  }}
-                  onMouseLeave={handleBlockLongPressEnd}
-                >
-                  <div className="w-5 h-0.5 bg-current rounded" />
-                  <div className="w-5 h-0.5 bg-current rounded" />
-                  <div className="w-5 h-0.5 bg-current rounded" />
-                </div>
-
-                {/* Superset slot letter (A/B) — sits by the drag handle so a
-                    linked pair reads as one lettered cluster. */}
-                {cluster.slot && (
-                  <div
-                    data-testid="superset-slot"
-                    className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-[#6d5ce0]/25 text-xs font-bold text-[#a99bff]"
-                    aria-label={`Superset position ${cluster.slot}`}
-                  >
-                    {cluster.slot}
-                  </div>
-                )}
-
-                {/* Exercise number indicator */}
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${
-                  isComplete 
-                    ? 'bg-success-500/20 text-success-400' 
-                    : isCurrent 
-                      ? 'bg-primary-500 text-white' 
-                      : 'bg-surface-800 text-surface-400'
-                }`}>
-                  {isComplete ? (
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  ) : (
-                    index + 1
-                  )}
-                </div>
-                
-                {/* Status badges and exercise name */}
-                <div className="flex items-center gap-2 flex-1 min-w-0">
-                  {isCurrent && (
-                    <Badge variant="info" size="sm">Current</Badge>
-                  )}
-                  {/* "Done" badge removed — the green check circle already signals
-                      completion, and dropping it frees the row's horizontal space. */}
-                  {/* Exercise name — only in this list row when COLLAPSED; when expanded
-                      the richer group-container header below shows the name (avoids duplication) */}
-                  {(allCollapsed || isBlockCollapsed) && (
-                    <span className={`text-sm font-medium truncate ${
-                      isCurrent ? 'text-surface-100' : 'text-surface-300'
-                    }`}>
-                      {block.exercise.name}
-                    </span>
-                  )}
-                  {/* Injury risk warning */}
-                  {(() => {
-                    const injuryRisk = getExerciseInjuryRisk(block.exercise, temporaryInjuries);
-                    return injuryRisk.isRisky && isCurrent ? (
-                      <div className={`text-xs ${
-                        injuryRisk.severity === 3 ? 'text-danger-400' : 'text-warning-400'
-                      }`}>
-                        ⚠️ {injuryRisk.reasons[0]}
-                        <button 
-                          className="ml-2 underline font-medium"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSwapTargetBlockId(block.id);
-                            setSwapSearchQuery('');
-                            if (availableExercises.length === 0) {
-                              fetchExercises();
-                            }
-                            setShowPageLevelSwapModal(true);
-                          }}
-                        >
-                          Swap exercise?
-                        </button>
-                      </div>
-                    ) : null;
-                  })()}
-                </div>
-                
-                {/* Row overflow menu — superset link/unlink, swap, plates,
-                    watch form, and the (now menu-only) destructive Remove. */}
-                <div onClick={(e) => e.stopPropagation()}>
-                  <RowOverflowMenu
-                    testId="row-menu-trigger"
-                    dataBlockId={block.id}
-                    ariaLabel={`Actions for ${block.exercise.name}`}
-                    items={buildRowMenuItems(index)}
-                  />
-                </div>
-                {/* Collapse/expand button */}
-                <button
+                  className={`flex items-center gap-2 rounded-lg px-2 py-0.5 transition-colors cursor-pointer ${
+                    isCurrent
+                      ? 'bg-surface-800/60 ring-1 ring-primary-500/50'
+                      : isComplete
+                        ? 'bg-success-500/5 hover:bg-surface-800/50'
+                        : 'bg-surface-800/40 hover:bg-surface-800/60'
+                  }`}
                   onClick={(e) => {
+                    // Tap anywhere non-interactive: activate + expand (same as
+                    // the old collapsed preview's "Tap to start").
+                    if (isDraggingBlock) return;
+                    const target = e.target as HTMLElement;
+                    if (target.closest('button, input, select, textarea, a, [data-drag-handle]')) return;
                     e.stopPropagation();
-                    toggleBlockCollapse(block.id);
+                    setCurrentBlockIndex(index);
+                    setCurrentSetNumber(blockSets.length + 1);
+                    revealBlock(block.id);
                   }}
-                  className="p-2 text-surface-400 hover:text-surface-200 transition-colors"
                 >
-                  <svg
-                    className={`w-5 h-5 transition-transform ${isBlockCollapsed ? '' : 'rotate-180'}`}
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
+                  {/* Drag grip — long press to reorder; ≥44×44 hit area */}
+                  <div
+                    data-drag-handle
+                    aria-label="Hold to reorder exercise"
+                    className="-my-1.5 -ml-2 flex min-h-[44px] min-w-[40px] flex-shrink-0 cursor-grab touch-none items-center justify-center text-surface-500 active:cursor-grabbing"
+                    onTouchStart={(e) => {
+                      e.stopPropagation();
+                      handleBlockLongPressStart(index, e.touches[0].clientY);
+                    }}
+                    onTouchEnd={(e) => {
+                      e.stopPropagation();
+                      handleBlockLongPressEnd();
+                      handleBlockDragEnd();
+                    }}
+                    onMouseDown={(e) => {
+                      e.stopPropagation();
+                      handleBlockLongPressStart(index, e.clientY);
+                    }}
+                    onMouseUp={(e) => {
+                      e.stopPropagation();
+                      handleBlockLongPressEnd();
+                      handleBlockDragEnd();
+                    }}
+                    onMouseLeave={handleBlockLongPressEnd}
                   >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-              </div>
+                    <IconGripVertical size={16} stroke={2} />
+                  </div>
+                  {/* Superset slot letter (A/B) — the hidden card suppresses
+                      its own copy while collapsed, so this is the block's only
+                      superset-slot node. */}
+                  {cluster.slot && (
+                    <div
+                      data-testid="superset-slot"
+                      className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-[#6d5ce0]/25 text-xs font-bold text-[#a99bff]"
+                      aria-label={`Superset position ${cluster.slot}`}
+                    >
+                      {cluster.slot}
+                    </div>
+                  )}
+                  {/* Position badge */}
+                  <span
+                    data-testid="position-badge"
+                    className={`flex-shrink-0 rounded-md px-1.5 py-1 text-[11px] font-bold leading-none transition-colors ${
+                      isComplete
+                        ? 'bg-success-500/20 text-success-400'
+                        : isCurrent
+                          ? 'bg-primary-500 text-white'
+                          : 'bg-surface-800 text-surface-400'
+                    }`}
+                  >
+                    {positionLabel}
+                  </span>
+                  <span
+                    className={`min-w-0 flex-1 truncate text-sm font-medium ${
+                      isCurrent ? 'text-surface-100' : 'text-surface-300'
+                    }`}
+                  >
+                    {block.exercise.name}
+                  </span>
+                  <span className="flex-shrink-0 text-[11px] text-surface-500">
+                    {blockSets.length}/{block.targetSets} · {formatMuscleName(block.exercise.primaryMuscle)}
+                  </span>
+                  {/* Row overflow menu — same items as the expanded card's ⋮
+                      (which is suppressed while collapsed, keeping one
+                      row-menu-trigger per block) */}
+                  <div className="-my-1.5" onClick={(e) => e.stopPropagation()}>
+                    <RowOverflowMenu
+                      testId="row-menu-trigger"
+                      dataBlockId={block.id}
+                      ariaLabel={`Actions for ${block.exercise.name}`}
+                      items={buildRowMenuItems(index)}
+                    />
+                  </div>
+                  {/* Expand chevron */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      revealBlock(block.id);
+                    }}
+                    className="-my-1.5 -ml-1 -mr-2 flex min-h-[44px] min-w-[40px] flex-shrink-0 items-center justify-center text-surface-400 hover:text-surface-200 transition-colors"
+                    aria-label="Expand exercise"
+                  >
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                </div>
+              )}
 
-              {/* Expanded content - show when not globally collapsed and not individually collapsed */}
-              {!allCollapsed && !isBlockCollapsed && (() => {
+              {/* Exercise card content — ALWAYS mounted (CSS-hidden while
+                  collapsed) so the card's in-progress set inputs survive
+                  collapse/expand and drag mode. */}
+              {(() => {
                 // Calculate AI recommended weight first so it can be used for warmup
                 const exerciseNote = coachMessage?.exerciseNotes.find(
                   n => n.name === block.exercise.name
@@ -5243,10 +5299,36 @@ export default function WorkoutPage() {
                   : (coldStartSuggestion?.weightKg ?? aiRecommendedWeightKg);
                 
                 return (
-                  // Exercise group container — ExerciseCard renders its own
-                  // card with the slim header (name + tier/plateau pills +
-                  // meta line, Phase 2.4), so no duplicate header here.
-                  <div className="mt-4 mb-6 transition-all">
+                  // Exercise group container — the card's own title row now
+                  // carries the grip/position/menu/chevron chrome, so it sits
+                  // flush at the top of the block (no standalone header row or
+                  // mt gap above it). `hidden` (not unmount) while collapsed.
+                  <div className={`${isRowCollapsed ? 'hidden' : ''} mb-6 transition-all`}>
+                    {/* Injury risk warning (formerly in the standalone header row) */}
+                    {(() => {
+                      const injuryRisk = getExerciseInjuryRisk(block.exercise, temporaryInjuries);
+                      return injuryRisk.isRisky && isCurrent ? (
+                        <div className={`mb-2 text-xs ${
+                          injuryRisk.severity === 3 ? 'text-danger-400' : 'text-warning-400'
+                        }`}>
+                          ⚠️ {injuryRisk.reasons[0]}
+                          <button
+                            className="ml-2 underline font-medium"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSwapTargetBlockId(block.id);
+                              setSwapSearchQuery('');
+                              if (availableExercises.length === 0) {
+                                fetchExercises();
+                              }
+                              setShowPageLevelSwapModal(true);
+                            }}
+                          >
+                            Swap exercise?
+                          </button>
+                        </div>
+                      ) : null;
+                    })()}
                     <div className="space-y-3">
                     <ExerciseCard
                     exercise={block.exercise}
@@ -5314,6 +5396,15 @@ export default function WorkoutPage() {
                     )}
                     unavailableEquipmentIds={locationUnavailableEquipmentIds}
                     isActive={isCurrent}
+                    positionLabel={positionLabel}
+                    listIndex={index}
+                    isCollapsed={isRowCollapsed}
+                    supersetSlot={cluster.slot}
+                    onDragHandleStart={handleGripDragStart}
+                    onDragHandleEnd={handleGripDragEnd}
+                    onDragHandleCancel={handleGripDragCancel}
+                    getMenuItems={getRowMenuItems}
+                    onToggleCollapse={toggleBlockCollapse}
                     onActiveSuggestionChange={isCurrent ? setActiveSuggestionLabel : undefined}
                     unit={preferences.units}
                     recommendedWeight={aiRecommendedWeightKg}
@@ -5473,71 +5564,6 @@ export default function WorkoutPage() {
                 );
               })()}
 
-              {/* Collapsed preview - show when all collapsed */}
-              {allCollapsed && (
-                <div
-                  className={`ml-11 p-3 rounded-lg cursor-pointer transition-colors ${
-                    isComplete ? 'bg-success-500/5 border border-success-500/20' : 'bg-surface-800/30 hover:bg-surface-800/50'
-                  }`}
-                  onClick={() => {
-                    setCurrentBlockIndex(index);
-                    setCurrentSetNumber(blockSets.length + 1);
-                    // "Tap to start" must ALWAYS reveal the set-logging UI —
-                    // marking the block current is a no-op when it's already
-                    // current, so we also clear the collapsed state here.
-                    // Otherwise the tap silently does nothing (card stays
-                    // collapsed) and the only responsive target left is the
-                    // name/info button. Collapse UI state only — session state
-                    // is untouched.
-                    setAllCollapsed(false);
-                    setCollapsedBlocks((prev) => {
-                      if (!prev.has(block.id)) return prev;
-                      const next = new Set(prev);
-                      next.delete(block.id);
-                      return next;
-                    });
-                  }}
-                >
-                  {isComplete ? (
-                    <div className="flex flex-col gap-1">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setSelectedExerciseForDetails(block.exercise); }}
-                        className="self-start text-sm font-medium text-surface-100 text-left hover:text-primary-400 transition-colors"
-                      >
-                        {block.exercise.name}
-                      </button>
-                      <div className="flex items-center justify-between">
-                        <div className="flex gap-3 flex-wrap">
-                          {blockSets.map((set, setIdx) => (
-                            <span key={set.id} className="text-xs text-surface-400">
-                              Set {setIdx + 1}: {convertWeightForDisplay(set.weightKg, preferences.units)} {preferences.units === 'lb' ? 'lbs' : 'kg'} × {set.reps}
-                            </span>
-                          ))}
-                        </div>
-                        <button className="text-xs text-primary-400 hover:text-primary-300">
-                          Edit
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col gap-1">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setSelectedExerciseForDetails(block.exercise); }}
-                        className="self-start text-sm font-medium text-surface-100 text-left hover:text-primary-400 transition-colors"
-                      >
-                        {block.exercise.name}
-                      </button>
-                      <div className="flex items-center justify-between text-surface-500">
-                        <span className="text-sm">
-                          {block.targetSets} sets × {block.targetRepRange[0]}-{block.targetRepRange[1]} reps
-                          {block.targetWeightKg > 0 && ` @ ${formatWeight(block.targetWeightKg, preferences.units)}`}
-                        </span>
-                        <span className="text-xs">Tap to start</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
           );
         })}
@@ -5654,9 +5680,15 @@ export default function WorkoutPage() {
                 <div className="w-4 h-0.5 bg-current rounded" />
                 <div className="w-4 h-0.5 bg-current rounded" />
               </div>
-              {/* Exercise number circle */}
-              <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold bg-primary-500 text-white">
-                {draggedBlockIndex + 1}
+              {/* Position badge — same "3/8" format as the list rows */}
+              <div className="rounded-md px-1.5 py-1 text-[11px] font-bold leading-none bg-primary-500 text-white flex-shrink-0">
+                {(() => {
+                  const draggedId = blocks[draggedBlockIndex]?.id;
+                  const pos = activeBlocks.findIndex((b) => b.id === draggedId);
+                  return pos >= 0
+                    ? `${pos + 1}/${activeBlocks.length}`
+                    : `${draggedBlockIndex + 1}/${blocks.length}`;
+                })()}
               </div>
               {/* Exercise name */}
               <div className="flex-1">
