@@ -209,6 +209,7 @@ function computeHistoryFromBlocks(
     return {
       lastWorkoutDate: '',
       lastWorkoutSets: [],
+      priorWorkoutSets: [],
       estimatedE1RM: 0,
       personalRecord: null,
       totalSessions: 0,
@@ -225,19 +226,30 @@ function computeHistoryFromBlocks(
   // kept set's e1RM with when it happened. The PR stays the undecayed best.
   const anchorEntries: E1RMAnchorEntry[] = [];
 
+  // Normal working sets of a block, ordered by set_number — so previousSets[i]
+  // maps to that workout's i-th working set (not a dropset/rest-pause or
+  // DB-ordering quirk).
+  const workingSetsOf = (block: HistoryBlockRow) =>
+    (block.set_logs || [])
+      .filter((s) => !s.is_warmup && (s.set_type ?? 'normal') === 'normal')
+      .sort((a, b) => (a.set_number ?? 0) - (b.set_number ?? 0))
+      .map((s) => ({
+        weightKg: s.weight_kg,
+        reps: s.reps,
+        rpe: s.rpe,
+      }));
+
   // Get last workout data
   const lastBlock = historyBlocks[0];
   const lastSession = lastBlock.workout_sessions;
-  const lastSets = (lastBlock.set_logs || [])
-    // Only normal working sets, ordered by set_number — so previousSets[i] maps to
-    // the prior workout's i-th working set (not a dropset/rest-pause or DB-ordering quirk).
-    .filter((s) => !s.is_warmup && (s.set_type ?? 'normal') === 'normal')
-    .sort((a, b) => (a.set_number ?? 0) - (b.set_number ?? 0))
-    .map((s) => ({
-      weightKg: s.weight_kg,
-      reps: s.reps,
-      rpe: s.rpe,
-    }));
+  const lastSets = workingSetsOf(lastBlock);
+
+  // Session BEFORE last (first block from a different session), for the
+  // regression path: two consecutive below-floor sessions confirm a decrement.
+  const priorBlock = historyBlocks.find(
+    (b) => b.workout_sessions && b.workout_sessions.id !== lastSession?.id
+  );
+  const priorSets = priorBlock ? workingSetsOf(priorBlock) : [];
 
   // Calculate best E1RM and PR
   historyBlocks.forEach((block) => {
@@ -271,6 +283,7 @@ function computeHistoryFromBlocks(
   return {
     lastWorkoutDate: lastSession?.completed_at || '',
     lastWorkoutSets: lastSets,
+    priorWorkoutSets: priorSets,
     // Recency-decayed anchor (Fix 3): a stale peak fades by calendar age
     // (exp(-age/tau), age relative to the newest session) instead of
     // anchoring today's prescription; the newest session always keeps full

@@ -45,6 +45,8 @@ function exercisePrimaryMuscle(ex: { primaryMuscle?: string; primary_muscle?: st
 interface ExerciseHistory {
   lastWorkoutDate: string;
   lastWorkoutSets: { weightKg: number; reps: number; rpe?: number }[];
+  /** Working sets from the session BEFORE last — regression-path evidence (Fix 4). */
+  priorWorkoutSets?: { weightKg: number; reps: number; rpe?: number }[];
   estimatedE1RM: number;
   personalRecord: { weightKg: number; reps: number; e1rm: number; date: string } | null;
   totalSessions: number;
@@ -757,12 +759,37 @@ export const ExerciseCard = memo(function ExerciseCard({
     [previousSets]
   );
 
+  // The session BEFORE last, for the regression path (Fix 4): a load
+  // decrement requires TWO consecutive below-floor sessions; one bad session
+  // holds. Undefined when the history shape doesn't carry it (legacy) —
+  // the recommender then keeps its legacy reduce behavior.
+  const priorSessionSetsForGating = useMemo(
+    () =>
+      exerciseHistory?.priorWorkoutSets
+        ? exerciseHistory.priorWorkoutSets
+            .filter((s) => s.weightKg > 0 && s.reps > 0)
+            .map((s) => ({
+              weightKg: s.weightKg,
+              reps: s.reps,
+              rir: s.rpe != null ? Math.max(0, rpeToRir(s.rpe)) : undefined,
+            }))
+        : undefined,
+    [exerciseHistory?.priorWorkoutSets]
+  );
+
   // Weight+reps seed for a not-yet-started exercise, anchored to the previous
   // session's set INCLUDING its effort (services/setRecommender). Holds the
   // weight when that set landed in range at roughly the target effort; steps
   // it on a clear miss — e.g. 20 reps left at 4 RIR against a 10-15 @ 2 RIR
   // target, or a rep range moved by the one-tap plateau switch — so a
   // mis-loaded session doesn't get replayed verbatim.
+  //
+  // NOTE: the session-list gates (prevSessionSets / priorSessionSets) are
+  // deliberately NOT passed here. This seed's only call site is the one-tap
+  // plateau REP-RANGE SWITCH — the previous sessions were performed under the
+  // OLD range, so grading them against the new range's floor/top would
+  // misread the switch as an unearned bump or a confirmed regression and
+  // block the proper curve-based repricing.
   const seedFromPreviousSet = useCallback(
     (prevSet: { weightKg: number; reps: number; rpe?: number }, range: [number, number]) =>
       recommendSessionStart({
@@ -772,9 +799,8 @@ export const ExerciseCard = memo(function ExerciseCard({
         targetRepRange: range,
         targetRir: effectiveTargetRir,
         minIncrementKg: exercise.minWeightIncrementKg,
-        prevSessionSets: prevSessionSetsForGating,
       }),
-    [effectiveTargetRir, exercise.minWeightIncrementKg, prevSessionSetsForGating]
+    [effectiveTargetRir, exercise.minWeightIncrementKg]
   );
 
   // Best recent WORKING weight last session (the top set). Doubles as the role-
@@ -812,10 +838,11 @@ export const ExerciseCard = memo(function ExerciseCard({
         prevReps: prevSet?.reps,
         prevRir: prevSet?.rpe != null ? rpeToRir(prevSet.rpe) : undefined,
         prevSessionSets: prevSessionSetsForGating,
+        priorSessionSets: priorSessionSetsForGating,
       });
       return { seed, prevSet };
     },
-    [previousSets, previousTopSetWeightKg, anchorE1RMKg, block.targetRepRange, effectiveTargetRir, exercise.minWeightIncrementKg, prevSessionSetsForGating]
+    [previousSets, previousTopSetWeightKg, anchorE1RMKg, block.targetRepRange, effectiveTargetRir, exercise.minWeightIncrementKg, prevSessionSetsForGating, priorSessionSetsForGating]
   );
 
   // Curve-consistent reps for a session-start seed: answer the seeded weight
