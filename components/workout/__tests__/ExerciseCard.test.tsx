@@ -287,11 +287,11 @@ describe('ExerciseCard', () => {
   });
 
   describe('Header', () => {
-    it('displays only the exercise name — muscle/grade/caution metadata moved to the info view', () => {
+    it('displays the exercise name and muscle meta line — grade/caution metadata moved to the info view', () => {
       render(<ExerciseCard {...defaultProps} />);
       expect(screen.getByText('Bench Press')).toBeInTheDocument();
-      // Muscle meta line removed from the header
-      expect(screen.queryByText(/chest/i)).not.toBeInTheDocument();
+      // Muscle meta line under the title row
+      expect(screen.getByText(/chest/i)).toBeInTheDocument();
       // Caution/safety badge removed (Bench Press is a 'protect' exercise)
       expect(screen.queryByText(/protect/i)).not.toBeInTheDocument();
       expect(screen.queryByText(/caution/i)).not.toBeInTheDocument();
@@ -302,7 +302,8 @@ describe('ExerciseCard', () => {
       expect(screen.queryByText(/0\/3/)).not.toBeInTheDocument();
     });
 
-    it('no longer renders the last-session meta line (it lives in the info view)', () => {
+    it('renders the last-session meta line with an expandable history detail', async () => {
+      const user = userEvent.setup();
       render(
         <ExerciseCard
           {...defaultProps}
@@ -318,7 +319,19 @@ describe('ExerciseCard', () => {
           }}
         />
       );
-      expect(screen.queryByText(/last session/)).not.toBeInTheDocument();
+      // "chest · last session 60 kg × 9, × 8 @ 2 RIR"
+      const metaLine = screen.getByText(/last session 60 kg × 9, × 8 @ 2 RIR/);
+      expect(metaLine).toBeInTheDocument();
+
+      // Tapping the meta line expands the history detail
+      await user.click(metaLine);
+      expect(screen.getByText('Last Workout')).toBeInTheDocument();
+      expect(screen.getByText(/Estimated 1RM/)).toBeInTheDocument();
+      expect(screen.getByText(/5 sessions/)).toBeInTheDocument();
+
+      // Tapping again collapses it
+      await user.click(metaLine);
+      expect(screen.queryByText('Last Workout')).not.toBeInTheDocument();
     });
 
     it('calls onExerciseNameClick when exercise name is clicked', async () => {

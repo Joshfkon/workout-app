@@ -24,6 +24,18 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
           class="ml-auto flex items-center gap-0.5 flex-shrink-0"
         />
       </div>
+      <button
+        class="mt-1 flex items-center justify-between w-full gap-2 text-left"
+        disabled=""
+      >
+        <p
+          class="min-w-0 text-[11px] text-surface-500 truncate"
+        >
+          <span>
+            Chest
+          </span>
+        </p>
+      </button>
     </div>
     <div
       class="px-3 py-3 space-y-1.5"
@@ -537,6 +549,19 @@ exports[`ExerciseCard Snapshot Tests renders bodyweight exercise 1`] = `
           class="ml-auto flex items-center gap-0.5 flex-shrink-0"
         />
       </div>
+      <button
+        class="mt-1 flex items-center justify-between w-full gap-2 text-left"
+        disabled=""
+      >
+        <p
+          class="min-w-0 text-[11px] text-surface-500 truncate"
+        >
+          <span>
+            Back
+          </span>
+           · bodyweight
+        </p>
+      </button>
       <div
         class="mt-2"
       >
@@ -737,6 +762,18 @@ exports[`ExerciseCard Snapshot Tests renders empty state (no sets logged) 1`] = 
           class="ml-auto flex items-center gap-0.5 flex-shrink-0"
         />
       </div>
+      <button
+        class="mt-1 flex items-center justify-between w-full gap-2 text-left"
+        disabled=""
+      >
+        <p
+          class="min-w-0 text-[11px] text-surface-500 truncate"
+        >
+          <span>
+            Chest
+          </span>
+        </p>
+      </button>
     </div>
     <div
       class="px-3 py-3 space-y-1.5"
@@ -917,6 +954,18 @@ exports[`ExerciseCard Snapshot Tests renders in lb unit mode 1`] = `
           class="ml-auto flex items-center gap-0.5 flex-shrink-0"
         />
       </div>
+      <button
+        class="mt-1 flex items-center justify-between w-full gap-2 text-left"
+        disabled=""
+      >
+        <p
+          class="min-w-0 text-[11px] text-surface-500 truncate"
+        >
+          <span>
+            Chest
+          </span>
+        </p>
+      </button>
     </div>
     <div
       class="px-3 py-3 space-y-1.5"
@@ -1097,6 +1146,18 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
           class="ml-auto flex items-center gap-0.5 flex-shrink-0"
         />
       </div>
+      <button
+        class="mt-1 flex items-center justify-between w-full gap-2 text-left"
+        disabled=""
+      >
+        <p
+          class="min-w-0 text-[11px] text-surface-500 truncate"
+        >
+          <span>
+            Chest
+          </span>
+        </p>
+      </button>
     </div>
     <div
       class="px-3 py-3 space-y-1.5"
@@ -1311,6 +1372,36 @@ exports[`ExerciseCard Snapshot Tests renders with exercise history 1`] = `
           class="ml-auto flex items-center gap-0.5 flex-shrink-0"
         />
       </div>
+      <button
+        class="mt-1 flex items-center justify-between w-full gap-2 text-left"
+      >
+        <p
+          class="min-w-0 text-[11px] text-surface-500 truncate"
+        >
+          <span>
+            Chest
+          </span>
+           · 
+          last session 100 kg × 10, × 9 @ 2 RIR
+        </p>
+        <svg
+          aria-hidden="true"
+          class="tabler-icon tabler-icon-chevron-down flex-shrink-0 text-surface-500 transition-transform "
+          fill="none"
+          height="14"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="14"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M6 9l6 6l6 -6"
+          />
+        </svg>
+      </button>
     </div>
     <div
       class="px-3 py-3 space-y-1.5"
@@ -1491,6 +1582,18 @@ exports[`ExerciseCard Snapshot Tests renders with hypertrophy score tier pill 1`
           class="ml-auto flex items-center gap-0.5 flex-shrink-0"
         />
       </div>
+      <button
+        class="mt-1 flex items-center justify-between w-full gap-2 text-left"
+        disabled=""
+      >
+        <p
+          class="min-w-0 text-[11px] text-surface-500 truncate"
+        >
+          <span>
+            Chest
+          </span>
+        </p>
+      </button>
     </div>
     <div
       class="px-3 py-3 space-y-1.5"
@@ -1681,6 +1784,18 @@ exports[`ExerciseCard Snapshot Tests renders with plateau pill 1`] = `
           Plateau
         </button>
       </div>
+      <button
+        class="mt-1 flex items-center justify-between w-full gap-2 text-left"
+        disabled=""
+      >
+        <p
+          class="min-w-0 text-[11px] text-surface-500 truncate"
+        >
+          <span>
+            Chest
+          </span>
+        </p>
+      </button>
     </div>
     <div
       class="px-3 py-3 space-y-1.5"
