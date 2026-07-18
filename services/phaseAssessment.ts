@@ -150,9 +150,18 @@ function trendAt(points: TrendPoint[], day: string): number | null {
 }
 
 /**
- * Trend-weight rate (lb/wk) over the trailing `windowDays` ending at `end`,
- * clamped so the window never reaches before `phaseStart`. Null when the
- * usable span is too short to call a weekly rate.
+ * Weekly weight rate (lb/wk) over the trailing `windowDays` ending at `end`:
+ * the least-squares slope of the raw weigh-ins inside the window — the same
+ * estimator the weight chart shows, so the verdict card can never contradict
+ * the chart the user is looking at. The window is clamped to `phaseStart` AND
+ * to the first actual weigh-in, and `spanDays` reports the real data span
+ * used (a 30d window with 22 days of weigh-ins reads "over 22d", not "over
+ * 30d"). Null when the usable span is too short to call a weekly rate.
+ *
+ * Deliberately NOT the difference of EWMA trend endpoints: after a step
+ * change (e.g. the glycogen/water jump in a bulk's first week) the EWMA lags
+ * for weeks, and its catch-up bleeds into every later window — a 14d window
+ * would read "hot" long after the actual last-14-days slope is on target.
  */
 function rateOverTrailing(
   points: TrendPoint[],
@@ -160,13 +169,25 @@ function rateOverTrailing(
   windowDays: number,
   phaseStart: string
 ): { rate: number; spanDays: number } | null {
-  const winStart = maxDay(phaseStart, addLocalDays(end, -windowDays));
-  const spanDays = localDaysBetweenDays(winStart, end);
+  if (points.length === 0) return null;
+  const winStart = maxDay(maxDay(phaseStart, addLocalDays(end, -windowDays)), points[0].date);
+  const inWin = points.filter((p) => p.date >= winStart && p.date <= end);
+  if (inWin.length < 2) return null;
+  const first = inWin[0];
+  const spanDays = localDaysBetweenDays(first.date, inWin[inWin.length - 1].date);
   if (spanDays < MIN_RATE_SPAN_DAYS) return null;
-  const w0 = trendAt(points, winStart);
-  const w1 = trendAt(points, end);
-  if (w0 == null || w1 == null) return null;
-  return { rate: ((w1 - w0) / spanDays) * 7, spanDays };
+  const xs = inWin.map((p) => localDaysBetweenDays(first.date, p.date));
+  const n = inWin.length;
+  const meanX = xs.reduce((sum, x) => sum + x, 0) / n;
+  const meanY = inWin.reduce((sum, p) => sum + p.raw, 0) / n;
+  let num = 0;
+  let den = 0;
+  for (let i = 0; i < n; i++) {
+    num += (xs[i] - meanX) * (inWin[i].raw - meanY);
+    den += (xs[i] - meanX) ** 2;
+  }
+  if (den === 0) return null;
+  return { rate: (num / den) * 7, spanDays };
 }
 
 /** DEXA scans inside [start, end], sorted ascending by scan date. */
@@ -274,14 +295,15 @@ export function assessProgress(input: AssessProgressInput): Assessment {
   const rate14 = rateOverTrailing(trendPoints, end, 14, start);
 
   if (!rate30) {
-    // Enough weigh-ins but the phase span itself is under a week.
+    // Enough weigh-ins but they span under a week (phase just started, or
+    // the user only recently began weighing in).
     return {
       status: 'insufficient_data',
       headline: `${prefix}: too new to assess`,
       details: [
         {
           metric: 'Span',
-          text: `Phase started ${fmtShortDay(start)}; a weekly rate needs at least ${MIN_RATE_SPAN_DAYS} in-phase days.`,
+          text: `Phase started ${fmtShortDay(start)}; a weekly rate needs weigh-ins spanning at least ${MIN_RATE_SPAN_DAYS} in-phase days.`,
         },
       ],
     };

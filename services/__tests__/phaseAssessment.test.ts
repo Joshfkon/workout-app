@@ -2,9 +2,9 @@
  * assessProgress rule-branch tests.
  *
  * Fixtures build weigh-in series relative to a fixed TODAY so every case is
- * deterministic. Long (90-120 day) phases are used for exact-rate cases so the
- * trend EWMA is in steady state and the measured weekly rate matches the
- * constructed slope to within a few thousandths of a lb/wk.
+ * deterministic. Rates are measured as the least-squares slope of raw
+ * weigh-ins in each window, so a linear fixture's measured rate matches its
+ * constructed slope exactly regardless of phase length.
  */
 
 import { assessProgress, scansInPhase, type WaistEntry } from '@/services/phaseAssessment';
@@ -132,12 +132,12 @@ describe('assessProgress — bulk rate rules', () => {
   });
 
   it('overshoot in 30d only (14d back on target) -> attention but NO suggestion', () => {
-    // Hot at +2 lb/wk until 29 days ago, then +0.4 lb/wk since: the 30d
-    // window still reads hot (~+1.0), the 14d window has cooled to ~+0.6
-    // (within target + 0.25), so the calorie suggestion must NOT fire.
-    const hot = linearWeighIns(-120, -29, 170, 2.0);
+    // Hot at +2 lb/wk until 15 days ago, then +0.5 lb/wk since: the 30d
+    // window still reads hot (~+1.3), but the last 14 days are exactly on
+    // target, so the calorie suggestion must NOT fire.
+    const hot = linearWeighIns(-120, -15, 170, 2.0);
     const lastHot = hot[hot.length - 1].weightLb;
-    const cool = linearWeighIns(-28, 0, lastHot + 0.4 / 7, 0.4);
+    const cool = linearWeighIns(-14, 0, lastHot + 0.5 / 7, 0.5);
     const result = assessProgress({
       phase: phase(),
       today: TODAY,
@@ -147,6 +147,40 @@ describe('assessProgress — bulk rate rules', () => {
     expect(result.status).toBe('attention');
     expect(result.headline).toContain('gaining faster than target');
     expect(result.suggestion).toBeUndefined();
+  });
+
+  it('an early-phase water-weight jump does not bleed into later windows', () => {
+    // Bulk week 7: +5 lb glycogen/water step in the first week, then a clean
+    // +0.5 lb/wk crawl. The old EWMA-endpoint rate still carried the step
+    // weeks later, claiming both windows were hot and advising a calorie cut;
+    // the honest slope of the last 30 (and 14) days is exactly on target.
+    const jump = linearWeighIns(-42, -37, 172, 7.0);
+    const lastJump = jump[jump.length - 1].weightLb;
+    const crawl = linearWeighIns(-36, 0, lastJump + 0.5 / 7, 0.5);
+    const result = assessProgress({
+      phase: phase({ startDay: day(-42) }),
+      today: TODAY,
+      weighIns: [...jump, ...crawl],
+      ...noData,
+    });
+    expect(result.status).toBe('on_track');
+    expect(result.headline).toContain('gaining on target');
+    expect(result.suggestion).toBeUndefined();
+  });
+
+  it('reports the actual data span when weigh-ins start inside the 30d window', () => {
+    // Phase is 45 days old but weigh-ins only began 22 days ago: the rate
+    // detail must say "over 22d" (the real data span), not "over 30d", and
+    // the rate must not be diluted by the empty days.
+    const weighIns = linearWeighIns(-22, 0, 172, 1.5);
+    const result = assessProgress({
+      phase: phase({ startDay: day(-45) }),
+      today: TODAY,
+      weighIns,
+      ...noData,
+    });
+    expect(result.details[0].text).toMatch(/Trend \+1\.5 lb\/wk vs \+0\.5 target over 22d/);
+    expect(result.status).toBe('attention');
   });
 
   it('flat/negative rate during bulk -> attention, gaining slower than target', () => {
