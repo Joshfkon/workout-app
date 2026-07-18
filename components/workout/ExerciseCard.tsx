@@ -408,6 +408,8 @@ export const ExerciseCard = memo(function ExerciseCard({
   const [dropsetMode, setDropsetMode] = useState<{ parentSetId: string; parentWeight: number } | null>(null);
   // Plateau suggestions bottom sheet (opened from the header pill)
   const [showPlateauSheet, setShowPlateauSheet] = useState(false);
+  // Expanded last-session history detail (behind the header meta line)
+  const [showHistory, setShowHistory] = useState(false);
 
   // Note editing state
   const [isEditingNote, setIsEditingNote] = useState(false);
@@ -1623,6 +1625,30 @@ export const ExerciseCard = memo(function ExerciseCard({
     }
   });
 
+  // Meta line under the header pills:
+  // "{muscle} · last session 60 lbs × 9, × 8 @ 2 RIR"
+  const lastSessionMeta = (() => {
+    const lastSets = exerciseHistory?.lastWorkoutSets ?? [];
+    if (lastSets.length === 0) return null;
+    const repsPart = lastSets
+      .slice(0, 3)
+      .map((s) => `× ${s.reps}${isDurationBased ? 's' : ''}`)
+      .join(', ');
+    const rir = lastSets[0].rpe != null ? Math.max(0, Math.round(10 - lastSets[0].rpe)) : null;
+    // Location-scoped calibration tag: for a local-scope exercise, mark whether
+    // the last session shown is this gym's own track ("· here") or a softened
+    // estimate carried over from another gym (rule 11).
+    let locationTag = '';
+    if (exerciseHistory?.progressionScope === 'local') {
+      locationTag = exerciseHistory.estimatedFromOtherLocation
+        ? ' · est. from another gym'
+        : ' · here';
+    }
+    return `last session ${displayWeight(lastSets[0].weightKg, true)} ${weightLabel} ${repsPart}${
+      rir !== null ? ` @ ${rir} RIR` : ''
+    }${locationTag}`;
+  })();
+
   // Tooltip for the progression pace pill: E1RM trend vs expectation, plus
   // what the top set did versus the previous session (weight/rep deltas).
   const progressionTitle = (() => {
@@ -1714,9 +1740,9 @@ export const ExerciseCard = memo(function ExerciseCard({
           )}
           {/* Name + (i): the name takes all freed width before truncating; the
               info icon hugs the end of the name text. Both open the exercise
-              info view (grade, caution reason, muscle, last session live there
-              now). Icon-only caution signal: amber tint when the exercise
-              carries an active caution flag — no badge, no text line. */}
+              info view (grade and caution reason live there). Icon-only
+              caution signal: amber tint when the exercise carries an active
+              caution flag — no badge, no text line. */}
           <div className="flex min-w-0 flex-1 items-center">
             <button
               onClick={onExerciseNameClick}
@@ -1818,6 +1844,27 @@ export const ExerciseCard = memo(function ExerciseCard({
           </div>
         )}
 
+        {/* Meta line — muscle + last-session summary; doubles as the history
+            expandable trigger when history exists */}
+        <button
+          onClick={() => exerciseHistory && setShowHistory(!showHistory)}
+          disabled={!exerciseHistory}
+          className="mt-1 flex items-center justify-between w-full gap-2 text-left"
+        >
+          <p className="min-w-0 text-[11px] text-surface-500 truncate">
+            <span>{formatMuscleName(exercise.primaryMuscle)}</span>
+            {isBodyweightExercise && ' · bodyweight'}
+            {lastSessionMeta && <> · {lastSessionMeta}</>}
+          </p>
+          {exerciseHistory && (
+            <IconChevronDown
+              size={14}
+              className={`flex-shrink-0 text-surface-500 transition-transform ${showHistory ? 'rotate-180' : ''}`}
+              aria-hidden="true"
+            />
+          )}
+        </button>
+
         {/* Enhanced mode: the joint-stress RIR floor is constraining this
             exercise below what the raised landmarks would allow */}
         {connectiveTissueCapBinds && (
@@ -1841,6 +1888,51 @@ export const ExerciseCard = memo(function ExerciseCard({
           </div>
         )}
 
+        {/* Expanded history detail (behind the meta-line expandable) */}
+        {exerciseHistory && showHistory && (
+          <div className="mt-3 pt-3 border-t border-surface-800">
+            <div className="space-y-3">
+              {/* Estimated 1RM + session count */}
+              {exerciseHistory.estimatedE1RM > 0 && (
+                <p className="text-xs text-surface-400">
+                  Estimated 1RM{' '}
+                  <span className="text-surface-200">
+                    {displayWeight(exerciseHistory.estimatedE1RM)} {weightLabel}
+                  </span>
+                  <span className="text-surface-600"> · </span>
+                  {exerciseHistory.totalSessions} session{exerciseHistory.totalSessions === 1 ? '' : 's'}
+                </p>
+              )}
+              {/* Last workout */}
+              {exerciseHistory.lastWorkoutSets.length > 0 && (
+                <div className="p-3 bg-surface-800/50 rounded-lg">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-medium text-surface-400 uppercase tracking-wider">
+                      Last Workout
+                    </span>
+                    <span className="text-xs text-surface-500">
+                      {new Date(exerciseHistory.lastWorkoutDate).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                      })}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {exerciseHistory.lastWorkoutSets.map((set, idx) => (
+                      <span
+                        key={idx}
+                        className="px-2 py-1 bg-surface-700 rounded text-xs text-surface-300"
+                      >
+                        {displayWeight(set.weightKg, true)} × {set.reps}{isDurationBased ? 's' : ''}
+                        {set.rpe && <span className="text-surface-500"> @{set.rpe}</span>}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Warmup sets - keep in separate table for now (legacy) */}
