@@ -21,6 +21,8 @@ import type { Exercise } from '@/types/schema';
 import { useKeyboardInset } from '@/hooks/useKeyboardInset';
 import { useExerciseDetailHistory } from '@/hooks/useExerciseDetailHistory';
 import { resolveDefaultTab, type ExerciseDetailTab } from '@/services/exerciseDetailAnalytics';
+import { getFailureSafetyTier, getTierDisplayInfo } from '@/services/exerciseSafety';
+import { convertWeightForDisplay } from '@/lib/utils';
 import { getExerciseProp, getTierBadgeClasses } from './exercise-details/helpers';
 import { AboutTab } from './exercise-details/AboutTab';
 import { HistoryTab } from './exercise-details/HistoryTab';
@@ -33,6 +35,14 @@ interface ExerciseDetailsModalProps {
   isOpen: boolean;
   onClose: () => void;
   unit?: 'kg' | 'lb';
+  /**
+   * Workout-context chips (only meaningful when opened from an active
+   * session). These carry the metadata the exercise card's title row no
+   * longer shows: position among non-skipped exercises ("3/8") and logged
+   * set count ("2/3 sets").
+   */
+  positionLabel?: string;
+  setCountLabel?: string;
 }
 
 const TABS: { id: ExerciseDetailTab; label: string }[] = [
@@ -42,7 +52,122 @@ const TABS: { id: ExerciseDetailTab; label: string }[] = [
   { id: 'records', label: 'Records' },
 ];
 
-export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }: ExerciseDetailsModalProps) {
+/**
+ * Header metadata block — line 2 chips (tier · caution · workout context ·
+ * muscle · equipment · pattern) plus the caution reason and compact
+ * last-session lines. This is where the metadata removed from the workout
+ * card's title area (grade, caution flag + reason, muscle group, position,
+ * set count, last session) now renders.
+ */
+function DetailHeaderMeta({
+  exercise,
+  positionLabel,
+  setCountLabel,
+  lastSessionSummary,
+}: {
+  exercise: Exercise;
+  positionLabel?: string;
+  setCountLabel?: string;
+  lastSessionSummary: string | null;
+}) {
+  const tier = getExerciseProp(exercise, 'hypertrophyScore', 'hypertrophy_score')?.tier;
+  const primaryMuscle = getExerciseProp(exercise, 'primaryMuscle', 'primary_muscle');
+  const movementPattern = getExerciseProp(exercise, 'movementPattern', 'movement_pattern');
+  const equipmentRequired = getExerciseProp(exercise, 'equipmentRequired', 'equipment_required');
+  const equipmentLabel =
+    Array.isArray(equipmentRequired) && equipmentRequired.length > 0
+      ? equipmentRequired[0]
+      : getExerciseProp(exercise, 'equipment', 'equipment');
+
+  // Caution flag (failure-safety tier) with its reason — the metadata the
+  // workout card's header line used to badge ("Caution"/"Protect"); the card
+  // now signals it only via the amber (i) tint and points here for the why.
+  const safetyTier = getFailureSafetyTier(exercise.name);
+  const safetyInfo = getTierDisplayInfo(safetyTier);
+  const isCautioned = safetyTier !== 'push_freely';
+
+  const chip = (label: string, key: string) => (
+    <span
+      key={key}
+      className="px-2 py-0.5 rounded-full bg-surface-800 text-surface-300 text-xs capitalize"
+    >
+      {label}
+    </span>
+  );
+
+  return (
+    <>
+      {/* Line 2: tier · caution · position/sets (workout context) · muscle ·
+          equipment · pattern as one wrapping chip row */}
+      <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+        {tier && (
+          <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${getTierBadgeClasses(tier)}`}>
+            Tier {tier}
+          </span>
+        )}
+        {isCautioned && (
+          <span
+            data-testid="exercise-detail-caution"
+            className="px-2 py-0.5 rounded-full bg-warning-500/15 text-warning-400 text-xs font-medium"
+          >
+            ⚠ {safetyInfo.shortLabel}
+          </span>
+        )}
+        {positionLabel && chip(`Exercise ${positionLabel}`, 'position')}
+        {setCountLabel && chip(setCountLabel, 'set-count')}
+        {primaryMuscle && chip(String(primaryMuscle), 'muscle')}
+        {equipmentLabel && chip(String(equipmentLabel), 'equipment')}
+        {movementPattern && chip(String(movementPattern).replace(/_/g, ' '), 'pattern')}
+      </div>
+
+      {/* Caution reason — why this exercise carries the flag */}
+      {isCautioned && (
+        <p className="mt-2 text-xs text-warning-400/90">{safetyInfo.description}</p>
+      )}
+
+      {/* Compact last-session summary (full history lives in the History tab) */}
+      {lastSessionSummary && (
+        <p data-testid="exercise-detail-last-session" className="mt-2 text-xs text-surface-400">
+          {lastSessionSummary}
+        </p>
+      )}
+    </>
+  );
+}
+
+/**
+ * Compact last-session summary (most recent completed session), mirroring the
+ * workout card's old header meta line: "60 lbs × 9, × 8 @ 2 RIR".
+ */
+function buildLastSessionSummary(
+  session: { date: string; sets: { weightKg: number; reps: number; rpe: number | null }[] } | undefined,
+  unit: 'kg' | 'lb'
+): string | null {
+  if (!session || session.sets.length === 0) return null;
+  const first = session.sets[0];
+  const repsPart = session.sets
+    .slice(0, 3)
+    .map((s) => `× ${s.reps}`)
+    .join(', ');
+  const rir = first.rpe != null ? Math.max(0, Math.round(10 - first.rpe)) : null;
+  const unitLabel = unit === 'lb' ? 'lbs' : 'kg';
+  const date = new Date(session.date).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+  });
+  return `Last session (${date}): ${convertWeightForDisplay(first.weightKg, unit)} ${unitLabel} ${repsPart}${
+    rir !== null ? ` @ ${rir} RIR` : ''
+  }`;
+}
+
+export function ExerciseDetailsModal({
+  exercise,
+  isOpen,
+  onClose,
+  unit = 'kg',
+  positionLabel,
+  setCountLabel,
+}: ExerciseDetailsModalProps) {
   const { inset: keyboardInset, scrollContainerRef } =
     useKeyboardInset<HTMLDivElement>(isOpen);
   const [isEditing, setIsEditing] = useState(false);
@@ -72,25 +197,8 @@ export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }:
 
   if (!isOpen || !exercise) return null;
 
-  const tier = getExerciseProp(exercise, 'hypertrophyScore', 'hypertrophy_score')?.tier;
-  const primaryMuscle = getExerciseProp(exercise, 'primaryMuscle', 'primary_muscle');
-  const movementPattern = getExerciseProp(exercise, 'movementPattern', 'movement_pattern');
-  const equipmentRequired = getExerciseProp(exercise, 'equipmentRequired', 'equipment_required');
-  const equipmentLabel =
-    Array.isArray(equipmentRequired) && equipmentRequired.length > 0
-      ? equipmentRequired[0]
-      : getExerciseProp(exercise, 'equipment', 'equipment');
-
-  const chip = (label: string, key: string) => (
-    <span
-      key={key}
-      className="px-2 py-0.5 rounded-full bg-surface-800 text-surface-300 text-xs capitalize"
-    >
-      {label}
-    </span>
-  );
-
   const sessionCount = sessions?.length ?? 0;
+  const lastSessionSummary = buildLastSessionSummary(sessions?.[0], unit);
 
   return (
     <div
@@ -138,17 +246,12 @@ export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }:
             </div>
           </div>
 
-          {/* Line 2: tier · muscle · equipment · pattern as one wrapping chip row */}
-          <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-            {tier && (
-              <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${getTierBadgeClasses(tier)}`}>
-                Tier {tier}
-              </span>
-            )}
-            {primaryMuscle && chip(String(primaryMuscle), 'muscle')}
-            {equipmentLabel && chip(String(equipmentLabel), 'equipment')}
-            {movementPattern && chip(String(movementPattern).replace(/_/g, ' '), 'pattern')}
-          </div>
+          <DetailHeaderMeta
+            exercise={exercise}
+            positionLabel={positionLabel}
+            setCountLabel={setCountLabel}
+            lastSessionSummary={lastSessionSummary}
+          />
 
           {isEditing ? (
             <div className="mt-4">

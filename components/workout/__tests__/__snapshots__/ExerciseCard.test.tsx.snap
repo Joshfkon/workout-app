@@ -6,55 +6,24 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
     class="rounded-xl bg-surface-900 border border-surface-800 shadow-lg shadow-black/20 relative overflow-hidden transition-all ring-2 ring-primary-500/50"
   >
     <div
-      class="p-4 border-b border-surface-800 sticky top-0 bg-surface-900 z-10"
+      class="p-4 sticky top-0 bg-surface-900 z-10"
     >
       <div
         class="flex items-center gap-2"
       >
-        <button
-          class="min-w-0 flex-1 truncate text-left text-[15px] font-medium text-surface-100 hover:text-primary-400 transition-colors"
+        <div
+          class="flex min-w-0 flex-1 items-center"
         >
-          Bench Press
-        </button>
+          <button
+            class="min-w-0 truncate text-left text-[15px] font-medium text-surface-100 hover:text-primary-400 transition-colors"
+          >
+            Bench Press
+          </button>
+        </div>
         <div
           class="ml-auto flex items-center gap-0.5 flex-shrink-0"
-        >
-          <span
-            class="inline-flex items-center font-medium rounded-full bg-surface-700 text-surface-200 px-2.5 py-1 text-xs"
-          >
-            0
-            /
-            3
-          </span>
-        </div>
+        />
       </div>
-      <div
-        class="mt-1.5 flex flex-wrap items-center gap-1.5"
-      >
-        <div
-          class="relative inline-flex"
-        >
-          <span
-            class="inline-flex items-center font-medium rounded-full bg-danger-500/20 text-danger-400 border border-danger-500/30 px-2 py-0.5 text-xs"
-          >
-            🔴
-             
-            Protect
-          </span>
-        </div>
-      </div>
-      <button
-        class="mt-1 flex items-center justify-between w-full gap-2 text-left"
-        disabled=""
-      >
-        <p
-          class="min-w-0 text-[11px] text-surface-500 truncate"
-        >
-          <span>
-            Chest
-          </span>
-        </p>
-      </button>
     </div>
     <div
       class="px-3 py-3 space-y-1.5"
@@ -63,7 +32,7 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
         class="space-y-2 pt-1"
       >
         <div
-          class="flex items-start gap-2 rounded-lg bg-primary-500/10 px-3 py-2"
+          class="flex items-start gap-2 rounded-lg px-3 py-2 transition-colors bg-primary-500/10"
         >
           <svg
             aria-hidden="true"
@@ -83,6 +52,7 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
             />
           </svg>
           <p
+            aria-live="polite"
             class="flex-1 text-[12px] leading-snug text-primary-400"
           >
             <span
@@ -100,7 +70,7 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
           </p>
           <button
             aria-label="How this suggestion works"
-            class="flex-shrink-0 p-0.5 text-primary-400/70 hover:text-primary-300 transition-colors"
+            class="flex-shrink-0 p-0.5 transition-colors text-primary-400/70 hover:text-primary-300"
           >
             <svg
               class="tabler-icon tabler-icon-info-circle "
@@ -549,41 +519,24 @@ exports[`ExerciseCard Snapshot Tests renders bodyweight exercise 1`] = `
     class="rounded-xl bg-surface-900 border border-surface-800 relative overflow-hidden transition-all "
   >
     <div
-      class="p-4 border-b border-surface-800 sticky top-0 bg-surface-900 z-10"
+      class="p-4 sticky top-0 bg-surface-900 z-10"
     >
       <div
         class="flex items-center gap-2"
       >
-        <button
-          class="min-w-0 flex-1 truncate text-left text-[15px] font-medium text-surface-100 hover:text-primary-400 transition-colors"
+        <div
+          class="flex min-w-0 flex-1 items-center"
         >
-          Pull-ups
-        </button>
+          <button
+            class="min-w-0 truncate text-left text-[15px] font-medium text-surface-100 hover:text-primary-400 transition-colors"
+          >
+            Pull-ups
+          </button>
+        </div>
         <div
           class="ml-auto flex items-center gap-0.5 flex-shrink-0"
-        >
-          <span
-            class="inline-flex items-center font-medium rounded-full bg-surface-700 text-surface-200 px-2.5 py-1 text-xs"
-          >
-            0
-            /
-            3
-          </span>
-        </div>
+        />
       </div>
-      <button
-        class="mt-1 flex items-center justify-between w-full gap-2 text-left"
-        disabled=""
-      >
-        <p
-          class="min-w-0 text-[11px] text-surface-500 truncate"
-        >
-          <span>
-            Back
-          </span>
-           · bodyweight
-        </p>
-      </button>
       <div
         class="mt-2"
       >
@@ -766,55 +719,24 @@ exports[`ExerciseCard Snapshot Tests renders empty state (no sets logged) 1`] = 
     class="rounded-xl bg-surface-900 border border-surface-800 relative overflow-hidden transition-all "
   >
     <div
-      class="p-4 border-b border-surface-800 sticky top-0 bg-surface-900 z-10"
+      class="p-4 sticky top-0 bg-surface-900 z-10"
     >
       <div
         class="flex items-center gap-2"
       >
-        <button
-          class="min-w-0 flex-1 truncate text-left text-[15px] font-medium text-surface-100 hover:text-primary-400 transition-colors"
+        <div
+          class="flex min-w-0 flex-1 items-center"
         >
-          Bench Press
-        </button>
+          <button
+            class="min-w-0 truncate text-left text-[15px] font-medium text-surface-100 hover:text-primary-400 transition-colors"
+          >
+            Bench Press
+          </button>
+        </div>
         <div
           class="ml-auto flex items-center gap-0.5 flex-shrink-0"
-        >
-          <span
-            class="inline-flex items-center font-medium rounded-full bg-surface-700 text-surface-200 px-2.5 py-1 text-xs"
-          >
-            0
-            /
-            3
-          </span>
-        </div>
+        />
       </div>
-      <div
-        class="mt-1.5 flex flex-wrap items-center gap-1.5"
-      >
-        <div
-          class="relative inline-flex"
-        >
-          <span
-            class="inline-flex items-center font-medium rounded-full bg-danger-500/20 text-danger-400 border border-danger-500/30 px-2 py-0.5 text-xs"
-          >
-            🔴
-             
-            Protect
-          </span>
-        </div>
-      </div>
-      <button
-        class="mt-1 flex items-center justify-between w-full gap-2 text-left"
-        disabled=""
-      >
-        <p
-          class="min-w-0 text-[11px] text-surface-500 truncate"
-        >
-          <span>
-            Chest
-          </span>
-        </p>
-      </button>
     </div>
     <div
       class="px-3 py-3 space-y-1.5"
@@ -977,55 +899,24 @@ exports[`ExerciseCard Snapshot Tests renders in lb unit mode 1`] = `
     class="rounded-xl bg-surface-900 border border-surface-800 relative overflow-hidden transition-all "
   >
     <div
-      class="p-4 border-b border-surface-800 sticky top-0 bg-surface-900 z-10"
+      class="p-4 sticky top-0 bg-surface-900 z-10"
     >
       <div
         class="flex items-center gap-2"
       >
-        <button
-          class="min-w-0 flex-1 truncate text-left text-[15px] font-medium text-surface-100 hover:text-primary-400 transition-colors"
+        <div
+          class="flex min-w-0 flex-1 items-center"
         >
-          Bench Press
-        </button>
+          <button
+            class="min-w-0 truncate text-left text-[15px] font-medium text-surface-100 hover:text-primary-400 transition-colors"
+          >
+            Bench Press
+          </button>
+        </div>
         <div
           class="ml-auto flex items-center gap-0.5 flex-shrink-0"
-        >
-          <span
-            class="inline-flex items-center font-medium rounded-full bg-surface-700 text-surface-200 px-2.5 py-1 text-xs"
-          >
-            0
-            /
-            3
-          </span>
-        </div>
+        />
       </div>
-      <div
-        class="mt-1.5 flex flex-wrap items-center gap-1.5"
-      >
-        <div
-          class="relative inline-flex"
-        >
-          <span
-            class="inline-flex items-center font-medium rounded-full bg-danger-500/20 text-danger-400 border border-danger-500/30 px-2 py-0.5 text-xs"
-          >
-            🔴
-             
-            Protect
-          </span>
-        </div>
-      </div>
-      <button
-        class="mt-1 flex items-center justify-between w-full gap-2 text-left"
-        disabled=""
-      >
-        <p
-          class="min-w-0 text-[11px] text-surface-500 truncate"
-        >
-          <span>
-            Chest
-          </span>
-        </p>
-      </button>
     </div>
     <div
       class="px-3 py-3 space-y-1.5"
@@ -1188,55 +1079,24 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
     class="rounded-xl bg-surface-900 border border-surface-800 relative overflow-hidden transition-all "
   >
     <div
-      class="p-4 border-b border-surface-800 sticky top-0 bg-surface-900 z-10"
+      class="p-4 sticky top-0 bg-surface-900 z-10"
     >
       <div
         class="flex items-center gap-2"
       >
-        <button
-          class="min-w-0 flex-1 truncate text-left text-[15px] font-medium text-surface-100 hover:text-primary-400 transition-colors"
+        <div
+          class="flex min-w-0 flex-1 items-center"
         >
-          Bench Press
-        </button>
+          <button
+            class="min-w-0 truncate text-left text-[15px] font-medium text-surface-100 hover:text-primary-400 transition-colors"
+          >
+            Bench Press
+          </button>
+        </div>
         <div
           class="ml-auto flex items-center gap-0.5 flex-shrink-0"
-        >
-          <span
-            class="inline-flex items-center font-medium rounded-full bg-surface-700 text-surface-200 px-2.5 py-1 text-xs"
-          >
-            2
-            /
-            3
-          </span>
-        </div>
+        />
       </div>
-      <div
-        class="mt-1.5 flex flex-wrap items-center gap-1.5"
-      >
-        <div
-          class="relative inline-flex"
-        >
-          <span
-            class="inline-flex items-center font-medium rounded-full bg-danger-500/20 text-danger-400 border border-danger-500/30 px-2 py-0.5 text-xs"
-          >
-            🔴
-             
-            Protect
-          </span>
-        </div>
-      </div>
-      <button
-        class="mt-1 flex items-center justify-between w-full gap-2 text-left"
-        disabled=""
-      >
-        <p
-          class="min-w-0 text-[11px] text-surface-500 truncate"
-        >
-          <span>
-            Chest
-          </span>
-        </p>
-      </button>
     </div>
     <div
       class="px-3 py-3 space-y-1.5"
@@ -1433,73 +1293,24 @@ exports[`ExerciseCard Snapshot Tests renders with exercise history 1`] = `
     class="rounded-xl bg-surface-900 border border-surface-800 relative overflow-hidden transition-all "
   >
     <div
-      class="p-4 border-b border-surface-800 sticky top-0 bg-surface-900 z-10"
+      class="p-4 sticky top-0 bg-surface-900 z-10"
     >
       <div
         class="flex items-center gap-2"
       >
-        <button
-          class="min-w-0 flex-1 truncate text-left text-[15px] font-medium text-surface-100 hover:text-primary-400 transition-colors"
+        <div
+          class="flex min-w-0 flex-1 items-center"
         >
-          Bench Press
-        </button>
+          <button
+            class="min-w-0 truncate text-left text-[15px] font-medium text-surface-100 hover:text-primary-400 transition-colors"
+          >
+            Bench Press
+          </button>
+        </div>
         <div
           class="ml-auto flex items-center gap-0.5 flex-shrink-0"
-        >
-          <span
-            class="inline-flex items-center font-medium rounded-full bg-surface-700 text-surface-200 px-2.5 py-1 text-xs"
-          >
-            0
-            /
-            3
-          </span>
-        </div>
+        />
       </div>
-      <div
-        class="mt-1.5 flex flex-wrap items-center gap-1.5"
-      >
-        <div
-          class="relative inline-flex"
-        >
-          <span
-            class="inline-flex items-center font-medium rounded-full bg-danger-500/20 text-danger-400 border border-danger-500/30 px-2 py-0.5 text-xs"
-          >
-            🔴
-             
-            Protect
-          </span>
-        </div>
-      </div>
-      <button
-        class="mt-1 flex items-center justify-between w-full gap-2 text-left"
-      >
-        <p
-          class="min-w-0 text-[11px] text-surface-500 truncate"
-        >
-          <span>
-            Chest
-          </span>
-           · 
-          last session 100 kg × 10, × 9 @ 2 RIR
-        </p>
-        <svg
-          aria-hidden="true"
-          class="tabler-icon tabler-icon-chevron-down flex-shrink-0 text-surface-500 transition-transform "
-          fill="none"
-          height="14"
-          stroke="currentColor"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="2"
-          viewBox="0 0 24 24"
-          width="14"
-          xmlns="http://www.w3.org/2000/svg"
-        >
-          <path
-            d="M6 9l6 6l6 -6"
-          />
-        </svg>
-      </button>
     </div>
     <div
       class="px-3 py-3 space-y-1.5"
@@ -1662,60 +1473,24 @@ exports[`ExerciseCard Snapshot Tests renders with hypertrophy score tier pill 1`
     class="rounded-xl bg-surface-900 border border-surface-800 relative overflow-hidden transition-all "
   >
     <div
-      class="p-4 border-b border-surface-800 sticky top-0 bg-surface-900 z-10"
+      class="p-4 sticky top-0 bg-surface-900 z-10"
     >
       <div
         class="flex items-center gap-2"
       >
-        <button
-          class="min-w-0 flex-1 truncate text-left text-[15px] font-medium text-surface-100 hover:text-primary-400 transition-colors"
+        <div
+          class="flex min-w-0 flex-1 items-center"
         >
-          Bench Press
-        </button>
+          <button
+            class="min-w-0 truncate text-left text-[15px] font-medium text-surface-100 hover:text-primary-400 transition-colors"
+          >
+            Bench Press
+          </button>
+        </div>
         <div
           class="ml-auto flex items-center gap-0.5 flex-shrink-0"
-        >
-          <span
-            class="inline-flex items-center font-medium rounded-full bg-surface-700 text-surface-200 px-2.5 py-1 text-xs"
-          >
-            0
-            /
-            3
-          </span>
-        </div>
+        />
       </div>
-      <div
-        class="mt-1.5 flex flex-wrap items-center gap-1.5"
-      >
-        <span
-          class="rounded-full px-2.5 py-1 text-[11px] font-medium leading-none flex-shrink-0 bg-gradient-to-r from-amber-500 to-yellow-400 text-black"
-        >
-          S
-        </span>
-        <div
-          class="relative inline-flex"
-        >
-          <span
-            class="inline-flex items-center font-medium rounded-full bg-danger-500/20 text-danger-400 border border-danger-500/30 px-2 py-0.5 text-xs"
-          >
-            🔴
-             
-            Protect
-          </span>
-        </div>
-      </div>
-      <button
-        class="mt-1 flex items-center justify-between w-full gap-2 text-left"
-        disabled=""
-      >
-        <p
-          class="min-w-0 text-[11px] text-surface-500 truncate"
-        >
-          <span>
-            Chest
-          </span>
-        </p>
-      </button>
     </div>
     <div
       class="px-3 py-3 space-y-1.5"
@@ -1878,27 +1653,23 @@ exports[`ExerciseCard Snapshot Tests renders with plateau pill 1`] = `
     class="rounded-xl bg-surface-900 border border-surface-800 relative overflow-hidden transition-all "
   >
     <div
-      class="p-4 border-b border-surface-800 sticky top-0 bg-surface-900 z-10"
+      class="p-4 sticky top-0 bg-surface-900 z-10"
     >
       <div
         class="flex items-center gap-2"
       >
-        <button
-          class="min-w-0 flex-1 truncate text-left text-[15px] font-medium text-surface-100 hover:text-primary-400 transition-colors"
+        <div
+          class="flex min-w-0 flex-1 items-center"
         >
-          Bench Press
-        </button>
+          <button
+            class="min-w-0 truncate text-left text-[15px] font-medium text-surface-100 hover:text-primary-400 transition-colors"
+          >
+            Bench Press
+          </button>
+        </div>
         <div
           class="ml-auto flex items-center gap-0.5 flex-shrink-0"
-        >
-          <span
-            class="inline-flex items-center font-medium rounded-full bg-surface-700 text-surface-200 px-2.5 py-1 text-xs"
-          >
-            0
-            /
-            3
-          </span>
-        </div>
+        />
       </div>
       <div
         class="mt-1.5 flex flex-wrap items-center gap-1.5"
@@ -1909,30 +1680,7 @@ exports[`ExerciseCard Snapshot Tests renders with plateau pill 1`] = `
         >
           Plateau
         </button>
-        <div
-          class="relative inline-flex"
-        >
-          <span
-            class="inline-flex items-center font-medium rounded-full bg-danger-500/20 text-danger-400 border border-danger-500/30 px-2 py-0.5 text-xs"
-          >
-            🔴
-             
-            Protect
-          </span>
-        </div>
       </div>
-      <button
-        class="mt-1 flex items-center justify-between w-full gap-2 text-left"
-        disabled=""
-      >
-        <p
-          class="min-w-0 text-[11px] text-surface-500 truncate"
-        >
-          <span>
-            Chest
-          </span>
-        </p>
-      </button>
     </div>
     <div
       class="px-3 py-3 space-y-1.5"

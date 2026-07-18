@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, memo, useRef, useCallback } from 'react';
-import { Card, Badge, Button, ConfirmModal } from '@/components/ui';
+import { Card, Button, ConfirmModal } from '@/components/ui';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/Accordion';
 import type { Exercise, ExerciseBlock, SetLog, WeightUnit, SetQuality, SetFeedback, BodyweightData, ExercisePerformanceSnapshot, StandardMuscleGroup, SorenessRating, PumpRating0to3, WorkloadRating, SetDiscomfort } from '@/types/schema';
 import { rpeToRir } from '@/types/schema';
@@ -20,7 +20,7 @@ import type { AdjustedRIRResult } from '@/services/rpeCalibration';
 import type { ReadinessModulation } from '@/services/fatigueEngine';
 import { lightHaptic } from '@/lib/integrations/notifications';
 import { Input } from '@/components/ui';
-import { IconBone, IconCheck, IconChevronDown, IconCloudPause, IconGripVertical } from '@tabler/icons-react';
+import { IconBone, IconCheck, IconChevronDown, IconCloudPause, IconGripVertical, IconInfoCircle } from '@tabler/icons-react';
 import { RowOverflowMenu, type RowMenuItem } from './RowOverflowMenu';
 import { InlineRestTimerBar } from './InlineRestTimerBar';
 import { DropsetPrompt } from './DropsetPrompt';
@@ -39,19 +39,6 @@ const MUSCLE_GROUPS = ['chest', 'back', 'shoulders', 'traps', 'biceps', 'triceps
 // swap muscle filter matches reliably.
 function exercisePrimaryMuscle(ex: { primaryMuscle?: string; primary_muscle?: string }): string {
   return String(ex.primaryMuscle ?? ex.primary_muscle ?? '').toLowerCase();
-}
-
-// Get color classes for hypertrophy tier badge (compact version for workouts)
-function getTierBadgeClasses(tier: string): string {
-  switch (tier) {
-    case 'S': return 'bg-gradient-to-r from-amber-500 to-yellow-400 text-black';
-    case 'A': return 'bg-emerald-500/30 text-emerald-400';
-    case 'B': return 'bg-blue-500/30 text-blue-400';
-    case 'C': return 'bg-surface-600 text-surface-400';
-    case 'D': return 'bg-orange-500/30 text-orange-400';
-    case 'F': return 'bg-red-500/30 text-red-400';
-    default: return 'bg-surface-700 text-surface-500';
-  }
 }
 
 interface ExerciseHistory {
@@ -80,7 +67,6 @@ import {
   type InjuryArea,
   type InjuryRisk
 } from '@/services/injuryAwareSwapper';
-import { SafetyTierBadge } from './SafetyTierBadge';
 import { getFailureSafetyTier, getRIRFloor } from '@/services/exerciseSafety';
 import { getBodyPartDisplayName, getJointDisplayName, jointToBodyPart } from '@/services/discomfortTracker';
 import { CONNECTIVE_TISSUE_CAP_NOTE } from '@/services/setPrescription';
@@ -141,6 +127,44 @@ function getExerciseInjuryRiskFromService(
 }
 
 type SetType = 'normal' | 'warmup' | 'dropset' | 'myorep' | 'rest_pause';
+
+/**
+ * Entered load (kg + display label) from the logger's CURRENT stepper values,
+ * for the live effort check. Bodyweight modes resolve to the effective load
+ * (BW ± modification) — the same basis the logged e1RMs use.
+ */
+function parseEnteredLoad(args: {
+  weightStr: string;
+  bwLoadStr: string;
+  isBodyweight: boolean;
+  weightMode: 'bodyweight' | 'weighted' | 'assisted';
+  userBodyweightKg?: number;
+  unit: WeightUnit;
+  unitLabel: string;
+}): { kg: number; label: string } | null {
+  const { unit, unitLabel } = args;
+  if (args.isBodyweight) {
+    if (!args.userBodyweightKg) return null;
+    const load = parseFloat(args.bwLoadStr);
+    const loadKg = isNaN(load) ? 0 : inputWeightToKg(load, unit);
+    if (args.weightMode === 'weighted') {
+      return {
+        kg: args.userBodyweightKg + loadKg,
+        label: `BW +${args.bwLoadStr || '0'} ${unitLabel}`,
+      };
+    }
+    if (args.weightMode === 'assisted') {
+      return {
+        kg: args.userBodyweightKg - loadKg,
+        label: `BW -${args.bwLoadStr || '0'} ${unitLabel}`,
+      };
+    }
+    return { kg: args.userBodyweightKg, label: 'BW' };
+  }
+  const w = parseFloat(args.weightStr);
+  if (isNaN(w) || w <= 0) return null;
+  return { kg: inputWeightToKg(w, unit), label: `${args.weightStr} ${unitLabel}` };
+}
 
 interface SetCompleteData {
   weightKg: number;
@@ -258,19 +282,17 @@ interface ExerciseCardProps {
   coldStartSuggestion?: ColdStartSuggestion;
   // --- Compact title-row chrome (the page's old standalone header row folded
   // into the card's own title row). All of these are page-owned wiring; the
-  // card only positions them. ---
-  // "3/8"-style position badge (position among non-skipped exercises / total).
-  positionLabel?: string;
+  // card only positions them. The old position badge / set-count badge /
+  // superset slot letter render in the exercise info view (and the page's
+  // collapsed row) instead of this title row. ---
   // This block's index in the page's block array, passed back to the drag and
   // menu callbacks below.
   listIndex?: number;
   // True while the page shows this block as a collapsed list row and hides the
   // card with CSS (kept mounted so in-progress set inputs survive collapse).
   // Gates the controls that would otherwise duplicate the collapsed row's
-  // (row-menu-trigger testid, superset-slot badge).
+  // (row-menu-trigger testid).
   isCollapsed?: boolean;
-  // Superset slot letter (A/B) for an adjacent cluster member.
-  supersetSlot?: string | null;
   // Drag-activation handlers for the title-row grip. Must be identity-stable
   // (latest-ref wrappers in the page): the memo comparator ignores them.
   onDragHandleStart?: (index: number, clientY: number) => void;
@@ -352,10 +374,8 @@ export const ExerciseCard = memo(function ExerciseCard({
   painNotice = null,
   onPainNoticeDismiss,
   onSetJointPain,
-  positionLabel,
   listIndex,
   isCollapsed = false,
-  supersetSlot = null,
   onDragHandleStart,
   onDragHandleEnd,
   onDragHandleCancel,
@@ -372,7 +392,6 @@ export const ExerciseCard = memo(function ExerciseCard({
 
   const [editingSetId, setEditingSetId] = useState<string | null>(null);
   const [jointPickerSetId, setJointPickerSetId] = useState<string | null>(null);
-  const [showHistory, setShowHistory] = useState(false);
   const [completedWarmups, setCompletedWarmups] = useState<Set<number>>(new Set());
   const [editingWarmupId, setEditingWarmupId] = useState<number | null>(null);
   const [customWarmupWeights, setCustomWarmupWeights] = useState<Map<number, number>>(new Map());
@@ -510,7 +529,6 @@ export const ExerciseCard = memo(function ExerciseCard({
 
   const completedSets = sets.filter((s) => !s.isWarmup && s.setType !== 'warmup');
   const pendingSetsCount = Math.max(0, block.targetSets - completedSets.length);
-  const progressPercent = Math.round((completedSets.length / block.targetSets) * 100);
 
   // Within-session next-set recommendation (services/setRecommender.ts).
   // Anchor on the freshest/strongest E1RM this exercise so late-set predictions
@@ -1605,30 +1623,6 @@ export const ExerciseCard = memo(function ExerciseCard({
     }
   });
 
-  // Single meta line under the exercise name (mockup 2.4):
-  // "{muscle} · last session 60 lbs × 9, × 8 @ 2 RIR"
-  const lastSessionMeta = (() => {
-    const lastSets = exerciseHistory?.lastWorkoutSets ?? [];
-    if (lastSets.length === 0) return null;
-    const repsPart = lastSets
-      .slice(0, 3)
-      .map((s) => `× ${s.reps}${isDurationBased ? 's' : ''}`)
-      .join(', ');
-    const rir = lastSets[0].rpe != null ? Math.max(0, Math.round(10 - lastSets[0].rpe)) : null;
-    // Location-scoped calibration tag: for a local-scope exercise, mark whether
-    // the last session shown is this gym's own track ("· here") or a softened
-    // estimate carried over from another gym (rule 11).
-    let locationTag = '';
-    if (exerciseHistory?.progressionScope === 'local') {
-      locationTag = exerciseHistory.estimatedFromOtherLocation
-        ? ' · est. from another gym'
-        : ' · here';
-    }
-    return `last session ${displayWeight(lastSets[0].weightKg, true)} ${weightLabel} ${repsPart}${
-      rir !== null ? ` @ ${rir} RIR` : ''
-    }${locationTag}`;
-  })();
-
   // Tooltip for the progression pace pill: E1RM trend vs expectation, plus
   // what the top set did versus the previous session (weight/rep deltas).
   const progressionTitle = (() => {
@@ -1651,23 +1645,21 @@ export const ExerciseCard = memo(function ExerciseCard({
     return title;
   })();
 
-  // Only badge exercises that need caution — "Safe" is the default and just adds header noise
   const safetyTier = getFailureSafetyTier(exercise.name);
+  // Active caution flag (push_cautiously / protect). Signalled ONLY by the
+  // amber tint on the title row's (i) icon; the reason renders in the
+  // exercise info view.
+  const isCautionedExercise = safetyTier !== 'push_freely';
 
-  // Second header line (tier/plateau/pace/superset/safety pills) renders only
-  // when at least one pill exists, so pill-less exercises keep a two-line header.
+  // Status pills line (plateau/pace/superset) renders only when at least one
+  // pill exists — most exercises keep a single-line header.
   const showPacePill =
     !plateau &&
     !!progressionInsight &&
     (progressionInsight.pace === 'ahead' ||
       progressionInsight.pace === 'on_track' ||
       progressionInsight.pace === 'behind');
-  const hasHeaderPills =
-    !!exercise.hypertrophyScore?.tier ||
-    !!plateau ||
-    showPacePill ||
-    !!block.supersetGroupId ||
-    safetyTier !== 'push_freely';
+  const hasHeaderPills = !!plateau || showPacePill || !!block.supersetGroupId;
 
   // Enhanced mode: surface (never alter) a binding joint-stress cap. The RIR
   // floor is computed from the exercise alone; when it raises the effective
@@ -1684,10 +1676,12 @@ export const ExerciseCard = memo(function ExerciseCard({
         isActive ? 'ring-2 ring-primary-500/50' : ''
       }`}
     >
-      {/* Header — compact: the page's old standalone header row (grip, number,
-          menu, chevron) is folded into the card's own title row. Line 1: grip +
-          position + name + counter/menu/chevron; line 2: pills; line 3: meta. */}
-      <div className="p-4 border-b border-surface-800 sticky top-0 bg-surface-900 z-10">
+      {/* Header — single title row: grip · name · (i) · ⋮ · chevron. The old
+          grade/caution pills line and muscle/last-session meta line moved into
+          the exercise info view (the (i) / name tap target); position and set
+          count render there too. Conditional status pills (plateau/pace/SS)
+          keep their own line below only when one exists. */}
+      <div className="p-4 sticky top-0 bg-surface-900 z-10">
         <div className="flex items-center gap-2">
           {/* Drag grip — long press to reorder. Visual icon is compact but the
               hit area stays ≥44×44 via min sizes, pulled back with negative
@@ -1718,47 +1712,34 @@ export const ExerciseCard = memo(function ExerciseCard({
               <IconGripVertical size={16} stroke={2} />
             </div>
           )}
-          {/* Superset slot letter (A/B). Rendered here only while expanded —
-              the collapsed list row renders its own (single source of truth
-              for the superset-slot testid, since the hidden card stays in the
-              DOM). */}
-          {!isCollapsed && supersetSlot && (
-            <div
-              data-testid="superset-slot"
-              className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-[#6d5ce0]/25 text-xs font-bold text-[#a99bff]"
-              aria-label={`Superset position ${supersetSlot}`}
+          {/* Name + (i): the name takes all freed width before truncating; the
+              info icon hugs the end of the name text. Both open the exercise
+              info view (grade, caution reason, muscle, last session live there
+              now). Icon-only caution signal: amber tint when the exercise
+              carries an active caution flag — no badge, no text line. */}
+          <div className="flex min-w-0 flex-1 items-center">
+            <button
+              onClick={onExerciseNameClick}
+              className="min-w-0 truncate text-left text-[15px] font-medium text-surface-100 hover:text-primary-400 transition-colors"
             >
-              {supersetSlot}
-            </div>
-          )}
-          {/* Position badge — "3/8" (position / total non-skipped exercises).
-              Suppressed while collapsed: the collapsed row shows the block's
-              only badge (keeps one position-badge node per block in the DOM). */}
-          {!isCollapsed && positionLabel && (
-            <span
-              data-testid="position-badge"
-              className={`flex-shrink-0 rounded-md px-1.5 py-1 text-[11px] font-bold leading-none transition-colors ${
-                progressPercent === 100
-                  ? 'bg-success-500/20 text-success-400'
-                  : isActive
-                    ? 'bg-primary-500 text-white'
-                    : 'bg-surface-800 text-surface-400'
-              }`}
-            >
-              {positionLabel}
-            </span>
-          )}
-          <button
-            onClick={onExerciseNameClick}
-            className="min-w-0 flex-1 truncate text-left text-[15px] font-medium text-surface-100 hover:text-primary-400 transition-colors"
-          >
-            {exercise.name}
-          </button>
+              {exercise.name}
+            </button>
+            {onExerciseNameClick && (
+              <button
+                onClick={onExerciseNameClick}
+                aria-label={`Exercise info for ${exercise.name}`}
+                data-testid="exercise-info-trigger"
+                className={`-my-2.5 flex min-h-[44px] min-w-[44px] flex-shrink-0 items-center justify-center transition-colors ${
+                  isCautionedExercise
+                    ? 'text-amber-400 hover:text-amber-300'
+                    : 'text-surface-500 hover:text-surface-300'
+                }`}
+              >
+                <IconInfoCircle size={16} aria-hidden="true" />
+              </button>
+            )}
+          </div>
           <div className="ml-auto flex items-center gap-0.5 flex-shrink-0">
-            {/* Set add/remove moved to the footer (next to "+ Add Set") to declutter the header */}
-            <Badge variant={progressPercent === 100 ? 'success' : 'default'}>
-              {completedSets.length}/{block.targetSets}
-            </Badge>
             {/* Row overflow (⋮) menu — page-built items (info, superset
                 link/unlink, swap, plates, watch form, remove). Only while
                 expanded: the collapsed row renders the block's single
@@ -1793,14 +1774,11 @@ export const ExerciseCard = memo(function ExerciseCard({
           </div>
         </div>
 
-        {/* Pills line — tier / plateau / pace / superset / safety */}
+        {/* Status pills line — plateau / pace / superset only. The static
+            grade + caution badges moved into the exercise info view; this line
+            renders only when an actionable/status pill exists. */}
         {hasHeaderPills && (
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-            {exercise.hypertrophyScore?.tier && (
-              <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium leading-none flex-shrink-0 ${getTierBadgeClasses(exercise.hypertrophyScore.tier)}`}>
-                {exercise.hypertrophyScore.tier}
-              </span>
-            )}
             {/* Plateau badge (services/plateauDetector) — opens the suggestions sheet */}
             {plateau && (
               <button
@@ -1837,31 +1815,8 @@ export const ExerciseCard = memo(function ExerciseCard({
                 SS{block.supersetOrder}
               </span>
             )}
-            {safetyTier !== 'push_freely' && (
-              <SafetyTierBadge tier={safetyTier} variant="short" showTooltip={true} />
-            )}
           </div>
         )}
-
-        {/* Meta line — doubles as the history expandable trigger */}
-        <button
-          onClick={() => exerciseHistory && setShowHistory(!showHistory)}
-          disabled={!exerciseHistory}
-          className="mt-1 flex items-center justify-between w-full gap-2 text-left"
-        >
-          <p className="min-w-0 text-[11px] text-surface-500 truncate">
-            <span>{formatMuscleName(exercise.primaryMuscle)}</span>
-            {isBodyweightExercise && ' · bodyweight'}
-            {lastSessionMeta && <> · {lastSessionMeta}</>}
-          </p>
-          {exerciseHistory && (
-            <IconChevronDown
-              size={14}
-              className={`flex-shrink-0 text-surface-500 transition-transform ${showHistory ? 'rotate-180' : ''}`}
-              aria-hidden="true"
-            />
-          )}
-        </button>
 
         {/* Enhanced mode: the joint-stress RIR floor is constraining this
             exercise below what the raised landmarks would allow */}
@@ -1886,66 +1841,6 @@ export const ExerciseCard = memo(function ExerciseCard({
           </div>
         )}
 
-        {/* Expanded history detail (behind the meta-line expandable) */}
-        {exerciseHistory && showHistory && (
-          <div className="mt-3 pt-3 border-t border-surface-800">
-            <div className="space-y-3">
-                {/* Estimated 1RM + session count */}
-                {exerciseHistory.estimatedE1RM > 0 && (
-                  <p className="text-xs text-surface-400">
-                    Estimated 1RM{' '}
-                    <span className="text-surface-200">
-                      {displayWeight(exerciseHistory.estimatedE1RM)} {weightLabel}
-                    </span>
-                    <span className="text-surface-600"> · </span>
-                    {exerciseHistory.totalSessions} session{exerciseHistory.totalSessions === 1 ? '' : 's'}
-                  </p>
-                )}
-                {/* Last workout */}
-                {exerciseHistory.lastWorkoutSets.length > 0 && (
-                  <div className="p-3 bg-surface-800/50 rounded-lg">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-medium text-surface-400 uppercase tracking-wider">
-                        Last Workout
-                      </span>
-                      <span className="text-xs text-surface-500">
-                        {new Date(exerciseHistory.lastWorkoutDate).toLocaleDateString('en-US', {
-                          month: 'short',
-                          day: 'numeric',
-                        })}
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {exerciseHistory.lastWorkoutSets.map((set, idx) => (
-                        <span
-                          key={idx}
-                          className="px-2 py-1 bg-surface-700 rounded text-xs text-surface-300"
-                        >
-                          {displayWeight(set.weightKg, true)} × {set.reps}{isDurationBased ? 's' : ''}
-                          {set.rpe && <span className="text-surface-500"> @{set.rpe}</span>}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Exercise resources - only show Exercise Info link here (Watch Form is in header) */}
-                <div className="flex gap-2">
-                  <a
-                    href={`https://exrx.net/Lists/Directory`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-surface-800 hover:bg-surface-700 rounded-lg text-xs text-surface-300 transition-colors"
-                  >
-                    <svg className="w-4 h-4 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    Exercise Info
-                  </a>
-                </div>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Warmup sets - keep in separate table for now (legacy) */}
@@ -2490,6 +2385,79 @@ export const ExerciseCard = memo(function ExerciseCard({
               : `BW ${weightMode === 'weighted' ? '+' : '-'}${bwLoadInput || '0'} ${weightLabel}`
             : `${suggestion.weight || '—'} ${weightLabel}`;
 
+          // Live effort check for the ENTERED weight × reps (the stepper
+          // values, not the suggestion): predicted RIR on the SAME e1RM the
+          // prescription came from, via the engine's own curve
+          // (setRecommender.estimateRepsForWeight with targetRir 0 = rep-max
+          // at that weight; predicted RIR = rep-max − entered reps). The
+          // banner debounces and renders the amber warning state itself so
+          // the 250ms flip re-renders only the banner.
+          const effortCheck = (() => {
+            if (isDurationBased) return null;
+            const enteredReps = parseInt(input.reps);
+            if (isNaN(enteredReps) || enteredReps < 1) return null;
+
+            const entered = parseEnteredLoad({
+              weightStr: input.weight,
+              bwLoadStr: bwLoadInput,
+              isBodyweight: isBodyweightExercise,
+              weightMode,
+              userBodyweightKg,
+              unit,
+              unitLabel: weightLabel,
+            });
+            if (!entered || !(entered.kg > 0)) return null;
+            const enteredKg = entered.kg;
+
+            const lastCompleted = completedSets[completedSets.length - 1];
+            let maxReps: number | null;
+            if (lastCompleted) {
+              // Within-session: same capacity anchor as recommendSet —
+              // max(session-best e1RM, Epley of the last set at its logged
+              // RIR), fatigue-adjusted for sets already done.
+              maxReps = estimateRepsForWeight(enteredKg, {
+                lastWeightKg: lastCompleted.weightKg,
+                lastReps: lastCompleted.reps,
+                lastRir: resolveLastRir(lastCompleted, effectiveTargetRir),
+                setsCompletedThisExercise: completedSets.length,
+                sessionBestE1RMKg: sessionBestE1RM,
+                targetRepRange: block.targetRepRange,
+                targetRir: 0,
+              });
+            } else {
+              // Session start: the same prescription e1RM ladder the seed's
+              // rep answer used (seedRepsForWeight) — last-session resolved
+              // e1RM, else the cold-start estimate. No rung → no warning.
+              const e1rm = lastSessionE1RM ?? coldStartE1RM;
+              maxReps = e1rm
+                ? estimateRepsForWeight(enteredKg, {
+                    lastWeightKg: 0,
+                    lastReps: 0,
+                    lastRir: 0,
+                    setsCompletedThisExercise: 0,
+                    sessionBestE1RMKg: e1rm,
+                    targetRepRange: block.targetRepRange,
+                    targetRir: 0,
+                  })
+                : null;
+            }
+            if (maxReps == null) return null;
+
+            // Confidence: an e1RM transferred from another lift (cold-start
+            // estimate; proxy = no logged working set for THIS exercise)
+            // softens the copy and names the source.
+            const hasOwnHistory = !!lastCompleted || lastSessionE1RM !== undefined;
+            return {
+              predictedRir: maxReps - enteredReps,
+              weightLabel: entered.label,
+              reps: enteredReps,
+              softened: !hasOwnHistory,
+              sourceLabel: !hasOwnHistory
+                ? coldStartSuggestion?.reason ?? 'estimate from your training profile'
+                : undefined,
+            };
+          })();
+
           return (
             <div className="space-y-2 pt-1">
               <SuggestionBanner
@@ -2500,6 +2468,8 @@ export const ExerciseCard = memo(function ExerciseCard({
                 roleTag={suggestion.role === 'ramp' ? 'ramp' : null}
                 reason={suggestion.reason}
                 explanation={suggestion.explanation}
+                effortCheck={effortCheck}
+                setKey={activeSetNumber}
               />
               {weightEditNote && (
                 <p
@@ -3309,15 +3279,13 @@ export const ExerciseCard = memo(function ExerciseCard({
     prevProps.userBodyweightKg === nextProps.userBodyweightKg &&
     prevProps.enhancedAthleteMode === nextProps.enhancedAthleteMode &&
     prevProps.isDeloadSession === nextProps.isDeloadSession &&
-    // Compact title-row chrome. These drive the position badge, the collapsed
-    // gating of the ⋮/slot controls, and the index handed back to the drag and
-    // menu callbacks — a stale listIndex would reorder the wrong block. The
-    // callbacks themselves are identity-stable latest-ref wrappers in the page,
-    // so they are deliberately not compared.
-    prevProps.positionLabel === nextProps.positionLabel &&
+    // Compact title-row chrome. These drive the collapsed gating of the ⋮
+    // control and the index handed back to the drag and menu callbacks — a
+    // stale listIndex would reorder the wrong block. The callbacks themselves
+    // are identity-stable latest-ref wrappers in the page, so they are
+    // deliberately not compared.
     prevProps.listIndex === nextProps.listIndex &&
     prevProps.isCollapsed === nextProps.isCollapsed &&
-    prevProps.supersetSlot === nextProps.supersetSlot &&
     // SS pill on the pills line (covers unlink of a drag-split pair, where the
     // slot letter is null on both sides of the change)
     prevProps.block.supersetGroupId === nextProps.block.supersetGroupId &&

@@ -5396,10 +5396,8 @@ export default function WorkoutPage() {
                     )}
                     unavailableEquipmentIds={locationUnavailableEquipmentIds}
                     isActive={isCurrent}
-                    positionLabel={positionLabel}
                     listIndex={index}
                     isCollapsed={isRowCollapsed}
-                    supersetSlot={cluster.slot}
                     onDragHandleStart={handleGripDragStart}
                     onDragHandleEnd={handleGripDragEnd}
                     onDragHandleCancel={handleGripDragCancel}
@@ -6311,13 +6309,39 @@ export default function WorkoutPage() {
         variant={totalCompletedSets < totalPlannedSets ? 'warning' : 'default'}
       />
       
-      {/* Exercise Details Modal */}
-      <ExerciseDetailsModal
-        exercise={selectedExerciseForDetails}
-        isOpen={!!selectedExerciseForDetails}
-        onClose={() => setSelectedExerciseForDetails(null)}
-        unit={preferences.units}
-      />
+      {/* Exercise Details Modal — carries the workout-context metadata the
+          card's title row no longer shows (position, set count; grade/caution/
+          muscle/last-session render inside the modal itself). */}
+      {(() => {
+        const detailsBlock = selectedExerciseForDetails
+          ? blocks.find((b) => b.exercise.id === selectedExerciseForDetails.id)
+          : undefined;
+        let detailsPositionLabel: string | undefined;
+        let detailsSetCountLabel: string | undefined;
+        if (detailsBlock) {
+          // Same position math as the exercise list rows (non-skipped index).
+          const activePos = activeBlocks.findIndex((b) => b.id === detailsBlock.id);
+          const rawPos = blocks.findIndex((b) => b.id === detailsBlock.id);
+          detailsPositionLabel =
+            activePos >= 0
+              ? `${activePos + 1}/${activeBlocks.length}`
+              : `${rawPos + 1}/${blocks.length}`;
+          const doneSets = completedSets.filter(
+            (s) => s.exerciseBlockId === detailsBlock.id && s.setType === 'normal'
+          ).length;
+          detailsSetCountLabel = `${doneSets}/${detailsBlock.targetSets} sets`;
+        }
+        return (
+          <ExerciseDetailsModal
+            exercise={selectedExerciseForDetails}
+            isOpen={!!selectedExerciseForDetails}
+            onClose={() => setSelectedExerciseForDetails(null)}
+            unit={preferences.units}
+            positionLabel={detailsPositionLabel}
+            setCountLabel={detailsSetCountLabel}
+          />
+        );
+      })()}
 
       {/* Sanity Check "Performance Drop" toast is rendered inside the bottom
           chrome stack above (so it stacks over the rest timer instead of
