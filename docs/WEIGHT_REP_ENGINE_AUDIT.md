@@ -234,3 +234,58 @@ graded against target RIR.
    declares them retired).
 7. **Small ones:** NULLS-LAST tiebreak on the history order; unify the week clock; use
    per-exercise increments in `roundToNearestPlate`; align the two missing-RPE assumptions.
+
+---
+
+## 6. Remediation (implemented 2026-07-18, branch `claude/weight-rep-engine-fixes-6qj3f8`)
+
+Each fix landed as its own commit, gated by a regression baseline
+(`engineRegressionBaseline.test.ts`) pinning the exact recommendation a
+regularly-trained exercise with recent history received before any change —
+the common case is bit-identical before and after.
+
+| Fix | Failure mode closed | What changed |
+|-----|--------------------|--------------|
+| **1. Per-exercise history window** | **#2** (global ≤120-row cap → false cold start) | The batched history read now selects from `exercises` with the blocks EMBEDDED, so `order` + `limit(HISTORY_SESSIONS_PER_EXERCISE)` execute per exercise (lateral subquery per parent row) — still one request. An infrequently-trained exercise always gets its own last-10 window; cold-start aggression now requires *proven* absence of history. `flattenExerciseHistoryRows` (pure) maps the nested rows back to the flat shape. |
+| **2. All-sets bump gating** | **#5** (single-set gating), grade #1(b) | `earnedSessionBump()`: a session-to-session load increase requires EVERY working-role set of the previous session to clear the top of the rep range under the unchanged effort condition (≥ `DEADBAND_RIR` spare, or a `+REP_OVERSHOOT` overshoot). Ramp/back-off sets (per `setRoles` inference, <75% of the session top) are never graded, so a designated light last set doesn't block an earned bump. Applied to both the e1RM-anchor seed (ceilinged at the recent working weight when unearned) and the no-anchor fallback (unearned increase → hold). Within-session `recommendSet` is untouched by design — it reacts to the set just performed. |
+| **3. Recency decay on the anchor** | **#3** (best-of-10 with equal weight) | `decayedE1RMMax()` weights each candidate by `exp(-age_days / E1RM_RECENCY_TAU_DAYS)` (τ = 45 d) before taking the max. Age is measured **relative to the newest candidate** (not the wall clock), so fresh data keeps full weight (no deflation of the common case, pure/deterministic, and a post-layoff history still anchors on its own newest session). A 30-day-old peak keeps ~51% influence; a 300-day-old pre-weight-cut peak ~0.1% — effectively gone. `personalRecord` display remains the true undecayed best. |
+| **4. Regression path** | Audit question §"prescribe DOWN" (see findings below) | `confirmedRegression()`: TWO consecutive sessions whose best working set fell below the rep-range floor at a maintained load (last top ≥ 95% of prior top) → step the load DOWN exactly one per-exercise increment (`min_weight_increment_kg`, same DB column the up-steps round to), floored at −`MAX_STEP_PCT` (−10%, mirroring the up-cap), reps recentered. ONE bad session → hold (noise/sleep). Ramp slots re-percentage off the stepped weight. |
+| **5. Session-build fallback** | **#1** (history-blind, schedule-driven block targets) | `startMesocycleSession` now batch-fetches direct history for the day's exercises and derives `target_weight_kg` from the decayed e1RM anchor via `prescribe()` (mid-range at target RIR) — with **no `intensityModifier`** on that path, ending the double-count of the RIR ramp. Deload weeks still apply the modifier (it *is* the deload lightening mechanism). True cold starts keep the `quickWeightEstimate` transfer ladder bit-for-bit (test-verified against the engine output). Warmup protocols now key off the realistic target. |
+| **6. Dead-code deletion** | §2.5 | Deleted `calculateNextTargets` (+input type, + all private helpers), `recommendNextSet` (+types), `PHASE_CONFIGS`/`PhaseConfig`, `checkForPR`, and the deprecated `calculateSuggestedWeight`/`FormAwareProgressionInput`. Grep confirmed zero live call sites incl. dynamic imports. The compound/isolation progression-priority distinction was deliberately NOT resurrected — per-exercise DB increments cover it. Set-quality, warmup, E1RM-display, performance-extraction and form helpers remain. |
+
+### Fix 4 findings — what the decrement behavior was before
+
+The audit hadn't covered the under-performance path. Findings:
+
+- **Within-session** (`recommendSet`): an explicit reduce branch already
+  existed — one set below the floor (or ≥2 RIR past target toward failure)
+  reduces the *next set* toward mid-range, capped −30%
+  (`MAX_REDUCE_PCT`). Unchanged: reacting to the set just done is correct.
+- **Session start, no-anchor path** (`recommendSessionStart`): reduced
+  immediately after ONE below-floor/grinding session, by up to −30% toward
+  mid-range. This conflicted with the "one bad session = hold" rule and was
+  adjusted: with prior-session evidence available, one bad session now
+  holds; two consecutive below-floor sessions step down one increment.
+  Callers that cannot supply prior-session sets keep the legacy behavior,
+  and the one-tap plateau rep-range switch intentionally bypasses both
+  session gates (its history was performed under the OLD range).
+- **Session start, e1RM-anchor path** (`recommendSeedForSlot`): had NO
+  explicit decrement — a decline only leaked in through the mid-range
+  recenter inside the ±10% clamp, while the 10-session-max anchor held the
+  prescription up. The confirmed-regression override (one increment down
+  off the recent working weight, provenance `last_session`) was added.
+
+### Still open (explicitly out of scope this pass)
+
+- **e1RM formula unification** (audit #4): the five formulas still coexist.
+  The prescription path remains pure Epley (`setRecommender`), and the
+  history-anchor formula (Brzycki-with-RIR) now lives in ONE place
+  (`services/suggestionEngine/e1rmAnchor.historySetE1RM`) shared by the
+  workout page and the session build — a relocation, not a unification.
+  TODO: standardize display/storage/repeat-workout on the prescription
+  formula and delete the rest.
+- The legacy no-`program_data` muscle fallback in `startMesocycleSession`
+  (`:639` pre-fix numbering) still uses estimate × modifier; it only runs
+  for mesocycles predating `program_data`.
+- Minor nits from §4.6 (NULLS-LAST tiebreak, dual week clocks,
+  `roundToNearestPlate` per-exercise increments) remain as listed.
