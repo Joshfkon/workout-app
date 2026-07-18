@@ -15,6 +15,7 @@ import { findSimilarExercises, calculateSimilarityScore } from '@/services/exerc
 import { filterExercisesByEquipment } from '@/services/equipmentFilter';
 import { detectPlateau, type PlateauDetectionResult, type PlateauGoal } from '@/services/plateauDetector';
 import { getExerciseProgression, type ExerciseProgressionInsight } from '@/services/progressionInsights';
+import { generateWarmupProtocol } from '@/services/progressionEngine';
 import { useUserStore } from '@/stores';
 import type { AdjustedRIRResult } from '@/services/rpeCalibration';
 import type { ReadinessModulation } from '@/services/fatigueEngine';
@@ -437,13 +438,6 @@ export const ExerciseCard = memo(function ExerciseCard({
     prevIsActiveRef.current = isActive;
   }, [isActive]);
 
-  // Auto-collapse warmup sets when all are completed
-  useEffect(() => {
-    if (warmupSets.length > 0 && completedWarmups.size === warmupSets.length) {
-      setIsWarmupExpanded(false);
-    }
-  }, [completedWarmups.size, warmupSets.length]);
-  
   const [swapMuscleFilter, setSwapMuscleFilter] = useState('');
   const [editWeight, setEditWeight] = useState('');
   const [editReps, setEditReps] = useState('');
@@ -616,6 +610,41 @@ export const ExerciseCard = memo(function ExerciseCard({
   // Check if this is a duration-based exercise (plank, hold, etc.)
   // These exercises track seconds instead of reps
   const isDurationBased = exercise.exerciseType === 'duration_based';
+
+  // Warmup fallback weight: with no calibrated working weight for this
+  // exercise (cold start in the "find working weight" state), fall back to
+  // the weight typed into the active set input so the warmup protocol can
+  // still render as percentages of the load the user is about to attempt.
+  const typedFirstSetWeightKg = useMemo(() => {
+    if (isBodyweightExercise) return 0;
+    const typed = parseFloat(pendingInputs[0]?.weight ?? '');
+    return Number.isFinite(typed) && typed > 0 ? inputWeightToKg(typed, unit) : 0;
+  }, [isBodyweightExercise, pendingInputs, unit]);
+
+  const warmupWorkingWeightKg = workingWeight > 0 ? workingWeight : typedFirstSetWeightKg;
+
+  // A protocol the page generated with workingWeight 0 collapsed to the
+  // single <20 kg "light activation" set — rebuild it from the typed weight
+  // so the set count and percentages match the actual load. A non-empty
+  // warmupSets prop is the page's eligibility signal (first exercise for a
+  // not-yet-warm muscle), so an empty prop stays empty here.
+  const effectiveWarmupSets = useMemo(() => {
+    if (workingWeight > 0 || typedFirstSetWeightKg <= 0 || warmupSets.length === 0) {
+      return warmupSets;
+    }
+    return generateWarmupProtocol({
+      workingWeight: typedFirstSetWeightKg,
+      exercise,
+      isFirstExercise: listIndex === 0,
+    });
+  }, [warmupSets, workingWeight, typedFirstSetWeightKg, exercise, listIndex]);
+
+  // Auto-collapse warmup sets when all are completed
+  useEffect(() => {
+    if (effectiveWarmupSets.length > 0 && completedWarmups.size === effectiveWarmupSets.length) {
+      setIsWarmupExpanded(false);
+    }
+  }, [completedWarmups.size, effectiveWarmupSets.length]);
 
   // Weight mode state for bodyweight exercises (header-level selection)
   const [weightMode, setWeightMode] = useState<'bodyweight' | 'weighted' | 'assisted'>(
@@ -1844,7 +1873,7 @@ export const ExerciseCard = memo(function ExerciseCard({
       </div>
 
       {/* Warmup sets - keep in separate table for now (legacy) */}
-      {isActive && warmupSets.length > 0 && workingWeight > 0 && (
+      {isActive && effectiveWarmupSets.length > 0 && warmupWorkingWeightKg > 0 && (
         <div className="border-b border-surface-800">
           {/* Collapsible header */}
           <button
@@ -1854,18 +1883,18 @@ export const ExerciseCard = memo(function ExerciseCard({
             <div className="flex items-center gap-2">
               <div
                 className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
-                  completedWarmups.size === warmupSets.length
+                  completedWarmups.size === effectiveWarmupSets.length
                     ? 'bg-success-500/20 text-success-400'
                     : 'bg-amber-500/20 text-amber-400'
                 }`}
               >
-                {completedWarmups.size === warmupSets.length ? '✓' : completedWarmups.size}
+                {completedWarmups.size === effectiveWarmupSets.length ? '✓' : completedWarmups.size}
               </div>
               <span className="text-sm font-medium text-surface-200">
                 Warmup Protocol
               </span>
               <span className="text-xs text-surface-500">
-                ({completedWarmups.size}/{warmupSets.length})
+                ({completedWarmups.size}/{effectiveWarmupSets.length})
               </span>
             </div>
             <svg
@@ -1895,8 +1924,8 @@ export const ExerciseCard = memo(function ExerciseCard({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-surface-800">
-                {warmupSets.map((warmup) => {
-                  const calculatedWeightKg = workingWeight * (warmup.percentOfWorking / 100);
+                {effectiveWarmupSets.map((warmup) => {
+                  const calculatedWeightKg = warmupWorkingWeightKg * (warmup.percentOfWorking / 100);
                   const hasCustomWeight = customWarmupWeights.has(warmup.setNumber);
                   const warmupWeightKg = hasCustomWeight 
                     ? customWarmupWeights.get(warmup.setNumber)! 
@@ -2011,11 +2040,11 @@ export const ExerciseCard = memo(function ExerciseCard({
                     </tr>
                   );
                 })}
-                {completedWarmups.size < warmupSets.length && (
+                {completedWarmups.size < effectiveWarmupSets.length && (
                   <tr className="bg-surface-800/30">
                     <td colSpan={6} className="px-3 py-1.5 text-center">
                       <button
-                        onClick={() => setCompletedWarmups(new Set(warmupSets.map(w => w.setNumber)))}
+                        onClick={() => setCompletedWarmups(new Set(effectiveWarmupSets.map(w => w.setNumber)))}
                         className="text-xs text-surface-500 hover:text-surface-400 transition-colors"
                       >
                         Skip warmup (already warm)

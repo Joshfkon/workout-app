@@ -1308,4 +1308,72 @@ describe('ExerciseCard', () => {
       expect(screen.getByText(/swap exercise/i)).toBeInTheDocument();
     });
   });
+
+  describe('Warmup fallback for uncalibrated working weight', () => {
+    // "Find working weight" state: no stored target, no estimate, so the page
+    // passes workingWeight 0 alongside the degenerate protocol it generated
+    // for weight 0 (a single light-activation set).
+    const uncalibratedProps = {
+      ...defaultProps,
+      block: createMockBlock({ targetWeightKg: 0 }),
+      isActive: true,
+      listIndex: 0,
+      workingWeight: 0,
+      warmupSets: [
+        {
+          setNumber: 1,
+          percentOfWorking: 50,
+          targetReps: 10,
+          purpose: 'Light activation',
+          restSeconds: 30,
+        },
+      ],
+    };
+
+    const typeWeight = async (user: ReturnType<typeof userEvent.setup>, value: string) => {
+      await user.click(screen.getByRole('button', { name: /^Weight:/ }));
+      const weightInput = screen.getByRole('spinbutton', { name: 'Weight' });
+      await user.clear(weightInput);
+      await user.type(weightInput, value);
+    };
+
+    it('hides the warmup protocol while no weight is known or entered', () => {
+      render(<ExerciseCard {...uncalibratedProps} />);
+      expect(screen.queryByText('Warmup Protocol')).not.toBeInTheDocument();
+    });
+
+    it('surfaces a full protocol computed from the weight typed into the set input', async () => {
+      const user = userEvent.setup();
+      render(<ExerciseCard {...uncalibratedProps} />);
+
+      await typeWeight(user, '100');
+
+      expect(screen.getByText('Warmup Protocol')).toBeInTheDocument();
+
+      // Expand the table and check the protocol was regenerated for 100 kg
+      // (multi-set barbell ramp), not the single-set weight-0 protocol.
+      await user.click(screen.getByText('Warmup Protocol'));
+      expect(screen.getByText('W1')).toBeInTheDocument();
+      expect(screen.getByText('W3')).toBeInTheDocument();
+    });
+
+    it('keeps the page-provided protocol when a working weight is already known', async () => {
+      const user = userEvent.setup();
+      render(<ExerciseCard {...uncalibratedProps} workingWeight={100} />);
+
+      expect(screen.getByText('Warmup Protocol')).toBeInTheDocument();
+      await user.click(screen.getByText('Warmup Protocol'));
+      expect(screen.getByText('W1')).toBeInTheDocument();
+      expect(screen.queryByText('W2')).not.toBeInTheDocument();
+    });
+
+    it('does not invent warmups when the page passed none (muscle already warm)', async () => {
+      const user = userEvent.setup();
+      render(<ExerciseCard {...uncalibratedProps} warmupSets={[]} />);
+
+      await typeWeight(user, '100');
+
+      expect(screen.queryByText('Warmup Protocol')).not.toBeInTheDocument();
+    });
+  });
 });
