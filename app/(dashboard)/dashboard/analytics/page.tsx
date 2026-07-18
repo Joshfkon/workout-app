@@ -5,7 +5,7 @@ import { useQuery, useQueryClient, useIsRestoring } from '@tanstack/react-query'
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Card, CardHeader, CardTitle, CardContent, Button, Badge, FullPageLoading, ErrorRetry } from '@/components/ui';
+import { Card, CardHeader, CardTitle, CardContent, Button, Badge, FullPageLoading, ErrorRetry, InfoTooltip } from '@/components/ui';
 import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 import { resolveAuthState } from '@/lib/supabase/authState';
 import { BodyMeasurements } from '@/components/dashboard/BodyMeasurements';
@@ -1837,6 +1837,9 @@ function AnalyticsPageContent() {
               data-testid="body-stats-since"
             >
               <label htmlFor="body-stats-since-input">Change since</label>
+              {/* (i) — how BF%/lean/FFMI values and deltas are estimated
+                  between DEXA scans (bodyCompAnchor). Covers the whole strip. */}
+              <InfoTooltip term="BODY_COMP_ESTIMATE" position="bottom" inline={false} />
               <input
                 id="body-stats-since-input"
                 type="date"

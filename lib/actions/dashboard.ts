@@ -1,8 +1,9 @@
 'use server';
 
 import { createUntypedServerClient } from '@/lib/supabase/server';
-import { getLocalDateString, inputWeightToKg } from '@/lib/utils';
-import { buildAnchoredBodyCompTrend } from '@/services/bodyCompAnchor';
+import { getLocalDateString } from '@/lib/utils';
+import { buildPersonalizedBodyCompTrend } from '@/lib/body-composition/trendBuilder';
+import { localDay, rollingWindowStart } from '@/lib/date/localDay';
 import { analyzeBodyCompTrend, computeFFMI } from '@/services/bodyCompEngine';
 import { getBodyCompLayout } from '@/services/compositionSpace';
 import { type WorkoutDay } from '@/types/schema';
@@ -247,10 +248,9 @@ export async function fetchWeightData(userId: string): Promise<WeightData> {
  */
 export async function fetchBodyCompGlance(userId: string): Promise<BodyCompGlance | null> {
   const supabase = await createUntypedServerClient();
-  const yearAgo = new Date();
-  yearAgo.setDate(yearAgo.getDate() - 365);
+  const yearAgoDay = localDay(rollingWindowStart(365));
 
-  const [scansRes, weightsRes, profileRes] = await Promise.all([
+  const [scansRes, weightsRes, profileRes, waistRes, volumeProfileRes] = await Promise.all([
     supabase
       .from('dexa_scans')
       .select('scan_date, body_fat_percent, lean_mass_kg, fat_mass_kg, weight_kg, bone_mass_kg')
@@ -260,31 +260,41 @@ export async function fetchBodyCompGlance(userId: string): Promise<BodyCompGlanc
       .from('weight_log')
       .select('logged_at, weight, unit')
       .eq('user_id', userId)
-      .gte('logged_at', getLocalDateString(yearAgo))
+      .gte('logged_at', yearAgoDay)
       .order('logged_at', { ascending: true }),
-    supabase.from('users').select('height_cm').eq('id', userId).single(),
+    supabase.from('users').select('height_cm, goal, sex, age').eq('id', userId).single(),
+    // Waist + volume profile mirror the Body tab hook's fetches: the card
+    // and the module it deep-links to must run the SAME trend inputs.
+    supabase
+      .from('body_measurements')
+      .select('logged_at, waist')
+      .eq('user_id', userId)
+      .gte('logged_at', yearAgoDay)
+      .not('waist', 'is', null)
+      .order('logged_at', { ascending: true }),
+    supabase
+      .from('user_volume_profiles')
+      .select('training_age, is_enhanced')
+      .eq('user_id', userId)
+      .maybeSingle(),
   ]);
 
   const scans = scansRes.data ?? [];
   const heightCm = profileRes.data?.height_cm ? Number(profileRes.data.height_cm) : null;
   if (!getBodyCompLayout(scans.length).showHomeCard || !heightCm) return null;
 
-  // Same anchored series the Body tab charts read (bodyCompAnchor), so the
+  // Same shared pipeline the Body tab hook runs (trendBuilder: unit
+  // conversion, waist shaping, personalized projection p-ratio), so the
   // card and the module it deep-links to can never disagree.
-  const trend = buildAnchoredBodyCompTrend(
-    (weightsRes.data ?? []).map((row: any) => ({
-      date: row.logged_at,
-      weightKg: inputWeightToKg(Number(row.weight), (row.unit ?? 'lb') as 'lb' | 'kg'),
-    })),
-    scans.map((scan: any) => ({
-      date: scan.scan_date,
-      bodyFatPercent: Number(scan.body_fat_percent),
-      leanMassKg: Number(scan.lean_mass_kg),
-      fatMassKg: Number(scan.fat_mass_kg),
-      weightKg: scan.weight_kg != null ? Number(scan.weight_kg) : undefined,
-      boneMassKg: scan.bone_mass_kg != null ? Number(scan.bone_mass_kg) : null,
-    }))
-  );
+  const { trend } = buildPersonalizedBodyCompTrend({
+    weights: (weightsRes.data ?? []) as any,
+    scans: scans as any,
+    waist: (waistRes.data ?? []) as any,
+    profile: {
+      user: (profileRes.data ?? null) as any,
+      volumeProfile: (volumeProfileRes.data ?? null) as any,
+    },
+  });
   if (trend.length === 0) return null;
   const latest = trend[trend.length - 1];
 

@@ -80,6 +80,16 @@ export interface BuildAnchoredTrendOptions {
    */
   pRatio?: number;
   /**
+   * Lean fraction (0..1) used ONLY for the projection beyond the NEWEST
+   * scan — the live, uncorrected segment the stat cards read. Historical
+   * segments (between scans, and the backcast before the first scan) always
+   * use `pRatio`: the piecewise rescale self-corrects them, so a learned
+   * split there would only reshape interiors, while the projection is where
+   * the split genuinely changes what users see. Defaults to `pRatio` —
+   * omitting it reproduces today's behavior exactly.
+   */
+  projectionPRatio?: number;
+  /**
    * Optional morning-waist EWMA trend (inches). When supplied and it spans a
    * between-scan segment, the fat estimate's INTERIOR follows the waist trend
    * shape instead of the weight-proportional split — so the BF% line "bends"
@@ -256,6 +266,7 @@ export function buildAnchoredBodyCompTrend(
   options: BuildAnchoredTrendOptions = {}
 ): AnchoredTrendPoint[] {
   const pRatio = Math.min(1, Math.max(0, options.pRatio ?? 0.5));
+  const projectionPRatio = Math.min(1, Math.max(0, options.projectionPRatio ?? pRatio));
   const waist = waistTrendInterpolator(options.waistTrend);
 
   const sortedScans = [...scans]
@@ -353,9 +364,10 @@ export function buildAnchoredBodyCompTrend(
     result.push(toEstimated(p, boneOffset(firstScan)));
   });
 
-  // After the last scan: project forward from it.
+  // After the last scan: project forward from it. This is the one segment
+  // that may use a personalized split — no later scan exists to correct it.
   const after = weightPoints.filter((p) => p.day > lastDay);
-  projectFromAnchor(after, lastScan, scanWeight(lastScan), pRatio).forEach((p) => {
+  projectFromAnchor(after, lastScan, scanWeight(lastScan), projectionPRatio).forEach((p) => {
     result.push(toEstimated(p, boneOffset(lastScan)));
   });
 

@@ -99,6 +99,20 @@ export interface NutritionGlobalBundle {
   } | null;
   userError: boolean;
   dexa: { body_fat_percent: number | null; weight_kg: number | null } | null;
+  /**
+   * Full scan history (date-ascending) for learned p-ratio calibration —
+   * consecutive-pair partitioning feeds calculatePRatio's
+   * personalPRatioHistory. Older persisted caches predate this field, so
+   * consumers must treat undefined as [].
+   */
+  dexaScans: Array<{
+    scan_date: string;
+    body_fat_percent: number | null;
+    weight_kg: number | null;
+    lean_mass_kg: number | null;
+    fat_mass_kg: number | null;
+    bone_mass_kg: number | null;
+  }>;
   mesocycle: { days_per_week: number | null; current_week: number | null } | null;
   prefs: { weight_unit: string | null } | null;
   volumeProfile: { training_age: string | null; is_enhanced: boolean | null } | null;
@@ -155,13 +169,14 @@ async function fetchNutritionGlobal(): Promise<NutritionGlobalBundle | null> {
       .order('logged_at', { ascending: false })
       .limit(200),
     supabase.from('users').select('height_cm, age, sex, goal').eq('id', userId).maybeSingle(),
+    // Full history (not just the latest): consecutive scan pairs are the
+    // learned p-ratio signal. Scans are sparse (a handful per year), so the
+    // unbounded select stays tiny.
     supabase
       .from('dexa_scans')
-      .select('body_fat_percent, weight_kg')
+      .select('scan_date, body_fat_percent, weight_kg, lean_mass_kg, fat_mass_kg, bone_mass_kg')
       .eq('user_id', userId)
-      .order('scan_date', { ascending: false })
-      .limit(1)
-      .maybeSingle(),
+      .order('scan_date', { ascending: true }),
     supabase
       .from('mesocycles')
       .select('days_per_week, current_week')
@@ -233,7 +248,17 @@ async function fetchNutritionGlobal(): Promise<NutritionGlobalBundle | null> {
     frequentRaw: (frequentResult.data ?? []) as NutritionGlobalBundle['frequentRaw'],
     user: (userResult.data ?? null) as NutritionGlobalBundle['user'],
     userError: !!userResult.error,
-    dexa: (dexaResult.data ?? null) as NutritionGlobalBundle['dexa'],
+    // `dexa` keeps its original latest-scan shape (newest = last of the
+    // ascending list) so existing consumers are untouched; the full list
+    // rides alongside for p-ratio calibration.
+    dexa: (() => {
+      const scans = (dexaResult.data ?? []) as NutritionGlobalBundle['dexaScans'];
+      const latest = scans.length > 0 ? scans[scans.length - 1] : null;
+      return latest
+        ? { body_fat_percent: latest.body_fat_percent, weight_kg: latest.weight_kg }
+        : null;
+    })(),
+    dexaScans: (dexaResult.data ?? []) as NutritionGlobalBundle['dexaScans'],
     mesocycle: (mesocycleResult.data ?? null) as NutritionGlobalBundle['mesocycle'],
     prefs: (prefsResult.data ?? null) as NutritionGlobalBundle['prefs'],
     volumeProfile: (volumeProfileResult.data ?? null) as NutritionGlobalBundle['volumeProfile'],

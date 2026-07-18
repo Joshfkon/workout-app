@@ -431,6 +431,44 @@ export function computeScanPairPRatios(
   return pairs;
 }
 
+/**
+ * Direction of the phase a p-ratio history will inform: 'surplus' (bulk /
+ * gaining) or 'deficit' (cut / losing). A pair only transfers to a projection
+ * running the SAME direction — partitioning during a loss says little about
+ * partitioning during a gain.
+ */
+export type PhaseDirection = 'surplus' | 'deficit';
+
+/**
+ * The ONE filter that decides which scan pairs may feed a personalized
+ * p-ratio (TDEE projections AND the anchored trend's projection segment use
+ * this same function — the two consumers must never filter differently):
+ *
+ *  - drops pairs `suppressed` by the weight-delta noise gate
+ *    (P_RATIO_MIN_WEIGHT_DELTA_KG), where the fractions are null;
+ *  - drops pairs `withinNoise` (BOTH components inside the DEXA
+ *    repeatability floors — the split is unresolvable). A pair with only
+ *    ONE component inside its floor is kept: "essentially all fat" is a
+ *    directional observation, not noise;
+ *  - keeps only pairs whose weight-change sign matches `direction`
+ *    (surplus → gains, deficit → losses);
+ *  - preserves chronological order (computeScanPairPRatios emits pairs
+ *    date-ascending, and this filter never reorders).
+ */
+export function selectUsablePRatioPairs(
+  pairs: ScanPairPRatio[],
+  direction: PhaseDirection
+): ScanPairPRatio[] {
+  return pairs.filter(
+    (pair) =>
+      !pair.suppressed &&
+      !pair.withinNoise &&
+      pair.fatFraction != null &&
+      pair.leanFraction != null &&
+      (direction === 'surplus' ? pair.deltaWeightKg > 0 : pair.deltaWeightKg < 0)
+  );
+}
+
 export type PartitioningQuality = 'excellent' | 'good' | 'poor' | null;
 
 /**

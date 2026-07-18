@@ -55,6 +55,7 @@ import { LOG_HOME_QUERY_KEY, type LogHomeData } from '@/hooks/useLogPageData';
 import { recalculateMacrosForWeight } from '@/lib/actions/nutrition';
 import { getAdaptiveTDEE, onWeightLoggedRecalculateTDEE, resetAndRecalculateTDEE, type TDEEData } from '@/lib/actions/tdee';
 import { TDEEDashboard } from '@/components/nutrition/TDEEDashboard';
+import { computeScanPairPRatios } from '@/services/compositionSpace';
 import { StepTracking } from '@/components/nutrition/StepTracking';
 import {
   getLocalDateString,
@@ -464,6 +465,29 @@ function NutritionPageContent() {
   // Fan the cached global bundle back out into the existing local state so
   // every downstream mutation and derived read stays untouched. Runs once per
   // load and again on background revalidation.
+  // Realized p-ratio between consecutive DEXA scan pairs — the learned
+  // partitioning signal the TDEE projections blend in (selectUsablePRatioPairs
+  // inside TDEEDashboard picks the direction-matched subset per prediction).
+  // `dexaScans` is undefined on persisted caches written before the field
+  // existed; treat as no history until the background refetch lands.
+  const scanPairPRatios = useMemo(() => {
+    const scans = globalQuery.data?.dexaScans ?? [];
+    if (!heightCm || scans.length < 2) return [];
+    return computeScanPairPRatios(
+      scans
+        .filter((s) => s.lean_mass_kg != null && s.fat_mass_kg != null)
+        .map((s) => ({
+          date: s.scan_date,
+          leanMassKg: Number(s.lean_mass_kg),
+          fatMassKg: Number(s.fat_mass_kg),
+          weightKg: s.weight_kg != null ? Number(s.weight_kg) : null,
+          boneMassKg: s.bone_mass_kg != null ? Number(s.bone_mass_kg) : null,
+          bodyFatPercent: s.body_fat_percent != null ? Number(s.body_fat_percent) : null,
+        })),
+      heightCm
+    );
+  }, [globalQuery.data?.dexaScans, heightCm]);
+
   useEffect(() => {
     if (globalQuery.data) processGlobal(globalQuery.data);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2140,6 +2164,7 @@ function NutritionPageContent() {
           biologicalSex={userProfile.sex || 'male'}
           chronologicalAge={userAge}
           latestDexaScan={latestDexaScan}
+          scanPairPRatios={scanPairPRatios}
           regressionAnalysis={tdeeData.regressionAnalysis}
           targetCalories={nutritionTargets?.calories}
           onRefresh={() => {

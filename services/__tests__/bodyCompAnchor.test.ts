@@ -188,6 +188,60 @@ describe('buildAnchoredBodyCompTrend', () => {
     expect(back!.fatMassKg).toBeCloseTo(15, 1);
   });
 
+  describe('projectionPRatio (personalized post-latest-scan split)', () => {
+    // One point in every regime: backcast, between-scan interior, and the
+    // projection beyond the newest scan.
+    const weights: WeightPoint[] = [
+      { date: '2026-05-22', weightKg: 78 },
+      { date: '2026-06-11', weightKg: 80 },
+      { date: '2026-07-01', weightKg: 82 }, // +2 vs scan B weight (80)
+    ];
+
+    it('omitted → byte-identical to the default-pRatio build', () => {
+      const plain = buildAnchoredBodyCompTrend(weights, [scanA, scanB]);
+      const explicit = buildAnchoredBodyCompTrend(weights, [scanA, scanB], {});
+      const undef = buildAnchoredBodyCompTrend(weights, [scanA, scanB], {
+        projectionPRatio: undefined,
+      });
+      expect(explicit).toEqual(plain);
+      expect(undef).toEqual(plain);
+    });
+
+    it('steers ONLY the projection beyond the newest scan', () => {
+      const base = buildAnchoredBodyCompTrend(weights, [scanA, scanB]);
+      const personalized = buildAnchoredBodyCompTrend(weights, [scanA, scanB], {
+        projectionPRatio: 0.7,
+      });
+
+      // Backcast, anchors, and the between-scan interior are untouched.
+      for (const date of ['2026-05-22', scanA.date, '2026-06-11', scanB.date]) {
+        expect(personalized.find((p) => p.date === date)).toEqual(
+          base.find((p) => p.date === date)
+        );
+      }
+
+      // The +2 kg projection splits 70/30 lean/fat instead of 50/50.
+      const proj = personalized.find((p) => p.date === '2026-07-01')!;
+      expect(proj.leanMassKg).toBeCloseTo(66 + 0.7 * 2, 1);
+      expect(proj.fatMassKg).toBeCloseTo(14 + 0.3 * 2, 1);
+      const baseProj = base.find((p) => p.date === '2026-07-01')!;
+      expect(baseProj.leanMassKg).toBeCloseTo(67, 1);
+      expect(baseProj.fatMassKg).toBeCloseTo(15, 1);
+    });
+
+    it('does not leak into the backcast before the first scan', () => {
+      const trend = buildAnchoredBodyCompTrend(
+        [{ date: '2026-05-22', weightKg: 78 }],
+        [scanA, scanB],
+        { projectionPRatio: 0.9 }
+      );
+      const back = trend.find((p) => p.date === '2026-05-22')!;
+      // Backcast still splits at the default 0.5, not 0.9.
+      expect(back.leanMassKg).toBeCloseTo(63, 1);
+      expect(back.fatMassKg).toBeCloseTo(15, 1);
+    });
+  });
+
   it('anchors deltas to the recorded scan weight, not lean + fat (bone offset)', () => {
     // Scan reports total 82 kg: 64 lean + 16 fat + 2 bone. A later weigh-in
     // of exactly 82 kg is NOT a gain — the projection must stay at the
