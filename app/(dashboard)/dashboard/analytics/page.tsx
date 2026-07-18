@@ -1897,7 +1897,7 @@ function AnalyticsPageContent() {
                     {changesSince.bodyFatDelta > 0 ? '+' : ''}
                     {changesSince.bodyFatDelta.toFixed(1)}%
                   </p>
-                ) : trend && (
+                ) : !statsSinceDate && trend && (
                   <p className={`text-xs mt-1 ${getTrendIndicator(trend.bodyFatChangeRate).color}`}>
                     {getTrendIndicator(trend.bodyFatChangeRate).icon} {Math.abs(trend.bodyFatChangeRate).toFixed(1)}%/mo
                   </p>
@@ -1913,7 +1913,7 @@ function AnalyticsPageContent() {
                     {getTrendIndicator(changesSince.leanMassDeltaKg).icon}{' '}
                     {formatSignedWeight(changesSince.leanMassDeltaKg)}
                   </p>
-                ) : trend && (
+                ) : !statsSinceDate && trend && (
                   <p className={`text-xs mt-1 ${getTrendIndicator(trend.leanMassChangeRate).color}`}>
                     {getTrendIndicator(trend.leanMassChangeRate).icon} {Math.abs(trend.leanMassChangeRate).toFixed(2)} {weightUnit}/mo
                   </p>
