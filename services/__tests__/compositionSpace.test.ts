@@ -18,6 +18,7 @@ import {
   computeGoalVectorProgress,
   selectStartPoint,
   computeScanPairPRatios,
+  selectUsablePRatioPairs,
   classifyPartitioning,
   getBodyCompLayout,
   computeMapDomain,
@@ -393,6 +394,85 @@ describe('computeScanPairPRatios', () => {
       '2026-01-05→2026-06-01',
       '2026-06-01→2026-09-01',
     ]);
+  });
+});
+
+// ============ usable-pair selection for personalized p-ratio ============
+
+describe('selectUsablePRatioPairs', () => {
+  // One scan sequence yielding, in chronological order:
+  //   A→B: +5 kg gain, clearly attributable       (usable, surplus)
+  //   B→C: +1 kg (< 3 lb)                          (suppressed)
+  //   C→D: −5 kg loss, clearly attributable        (usable, deficit)
+  //   D→E: +1.5 kg but lean AND fat < floors       (withinNoise)
+  //   E→F: +4 kg gain, clearly attributable        (usable, surplus)
+  const pairs = computeScanPairPRatios(
+    [
+      { date: '2026-01-05', leanMassKg: 60, fatMassKg: 15, weightKg: 78, bodyFatPercent: 19.0 },
+      { date: '2026-03-01', leanMassKg: 63.4, fatMassKg: 16.6, weightKg: 83, bodyFatPercent: 21.0 },
+      { date: '2026-04-01', leanMassKg: 64, fatMassKg: 17, weightKg: 84, bodyFatPercent: 21.2 },
+      { date: '2026-06-01', leanMassKg: 63.25, fatMassKg: 12.75, weightKg: 79, bodyFatPercent: 17.0 },
+      // Scale/hydration-shaped: weight up 1.5 kg with both components flat.
+      { date: '2026-07-01', leanMassKg: 63.5, fatMassKg: 13, weightKg: 80.5, bodyFatPercent: 17.1 },
+      { date: '2026-09-01', leanMassKg: 65.5, fatMassKg: 15, weightKg: 84.5, bodyFatPercent: 18.7 },
+    ],
+    180
+  );
+
+  it('fixture sanity: gates fire exactly as constructed', () => {
+    expect(pairs).toHaveLength(5);
+    expect(pairs.map((p) => p.suppressed)).toEqual([false, true, false, false, false]);
+    // The suppressed +1 kg pair also sits inside both component floors —
+    // either gate alone excludes it.
+    expect(pairs.map((p) => p.withinNoise)).toEqual([false, true, false, true, false]);
+  });
+
+  it('keeps only clean, direction-matched gain pairs for a surplus', () => {
+    const usable = selectUsablePRatioPairs(pairs, 'surplus');
+    expect(usable.map((p) => `${p.fromDate}→${p.toDate}`)).toEqual([
+      '2026-01-05→2026-03-01',
+      '2026-07-01→2026-09-01',
+    ]);
+    // Chronological order preserved for any downstream recency weighting.
+    expect(usable.every((p) => p.deltaWeightKg > 0)).toBe(true);
+    expect(usable.every((p) => p.fatFraction != null && p.leanFraction != null)).toBe(true);
+  });
+
+  it('keeps only clean loss pairs for a deficit — gain pairs never leak in', () => {
+    const usable = selectUsablePRatioPairs(pairs, 'deficit');
+    expect(usable.map((p) => `${p.fromDate}→${p.toDate}`)).toEqual([
+      '2026-04-01→2026-06-01',
+    ]);
+    expect(usable[0].deltaWeightKg).toBeLessThan(0);
+    // The cut-phase framing: fat share of the loss.
+    expect(usable[0].fatFraction).toBeCloseTo(0.85, 2);
+  });
+
+  it('excludes suppressed and within-noise pairs in both directions', () => {
+    const surplus = selectUsablePRatioPairs(pairs, 'surplus');
+    const deficit = selectUsablePRatioPairs(pairs, 'deficit');
+    for (const usable of [surplus, deficit]) {
+      expect(usable.some((p) => p.suppressed)).toBe(false);
+      expect(usable.some((p) => p.withinNoise)).toBe(false);
+    }
+  });
+
+  it('keeps a one-component-flat pair (directional finding, not noise)', () => {
+    const flatLean = computeScanPairPRatios(
+      [
+        { date: '2025-12-03', leanMassKg: 63, fatMassKg: 17, weightKg: 83.4, bodyFatPercent: 20.4 },
+        { date: '2026-03-15', leanMassKg: 62.8, fatMassKg: 13.8, weightKg: 80, bodyFatPercent: 17.3 },
+      ],
+      180
+    );
+    const usable = selectUsablePRatioPairs(flatLean, 'deficit');
+    expect(usable).toHaveLength(1);
+    expect(usable[0].leanWithinNoise).toBe(true);
+  });
+
+  it('returns [] for empty history', () => {
+    expect(selectUsablePRatioPairs([], 'surplus')).toEqual([]);
+    expect(selectUsablePRatioPairs([], 'deficit')).toEqual([]);
   });
 });
 

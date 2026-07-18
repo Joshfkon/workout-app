@@ -31,6 +31,10 @@ import {
   type PRatioInputs,
   type BodyCompProjection,
 } from '@/lib/body-composition/p-ratio';
+import {
+  selectUsablePRatioPairs,
+  type ScanPairPRatio,
+} from '@/services/compositionSpace';
 
 interface ResetResult {
   success: boolean;
@@ -83,6 +87,13 @@ interface TDEEDashboardProps {
     lean_mass_kg: number;
     fat_mass_kg: number;
   } | null;
+  /**
+   * Realized p-ratios between consecutive DEXA scan pairs
+   * (computeScanPairPRatios output, date-ascending). Direction-matched,
+   * noise-gated pairs feed calculatePRatio's personalPRatioHistory so the
+   * projection learns the user's own partitioning.
+   */
+  scanPairPRatios?: ScanPairPRatio[];
   regressionAnalysis?: RegressionAnalysis | null;
   onRefresh?: () => void;
   onSetTarget?: () => void;
@@ -107,6 +118,7 @@ export function TDEEDashboard({
   biologicalSex,
   chronologicalAge,
   latestDexaScan,
+  scanPairPRatios,
   regressionAnalysis,
   onRefresh,
   onSetTarget,
@@ -655,6 +667,24 @@ export function TDEEDashboard({
           // Energy balance: negative = deficit, positive = surplus
           const energyBalancePercent = (dailyDeficit / activeEstimate.estimatedTDEE) * 100;
           
+          // Learned partitioning: scan pairs matching THIS prediction's
+          // direction (a gain projection learns only from surplus pairs, a
+          // loss projection only from deficit pairs). Selection — noise
+          // gates included — lives in selectUsablePRatioPairs so every
+          // consumer filters identically. fatFraction is calculatePRatio's
+          // p-ratio convention (share of the weight change that is fat) and
+          // is non-null on every pair the selector keeps. Note: only the
+          // loss path (calculatePRatio) consumes the history today;
+          // predictWeightGainComposition ignores it by design.
+          const usablePairs = selectUsablePRatioPairs(
+            scanPairPRatios ?? [],
+            weightChangeKg > 0 ? 'surplus' : 'deficit'
+          );
+          const personalPRatioHistory =
+            usablePairs.length > 0
+              ? usablePairs.map((pair) => pair.fatFraction as number)
+              : undefined;
+
           // Build P-ratio inputs from available data
           const pRatioInputs: PRatioInputs = {
             avgDailyProteinGrams: avgDailyProteinGrams || 150, // Fallback
@@ -668,7 +698,7 @@ export function TDEEDashboard({
             isEnhanced: isEnhanced || false,
             biologicalSex: biologicalSex || 'male',
             chronologicalAge,
-            personalPRatioHistory: undefined, // TODO: Calculate from DEXA scan history if available
+            personalPRatioHistory,
           };
           
           // Handle weight gain differently

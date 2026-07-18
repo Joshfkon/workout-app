@@ -7,33 +7,25 @@
  * composition trend (services/bodyCompAnchor). This is the ONE data source
  * for every surface derived from the anchored series: the Body Composition
  * Trend chart AND the Analytics FFMI gauge (which must equal the last point
- * of the trend's FFMI series). Weight → kg conversion happens here, once,
- * via inputWeightToKg.
+ * of the trend's FFMI series).
+ *
+ * The actual row→trend pipeline (unit conversion, waist-EWMA shaping,
+ * personalized projection p-ratio) lives in
+ * lib/body-composition/trendBuilder — SHARED with the Home card's server
+ * action so both surfaces produce identical trends for identical data.
  */
 
 import { useEffect, useMemo, useState } from 'react';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { type AnchoredTrendPoint } from '@/services/bodyCompAnchor';
 import {
-  buildAnchoredBodyCompTrend,
-  type AnchoredTrendPoint,
-} from '@/services/bodyCompAnchor';
-import { computeWaistTrend } from '@/services/waistTrend';
-import { inputWeightToKg, cmToIn } from '@/lib/utils';
-
-interface WeightLogRow {
-  logged_at: string;
-  weight: number;
-  unit: 'lb' | 'kg' | null;
-}
-
-interface DexaRow {
-  scan_date: string;
-  body_fat_percent: number;
-  lean_mass_kg: number;
-  fat_mass_kg: number;
-  weight_kg: number | null;
-  bone_mass_kg: number | null;
-}
+  buildPersonalizedBodyCompTrend,
+  type TrendDexaRow,
+  type TrendProfileRows,
+  type TrendWaistRow,
+  type TrendWeightRow,
+} from '@/lib/body-composition/trendBuilder';
+import { localDay, rollingWindowStart } from '@/lib/date/localDay';
 
 export interface WeightHistoryEntry {
   date: string;
@@ -51,9 +43,10 @@ export interface BodyCompTrendData {
 
 /** Bump `refreshKey` to refetch after the log sheet saves something. */
 export function useBodyCompTrend(refreshKey: number = 0): BodyCompTrendData {
-  const [weightRows, setWeightRows] = useState<WeightLogRow[]>([]);
-  const [scans, setScans] = useState<DexaRow[]>([]);
-  const [waistRows, setWaistRows] = useState<Array<{ logged_at: string; waist: number | null }>>([]);
+  const [weightRows, setWeightRows] = useState<TrendWeightRow[]>([]);
+  const [scans, setScans] = useState<TrendDexaRow[]>([]);
+  const [waistRows, setWaistRows] = useState<TrendWaistRow[]>([]);
+  const [profileRows, setProfileRows] = useState<TrendProfileRows | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -63,14 +56,13 @@ export function useBodyCompTrend(refreshKey: number = 0): BodyCompTrendData {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
-        const yearAgo = new Date();
-        yearAgo.setDate(yearAgo.getDate() - 365);
-        const [weightsRes, scansRes, waistRes] = await Promise.all([
+        const yearAgoDay = localDay(rollingWindowStart(365));
+        const [weightsRes, scansRes, waistRes, userRes, volumeProfileRes] = await Promise.all([
           supabase
             .from('weight_log')
             .select('logged_at, weight, unit')
             .eq('user_id', user.id)
-            .gte('logged_at', yearAgo.toISOString().slice(0, 10))
+            .gte('logged_at', yearAgoDay)
             .order('logged_at', { ascending: true }),
           supabase
             .from('dexa_scans')
@@ -85,16 +77,31 @@ export function useBodyCompTrend(refreshKey: number = 0): BodyCompTrendData {
             .from('body_measurements')
             .select('logged_at, waist')
             .eq('user_id', user.id)
-            .gte('logged_at', yearAgo.toISOString().slice(0, 10))
+            .gte('logged_at', yearAgoDay)
             .not('waist', 'is', null)
             .order('logged_at', { ascending: true }),
+          // Profile slices feeding the personalized projection p-ratio.
+          // Non-fatal: absent rows just leave the projection at the 0.5
+          // default.
+          supabase
+            .from('users')
+            .select('height_cm, goal, sex, age')
+            .eq('id', user.id)
+            .maybeSingle(),
+          supabase
+            .from('user_volume_profiles')
+            .select('training_age, is_enhanced')
+            .eq('user_id', user.id)
+            .maybeSingle(),
         ]);
 
-        setWeightRows((weightsRes.data ?? []) as WeightLogRow[]);
-        setScans((scansRes.data ?? []) as DexaRow[]);
-        setWaistRows(
-          (waistRes.data ?? []) as Array<{ logged_at: string; waist: number | null }>
-        );
+        setWeightRows((weightsRes.data ?? []) as TrendWeightRow[]);
+        setScans((scansRes.data ?? []) as TrendDexaRow[]);
+        setWaistRows((waistRes.data ?? []) as TrendWaistRow[]);
+        setProfileRows({
+          user: (userRes.data ?? null) as TrendProfileRows['user'],
+          volumeProfile: (volumeProfileRes.data ?? null) as TrendProfileRows['volumeProfile'],
+        });
       } catch (err) {
         console.error('Failed to load body trend data:', err);
       } finally {
@@ -114,39 +121,15 @@ export function useBodyCompTrend(refreshKey: number = 0): BodyCompTrendData {
     [weightRows]
   );
 
-  const waistTrend = useMemo(
-    () =>
-      computeWaistTrend(
-        waistRows
-          .filter((r) => r.waist != null)
-          .map((r) => ({ date: r.logged_at, waistIn: cmToIn(Number(r.waist)) }))
-      )
-        // Only valid (non-outlier) points shape the interior.
-        .filter((p) => !p.isOutlier)
-        .map((p) => ({ date: p.date, trendIn: p.trendIn })),
-    [waistRows]
-  );
-
   const trend = useMemo(
     () =>
-      buildAnchoredBodyCompTrend(
-        weightRows.map((row) => ({
-          date: row.logged_at,
-          weightKg: inputWeightToKg(row.weight, row.unit ?? 'lb'),
-        })),
-        scans.map((scan) => ({
-          date: scan.scan_date,
-          bodyFatPercent: Number(scan.body_fat_percent),
-          leanMassKg: Number(scan.lean_mass_kg),
-          fatMassKg: Number(scan.fat_mass_kg),
-          // The recorded total (includes bone) anchors bodyweight deltas.
-          weightKg: scan.weight_kg != null ? Number(scan.weight_kg) : undefined,
-          // BMC feeds the FFMI series (FFM = lean + bone when logged).
-          boneMassKg: scan.bone_mass_kg != null ? Number(scan.bone_mass_kg) : null,
-        })),
-        { waistTrend }
-      ),
-    [weightRows, scans, waistTrend]
+      buildPersonalizedBodyCompTrend({
+        weights: weightRows,
+        scans,
+        waist: waistRows,
+        profile: profileRows,
+      }).trend,
+    [weightRows, scans, waistRows, profileRows]
   );
 
   return { trend, weightHistory, isLoading };
