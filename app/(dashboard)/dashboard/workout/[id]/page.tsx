@@ -110,7 +110,10 @@ import { AddExercisePicker } from './_components/AddExercisePicker';
 import {
   buildExerciseHistories,
   fetchExerciseHistory,
+  flattenExerciseHistoryRows,
   generateCoachMessage,
+  HISTORY_SESSIONS_PER_EXERCISE,
+  type ExerciseHistoryQueryRow,
 } from './_lib/suggestions';
 import { deriveProgressionScope, type ProgressionScope } from '@/services/progressionScope';
 import {
@@ -986,39 +989,49 @@ export default function WorkoutPage() {
             .select('*', { count: 'exact', head: true })
             .eq('user_id', sessionData.user_id)
             .eq('state', 'completed'),
-          // Exercise history for all exercises (single batched query)
+          // Exercise history for all exercises: one batched query, but the
+          // recency window is PER EXERCISE (embedded blocks execute as a
+          // lateral subquery per exercise row, so order+limit apply to each
+          // exercise independently). The old flat query capped rows GLOBALLY
+          // across all of today's exercises, so an infrequently-trained
+          // exercise could get zero rows and be misread as a cold start
+          // (+15% steps, easy-RIR auto-bumps) despite years of history —
+          // audit failure mode #2 (docs/WEIGHT_REP_ENGINE_AUDIT.md).
           exerciseIds.length > 0
             ? supabase
-                .from('exercise_blocks')
+                .from('exercises')
                 .select(`
                   id,
-                  exercise_id,
-                  workout_sessions!inner (
+                  exercise_blocks (
                     id,
-                    completed_at,
-                    state,
-                    user_id,
-                    is_deload
-                  ),
-                  set_logs (
-                    weight_kg,
-                    reps,
-                    rpe,
-                    is_warmup,
-                    set_number,
-                    set_type,
-                    logged_at,
-                    location_id
+                    exercise_id,
+                    workout_sessions!inner (
+                      id,
+                      completed_at,
+                      state,
+                      user_id,
+                      is_deload
+                    ),
+                    set_logs (
+                      weight_kg,
+                      reps,
+                      rpe,
+                      is_warmup,
+                      set_number,
+                      set_type,
+                      logged_at,
+                      location_id
+                    )
                   )
                 `)
-                .in('exercise_id', exerciseIds)
-                .eq('workout_sessions.user_id', sessionData.user_id)
-                .eq('workout_sessions.state', 'completed')
-                .order('workout_sessions(completed_at)', { ascending: false })
-                // P1-2 (perf): suggestions only look at recent sessions —
-                // cap the rows instead of loading a full training history
-                // (~10 recent blocks per exercise is ample for E1RM/last-time).
-                .limit(Math.min(exerciseIds.length * 10, 120))
+                .in('id', exerciseIds)
+                .eq('exercise_blocks.workout_sessions.user_id', sessionData.user_id)
+                .eq('exercise_blocks.workout_sessions.state', 'completed')
+                .order('workout_sessions(completed_at)', {
+                  referencedTable: 'exercise_blocks',
+                  ascending: false,
+                })
+                .limit(HISTORY_SESSIONS_PER_EXERCISE, { referencedTable: 'exercise_blocks' })
             : Promise.resolve({ data: null }),
           // Cross-exercise strength summary for cold-start transfer estimation
           // (never-trained exercises seed from a related exercise's e1RM).
@@ -1030,7 +1043,9 @@ export default function WorkoutPage() {
         const calibratedLifts = calibratedResult.data;
         const mesocycleData = mesocycleResult.data;
         const completedWorkoutsCount = completedCountResult.count ?? 0;
-        const allHistoryBlocks = historyResult.data;
+        const allHistoryBlocks = flattenExerciseHistoryRows(
+          historyResult.data as ExerciseHistoryQueryRow[] | null
+        );
         setTransferCandidates(fetchedTransferCandidates);
         
         const profile: UserProfileForWeights | undefined = userData ? {

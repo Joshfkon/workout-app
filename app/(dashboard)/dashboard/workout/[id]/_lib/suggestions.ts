@@ -83,6 +83,43 @@ export interface HistoryBlockRow {
 }
 
 /**
+ * Sessions of direct history each exercise reads for suggestions (last-N
+ * window). This is the per-exercise fetch limit AND the per-exercise trim in
+ * buildExerciseHistories — one constant so the query and the grouping cannot
+ * disagree.
+ */
+export const HISTORY_SESSIONS_PER_EXERCISE = 10;
+
+/**
+ * Row shape of the per-exercise batched history query: one row per exercise in
+ * today's session, with that exercise's own most-recent blocks embedded
+ * (each exercise gets its own last-N window — a shared global row cap starved
+ * infrequently-trained exercises into a false cold start).
+ */
+export interface ExerciseHistoryQueryRow {
+  id: string;
+  exercise_blocks: HistoryBlockRow[] | null;
+}
+
+/**
+ * Flatten the per-exercise query rows into the flat block list the rest of the
+ * pipeline consumes (buildExerciseHistories, buildPerformanceSnapshots). Order
+ * within each exercise is preserved (most-recent-first from the query); cross-
+ * exercise order is irrelevant — every consumer groups by exercise_id. Pure.
+ */
+export function flattenExerciseHistoryRows(
+  rows: ExerciseHistoryQueryRow[] | null | undefined
+): HistoryBlockRow[] {
+  const blocks: HistoryBlockRow[] = [];
+  for (const row of rows || []) {
+    for (const block of row.exercise_blocks || []) {
+      blocks.push(block);
+    }
+  }
+  return blocks;
+}
+
+/**
  * Per-exercise location-scoping config for the history read. When present, a
  * `local`-scope exercise reads only sets logged at `currentLocationId`; a
  * `global`-scope exercise (or a null location) reads full history. See
@@ -303,12 +340,12 @@ export function buildExerciseHistories(
     }
   }
 
-  // Group results by exercise_id and limit to 10 per exercise
+  // Group results by exercise_id and limit to the per-exercise window
   const groupedByExercise: Record<string, HistoryBlockRow[]> = {};
   for (const block of allHistoryBlocks || []) {
     const exId = block.exercise_id;
     if (!groupedByExercise[exId]) groupedByExercise[exId] = [];
-    if (groupedByExercise[exId].length < 10) {
+    if (groupedByExercise[exId].length < HISTORY_SESSIONS_PER_EXERCISE) {
       groupedByExercise[exId].push(block);
     }
   }
@@ -373,7 +410,7 @@ export async function fetchExerciseHistory(
     .eq('workout_sessions.user_id', userId)
     .eq('workout_sessions.state', 'completed')
     .order('workout_sessions(completed_at)', { ascending: false })
-    .limit(10);
+    .limit(HISTORY_SESSIONS_PER_EXERCISE);
 
   if (error || !historyBlocks || historyBlocks.length === 0) {
     return null;
