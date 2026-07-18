@@ -2,8 +2,8 @@
  * Set Recommender — within-session next-set suggestion.
  *
  * Single engine for "what weight x reps should my next set be?" during an active
- * workout. Replaces the competing recommendNextSet (progressionEngine) and the
- * suggestWeight/suggestReps pair (setSuggestionEngine).
+ * workout. Replaced the competing recommendNextSet (progressionEngine, since
+ * deleted) and the suggestWeight/suggestReps pair (setSuggestionEngine).
  *
  * Design + rationale: docs/next-set-recommender-design.md
  *

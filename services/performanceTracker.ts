@@ -5,9 +5,10 @@
  * when patterns are detected (overperformance, underperformance, stagnation).
  *
  * IMPORTANT: This module is ANALYSIS-ONLY. It does NOT produce authoritative
- * weight recommendations. Weight/rep/set targets come exclusively from
- * progressionEngine.ts via calculateNextTargets(). Signals from this module
- * are advisory and displayed to users as informational banners.
+ * weight recommendations. Weight/rep suggestions come exclusively from
+ * services/setRecommender.ts (with weightEstimationEngine for cold starts).
+ * Signals from this module are advisory and displayed to users as
+ * informational banners.
  *
  * Pure functions - no database calls.
  */
@@ -139,8 +140,8 @@ function signalToFlag(signal: PerformanceSignal): ProgressionFlag {
  * 3. getPerformanceSignal() returns detected patterns
  * 4. clearSignal() after user acknowledges
  *
- * NOTE: This class is for pattern detection only. For actual progression
- * targets (weight, reps, sets), use progressionEngine.calculateNextTargets().
+ * NOTE: This class is for pattern detection only. Actual weight/rep
+ * suggestions come from services/setRecommender.ts.
  */
 export class PerformanceTracker {
   private setHistory: PerformanceSetLog[] = [];

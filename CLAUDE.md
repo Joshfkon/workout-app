@@ -185,12 +185,16 @@ The conceptual progression hierarchy is:
 3. **Set progression**: Add sets within mesocycle
 4. **Technique progression**: Maintain for consolidation
 
-In the LIVE app, next-set weight **suggestions** come from
-`weightEstimationEngine.quickWeightEstimate` (E1RM-based), and
-progression / PR detection happens inline in the workout page
+In the LIVE app, weight/rep **suggestions** come from
+`services/setRecommender.ts` (e1RM-anchored, with recency decay via
+`services/suggestionEngine/e1rmAnchor.ts`), falling back to
+`weightEstimationEngine.quickWeightEstimate` for true cold starts.
+Progression / PR detection happens inline in the workout page
 (`app/(dashboard)/dashboard/workout/[id]/page.tsx`) and `SessionSummary`,
-using `progressionEngine`'s set-quality and `checkForPR` helpers. The older
-`progressionEngine.calculateNextTargets` orchestrator has been retired.
+using `progressionEngine`'s set-quality helpers. The older
+`progressionEngine.calculateNextTargets` orchestrator (and its
+`recommendNextSet` / `checkForPR` siblings) has been deleted — see
+docs/WEIGHT_REP_ENGINE_AUDIT.md §Remediation.
 
 ### Set Quality Classification
 Based on RPE analysis in `types/schema.ts`:

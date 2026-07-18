@@ -290,6 +290,26 @@ interface DirectHistoryRow {
     | null;
 }
 
+/** Non-deload, non-warmup set e1RMs (with dates) from one exercise's history row. */
+function anchorEntriesFromHistoryRow(row: DirectHistoryRow): E1RMAnchorEntry[] {
+  const entries: E1RMAnchorEntry[] = [];
+  for (const block of row.exercise_blocks ?? []) {
+    const session = block.workout_sessions;
+    // Deload sessions are held light on purpose — never anchor on them.
+    if (!session || session.is_deload) continue;
+    for (const s of block.set_logs ?? []) {
+      const weightKg = s.weight_kg ?? 0;
+      const reps = s.reps ?? 0;
+      if (s.is_warmup || weightKg <= 0 || reps <= 0) continue;
+      entries.push({
+        e1rmKg: historySetE1RM(weightKg, reps, s.rpe ?? 10),
+        timeMs: Date.parse(session.completed_at || s.logged_at || ''),
+      });
+    }
+  }
+  return entries;
+}
+
 /**
  * Recency-decayed direct-history e1RM anchor per exercise (audit remediation
  * Fix 5). One batched query — the same per-exercise embedded last-N window
@@ -341,20 +361,7 @@ async function fetchDirectHistoryAnchors(
     // (The generated client types infer to-one embeds as arrays — cast via
     // unknown to the runtime shape, same convention as the workout page.)
     for (const row of data as unknown as DirectHistoryRow[]) {
-      const entries: E1RMAnchorEntry[] = [];
-      for (const block of row.exercise_blocks ?? []) {
-        const session = block.workout_sessions;
-        // Deload sessions are held light on purpose — never anchor on them.
-        if (!session || session.is_deload) continue;
-        for (const s of block.set_logs ?? []) {
-          if (s.is_warmup || !s.weight_kg || !s.reps || s.weight_kg <= 0 || s.reps <= 0) continue;
-          entries.push({
-            e1rmKg: historySetE1RM(s.weight_kg, s.reps, s.rpe ?? 10),
-            timeMs: Date.parse(session.completed_at || s.logged_at || ''),
-          });
-        }
-      }
-      const anchor = decayedE1RMMax(entries);
+      const anchor = decayedE1RMMax(anchorEntriesFromHistoryRow(row));
       if (anchor > 0) anchors.set(row.id, anchor);
     }
   } catch {
