@@ -363,6 +363,9 @@ export default function SettingsPage() {
         const phaseResult = await updateTrainingPhase(phase);
         if (phaseResult.success) {
           setSavedGoal(goal);
+          // The action rewrote the training_phases spans — refetch so the
+          // Body tab verdict/banner reflect the new active span.
+          void queryClient.invalidateQueries({ queryKey: ['phases'] });
           if (phaseResult.newTargets) {
             successText = `Settings saved! Macro targets updated to match your new goal (${phaseResult.newTargets.calories} cal).`;
           }

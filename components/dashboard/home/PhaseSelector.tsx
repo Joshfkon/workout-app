@@ -2,9 +2,11 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui';
 import { Modal } from '@/components/ui/Modal';
 import { updateTrainingPhase, type TrainingPhase, type UpdatePhaseResult } from '@/lib/actions/phase';
+import { PHASES_QUERY_KEY_PREFIX } from '@/hooks/useTrainingPhases';
 
 const PHASE_META: Record<
   TrainingPhase,
@@ -47,6 +49,7 @@ interface PhaseSelectorProps {
  */
 export function PhaseSelector({ phase, onPhaseChanged }: PhaseSelectorProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [isOpen, setIsOpen] = useState(false);
   const [selected, setSelected] = useState<TrainingPhase>(phase);
   const [syncTargets, setSyncTargets] = useState(true);
@@ -77,6 +80,9 @@ export function PhaseSelector({ phase, onPhaseChanged }: PhaseSelectorProps) {
         setError(result.message);
         return;
       }
+      // The server action rewrote the training_phases spans (close + open) —
+      // refetch so the Body tab verdict/banner reflect the new active span.
+      void queryClient.invalidateQueries({ queryKey: [PHASES_QUERY_KEY_PREFIX] });
       onPhaseChanged(selected, result.newTargets);
       if (result.activeMesocycle) {
         setStaleMesocycle(result.activeMesocycle);

@@ -108,3 +108,30 @@ export function rollingWindowStartISO(days = 7, date: Date = new Date()): string
 export function localDaysBetween(a: Date, b: Date): number {
   return Math.round((startOfLocalDay(b).getTime() - startOfLocalDay(a).getTime()) / DAY_MS);
 }
+
+// === localDay STRING helpers ===
+//
+// Entities that store days as `YYYY-MM-DD` strings (weight_log.logged_at,
+// dexa_scans.scan_date, training_phases.start_day/end_day) need day arithmetic
+// without ever round-tripping through UTC. Parsing with `new Date('YYYY-MM-DD')`
+// is the classic bug: the spec makes that UTC midnight, which is the PREVIOUS
+// local day in negative-offset timezones. These helpers pin parsing to local
+// midnight so `parse → format` is always the identity.
+
+/** Parse a `YYYY-MM-DD` localDay string to local midnight of that day. */
+export function parseLocalDay(day: string): Date {
+  const [y, m, d] = day.slice(0, 10).split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
+/** `day + days` as a localDay string (days may be negative). */
+export function addLocalDays(day: string, days: number): string {
+  const date = parseLocalDay(day);
+  date.setDate(date.getDate() + days);
+  return localDay(date);
+}
+
+/** Whole calendar days from localDay string `a` to `b` (b − a). */
+export function localDaysBetweenDays(a: string, b: string): number {
+  return localDaysBetween(parseLocalDay(a), parseLocalDay(b));
+}
