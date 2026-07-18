@@ -101,18 +101,31 @@ export const WeightGraph = memo(function WeightGraph({ weightHistory, preferredU
     });
   }, [weightHistory, timeframe, preferredUnit]);
 
-  // Calculate trend
+  // Weekly rolling trend: least-squares slope of weight over the visible
+  // window, expressed per week. Robust to noisy endpoints, unlike last - first.
   const trend = useMemo(() => {
     if (chartData.length < 2) return null;
 
-    const first = chartData[0].weight;
-    const last = chartData[chartData.length - 1].weight;
-    const change = last - first;
+    const t0 = new Date(chartData[0].date).getTime();
+    const points = chartData.map((d) => ({
+      x: (new Date(d.date).getTime() - t0) / (1000 * 60 * 60 * 24),
+      y: d.weight,
+    }));
+
+    const n = points.length;
+    const meanX = points.reduce((sum, p) => sum + p.x, 0) / n;
+    const meanY = points.reduce((sum, p) => sum + p.y, 0) / n;
+    const denom = points.reduce((sum, p) => sum + (p.x - meanX) ** 2, 0);
+    if (denom === 0) return null;
+
+    const slopePerDay =
+      points.reduce((sum, p) => sum + (p.x - meanX) * (p.y - meanY), 0) / denom;
+    const perWeek = slopePerDay * 7;
 
     return {
-      change,
-      isPositive: change > 0,
-      isNegative: change < 0,
+      perWeek,
+      isPositive: perWeek > 0.05,
+      isNegative: perWeek < -0.05,
     };
   }, [chartData]);
 
@@ -164,8 +177,8 @@ export const WeightGraph = memo(function WeightGraph({ weightHistory, preferredU
                   : 'text-surface-400'
               }
             >
-              {trend.change > 0 ? '+' : ''}
-              {trend.change.toFixed(1)} {preferredUnit}
+              {trend.perWeek > 0 ? '+' : ''}
+              {trend.perWeek.toFixed(1)} {preferredUnit}/wk
             </span>
           )}
         </div>
