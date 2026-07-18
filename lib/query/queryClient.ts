@@ -32,6 +32,7 @@ export const PERSISTED_QUERY_PREFIXES = [
   'templates',      // the folders + templates list
   'settings',       // user settings/preferences row
   'blood-pressure', // daily BP readings — history is immutable-in-practice
+  'phases',         // training phase spans — low-frequency, drive the Body verdict
 ] as const;
 
 export function shouldPersistQueryKey(queryKey: readonly unknown[]): boolean {

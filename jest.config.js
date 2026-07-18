@@ -1,3 +1,10 @@
+// Default the suite to a negative-offset timezone unless the caller pins one.
+// Running in UTC hides the entire local-vs-UTC day-boundary bug class (an
+// 11 PM local weigh-in "moving" to tomorrow); a real offset makes those bugs
+// fail loudly. Set BEFORE workers spawn so Date sees it from process start.
+// See lib/date/__tests__/localDayStrings.test.ts.
+process.env.TZ = process.env.TZ || 'America/Denver';
+
 const nextJest = require('next/jest');
 
 const createJestConfig = nextJest({

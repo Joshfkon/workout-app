@@ -34,7 +34,7 @@ import {
   ReferenceLine,
 } from 'recharts';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui';
-import { WeightGraph } from '@/components/analytics/WeightGraph';
+import { WeightGraph, type PhaseBandSpan } from '@/components/analytics/WeightGraph';
 import {
   findLowConfidenceGaps,
   LOW_CONFIDENCE_GAP_DAYS,
@@ -74,6 +74,8 @@ interface BodyHubTrendsProps {
   onSetTarget?: (target: { targetFfmi: number; targetBodyFatPercent: number }) => void | Promise<void>;
   /** Deep links can open a specific view (e.g. 'map' from the Home card). */
   initialMetric?: CompMetric;
+  /** Training-phase spans drawn as background bands on the weight chart. */
+  phaseSpans?: PhaseBandSpan[];
 }
 
 export type CompMetric = 'bodyFat' | 'leanMass' | 'ffmi' | 'map';
@@ -110,6 +112,7 @@ export function BodyHubTrends({
   experience = null,
   onSetTarget,
   initialMetric,
+  phaseSpans,
 }: BodyHubTrendsProps) {
   const [metric, setMetric] = useState<CompMetric>(initialMetric ?? 'bodyFat');
 
@@ -215,7 +218,7 @@ export function BodyHubTrends({
     <div className="space-y-4">
       {/* Weight trend */}
       {weightHistory.length >= 2 && (
-        <WeightGraph weightHistory={weightHistory} preferredUnit={units} />
+        <WeightGraph weightHistory={weightHistory} preferredUnit={units} phases={phaseSpans} />
       )}
 
       {/* BF% / lean mass / FFMI anchored trend + Composition Map.

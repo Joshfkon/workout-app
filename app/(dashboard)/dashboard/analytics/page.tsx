@@ -22,6 +22,11 @@ import {
 } from '@/services/bodyCompEngine';
 import { useBodyCompTrend } from '@/hooks/useBodyCompTrend';
 import { useBodyStatsSince } from '@/hooks/useBodyStatsSince';
+import { useTrainingPhases } from '@/hooks/useTrainingPhases';
+import { assessProgress } from '@/services/phaseAssessment';
+import { PhaseVerdictCard } from '@/components/body/PhaseVerdictCard';
+import { PhaseBanner } from '@/components/body/PhaseBanner';
+import { localDay } from '@/lib/date/localDay';
 import { computeTrendChangesSince } from '@/services/bodyCompAnchor';
 import { getDisplayWeight } from '@/lib/weightUtils';
 import {
@@ -424,8 +429,13 @@ function AnalyticsPageContent() {
   const {
     trend: bodyCompTrend,
     weightHistory: bodyWeightHistory,
+    waistHistory: bodyWaistHistory,
     isLoading: isBodyTrendLoading,
   } = useBodyCompTrend(bodyRefreshKey);
+
+  // Training phases (bulk/cut/recomp/maintenance spans) — drive the verdict
+  // card, the phase banner, and the trend chart's background bands.
+  const { phases: trainingPhases, current: currentPhase } = useTrainingPhases();
 
   // Goals tab state
   const [activeMesocycle, setActiveMesocycle] = useState<Mesocycle | null>(null);
@@ -1573,15 +1583,61 @@ function AnalyticsPageContent() {
   const phaseChangeDates = activeTarget?.createdAt
     ? [activeTarget.createdAt.slice(0, 10)]
     : [];
-  const recommendations = userProfile?.heightCm
+
+  // Rules-based phase assessment (the Body tab verdict card). Weigh-ins are
+  // normalized to lb for the engine; the phase span itself scopes every
+  // trend inside assessProgress.
+  const assessment = useMemo(
+    () =>
+      assessProgress({
+        phase: currentPhase,
+        today: localDay(),
+        weighIns: bodyWeightHistory.map((entry) => ({
+          date: entry.date.slice(0, 10),
+          weightLb: getDisplayWeight(entry.weight, entry.unit, 'lb'),
+        })),
+        scans,
+        waist: bodyWaistHistory,
+      }),
+    [currentPhase, bodyWeightHistory, scans, bodyWaistHistory]
+  );
+
+  // Topics the verdict card already covers (in-phase composition + rate
+  // trends). When a real verdict is showing, the same story must not repeat
+  // in the Recommendations card below it.
+  const verdictCoversTrends =
+    assessment.status === 'on_track' ||
+    assessment.status === 'attention' ||
+    assessment.status === 'off_track';
+  const VERDICT_COVERED_TITLES = new Set([
+    'Fat Gain Too Fast',
+    'Lean Mass Trending Down During Bulk',
+    'Muscle Gain Below Expected',
+    'Muscle Loss Detected',
+    'Successful Recomp',
+  ]);
+  const allRecommendations = userProfile?.heightCm
     ? generateCoachingRecommendations(
         scans,
         userProfile.heightCm,
         userProfile.goal,
         userProfile.experience,
-        { weightUnit: units, phaseChangeDates }
+        {
+          weightUnit: units,
+          phaseChangeDates,
+          activePhase: currentPhase
+            ? {
+                phaseType: currentPhase.phaseType,
+                startDay: currentPhase.startDay,
+                endDay: currentPhase.endDay,
+              }
+            : null,
+        }
       )
     : [];
+  const recommendations = verdictCoversTrends
+    ? allRecommendations.filter((rec) => !VERDICT_COVERED_TITLES.has(rec.title))
+    : allRecommendations;
 
   // A transient failure to load/verify the session (network, 5xx, failed
   // client init) — React Query has already retried and surfaced the error.
@@ -1724,6 +1780,11 @@ function AnalyticsPageContent() {
           ? 'map'
           : undefined
       }
+      phaseSpans={trainingPhases.map((p) => ({
+        phaseType: p.phaseType,
+        startDay: p.startDay,
+        endDay: p.endDay,
+      }))}
     />
   );
 
@@ -1821,6 +1882,12 @@ function AnalyticsPageContent() {
               </Button>
             </div>
           </div>
+
+          {/* 1. Verdict card — the rules-based phase assessment. Tapping it
+              opens the phase editor. 2. Phase banner — compact current-phase
+              strip with the Manage link (or the set-one CTA). */}
+          <PhaseVerdictCard assessment={assessment} href="/dashboard/phases" />
+          <PhaseBanner phase={currentPhase} href="/dashboard/phases" />
 
           {/* Header stat strip — weight / BF% / lean / FFMI, ALL derived from
               the same canonical source (the anchored trend's last point via

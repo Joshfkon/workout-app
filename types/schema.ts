@@ -2316,6 +2316,45 @@ export interface DexaScan {
   createdAt: string;
 }
 
+/** Training phase kind for date-spanned phase tracking. */
+export type PhaseType = 'bulk' | 'cut' | 'recomp' | 'maintenance';
+
+/**
+ * A date-spanned training phase (training_phases table). Unlike the
+ * append-only phase_history log (current-phase switches only), these are
+ * user-editable, retroactive spans with an explicit end and a target rate,
+ * and they drive the Body tab's phase-aware assessment.
+ *
+ * Invariants enforced in application logic (services/phasePlanning.ts):
+ * - A user's phases never overlap (gaps ARE allowed — untracked periods).
+ * - At most one phase has endDay = null (the active phase).
+ * - startDay <= endDay when endDay is present.
+ * All days are localDay strings (YYYY-MM-DD); compare via lib/date/localDay.
+ */
+export interface TrainingPhase {
+  id: string;
+  userId: string;
+
+  phaseType: PhaseType;
+
+  /** First day of the phase (localDay YYYY-MM-DD). */
+  startDay: string;
+
+  /** Last day of the phase (localDay), or null while the phase is active. */
+  endDay: string | null;
+
+  /**
+   * Signed weekly weight-change target in lb (+0.5 bulk, −1.0 cut).
+   * Null for recomp/maintenance, where weight is not the goal.
+   */
+  targetRateLbsPerWeek: number | null;
+
+  note: string | null;
+
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 /**
  * Progress photo entry for visual body composition tracking
  */

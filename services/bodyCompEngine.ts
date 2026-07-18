@@ -286,6 +286,21 @@ export interface RecommendationOptions {
    * suppressed rather than emitted from corrupted data.
    */
   phaseChangeDates?: string[];
+  /**
+   * The active training-phase span (training_phases). When present, every
+   * TREND-based recommendation is computed from scans INSIDE this span only —
+   * a slope must never cross a phase boundary (the old "Lean Mass Trending
+   * Down During Bulk" bug paired a cut-era scan with a bulk-era scan). With
+   * fewer than 2 in-phase scans, trend advice is withheld entirely. The
+   * phase's type also supersedes the profile goal for advice direction.
+   */
+  activePhase?: {
+    phaseType: Goal;
+    /** localDay YYYY-MM-DD */
+    startDay: string;
+    /** null = still active */
+    endDay: string | null;
+  } | null;
 }
 
 const KG_TO_LB = 2.20462;
@@ -358,7 +373,21 @@ export function generateCoachingRecommendations(
   const latestScan = scans[0];
   // Canonical FFMI definition (lean + bone unless bone is baked into lean).
   const ffmiResult = selectCanonicalFfmi({ latestScan, heightCm })!;
-  const trend = analyzeBodyCompTrend(scans, heightCm);
+  const activePhase = options.activePhase ?? null;
+  // Phase-aware trend scope: with an active phase, the slope may only see
+  // scans inside the phase — never across its start boundary.
+  const trendScans = activePhase
+    ? scans.filter((s) => {
+        const scanDay = s.scanDate.slice(0, 10);
+        return (
+          scanDay >= activePhase.startDay &&
+          (activePhase.endDay === null || scanDay <= activePhase.endDay)
+        );
+      })
+    : scans;
+  // The phase type supersedes the profile goal for advice direction.
+  const effectiveGoal: Goal = activePhase ? activePhase.phaseType : goal;
+  const trend = analyzeBodyCompTrend(trendScans, heightCm);
   const naturalLimit = getNaturalFFMILimit(experience);
 
   // FFMI-based recommendations
@@ -372,7 +401,7 @@ export function generateCoachingRecommendations(
   }
 
   // Body fat recommendations
-  if (goal === 'bulk' && latestScan.bodyFatPercent > 20) {
+  if (effectiveGoal === 'bulk' && latestScan.bodyFatPercent > 20) {
     recommendations.push({
       type: 'warning',
       title: 'Consider a Mini-Cut',
@@ -382,7 +411,7 @@ export function generateCoachingRecommendations(
     });
   }
 
-  if (goal === 'cut' && latestScan.bodyFatPercent < 10) {
+  if (effectiveGoal === 'cut' && latestScan.bodyFatPercent < 10) {
     recommendations.push({
       type: 'warning',
       title: 'Risk of Muscle Loss',
@@ -392,12 +421,32 @@ export function generateCoachingRecommendations(
     });
   }
 
-  // Trend-based recommendations. Gating: the two-endpoint slope needs at
-  // least 2 DEXA-anchored intervals (≥3 scans) AND endpoints clear of the
-  // phase-boundary water window before it can drive advice.
+  // Trend-based recommendations. Gating without a phase span: the
+  // two-endpoint slope needs at least 2 DEXA-anchored intervals (≥3 scans).
+  // With an active phase the span itself scopes the slope, and 2 in-phase
+  // scans suffice (the phase boundary already excludes regime changes). In
+  // both modes the endpoints must clear the phase-boundary water window.
   const intervals = trend ? trend.dataPoints - 1 : 0;
-  const inPhaseWindow = trendEndpointsInPhaseWindow(scans, options.phaseChangeDates ?? []);
-  const trendIsTrustworthy = trend != null && intervals >= 2 && !inPhaseWindow;
+  const waterWindowDates = [
+    ...(options.phaseChangeDates ?? []),
+    ...(activePhase ? [activePhase.startDay] : []),
+  ];
+  const inPhaseWindow = trendEndpointsInPhaseWindow(trendScans, waterWindowDates);
+  const trendIsTrustworthy =
+    trend != null && intervals >= (activePhase ? 1 : 2) && !inPhaseWindow;
+
+  if (activePhase && scans.length >= 2 && trendScans.length < 2) {
+    // Enough scans overall, but not within the current phase — a slope across
+    // the boundary would mix regimes, so composition advice waits.
+    recommendations.push({
+      type: 'info',
+      title: 'Composition Trend Still Calibrating',
+      message:
+        'Composition advice needs 2 DEXA scans inside the current phase — scans from a previous phase can\'t be compared across the boundary. Log your next scan to unlock it.',
+      priority: 1,
+      evidence: `${trendScans.length} of ${scans.length} DEXA scans fall inside the current phase (started ${formatScanDate(activePhase.startDay)})`,
+    });
+  }
 
   if (trend && !trendIsTrustworthy) {
     // Soften instead of asserting: say WHY there's no composition advice.
@@ -408,17 +457,17 @@ export function generateCoachingRecommendations(
         ? `A recent phase change puts a scan inside the ~${PHASE_BOUNDARY_DAYS}-day water/glycogen shift window, so scan-to-scan changes mostly reflect water — composition advice is paused until a scan lands outside it.`
         : 'Composition advice needs at least 3 DEXA scans to separate a real trend from scan-to-scan noise. Log your next scan to unlock it.',
       priority: 1,
-      evidence: `${trend.dataPoints} DEXA scans (${formatScanDate(scans[scans.length - 1].scanDate)} → ${formatScanDate(scans[0].scanDate)})`,
+      evidence: `${trend.dataPoints} DEXA scans (${formatScanDate(trendScans[trendScans.length - 1].scanDate)} → ${formatScanDate(trendScans[0].scanDate)})`,
     });
   }
 
   if (trend && trendIsTrustworthy) {
-    const sortedDates = scans.map((s) => s.scanDate).sort();
+    const sortedDates = trendScans.map((s) => s.scanDate).sort();
     const spanEvidence = `${trend.dataPoints} DEXA scans (${formatScanDate(sortedDates[0])} → ${formatScanDate(sortedDates[sortedDates.length - 1])})`;
     const leanEvidence = `${spanEvidence}: lean mass ${trend.leanMassChangeRate >= 0 ? '+' : '−'}${formatMassRate(Math.abs(trend.leanMassChangeRate), unit, 1)}/mo`;
     const fatEvidence = `${spanEvidence}: fat mass ${trend.fatMassChangeRate >= 0 ? '+' : '−'}${formatMassRate(Math.abs(trend.fatMassChangeRate), unit, 1)}/mo`;
 
-    if (goal === 'bulk' && trend.fatMassChangeRate > 0.5) {
+    if (effectiveGoal === 'bulk' && trend.fatMassChangeRate > 0.5) {
       recommendations.push({
         type: 'warning',
         title: 'Fat Gain Too Fast',
@@ -428,7 +477,7 @@ export function generateCoachingRecommendations(
       });
     }
 
-    if (goal === 'bulk' && trend.leanMassChangeRate < -0.1) {
+    if (effectiveGoal === 'bulk' && trend.leanMassChangeRate < -0.1) {
       // A negative lean slope is a LOSS — never phrased as "gaining -X".
       recommendations.push({
         type: 'warning',
@@ -437,7 +486,7 @@ export function generateCoachingRecommendations(
         priority: 4,
         evidence: leanEvidence,
       });
-    } else if (goal === 'bulk' && trend.leanMassChangeRate < 0.2 && experience !== 'advanced') {
+    } else if (effectiveGoal === 'bulk' && trend.leanMassChangeRate < 0.2 && experience !== 'advanced') {
       const flat = Math.abs(trend.leanMassChangeRate) < 0.05;
       recommendations.push({
         type: 'suggestion',
@@ -450,7 +499,7 @@ export function generateCoachingRecommendations(
       });
     }
 
-    if (goal === 'cut' && trend.leanMassChangeRate < -0.2) {
+    if (effectiveGoal === 'cut' && trend.leanMassChangeRate < -0.2) {
       recommendations.push({
         type: 'warning',
         title: 'Muscle Loss Detected',

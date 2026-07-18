@@ -10,10 +10,13 @@ import {
   Tooltip,
   ResponsiveContainer,
   ReferenceLine,
+  ReferenceArea,
 } from 'recharts';
 import { formatDate, formatChartTickDate, dateTickStep, showDateTick } from '@/lib/utils';
 import { getDisplayWeight } from '@/lib/weightUtils';
 import type { RechartsTooltipProps } from '@/types/database-queries';
+import type { PhaseType } from '@/types/schema';
+import { PHASE_STYLE, PHASE_BAND_OPACITY } from '@/components/body/phaseStyle';
 
 type Timeframe = '7d' | '14d' | '30d' | '90d';
 
@@ -36,10 +39,21 @@ interface WeightEntry {
   unit: string;
 }
 
+/** A training-phase span rendered as a translucent background band. */
+export interface PhaseBandSpan {
+  phaseType: PhaseType;
+  /** localDay YYYY-MM-DD */
+  startDay: string;
+  /** null = active phase (band extends to the newest point) */
+  endDay: string | null;
+}
+
 interface WeightGraphProps {
   weightHistory: WeightEntry[];
   preferredUnit: 'lb' | 'kg';
   className?: string;
+  /** Optional phase spans, drawn as colored background bands. */
+  phases?: PhaseBandSpan[];
 }
 
 const WeightTooltip = memo(function WeightTooltip({
@@ -61,7 +75,7 @@ const WeightTooltip = memo(function WeightTooltip({
   );
 });
 
-export const WeightGraph = memo(function WeightGraph({ weightHistory, preferredUnit, className }: WeightGraphProps) {
+export const WeightGraph = memo(function WeightGraph({ weightHistory, preferredUnit, className, phases }: WeightGraphProps) {
   const [timeframe, setTimeframe] = useState<Timeframe>('30d');
   const [isMounted, setIsMounted] = useState(false);
 
@@ -100,6 +114,30 @@ export const WeightGraph = memo(function WeightGraph({ weightHistory, preferredU
       };
     });
   }, [weightHistory, timeframe, preferredUnit]);
+
+  // Phase spans clipped to the visible window, expressed as category-axis
+  // endpoints (first/last visible point inside each span). Rendered as
+  // translucent ReferenceArea bands behind the line.
+  const phaseBands = useMemo(() => {
+    if (!phases || phases.length === 0 || chartData.length === 0) return [];
+    const bands: { key: string; x1: string; x2: string; color: string }[] = [];
+    for (const span of phases) {
+      const start = span.startDay;
+      const end = span.endDay ?? chartData[chartData.length - 1].date.slice(0, 10);
+      const inSpan = chartData.filter((d) => {
+        const day = d.date.slice(0, 10);
+        return day >= start && day <= end;
+      });
+      if (inSpan.length < 2) continue;
+      bands.push({
+        key: `${span.phaseType}-${start}`,
+        x1: inSpan[0].displayDate,
+        x2: inSpan[inSpan.length - 1].displayDate,
+        color: PHASE_STYLE[span.phaseType].band,
+      });
+    }
+    return bands;
+  }, [phases, chartData]);
 
   // Weekly rolling trend: least-squares slope of weight over the visible
   // window, expressed per week. Robust to noisy endpoints, unlike last - first.
@@ -232,6 +270,16 @@ export const WeightGraph = memo(function WeightGraph({ weightHistory, preferredU
               width={40}
             />
             <Tooltip content={<WeightTooltip preferredUnit={preferredUnit} />} />
+            {phaseBands.map((band) => (
+              <ReferenceArea
+                key={band.key}
+                x1={band.x1}
+                x2={band.x2}
+                fill={band.color}
+                fillOpacity={PHASE_BAND_OPACITY}
+                stroke="none"
+              />
+            ))}
             {stats && (
               <ReferenceLine
                 y={stats.avg}

@@ -618,6 +618,103 @@ describe('generateCoachingRecommendations', () => {
 });
 
 // ============================================
+// PHASE-AWARE RECOMMENDATION SCOPING
+// ============================================
+
+describe('generateCoachingRecommendations — activePhase scoping', () => {
+  // A cut ending Mar 10 (lean falling), then a bulk from Mar 20 (lean rising).
+  // Newest-first, as the Body tab passes them.
+  const cutThenBulkScans = [
+    createMockDexaScan({ id: 's4', scanDate: '2024-06-01', leanMassKg: 70.5, fatMassKg: 12.5 }),
+    createMockDexaScan({ id: 's3', scanDate: '2024-04-15', leanMassKg: 70, fatMassKg: 12 }),
+    createMockDexaScan({ id: 's2', scanDate: '2024-02-15', leanMassKg: 72.5, fatMassKg: 13.5 }),
+    createMockDexaScan({ id: 's1', scanDate: '2024-01-01', leanMassKg: 74, fatMassKg: 14 }),
+  ];
+  const bulkPhase = { phaseType: 'bulk' as Goal, startDay: '2024-03-20', endDay: null };
+
+  it('the known offender: cross-boundary lean decline no longer flags "Lean Mass Trending Down During Bulk"', () => {
+    // WITHOUT the phase span, the slope pairs cut-era scans with bulk-era
+    // scans and reads lean as falling.
+    const phaseBlind = generateCoachingRecommendations(
+      cutThenBulkScans, 180, 'bulk', 'intermediate'
+    );
+    expect(phaseBlind.some((r) => r.title === 'Lean Mass Trending Down During Bulk')).toBe(true);
+
+    // WITH the active phase, only the two in-phase scans count — lean is
+    // RISING within the bulk, so the warning must not appear.
+    const phaseAware = generateCoachingRecommendations(
+      cutThenBulkScans, 180, 'bulk', 'intermediate',
+      { activePhase: bulkPhase }
+    );
+    expect(phaseAware.some((r) => r.title === 'Lean Mass Trending Down During Bulk')).toBe(false);
+    expect(phaseAware.some((r) => r.title === 'Muscle Loss Detected')).toBe(false);
+  });
+
+  it('withholds trend advice with fewer than 2 in-phase scans and says why', () => {
+    const scans = [
+      createMockDexaScan({ id: 's3', scanDate: '2024-04-15', leanMassKg: 70, fatMassKg: 12 }),
+      createMockDexaScan({ id: 's2', scanDate: '2024-02-15', leanMassKg: 72.5, fatMassKg: 13.5 }),
+      createMockDexaScan({ id: 's1', scanDate: '2024-01-01', leanMassKg: 74, fatMassKg: 14 }),
+    ];
+    const recommendations = generateCoachingRecommendations(
+      scans, 180, 'bulk', 'intermediate',
+      { activePhase: bulkPhase }
+    );
+    expect(recommendations.some((r) => r.title === 'Lean Mass Trending Down During Bulk')).toBe(false);
+    const calibrating = recommendations.find((r) => r.title.includes('Calibrating'));
+    expect(calibrating).toBeDefined();
+    expect(calibrating!.message).toMatch(/inside the current phase/);
+    expect(calibrating!.evidence).toContain('1 of 3');
+  });
+
+  it('still suppresses a slope whose endpoint sits in the phase-start water window', () => {
+    const scans = [
+      // 5 days after the bulk started — water/glycogen, not tissue.
+      createMockDexaScan({ id: 's3', scanDate: '2024-03-25', leanMassKg: 71.5, fatMassKg: 12.4 }),
+      createMockDexaScan({ id: 's2', scanDate: '2024-05-10', leanMassKg: 70.9, fatMassKg: 12.9 }),
+    ].sort((a, b) => b.scanDate.localeCompare(a.scanDate));
+    const recommendations = generateCoachingRecommendations(
+      scans, 180, 'bulk', 'intermediate',
+      { activePhase: bulkPhase }
+    );
+    expect(recommendations.some((r) => r.title === 'Lean Mass Trending Down During Bulk')).toBe(false);
+    const paused = recommendations.find((r) => r.title.includes('Calibrating'));
+    expect(paused).toBeDefined();
+    expect(paused!.message).toMatch(/water/i);
+  });
+
+  it('the phase type supersedes the profile goal for advice direction', () => {
+    // Profile still says cut, but the active phase is a bulk: lean falling
+    // in-phase should read as the bulk warning, not "Muscle Loss Detected"
+    // with cut advice.
+    const scans = [
+      createMockDexaScan({ id: 's2', scanDate: '2024-06-01', leanMassKg: 70.4, fatMassKg: 13.4 }),
+      createMockDexaScan({ id: 's1', scanDate: '2024-04-10', leanMassKg: 71.2, fatMassKg: 12.6 }),
+    ];
+    const recommendations = generateCoachingRecommendations(
+      scans, 180, 'cut', 'intermediate',
+      { activePhase: bulkPhase }
+    );
+    expect(recommendations.some((r) => r.title === 'Lean Mass Trending Down During Bulk')).toBe(true);
+    expect(recommendations.some((r) => r.title === 'Muscle Loss Detected')).toBe(false);
+  });
+
+  it('two in-phase scans are enough for trend advice when a phase span scopes them', () => {
+    const scans = [
+      createMockDexaScan({ id: 's2', scanDate: '2024-06-01', leanMassKg: 70.6, fatMassKg: 14.2 }),
+      createMockDexaScan({ id: 's1', scanDate: '2024-04-10', leanMassKg: 70.4, fatMassKg: 12.6 }),
+    ];
+    const recommendations = generateCoachingRecommendations(
+      scans, 180, 'bulk', 'intermediate',
+      { activePhase: bulkPhase }
+    );
+    // Fat climbing ~0.94 kg/mo in-phase: the fast-fat-gain warning may fire
+    // from just these 2 scans because the phase bounds the regime.
+    expect(recommendations.some((r) => r.title === 'Fat Gain Too Fast')).toBe(true);
+  });
+});
+
+// ============================================
 // BODY COMP TARGETS TESTS
 // ============================================
 
