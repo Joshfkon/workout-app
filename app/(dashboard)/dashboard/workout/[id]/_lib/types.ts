@@ -16,6 +16,11 @@ export interface AvailableExercise {
   movement_pattern?: string;
   mechanic: 'compound' | 'isolation';
   equipment_required?: string[];
+  /**
+   * Normalized equipment class (exercises.equipment_class). May be null on
+   * older rows; the picker derives it on read via services/equipmentClass.ts.
+   */
+  equipment_class?: string | null;
   default_rep_range?: [number, number];
   default_rir?: number;
   is_bodyweight?: boolean;

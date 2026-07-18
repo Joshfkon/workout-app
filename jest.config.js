@@ -63,6 +63,12 @@ const customJestConfig = {
       branches: 50,
       statements: 70,
     },
+    'services/equipmentClass.ts': {
+      lines: 70,
+      functions: 60,
+      branches: 50,
+      statements: 70,
+    },
     'services/exerciseDetailAnalytics.ts': {
       lines: 70,
       functions: 60,
