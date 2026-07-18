@@ -1,8 +1,10 @@
 import {
   formatWeight,
+  formatBodyWeight,
   formatWeightValue,
   roundToPlateIncrement,
   roundToIncrement,
+  inputWeightToKg,
 } from '../utils';
 
 describe('Unit Display Formatting', () => {
@@ -65,6 +67,26 @@ describe('Unit Display Formatting', () => {
         expect(formatWeight(100, 'kg', 2)).toBe('100.00 kg');
         expect(formatWeight(62.5, 'kg', 1)).toBe('62.5 kg');
       });
+    });
+  });
+
+  describe('formatBodyWeight', () => {
+    test('does NOT apply plate rounding — a 177.2 lb weigh-in stays 177.2', () => {
+      const kg = inputWeightToKg(177.2, 'lb');
+      expect(formatBodyWeight(kg, 'lb')).toBe('177.2 lbs');
+      // The plate-increment formatter would show 177.5 here — the bug this
+      // function exists to avoid on body surfaces.
+      expect(formatWeight(kg, 'lb')).toBe('177.5 lbs');
+    });
+
+    test('formats kg exactly with suffix', () => {
+      expect(formatBodyWeight(80.4, 'kg')).toBe('80.4 kg');
+      expect(formatBodyWeight(61.23, 'kg')).toBe('61.2 kg');
+    });
+
+    test('respects decimals parameter', () => {
+      expect(formatBodyWeight(80, 'kg', 0)).toBe('80 kg');
+      expect(formatBodyWeight(80, 'lb', 2)).toBe('176.37 lbs');
     });
   });
 

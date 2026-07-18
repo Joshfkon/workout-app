@@ -21,7 +21,7 @@
  * Pure functions only: NO database calls.
  */
 
-import { leanMassIncludesBone } from '@/services/bodyCompEngine';
+import { computeFFMI, leanMassIncludesBone } from '@/services/bodyCompEngine';
 
 // ============================================================
 // Types
@@ -456,6 +456,64 @@ export function buildAnchoredBodyCompTrend(
       kind: 'estimated',
     };
   }
+}
+
+// ============================================================
+// Changes since a reference date
+// ============================================================
+
+export interface TrendChangesSince {
+  /** Date of the trend point actually used as the baseline. */
+  referenceDate: string;
+  /** Date of the latest trend point the deltas run to. */
+  latestDate: string;
+  weightDeltaKg: number;
+  /** BF% change in percentage points. */
+  bodyFatDelta: number;
+  leanMassDeltaKg: number;
+  /** Raw-FFMI change; null when height is unknown. */
+  ffmiDelta: number | null;
+}
+
+/**
+ * Deltas between the latest trend point and the trend as it stood on a
+ * user-chosen reference date (e.g. the day a bulk started). The baseline is
+ * the last point at or before `sinceDate`; when the date predates the whole
+ * trend the first point serves instead. Returns null when there's nothing to
+ * compare (a single point, or a reference date at/after the latest point).
+ */
+export function computeTrendChangesSince(
+  trend: AnchoredTrendPoint[],
+  sinceDate: string,
+  heightCm: number | null
+): TrendChangesSince | null {
+  if (trend.length < 2) return null;
+
+  let reference: AnchoredTrendPoint | null = null;
+  for (const point of trend) {
+    if (point.date <= sinceDate) reference = point;
+    else break;
+  }
+  reference = reference ?? trend[0];
+  const latest = trend[trend.length - 1];
+  if (latest.date <= reference.date) return null;
+
+  const ffmiDelta =
+    heightCm != null && heightCm > 0
+      ? round1(
+          computeFFMI(latest.leanMassKg, latest.boneMassKg, heightCm).ffmi -
+            computeFFMI(reference.leanMassKg, reference.boneMassKg, heightCm).ffmi
+        )
+      : null;
+
+  return {
+    referenceDate: reference.date,
+    latestDate: latest.date,
+    weightDeltaKg: round1(latest.weightKg - reference.weightKg),
+    bodyFatDelta: round1(latest.bodyFatPercent - reference.bodyFatPercent),
+    leanMassDeltaKg: round1(latest.leanMassKg - reference.leanMassKg),
+    ffmiDelta,
+  };
 }
 
 // ============================================================

@@ -1,8 +1,10 @@
 import {
   buildAnchoredBodyCompTrend,
+  computeTrendChangesSince,
   findLowConfidenceGaps,
   rescaleSegment,
   LOW_CONFIDENCE_GAP_DAYS,
+  type AnchoredTrendPoint,
   type ScanAnchor,
   type WeightPoint,
 } from '@/services/bodyCompAnchor';
@@ -453,5 +455,75 @@ describe('buildAnchoredBodyCompTrend waist shaping', () => {
       ],
     });
     expect(nonOverlapping).toEqual(straight);
+  });
+});
+
+// ============================================================
+// computeTrendChangesSince — stat-card deltas measured from a
+// user-chosen reference date (e.g. bulk start)
+// ============================================================
+
+describe('computeTrendChangesSince', () => {
+  const point = (
+    date: string,
+    weightKg: number,
+    bodyFatPercent: number,
+    leanMassKg: number,
+    kind: AnchoredTrendPoint['kind'] = 'estimated'
+  ): AnchoredTrendPoint => ({
+    date,
+    weightKg,
+    bodyFatPercent,
+    leanMassKg,
+    fatMassKg: weightKg - leanMassKg,
+    boneMassKg: null,
+    kind,
+  });
+
+  const trend: AnchoredTrendPoint[] = [
+    point('2026-05-01', 78, 19, 62, 'dexa'),
+    point('2026-06-01', 79, 19.5, 62.4),
+    point('2026-07-01', 80, 20, 62.8),
+    point('2026-07-18', 80.5, 20.3, 63, 'dexa'),
+  ];
+
+  it('measures deltas from the point on the reference date to the latest point', () => {
+    const changes = computeTrendChangesSince(trend, '2026-06-01', null);
+    expect(changes).not.toBeNull();
+    expect(changes!.referenceDate).toBe('2026-06-01');
+    expect(changes!.latestDate).toBe('2026-07-18');
+    expect(changes!.weightDeltaKg).toBeCloseTo(1.5, 5);
+    expect(changes!.bodyFatDelta).toBeCloseTo(0.8, 5);
+    expect(changes!.leanMassDeltaKg).toBeCloseTo(0.6, 5);
+    expect(changes!.ffmiDelta).toBeNull();
+  });
+
+  it('uses the last point at or before the reference date when no point falls on it', () => {
+    const changes = computeTrendChangesSince(trend, '2026-06-15', null);
+    expect(changes!.referenceDate).toBe('2026-06-01');
+  });
+
+  it('falls back to the first point when the reference date predates the trend', () => {
+    const changes = computeTrendChangesSince(trend, '2026-01-01', null);
+    expect(changes!.referenceDate).toBe('2026-05-01');
+    expect(changes!.weightDeltaKg).toBeCloseTo(2.5, 5);
+  });
+
+  it('returns null when the reference date is at or after the latest point', () => {
+    expect(computeTrendChangesSince(trend, '2026-07-18', null)).toBeNull();
+    expect(computeTrendChangesSince(trend, '2026-08-01', null)).toBeNull();
+  });
+
+  it('returns null when the trend has fewer than two points', () => {
+    expect(computeTrendChangesSince([], '2026-06-01', null)).toBeNull();
+    expect(computeTrendChangesSince([trend[0]], '2026-04-01', null)).toBeNull();
+  });
+
+  it('computes the FFMI delta with the same bone-aware function as the gauge', () => {
+    const heightCm = 180;
+    const changes = computeTrendChangesSince(trend, '2026-05-01', heightCm);
+    const expected =
+      computeFFMI(63, null, heightCm).ffmi - computeFFMI(62, null, heightCm).ffmi;
+    expect(changes!.ffmiDelta).toBeCloseTo(Math.round(expected * 10) / 10, 5);
   });
 });
