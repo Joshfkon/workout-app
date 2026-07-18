@@ -740,6 +740,23 @@ export const ExerciseCard = memo(function ExerciseCard({
     [displayWeight]
   );
 
+  // The previous session's FULL set list (performed order) for the all-sets
+  // bump gate: a session-to-session load increase is earned only when every
+  // working set cleared the top of the range, not by one strong set
+  // (services/setRecommender.earnedSessionBump; ramp/back-off sets excluded
+  // by role inference).
+  const prevSessionSetsForGating = useMemo(
+    () =>
+      previousSets
+        .filter((s) => s.weightKg > 0 && s.reps > 0)
+        .map((s) => ({
+          weightKg: s.weightKg,
+          reps: s.reps,
+          rir: s.rpe != null ? Math.max(0, rpeToRir(s.rpe)) : undefined,
+        })),
+    [previousSets]
+  );
+
   // Weight+reps seed for a not-yet-started exercise, anchored to the previous
   // session's set INCLUDING its effort (services/setRecommender). Holds the
   // weight when that set landed in range at roughly the target effort; steps
@@ -755,8 +772,9 @@ export const ExerciseCard = memo(function ExerciseCard({
         targetRepRange: range,
         targetRir: effectiveTargetRir,
         minIncrementKg: exercise.minWeightIncrementKg,
+        prevSessionSets: prevSessionSetsForGating,
       }),
-    [effectiveTargetRir, exercise.minWeightIncrementKg]
+    [effectiveTargetRir, exercise.minWeightIncrementKg, prevSessionSetsForGating]
   );
 
   // Best recent WORKING weight last session (the top set). Doubles as the role-
@@ -793,10 +811,11 @@ export const ExerciseCard = memo(function ExerciseCard({
         prevWeightKg: prevSet?.weightKg,
         prevReps: prevSet?.reps,
         prevRir: prevSet?.rpe != null ? rpeToRir(prevSet.rpe) : undefined,
+        prevSessionSets: prevSessionSetsForGating,
       });
       return { seed, prevSet };
     },
-    [previousSets, previousTopSetWeightKg, anchorE1RMKg, block.targetRepRange, effectiveTargetRir, exercise.minWeightIncrementKg]
+    [previousSets, previousTopSetWeightKg, anchorE1RMKg, block.targetRepRange, effectiveTargetRir, exercise.minWeightIncrementKg, prevSessionSetsForGating]
   );
 
   // Curve-consistent reps for a session-start seed: answer the seeded weight

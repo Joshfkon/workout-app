@@ -132,6 +132,38 @@ describe('engine regression baseline — staple exercise, recent history', () =>
     });
   });
 
+  it('session-start seed with the full previous-session set list (Fix 2 call shape) is IDENTICAL for the staple', () => {
+    // ExerciseCard now passes prevSessionSets for the all-sets bump gate. For
+    // the common case (mid-range reps, near-target effort → the engine held
+    // anyway) the gated call must produce the exact same seed as the baseline.
+    const seed = recommendSeedForSlot({
+      role: 'working',
+      targetRepRange: REP_RANGE,
+      targetRir: TARGET_RIR,
+      minIncrementKg: INC,
+      anchorE1RMKg: history.estimatedE1RM,
+      recentWorkingWeightKg: 100,
+      prevWeightKg: 100,
+      prevReps: 10,
+      prevRir: 1.5,
+      prevSessionSets: [
+        { weightKg: 100, reps: 10, rir: 1.5 },
+        { weightKg: 100, reps: 9, rir: 1 },
+        { weightKg: 100, reps: 8, rir: 0.5 },
+      ],
+    });
+    expect(seed).toEqual({
+      weightKg: 100,
+      repRange: REP_RANGE,
+      rir: TARGET_RIR,
+      role: 'working',
+      showRirTarget: true,
+      anchorSource: 'e1rm',
+      clamped: false,
+      engineVersion: 3,
+    });
+  });
+
   it('session-start seed (ramp slot): 57.5% of the working top set', () => {
     const seed = recommendSeedForSlot({
       role: 'ramp',
