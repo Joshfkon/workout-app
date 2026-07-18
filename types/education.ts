@@ -181,7 +181,7 @@ export const TOOLTIP_CONTENT: Record<string, TooltipContent> = {
     fullName: 'Fat-Free Mass Index',
     shortExplanation: 'A measure of how much muscle you carry relative to your height. Think of it as "BMI for muscle".',
     longExplanation: 'FFMI helps assess muscular development independent of body fat. Natural lifters typically max out around 25 FFMI. Values above this usually indicate exceptional genetics or enhancement.',
-    learnMoreSlug: 'understanding-data',
+    learnMoreSlug: 'data-explained',
     category: 'body-composition',
   },
   E1RM: {
@@ -189,7 +189,7 @@ export const TOOLTIP_CONTENT: Record<string, TooltipContent> = {
     fullName: 'Estimated One-Rep Max',
     shortExplanation: 'The maximum weight you could lift for one rep, calculated from your performance at higher reps.',
     longExplanation: 'E1RM lets us track strength progress without actually testing your max (which is fatiguing and risky). It\'s calculated using proven formulas based on weight × reps.',
-    learnMoreSlug: 'understanding-data',
+    learnMoreSlug: 'data-explained',
     category: 'strength',
   },
   BODY_FAT_PERCENTAGE: {
@@ -203,6 +203,14 @@ export const TOOLTIP_CONTENT: Record<string, TooltipContent> = {
     term: 'Lean Mass',
     shortExplanation: 'Everything in your body that isn\'t fat - muscles, bones, organs, and water.',
     longExplanation: 'Building lean mass is the goal of hypertrophy training. More lean mass means a higher metabolism and better strength.',
+    category: 'body-composition',
+  },
+  BODY_COMP_ESTIMATE: {
+    term: 'Body Comp Estimates',
+    fullName: 'how Body Fat %, Lean Mass & FFMI are calculated',
+    shortExplanation: 'DEXA scans are the source of truth. Between scans, your daily weigh-ins fill in the gaps: each weight change is split between lean mass and fat, so Body Fat %, Lean Mass, and FFMI are estimates until your next scan confirms them.',
+    longExplanation: 'When a new scan comes in, the estimates since your previous scan are corrected so the trend passes exactly through both scans. FFMI is fat-free mass divided by height squared; "norm" adjusts it to a 1.8 m (5\'11") height so lifters of different heights can compare. Weight always shows your latest weigh-in or scan directly.',
+    learnMoreSlug: 'data-explained',
     category: 'body-composition',
   },
   RECOMP: {
