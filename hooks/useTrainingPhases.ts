@@ -27,7 +27,7 @@ import {
   updateTrainingPhaseSpan,
   type TrainingPhaseInput,
 } from '@/lib/body/trainingPhases';
-import { activePhase, sortPhases } from '@/services/phasePlanning';
+import { activePhase, goalSyncAfterEdit, sortPhases } from '@/services/phasePlanning';
 import { localDay } from '@/lib/date/localDay';
 import type { TrainingPhase } from '@/types/schema';
 
@@ -67,11 +67,31 @@ export function useTrainingPhases(): UseTrainingPhasesResult {
 
   const syncCache = useCallback(
     (updater: (prev: TrainingPhase[]) => TrainingPhase[]) => {
-      queryClient.setQueryData<TrainingPhase[]>([PHASES_QUERY_KEY_PREFIX, userId], (prev) =>
-        sortPhases(updater(prev ?? []))
-      );
+      const before =
+        queryClient.getQueryData<TrainingPhase[]>([PHASES_QUERY_KEY_PREFIX, userId]) ?? [];
+      const after = sortPhases(updater(before));
+      queryClient.setQueryData<TrainingPhase[]>([PHASES_QUERY_KEY_PREFIX, userId], after);
       // Background reconcile; in-place update above keeps the UI instant.
       queryClient.invalidateQueries({ queryKey: [PHASES_QUERY_KEY_PREFIX, userId] });
+
+      // Retroactive edits leave users.goal / phase_history alone (they record
+      // what the user believed at the time; the spans are the corrected
+      // truth). But when an edit changes which span covers TODAY, users.goal
+      // must mirror it so legacy readers can't disagree about the present.
+      // Best-effort: a failed mirror never blocks the phase write.
+      const mirroredGoal = goalSyncAfterEdit(before, after, localDay());
+      if (mirroredGoal && userId) {
+        const supabase = createUntypedClient();
+        void (async () => {
+          const { error } = await supabase
+            .from('users')
+            .update({ goal: mirroredGoal })
+            .eq('id', userId);
+          if (error) {
+            console.error('[useTrainingPhases] users.goal mirror failed (non-fatal):', error);
+          }
+        })();
+      }
     },
     [queryClient, userId]
   );

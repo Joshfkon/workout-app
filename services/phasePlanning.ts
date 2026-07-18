@@ -12,7 +12,7 @@
 
 import type { TrainingPhase, PhaseType } from '@/types/schema';
 import type { WeighIn } from '@/lib/nutrition/interval-tdee';
-import { addLocalDays, localDaysBetweenDays } from '@/lib/date/localDay';
+import { addLocalDays, localDay, localDaysBetweenDays } from '@/lib/date/localDay';
 
 // === BASIC SELECTORS ===
 
@@ -31,6 +31,115 @@ export function phaseOnDay(phases: TrainingPhase[], day: string): TrainingPhase 
 /** The active phase: endDay null, or an end date still in the future. */
 export function activePhase(phases: TrainingPhase[], today: string): TrainingPhase | null {
   return phaseOnDay(phases, today);
+}
+
+// === QUICK-SWITCHER SYNC (training_phases is the source of truth) ===
+
+/**
+ * Default signed weekly target (lb) a quick-switcher flip stamps on the span
+ * it opens. Deliberately conservative; the phase editor can refine it.
+ */
+export const SWITCHER_DEFAULT_TARGET: Record<PhaseType, number | null> = {
+  bulk: 0.5,
+  cut: -0.75,
+  recomp: null,
+  maintenance: null,
+};
+
+/**
+ * users.goal is a Postgres enum WITHOUT 'recomp' (initial_schema.sql), so a
+ * recomp span mirrors to 'maintenance' — the closest derived value. The span
+ * keeps the real type; users.goal is a back-compat mirror only.
+ */
+export function phaseTypeToProfileGoal(type: PhaseType): 'bulk' | 'cut' | 'maintenance' {
+  return type === 'recomp' ? 'maintenance' : type;
+}
+
+export interface PhaseSwitchPlan {
+  /** True when the active span already has this type — write nothing. */
+  noop: boolean;
+  /** Close the currently active span at yesterday (localDay). */
+  close?: { id: string; endDay: string };
+  /**
+   * Same-day flip: the active span was opened TODAY, so closing it at
+   * yesterday would invert the span — retype it in place instead of
+   * fragmenting.
+   */
+  retype?: { id: string; phaseType: PhaseType; targetRateLbsPerWeek: number | null };
+  /** Open a new active span starting today. */
+  open?: {
+    phaseType: PhaseType;
+    startDay: string;
+    endDay: null;
+    targetRateLbsPerWeek: number | null;
+  };
+}
+
+/**
+ * Plan the training_phases writes for a quick-switcher flip to `nextType`.
+ * Day boundaries come from localDay(now) — never UTC — so a 11 PM flip lands
+ * on the user's local calendar day.
+ */
+export function planPhaseSwitch(
+  phases: TrainingPhase[],
+  nextType: PhaseType,
+  now: Date = new Date()
+): PhaseSwitchPlan {
+  const today = localDay(now);
+  const active = phaseOnDay(phases, today);
+
+  if (active && active.phaseType === nextType) return { noop: true };
+
+  const open: PhaseSwitchPlan['open'] = {
+    phaseType: nextType,
+    startDay: today,
+    endDay: null,
+    targetRateLbsPerWeek: SWITCHER_DEFAULT_TARGET[nextType],
+  };
+
+  if (!active) return { noop: false, open };
+
+  if (active.startDay === today) {
+    return {
+      noop: false,
+      retype: {
+        id: active.id,
+        phaseType: nextType,
+        targetRateLbsPerWeek: SWITCHER_DEFAULT_TARGET[nextType],
+      },
+    };
+  }
+
+  return {
+    noop: false,
+    close: { id: active.id, endDay: addLocalDays(today, -1) },
+    open,
+  };
+}
+
+/**
+ * Whether an EDITOR change must mirror into users.goal.
+ *
+ * Retroactive edits never touch users.goal / phase_history — those record
+ * what the user believed at the time; training_phases is the corrected
+ * truth. The one exception: when an edit changes which span covers TODAY
+ * (different span, or the active span's type changed), users.goal must
+ * follow so the two can't disagree about the present. Returns the goal to
+ * write, or null for no write. Ending/deleting the active span (today
+ * becomes untracked) keeps users.goal as the standing fallback.
+ */
+export function goalSyncAfterEdit(
+  before: TrainingPhase[],
+  after: TrainingPhase[],
+  today: string = localDay()
+): 'bulk' | 'cut' | 'maintenance' | null {
+  const prevActive = phaseOnDay(before, today);
+  const nextActive = phaseOnDay(after, today);
+  if (!nextActive) return null;
+  if (prevActive && prevActive.id === nextActive.id && prevActive.phaseType === nextActive.phaseType) {
+    return null;
+  }
+  return phaseTypeToProfileGoal(nextActive.phaseType);
 }
 
 // === VALIDATION ===

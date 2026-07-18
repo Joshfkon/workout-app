@@ -4,16 +4,27 @@
  * Training Phase Server Actions
  *
  * Single write path for the user's current phase (bulk / cut / maintain).
- * The phase lives in two places with different vocabularies:
- * - users.goal ('bulk' | 'cut' | 'maintenance') — drives training logic
+ *
+ * SOURCE OF TRUTH: the training_phases span table. A switch here closes the
+ * active span and opens a new one (services/phasePlanning.planPhaseSwitch).
+ * The legacy stores are still written for backward compatibility, but they
+ * are DERIVED mirrors now, not authoritative:
+ * - users.goal ('bulk' | 'cut' | 'maintenance') — read by training logic
  *   (mesocycle builder, fatigue budget, session builder, AI coaching context)
+ * - phase_history — append-only switch log for the nutrition calendar
  * - macro_settings.goal (7-level 'aggressive_cut'..'aggressive_bulk') — drives
  *   nutrition target calculation
- * Updating the phase here keeps both in sync and (optionally) recalculates
- * nutrition_targets so the calorie/macro targets match the new phase.
+ * Updating the phase here keeps all of them in sync and (optionally)
+ * recalculates nutrition_targets to match the new phase.
  */
 
 import { createUntypedServerClient } from '@/lib/supabase/server';
+import {
+  fetchTrainingPhases,
+  insertTrainingPhase,
+  updateTrainingPhaseSpan,
+} from '@/lib/body/trainingPhases';
+import { planPhaseSwitch } from '@/services/phasePlanning';
 import {
   calculateMacros,
   lbsToKg,
@@ -144,6 +155,41 @@ async function recordPhaseChange(
 }
 
 /**
+ * Mirror a quick-switcher flip into the authoritative training_phases spans:
+ * close the active span at yesterday and open a `nextPhase` span today
+ * (planPhaseSwitch also handles the no-active-span and flipped-twice-today
+ * cases; a same-type flip is a no-op so the span never fragments).
+ * Best-effort like recordPhaseChange: a failure (e.g. table not yet
+ * migrated) never blocks the phase change.
+ */
+async function syncTrainingPhaseSpans(
+  supabase: Awaited<ReturnType<typeof createUntypedServerClient>>,
+  userId: string,
+  nextPhase: TrainingPhase
+): Promise<void> {
+  try {
+    const phases = await fetchTrainingPhases(supabase, userId);
+    const plan = planPhaseSwitch(phases, nextPhase);
+    if (plan.noop) return;
+    if (plan.retype) {
+      await updateTrainingPhaseSpan(supabase, plan.retype.id, {
+        phaseType: plan.retype.phaseType,
+        targetRateLbsPerWeek: plan.retype.targetRateLbsPerWeek,
+      });
+      return;
+    }
+    if (plan.close) {
+      await updateTrainingPhaseSpan(supabase, plan.close.id, { endDay: plan.close.endDay });
+    }
+    if (plan.open) {
+      await insertTrainingPhase(supabase, userId, plan.open);
+    }
+  } catch (error) {
+    console.error('[updateTrainingPhase] training_phases sync failed (non-fatal):', error);
+  }
+}
+
+/**
  * Set the user's current phase (bulk / cut / maintain).
  *
  * Always updates users.goal. If the user has macro settings (i.e. has used the
@@ -185,6 +231,9 @@ export async function updateTrainingPhase(
     }
 
     await recordPhaseChange(supabase, user.id, previousPhase, phase);
+    // Span sync runs even when users.goal didn't change: a user with no span
+    // yet (pre-migration data) still gets one opened.
+    await syncTrainingPhaseSpans(supabase, user.id, phase);
 
     // Active mesocycle check (same detection as the dashboard): its program was
     // built for the old phase, so callers can offer a rebuild. Fetched alongside

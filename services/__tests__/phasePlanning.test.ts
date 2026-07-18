@@ -7,14 +7,17 @@ import {
   activePhase,
   canSuggestPhases,
   computePhaseStats,
+  goalSyncAfterEdit,
   phaseOnDay,
+  phaseTypeToProfileGoal,
+  planPhaseSwitch,
   sortPhases,
   suggestPhasesFromHistory,
   validatePhaseSpan,
 } from '@/services/phasePlanning';
 import type { TrainingPhase } from '@/types/schema';
 import type { WeighIn } from '@/lib/nutrition/interval-tdee';
-import { addLocalDays } from '@/lib/date/localDay';
+import { addLocalDays, localDay } from '@/lib/date/localDay';
 
 function mkPhase(overrides: Partial<TrainingPhase> & Pick<TrainingPhase, 'id' | 'startDay'>): TrainingPhase {
   return {
@@ -212,6 +215,102 @@ describe('canSuggestPhases', () => {
       ])
     ).toBe(false);
     expect(canSuggestPhases(0, [])).toBe(false);
+  });
+});
+
+describe('planPhaseSwitch (quick-switcher → spans sync)', () => {
+  // An 11 PM LOCAL instant: in the suite's negative-offset timezone the UTC
+  // date is already tomorrow, so any UTC-based day math closes/opens the
+  // spans on the wrong day.
+  const now = new Date(2026, 6, 17, 23, 0);
+  const today = localDay(now); // '2026-07-17'
+  const activeBulk = mkPhase({
+    id: 'active',
+    phaseType: 'bulk',
+    startDay: '2026-05-01',
+    endDay: null,
+    targetRateLbsPerWeek: 0.5,
+  });
+
+  it('closes the active span at LOCAL yesterday and opens the new type at LOCAL today', () => {
+    const plan = planPhaseSwitch([activeBulk], 'cut', now);
+    expect(plan.noop).toBe(false);
+    expect(plan.close).toEqual({ id: 'active', endDay: '2026-07-16' });
+    expect(plan.open).toEqual({
+      phaseType: 'cut',
+      startDay: '2026-07-17',
+      endDay: null,
+      targetRateLbsPerWeek: -0.75,
+    });
+    // The naive-UTC answer would have been the 18th/17th:
+    if (now.getTimezoneOffset() > 0) {
+      expect(now.toISOString().slice(0, 10)).toBe('2026-07-18');
+      expect(plan.open!.startDay).not.toBe(now.toISOString().slice(0, 10));
+    }
+  });
+
+  it('same-type flip is a no-op — the span never fragments', () => {
+    const plan = planPhaseSwitch([activeBulk], 'bulk', now);
+    expect(plan).toEqual({ noop: true });
+  });
+
+  it('with no active span it just opens one (gap case, ended span, or empty table)', () => {
+    const ended = mkPhase({ id: 'old', phaseType: 'cut', startDay: '2026-01-01', endDay: '2026-03-01' });
+    for (const phases of [[], [ended]]) {
+      const plan = planPhaseSwitch(phases, 'maintenance', now);
+      expect(plan.close).toBeUndefined();
+      expect(plan.open).toEqual({
+        phaseType: 'maintenance',
+        startDay: today,
+        endDay: null,
+        targetRateLbsPerWeek: null,
+      });
+    }
+  });
+
+  it('a second flip on the same day retypes the span instead of inverting it', () => {
+    const openedToday = mkPhase({ id: 'today', phaseType: 'cut', startDay: today, endDay: null });
+    const plan = planPhaseSwitch([openedToday], 'bulk', now);
+    expect(plan.close).toBeUndefined();
+    expect(plan.open).toBeUndefined();
+    expect(plan.retype).toEqual({ id: 'today', phaseType: 'bulk', targetRateLbsPerWeek: 0.5 });
+  });
+});
+
+describe('goalSyncAfterEdit (editor → users.goal mirror)', () => {
+  const today = '2026-07-17';
+  const past = mkPhase({ id: 'past', phaseType: 'cut', startDay: '2026-01-01', endDay: '2026-03-01' });
+  const active = mkPhase({ id: 'active', phaseType: 'bulk', startDay: '2026-05-01', endDay: null });
+
+  it('a retroactive edit (past span) writes nothing — users.goal/phase_history stay untouched', () => {
+    const edited = { ...past, phaseType: 'maintenance' as const };
+    expect(goalSyncAfterEdit([past, active], [edited, active], today)).toBeNull();
+  });
+
+  it('changing the ACTIVE span type mirrors into users.goal', () => {
+    const edited = { ...active, phaseType: 'cut' as const };
+    expect(goalSyncAfterEdit([past, active], [past, edited], today)).toBe('cut');
+  });
+
+  it('adding a span that covers today mirrors into users.goal', () => {
+    expect(goalSyncAfterEdit([past], [past, active], today)).toBe('bulk');
+  });
+
+  it('ending or deleting the active span leaves users.goal as the standing fallback', () => {
+    const ended = { ...active, endDay: '2026-07-10' };
+    expect(goalSyncAfterEdit([past, active], [past, ended], today)).toBeNull();
+    expect(goalSyncAfterEdit([past, active], [past], today)).toBeNull();
+  });
+
+  it('an active recomp span mirrors as maintenance (users.goal enum has no recomp)', () => {
+    const recomp = mkPhase({ id: 'r', phaseType: 'recomp', startDay: '2026-06-01', endDay: null });
+    expect(goalSyncAfterEdit([], [recomp], today)).toBe('maintenance');
+    expect(phaseTypeToProfileGoal('recomp')).toBe('maintenance');
+  });
+
+  it('extending the active span end date (still active) writes nothing', () => {
+    const extended = { ...active, endDay: '2026-12-31' };
+    expect(goalSyncAfterEdit([active], [extended], today)).toBeNull();
   });
 });
 

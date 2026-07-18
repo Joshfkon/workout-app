@@ -1753,7 +1753,10 @@ function AnalyticsPageContent() {
       trend={bodyCompTrend}
       weightHistory={bodyWeightHistory}
       isLoading={isBodyTrendLoading}
-      phase={userProfile?.goal ?? null}
+      // Advice framing prefers the active training_phases span; users.goal
+      // is only the fallback when no span exists (same rule as the
+      // recommendations engine's activePhase option).
+      phase={currentPhase?.phaseType ?? userProfile?.goal ?? null}
       target={
         activeTarget
           ? {
@@ -1771,7 +1774,7 @@ function AnalyticsPageContent() {
               }
             : null
       }
-      phaseStartDate={activeTarget?.createdAt ?? null}
+      phaseStartDate={currentPhase?.startDay ?? activeTarget?.createdAt ?? null}
       sex={sex}
       experience={userProfile?.experience ?? null}
       onSetTarget={handleSetSuggestedTarget}
@@ -1915,10 +1918,16 @@ function AnalyticsPageContent() {
                 onChange={(e) => setStatsSinceDate(e.target.value || null)}
                 className="bg-surface-800 border border-surface-700 rounded-md px-2 py-1 text-surface-200 [color-scheme:dark]"
               />
-              {!statsSinceDate && activeTarget?.createdAt && (
+              {!statsSinceDate && (currentPhase || activeTarget?.createdAt) && (
                 <button
                   type="button"
-                  onClick={() => setStatsSinceDate(activeTarget.createdAt.slice(0, 10))}
+                  onClick={() =>
+                    // The active training_phases span is the real phase start;
+                    // the target's creation date is only the legacy proxy.
+                    setStatsSinceDate(
+                      currentPhase?.startDay ?? activeTarget!.createdAt.slice(0, 10)
+                    )
+                  }
                   className="text-primary-400 hover:text-primary-300 font-medium"
                 >
                   Use phase start
