@@ -20,6 +20,7 @@ import {
   type TransferCandidate,
   type WorkingWeightRecommendation,
 } from '@/services/weightEstimationEngine';
+import { decayedE1RMMax, type E1RMAnchorEntry } from '@/services/suggestionEngine/e1rmAnchor';
 import {
   resolveLegacyLocationAttribution,
   scopeHistorySets,
@@ -220,6 +221,9 @@ function computeHistoryFromBlocks(
   let personalRecord: ExerciseHistoryData['personalRecord'] = null;
   let totalSessions = 0;
   const seenSessions = new Set<string>();
+  // Candidates for the recency-decayed prescription anchor (Fix 3): every
+  // kept set's e1RM with when it happened. The PR stays the undecayed best.
+  const anchorEntries: E1RMAnchorEntry[] = [];
 
   // Get last workout data
   const lastBlock = historyBlocks[0];
@@ -248,6 +252,10 @@ function computeHistoryFromBlocks(
       // Pass RPE to get accurate E1RM - without RPE it assumes failure (RPE 10)
       // which underestimates true strength for sets done with reps in reserve
       const e1rm = calculateE1RM(set.weight_kg, set.reps, set.rpe);
+      anchorEntries.push({
+        e1rmKg: e1rm,
+        timeMs: Date.parse(session?.completed_at || set.logged_at),
+      });
       if (e1rm > bestE1RM) {
         bestE1RM = e1rm;
         personalRecord = {
@@ -263,10 +271,18 @@ function computeHistoryFromBlocks(
   return {
     lastWorkoutDate: lastSession?.completed_at || '',
     lastWorkoutSets: lastSets,
+    // Recency-decayed anchor (Fix 3): a stale peak fades by calendar age
+    // (exp(-age/tau), age relative to the newest session) instead of
+    // anchoring today's prescription; the newest session always keeps full
+    // weight, so an actively-trained exercise is unchanged. The PR above
+    // stays the true undecayed best.
     // First session at a new implement: soften the seeded e1RM ~10% so the
     // suggestion is a conservative starting point, not another gym's target
     // (rule 4). Same-location history is untouched.
-    estimatedE1RM: softenOtherLocationEstimate(bestE1RM, estimatedFromOtherLocation),
+    estimatedE1RM: softenOtherLocationEstimate(
+      decayedE1RMMax(anchorEntries),
+      estimatedFromOtherLocation
+    ),
     personalRecord,
     totalSessions,
     progressionScope: scope,
