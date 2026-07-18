@@ -54,6 +54,13 @@ export interface UserContext {
 export interface ExerciseHistoryData {
   lastWorkoutDate: string;
   lastWorkoutSets: { weightKg: number; reps: number; rpe?: number }[];
+  /**
+   * Working sets from the session BEFORE last (same shape/filtering as
+   * lastWorkoutSets). Feeds the regression path (Fix 4): two consecutive
+   * below-floor sessions confirm a load decrement. [] when there is only one
+   * session of history; undefined on legacy shapes.
+   */
+  priorWorkoutSets?: { weightKg: number; reps: number; rpe?: number }[];
   estimatedE1RM: number;
   personalRecord: { weightKg: number; reps: number; e1rm: number; date: string } | null;
   totalSessions: number;

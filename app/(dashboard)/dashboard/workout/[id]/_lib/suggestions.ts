@@ -21,6 +21,12 @@ import {
   type WorkingWeightRecommendation,
 } from '@/services/weightEstimationEngine';
 import {
+  decayedE1RMMax,
+  historySetE1RM,
+  type E1RMAnchorEntry,
+} from '@/services/suggestionEngine/e1rmAnchor';
+import { HISTORY_SESSIONS_PER_EXERCISE } from '@/services/suggestionEngine/constants';
+import {
   resolveLegacyLocationAttribution,
   scopeHistorySets,
   softenOtherLocationEstimate,
@@ -37,12 +43,10 @@ import type {
 
 // Calculate E1RM using Brzycki formula
 // RPE adjusts for reps in reserve: effectiveReps = reps + (10 - rpe)
+// (Implementation moved verbatim to services/suggestionEngine/e1rmAnchor so
+// the mesocycle session build anchors on the same number.)
 export function calculateE1RM(weight: number, reps: number, rpe: number = 10): number {
-  if (reps === 1 && rpe === 10) return weight;
-  // Account for reps in reserve when RPE < 10
-  const effectiveReps = rpe ? reps + (10 - rpe) : reps;
-  if (effectiveReps > 12) return weight * (1 + effectiveReps / 30);
-  return weight * (36 / (37 - effectiveReps));
+  return historySetE1RM(weight, reps, rpe);
 }
 
 /** Shape of the coach message rendered in the workout page. */
@@ -80,6 +84,39 @@ export interface HistoryBlockRow {
     is_deload?: boolean | null;
   } | null;
   set_logs: HistorySetLogRow[] | null;
+}
+
+// Re-exported for the page's history query (canonical home:
+// services/suggestionEngine/constants — shared with the session build).
+export { HISTORY_SESSIONS_PER_EXERCISE };
+
+/**
+ * Row shape of the per-exercise batched history query: one row per exercise in
+ * today's session, with that exercise's own most-recent blocks embedded
+ * (each exercise gets its own last-N window — a shared global row cap starved
+ * infrequently-trained exercises into a false cold start).
+ */
+export interface ExerciseHistoryQueryRow {
+  id: string;
+  exercise_blocks: HistoryBlockRow[] | null;
+}
+
+/**
+ * Flatten the per-exercise query rows into the flat block list the rest of the
+ * pipeline consumes (buildExerciseHistories, buildPerformanceSnapshots). Order
+ * within each exercise is preserved (most-recent-first from the query); cross-
+ * exercise order is irrelevant — every consumer groups by exercise_id. Pure.
+ */
+export function flattenExerciseHistoryRows(
+  rows: ExerciseHistoryQueryRow[] | null | undefined
+): HistoryBlockRow[] {
+  const blocks: HistoryBlockRow[] = [];
+  for (const row of rows || []) {
+    for (const block of row.exercise_blocks || []) {
+      blocks.push(block);
+    }
+  }
+  return blocks;
 }
 
 /**
@@ -171,6 +208,7 @@ function computeHistoryFromBlocks(
     return {
       lastWorkoutDate: '',
       lastWorkoutSets: [],
+      priorWorkoutSets: [],
       estimatedE1RM: 0,
       personalRecord: null,
       totalSessions: 0,
@@ -183,20 +221,34 @@ function computeHistoryFromBlocks(
   let personalRecord: ExerciseHistoryData['personalRecord'] = null;
   let totalSessions = 0;
   const seenSessions = new Set<string>();
+  // Candidates for the recency-decayed prescription anchor (Fix 3): every
+  // kept set's e1RM with when it happened. The PR stays the undecayed best.
+  const anchorEntries: E1RMAnchorEntry[] = [];
+
+  // Normal working sets of a block, ordered by set_number — so previousSets[i]
+  // maps to that workout's i-th working set (not a dropset/rest-pause or
+  // DB-ordering quirk).
+  const workingSetsOf = (block: HistoryBlockRow) =>
+    (block.set_logs || [])
+      .filter((s) => !s.is_warmup && (s.set_type ?? 'normal') === 'normal')
+      .sort((a, b) => (a.set_number ?? 0) - (b.set_number ?? 0))
+      .map((s) => ({
+        weightKg: s.weight_kg,
+        reps: s.reps,
+        rpe: s.rpe,
+      }));
 
   // Get last workout data
   const lastBlock = historyBlocks[0];
   const lastSession = lastBlock.workout_sessions;
-  const lastSets = (lastBlock.set_logs || [])
-    // Only normal working sets, ordered by set_number — so previousSets[i] maps to
-    // the prior workout's i-th working set (not a dropset/rest-pause or DB-ordering quirk).
-    .filter((s) => !s.is_warmup && (s.set_type ?? 'normal') === 'normal')
-    .sort((a, b) => (a.set_number ?? 0) - (b.set_number ?? 0))
-    .map((s) => ({
-      weightKg: s.weight_kg,
-      reps: s.reps,
-      rpe: s.rpe,
-    }));
+  const lastSets = workingSetsOf(lastBlock);
+
+  // Session BEFORE last (first block from a different session), for the
+  // regression path: two consecutive below-floor sessions confirm a decrement.
+  const priorBlock = historyBlocks.find(
+    (b) => b.workout_sessions && b.workout_sessions.id !== lastSession?.id
+  );
+  const priorSets = priorBlock ? workingSetsOf(priorBlock) : [];
 
   // Calculate best E1RM and PR
   historyBlocks.forEach((block) => {
@@ -211,6 +263,10 @@ function computeHistoryFromBlocks(
       // Pass RPE to get accurate E1RM - without RPE it assumes failure (RPE 10)
       // which underestimates true strength for sets done with reps in reserve
       const e1rm = calculateE1RM(set.weight_kg, set.reps, set.rpe);
+      anchorEntries.push({
+        e1rmKg: e1rm,
+        timeMs: Date.parse(session?.completed_at || set.logged_at),
+      });
       if (e1rm > bestE1RM) {
         bestE1RM = e1rm;
         personalRecord = {
@@ -226,10 +282,19 @@ function computeHistoryFromBlocks(
   return {
     lastWorkoutDate: lastSession?.completed_at || '',
     lastWorkoutSets: lastSets,
+    priorWorkoutSets: priorSets,
+    // Recency-decayed anchor (Fix 3): a stale peak fades by calendar age
+    // (exp(-age/tau), age relative to the newest session) instead of
+    // anchoring today's prescription; the newest session always keeps full
+    // weight, so an actively-trained exercise is unchanged. The PR above
+    // stays the true undecayed best.
     // First session at a new implement: soften the seeded e1RM ~10% so the
     // suggestion is a conservative starting point, not another gym's target
     // (rule 4). Same-location history is untouched.
-    estimatedE1RM: softenOtherLocationEstimate(bestE1RM, estimatedFromOtherLocation),
+    estimatedE1RM: softenOtherLocationEstimate(
+      decayedE1RMMax(anchorEntries),
+      estimatedFromOtherLocation
+    ),
     personalRecord,
     totalSessions,
     progressionScope: scope,
@@ -303,12 +368,12 @@ export function buildExerciseHistories(
     }
   }
 
-  // Group results by exercise_id and limit to 10 per exercise
+  // Group results by exercise_id and limit to the per-exercise window
   const groupedByExercise: Record<string, HistoryBlockRow[]> = {};
   for (const block of allHistoryBlocks || []) {
     const exId = block.exercise_id;
     if (!groupedByExercise[exId]) groupedByExercise[exId] = [];
-    if (groupedByExercise[exId].length < 10) {
+    if (groupedByExercise[exId].length < HISTORY_SESSIONS_PER_EXERCISE) {
       groupedByExercise[exId].push(block);
     }
   }
@@ -373,7 +438,7 @@ export async function fetchExerciseHistory(
     .eq('workout_sessions.user_id', userId)
     .eq('workout_sessions.state', 'completed')
     .order('workout_sessions(completed_at)', { ascending: false })
-    .limit(10);
+    .limit(HISTORY_SESSIONS_PER_EXERCISE);
 
   if (error || !historyBlocks || historyBlocks.length === 0) {
     return null;

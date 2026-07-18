@@ -17,7 +17,7 @@ export interface ProgressionFlagBannerProps {
  *
  * This banner is advisory only — it surfaces observations like stagnation
  * or consistent overperformance. Actual weight/rep recommendations come
- * from progressionEngine.calculateNextTargets().
+ * from services/setRecommender.ts.
  */
 export const ProgressionFlagBanner = memo(function ProgressionFlagBanner({
   signal,

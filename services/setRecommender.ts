@@ -2,8 +2,8 @@
  * Set Recommender — within-session next-set suggestion.
  *
  * Single engine for "what weight x reps should my next set be?" during an active
- * workout. Replaces the competing recommendNextSet (progressionEngine) and the
- * suggestWeight/suggestReps pair (setSuggestionEngine).
+ * workout. Replaced the competing recommendNextSet (progressionEngine, since
+ * deleted) and the suggestWeight/suggestReps pair (setSuggestionEngine).
  *
  * Design + rationale: docs/next-set-recommender-design.md
  *
@@ -40,7 +40,7 @@ import {
   RECAL_MAX_FRESHNESS_CORRECTION,
   SUGGESTION_ENGINE_VERSION,
 } from './suggestionEngine/constants';
-import type { SetRole } from './suggestionEngine/setRoles';
+import { inferRolesForSession, type SetRole } from './suggestionEngine/setRoles';
 
 // Tunable constants now live in services/suggestionEngine/constants.ts (one
 // module for the whole suggestion surface — see task constraints). The design
@@ -124,6 +124,114 @@ function epleyE1RM(weightKg: number, reps: number, rir: number): number {
 /** Inverse Epley: the load at which `reps` are achievable leaving `rir` in reserve. */
 function weightForReps(e1rm: number, reps: number, rir: number): number {
   return e1rm / (1 + (reps + rir) / 30);
+}
+
+// ============================================
+// SESSION-TO-SESSION BUMP GATING (all working sets)
+// ============================================
+
+/** One set from the previous session, in performed order, for bump gating. */
+export interface PrevSessionSet {
+  weightKg: number;
+  reps: number;
+  /** RIR on that set when recorded. Omitted → assume it landed on target. */
+  rir?: number;
+}
+
+/**
+ * Did the previous session EARN a load increase? True only when EVERY working
+ * set cleared the top of the rep range under the existing effort condition
+ * (>= DEADBAND_RIR spare, or an unambiguous +REP_OVERSHOOT rep overshoot).
+ *
+ * A single strong top set followed by mid-range back-half sets (12-10-9) must
+ * read as "keep accumulating reps at this load", not as a bump — grading one
+ * qualifying set was audit failure mode #5 (single-set gating).
+ *
+ * Set roles are respected: ramp / back-off sets (load below
+ * RAMP_ROLE_MAX_FRACTION of the session top set, per setRoles inference) are
+ * feeder work and are never graded against the working rep target — so a
+ * designated light last set doesn't block a bump the working sets earned.
+ */
+export function earnedSessionBump(
+  prevSessionSets: PrevSessionSet[],
+  targetRepRange: [number, number],
+  targetRir: number
+): boolean {
+  const repMax = targetRepRange[1];
+  const roles = inferRolesForSession(prevSessionSets.map((s) => ({ weightKg: s.weightKg })));
+  let gradedWorkingSets = 0;
+  for (let i = 0; i < prevSessionSets.length; i++) {
+    if (roles[i] !== 'working') continue;
+    const s = prevSessionSets[i];
+    if (!(s.weightKg > 0) || !(s.reps > 0)) continue;
+    gradedWorkingSets++;
+    const dev = Math.max(0, s.rir ?? targetRir) - targetRir;
+    const qualified = s.reps > repMax + REP_OVERSHOOT || (s.reps >= repMax && dev >= DEADBAND_RIR);
+    if (!qualified) return false;
+  }
+  return gradedWorkingSets > 0;
+}
+
+// ============================================
+// SESSION-TO-SESSION REGRESSION (confirmed underperformance → step down)
+// ============================================
+
+/**
+ * A session's floor evidence: did even the BEST working set fail to reach the
+ * bottom of the rep range? Ramp / back-off sets are excluded via role
+ * inference. Returns null when the session has no graded working sets.
+ */
+function sessionFloorMiss(
+  sets: PrevSessionSet[],
+  targetRepRange: [number, number]
+): { belowFloor: boolean; topWorkingWeightKg: number } | null {
+  const repMin = targetRepRange[0];
+  const roles = inferRolesForSession(sets.map((s) => ({ weightKg: s.weightKg })));
+  let bestReps = 0;
+  let topWeight = 0;
+  let graded = 0;
+  for (let i = 0; i < sets.length; i++) {
+    if (roles[i] !== 'working') continue;
+    const s = sets[i];
+    if (!(s.weightKg > 0) || !(s.reps > 0)) continue;
+    graded++;
+    if (s.reps > bestReps) bestReps = s.reps;
+    if (s.weightKg > topWeight) topWeight = s.weightKg;
+  }
+  if (graded === 0) return null;
+  return { belowFloor: bestReps < repMin, topWorkingWeightKg: topWeight };
+}
+
+/**
+ * TWO consecutive sessions below the rep-range floor at a maintained load =
+ * confirmed regression → the load steps DOWN one increment (Fix 4). One bad
+ * session is noise (sleep, stress) and holds instead.
+ *
+ * "At a given load": the last session must not have already self-corrected
+ * downward (top working load within 5% of, or above, the prior session's) —
+ * if the load was already reduced and still missed, the reduced load gets its
+ * own second chance before stepping further.
+ */
+export function confirmedRegression(
+  lastSessionSets: PrevSessionSet[],
+  priorSessionSets: PrevSessionSet[],
+  targetRepRange: [number, number]
+): boolean {
+  const last = sessionFloorMiss(lastSessionSets, targetRepRange);
+  const prior = sessionFloorMiss(priorSessionSets, targetRepRange);
+  if (!last?.belowFloor || !prior?.belowFloor) return false;
+  return last.topWorkingWeightKg >= prior.topWorkingWeightKg * 0.95;
+}
+
+/**
+ * One per-exercise increment down, floored at −MAX_STEP_PCT (the mirror of
+ * the up-cap). Rounding may collapse back to the held weight — then a full
+ * increment is taken anyway, exactly like the up-step's `+= inc` escape.
+ */
+function regressionStepDown(weightKg: number, inc: number): number {
+  let stepped = roundToIncrement(Math.max(weightKg - inc, weightKg * (1 - MAX_STEP_PCT)), inc);
+  if (stepped >= weightKg) stepped = weightKg - inc;
+  return Math.max(0, stepped);
 }
 
 // ============================================
@@ -336,6 +444,22 @@ export interface SessionStartInput {
   targetRepRange: [number, number];
   targetRir: number;
   minIncrementKg?: number;
+  /**
+   * ALL sets from the previous session (in performed order), for the all-sets
+   * bump gate: a load increase is earned only when every working set cleared
+   * the top of the range (earnedSessionBump). Omitted → legacy single-set
+   * grading (callers that only know the one corresponding set).
+   */
+  prevSessionSets?: PrevSessionSet[];
+  /**
+   * ALL sets from the session BEFORE last, for the regression path (Fix 4):
+   * a session-start load REDUCTION requires two consecutive below-floor
+   * sessions (confirmedRegression) and then steps down exactly one increment
+   * (capped −MAX_STEP_PCT); a single bad session holds. Pass [] when the
+   * prior session is known not to exist. Omitted (undefined) → legacy
+   * immediate curve-based reduce.
+   */
+  priorSessionSets?: PrevSessionSet[];
 }
 
 /**
@@ -347,6 +471,10 @@ export interface SessionStartInput {
  * 10-15 @ 2 RIR target — doesn't get replayed verbatim. The rep prediction
  * differs: the lifter is FRESH, so on a hold there is no within-session
  * fatigue to shave and the expectation is to repeat last session's reps.
+ *
+ * With `prevSessionSets`, a session-to-session INCREASE additionally requires
+ * the whole previous session to have earned it (every working set at the top
+ * of the range — earnedSessionBump); a lone strong set holds instead.
  */
 export function recommendSessionStart(input: SessionStartInput): SetRecommendation {
   const rec = recommendSet({
@@ -358,6 +486,52 @@ export function recommendSessionStart(input: SessionStartInput): SetRecommendati
     targetRir: input.targetRir,
     minIncrementKg: input.minIncrementKg,
   });
+  if (rec.rationale === 'reduce_load' && input.priorSessionSets !== undefined) {
+    // Regression path (Fix 4): prescribe DOWN only on CONFIRMED
+    // underperformance — two consecutive sessions below the range floor at a
+    // maintained load. One bad session (below floor, or a grind) is noise:
+    // hold the load and let the lifter retry fresh.
+    const lastSessionSets: PrevSessionSet[] =
+      input.prevSessionSets && input.prevSessionSets.length > 0
+        ? input.prevSessionSets
+        : [{ weightKg: input.prevWeightKg, reps: input.prevReps, rir: input.prevRir }];
+    if (confirmedRegression(lastSessionSets, input.priorSessionSets, input.targetRepRange)) {
+      const inc =
+        input.minIncrementKg && input.minIncrementKg > 0 ? input.minIncrementKg : 2.5;
+      const [repMin, repMax] = input.targetRepRange;
+      return {
+        weightKg: regressionStepDown(input.prevWeightKg, inc),
+        // Recenter the rep expectation on the plan at the reduced load.
+        reps: Math.round((repMin + repMax) / 2),
+        rir: input.targetRir,
+        rationale: 'reduce_load',
+        effortVsTarget: rec.effortVsTarget,
+      };
+    }
+    return {
+      weightKg: input.prevWeightKg,
+      reps: clamp(input.prevReps, 1, input.targetRepRange[1] + OVERSHOOT_CEILING),
+      rir: input.targetRir,
+      rationale: 'maintain',
+      effortVsTarget: rec.effortVsTarget,
+    };
+  }
+  if (
+    rec.rationale === 'increase_load' &&
+    input.prevSessionSets &&
+    input.prevSessionSets.length > 0 &&
+    !earnedSessionBump(input.prevSessionSets, input.targetRepRange, input.targetRir)
+  ) {
+    // The reference set alone would bump, but the session as a whole didn't
+    // earn it — hold the load and keep accumulating reps across all sets.
+    return {
+      weightKg: input.prevWeightKg,
+      reps: clamp(input.prevReps, 1, input.targetRepRange[1] + OVERSHOOT_CEILING),
+      rir: input.targetRir,
+      rationale: 'maintain',
+      effortVsTarget: rec.effortVsTarget,
+    };
+  }
   if (rec.rationale === 'maintain' && input.prevReps > 0 && input.prevWeightKg > 0) {
     // Honest reps (design §7): repeat what the set actually was, capped only
     // at the display overshoot ceiling. Zero-load references skip this — with
@@ -458,6 +632,22 @@ export interface SeedSlotInput {
   prevWeightKg?: number;
   prevReps?: number;
   prevRir?: number;
+  /**
+   * ALL sets from the previous session (in performed order). When provided,
+   * the e1RM prescription may only rise above `recentWorkingWeightKg` if the
+   * whole session earned it (every working set at the top of the range —
+   * earnedSessionBump); otherwise the seed is ceilinged at the recent working
+   * weight. Omitted → legacy behavior (±clamp only).
+   */
+  prevSessionSets?: PrevSessionSet[];
+  /**
+   * ALL sets from the session BEFORE last (Fix 4): with both session lists
+   * present and BOTH sessions below the rep-range floor at a maintained load
+   * (confirmedRegression), the working seed steps DOWN one increment from the
+   * recent working weight instead of consulting the e1RM curve. Omitted → no
+   * regression check.
+   */
+  priorSessionSets?: PrevSessionSet[];
 }
 
 export interface SeedRecommendation {
@@ -486,7 +676,8 @@ function workingWeightFromAnchor(
   targetRepRange: [number, number],
   targetRir: number,
   inc: number,
-  recentWorkingWeightKg?: number
+  recentWorkingWeightKg?: number,
+  bumpEarned?: boolean
 ): { weightKg: number; clamped: boolean } {
   const [repMin, repMax] = targetRepRange;
   const mid = Math.round((repMin + repMax) / 2);
@@ -499,6 +690,16 @@ function workingWeightFromAnchor(
     const hi = recentWorkingWeightKg * (1 + WORKING_WEIGHT_CLAMP_FRACTION);
     bounded = clamp(raw, lo, hi);
     clamped = bounded !== raw;
+    // All-sets bump gate: a hot e1RM (usually one strong top set) may not
+    // prescribe ABOVE the recent working weight unless the whole previous
+    // session earned it. Only reported as clamped when the gate actually
+    // moved the rounded prescription.
+    if (bumpEarned === false && bounded > recentWorkingWeightKg) {
+      const gated = recentWorkingWeightKg;
+      clamped =
+        clamped || roundToIncrement(gated, inc) !== roundToIncrement(bounded, inc);
+      bounded = gated;
+    }
   }
 
   return { weightKg: roundToIncrement(bounded, inc), clamped };
@@ -526,18 +727,45 @@ export function recommendSeedForSlot(input: SeedSlotInput): SeedRecommendation {
   const [repMin, repMax] = input.targetRepRange;
   const hasAnchor = !!(input.anchorE1RMKg && input.anchorE1RMKg > 0);
 
+  // All-sets bump gate (audit failure mode #5): with the previous session's
+  // full set list available, a load increase over the recent working weight is
+  // earned only when EVERY working set cleared the top of the range. Undefined
+  // (no set list supplied) preserves legacy behavior.
+  const bumpEarned =
+    input.prevSessionSets && input.prevSessionSets.length > 0
+      ? earnedSessionBump(input.prevSessionSets, input.targetRepRange, input.targetRir)
+      : undefined;
+
+  // Regression path (Fix 4): two consecutive below-floor sessions at a
+  // maintained load → today's working weight is one increment DOWN from the
+  // recent working weight, overriding the e1RM curve (whose 10-session max
+  // reacts too slowly to a confirmed decline).
+  const regressionConfirmed =
+    input.prevSessionSets &&
+    input.prevSessionSets.length > 0 &&
+    input.priorSessionSets !== undefined &&
+    confirmedRegression(input.prevSessionSets, input.priorSessionSets, input.targetRepRange);
+  const regressionWeightKg =
+    regressionConfirmed && input.recentWorkingWeightKg && input.recentWorkingWeightKg > 0
+      ? regressionStepDown(input.recentWorkingWeightKg, inc)
+      : 0;
+
   // Establish today's top working weight (the basis for a ramp %). Prefer the
   // e1RM working prescription; fall back to an explicitly supplied top; last of
   // all, the previous-session load for this slot.
   let topWorkingKg = input.topWorkingWeightKg ?? 0;
   let workingClamped = false;
+  if (topWorkingKg <= 0 && regressionWeightKg > 0) {
+    topWorkingKg = regressionWeightKg;
+  }
   if (topWorkingKg <= 0 && hasAnchor) {
     const w = workingWeightFromAnchor(
       input.anchorE1RMKg!,
       input.targetRepRange,
       input.targetRir,
       inc,
-      input.recentWorkingWeightKg
+      input.recentWorkingWeightKg,
+      bumpEarned
     );
     topWorkingKg = w.weightKg;
     workingClamped = w.clamped;
@@ -562,6 +790,22 @@ export function recommendSeedForSlot(input: SeedSlotInput): SeedRecommendation {
     };
   }
 
+  // ---- WORKING slot, confirmed regression → step down one increment ----
+  if (regressionWeightKg > 0) {
+    return {
+      weightKg: regressionWeightKg,
+      repRange: input.targetRepRange,
+      rir: input.targetRir,
+      role: 'working',
+      showRirTarget: true,
+      // The stepped weight is anchored to the last session's working load,
+      // not the e1RM curve — provenance must say so.
+      anchorSource: 'last_session',
+      clamped: false,
+      engineVersion: SUGGESTION_ENGINE_VERSION,
+    };
+  }
+
   // ---- WORKING slot, e1RM anchor available ----
   if (hasAnchor) {
     const w = workingWeightFromAnchor(
@@ -569,7 +813,8 @@ export function recommendSeedForSlot(input: SeedSlotInput): SeedRecommendation {
       input.targetRepRange,
       input.targetRir,
       inc,
-      input.recentWorkingWeightKg
+      input.recentWorkingWeightKg,
+      bumpEarned
     );
     return {
       weightKg: w.weightKg,
@@ -592,6 +837,8 @@ export function recommendSeedForSlot(input: SeedSlotInput): SeedRecommendation {
       targetRepRange: input.targetRepRange,
       targetRir: input.targetRir,
       minIncrementKg: inc,
+      prevSessionSets: input.prevSessionSets,
+      priorSessionSets: input.priorSessionSets,
     });
     return {
       weightKg: rec.weightKg,

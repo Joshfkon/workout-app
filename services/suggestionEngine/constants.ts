@@ -66,6 +66,30 @@ export const RAMP_LOAD_FRACTION = 0.575;
 export const WORKING_WEIGHT_CLAMP_FRACTION = 0.10;
 
 // ============================================================
+// E1RM ANCHOR RECENCY (audit remediation Fix 3)
+// ============================================================
+
+/**
+ * Sessions of direct history each exercise reads for suggestions (last-N
+ * window). This is the per-exercise fetch limit everywhere direct history is
+ * read (workout-page batched query, single-exercise fallback fetch, and the
+ * mesocycle session build), AND the per-exercise trim in
+ * buildExerciseHistories — one constant so the queries and the grouping
+ * cannot disagree.
+ */
+export const HISTORY_SESSIONS_PER_EXERCISE = 10;
+
+/**
+ * Half-life-style time constant (days) for the e1RM anchor's recency decay:
+ * each history session's e1RM is weighted by exp(-age_days / tau) — age
+ * relative to the newest session — before the max is taken
+ * (services/suggestionEngine/e1rmAnchor.ts). 45 keeps a 30-day-old peak at
+ * ~51% influence while a 300-day-old peak (~0.1%) is effectively gone, so a
+ * pre-weight-cut PR cannot keep prescribing today's targets.
+ */
+export const E1RM_RECENCY_TAU_DAYS = 45;
+
+// ============================================================
 // LOGGED-SET OVERRIDE (Phase 4)
 // ============================================================
 
