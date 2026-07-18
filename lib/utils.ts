@@ -271,10 +271,19 @@ export function convertWeightForDisplay(weightKg: number, unit: 'kg' | 'lb', dec
 }
 
 /**
+ * Format a BODY metric (bodyweight, lean mass) with unit suffix, exactly.
+ * formatWeight's 2.5-increment rounding is for barbell loads — on body
+ * surfaces it turns a 177.2 lb weigh-in into "177.5 lbs".
+ */
+export function formatBodyWeight(weightKg: number, unit: 'kg' | 'lb', decimals: number = 1): string {
+  return `${convertWeightForDisplay(weightKg, unit, decimals).toFixed(decimals)} ${unit === 'kg' ? 'kg' : 'lbs'}`;
+}
+
+/**
  * Format weight value only (no unit suffix), rounded to plate increments
  * - lb: 2.5lb increments (or 1lb for weights < 45lb)
  * - kg: 2.5kg increments (or 1kg for weights < 20kg)
- * 
+ *
  * NOTE: Use convertWeightForDisplay() for displaying saved/completed set weights
  * to preserve exact user input. Use this function only for suggestions/calculations.
  */

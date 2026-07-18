@@ -21,6 +21,9 @@ import {
   getTrendIndicator,
 } from '@/services/bodyCompEngine';
 import { useBodyCompTrend } from '@/hooks/useBodyCompTrend';
+import { useBodyStatsSince } from '@/hooks/useBodyStatsSince';
+import { computeTrendChangesSince } from '@/services/bodyCompAnchor';
+import { getDisplayWeight } from '@/lib/weightUtils';
 import {
   getBodyCompLayout,
   BODY_COMP_TREND_SECTION_ID,
@@ -35,7 +38,7 @@ import {
   getStrengthLevelColor,
   generatePercentileSegments
 } from '@/services/coachingEngine';
-import { kgToLbs, inputWeightToKg, roundToIncrement, formatWeight, formatWorkoutDuration, resolveWorkoutDurationSeconds, estimateE1RM, getLocalDateString, muscleDisplayName, cmToIn, inToCm } from '@/lib/utils';
+import { kgToLbs, inputWeightToKg, roundToIncrement, formatWeight, formatBodyWeight, convertWeightForDisplay, formatWorkoutDuration, resolveWorkoutDurationSeconds, estimateE1RM, getLocalDateString, muscleDisplayName, cmToIn, inToCm } from '@/lib/utils';
 import {
   computeWaistTrend,
   latestWaistTrendIn,
@@ -1533,6 +1536,37 @@ function AnalyticsPageContent() {
   const trend = userProfile?.heightCm
     ? analyzeBodyCompTrend(scans, userProfile.heightCm)
     : null;
+  // The Weight card shows the latest RAW weigh-in (converted directly from
+  // its logged unit) whenever it's the newest data point — the anchored
+  // trend round-trips through rounded kg, which can drift ~0.1 from what the
+  // user just logged. Only an even-newer DEXA scan outranks it.
+  const latestWeighIn =
+    bodyWeightHistory.length > 0 ? bodyWeightHistory[bodyWeightHistory.length - 1] : null;
+  const currentWeightDisplay =
+    latestWeighIn && (!latestTrendPoint || latestWeighIn.date >= latestTrendPoint.date)
+      ? `${getDisplayWeight(latestWeighIn.weight, latestWeighIn.unit, units).toFixed(1)} ${weightUnit}`
+      : latestTrendPoint
+        ? formatBodyWeight(latestTrendPoint.weightKg, units)
+        : latestScan
+          ? formatBodyWeight(latestScan.weightKg, units)
+          : null;
+  // "Change since" reference date for the stat cards (e.g. bulk start).
+  // Persisted per device; when set, the cards show deltas from that date
+  // instead of scan-to-scan monthly rates.
+  const [statsSinceDate, setStatsSinceDate] = useBodyStatsSince();
+  const changesSince = statsSinceDate
+    ? computeTrendChangesSince(bodyCompTrend, statsSinceDate, userProfile?.heightCm ?? null)
+    : null;
+  const formatSignedWeight = (deltaKg: number): string => {
+    const value = convertWeightForDisplay(deltaKg, units);
+    return `${value > 0 ? '+' : ''}${value.toFixed(1)} ${weightUnit}`;
+  };
+  const sinceDateLabel = statsSinceDate
+    ? new Date(`${statsSinceDate}T00:00:00`).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+      })
+    : null;
   // Phase-boundary dates (bulk/cut start) let the recommender suppress
   // composition advice inside the water-weight window — reuse the active
   // target's creation date as the current phase's start.
@@ -1794,21 +1828,76 @@ function AnalyticsPageContent() {
               arrows. One source of truth: these can't disagree with the
               combined trend chart below. */}
           {latestScan && (
+            <>
+            {/* Reference-date control: when set, the stat cards below show
+                deltas since this date (e.g. bulk start) instead of the
+                scan-to-scan monthly rates. */}
+            <div
+              className="flex flex-wrap items-center gap-2 text-xs text-surface-500"
+              data-testid="body-stats-since"
+            >
+              <label htmlFor="body-stats-since-input">Change since</label>
+              <input
+                id="body-stats-since-input"
+                type="date"
+                value={statsSinceDate ?? ''}
+                max={getLocalDateString()}
+                onChange={(e) => setStatsSinceDate(e.target.value || null)}
+                className="bg-surface-800 border border-surface-700 rounded-md px-2 py-1 text-surface-200 [color-scheme:dark]"
+              />
+              {!statsSinceDate && activeTarget?.createdAt && (
+                <button
+                  type="button"
+                  onClick={() => setStatsSinceDate(activeTarget.createdAt.slice(0, 10))}
+                  className="text-primary-400 hover:text-primary-300 font-medium"
+                >
+                  Use phase start
+                </button>
+              )}
+              {statsSinceDate && (
+                <button
+                  type="button"
+                  onClick={() => setStatsSinceDate(null)}
+                  className="text-surface-400 hover:text-surface-200"
+                >
+                  Clear
+                </button>
+              )}
+              {statsSinceDate && !changesSince && (
+                <span>No trend data since this date yet.</span>
+              )}
+              {changesSince && sinceDateLabel && (
+                <span>
+                  Cards show change from {sinceDateLabel}
+                  {changesSince.referenceDate !== statsSinceDate && ' (nearest logged day)'}
+                </span>
+              )}
+            </div>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3" data-testid="body-stat-strip">
               <Card className="p-4">
                 <p className="text-xs text-surface-500 uppercase tracking-wider">Weight</p>
                 <p className="text-2xl font-bold text-surface-100 mt-1">
-                  {latestTrendPoint
-                    ? formatWeight(latestTrendPoint.weightKg, units)
-                    : formatWeight(latestScan.weightKg, units)}
+                  {currentWeightDisplay}
                 </p>
+                {changesSince && (
+                  <p className={`text-xs mt-1 ${getTrendIndicator(changesSince.weightDeltaKg).color}`}>
+                    {getTrendIndicator(changesSince.weightDeltaKg).icon}{' '}
+                    {formatSignedWeight(changesSince.weightDeltaKg)}
+                  </p>
+                )}
               </Card>
               <Card className="p-4">
                 <p className="text-xs text-surface-500 uppercase tracking-wider">Body Fat</p>
                 <p className="text-2xl font-bold text-surface-100 mt-1">
                   {(latestTrendPoint?.bodyFatPercent ?? latestScan.bodyFatPercent).toFixed(1)}%
                 </p>
-                {trend && (
+                {changesSince ? (
+                  <p className={`text-xs mt-1 ${getTrendIndicator(changesSince.bodyFatDelta).color}`}>
+                    {getTrendIndicator(changesSince.bodyFatDelta).icon}{' '}
+                    {changesSince.bodyFatDelta > 0 ? '+' : ''}
+                    {changesSince.bodyFatDelta.toFixed(1)}%
+                  </p>
+                ) : trend && (
                   <p className={`text-xs mt-1 ${getTrendIndicator(trend.bodyFatChangeRate).color}`}>
                     {getTrendIndicator(trend.bodyFatChangeRate).icon} {Math.abs(trend.bodyFatChangeRate).toFixed(1)}%/mo
                   </p>
@@ -1817,9 +1906,14 @@ function AnalyticsPageContent() {
               <Card className="p-4">
                 <p className="text-xs text-surface-500 uppercase tracking-wider">Lean Mass</p>
                 <p className="text-2xl font-bold text-surface-100 mt-1">
-                  {formatWeight(latestTrendPoint?.leanMassKg ?? latestScan.leanMassKg, units)}
+                  {formatBodyWeight(latestTrendPoint?.leanMassKg ?? latestScan.leanMassKg, units)}
                 </p>
-                {trend && (
+                {changesSince ? (
+                  <p className={`text-xs mt-1 ${getTrendIndicator(changesSince.leanMassDeltaKg).color}`}>
+                    {getTrendIndicator(changesSince.leanMassDeltaKg).icon}{' '}
+                    {formatSignedWeight(changesSince.leanMassDeltaKg)}
+                  </p>
+                ) : trend && (
                   <p className={`text-xs mt-1 ${getTrendIndicator(trend.leanMassChangeRate).color}`}>
                     {getTrendIndicator(trend.leanMassChangeRate).icon} {Math.abs(trend.leanMassChangeRate).toFixed(2)} {weightUnit}/mo
                   </p>
@@ -1830,6 +1924,13 @@ function AnalyticsPageContent() {
                 <p className="text-2xl font-bold text-surface-100 mt-1" data-testid="body-ffmi-value">
                   {ffmiResult ? ffmiResult.ffmi.toFixed(1) : '—'}
                 </p>
+                {changesSince?.ffmiDelta != null && (
+                  <p className={`text-xs mt-1 ${getTrendIndicator(changesSince.ffmiDelta).color}`}>
+                    {getTrendIndicator(changesSince.ffmiDelta).icon}{' '}
+                    {changesSince.ffmiDelta > 0 ? '+' : ''}
+                    {changesSince.ffmiDelta.toFixed(1)}
+                  </p>
+                )}
                 {ffmiResult && (
                   <p className="text-[11px] text-surface-500 mt-1">
                     norm {ffmiResult.normalizedFfmi.toFixed(1)}
@@ -1837,6 +1938,7 @@ function AnalyticsPageContent() {
                 )}
               </Card>
             </div>
+            </>
           )}
 
           {/* Prominence (getBodyCompLayout): with ≥2 DEXA scans the trend
@@ -1985,7 +2087,7 @@ function AnalyticsPageContent() {
                         {new Date(scan.scanDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                       </span>
                       <span className="text-surface-400 tabular-nums">
-                        {scan.bodyFatPercent}% BF · {formatWeight(scan.leanMassKg, units)} lean
+                        {scan.bodyFatPercent}% BF · {formatBodyWeight(scan.leanMassKg, units)} lean
                       </span>
                     </div>
                   ))}
