@@ -7,7 +7,7 @@
  */
 
 import React from 'react';
-import { render, screen, act } from '@testing-library/react';
+import { render, screen, act, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ExerciseCard } from '../ExerciseCard';
 import type {
@@ -287,18 +287,22 @@ describe('ExerciseCard', () => {
   });
 
   describe('Header', () => {
-    it('displays exercise name and primary muscle meta line', () => {
+    it('displays only the exercise name — muscle/grade/caution metadata moved to the info view', () => {
       render(<ExerciseCard {...defaultProps} />);
       expect(screen.getByText('Bench Press')).toBeInTheDocument();
-      expect(screen.getByText(/chest/i)).toBeInTheDocument();
+      // Muscle meta line removed from the header
+      expect(screen.queryByText(/chest/i)).not.toBeInTheDocument();
+      // Caution/safety badge removed (Bench Press is a 'protect' exercise)
+      expect(screen.queryByText(/protect/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/caution/i)).not.toBeInTheDocument();
     });
 
-    it('displays progress badge', () => {
+    it('does not render the set-count badge in the title row', () => {
       render(<ExerciseCard {...defaultProps} />);
-      expect(screen.getByText(/0\/3/)).toBeInTheDocument();
+      expect(screen.queryByText(/0\/3/)).not.toBeInTheDocument();
     });
 
-    it('shows last-session summary in the meta line', () => {
+    it('no longer renders the last-session meta line (it lives in the info view)', () => {
       render(
         <ExerciseCard
           {...defaultProps}
@@ -314,8 +318,7 @@ describe('ExerciseCard', () => {
           }}
         />
       );
-      // "chest · last session 60 kg × 9, × 8 @ 2 RIR"
-      expect(screen.getByText(/last session 60 kg × 9, × 8 @ 2 RIR/)).toBeInTheDocument();
+      expect(screen.queryByText(/last session/)).not.toBeInTheDocument();
     });
 
     it('calls onExerciseNameClick when exercise name is clicked', async () => {
@@ -326,6 +329,170 @@ describe('ExerciseCard', () => {
 
       await user.click(screen.getByText('Bench Press'));
       expect(onExerciseNameClick).toHaveBeenCalled();
+    });
+
+    it('renders the (i) info trigger which opens the exercise info view', async () => {
+      const user = userEvent.setup();
+      const onExerciseNameClick = jest.fn();
+
+      render(<ExerciseCard {...defaultProps} onExerciseNameClick={onExerciseNameClick} />);
+
+      const infoTrigger = screen.getByTestId('exercise-info-trigger');
+      await user.click(infoTrigger);
+      expect(onExerciseNameClick).toHaveBeenCalledTimes(1);
+    });
+
+    it('tints the (i) icon amber for a cautioned exercise, default otherwise', () => {
+      const { rerender } = render(
+        <ExerciseCard
+          {...defaultProps}
+          // 'bulgarian' matches the push_cautiously pattern
+          exercise={createMockExercise({ name: 'Bulgarian Split Squat', primaryMuscle: 'quads' })}
+          onExerciseNameClick={jest.fn()}
+        />
+      );
+      expect(screen.getByTestId('exercise-info-trigger').className).toContain('text-amber-400');
+
+      rerender(
+        <ExerciseCard
+          {...defaultProps}
+          // 'pulldown' matches the machine/cable safe pattern
+          exercise={createMockExercise({ id: 'lat-pd', name: 'Lat Pulldown', primaryMuscle: 'back' })}
+          onExerciseNameClick={jest.fn()}
+        />
+      );
+      const trigger = screen.getByTestId('exercise-info-trigger');
+      expect(trigger.className).not.toContain('text-amber-400');
+      expect(trigger.className).toContain('text-surface-500');
+    });
+  });
+
+  describe('Live effort warning (SuggestionBanner)', () => {
+    // Within-session fixture: 100 kg × 10 @ RPE 8 (2 RIR) logged → capacity
+    // anchor e1RM = 100·(1+12/30) = 140 kg (Epley, services/setRecommender).
+    // Rep-max at 100 kg on set 2 (1% fatigue haircut): round(30·(138.6/100−1))
+    // = 12 reps. So 100 × 12 back-computes to exactly 0 RIR.
+    const loggedSets = [
+      createMockSetLog({ id: 'set-1', setNumber: 1, weightKg: 100, reps: 10, rpe: 8 }),
+    ];
+
+    it('turns amber at predicted RIR ≤ 0 and restores blue when stepping back down', async () => {
+      const user = userEvent.setup();
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          sets={loggedSets}
+          isActive={true}
+          onSetComplete={jest.fn().mockResolvedValue('id')}
+        />
+      );
+
+      // Prefill is 100 kg × 9; no warning initially.
+      expect(screen.getByText(/100 kg × 9 @ 2 RIR/)).toBeInTheDocument();
+      expect(screen.queryByTestId('effort-warning')).not.toBeInTheDocument();
+
+      // Step reps 9 → 12 (rep-max at this weight) → predicted RIR 0.
+      await user.click(screen.getByRole('button', { name: 'Increase reps' }));
+      await user.click(screen.getByRole('button', { name: 'Increase reps' }));
+      await user.click(screen.getByRole('button', { name: 'Increase reps' }));
+
+      // Debounced ~250ms; assertive copy for a directly-trained exercise.
+      await waitFor(() => {
+        expect(screen.getByTestId('effort-warning')).toHaveTextContent(
+          '100 kg × 12 ≈ 0 RIR — predicted max for you'
+        );
+      });
+      expect(screen.queryByText(/100 kg × 9 @ 2 RIR/)).not.toBeInTheDocument();
+
+      // Step back down to 11 → predicted RIR 1 → hysteresis exit, blue restored.
+      await user.click(screen.getByRole('button', { name: 'Decrease reps' }));
+      await waitFor(() => {
+        expect(screen.queryByTestId('effort-warning')).not.toBeInTheDocument();
+      });
+      expect(screen.getByText(/100 kg × 9 @ 2 RIR/)).toBeInTheDocument();
+    });
+
+    it('does not warn at predicted RIR 1 (enter threshold is ≤ 0 only)', async () => {
+      const user = userEvent.setup();
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          sets={loggedSets}
+          isActive={true}
+          onSetComplete={jest.fn().mockResolvedValue('id')}
+        />
+      );
+
+      // 9 → 11 reps: predicted RIR exactly 1 — must stay blue.
+      await user.click(screen.getByRole('button', { name: 'Increase reps' }));
+      await user.click(screen.getByRole('button', { name: 'Increase reps' }));
+
+      // Give the 250ms debounce time to fire before asserting absence.
+      await act(() => new Promise((r) => setTimeout(r, 400)));
+      expect(screen.queryByTestId('effort-warning')).not.toBeInTheDocument();
+    });
+
+    it('clears the warning when the set is logged', async () => {
+      const user = userEvent.setup();
+      const { rerender } = render(
+        <ExerciseCard
+          {...defaultProps}
+          sets={loggedSets}
+          isActive={true}
+          onSetComplete={jest.fn().mockResolvedValue('id')}
+        />
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Increase reps' }));
+      await user.click(screen.getByRole('button', { name: 'Increase reps' }));
+      await user.click(screen.getByRole('button', { name: 'Increase reps' }));
+      await waitFor(() => {
+        expect(screen.getByTestId('effort-warning')).toBeInTheDocument();
+      });
+
+      // Parent persists the logged set → set number advances → per-set reset.
+      rerender(
+        <ExerciseCard
+          {...defaultProps}
+          sets={[
+            ...loggedSets,
+            createMockSetLog({ id: 'set-2', setNumber: 2, weightKg: 100, reps: 12, rpe: 10 }),
+          ]}
+          isActive={true}
+          onSetComplete={jest.fn().mockResolvedValue('id')}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('effort-warning')).not.toBeInTheDocument();
+      });
+    });
+
+    it('softens the copy when the e1RM is transferred from another lift (no own history)', async () => {
+      const user = userEvent.setup();
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          isActive={true}
+          onSetComplete={jest.fn().mockResolvedValue('id')}
+          coldStartSuggestion={{
+            weightKg: 60,
+            reason: 'estimated from your Iso-Lateral Low Row strength',
+            explanation: 'Transferred from a logged related exercise.',
+          }}
+        />
+      );
+
+      // Cold-start prefill: 60 kg × 10 (curve answer on the transfer e1RM of
+      // 84 kg). Rep-max at 60 kg = round(30·(84/60−1)) = 12.
+      await user.click(screen.getByRole('button', { name: 'Increase reps' }));
+      await user.click(screen.getByRole('button', { name: 'Increase reps' }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('effort-warning')).toHaveTextContent(
+          '60 kg × 12 may be near max — estimated from your Iso-Lateral Low Row strength'
+        );
+      });
     });
   });
 
