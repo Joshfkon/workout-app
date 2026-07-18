@@ -148,28 +148,49 @@ function programSessionWeek(week: number, intensityModifier: number, isDeload = 
   };
 }
 
+function benchSet(weight_kg: number, reps: number, rpe: number, set_number: number, logged_at: string) {
+  return { weight_kg, reps, rpe, is_warmup: false, set_number, set_type: 'normal', logged_at };
+}
+
 // Bench direct history: newest session holds the best set — 100 × 10 @ RPE 8
 // → Brzycki-with-RIR e1RM = 100 × 36 / 25 = 144 (no decay on the newest).
+// Sets are mid-range (10/9 vs an 8-12 top), so the all-sets bump gate holds
+// the target at the recent 100 kg working weight.
 const benchHistoryRow = {
   id: EX_BENCH,
   exercise_blocks: [
     {
-      workout_sessions: { completed_at: '2026-07-15T10:00:00Z', is_deload: false },
+      workout_sessions: { id: 'ws-1', completed_at: '2026-07-15T10:00:00Z', is_deload: false },
       set_logs: [
-        { weight_kg: 100, reps: 10, rpe: 8, is_warmup: false, logged_at: '2026-07-15T10:00:00Z' },
-        { weight_kg: 100, reps: 9, rpe: 8.5, is_warmup: false, logged_at: '2026-07-15T10:00:00Z' },
+        benchSet(100, 10, 8, 1, '2026-07-15T10:00:00Z'),
+        benchSet(100, 9, 8.5, 2, '2026-07-15T10:00:00Z'),
       ],
     },
     {
-      workout_sessions: { completed_at: '2026-07-11T10:00:00Z', is_deload: false },
+      workout_sessions: { id: 'ws-2', completed_at: '2026-07-11T10:00:00Z', is_deload: false },
+      set_logs: [benchSet(97.5, 10, 8, 1, '2026-07-11T10:00:00Z')],
+    },
+  ],
+};
+
+// Variant where the whole previous session EARNED a bump: every working set
+// at the top of the range with >= 2 RIR spare (RPE 6 = 4 RIR vs target 2).
+const benchAllTopHistoryRow = {
+  id: EX_BENCH,
+  exercise_blocks: [
+    {
+      workout_sessions: { id: 'ws-1', completed_at: '2026-07-15T10:00:00Z', is_deload: false },
       set_logs: [
-        { weight_kg: 97.5, reps: 10, rpe: 8, is_warmup: false, logged_at: '2026-07-11T10:00:00Z' },
+        benchSet(100, 12, 6, 1, '2026-07-15T10:00:00Z'),
+        benchSet(100, 12, 6, 2, '2026-07-15T10:00:00Z'),
       ],
     },
   ],
 };
 
-function makeResponder(withBenchHistory: boolean): Responder {
+type BenchHistoryRow = typeof benchHistoryRow | typeof benchAllTopHistoryRow | null;
+
+function makeResponder(benchRow: BenchHistoryRow): Responder {
   return (query) => {
     if (query.table === 'user_profiles') return { data: { goal: 'bulk', experience: 'intermediate' } };
     if (query.table === 'users') {
@@ -193,7 +214,7 @@ function makeResponder(withBenchHistory: boolean): Responder {
     if (query.table === 'exercises') {
       // Direct-history embedded query (filters on id list).
       if (Array.isArray(query.filters['id'])) {
-        return { data: withBenchHistory ? [benchHistoryRow, { id: EX_FLY, exercise_blocks: [] }] : [] };
+        return { data: benchRow ? [benchRow, { id: EX_FLY, exercise_blocks: [] }] : [] };
       }
       // Per-exercise metadata lookup by name (.single()).
       const name = query.filters['name'];
@@ -230,8 +251,8 @@ const baseMesocycle: StartableMesocycle = {
 };
 
 describe('startMesocycleWorkoutSession — direct-history targets (Fix 5)', () => {
-  it('an exercise with direct history gets its target from the decayed e1RM anchor, with NO intensityModifier', async () => {
-    const { supabase, queries } = createSupabaseMock(makeResponder(true));
+  it('direct history runs through the live session-start gates: mid-range session HOLDs at the recent working weight, no intensityModifier', async () => {
+    const { supabase, queries } = createSupabaseMock(makeResponder(benchHistoryRow));
     await startMesocycleWorkoutSession({
       supabase,
       mesocycle: baseMesocycle,
@@ -241,14 +262,32 @@ describe('startMesocycleWorkoutSession — direct-history targets (Fix 5)', () =
 
     const blocks = insertedBlocks(queries);
     const bench = blocks.find((b) => b.exercise_id === EX_BENCH);
-    // Anchor 144 → mid of 8-12 (10 reps) @ 2 RIR: 144 / (1 + 12/30) ≈ 102.86,
-    // rounded to the exercise's 2.5 kg increment. Week 2's 1.05 modifier is
-    // NOT applied (102.5 × 1.05 would be ≈107.5).
-    expect(bench.target_weight_kg).toBe(102.5);
+    // Anchor 144 → curve mid of 8-12 @ 2 RIR ≈ 102.86, but last session's
+    // sets were mid-range (10/9 vs top 12), so the all-sets bump gate ceilings
+    // the target at the recent 100 kg working weight. Week 2's 1.05 modifier
+    // is NOT applied (100 × 1.05 would be 105).
+    expect(bench.target_weight_kg).toBe(100);
+  });
+
+  it('an EARNED session (all sets at top with spare RIR) may bump the stored target', async () => {
+    const { supabase, queries } = createSupabaseMock(makeResponder(benchAllTopHistoryRow));
+    await startMesocycleWorkoutSession({
+      supabase,
+      mesocycle: baseMesocycle,
+      todayWorkout: null,
+      completedSessions: 4,
+    });
+
+    const blocks = insertedBlocks(queries);
+    const bench = blocks.find((b) => b.exercise_id === EX_BENCH);
+    // Anchor: 100 × 12 @ RPE 6 → eff reps 16 → 100 × (1 + 16/30) ≈ 153.3.
+    // Curve ≈ 109.5, allowed up to the ±10% clamp of the recent 100 → 110.
+    expect(bench.target_weight_kg).toBeGreaterThan(100);
+    expect(bench.target_weight_kg).toBeLessThanOrEqual(110);
   });
 
   it('a true cold start keeps the quickWeightEstimate × intensityModifier path bit-for-bit', async () => {
-    const { supabase, queries } = createSupabaseMock(makeResponder(true));
+    const { supabase, queries } = createSupabaseMock(makeResponder(benchHistoryRow));
     await startMesocycleWorkoutSession({
       supabase,
       mesocycle: baseMesocycle,
@@ -286,7 +325,7 @@ describe('startMesocycleWorkoutSession — direct-history targets (Fix 5)', () =
   });
 
   it('with no history rows at all, every exercise takes the legacy estimate path', async () => {
-    const { supabase, queries } = createSupabaseMock(makeResponder(false));
+    const { supabase, queries } = createSupabaseMock(makeResponder(null));
     await startMesocycleWorkoutSession({
       supabase,
       mesocycle: baseMesocycle,
@@ -320,7 +359,7 @@ describe('startMesocycleWorkoutSession — direct-history targets (Fix 5)', () =
   });
 
   it('a deload week still applies the scheduled reduction to the direct-history target', async () => {
-    const { supabase, queries } = createSupabaseMock(makeResponder(true));
+    const { supabase, queries } = createSupabaseMock(makeResponder(benchHistoryRow));
     await startMesocycleWorkoutSession({
       supabase,
       mesocycle: { ...baseMesocycle, current_week: 3 },
@@ -331,7 +370,7 @@ describe('startMesocycleWorkoutSession — direct-history targets (Fix 5)', () =
     const blocks = insertedBlocks(queries);
     const bench = blocks.find((b) => b.exercise_id === EX_BENCH);
     // The deload modifier (0.6) is the lightening mechanism itself — it must
-    // still apply: 102.5 × 0.6 = 61.5.
-    expect(bench.target_weight_kg).toBe(61.5);
+    // still apply to the gated target: 100 × 0.6 = 60.
+    expect(bench.target_weight_kg).toBe(60);
   });
 });

@@ -59,8 +59,8 @@ import {
   type E1RMAnchorEntry,
 } from '@/services/suggestionEngine/e1rmAnchor';
 import { HISTORY_SESSIONS_PER_EXERCISE } from '@/services/suggestionEngine/constants';
-import { prescribe } from '@/services/setRecommender';
-import { toLegacyMuscleGroup } from '@/types/schema';
+import { recommendSeedForSlot, type PrevSessionSet } from '@/services/setRecommender';
+import { rpeToRir, toLegacyMuscleGroup } from '@/types/schema';
 import type {
   Experience,
   FullProgramRecommendation,
@@ -274,6 +274,7 @@ interface DirectHistoryRow {
   exercise_blocks:
     | {
         workout_sessions: {
+          id: string;
           completed_at: string | null;
           is_deload: boolean | null;
         } | null;
@@ -283,11 +284,30 @@ interface DirectHistoryRow {
               reps: number | null;
               rpe: number | null;
               is_warmup: boolean | null;
+              set_number: number | null;
+              set_type: string | null;
               logged_at: string | null;
             }[]
           | null;
       }[]
     | null;
+}
+
+/**
+ * One exercise's direct history reduced to the same inputs the live card's
+ * session-start recommender consumes, so the persisted block target goes
+ * through the SAME gates (±10% working-weight clamp, all-sets bump gate,
+ * confirmed-regression step-down) as the on-screen seed.
+ */
+interface DirectHistorySummary {
+  /** Recency-decayed e1RM anchor (decayedE1RMMax over non-deload sets). */
+  anchorE1RMKg: number;
+  /** Top working weight of the most recent non-deload session (clamp anchor). */
+  recentWorkingWeightKg: number;
+  /** Working sets of the most recent non-deload session, performed order. */
+  prevSessionSets: PrevSessionSet[];
+  /** Working sets of the session before that ([] when none). */
+  priorSessionSets: PrevSessionSet[];
 }
 
 /** Non-deload, non-warmup set e1RMs (with dates) from one exercise's history row. */
@@ -311,20 +331,60 @@ function anchorEntriesFromHistoryRow(row: DirectHistoryRow): E1RMAnchorEntry[] {
 }
 
 /**
- * Recency-decayed direct-history e1RM anchor per exercise (audit remediation
- * Fix 5). One batched query — the same per-exercise embedded last-N window
- * the workout page's history read uses — reduced to decayedE1RMMax over the
- * user's own non-deload working sets (same Brzycki-with-RIR per-set formula
- * as the live card's anchor). Exercises with no direct history are simply
- * absent from the map; any query failure degrades to an empty map so the
- * cold-start estimation ladder still runs.
+ * Normal working sets of one history block, ordered by set_number — the same
+ * filtering buildExerciseHistories applies to lastWorkoutSets.
+ */
+function workingSetsFromBlock(
+  block: NonNullable<DirectHistoryRow['exercise_blocks']>[number]
+): PrevSessionSet[] {
+  return (block.set_logs ?? [])
+    .filter((s) => !s.is_warmup && (s.set_type ?? 'normal') === 'normal')
+    .sort((a, b) => (a.set_number ?? 0) - (b.set_number ?? 0))
+    .filter((s) => (s.weight_kg ?? 0) > 0 && (s.reps ?? 0) > 0)
+    .map((s) => ({
+      weightKg: s.weight_kg as number,
+      reps: s.reps as number,
+      rir: s.rpe != null ? Math.max(0, rpeToRir(s.rpe)) : undefined,
+    }));
+}
+
+/** The last two non-deload sessions' working sets + the recent top weight. */
+function recentSessionsFromHistoryRow(row: DirectHistoryRow): {
+  recentWorkingWeightKg: number;
+  prevSessionSets: PrevSessionSet[];
+  priorSessionSets: PrevSessionSet[];
+} {
+  const nonDeload = (row.exercise_blocks ?? []).filter(
+    (b) => b.workout_sessions && !b.workout_sessions.is_deload
+  );
+  const lastBlock = nonDeload[0];
+  const lastSessionId = lastBlock?.workout_sessions?.id;
+  const priorBlock = nonDeload.find((b) => b.workout_sessions?.id !== lastSessionId);
+  const prevSessionSets = lastBlock ? workingSetsFromBlock(lastBlock) : [];
+  const priorSessionSets = priorBlock ? workingSetsFromBlock(priorBlock) : [];
+  return {
+    recentWorkingWeightKg: prevSessionSets.reduce((m, s) => (s.weightKg > m ? s.weightKg : m), 0),
+    prevSessionSets,
+    priorSessionSets,
+  };
+}
+
+/**
+ * Direct-history summary per exercise (audit remediation Fix 5). One batched
+ * query — the same per-exercise embedded last-N window the workout page's
+ * history read uses — reduced to the recency-decayed e1RM anchor (same
+ * Brzycki-with-RIR per-set formula as the live card) PLUS the last two
+ * sessions' working sets, so the block target can run through the live
+ * session-start gates. Exercises with no direct history are simply absent
+ * from the map; any query failure degrades to an empty map so the cold-start
+ * estimation ladder still runs.
  */
 async function fetchDirectHistoryAnchors(
   supabase: SupabaseClient,
   userId: string,
   exerciseIds: string[]
-): Promise<Map<string, number>> {
-  const anchors = new Map<string, number>();
+): Promise<Map<string, DirectHistorySummary>> {
+  const anchors = new Map<string, DirectHistorySummary>();
   if (exerciseIds.length === 0) return anchors;
   try {
     const { data, error } = await supabase
@@ -334,6 +394,7 @@ async function fetchDirectHistoryAnchors(
         id,
         exercise_blocks (
           workout_sessions!inner (
+            id,
             completed_at,
             is_deload
           ),
@@ -342,6 +403,8 @@ async function fetchDirectHistoryAnchors(
             reps,
             rpe,
             is_warmup,
+            set_number,
+            set_type,
             logged_at
           )
         )
@@ -361,8 +424,10 @@ async function fetchDirectHistoryAnchors(
     // (The generated client types infer to-one embeds as arrays — cast via
     // unknown to the runtime shape, same convention as the workout page.)
     for (const row of data as unknown as DirectHistoryRow[]) {
-      const anchor = decayedE1RMMax(anchorEntriesFromHistoryRow(row));
-      if (anchor > 0) anchors.set(row.id, anchor);
+      const anchorE1RMKg = decayedE1RMMax(anchorEntriesFromHistoryRow(row));
+      if (anchorE1RMKg > 0) {
+        anchors.set(row.id, { anchorE1RMKg, ...recentSessionsFromHistoryRow(row) });
+      }
     }
   } catch {
     // Non-fatal: fall through to the estimation ladder.
@@ -655,30 +720,37 @@ export async function startMesocycleWorkoutSession(
 
       // Target weight, in priority order:
       //  1. DIRECT HISTORY (Fix 5): the user's own recency-decayed e1RM for
-      //     THIS exercise → weight for the mid of the rep range at the target
-      //     RIR (the same curve the live card prescribes with). The weekly
-      //     intensityModifier is NOT applied on this path — the RIR ramp
-      //     already drives weekly intensification and multiplying by the
+      //     THIS exercise, run through the SAME session-start recommender the
+      //     live card uses (recommendSeedForSlot) — so the persisted target
+      //     honors the ±10% recent-working-weight clamp, the all-sets bump
+      //     gate (Fix 2), and the confirmed-regression step-down (Fix 4)
+      //     instead of letting one strong set over-bump the stored plan. The
+      //     weekly intensityModifier is NOT applied on this path — the RIR
+      //     ramp already drives weekly intensification and multiplying by the
       //     scheduled modifier double-counts it (audit failure mode #1).
       //     Deload weeks are the exception: the modifier IS the deload's
       //     lightening mechanism, so it still applies there.
       //  2. TRUE COLD START: no direct history → the existing
       //     quickWeightEstimate transfer/profile ladder, unchanged.
       let targetWeight = 0;
-      const directAnchor = directAnchors.get(exerciseId) ?? 0;
-      if (directAnchor > 0) {
-        const prescribed = prescribe({
-          e1RMKg: directAnchor,
+      const direct = directAnchors.get(exerciseId);
+      if (direct) {
+        const seed = recommendSeedForSlot({
+          role: 'working',
+          targetRepRange: [exercise.repRange.min, exercise.repRange.max],
           targetRir: exercise.targetRir,
-          repRange: [exercise.repRange.min, exercise.repRange.max],
           minIncrementKg:
             (dbExercise as { min_weight_increment_kg?: number } | null)
               ?.min_weight_increment_kg || undefined,
+          anchorE1RMKg: direct.anchorE1RMKg,
+          recentWorkingWeightKg: direct.recentWorkingWeightKg || undefined,
+          prevSessionSets: direct.prevSessionSets,
+          priorSessionSets: direct.priorSessionSets,
         });
-        if (prescribed && prescribed.weightKg > 0) {
+        if (seed.weightKg > 0) {
           targetWeight = progressionModifiers.isDeload
-            ? Math.round(prescribed.weightKg * progressionModifiers.intensityModifier * 2) / 2
-            : prescribed.weightKg;
+            ? Math.round(seed.weightKg * progressionModifiers.intensityModifier * 2) / 2
+            : seed.weightKg;
         }
       }
       if (targetWeight <= 0 && userData?.height_cm && userData?.weight_kg) {
