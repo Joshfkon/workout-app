@@ -3493,7 +3493,7 @@ export default function WorkoutPage() {
     const supabase = createUntypedClient();
     let query = supabase
       .from('exercises')
-      .select('id, name, primary_muscle, mechanic, equipment_required, default_rep_range, default_rir, is_bodyweight')
+      .select('id, name, primary_muscle, secondary_muscles, movement_pattern, mechanic, equipment_required, equipment_class, default_rep_range, default_rir, is_bodyweight, hypertrophy_tier')
       .is('deleted_at', null) // hide merge-soft-deleted duplicates
       .order('name');
 
