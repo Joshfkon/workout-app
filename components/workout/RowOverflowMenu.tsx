@@ -20,7 +20,16 @@ export interface RowMenuItem {
 }
 
 interface RowOverflowMenuProps {
-  items: RowMenuItem[];
+  items?: RowMenuItem[];
+  /**
+   * Lazily builds the items on each render of this component — in particular
+   * when the trigger is clicked (open toggles state → re-render → fresh call).
+   * Use this instead of `items` when the parent is memoized and may skip
+   * renders while the underlying menu data changes (e.g. an expanded
+   * ExerciseCard whose neighbor's superset state changed): a static `items`
+   * array would then go stale, offering actions built from outdated state.
+   */
+  getItems?: () => RowMenuItem[];
   /** Accessible label for the trigger button. */
   ariaLabel?: string;
   /** Forwarded to the trigger for e2e targeting. */
@@ -62,11 +71,13 @@ function readSafeAreaInsets(): { top: number; bottom: number } {
  * returns focus to the trigger) with the matching aria roles.
  */
 export function RowOverflowMenu({
-  items,
+  items: itemsProp,
+  getItems,
   ariaLabel = 'More actions',
   testId,
   dataBlockId,
 }: RowOverflowMenuProps) {
+  const items = getItems ? getItems() : (itemsProp ?? []);
   const [isOpen, setIsOpen] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);

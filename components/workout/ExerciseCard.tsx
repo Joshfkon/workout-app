@@ -1765,11 +1765,15 @@ export const ExerciseCard = memo(function ExerciseCard({
                 row-menu-trigger. */}
             {!isCollapsed && getMenuItems && listIndex !== undefined && (
               <div className="-my-2.5" onClick={(e) => e.stopPropagation()}>
+                {/* getItems (not items): this card is memoized and can skip
+                    renders while a NEIGHBOR's superset state changes, which
+                    the page-built menu depends on ("Link with {next}"). Lazy
+                    build on open always reads the freshest page state. */}
                 <RowOverflowMenu
                   testId="row-menu-trigger"
                   dataBlockId={block.id}
                   ariaLabel={`Actions for ${exercise.name}`}
-                  items={getMenuItems(listIndex)}
+                  getItems={() => getMenuItems(listIndex)}
                 />
               </div>
             )}

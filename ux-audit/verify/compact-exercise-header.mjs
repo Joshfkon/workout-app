@@ -202,6 +202,36 @@ async function run() {
   assert((await badge(0).first().innerText()) === '1/5', `badge total drops after skip (got ${await badge(0).first().innerText()})`);
   await page.screenshot({ path: `${OUT}compact-header-after-skip.png` });
 
+  // --- 8. Expanded card's ⋮ menu is built at OPEN time, not frozen at the
+  //        memoized card's last render. Repro: link blocks 1+2 from block 1's
+  //        collapsed row (block 0's compared props don't change, so its card
+  //        skips re-rendering), then open block 0's menu: it must NOT still
+  //        offer "Link with {block 1}" — block 1 is now in a superset. -------
+  await page.goto(`${BASE}/dashboard/workout/${SID}`, { waitUntil: 'domcontentloaded' });
+  await page.locator('text=Standing Calf Raise').first().waitFor({ state: 'visible', timeout: 20000 });
+  await page.waitForTimeout(500);
+  // Pre-scroll before opening: the popover dismisses on any scroll, so a
+  // scroll-into-view performed BY the click would close it immediately.
+  await page.locator('[data-block-index="1"] [data-testid="row-menu-trigger"]').scrollIntoViewIfNeeded();
+  await page.waitForTimeout(300);
+  await page.locator('[data-block-index="1"] [data-testid="row-menu-trigger"]').click();
+  await page.locator('[data-testid="row-menu"]').waitFor({ state: 'visible', timeout: 5000 });
+  await page.locator('[data-testid="row-menu-item-link-next"]').click();
+  await page.waitForTimeout(400);
+  assert(
+    (await page.locator('[data-testid="superset-slot"]').count()) === 2,
+    'blocks 1+2 linked from the collapsed row (slots rendered)'
+  );
+  await page.locator('[data-block-index="0"] [data-testid="row-menu-trigger"]').scrollIntoViewIfNeeded();
+  await page.waitForTimeout(300);
+  await page.locator('[data-block-index="0"] [data-testid="row-menu-trigger"]').click();
+  await page.locator('[data-testid="row-menu"]').waitFor({ state: 'visible', timeout: 5000 });
+  assert(
+    (await page.locator('[data-testid="row-menu-item-link-next"]').count()) === 0,
+    'expanded card menu rebuilt on open: no stale "Link with next" after neighbor linked elsewhere'
+  );
+  await page.keyboard.press('Escape');
+
   const passed = results.filter(Boolean).length;
   console.log(`\n${passed}/${results.length} assertions passed.`);
   await browser.close();
