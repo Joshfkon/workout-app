@@ -70,6 +70,16 @@ export const WORKING_WEIGHT_CLAMP_FRACTION = 0.10;
 // ============================================================
 
 /**
+ * Sessions of direct history each exercise reads for suggestions (last-N
+ * window). This is the per-exercise fetch limit everywhere direct history is
+ * read (workout-page batched query, single-exercise fallback fetch, and the
+ * mesocycle session build), AND the per-exercise trim in
+ * buildExerciseHistories — one constant so the queries and the grouping
+ * cannot disagree.
+ */
+export const HISTORY_SESSIONS_PER_EXERCISE = 10;
+
+/**
  * Half-life-style time constant (days) for the e1RM anchor's recency decay:
  * each history session's e1RM is weighted by exp(-age_days / tau) — age
  * relative to the newest session — before the max is taken

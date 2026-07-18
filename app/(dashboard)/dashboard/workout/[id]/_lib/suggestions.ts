@@ -20,7 +20,12 @@ import {
   type TransferCandidate,
   type WorkingWeightRecommendation,
 } from '@/services/weightEstimationEngine';
-import { decayedE1RMMax, type E1RMAnchorEntry } from '@/services/suggestionEngine/e1rmAnchor';
+import {
+  decayedE1RMMax,
+  historySetE1RM,
+  type E1RMAnchorEntry,
+} from '@/services/suggestionEngine/e1rmAnchor';
+import { HISTORY_SESSIONS_PER_EXERCISE } from '@/services/suggestionEngine/constants';
 import {
   resolveLegacyLocationAttribution,
   scopeHistorySets,
@@ -38,12 +43,10 @@ import type {
 
 // Calculate E1RM using Brzycki formula
 // RPE adjusts for reps in reserve: effectiveReps = reps + (10 - rpe)
+// (Implementation moved verbatim to services/suggestionEngine/e1rmAnchor so
+// the mesocycle session build anchors on the same number.)
 export function calculateE1RM(weight: number, reps: number, rpe: number = 10): number {
-  if (reps === 1 && rpe === 10) return weight;
-  // Account for reps in reserve when RPE < 10
-  const effectiveReps = rpe ? reps + (10 - rpe) : reps;
-  if (effectiveReps > 12) return weight * (1 + effectiveReps / 30);
-  return weight * (36 / (37 - effectiveReps));
+  return historySetE1RM(weight, reps, rpe);
 }
 
 /** Shape of the coach message rendered in the workout page. */
@@ -83,13 +86,9 @@ export interface HistoryBlockRow {
   set_logs: HistorySetLogRow[] | null;
 }
 
-/**
- * Sessions of direct history each exercise reads for suggestions (last-N
- * window). This is the per-exercise fetch limit AND the per-exercise trim in
- * buildExerciseHistories — one constant so the query and the grouping cannot
- * disagree.
- */
-export const HISTORY_SESSIONS_PER_EXERCISE = 10;
+// Re-exported for the page's history query (canonical home:
+// services/suggestionEngine/constants — shared with the session build).
+export { HISTORY_SESSIONS_PER_EXERCISE };
 
 /**
  * Row shape of the per-exercise batched history query: one row per exercise in

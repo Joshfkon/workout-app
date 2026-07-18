@@ -53,6 +53,13 @@ import { sessionIndexFromCompleted } from '@/lib/training/mesocycleProgress';
 import { insertWorkoutSessions } from '@/lib/training/sessionOrigin';
 import { quickWeightEstimate, type TransferCandidate } from '@/services/weightEstimationEngine';
 import { fetchTransferCandidates } from '@/lib/training/transferCandidates';
+import {
+  decayedE1RMMax,
+  historySetE1RM,
+  type E1RMAnchorEntry,
+} from '@/services/suggestionEngine/e1rmAnchor';
+import { HISTORY_SESSIONS_PER_EXERCISE } from '@/services/suggestionEngine/constants';
+import { prescribe } from '@/services/setRecommender';
 import { toLegacyMuscleGroup } from '@/types/schema';
 import type {
   Experience,
@@ -260,6 +267,101 @@ export async function countCompletedSessions(
 const isUuid = (v: unknown): v is string =>
   typeof v === 'string' &&
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+
+/** Row shape of the per-exercise direct-history query below. */
+interface DirectHistoryRow {
+  id: string;
+  exercise_blocks:
+    | {
+        workout_sessions: {
+          completed_at: string | null;
+          is_deload: boolean | null;
+        } | null;
+        set_logs:
+          | {
+              weight_kg: number | null;
+              reps: number | null;
+              rpe: number | null;
+              is_warmup: boolean | null;
+              logged_at: string | null;
+            }[]
+          | null;
+      }[]
+    | null;
+}
+
+/**
+ * Recency-decayed direct-history e1RM anchor per exercise (audit remediation
+ * Fix 5). One batched query — the same per-exercise embedded last-N window
+ * the workout page's history read uses — reduced to decayedE1RMMax over the
+ * user's own non-deload working sets (same Brzycki-with-RIR per-set formula
+ * as the live card's anchor). Exercises with no direct history are simply
+ * absent from the map; any query failure degrades to an empty map so the
+ * cold-start estimation ladder still runs.
+ */
+async function fetchDirectHistoryAnchors(
+  supabase: SupabaseClient,
+  userId: string,
+  exerciseIds: string[]
+): Promise<Map<string, number>> {
+  const anchors = new Map<string, number>();
+  if (exerciseIds.length === 0) return anchors;
+  try {
+    const { data, error } = await supabase
+      .from('exercises')
+      .select(
+        `
+        id,
+        exercise_blocks (
+          workout_sessions!inner (
+            completed_at,
+            is_deload
+          ),
+          set_logs (
+            weight_kg,
+            reps,
+            rpe,
+            is_warmup,
+            logged_at
+          )
+        )
+      `
+      )
+      .in('id', exerciseIds)
+      .eq('exercise_blocks.workout_sessions.user_id', userId)
+      .eq('exercise_blocks.workout_sessions.state', 'completed')
+      .order('workout_sessions(completed_at)', {
+        referencedTable: 'exercise_blocks',
+        ascending: false,
+      })
+      .limit(HISTORY_SESSIONS_PER_EXERCISE, { referencedTable: 'exercise_blocks' });
+
+    if (error || !data) return anchors;
+
+    // (The generated client types infer to-one embeds as arrays — cast via
+    // unknown to the runtime shape, same convention as the workout page.)
+    for (const row of data as unknown as DirectHistoryRow[]) {
+      const entries: E1RMAnchorEntry[] = [];
+      for (const block of row.exercise_blocks ?? []) {
+        const session = block.workout_sessions;
+        // Deload sessions are held light on purpose — never anchor on them.
+        if (!session || session.is_deload) continue;
+        for (const s of block.set_logs ?? []) {
+          if (s.is_warmup || !s.weight_kg || !s.reps || s.weight_kg <= 0 || s.reps <= 0) continue;
+          entries.push({
+            e1rmKg: historySetE1RM(s.weight_kg, s.reps, s.rpe ?? 10),
+            timeMs: Date.parse(session.completed_at || s.logged_at || ''),
+          });
+        }
+      }
+      const anchor = decayedE1RMMax(entries);
+      if (anchor > 0) anchors.set(row.id, anchor);
+    }
+  } catch {
+    // Non-fatal: fall through to the estimation ladder.
+  }
+  return anchors;
+}
 
 /**
  * Whether a program_data session would actually produce exercise blocks in
@@ -493,6 +595,31 @@ export async function startMesocycleWorkoutSession(
     const overrides = (mesocycle.exercise_overrides || []) as ExerciseOverride[];
     const exercisesWithOverrides = applyExerciseOverrides(programSession.exercises, overrides);
 
+    // Direct-history anchors (Fix 5): resolve today's exercise ids up front
+    // (program UUIDs + one batched name lookup) and batch-fetch each one's
+    // own recent history, so target_weight_kg can come from the user's real
+    // e1RM instead of the population/transfer estimate whenever they have
+    // trained the exercise before.
+    const uuidIds = exercisesWithOverrides
+      .map((e) => e.exerciseId)
+      .filter(isUuid);
+    const unresolvedNames = exercisesWithOverrides
+      .filter((e) => !isUuid(e.exerciseId))
+      .map((e) => e.exerciseName);
+    let nameResolvedIds: string[] = [];
+    if (unresolvedNames.length > 0) {
+      const { data: nameRows } = await supabase
+        .from('exercises')
+        .select('id, name')
+        .in('name', unresolvedNames)
+        .is('deleted_at', null); // hide merge-soft-deleted duplicates
+      nameResolvedIds = ((nameRows ?? []) as { id: string }[]).map((r) => r.id);
+    }
+    const directAnchors = await fetchDirectHistoryAnchors(supabase, user.id, [
+      ...uuidIds,
+      ...nameResolvedIds,
+    ]);
+
     // USE PROGRAM_DATA: Create exercise blocks from pre-calculated program
     for (let exerciseIndex = 0; exerciseIndex < exercisesWithOverrides.length; exerciseIndex++) {
       const exercise = exercisesWithOverrides[exerciseIndex];
@@ -503,7 +630,7 @@ export async function startMesocycleWorkoutSession(
       // transfer matching)
       const { data: dbExercise } = await supabase
         .from('exercises')
-        .select('id, mechanic, default_rep_range, default_rir, primary_muscle, movement_pattern, equipment_required')
+        .select('id, mechanic, default_rep_range, default_rir, primary_muscle, movement_pattern, equipment_required, min_weight_increment_kg')
         .eq('name', exercise.exerciseName)
         // Hide merge-soft-deleted duplicates: without this, a name shared with
         // a merged loser returns 2+ rows and .single() errors -> block skipped.
@@ -519,9 +646,35 @@ export async function startMesocycleWorkoutSession(
       const exerciseId = isUuid(exercise.exerciseId) ? exercise.exerciseId : dbExercise?.id;
       if (!exerciseId) continue; // Skip if exercise not found
 
-      // Get weight estimate using the WeightEstimationEngine
+      // Target weight, in priority order:
+      //  1. DIRECT HISTORY (Fix 5): the user's own recency-decayed e1RM for
+      //     THIS exercise → weight for the mid of the rep range at the target
+      //     RIR (the same curve the live card prescribes with). The weekly
+      //     intensityModifier is NOT applied on this path — the RIR ramp
+      //     already drives weekly intensification and multiplying by the
+      //     scheduled modifier double-counts it (audit failure mode #1).
+      //     Deload weeks are the exception: the modifier IS the deload's
+      //     lightening mechanism, so it still applies there.
+      //  2. TRUE COLD START: no direct history → the existing
+      //     quickWeightEstimate transfer/profile ladder, unchanged.
       let targetWeight = 0;
-      if (userData?.height_cm && userData?.weight_kg) {
+      const directAnchor = directAnchors.get(exerciseId) ?? 0;
+      if (directAnchor > 0) {
+        const prescribed = prescribe({
+          e1RMKg: directAnchor,
+          targetRir: exercise.targetRir,
+          repRange: [exercise.repRange.min, exercise.repRange.max],
+          minIncrementKg:
+            (dbExercise as { min_weight_increment_kg?: number } | null)
+              ?.min_weight_increment_kg || undefined,
+        });
+        if (prescribed && prescribed.weightKg > 0) {
+          targetWeight = progressionModifiers.isDeload
+            ? Math.round(prescribed.weightKg * progressionModifiers.intensityModifier * 2) / 2
+            : prescribed.weightKg;
+        }
+      }
+      if (targetWeight <= 0 && userData?.height_cm && userData?.weight_kg) {
         const weightRec = quickWeightEstimate(
           exercise.exerciseName,
           exercise.repRange,

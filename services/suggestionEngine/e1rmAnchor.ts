@@ -25,6 +25,23 @@ import { E1RM_RECENCY_TAU_DAYS } from './constants';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
+/**
+ * The e1RM formula used for HISTORY sets on the prescription-anchor path
+ * (Brzycki with RIR-adjusted reps, linear above 12 effective reps). Moved
+ * verbatim from the workout page's suggestions glue so the mesocycle session
+ * build can anchor on the SAME number the live card uses — not a sixth
+ * formula. (App-wide e1RM formula unification is a known TODO — see
+ * docs/WEIGHT_REP_ENGINE_AUDIT.md §4.4; the prescription path itself uses
+ * Epley via setRecommender.prescribe.)
+ */
+export function historySetE1RM(weight: number, reps: number, rpe: number = 10): number {
+  if (reps === 1 && rpe === 10) return weight;
+  // Account for reps in reserve when RPE < 10
+  const effectiveReps = rpe ? reps + (10 - rpe) : reps;
+  if (effectiveReps > 12) return weight * (1 + effectiveReps / 30);
+  return weight * (36 / (37 - effectiveReps));
+}
+
 /** One anchor candidate: a set's estimated 1RM and when it was performed. */
 export interface E1RMAnchorEntry {
   e1rmKg: number;
