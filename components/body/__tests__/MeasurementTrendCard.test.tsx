@@ -100,16 +100,45 @@ describe('MeasurementTrendCard date ranges', () => {
     expect(screen.getByTestId('line-chart')).toHaveAttribute('data-points', '4');
   });
 
-  it('points at a longer range when the site has history outside the window', async () => {
+  it('points at a longer range when all history is outside the window', async () => {
     mockRows = [chestRow(daysAgo(500), 100), chestRow(daysAgo(400), 104)];
     render(<MeasurementTrendCard tapeUnit="cm" />);
 
     expect(
-      await screen.findByText(/Fewer than two entries in this date range/)
+      await screen.findByText(/No measurements in this date range/)
     ).toBeInTheDocument();
 
     const user = userEvent.setup();
     await user.click(screen.getByTestId('measurement-trend-range-all'));
     expect(screen.getByTestId('line-chart')).toHaveAttribute('data-points', '2');
+  });
+
+  it('lists each measured site with a direction badge and rate', async () => {
+    mockRows = [
+      { logged_at: daysAgo(60), chest: 100, waist: 90 },
+      { logged_at: daysAgo(30), chest: 103, waist: 87 },
+      { logged_at: daysAgo(1), chest: 106, waist: 84, neck: 38 },
+    ];
+    render(<MeasurementTrendCard tapeUnit="cm" />);
+
+    const chestRowEl = await screen.findByTestId('measurement-trend-row-chest');
+    expect(chestRowEl).toHaveTextContent('Chest');
+    expect(chestRowEl).toHaveTextContent('Rising');
+    expect(chestRowEl).toHaveTextContent('106.0 cm');
+    expect(chestRowEl).toHaveTextContent('cm/mo');
+    expect(chestRowEl).toHaveTextContent('3 entries');
+
+    // Waist is shrinking → labeled Down (improvement coloring is CSS-only).
+    expect(screen.getByTestId('measurement-trend-row-waist')).toHaveTextContent('Down');
+
+    // One neck entry → no fitted trend yet.
+    const neckRowEl = screen.getByTestId('measurement-trend-row-neck');
+    expect(neckRowEl).toHaveTextContent('Building');
+    expect(neckRowEl).toHaveTextContent('1 entry');
+
+    // Tapping a row selects it for the detail chart.
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId('measurement-trend-row-waist'));
+    expect(screen.getByText('Waist detail')).toBeInTheDocument();
   });
 });
