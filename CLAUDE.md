@@ -47,7 +47,7 @@ HyperTrack is a science-based hypertrophy training app with intelligent auto-reg
 /components            # React components
   /analytics           # Charts (E1RMGraph, VolumeChart, FFMIGauge, WeightGraph)
   /coaching            # AI coaching UI (ImbalanceAlert, PercentileChart, StrengthLevelBadge)
-  /dashboard           # Dashboard cards (ActivityCard, CardioTracker, MuscleRecoveryCard)
+  /dashboard           # Dashboard cards (ActivityCard, CardioTracker, BloodPressureCard)
   /exercises           # Exercise management (CreateCustomExercise, FormCuesEditor)
   /nutrition           # Nutrition (MacroCalculator, BarcodeScanner, TDEEDashboard)
   /providers           # React providers (ServiceWorker, NativeAppBehavior, SplashProvider)

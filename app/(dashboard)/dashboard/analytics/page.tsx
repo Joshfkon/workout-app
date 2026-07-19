@@ -143,16 +143,8 @@ const HydrationTracker = dynamic(
   () => import('@/components/dashboard/HydrationTracker').then(m => m.HydrationTracker),
   { ssr: false, loading: () => <div className="h-40 animate-pulse bg-surface-700 rounded-xl" /> }
 );
-const CardioTracker = dynamic(
-  () => import('@/components/dashboard/CardioTracker').then(m => m.CardioTracker),
-  { ssr: false, loading: () => <div className="h-40 animate-pulse bg-surface-700 rounded-xl" /> }
-);
 const BodyTargets = dynamic(
   () => import('@/components/dashboard/BodyTargets').then(m => m.BodyTargets),
-  { ssr: false, loading: () => <div className="h-40 animate-pulse bg-surface-700 rounded-xl" /> }
-);
-const MuscleRecoveryCard = dynamic(
-  () => import('@/components/dashboard/MuscleRecoveryCard').then(m => m.MuscleRecoveryCard),
   { ssr: false, loading: () => <div className="h-40 animate-pulse bg-surface-700 rounded-xl" /> }
 );
 const BloodPressureCard = dynamic(
@@ -1865,12 +1857,10 @@ function AnalyticsPageContent() {
         </div>
       )}
 
-      {/* Wellness Tab */}
+      {/* Wellness Tab. Muscle recovery lives on the Train page (its Recovery
+          section) — no duplicate card here. */}
       {activeTab === 'wellness' && (
         <div className="space-y-6">
-          {/* Muscle recovery — shared component (map + rows), unchanged. */}
-          <MuscleRecoveryCard />
-
           {/* ONE Wellness Trends card: a single chart with metric chips
               (sleep / soreness / energy / mood up front, the rest under
               "More"), plus a 2-col sparkline summary grid. Metrics with no
@@ -1888,9 +1878,7 @@ function AnalyticsPageContent() {
 
           {/* ONE "Today" card consolidating steps/activity (HealthKit-aware),
               a SINGLE hydration tracker (one unit honoring the user's pref),
-              and cardio quick-log. The duplicate ml Hydration graph card was
-              deleted; logging stays one tap away instead of four input cards
-              leading the tab. */}
+              and blood pressure. Cardio logging moved to the Train page. */}
           {userId && (
             <div className="space-y-3" data-testid="wellness-today">
               <h2 className="text-[15px] font-medium text-surface-100">Today</h2>
@@ -1898,14 +1886,6 @@ function AnalyticsPageContent() {
                 <ActivityCard userId={userId} />
                 <HydrationTracker userId={userId} unit={units === 'kg' ? 'ml' : 'oz'} />
                 <BloodPressureCard />
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Cardio Log</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <CardioTracker userId={userId} />
-                  </CardContent>
-                </Card>
               </div>
             </div>
           )}

@@ -79,6 +79,11 @@ const SleepQuickLog = dynamic(
   { ssr: false, loading: () => <CardSkeleton /> }
 );
 
+const LogBloodPressureModal = dynamic(
+  () => import('@/components/dashboard/LogBloodPressureModal').then(mod => ({ default: mod.LogBloodPressureModal })),
+  { ssr: false }
+);
+
 // Static import (item 6): AtrophyRiskAlert is the dashboard's LCP element.
 // As a next/dynamic component it was code-split, and during hydration the
 // dynamic boundary flashed its `loading` skeleton over the SSR'd card until
@@ -281,7 +286,7 @@ function getWorkoutForDay(
   return { ...schedule[workoutIndex], dayNumber: dayIndex + 1 };
 }
 
-type QuickLogModal = 'weight' | 'water' | 'food' | 'cardio' | 'checkin' | 'sleep';
+type QuickLogModal = 'weight' | 'water' | 'food' | 'cardio' | 'checkin' | 'sleep' | 'bp';
 
 export function DashboardClient({ initialData }: DashboardClientProps) {
   // If we have server-fetched initialData, skip loading state entirely
@@ -1462,6 +1467,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         onLogWater={userId ? () => setActiveModal('water') : undefined}
         onLogFood={() => setActiveModal('food')}
         onLogCardio={showCardio && userId ? () => setActiveModal('cardio') : undefined}
+        onLogBloodPressure={userId ? () => setActiveModal('bp') : undefined}
       />
 
       {/* Quick-log modals (content lazy-loads on first open) */}
@@ -1502,6 +1508,12 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         <Modal isOpen onClose={() => setActiveModal(null)} title="Log sleep">
           <SleepQuickLog onSaved={() => setActiveModal(null)} />
         </Modal>
+      )}
+
+      {/* LogBloodPressureModal renders its own Modal shell (and closes
+          itself after a save). */}
+      {activeModal === 'bp' && userId && (
+        <LogBloodPressureModal isOpen onClose={() => setActiveModal(null)} />
       )}
 
       {activeModal === 'checkin' && userId && (
