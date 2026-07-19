@@ -41,7 +41,9 @@ let mockMutations: Array<{
 jest.mock('@/lib/supabase/client', () => ({
   createUntypedClient: () => ({
     auth: {
-      getUser: async () => ({ data: { user: { id: 'user-1' } } }),
+      // The card resolves identity from the locally persisted session
+      // (getLocalUserId → getSession), never a getUser() network round trip.
+      getSession: async () => ({ data: { session: { user: { id: 'user-1' } } } }),
     },
     from: () => ({
       select: () => {

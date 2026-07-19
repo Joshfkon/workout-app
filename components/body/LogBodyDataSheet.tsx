@@ -21,6 +21,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { getLocalUserId } from '@/lib/supabase/authState';
 import { BottomSheet } from '@/components/workout/BottomSheet';
 import { SegmentedControl } from '@/components/workout/SegmentedControl';
 import {
@@ -118,12 +119,12 @@ export function LogBodyDataSheet({
   useEffect(() => {
     if (!isOpen) return;
     async function fetchPrevious() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      const userId = await getLocalUserId(supabase);
+      if (!userId) return;
       const { data } = await supabase
         .from('body_measurements')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .order('logged_at', { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -185,15 +186,19 @@ export function LogBodyDataSheet({
     setIsSaving(true);
     setError(null);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not signed in');
+      // Local session read only — `getUser()` hits the auth server and
+      // returns a null user on any network blip, which used to surface as a
+      // bogus "Not signed in" for a logged-in user on a flaky connection.
+      // RLS still enforces the token server-side on the write itself.
+      const userId = await getLocalUserId(supabase);
+      if (!userId) throw new Error('Not signed in');
 
       if (segment === 'weight') {
         const weight = parseFloat(weightValue);
         if (!isFinite(weight) || weight <= 0 || weight >= 1500) {
           throw new Error('Enter a valid weight.');
         }
-        await saveWeightLogEntry(supabase, user.id, {
+        await saveWeightLogEntry(supabase, userId, {
           weight,
           unit: preferredUnit,
           date: weightDate,
@@ -209,7 +214,7 @@ export function LogBodyDataSheet({
         if (Object.keys(valuesCm).length === 0) {
           throw new Error('Enter at least one measurement.');
         }
-        await saveBodyMeasurements(supabase, user.id, measureDate, valuesCm);
+        await saveBodyMeasurements(supabase, userId, measureDate, valuesCm);
         setMeasureValues({});
         onSaved?.({ kind: 'measurements', date: measureDate });
       } else {
@@ -224,7 +229,7 @@ export function LogBodyDataSheet({
 
         const toKg = (v: number) => inputWeightToKg(v, preferredUnit);
         const boneDisplay = parseFloat(boneMass);
-        await saveDexaScan(supabase, user.id, {
+        await saveDexaScan(supabase, userId, {
           scanDate,
           weightKg: toKg(weightDisplay),
           leanMassKg: toKg(leanDisplay),

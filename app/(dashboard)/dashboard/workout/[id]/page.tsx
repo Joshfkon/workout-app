@@ -72,6 +72,7 @@ import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaR
 import type { SessionMuscleFeedbackEntry, SessionSummarySubmitData } from '@/components/workout/SessionSummary';
 import type { MuscleSorenessRatings } from '@/components/workout/ReadinessCheckIn';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { getLocalUserId } from '@/lib/supabase/authState';
 import { generateWarmupProtocol, isMuscleWarmedUp } from '@/services/progressionEngine';
 import { MUSCLE_GROUPS, muscleMatchesGroup, rirToRpe, rpeToRir, STANDARD_MUSCLE_DISPLAY_NAMES } from '@/types/schema';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
@@ -3948,14 +3949,16 @@ export default function WorkoutPage() {
 
     try {
       const supabase = createUntypedClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not signed in');
+      // Local session read — getUser() hits the network and reads a blip as
+      // "logged out"; RLS still enforces the token on the queries themselves.
+      const userId = await getLocalUserId(supabase);
+      if (!userId) throw new Error('Not signed in');
 
       // Most recently completed session other than this one
       const { data: lastSession, error: lastSessionError } = await supabase
         .from('workout_sessions')
         .select('id')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .not('completed_at', 'is', null)
         .neq('id', sessionId)
         .order('completed_at', { ascending: false })

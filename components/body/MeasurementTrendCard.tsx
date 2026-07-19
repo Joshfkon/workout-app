@@ -24,6 +24,7 @@ import {
   Tooltip,
 } from 'recharts';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { getLocalUserId } from '@/lib/supabase/authState';
 import { Card, CardHeader, CardTitle, CardContent, Badge } from '@/components/ui';
 import {
   MEASUREMENT_FIELDS,
@@ -148,9 +149,11 @@ function SiteEntriesEditor({
     setMutateError(null);
     try {
       const supabase = createUntypedClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not signed in');
-      await fn(user.id);
+      // Local session read — getUser() hits the network and reads a blip as
+      // "logged out"; RLS still verifies the token on the write itself.
+      const userId = await getLocalUserId(supabase);
+      if (!userId) throw new Error('Not signed in');
+      await fn(userId);
       setEditingDate(null);
       setConfirmDeleteDate(null);
       onChanged();
@@ -333,14 +336,14 @@ export function MeasurementTrendCard({
     async function fetchAll() {
       try {
         const supabase = createUntypedClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
+        const userId = await getLocalUserId(supabase);
+        if (!userId) return;
         // Full history — the range selector filters client-side so "All"
         // and shorter windows never need a refetch.
         const { data } = await supabase
           .from('body_measurements')
           .select('*')
-          .eq('user_id', user.id)
+          .eq('user_id', userId)
           .order('logged_at', { ascending: true });
         setRows((data ?? []) as MeasurementRow[]);
       } catch (err) {
