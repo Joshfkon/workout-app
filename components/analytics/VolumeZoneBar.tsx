@@ -6,6 +6,7 @@ import {
   zoneBandLabel,
   type VolumeRow,
 } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
+import { formatEffectiveVolume } from '@/services/effectiveVolume';
 
 /**
  * Volume-surface row CONTENT for the shared MuscleGroupList: the name + count
@@ -42,7 +43,9 @@ export function BarTrack({ row }: { row: VolumeRow }) {
   );
 }
 
-/** Coarse-row content: "Chest    12 · zone 8–22" over the zone bar. */
+/** Coarse-row content: "Chest    14.2 eff / 18 · zone 8–22" over the zone bar.
+ *  Effective Volume (RIR-weighted) is the primary number; the raw set count
+ *  rides secondary. Zone/bar math stays on raw sets. */
 export function VolumeRowContent({ row }: { row: VolumeRow }) {
   return (
     <>
@@ -50,9 +53,9 @@ export function VolumeRowContent({ row }: { row: VolumeRow }) {
         <span className="font-medium text-surface-200">{row.displayName}</span>
         <span className="text-sm tabular-nums flex-shrink-0">
           <span className={`font-semibold ${zoneTextClass(row.zone, row.sets)}`} data-testid={`volume-sets-${row.muscle}`}>
-            {row.sets}
+            {formatEffectiveVolume(row.effectiveSets)}
           </span>
-          <span className="text-surface-500"> · {zoneBandLabel(row.band)}</span>
+          <span className="text-surface-500"> eff / {row.sets} · {zoneBandLabel(row.band)}</span>
         </span>
       </div>
       <BarTrack row={row} />
@@ -68,9 +71,9 @@ export function VolumeChildContent({ child }: { child: VolumeRow }) {
         <span className="text-xs text-surface-400">{child.displayName}</span>
         <span className="text-xs tabular-nums">
           <span className={zoneTextClass(child.zone, child.sets)} data-testid={`volume-sets-${child.muscle}`}>
-            {child.sets}
+            {formatEffectiveVolume(child.effectiveSets)}
           </span>
-          <span className="text-surface-600"> · {zoneBandLabel(child.band)}</span>
+          <span className="text-surface-600"> eff / {child.sets} · {zoneBandLabel(child.band)}</span>
         </span>
       </div>
       <BarTrack row={child} />

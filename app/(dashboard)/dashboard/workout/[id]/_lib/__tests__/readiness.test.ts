@@ -15,7 +15,7 @@ import { COARSE_MUSCLES, type MuscleVolumeStats } from '@/app/(dashboard)/dashbo
 const NOW = new Date('2026-07-11T12:00:00.000Z');
 
 function stat(muscle: string, sets: number): MuscleVolumeStats {
-  return { muscle, sets, target: 0, status: 'optimal', exercises: [{ id: muscle, name: `${muscle} ex`, sets }] };
+  return { muscle, sets, effectiveSets: sets, target: 0, status: 'optimal', exercises: [{ id: muscle, name: `${muscle} ex`, sets }] };
 }
 
 function session(

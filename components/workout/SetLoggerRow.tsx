@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useId, useMemo, useState } from 'react';
-import { IconBarbell, IconMinus, IconPlus, IconMessagePlus, IconBone } from '@tabler/icons-react';
+import { IconBarbell, IconMinus, IconPlus, IconMessagePlus } from '@tabler/icons-react';
 import { BottomSheet } from './BottomSheet';
 import { FormRatingSelector } from './FormRatingSelector';
 import { JointPainPicker } from './FeedbackChips';
@@ -36,7 +36,7 @@ interface SetLoggerRowProps {
   onRepsChange: (value: string) => void;
   /**
    * Prescribed target RIR for this set (calibration/readiness adjusted).
-   * Pre-selects the matching RIR chip (clamped to the 0-3 chip range).
+   * Pre-selects the matching RIR chip (clamped to the 0-4 chip range).
    */
   targetRir: number;
   unit?: WeightUnit;
@@ -69,13 +69,22 @@ interface SetLoggerRowProps {
   onPlateCalculatorOpen?: () => void;
 }
 
-/** Clamp a prescribed RIR to the 0-3 chip range. */
+/** Clamp a prescribed RIR to the 0-4 chip range. */
 function clampToChip(rir: number): RepsInTank {
   const rounded = Math.round(rir);
-  return Math.max(0, Math.min(3, Number.isFinite(rounded) ? rounded : 2)) as RepsInTank;
+  return Math.max(0, Math.min(4, Number.isFinite(rounded) ? rounded : 2)) as RepsInTank;
 }
 
-const RIR_CHIPS: RepsInTank[] = [3, 2, 1, 0];
+const RIR_CHIPS: RepsInTank[] = [4, 3, 2, 1, 0];
+
+/** Chip face text — RIR 4 renders as "4+" (stored as integer 4). */
+const RIR_CHIP_TEXT: Record<RepsInTank, string> = {
+  4: '4+',
+  3: '3',
+  2: '2',
+  1: '1',
+  0: '0',
+};
 
 /** Compact neutral summary line for a logged discomfort, with Remove. */
 function DiscomfortSummaryRow({
@@ -105,7 +114,7 @@ function DiscomfortSummaryRow({
 
 /** Effort labels under the RIR numbers (matches the set-feedback semantics). */
 const RIR_LABELS: Record<RepsInTank, string> = {
-  4: 'easy', // not rendered as a chip (chips clamp to 0-3) but RepsInTank includes it
+  4: 'cruise',
   3: 'easy',
   2: 'good',
   1: 'hard',
@@ -115,9 +124,9 @@ const RIR_LABELS: Record<RepsInTank, string> = {
 /**
  * One-tap set logger row (replaces the SetInputRow → SetFeedbackCard
  * two-phase flow). Weight/reps steppers pre-filled from the suggestion, RIR
- * chips pre-selected to the prescribed target — accepting the suggestion is
- * exactly one tap on "Log set". Optional form/discomfort/note live behind
- * the note icon's bottom sheet.
+ * chips (4+/3/2/1/0) pre-selected to the prescribed target — accepting the
+ * suggestion is exactly one tap on "Log set". Optional form/injury/note live
+ * behind the note icon's bottom sheet.
  */
 export function SetLoggerRow({
   setNumber,
@@ -139,7 +148,6 @@ export function SetLoggerRow({
   const [selectedRir, setSelectedRir] = useState<RepsInTank>(() => clampToChip(targetRir));
   const [editingField, setEditingField] = useState<'weight' | 'reps' | null>(null);
   const [showFeedbackSheet, setShowFeedbackSheet] = useState(false);
-  const [showJointPicker, setShowJointPicker] = useState(false);
   const [showSheetDiscomfortPicker, setShowSheetDiscomfortPicker] = useState(false);
   const [form, setForm] = useState<FormRating | null>(null);
   const [discomfort, setDiscomfort] = useState<SetDiscomfort | undefined>(undefined);
@@ -156,7 +164,6 @@ export function SetLoggerRow({
     setForm(null);
     setDiscomfort(undefined);
     setNote('');
-    setShowJointPicker(false);
     setShowSheetDiscomfortPicker(false);
   }, [setNumber]);
 
@@ -416,13 +423,13 @@ export function SetLoggerRow({
             type="button"
             onClick={() => setSelectedRir(chip)}
             disabled={disabled}
-            aria-label={`${chip} reps in reserve (${RIR_LABELS[chip]})`}
+            aria-label={`${RIR_CHIP_TEXT[chip]} reps in reserve (${RIR_LABELS[chip]})`}
             aria-pressed={selectedRir === chip}
             className={`${SELECTOR_CHIP_BASE} ${
               selectedRir === chip ? SELECTOR_CHIP_SELECTED : SELECTOR_CHIP_IDLE
             }`}
           >
-            <span className="text-[16px] font-semibold leading-tight">{chip}</span>
+            <span className="text-[16px] font-semibold leading-tight">{RIR_CHIP_TEXT[chip]}</span>
             <span className={`text-[10px] leading-tight ${selectedRir === chip ? 'text-white/80' : 'text-surface-500'}`}>
               {RIR_LABELS[chip]}
             </span>
@@ -430,61 +437,26 @@ export function SetLoggerRow({
         ))}
         <button
           type="button"
-          onClick={() => setShowJointPicker((prev) => !prev)}
+          onClick={() => setShowFeedbackSheet(true)}
           disabled={disabled}
-          aria-label="Log joint pain"
-          data-testid="joint-pain-trigger"
+          aria-label="Add set feedback"
           className={`relative min-w-[52px] min-h-[52px] rounded-xl flex items-center justify-center transition-colors ${
             discomfort
               ? 'text-danger-400 bg-danger-500/10'
               : 'text-surface-400 hover:text-surface-200 bg-surface-800/50 hover:bg-surface-800'
           }`}
         >
-          <IconBone size={20} />
-          {discomfort && (
-            <span
-              className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-danger-400"
-              aria-hidden="true"
-            />
-          )}
-        </button>
-        <button
-          type="button"
-          onClick={() => setShowFeedbackSheet(true)}
-          disabled={disabled}
-          aria-label="Add set feedback"
-          className="relative min-w-[52px] min-h-[52px] rounded-xl flex items-center justify-center text-surface-400 hover:text-surface-200 bg-surface-800/50 hover:bg-surface-800 transition-colors"
-        >
           <IconMessagePlus size={20} />
           {hasSheetFeedback && (
             <span
-              className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-primary-400"
+              className={`absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full ${
+                discomfort ? 'bg-danger-400' : 'bg-primary-400'
+              }`}
               aria-hidden="true"
             />
           )}
         </button>
       </div>
-
-      {/* Inline joint pain picker — two taps (joint, then severity), no modal.
-          The pick rides feedback.discomfort and is saved with the set. */}
-      {showJointPicker && !discomfort && (
-        <JointPainPicker
-          onPick={(joint, severity) => {
-            setDiscomfort({ bodyPart: jointToBodyPart(joint), severity });
-            setShowJointPicker(false);
-          }}
-          onCancel={() => setShowJointPicker(false)}
-        />
-      )}
-      {showJointPicker && discomfort && (
-        <DiscomfortSummaryRow
-          discomfort={discomfort}
-          onRemove={() => {
-            setDiscomfort(undefined);
-            setShowJointPicker(false);
-          }}
-        />
-      )}
 
       {/* Row 3: one-tap log */}
       <button
@@ -508,11 +480,14 @@ export function SetLoggerRow({
         <div className="space-y-4">
           <FormRatingSelector value={form} onChange={setForm} disabled={disabled} />
 
-          {/* Discomfort — same two-tap joint picker as the inline row,
-              collapsed behind a small neutral row (nothing is wrong, so no
-              warning styling). */}
+          {/* Injury / discomfort — the two-tap joint picker (this sheet is now
+              its only entry point; the old bone-icon shortcut on the chip row
+              was removed). The pick rides feedback.discomfort and is saved
+              with the set, feeding joint_pain_events → deload advisor and
+              exercise pain-pattern notices exactly as before. Collapsed behind
+              a small neutral row (nothing is wrong, so no warning styling). */}
           <div className="space-y-2">
-            <span className="block text-sm font-medium text-surface-300">Discomfort</span>
+            <span className="block text-sm font-medium text-surface-300">Injury / discomfort</span>
             {discomfort ? (
               <DiscomfortSummaryRow
                 discomfort={discomfort}
@@ -531,10 +506,11 @@ export function SetLoggerRow({
                 type="button"
                 onClick={() => setShowSheetDiscomfortPicker(true)}
                 disabled={disabled}
+                data-testid="joint-pain-trigger"
                 className="w-full min-h-[44px] flex items-center gap-1.5 rounded-lg bg-surface-800/50 hover:bg-surface-800 px-3 text-[13px] text-surface-400 hover:text-surface-200 transition-colors"
               >
                 <IconPlus size={14} aria-hidden="true" />
-                Log discomfort (optional)
+                Log injury or discomfort (optional)
               </button>
             )}
           </div>

@@ -32,6 +32,7 @@ import {
   READINESS_READY_THRESHOLD,
 } from '@/app/(dashboard)/dashboard/workout/[id]/_lib/readiness';
 import type { WorkoutMuscleVolumeRow } from '@/hooks/useWorkoutMuscleVolume';
+import { formatEffectiveVolume } from '@/services/effectiveVolume';
 
 interface WorkoutVolumeStripProps {
   rows: WorkoutMuscleVolumeRow[];
@@ -149,7 +150,7 @@ export function WorkoutVolumeStrip({ rows, isLoading, onOpenDetail }: WorkoutVol
               onClick={onOpenDetail}
               className="flex-shrink-0 snap-start w-[104px] text-left rounded-lg border border-surface-800 bg-surface-900/60 px-2.5 py-2 hover:border-surface-700 transition-colors"
               data-testid={`workout-volume-chip-${row.muscle}`}
-              aria-label={`${row.displayName}: ${row.sets} weekly sets, ${zoneBandLabel(row.band)}, ${
+              aria-label={`${row.displayName}: ${formatEffectiveVolume(row.effectiveSets)} effective of ${row.sets} weekly sets, ${zoneBandLabel(row.band)}, ${
                 row.readyInHours <= 0 ? 'ready' : `ready in ${readyInLabel(row.readyInHours)}`
               }`}
             >
@@ -171,7 +172,9 @@ export function WorkoutVolumeStrip({ rows, isLoading, onOpenDetail }: WorkoutVol
                     className={`text-sm font-semibold tabular-nums ${zoneTextClass(row.zone, row.sets)}`}
                     data-testid={`workout-volume-sets-${row.muscle}`}
                   >
-                    {row.sets}
+                    {/* Effective (RIR-weighted) primary, raw secondary */}
+                    {formatEffectiveVolume(row.effectiveSets)}
+                    <span className="text-[10px] font-normal text-surface-500">/{row.sets}</span>
                   </span>
                 )}
               </div>

@@ -39,7 +39,15 @@ export interface MuscleVolumeData {
   // Volume metrics
   totalSets: number;
   workingSets: number;           // Excluding warmups
-  effectiveSets: number;         // Sets at RPE 7+ with clean/some_breakdown form
+  effectiveSets: number;         // Sets at RPE 7+ with clean/some_breakdown form (legacy binary count)
+  /**
+   * RIR-weighted "Effective Volume" (Σ EFFECTIVE_VOLUME_WEIGHTS[rir] over the
+   * same working sets — see services/effectiveVolume). Optional: rows rebuilt
+   * from stored weekly aggregates have no per-set RIR and omit it; consumers
+   * fall back to raw workingSets. Distinct from the legacy binary
+   * `effectiveSets` above, which is unchanged.
+   */
+  effectiveVolumeSets?: number;
 
   // Performance metrics
   totalVolume: number;           // Sets × reps × weight
@@ -1131,13 +1139,21 @@ export function analyzeMesocycle(
     const avgWeeklySets = average(weeklyData.map(w => w.workingSets));
     const totalSets = sum(weeklyData.map(w => w.workingSets));
     const effectiveSets = sum(weeklyData.map(w => w.effectiveSets));
+    // Hypertrophy targeting consumes RIR-weighted Effective Volume when the
+    // week carried per-set RIR data; aggregate-only weeks fall back to raw
+    // working sets (identical to the pre-weighting behavior). This is the
+    // number compared against the learned MEV/MRV tolerance below — readiness
+    // and fatigue models are NOT on this path and keep consuming raw volume.
+    const avgWeeklyStimulus = average(
+      weeklyData.map(w => w.effectiveVolumeSets ?? w.workingSets)
+    );
 
     muscleVolumes[muscleGroup] = { avgWeeklySets, totalSets, effectiveSets };
 
     if (weeklyData.length < 3) {
       muscleOutcomes[muscleGroup] = {
         muscle: muscleGroup,
-        weeklySets: avgWeeklySets,
+        weeklySets: avgWeeklyStimulus,
         progressionRate: 0,
         progressionTrend: 'maintaining',
         rirDrift: 0,
@@ -1176,14 +1192,14 @@ export function analyzeMesocycle(
       },
       rirDrift,
       formTrend,
-      avgWeeklySets,
+      avgWeeklyStimulus,
       tolerance,
       subjectiveByMuscle?.[muscleGroup]
     );
 
     muscleOutcomes[muscleGroup] = {
       muscle: muscleGroup,
-      weeklySets: avgWeeklySets,
+      weeklySets: avgWeeklyStimulus,
       progressionRate: 0, // Would be calculated from actual progression data
       progressionTrend,
       rirDrift: rirDrift.drift,

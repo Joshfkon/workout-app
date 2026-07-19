@@ -7,6 +7,7 @@ import {
   coarseMevTiles,
   zoneBandLabel,
 } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
+import { formatEffectiveVolume } from '@/services/effectiveVolume';
 
 /**
  * "This week vs MEV" header for the volume page — the detail view behind the
@@ -33,8 +34,12 @@ export function WeeklyMevSummary() {
       <div className="flex items-center justify-between mb-1">
         <h3 className="font-semibold text-surface-100">This Week vs MEV</h3>
         <span className="text-sm text-surface-300">
-          <span className="font-semibold text-surface-100">{tiles.totalSets}</span>
-          <span className="text-surface-500"> / {tiles.totalTarget} sets</span>
+          {/* Effective Volume (RIR-weighted) is the primary number; the raw
+              set count rides secondary so the user still sees work done. */}
+          <span className="font-semibold text-surface-100">
+            {formatEffectiveVolume(tiles.totalEffectiveSets)} effective
+          </span>
+          <span className="text-surface-500"> / {tiles.totalSets} total sets</span>
         </span>
       </div>
       <p className={`text-xs mb-3 ${tiles.lowCount > 0 ? 'text-warning-400' : 'text-success-400'}`}>
@@ -51,7 +56,7 @@ export function WeeklyMevSummary() {
             >
               {row.displayName}
               <span className="text-warning-400/70">
-                {row.sets} · {zoneBandLabel(row.band)}
+                {formatEffectiveVolume(row.effectiveSets)} eff / {row.sets} · {zoneBandLabel(row.band)}
               </span>
             </span>
           ))}

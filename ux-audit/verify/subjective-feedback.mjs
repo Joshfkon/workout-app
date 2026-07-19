@@ -153,15 +153,19 @@ async function main() {
   assert(!(await sorenessRow.isVisible().catch(() => false)), 'ignored soreness ask dismissed by logging (records null, never re-asked)');
   await page.screenshot({ path: `${out}feedback-2-logged-ignoring.png` });
 
-  // 3. Joint pain: inline two-tap picker on the active row.
+  // 3. Joint pain: two-tap picker inside the note icon's feedback sheet (the
+  //    bone-icon shortcut on the chip row was removed; injury flagging now
+  //    lives in the notes flow).
+  await page.getByRole('button', { name: 'Add set feedback' }).click();
   const jointTrigger = page.getByTestId('joint-pain-trigger');
-  assert(await jointTrigger.isVisible(), 'joint icon present next to the note icon on the set row');
+  assert(await jointTrigger.isVisible(), 'injury/discomfort trigger present inside the feedback sheet');
   await jointTrigger.click();
   const picker = page.getByTestId('joint-pain-picker');
-  assert(await picker.isVisible(), 'inline joint picker (not a modal)');
+  assert(await picker.isVisible(), 'joint picker renders in the sheet');
   await page.getByTestId('joint-chip-knee').click(); // tap 1
   await page.getByTestId('joint-severity-chip-twinge').click(); // tap 2
   assert(!(await picker.isVisible().catch(() => false)), 'two taps total: joint then severity, picker closes');
+  await page.getByRole('button', { name: 'Done' }).click();
   await page.screenshot({ path: `${out}feedback-3-joint-picked.png` });
 
   // 4. Log the final planned set → completed state shows pump/workload chips.

@@ -260,6 +260,23 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
             class="flex items-stretch gap-2"
           >
             <button
+              aria-label="4+ reps in reserve (cruise)"
+              aria-pressed="false"
+              class="flex-1 min-h-[52px] rounded-xl flex flex-col items-center justify-center gap-0 font-medium transition-colors bg-surface-800 text-surface-300 hover:bg-surface-700"
+              type="button"
+            >
+              <span
+                class="text-[16px] font-semibold leading-tight"
+              >
+                4+
+              </span>
+              <span
+                class="text-[10px] leading-tight text-surface-500"
+              >
+                cruise
+              </span>
+            </button>
+            <button
               aria-label="3 reps in reserve (easy)"
               aria-pressed="false"
               class="flex-1 min-h-[52px] rounded-xl flex flex-col items-center justify-center gap-0 font-medium transition-colors bg-surface-800 text-surface-300 hover:bg-surface-700"
@@ -328,31 +345,8 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
               </span>
             </button>
             <button
-              aria-label="Log joint pain"
-              class="relative min-w-[52px] min-h-[52px] rounded-xl flex items-center justify-center transition-colors text-surface-400 hover:text-surface-200 bg-surface-800/50 hover:bg-surface-800"
-              data-testid="joint-pain-trigger"
-              type="button"
-            >
-              <svg
-                class="tabler-icon tabler-icon-bone "
-                fill="none"
-                height="20"
-                stroke="currentColor"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                viewBox="0 0 24 24"
-                width="20"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  d="M15 3a3 3 0 0 1 3 3a3 3 0 1 1 -2.12 5.122l-4.758 4.758a3 3 0 1 1 -5.117 2.297l0 -.177l-.176 0a3 3 0 1 1 2.298 -5.115l4.758 -4.758a3 3 0 0 1 2.12 -5.122l-.005 -.005"
-                />
-              </svg>
-            </button>
-            <button
               aria-label="Add set feedback"
-              class="relative min-w-[52px] min-h-[52px] rounded-xl flex items-center justify-center text-surface-400 hover:text-surface-200 bg-surface-800/50 hover:bg-surface-800 transition-colors"
+              class="relative min-w-[52px] min-h-[52px] rounded-xl flex items-center justify-center transition-colors text-surface-400 hover:text-surface-200 bg-surface-800/50 hover:bg-surface-800"
               type="button"
             >
               <svg

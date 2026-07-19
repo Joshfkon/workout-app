@@ -410,7 +410,7 @@ export async function fetchWeeklyMuscleVolume(userId: string): Promise<WeeklyMus
 
   const { data } = await supabase
     .from('exercise_blocks')
-    .select(`id, exercises (id, name, primary_muscle, secondary_muscles), set_logs (id, is_warmup),
+    .select(`id, exercises (id, name, primary_muscle, secondary_muscles), set_logs (id, is_warmup, feedback),
       workout_sessions!inner (user_id, completed_at, state)`)
     .eq('workout_sessions.user_id', userId)
     .eq('workout_sessions.state', 'completed')

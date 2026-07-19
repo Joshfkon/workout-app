@@ -26,6 +26,7 @@ import {
 import type { MuscleGroup } from '@/types/schema';
 import { MUSCLE_GROUPS, resolveMuscleToStandard } from '@/types/schema';
 import { resolvePrimaryMuscleCredits, SECONDARY_MUSCLE_CREDIT } from '@/services/volumeTracker';
+import { rirFromFeedback, sumEffectiveVolume } from '@/services/effectiveVolume';
 import { STANDARD_TO_COARSE } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 import type {
   ExerciseBlockFull,
@@ -148,10 +149,10 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
           // 0.5x to coarse secondaries, so the learned table relearns on the
           // same counts every other surface displays. effectiveSets / RIR stay
           // primary-attributed (they gauge stimulus quality, not volume).
-          const volumeByMuscle = new Map<MuscleGroup, { totalSets: number; effectiveSets: number; totalRIR: number; rirCount: number }>();
+          const volumeByMuscle = new Map<MuscleGroup, { totalSets: number; effectiveSets: number; weightedSets: number; totalRIR: number; rirCount: number }>();
           const bump = (muscle: MuscleGroup) => {
             if (!volumeByMuscle.has(muscle)) {
-              volumeByMuscle.set(muscle, { totalSets: 0, effectiveSets: 0, totalRIR: 0, rirCount: 0 });
+              volumeByMuscle.set(muscle, { totalSets: 0, effectiveSets: 0, weightedSets: 0, totalRIR: 0, rirCount: 0 });
             }
             return volumeByMuscle.get(muscle)!;
           };
@@ -170,6 +171,13 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
               return rir <= 3 && (form === 'clean' || form === 'some_breakdown');
             }).length;
             const rirValues = workingSets.map((s: SetLogRow) => s.feedback?.repsInTank ?? (s.rpe ? 10 - s.rpe : 2));
+            // RIR-weighted Effective Volume for the same working sets (single
+            // source of truth: services/effectiveVolume). Explicit feedback
+            // RIR only — unknown weighs 1.0 (conservative, warned).
+            const weightedVolume = sumEffectiveVolume(
+              workingSets.map((s: SetLogRow) => rirFromFeedback(s.feedback)),
+              exercise.name ?? exercise.primary_muscle ?? undefined
+            );
 
             // Primary → coarse credit (weighted split for legacy coarse tags).
             const primaryCredits = resolvePrimaryMuscleCredits(exercise.primary_muscle);
@@ -181,12 +189,15 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
               const data = bump(coarse);
               data.totalSets += workingSets.length * weight;
               data.effectiveSets += effective * weight;
+              data.weightedSets += weightedVolume * weight;
               for (const rir of rirValues) { data.totalRIR += rir * weight; data.rirCount += weight; }
               creditedCoarse.add(coarse);
             }
 
             // Secondary → 0.5x coarse credit (volume only), skipping any coarse
-            // group the primary already fed.
+            // group the primary already fed. The weighted Effective Volume gets
+            // the same fractional credit (it is a volume measure, unlike the
+            // primary-attributed stimulus-quality fields).
             for (const secondary of exercise.secondary_muscles || []) {
               const standards = resolveMuscleToStandard(secondary);
               if (standards.length === 0) continue;
@@ -195,7 +206,9 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
                 if (primaryStd.has(std)) continue;
                 const coarse = STANDARD_TO_COARSE[std] as MuscleGroup | undefined;
                 if (!coarse || creditedCoarse.has(coarse)) continue;
-                bump(coarse).totalSets += workingSets.length * per;
+                const data = bump(coarse);
+                data.totalSets += workingSets.length * per;
+                data.weightedSets += weightedVolume * per;
               }
             }
           });
@@ -208,6 +221,7 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
             totalSets: Math.round(data.totalSets),
             workingSets: Math.round(data.totalSets),
             effectiveSets: Math.round(data.effectiveSets),
+            effectiveVolumeSets: Math.round(data.weightedSets * 10) / 10,
             totalVolume: 0,
             averageRIR: data.rirCount > 0 ? data.totalRIR / data.rirCount : 2,
             averageFormScore: 0.8,

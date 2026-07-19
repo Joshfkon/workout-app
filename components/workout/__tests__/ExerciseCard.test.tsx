@@ -1042,7 +1042,7 @@ describe('ExerciseCard', () => {
       await user.click(screen.getByText('Some Breakdown'));
 
       // Discomfort: expand the joint picker — two taps (joint, then severity)
-      await user.click(screen.getByText(/Log discomfort/));
+      await user.click(screen.getByText(/Log injury or discomfort/));
       await user.click(screen.getByTestId('joint-chip-lower_back'));
       await user.click(screen.getByTestId('joint-severity-chip-twinge'));
 

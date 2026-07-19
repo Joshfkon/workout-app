@@ -23,6 +23,7 @@ import {
 } from '@/types/schema';
 import { toStandardMuscleForVolume } from '@/lib/migrations/muscle-groups';
 import { rollingWindowStartISO } from '@/lib/date/localDay';
+import { rirFromFeedback, sumEffectiveVolume } from '@/services/effectiveVolume';
 
 /**
  * The "this week" window for weekly volume: a trailing 7 local days including
@@ -144,6 +145,12 @@ export interface ExerciseVolume {
 export interface MuscleVolumeStats {
   muscle: string;
   sets: number;
+  /**
+   * RIR-weighted "Effective Volume" for the same counted sets (Σ
+   * EFFECTIVE_VOLUME_WEIGHTS[rir]; unknown RIR weighs 1.0). Same warm-up
+   * exclusion and crediting as `sets`; one decimal. `sets` stays raw.
+   */
+  effectiveSets: number;
   target: number;
   status: 'low' | 'optimal' | 'high';
   exercises: ExerciseVolume[];
@@ -151,23 +158,27 @@ export interface MuscleVolumeStats {
 
 export type VolumeAccumulator = Record<
   string,
-  { sets: number; exercises: Map<string, { id: string; name: string; sets: number }> }
+  { sets: number; effectiveSets: number; exercises: Map<string, { id: string; name: string; sets: number }> }
 >;
 
 /** Credit one exercise block's working sets to the accumulator (weighted
- *  primary split + 0.5x secondary credit). */
+ *  primary split + 0.5x secondary credit). `effectiveVolume` is the block's
+ *  RIR-weighted working-set sum (see services/effectiveVolume); callers
+ *  without per-set RIR omit it and the effective tally falls back to raw. */
 export function accumulateExerciseVolume(
   volumeByMuscle: VolumeAccumulator,
   exercise: { id: string; name: string; primary_muscle?: string | null; secondary_muscles?: string[] | null },
-  workingSets: number
+  workingSets: number,
+  effectiveVolume: number = workingSets
 ): void {
   if (!exercise.primary_muscle || workingSets === 0) return;
 
-  const addCredit = (muscle: string, sets: number) => {
+  const addCredit = (muscle: string, sets: number, effective: number) => {
     if (!volumeByMuscle[muscle]) {
-      volumeByMuscle[muscle] = { sets: 0, exercises: new Map() };
+      volumeByMuscle[muscle] = { sets: 0, effectiveSets: 0, exercises: new Map() };
     }
     volumeByMuscle[muscle].sets += sets;
+    volumeByMuscle[muscle].effectiveSets += effective;
     const existing = volumeByMuscle[muscle].exercises.get(exercise.id);
     if (existing) {
       existing.sets += sets;
@@ -179,9 +190,11 @@ export function accumulateExerciseVolume(
   const primaryCredits = resolvePrimaryMuscleCredits(exercise.primary_muscle);
   const primarySet = new Set<string>(primaryCredits.map((c) => c.muscle));
   if (primaryCredits.length > 0) {
-    primaryCredits.forEach(({ muscle, weight }) => addCredit(muscle, workingSets * weight));
+    primaryCredits.forEach(({ muscle, weight }) =>
+      addCredit(muscle, workingSets * weight, effectiveVolume * weight)
+    );
   } else {
-    addCredit(exercise.primary_muscle.toLowerCase(), workingSets);
+    addCredit(exercise.primary_muscle.toLowerCase(), workingSets, effectiveVolume);
   }
 
   (exercise.secondary_muscles || []).forEach((secondary) => {
@@ -190,7 +203,7 @@ export function accumulateExerciseVolume(
     const creditPerMuscle = SECONDARY_MUSCLE_CREDIT / standards.length;
     standards.forEach((standardMuscle) => {
       if (primarySet.has(standardMuscle)) return;
-      addCredit(standardMuscle, workingSets * creditPerMuscle);
+      addCredit(standardMuscle, workingSets * creditPerMuscle, effectiveVolume * creditPerMuscle);
     });
   });
 }
@@ -199,21 +212,25 @@ export function volumeAccumulatorToStats(volumeByMuscle: VolumeAccumulator): Mus
   return Object.entries(volumeByMuscle)
     .map(([muscle, data]) => {
       const sets = Math.round(data.sets);
+      const effectiveSets = Math.round(data.effectiveSets * 10) / 10;
       const target = getMevForMuscle(muscle);
       const status: 'low' | 'optimal' | 'high' = sets < target ? 'low' : sets > target * 1.5 ? 'high' : 'optimal';
       const exercises = Array.from(data.exercises.values())
         .map((ex) => ({ ...ex, sets: Math.round(ex.sets * 10) / 10 }))
         .filter((ex) => ex.sets > 0);
-      return { muscle, sets, target, status, exercises };
+      return { muscle, sets, effectiveSets, target, status, exercises };
     })
     .filter((stat) => stat.sets > 0)
     .sort((a, b) => b.sets - a.sets);
 }
 
-/** Block row shape from the weekly-volume query (both paths use this select). */
+/** Block row shape from the weekly-volume query (both paths use this select).
+ *  `feedback` (the set's JSONB feedback payload carrying repsInTank) is
+ *  optional: paths that select it get real RIR weighting; without it every
+ *  set weighs 1.0 (raw = effective). */
 export interface WeeklyVolumeBlockRow {
   exercises: { id: string; name: string; primary_muscle?: string | null; secondary_muscles?: string[] | null } | null;
-  set_logs: { id: string; is_warmup: boolean | null }[] | null;
+  set_logs: { id: string; is_warmup: boolean | null; feedback?: unknown }[] | null;
 }
 
 /** Full pipeline: rows -> per-muscle weekly stats. */
@@ -222,8 +239,18 @@ export function computeWeeklyMuscleVolume(blocks: WeeklyVolumeBlockRow[]): Muscl
   for (const block of blocks) {
     const exercise = block.exercises;
     if (!exercise) continue;
-    const workingSets = (block.set_logs || []).filter((s) => !s.is_warmup).length;
-    accumulateExerciseVolume(volumeByMuscle, exercise, workingSets);
+    const workingSets = (block.set_logs || []).filter((s) => !s.is_warmup);
+    // Rows whose query doesn't select `feedback` weigh 1.0 per set (raw)
+    // WITHOUT the unknown-RIR warning — the data was never fetched, which is
+    // different from a fetched set that genuinely lacks an RIR report.
+    const hasFeedbackColumn = workingSets.some((s) => 'feedback' in s);
+    const effectiveVolume = hasFeedbackColumn
+      ? sumEffectiveVolume(
+          workingSets.map((s) => rirFromFeedback(s.feedback)),
+          exercise.name
+        )
+      : workingSets.length;
+    accumulateExerciseVolume(volumeByMuscle, exercise, workingSets.length, effectiveVolume);
   }
   return volumeAccumulatorToStats(volumeByMuscle);
 }
@@ -233,6 +260,8 @@ export interface MuscleMevEntry {
   /** Muscle key as reported by the stats (may be legacy) or a standard id. */
   muscle: string;
   sets: number;
+  /** RIR-weighted effective volume for the same sets (raw when RIR unknown). */
+  effectiveSets: number;
   mev: number;
   belowMev: boolean;
   /**
@@ -251,6 +280,8 @@ export interface MuscleMevEntry {
  */
 export interface WeeklyMevSummary {
   totalSets: number;
+  /** RIR-weighted effective volume across all muscles (one decimal). */
+  totalEffectiveSets: number;
   totalTarget: number;
   /** Muscles below MEV: trained-but-low plus completely untrained ones. */
   lowCount: number;
@@ -296,6 +327,8 @@ export function computeWeeklyMevSummary(
   );
 
   const totalSets = muscleVolume.reduce((s, mv) => s + mv.sets, 0);
+  const totalEffectiveSets =
+    Math.round(muscleVolume.reduce((s, mv) => s + mv.effectiveSets, 0) * 10) / 10;
   const totalTarget =
     muscleVolume.reduce((s, mv) => s + mv.target, 0) +
     untrained.reduce((s, m) => s + getMevForMuscle(m), 0);
@@ -305,6 +338,7 @@ export function computeWeeklyMevSummary(
     ...muscleVolume.map((mv) => ({
       muscle: mv.muscle,
       sets: mv.sets,
+      effectiveSets: mv.effectiveSets,
       mev: getMevForMuscle(mv.muscle),
       belowMev: mv.status === 'low',
       exercises: mv.exercises,
@@ -312,13 +346,14 @@ export function computeWeeklyMevSummary(
     ...untrained.map((m) => ({
       muscle: m as string,
       sets: 0,
+      effectiveSets: 0,
       mev: getMevForMuscle(m),
       belowMev: true,
       exercises: [],
     })),
   ].sort((a, b) => Number(b.belowMev) - Number(a.belowMev) || b.sets - a.sets);
 
-  return { totalSets, totalTarget, lowCount, entries };
+  return { totalSets, totalEffectiveSets, totalTarget, lowCount, entries };
 }
 
 /**
@@ -557,6 +592,8 @@ export interface VolumeRow {
   parent: CoarseMuscle | null;
   /** Credited (0.5-secondary) working sets, rounded. */
   sets: number;
+  /** RIR-weighted effective volume for the same sets (one decimal). */
+  effectiveSets: number;
   band: VolumeBand;
   zone: VolumeZone;
   belowMev: boolean;
@@ -587,11 +624,12 @@ export interface BuildVolumeRowsOptions {
 /** Accumulate credited sets + contributing exercises per standard muscle. */
 function setsByStandardMuscle(
   stats: MuscleVolumeStats[]
-): Map<StandardMuscleGroup, { sets: number; exercises: ExerciseVolume[] }> {
-  const out = new Map<StandardMuscleGroup, { sets: number; exercises: ExerciseVolume[] }>();
-  const add = (m: StandardMuscleGroup, sets: number, exercises: ExerciseVolume[]) => {
-    const cur = out.get(m) ?? { sets: 0, exercises: [] };
+): Map<StandardMuscleGroup, { sets: number; effectiveSets: number; exercises: ExerciseVolume[] }> {
+  const out = new Map<StandardMuscleGroup, { sets: number; effectiveSets: number; exercises: ExerciseVolume[] }>();
+  const add = (m: StandardMuscleGroup, sets: number, effectiveSets: number, exercises: ExerciseVolume[]) => {
+    const cur = out.get(m) ?? { sets: 0, effectiveSets: 0, exercises: [] };
     cur.sets += sets;
+    cur.effectiveSets += effectiveSets;
     for (const ex of exercises) {
       const existing = cur.exercises.find((e) => e.id === ex.id);
       if (existing) existing.sets += ex.sets;
@@ -605,7 +643,8 @@ function setsByStandardMuscle(
       : resolveMuscleToStandard(stat.muscle);
     if (standards.length === 0) continue;
     // Split a legacy-keyed stat evenly across the standards it covers.
-    for (const std of standards) add(std, stat.sets / standards.length, stat.exercises);
+    for (const std of standards)
+      add(std, stat.sets / standards.length, stat.effectiveSets / standards.length, stat.exercises);
   }
   return out;
 }
@@ -638,12 +677,14 @@ export function buildVolumeRows(
     );
 
     let coarseSetsRaw = 0;
+    let coarseEffectiveRaw = 0;
     const coarseExercises: ExerciseVolume[] = [];
     const childRows: VolumeRow[] = [];
 
     for (const child of children) {
-      const data = byStd.get(child) ?? { sets: 0, exercises: [] };
+      const data = byStd.get(child) ?? { sets: 0, effectiveSets: 0, exercises: [] };
       coarseSetsRaw += data.sets;
+      coarseEffectiveRaw += data.effectiveSets;
       for (const ex of data.exercises) {
         const existing = coarseExercises.find((e) => e.id === ex.id);
         if (existing) existing.sets = Math.round((existing.sets + ex.sets) * 10) / 10;
@@ -676,6 +717,7 @@ export function buildVolumeRows(
         isChild: true,
         parent: coarse,
         sets: childSets,
+        effectiveSets: Math.round(data.effectiveSets * 10) / 10,
         band: childBand,
         zone: volumeZone(childSets, childBand),
         belowMev: childBelowMev,
@@ -694,6 +736,7 @@ export function buildVolumeRows(
       isChild: false,
       parent: null,
       sets: coarseSets,
+      effectiveSets: Math.round(coarseEffectiveRaw * 10) / 10,
       band,
       zone: volumeZone(coarseSets, band),
       belowMev: coarseSets < band.mev,
@@ -718,19 +761,23 @@ export function buildVolumeRows(
  */
 export interface CoarseMevTiles {
   totalSets: number;
+  /** RIR-weighted effective volume across coarse rows (one decimal). */
+  totalEffectiveSets: number;
   totalTarget: number;
   lowCount: number;
 }
 export function coarseMevTiles(rows: VolumeRow[]): CoarseMevTiles {
   let totalSets = 0;
+  let totalEffectiveSets = 0;
   let totalTarget = 0;
   let lowCount = 0;
   for (const row of rows) {
     totalSets += row.sets;
+    totalEffectiveSets += row.effectiveSets;
     totalTarget += row.band.mev;
     if (row.zone === 'below_mev') lowCount++;
   }
-  return { totalSets, totalTarget, lowCount };
+  return { totalSets, totalEffectiveSets: Math.round(totalEffectiveSets * 10) / 10, totalTarget, lowCount };
 }
 
 /**
