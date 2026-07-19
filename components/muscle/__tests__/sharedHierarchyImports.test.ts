@@ -14,8 +14,6 @@ const SHARED_IMPORT = "@/components/muscle/MuscleGroupList";
 const SURFACES = [
   // Volume page ("This Week's Volume" bars)
   'app/(dashboard)/dashboard/volume/page.tsx',
-  // Analytics Muscle Recovery card
-  'components/dashboard/MuscleRecoveryCard.tsx',
   // In-workout Muscle Readiness sheet (+ empty-workout inline placement)
   'components/workout/MuscleReadinessSheet.tsx',
 ];

@@ -21,9 +21,11 @@
  *      status line (links to /dashboard/volume).
  *   6. Recovery: overall % + ready count, per-muscle bars for recovering
  *      muscles with time remaining, expandable past the first three.
- *   7. Progression: compact summary (tracked vs building-history muscle
+ *   7. Cardio: today's cardio quick-log (moved here from the Progress
+ *      page's Wellness tab — cardio is training).
+ *   8. Progression: compact summary (tracked vs building-history muscle
  *      groups) linking to /dashboard/analytics.
- *   8. Recent workouts: day name · top muscles, date · sets · duration.
+ *   9. Recent workouts: day name · top muscles, date · sets · duration.
  */
 
 import { useEffect, useMemo, useState } from 'react';
@@ -71,6 +73,7 @@ import {
   formatRelativeDay,
 } from '../log/_components/LogPageSections';
 import { BottomSheet } from '@/components/workout/BottomSheet';
+import { CardioTracker } from '@/components/dashboard/CardioTracker';
 import { SuggestedWorkoutSheet } from '@/components/workout/SuggestedWorkoutSheet';
 import { Modal } from '@/components/ui/Modal';
 import {
@@ -233,12 +236,15 @@ export default function TrainPage() {
   const [isDiscarding, setIsDiscarding] = useState(false);
   const [showAllRecovering, setShowAllRecovering] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // For the self-contained cardio quick-log card.
+  const [userId, setUserId] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchAll() {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
+        setUserId(user.id);
 
         const today = getLocalDateString();
         // Same rolling 7-day window as useWeeklyVolume, so the sets and
@@ -928,6 +934,15 @@ export default function TrainPage() {
           </>
         )}
       </div>
+
+      {/* Cardio quick-log (moved here from the Progress page's Wellness
+          tab). Self-contained: fetches and writes today's cardio_log. */}
+      {userId && (
+        <div className="rounded-2xl p-4 bg-surface-900 border border-surface-800">
+          <h3 className="text-[15px] font-semibold text-surface-100 mb-3">Cardio</h3>
+          <CardioTracker userId={userId} />
+        </div>
+      )}
 
       {/* Progression summary — deep-links to the Strength tab's
           per-muscle progression card, not just the top of Progress. */}

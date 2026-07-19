@@ -163,30 +163,39 @@ async function run() {
   await page.screenshot({ path: `${OUT}restructure-body.png`, fullPage: true });
 
   const tabButtons = await page.locator('nav button, div button').allInnerTexts().catch(() => []);
-  const labelsPresent = ['Body', 'Strength', 'Training', 'Wellness'].every((l) =>
+  const labelsPresent = ['Body', 'Strength', 'Wellness'].every((l) =>
     tabButtons.some((t) => t.includes(l)));
-  assert(labelsPresent, 'four tabs present: Body · Strength · Training · Wellness');
+  assert(labelsPresent, 'three tabs present: Body · Strength · Wellness');
   assert(!tabButtons.some((t) => t.trim() === 'Goals'), 'Goals tab removed');
+  assert((await page.locator('[data-testid="analytics-tab-training"]').count()) === 0,
+    'Training tab removed (its content lives on the Train page)');
 
-  const bodyFfmi = numOf(await page.locator('[data-testid="body-ffmi-value"]').first().innerText().catch(() => ''));
-  assert(/\d/.test(bodyFfmi), `Body FFMI stat renders (${bodyFfmi})`);
+  // Body-tab cleanup: the four stat cards (weight/BF/lean/FFMI) and the
+  // inline measurements compare/entry card are gone; entry lives behind the
+  // header "Log measurements" button and per-site trends stay.
+  const statStrip = await page.locator('[data-testid="body-stat-strip"]').count();
+  assert(statStrip === 0, 'stat-card strip (weight/BF/lean/FFMI) removed from Body');
+  const inlineMeasurements = await page.locator('text="Body Measurements"').count();
+  assert(inlineMeasurements === 0, 'inline Body Measurements compare/entry card removed');
+  const logMeasurementsBtn = await page.locator('button:has-text("Log measurements")').count();
+  assert(logMeasurementsBtn >= 1, '"Log measurements" button present in the Body header');
+  assert((await page.locator('text="Measurement Trends"').count()) >= 1,
+    'per-site Measurement Trends card still present');
+  const dexaHistory = await page.locator('text="DEXA scan history"').count();
+  assert(dexaHistory === 0, 'DEXA scan history card removed');
 
   // Range selector must NOT appear on Body (dead control removed).
   const rangeOnBody = await page.locator('[data-testid="analytics-range-selector"]').count();
   assert(rangeOnBody === 0, 'range selector hidden on Body tab');
 
-  // Measurements: outlier chip present, null site hidden (no dash-delta row).
-  const outlierChips = await page.locator('[data-testid^="measurement-outlier-"]').count();
-  assert(outlierChips >= 1, `measurement outlier "check entry" chip present (${outlierChips})`);
-  const dashDeltaText = await page.locator('text=/- (in|cm) ↓/').count();
-  assert(dashDeltaText === 0, 'no dash-delta ("- in ↓NN") rows in the compare grid');
-  const calfVisibleBefore = await page.locator('[data-testid="measurement-missing-left_calf"]').count();
-  assert(calfVisibleBefore === 0, 'null-current site hidden from grid before "Show all"');
-  // Reveal hidden sites.
-  await page.locator('[data-testid="measurements-show-all-toggle"]').first().click().catch(() => {});
-  await page.waitForTimeout(300);
-  const calfVisibleAfter = await page.locator('[data-testid="measurement-missing-left_calf"]').count();
-  assert(calfVisibleAfter >= 1, 'null-current site appears under "Show all" with add affordance');
+  // The "Log measurements" button opens the unified sheet on its
+  // measurements segment.
+  await page.locator('button:has-text("Log measurements")').first().click().catch(() => {});
+  await page.waitForTimeout(600);
+  const sheetMeasureSave = await page.locator('button:has-text("Save measurements")').count();
+  assert(sheetMeasureSave >= 1, 'log sheet opens on the measurements segment');
+  await page.locator('[aria-label="Close"]').first().click().catch(() => {});
+  await page.waitForTimeout(400);
 
   // Proportions & targets card present (Goals content rehomed).
   assert((await page.locator('[data-testid="proportions-targets-card"]').count()) === 1,
@@ -206,23 +215,19 @@ async function run() {
   assert(scoreCards === 1, `strength score card rendered exactly once (${scoreCards})`);
 
   const strengthFfmi = numOf(await page.locator('[data-testid="strength-ffmi-stat"]').first().innerText().catch(() => ''));
-  assert(strengthFfmi === bodyFfmi && /\d/.test(strengthFfmi),
-    `FFMI equal across Body & Strength (Body ${bodyFfmi} == Strength ${strengthFfmi}) and NOT the stale 16.6`);
+  assert(/\d/.test(strengthFfmi), `Strength FFMI stat renders (${strengthFfmi})`);
   assert(strengthFfmi !== '16.6', 'Strength FFMI is the canonical value, not the frozen 16.6');
 
   const rangeOnStrength = await page.locator('[data-testid="analytics-range-selector"]').count();
   assert(rangeOnStrength === 0, 'range selector hidden on Strength tab');
 
-  // ---- Training tab -------------------------------------------------------
-  await clickTab(page, 'training');
-  await page.waitForTimeout(800);
-  await page.screenshot({ path: `${OUT}restructure-training.png`, fullPage: true });
-
-  const rangeOnTraining = await page.locator('[data-testid="analytics-range-selector"]').count();
-  assert(rangeOnTraining >= 1, 'range selector present on Training tab (it scopes this data)');
-  assert((await page.locator('text="Volume vs your targets"').count()) >= 1,
-    'Training shows shared MEV–MRV "Volume vs your targets" (not hardcoded table)');
-  assert((await page.locator('text=/Week 2 of 6/').count()) >= 1, 'mesocycle progress row present on Training');
+  // ---- Retired training deep links ---------------------------------------
+  // ?tab=training / ?tab=volume must fall through to the default Body tab.
+  await page.goto(`${BASE}/dashboard/analytics?tab=training`, { waitUntil: 'domcontentloaded' });
+  await page.locator('[data-testid="analytics-content"]').first().waitFor({ state: 'visible', timeout: 30000 });
+  await page.waitForTimeout(1000);
+  assert((await page.locator('button:has-text("Log measurements")').count()) >= 1,
+    '?tab=training falls through to the Body tab');
 
   // ---- Wellness tab -------------------------------------------------------
   await clickTab(page, 'wellness');
@@ -252,9 +257,9 @@ async function run() {
   await page.goto(`${BASE}/dashboard/analytics?tab=goals&section=body-targets`, { waitUntil: 'domcontentloaded' });
   await page.locator('[data-testid="analytics-content"]').first().waitFor({ state: 'visible', timeout: 30000 });
   await page.waitForTimeout(1200);
-  const bodyStripAfterGoals = await page.locator('[data-testid="body-stat-strip"]').count();
+  const proportionsAfterGoals = await page.locator('[data-testid="proportions-targets-card"]').count();
   const bodyTargetsReachable = await page.locator('#body-targets').count();
-  assert(bodyStripAfterGoals >= 1 && bodyTargetsReachable >= 1,
+  assert(proportionsAfterGoals >= 1 && bodyTargetsReachable >= 1,
     '?tab=goals lands on Body with the targets editor reachable (#body-targets)');
 
   await browser.close();

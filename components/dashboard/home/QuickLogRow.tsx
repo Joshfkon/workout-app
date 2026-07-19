@@ -1,6 +1,6 @@
 'use client';
 
-import { IconScale, IconDroplet, IconSalad, IconRun, type Icon } from '@tabler/icons-react';
+import { IconScale, IconDroplet, IconSalad, IconRun, IconHeartbeat, type Icon } from '@tabler/icons-react';
 
 interface QuickLogRowProps {
   /** Opens the weight-log modal. */
@@ -11,19 +11,22 @@ interface QuickLogRowProps {
   onLogFood: () => void;
   /** Opens the cardio modal; omit to hide (only with an active cardio prescription). */
   onLogCardio?: () => void;
+  /** Opens the blood-pressure modal; omit to hide (needs a signed-in user). */
+  onLogBloodPressure?: () => void;
 }
 
 /**
- * Quick log row — one-tap logging for Weight / Water / Food / Cardio.
+ * Quick log row — one-tap logging for Weight / Water / Food / Cardio / BP.
  * Each button opens a modal wired up by the dashboard (the old scroll-to
  * detail cards were removed from the home page).
  */
-export function QuickLogRow({ onLogWeight, onLogWater, onLogFood, onLogCardio }: QuickLogRowProps) {
+export function QuickLogRow({ onLogWeight, onLogWater, onLogFood, onLogCardio, onLogBloodPressure }: QuickLogRowProps) {
   const actions: { label: string; icon: Icon; iconClass: string; onClick: (() => void) | undefined }[] = [
     { label: 'Water', icon: IconDroplet, iconClass: 'text-primary-400', onClick: onLogWater },
     { label: 'Food', icon: IconSalad, iconClass: 'text-success-400', onClick: onLogFood },
     { label: 'Weight', icon: IconScale, iconClass: 'text-accent-400', onClick: onLogWeight },
     { label: 'Cardio', icon: IconRun, iconClass: 'text-danger-400', onClick: onLogCardio },
+    { label: 'Blood Pressure', icon: IconHeartbeat, iconClass: 'text-danger-300', onClick: onLogBloodPressure },
   ];
   const visible = actions.filter(
     (a): a is (typeof actions)[number] & { onClick: () => void } => !!a.onClick
