@@ -38,7 +38,7 @@ import {
   getStrengthLevelColor,
   generatePercentileSegments
 } from '@/services/coachingEngine';
-import { kgToLbs, inputWeightToKg, roundToIncrement, formatWeight, formatWorkoutDuration, resolveWorkoutDurationSeconds, estimateE1RM, getLocalDateString, muscleDisplayName, cmToIn, inToCm } from '@/lib/utils';
+import { kgToLbs, inputWeightToKg, roundToIncrement, estimateE1RM, getLocalDateString, muscleDisplayName, cmToIn, inToCm } from '@/lib/utils';
 import {
   computeWaistTrend,
   latestWaistTrendIn,
@@ -57,16 +57,6 @@ import { getMuscleGroupProgression } from '@/services/progressionInsights';
 import { MuscleProgressionCard } from '@/components/analytics/MuscleProgressionCard';
 import { ProportionsTargetsCard } from '@/components/analytics/ProportionsTargetsCard';
 import { WellnessTrendsCard } from '@/components/analytics/WellnessTrendsCard';
-import {
-  MuscleGroupList,
-  useMuscleRowExpansion,
-} from '@/components/muscle/MuscleGroupList';
-import { VolumeRowContent, VolumeChildContent } from '@/components/analytics/VolumeZoneBar';
-import { useWeeklyMevSummary } from '@/hooks/useWeeklyMevSummary';
-import {
-  buildVolumeRows,
-  type VolumeRow,
-} from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 import { BodyHubTrends } from '@/components/body/BodyHubTrends';
 import { BodyHubNudges } from '@/components/body/BodyHubNudges';
 import { MeasurementTrendCard } from '@/components/body/MeasurementTrendCard';
@@ -170,24 +160,23 @@ const BloodPressureCard = dynamic(
   { ssr: false, loading: () => <div className="h-40 animate-pulse bg-surface-700 rounded-xl" /> }
 );
 
-// Tab types. The 5-tab layout (Body · Goals · Strength · Volume · Wellness)
-// collapsed to four: Goals dissolved into Body (targets editor + projections)
-// and Volume was renamed Training.
-type TabType = 'body-composition' | 'strength' | 'training' | 'wellness';
+// Tab types. Down to three: Goals dissolved into Body (targets editor +
+// projections) and the Training tab was removed — its workout totals, volume
+// vs targets, and recent-workout content all live on the Train page.
+type TabType = 'body-composition' | 'strength' | 'wellness';
 
 // Valid ?tab= values — tab targeting is a route parameter so any surface
 // (home tiles, notifications, weekly summary) can deep-link a specific tab,
 // e.g. /dashboard/analytics?tab=strength&section=lift-trends.
-const TAB_IDS: readonly TabType[] = ['body-composition', 'strength', 'training', 'wellness'];
+const TAB_IDS: readonly TabType[] = ['body-composition', 'strength', 'wellness'];
 
 function parseTabParam(value: string | null): TabType | null {
   // Back-compat aliases so existing home tiles / notifications / deep links
-  // keep working after the 5→4 restructure:
+  // keep working after the tab restructures:
   //   body  → Body (friendly alias the Home Weight tile links to)
   //   goals → Body (goal-setting + projections moved here)
-  //   volume→ Training (renamed tab)
+  // Retired ids (volume/training) fall through to the default tab.
   if (value === 'body' || value === 'goals') return 'body-composition';
-  if (value === 'volume') return 'training';
   return value && (TAB_IDS as readonly string[]).includes(value) ? (value as TabType) : null;
 }
 
@@ -213,120 +202,6 @@ interface ProgressionRawData {
   goal?: PlateauGoal;
 }
 
-interface WorkoutSummary {
-  id: string;
-  date: string;
-  duration: number;
-  totalSets: number;
-  totalReps: number;
-  totalVolume: number;
-  sessionRpe: number | null;
-}
-
-interface MuscleVolumeData {
-  muscle: string;
-  sets: number;
-  workouts: number;
-  exercises: Array<{
-    id: string;
-    name: string;
-    sets: number;
-    bestE1RM: number;
-  }>;
-}
-
-interface ExercisePerformance {
-  exerciseId: string;
-  exerciseName: string;
-  primaryMuscle: string;
-  bestWeight: number;
-  bestReps: number;
-  estimatedE1RM: number;
-  totalSets: number;
-}
-
-// Strength standards relative to bodyweight (intermediate male, approximate)
-// ONLY for free-weight compound movements with reliable powerlifting/research data
-// Machine exercises are excluded - leverage varies by manufacturer
-// Isolation exercises are excluded - no competitive standards exist
-const STRENGTH_STANDARDS: Record<string, number> = {
-  // Barbell compound movements (most reliable data)
-  'Barbell Back Squat': 1.5,
-  'Back Squat': 1.5,
-  'Squat': 1.5,
-  'Front Squat': 1.2,
-  'Conventional Deadlift': 1.75,
-  'Deadlift': 1.75,
-  'Sumo Deadlift': 1.75,
-  'Romanian Deadlift': 1.2,
-  'RDL': 1.2,
-  'Barbell Bench Press': 1.25,
-  'Bench Press': 1.25,
-  'Flat Bench Press': 1.25,
-  'Incline Barbell Press': 1.0,
-  'Incline Bench Press': 1.0,
-  'Decline Bench Press': 1.3,
-  'Standing Overhead Press': 0.75,
-  'Overhead Press': 0.75,
-  'Military Press': 0.75,
-  'Barbell Row': 1.0,
-  'Bent Over Row': 1.0,
-  'Pendlay Row': 1.0,
-  'Hip Thrust': 1.5,
-  'Barbell Hip Thrust': 1.5,
-  // Dumbbell compound movements (fairly reliable)
-  'Dumbbell Bench Press': 0.35, // Per arm
-  'Dumbbell Incline Press': 0.3, // Per arm
-  'Dumbbell Shoulder Press': 0.25, // Per arm
-  'Dumbbell Row': 0.4, // Per arm
-  // Weighted bodyweight movements
-  'Pull-up': 0.3, // Added weight as % of BW
-  'Chin-up': 0.35,
-  'Dip': 0.4,
-  'Weighted Pull-up': 0.3,
-  'Weighted Dip': 0.4,
-};
-
-// Exercises that should NOT show relative strength (machines, cables, isolation)
-// These have unreliable standards due to equipment variation or lack of data
-function hasReliableStandard(exerciseName: string): boolean {
-  const name = exerciseName.toLowerCase();
-  
-  // Exclude machines - leverage varies by manufacturer
-  if (name.includes('machine') || name.includes('smith') || 
-      name.includes('cable') || name.includes('pec deck') ||
-      name.includes('lat pulldown') || name.includes('pulldown') ||
-      name.includes('leg press') || name.includes('hack squat') ||
-      name.includes('leg extension') || name.includes('leg curl') ||
-      name.includes('chest press') || name.includes('shoulder press machine') ||
-      name.includes('iso-lateral') || name.includes('hammer strength') ||
-      name.includes('cybex') || name.includes('nautilus') ||
-      name.includes('seated row') || name.includes('t-bar')) {
-    return false;
-  }
-  
-  // Exclude isolation movements - no competitive standards
-  if (name.includes('curl') && !name.includes('deadlift') || // Bicep curls, but not RDL
-      name.includes('extension') || name.includes('pushdown') ||
-      name.includes('fly') || name.includes('flye') ||
-      name.includes('raise') || name.includes('lateral') ||
-      name.includes('rear delt') || name.includes('face pull') ||
-      name.includes('shrug') || name.includes('calf') ||
-      name.includes('crunch') || name.includes('ab ')) {
-    return false;
-  }
-  
-  // Check if it's in our standards list
-  return Object.keys(STRENGTH_STANDARDS).some(
-    standard => name.includes(standard.toLowerCase()) || standard.toLowerCase().includes(name)
-  );
-}
-
-// The Training tab's volume section now reads the adaptive MEV–MRV engine
-// (buildVolumeRows over useWeeklyMevSummary) instead of a hardcoded
-// optimal-sets table, so the old OPTIMAL_WEEKLY_VOLUME map and its
-// getWeeksInRange multiplier were retired.
-
 // Get time range label
 function getTimeRangeLabel(range: '7d' | '30d' | '60d' | '6m' | '1y' | 'all'): string {
   switch (range) {
@@ -338,18 +213,6 @@ function getTimeRangeLabel(range: '7d' | '30d' | '60d' | '6m' | '1y' | 'all'): s
     case 'all': return 'all time';
     default: return 'this period';
   }
-}
-
-interface AnalyticsData {
-  totalWorkouts: number;
-  totalSets: number;
-  totalVolume: number;
-  avgWorkoutDuration: number;
-  avgSessionRpe: number;
-  recentWorkouts: WorkoutSummary[];
-  weeklyMuscleVolume: MuscleVolumeData[];
-  topExercises: ExercisePerformance[];
-  currentStreak: number;
 }
 
 // Helper function for percentile bars
@@ -450,23 +313,15 @@ function AnalyticsPageContent() {
   // identical query window, so the tile aggregate and this detail agree).
   const [liftTrendsSummary, setLiftTrendsSummary] = useState<LiftTrendsSummary | null>(null);
 
-  // Analytics state
-  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
-  // Volume-tab fetch lifecycle. The empty state renders ONLY on a successful
-  // fetch that truly found zero workouts in range — a failed fetch gets an
-  // error+retry state instead of masquerading as "No workout data yet".
-  const [analyticsStatus, setAnalyticsStatus] = useState<'loading' | 'error' | 'ready'>('loading');
-  const [analyticsRetryNonce, setAnalyticsRetryNonce] = useState(0);
   // Per-time-range result cache (P1-2) — lives for the page's lifetime.
   const analyticsRangeCacheRef = useRef(
-    new Map<string, { analytics: AnalyticsData; plateauAlerts: Array<{ exerciseId: string; exerciseName: string; result: PlateauDetectionResult }>; progressionRaw: ProgressionRawData | null }>()
+    new Map<string, { plateauAlerts: Array<{ exerciseId: string; exerciseName: string; result: PlateauDetectionResult }>; progressionRaw: ProgressionRawData | null }>()
   );
   const [plateauAlerts, setPlateauAlerts] = useState<Array<{ exerciseId: string; exerciseName: string; result: PlateauDetectionResult }>>([]);
   // Raw inputs for the muscle-group progression card. Classification happens
   // in a render-side memo so it re-runs when the user profile (experience)
   // finishes loading, without refetching workout data.
   const [progressionRaw, setProgressionRaw] = useState<ProgressionRawData | null>(null);
-  const [strengthViewMode, setStrengthViewMode] = useState<'absolute' | 'relative'>('absolute');
 
   // Wellness state
   const [hydrationData, setHydrationData] = useState<Array<{ date: string; totalMl: number }>>([]);
@@ -1072,7 +927,9 @@ function AnalyticsPageContent() {
     fetchWellnessData();
   }, [userId, timeRange]);
 
-  // Fetch workout analytics data.
+  // Fetch workout data for the Strength tab's plateau alerts and
+  // muscle-progression card. (The Training tab this fetch also fed was
+  // removed — its totals/volume/recent-workout views live on the Train page.)
   // P1-2 (perf): results are cached per time range for the page's lifetime —
   // flipping 7d -> 30d -> 7d no longer refetches the whole nested query tree.
   useEffect(() => {
@@ -1080,24 +937,17 @@ function AnalyticsPageContent() {
       try {
         const cached = analyticsRangeCacheRef.current.get(timeRange);
         if (cached) {
-          setAnalytics(cached.analytics);
           setPlateauAlerts(cached.plateauAlerts);
           setProgressionRaw(cached.progressionRaw);
-          setAnalyticsStatus('ready');
           return;
         }
 
-        setAnalyticsStatus('loading');
         const supabase = createUntypedClient();
         // Same auth semantics as the main query: only a confirmed signed-out
         // state bails (the main query's effect redirects to /login); a
-        // transient verify failure is a retryable error, never faux-emptiness.
+        // transient verify failure must not be cached as emptiness.
         const auth = await resolveAuthState(supabase);
-        if (auth.status === 'unauthenticated') return;
-        if (auth.status === 'error') {
-          setAnalyticsStatus('error');
-          return;
-        }
+        if (auth.status !== 'authenticated') return;
         const user = { id: auth.userId };
 
         // Range lower bound at local midnight so a range means whole local
@@ -1191,10 +1041,9 @@ function AnalyticsPageContent() {
           await Promise.all([query, goalPromise, pendingPromise]);
 
         if (error || pendingError) {
-          // A failed fetch is an error state with retry — NEVER rendered as
-          // "no workout data".
+          // A failed fetch must never be cached as "no data" — bail and let
+          // the next mount/range change retry.
           console.error('Failed to fetch analytics:', error ?? pendingError);
-          setAnalyticsStatus('error');
           return;
         }
 
@@ -1208,40 +1057,22 @@ function AnalyticsPageContent() {
 
         if (workoutSessions.length === 0) {
           // Genuinely zero workouts in range (server AND local outbox agree).
-          setAnalytics(null);
           setPlateauAlerts([]);
           setProgressionRaw(null);
-          setAnalyticsStatus('ready');
+          analyticsRangeCacheRef.current.set(timeRange, {
+            plateauAlerts: [],
+            progressionRaw: null,
+          });
           return;
         }
 
-        let totalSets = 0;
-        let totalVolume = 0;
-        let totalRpeSum = 0;
-        let rpeCount = 0;
-        const durations: number[] = [];
-        const muscleVolumeMap = new Map<string, { sets: number; workouts: Set<string>; exercises: Map<string, { id: string; name: string; sets: number; bestE1RM: number }> }>();
-        const exercisePerformanceMap = new Map<string, ExercisePerformance>();
-        // Per-session snapshots per exercise, for plateau detection
+        // Per-session snapshots per exercise (for plateau detection), plus
+        // each exercise's name and primary muscle (for the progression card).
         const snapshotMap = new Map<string, ExercisePerformanceSnapshot[]>();
         const exerciseNameMap = new Map<string, string>();
+        const muscleByExercise = new Map<string, string>();
 
         workoutSessions.forEach((session: any) => {
-          if (session.duration_seconds != null || (session.started_at && session.completed_at)) {
-            durations.push(
-              resolveWorkoutDurationSeconds(
-                session.duration_seconds,
-                session.started_at,
-                session.completed_at
-              )
-            );
-          }
-
-          if (session.session_rpe) {
-            totalRpeSum += session.session_rpe;
-            rpeCount++;
-          }
-
           if (session.exercise_blocks) {
             session.exercise_blocks.forEach((block: any) => {
               if (!block.exercises || !block.set_logs) return;
@@ -1251,52 +1082,7 @@ function AnalyticsPageContent() {
               const exerciseName = block.exercises.name;
 
               const workingSets = block.set_logs.filter((s: any) => !s.is_warmup);
-
-              if (!muscleVolumeMap.has(muscle)) {
-                muscleVolumeMap.set(muscle, { sets: 0, workouts: new Set(), exercises: new Map() });
-              }
-              const muscleData = muscleVolumeMap.get(muscle)!;
-              muscleData.sets += workingSets.length;
-              muscleData.workouts.add(session.id);
-
-              // Track exercises within each muscle group
-              if (!muscleData.exercises.has(exerciseId)) {
-                muscleData.exercises.set(exerciseId, { id: exerciseId, name: exerciseName, sets: 0, bestE1RM: 0 });
-              }
-              const exInMuscle = muscleData.exercises.get(exerciseId)!;
-              exInMuscle.sets += workingSets.length;
-
-              workingSets.forEach((set: any) => {
-                totalSets++;
-                totalVolume += set.weight_kg * set.reps;
-
-                const e1rm = estimateE1RM(set.weight_kg, set.reps);
-                
-                // Update best E1RM for this exercise in muscle group
-                if (e1rm > exInMuscle.bestE1RM) {
-                  exInMuscle.bestE1RM = e1rm;
-                }
-
-                if (!exercisePerformanceMap.has(exerciseId)) {
-                  exercisePerformanceMap.set(exerciseId, {
-                    exerciseId,
-                    exerciseName,
-                    primaryMuscle: muscle,
-                    bestWeight: set.weight_kg,
-                    bestReps: set.reps,
-                    estimatedE1RM: e1rm,
-                    totalSets: 0,
-                  });
-                }
-
-                const exData = exercisePerformanceMap.get(exerciseId)!;
-                exData.totalSets++;
-                if (e1rm > exData.estimatedE1RM) {
-                  exData.estimatedE1RM = e1rm;
-                  exData.bestWeight = set.weight_kg;
-                  exData.bestReps = set.reps;
-                }
-              });
+              if (muscle) muscleByExercise.set(exerciseId, muscle);
 
               // Build a per-session snapshot for this exercise (top set by E1RM)
               // so the plateau detector can analyze E1RM trends over time.
@@ -1360,10 +1146,6 @@ function AnalyticsPageContent() {
 
         // Raw inputs for the muscle-group progression card: per-exercise
         // session snapshots plus each exercise's primary muscle.
-        const muscleByExercise = new Map<string, string>();
-        exercisePerformanceMap.forEach((data, exId) => {
-          if (data.primaryMuscle) muscleByExercise.set(exId, data.primaryMuscle);
-        });
         const progressionRawResult: ProgressionRawData = {
           snapshotsByExercise: snapshotMap,
           muscleByExercise,
@@ -1372,122 +1154,17 @@ function AnalyticsPageContent() {
         };
         setProgressionRaw(progressionRawResult);
 
-        const totalWorkouts = workoutSessions.length;
-        const avgWorkoutDuration = durations.length > 0
-          ? Math.floor(durations.reduce((a, b) => a + b, 0) / durations.length)
-          : 0;
-        const avgSessionRpe = rpeCount > 0
-          ? Math.round((totalRpeSum / rpeCount) * 10) / 10
-          : 0;
-
-        const recentWorkouts: WorkoutSummary[] = workoutSessions.slice(0, 5).map((session: any) => {
-          let sessionSets = 0;
-          let sessionReps = 0;
-          let sessionVolume = 0;
-
-          if (session.exercise_blocks) {
-            session.exercise_blocks.forEach((block: any) => {
-              if (block.set_logs) {
-                block.set_logs.forEach((set: any) => {
-                  if (!set.is_warmup) {
-                    sessionSets++;
-                    sessionReps += set.reps;
-                    sessionVolume += set.weight_kg * set.reps;
-                  }
-                });
-              }
-            });
-          }
-
-          const duration = resolveWorkoutDurationSeconds(
-            session.duration_seconds,
-            session.started_at,
-            session.completed_at
-          );
-
-          return {
-            id: session.id,
-            date: session.completed_at,
-            duration,
-            totalSets: sessionSets,
-            totalReps: sessionReps,
-            totalVolume: sessionVolume,
-            sessionRpe: session.session_rpe,
-          };
-        });
-
-        const weeklyMuscleVolume: MuscleVolumeData[] = Array.from(muscleVolumeMap.entries())
-          .map(([muscle, data]) => ({
-            muscle,
-            sets: data.sets,
-            workouts: data.workouts.size,
-            exercises: Array.from(data.exercises.values())
-              .sort((a, b) => b.sets - a.sets),
-          }))
-          .sort((a, b) => b.sets - a.sets);
-
-        const topExercises = Array.from(exercisePerformanceMap.values())
-          .sort((a, b) => b.estimatedE1RM - a.estimatedE1RM)
-          .slice(0, 8);
-
-        // Calculate streak
-        let currentStreak = 0;
-        if (workoutSessions.length > 0) {
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
-
-          // merge guarantees completed_at is non-null on every returned session
-          const lastWorkoutDate = new Date(workoutSessions[0].completed_at!);
-          lastWorkoutDate.setHours(0, 0, 0, 0);
-
-          const daysSinceLastWorkout = Math.floor((today.getTime() - lastWorkoutDate.getTime()) / (24 * 60 * 60 * 1000));
-
-          if (daysSinceLastWorkout <= 2) {
-            currentStreak = 1;
-
-            for (let i = 1; i < workoutSessions.length; i++) {
-              const prevDate = new Date(workoutSessions[i - 1].completed_at!);
-              const currDate = new Date(workoutSessions[i].completed_at!);
-              prevDate.setHours(0, 0, 0, 0);
-              currDate.setHours(0, 0, 0, 0);
-
-              const gap = Math.floor((prevDate.getTime() - currDate.getTime()) / (24 * 60 * 60 * 1000));
-
-              if (gap <= 3) {
-                currentStreak++;
-              } else {
-                break;
-              }
-            }
-          }
-        }
-
-        const analyticsResult = {
-          totalWorkouts,
-          totalSets,
-          totalVolume,
-          avgWorkoutDuration,
-          avgSessionRpe,
-          recentWorkouts,
-          weeklyMuscleVolume,
-          topExercises,
-          currentStreak,
-        };
-        setAnalytics(analyticsResult);
-        setAnalyticsStatus('ready');
         analyticsRangeCacheRef.current.set(timeRange, {
-          analytics: analyticsResult,
           plateauAlerts: detectedPlateauAlerts,
           progressionRaw: progressionRawResult,
         });
       } catch (error) {
         console.error('Failed to fetch analytics:', error);
-        setAnalyticsStatus('error');
       }
     }
 
     fetchAnalytics();
-  }, [timeRange, analyticsRetryNonce]);
+  }, [timeRange]);
 
   // Muscle-group progression classification (services/progressionInsights).
   // Recomputes when the profile loads so pace is judged against the right
@@ -1506,20 +1183,6 @@ function AnalyticsPageContent() {
       programStartDate: activeMesocycle?.startedAt ?? null,
     });
   }, [progressionRaw, userProfile?.experience, activeMesocycle?.startedAt]);
-
-  // Shared weekly (rolling 7-day) volume for the Training tab's "Volume vs
-  // your targets" section — the SAME hook/counter/band the /volume page and
-  // the Home weekly-volume tile use, so the numbers can never diverge.
-  const { stats: volumeStats, reachable: volumeReachable } = useWeeklyMevSummary();
-  const volumeRows = useMemo(
-    () => buildVolumeRows(volumeStats, volumeReachable),
-    [volumeStats, volumeReachable]
-  );
-  const volumeExpansion = useMuscleRowExpansion('analytics-training', volumeRows);
-  const pinLaggingVolumeChild = useMemo(
-    () => (child: VolumeRow) => child.belowMev && child.reachable,
-    []
-  );
 
   // Calculated values
   const latestScan = scans[0];
@@ -1755,14 +1418,13 @@ function AnalyticsPageContent() {
   const tabs = [
     { id: 'body-composition' as TabType, label: 'Body', icon: '📊' },
     { id: 'strength' as TabType, label: 'Strength', icon: '💪' },
-    { id: 'training' as TabType, label: 'Training', icon: '📈' },
     { id: 'wellness' as TabType, label: 'Wellness', icon: '💚' },
   ];
 
-  // The global time-range selector genuinely scopes only the Training and
-  // Wellness data (workout aggregates + wellness series). On Body and
-  // Strength it was a dead control, so it renders only where it applies.
-  const rangeAppliesToTab = activeTab === 'training' || activeTab === 'wellness';
+  // The global time-range selector genuinely scopes only the Wellness data
+  // (hydration/cardio/check-in series). On Body and Strength it was a dead
+  // control, so it renders only where it applies.
+  const rangeAppliesToTab = activeTab === 'wellness';
 
   const timeRangeSelector = (
     <div className="flex gap-1 bg-surface-800 p-1 rounded-lg flex-wrap" data-testid="analytics-range-selector">
@@ -2198,401 +1860,6 @@ function AnalyticsPageContent() {
               <Button className="mt-6" onClick={() => router.push('/onboarding')}>
                 Start Strength Test
               </Button>
-            </Card>
-          )}
-        </div>
-      )}
-
-      {activeTab === 'training' && (
-        <div className="space-y-6">
-          {/* The range selector (header) genuinely scopes this tab's workout
-              totals — call the active scope out so it's never a silent
-              control. */}
-          <p className="text-xs text-surface-500">
-            Workout totals below are scoped to{' '}
-            <span className="text-surface-300">{getTimeRangeLabel(timeRange)}</span>.
-          </p>
-
-          {/* Mesocycle progress row (moved in from the dissolved Goals tab —
-              it's training state). Its own scope: the current mesocycle. */}
-          {activeMesocycle && (
-            <Card>
-              <CardContent className="py-4">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-primary-500/20 flex items-center justify-center">
-                      <span className="text-primary-400">📅</span>
-                    </div>
-                    <div>
-                      <h3 className="font-medium text-surface-200">{activeMesocycle.name}</h3>
-                      <p className="text-xs text-surface-500">
-                        Week {activeMesocycle.currentWeek} of {activeMesocycle.totalWeeks} · this mesocycle
-                      </p>
-                    </div>
-                  </div>
-                  <Link href="/dashboard/mesocycle">
-                    <Button variant="ghost" size="sm">View →</Button>
-                  </Link>
-                </div>
-                <div className="relative h-2 bg-surface-800 rounded-full overflow-hidden">
-                  <div
-                    className="absolute inset-y-0 left-0 bg-gradient-to-r from-primary-600 to-primary-400 rounded-full transition-all duration-500"
-                    style={{ width: `${(activeMesocycle.currentWeek / activeMesocycle.totalWeeks) * 100}%` }}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {analyticsStatus === 'error' ? (
-            // A failed fetch must never render as authoritative emptiness —
-            // stale/absent data gets an explicit retry, not "No workout data".
-            <Card>
-              <ErrorRetry
-                title="Couldn't load training data"
-                message="Your workouts are safe — we just couldn't load them right now. Check your connection and try again."
-                onRetry={() => setAnalyticsRetryNonce((n) => n + 1)}
-                isRetrying={false}
-              />
-            </Card>
-          ) : analyticsStatus === 'loading' && !analytics ? (
-            // First load only — a range switch keeps the previous range's data
-            // on screen until the new result lands (cached-first doctrine).
-            <div className="space-y-6" data-testid="volume-tab-loading">
-              <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <div key={i} className="h-20 animate-pulse bg-surface-800 rounded-xl" />
-                ))}
-              </div>
-              <div className="grid lg:grid-cols-2 gap-6">
-                <div className="h-64 animate-pulse bg-surface-800 rounded-xl" />
-                <div className="h-64 animate-pulse bg-surface-800 rounded-xl" />
-              </div>
-            </div>
-          ) : analytics && analytics.totalWorkouts > 0 ? (
-            <>
-              {/* Quick Stats */}
-              <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-                <Card className="p-4">
-                  <p className="text-xs text-surface-500 uppercase tracking-wider">Workouts</p>
-                  <p className="text-2xl font-bold text-primary-400 mt-1">{analytics.totalWorkouts}</p>
-                  {analytics.currentStreak > 1 && (
-                    <p className="text-xs text-success-400 mt-1">🔥 {analytics.currentStreak} streak</p>
-                  )}
-                </Card>
-                <Card className="p-4">
-                  <p className="text-xs text-surface-500 uppercase tracking-wider">Total Sets</p>
-                  <p className="text-2xl font-bold text-primary-400 mt-1">{analytics.totalSets}</p>
-                </Card>
-                <Card className="p-4">
-                  <p className="text-xs text-surface-500 uppercase tracking-wider">Volume</p>
-                  <p className="text-2xl font-bold text-primary-400 mt-1">
-                    {(() => {
-                      const vol = units === 'lb' ? kgToLbs(analytics.totalVolume) : analytics.totalVolume;
-                      const unitLabel = units === 'lb' ? 'lbs' : 'kg';
-                      return vol >= 1000 ? `${(vol / 1000).toFixed(1)}k ${unitLabel}` : `${Math.round(vol)} ${unitLabel}`;
-                    })()}
-                  </p>
-                </Card>
-                <Card className="p-4">
-                  <p className="text-xs text-surface-500 uppercase tracking-wider">Avg Duration</p>
-                  <p className="text-2xl font-bold text-primary-400 mt-1">
-                    {formatWorkoutDuration(analytics.avgWorkoutDuration)}
-                  </p>
-                </Card>
-                <Card className="p-4">
-                  <p className="text-xs text-surface-500 uppercase tracking-wider">Avg RPE</p>
-                  <p className="text-2xl font-bold text-primary-400 mt-1">
-                    {analytics.avgSessionRpe > 0 ? analytics.avgSessionRpe : '-'}
-                  </p>
-                </Card>
-              </div>
-
-              <div className="grid lg:grid-cols-2 gap-6">
-                {/* Volume vs your targets — the SHARED adaptive MEV–MRV
-                    hierarchy (same buildVolumeRows + MuscleGroupList the
-                    /volume page and Home weekly tile render), replacing the
-                    old hardcoded OPTIMAL_WEEKLY_VOLUME table. Its scope is the
-                    rolling 7 local days (not the range selector), so it's
-                    labeled explicitly rather than silently ignoring it. */}
-                <Card>
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <CardTitle>Volume vs your targets</CardTitle>
-                      <Link href="/dashboard/volume">
-                        <Button variant="ghost" size="sm">Details →</Button>
-                      </Link>
-                    </div>
-                    <p className="text-xs text-surface-500 mt-1">
-                      This week · personalized MEV–MRV zone
-                    </p>
-                  </CardHeader>
-                  <CardContent>
-                    {volumeRows.length > 0 ? (
-                      <MuscleGroupList
-                        rows={volumeRows}
-                        expansion={volumeExpansion}
-                        renderRow={(row) => <VolumeRowContent row={row} />}
-                        renderChild={(child) => <VolumeChildContent child={child} />}
-                        pinChild={pinLaggingVolumeChild}
-                        testIdPrefix="analytics-volume-row"
-                        rowClassName="py-3 border-b border-surface-800 last:border-b-0"
-                      />
-                    ) : (
-                      <p className="text-sm text-surface-500 py-4 text-center">
-                        Log a few sets this week to see your volume vs targets.
-                      </p>
-                    )}
-                  </CardContent>
-                </Card>
-
-                {/* Top Exercises */}
-                <Card>
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <CardTitle>Top Exercises</CardTitle>
-                      <div className="flex gap-1 p-0.5 bg-surface-800 rounded-lg">
-                        <button
-                          onClick={() => setStrengthViewMode('absolute')}
-                          className={`px-2 py-1 text-xs rounded transition-colors ${
-                            strengthViewMode === 'absolute' 
-                              ? 'bg-primary-500 text-white' 
-                              : 'text-surface-400 hover:text-surface-200'
-                          }`}
-                        >
-                          By E1RM
-                        </button>
-                        <button
-                          onClick={() => setStrengthViewMode('relative')}
-                          className={`px-2 py-1 text-xs rounded transition-colors ${
-                            strengthViewMode === 'relative' 
-                              ? 'bg-primary-500 text-white' 
-                              : 'text-surface-400 hover:text-surface-200'
-                          }`}
-                        >
-                          By Relative
-                        </button>
-                      </div>
-                    </div>
-                    <p className="text-xs text-surface-500 mt-1">
-                      {strengthViewMode === 'absolute' 
-                        ? 'Ranked by estimated 1RM' 
-                        : 'Ranked by relative strength (compounds with reliable data first)'}
-                    </p>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      {(() => {
-                        const userWeight = latestScan?.weightKg || 80; // Default to 80kg if no scan
-                        
-                        // Helper to get standard - only for exercises with reliable data
-                        const getStandard = (name: string): number | null => {
-                          // Check exact matches first
-                          if (STRENGTH_STANDARDS[name]) return STRENGTH_STANDARDS[name];
-                          // Check partial matches
-                          const lowerName = name.toLowerCase();
-                          for (const [key, value] of Object.entries(STRENGTH_STANDARDS)) {
-                            if (lowerName.includes(key.toLowerCase()) || key.toLowerCase().includes(lowerName)) {
-                              return value;
-                            }
-                          }
-                          return null;
-                        };
-
-                        // Filter and sort based on view mode
-                        let sortedExercises = [...analytics.topExercises];
-                        
-                        if (strengthViewMode === 'relative') {
-                          // Only show exercises with reliable standards in relative mode
-                          sortedExercises = sortedExercises.filter(ex => {
-                            const standard = getStandard(ex.exerciseName);
-                            return standard !== null && hasReliableStandard(ex.exerciseName);
-                          });
-                        }
-                        
-                        sortedExercises = sortedExercises.sort((a, b) => {
-                          if (strengthViewMode === 'absolute') {
-                            return b.estimatedE1RM - a.estimatedE1RM;
-                          }
-                          // Relative strength
-                          const standardA = getStandard(a.exerciseName) || 1;
-                          const standardB = getStandard(b.exerciseName) || 1;
-                          const relativeA = a.estimatedE1RM / (userWeight * standardA);
-                          const relativeB = b.estimatedE1RM / (userWeight * standardB);
-                          return relativeB - relativeA;
-                        }).slice(0, 10);
-
-                        return sortedExercises.map((exercise, idx) => {
-                          const standard = getStandard(exercise.exerciseName);
-                          const showGauge = standard !== null && hasReliableStandard(exercise.exerciseName);
-                          const expectedE1RM = standard ? userWeight * standard : 0;
-                          const relativeStrength = standard ? (exercise.estimatedE1RM / expectedE1RM) * 100 : 0;
-                          
-                          // Strength level thresholds (% of intermediate standard)
-                          const getStrengthLevel = (pct: number) => {
-                            if (pct >= 125) return { label: 'Elite', color: 'text-purple-400', bgColor: 'bg-purple-500' };
-                            if (pct >= 100) return { label: 'Advanced', color: 'text-success-400', bgColor: 'bg-success-500' };
-                            if (pct >= 75) return { label: 'Intermediate', color: 'text-primary-400', bgColor: 'bg-primary-500' };
-                            if (pct >= 50) return { label: 'Novice', color: 'text-warning-400', bgColor: 'bg-warning-500' };
-                            return { label: 'Beginner', color: 'text-surface-400', bgColor: 'bg-surface-500' };
-                          };
-                          
-                          const strengthLevel = getStrengthLevel(relativeStrength);
-                          const gaugeWidth = Math.min(relativeStrength, 150);
-                          
-                          return (
-                            <Link
-                              key={exercise.exerciseId}
-                              href={`/dashboard/history?exercise=${exercise.exerciseId}`}
-                              className="block p-3 -mx-2 rounded-lg hover:bg-surface-800/50 transition-colors cursor-pointer border border-transparent hover:border-surface-700"
-                            >
-                              <div className="flex items-start gap-3">
-                                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
-                                  idx < 3 ? 'bg-primary-500/20 text-primary-400' : 'bg-surface-800 text-surface-500'
-                                }`}>
-                                  {idx + 1}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center justify-between mb-1">
-                                    <p className="text-sm font-medium text-surface-200 truncate">{exercise.exerciseName}</p>
-                                    <p className="text-sm font-bold text-primary-400 ml-2">
-                                      {formatWeight(exercise.estimatedE1RM, units)}
-                                    </p>
-                                  </div>
-                                  
-                                  {/* Relative Strength Gauge - only shown for exercises with reliable data */}
-                                  {showGauge && (
-                                    <div className="mt-2">
-                                      <div className="flex items-center justify-between text-xs mb-1">
-                                        <span className={strengthLevel.color}>{strengthLevel.label}</span>
-                                        <span className="text-surface-500">
-                                          {Math.round(relativeStrength)}% of standard
-                                        </span>
-                                      </div>
-                                      <div className="h-1.5 bg-surface-800 rounded-full overflow-hidden relative">
-                                        {/* Tier markers */}
-                                        <div className="absolute top-0 bottom-0 left-[33%] w-px bg-surface-600" title="Novice" />
-                                        <div className="absolute top-0 bottom-0 left-[50%] w-px bg-surface-600" title="Intermediate" />
-                                        <div className="absolute top-0 bottom-0 left-[66%] w-px bg-surface-600" title="Advanced" />
-                                        <div className="absolute top-0 bottom-0 left-[83%] w-px bg-surface-600" title="Elite" />
-                                        
-                                        {/* Progress bar */}
-                                        <div
-                                          className={`h-full rounded-full transition-all duration-500 ${strengthLevel.bgColor}`}
-                                          style={{ width: `${(gaugeWidth / 150) * 100}%` }}
-                                        />
-                                      </div>
-                                      <div className="flex justify-between text-[10px] text-surface-600 mt-0.5">
-                                        <span>Beginner</span>
-                                        <span>Elite</span>
-                                      </div>
-                                    </div>
-                                  )}
-                                  
-                                  <div className="flex items-center gap-3 mt-2 text-xs text-surface-500">
-                                    <span>Best: {formatWeight(exercise.bestWeight, units)} × {exercise.bestReps}</span>
-                                    <span>•</span>
-                                    <span>{exercise.totalSets} sets</span>
-                                  </div>
-                                </div>
-                              </div>
-                            </Link>
-                          );
-                        });
-                      })()}
-                      
-                      {/* Show message if no exercises with reliable standards in relative mode */}
-                      {strengthViewMode === 'relative' && (() => {
-                        const getStandardCheck = (name: string): number | null => {
-                          if (STRENGTH_STANDARDS[name]) return STRENGTH_STANDARDS[name];
-                          const lowerName = name.toLowerCase();
-                          for (const [key, value] of Object.entries(STRENGTH_STANDARDS)) {
-                            if (lowerName.includes(key.toLowerCase()) || key.toLowerCase().includes(lowerName)) {
-                              return value;
-                            }
-                          }
-                          return null;
-                        };
-                        const hasReliable = analytics.topExercises.some(ex => 
-                          getStandardCheck(ex.exerciseName) !== null && hasReliableStandard(ex.exerciseName)
-                        );
-                        if (!hasReliable) {
-                          return (
-                            <div className="p-4 bg-surface-800/50 rounded-lg text-center">
-                              <p className="text-sm text-surface-400">
-                                No free-weight compound exercises found in this period.
-                              </p>
-                              <p className="text-xs text-surface-500 mt-1">
-                                Relative strength standards only apply to barbell/dumbbell compounds like Squat, Bench, Deadlift, etc.
-                              </p>
-                            </div>
-                          );
-                        }
-                        return null;
-                      })()}
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* Recent Workouts */}
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle>Recent Workouts</CardTitle>
-                    <Link href="/dashboard/history">
-                      <Button variant="ghost" size="sm">View All →</Button>
-                    </Link>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {analytics.recentWorkouts.map((workout) => (
-                      <Link key={workout.id} href={`/dashboard/workout/${workout.id}`}>
-                        <div className="p-3 bg-surface-800/50 rounded-lg hover:bg-surface-800 transition-colors">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="text-sm font-medium text-surface-200">
-                                {new Date(workout.date).toLocaleDateString('en-US', {
-                                  weekday: 'short',
-                                  month: 'short',
-                                  day: 'numeric',
-                                })}
-                              </p>
-                              <p className="text-xs text-surface-500">
-                                {workout.totalSets} sets · {formatWeight(workout.totalVolume, units)} total
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {workout.sessionRpe && (
-                                <Badge variant={workout.sessionRpe >= 8 ? 'danger' : 'warning'}>
-                                  RPE {workout.sessionRpe}
-                                </Badge>
-                              )}
-                              <span className="text-xs text-surface-500">{formatWorkoutDuration(workout.duration)}</span>
-                            </div>
-                          </div>
-                        </div>
-                      </Link>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </>
-          ) : (
-            <Card className="text-center py-12">
-              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-surface-800 flex items-center justify-center">
-                <svg className="w-8 h-8 text-surface-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
-              </div>
-              <h2 className="text-lg font-semibold text-surface-200">No workout data yet</h2>
-              <p className="text-surface-500 mt-2 max-w-md mx-auto">
-                Complete some workouts to see your volume and training trends.
-              </p>
-              <Link href="/dashboard/workout/new">
-                <Button className="mt-6">Start a Workout</Button>
-              </Link>
             </Card>
           )}
         </div>

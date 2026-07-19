@@ -163,10 +163,12 @@ async function run() {
   await page.screenshot({ path: `${OUT}restructure-body.png`, fullPage: true });
 
   const tabButtons = await page.locator('nav button, div button').allInnerTexts().catch(() => []);
-  const labelsPresent = ['Body', 'Strength', 'Training', 'Wellness'].every((l) =>
+  const labelsPresent = ['Body', 'Strength', 'Wellness'].every((l) =>
     tabButtons.some((t) => t.includes(l)));
-  assert(labelsPresent, 'four tabs present: Body · Strength · Training · Wellness');
+  assert(labelsPresent, 'three tabs present: Body · Strength · Wellness');
   assert(!tabButtons.some((t) => t.trim() === 'Goals'), 'Goals tab removed');
+  assert((await page.locator('[data-testid="analytics-tab-training"]').count()) === 0,
+    'Training tab removed (its content lives on the Train page)');
 
   // Body-tab cleanup: the four stat cards (weight/BF/lean/FFMI) and the
   // inline measurements compare/entry card are gone; entry lives behind the
@@ -219,16 +221,13 @@ async function run() {
   const rangeOnStrength = await page.locator('[data-testid="analytics-range-selector"]').count();
   assert(rangeOnStrength === 0, 'range selector hidden on Strength tab');
 
-  // ---- Training tab -------------------------------------------------------
-  await clickTab(page, 'training');
-  await page.waitForTimeout(800);
-  await page.screenshot({ path: `${OUT}restructure-training.png`, fullPage: true });
-
-  const rangeOnTraining = await page.locator('[data-testid="analytics-range-selector"]').count();
-  assert(rangeOnTraining >= 1, 'range selector present on Training tab (it scopes this data)');
-  assert((await page.locator('text="Volume vs your targets"').count()) >= 1,
-    'Training shows shared MEV–MRV "Volume vs your targets" (not hardcoded table)');
-  assert((await page.locator('text=/Week 2 of 6/').count()) >= 1, 'mesocycle progress row present on Training');
+  // ---- Retired training deep links ---------------------------------------
+  // ?tab=training / ?tab=volume must fall through to the default Body tab.
+  await page.goto(`${BASE}/dashboard/analytics?tab=training`, { waitUntil: 'domcontentloaded' });
+  await page.locator('[data-testid="analytics-content"]').first().waitFor({ state: 'visible', timeout: 30000 });
+  await page.waitForTimeout(1000);
+  assert((await page.locator('button:has-text("Log measurements")').count()) >= 1,
+    '?tab=training falls through to the Body tab');
 
   // ---- Wellness tab -------------------------------------------------------
   await clickTab(page, 'wellness');
