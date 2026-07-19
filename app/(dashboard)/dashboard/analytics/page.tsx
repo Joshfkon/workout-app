@@ -5,10 +5,9 @@ import { useQuery, useQueryClient, useIsRestoring } from '@tanstack/react-query'
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Card, CardHeader, CardTitle, CardContent, Button, Badge, FullPageLoading, ErrorRetry, InfoTooltip } from '@/components/ui';
+import { Card, CardHeader, CardTitle, CardContent, Button, Badge, FullPageLoading, ErrorRetry } from '@/components/ui';
 import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 import { resolveAuthState } from '@/lib/supabase/authState';
-import { BodyMeasurements } from '@/components/dashboard/BodyMeasurements';
 import { useMusclePriorities } from '@/components/settings/MusclePrioritySettings';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
@@ -16,18 +15,14 @@ import type { DexaScan, Goal, Experience, FFMIResult, ProgressPhoto, MuscleGroup
 import { STANDARD_MUSCLE_DISPLAY_NAMES } from '@/types/schema';
 import {
   selectCanonicalFfmi,
-  analyzeBodyCompTrend,
   generateCoachingRecommendations,
-  getTrendIndicator,
 } from '@/services/bodyCompEngine';
 import { useBodyCompTrend } from '@/hooks/useBodyCompTrend';
-import { useBodyStatsSince } from '@/hooks/useBodyStatsSince';
 import { useTrainingPhases } from '@/hooks/useTrainingPhases';
 import { assessProgress } from '@/services/phaseAssessment';
 import { PhaseVerdictCard } from '@/components/body/PhaseVerdictCard';
 import { PhaseBanner } from '@/components/body/PhaseBanner';
 import { localDay } from '@/lib/date/localDay';
-import { computeTrendChangesSince } from '@/services/bodyCompAnchor';
 import { getDisplayWeight } from '@/lib/weightUtils';
 import {
   getBodyCompLayout,
@@ -43,7 +38,7 @@ import {
   getStrengthLevelColor,
   generatePercentileSegments
 } from '@/services/coachingEngine';
-import { kgToLbs, inputWeightToKg, roundToIncrement, formatWeight, formatBodyWeight, convertWeightForDisplay, formatWorkoutDuration, resolveWorkoutDurationSeconds, estimateE1RM, getLocalDateString, muscleDisplayName, cmToIn, inToCm } from '@/lib/utils';
+import { kgToLbs, inputWeightToKg, roundToIncrement, formatWeight, formatWorkoutDuration, resolveWorkoutDurationSeconds, estimateE1RM, getLocalDateString, muscleDisplayName, cmToIn, inToCm } from '@/lib/utils';
 import {
   computeWaistTrend,
   latestWaistTrendIn,
@@ -1543,40 +1538,6 @@ function AnalyticsPageContent() {
     latestScan: latestScan ?? null,
     heightCm: userProfile?.heightCm,
   });
-  const trend = userProfile?.heightCm
-    ? analyzeBodyCompTrend(scans, userProfile.heightCm)
-    : null;
-  // The Weight card shows the latest RAW weigh-in (converted directly from
-  // its logged unit) whenever it's the newest data point — the anchored
-  // trend round-trips through rounded kg, which can drift ~0.1 from what the
-  // user just logged. Only an even-newer DEXA scan outranks it.
-  const latestWeighIn =
-    bodyWeightHistory.length > 0 ? bodyWeightHistory[bodyWeightHistory.length - 1] : null;
-  const currentWeightDisplay =
-    latestWeighIn && (!latestTrendPoint || latestWeighIn.date >= latestTrendPoint.date)
-      ? `${getDisplayWeight(latestWeighIn.weight, latestWeighIn.unit, units).toFixed(1)} ${weightUnit}`
-      : latestTrendPoint
-        ? formatBodyWeight(latestTrendPoint.weightKg, units)
-        : latestScan
-          ? formatBodyWeight(latestScan.weightKg, units)
-          : null;
-  // "Change since" reference date for the stat cards (e.g. bulk start).
-  // Persisted per device; when set, the cards show deltas from that date
-  // instead of scan-to-scan monthly rates.
-  const [statsSinceDate, setStatsSinceDate] = useBodyStatsSince();
-  const changesSince = statsSinceDate
-    ? computeTrendChangesSince(bodyCompTrend, statsSinceDate, userProfile?.heightCm ?? null)
-    : null;
-  const formatSignedWeight = (deltaKg: number): string => {
-    const value = convertWeightForDisplay(deltaKg, units);
-    return `${value > 0 ? '+' : ''}${value.toFixed(1)} ${weightUnit}`;
-  };
-  const sinceDateLabel = statsSinceDate
-    ? new Date(`${statsSinceDate}T00:00:00`).toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-      })
-    : null;
   // Phase-boundary dates (bulk/cut start) let the recommender suppress
   // composition advice inside the water-weight window — reuse the active
   // target's creation date as the current phase's start.
@@ -1880,179 +1841,25 @@ function AnalyticsPageContent() {
               >
                 Edit goals
               </Button>
+              {/* Measurement entry lives behind this button (the unified log
+                  sheet's measurements segment) — the old inline
+                  BodyMeasurements compare/entry card was retired. */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setLogSegment('measurements')}
+              >
+                Log measurements
+              </Button>
               <Button size="sm" onClick={() => setLogSegment('weight')}>
                 + Log
               </Button>
             </div>
           </div>
 
-          {/* 1. Verdict card — the rules-based phase assessment. Tapping it
-              opens the phase editor. 2. Phase banner — compact current-phase
-              strip with the Manage link (or the set-one CTA). */}
-          <PhaseVerdictCard assessment={assessment} href="/dashboard/phases" />
-          <PhaseBanner phase={currentPhase} href="/dashboard/phases" />
-
-          {/* Header stat strip — weight / BF% / lean / FFMI, ALL derived from
-              the same canonical source (the anchored trend's last point via
-              selectCanonicalFfmi + the latest scan), with per-metric trend
-              arrows. One source of truth: these can't disagree with the
-              combined trend chart below. */}
-          {latestScan && (
-            <>
-            {/* Reference-date control: when set, the stat cards below show
-                deltas since this date (e.g. bulk start) instead of the
-                scan-to-scan monthly rates. */}
-            <div
-              className="flex flex-wrap items-center gap-2 text-xs text-surface-500"
-              data-testid="body-stats-since"
-            >
-              <label htmlFor="body-stats-since-input">Change since</label>
-              {/* (i) — how BF%/lean/FFMI values and deltas are estimated
-                  between DEXA scans (bodyCompAnchor). Covers the whole strip. */}
-              <InfoTooltip term="BODY_COMP_ESTIMATE" position="bottom" inline={false} />
-              <input
-                id="body-stats-since-input"
-                type="date"
-                value={statsSinceDate ?? ''}
-                max={getLocalDateString()}
-                onChange={(e) => setStatsSinceDate(e.target.value || null)}
-                className="bg-surface-800 border border-surface-700 rounded-md px-2 py-1 text-surface-200 [color-scheme:dark]"
-              />
-              {!statsSinceDate && (currentPhase || activeTarget?.createdAt) && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    // The active training_phases span is the real phase start;
-                    // the target's creation date is only the legacy proxy.
-                    setStatsSinceDate(
-                      currentPhase?.startDay ?? activeTarget!.createdAt.slice(0, 10)
-                    )
-                  }
-                  className="text-primary-400 hover:text-primary-300 font-medium"
-                >
-                  Use phase start
-                </button>
-              )}
-              {statsSinceDate && (
-                <button
-                  type="button"
-                  onClick={() => setStatsSinceDate(null)}
-                  className="text-surface-400 hover:text-surface-200"
-                >
-                  Clear
-                </button>
-              )}
-              {statsSinceDate && !changesSince && (
-                <span>No trend data since this date yet.</span>
-              )}
-              {changesSince && sinceDateLabel && (
-                <span>
-                  Cards show change from {sinceDateLabel}
-                  {changesSince.referenceDate !== statsSinceDate && ' (nearest logged day)'}
-                </span>
-              )}
-            </div>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3" data-testid="body-stat-strip">
-              <Card className="p-4">
-                <p className="text-xs text-surface-500 uppercase tracking-wider">Weight</p>
-                <p className="text-2xl font-bold text-surface-100 mt-1">
-                  {currentWeightDisplay}
-                </p>
-                {changesSince && (
-                  <p className={`text-xs mt-1 ${getTrendIndicator(changesSince.weightDeltaKg).color}`}>
-                    {getTrendIndicator(changesSince.weightDeltaKg).icon}{' '}
-                    {formatSignedWeight(changesSince.weightDeltaKg)}
-                  </p>
-                )}
-              </Card>
-              <Card className="p-4">
-                <p className="text-xs text-surface-500 uppercase tracking-wider">Body Fat</p>
-                <p className="text-2xl font-bold text-surface-100 mt-1">
-                  {(latestTrendPoint?.bodyFatPercent ?? latestScan.bodyFatPercent).toFixed(1)}%
-                </p>
-                {changesSince ? (
-                  <p className={`text-xs mt-1 ${getTrendIndicator(changesSince.bodyFatDelta).color}`}>
-                    {getTrendIndicator(changesSince.bodyFatDelta).icon}{' '}
-                    {changesSince.bodyFatDelta > 0 ? '+' : ''}
-                    {changesSince.bodyFatDelta.toFixed(1)}%
-                  </p>
-                ) : trend && (
-                  <p className={`text-xs mt-1 ${getTrendIndicator(trend.bodyFatChangeRate).color}`}>
-                    {getTrendIndicator(trend.bodyFatChangeRate).icon} {Math.abs(trend.bodyFatChangeRate).toFixed(1)}%/mo
-                  </p>
-                )}
-              </Card>
-              <Card className="p-4">
-                <p className="text-xs text-surface-500 uppercase tracking-wider">Lean Mass</p>
-                <p className="text-2xl font-bold text-surface-100 mt-1">
-                  {formatBodyWeight(latestTrendPoint?.leanMassKg ?? latestScan.leanMassKg, units)}
-                </p>
-                {changesSince ? (
-                  <p className={`text-xs mt-1 ${getTrendIndicator(changesSince.leanMassDeltaKg).color}`}>
-                    {getTrendIndicator(changesSince.leanMassDeltaKg).icon}{' '}
-                    {formatSignedWeight(changesSince.leanMassDeltaKg)}
-                  </p>
-                ) : trend && (
-                  <p className={`text-xs mt-1 ${getTrendIndicator(trend.leanMassChangeRate).color}`}>
-                    {getTrendIndicator(trend.leanMassChangeRate).icon} {Math.abs(trend.leanMassChangeRate).toFixed(2)} {weightUnit}/mo
-                  </p>
-                )}
-              </Card>
-              <Card className="p-4" data-testid="body-ffmi-stat">
-                <p className="text-xs text-surface-500 uppercase tracking-wider">FFMI</p>
-                <p className="text-2xl font-bold text-surface-100 mt-1" data-testid="body-ffmi-value">
-                  {ffmiResult ? ffmiResult.ffmi.toFixed(1) : '—'}
-                </p>
-                {changesSince?.ffmiDelta != null && (
-                  <p className={`text-xs mt-1 ${getTrendIndicator(changesSince.ffmiDelta).color}`}>
-                    {getTrendIndicator(changesSince.ffmiDelta).icon}{' '}
-                    {changesSince.ffmiDelta > 0 ? '+' : ''}
-                    {changesSince.ffmiDelta.toFixed(1)}
-                  </p>
-                )}
-                {ffmiResult && (
-                  <p className="text-[11px] text-surface-500 mt-1">
-                    norm {ffmiResult.normalizedFfmi.toFixed(1)}
-                  </p>
-                )}
-              </Card>
-            </div>
-            </>
-          )}
-
-          {/* Prominence (getBodyCompLayout): with ≥2 DEXA scans the trend
-              module (incl. the Composition Map) leads the tab; below that
-              the existing order stands plus a subtle log-a-scan prompt. This
-              ONE module is the combined trend chart (weight + BF%/lean/FFMI
-              toggle + map) — the legacy duplicate area chart was deleted. */}
-          {bodyCompLayout.trendFirst && bodyTrendModule}
-
-          {/* Staleness + DEXA-due nudges */}
-          <BodyHubNudges
-            onLog={(segment) => setLogSegment(segment)}
-            refreshKey={bodyRefreshKey}
-          />
-
-          {!bodyCompLayout.trendFirst && bodyTrendModule}
-
-          {bodyCompLayout.showScanPrompt && (
-            <p className="text-xs text-surface-500 text-center">
-              {scans.length === 0
-                ? 'Log a DEXA scan to unlock composition trends and the Composition Map.'
-                : 'One more DEXA scan unlocks the Composition Map and scan-to-scan analysis.'}{' '}
-              <button
-                type="button"
-                onClick={() => setLogSegment('dexa')}
-                className="text-primary-400 hover:text-primary-300 font-medium"
-              >
-                Log scan
-              </button>
-            </p>
-          )}
-
-          {/* Recommendations — now correctly signed, unit-aware, evidence-cited
-              (deload-advisor style), and suppressed inside the phase-boundary
-              water window. */}
+          {/* Recommendations — first thing on the tab. Correctly signed,
+              unit-aware, evidence-cited (deload-advisor style), and suppressed
+              inside the phase-boundary water window. */}
           {recommendations.length > 0 && (
             <Card>
               <CardHeader>
@@ -2086,18 +1893,44 @@ function AnalyticsPageContent() {
             </Card>
           )}
 
-          {/* Measurements compare grid (null/outlier rules per Phase 1.4) +
-              per-site tape trends, merged into one measurement area. */}
-          {userId && (
-            <BodyMeasurements
-              userId={userId}
-              unit={units === 'lb' ? 'in' : 'cm'}
-              heightCm={userProfile?.heightCm || undefined}
-              showImbalanceAnalysis={true}
-              refreshKey={bodyRefreshKey}
-              onSaved={() => setBodyRefreshKey((k) => k + 1)}
-            />
+          {/* 1. Verdict card — the rules-based phase assessment. Tapping it
+              opens the phase editor. 2. Phase banner — compact current-phase
+              strip with the Manage link (or the set-one CTA). */}
+          <PhaseVerdictCard assessment={assessment} href="/dashboard/phases" />
+          <PhaseBanner phase={currentPhase} href="/dashboard/phases" />
+
+          {/* Prominence (getBodyCompLayout): with ≥2 DEXA scans the trend
+              module (incl. the Composition Map) leads the tab; below that
+              the existing order stands plus a subtle log-a-scan prompt. This
+              ONE module is the combined trend chart (weight + BF%/lean/FFMI
+              toggle + map) — the legacy duplicate area chart was deleted. */}
+          {bodyCompLayout.trendFirst && bodyTrendModule}
+
+          {/* Staleness + DEXA-due nudges */}
+          <BodyHubNudges
+            onLog={(segment) => setLogSegment(segment)}
+            refreshKey={bodyRefreshKey}
+          />
+
+          {!bodyCompLayout.trendFirst && bodyTrendModule}
+
+          {bodyCompLayout.showScanPrompt && (
+            <p className="text-xs text-surface-500 text-center">
+              {scans.length === 0
+                ? 'Log a DEXA scan to unlock composition trends and the Composition Map.'
+                : 'One more DEXA scan unlocks the Composition Map and scan-to-scan analysis.'}{' '}
+              <button
+                type="button"
+                onClick={() => setLogSegment('dexa')}
+                className="text-primary-400 hover:text-primary-300 font-medium"
+              >
+                Log scan
+              </button>
+            </p>
           )}
+
+          {/* Per-site tape trends. Entry happens via the header's
+              "Log measurements" button (unified sheet). */}
           <MeasurementTrendCard
             tapeUnit={units === 'lb' ? 'in' : 'cm'}
             refreshKey={bodyRefreshKey}
@@ -2118,7 +1951,7 @@ function AnalyticsPageContent() {
             weightHistory={weightHistory}
           />
 
-          {/* Progress Photos + DEXA scan history */}
+          {/* Progress Photos */}
           {progressPhotos.length > 0 && (
             <Card>
               <CardHeader>
@@ -2150,28 +1983,6 @@ function AnalyticsPageContent() {
                       </div>
                     );
                   })}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {scans.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>DEXA scan history</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {scans.slice(0, 6).map((scan) => (
-                    <div key={scan.id} className="flex items-center justify-between text-sm py-1 border-b border-surface-800 last:border-b-0">
-                      <span className="text-surface-300">
-                        {new Date(scan.scanDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                      </span>
-                      <span className="text-surface-400 tabular-nums">
-                        {scan.bodyFatPercent}% BF · {formatBodyWeight(scan.leanMassKg, units)} lean
-                      </span>
-                    </div>
-                  ))}
                 </div>
               </CardContent>
             </Card>
