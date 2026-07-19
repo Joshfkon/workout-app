@@ -156,6 +156,70 @@ export async function saveWaistFromCheckin(
   await saveBodyMeasurements(supabase, userId, date, { waist: waistCm }, undefined, 'daily_checkin');
 }
 
+/**
+ * Correct a single site's value on an existing day-row (the "logged my calf
+ * as my thigh" fix path). `valueCm` must already be in cm. No-op if the row
+ * doesn't exist. Throws on failure.
+ */
+export async function updateMeasurementSiteEntry(
+  supabase: SupabaseClient,
+  userId: string,
+  date: string,
+  site: string,
+  valueCm: number
+): Promise<void> {
+  const { error } = await supabase
+    .from('body_measurements')
+    .update({ [site]: valueCm })
+    .eq('user_id', userId)
+    .eq('logged_at', date);
+  if (error) throw error;
+}
+
+/**
+ * Remove a single site's value from an existing day-row. Other sites logged
+ * that day are untouched (the column is nulled); when the deleted site was
+ * the row's ONLY value, the whole day-row is deleted so it never lingers as
+ * an all-null husk. `allSiteKeys` is the canonical site list (the caller
+ * passes MEASUREMENT_FIELDS keys — bodyLog can't import a component file).
+ * Throws on failure.
+ */
+export async function deleteMeasurementSiteEntry(
+  supabase: SupabaseClient,
+  userId: string,
+  date: string,
+  site: string,
+  allSiteKeys: string[]
+): Promise<void> {
+  const { data: row, error: selectError } = await supabase
+    .from('body_measurements')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('logged_at', date)
+    .maybeSingle();
+  if (selectError) throw selectError;
+  if (!row) return;
+
+  const hasOtherValues = allSiteKeys.some(
+    (key) => key !== site && (row as Record<string, unknown>)[key] != null
+  );
+  if (hasOtherValues) {
+    const { error } = await supabase
+      .from('body_measurements')
+      .update({ [site]: null })
+      .eq('user_id', userId)
+      .eq('logged_at', date);
+    if (error) throw error;
+  } else {
+    const { error } = await supabase
+      .from('body_measurements')
+      .delete()
+      .eq('user_id', userId)
+      .eq('logged_at', date);
+    if (error) throw error;
+  }
+}
+
 // ------------------------------------------------------------
 // DEXA scans (dexa_scans — sparse, authoritative events)
 // ------------------------------------------------------------
