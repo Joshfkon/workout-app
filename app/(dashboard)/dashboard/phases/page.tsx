@@ -316,7 +316,7 @@ export default function TrainingPhasesPage() {
                   </span>
                 ))}
                 <span className="inline-flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-surface-100" />
+                  <span className="w-2 h-2 rounded-full bg-cyan-400" />
                   DEXA scan
                 </span>
               </div>
