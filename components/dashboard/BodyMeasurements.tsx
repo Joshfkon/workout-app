@@ -61,6 +61,10 @@ interface BodyMeasurementsProps {
   heightCm?: number;
   wristCm?: number;
   showImbalanceAnalysis?: boolean;
+  /** Bump to refetch (e.g. after the unified log sheet saves a measurement). */
+  refreshKey?: number;
+  /** Called after this card saves, so sibling widgets (trend chart) can refetch. */
+  onSaved?: () => void;
 }
 
 // Exported: the canonical tape-site list (the same sites the ratio analytics
@@ -169,6 +173,8 @@ export function BodyMeasurements({
   heightCm,
   wristCm,
   showImbalanceAnalysis = true,
+  refreshKey: externalRefreshKey = 0,
+  onSaved,
 }: BodyMeasurementsProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -399,7 +405,7 @@ export function BodyMeasurements({
     };
 
     loadMeasurements();
-  }, [userId, refreshKey]);
+  }, [userId, refreshKey, externalRefreshKey]);
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -429,6 +435,9 @@ export function BodyMeasurements({
     if (!error) {
       setRefreshKey(k => k + 1); // Trigger reload
       setIsEditing(false);
+      // Let sibling widgets reading body_measurements (trend chart, nudges)
+      // refetch — otherwise the grid and the graph drift apart until reload.
+      onSaved?.();
     }
     setIsSaving(false);
   };
