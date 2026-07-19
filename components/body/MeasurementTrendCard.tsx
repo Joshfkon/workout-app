@@ -2,9 +2,10 @@
 
 /**
  * Per-site tape measurement trend (Body hub). One line chart per selected
- * site over the last year — site list identical to the entry form / ratio
- * analytics (MEASUREMENT_FIELDS). Self-fetching; refetches when refreshKey
- * bumps (after the unified log sheet saves).
+ * site over the selected date range — site list identical to the entry form /
+ * ratio analytics (MEASUREMENT_FIELDS). Self-fetching; refetches when
+ * refreshKey bumps (after the unified log sheet or the measurements grid
+ * saves).
  */
 
 import { useEffect, useMemo, useState } from 'react';
@@ -23,7 +24,7 @@ import {
   MEASUREMENT_FIELDS,
   type Measurements,
 } from '@/components/dashboard/BodyMeasurements';
-import { cmToIn } from '@/lib/utils';
+import { cmToIn, getLocalDateString } from '@/lib/utils';
 
 interface MeasurementTrendCardProps {
   /** Tape unit follows the app-wide weight unit (lb → in, kg → cm). */
@@ -33,10 +34,21 @@ interface MeasurementTrendCardProps {
 
 type MeasurementRow = Measurements & { logged_at: string };
 
+// Selectable chart windows. `days: null` = no cutoff (full history).
+const DATE_RANGES = [
+  { key: '1m', label: '1M', days: 30 },
+  { key: '3m', label: '3M', days: 91 },
+  { key: '6m', label: '6M', days: 182 },
+  { key: '1y', label: '1Y', days: 365 },
+  { key: 'all', label: 'All', days: null },
+] as const;
+type DateRangeKey = (typeof DATE_RANGES)[number]['key'];
+
 export function MeasurementTrendCard({ tapeUnit, refreshKey = 0 }: MeasurementTrendCardProps) {
   const [rows, setRows] = useState<MeasurementRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [site, setSite] = useState<keyof Measurements | ''>('');
+  const [range, setRange] = useState<DateRangeKey>('1y');
 
   useEffect(() => {
     async function fetchAll() {
@@ -44,13 +56,12 @@ export function MeasurementTrendCard({ tapeUnit, refreshKey = 0 }: MeasurementTr
         const supabase = createUntypedClient();
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
-        const yearAgo = new Date();
-        yearAgo.setDate(yearAgo.getDate() - 365);
+        // Full history — the range selector filters client-side so "All"
+        // and shorter windows never need a refetch.
         const { data } = await supabase
           .from('body_measurements')
           .select('*')
           .eq('user_id', user.id)
-          .gte('logged_at', yearAgo.toISOString().slice(0, 10))
           .order('logged_at', { ascending: true });
         setRows((data ?? []) as MeasurementRow[]);
       } catch (err) {
@@ -80,10 +91,29 @@ export function MeasurementTrendCard({ tapeUnit, refreshKey = 0 }: MeasurementTr
     setSite((withTrend ?? availableSites[0]).key);
   }, [availableSites, rows, site]);
 
+  // Local-timezone YYYY-MM-DD cutoff for the selected range (string compare
+  // works because logged_at is a YYYY-MM-DD date column).
+  const rangeCutoff = useMemo(() => {
+    const days = DATE_RANGES.find((r) => r.key === range)?.days ?? null;
+    if (days == null) return null;
+    const d = new Date();
+    d.setDate(d.getDate() - days);
+    return getLocalDateString(d);
+  }, [range]);
+
+  /** All chart points for the site, before the date-range cut. */
+  const sitePointCount = useMemo(
+    () => (site ? rows.filter((row) => row[site] != null).length : 0),
+    [rows, site]
+  );
+
   const chartData = useMemo(() => {
     if (!site) return [];
     return rows
-      .filter((row) => row[site] != null)
+      .filter(
+        (row) =>
+          row[site] != null && (rangeCutoff == null || row.logged_at >= rangeCutoff)
+      )
       .map((row) => ({
         label: new Date(`${row.logged_at}T00:00:00`).toLocaleDateString('en-US', {
           month: 'short',
@@ -93,7 +123,7 @@ export function MeasurementTrendCard({ tapeUnit, refreshKey = 0 }: MeasurementTr
           Math.round((tapeUnit === 'in' ? cmToIn(Number(row[site])) : Number(row[site])) * 10) /
           10,
       }));
-  }, [rows, site, tapeUnit]);
+  }, [rows, site, tapeUnit, rangeCutoff]);
 
   if (!isLoading && rows.length === 0) return null; // nothing to trend yet
 
@@ -119,11 +149,33 @@ export function MeasurementTrendCard({ tapeUnit, refreshKey = 0 }: MeasurementTr
         </div>
       </CardHeader>
       <CardContent>
+        {!isLoading && rows.length > 0 && (
+          <div className="flex gap-1 mb-3" role="group" aria-label="Date range">
+            {DATE_RANGES.map((r) => (
+              <button
+                key={r.key}
+                type="button"
+                onClick={() => setRange(r.key)}
+                data-testid={`measurement-trend-range-${r.key}`}
+                className={`px-2.5 py-1 text-xs rounded-full transition-colors ${
+                  range === r.key
+                    ? 'bg-primary-500 text-white'
+                    : 'bg-surface-800 text-surface-400 hover:text-surface-200'
+                }`}
+                aria-pressed={range === r.key}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
+        )}
         {isLoading ? (
           <div className="h-48 animate-pulse bg-surface-800/50 rounded-lg" />
         ) : chartData.length < 2 ? (
           <p className="text-sm text-surface-500 py-6 text-center">
-            Log this site a couple of times to see its trend.
+            {sitePointCount >= 2
+              ? 'Fewer than two entries in this date range — try a longer range.'
+              : 'Log this site a couple of times to see its trend.'}
           </p>
         ) : (
           <div className="h-48">

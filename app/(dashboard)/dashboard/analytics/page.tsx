@@ -2094,6 +2094,8 @@ function AnalyticsPageContent() {
               unit={units === 'lb' ? 'in' : 'cm'}
               heightCm={userProfile?.heightCm || undefined}
               showImbalanceAnalysis={true}
+              refreshKey={bodyRefreshKey}
+              onSaved={() => setBodyRefreshKey((k) => k + 1)}
             />
           )}
           <MeasurementTrendCard
