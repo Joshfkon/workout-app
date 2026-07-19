@@ -6,6 +6,7 @@ import { useQueryClient, useIsRestoring } from '@tanstack/react-query';
 import dynamic from 'next/dynamic';
 import { Card, CardHeader, CardTitle, CardContent, Button, LoadingAnimation, SwipeableRow, ToastContainer, useToasts } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { getLocalUserId } from '@/lib/supabase/authState';
 
 // Dynamic imports for heavy modals - reduces initial bundle size
 const AddFoodModal = dynamic(() => import('@/components/nutrition/AddFoodModal').then(m => ({ default: m.AddFoodModal })), { ssr: false });
@@ -689,12 +690,14 @@ function NutritionPageContent() {
    * goes through here.
    */
   async function insertFoodEntry(food: FoodLogInsert): Promise<FoodLogEntry> {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Not signed in');
+    // Local session read — getUser() hits the network and reads a blip as
+    // "logged out"; RLS still verifies the token on the insert itself.
+    const userId = await getLocalUserId(supabase);
+    if (!userId) throw new Error('Not signed in');
     if (!selectedDate) throw new Error('Date not initialized');
 
     const { data, error } = await supabase.from('food_log').insert({
-      user_id: user.id,
+      user_id: userId,
       logged_at: selectedDate,
       meal_type: food.meal_type,
       food_name: food.food_name,

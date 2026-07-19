@@ -28,6 +28,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { IconArrowsExchange, IconLoader2, IconPlus, IconX } from '@tabler/icons-react';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { getLocalUserId } from '@/lib/supabase/authState';
 import { generateWarmupProtocol } from '@/services/progressionEngine';
 import { quickWeightEstimate } from '@/services/weightEstimationEngine';
 import { fetchTransferCandidates } from '@/lib/training/transferCandidates';
@@ -167,8 +168,8 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
   useEffect(() => {
     async function fetchAll() {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
+        const userId = await getLocalUserId(supabase);
+        if (!userId) return;
 
         const ninetyDaysAgo = new Date();
         ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
@@ -184,15 +185,15 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
           supabase
             .from('exercise_blocks')
             .select('exercise_id, workout_sessions!inner(user_id, started_at)')
-            .eq('workout_sessions.user_id', user.id)
+            .eq('workout_sessions.user_id', userId)
             .gte('workout_sessions.started_at', ninetyDaysAgo.toISOString()),
           supabase
             .from('users')
             .select('weight_kg, height_cm, body_fat_percent, experience, injury_history')
-            .eq('id', user.id)
+            .eq('id', userId)
             .single(),
-          fetchUnavailableEquipment(user.id).catch(() => [] as string[]),
-          fetchTrainingLocations(user.id).catch(() => [] as TrainingLocationRow[]),
+          fetchUnavailableEquipment(userId).catch(() => [] as string[]),
+          fetchTrainingLocations(userId).catch(() => [] as TrainingLocationRow[]),
         ]);
 
         setExercises((exercisesRes.data ?? []) as SheetExercise[]);
@@ -260,11 +261,11 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
 
     let cancelled = false;
     async function fetchBlocklists() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user || cancelled) return;
+      const userId = await getLocalUserId(supabase);
+      if (!userId || cancelled) return;
       const entries = await Promise.all(
         neededIds.map(async (id) => {
-          const ids = await fetchUnavailableEquipmentForLocation(user.id, id).catch((err) => {
+          const ids = await fetchUnavailableEquipmentForLocation(userId, id).catch((err) => {
             // Degrading to "no blocklist" here means the location stops
             // constraining generation — make that failure loud.
             console.error(
@@ -429,11 +430,13 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
     setIsSavingLocation(true);
     setAddLocationError(null);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not signed in');
+      // Local session read — getUser() hits the network and reads a blip as
+      // "logged out"; RLS still verifies the token on the write itself.
+      const userId = await getLocalUserId(supabase);
+      if (!userId) throw new Error('Not signed in');
 
       const parsedDumbbell = parseFloat(newDumbbellMax);
-      const created = await createTrainingLocation(user.id, {
+      const created = await createTrainingLocation(userId, {
         name,
         presetKind: newLocationPreset,
         dumbbellMaxKg: Number.isFinite(parsedDumbbell) && parsedDumbbell > 0 ? parsedDumbbell : null,
@@ -501,15 +504,18 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
     setIsStarting(true);
     setError(null);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      // Only bounce to /login when the persisted session is genuinely absent.
+      // getUser() here used to read a network blip as "logged out" and kick a
+      // signed-in user to the login screen mid-flow.
+      const userId = await getLocalUserId(supabase);
+      if (!userId) {
         router.push('/login');
         return;
       }
 
       const { sessionId, isNewSession } = await getOrCreateTodaySession(
         supabase,
-        user.id,
+        userId,
         'ai_suggested',
         selectedLocationId
       );
@@ -517,7 +523,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
       // Cross-exercise strength summary for cold-start weight estimation:
       // never-trained exercises (incl. first-time substitutes) seed from a
       // related exercise's logged e1RM before profile heuristics.
-      const transferCandidates = await fetchTransferCandidates(user.id, supabase);
+      const transferCandidates = await fetchTransferCandidates(userId, supabase);
 
       let order = 1;
       if (!isNewSession) {
@@ -640,7 +646,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
       // Remember where this workout happened (best-effort) so next time the
       // chip row defaults to it.
       if (selectedLocationId) {
-        touchLocationLastUsed(user.id, selectedLocationId).catch(() => {});
+        touchLocationLastUsed(userId, selectedLocationId).catch(() => {});
       }
 
       router.push(`/dashboard/workout/${sessionId}?fromCreate=true`);

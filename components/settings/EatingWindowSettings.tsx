@@ -11,6 +11,7 @@
 import { useEffect, useState } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, Button } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { getLocalUserId } from '@/lib/supabase/authState';
 import {
   fetchEatingWindow,
   saveEatingWindow,
@@ -33,9 +34,9 @@ export function EatingWindowSettings() {
 
   useEffect(() => {
     async function load() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      const window = await fetchEatingWindow(supabase, user.id);
+      const userId = await getLocalUserId(supabase);
+      if (!userId) return;
+      const window = await fetchEatingWindow(supabase, userId);
       setStartValue(minutesToTimeValue(window.startMinutes));
       setEndValue(minutesToTimeValue(window.endMinutes));
     }
@@ -59,9 +60,11 @@ export function EatingWindowSettings() {
     }
     setIsSaving(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not signed in');
-      await saveEatingWindow(supabase, user.id, { startMinutes, endMinutes });
+      // Local session read — getUser() hits the network and reads a blip as
+      // "logged out"; RLS still verifies the token on the write itself.
+      const userId = await getLocalUserId(supabase);
+      if (!userId) throw new Error('Not signed in');
+      await saveEatingWindow(supabase, userId, { startMinutes, endMinutes });
       setMessage({ type: 'success', text: 'Eating window saved.' });
     } catch (err) {
       console.error('Failed to save eating window:', err);
