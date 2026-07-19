@@ -17,7 +17,9 @@
  */
 
 // Bump this version on releases to invalidate old caches and trigger an update.
-const CACHE_NAME = 'hypertrack-v4';
+// v5: Progress-page restructure (Body tab cleanup, Training tab removal,
+// wellness card moves) — bumped so deployed clients drop the cached old shell.
+const CACHE_NAME = 'hypertrack-v5';
 
 // Critical assets to cache on install (app shell + key routes)
 const PRECACHE_ASSETS = [
