@@ -582,7 +582,11 @@ function AnalyticsPageContent() {
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, [sectionParam, activeTab, isLoading, liftTrendsSummary, progressionRaw]);
 
-  // Fetch goals tab data (mesocycle, targets, weight history, measurements)
+  // Fetch goals tab data (mesocycle, targets, weight history, measurements).
+  // Keyed on bodyRefreshKey so a save from the unified log sheet (the header
+  // "Log measurements" button, weight, DEXA) refreshes currentMeasurements /
+  // proportionsAnalysis / weightHistory — the sheet is the primary entry path
+  // now that the inline measurements card is gone.
   useEffect(() => {
     async function fetchGoalsData() {
       if (!userId) return;
@@ -794,7 +798,7 @@ function AnalyticsPageContent() {
     }
 
     fetchGoalsData();
-  }, [userId, userProfile?.heightCm]);
+  }, [userId, userProfile?.heightCm, bodyRefreshKey]);
 
   // Fetch wellness data (hydration and daily check-ins)
   useEffect(() => {
