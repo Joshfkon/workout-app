@@ -26,18 +26,72 @@ jest.mock('recharts', () => ({
 }));
 
 let mockRows: Array<Record<string, unknown>> = [];
+/** Every update/delete the card issued, so tests can assert the write path. */
+let mockMutations: Array<{
+  type: 'update' | 'delete';
+  payload?: Record<string, unknown>;
+  filters: Record<string, unknown>;
+}> = [];
 
+// Chainable builder covering the card's three query shapes: the history
+// fetch (select→eq→order), the delete helper's row lookup
+// (select→eq→eq→maybeSingle), and the mutations (update/delete→eq→eq,
+// awaited as thenables). Mutations are applied to mockRows so the card's
+// post-save refetch sees the new state.
 jest.mock('@/lib/supabase/client', () => ({
   createUntypedClient: () => ({
     auth: {
       getUser: async () => ({ data: { user: { id: 'user-1' } } }),
     },
     from: () => ({
-      select: () => ({
-        eq: () => ({
-          order: async () => ({ data: mockRows }),
-        }),
-      }),
+      select: () => {
+        const filters: Record<string, unknown> = {};
+        const sel = {
+          eq(col: string, val: unknown) {
+            filters[col] = val;
+            return sel;
+          },
+          // Fresh row copies each fetch — returning the same references would
+          // let React bail out of the post-mutation setRows.
+          order: async () => ({ data: mockRows.map((r) => ({ ...r })) }),
+          maybeSingle: async () => ({
+            data: mockRows.find((r) => r.logged_at === filters.logged_at) ?? null,
+            error: null,
+          }),
+        };
+        return sel;
+      },
+      update: (payload: Record<string, unknown>) => {
+        const filters: Record<string, unknown> = {};
+        const upd = {
+          eq(col: string, val: unknown) {
+            filters[col] = val;
+            return upd;
+          },
+          then(resolve: (v: { error: null }) => void) {
+            mockMutations.push({ type: 'update', payload, filters });
+            const row = mockRows.find((r) => r.logged_at === filters.logged_at);
+            if (row) Object.assign(row, payload);
+            resolve({ error: null });
+          },
+        };
+        return upd;
+      },
+      delete: () => {
+        const filters: Record<string, unknown> = {};
+        const del = {
+          eq(col: string, val: unknown) {
+            filters[col] = val;
+            return del;
+          },
+          then(resolve: (v: { error: null }) => void) {
+            mockMutations.push({ type: 'delete', filters });
+            mockRows = mockRows.filter((r) => r.logged_at !== filters.logged_at);
+            resolve({ error: null });
+          },
+        };
+        return del;
+      },
     }),
   }),
 }));
@@ -62,6 +116,7 @@ const chestRow = (loggedAt: string, chestCm: number) => ({
 describe('MeasurementTrendCard date ranges', () => {
   beforeEach(() => {
     mockRows = [];
+    mockMutations = [];
   });
 
   it('defaults to 1Y and excludes points older than a year', async () => {
@@ -140,5 +195,127 @@ describe('MeasurementTrendCard date ranges', () => {
     const user = userEvent.setup();
     await user.click(screen.getByTestId('measurement-trend-row-waist'));
     expect(screen.getByText('Waist detail')).toBeInTheDocument();
+  });
+});
+
+describe('MeasurementTrendCard entry editor', () => {
+  beforeEach(() => {
+    mockRows = [];
+    mockMutations = [];
+  });
+
+  it('edits a historical entry in place and refetches', async () => {
+    mockRows = [
+      { logged_at: daysAgo(20), chest: 100 },
+      { logged_at: daysAgo(10), chest: 102 },
+      { logged_at: daysAgo(1), chest: 104 },
+    ];
+    const onDataChanged = jest.fn();
+    render(<MeasurementTrendCard tapeUnit="cm" onDataChanged={onDataChanged} />);
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByTestId('measurement-entries-toggle'));
+
+    const badDate = daysAgo(10);
+    await user.click(screen.getByTestId(`measurement-entry-edit-${badDate}`));
+    const input = screen.getByTestId('measurement-entry-input');
+    await user.clear(input);
+    await user.type(input, '95.5');
+    await user.click(screen.getByTestId('measurement-entry-save'));
+
+    expect(mockMutations).toEqual([
+      {
+        type: 'update',
+        payload: { chest: 95.5 },
+        filters: { user_id: 'user-1', logged_at: badDate },
+      },
+    ]);
+    expect(onDataChanged).toHaveBeenCalled();
+    // Post-save refetch shows the corrected value in the list.
+    expect(
+      await screen.findByText('95.5 cm')
+    ).toBeInTheDocument();
+  });
+
+  it('converts an inch input back to cm before saving', async () => {
+    mockRows = [
+      { logged_at: daysAgo(5), right_thigh: 54.6 },
+      { logged_at: daysAgo(1), right_thigh: 35.8 }, // the mislogged calf value
+    ];
+    render(<MeasurementTrendCard tapeUnit="in" />);
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByTestId('measurement-entries-toggle'));
+    await user.click(screen.getByTestId(`measurement-entry-edit-${daysAgo(1)}`));
+    const input = screen.getByTestId('measurement-entry-input');
+    await user.clear(input);
+    await user.type(input, '21.5');
+    await user.click(screen.getByTestId('measurement-entry-save'));
+
+    expect(mockMutations).toHaveLength(1);
+    expect(mockMutations[0].type).toBe('update');
+    expect(mockMutations[0].payload?.right_thigh as number).toBeCloseTo(54.61, 2);
+  });
+
+  it('rejects a non-positive value without writing', async () => {
+    mockRows = [
+      { logged_at: daysAgo(5), chest: 100 },
+      { logged_at: daysAgo(1), chest: 102 },
+    ];
+    render(<MeasurementTrendCard tapeUnit="cm" />);
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByTestId('measurement-entries-toggle'));
+    await user.click(screen.getByTestId(`measurement-entry-edit-${daysAgo(1)}`));
+    await user.clear(screen.getByTestId('measurement-entry-input'));
+    await user.click(screen.getByTestId('measurement-entry-save'));
+
+    expect(mockMutations).toHaveLength(0);
+    expect(screen.getByTestId('measurement-entry-error')).toHaveTextContent(
+      'greater than 0'
+    );
+  });
+
+  it('deleting nulls the site when the day-row has other values', async () => {
+    mockRows = [
+      { logged_at: daysAgo(5), right_thigh: 54, waist: 86 },
+      { logged_at: daysAgo(1), right_thigh: 35.8, waist: 85 },
+    ];
+    render(<MeasurementTrendCard tapeUnit="cm" />);
+    const user = userEvent.setup();
+
+    // Select the thigh row explicitly (sort order may differ).
+    await user.click(await screen.findByTestId('measurement-trend-row-right_thigh'));
+    await user.click(screen.getByTestId('measurement-entries-toggle'));
+    await user.click(screen.getByTestId(`measurement-entry-delete-${daysAgo(1)}`));
+    // Two-step confirm.
+    await user.click(screen.getByTestId('measurement-entry-delete-confirm'));
+
+    expect(mockMutations).toEqual([
+      {
+        type: 'update',
+        payload: { right_thigh: null },
+        filters: { user_id: 'user-1', logged_at: daysAgo(1) },
+      },
+    ]);
+  });
+
+  it('deleting the only value on a day removes the whole row', async () => {
+    mockRows = [
+      { logged_at: daysAgo(5), chest: 100 },
+      { logged_at: daysAgo(1), chest: 102 },
+    ];
+    const onDataChanged = jest.fn();
+    render(<MeasurementTrendCard tapeUnit="cm" onDataChanged={onDataChanged} />);
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByTestId('measurement-entries-toggle'));
+    await user.click(screen.getByTestId(`measurement-entry-delete-${daysAgo(1)}`));
+    await user.click(screen.getByTestId('measurement-entry-delete-confirm'));
+
+    expect(mockMutations).toEqual([
+      { type: 'delete', filters: { user_id: 'user-1', logged_at: daysAgo(1) } },
+    ]);
+    expect(onDataChanged).toHaveBeenCalled();
   });
 });

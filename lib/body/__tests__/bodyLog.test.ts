@@ -2,6 +2,8 @@ import {
   buildMeasurementUpsert,
   saveBodyMeasurements,
   saveWaistFromCheckin,
+  updateMeasurementSiteEntry,
+  deleteMeasurementSiteEntry,
   BODY_MEASUREMENTS_CONFLICT,
 } from '@/lib/body/bodyLog';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -90,5 +92,116 @@ describe('single-source invariant', () => {
     expect(upserts[0].payload).toHaveProperty('source');
     expect(upserts[1].payload).not.toHaveProperty('source'); // retry drops it
     expect(upserts[1].payload).toMatchObject({ waist: 86 });
+  });
+});
+
+// ------------------------------------------------------------
+// Per-entry correction helpers (the mislogged-site fix path)
+// ------------------------------------------------------------
+
+const SITE_KEYS = ['waist', 'right_thigh', 'right_calf'];
+
+/**
+ * Mock supporting the correction helpers' shapes: select→eq→eq→maybeSingle
+ * (row lookup), update→eq→eq, delete→eq→eq (thenable chains). `row` is what
+ * the lookup returns; mutations records the writes.
+ */
+function mockCorrectionClient(row: Record<string, unknown> | null) {
+  const mutations: Array<{
+    type: 'update' | 'delete';
+    payload?: Record<string, unknown>;
+    filters: Record<string, unknown>;
+  }> = [];
+  const client = {
+    from() {
+      return {
+        select() {
+          const sel: any = {
+            eq: () => sel,
+            maybeSingle: async () => ({ data: row, error: null }),
+          };
+          return sel;
+        },
+        update(payload: Record<string, unknown>) {
+          const filters: Record<string, unknown> = {};
+          const upd: any = {
+            eq(col: string, val: unknown) {
+              filters[col] = val;
+              return upd;
+            },
+            then(resolve: (v: { error: null }) => void) {
+              mutations.push({ type: 'update', payload, filters });
+              resolve({ error: null });
+            },
+          };
+          return upd;
+        },
+        delete() {
+          const filters: Record<string, unknown> = {};
+          const del: any = {
+            eq(col: string, val: unknown) {
+              filters[col] = val;
+              return del;
+            },
+            then(resolve: (v: { error: null }) => void) {
+              mutations.push({ type: 'delete', filters });
+              resolve({ error: null });
+            },
+          };
+          return del;
+        },
+      };
+    },
+  } as unknown as SupabaseClient;
+  return { client, mutations };
+}
+
+describe('updateMeasurementSiteEntry', () => {
+  it('writes only the corrected site, keyed by user and day', async () => {
+    const { client, mutations } = mockCorrectionClient(null);
+    await updateMeasurementSiteEntry(client, 'u1', '2026-07-19', 'right_thigh', 54.61);
+    expect(mutations).toEqual([
+      {
+        type: 'update',
+        payload: { right_thigh: 54.61 },
+        filters: { user_id: 'u1', logged_at: '2026-07-19' },
+      },
+    ]);
+  });
+});
+
+describe('deleteMeasurementSiteEntry', () => {
+  it('nulls the site when the day-row has other values', async () => {
+    const { client, mutations } = mockCorrectionClient({
+      logged_at: '2026-07-19',
+      right_thigh: 35.8,
+      waist: 86,
+    });
+    await deleteMeasurementSiteEntry(client, 'u1', '2026-07-19', 'right_thigh', SITE_KEYS);
+    expect(mutations).toEqual([
+      {
+        type: 'update',
+        payload: { right_thigh: null },
+        filters: { user_id: 'u1', logged_at: '2026-07-19' },
+      },
+    ]);
+  });
+
+  it('deletes the whole day-row when the site was its only value', async () => {
+    const { client, mutations } = mockCorrectionClient({
+      logged_at: '2026-07-19',
+      right_thigh: 35.8,
+      waist: null,
+    });
+    await deleteMeasurementSiteEntry(client, 'u1', '2026-07-19', 'right_thigh', SITE_KEYS);
+    expect(mutations).toEqual([
+      { type: 'delete', filters: { user_id: 'u1', logged_at: '2026-07-19' } },
+    ]);
+  });
+
+  it('is a no-op when the row does not exist', async () => {
+    const { client, mutations } = mockCorrectionClient(null);
+    await deleteMeasurementSiteEntry(client, 'u1', '2026-07-19', 'right_thigh', SITE_KEYS);
+    expect(mutations).toHaveLength(0);
   });
 });

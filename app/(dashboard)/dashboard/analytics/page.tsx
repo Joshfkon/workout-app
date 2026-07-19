@@ -1588,10 +1588,12 @@ function AnalyticsPageContent() {
           )}
 
           {/* Per-site tape trends. Entry happens via the header's
-              "Log measurements" button (unified sheet). */}
+              "Log measurements" button (unified sheet); corrections/deletes
+              happen inline in the card's per-entry editor. */}
           <MeasurementTrendCard
             tapeUnit={units === 'lb' ? 'in' : 'cm'}
             refreshKey={bodyRefreshKey}
+            onDataChanged={() => setBodyRefreshKey((k) => k + 1)}
           />
 
           {/* Proportions & targets — How You Compare + FFMI ceiling + weight
