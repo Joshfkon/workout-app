@@ -25,6 +25,7 @@ import {
   normalizeMuscleToken,
   resolveMuscleToStandard,
 } from '@/types/schema';
+import { rirFromFeedback, sumEffectiveVolume } from '@/services/effectiveVolume';
 
 // ============================================
 // CONSTANTS / HELPERS
@@ -100,6 +101,15 @@ export interface MuscleVolumeData {
   totalSets: number;
   directSets: number;
   indirectSets: number;
+  /**
+   * RIR-weighted "Effective Volume" for the same counted sets: Σ
+   * EFFECTIVE_VOLUME_WEIGHTS[set.rir] with identical warm-up exclusion and
+   * primary/secondary crediting as totalSets. Sets with unknown RIR weigh 1.0
+   * (conservative). One decimal of precision; totalSets stays the raw count.
+   * Optional: paths that only have pre-aggregated rows (no per-set RIR) omit
+   * it, and consumers fall back to the raw count.
+   */
+  effectiveVolumeSets?: number;
   landmarks: VolumeLandmarks;
   status: VolumeStatus;
   percentOfMrv: number;
@@ -161,11 +171,16 @@ export function calculateWeeklyVolume(input: CalculateVolumeInput): Map<Standard
       totalSets: 0,
       directSets: 0,
       indirectSets: 0,
+      effectiveVolumeSets: 0,
       landmarks,
       status: 'below_mev',
       percentOfMrv: 0,
     });
   });
+
+  // Per-muscle accumulator for the RIR-weighted effective volume (kept
+  // separate from directSets/indirectSets so raw counting is untouched).
+  const effectiveByMuscle = new Map<StandardMuscleGroup, number>();
 
   // Count sets per muscle group
   for (const { exercise, completedSets } of exerciseBlocks) {
@@ -173,6 +188,12 @@ export function calculateWeeklyVolume(input: CalculateVolumeInput): Map<Standard
     const setCount = workingSets.length;
 
     if (setCount === 0) continue;
+
+    // Same counted sets, weighted by reported RIR (unknown -> 1.0, warned).
+    const effectiveCount = sumEffectiveVolume(
+      workingSets.map((s) => rirFromFeedback(s.feedback)),
+      exercise.name
+    );
 
     // Primary muscle: distribute direct credit across the standard muscles it
     // resolves to (legacy coarse tags like 'chest' split across their heads,
@@ -184,6 +205,7 @@ export function calculateWeeklyVolume(input: CalculateVolumeInput): Map<Standard
         const data = volumeMap.get(muscle);
         if (!data) continue;
         data.directSets += setCount * weight;
+        effectiveByMuscle.set(muscle, (effectiveByMuscle.get(muscle) ?? 0) + effectiveCount * weight);
       }
     } else if (process.env.NODE_ENV !== 'production') {
       // A primary muscle that doesn't map to a canonical group silently drops
@@ -222,6 +244,10 @@ export function calculateWeeklyVolume(input: CalculateVolumeInput): Map<Standard
       if (volumeMap.has(standardMuscle)) {
         const data = volumeMap.get(standardMuscle)!;
         data.indirectSets += setCount * credit;
+        effectiveByMuscle.set(
+          standardMuscle,
+          (effectiveByMuscle.get(standardMuscle) ?? 0) + effectiveCount * credit
+        );
       }
     });
   }
@@ -233,6 +259,9 @@ export function calculateWeeklyVolume(input: CalculateVolumeInput): Map<Standard
     data.directSets = Math.round(data.directSets);
     data.indirectSets = Math.round(data.indirectSets);
     data.totalSets = data.directSets + data.indirectSets;
+    // Effective volume keeps one decimal (weighted sums are fractional by design).
+    data.effectiveVolumeSets =
+      Math.round((effectiveByMuscle.get(data.muscleGroup) ?? 0) * 10) / 10;
     data.status = assessVolumeStatus(data.totalSets, data.landmarks);
     // Guard against division by zero (mrv should never be 0, but protect anyway)
     data.percentOfMrv = data.landmarks.mrv > 0

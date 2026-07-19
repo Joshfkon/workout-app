@@ -105,6 +105,12 @@ const customJestConfig = {
       branches: 50,
       statements: 70,
     },
+    'services/effectiveVolume.ts': {
+      lines: 70,
+      functions: 60,
+      branches: 50,
+      statements: 70,
+    },
     'services/fatigueEngine.ts': {
       lines: 70,
       functions: 60,

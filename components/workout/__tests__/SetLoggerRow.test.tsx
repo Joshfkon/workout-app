@@ -115,7 +115,7 @@ describe('SetLoggerRow feedback sheet', () => {
     await user.click(screen.getByRole('button', { name: /Ugly/ }));
 
     // Discomfort: collapsed neutral row -> joint picker -> severity (two taps)
-    await user.click(screen.getByText(/Log discomfort/));
+    await user.click(screen.getByText(/Log injury or discomfort/));
     await user.click(screen.getByTestId('joint-chip-knee'));
     await user.click(screen.getByTestId('joint-severity-chip-pain'));
 
@@ -137,18 +137,71 @@ describe('SetLoggerRow feedback sheet', () => {
     );
   });
 
+  describe('RIR chip row (4+ through 0)', () => {
+    it('renders the five effort chips in order with a 4+ chip at the far left and no bone icon', () => {
+      render(<SetLoggerRow {...defaultProps} />);
+
+      const chips = [
+        screen.getByRole('button', { name: '4+ reps in reserve (cruise)' }),
+        screen.getByRole('button', { name: '3 reps in reserve (easy)' }),
+        screen.getByRole('button', { name: '2 reps in reserve (good)' }),
+        screen.getByRole('button', { name: '1 reps in reserve (hard)' }),
+        screen.getByRole('button', { name: '0 reps in reserve (maxed)' }),
+      ];
+      // DOM order matches the visual order: 4+ leftmost, 0 rightmost.
+      for (let i = 1; i < chips.length; i++) {
+        expect(
+          chips[i - 1].compareDocumentPosition(chips[i]) & Node.DOCUMENT_POSITION_FOLLOWING
+        ).toBeTruthy();
+      }
+
+      // The bone (injury) shortcut is gone from the row; injury logging lives
+      // in the feedback sheet.
+      expect(screen.queryByRole('button', { name: 'Log joint pain' })).not.toBeInTheDocument();
+    });
+
+    it('stores a 4+ selection as integer 4 with RPE 6 in the logged set', async () => {
+      const user = userEvent.setup();
+      const onLog = jest.fn();
+      render(<SetLoggerRow {...defaultProps} onLog={onLog} />);
+
+      const cruiseChip = screen.getByRole('button', { name: '4+ reps in reserve (cruise)' });
+      await user.click(cruiseChip);
+      expect(cruiseChip).toHaveAttribute('aria-pressed', 'true');
+
+      await user.click(screen.getByRole('button', { name: 'Log set' }));
+
+      expect(onLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          rpe: 6,
+          feedback: expect.objectContaining({ repsInTank: 4 }),
+        })
+      );
+      const logged = onLog.mock.calls[0][0];
+      expect(logged.feedback.repsInTank).toBe(4);
+      expect(typeof logged.feedback.repsInTank).toBe('number');
+    });
+
+    it('pre-selects a prescribed target RIR of 4 instead of clamping it to 3', () => {
+      render(<SetLoggerRow {...defaultProps} targetRir={4} />);
+      expect(
+        screen.getByRole('button', { name: '4+ reps in reserve (cruise)' })
+      ).toHaveAttribute('aria-pressed', 'true');
+    });
+  });
+
   it('shows a logged discomfort as a summary row with a Remove affordance', async () => {
     const user = userEvent.setup();
     render(<SetLoggerRow {...defaultProps} />);
     await openFeedbackSheet(user);
 
-    await user.click(screen.getByText(/Log discomfort/));
+    await user.click(screen.getByText(/Log injury or discomfort/));
     await user.click(screen.getByTestId('joint-chip-shoulder'));
     await user.click(screen.getByTestId('joint-severity-chip-twinge'));
 
     expect(screen.getByText(/Shoulders — Twinge/)).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Remove discomfort' }));
-    expect(screen.getByText(/Log discomfort/)).toBeInTheDocument();
+    expect(screen.getByText(/Log injury or discomfort/)).toBeInTheDocument();
   });
 });

@@ -19,6 +19,7 @@ import {
 } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 import { resolveMuscleToStandard, type StandardMuscleGroup } from '@/types/schema';
 import type { SetLog } from '@/types/schema';
+import { rirFromFeedback, sumEffectiveVolume } from '@/services/effectiveVolume';
 import type { ExerciseBlockWithExercise } from '@/app/(dashboard)/dashboard/workout/[id]/_lib/types';
 import {
   computeSleepWindowMultiplier,
@@ -150,7 +151,8 @@ function useWeeklyStats(
         accumulateExerciseVolume(
           acc,
           { id: ex.primaryMuscle || 'x', name: ex.primaryMuscle || 'x', primary_muscle: ex.primaryMuscle, secondary_muscles: ex.secondaryMuscles },
-          ex.sets.length
+          ex.sets.length,
+          sumEffectiveVolume(ex.sets.map((set) => set.reportedRir), ex.primaryMuscle ?? undefined)
         );
         markReachable(ex.primaryMuscle, ex.secondaryMuscles);
       }
@@ -158,8 +160,8 @@ function useWeeklyStats(
 
     for (const block of liveBlocks) {
       markReachable(block.exercise.primaryMuscle, block.exercise.secondaryMuscles);
-      const workingSets = liveWorkingSetsByBlock.get(block.id)?.length ?? 0;
-      if (workingSets === 0) continue;
+      const workingSets = liveWorkingSetsByBlock.get(block.id) ?? [];
+      if (workingSets.length === 0) continue;
       accumulateExerciseVolume(
         acc,
         {
@@ -168,7 +170,11 @@ function useWeeklyStats(
           primary_muscle: block.exercise.primaryMuscle,
           secondary_muscles: block.exercise.secondaryMuscles,
         },
-        workingSets
+        workingSets.length,
+        sumEffectiveVolume(
+          workingSets.map((s) => rirFromFeedback(s.feedback)),
+          block.exercise.name
+        )
       );
     }
 

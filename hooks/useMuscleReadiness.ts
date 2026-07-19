@@ -17,6 +17,7 @@ import {
   type CoarseMuscle,
 } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 import { resolveMuscleToStandard } from '@/types/schema';
+import { rirFromFeedback, sumEffectiveVolume } from '@/services/effectiveVolume';
 import {
   computeSleepWindowMultiplier,
   recoveryConfigFor,
@@ -55,8 +56,11 @@ interface HistorySessionRow {
   exercises: {
     primaryMuscle: string | null;
     secondaryMuscles: string[];
-    // Working sets only (warmups excluded on ingest).
-    sets: { repsInTank: number | null }[];
+    // Working sets only (warmups excluded on ingest). `repsInTank` is the
+    // recovery-model RIR (feedback, else RPE-derived); `reportedRir` is ONLY
+    // the explicitly logged feedback RIR (null otherwise) and is what the
+    // effective-volume weighting consumes (unknown → 1.0, conservative).
+    sets: { repsInTank: number | null; reportedRir: number | null }[];
   }[];
 }
 
@@ -179,7 +183,10 @@ export function useRecoveryHistory(
         entry.exercises.push({
           primaryMuscle: exercise.primary_muscle,
           secondaryMuscles: exercise.secondary_muscles || [],
-          sets: workingSets.map((s) => ({ repsInTank: rirFromRow(s) })),
+          sets: workingSets.map((s) => ({
+            repsInTank: rirFromRow(s),
+            reportedRir: rirFromFeedback(s.feedback),
+          })),
         });
       });
 
@@ -257,7 +264,8 @@ export function useMuscleReadiness({
         accumulateExerciseVolume(
           acc,
           { id: ex.primaryMuscle || 'x', name: ex.primaryMuscle || 'x', primary_muscle: ex.primaryMuscle, secondary_muscles: ex.secondaryMuscles },
-          ex.sets.length
+          ex.sets.length,
+          sumEffectiveVolume(ex.sets.map((set) => set.reportedRir), ex.primaryMuscle ?? undefined)
         );
         markReachable(ex.primaryMuscle, ex.secondaryMuscles);
       }
@@ -265,9 +273,9 @@ export function useMuscleReadiness({
 
     // Live session.
     for (const block of liveBlocks) {
-      const workingSets = liveWorkingSetsByBlock.get(block.id)?.length ?? 0;
+      const liveWorkingSets = liveWorkingSetsByBlock.get(block.id) ?? [];
       markReachable(block.exercise.primaryMuscle, block.exercise.secondaryMuscles);
-      if (workingSets === 0) continue;
+      if (liveWorkingSets.length === 0) continue;
       accumulateExerciseVolume(
         acc,
         {
@@ -276,7 +284,11 @@ export function useMuscleReadiness({
           primary_muscle: block.exercise.primaryMuscle,
           secondary_muscles: block.exercise.secondaryMuscles,
         },
-        workingSets
+        liveWorkingSets.length,
+        sumEffectiveVolume(
+          liveWorkingSets.map((s) => rirFromFeedback(s.feedback)),
+          block.exercise.name
+        )
       );
     }
 

@@ -9,6 +9,7 @@ import { MetricTile } from './MetricTile';
 import { SleepTile, type SleepGlance } from './SleepTile';
 import { intakePaceVerdict } from './intakePace';
 import type { EatingWindow, PacingPhase } from '@/services/intakePacing';
+import { formatEffectiveVolume } from '@/services/effectiveVolume';
 
 /** Today's macro totals (as summed from the food log). */
 export interface GlanceNutritionTotals {
@@ -21,6 +22,8 @@ export interface GlanceNutritionTotals {
 /** Pre-aggregated weekly volume summary for the glance tile (null = no volume yet). */
 export interface GlanceVolumeSummary {
   totalSets: number;
+  /** RIR-weighted Effective Volume for the same sets (primary display number). */
+  totalEffectiveSets: number;
   totalTarget: number;
   lowCount: number;
 }
@@ -251,8 +254,11 @@ export function MetricTileGrid({
           accent={volume.lowCount > 0 ? 'warning' : undefined}
         >
           <div className="text-xl font-semibold text-surface-100">
-            {volume.totalSets}
-            <span className="text-sm text-surface-500 font-normal"> / {volume.totalTarget} sets</span>
+            {/* Effective Volume (RIR-weighted) primary; raw count secondary. */}
+            {formatEffectiveVolume(volume.totalEffectiveSets)}
+            <span className="text-sm text-surface-500 font-normal">
+              {' '}effective / {volume.totalSets} sets
+            </span>
           </div>
           <div className="h-1 bg-surface-800 rounded-full mt-2 overflow-hidden">
             <div

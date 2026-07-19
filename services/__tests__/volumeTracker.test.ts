@@ -826,3 +826,117 @@ function createVolumeData(
     percentOfMrv: Math.round((totalSets / 22) * 100),
   };
 }
+
+// ============================================
+// EFFECTIVE VOLUME (RIR-WEIGHTED) TESTS
+// ============================================
+
+describe('calculateWeeklyVolume — effectiveVolumeSets (RIR-weighted)', () => {
+  let warnSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+  afterEach(() => {
+    warnSpy.mockRestore();
+  });
+
+  const setWithRir = (blockId: string, rir: 0 | 1 | 2 | 3 | 4): SetLog => ({
+    ...createMockSetLog(blockId),
+    feedback: { repsInTank: rir, form: 'clean' },
+  });
+
+  it('weights a mixed-RIR session by the EFFECTIVE_VOLUME_WEIGHTS table', () => {
+    const exercise = createMockExercise('chest_upper');
+    const block = createMockBlock(exercise.id);
+    const input: CalculateVolumeInput = {
+      exerciseBlocks: [
+        {
+          block,
+          exercise,
+          // 0 → 1.0, 1 → 1.0, 2 → 1.0, 3 → 0.6, 4 → 0.25 = 3.85
+          completedSets: [
+            setWithRir(block.id, 0),
+            setWithRir(block.id, 1),
+            setWithRir(block.id, 2),
+            setWithRir(block.id, 3),
+            setWithRir(block.id, 4),
+          ],
+        },
+      ],
+      userLandmarks: defaultLandmarks,
+    };
+
+    const result = calculateWeeklyVolume(input);
+    const chest = result.get('chest_upper')!;
+    expect(chest.totalSets).toBe(5); // raw count untouched
+    expect(chest.effectiveVolumeSets).toBeCloseTo(3.9, 5); // 3.85 rounded to 1dp
+  });
+
+  it('excludes warm-up sets from effective volume exactly like the raw count', () => {
+    const exercise = createMockExercise('chest_upper');
+    const block = createMockBlock(exercise.id);
+    const input: CalculateVolumeInput = {
+      exerciseBlocks: [
+        {
+          block,
+          exercise,
+          completedSets: [
+            { ...createMockSetLog(block.id, true), feedback: { repsInTank: 4, form: 'clean' } },
+            { ...createMockSetLog(block.id, true), feedback: { repsInTank: 4, form: 'clean' } },
+            setWithRir(block.id, 1),
+            setWithRir(block.id, 2),
+          ],
+        },
+      ],
+      userLandmarks: defaultLandmarks,
+    };
+
+    const result = calculateWeeklyVolume(input);
+    const chest = result.get('chest_upper')!;
+    expect(chest.totalSets).toBe(2);
+    expect(chest.effectiveVolumeSets).toBeCloseTo(2.0, 5);
+  });
+
+  it('weights sets with null/unknown RIR 1.0 (conservative), warns, and never drops them', () => {
+    const exercise = createMockExercise('chest_upper');
+    const block = createMockBlock(exercise.id);
+    const input: CalculateVolumeInput = {
+      exerciseBlocks: [
+        {
+          block,
+          exercise,
+          // No feedback at all (legacy set) + one explicit RIR 3.
+          completedSets: [createMockSetLog(block.id), setWithRir(block.id, 3)],
+        },
+      ],
+      userLandmarks: defaultLandmarks,
+    };
+
+    const result = calculateWeeklyVolume(input);
+    const chest = result.get('chest_upper')!;
+    expect(chest.totalSets).toBe(2);
+    expect(chest.effectiveVolumeSets).toBeCloseTo(1.6, 5); // 1.0 (unknown) + 0.6
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy.mock.calls[0][0]).toMatch(/null\/unknown RIR/);
+  });
+
+  it('applies the 0.5x secondary-muscle credit to effective volume too', () => {
+    const exercise = createMockExercise('chest_upper', ['triceps']);
+    const block = createMockBlock(exercise.id);
+    const input: CalculateVolumeInput = {
+      exerciseBlocks: [
+        {
+          block,
+          exercise,
+          completedSets: [setWithRir(block.id, 0), setWithRir(block.id, 4)], // 1.25 effective
+        },
+      ],
+      userLandmarks: defaultLandmarks,
+    };
+
+    const result = calculateWeeklyVolume(input);
+    expect(result.get('chest_upper')!.effectiveVolumeSets).toBeCloseTo(1.3, 5); // 1.25 → 1dp
+    expect(result.get('triceps')!.effectiveVolumeSets).toBeCloseTo(0.6, 5); // 1.25 × 0.5 → 1dp
+  });
+});
