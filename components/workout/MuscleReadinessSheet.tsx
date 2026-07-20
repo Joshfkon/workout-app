@@ -280,8 +280,8 @@ export function MuscleReadinessContent({
   // The map paints from the same rows the list shows: fine-child overrides
   // only for children actually visible (pinned-lagging or expanded).
   const mapRows = useMemo(
-    () => withVisibleChildren(rows, expansion.expanded, pinLaggingChild),
-    [rows, expansion.expanded]
+    () => withVisibleChildren(rows, expansion.expanded, pinLaggingChild, expansion.collapsed),
+    [rows, expansion.expanded, expansion.collapsed]
   );
 
   return (

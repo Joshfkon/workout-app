@@ -226,8 +226,8 @@ export default function VolumeProfilePage() {
   // Rows narrowed to the children actually on screen — the body map and the
   // tap-to-scroll targets must match the visible bars, not the full hierarchy.
   const visibleRows = useMemo(
-    () => withVisibleChildren(volumeRows, expansion.expanded, pinLaggingChild),
-    [volumeRows, expansion.expanded, pinLaggingChild]
+    () => withVisibleChildren(volumeRows, expansion.expanded, pinLaggingChild, expansion.collapsed),
+    [volumeRows, expansion.expanded, expansion.collapsed, pinLaggingChild]
   );
 
   // Find muscles below MEV (for atrophy risk alert) — same coarse rows as bars.

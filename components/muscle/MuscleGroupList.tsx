@@ -19,7 +19,9 @@ import { useUserStore } from '@/stores';
  *  - THIS component decides visibility: a child renders when its parent is
  *    expanded or the surface pins it (e.g. below-MEV children on volume
  *    surfaces), and a parent defaults to expanded when the data flags
- *    divergence — an explicit user choice always wins over the default.
+ *    divergence — an explicit user choice always wins over the default,
+ *    including over pins: explicitly collapsing a parent hides its pinned
+ *    children too.
  *  - Each surface supplies its own row/child CONTENT renderers (bars, badges,
  *    timers) and its own row ordering; the hierarchy chrome is shared.
  */
@@ -43,6 +45,12 @@ export interface MuscleListRow<C extends MuscleListChild = MuscleListChild> {
 export interface MuscleRowExpansion {
   /** Effective expanded coarse ids (explicit user choice, else autoExpand). */
   expanded: ReadonlySet<string>;
+  /**
+   * Coarse ids the user EXPLICITLY collapsed. Pinned children (e.g. lagging
+   * fine muscles) stay visible under an untouched parent, but an explicit
+   * collapse hides them too — the user's choice wins over the pin default.
+   */
+  collapsed: ReadonlySet<string>;
   /** Flip a parent; the resulting explicit choice is persisted per user per surface. */
   toggle: (muscle: string) => void;
 }
@@ -112,6 +120,14 @@ export function useMuscleRowExpansion(
     return set;
   }, [autoByMuscle, choices]);
 
+  const collapsed = useMemo(() => {
+    const set = new Set<string>();
+    for (const [muscle, value] of Object.entries(choices)) {
+      if (value === false) set.add(muscle);
+    }
+    return set;
+  }, [choices]);
+
   const toggle = (muscle: string) => {
     setChoices((prev) => {
       const effective = prev[muscle] ?? autoByMuscle.get(muscle) ?? false;
@@ -121,23 +137,28 @@ export function useMuscleRowExpansion(
     });
   };
 
-  return { expanded, toggle };
+  return { expanded, collapsed, toggle };
 }
 
 /**
  * Rows with `children` narrowed to the ones actually VISIBLE (expanded or
  * pinned) — feed the muscle-map adapters and scroll-target sets from this so
  * the map's fine-child overrides always match the child rows on screen.
+ * Pass `collapsed` (explicit user collapses) so a pinned child under an
+ * explicitly-collapsed parent is hidden here too, matching the rendered list.
  */
 export function withVisibleChildren<R extends MuscleListRow>(
   rows: readonly R[],
   expanded: ReadonlySet<string>,
-  pinChild?: (child: R['children'][number], row: R) => boolean
+  pinChild?: (child: R['children'][number], row: R) => boolean,
+  collapsed?: ReadonlySet<string>
 ): R[] {
   return rows.map((row) => ({
     ...row,
     children: row.children.filter(
-      (child) => expanded.has(row.muscle) || pinChild?.(child, row) === true
+      (child) =>
+        expanded.has(row.muscle) ||
+        (!collapsed?.has(row.muscle) && pinChild?.(child, row) === true)
     ),
   }));
 }
@@ -188,8 +209,13 @@ export function MuscleGroupList<R extends MuscleListRow>({
       {rows.map((row) => {
         const hasChildren = row.children.length > 0;
         const expanded = hasChildren && expansion.expanded.has(row.muscle);
+        // Pins keep lagging children visible under an untouched parent, but an
+        // explicit user collapse hides everything — the choice wins over the pin.
+        const pinsSuppressed = expansion.collapsed.has(row.muscle);
         const visibleChildren = hasChildren
-          ? row.children.filter((child) => expanded || pinChild?.(child, row) === true)
+          ? row.children.filter(
+              (child) => expanded || (!pinsSuppressed && pinChild?.(child, row) === true)
+            )
           : [];
 
         return (
