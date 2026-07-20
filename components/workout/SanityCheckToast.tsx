@@ -53,24 +53,27 @@ export const SanityCheckToast = memo(function SanityCheckToast({
     setTimeout(onDismiss, 200);
   };
 
+  // Accent shades must exist in the Tailwind palette (warning/danger only
+  // define 400-600) and need a dark counterpart so titles stay readable on
+  // the light theme's white toast surface.
   const colorClasses = {
     blue: {
       bg: 'bg-primary-500/10',
       border: 'border-primary-500/30',
-      icon: 'text-primary-400',
-      title: 'text-primary-300',
+      icon: 'text-primary-600 dark:text-primary-400',
+      title: 'text-primary-700 dark:text-primary-300',
     },
     yellow: {
       bg: 'bg-warning-500/10',
       border: 'border-warning-500/30',
-      icon: 'text-warning-400',
-      title: 'text-warning-300',
+      icon: 'text-warning-600 dark:text-warning-400',
+      title: 'text-warning-600 dark:text-warning-400',
     },
     red: {
       bg: 'bg-danger-500/10',
       border: 'border-danger-500/30',
-      icon: 'text-danger-400',
-      title: 'text-danger-300',
+      icon: 'text-danger-600 dark:text-danger-400',
+      title: 'text-danger-600 dark:text-danger-400',
     },
   };
 
@@ -100,8 +103,10 @@ export const SanityCheckToast = memo(function SanityCheckToast({
         layout === 'fixed'
           ? 'fixed bottom-4 right-4 z-50 max-w-sm'
           : 'relative ml-auto w-full max-w-sm',
-        'rounded-lg border shadow-lg',
-        colors.bg,
+        // Solid surface under the accent tint: the toast floats over page
+        // content, so a bare /10 background lets whatever is behind it bleed
+        // through the text.
+        'rounded-lg border shadow-lg bg-surface-900 overflow-hidden',
         colors.border,
         'transform transition-all duration-200',
         isExiting
@@ -109,7 +114,7 @@ export const SanityCheckToast = memo(function SanityCheckToast({
           : 'opacity-100 translate-y-0 animate-in slide-in-from-bottom-4 fade-in-0'
       )}
     >
-      <div className="p-4">
+      <div className={cn('p-4', colors.bg)}>
         <div className="flex items-start gap-3">
           {/* Icon */}
           <div className={cn('flex-shrink-0', colors.icon)}>
