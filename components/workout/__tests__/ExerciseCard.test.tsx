@@ -509,6 +509,92 @@ describe('ExerciseCard', () => {
     });
   });
 
+  describe('Predicted RIR readout for the entered weight × reps (SetLoggerRow)', () => {
+    // Same within-session fixture as the effort-warning tests: 100 kg × 10 @
+    // RPE 8 (2 RIR) logged → anchor e1RM 140 kg, 1-set fatigue haircut →
+    // 138.6 kg effective, rep-max at 100 kg = 12.
+    const loggedSets = [
+      createMockSetLog({ id: 'set-1', setNumber: 1, weightKg: 100, reps: 10, rpe: 8 }),
+    ];
+
+    it('shows the live prediction for the prefilled combo and tracks rep edits without debounce', async () => {
+      const user = userEvent.setup();
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          sets={loggedSets}
+          isActive={true}
+          onSetComplete={jest.fn().mockResolvedValue('id')}
+        />
+      );
+
+      // Prefill 100 kg × 9 → 12 − 9 = 3 predicted RIR, always visible.
+      expect(screen.getByTestId('predicted-rir')).toHaveTextContent('Predicted: ~3 RIR (easy)');
+
+      // 9 → 12 reps: predicted RIR 0, immediately (readout is not debounced).
+      await user.click(screen.getByRole('button', { name: 'Increase reps' }));
+      await user.click(screen.getByRole('button', { name: 'Increase reps' }));
+      await user.click(screen.getByRole('button', { name: 'Increase reps' }));
+      expect(screen.getByTestId('predicted-rir')).toHaveTextContent('Predicted: ~0 RIR (maxed)');
+
+      // One more rep: past the predicted max.
+      await user.click(screen.getByRole('button', { name: 'Increase reps' }));
+      expect(screen.getByTestId('predicted-rir')).toHaveTextContent(
+        'Predicted: 1 rep past your max'
+      );
+    });
+
+    it('opens a reasoning sheet from the (i) that walks the anchor → fatigue → curve math', async () => {
+      const user = userEvent.setup();
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          sets={loggedSets}
+          isActive={true}
+          onSetComplete={jest.fn().mockResolvedValue('id')}
+        />
+      );
+
+      await user.click(screen.getByRole('button', { name: 'How this RIR prediction works' }));
+
+      const reasoning = screen.getByTestId('predicted-rir-reasoning');
+      expect(reasoning).toHaveTextContent(
+        'Capacity anchor: ~140 kg estimated 1RM — from your strongest set logged this session.'
+      );
+      expect(reasoning).toHaveTextContent(
+        'Within-session fatigue: after 1 logged set, usable capacity is de-rated ~1% per set to ~138.6 kg (capped at −8%).'
+      );
+      expect(reasoning).toHaveTextContent(
+        'Rep-max curve (Epley): at 100 kg, that capacity predicts about 12 reps to failure (0 RIR).'
+      );
+      expect(reasoning).toHaveTextContent("You've entered 9 reps: 12 − 9 ≈ 3 reps in reserve.");
+    });
+
+    it('names the transferred source in the reasoning on a cold-start exercise', async () => {
+      const user = userEvent.setup();
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          isActive={true}
+          onSetComplete={jest.fn().mockResolvedValue('id')}
+          coldStartSuggestion={{
+            weightKg: 60,
+            reason: 'estimated from your Iso-Lateral Low Row strength',
+            explanation: 'Transferred from a logged related exercise.',
+          }}
+        />
+      );
+
+      // Transferred anchor → softened readout.
+      expect(screen.getByTestId('predicted-rir')).toHaveTextContent('rough estimate');
+
+      await user.click(screen.getByRole('button', { name: 'How this RIR prediction works' }));
+      const reasoning = screen.getByTestId('predicted-rir-reasoning');
+      expect(reasoning).toHaveTextContent('estimated from your Iso-Lateral Low Row strength');
+      expect(reasoning).toHaveTextContent('treat this as a rough guide');
+    });
+  });
+
   describe('One-tap set logging (SetLoggerRow)', () => {
     it('logs a set with prefilled suggestion values in exactly one tap', async () => {
       const user = userEvent.setup();

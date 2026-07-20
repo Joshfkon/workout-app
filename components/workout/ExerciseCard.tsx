@@ -8,9 +8,9 @@ import { rpeToRir } from '@/types/schema';
 import { SorenessChipRow, ExerciseFeedbackChips, JointPainPicker } from './FeedbackChips';
 import { filterExercises, dedupeExercisesById } from '@/services/exerciseFilter';
 import { convertWeight, formatMuscleName, formatWeightValue, convertWeightForDisplay, inputWeightToKg, roundToPlateIncrement } from '@/lib/utils';
-import { recommendSet, recommendSessionStart, estimateRepsForWeight, predictAmrapReps, recommendSeedForSlot, resolveLastRir, prescribe, type SeedRecommendation } from '@/services/setRecommender';
+import { recommendSet, recommendSessionStart, estimateRepsForWeight, fatigueAdjustedE1RM, predictAmrapReps, recommendSeedForSlot, resolveLastRir, prescribe, type SeedRecommendation } from '@/services/setRecommender';
 import { inferSetRole, type SetRole } from '@/services/suggestionEngine/setRoles';
-import { RAMP_LOAD_FRACTION, WORKING_WEIGHT_CLAMP_FRACTION } from '@/services/suggestionEngine/constants';
+import { RAMP_LOAD_FRACTION, WORKING_WEIGHT_CLAMP_FRACTION, FATIGUE_E1RM_PER_SET, FATIGUE_E1RM_FLOOR } from '@/services/suggestionEngine/constants';
 import { findSimilarExercises, calculateSimilarityScore } from '@/services/exerciseSwapper';
 import { filterExercisesByEquipment } from '@/services/equipmentFilter';
 import { detectPlateau, type PlateauDetectionResult, type PlateauGoal } from '@/services/plateauDetector';
@@ -2578,19 +2578,30 @@ export const ExerciseCard = memo(function ExerciseCard({
 
             const lastCompleted = completedSets[completedSets.length - 1];
             let maxReps: number | null;
+            let anchorE1RMKgUsed: number;
+            let anchorSourcePhrase: string;
+            let setsDone = 0;
             if (lastCompleted) {
               // Within-session: same capacity anchor as recommendSet —
               // max(session-best e1RM, Epley of the last set at its logged
               // RIR), fatigue-adjusted for sets already done.
+              const lastRir = resolveLastRir(lastCompleted, effectiveTargetRir);
+              setsDone = completedSets.length;
               maxReps = estimateRepsForWeight(enteredKg, {
                 lastWeightKg: lastCompleted.weightKg,
                 lastReps: lastCompleted.reps,
-                lastRir: resolveLastRir(lastCompleted, effectiveTargetRir),
-                setsCompletedThisExercise: completedSets.length,
+                lastRir,
+                setsCompletedThisExercise: setsDone,
                 sessionBestE1RMKg: sessionBestE1RM,
                 targetRepRange: block.targetRepRange,
                 targetRir: 0,
               });
+              // Mirror estimateRepsForWeight's anchor rule so the reasoning
+              // sheet names the exact e1RM the prediction ran on.
+              const lastSetE1RM =
+                lastCompleted.weightKg * (1 + (lastCompleted.reps + Math.max(0, lastRir)) / 30);
+              anchorE1RMKgUsed = Math.max(sessionBestE1RM ?? 0, lastSetE1RM);
+              anchorSourcePhrase = 'from your strongest set logged this session';
             } else {
               // Session start: the same prescription e1RM ladder the seed's
               // rep answer used (seedRepsForWeight) — last-session resolved
@@ -2607,6 +2618,11 @@ export const ExerciseCard = memo(function ExerciseCard({
                     targetRir: 0,
                   })
                 : null;
+              anchorE1RMKgUsed = e1rm ?? 0;
+              anchorSourcePhrase =
+                lastSessionE1RM !== undefined
+                  ? 'from your last session of this exercise'
+                  : coldStartSuggestion?.reason ?? 'an estimate from your training profile';
             }
             if (maxReps == null) return null;
 
@@ -2614,14 +2630,43 @@ export const ExerciseCard = memo(function ExerciseCard({
             // estimate; proxy = no logged working set for THIS exercise)
             // softens the copy and names the source.
             const hasOwnHistory = !!lastCompleted || lastSessionE1RM !== undefined;
+            const predictedRir = maxReps - enteredReps;
+
+            // Plain-language reasoning for the logger's predicted-RIR (i)
+            // sheet: each line states one input layer with its real numbers,
+            // in the order the math applies them (anchor → fatigue → curve →
+            // subtraction), matching the suggestion sheet's copy style.
+            const reasoning: string[] = [
+              `Capacity anchor: ~${displayWeight(anchorE1RMKgUsed, true)} ${weightLabel} estimated 1RM — ${anchorSourcePhrase}.`,
+            ];
+            if (setsDone > 0) {
+              reasoning.push(
+                `Within-session fatigue: after ${setsDone} logged set${setsDone === 1 ? '' : 's'}, usable capacity is de-rated ~${Math.round(FATIGUE_E1RM_PER_SET * 100)}% per set to ~${displayWeight(fatigueAdjustedE1RM(anchorE1RMKgUsed, setsDone), true)} ${weightLabel} (capped at −${Math.round((1 - FATIGUE_E1RM_FLOOR) * 100)}%).`
+              );
+            }
+            reasoning.push(
+              `Rep-max curve (Epley): at ${entered.label}, that capacity predicts about ${maxReps} rep${maxReps === 1 ? '' : 's'} to failure (0 RIR).`
+            );
+            reasoning.push(
+              predictedRir >= 0
+                ? `You've entered ${enteredReps} rep${enteredReps === 1 ? '' : 's'}: ${maxReps} − ${enteredReps} ≈ ${predictedRir} rep${predictedRir === 1 ? '' : 's'} in reserve.`
+                : `You've entered ${enteredReps} rep${enteredReps === 1 ? '' : 's'} — ${Math.abs(predictedRir)} more than the predicted max, so this set is predicted to hit failure before the last rep.`
+            );
+            if (!hasOwnHistory) {
+              reasoning.push(
+                'Nothing logged for this exercise yet, so the anchor is transferred rather than measured — treat this as a rough guide until you log a set here.'
+              );
+            }
+
             return {
-              predictedRir: maxReps - enteredReps,
+              predictedRir,
               weightLabel: entered.label,
               reps: enteredReps,
               softened: !hasOwnHistory,
               sourceLabel: !hasOwnHistory
                 ? coldStartSuggestion?.reason ?? 'estimate from your training profile'
                 : undefined,
+              reasoning,
             };
           })();
 
@@ -2659,6 +2704,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                 targetRir={loggerTargetRir}
                 unit={unit}
                 minIncrementKg={exercise.minWeightIncrementKg}
+                effortCheck={effortCheck}
                 disabled={isCompletingSet}
                 isDurationBased={isDurationBased}
                 isBodyweight={isBodyweightExercise}
