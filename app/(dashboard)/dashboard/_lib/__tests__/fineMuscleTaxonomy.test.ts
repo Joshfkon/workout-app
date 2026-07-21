@@ -214,7 +214,9 @@ describe('property: parent total == fine-child credits + coarse-tagged credits, 
         (sum, std) => sum + (raw.get(std) ?? 0),
         0
       );
-      expect(row.sets).toBe(Math.round(expected));
+      // Rows emit one-decimal credited sets (round-once) — compare against
+      // the raw expectation at that precision (max rounding error 0.05).
+      expect(row.sets).toBeCloseTo(expected, 1);
     }
 
     // Global conservation: the coarse rollup equals ALL credit handed out —

@@ -26,8 +26,8 @@ describe('ContributingSets', () => {
         muscle="chest"
         testIdPrefix="volume-sources"
         exercises={[
-          { id: 'e1', name: 'Incline Press', sets: 8 },
-          { id: 'e2', name: 'Dips', sets: 2 },
+          { id: 'e1', name: 'Incline Press', sets: 8, effective: 8 },
+          { id: 'e2', name: 'Dips', sets: 2, effective: 2 },
         ]}
       />
     );
@@ -44,7 +44,7 @@ describe('ContributingSets', () => {
       <ContributingSets
         muscle="triceps"
         testIdPrefix="volume-sources"
-        exercises={[{ id: 'e1', name: 'Bench Press', sets: 1.5 }]}
+        exercises={[{ id: 'e1', name: 'Bench Press', sets: 1.5, effective: 1.5 }]}
       />
     );
     const panel = screen.getByTestId('volume-sources-triceps');
@@ -61,7 +61,7 @@ describe('SourcesDisclosure', () => {
         muscle="lats"
         displayName="Lats"
         testIdPrefix="volume-sources"
-        exercises={[{ id: 'e1', name: 'Pulldown', sets: 6 }]}
+        exercises={[{ id: 'e1', name: 'Pulldown', sets: 6, effective: 6 }]}
       >
         <span>row content</span>
       </SourcesDisclosure>

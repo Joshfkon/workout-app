@@ -15,7 +15,7 @@ import { COARSE_MUSCLES, type MuscleVolumeStats } from '@/app/(dashboard)/dashbo
 const NOW = new Date('2026-07-11T12:00:00.000Z');
 
 function stat(muscle: string, sets: number): MuscleVolumeStats {
-  return { muscle, sets, effectiveSets: sets, target: 0, status: 'optimal', exercises: [{ id: muscle, name: `${muscle} ex`, sets }] };
+  return { muscle, sets, effectiveSets: sets, target: 0, status: 'optimal', exercises: [{ id: muscle, name: `${muscle} ex`, sets, effective: sets }] };
 }
 
 function session(
@@ -101,7 +101,7 @@ describe('buildReadinessRows (coarse rows)', () => {
 
     // …and the fine child carries only its own.
     const child = glutes.children.find((c) => c.muscle === 'glute_med');
-    expect(child!.exercises).toEqual([{ id: 'glute_med', name: 'glute_med ex', sets: 4 }]);
+    expect(child!.exercises).toEqual([{ id: 'glute_med', name: 'glute_med ex', sets: 4, effective: 4 }]);
 
     // An untrained group has nothing to drill into.
     expect(rowFor(rows, 'chest').exercises).toEqual([]);
@@ -217,7 +217,7 @@ describe('selectGoodTargets', () => {
     // The bug fixture: the most-behind muscle (triceps, 0 sets → gap 6) is
     // Recovering (~18h out), while every other muscle is Fresh but at/above MEV
     // (a "Fresh, mid-zone" muscle has gap 0, so it isn't eligible either).
-    const triceps = { ...stat('triceps', 12), sets: 0, exercises: [{ id: 'triceps', name: 'triceps ex', sets: 0 }] };
+    const triceps = { ...stat('triceps', 12), sets: 0, exercises: [{ id: 'triceps', name: 'triceps ex', sets: 0, effective: 0 }] };
     const stats = [triceps, ...ALL_AT_MEV.filter((s) => s.muscle !== 'triceps')];
     // Trained 30h ago (window 36h) → Recovering, ~6h until Fresh (> soon window).
     const history = [session(hoursBefore(NOW, 30), 'triceps', 5, 2)];
@@ -237,7 +237,7 @@ describe('selectGoodTargets', () => {
   });
 
   it('offers a lagging, nearly-ready muscle as a muted "ready soon" pick, not ready-now', () => {
-    const triceps = { ...stat('triceps', 12), sets: 0, exercises: [{ id: 'triceps', name: 'triceps ex', sets: 0 }] };
+    const triceps = { ...stat('triceps', 12), sets: 0, exercises: [{ id: 'triceps', name: 'triceps ex', sets: 0, effective: 0 }] };
     const stats = [triceps, ...ALL_AT_MEV.filter((s) => s.muscle !== 'triceps')];
     // Trained 34h ago (window 36h) → Recovering, ~2h until Fresh (within soon window).
     const history = [session(hoursBefore(NOW, 34), 'triceps', 5, 2)];

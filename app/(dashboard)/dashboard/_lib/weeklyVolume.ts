@@ -136,19 +136,104 @@ export function getMevForMuscle(muscle: string): number {
   return 4;
 }
 
+// ============================================
+// EMISSION ROUNDING (round once, at the edge)
+// ============================================
+//
+// The accumulation pipeline (accumulateExerciseVolume → stats →
+// buildVolumeRows) carries FULL-PRECISION values end to end; rounding happens
+// exactly once, when a number is emitted for display. Rounding mid-pipeline
+// (per merge step, per layer) is what produced phantom credited counts
+// ("Arnold Press 8.1" for a true 8.0) and header/list disagreements.
+
+/**
+ * Guards Math.round against IEEE-754 drift from 1/3 and 1/6 credit weights:
+ * a rational 23.5 accumulated through thirds lands at 23.499999999999996 and
+ * would otherwise round the wrong way. Far larger than any float dust the
+ * pipeline can accumulate, far smaller than any real credit increment (1/6).
+ */
+const ROUNDING_EPSILON = 1e-9;
+
+/** Round to one decimal, drift-guarded. All displayed set values use this. */
+function round1(value: number): number {
+  return Math.round((value + ROUNDING_EPSILON) * 10) / 10;
+}
+
+/** Round to a whole number, drift-guarded. */
+function roundWhole(value: number): number {
+  return Math.round(value + ROUNDING_EPSILON);
+}
+
+/**
+ * Round a list of non-negative raw values to one decimal so that the rounded
+ * values sum EXACTLY to round1(Σ raw) — largest-remainder allocation in
+ * integer tenths. This is what lets a counted-sets breakdown always reconcile
+ * against the header it sits under: rounding each entry independently is not
+ * additive (three ⅓-credits round to 0.7 + 0.7 + 0.7 = 2.1 for a true 2.0).
+ */
+function allocateRounded(values: number[]): number[] {
+  const tenths = values.map((v) => (v + ROUNDING_EPSILON) * 10);
+  const floors = tenths.map(Math.floor);
+  const target = Math.round(
+    values.reduce((s, v) => s + v, 0) * 10 + ROUNDING_EPSILON * 10
+  );
+  let remainder = target - floors.reduce((s, f) => s + f, 0);
+  // Hand the leftover tenths to the entries that lost the most to flooring.
+  const order = tenths
+    .map((t, i) => ({ i, frac: t - Math.floor(t) }))
+    .sort((a, b) => b.frac - a.frac || a.i - b.i);
+  const out = [...floors];
+  for (let k = 0; k < order.length && remainder > 0; k++, remainder--) {
+    out[order[k].i] += 1;
+  }
+  return out.map((t) => t / 10);
+}
+
 export interface ExerciseVolume {
   id: string;
   name: string;
+  /** Credited (fractional) working sets this exercise contributed. */
   sets: number;
+  /**
+   * RIR-weighted effective volume for the same credited sets (see
+   * services/effectiveVolume). Equals `sets` when every set's RIR is ≤2 or
+   * unknown — the counted-sets breakdown must reconcile against BOTH header
+   * metrics, so both are carried per exercise.
+   */
+  effective: number;
+}
+
+/**
+ * Emit a per-exercise breakdown for display under a header showing
+ * `totalSets` / `totalEffective`: filters empty entries, sorts biggest first,
+ * and rounds with sum-preserving allocation so Σ(list) === header for both
+ * metrics, exactly.
+ */
+function emitExerciseList(
+  entries: ExerciseVolume[],
+): ExerciseVolume[] {
+  const kept = entries
+    .filter((e) => e.sets > ROUNDING_EPSILON)
+    .sort((a, b) => b.sets - a.sets);
+  const sets = allocateRounded(kept.map((e) => e.sets));
+  const effective = allocateRounded(kept.map((e) => e.effective));
+  return kept.map((e, i) => ({ ...e, sets: sets[i], effective: effective[i] }));
 }
 
 export interface MuscleVolumeStats {
   muscle: string;
+  /**
+   * Credited (0.5-secondary, legacy-split) working sets, FULL PRECISION —
+   * not rounded. Rounding happens once at each display surface (the MEV
+   * summary, buildVolumeRows) so downstream aggregates can't accumulate
+   * rounding drift. `status` is still judged on the whole-set rounded value,
+   * so the low/optimal/high classification is unchanged.
+   */
   sets: number;
   /**
    * RIR-weighted "Effective Volume" for the same counted sets (Σ
    * EFFECTIVE_VOLUME_WEIGHTS[rir]; unknown RIR weighs 1.0). Same warm-up
-   * exclusion and crediting as `sets`; one decimal. `sets` stays raw.
+   * exclusion and crediting as `sets`; full precision, rounded at display.
    */
   effectiveSets: number;
   target: number;
@@ -158,7 +243,7 @@ export interface MuscleVolumeStats {
 
 export type VolumeAccumulator = Record<
   string,
-  { sets: number; effectiveSets: number; exercises: Map<string, { id: string; name: string; sets: number }> }
+  { sets: number; effectiveSets: number; exercises: Map<string, ExerciseVolume> }
 >;
 
 /** Credit one exercise block's working sets to the accumulator (weighted
@@ -182,8 +267,14 @@ export function accumulateExerciseVolume(
     const existing = volumeByMuscle[muscle].exercises.get(exercise.id);
     if (existing) {
       existing.sets += sets;
+      existing.effective += effective;
     } else {
-      volumeByMuscle[muscle].exercises.set(exercise.id, { id: exercise.id, name: exercise.name, sets });
+      volumeByMuscle[muscle].exercises.set(exercise.id, {
+        id: exercise.id,
+        name: exercise.name,
+        sets,
+        effective,
+      });
     }
   };
 
@@ -211,16 +302,19 @@ export function accumulateExerciseVolume(
 export function volumeAccumulatorToStats(volumeByMuscle: VolumeAccumulator): MuscleVolumeStats[] {
   return Object.entries(volumeByMuscle)
     .map(([muscle, data]) => {
-      const sets = Math.round(data.sets);
-      const effectiveSets = Math.round(data.effectiveSets * 10) / 10;
       const target = getMevForMuscle(muscle);
-      const status: 'low' | 'optimal' | 'high' = sets < target ? 'low' : sets > target * 1.5 ? 'high' : 'optimal';
-      const exercises = Array.from(data.exercises.values())
-        .map((ex) => ({ ...ex, sets: Math.round(ex.sets * 10) / 10 }))
-        .filter((ex) => ex.sets > 0);
-      return { muscle, sets, effectiveSets, target, status, exercises };
+      // Status is judged on the whole-set rounded count (unchanged behavior);
+      // the carried values stay full precision — display surfaces round once
+      // at emission so aggregates (coarse rows) can't accumulate drift.
+      const wholeSets = roundWhole(data.sets);
+      const status: 'low' | 'optimal' | 'high' =
+        wholeSets < target ? 'low' : wholeSets > target * 1.5 ? 'high' : 'optimal';
+      const exercises = Array.from(data.exercises.values()).filter(
+        (ex) => ex.sets > ROUNDING_EPSILON
+      );
+      return { muscle, sets: data.sets, effectiveSets: data.effectiveSets, target, status, exercises };
     })
-    .filter((stat) => stat.sets > 0)
+    .filter((stat) => stat.sets > ROUNDING_EPSILON)
     .sort((a, b) => b.sets - a.sets);
 }
 
@@ -326,9 +420,13 @@ export function computeWeeklyMevSummary(
     (m) => !trainedMuscles.has(m) && isMuscleWarnable(m, reachable)
   );
 
-  const totalSets = muscleVolume.reduce((s, mv) => s + mv.sets, 0);
-  const totalEffectiveSets =
-    Math.round(muscleVolume.reduce((s, mv) => s + mv.effectiveSets, 0) * 10) / 10;
+  // Stats arrive full precision; this summary displays whole sets per muscle,
+  // so round here (once) — and make the total the sum of the SAME whole-set
+  // numbers the entries show, so the tile always reconciles with its list.
+  const totalSets = muscleVolume.reduce((s, mv) => s + roundWhole(mv.sets), 0);
+  const totalEffectiveSets = round1(
+    muscleVolume.reduce((s, mv) => s + mv.effectiveSets, 0)
+  );
   const totalTarget =
     muscleVolume.reduce((s, mv) => s + mv.target, 0) +
     untrained.reduce((s, m) => s + getMevForMuscle(m), 0);
@@ -337,11 +435,11 @@ export function computeWeeklyMevSummary(
   const entries: MuscleMevEntry[] = [
     ...muscleVolume.map((mv) => ({
       muscle: mv.muscle,
-      sets: mv.sets,
-      effectiveSets: mv.effectiveSets,
+      sets: roundWhole(mv.sets),
+      effectiveSets: round1(mv.effectiveSets),
       mev: getMevForMuscle(mv.muscle),
       belowMev: mv.status === 'low',
-      exercises: mv.exercises,
+      exercises: emitExerciseList(mv.exercises),
     })),
     ...untrained.map((m) => ({
       muscle: m as string,
@@ -590,7 +688,8 @@ export interface VolumeRow {
   displayName: string;
   isChild: boolean;
   parent: CoarseMuscle | null;
-  /** Credited (0.5-secondary) working sets, rounded. */
+  /** Credited (0.5-secondary) working sets, rounded once to one decimal at
+   *  emission (so ⅓/½ credits survive: 23.5, 9.8 — never a phantom re-round). */
   sets: number;
   /** RIR-weighted effective volume for the same sets (one decimal). */
   effectiveSets: number;
@@ -632,8 +731,12 @@ function setsByStandardMuscle(
     cur.effectiveSets += effectiveSets;
     for (const ex of exercises) {
       const existing = cur.exercises.find((e) => e.id === ex.id);
-      if (existing) existing.sets += ex.sets;
-      else cur.exercises.push({ ...ex });
+      if (existing) {
+        existing.sets += ex.sets;
+        existing.effective += ex.effective;
+      } else {
+        cur.exercises.push({ ...ex });
+      }
     }
     out.set(m, cur);
   };
@@ -678,6 +781,11 @@ export function buildVolumeRows(
 
     let coarseSetsRaw = 0;
     let coarseEffectiveRaw = 0;
+    // Accumulate the per-exercise breakdown at FULL precision; rounding
+    // happens once at emission (emitExerciseList), sum-preserving so the
+    // list always reconciles exactly against the row header. Rounding at
+    // each merge step here is what produced "Arnold Press 8.1" for a true
+    // 8.0 (three ⅓-credits, each merge re-rounded).
     const coarseExercises: ExerciseVolume[] = [];
     const childRows: VolumeRow[] = [];
 
@@ -687,13 +795,17 @@ export function buildVolumeRows(
       coarseEffectiveRaw += data.effectiveSets;
       for (const ex of data.exercises) {
         const existing = coarseExercises.find((e) => e.id === ex.id);
-        if (existing) existing.sets = Math.round((existing.sets + ex.sets) * 10) / 10;
-        else coarseExercises.push({ ...ex, sets: Math.round(ex.sets * 10) / 10 });
+        if (existing) {
+          existing.sets += ex.sets;
+          existing.effective += ex.effective;
+        } else {
+          coarseExercises.push({ ...ex });
+        }
       }
 
       if (!FINE_CHILD_MUSCLES.has(child)) continue;
 
-      const childSets = Math.round(data.sets);
+      const childSets = round1(data.sets);
       const childMev = fineChildMev(child);
       // Children are carried only on EXPANDABLE rows (≥1 reachable fine child —
       // the chevron rule above). An expandable row carries ALL its fine
@@ -717,20 +829,18 @@ export function buildVolumeRows(
         isChild: true,
         parent: coarse,
         sets: childSets,
-        effectiveSets: Math.round(data.effectiveSets * 10) / 10,
+        effectiveSets: round1(data.effectiveSets),
         band: childBand,
         zone: volumeZone(childSets, childBand),
         belowMev: childBelowMev,
         reachable: childReachable,
         expandable: false,
-        exercises: data.exercises
-          .map((e) => ({ ...e, sets: Math.round(e.sets * 10) / 10 }))
-          .sort((a, b) => b.sets - a.sets),
+        exercises: emitExerciseList(data.exercises),
         children: [],
       });
     }
 
-    const coarseSets = Math.round(coarseSetsRaw);
+    const coarseSets = round1(coarseSetsRaw);
     return {
       key: coarse,
       muscle: coarse,
@@ -738,13 +848,13 @@ export function buildVolumeRows(
       isChild: false,
       parent: null,
       sets: coarseSets,
-      effectiveSets: Math.round(coarseEffectiveRaw * 10) / 10,
+      effectiveSets: round1(coarseEffectiveRaw),
       band,
       zone: volumeZone(coarseSets, band),
       belowMev: coarseSets < band.mev,
       reachable: true,
       expandable,
-      exercises: coarseExercises.sort((a, b) => b.sets - a.sets),
+      exercises: emitExerciseList(coarseExercises),
       children: childRows.sort((a, b) => Number(b.belowMev) - Number(a.belowMev) || b.sets - a.sets),
     };
   });
@@ -779,7 +889,8 @@ export function coarseMevTiles(rows: VolumeRow[]): CoarseMevTiles {
     totalTarget += row.band.mev;
     if (row.zone === 'below_mev') lowCount++;
   }
-  return { totalSets, totalEffectiveSets: Math.round(totalEffectiveSets * 10) / 10, totalTarget, lowCount };
+  // Rows carry one-decimal values; re-round the sums to shed float dust.
+  return { totalSets: round1(totalSets), totalEffectiveSets: round1(totalEffectiveSets), totalTarget, lowCount };
 }
 
 /**
