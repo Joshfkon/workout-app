@@ -107,6 +107,25 @@ describe('MuscleGroupList', () => {
     expect(screen.queryByTestId('row-lateral_delts')).not.toBeInTheDocument();
   });
 
+  it('an explicit collapse hides pinned children too, and persists; re-expanding restores the pin default after a reset', async () => {
+    const user = userEvent.setup();
+    const first = render(<Harness />);
+    // Untouched back: pinned erectors visible by default.
+    expect(screen.getByTestId('row-erectors')).toBeInTheDocument();
+
+    // Expand, then explicitly collapse — everything hides, pin included.
+    await user.click(screen.getByTestId('row-toggle-back'));
+    expect(screen.getByTestId('row-lats')).toBeInTheDocument();
+    await user.click(screen.getByTestId('row-toggle-back'));
+    expect(screen.queryByTestId('row-erectors')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('row-lats')).not.toBeInTheDocument();
+    first.unmount();
+
+    // The full collapse survives a restart.
+    render(<Harness />);
+    expect(screen.queryByTestId('row-erectors')).not.toBeInTheDocument();
+  });
+
   it('autoExpand defaults a divergent parent open; an explicit collapse overrides and persists', async () => {
     const user = userEvent.setup();
     const rows: FixtureRow[] = [{ ...ROWS[0], autoExpand: true }];
@@ -135,5 +154,12 @@ describe('withVisibleChildren', () => {
       'erectors',
     ]);
     expect(visible.find((r) => r.muscle === 'biceps')!.children).toHaveLength(0);
+  });
+
+  it('an explicitly collapsed parent hides its pinned children, mirroring the rendered list', () => {
+    const expanded = new Set<string>();
+    const collapsed = new Set(['back']);
+    const visible = withVisibleChildren(ROWS, expanded, (c) => c.pinned === true, collapsed);
+    expect(visible.find((r) => r.muscle === 'back')!.children).toHaveLength(0);
   });
 });
