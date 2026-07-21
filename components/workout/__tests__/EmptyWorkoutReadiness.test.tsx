@@ -121,22 +121,22 @@ describe('EmptyWorkoutReadiness', () => {
       { wrapper }
     );
 
+    // Row testids only — expansion toggles share the prefix (readiness-row-toggle-*).
+    const rowIds = () =>
+      Array.from(document.querySelectorAll('[data-testid^="readiness-row-"]'))
+        .map((el) => (el.getAttribute('data-testid') || '').replace('readiness-row-', ''))
+        .filter((id) => !id.startsWith('toggle-'));
+
     // 6 coarse rows visible, the rest behind "+N more" (13 coarse groups total).
-    await waitFor(() =>
-      expect(document.querySelectorAll('[data-testid^="readiness-row-"]').length).toBe(6)
-    );
+    await waitFor(() => expect(rowIds().length).toBe(6));
     expect(screen.getByTestId('readiness-show-more')).toHaveTextContent('+7 more');
 
     // Expanding reveals the full list inline.
     await userEvent.click(screen.getByTestId('readiness-show-more'));
-    await waitFor(() =>
-      expect(document.querySelectorAll('[data-testid^="readiness-row-"]').length).toBe(13)
-    );
+    await waitFor(() => expect(rowIds().length).toBe(13));
 
     // Fatigued quads (trained 30h ago) is present at the bottom, not vanished.
-    const order = Array.from(document.querySelectorAll('[data-testid^="readiness-row-"]')).map((el) =>
-      (el.getAttribute('data-testid') || '').replace('readiness-row-', '')
-    );
+    const order = rowIds();
     expect(screen.getByTestId('readiness-badge-quads')).toHaveTextContent('Fatigued');
     expect(order[order.length - 1]).toBe('quads');
 

@@ -7,6 +7,7 @@
 
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ReactNode } from 'react';
 
 jest.mock('@/stores', () => ({
   useUserStore: () => ({ user: { id: 'u1' } }),
@@ -41,7 +42,15 @@ const ROWS: FixtureRow[] = [
   },
 ];
 
-function Harness({ rows = ROWS, surface = 'test' }: { rows?: FixtureRow[]; surface?: string }) {
+function Harness({
+  rows = ROWS,
+  surface = 'test',
+  renderRowDetail,
+}: {
+  rows?: FixtureRow[];
+  surface?: string;
+  renderRowDetail?: (row: FixtureRow) => ReactNode;
+}) {
   const expansion = useMuscleRowExpansion(surface, rows);
   return (
     <MuscleGroupList
@@ -50,6 +59,7 @@ function Harness({ rows = ROWS, surface = 'test' }: { rows?: FixtureRow[]; surfa
       renderRow={(row) => <span>{row.displayName}</span>}
       renderChild={(child) => <span>{child.muscle}</span>}
       pinChild={(child) => child.pinned === true}
+      renderRowDetail={renderRowDetail}
       testIdPrefix="row"
     />
   );
@@ -124,6 +134,41 @@ describe('MuscleGroupList', () => {
     // The full collapse survives a restart.
     render(<Harness />);
     expect(screen.queryByTestId('row-erectors')).not.toBeInTheDocument();
+  });
+
+  it('renderRowDetail makes a childless row expandable and reveals the detail behind the chevron', async () => {
+    const user = userEvent.setup();
+    render(
+      <Harness
+        renderRowDetail={(row) => (row.muscle === 'biceps' ? <span data-testid="detail-biceps">detail</span> : null)}
+      />
+    );
+
+    // Biceps has no children but a detail → it now gets a toggle; the detail
+    // stays hidden until expanded.
+    const toggle = screen.getByTestId('row-toggle-biceps');
+    expect(screen.queryByTestId('detail-biceps')).not.toBeInTheDocument();
+
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByTestId('detail-biceps')).toBeInTheDocument();
+
+    await user.click(toggle);
+    expect(screen.queryByTestId('detail-biceps')).not.toBeInTheDocument();
+
+    // A row for which the renderer returns null stays chevronless… unless it
+    // has children (shoulders keeps its toggle regardless).
+    expect(screen.getByTestId('row-toggle-shoulders')).toBeInTheDocument();
+  });
+
+  it('renders the detail after the children when a parent with both expands', async () => {
+    const user = userEvent.setup();
+    render(<Harness renderRowDetail={() => <span data-testid="detail-any">detail</span>} />);
+
+    await user.click(screen.getByTestId('row-toggle-shoulders'));
+    const shoulders = screen.getByTestId('row-shoulders');
+    expect(shoulders.querySelector('[data-testid="detail-any"]')).toBeInTheDocument();
+    expect(screen.getByTestId('row-lateral_delts')).toBeInTheDocument();
   });
 
   it('autoExpand defaults a divergent parent open; an explicit collapse overrides and persists', async () => {

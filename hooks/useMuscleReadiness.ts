@@ -54,6 +54,11 @@ interface HistorySessionRow {
   sessionId: string;
   completedAt: string;
   exercises: {
+    /** Real exercise identity — the volume accumulator keys contributing-
+     *  exercise credits by this, so the readiness drill-down can name the
+     *  exercises behind a muscle's weekly count. */
+    id: string;
+    name: string;
     primaryMuscle: string | null;
     secondaryMuscles: string[];
     // Working sets only (warmups excluded on ingest). `repsInTank` is the
@@ -181,6 +186,8 @@ export function useRecoveryHistory(
           bySession.set(session.id, entry);
         }
         entry.exercises.push({
+          id: exercise.id,
+          name: exercise.name,
           primaryMuscle: exercise.primary_muscle,
           secondaryMuscles: exercise.secondary_muscles || [],
           sets: workingSets.map((s) => ({
@@ -258,14 +265,16 @@ export function useMuscleReadiness({
       }
     };
 
-    // DB history.
+    // DB history. Credited under the REAL exercise identity so the rows'
+    // contributing-exercise lists (the tap-to-see-sources drill-down) name
+    // actual exercises rather than collapsing per muscle.
     for (const s of historyRows) {
       for (const ex of s.exercises) {
         accumulateExerciseVolume(
           acc,
-          { id: ex.primaryMuscle || 'x', name: ex.primaryMuscle || 'x', primary_muscle: ex.primaryMuscle, secondary_muscles: ex.secondaryMuscles },
+          { id: ex.id, name: ex.name, primary_muscle: ex.primaryMuscle, secondary_muscles: ex.secondaryMuscles },
           ex.sets.length,
-          sumEffectiveVolume(ex.sets.map((set) => set.reportedRir), ex.primaryMuscle ?? undefined)
+          sumEffectiveVolume(ex.sets.map((set) => set.reportedRir), ex.name)
         );
         markReachable(ex.primaryMuscle, ex.secondaryMuscles);
       }
