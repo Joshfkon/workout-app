@@ -65,10 +65,11 @@ function wrapper({ children }: { children: ReactNode }) {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
 
-function muscleOrder(container: HTMLElement): string[] {
-  return Array.from(container.querySelectorAll('[data-testid^="readiness-row-"]')).map((el) =>
-    (el.getAttribute('data-testid') || '').replace('readiness-row-', '')
-  );
+/** Row testids only — the expansion toggles share the prefix (`readiness-row-toggle-*`). */
+function muscleRows(container: HTMLElement): string[] {
+  return Array.from(container.querySelectorAll('[data-testid^="readiness-row-"]'))
+    .map((el) => (el.getAttribute('data-testid') || '').replace('readiness-row-', ''))
+    .filter((id) => !id.startsWith('toggle-'));
 }
 
 /** A minimal live block whose exercise targets one muscle. */
@@ -159,7 +160,7 @@ describe('MuscleReadinessSheet', () => {
     expect(screen.getByTestId('readiness-badge-quads')).toHaveTextContent('Fatigued');
     expect(screen.getByTestId('readiness-badge-calves')).toHaveTextContent('No recent data');
 
-    const order = muscleOrder(container);
+    const order = muscleRows(container);
     expect(order.indexOf('calves')).toBeLessThan(order.indexOf('quads'));
   });
 
@@ -224,7 +225,7 @@ describe('MuscleReadinessSheet', () => {
 
     // Expanding reveals the full list inline.
     await userEvent.click(screen.getByTestId('readiness-show-more'));
-    const order = muscleOrder(container);
+    const order = muscleRows(container);
     expect(order.length).toBe(13);
 
     // Yesterday's glutes did NOT vanish — present, Fatigued, and last in the sort.
@@ -233,6 +234,51 @@ describe('MuscleReadinessSheet', () => {
 
     // A never-trained coarse group shows the no-data state, not a recovery estimate.
     expect(screen.getByTestId('readiness-badge-chest')).toHaveTextContent('No recent data');
+  });
+
+  it('tapping a muscle row reveals which exercises\' sets are counted (coarse row and fine child)', async () => {
+    // Incline Press (chest_upper primary) 5 working sets, 30h ago; the default
+    // Squat block stays so quads also has drill-down data.
+    mockBlocks = [
+      ...mockBlocks,
+      {
+        exercises: { id: 'ex-inc', name: 'Incline Press', primary_muscle: 'chest_upper', secondary_muscles: [] },
+        workout_sessions: { id: 's2', completed_at: hoursAgo(30), user_id: 'u1', state: 'completed' },
+        set_logs: Array.from({ length: 5 }, (_, i) => ({ id: `ip${i}`, is_warmup: false, rpe: 8, feedback: { repsInTank: 2 } })),
+      },
+    ];
+
+    render(
+      <MuscleReadinessSheet isOpen onClose={jest.fn()} liveBlocks={[]} liveSets={[]} />,
+      { wrapper }
+    );
+
+    // Reveal all rows (trained muscles sink toward the bottom of the sort).
+    await waitFor(() => expect(screen.getByTestId('readiness-show-more')).toBeInTheDocument());
+    await userEvent.click(screen.getByTestId('readiness-show-more'));
+
+    // Sources stay hidden until the row is expanded.
+    expect(screen.queryByTestId('readiness-sources-chest')).not.toBeInTheDocument();
+
+    // Tap the chest row → its counted-sets breakdown names the exercise.
+    await userEvent.click(screen.getByTestId('readiness-row-toggle-chest'));
+    const chestPanel = screen.getByTestId('readiness-sources-chest');
+    expect(chestPanel).toHaveTextContent('Incline Press');
+    expect(chestPanel).toHaveTextContent('5 sets');
+
+    // The same expansion revealed the chest_upper fine child; tapping it shows
+    // the child's own share.
+    await userEvent.click(screen.getByTestId('readiness-sources-toggle-chest_upper'));
+    const childPanel = screen.getByTestId('readiness-sources-chest_upper');
+    expect(childPanel).toHaveTextContent('Incline Press');
+    expect(childPanel).toHaveTextContent('5 sets');
+
+    // Quads has no fine children, but the drill-down still gives its row a
+    // toggle — including the ½-credit secondary explanation for glutes' share.
+    await userEvent.click(screen.getByTestId('readiness-row-toggle-quads'));
+    const quadsPanel = screen.getByTestId('readiness-sources-quads');
+    expect(quadsPanel).toHaveTextContent('Squat');
+    expect(quadsPanel).toHaveTextContent('8 sets');
   });
 
   it('remembers the expanded state across re-mounts within the session', async () => {

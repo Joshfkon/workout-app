@@ -25,6 +25,7 @@ import {
   buildVolumeRows,
   COARSE_CHILDREN,
   type CoarseMuscle,
+  type ExerciseVolume,
   type VolumeBand,
   type VolumeZone,
   type VolumeRow,
@@ -58,6 +59,12 @@ export interface ReadinessChild {
    */
   reachable: boolean;
   recovery: MuscleRecoveryResult;
+  /**
+   * Which exercises fed this muscle's weekly count and how many credited
+   * (fractional-credit) sets each contributed, biggest first — the
+   * tap-to-see-sources drill-down behind the set number.
+   */
+  exercises: ExerciseVolume[];
 }
 
 export interface ReadinessRow {
@@ -81,6 +88,8 @@ export interface ReadinessRow {
   expandable: boolean;
   /** ALL fine children of an expandable row, each with its own recovery. */
   children: ReadinessChild[];
+  /** Contributing exercises with credited sets, biggest first (drill-down). */
+  exercises: ExerciseVolume[];
   /**
    * Divergence flag: a trained child's status differs from the parent's
    * (worst-of-children) status by at least one full level — e.g. Shoulders
@@ -305,6 +314,7 @@ export function buildReadinessRows(
         volumeGap: Math.max(0, child.band.mev - child.sets),
         reachable: child.reachable,
         recovery: childRecovery,
+        exercises: [...child.exercises].sort((a, b) => b.sets - a.sets),
       };
     });
 
@@ -331,6 +341,7 @@ export function buildReadinessRows(
       score,
       expandable: vr.expandable,
       children,
+      exercises: vr.exercises,
       autoExpand,
     };
   });

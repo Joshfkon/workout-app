@@ -90,6 +90,23 @@ describe('buildReadinessRows (coarse rows)', () => {
     expect(child!.recovery.status).toBe('fresh');
   });
 
+  it('carries contributing exercises (drill-down) on coarse rows and fine children, biggest first', () => {
+    const reachable = new Set<StandardMuscleGroup>(['glutes', 'glute_med']);
+    const rows = buildReadinessRows([stat('glutes', 10), stat('glute_med', 4)], [], NOW, reachable);
+    const glutes = rowFor(rows, 'glutes');
+
+    // The coarse row aggregates both muscles' contributing exercises…
+    expect(glutes.exercises.map((e) => e.name)).toEqual(['glutes ex', 'glute_med ex']);
+    expect(glutes.exercises.map((e) => e.sets)).toEqual([10, 4]);
+
+    // …and the fine child carries only its own.
+    const child = glutes.children.find((c) => c.muscle === 'glute_med');
+    expect(child!.exercises).toEqual([{ id: 'glute_med', name: 'glute_med ex', sets: 4 }]);
+
+    // An untrained group has nothing to drill into.
+    expect(rowFor(rows, 'chest').exercises).toEqual([]);
+  });
+
   it('surfaces a reachable, lagging fine child under an on-target parent', () => {
     // Glutes at MEV via glute max; glute_med reachable but untrained (0 < MEV 2).
     const reachable = new Set<StandardMuscleGroup>(['glutes', 'glute_med']);

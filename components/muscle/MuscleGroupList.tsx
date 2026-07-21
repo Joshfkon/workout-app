@@ -172,6 +172,14 @@ export interface MuscleGroupListProps<R extends MuscleListRow> {
   renderChild: (child: R['children'][number], row: R) => ReactNode;
   /** Children visible even while the parent is collapsed (e.g. lagging fine muscles). */
   pinChild?: (child: R['children'][number], row: R) => boolean;
+  /**
+   * Extra per-row content revealed by the SAME expansion gesture as the fine
+   * children (rendered after them, inside the indented block). A row for which
+   * this returns non-null is expandable even with zero children — that's how a
+   * single-muscle group (Biceps, Quads, …) gets a chevron and something to
+   * show behind it (e.g. the readiness sheet's contributing-sets breakdown).
+   */
+  renderRowDetail?: (row: R) => ReactNode;
   /** testid prefix: rows get `${prefix}-${muscle}` (children too, by child muscle id). */
   testIdPrefix: string;
   /** Per-surface row container styling (borders / vertical rhythm). */
@@ -200,6 +208,7 @@ export function MuscleGroupList<R extends MuscleListRow>({
   renderRow,
   renderChild,
   pinChild,
+  renderRowDetail,
   testIdPrefix,
   rowClassName,
   childrenClassName,
@@ -208,7 +217,9 @@ export function MuscleGroupList<R extends MuscleListRow>({
     <>
       {rows.map((row) => {
         const hasChildren = row.children.length > 0;
-        const expanded = hasChildren && expansion.expanded.has(row.muscle);
+        const detail = renderRowDetail?.(row) ?? null;
+        const expandable = hasChildren || detail !== null;
+        const expanded = expandable && expansion.expanded.has(row.muscle);
         // Pins keep lagging children visible under an untouched parent, but an
         // explicit user collapse hides everything — the choice wins over the pin.
         const pinsSuppressed = expansion.collapsed.has(row.muscle);
@@ -220,7 +231,7 @@ export function MuscleGroupList<R extends MuscleListRow>({
 
         return (
           <div key={row.muscle} className={rowClassName} data-testid={`${testIdPrefix}-${row.muscle}`}>
-            {hasChildren ? (
+            {expandable ? (
               <button
                 type="button"
                 onClick={() => expansion.toggle(row.muscle)}
@@ -243,13 +254,14 @@ export function MuscleGroupList<R extends MuscleListRow>({
               </div>
             )}
 
-            {visibleChildren.length > 0 && (
+            {(visibleChildren.length > 0 || (expanded && detail !== null)) && (
               <div className={childrenClassName ?? 'mt-2 space-y-2 pl-4 ml-5 border-l border-surface-800/80'}>
                 {visibleChildren.map((child) => (
                   <div key={child.muscle} data-testid={`${testIdPrefix}-${child.muscle}`}>
                     {renderChild(child, row)}
                   </div>
                 ))}
+                {expanded && detail}
               </div>
             )}
           </div>
