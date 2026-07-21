@@ -102,6 +102,86 @@ describe('sessionMetPrescription — the single success predicate', () => {
   });
 });
 
+describe('light-load rep-ceiling extension (coarse increments)', () => {
+  // DB curl case: 10 kg with a 2.5 kg smallest increment — a bump is a +25%
+  // jump. When the increment exceeds 10% of the top set's load, the rep
+  // ceiling extends by +2: reps climb past the nominal repMax as a substitute
+  // for the fractional load that doesn't exist.
+  const CURL_RANGE: [number, number] = [8, 12];
+  const CURL_TARGET = { targetRepRange: CURL_RANGE, targetRir: 2, minIncrementKg: 2.5 };
+
+  it('nominal repMax does NOT qualify when the increment is >10% of the load', () => {
+    expect(
+      sessionMetPrescription(
+        [
+          { weightKg: 10, reps: 12, rir: 2 },
+          { weightKg: 10, reps: 11, rir: 2 },
+        ],
+        CURL_TARGET
+      )
+    ).toBe(false);
+  });
+
+  it('repMax + 2 qualifies the light-load bump', () => {
+    expect(sessionMetPrescription([{ weightKg: 10, reps: 14, rir: 2 }], CURL_TARGET)).toBe(true);
+  });
+
+  it('a fractional increment (<=10% of load) keeps the nominal ceiling', () => {
+    expect(
+      sessionMetPrescription([{ weightKg: 10, reps: 12, rir: 2 }], {
+        ...CURL_TARGET,
+        minIncrementKg: 0.5,
+      })
+    ).toBe(true);
+  });
+
+  it('heavy loads are unaffected (increment well under 10%)', () => {
+    expect(sessionMetPrescription([{ weightKg: 100, reps: 12, rir: 2 }], CURL_TARGET)).toBe(true);
+  });
+
+  it('an unknown increment never extends the ceiling (no guessing)', () => {
+    expect(
+      sessionMetPrescription([{ weightKg: 10, reps: 12, rir: 2 }], {
+        targetRepRange: CURL_RANGE,
+        targetRir: 2,
+      })
+    ).toBe(true);
+  });
+
+  it('the +1 seed climbs PAST the nominal repMax toward the extended ceiling', () => {
+    const rec = recommendSessionStart({
+      prevWeightKg: 10,
+      prevReps: 12,
+      prevRir: 2,
+      targetRepRange: CURL_RANGE,
+      targetRir: 2,
+      minIncrementKg: 2.5,
+      prevSessionSets: [
+        { weightKg: 10, reps: 12, rir: 2 },
+        { weightKg: 10, reps: 11, rir: 2 },
+      ],
+    });
+    expect(rec.rationale).toBe('maintain');
+    expect(rec.weightKg).toBe(10);
+    expect(rec.reps).toBe(13); // not capped at 12 — reps substitute for load
+  });
+
+  it('meeting the extended ceiling bumps and reseeds at repMin', () => {
+    const rec = recommendSessionStart({
+      prevWeightKg: 10,
+      prevReps: 14,
+      prevRir: 2,
+      targetRepRange: CURL_RANGE,
+      targetRir: 2,
+      minIncrementKg: 2.5,
+      prevSessionSets: [{ weightKg: 10, reps: 14, rir: 2 }],
+    });
+    expect(rec.rationale).toBe('increase_load');
+    expect(rec.weightKg).toBe(12.5);
+    expect(rec.reps).toBe(CURL_RANGE[0]);
+  });
+});
+
 describe('earnedSessionBump delegates to the shared predicate (single source of truth)', () => {
   const fixtures: PrevSessionSet[][] = [
     [{ weightKg: 180, reps: 10, rir: 1 }],

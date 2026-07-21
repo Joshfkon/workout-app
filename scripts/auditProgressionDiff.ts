@@ -31,6 +31,7 @@ import {
   recommendSessionStart,
   sessionMetPrescription,
   confirmedRegression,
+  effectiveRepCeiling,
   type PrevSessionSet,
   type SetRecommendation,
 } from '../services/setRecommender';
@@ -206,7 +207,7 @@ function ruleLabel(
   if (newRec.rationale === 'reduce_load') return 'regression → step down';
   if (newRec.suggestDeload) return 'stall ×3 → hold + deload flag';
   if (newRec.reps > ref.reps) return '+1 rep';
-  if (ref.reps >= repMax) return '+1 rep (capped at repMax)';
+  if (ref.reps >= repMax) return '+1 rep (capped at ceiling)';
   const refRir = Math.max(0, ref.rir ?? target.targetRir);
   if (ref.reps < repMin || refRir - target.targetRir <= -DEADBAND_RIR) return 'hold (red flag: miss)';
   const gradable = prevSets.some((s) => Number.isFinite(s.weightKg) && s.weightKg > 0);
@@ -242,8 +243,17 @@ function replayExercise(ex: FixtureExercise): DiffRow[] {
     const newRec = recommendSessionStart({ ...common, earlierSessionSets: earlier });
 
     const flags: string[] = [];
-    if (newRec.weightKg > ref.weightKg * 1.05) flags.push('JUMP>5%');
-    if (newRec.reps > ex.targetRepRange[1]) flags.push('REPS>MAX');
+    // A single minimum increment is the smallest possible bump — on light
+    // loads it can exceed 5% by itself, and the extended rep ceiling already
+    // gates when it's earned. Flag only jumps beyond BOTH 5% and one step.
+    const inc = ex.minIncrementKg && ex.minIncrementKg > 0 ? ex.minIncrementKg : 2.5;
+    if (newRec.weightKg > Math.max(ref.weightKg * 1.05, ref.weightKg + inc + 1e-9))
+      flags.push('JUMP>5%');
+    // Rep targets above nominal repMax are legitimate on light-load exercises
+    // (extended ceiling substitutes reps for unavailable fractional load) —
+    // flag only past the effective ceiling.
+    if (newRec.reps > effectiveRepCeiling(ex.targetRepRange[1], ref.weightKg, ex.minIncrementKg))
+      flags.push('REPS>MAX');
 
     rows.push({
       date: ex.sessions[i].date,

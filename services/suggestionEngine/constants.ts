@@ -211,6 +211,19 @@ export const SCHEME_REP_WINDOW_FLOOR_MULTIPLE = 2;
  */
 export const STALL_LOAD_TOLERANCE = 0.05;
 
+/**
+ * When the exercise's smallest loadable increment exceeds this fraction of the
+ * top set's load, a load bump is a big jump (e.g. 10 kg DB + 2.5 kg = +25%) —
+ * bump-then-fail-then-stall territory. The success predicate then requires the
+ * EXTENDED rep ceiling below instead of the nominal repMax: reps climb past
+ * the range top as a substitute for the fractional load that doesn't exist.
+ * Only applies when the increment is explicitly known (never guessed).
+ */
+export const LIGHT_LOAD_INCREMENT_FRACTION = 0.10;
+
+/** Extra reps over repMax required to earn a bump on a light-load exercise. */
+export const LIGHT_LOAD_REP_CEILING_EXTENSION = 2;
+
 // ============================================================
 // COLD-START (first-ever session of an exercise) DIALS
 // ============================================================

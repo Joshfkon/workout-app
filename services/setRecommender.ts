@@ -43,6 +43,8 @@ import {
   TOP_SET_LOAD_TOLERANCE,
   SCHEME_REP_WINDOW_FLOOR_MULTIPLE,
   STALL_LOAD_TOLERANCE,
+  LIGHT_LOAD_INCREMENT_FRACTION,
+  LIGHT_LOAD_REP_CEILING_EXTENSION,
 } from './suggestionEngine/constants';
 import { inferRolesForSession, type SetRole } from './suggestionEngine/setRoles';
 
@@ -152,6 +154,37 @@ export interface PrevSessionSet {
 export interface SessionPrescriptionTarget {
   targetRepRange: [number, number];
   targetRir: number;
+  /**
+   * Smallest loadable increment (kg), when known. Enables the light-load
+   * rep-ceiling extension (effectiveRepCeiling): omitted → nominal repMax
+   * always (never guess loadability).
+   */
+  minIncrementKg?: number;
+}
+
+/**
+ * The rep ceiling a set must reach to earn a load bump. Nominal repMax —
+ * EXCEPT when the smallest loadable increment exceeds
+ * LIGHT_LOAD_INCREMENT_FRACTION of the load (e.g. 10 kg DB + 2.5 kg = +25%):
+ * a bump that big is bump-then-fail-then-stall, and holding forever is worse,
+ * so the ceiling extends by LIGHT_LOAD_REP_CEILING_EXTENSION and reps climb
+ * past the range top as a substitute for the fractional load that doesn't
+ * exist. Extension applies only when the increment is explicitly known.
+ */
+export function effectiveRepCeiling(
+  repMax: number,
+  weightKg: number,
+  minIncrementKg?: number
+): number {
+  if (
+    minIncrementKg &&
+    minIncrementKg > 0 &&
+    weightKg > 0 &&
+    minIncrementKg / weightKg > LIGHT_LOAD_INCREMENT_FRACTION
+  ) {
+    return repMax + LIGHT_LOAD_REP_CEILING_EXTENSION;
+  }
+  return repMax;
 }
 
 /**
@@ -185,7 +218,8 @@ interface GradedSession {
  */
 function gradeSession(
   sets: PrevSessionSet[],
-  targetRepRange: [number, number]
+  targetRepRange: [number, number],
+  minIncrementKg?: number
 ): GradedSession | null {
   const [repMin, repMax] = targetRepRange;
   const valid = sets.filter(
@@ -195,7 +229,12 @@ function gradeSession(
   if (valid.length === 0) return null;
 
   const topLoad = valid.reduce((m, s) => (s.weightKg > m ? s.weightKg : m), 0);
-  const schemeRepMax = Math.max(repMin * SCHEME_REP_WINDOW_FLOOR_MULTIPLE, repMax);
+  // Window upper bound includes the light-load extension so an extended-ceiling
+  // rep count is never excluded as out-of-scheme on narrow ranges.
+  const schemeRepMax = Math.max(
+    repMin * SCHEME_REP_WINDOW_FLOOR_MULTIPLE,
+    repMax + LIGHT_LOAD_REP_CEILING_EXTENSION
+  );
   const graded = valid.filter(
     (s) =>
       s.weightKg >= topLoad * RAMP_ROLE_MAX_FRACTION &&
@@ -207,12 +246,16 @@ function gradeSession(
   const topSets = graded.filter((s) => s.weightKg >= topWeightKg * (1 - TOP_SET_LOAD_TOLERANCE));
   const topReps = topSets.reduce((m, s) => (s.reps > m ? s.reps : m), 0);
 
-  // The prescription is met when a top set reached the rep ceiling. Effort at
-  // ≤ targetRir + 1 meets it as prescribed (§10's "at ≤ targetRir", with the
-  // half-step chip tolerance); a HIGHER logged RIR means it was met with
-  // effort to spare — also success. Either way the rep ceiling decides: RIR
-  // cannot disqualify a set that reached it.
-  const met = topSets.some((s) => s.reps >= repMax);
+  // The prescription is met when a top set reached the rep ceiling —
+  // effectiveRepCeiling: nominal repMax, extended on light-load exercises
+  // where the smallest increment is a >10% jump. Effort at ≤ targetRir + 1
+  // meets it as prescribed (§10's "at ≤ targetRir", with the half-step chip
+  // tolerance); a HIGHER logged RIR means it was met with effort to spare —
+  // also success. Either way the rep ceiling decides: RIR cannot disqualify a
+  // set that reached it.
+  const met = topSets.some(
+    (s) => s.reps >= effectiveRepCeiling(repMax, s.weightKg, minIncrementKg)
+  );
 
   return { topSets, topWeightKg, topReps, met };
 }
@@ -230,7 +273,7 @@ export function sessionMetPrescription(
   sets: PrevSessionSet[],
   target: SessionPrescriptionTarget
 ): boolean {
-  const graded = gradeSession(sets, target.targetRepRange);
+  const graded = gradeSession(sets, target.targetRepRange, target.minIncrementKg);
   return graded ? graded.met : false;
 }
 
@@ -246,9 +289,10 @@ export function sessionMetPrescription(
 export function earnedSessionBump(
   prevSessionSets: PrevSessionSet[],
   targetRepRange: [number, number],
-  targetRir: number
+  targetRir: number,
+  minIncrementKg?: number
 ): boolean {
-  return sessionMetPrescription(prevSessionSets, { targetRepRange, targetRir });
+  return sessionMetPrescription(prevSessionSets, { targetRepRange, targetRir, minIncrementKg });
 }
 
 // ============================================
@@ -559,13 +603,13 @@ export interface SessionStartInput {
  */
 function stallStreak(prevGraded: GradedSession, input: SessionStartInput): number {
   if (!input.priorSessionSets || input.priorSessionSets.length === 0) return 0;
-  const prior = gradeSession(input.priorSessionSets, input.targetRepRange);
+  const prior = gradeSession(input.priorSessionSets, input.targetRepRange, input.minIncrementKg);
   if (!prior) return 0;
   const sameLoad = (a: number, b: number) => b > 0 && Math.abs(a - b) / b <= STALL_LOAD_TOLERANCE;
   if (!sameLoad(prevGraded.topWeightKg, prior.topWeightKg)) return 0;
   if (prevGraded.topReps > prior.topReps) return 0; // reps moved — that IS progress
   if (input.earlierSessionSets && input.earlierSessionSets.length > 0) {
-    const earlier = gradeSession(input.earlierSessionSets, input.targetRepRange);
+    const earlier = gradeSession(input.earlierSessionSets, input.targetRepRange, input.minIncrementKg);
     if (earlier && sameLoad(prior.topWeightKg, earlier.topWeightKg) && prior.topReps <= earlier.topReps) {
       return 3;
     }
@@ -648,7 +692,7 @@ export function recommendSessionStart(input: SessionStartInput): SetRecommendati
     input.prevSessionSets && input.prevSessionSets.length > 0
       ? input.prevSessionSets
       : [{ weightKg: input.prevWeightKg, reps: input.prevReps, rir: input.prevRir }];
-  const graded = gradeSession(lastSessionSets, input.targetRepRange);
+  const graded = gradeSession(lastSessionSets, input.targetRepRange, input.minIncrementKg);
 
   if (!graded) {
     // No silent failures: malformed / ungradable session data → hold the last
@@ -690,11 +734,14 @@ export function recommendSessionStart(input: SessionStartInput): SetRecommendati
   }
 
   // NOT met, no red flags → ask for one more rep at the same load, capped at
-  // repMax. A slot already at/above repMax keeps its honest count (never seed
-  // fewer reps than the lifter actually did).
+  // the effective rep ceiling (nominal repMax; extended past it on light-load
+  // exercises where the smallest increment is a >10% jump, so reps substitute
+  // for unavailable fractional load). A slot already at/above the ceiling
+  // keeps its honest count (never seed fewer reps than the lifter did).
+  const ceiling = effectiveRepCeiling(repMax, input.prevWeightKg, input.minIncrementKg);
   return {
     weightKg: input.prevWeightKg,
-    reps: Math.min(input.prevReps + 1, Math.max(repMax, input.prevReps)),
+    reps: Math.min(input.prevReps + 1, Math.max(ceiling, input.prevReps)),
     rir: input.targetRir,
     rationale: 'maintain',
     effortVsTarget: rec.effortVsTarget,
@@ -893,7 +940,14 @@ export function recommendSeedForSlot(input: SeedSlotInput): SeedRecommendation {
   // (no set list supplied) preserves legacy behavior.
   const bumpEarned =
     input.prevSessionSets && input.prevSessionSets.length > 0
-      ? earnedSessionBump(input.prevSessionSets, input.targetRepRange, input.targetRir)
+      ? earnedSessionBump(
+          input.prevSessionSets,
+          input.targetRepRange,
+          input.targetRir,
+          // Raw increment (not the 2.5 rounding default): the light-load
+          // rep-ceiling extension applies only to a KNOWN equipment step.
+          input.minIncrementKg
+        )
       : undefined;
 
   // Regression path (Fix 4): two consecutive below-floor sessions at a
