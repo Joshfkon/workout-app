@@ -45,30 +45,33 @@ export const Toast = memo(function Toast({
     }
   }, [duration, handleDismiss]);
 
+  // Accent shades must exist in the Tailwind palette (success/warning/danger
+  // only define 400-600) and need a dark counterpart so text stays readable
+  // on the light theme's white toast surface.
   const typeStyles = {
     success: {
       bg: 'bg-success-500/10',
       border: 'border-success-500/30',
-      icon: 'text-success-400',
-      text: 'text-success-300',
+      icon: 'text-success-600 dark:text-success-400',
+      text: 'text-success-600 dark:text-success-400',
     },
     error: {
       bg: 'bg-danger-500/10',
       border: 'border-danger-500/30',
-      icon: 'text-danger-400',
-      text: 'text-danger-300',
+      icon: 'text-danger-600 dark:text-danger-400',
+      text: 'text-danger-600 dark:text-danger-400',
     },
     warning: {
       bg: 'bg-warning-500/10',
       border: 'border-warning-500/30',
-      icon: 'text-warning-400',
-      text: 'text-warning-300',
+      icon: 'text-warning-600 dark:text-warning-400',
+      text: 'text-warning-600 dark:text-warning-400',
     },
     info: {
       bg: 'bg-primary-500/10',
       border: 'border-primary-500/30',
-      icon: 'text-primary-400',
-      text: 'text-primary-300',
+      icon: 'text-primary-600 dark:text-primary-400',
+      text: 'text-primary-700 dark:text-primary-300',
     },
   };
 
@@ -100,8 +103,10 @@ export const Toast = memo(function Toast({
   return (
     <div
       className={cn(
-        'rounded-lg border shadow-lg max-w-sm w-full',
-        styles.bg,
+        // Solid surface under the accent tint: the toast floats over page
+        // content, so a bare /10 background lets whatever is behind it bleed
+        // through the text.
+        'rounded-lg border shadow-lg max-w-sm w-full bg-surface-900 overflow-hidden',
         styles.border,
         'transform transition-all duration-200',
         isExiting
@@ -109,7 +114,7 @@ export const Toast = memo(function Toast({
           : 'opacity-100 translate-x-0 animate-in slide-in-from-right-4 fade-in-0'
       )}
     >
-      <div className="p-4">
+      <div className={cn('p-4', styles.bg)}>
         <div className="flex items-start gap-3">
           {/* Icon */}
           <div className={cn('flex-shrink-0', styles.icon)}>
