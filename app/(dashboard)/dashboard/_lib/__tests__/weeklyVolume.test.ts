@@ -9,7 +9,7 @@ import {
 } from '../weeklyVolume';
 
 function stat(muscle: string, sets: number, target: number, status: 'low' | 'optimal' | 'high'): MuscleVolumeStats {
-  return { muscle, sets, effectiveSets: sets, target, status, exercises: [] };
+  return { muscle, sets, effectiveSets: sets, directSets: sets, indirectSets: 0, directEffectiveSets: sets, indirectEffectiveSets: 0, target, status, exercises: [] };
 }
 
 function volumeBlock(exerciseId: string, primaryMuscle: string, workingSets: number): WeeklyVolumeBlockRow {

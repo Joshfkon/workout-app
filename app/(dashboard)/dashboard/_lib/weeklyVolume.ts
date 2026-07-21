@@ -193,7 +193,11 @@ function allocateRounded(values: number[]): number[] {
 export interface ExerciseVolume {
   id: string;
   name: string;
-  /** Credited (fractional) working sets this exercise contributed. */
+  /**
+   * Credited (fractional) working sets this exercise contributed — the
+   * canonical display TOTAL (= direct + indirect; sum-preserving rounded at
+   * emission so lists reconcile exactly against their header).
+   */
   sets: number;
   /**
    * RIR-weighted effective volume for the same credited sets (see
@@ -202,6 +206,20 @@ export interface ExerciseVolume {
    * metrics, so both are carried per exercise.
    */
   effective: number;
+  /**
+   * Composition of the credit (Phase 5): direct = from the exercise's
+   * PRIMARY-muscle tag (incl. legacy-split primaries), indirect = from
+   * secondary tags (the 0.5-credit share). Raw in the accumulator; rounded
+   * independently to one decimal at emission, so direct + indirect can
+   * differ from the displayed `sets` total by ≤0.1 — `sets`/`effective`
+   * remain the canonical totals everywhere a single number is needed.
+   * An indirect-only entry (direct === 0) is how a bench variant shows up
+   * on the front-delt row — the UI annotates those as "secondary".
+   */
+  direct: number;
+  indirect: number;
+  directEffective: number;
+  indirectEffective: number;
 }
 
 /**
@@ -218,7 +236,17 @@ function emitExerciseList(
     .sort((a, b) => b.sets - a.sets);
   const sets = allocateRounded(kept.map((e) => e.sets));
   const effective = allocateRounded(kept.map((e) => e.effective));
-  return kept.map((e, i) => ({ ...e, sets: sets[i], effective: effective[i] }));
+  return kept.map((e, i) => ({
+    ...e,
+    sets: sets[i],
+    effective: effective[i],
+    // Composition fields round independently (they annotate, they are not
+    // summed by any consumer — `sets`/`effective` stay the canonical totals).
+    direct: round1(e.direct),
+    indirect: round1(e.indirect),
+    directEffective: round1(e.directEffective),
+    indirectEffective: round1(e.indirectEffective),
+  }));
 }
 
 export interface MuscleVolumeStats {
@@ -237,6 +265,16 @@ export interface MuscleVolumeStats {
    * exclusion and crediting as `sets`; full precision, rounded at display.
    */
   effectiveSets: number;
+  /**
+   * Composition split of `sets`/`effectiveSets` (Phase 5), full precision:
+   * direct = primary-tag credit, indirect = secondary-tag (0.5) credit.
+   * Invariant by construction (single accumulator, single pass):
+   * directSets + indirectSets === sets and likewise for effective.
+   */
+  directSets: number;
+  indirectSets: number;
+  directEffectiveSets: number;
+  indirectEffectiveSets: number;
   target: number;
   status: 'low' | 'optimal' | 'high';
   exercises: ExerciseVolume[];
@@ -244,7 +282,17 @@ export interface MuscleVolumeStats {
 
 export type VolumeAccumulator = Record<
   string,
-  { sets: number; effectiveSets: number; exercises: Map<string, ExerciseVolume> }
+  {
+    /** Totals (= direct + indirect, maintained in the same pass). */
+    sets: number;
+    effectiveSets: number;
+    /** Composition (Phase 5): primary-tag vs secondary-tag credit. */
+    directSets: number;
+    indirectSets: number;
+    directEffectiveSets: number;
+    indirectEffectiveSets: number;
+    exercises: Map<string, ExerciseVolume>;
+  }
 >;
 
 /** Credit one exercise block's working sets to the accumulator (weighted
@@ -259,34 +307,62 @@ export function accumulateExerciseVolume(
 ): void {
   if (!exercise.primary_muscle || workingSets === 0) return;
 
-  const addCredit = (muscle: string, sets: number, effective: number) => {
+  // Direct (primary-tag) vs indirect (secondary-tag) credit is tracked in the
+  // SAME pass through the same accumulator — totals stay direct + indirect by
+  // construction, never a second computation path.
+  const addCredit = (muscle: string, sets: number, effective: number, isDirect: boolean) => {
     if (!volumeByMuscle[muscle]) {
-      volumeByMuscle[muscle] = { sets: 0, effectiveSets: 0, exercises: new Map() };
+      volumeByMuscle[muscle] = {
+        sets: 0,
+        effectiveSets: 0,
+        directSets: 0,
+        indirectSets: 0,
+        directEffectiveSets: 0,
+        indirectEffectiveSets: 0,
+        exercises: new Map(),
+      };
     }
-    volumeByMuscle[muscle].sets += sets;
-    volumeByMuscle[muscle].effectiveSets += effective;
-    const existing = volumeByMuscle[muscle].exercises.get(exercise.id);
-    if (existing) {
-      existing.sets += sets;
-      existing.effective += effective;
+    const entry = volumeByMuscle[muscle];
+    entry.sets += sets;
+    entry.effectiveSets += effective;
+    if (isDirect) {
+      entry.directSets += sets;
+      entry.directEffectiveSets += effective;
     } else {
-      volumeByMuscle[muscle].exercises.set(exercise.id, {
-        id: exercise.id,
-        name: exercise.name,
-        sets,
-        effective,
-      });
+      entry.indirectSets += sets;
+      entry.indirectEffectiveSets += effective;
     }
+    const existing = entry.exercises.get(exercise.id);
+    const ex = existing ?? {
+      id: exercise.id,
+      name: exercise.name,
+      sets: 0,
+      effective: 0,
+      direct: 0,
+      indirect: 0,
+      directEffective: 0,
+      indirectEffective: 0,
+    };
+    ex.sets += sets;
+    ex.effective += effective;
+    if (isDirect) {
+      ex.direct += sets;
+      ex.directEffective += effective;
+    } else {
+      ex.indirect += sets;
+      ex.indirectEffective += effective;
+    }
+    if (!existing) entry.exercises.set(exercise.id, ex);
   };
 
   const primaryCredits = resolvePrimaryMuscleCredits(exercise.primary_muscle);
   const primarySet = new Set<string>(primaryCredits.map((c) => c.muscle));
   if (primaryCredits.length > 0) {
     primaryCredits.forEach(({ muscle, weight }) =>
-      addCredit(muscle, workingSets * weight, effectiveVolume * weight)
+      addCredit(muscle, workingSets * weight, effectiveVolume * weight, true)
     );
   } else {
-    addCredit(exercise.primary_muscle.toLowerCase(), workingSets, effectiveVolume);
+    addCredit(exercise.primary_muscle.toLowerCase(), workingSets, effectiveVolume, true);
   }
 
   (exercise.secondary_muscles || []).forEach((secondary) => {
@@ -295,7 +371,12 @@ export function accumulateExerciseVolume(
     const creditPerMuscle = SECONDARY_MUSCLE_CREDIT / standards.length;
     standards.forEach((standardMuscle) => {
       if (primarySet.has(standardMuscle)) return;
-      addCredit(standardMuscle, workingSets * creditPerMuscle, effectiveVolume * creditPerMuscle);
+      addCredit(
+        standardMuscle,
+        workingSets * creditPerMuscle,
+        effectiveVolume * creditPerMuscle,
+        false
+      );
     });
   });
 }
@@ -313,7 +394,18 @@ export function volumeAccumulatorToStats(volumeByMuscle: VolumeAccumulator): Mus
       const exercises = Array.from(data.exercises.values()).filter(
         (ex) => ex.sets > ROUNDING_EPSILON
       );
-      return { muscle, sets: data.sets, effectiveSets: data.effectiveSets, target, status, exercises };
+      return {
+        muscle,
+        sets: data.sets,
+        effectiveSets: data.effectiveSets,
+        directSets: data.directSets,
+        indirectSets: data.indirectSets,
+        directEffectiveSets: data.directEffectiveSets,
+        indirectEffectiveSets: data.indirectEffectiveSets,
+        target,
+        status,
+        exercises,
+      };
     })
     .filter((stat) => stat.sets > ROUNDING_EPSILON)
     .sort((a, b) => b.sets - a.sets);
@@ -640,6 +732,40 @@ export function fineChildMev(muscle: StandardMuscleGroup): number {
  * Fine-child bands are deliberately NOT rescaled by a learned/override coarse
  * band — subdivision landmarks are independent of the group aggregate (see
  * RESEARCH_VOLUME_BANDS semantics note).
+ *
+ * ─── PHASE 5b REVIEW: total-inclusive band values (NOT applied — awaiting
+ * sign-off; the counter now splits direct vs indirect credit, so bands can be
+ * stated honestly instead of fudging credit weights) ───────────────────────
+ *
+ * Zone placement uses the TOTAL (direct + indirect) — never direct-only — so
+ * every band below must be read as a total-inclusive threshold. The current
+ * values (MEV_TARGETS × DEFAULT_VOLUME_LANDMARKS.intermediate) read as
+ * DIRECT-work landmarks from the source literature; muscles with heavy
+ * routine indirect credit deserve explicit total-inclusive values:
+ *
+ *   front_delts: current {mev 4, mrv 12} → proposed {mev 2, mrv 14}.
+ *     Pressing alone (0.5/set) routinely supplies 4–6 indirect sets — near-
+ *     zero direct work is fine when pressing volume exists, and the MRV
+ *     ceiling should absorb the indirect load a chest day adds.
+ *   rear_delts: current {mev 4, mrv 18} → proposed {mev 3, mrv 18}.
+ *     Rows/pulldowns supply 1–3 indirect sets in most programs — a smaller
+ *     discount than front delts since pulls credit rear delts less densely.
+ *   lateral_delts: current {mev 6, mrv 20} → keep.
+ *     Almost nothing credits side delts indirectly (upright rows are tagged
+ *     primary); the direct-work reading and total-inclusive reading coincide.
+ *   chest_upper / chest_lower / lats / upper_back: keep — their indirect
+ *     share comes from the SAME coarse-tagged exercises that feed them
+ *     directly, so the intermediate-table values already behave as totals.
+ *
+ * RESEARCH_VOLUME_BANDS entries that assume DIRECT-ONLY counting in their
+ * source but are compared against our total-inclusive counter (flagged for
+ * the same review): shoulders {8,22} (Israetel-style "shoulders sets" =
+ * direct lateral/rear work — presses land under chest; our counter adds
+ * ~0.5/press to this row), biceps {6,20} and triceps {6,18} (pulls/presses
+ * add ~0.5/set here), traps {4,16} (deadlifts/rows/carries feed it
+ * indirectly). chest/quads/hamstrings/glutes read the same either way
+ * (little cross-group secondary credit flows in).
+ * ──────────────────────────────────────────────────────────────────────────
  */
 export function fineChildBand(muscle: StandardMuscleGroup): VolumeBand {
   const mev = MEV_TARGETS[muscle];
@@ -787,6 +913,14 @@ export interface VolumeRow {
   sets: number;
   /** RIR-weighted effective volume for the same sets (one decimal). */
   effectiveSets: number;
+  /**
+   * Composition (Phase 5): the share of `sets`/`effectiveSets` that came from
+   * PRIMARY-muscle tags (one decimal; indirect = total − direct). Lets the UI
+   * show "9.7 eff (4.3 direct)" so a press-inflated front-delt row is honest
+   * about how much is secondary credit.
+   */
+  directSets: number;
+  directEffectiveSets: number;
   band: VolumeBand;
   zone: VolumeZone;
   belowMev: boolean;
@@ -821,20 +955,49 @@ export interface BuildVolumeRowsOptions {
   bands?: Partial<Record<CoarseMuscle, VolumeBand>>;
 }
 
+/** Per-standard-muscle rollup carried into the row model (full precision). */
+interface StandardMuscleRollup {
+  sets: number;
+  effectiveSets: number;
+  directSets: number;
+  indirectSets: number;
+  directEffectiveSets: number;
+  indirectEffectiveSets: number;
+  exercises: ExerciseVolume[];
+}
+
+const emptyRollup = (): StandardMuscleRollup => ({
+  sets: 0,
+  effectiveSets: 0,
+  directSets: 0,
+  indirectSets: 0,
+  directEffectiveSets: 0,
+  indirectEffectiveSets: 0,
+  exercises: [],
+});
+
 /** Accumulate credited sets + contributing exercises per standard muscle. */
 function setsByStandardMuscle(
   stats: MuscleVolumeStats[]
-): Map<StandardMuscleGroup, { sets: number; effectiveSets: number; exercises: ExerciseVolume[] }> {
-  const out = new Map<StandardMuscleGroup, { sets: number; effectiveSets: number; exercises: ExerciseVolume[] }>();
-  const add = (m: StandardMuscleGroup, sets: number, effectiveSets: number, exercises: ExerciseVolume[]) => {
-    const cur = out.get(m) ?? { sets: 0, effectiveSets: 0, exercises: [] };
-    cur.sets += sets;
-    cur.effectiveSets += effectiveSets;
-    for (const ex of exercises) {
+): Map<StandardMuscleGroup, StandardMuscleRollup> {
+  const out = new Map<StandardMuscleGroup, StandardMuscleRollup>();
+  const add = (m: StandardMuscleGroup, stat: MuscleVolumeStats, share: number) => {
+    const cur = out.get(m) ?? emptyRollup();
+    cur.sets += stat.sets * share;
+    cur.effectiveSets += stat.effectiveSets * share;
+    cur.directSets += stat.directSets * share;
+    cur.indirectSets += stat.indirectSets * share;
+    cur.directEffectiveSets += stat.directEffectiveSets * share;
+    cur.indirectEffectiveSets += stat.indirectEffectiveSets * share;
+    for (const ex of stat.exercises) {
       const existing = cur.exercises.find((e) => e.id === ex.id);
       if (existing) {
         existing.sets += ex.sets;
         existing.effective += ex.effective;
+        existing.direct += ex.direct;
+        existing.indirect += ex.indirect;
+        existing.directEffective += ex.directEffective;
+        existing.indirectEffective += ex.indirectEffective;
       } else {
         cur.exercises.push({ ...ex });
       }
@@ -847,8 +1010,7 @@ function setsByStandardMuscle(
       : resolveMuscleToStandard(stat.muscle);
     if (standards.length === 0) continue;
     // Split a legacy-keyed stat evenly across the standards it covers.
-    for (const std of standards)
-      add(std, stat.sets / standards.length, stat.effectiveSets / standards.length, stat.exercises);
+    for (const std of standards) add(std, stat, 1 / standards.length);
   }
   return out;
 }
@@ -882,6 +1044,8 @@ export function buildVolumeRows(
 
     let coarseSetsRaw = 0;
     let coarseEffectiveRaw = 0;
+    let coarseDirectRaw = 0;
+    let coarseDirectEffectiveRaw = 0;
     // Accumulate the per-exercise breakdown at FULL precision; rounding
     // happens once at emission (emitExerciseList), sum-preserving so the
     // list always reconciles exactly against the row header. Rounding at
@@ -891,14 +1055,20 @@ export function buildVolumeRows(
     const childRows: VolumeRow[] = [];
 
     for (const child of children) {
-      const data = byStd.get(child) ?? { sets: 0, effectiveSets: 0, exercises: [] };
+      const data = byStd.get(child) ?? emptyRollup();
       coarseSetsRaw += data.sets;
       coarseEffectiveRaw += data.effectiveSets;
+      coarseDirectRaw += data.directSets;
+      coarseDirectEffectiveRaw += data.directEffectiveSets;
       for (const ex of data.exercises) {
         const existing = coarseExercises.find((e) => e.id === ex.id);
         if (existing) {
           existing.sets += ex.sets;
           existing.effective += ex.effective;
+          existing.direct += ex.direct;
+          existing.indirect += ex.indirect;
+          existing.directEffective += ex.directEffective;
+          existing.indirectEffective += ex.indirectEffective;
         } else {
           coarseExercises.push({ ...ex });
         }
@@ -931,6 +1101,8 @@ export function buildVolumeRows(
         parent: coarse,
         sets: childSets,
         effectiveSets: round1(data.effectiveSets),
+        directSets: round1(data.directSets),
+        directEffectiveSets: round1(data.directEffectiveSets),
         band: childBand,
         zone: volumeZone(childSets, childBand),
         belowMev: childBelowMev,
@@ -951,6 +1123,8 @@ export function buildVolumeRows(
       parent: null,
       sets: coarseSets,
       effectiveSets: round1(coarseEffectiveRaw),
+      directSets: round1(coarseDirectRaw),
+      directEffectiveSets: round1(coarseDirectEffectiveRaw),
       band,
       zone: volumeZone(coarseSets, band),
       belowMev: coarseSets < band.mev,

@@ -26,8 +26,8 @@ describe('ContributingSets', () => {
         muscle="chest"
         testIdPrefix="volume-sources"
         exercises={[
-          { id: 'e1', name: 'Incline Press', sets: 8, effective: 8 },
-          { id: 'e2', name: 'Dips', sets: 2, effective: 2 },
+          { id: 'e1', name: 'Incline Press', sets: 8, effective: 8, direct: 8, indirect: 0, directEffective: 8, indirectEffective: 0 },
+          { id: 'e2', name: 'Dips', sets: 2, effective: 2, direct: 2, indirect: 0, directEffective: 2, indirectEffective: 0 },
         ]}
       />
     );
@@ -44,7 +44,7 @@ describe('ContributingSets', () => {
       <ContributingSets
         muscle="triceps"
         testIdPrefix="volume-sources"
-        exercises={[{ id: 'e1', name: 'Bench Press', sets: 1.5, effective: 1.5 }]}
+        exercises={[{ id: 'e1', name: 'Bench Press', sets: 1.5, effective: 1.5, direct: 0, indirect: 1.5, directEffective: 0, indirectEffective: 1.5 }]}
       />
     );
     const panel = screen.getByTestId('volume-sources-triceps');
@@ -61,7 +61,7 @@ describe('SourcesDisclosure', () => {
         muscle="lats"
         displayName="Lats"
         testIdPrefix="volume-sources"
-        exercises={[{ id: 'e1', name: 'Pulldown', sets: 6, effective: 6 }]}
+        exercises={[{ id: 'e1', name: 'Pulldown', sets: 6, effective: 6, direct: 6, indirect: 0, directEffective: 6, indirectEffective: 0 }]}
       >
         <span>row content</span>
       </SourcesDisclosure>
@@ -87,5 +87,27 @@ describe('SourcesDisclosure', () => {
     );
     expect(screen.getByText('row content')).toBeInTheDocument();
     expect(screen.queryByTestId('volume-sources-toggle-lats')).not.toBeInTheDocument();
+  });
+});
+
+describe('secondary (indirect-only) annotation', () => {
+  it('tags indirect-only entries and leaves direct entries untagged', () => {
+    render(
+      <ContributingSets
+        muscle="front_delts"
+        testIdPrefix="volume-sources"
+        exercises={[
+          // Direct work — no tag.
+          { id: 'ohp', name: 'Overhead Press', sets: 4, effective: 4, direct: 4, indirect: 0, directEffective: 4, indirectEffective: 0 },
+          // Pure secondary credit (a bench variant on the front-delt row) — tagged.
+          { id: 'bench', name: 'Barbell Bench Press', sets: 1.5, effective: 1.5, direct: 0, indirect: 1.5, directEffective: 0, indirectEffective: 1.5 },
+        ]}
+      />
+    );
+    expect(screen.queryByTestId('volume-sources-secondary-ohp')).not.toBeInTheDocument();
+    const tag = screen.getByTestId('volume-sources-secondary-bench');
+    expect(tag).toHaveTextContent(/secondary/i);
+    // The footer still explains what the tag means.
+    expect(screen.getByTestId('volume-sources-front_delts')).toHaveTextContent('shared credit');
   });
 });

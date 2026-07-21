@@ -69,7 +69,10 @@ export function VolumeRowContent({ row }: { row: VolumeRow }) {
   );
 }
 
-/** Fine-child content: the smaller indented variant of the same line + bar. */
+/** Fine-child content: the smaller indented variant of the same line + bar.
+ *  Children show credit COMPOSITION — "9.7 eff (4.3 direct) · …" — so a row
+ *  inflated by secondary credit (front delts fed by pressing) is honest about
+ *  how much of it comes from primary-tag work. */
 export function VolumeChildContent({ child }: { child: VolumeRow }) {
   return (
     <>
@@ -79,7 +82,9 @@ export function VolumeChildContent({ child }: { child: VolumeRow }) {
           <span className={rowTextClass(child)} data-testid={`volume-sets-${child.muscle}`}>
             {formatEffectiveVolume(child.effectiveSets)}
           </span>
-          <span className="text-surface-600"> eff · {child.sets} sets · {zoneBandLabel(child.band)}</span>
+          <span className="text-surface-600">
+            {' '}eff ({formatEffectiveVolume(child.directEffectiveSets)} direct) · {child.sets} sets · {zoneBandLabel(child.band)}
+          </span>
         </span>
       </div>
       <BarTrack row={child} />

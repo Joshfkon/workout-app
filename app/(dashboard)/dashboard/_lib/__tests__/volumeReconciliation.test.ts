@@ -147,3 +147,94 @@ describe('reconciliation holds for every coarse row (not just shoulders)', () =>
     }
   );
 });
+
+describe('direct vs indirect composition (Phase 5) — reference data, pre-retag tags', () => {
+  it('front delts: direct 4.33 raw (Arnold ⅓ + coarse laterals ⅓s), indirect 5.5 (presses)', () => {
+    const frontStat = stats.find((s) => s.muscle === 'front_delts')!;
+    expect(frontStat.directSets).toBeCloseTo(4.3333, 3); // 8/3 + 3/3 + 2/3
+    expect(frontStat.indirectSets).toBeCloseTo(5.5, 9); // 1.5+1.5+1.5+1.0 bench credit
+    expect(frontStat.sets).toBeCloseTo(9.8333, 3);
+
+    const front = shoulders.children.find((c) => c.muscle === 'front_delts')!;
+    expect(front.directSets).toBe(4.3);
+    // Direct effective: Arnold's RIR-3 set lives in the direct share
+    // (7.6/3 = 2.533) + 1.0 + 0.667 = 4.2.
+    expect(front.directEffectiveSets).toBe(4.2);
+  });
+
+  it('single-pass invariant: direct + indirect === total to the epsilon, every muscle, both metrics', () => {
+    for (const s of stats) {
+      expect(s.directSets + s.indirectSets).toBeCloseTo(s.sets, 9);
+      expect(s.directEffectiveSets + s.indirectEffectiveSets).toBeCloseTo(s.effectiveSets, 9);
+    }
+  });
+
+  it('counted-sets entries carry composition: bench variants are indirect-only, Arnold is direct-only', () => {
+    const byId = new Map(shoulders.exercises.map((e) => [e.id, e]));
+    for (const benchId of ['db', 'bb', 'fly', 'mcp']) {
+      expect(byId.get(benchId)!.direct).toBe(0);
+      expect(byId.get(benchId)!.indirect).toBeGreaterThan(0);
+    }
+    expect(byId.get('arnold')!.direct).toBe(8);
+    expect(byId.get('arnold')!.indirect).toBe(0);
+  });
+});
+
+describe('direct vs indirect composition — AFTER the Phase 3 retag mappings (fixture only)', () => {
+  // The confirmed 3b mappings applied in-fixture: Arnold → front_delts +
+  // lateral_delts secondary; both lateral raises → lateral_delts.
+  const retagged: WeeklyVolumeBlockRow[] = [
+    block('arnold', 'Arnold Press', 'front_delts', ['lateral_delts'], [...rir2(7), 3]),
+    block('lrm', 'Lateral Raise (Machine)', 'lateral_delts', [], rir2(3)),
+    block('lrc', 'Lateral Raise (Cable)', 'lateral_delts', [], rir2(2)),
+    block('cur', 'Cable Upright Row', 'lateral_delts', ['traps', 'biceps'], rir2(3)),
+    block('pd', 'Lat Pulldown', 'lats', ['biceps', 'upper_back', 'rear_delts'], rir2(4)),
+    block('db', 'Dumbbell Bench Press', 'chest', ['front_delts', 'triceps'], rir2(3)),
+    block('bb', 'Barbell Bench Press', 'chest', ['front_delts', 'triceps'], rir2(3)),
+    block('fly', 'Cable Fly', 'chest', ['front_delts'], rir2(3)),
+    block('mcp', 'Machine Chest Press', 'chest', ['front_delts', 'triceps'], rir2(2)),
+  ];
+  const retagStats = computeWeeklyMuscleVolume(retagged);
+  const byMuscle = new Map(retagStats.map((s) => [s.muscle, s]));
+
+  it('front: 8 direct (Arnold) + 5.5 indirect (presses); side: 8 direct + 4 indirect (Arnold secondary); rear: 2 indirect only', () => {
+    const front = byMuscle.get('front_delts')!;
+    expect(front.directSets).toBeCloseTo(8, 9);
+    expect(front.indirectSets).toBeCloseTo(5.5, 9);
+
+    const side = byMuscle.get('lateral_delts')!;
+    expect(side.directSets).toBeCloseTo(8, 9); // 3 + 2 + 3 (upright row)
+    expect(side.indirectSets).toBeCloseTo(4, 9); // Arnold 0.5 × 8
+
+    const rear = byMuscle.get('rear_delts')!;
+    expect(rear.directSets).toBeCloseTo(0, 9);
+    expect(rear.indirectSets).toBeCloseTo(2, 9); // pulldown 0.5 × 4
+  });
+
+  it('invariant holds post-retag too: direct + indirect === total to the epsilon', () => {
+    for (const s of retagStats) {
+      expect(s.directSets + s.indirectSets).toBeCloseTo(s.sets, 9);
+      expect(s.directEffectiveSets + s.indirectEffectiveSets).toBeCloseTo(s.effectiveSets, 9);
+    }
+  });
+});
+
+describe('zero direct work + sufficient indirect renders in-zone (the "pressing covers it" case)', () => {
+  it('front delts fed only by bench secondaries (5.5 ≥ MEV 4) is in_zone, not under', () => {
+    const pressesOnly: WeeklyVolumeBlockRow[] = [
+      block('db', 'Dumbbell Bench Press', 'chest', ['front_delts', 'triceps'], rir2(3)),
+      block('bb', 'Barbell Bench Press', 'chest', ['front_delts', 'triceps'], rir2(3)),
+      block('fly', 'Cable Fly', 'chest', ['front_delts'], rir2(3)),
+      block('mcp', 'Machine Chest Press', 'chest', ['front_delts', 'triceps'], rir2(2)),
+    ];
+    const s = computeWeeklyMuscleVolume(pressesOnly);
+    const reach = computeReachableMuscles(pressesOnly);
+    const shouldersRow = buildVolumeRows(s, reach).find((r) => r.muscle === 'shoulders')!;
+    const front = shouldersRow.children.find((c) => c.muscle === 'front_delts')!;
+
+    expect(front.directSets).toBe(0);
+    expect(front.sets).toBe(5.5); // all indirect
+    expect(front.zone).toBe('in_zone'); // 5.5 ≥ MEV 4 — zone judges the TOTAL
+    expect(front.belowMev).toBe(false);
+  });
+});
