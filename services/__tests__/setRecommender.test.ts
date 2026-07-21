@@ -358,11 +358,11 @@ describe('recommendSessionStart', () => {
     ...over,
   });
 
-  it('repeats last session verbatim when it landed in range at ~target effort (fresh, no fatigue shave)', () => {
+  it('asks for one more rep when last session landed in range short of the top (fresh, no fatigue shave)', () => {
     const r = recommendSessionStart(start({ prevReps: 11, prevRir: 3 }));
     expect(r.rationale).toBe('maintain');
     expect(r.weightKg).toBe(100);
-    expect(r.reps).toBe(11); // NOT 10 — a new session starts fresh
+    expect(r.reps).toBe(12); // prevReps + 1 — the seed prescribes progression, not a replay
   });
 
   it('steps the load up when last session was clearly too light (live bug: 20 reps @ 4 RIR vs 10-15 @ 2)', () => {
@@ -389,11 +389,11 @@ describe('recommendSessionStart', () => {
   });
 
   it('assumes on-target effort when the previous set has no recorded RIR', () => {
-    // In-range reps, unknown effort -> hold and repeat.
+    // In-range reps short of the top, unknown effort -> hold the load, +1 rep.
     const r = recommendSessionStart(start({ prevReps: 10, prevRir: undefined }));
     expect(r.rationale).toBe('maintain');
     expect(r.weightKg).toBe(100);
-    expect(r.reps).toBe(10);
+    expect(r.reps).toBe(11);
   });
 
   it('still increases on an objective rep-overshoot even with no recorded RIR', () => {
@@ -406,11 +406,12 @@ describe('recommendSessionStart', () => {
   it('rep-overshoot beats the RIR deadband: a rep range moved down reprices UP off a near-failure set', () => {
     // 100×10 @ 0 RIR against a switched 5-6 @ 2 target: the 10 reps prove the
     // load is light for the NEW range even though the set ran to failure.
-    // E1RM at 0 RIR = 133.3; weight for 6 @ 2 RIR ≈ 105.3 → 105.
+    // E1RM at 0 RIR = 133.3; weight for 6 @ 2 RIR ≈ 105.3 → 105. A bump seeds
+    // the rep target at the new range's FLOOR (repMin), not the curve answer.
     const r = recommendSessionStart(start({ prevReps: 10, prevRir: 0, targetRepRange: [5, 6] }));
     expect(r.rationale).toBe('increase_load');
     expect(r.weightKg).toBe(105);
-    expect(r.reps).toBe(6);
+    expect(r.reps).toBe(5);
   });
 
   it('zero-load seeds follow a moved rep range instead of repeating out-of-range reps', () => {

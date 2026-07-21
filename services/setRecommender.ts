@@ -39,6 +39,10 @@ import {
   RECAL_FATIGUE_CORRECTION_PER_SET,
   RECAL_MAX_FRESHNESS_CORRECTION,
   SUGGESTION_ENGINE_VERSION,
+  RAMP_ROLE_MAX_FRACTION,
+  TOP_SET_LOAD_TOLERANCE,
+  SCHEME_REP_WINDOW_FLOOR_MULTIPLE,
+  STALL_LOAD_TOLERANCE,
 } from './suggestionEngine/constants';
 import { inferRolesForSession, type SetRole } from './suggestionEngine/setRoles';
 
@@ -87,6 +91,12 @@ export interface SetRecommendation {
    * "matched" — a set left easier than target must not read as matched.
    */
   effortVsTarget: 'easier' | 'on_target' | 'harder';
+  /**
+   * Set by recommendSessionStart when THREE consecutive sessions attempted the
+   * same prescription without progress (stall rule). Flag only — the UI may
+   * later surface it as a deload suggestion; nothing consumes it yet.
+   */
+  suggestDeload?: boolean;
 }
 
 /**
@@ -138,38 +148,107 @@ export interface PrevSessionSet {
   rir?: number;
 }
 
+/** Target a session is graded against by sessionMetPrescription. */
+export interface SessionPrescriptionTarget {
+  targetRepRange: [number, number];
+  targetRir: number;
+}
+
 /**
- * Did the previous session EARN a load increase? True only when EVERY working
- * set cleared the top of the rep range under the existing effort condition
- * (>= DEADBAND_RIR spare, or an unambiguous +REP_OVERSHOOT rep overshoot).
+ * A previous session reduced to its gradable working sets, for the success
+ * predicate and the stall rule. Null when NOTHING in the session is gradable
+ * (malformed data, or no set inside the grading scheme) — callers must then
+ * hold the last prescription rather than guess.
+ */
+interface GradedSession {
+  /** Gradable set(s) at the session's top graded load (± TOP_SET_LOAD_TOLERANCE). */
+  topSets: PrevSessionSet[];
+  topWeightKg: number;
+  /** Best reps among the top graded set(s) — the stall rule's progress signal. */
+  topReps: number;
+  met: boolean;
+}
+
+/**
+ * Grade a session's sets against the prescribed rep range (design doc §10).
  *
- * A single strong top set followed by mid-range back-half sets (12-10-9) must
- * read as "keep accumulating reps at this load", not as a bump — grading one
- * qualifying set was audit failure mode #5 (single-set gating).
+ * Exclusions before grading:
+ *  - invalid rows (non-finite / non-positive weight or reps) — skipped, never throw;
+ *  - feeder work below RAMP_ROLE_MAX_FRACTION of the session's top load;
+ *  - out-of-scheme sets whose reps fall outside
+ *    [repMin, max(repMin × SCHEME_REP_WINDOW_FLOOR_MULTIPLE, repMax)] — e.g. a
+ *    heavy 200×4 pyramid top against a 6–10 range. These are a different rep
+ *    scheme: they neither earn nor block a bump. Rep overshoot beyond
+ *    repMax + REP_OVERSHOOT stays gradable (it objectively proves under-load).
+ *    TODO(known debt): the durable fix is per-slot rep ranges for pyramid
+ *    schemes; this window is the interim heuristic.
+ */
+function gradeSession(
+  sets: PrevSessionSet[],
+  targetRepRange: [number, number]
+): GradedSession | null {
+  const [repMin, repMax] = targetRepRange;
+  const valid = sets.filter(
+    (s) =>
+      Number.isFinite(s.weightKg) && s.weightKg > 0 && Number.isFinite(s.reps) && s.reps > 0
+  );
+  if (valid.length === 0) return null;
+
+  const topLoad = valid.reduce((m, s) => (s.weightKg > m ? s.weightKg : m), 0);
+  const schemeRepMax = Math.max(repMin * SCHEME_REP_WINDOW_FLOOR_MULTIPLE, repMax);
+  const graded = valid.filter(
+    (s) =>
+      s.weightKg >= topLoad * RAMP_ROLE_MAX_FRACTION &&
+      ((s.reps >= repMin && s.reps <= schemeRepMax) || s.reps > repMax + REP_OVERSHOOT)
+  );
+  if (graded.length === 0) return null;
+
+  const topWeightKg = graded.reduce((m, s) => (s.weightKg > m ? s.weightKg : m), 0);
+  const topSets = graded.filter((s) => s.weightKg >= topWeightKg * (1 - TOP_SET_LOAD_TOLERANCE));
+  const topReps = topSets.reduce((m, s) => (s.reps > m ? s.reps : m), 0);
+
+  // The prescription is met when a top set reached the rep ceiling. Effort at
+  // ≤ targetRir + 1 meets it as prescribed (§10's "at ≤ targetRir", with the
+  // half-step chip tolerance); a HIGHER logged RIR means it was met with
+  // effort to spare — also success. Either way the rep ceiling decides: RIR
+  // cannot disqualify a set that reached it.
+  const met = topSets.some((s) => s.reps >= repMax);
+
+  return { topSets, topWeightKg, topReps, met };
+}
+
+/**
+ * THE session-to-session success predicate (single source of truth): did the
+ * session meet its prescription — top working set(s) at reps >= repMax
+ * (design doc §10)? Consumed by BOTH earnedSessionBump (seed/anchor bump
+ * gate) and recommendSessionStart (rep seeding + stall rule), so the gate and
+ * the seed can never disagree about what "earned it" means.
  *
- * Set roles are respected: ramp / back-off sets (load below
- * RAMP_ROLE_MAX_FRACTION of the session top set, per setRoles inference) are
- * feeder work and are never graded against the working rep target — so a
- * designated light last set doesn't block a bump the working sets earned.
+ * False (never a throw) for empty, malformed, or ungradable sessions.
+ */
+export function sessionMetPrescription(
+  sets: PrevSessionSet[],
+  target: SessionPrescriptionTarget
+): boolean {
+  const graded = gradeSession(sets, target.targetRepRange);
+  return graded ? graded.met : false;
+}
+
+/**
+ * Did the previous session EARN a load increase? Delegates to
+ * sessionMetPrescription — kept as the named gate the seed/anchor path calls.
+ *
+ * Previous semantics (EVERY working set at repMax with >= DEADBAND_RIR spare)
+ * made progression unreachable when following prescriptions exactly: hitting
+ * top-of-range at the target effort — textbook double-progression success —
+ * never qualified. Now the TOP working set(s) reaching repMax earns the bump.
  */
 export function earnedSessionBump(
   prevSessionSets: PrevSessionSet[],
   targetRepRange: [number, number],
   targetRir: number
 ): boolean {
-  const repMax = targetRepRange[1];
-  const roles = inferRolesForSession(prevSessionSets.map((s) => ({ weightKg: s.weightKg })));
-  let gradedWorkingSets = 0;
-  for (let i = 0; i < prevSessionSets.length; i++) {
-    if (roles[i] !== 'working') continue;
-    const s = prevSessionSets[i];
-    if (!(s.weightKg > 0) || !(s.reps > 0)) continue;
-    gradedWorkingSets++;
-    const dev = Math.max(0, s.rir ?? targetRir) - targetRir;
-    const qualified = s.reps > repMax + REP_OVERSHOOT || (s.reps >= repMax && dev >= DEADBAND_RIR);
-    if (!qualified) return false;
-  }
-  return gradedWorkingSets > 0;
+  return sessionMetPrescription(prevSessionSets, { targetRepRange, targetRir });
 }
 
 // ============================================
@@ -445,38 +524,75 @@ export interface SessionStartInput {
   targetRir: number;
   minIncrementKg?: number;
   /**
-   * ALL sets from the previous session (in performed order), for the all-sets
-   * bump gate: a load increase is earned only when every working set cleared
-   * the top of the range (earnedSessionBump). Omitted → legacy single-set
-   * grading (callers that only know the one corresponding set).
+   * ALL sets from the previous session (in performed order), for the success
+   * predicate: a load increase is earned when the TOP working set(s) reached
+   * the top of the range (sessionMetPrescription). Omitted → single-set
+   * grading off the reference set (callers that only know the one
+   * corresponding set).
    */
   prevSessionSets?: PrevSessionSet[];
   /**
-   * ALL sets from the session BEFORE last, for the regression path (Fix 4):
-   * a session-start load REDUCTION requires two consecutive below-floor
-   * sessions (confirmedRegression) and then steps down exactly one increment
-   * (capped −MAX_STEP_PCT); a single bad session holds. Pass [] when the
-   * prior session is known not to exist. Omitted (undefined) → legacy
-   * immediate curve-based reduce.
+   * ALL sets from the session BEFORE last. Two consumers: the regression path
+   * (Fix 4 — a session-start load REDUCTION requires two consecutive
+   * below-floor sessions, then steps down one increment capped −MAX_STEP_PCT;
+   * a single bad session holds), and the stall rule (two consecutive attempts
+   * at the same prescription without progress → hold instead of +1). Pass []
+   * when the prior session is known not to exist. Omitted (undefined) →
+   * legacy immediate curve-based reduce, and no stall detection.
    */
   priorSessionSets?: PrevSessionSet[];
+  /**
+   * ALL sets from the session before `priorSessionSets`' session (three back),
+   * used ONLY by the stall rule's third strike: three consecutive attempts at
+   * the same prescription without progress additionally set `suggestDeload`.
+   * Omitted → the flag never fires.
+   */
+  earlierSessionSets?: PrevSessionSet[];
+}
+
+/**
+ * How many consecutive completed sessions attempted the SAME prescription
+ * (top graded load within STALL_LOAD_TOLERANCE) without rep progress, ending
+ * at the most recent session. 0/1 = no stall; 2 = hold instead of +1; 3 =
+ * hold + suggestDeload. Only counted when the most recent session did NOT
+ * meet its prescription (callers check that first).
+ */
+function stallStreak(prevGraded: GradedSession, input: SessionStartInput): number {
+  if (!input.priorSessionSets || input.priorSessionSets.length === 0) return 0;
+  const prior = gradeSession(input.priorSessionSets, input.targetRepRange);
+  if (!prior) return 0;
+  const sameLoad = (a: number, b: number) => b > 0 && Math.abs(a - b) / b <= STALL_LOAD_TOLERANCE;
+  if (!sameLoad(prevGraded.topWeightKg, prior.topWeightKg)) return 0;
+  if (prevGraded.topReps > prior.topReps) return 0; // reps moved — that IS progress
+  if (input.earlierSessionSets && input.earlierSessionSets.length > 0) {
+    const earlier = gradeSession(input.earlierSessionSets, input.targetRepRange);
+    if (earlier && sameLoad(prior.topWeightKg, earlier.topWeightKg) && prior.topReps <= earlier.topReps) {
+      return 3;
+    }
+  }
+  return 2;
 }
 
 /**
  * Session-START recommendation: the first working set of a NEW session,
- * anchored to the corresponding set from the previous session.
+ * anchored to the corresponding set from the previous session, driven by the
+ * shared success predicate (sessionMetPrescription / design doc §10):
  *
- * Same weight policy as recommendSet (hold by default, step only on a clear
- * miss), so a mis-loaded session — e.g. 20 reps left at 4 RIR against a
- * 10-15 @ 2 RIR target — doesn't get replayed verbatim. The rep prediction
- * differs: the lifter is FRESH, so on a hold there is no within-session
- * fatigue to shave and the expectation is to repeat last session's reps.
- *
- * With `prevSessionSets`, a session-to-session INCREASE additionally requires
- * the whole previous session to have earned it (every working set at the top
- * of the range — earnedSessionBump); a lone strong set holds instead.
+ *  - Previous session MET its prescription → bump the load (existing e1RM
+ *    anchor math: ideal for repMax @ target RIR, capped +MAX_STEP_PCT, with
+ *    the one-increment escape) and RESET the rep seed to repMin.
+ *  - NOT met, no red flags → same load, prevReps + 1 (capped at repMax): the
+ *    seed now ASKS for rep progression instead of replaying last session.
+ *  - Stalled (2 consecutive sessions at the same prescription with no rep
+ *    progress) → hold verbatim; a 3rd consecutive miss also sets
+ *    `suggestDeload` (flag only).
+ *  - Red flags (reference set below the floor or past the failure deadband)
+ *    keep the regression path: confirmed two-in-a-row regressions step down
+ *    one increment; a single bad session holds verbatim — never +1 off a miss.
+ *  - Ungradable previous-session data → log and hold (never crash or guess).
  */
 export function recommendSessionStart(input: SessionStartInput): SetRecommendation {
+  const [repMin, repMax] = input.targetRepRange;
   const rec = recommendSet({
     lastWeightKg: input.prevWeightKg,
     lastReps: input.prevReps,
@@ -486,11 +602,25 @@ export function recommendSessionStart(input: SessionStartInput): SetRecommendati
     targetRir: input.targetRir,
     minIncrementKg: input.minIncrementKg,
   });
+
+  // Degenerate reference (zero load / zero reps): recommendSet's guard already
+  // produced the in-range hold (the only seed a bodyweight/broken slot has).
+  if (input.prevWeightKg <= 0 || input.prevReps <= 0) return rec;
+
+  const holdVerbatim = (suggestDeload?: boolean): SetRecommendation => ({
+    weightKg: input.prevWeightKg,
+    reps: clamp(input.prevReps, 1, repMax + OVERSHOOT_CEILING),
+    rir: input.targetRir,
+    rationale: 'maintain',
+    effortVsTarget: rec.effortVsTarget,
+    ...(suggestDeload ? { suggestDeload } : {}),
+  });
+
   if (rec.rationale === 'reduce_load' && input.priorSessionSets !== undefined) {
-    // Regression path (Fix 4): prescribe DOWN only on CONFIRMED
+    // RED FLAGS — regression path (Fix 4): prescribe DOWN only on CONFIRMED
     // underperformance — two consecutive sessions below the range floor at a
     // maintained load. One bad session (below floor, or a grind) is noise:
-    // hold the load and let the lifter retry fresh.
+    // hold the load verbatim (never +1 off a miss) and let the lifter retry.
     const lastSessionSets: PrevSessionSet[] =
       input.prevSessionSets && input.prevSessionSets.length > 0
         ? input.prevSessionSets
@@ -498,7 +628,6 @@ export function recommendSessionStart(input: SessionStartInput): SetRecommendati
     if (confirmedRegression(lastSessionSets, input.priorSessionSets, input.targetRepRange)) {
       const inc =
         input.minIncrementKg && input.minIncrementKg > 0 ? input.minIncrementKg : 2.5;
-      const [repMin, repMax] = input.targetRepRange;
       return {
         weightKg: regressionStepDown(input.prevWeightKg, inc),
         // Recenter the rep expectation on the plan at the reduced load.
@@ -508,37 +637,68 @@ export function recommendSessionStart(input: SessionStartInput): SetRecommendati
         effortVsTarget: rec.effortVsTarget,
       };
     }
+    return holdVerbatim();
+  }
+  if (rec.rationale === 'reduce_load') {
+    // Legacy callers (no prior-session info): immediate curve-based reduce.
+    return rec;
+  }
+
+  const lastSessionSets: PrevSessionSet[] =
+    input.prevSessionSets && input.prevSessionSets.length > 0
+      ? input.prevSessionSets
+      : [{ weightKg: input.prevWeightKg, reps: input.prevReps, rir: input.prevRir }];
+  const graded = gradeSession(lastSessionSets, input.targetRepRange);
+
+  if (!graded) {
+    // No silent failures: malformed / ungradable session data → hold the last
+    // prescription rather than crash or invent progression.
+    console.warn(
+      '[setRecommender] recommendSessionStart: previous session has no gradable working sets — holding last prescription.'
+    );
+    return holdVerbatim();
+  }
+
+  if (graded.met) {
+    // Bump earned (single source of truth: sessionMetPrescription). Load per
+    // the existing e1RM anchor math — ideal for repMax @ target RIR off the
+    // reference set's capacity estimate, capped +MAX_STEP_PCT, one-increment
+    // escape — and the rep seed RESETS to the range floor for the new load.
+    const inc = input.minIncrementKg && input.minIncrementKg > 0 ? input.minIncrementKg : 2.5;
+    const e1rm = epleyE1RM(
+      input.prevWeightKg,
+      input.prevReps,
+      Math.max(0, input.prevRir ?? input.targetRir)
+    );
+    const ideal = weightForReps(e1rm, repMax, input.targetRir);
+    let weightKg = roundToIncrement(Math.min(ideal, input.prevWeightKg * (1 + MAX_STEP_PCT)), inc);
+    if (weightKg <= input.prevWeightKg) weightKg = input.prevWeightKg + inc;
     return {
-      weightKg: input.prevWeightKg,
-      reps: clamp(input.prevReps, 1, input.targetRepRange[1] + OVERSHOOT_CEILING),
+      weightKg,
+      reps: repMin,
       rir: input.targetRir,
-      rationale: 'maintain',
+      rationale: 'increase_load',
       effortVsTarget: rec.effortVsTarget,
     };
   }
-  if (
-    rec.rationale === 'increase_load' &&
-    input.prevSessionSets &&
-    input.prevSessionSets.length > 0 &&
-    !earnedSessionBump(input.prevSessionSets, input.targetRepRange, input.targetRir)
-  ) {
-    // The reference set alone would bump, but the session as a whole didn't
-    // earn it — hold the load and keep accumulating reps across all sets.
-    return {
-      weightKg: input.prevWeightKg,
-      reps: clamp(input.prevReps, 1, input.targetRepRange[1] + OVERSHOOT_CEILING),
-      rir: input.targetRir,
-      rationale: 'maintain',
-      effortVsTarget: rec.effortVsTarget,
-    };
+
+  const streak = stallStreak(graded, input);
+  if (streak >= 2) {
+    // Stalled at this prescription — re-prescribe the same instead of piling
+    // +1s the lifter isn't hitting; the third strike raises the deload flag.
+    return holdVerbatim(streak >= 3);
   }
-  if (rec.rationale === 'maintain' && input.prevReps > 0 && input.prevWeightKg > 0) {
-    // Honest reps (design §7): repeat what the set actually was, capped only
-    // at the display overshoot ceiling. Zero-load references skip this — with
-    // no weight lever, the guard's in-range rep target IS the seed.
-    return { ...rec, reps: clamp(input.prevReps, 1, input.targetRepRange[1] + OVERSHOOT_CEILING) };
-  }
-  return rec;
+
+  // NOT met, no red flags → ask for one more rep at the same load, capped at
+  // repMax. A slot already at/above repMax keeps its honest count (never seed
+  // fewer reps than the lifter actually did).
+  return {
+    weightKg: input.prevWeightKg,
+    reps: Math.min(input.prevReps + 1, Math.max(repMax, input.prevReps)),
+    rir: input.targetRir,
+    rationale: 'maintain',
+    effortVsTarget: rec.effortVsTarget,
+  };
 }
 
 // ============================================

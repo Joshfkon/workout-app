@@ -128,7 +128,7 @@ describe('engine regression baseline — staple exercise, recent history', () =>
       showRirTarget: true,
       anchorSource: 'e1rm',
       clamped: false,
-      engineVersion: 3,
+      engineVersion: 4,
     });
   });
 
@@ -160,7 +160,7 @@ describe('engine regression baseline — staple exercise, recent history', () =>
       showRirTarget: true,
       anchorSource: 'e1rm',
       clamped: false,
-      engineVersion: 3,
+      engineVersion: 4,
     });
   });
 
@@ -181,7 +181,7 @@ describe('engine regression baseline — staple exercise, recent history', () =>
     expect(seed.showRirTarget).toBe(false);
   });
 
-  it('session-start fallback (no anchor): repeats last session verbatim', () => {
+  it('session-start fallback (no anchor): holds the load and asks for one more rep', () => {
     const rec = recommendSessionStart({
       prevWeightKg: 100,
       prevReps: 10,
@@ -191,7 +191,7 @@ describe('engine regression baseline — staple exercise, recent history', () =>
       minIncrementKg: INC,
     });
     expect(rec.weightKg).toBe(100);
-    expect(rec.reps).toBe(10);
+    expect(rec.reps).toBe(11); // prevReps + 1 — the seed prescribes progression
     expect(rec.rationale).toBe('maintain');
   });
 

@@ -6,12 +6,14 @@ import {
 } from '../setRecommender';
 
 /**
- * Fix 2 (audit failure mode #5): session-to-session load increases are gated
- * on ALL prescribed working sets reaching the top of the rep range — a single
- * strong set no longer buys a bump. The existing effort condition
- * (>= 2 RIR spare, or a +2 rep overshoot) still applies, per qualifying set.
- * Ramp / back-off sets (below 75% of the session top set) are excluded per the
- * set-role model.
+ * Session-to-session load increases are gated on the shared success predicate
+ * (sessionMetPrescription, design doc §10): the TOP working set(s) reaching
+ * the top of the rep range earns the bump — at any logged effort (on-target
+ * meets the prescription; easier is effort overshoot, still success). The old
+ * all-sets + RIR-spare gate made progression unreachable when following
+ * prescriptions exactly (top-of-range at target RIR never qualified).
+ * Ramp / back-off sets (below 75% of the session top set) and out-of-scheme
+ * sets (reps outside the grading window) are excluded.
  */
 
 const REP_RANGE: [number, number] = [8, 12];
@@ -33,8 +35,10 @@ const allSetsStrong: PrevSessionSet[] = [
 ];
 
 describe('earnedSessionBump', () => {
-  it('one qualifying set among mid-range sets does NOT earn a bump', () => {
-    expect(earnedSessionBump(oneStrongSet, REP_RANGE, TARGET_RIR)).toBe(false);
+  it('a top set at the top of the range earns the bump even with mid-range back-half sets', () => {
+    // 12 @ 3 RIR on the top set IS double-progression success; the 10/9-rep
+    // back-half no longer vetoes it (the old all-sets gate was the bug).
+    expect(earnedSessionBump(oneStrongSet, REP_RANGE, TARGET_RIR)).toBe(true);
   });
 
   it('all working sets at the top of the range with spare RIR earns a bump', () => {
@@ -49,10 +53,18 @@ describe('earnedSessionBump', () => {
     expect(earnedSessionBump(sets, REP_RANGE, TARGET_RIR)).toBe(true);
   });
 
-  it('top-of-range WITHOUT the RIR spare does not qualify', () => {
+  it('top-of-range at target effort (no RIR spare) DOES qualify — §10 double progression', () => {
     const sets: PrevSessionSet[] = [
-      { weightKg: 100, reps: 12, rir: 1 }, // on-target effort, not clearly too light
+      { weightKg: 100, reps: 12, rir: 1 }, // repMax at target RIR = prescription met
       { weightKg: 100, reps: 12, rir: 1 },
+    ];
+    expect(earnedSessionBump(sets, REP_RANGE, TARGET_RIR)).toBe(true);
+  });
+
+  it('a top set short of repMax does NOT earn a bump', () => {
+    const sets: PrevSessionSet[] = [
+      { weightKg: 100, reps: 11, rir: 3 },
+      { weightKg: 100, reps: 10, rir: 1 },
     ];
     expect(earnedSessionBump(sets, REP_RANGE, TARGET_RIR)).toBe(false);
   });
@@ -74,10 +86,10 @@ describe('earnedSessionBump', () => {
   });
 });
 
-describe('recommendSeedForSlot — anchor path honors the all-sets gate', () => {
+describe('recommendSeedForSlot — anchor path honors the success-predicate gate', () => {
   // Anchor from the one strong set: Epley(100, 12, 3) = 100 * (1 + 15/30) = 150.
-  // Curve weight at mid-range (10) @ 1 RIR = 150 / (1 + 11/30) ≈ 109.8, which
-  // the ±10% clamp alone would allow (110) — the gate must hold it at 100.
+  // Curve weight at mid-range (10) @ 1 RIR = 150 / (1 + 11/30) ≈ 109.8 (110 at
+  // the increment) — allowed only when the previous session MET its prescription.
   const baseInput = {
     role: 'working' as const,
     targetRepRange: REP_RANGE,
@@ -90,8 +102,19 @@ describe('recommendSeedForSlot — anchor path honors the all-sets gate', () => 
     prevRir: 3,
   };
 
-  it('HOLDs at the recent working weight when only one set qualified', () => {
+  // Session where no top set reached repMax — the gate must ceiling the seed.
+  const notMetSets: PrevSessionSet[] = [
+    { weightKg: 100, reps: 11, rir: 3 },
+    { weightKg: 100, reps: 10, rir: 1 },
+  ];
+
+  it('bumps off a met session (top set at repMax) even with mid-range back-half sets', () => {
     const seed = recommendSeedForSlot({ ...baseInput, prevSessionSets: oneStrongSet });
+    expect(seed.weightKg).toBe(110);
+  });
+
+  it('HOLDs at the recent working weight when the session did not meet its prescription', () => {
+    const seed = recommendSeedForSlot({ ...baseInput, prevSessionSets: notMetSets });
     expect(seed.weightKg).toBe(100);
     expect(seed.clamped).toBe(true); // the gate bound the prescription — say so
   });
@@ -119,8 +142,8 @@ describe('recommendSeedForSlot — anchor path honors the all-sets gate', () => 
   });
 });
 
-describe('recommendSessionStart — fallback path honors the all-sets gate', () => {
-  it('HOLDs when the reference set alone would bump but the session did not earn it', () => {
+describe('recommendSessionStart — fallback path honors the success-predicate gate', () => {
+  it('bumps off a met session (top set at repMax) and reseeds reps at the range floor', () => {
     const rec = recommendSessionStart({
       prevWeightKg: 100,
       prevReps: 12,
@@ -130,9 +153,27 @@ describe('recommendSessionStart — fallback path honors the all-sets gate', () 
       minIncrementKg: INC,
       prevSessionSets: oneStrongSet,
     });
+    expect(rec.rationale).toBe('increase_load');
+    expect(rec.weightKg).toBeGreaterThan(100);
+    expect(rec.reps).toBe(REP_RANGE[0]);
+  });
+
+  it('HOLDs the load (with a +1 rep ask) when no top set reached repMax', () => {
+    const rec = recommendSessionStart({
+      prevWeightKg: 100,
+      prevReps: 11,
+      prevRir: 3,
+      targetRepRange: REP_RANGE,
+      targetRir: TARGET_RIR,
+      minIncrementKg: INC,
+      prevSessionSets: [
+        { weightKg: 100, reps: 11, rir: 3 },
+        { weightKg: 100, reps: 10, rir: 1 },
+      ],
+    });
     expect(rec.rationale).toBe('maintain');
     expect(rec.weightKg).toBe(100);
-    expect(rec.reps).toBe(12);
+    expect(rec.reps).toBe(12); // 11 + 1, capped at repMax
   });
 
   it('bumps when every working set earned it', () => {

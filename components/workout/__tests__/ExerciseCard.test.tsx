@@ -1157,9 +1157,10 @@ describe('ExerciseCard', () => {
       expect(onRepRangeChange).toHaveBeenCalledWith([5, 6]);
       // With no completed sets the reseed effects never fire, so the button
       // itself must reprice the prefill: 100×10 @ 2 RIR → E1RM 140 kg, and
-      // 140 / (1 + (6+2)/30) ≈ 110.5 → 110 at the 2.5 kg increment.
+      // 140 / (1 + (6+2)/30) ≈ 110.5 → 110 at the 2.5 kg increment. A bump
+      // seeds reps at the NEW range's floor (5), not the curve answer.
       expect(screen.getByRole('button', { name: /Weight: 110 kg/ })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /Reps: 6/ })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Reps: 5/ })).toBeInTheDocument();
     });
 
     it('reprices from the logged RPE when the previous set has one', async () => {
@@ -1183,8 +1184,9 @@ describe('ExerciseCard', () => {
       // over the near-failure RIR reading: the switch reprices UP off the
       // logged E1RM. 100×10 at RPE 10 (0 RIR) → E1RM 133.3 kg, not the 140 the
       // target-RIR fallback would assume: 133.3 / (1 + (6+2)/30) ≈ 105.3 → 105.
+      // A bump seeds reps at the NEW range's floor (5), not the curve answer.
       expect(screen.getByRole('button', { name: /Weight: 105 kg/ })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /Reps: 6/ })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Reps: 5/ })).toBeInTheDocument();
     });
 
     it('keeps a zero-load seed at zero when repriced into the new range', async () => {
