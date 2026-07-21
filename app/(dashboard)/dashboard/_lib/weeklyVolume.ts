@@ -723,7 +723,9 @@ export function buildVolumeRows(
         belowMev: childBelowMev,
         reachable: childReachable,
         expandable: false,
-        exercises: data.exercises.map((e) => ({ ...e, sets: Math.round(e.sets * 10) / 10 })),
+        exercises: data.exercises
+          .map((e) => ({ ...e, sets: Math.round(e.sets * 10) / 10 }))
+          .sort((a, b) => b.sets - a.sets),
         children: [],
       });
     }
