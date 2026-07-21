@@ -311,6 +311,86 @@ describe('submitFinishOptimistic', () => {
     expect(finish?.attempts).toBeGreaterThanOrEqual(1);
   });
 
+  it('fires onCompletionSynced only AFTER the completion is confirmed synced', async () => {
+    const { client, pending } = makeGatedSupabase();
+    const onCompletionSynced = jest.fn();
+
+    await submitFinishOptimistic(
+      {
+        supabase: client,
+        sessionId: 's1',
+        session: makeSession(),
+        navigate: jest.fn(),
+        onCompletionSynced,
+        runMesoUpdates: jest.fn(),
+      },
+      SUMMARY_DATA
+    );
+    await settle();
+
+    // Completion request in flight, not settled -> caches must not be
+    // invalidated yet (a refetch now would re-cache the pre-workout state).
+    expect(onCompletionSynced).not.toHaveBeenCalled();
+
+    while (pending.length > 0) {
+      pending.shift()!.resolve();
+      await settle();
+    }
+
+    expect(onCompletionSynced).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not fire onCompletionSynced when the network fails', async () => {
+    const { client, pending } = makeGatedSupabase();
+    const onCompletionSynced = jest.fn();
+
+    await submitFinishOptimistic(
+      {
+        supabase: client,
+        sessionId: 's1',
+        session: makeSession(),
+        navigate: jest.fn(),
+        onCompletionSynced,
+        runMesoUpdates: jest.fn(),
+      },
+      SUMMARY_DATA
+    );
+    await settle();
+    pending.shift()!.resolve({ message: 'TypeError: Failed to fetch' });
+    await settle();
+    await settle();
+
+    expect(onCompletionSynced).not.toHaveBeenCalled();
+  });
+
+  it('still runs meso post-processing when onCompletionSynced throws', async () => {
+    const { client, pending } = makeGatedSupabase();
+    const runMesoUpdates = jest.fn().mockResolvedValue(undefined);
+    const onCompletionSynced = jest.fn(() => {
+      throw new Error('invalidation exploded');
+    });
+
+    await submitFinishOptimistic(
+      {
+        supabase: client,
+        sessionId: 's1',
+        session: makeSession({ mesocycleId: 'meso-1' }),
+        navigate: jest.fn(),
+        onCompletionSynced,
+        runMesoUpdates,
+      },
+      SUMMARY_DATA
+    );
+    await settle();
+    while (pending.length > 0) {
+      pending.shift()!.resolve();
+      await settle();
+    }
+
+    expect(onCompletionSynced).toHaveBeenCalledTimes(1);
+    expect(runMesoUpdates).toHaveBeenCalledTimes(1);
+  });
+
   it('fires the calorie estimate after sync when the session has a planned date', async () => {
     const { client, pending } = makeGatedSupabase();
 
