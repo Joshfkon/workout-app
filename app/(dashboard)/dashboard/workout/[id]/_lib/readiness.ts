@@ -314,7 +314,7 @@ export function buildReadinessRows(
         volumeGap: Math.max(0, child.band.mev - child.sets),
         reachable: child.reachable,
         recovery: childRecovery,
-        exercises: [...child.exercises].sort((a, b) => b.sets - a.sets),
+        exercises: child.exercises,
       };
     });
 

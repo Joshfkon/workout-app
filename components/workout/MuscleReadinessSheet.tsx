@@ -16,13 +16,13 @@ import {
   zoneTextClass,
   zoneBandLabel,
   STANDARD_TO_COARSE,
-  type ExerciseVolume,
 } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 import {
   MuscleGroupList,
   useMuscleRowExpansion,
   withVisibleChildren,
 } from '@/components/muscle/MuscleGroupList';
+import { ContributingSets, SourcesDisclosure } from '@/components/muscle/ContributingSets';
 import { MuscleMap } from '@/components/muscleMap/MuscleMap';
 import { readinessRowsToMapData } from '@/lib/muscleMap/adapters';
 import type { MuscleId } from '@/lib/muscleMap/taxonomy';
@@ -187,80 +187,32 @@ function RecoveryBadge({ recovery, muscle }: { recovery: MuscleRecoveryResult; m
   );
 }
 
-/** "4 sets" / "1.5 sets" — credited counts keep their fraction (½ credits). */
-function formatCreditedSets(sets: number): string {
-  const rounded = Math.round(sets * 10) / 10;
-  return `${rounded} ${rounded === 1 ? 'set' : 'sets'}`;
-}
-
-/**
- * ContributingSets — the drill-down behind a muscle's weekly number: which
- * exercises fed the count and how many credited sets each contributed
- * (biggest first, ½-credit secondary work explained by the footnote).
- */
-function ContributingSets({ exercises, muscle }: { exercises: ExerciseVolume[]; muscle: string }) {
-  const hasFractional = exercises.some((ex) => !Number.isInteger(Math.round(ex.sets * 10) / 10));
-  return (
-    <div className="rounded-lg bg-surface-800/40 px-2.5 py-2" data-testid={`readiness-sources-${muscle}`}>
-      <p className="text-[10px] uppercase tracking-wide text-surface-500 mb-1">Counted sets · last 7 days</p>
-      <ul className="space-y-0.5">
-        {exercises.map((ex) => (
-          <li key={ex.id} className="flex items-baseline justify-between gap-2 text-xs">
-            <span className="text-surface-300 truncate">{ex.name}</span>
-            <span className="tabular-nums text-surface-400 flex-shrink-0">{formatCreditedSets(ex.sets)}</span>
-          </li>
-        ))}
-      </ul>
-      {hasFractional && (
-        <p className="mt-1 text-[10px] leading-relaxed text-surface-600">
-          Partial counts are shared credit — ½ per set for secondary-muscle work,
-          split across heads for multi-head groups.
-        </p>
-      )}
-    </div>
-  );
-}
-
 /** Fine-child content for the shared MuscleGroupList (chrome lives there).
  *  Tapping the child row toggles its own contributing-sets breakdown. */
 function ReadinessChildContent({ child }: { child: ReadinessChild }) {
-  const [showSources, setShowSources] = useState(false);
-  const hasSources = child.exercises.length > 0;
-
-  const rowContent = (
-    <div className="flex items-center gap-3 py-1.5">
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-xs text-surface-400 truncate">{child.displayName}</span>
-          <span className="text-[10px] tabular-nums text-surface-500 flex-shrink-0">
-            <span className={zoneTextClass(child.zone, child.sets)} data-testid={`readiness-sets-${child.muscle}`}>{child.sets}</span>
-            <span className="text-surface-600"> · {zoneBandLabel(child.band)}</span>
-          </span>
-        </div>
-        <div className="mt-1 h-1 rounded-full bg-surface-800 overflow-hidden">
-          <div className={`h-full rounded-full ${zoneBarClass(child.zone, child.sets)}`} style={{ width: `${barFillPct(child.sets, child.band.mrv)}%` }} />
-        </div>
-      </div>
-      <RecoveryBadge recovery={child.recovery} muscle={child.muscle} />
-    </div>
-  );
-
-  if (!hasSources) return rowContent;
-
   return (
-    <div>
-      <button
-        type="button"
-        onClick={() => setShowSources((v) => !v)}
-        aria-expanded={showSources}
-        aria-label={`${showSources ? 'Hide' : 'Show'} sets counted for ${child.displayName}`}
-        className="w-full text-left"
-        data-testid={`readiness-sources-toggle-${child.muscle}`}
-      >
-        {rowContent}
-      </button>
-      {showSources && <ContributingSets exercises={child.exercises} muscle={child.muscle} />}
-    </div>
+    <SourcesDisclosure
+      exercises={child.exercises}
+      muscle={child.muscle}
+      displayName={child.displayName}
+      testIdPrefix="readiness-sources"
+    >
+      <div className="flex items-center gap-3 py-1.5">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs text-surface-400 truncate">{child.displayName}</span>
+            <span className="text-[10px] tabular-nums text-surface-500 flex-shrink-0">
+              <span className={zoneTextClass(child.zone, child.sets)} data-testid={`readiness-sets-${child.muscle}`}>{child.sets}</span>
+              <span className="text-surface-600"> · {zoneBandLabel(child.band)}</span>
+            </span>
+          </div>
+          <div className="mt-1 h-1 rounded-full bg-surface-800 overflow-hidden">
+            <div className={`h-full rounded-full ${zoneBarClass(child.zone, child.sets)}`} style={{ width: `${barFillPct(child.sets, child.band.mrv)}%` }} />
+          </div>
+        </div>
+        <RecoveryBadge recovery={child.recovery} muscle={child.muscle} />
+      </div>
+    </SourcesDisclosure>
   );
 }
 
@@ -398,7 +350,7 @@ export function MuscleReadinessContent({
               // something to expand to.
               renderRowDetail={(row) =>
                 row.exercises.length > 0 ? (
-                  <ContributingSets exercises={row.exercises} muscle={row.muscle} />
+                  <ContributingSets exercises={row.exercises} muscle={row.muscle} testIdPrefix="readiness-sources" />
                 ) : null
               }
               testIdPrefix="readiness-row"

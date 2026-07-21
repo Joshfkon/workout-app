@@ -14,6 +14,7 @@ import {
   useMuscleRowExpansion,
   withVisibleChildren,
 } from '@/components/muscle/MuscleGroupList';
+import { ContributingSets, SourcesDisclosure } from '@/components/muscle/ContributingSets';
 import { EnhancedAthleteModeCard } from '@/components/settings/EnhancedAthleteModeCard';
 import { MuscleMap } from '@/components/muscleMap/MuscleMap';
 import { volumeRowsToMapData } from '@/lib/muscleMap/adapters';
@@ -377,8 +378,26 @@ export default function VolumeProfilePage() {
             rows={volumeRows}
             expansion={expansion}
             renderRow={(row) => <VolumeRowContent row={row} />}
-            renderChild={(child) => <VolumeChildContent child={child} />}
+            renderChild={(child) => (
+              // Tapping a fine-child bar toggles its own counted-sets breakdown.
+              <SourcesDisclosure
+                exercises={child.exercises}
+                muscle={child.muscle}
+                displayName={child.displayName}
+                testIdPrefix="volume-sources"
+              >
+                <VolumeChildContent child={child} />
+              </SourcesDisclosure>
+            )}
             pinChild={pinLaggingChild}
+            // Expanding a row also reveals WHERE its weekly count came from —
+            // and gives chevronless single-muscle groups (Biceps, Quads, …)
+            // something to expand to.
+            renderRowDetail={(row) =>
+              row.exercises.length > 0 ? (
+                <ContributingSets exercises={row.exercises} muscle={row.muscle} testIdPrefix="volume-sources" />
+              ) : null
+            }
             testIdPrefix="volume-row"
             rowClassName="py-3 border-b border-surface-800 last:border-b-0"
           />
