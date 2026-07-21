@@ -331,6 +331,77 @@ export const MUSCLE_GROUP_OPTIONS: { value: MuscleGroup; label: string }[] = [
   { value: 'traps', label: 'Traps' },
 ];
 
+// ============================================
+// PRECISE (STANDARD-MUSCLE) TAGGING OPTIONS
+// ============================================
+//
+// Custom-exercise tagging was coarse-only, which is how user exercises like
+// "Lateral Raise (Machine)" ended up primary 'shoulders' — a tag the volume
+// counter SPLITS evenly across all three delt heads (⅓ credit each), leaking
+// side-delt work onto the front/rear delt rows. The creation flow now offers
+// the fine standard muscles too (mirroring the in-workout edit form's
+// taxonomy); coarse remains selectable as an explicit "whole group" fallback
+// that surfaces the split-credit warning below.
+
+/** One selectable muscle group with its fine (standard-taxonomy) heads. */
+export interface GroupedMuscleOption {
+  /** Coarse token stored when the whole group is selected. */
+  value: string;
+  label: string;
+  /** Fine standard tokens; empty for groups with no meaningful subdivision. */
+  subMuscles: { value: StandardMuscleGroup; label: string }[];
+}
+
+const fine = (value: StandardMuscleGroup): { value: StandardMuscleGroup; label: string } => ({
+  value,
+  label: STANDARD_MUSCLE_DISPLAY_NAMES[value],
+});
+
+/** The creation-flow taxonomy — same shape/content as the workout edit form's
+ *  (components/workout/exercise-details/editFormOptions.ts). */
+export const GROUPED_MUSCLE_OPTIONS: GroupedMuscleOption[] = [
+  { value: 'chest', label: 'Chest', subMuscles: [fine('chest_upper'), fine('chest_lower')] },
+  { value: 'back', label: 'Back', subMuscles: [fine('lats'), fine('upper_back'), fine('erectors')] },
+  { value: 'shoulders', label: 'Shoulders', subMuscles: [fine('front_delts'), fine('lateral_delts'), fine('rear_delts')] },
+  { value: 'biceps', label: 'Biceps', subMuscles: [] },
+  { value: 'triceps', label: 'Triceps', subMuscles: [] },
+  { value: 'forearms', label: 'Forearms', subMuscles: [] },
+  { value: 'traps', label: 'Traps', subMuscles: [fine('upper_traps'), fine('mid_lower_traps')] },
+  { value: 'quads', label: 'Quads', subMuscles: [] },
+  { value: 'hamstrings', label: 'Hamstrings', subMuscles: [] },
+  { value: 'glutes', label: 'Glutes', subMuscles: [fine('glute_med')] },
+  { value: 'adductors', label: 'Adductors', subMuscles: [] },
+  { value: 'calves', label: 'Calves', subMuscles: [fine('gastrocnemius'), fine('soleus')] },
+  { value: 'abs', label: 'Abs', subMuscles: [fine('obliques')] },
+];
+
+/**
+ * Flat option list for plain <Select> primary-muscle pickers: each group
+ * followed by its fine heads ("Shoulders · Side Delts"). Coarse entries with
+ * subdivisions are labeled "(whole group)" so choosing them is a deliberate
+ * act, not the default reading.
+ */
+export const PRECISE_MUSCLE_GROUP_OPTIONS: { value: string; label: string }[] =
+  GROUPED_MUSCLE_OPTIONS.flatMap((group) => [
+    {
+      value: group.value,
+      label: group.subMuscles.length > 0 ? `${group.label} (whole group)` : group.label,
+    },
+    ...group.subMuscles.map((s) => ({ value: s.value, label: `${group.label} · ${s.label}` })),
+  ]);
+
+/**
+ * Warning copy when a SPLITTING coarse token is selected (a group with
+ * subdivisions): volume credit will be divided evenly across the listed heads.
+ * Returns null for precise tokens and for coarse groups with no subdivisions.
+ */
+export function coarseSplitWarning(muscle: string): string | null {
+  const group = GROUPED_MUSCLE_OPTIONS.find((g) => g.value === muscle.toLowerCase().trim());
+  if (!group || group.subMuscles.length === 0) return null;
+  const heads = group.subMuscles.map((s) => s.label).join(' / ');
+  return `Whole-group tag: volume credit is split evenly across ${heads}. Pick a specific muscle if this exercise targets one.`;
+}
+
 export const EQUIPMENT_OPTIONS: { value: Equipment; label: string }[] = [
   { value: 'barbell', label: 'Barbell' },
   { value: 'dumbbell', label: 'Dumbbell' },
