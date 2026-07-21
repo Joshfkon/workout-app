@@ -10,6 +10,8 @@ import {
   volumeZone,
   computeWeeklyMuscleVolume,
   computeReachableMuscles,
+  rowColorToken,
+  rowBarClass,
   RESEARCH_VOLUME_BANDS,
   COARSE_MUSCLES,
   type MuscleVolumeStats,
@@ -108,5 +110,67 @@ describe('buildVolumeRows — coarse rows + fine children', () => {
     const biceps = rows.find((r) => r.muscle === 'biceps')!;
     expect(biceps.band).toEqual({ mev: 12, mrv: 24 });
     expect(biceps.zone).toBe('below_mev'); // 10 < learned MEV 12
+  });
+});
+
+describe('fine-child bands are per-subdivision research landmarks (not parent slices)', () => {
+  it('shoulders heads use their own MEV/MRV — front delts no longer capped at parent/3', () => {
+    const rows = buildVolumeRows([stat('front_delts', 10)]);
+    const shoulders = rows.find((r) => r.muscle === 'shoulders')!;
+    const front = shoulders.children.find((c) => c.muscle === 'front_delts')!;
+    // Old synthesis: mrv = max(mev+2, round(22/3)) = 7 → 10 sets read over-MRV
+    // red for anyone who benches. Research band: front delts tolerate ~12.
+    expect(front.band).toEqual({ mev: 4, mrv: 12 });
+    expect(front.zone).toBe('in_zone');
+    expect(shoulders.children.find((c) => c.muscle === 'lateral_delts')!.band).toEqual({ mev: 6, mrv: 20 });
+    expect(shoulders.children.find((c) => c.muscle === 'rear_delts')!.band).toEqual({ mev: 4, mrv: 18 });
+  });
+});
+
+describe('parent color is gated on child states (rowColorToken)', () => {
+  it('a parent in its group zone can NEVER read green while every child is under its own MEV', () => {
+    // 3 sets per head: parent 9 ≥ group MEV 8 (in_zone), but front 3 < 4,
+    // side 3 < 6, rear 3 < 4 — every subdivision is lagging.
+    const blocks = [
+      block('fr', 'front_delts', [], 3),
+      block('la', 'lateral_delts', [], 3),
+      block('re', 'rear_delts', [], 3),
+    ];
+    const stats = computeWeeklyMuscleVolume(blocks);
+    const reachable = computeReachableMuscles(blocks);
+    const shoulders = buildVolumeRows(stats, reachable).find((r) => r.muscle === 'shoulders')!;
+
+    expect(shoulders.zone).toBe('in_zone'); // the band alone would say green…
+    expect(shoulders.laggingChildren).toBe(true); // …but children are lagging
+    expect(rowColorToken(shoulders)).toBe('warning'); // so the row demotes
+    expect(rowBarClass(shoulders)).toBe('bg-warning-500');
+    // The zone itself is untouched — bands/markers still render correctly.
+    expect(volumeZone(shoulders.sets, shoulders.band)).toBe('in_zone');
+  });
+
+  it('an in-zone parent whose children are all at/above their own MEV stays green', () => {
+    const blocks = [
+      block('fr', 'front_delts', [], 4),
+      block('la', 'lateral_delts', [], 6),
+      block('re', 'rear_delts', [], 4),
+    ];
+    const stats = computeWeeklyMuscleVolume(blocks);
+    const reachable = computeReachableMuscles(blocks);
+    const shoulders = buildVolumeRows(stats, reachable).find((r) => r.muscle === 'shoulders')!;
+
+    expect(shoulders.zone).toBe('in_zone');
+    expect(shoulders.laggingChildren).toBe(false);
+    expect(rowColorToken(shoulders)).toBe('success');
+  });
+
+  it('an UNREACHABLE lagging child does not demote the parent (context rows never nag)', () => {
+    // Only coarse-calves tagging: gastroc/soleus are unreachable context rows.
+    const blocks = [block('cr', 'calves', [], 10, 'Standing Calf Raise')];
+    const stats = computeWeeklyMuscleVolume(blocks);
+    const reachable = computeReachableMuscles(blocks);
+    const calves = buildVolumeRows(stats, reachable).find((r) => r.muscle === 'calves')!;
+    expect(calves.zone).toBe('in_zone');
+    expect(calves.laggingChildren).toBe(false);
+    expect(rowColorToken(calves)).toBe('success');
   });
 });

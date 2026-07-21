@@ -23,9 +23,9 @@
 import { useState } from 'react';
 import { IconChevronDown } from '@tabler/icons-react';
 import {
-  zoneBandLabel,
-  zoneBarClass,
-  zoneTextClass,
+  groupZoneBandLabel,
+  rowBarClass,
+  rowTextClass,
 } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 import {
   READINESS_AMBER_THRESHOLD,
@@ -150,7 +150,7 @@ export function WorkoutVolumeStrip({ rows, isLoading, onOpenDetail }: WorkoutVol
               onClick={onOpenDetail}
               className="flex-shrink-0 snap-start w-[104px] text-left rounded-lg border border-surface-800 bg-surface-900/60 px-2.5 py-2 hover:border-surface-700 transition-colors"
               data-testid={`workout-volume-chip-${row.muscle}`}
-              aria-label={`${row.displayName}: ${formatEffectiveVolume(row.effectiveSets)} effective of ${row.sets} weekly sets, ${zoneBandLabel(row.band)}, ${
+              aria-label={`${row.displayName}: ${formatEffectiveVolume(row.effectiveSets)} effective of ${row.sets} weekly sets, ${groupZoneBandLabel(row.band)}, ${
                 row.readyInHours <= 0 ? 'ready' : `ready in ${readyInLabel(row.readyInHours)}`
               }`}
             >
@@ -173,7 +173,7 @@ export function WorkoutVolumeStrip({ rows, isLoading, onOpenDetail }: WorkoutVol
                 ) : (
                   <>
                     <span
-                      className={`text-sm font-semibold tabular-nums ${zoneTextClass(row.zone, row.sets)}`}
+                      className={`text-sm font-semibold tabular-nums ${rowTextClass(row)}`}
                       data-testid={`workout-volume-sets-${row.muscle}`}
                     >
                       {/* Effective (RIR-weighted) primary; the raw count rides
@@ -191,7 +191,7 @@ export function WorkoutVolumeStrip({ rows, isLoading, onOpenDetail }: WorkoutVol
               <div className="mt-1.5 h-1.5 rounded-full bg-surface-800 overflow-hidden">
                 {!isLoading && (
                   <div
-                    className={`h-full rounded-full ${zoneBarClass(row.zone, row.sets)}`}
+                    className={`h-full rounded-full ${rowBarClass(row)}`}
                     style={{ width: `${barFillPct(row.sets, row.band.mrv)}%` }}
                   />
                 )}

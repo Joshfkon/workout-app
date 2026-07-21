@@ -91,6 +91,14 @@ describe('reference reconstruction — shoulders header', () => {
     expect(child('lateral_delts').effectiveSets).toBe(7.2);
     expect(child('rear_delts').effectiveSets).toBe(6.2);
   });
+
+  it('front delts at 9.8 is IN ZONE under its research band (4–12) — normal press+shoulder training is not structurally red', () => {
+    const front = shoulders.children.find((c) => c.muscle === 'front_delts')!;
+    expect(front.band).toEqual({ mev: 4, mrv: 12 });
+    expect(front.zone).toBe('in_zone');
+    // No head is lagging in the reference week, so the parent keeps success.
+    expect(shoulders.laggingChildren).toBe(false);
+  });
 });
 
 describe('reference reconstruction — counted-sets list', () => {

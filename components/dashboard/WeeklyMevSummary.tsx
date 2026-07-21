@@ -5,7 +5,7 @@ import { useWeeklyMevSummary } from '@/hooks/useWeeklyMevSummary';
 import {
   buildVolumeRows,
   coarseMevTiles,
-  zoneBandLabel,
+  groupZoneBandLabel,
 } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 import { formatEffectiveVolume } from '@/services/effectiveVolume';
 
@@ -56,7 +56,7 @@ export function WeeklyMevSummary() {
             >
               {row.displayName}
               <span className="text-warning-400/70">
-                {formatEffectiveVolume(row.effectiveSets)} eff · {row.sets} sets · {zoneBandLabel(row.band)}
+                {formatEffectiveVolume(row.effectiveSets)} eff · {row.sets} sets · {groupZoneBandLabel(row.band)}
               </span>
             </span>
           ))}

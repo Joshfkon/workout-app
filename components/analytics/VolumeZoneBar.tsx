@@ -1,9 +1,10 @@
 'use client';
 
 import {
-  zoneBarClass,
-  zoneTextClass,
+  rowBarClass,
+  rowTextClass,
   zoneBandLabel,
+  groupZoneBandLabel,
   type VolumeRow,
 } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 import { formatEffectiveVolume } from '@/services/effectiveVolume';
@@ -18,7 +19,7 @@ import { formatEffectiveVolume } from '@/services/effectiveVolume';
  * punished with a red bar.
  */
 export function BarTrack({ row }: { row: VolumeRow }) {
-  const { sets, band, zone } = row;
+  const { sets, band } = row;
   // Scale so MRV sits at ~83% and there's headroom to show an over-MRV overrun.
   const maxDisplay = band.mrv * 1.2;
   const pct = (v: number) => `${Math.min(100, Math.max(0, (v / maxDisplay) * 100))}%`;
@@ -34,16 +35,17 @@ export function BarTrack({ row }: { row: VolumeRow }) {
       <div className="absolute top-0 bottom-0 w-px bg-surface-500" style={{ left: pct(band.mev) }} />
       {/* MRV marker */}
       <div className="absolute top-0 bottom-0 w-px bg-danger-500/60" style={{ left: pct(band.mrv) }} />
-      {/* Current fill */}
+      {/* Current fill — row-aware: an in-zone parent with a lagging fine
+          child demotes to warning, never green (rowBarClass). */}
       <div
-        className={`absolute top-0 bottom-0 left-0 ${zoneBarClass(zone, sets)} transition-all duration-300`}
+        className={`absolute top-0 bottom-0 left-0 ${rowBarClass(row)} transition-all duration-300`}
         style={{ width: pct(sets) }}
       />
     </div>
   );
 }
 
-/** Coarse-row content: "Chest    14.2 eff · 18 sets · zone 8–22" over the zone
+/** Coarse-row content: "Chest    14.2 eff · 18 sets · group zone 8–22" over the zone
  *  bar. Effective Volume (RIR-weighted) is the primary number; the raw set
  *  count rides secondary WITH its unit — never "eff / 18", which reads as
  *  current/target and was the root of the shoulders-card bug report. Zone/bar
@@ -54,10 +56,12 @@ export function VolumeRowContent({ row }: { row: VolumeRow }) {
       <div className="flex items-center justify-between mb-2">
         <span className="font-medium text-surface-200">{row.displayName}</span>
         <span className="text-sm tabular-nums flex-shrink-0">
-          <span className={`font-semibold ${zoneTextClass(row.zone, row.sets)}`} data-testid={`volume-sets-${row.muscle}`}>
+          <span className={`font-semibold ${rowTextClass(row)}`} data-testid={`volume-sets-${row.muscle}`}>
             {formatEffectiveVolume(row.effectiveSets)}
           </span>
-          <span className="text-surface-500"> eff · {row.sets} sets · {zoneBandLabel(row.band)}</span>
+          {/* Coarse bands are group-level landmarks, labeled as such so they
+              can't be misread as the sum of the child zones beneath. */}
+          <span className="text-surface-500"> eff · {row.sets} sets · {groupZoneBandLabel(row.band)}</span>
         </span>
       </div>
       <BarTrack row={row} />
@@ -72,7 +76,7 @@ export function VolumeChildContent({ child }: { child: VolumeRow }) {
       <div className="flex items-center justify-between mb-1">
         <span className="text-xs text-surface-400">{child.displayName}</span>
         <span className="text-xs tabular-nums">
-          <span className={zoneTextClass(child.zone, child.sets)} data-testid={`volume-sets-${child.muscle}`}>
+          <span className={rowTextClass(child)} data-testid={`volume-sets-${child.muscle}`}>
             {formatEffectiveVolume(child.effectiveSets)}
           </span>
           <span className="text-surface-600"> eff · {child.sets} sets · {zoneBandLabel(child.band)}</span>

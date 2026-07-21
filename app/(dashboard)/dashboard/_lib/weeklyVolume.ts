@@ -14,6 +14,7 @@ import {
   type MuscleVolumeData,
 } from '@/services/volumeTracker';
 import {
+  DEFAULT_VOLUME_LANDMARKS,
   isStandardMuscle,
   legacyToStandardMuscles,
   resolveMuscleToStandard,
@@ -579,6 +580,20 @@ export const FINE_CHILD_MUSCLES = new Set<StandardMuscleGroup>([
  * hitting MEV is never punished with a red bar. Per-user learning may nudge the
  * volume page's band; these are the defaults every glance surface uses (and the
  * baseline the learned table resets to).
+ *
+ * SEMANTICS (decided in the shoulders-card audit): a coarse band is an
+ * INDEPENDENT group-level landmark — it is deliberately NOT the sum of its
+ * fine children's bands. Group MEVs assume overlapping stimulus (8 "shoulders"
+ * sets can touch every head), while a fine child's band (see fineChildBand) is
+ * that subdivision's own research landmark, so Σ(child MEVs) is expected to
+ * exceed the group MEV. Two consequences every surface must respect:
+ *   1. Labels must distinguish the scopes — groupZoneBandLabel ("group zone
+ *      8–22") for coarse rows vs zoneBandLabel ("zone 4–12") for children.
+ *   2. A parent may NOT render green while a reachable fine child sits below
+ *      its own MEV — the aggregate would be hiding a lagging subdivision. The
+ *      row-aware color helpers (rowColorToken and friends) demote such a
+ *      parent from success to warning; use them, not the raw zone helpers,
+ *      wherever a coarse row is colorized.
  */
 export const RESEARCH_VOLUME_BANDS: Record<CoarseMuscle, { mev: number; mrv: number }> = {
   chest: { mev: 8, mrv: 22 },
@@ -599,6 +614,37 @@ export const RESEARCH_VOLUME_BANDS: Record<CoarseMuscle, { mev: number; mrv: num
 /** MEV target for a fine child row (its own subdivision-level threshold). */
 export function fineChildMev(muscle: StandardMuscleGroup): number {
   return MEV_TARGETS[muscle];
+}
+
+/**
+ * MEV–MRV band for a fine child row, from PER-SUBDIVISION research landmarks —
+ * NOT a slice of the parent band. The old synthesis (parent MRV ÷ child count)
+ * capped front delts at ⌈22/3⌉ = 7 weekly sets, which anyone who both presses
+ * (0.5 front-delt credit per bench set) and does direct shoulder work blows
+ * past immediately — the bar was structurally red for normal training.
+ *
+ * Sources, both already in the codebase:
+ *   - mev: MEV_TARGETS — the same table the below-MEV warning surface uses, so
+ *     a child bar can never read amber while the warning says it's fine (or
+ *     vice versa). Where DEFAULT_VOLUME_LANDMARKS disagrees slightly (its
+ *     intermediate front_delts MEV is 3 vs MEV_TARGETS' 4), MEV_TARGETS wins
+ *     for exactly that consistency reason.
+ *   - mrv: DEFAULT_VOLUME_LANDMARKS.intermediate — the per-muscle research
+ *     table (types/schema.ts) that volumeTracker already falls back to.
+ *     Intermediate tier: these bands are population defaults, matching the
+ *     coarse RESEARCH_VOLUME_BANDS above (per-user learning only nudges
+ *     coarse bands today).
+ *
+ * The mev+2 floor guards subdivisions whose research MRV sits at/below the
+ * warning-table MEV (can't happen with today's values; kept as an invariant).
+ * Fine-child bands are deliberately NOT rescaled by a learned/override coarse
+ * band — subdivision landmarks are independent of the group aggregate (see
+ * RESEARCH_VOLUME_BANDS semantics note).
+ */
+export function fineChildBand(muscle: StandardMuscleGroup): VolumeBand {
+  const mev = MEV_TARGETS[muscle];
+  const research = DEFAULT_VOLUME_LANDMARKS.intermediate[muscle];
+  return { mev, mrv: Math.max(mev + 2, research.mrv) };
 }
 
 export type VolumeZone = 'below_mev' | 'in_zone' | 'over_mrv';
@@ -669,9 +715,57 @@ export function zoneFillClass(zone: VolumeZone, sets: number): string {
   return ZONE_FILL_CLASSES[zoneColorToken(zone, sets)];
 }
 
+/**
+ * The minimum a colorized row must expose for the row-aware color decision:
+ * its zone + sets (the plain zone rule) and whether any reachable fine child
+ * sits below its own MEV.
+ */
+export interface RowColorInput {
+  zone: VolumeZone;
+  sets: number;
+  laggingChildren?: boolean;
+}
+
+/**
+ * Row-aware color token: the shared zone rule, EXCEPT a parent whose reachable
+ * fine children include one below its own MEV can never read success — the
+ * group aggregate would be advertising "all good" while hiding a lagging
+ * subdivision (front delts stuffed by pressing while side delts starve). Such
+ * a row demotes to warning. Use these helpers wherever a COARSE row is
+ * colorized; children carry laggingChildren: false and pass through unchanged.
+ */
+export function rowColorToken(row: RowColorInput): ZoneColorToken {
+  const token = zoneColorToken(row.zone, row.sets);
+  return token === 'success' && row.laggingChildren === true ? 'warning' : token;
+}
+
+/** Row-aware bar fill colour (zoneBarClass + the lagging-child demotion). */
+export function rowBarClass(row: RowColorInput): string {
+  return ZONE_BAR_CLASSES[rowColorToken(row)];
+}
+
+/** Row-aware text colour (zoneTextClass + the lagging-child demotion). */
+export function rowTextClass(row: RowColorInput): string {
+  return ZONE_TEXT_CLASSES[rowColorToken(row)];
+}
+
+/** Row-aware SVG fill (zoneFillClass + the lagging-child demotion). */
+export function rowFillClass(row: RowColorInput): string {
+  return ZONE_FILL_CLASSES[rowColorToken(row)];
+}
+
 /** Denominator label: the MEV–MRV band, never n/MEV. e.g. "zone 8–20". */
 export function zoneBandLabel(band: VolumeBand): string {
   return `zone ${band.mev}–${band.mrv}`;
+}
+
+/**
+ * Denominator label for a COARSE row: same band, prefixed "group" so an
+ * independent group-level landmark can't be misread as the sum of the child
+ * zones shown beneath it (see RESEARCH_VOLUME_BANDS semantics note).
+ */
+export function groupZoneBandLabel(band: VolumeBand): string {
+  return `group zone ${band.mev}–${band.mrv}`;
 }
 
 /** Display name for a coarse group. */
@@ -696,6 +790,13 @@ export interface VolumeRow {
   band: VolumeBand;
   zone: VolumeZone;
   belowMev: boolean;
+  /**
+   * Coarse rows only: at least one REACHABLE fine child is below its own MEV.
+   * Drives the row-aware color demotion (rowColorToken): an in-zone parent
+   * with a lagging subdivision renders warning, never success. Always false
+   * on child rows.
+   */
+  laggingChildren: boolean;
   /** Whether the user's exercises can feed this muscle (children only gate). */
   reachable: boolean;
   /**
@@ -819,9 +920,9 @@ export function buildVolumeRows(
       const childReachable = !reachable || reachable.has(child);
       const childBelowMev = childSets < childMev;
 
-      // A fine child's band is a proportional slice of the coarse band, floored
-      // at its own MEV, so its zone reads sensibly on the same scale.
-      const childBand: VolumeBand = { mev: childMev, mrv: Math.max(childMev + 2, Math.round(band.mrv / children.length)) };
+      // A fine child's band is its OWN subdivision-level research landmark —
+      // never a slice of the parent band (see fineChildBand for why).
+      const childBand: VolumeBand = fineChildBand(child);
       childRows.push({
         key: `${coarse}:${child}`,
         muscle: child,
@@ -833,6 +934,7 @@ export function buildVolumeRows(
         band: childBand,
         zone: volumeZone(childSets, childBand),
         belowMev: childBelowMev,
+        laggingChildren: false,
         reachable: childReachable,
         expandable: false,
         exercises: emitExerciseList(data.exercises),
@@ -852,6 +954,9 @@ export function buildVolumeRows(
       band,
       zone: volumeZone(coarseSets, band),
       belowMev: coarseSets < band.mev,
+      // ALL reachable children count, not just visible ones — an explicit
+      // collapse must not turn a lagging-subdivision parent green.
+      laggingChildren: childRows.some((c) => c.reachable && c.belowMev),
       reachable: true,
       expandable,
       exercises: emitExerciseList(coarseExercises),

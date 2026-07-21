@@ -10,7 +10,7 @@ import {
 } from '@/lib/muscleMap/paths';
 import { REGION_TO_MUSCLE, type MuscleId } from '@/lib/muscleMap/taxonomy';
 import type { MuscleMapData, MuscleMapDatum } from '@/lib/muscleMap/adapters';
-import { zoneFillClass } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
+import { rowFillClass } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 import { STANDARD_MUSCLE_DISPLAY_NAMES } from '@/types/schema';
 import type { RecoveryStatus } from '@/services/muscleRecovery';
 
@@ -86,11 +86,18 @@ function presentRegion(mode: MuscleMapMode, datum: MuscleMapDatum | undefined): 
       zone === 'over_mrv'
         ? 'over recoverable volume'
         : zone === 'in_zone'
-          ? 'in the optimal volume zone'
+          ? datum.lagging
+            ? 'in the volume zone, but a subdivision is below target'
+            : 'in the optimal volume zone'
           : datum.value <= 0
             ? 'untrained this week'
             : 'below volume target';
-    return { fillClass: zoneFillClass(zone, datum.value), ariaStatus };
+    // Row-aware fill: a coarse-sourced region with a lagging subdivision
+    // paints warning, matching the demoted bar on the same screen.
+    return {
+      fillClass: rowFillClass({ zone, sets: datum.value, laggingChildren: datum.lagging }),
+      ariaStatus,
+    };
   }
 
   if (mode === 'recovery') {
