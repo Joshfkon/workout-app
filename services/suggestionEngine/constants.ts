@@ -29,8 +29,14 @@
  *       prediction shifts by the effort-vs-target gap (11 @ 3 RIR vs a 2 RIR
  *       target → 11, not 10) instead of shaving fatigue alone, so identical
  *       inputs can produce different reps than a v2 record.
+ *  v4 = session-to-session progression driven by the shared success predicate
+ *       (sessionMetPrescription, design doc §10): top working set(s) at repMax
+ *       earn the bump (was: EVERY working set with >= DEADBAND RIR spare); a
+ *       bump reseeds reps at repMin; a not-met session seeds prevReps + 1
+ *       (capped at repMax) instead of replaying last session; 2-session stalls
+ *       hold and a 3rd consecutive miss sets the suggestDeload flag.
  */
-export const SUGGESTION_ENGINE_VERSION = 3;
+export const SUGGESTION_ENGINE_VERSION = 4;
 
 // ============================================================
 // SET ROLES (Phase 2)
@@ -174,6 +180,49 @@ export const OVERSHOOT_CEILING = 5;
  * self-reported RIR.
  */
 export const REP_OVERSHOOT = 2;
+
+// ============================================================
+// SESSION SUCCESS PREDICATE (sessionMetPrescription) DIALS
+// ============================================================
+
+/**
+ * Sets within this fraction of the session's top GRADED load count as "top
+ * set(s)" for the success predicate — double progression is graded where the
+ * progression actually happens, not on lighter back-off work. 3% absorbs
+ * micro-loading and unit-conversion rounding (e.g. 180 vs 182.5 lb).
+ */
+export const TOP_SET_LOAD_TOLERANCE = 0.03;
+
+/**
+ * Upper bound multiple on the grading scheme's rep window: a working-load set
+ * is gradable only when its reps land in [repMin, max(repMin × this, repMax)].
+ * Sets outside it (a heavy 200×4 pyramid top against a 6–10 range, or a
+ * high-rep burnout) are a different scheme and are excluded from grading —
+ * they must neither earn nor block a bump. Rep overshoot past
+ * repMax + REP_OVERSHOOT stays gradable (it objectively proves under-load).
+ * TODO(known debt): the durable fix is per-slot rep ranges for pyramid
+ * schemes; this window is the interim heuristic.
+ */
+export const SCHEME_REP_WINDOW_FLOOR_MULTIPLE = 2;
+
+/**
+ * Two sessions count as attempts at the SAME prescription (for the stall
+ * rule) when their top graded loads are within this fraction of each other.
+ */
+export const STALL_LOAD_TOLERANCE = 0.05;
+
+/**
+ * When the exercise's smallest loadable increment exceeds this fraction of the
+ * top set's load, a load bump is a big jump (e.g. 10 kg DB + 2.5 kg = +25%) —
+ * bump-then-fail-then-stall territory. The success predicate then requires the
+ * EXTENDED rep ceiling below instead of the nominal repMax: reps climb past
+ * the range top as a substitute for the fractional load that doesn't exist.
+ * Only applies when the increment is explicitly known (never guessed).
+ */
+export const LIGHT_LOAD_INCREMENT_FRACTION = 0.10;
+
+/** Extra reps over repMax required to earn a bump on a light-load exercise. */
+export const LIGHT_LOAD_REP_CEILING_EXTENSION = 2;
 
 // ============================================================
 // COLD-START (first-ever session of an exercise) DIALS
