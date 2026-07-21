@@ -111,6 +111,16 @@ export interface FinishFlowDeps {
   navigate: () => void;
   /** Non-null when a mesocycle claim candidate is armed: shown INSTEAD of navigating. */
   showClaimPrompt?: (() => void) | null;
+  /**
+   * Called once the completion patch is confirmed visible in the DB. The
+   * workout page uses this to invalidate the workout-derived React Query
+   * caches (history list, exercise charts, analytics) — they cache completed
+   * history with long stale times, so without this the History list keeps
+   * showing the pre-workout snapshot while the calendar (which fetches fresh)
+   * already has the new session. Best-effort: a throw here must never break
+   * the finish flow.
+   */
+  onCompletionSynced?: () => void;
   /** Test seam: overrides the background post-processing runner. */
   runMesoUpdates?: typeof runPostSessionMesoUpdates;
 }
@@ -208,6 +218,11 @@ export async function submitFinishOptimistic(
       timer.mark(completionSynced ? 'synced' : 'sync-pending(queued for retry)');
 
       if (completionSynced) {
+        try {
+          deps.onCompletionSynced?.();
+        } catch (err) {
+          console.error('onCompletionSynced hook failed:', err);
+        }
         await runFinishPostProcessing(deps, data.sessionRpe, timer);
       }
     } catch (err) {

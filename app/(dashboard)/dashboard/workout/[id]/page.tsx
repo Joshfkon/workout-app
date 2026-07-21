@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { invalidateWorkoutDerivedCaches } from '@/lib/query/workoutInvalidation';
 import { createPortal } from 'react-dom';
 import dynamic from 'next/dynamic';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
@@ -265,6 +267,7 @@ function CancelWorkoutModal({
 export default function WorkoutPage() {
   const params = useParams();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const sessionId = params.id as string;
   const fromCreate = searchParams.get('fromCreate') === 'true';
@@ -4247,6 +4250,12 @@ export default function WorkoutPage() {
         session,
         navigate: options?.viewReport ? () => finishToReport(data) : finishToDashboard,
         showClaimPrompt: claimArmed ? () => setShowClaimPrompt(true) : null,
+        // Once the completion is visible in the DB, mark the cached-first
+        // history/analytics queries stale — the SPA context survives the
+        // navigate() above, so this runs ~a flush later and the History list
+        // (24h staleTime) picks up the new session instead of serving the
+        // pre-workout snapshot the calendar view has already moved past.
+        onCompletionSynced: () => void invalidateWorkoutDerivedCaches(queryClient),
       },
       // Persist the same frozen duration the summary is showing.
       { ...data, durationSeconds: finishSnapshot?.durationSeconds ?? null }

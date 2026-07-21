@@ -164,7 +164,14 @@ function HistoryPageContent() {
       if (error) throw error;
       return data ? transformSessions(data) : [];
     },
-    staleTime: IMMUTABLE_GC_TIME,
+    // Cached-first paint, but ALWAYS revalidate shortly: past sessions are
+    // immutable, the newest edge is not — finishing a workout adds a row this
+    // page must show. Completion also invalidates ['history'] explicitly
+    // (lib/query/workoutInvalidation), but that hook can be missed (app
+    // killed before the outbox flushed), so a long staleTime here would pin
+    // the pre-workout snapshot for up to 24h — exactly the "today's workout
+    // is in the calendar but not the list" bug.
+    staleTime: 30 * 1000,
     gcTime: IMMUTABLE_GC_TIME,
   });
   const isRestoring = useIsRestoring();
@@ -731,18 +738,29 @@ function HistoryPageContent() {
       setIsLoadingMore(false);
   };
 
-  // Seed the accumulated list from the cached first page exactly once per
-  // mount. On a revisit the cache is warm, so this runs on the first render
-  // and there is no full-screen loader. Later mutations go through
-  // mutateWorkouts (state + cache) so this guard won't clobber paginated pages.
-  const seededRef = useRef(false);
+  // Sync the accumulated list from the first-page query. On a revisit the
+  // cache is warm, so the initial seed runs on the first render and there is
+  // no full-screen loader. Unlike the old seed-once guard, a background
+  // refetch (staleTime elapsed, or ['history'] invalidated by a finished
+  // workout) also lands here — otherwise a workout completed since the page
+  // was cached stayed invisible in the list until a full remount, even
+  // though the calendar (which fetches fresh) already showed it. Fresh data
+  // replaces the first page; sessions loaded via pagination that fell
+  // outside it are kept (they're older, so they sort after it).
+  const seededDataRef = useRef<WorkoutHistory[] | null>(null);
   useEffect(() => {
-    if (!seededRef.current && firstPageQuery.data) {
-      seededRef.current = true;
-      setWorkouts(firstPageQuery.data);
-      setHasMore(firstPageQuery.data.length === PAGE_SIZE);
-      setIsLoading(false);
-    }
+    const data = firstPageQuery.data;
+    // Reference equality also skips echoes of our own mutateWorkouts writes.
+    if (!data || seededDataRef.current === data) return;
+    const isFirstSeed = seededDataRef.current === null;
+    seededDataRef.current = data;
+    setWorkouts((prev) => {
+      if (isFirstSeed || prev.length === 0) return data;
+      const freshIds = new Set(data.map((w) => w.id));
+      return [...data, ...prev.filter((w) => !freshIds.has(w.id))];
+    });
+    if (isFirstSeed) setHasMore(data.length === PAGE_SIZE);
+    setIsLoading(false);
   }, [firstPageQuery.data]);
 
   // Update the visible list AND the persisted first-page cache together, so a
