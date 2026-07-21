@@ -154,19 +154,22 @@ export function WorkoutVolumeStrip({ rows, isLoading, onOpenDetail }: WorkoutVol
                 row.readyInHours <= 0 ? 'ready' : `ready in ${readyInLabel(row.readyInHours)}`
               }`}
             >
-              <div className="flex items-baseline justify-between gap-1">
-                <span className="flex items-center gap-1.5 min-w-0">
-                  <span
-                    className={`h-[9px] w-[9px] flex-shrink-0 rounded-full ${
-                      isLoading ? 'bg-surface-700' : readinessDotClass(row.readiness)
-                    }`}
-                    data-testid={`workout-volume-readiness-dot-${row.muscle}`}
-                    aria-hidden
-                  />
-                  <span className="text-xs font-medium text-surface-200 truncate">{row.displayName}</span>
-                </span>
+              {/* Name gets the full card width — the set count lives on its own
+                  line below so wide values ("16.6/17") can never crush the name
+                  down to its first letter. */}
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span
+                  className={`h-[9px] w-[9px] flex-shrink-0 rounded-full ${
+                    isLoading ? 'bg-surface-700' : readinessDotClass(row.readiness)
+                  }`}
+                  data-testid={`workout-volume-readiness-dot-${row.muscle}`}
+                  aria-hidden
+                />
+                <span className="text-xs font-medium text-surface-200 truncate">{row.displayName}</span>
+              </div>
+              <div className="mt-0.5">
                 {isLoading ? (
-                  <span className="inline-block h-3 w-4 rounded bg-surface-700 animate-pulse" aria-hidden />
+                  <span className="inline-block h-4 w-8 rounded bg-surface-700 animate-pulse" aria-hidden />
                 ) : (
                   <span
                     className={`text-sm font-semibold tabular-nums ${zoneTextClass(row.zone, row.sets)}`}
