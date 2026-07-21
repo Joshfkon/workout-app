@@ -155,8 +155,8 @@ export function WorkoutVolumeStrip({ rows, isLoading, onOpenDetail }: WorkoutVol
               }`}
             >
               {/* Name gets the full card width — the set count lives on its own
-                  line below so wide values ("16.6/17") can never crush the name
-                  down to its first letter. */}
+                  line below so wide values ("16.6 eff") can never crush the
+                  name down to its first letter. */}
               <div className="flex items-center gap-1.5 min-w-0">
                 <span
                   className={`h-[9px] w-[9px] flex-shrink-0 rounded-full ${
@@ -171,14 +171,21 @@ export function WorkoutVolumeStrip({ rows, isLoading, onOpenDetail }: WorkoutVol
                 {isLoading ? (
                   <span className="inline-block h-4 w-8 rounded bg-surface-700 animate-pulse" aria-hidden />
                 ) : (
-                  <span
-                    className={`text-sm font-semibold tabular-nums ${zoneTextClass(row.zone, row.sets)}`}
-                    data-testid={`workout-volume-sets-${row.muscle}`}
-                  >
-                    {/* Effective (RIR-weighted) primary, raw secondary */}
-                    {formatEffectiveVolume(row.effectiveSets)}
-                    <span className="text-[10px] font-normal text-surface-500">/{row.sets}</span>
-                  </span>
+                  <>
+                    <span
+                      className={`text-sm font-semibold tabular-nums ${zoneTextClass(row.zone, row.sets)}`}
+                      data-testid={`workout-volume-sets-${row.muscle}`}
+                    >
+                      {/* Effective (RIR-weighted) primary; the raw count rides
+                          below with its unit — never "16.6/17", which reads as
+                          current/target. */}
+                      {formatEffectiveVolume(row.effectiveSets)}
+                      <span className="text-[10px] font-normal text-surface-500"> eff</span>
+                    </span>
+                    <span className="block text-[10px] tabular-nums text-surface-500">
+                      of {row.sets} sets
+                    </span>
+                  </>
                 )}
               </div>
               <div className="mt-1.5 h-1.5 rounded-full bg-surface-800 overflow-hidden">

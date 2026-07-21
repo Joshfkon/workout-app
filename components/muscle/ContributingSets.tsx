@@ -2,13 +2,16 @@
 
 import { useState, type ReactNode } from 'react';
 import type { ExerciseVolume } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
+import { formatEffectiveVolume } from '@/services/effectiveVolume';
 
 /**
  * ContributingSets — the drill-down behind a muscle's weekly volume number:
- * which exercises fed the count and how many credited sets each contributed
- * (biggest first, ½-credit secondary work explained by the footnote). Shared
- * by every surface that renders the coarse-row volume model (the in-workout
- * readiness sheet and the volume page bars).
+ * which exercises fed the count, in BOTH header metrics — effective
+ * (RIR-weighted) volume leading, credited raw sets alongside — so the list
+ * always reconciles against the "X eff · Y sets" header it sits under
+ * (biggest first, shared credit explained by the footnote). Shared by every
+ * surface that renders the coarse-row volume model (the in-workout readiness
+ * sheet and the volume page bars).
  */
 
 /** "4 sets" / "1.5 sets" — credited counts keep their fraction (½ credits). */
@@ -27,22 +30,38 @@ export function ContributingSets({
   /** Panels get `${testIdPrefix}-${muscle}` (e.g. readiness-sources-chest). */
   testIdPrefix: string;
 }) {
-  const hasFractional = exercises.some((ex) => !Number.isInteger(Math.round(ex.sets * 10) / 10));
+  const isFractional = (v: number) => !Number.isInteger(Math.round(v * 10) / 10);
+  const hasFractional = exercises.some((ex) => isFractional(ex.sets));
+  const hasDownWeighted = exercises.some(
+    (ex) => Math.round(ex.effective * 10) !== Math.round(ex.sets * 10)
+  );
   return (
     <div className="rounded-lg bg-surface-800/40 px-2.5 py-2" data-testid={`${testIdPrefix}-${muscle}`}>
-      <p className="text-[10px] uppercase tracking-wide text-surface-500 mb-1">Counted sets · last 7 days</p>
+      <p className="text-[10px] uppercase tracking-wide text-surface-500 mb-1">
+        Counted sets · last 7 days · effective (RIR-weighted)
+      </p>
       <ul className="space-y-0.5">
         {exercises.map((ex) => (
           <li key={ex.id} className="flex items-baseline justify-between gap-2 text-xs">
             <span className="text-surface-300 truncate">{ex.name}</span>
-            <span className="tabular-nums text-surface-400 flex-shrink-0">{formatCreditedSets(ex.sets)}</span>
+            <span className="tabular-nums flex-shrink-0">
+              <span className="text-surface-300">{formatEffectiveVolume(ex.effective)} eff</span>
+              <span className="text-surface-500"> · {formatCreditedSets(ex.sets)}</span>
+            </span>
           </li>
         ))}
       </ul>
-      {hasFractional && (
+      {(hasFractional || hasDownWeighted) && (
         <p className="mt-1 text-[10px] leading-relaxed text-surface-600">
-          Partial counts are shared credit — ½ per set for secondary-muscle work,
-          split across heads for multi-head groups.
+          {hasFractional && (
+            <>
+              Partial counts are shared credit — ½ per set for secondary-muscle
+              work, split across heads for multi-head groups.{' '}
+            </>
+          )}
+          {hasDownWeighted && (
+            <>Effective volume weights each set by its reported RIR, so easy sets count less.</>
+          )}
         </p>
       )}
     </div>

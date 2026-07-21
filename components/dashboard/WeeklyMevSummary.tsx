@@ -39,7 +39,7 @@ export function WeeklyMevSummary() {
           <span className="font-semibold text-surface-100">
             {formatEffectiveVolume(tiles.totalEffectiveSets)} effective
           </span>
-          <span className="text-surface-500"> / {tiles.totalSets} total sets</span>
+          <span className="text-surface-500"> · {tiles.totalSets} total sets</span>
         </span>
       </div>
       <p className={`text-xs mb-3 ${tiles.lowCount > 0 ? 'text-warning-400' : 'text-success-400'}`}>
@@ -56,7 +56,7 @@ export function WeeklyMevSummary() {
             >
               {row.displayName}
               <span className="text-warning-400/70">
-                {formatEffectiveVolume(row.effectiveSets)} eff / {row.sets} · {zoneBandLabel(row.band)}
+                {formatEffectiveVolume(row.effectiveSets)} eff · {row.sets} sets · {zoneBandLabel(row.band)}
               </span>
             </span>
           ))}

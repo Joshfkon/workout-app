@@ -43,9 +43,11 @@ export function BarTrack({ row }: { row: VolumeRow }) {
   );
 }
 
-/** Coarse-row content: "Chest    14.2 eff / 18 · zone 8–22" over the zone bar.
- *  Effective Volume (RIR-weighted) is the primary number; the raw set count
- *  rides secondary. Zone/bar math stays on raw sets. */
+/** Coarse-row content: "Chest    14.2 eff · 18 sets · zone 8–22" over the zone
+ *  bar. Effective Volume (RIR-weighted) is the primary number; the raw set
+ *  count rides secondary WITH its unit — never "eff / 18", which reads as
+ *  current/target and was the root of the shoulders-card bug report. Zone/bar
+ *  math stays on raw sets. */
 export function VolumeRowContent({ row }: { row: VolumeRow }) {
   return (
     <>
@@ -55,7 +57,7 @@ export function VolumeRowContent({ row }: { row: VolumeRow }) {
           <span className={`font-semibold ${zoneTextClass(row.zone, row.sets)}`} data-testid={`volume-sets-${row.muscle}`}>
             {formatEffectiveVolume(row.effectiveSets)}
           </span>
-          <span className="text-surface-500"> eff / {row.sets} · {zoneBandLabel(row.band)}</span>
+          <span className="text-surface-500"> eff · {row.sets} sets · {zoneBandLabel(row.band)}</span>
         </span>
       </div>
       <BarTrack row={row} />
@@ -73,7 +75,7 @@ export function VolumeChildContent({ child }: { child: VolumeRow }) {
           <span className={zoneTextClass(child.zone, child.sets)} data-testid={`volume-sets-${child.muscle}`}>
             {formatEffectiveVolume(child.effectiveSets)}
           </span>
-          <span className="text-surface-600"> eff / {child.sets} · {zoneBandLabel(child.band)}</span>
+          <span className="text-surface-600"> eff · {child.sets} sets · {zoneBandLabel(child.band)}</span>
         </span>
       </div>
       <BarTrack row={child} />
