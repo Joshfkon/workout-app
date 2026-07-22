@@ -91,6 +91,74 @@ describe('fatigue-integrated generator respects the effective ceilings (live pat
     ['enhanced', true],
   ];
 
+  // The credited-currency check (Codex review, 48c5cbe): volumePerMuscle
+  // respecting the ceiling is necessary but not sufficient — the BUILT
+  // sessions' credited totals (primary splits + 0.5 secondary credit, the
+  // currency the tracking card counts in) must also stay at or under the
+  // effective group MRV, else a fresh plan starts in the red zone.
+  const creditedGroupTotals = (
+    sessions: Array<{ exercises: Array<{ exercise: { primaryMuscle: string; secondaryMuscles?: string[] }; sets: number }> }>
+  ): Map<string, number> => {
+    const { resolvePrimaryMuscleCredits, SECONDARY_MUSCLE_CREDIT } = require('@/services/volumeTracker');
+    const { resolveMuscleToStandard } = require('@/types/schema');
+    const { STANDARD_TO_COARSE } = require('@/services/volumeBands');
+    const totals = new Map<string, number>();
+    const add = (std: string, v: number) => {
+      const coarse = STANDARD_TO_COARSE[std];
+      if (!coarse) return;
+      totals.set(coarse, (totals.get(coarse) ?? 0) + v);
+    };
+    for (const session of sessions) {
+      for (const ex of session.exercises) {
+        const credits = resolvePrimaryMuscleCredits(ex.exercise.primaryMuscle) as Array<{ muscle: string; weight: number }>;
+        const primarySet = new Set(credits.map((c) => c.muscle));
+        for (const { muscle, weight } of credits) add(muscle, ex.sets * weight);
+        for (const secondary of ex.exercise.secondaryMuscles ?? []) {
+          const standards = resolveMuscleToStandard(secondary) as string[];
+          if (standards.length === 0) continue;
+          const per = SECONDARY_MUSCLE_CREDIT / standards.length;
+          for (const std of standards) {
+            if (primarySet.has(std)) continue;
+            add(std, ex.sets * per);
+          }
+        }
+      }
+    }
+    return totals;
+  };
+
+  const DAYS: number[] = [4, 6];
+
+  it.each(profiles.flatMap(([p, e]) => DAYS.map((d): ['standard' | 'enhanced', boolean, number] => [p, e, d])))(
+    '%s profile (enhanced=%s), %i-day: built week-1 sessions credit ≤ effective group MRV',
+    (recoveryProfile, enhancedAthleteMode, daysPerWeek) => {
+      const { generateFullMesocycleWithFatigue } = require('@/services/sessionBuilderWithFatigue');
+      const profile = {
+        goal: 'bulk',
+        experience: 'intermediate',
+        heightCm: 175,
+        latestDexa: null,
+        age: 30,
+        sleepQuality: 3,
+        stressLevel: 3,
+        trainingAge: 2,
+        availableEquipment: ['barbell', 'dumbbell', 'cable', 'machine'],
+        injuryHistory: [],
+        enhancedAthleteMode,
+      };
+      const program = generateFullMesocycleWithFatigue(daysPerWeek, profile, 60);
+      const totals = creditedGroupTotals(program.sessions);
+      const overCeiling: Array<{ group: string; credited: number; mrv: number }> = [];
+      for (const [group, credited] of Array.from(totals.entries())) {
+        const band = getEffectiveBand(group as Parameters<typeof getEffectiveBand>[0], { recoveryProfile });
+        // Same tolerance as the equilibrium gate: overshoot < 1 credited set
+        // is rounding noise, >= 1 is a real over-ceiling start.
+        if (credited - band.mrv >= 1) overCeiling.push({ group, credited, mrv: band.mrv });
+      }
+      expect(overCeiling).toEqual([]);
+    }
+  );
+
   it.each(profiles)('%s profile: volumePerMuscle ≤ effective MRV per coarse muscle', (recoveryProfile, enhancedAthleteMode) => {
     // Lazy require keeps the heavy generator out of the suites above.
     const { generateFullMesocycleWithFatigue } = require('@/services/sessionBuilderWithFatigue');

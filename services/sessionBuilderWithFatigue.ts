@@ -50,7 +50,8 @@ import {
 } from './fatigueBudgetEngine';
 import { toStandardMuscleForVolume } from '@/lib/migrations/muscle-groups';
 
-import { calculateRecoveryFactors, buildPeriodizationPlan, calculateVolumeDistribution as calculateVolumeDistributionWithLagging, generateWarmup, isMuscleExcludedByInjury } from './mesocycleBuilder';
+import { calculateRecoveryFactors, buildPeriodizationPlan, calculateVolumeDistribution as calculateVolumeDistributionWithLagging, generateWarmup, isMuscleExcludedByInjury, applyIndirectAwareAllocation } from './mesocycleBuilder';
+import { getEffectiveBand, type CoarseMuscle } from './volumeBands';
 import { getExercisesSync, type Exercise as ServiceExercise } from './exerciseService';
 
 // NOTE: generateWarmup imported from mesocycleBuilder.ts
@@ -967,6 +968,9 @@ export function generateFullMesocycleWithFatigue(
   const schedule = schedulePatterns[daysPerWeek] || schedulePatterns[4];
 
   // Step 8: Build full mesocycle with week-by-week progression
+  const bandContext = {
+    recoveryProfile: profile.enhancedAthleteMode ? 'enhanced' : 'standard',
+  } as const;
   const mesocycleWeeks: MesocycleWeek[] = [];
 
   for (let weekNum = 1; weekNum <= periodization.mesocycleWeeks; weekNum++) {
@@ -1026,6 +1030,30 @@ export function generateFullMesocycleWithFatigue(
 
       weekSessions.push(session);
       dayCounter++;
+    }
+
+    // Indirect-aware allocation — the SAME trim pass generateFullProgram
+    // runs (Codex review on 48c5cbe: this path never trimmed, so credited
+    // shoulders reached 30.5 vs the 26 ceiling on 4-day, 53 on 6-day PPL).
+    // Targets are total-inclusive: the built week's credited totals (primary
+    // splits + secondary credit, the currency the tracking card counts in)
+    // are trimmed down to the week-scaled targets, clamped at the effective
+    // MRV so no accumulation week starts past the ceiling the card flags.
+    const weekTargets = Object.fromEntries(
+      Object.entries(volumePerMuscle).map(([muscle, vol]) => [
+        muscle,
+        {
+          sets: Math.min(
+            Math.round(vol.sets * weekProgression.volumeModifier),
+            getEffectiveBand(muscle as CoarseMuscle, bandContext)?.mrv ?? Number.MAX_SAFE_INTEGER
+          ),
+        },
+      ])
+    );
+    const trimNotes = applyIndirectAwareAllocation(weekSessions, weekTargets);
+    if (weekNum === 1) programNotes.push(...trimNotes);
+    for (const session of weekSessions) {
+      session.totalSets = session.exercises.reduce((sum, ex) => sum + ex.sets, 0);
     }
 
     mesocycleWeeks.push({

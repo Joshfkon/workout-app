@@ -1415,7 +1415,16 @@ interface WeekCredit {
   indirect: Map<StandardMuscleGroup, number>;
 }
 
-function creditWeek(sessions: DetailedSession[]): WeekCredit {
+/**
+ * Minimal structural shape the allocation pass reads and mutates — lets the
+ * fatigue-integrated generator's sessions (whose exercises carry RepRangeConfig
+ * instead of a repRange string) flow through the SAME trim pass instead of a
+ * parallel one.
+ */
+type AllocatableExercise = { exercise: ExerciseEntry; sets: number };
+type AllocatableSession = { exercises: AllocatableExercise[] };
+
+function creditWeek(sessions: readonly AllocatableSession[]): WeekCredit {
   const direct = new Map<StandardMuscleGroup, number>();
   const indirect = new Map<StandardMuscleGroup, number>();
   const add = (m: Map<StandardMuscleGroup, number>, k: StandardMuscleGroup, v: number) =>
@@ -1469,7 +1478,7 @@ function directFloor(std: StandardMuscleGroup, indirect: number): number {
  * and returns human-readable notes of what was trimmed.
  */
 export function applyIndirectAwareAllocation(
-  sessions: DetailedSession[],
+  sessions: AllocatableSession[],
   targets: Record<string, { sets: number }>
 ): string[] {
   const notes: string[] = [];
@@ -1522,7 +1531,7 @@ export function applyIndirectAwareAllocation(
         }
       }
     }
-    const removalKeepsMovements = (ex: DetailedExercise): boolean =>
+    const removalKeepsMovements = (ex: AllocatableExercise): boolean =>
       resolvePrimaryMuscleCredits(ex.exercise.primaryMuscle).every(
         ({ muscle }) => (directMovementCount.get(muscle) ?? 0) >= 2
       );
@@ -1536,7 +1545,7 @@ export function applyIndirectAwareAllocation(
       if (trimmed) break;
       for (const { std } of candidates) {
         const minSets = allowRemoval ? 1 : 2;
-        let best: { ex: DetailedExercise; weight: number } | null = null;
+        let best: { ex: AllocatableExercise; weight: number } | null = null;
         for (const session of sessions) {
           for (const ex of session.exercises) {
             if (ex.sets < minSets) continue;
