@@ -1,11 +1,11 @@
 /**
  * Tests for User Store (Zustand)
  */
+import { applyRecoveryProfileToLandmarks } from '@/services/volumeBands';
 import { useUserStore } from '../userStore';
 import {
   DEFAULT_USER_PREFERENCES,
   DEFAULT_VOLUME_LANDMARKS,
-  scaleLandmarksForEnhanced,
 } from '@/types/schema';
 import type { User, UserPreferences, VolumeLandmarks, Experience } from '@/types/schema';
 
@@ -280,9 +280,12 @@ describe('userStore', () => {
 
       const base = DEFAULT_VOLUME_LANDMARKS.intermediate.chest_upper;
       const landmarks = useUserStore.getState().getVolumeLandmarks('chest_upper');
-      expect(landmarks).toEqual(scaleLandmarksForEnhanced(base, true));
-      // Differentiated, not flat: ceiling rises more than floor
-      expect(landmarks.mrv / base.mrv).toBeGreaterThan(landmarks.mev / base.mev);
+      expect(landmarks).toEqual(
+        applyRecoveryProfileToLandmarks(base, 'chest_upper', { recoveryProfile: 'enhanced' })
+      );
+      // Tiered, not flat: the ceiling rises, the floor NEVER does.
+      expect(landmarks.mev).toBe(base.mev);
+      expect(landmarks.mrv).toBeGreaterThan(base.mrv);
     });
   });
 

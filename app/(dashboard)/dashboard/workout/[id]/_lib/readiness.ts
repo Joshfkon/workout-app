@@ -28,6 +28,7 @@ import {
   type ExerciseVolume,
   type VolumeBand,
   type VolumeZone,
+  type RecoveryProfile,
   type VolumeRow,
   type MuscleVolumeStats,
 } from '../../../_lib/weeklyVolume';
@@ -77,6 +78,9 @@ export interface ReadinessRow {
   band: VolumeBand;
   zone: VolumeZone;
   belowMev: boolean;
+  /** ≥1 reachable fine child below its own MEV — demotes the row's color
+   *  from success to warning (see rowColorToken in weeklyVolume). */
+  laggingChildren: boolean;
   /** How far below MEV (0 at/above MEV). */
   volumeGap: number;
   /** Legacy tri-state kept for the bar colour fallback. */
@@ -289,9 +293,10 @@ export function buildReadinessRows(
   now: Date,
   reachable?: Set<StandardMuscleGroup>,
   config: RecoveryConfig = RECOVERY_CONFIG,
-  sorenessOverrides?: ReadonlySet<StandardMuscleGroup>
+  sorenessOverrides?: ReadonlySet<StandardMuscleGroup>,
+  recoveryProfile?: RecoveryProfile
 ): ReadinessRow[] {
-  const volumeRows = buildVolumeRows(stats, reachable);
+  const volumeRows = buildVolumeRows(stats, reachable, { recoveryProfile });
 
   const rows = volumeRows.map((vr: VolumeRow): ReadinessRow => {
     const coarse = vr.muscle as CoarseMuscle;
@@ -335,6 +340,7 @@ export function buildReadinessRows(
       band: vr.band,
       zone: vr.zone,
       belowMev: vr.belowMev,
+      laggingChildren: vr.laggingChildren,
       volumeGap,
       volumeStatus: volumeStatusForZone(vr.zone),
       recovery,

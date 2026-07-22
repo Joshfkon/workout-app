@@ -9,9 +9,8 @@
  * - mesocycle generator consumption (volume, ramp, accumulation length)
  * - joint-stress caps provably unaffected by the toggle
  */
+import { getEffectiveBand, applyRecoveryProfileToLandmarks, ENHANCED_MRV_MULTIPLIERS, ENHANCED_MAV_MULTIPLIER } from '../volumeBands';
 import {
-  ENHANCED_SCALING,
-  scaleLandmarksForEnhanced,
   DEFAULT_VOLUME_LANDMARKS,
   type VolumeLandmarks,
 } from '@/types/schema';
@@ -66,33 +65,29 @@ function createProfile(overrides: Partial<ExtendedUserProfile> = {}): ExtendedUs
 // 1. Central landmark scaling
 // ============================================
 
-describe('scaleLandmarksForEnhanced', () => {
+describe('applyRecoveryProfileToLandmarks (the single profile derivation)', () => {
   const base: VolumeLandmarks = { mev: 8, mav: 14, mrv: 22 };
+  const enhancedCtx = { recoveryProfile: 'enhanced' as const };
 
-  it('uses the documented differentiated multipliers', () => {
-    expect(ENHANCED_SCALING).toEqual({ mev: 1.1, mav: 1.25, mrv: 1.375 });
-  });
-
-  it('scales each landmark by its own multiplier, rounded to whole sets', () => {
-    const scaled = scaleLandmarksForEnhanced(base, true);
+  it('scales the ceiling by the muscle TIER, never the floor', () => {
+    const scaled = applyRecoveryProfileToLandmarks(base, 'chest', enhancedCtx);
     expect(scaled).toEqual({
-      mev: Math.round(8 * 1.1),   // 9
-      mav: Math.round(14 * 1.25), // 18
-      mrv: Math.round(22 * 1.375), // 30
+      mev: 8, // INVARIANT: enhanced never raises (or changes) a floor
+      mav: Math.min(Math.round(14 * ENHANCED_MAV_MULTIPLIER), Math.round(22 * ENHANCED_MRV_MULTIPLIERS.chest * 2) / 2),
+      mrv: Math.round(22 * ENHANCED_MRV_MULTIPLIERS.chest * 2) / 2,
     });
   });
 
-  it('returns landmarks unchanged when the mode is off or undefined', () => {
-    expect(scaleLandmarksForEnhanced(base, false)).toBe(base);
-    expect(scaleLandmarksForEnhanced(base, undefined)).toBe(base);
+  it('returns landmarks unchanged for the standard profile (or no context)', () => {
+    expect(applyRecoveryProfileToLandmarks(base, 'chest')).toBe(base);
+    expect(applyRecoveryProfileToLandmarks(base, 'chest', { recoveryProfile: 'standard' })).toBe(base);
   });
 
-  it('raises the ceiling far more than the floor (no flat multiplier)', () => {
-    const scaled = scaleLandmarksForEnhanced(base, true);
-    expect(scaled.mrv / base.mrv).toBeGreaterThan(scaled.mev / base.mev);
-    // MRV rises 35-40%, MEV only ~10%
-    expect(scaled.mrv / base.mrv).toBeGreaterThanOrEqual(1.35);
-    expect(scaled.mev / base.mev).toBeLessThanOrEqual(1.15);
+  it('tiers differ by axial load: isolation-friendly muscles scale more', () => {
+    const biceps = applyRecoveryProfileToLandmarks(base, 'biceps', enhancedCtx);
+    const quads = applyRecoveryProfileToLandmarks(base, 'quads', enhancedCtx);
+    expect(biceps.mrv).toBeGreaterThan(quads.mrv); // x1.35 vs x1.15
+    expect(biceps.mev).toBe(quads.mev); // floors identical, never scaled
   });
 });
 
@@ -263,13 +258,15 @@ describe('mesocycle generator (enhanced mode)', () => {
     );
   });
 
-  it('scales MAV-derived base volume by the MAV multiplier', () => {
+  it('shifts base volume by at most +10% (residuals pass: less than any MRV tier)', () => {
+    // The old ENHANCED_SCALING.mav (x1.25) preset bump was replaced: the
+    // enhanced ceiling is exploration headroom, not a prescription.
     const natural = recommendVolume('intermediate', 'maintenance', 'chest');
     const enhanced = recommendVolume('intermediate', 'maintenance', 'chest', true);
-    expect(enhanced).toBe(Math.round(natural * ENHANCED_SCALING.mav));
+    expect(enhanced).toBe(Math.round(natural * 1.10));
   });
 
-  it('clamps weekly volume to the SCALED MRV when enhanced, natural MRV when not', () => {
+  it('clamps weekly volume at each profile\'s EFFECTIVE band MRV', () => {
     // Max out every recovery multiplier so the clamp actually binds.
     const boostedRecovery = calculateRecoveryFactors(
       createProfile({ age: 22, sleepQuality: 5 as Rating, stressLevel: 1 as Rating })
@@ -282,13 +279,20 @@ describe('mesocycle generator (enhanced mode)', () => {
       'Upper/Lower', 4, 'advanced', 'bulk', boostedRecovery, undefined, undefined, true
     );
 
-    // The legacy 'chest' key doesn't resolve in DEFAULT_VOLUME_LANDMARKS
-    // (standard keys), so the fallback landmark {mrv:16} applies — the clamp
-    // is still exercised: enhanced ceiling = round-scaled fallback MRV.
-    const fallbackMrv = 16;
-    expect(natural.chest.sets).toBeLessThanOrEqual(fallbackMrv);
-    expect(enhanced.chest.sets).toBeLessThanOrEqual(Math.round(fallbackMrv * ENHANCED_SCALING.mrv));
-    expect(enhanced.chest.sets).toBeGreaterThan(natural.chest.sets);
+    // Coarse groups clamp at the SHARED band MRV (services/volumeBands) —
+    // the tracking card renders that ceiling un-scaled for enhanced users
+    // too, so the clamp deliberately applies to both modes: a target the
+    // card would flag is wrong regardless of recovery capacity. (The old
+    // behavior clamped 'chest' at the {mrv:16} legacy fallback because the
+    // coarse key missed the per-standard landmark table entirely.)
+    const naturalMrv = getEffectiveBand('chest', { recoveryProfile: 'standard' }).mrv;
+    const enhancedMrv = getEffectiveBand('chest', { recoveryProfile: 'enhanced' }).mrv;
+    expect(natural.chest.sets).toBeLessThanOrEqual(naturalMrv);
+    expect(enhanced.chest.sets).toBeLessThanOrEqual(enhancedMrv);
+    // The enhanced ceiling is strictly higher (chest tier x1.25: 22 -> 27.5)…
+    expect(enhancedMrv).toBeGreaterThan(naturalMrv);
+    // …and enhanced never allocates less than natural.
+    expect(enhanced.chest.sets).toBeGreaterThanOrEqual(natural.chest.sets);
   });
 
   it('ramps weekly volume proportionally faster so the lifter approaches MRV before deload', () => {
@@ -419,11 +423,10 @@ describe('connective-tissue safety caps (invariant under the toggle)', () => {
 // ============================================
 
 describe('DEFAULT_VOLUME_LANDMARKS + central scaling', () => {
-  it('scaled intermediate chest_upper matches the table in the spec', () => {
+  it('scaled intermediate chest_upper: MEV unchanged, MRV by the chest tier', () => {
     const base = DEFAULT_VOLUME_LANDMARKS.intermediate.chest_upper; // {6, 10, 16}
-    const scaled = scaleLandmarksForEnhanced(base, true);
-    expect(scaled.mev).toBe(Math.round(base.mev * 1.1));
-    expect(scaled.mav).toBe(Math.round(base.mav * 1.25));
-    expect(scaled.mrv).toBe(Math.round(base.mrv * 1.375));
+    const scaled = applyRecoveryProfileToLandmarks(base, 'chest_upper', { recoveryProfile: 'enhanced' });
+    expect(scaled.mev).toBe(base.mev); // invariant
+    expect(scaled.mrv).toBe(Math.round(base.mrv * ENHANCED_MRV_MULTIPLIERS.chest * 2) / 2);
   });
 });

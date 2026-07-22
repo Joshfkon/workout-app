@@ -54,8 +54,9 @@ export interface WeeklySetAdjustmentInput {
   weekInMeso: number;
   isDeloadWeek: boolean;
   /**
-   * Enhanced Athlete Mode: the MRV ceiling is ~37.5% higher (see
-   * ENHANCED_SCALING — callers pass already-scaled landmarks), so the weekly
+   * Enhanced Athlete Mode: the MRV ceiling is 15–35% higher by muscle tier
+   * (see the volumeBands profile derivation — callers pass already-scaled
+   * landmarks), so the weekly
    * set-addition rate rises proportionally (ENHANCED_WEEKLY_SET_INCREMENT).
    * Otherwise the lifter would never approach the raised ceiling before the
    * deload. Remove/hold logic is unchanged — recovery debt still wins.

@@ -112,7 +112,7 @@ interface DashboardCacheData {
   dateKey: string; // To invalidate cache on new day
 }
 
-// MEV_TARGETS, ALL_MUSCLE_GROUPS, accumulateExerciseVolume, volumeAccumulatorToStats,
+// the MEV table, ALL_MUSCLE_GROUPS, accumulateExerciseVolume, volumeAccumulatorToStats,
 // VolumeAccumulator, MuscleVolumeStats now live in ./_lib/weeklyVolume (shared with
 // the server initial-data path, item 6). Imported above.
 

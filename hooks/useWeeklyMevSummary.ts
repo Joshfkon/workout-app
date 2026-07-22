@@ -7,7 +7,9 @@ import {
   computeReachableMuscles,
   weeklyVolumeWindowStartISO,
   type MuscleVolumeStats,
+  type WeeklyVolumeBlockRow,
 } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
+import { logCoarsePrimaryRetagDryRun } from '@/lib/migrations/coarsePrimaryRetag';
 import type { StandardMuscleGroup } from '@/types/schema';
 
 export interface UseWeeklyMevSummaryResult {
@@ -56,6 +58,17 @@ export function useWeeklyMevSummary(): UseWeeklyMevSummaryResult {
         const stats = computeWeeklyMuscleVolume(blocks);
         const reachable = computeReachableMuscles(blocks);
         setResult({ stats, reachable });
+
+        // Dev-only DRY RUN: surface logged exercises whose coarse tags smear
+        // volume credit across a whole group, with proposed precise retags.
+        // Report-only — applying a retag is a separate, confirmed step.
+        if (process.env.NODE_ENV === 'development') {
+          logCoarsePrimaryRetagDryRun(
+            (blocks as WeeklyVolumeBlockRow[])
+              .map((b) => b.exercises)
+              .filter((e): e is NonNullable<typeof e> => e != null)
+          );
+        }
       } catch (err) {
         console.error('Failed to load weekly MEV summary:', err);
       } finally {

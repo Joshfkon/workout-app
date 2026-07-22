@@ -17,11 +17,11 @@ import {
   zoneBarClass,
   zoneFillClass,
   zoneColorToken,
-  RESEARCH_VOLUME_BANDS,
   COARSE_CHILDREN,
   type WeeklyVolumeBlockRow,
   type CoarseMuscle,
 } from '../weeklyVolume';
+import { RESEARCH_VOLUME_BANDS, MEV_TARGETS } from '@/services/volumeBands';
 import { buildReadinessRows } from '../../workout/[id]/_lib/readiness';
 import { volumeRowsToMapData, readinessRowsToMapData } from '@/lib/muscleMap/adapters';
 import type { RecoverySession } from '@/services/muscleRecovery';

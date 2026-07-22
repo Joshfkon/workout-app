@@ -6,9 +6,7 @@
 
 import type {
   Goal,
-  Experience,
   MuscleGroup,
-  StandardMuscleGroup,
   MovementPattern,
   Equipment,
   PeriodizationModel,
@@ -27,18 +25,7 @@ import type {
   FullProgramRecommendation,
   Split,
 } from '@/types/schema';
-import { DEFAULT_VOLUME_LANDMARKS, muscleMatchesGroup, toLegacyMuscleGroup } from '@/types/schema';
-
-/** Fallback volume landmarks for muscles missing from DEFAULT_VOLUME_LANDMARKS */
-const FALLBACK_VOLUME_LANDMARK = { mev: 4, mav: 10, mrv: 16 };
-
-/** Look up the experience-specific MRV for a muscle, with a sane fallback */
-function getMuscleMRV(experience: Experience, muscle: string): number {
-  return (
-    DEFAULT_VOLUME_LANDMARKS[experience]?.[muscle as StandardMuscleGroup]?.mrv ??
-    FALLBACK_VOLUME_LANDMARK.mrv
-  );
-}
+import { muscleMatchesGroup, toLegacyMuscleGroup } from '@/types/schema';
 
 import { filterExercisesByEquipment } from './equipmentFilter';
 import type { ExerciseVarietyPreferences } from '@/types/user-exercise-preferences';
@@ -63,7 +50,8 @@ import {
 } from './fatigueBudgetEngine';
 import { toStandardMuscleForVolume } from '@/lib/migrations/muscle-groups';
 
-import { calculateRecoveryFactors, buildPeriodizationPlan, calculateVolumeDistribution as calculateVolumeDistributionWithLagging, generateWarmup, isMuscleExcludedByInjury } from './mesocycleBuilder';
+import { calculateRecoveryFactors, buildPeriodizationPlan, calculateVolumeDistribution as calculateVolumeDistributionWithLagging, generateWarmup, isMuscleExcludedByInjury, applyIndirectAwareAllocation } from './mesocycleBuilder';
+import { getEffectiveBand, type CoarseMuscle } from './volumeBands';
 import { getExercisesSync, type Exercise as ServiceExercise } from './exerciseService';
 
 // NOTE: generateWarmup imported from mesocycleBuilder.ts
@@ -873,153 +861,6 @@ function buildSessionTemplates(split: Split, daysPerWeek: number): SessionTempla
 }
 
 /**
- * Calculate volume distribution with frequency
- */
-function calculateVolumeDistribution(
-  split: Split,
-  daysPerWeek: number,
-  experience: Experience,
-  goal: Goal,
-  recoveryFactors: RecoveryFactors
-): Record<MuscleGroup, { sets: number; frequency: number }> {
-  const muscles: MuscleGroup[] = [
-    'chest',
-    'back',
-    'shoulders',
-    'biceps',
-    'triceps',
-    'quads',
-    'hamstrings',
-    'glutes',
-    'calves',
-    'abs',
-  ];
-
-  // Base volumes
-  const baseVolumes: Record<string, Record<Experience, number>> = {
-    chest: { novice: 10, intermediate: 14, advanced: 18 },
-    back: { novice: 12, intermediate: 16, advanced: 20 },
-    shoulders: { novice: 10, intermediate: 14, advanced: 18 },
-    biceps: { novice: 8, intermediate: 12, advanced: 16 },
-    triceps: { novice: 8, intermediate: 12, advanced: 16 },
-    quads: { novice: 10, intermediate: 14, advanced: 18 },
-    hamstrings: { novice: 8, intermediate: 12, advanced: 14 },
-    glutes: { novice: 8, intermediate: 12, advanced: 16 },
-    calves: { novice: 10, intermediate: 14, advanced: 18 },
-    abs: { novice: 8, intermediate: 12, advanced: 16 },
-  };
-
-  // Frequency based on split
-  const frequencyMap: Record<Split, Record<MuscleGroup, number>> = {
-    'Full Body': {
-      chest: Math.min(daysPerWeek, 3),
-      back: Math.min(daysPerWeek, 3),
-      shoulders: Math.min(daysPerWeek, 3),
-      biceps: Math.min(daysPerWeek, 2),
-      triceps: Math.min(daysPerWeek, 2),
-      quads: Math.min(daysPerWeek, 3),
-      hamstrings: Math.min(daysPerWeek, 2),
-      glutes: Math.min(daysPerWeek, 2),
-      calves: Math.min(daysPerWeek, 2),
-      abs: Math.min(daysPerWeek, 2),
-      adductors: Math.min(daysPerWeek, 2),
-      forearms: Math.min(daysPerWeek, 2),
-      traps: Math.min(daysPerWeek, 2),
-    },
-    'Upper/Lower': {
-      chest: 2,
-      back: 2,
-      shoulders: 2,
-      biceps: 2,
-      triceps: 2,
-      quads: 2,
-      hamstrings: 2,
-      glutes: 2,
-      calves: 2,
-      abs: 2,
-      adductors: 2,
-      forearms: 2,
-      traps: 2,
-    },
-    PPL: {
-      chest: daysPerWeek >= 6 ? 2 : 1,
-      back: daysPerWeek >= 6 ? 2 : 1,
-      shoulders: daysPerWeek >= 6 ? 2 : 1,
-      biceps: daysPerWeek >= 6 ? 2 : 1,
-      triceps: daysPerWeek >= 6 ? 2 : 1,
-      quads: daysPerWeek >= 6 ? 2 : 1,
-      hamstrings: daysPerWeek >= 6 ? 2 : 1,
-      glutes: daysPerWeek >= 6 ? 2 : 1,
-      calves: daysPerWeek >= 6 ? 2 : 1,
-      abs: daysPerWeek >= 6 ? 2 : 1,
-      adductors: daysPerWeek >= 6 ? 2 : 1,
-      forearms: daysPerWeek >= 6 ? 2 : 1,
-      traps: daysPerWeek >= 6 ? 2 : 1,
-    },
-    Arnold: {
-      chest: 2,
-      back: 2,
-      shoulders: 2,
-      biceps: 2,
-      triceps: 2,
-      quads: 2,
-      hamstrings: 2,
-      glutes: 2,
-      calves: 2,
-      abs: 2,
-      adductors: 2,
-      forearms: 2,
-      traps: 2,
-    },
-    'Bro Split': {
-      chest: 1,
-      back: 1,
-      shoulders: 1,
-      biceps: 1,
-      triceps: 1,
-      quads: 1,
-      hamstrings: 1,
-      glutes: 1,
-      calves: 1,
-      abs: 1,
-      adductors: 1,
-      forearms: 1,
-      traps: 1,
-    },
-  };
-
-  const frequencies = frequencyMap[split];
-  const result = {} as Record<MuscleGroup, { sets: number; frequency: number }>;
-
-  muscles.forEach((muscle) => {
-    let baseVolume = baseVolumes[muscle]?.[experience] || 12;
-
-    // Goal adjustment
-    if (goal === 'cut') {
-      baseVolume = Math.round(baseVolume * 0.7);
-    } else if (goal === 'bulk') {
-      baseVolume = Math.round(baseVolume * 1.1);
-    }
-
-    // Recovery adjustment
-    let adjustedVolume = Math.round(baseVolume * recoveryFactors.volumeMultiplier);
-
-    // Clamp to the muscle's experience-specific MRV so week-1 volume never
-    // starts above the maximum recoverable volume after all multipliers.
-    adjustedVolume = Math.min(adjustedVolume, getMuscleMRV(experience, muscle));
-
-    const frequency = Math.round(frequencies[muscle] * recoveryFactors.frequencyMultiplier);
-
-    result[muscle] = {
-      sets: adjustedVolume,
-      frequency: Math.max(1, frequency),
-    };
-  });
-
-  return result;
-}
-
-/**
  * Generate a complete mesocycle with fatigue-integrated sessions
  */
 export function generateFullMesocycleWithFatigue(
@@ -1052,7 +893,8 @@ export function generateFullMesocycleWithFatigue(
 
   if (profile.enhancedAthleteMode) {
     programNotes.push(
-      'Enhanced Athlete Mode: volume ceiling raised (MRV x1.375, MAV x1.25, MEV x1.10), ' +
+      'Enhanced Athlete Mode: recoverable-volume ceiling raised 15-35% by muscle ' +
+      '(more for smaller muscles, less for axial ones), optimal-zone top up 10%, minimums unchanged; ' +
       'accumulation extended by 1 week. Joint-stress limits unchanged to protect connective tissue.'
     );
   }
@@ -1126,6 +968,9 @@ export function generateFullMesocycleWithFatigue(
   const schedule = schedulePatterns[daysPerWeek] || schedulePatterns[4];
 
   // Step 8: Build full mesocycle with week-by-week progression
+  const bandContext = {
+    recoveryProfile: profile.enhancedAthleteMode ? 'enhanced' : 'standard',
+  } as const;
   const mesocycleWeeks: MesocycleWeek[] = [];
 
   for (let weekNum = 1; weekNum <= periodization.mesocycleWeeks; weekNum++) {
@@ -1185,6 +1030,30 @@ export function generateFullMesocycleWithFatigue(
 
       weekSessions.push(session);
       dayCounter++;
+    }
+
+    // Indirect-aware allocation — the SAME trim pass generateFullProgram
+    // runs (Codex review on 48c5cbe: this path never trimmed, so credited
+    // shoulders reached 30.5 vs the 26 ceiling on 4-day, 53 on 6-day PPL).
+    // Targets are total-inclusive: the built week's credited totals (primary
+    // splits + secondary credit, the currency the tracking card counts in)
+    // are trimmed down to the week-scaled targets, clamped at the effective
+    // MRV so no accumulation week starts past the ceiling the card flags.
+    const weekTargets = Object.fromEntries(
+      Object.entries(volumePerMuscle).map(([muscle, vol]) => [
+        muscle,
+        {
+          sets: Math.min(
+            Math.round(vol.sets * weekProgression.volumeModifier),
+            getEffectiveBand(muscle as CoarseMuscle, bandContext)?.mrv ?? Number.MAX_SAFE_INTEGER
+          ),
+        },
+      ])
+    );
+    const trimNotes = applyIndirectAwareAllocation(weekSessions, weekTargets);
+    if (weekNum === 1) programNotes.push(...trimNotes);
+    for (const session of weekSessions) {
+      session.totalSets = session.exercises.reduce((sum, ex) => sum + ex.sets, 0);
     }
 
     mesocycleWeeks.push({

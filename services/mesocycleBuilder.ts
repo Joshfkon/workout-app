@@ -36,10 +36,22 @@ import type {
   RepRangeConfig,
 } from '@/types/schema';
 import {
+  COARSE_CHILDREN,
+  COARSE_MUSCLES,
+  FINE_CHILD_MUSCLES,
+  getEffectiveBand,
+  getStandardMev,
+  STANDARD_TO_COARSE,
+  type CoarseMuscle,
+} from '@/services/volumeBands';
+import {
+  resolvePrimaryMuscleCredits,
+  SECONDARY_MUSCLE_CREDIT,
+} from '@/services/volumeTracker';
+import { resolveMuscleToStandard } from '@/types/schema';
+import {
   DEFAULT_VOLUME_LANDMARKS,
-  ENHANCED_SCALING,
   muscleMatchesGroup,
-  scaleLandmarksForEnhanced,
   toLegacyMuscleGroup,
 } from '@/types/schema';
 import { calculateFFMI, getNaturalFFMILimit } from './bodyCompEngine';
@@ -51,21 +63,8 @@ export { isMuscleExcludedByInjury } from './shared/injuryExclusion';
 /** Fallback volume landmarks for muscles missing from DEFAULT_VOLUME_LANDMARKS */
 const FALLBACK_VOLUME_LANDMARK = { mev: 4, mav: 10, mrv: 16 };
 
-/**
- * Look up the experience-specific MRV for a muscle, with a sane fallback.
- * Enhanced Athlete Mode raises the ceiling through the central
- * scaleLandmarksForEnhanced derivation (never a local multiplier).
- */
-function getMuscleMRV(
-  experience: Experience,
-  muscle: string,
-  enhancedAthleteMode?: boolean
-): number {
-  const base =
-    DEFAULT_VOLUME_LANDMARKS[experience]?.[muscle as StandardMuscleGroup] ??
-    FALLBACK_VOLUME_LANDMARK;
-  return scaleLandmarksForEnhanced(base, enhancedAthleteMode).mrv;
-}
+// (getMuscleMRV retired: every distribution muscle is a coarse group and
+// clamps at getEffectiveBand; the old path fell back to a flat {mrv:16}.)
 
 /**
  * Extra accumulation weeks before deload for enhanced athletes. Faster
@@ -262,7 +261,7 @@ export function calculateRecoveryFactors(profile: ExtendedUserProfile): Recovery
   }
 
   // Enhanced athletes sustain accumulation longer before needing a deload.
-  // Volume itself is NOT bumped here — landmark scaling (ENHANCED_SCALING)
+  // Volume itself is NOT bumped here — profile landmark scaling
   // handles that at derivation time.
   if (profile.enhancedAthleteMode) {
     baseDeloadWeeks += ENHANCED_EXTRA_ACCUMULATION_WEEKS;
@@ -695,7 +694,7 @@ export function buildPeriodizationPlan(
  * Extra end-of-ramp volume modifier for enhanced athletes. Weekly base sets
  * are MAV-derived (already scaled x1.25 when enhanced); ramping the final
  * accumulation week to ~110% instead of 100% lands weekly volume in
- * scaled-MRV territory (1.1 x 1.25 ≈ 1.375 ≈ ENHANCED_SCALING.mrv), so the
+ * scaled-MRV territory, so the
  * lifter actually approaches the raised ceiling before deload instead of
  * running the same shallow ramp under a higher roof.
  */
@@ -821,27 +820,65 @@ export function recommendVolume(
   muscleGroup: string,
   enhancedAthleteMode?: boolean
 ): number {
-  // Base volumes (MAV - Maximum Adaptive Volume estimates)
+  // Base volumes (MAV estimates), TOTAL-INCLUSIVE (convention-conversion v2,
+  // ADOPTED): the tracking surfaces count credited volume (0.5/secondary
+  // set), so targets are stated in that same currency — direct preset + the
+  // MEAN indirect inflow measured across three generated templates (Full
+  // Body 3d / Upper-Lower 4d / PPL 6d, intermediate bulk). A program whose
+  // projected inflow matches the mean allocates exactly the old direct
+  // prescription; one with none allocates more direct work; one with extra
+  // allocates less (see applyIndirectAwareAllocation). Converted values
+  // (novice/intermediate/advanced, old → new):
+  //
+  //   shoulders 10/14/18 → 14/19/24  (observed group inflow 8.5–16)
+  //
+  //     The shoulders GROUP preset is a LIVE input, not an ambient number:
+  //     calculateVolumeDistribution feeds it into volumePerMuscle.shoulders,
+  //     which (1) buildDetailedSession uses to allocate the initial direct
+  //     shoulder sets in each session, and (2) applyIndirectAwareAllocation
+  //     uses as the roll-up CEILING its per-standard trim converges the
+  //     group's credited total to. The delt heads are governed by the
+  //     per-standard floors during that trim; this group number decides how
+  //     much TOTAL shoulder stimulus a program carries. Gate-verified
+  //     against band 12–26 across all three templates.
+  //   biceps     8/12/16 → 12/17/22  (observed 6–8)
+  //   triceps    8/12/16 → 11/15/20  (observed 0–7: fly-based programs 0,
+  //                                   bench-based 4–7 — shifted by the mean)
+  //   glutes     8/12/16 → 15/19/23  (observed 5.5–9; band converted to
+  //                                   {6,24} in the same pass)
+  //   hamstrings 8/12/14 → 12/16/19  (observed 3.5–7; band → {8,20})
+  //   back      12/16/20 → 14/18/23  (observed 3.5–7 hinge spillover)
+  //   chest / quads / calves / abs: unchanged (little cross-group inflow).
+  //
+  // INVARIANT (bandPresetInvariant.test.ts): band MEV ≤ preset ≤ band MRV
+  // per muscle × experience, and the goal/enhanced-adjusted output is
+  // CLAMPED to the band MRV below — a generated target can never exceed the
+  // ceiling the tracking card renders (this retired the live pre-existing
+  // glutes advanced×bulk 18 > 16 violation).
   const baseVolumes: Record<string, Record<Experience, number>> = {
     chest: { novice: 10, intermediate: 14, advanced: 18 },
-    back: { novice: 12, intermediate: 16, advanced: 20 },
-    shoulders: { novice: 10, intermediate: 14, advanced: 18 },
-    biceps: { novice: 8, intermediate: 12, advanced: 16 },
-    triceps: { novice: 8, intermediate: 12, advanced: 16 },
+    back: { novice: 14, intermediate: 18, advanced: 23 },
+    shoulders: { novice: 14, intermediate: 19, advanced: 24 },
+    biceps: { novice: 12, intermediate: 17, advanced: 22 },
+    triceps: { novice: 11, intermediate: 15, advanced: 20 },
     quads: { novice: 10, intermediate: 14, advanced: 18 },
-    hamstrings: { novice: 8, intermediate: 12, advanced: 14 },
-    glutes: { novice: 8, intermediate: 12, advanced: 16 },
+    hamstrings: { novice: 12, intermediate: 16, advanced: 19 },
+    glutes: { novice: 15, intermediate: 19, advanced: 23 },
     calves: { novice: 10, intermediate: 14, advanced: 18 },
     abs: { novice: 8, intermediate: 12, advanced: 16 },
+    // Total-inclusive like the rest: generated inflow (rows/hinges/carries)
+    // measures 2.5–5, so a small direct share (shrugs) closes the gap to MEV 6.
+    traps: { novice: 6, intermediate: 8, advanced: 10 },
   };
 
   let volume = baseVolumes[muscleGroup]?.[experience] || 12;
 
-  // These base volumes are MAV estimates, so enhanced mode applies the MAV
-  // multiplier from the central scaling table (the MRV ceiling is applied
-  // separately in calculateVolumeDistribution via getMuscleMRV).
+  // Enhanced preset shift is capped at +10% — deliberately LESS than the
+  // enhanced MRV scaling (min tier ×1.15, see ENHANCED_MRV_MULTIPLIERS): the
+  // extra ceiling is headroom for autoregulated exploration, not a
+  // prescription. (Replaces the old flat ×1.25 MAV bump.)
   if (enhancedAthleteMode) {
-    volume = Math.round(volume * ENHANCED_SCALING.mav);
+    volume = Math.round(volume * 1.10);
   }
 
   // Adjust for goal
@@ -849,6 +886,17 @@ export function recommendVolume(
     volume = Math.round(volume * 0.7); // Reduce volume during cut to manage recovery
   } else if (goal === 'bulk') {
     volume = Math.round(volume * 1.1); // Slightly increase during surplus
+  }
+
+  // Goal-clamp: the adjusted target never exceeds the muscle's EFFECTIVE
+  // band MRV — the same ceiling the tracking card renders for this user's
+  // recovery profile (enhanced scales the ceiling per muscle tier; MEV never
+  // scales). Single band source: getEffectiveBand.
+  if ((COARSE_MUSCLES as readonly string[]).includes(muscleGroup)) {
+    const band = getEffectiveBand(muscleGroup as CoarseMuscle, {
+      recoveryProfile: enhancedAthleteMode ? 'enhanced' : 'standard',
+    });
+    volume = Math.min(volume, band.mrv);
   }
 
   return volume;
@@ -878,7 +926,10 @@ export function calculateVolumeDistribution(
   enhancedAthleteMode?: boolean
 ): Record<MuscleGroup, { sets: number; frequency: number }> {
 
-  const muscles: MuscleGroup[] = ['chest', 'back', 'shoulders', 'biceps', 'triceps', 'quads', 'hamstrings', 'glutes', 'calves', 'abs'];
+  // traps added in the residuals pass: it was absent from planning entirely
+  // (no preset, no template slot), so no template produced direct traps work
+  // and credited totals (2.5–5) sat under the band MEV 6.
+  const muscles: MuscleGroup[] = ['chest', 'back', 'shoulders', 'biceps', 'triceps', 'quads', 'hamstrings', 'glutes', 'calves', 'abs', 'traps'];
   const result: Record<MuscleGroup, { sets: number; frequency: number }> = {} as Record<MuscleGroup, { sets: number; frequency: number }>;
 
   // Determine frequency based on split
@@ -969,10 +1020,19 @@ export function calculateVolumeDistribution(
 
     let adjustedVolume = Math.round(baseVolume * recoveryFactors.volumeMultiplier);
 
-    // Clamp to the muscle's experience-specific MRV so week-1 volume never
-    // starts above the maximum recoverable volume after all multipliers.
-    // (Enhanced mode raises this ceiling via central landmark scaling.)
-    adjustedVolume = Math.min(adjustedVolume, getMuscleMRV(experience, muscle, enhancedAthleteMode));
+    // Clamp so week-1 volume never starts above the maximum recoverable
+    // volume after all multipliers. For coarse groups the ceiling is the
+    // SHARED band MRV (services/volumeBands) — the same total-inclusive
+    // ceiling the tracking card colors red past. The old getMuscleMRV path
+    // looked coarse keys ('chest', 'shoulders') up in the per-STANDARD-muscle
+    // landmark table, silently fell through to the {mrv:16} fallback, and
+    // capped every big group at 16; it remains only for non-coarse keys.
+    const bandMrv = (COARSE_MUSCLES as readonly string[]).includes(muscle)
+      ? getEffectiveBand(muscle as CoarseMuscle, {
+          recoveryProfile: enhancedAthleteMode ? 'enhanced' : 'standard',
+        }).mrv
+      : undefined;
+    adjustedVolume = Math.min(adjustedVolume, bandMrv ?? FALLBACK_VOLUME_LANDMARK.mrv);
 
     const frequency = Math.round(frequencies[muscle] * recoveryFactors.frequencyMultiplier);
 
@@ -1070,11 +1130,16 @@ export function selectExercises(
   let remainingSets = setsNeeded;
   let fatigueBudget = sessionFatigueBudget;
   
-  // Pick exercises
+  // Pick exercises. The fatigue budget gates ADDITIONAL exercises, not the
+  // first one: a muscle with an allocation is guaranteed one movement even on
+  // a crowded day (residuals pass — small muscles late in the compound-first
+  // order, e.g. traps, otherwise selected NOTHING once the budget was spent,
+  // and no session produced their direct work at all). Mirrors the
+  // allocator's movement-pattern floor.
   for (const exercise of candidates) {
     if (remainingSets <= 0) break;
-    if (fatigueBudget < exercise.fatigueRating) continue;
-    
+    if (exercises.length > 0 && fatigueBudget < exercise.fatigueRating) continue;
+
     // Determine sets for this exercise
     // Compounds get more sets, isolations get fewer
     const maxSetsForExercise = exercise.pattern === 'isolation' ? 3 : 4;
@@ -1196,18 +1261,21 @@ export function buildSessionTemplates(
   const templates: Record<Split, SessionTemplate[]> = {
     'Full Body': [
       { day: 'Full Body A', focus: 'Quad/Push emphasis', targetMuscles: ['quads', 'chest', 'shoulders', 'triceps', 'abs'] },
-      { day: 'Full Body B', focus: 'Hinge/Pull emphasis', targetMuscles: ['hamstrings', 'back', 'biceps', 'glutes', 'calves'] },
-      { day: 'Full Body C', focus: 'Balanced', targetMuscles: ['quads', 'back', 'shoulders', 'biceps', 'triceps'] },
+      // chest added (residuals pass): the FB frequency map declares chest 3×/wk
+      // but only day A carried a chest slot — 15-set target ÷ 3 landed 5 weekly
+      // sets (< MEV 8). A full-body day with zero push work was a template bug.
+      { day: 'Full Body B', focus: 'Hinge/Pull emphasis', targetMuscles: ['hamstrings', 'back', 'chest', 'biceps', 'glutes', 'calves', 'traps'] },
+      { day: 'Full Body C', focus: 'Balanced', targetMuscles: ['quads', 'back', 'chest', 'shoulders', 'biceps', 'triceps', 'traps'] },
     ],
     'Upper/Lower': [
       { day: 'Upper A', focus: 'Horizontal emphasis', targetMuscles: ['chest', 'back', 'shoulders', 'biceps', 'triceps'] },
       { day: 'Lower A', focus: 'Quad emphasis', targetMuscles: ['quads', 'hamstrings', 'glutes', 'calves', 'abs'] },
-      { day: 'Upper B', focus: 'Vertical emphasis', targetMuscles: ['back', 'chest', 'shoulders', 'triceps', 'biceps'] },
+      { day: 'Upper B', focus: 'Vertical emphasis', targetMuscles: ['back', 'chest', 'shoulders', 'triceps', 'biceps', 'traps'] },
       { day: 'Lower B', focus: 'Hinge emphasis', targetMuscles: ['hamstrings', 'quads', 'glutes', 'calves', 'abs'] },
     ],
     'PPL': [
       { day: 'Push', focus: 'Chest, shoulders, triceps', targetMuscles: ['chest', 'shoulders', 'triceps'] },
-      { day: 'Pull', focus: 'Back, biceps, rear delts', targetMuscles: ['back', 'biceps', 'shoulders'] },
+      { day: 'Pull', focus: 'Back, biceps, rear delts', targetMuscles: ['back', 'biceps', 'shoulders', 'traps'] },
       { day: 'Legs', focus: 'Quads, hamstrings, glutes', targetMuscles: ['quads', 'hamstrings', 'glutes', 'calves', 'abs'] },
     ],
     'Arnold': [
@@ -1258,7 +1326,7 @@ export function buildDetailedSession(
     'quads', 'hamstrings', 'glutes',  // Legs first if present
     'back', 'chest',                   // Big upper body
     'shoulders',                       // Medium
-    'biceps', 'triceps', 'calves', 'abs'  // Small/isolation last
+    'biceps', 'triceps', 'calves', 'abs', 'traps'  // Small/isolation last
   ];
   
   const orderedMuscles = sessionTemplate.targetMuscles.sort((a, b) =>
@@ -1337,6 +1405,191 @@ export function buildDetailedSession(
  * @param laggingAreas - Optional array of lagging muscle areas from regional DEXA analysis
  * @param volumeAdjustments - Optional array of volume adjustments from imbalance analysis or user priorities
  */
+// ============================================================
+// INDIRECT-AWARE ALLOCATION (convention-conversion v2, adopted)
+// ============================================================
+
+/** Per-standard-muscle credited volume of a built week (direct/indirect). */
+interface WeekCredit {
+  direct: Map<StandardMuscleGroup, number>;
+  indirect: Map<StandardMuscleGroup, number>;
+}
+
+/**
+ * Minimal structural shape the allocation pass reads and mutates — lets the
+ * fatigue-integrated generator's sessions (whose exercises carry RepRangeConfig
+ * instead of a repRange string) flow through the SAME trim pass instead of a
+ * parallel one.
+ */
+type AllocatableExercise = { exercise: ExerciseEntry; sets: number };
+type AllocatableSession = { exercises: AllocatableExercise[] };
+
+function creditWeek(sessions: readonly AllocatableSession[]): WeekCredit {
+  const direct = new Map<StandardMuscleGroup, number>();
+  const indirect = new Map<StandardMuscleGroup, number>();
+  const add = (m: Map<StandardMuscleGroup, number>, k: StandardMuscleGroup, v: number) =>
+    m.set(k, (m.get(k) ?? 0) + v);
+  for (const session of sessions) {
+    for (const ex of session.exercises) {
+      const primaryCredits = resolvePrimaryMuscleCredits(ex.exercise.primaryMuscle);
+      const primarySet = new Set(primaryCredits.map((c) => c.muscle));
+      for (const { muscle, weight } of primaryCredits) add(direct, muscle, ex.sets * weight);
+      for (const secondary of ex.exercise.secondaryMuscles ?? []) {
+        const standards = resolveMuscleToStandard(secondary);
+        if (standards.length === 0) continue;
+        const per = SECONDARY_MUSCLE_CREDIT / standards.length;
+        for (const std of standards) {
+          if (primarySet.has(std)) continue;
+          add(indirect, std, ex.sets * per);
+        }
+      }
+    }
+  }
+  return { direct, indirect };
+}
+
+/**
+ * Direct-work floor for one standard muscle when trimming:
+ * - fine children (delt heads, chest heads, …) floor DIRECT sets at their own
+ *   their own MEVs — side delts get 0.0 indirect in every measured template, so
+ *   group-level arithmetic must never cut the direct work that serves them;
+ * - single-muscle groups (biceps, quads, …) floor so the TOTAL (direct +
+ *   indirect) stays at or above the group band MEV.
+ */
+function directFloor(std: StandardMuscleGroup, indirect: number): number {
+  // MEVs never scale with recovery profile — no context needed here.
+  if (FINE_CHILD_MUSCLES.has(std)) return getStandardMev(std);
+  const band = getEffectiveBand(STANDARD_TO_COARSE[std]);
+  return Math.max(0, (band?.mev ?? 0) - indirect);
+}
+
+/**
+ * Post-selection allocation pass: trims direct sets so each coarse group's
+ * CREDITED total (direct + indirect, the currency every tracking surface
+ * counts in) lands at its converted target instead of overshooting by the
+ * indirect inflow the selected exercises produce. Deduction is applied PER
+ * STANDARD MUSCLE — each single-set trim is taken from the standard muscle
+ * with the most surplus above its direct floor (see directFloor), so e.g. a
+ * press-inflated shoulders group trims front-delt work while side/rear delt
+ * volume is protected. Trim-only by design: adding volume mid-generation is
+ * the weekly rollover's job.
+ *
+ * Mutates `sessions` exercise set counts in place (min 1 set per exercise)
+ * and returns human-readable notes of what was trimmed.
+ */
+export function applyIndirectAwareAllocation(
+  sessions: AllocatableSession[],
+  targets: Record<string, { sets: number }>
+): string[] {
+  const notes: string[] = [];
+  const trimmedByGroup = new Map<CoarseMuscle, number>();
+  const blockedGroups = new Set<CoarseMuscle>();
+
+  // Safety valve far above any real trim count (weekly sets are ~100).
+  for (let iteration = 0; iteration < 300; iteration++) {
+    const { direct, indirect } = creditWeek(sessions);
+
+    // Largest-overshoot group first, recomputed every iteration because a
+    // trim also removes the trimmed exercise's OWN secondary credit from
+    // other groups.
+    let worst: { group: CoarseMuscle; overshoot: number } | null = null;
+    for (const group of COARSE_MUSCLES) {
+      const target = targets[group]?.sets;
+      if (target === undefined || blockedGroups.has(group)) continue;
+      const total = COARSE_CHILDREN[group].reduce(
+        (sum, std) => sum + (direct.get(std) ?? 0) + (indirect.get(std) ?? 0),
+        0
+      );
+      const overshoot = total - target;
+      if (overshoot >= 1 && (!worst || overshoot > worst.overshoot)) {
+        worst = { group, overshoot };
+      }
+    }
+    if (!worst) break;
+
+    // Within the group: trim the standard muscle with the most direct-work
+    // surplus above its floor.
+    const candidates = COARSE_CHILDREN[worst.group]
+      .map((std) => ({
+        std,
+        surplus: (direct.get(std) ?? 0) - directFloor(std, indirect.get(std) ?? 0),
+      }))
+      .filter((c) => c.surplus >= 1)
+      .sort((a, b) => b.surplus - a.surplus);
+
+    // Movement-pattern floor for outright removals: indirect credit maintains
+    // VOLUME, not movement patterns — every standard muscle that had any
+    // direct movement keeps at least one. A 1-set straggler is removable only
+    // if every standard muscle its primary credits retains another direct
+    // exercise afterward.
+    const directMovementCount = new Map<StandardMuscleGroup, number>();
+    for (const session of sessions) {
+      for (const ex of session.exercises) {
+        if (ex.sets < 1) continue;
+        for (const { muscle } of resolvePrimaryMuscleCredits(ex.exercise.primaryMuscle)) {
+          directMovementCount.set(muscle, (directMovementCount.get(muscle) ?? 0) + 1);
+        }
+      }
+    }
+    const removalKeepsMovements = (ex: AllocatableExercise): boolean =>
+      resolvePrimaryMuscleCredits(ex.exercise.primaryMuscle).every(
+        ({ muscle }) => (directMovementCount.get(muscle) ?? 0) >= 2
+      );
+
+    let trimmed = false;
+    // Pass 1 prefers taking a set from a multi-set exercise; pass 2 (only
+    // when the whole group has no multi-set candidate left) removes a 1-set
+    // straggler outright — otherwise a split that selected many exercises
+    // keeps N × 1 irreducible sets and the group parks over its ceiling.
+    for (const allowRemoval of [false, true]) {
+      if (trimmed) break;
+      for (const { std } of candidates) {
+        const minSets = allowRemoval ? 1 : 2;
+        let best: { ex: AllocatableExercise; weight: number } | null = null;
+        for (const session of sessions) {
+          for (const ex of session.exercises) {
+            if (ex.sets < minSets) continue;
+            // A trim that would DELETE the exercise must pass the
+            // movement-pattern floor.
+            if (ex.sets === 1 && !removalKeepsMovements(ex)) continue;
+            const credit = resolvePrimaryMuscleCredits(ex.exercise.primaryMuscle).find(
+              (c) => c.muscle === std
+            );
+            if (!credit) continue;
+            if (
+              !best ||
+              credit.weight > best.weight ||
+              (credit.weight === best.weight && ex.sets > best.ex.sets)
+            ) {
+              best = { ex, weight: credit.weight };
+            }
+          }
+        }
+        if (!best) continue;
+        best.ex.sets -= 1;
+        trimmedByGroup.set(worst.group, (trimmedByGroup.get(worst.group) ?? 0) + 1);
+        trimmed = true;
+        break;
+      }
+    }
+    // No legal trim (every candidate at its floor) — accept the overshoot
+    // rather than starve a subdivision, and stop revisiting.
+    if (!trimmed) blockedGroups.add(worst.group);
+  }
+
+  // Prune exercises the removal pass emptied out.
+  for (const session of sessions) {
+    session.exercises = session.exercises.filter((ex) => ex.sets > 0);
+  }
+
+  for (const [group, sets] of Array.from(trimmedByGroup.entries())) {
+    notes.push(
+      `Indirect-aware allocation: trimmed ${sets} direct ${group} set${sets === 1 ? '' : 's'} — secondary credit from the selected exercises already covers the difference`
+    );
+  }
+  return notes;
+}
+
 export function generateFullProgram(
   daysPerWeek: number,
   profile: ExtendedUserProfile,
@@ -1404,7 +1657,15 @@ export function generateFullProgram(
   const sessions = sessionTemplates.map(template =>
     buildDetailedSession(template, volumePerMuscle, profile)
   );
-  
+
+  // Step 6.5: Indirect-aware allocation (convention-conversion v2). Targets
+  // are total-inclusive; the selected exercises' secondary credit counts
+  // toward them, so direct sets are trimmed per standard muscle (side/rear
+  // delt work floored at child MEVs) until each group's credited total lands
+  // at its target instead of overshooting by the inflow.
+  programNotes.push(...applyIndirectAwareAllocation(sessions, volumePerMuscle));
+
+
   // Step 7: Generate schedule
   const schedulePatterns: Record<number, string[]> = {
     2: ['Mon', 'Thu'],
@@ -1673,31 +1934,6 @@ export function generateWorkoutTemplates(
   });
 
   return templates;
-}
-
-/**
- * Calculate weekly volume per muscle for a given split
- */
-export function calculateWeeklyVolumePerMuscle(
-  sessions: { muscles: string[]; exercises: { sets: number; exerciseName: string }[] }[]
-): Record<string, number> {
-  const volume: Record<string, number> = {};
-  const exerciseDb = getExerciseDatabase();
-
-  sessions.forEach(session => {
-    session.exercises.forEach(ex => {
-      // Try to find the exercise in our database
-      const dbExercise = exerciseDb.find(e => e.name === ex.exerciseName);
-      if (dbExercise) {
-        volume[dbExercise.primaryMuscle] = (volume[dbExercise.primaryMuscle] || 0) + ex.sets;
-        dbExercise.secondaryMuscles.forEach(m => {
-          volume[m] = (volume[m] || 0) + Math.floor(ex.sets * 0.5); // Count secondary at 50%
-        });
-      }
-    });
-  });
-  
-  return volume;
 }
 
 // Re-export from exercise service for backward compatibility

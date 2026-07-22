@@ -15,6 +15,9 @@ import {
   zoneBarClass,
   zoneTextClass,
   zoneBandLabel,
+  rowBarClass,
+  rowTextClass,
+  groupZoneBandLabel,
   STANDARD_TO_COARSE,
 } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 import {
@@ -224,12 +227,14 @@ function ReadinessRowContent({ row }: { row: ReadinessRow }) {
         <div className="flex items-center justify-between gap-2">
           <span className="text-sm text-surface-100 truncate">{row.displayName}</span>
           <span className="text-[11px] tabular-nums flex-shrink-0">
-            <span className={zoneTextClass(row.zone, row.sets)} data-testid={`readiness-sets-${row.muscle}`}>{row.sets}</span>
-            <span className="text-surface-600"> · {zoneBandLabel(row.band)}</span>
+            {/* Row-aware color: an in-zone parent with a lagging fine child
+                reads warning, never green. Coarse bands are group landmarks. */}
+            <span className={rowTextClass(row)} data-testid={`readiness-sets-${row.muscle}`}>{row.sets}</span>
+            <span className="text-surface-600"> · {groupZoneBandLabel(row.band)}</span>
           </span>
         </div>
         <div className="mt-1.5 h-1 rounded-full bg-surface-800 overflow-hidden">
-          <div className={`h-full rounded-full ${zoneBarClass(row.zone, row.sets)}`} style={{ width: `${barFillPct(row.sets, row.band.mrv)}%` }} />
+          <div className={`h-full rounded-full ${rowBarClass(row)}`} style={{ width: `${barFillPct(row.sets, row.band.mrv)}%` }} />
         </div>
       </div>
       <RecoveryBadge recovery={row.recovery} muscle={row.muscle} />

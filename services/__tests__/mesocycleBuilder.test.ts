@@ -16,11 +16,12 @@ import {
   getRecommendedExercises,
   estimateStartingWeight,
   generateWorkoutTemplates,
-  calculateWeeklyVolumePerMuscle,
   generateMesocycleRecommendation,
+  applyIndirectAwareAllocation,
 } from '../mesocycleBuilder';
 import type { ExtendedUserProfile, RecoveryFactors, Rating, Goal, Experience, MuscleGroup, StandardMuscleGroup, Split, Equipment, SessionTemplate } from '@/types/schema';
 import { DEFAULT_VOLUME_LANDMARKS } from '@/types/schema';
+import { RESEARCH_VOLUME_BANDS, type CoarseMuscle } from '../volumeBands';
 import { makeDexaScan } from '@/test-utils/factories';
 
 // Helper to create a profile with defaults
@@ -584,7 +585,13 @@ describe('mesocycleBuilder', () => {
         );
 
         for (const muscle of Object.keys(distribution) as MuscleGroup[]) {
-          const mrv = DEFAULT_VOLUME_LANDMARKS[experience][muscle as unknown as StandardMuscleGroup]?.mrv ?? 16;
+          // Coarse groups clamp at the SHARED band MRV (services/volumeBands)
+          // — the same total-inclusive ceiling the tracking card colors red
+          // past; non-coarse keys keep the legacy landmark fallback.
+          const mrv =
+            RESEARCH_VOLUME_BANDS[muscle as unknown as CoarseMuscle]?.mrv ??
+            DEFAULT_VOLUME_LANDMARKS[experience][muscle as unknown as StandardMuscleGroup]?.mrv ??
+            16;
           expect(distribution[muscle].sets).toBeLessThanOrEqual(mrv);
         }
       }
@@ -998,60 +1005,6 @@ describe('mesocycleBuilder', () => {
     });
   });
 
-  describe('calculateWeeklyVolumePerMuscle', () => {
-    it('calculates volume from session data', () => {
-      const sessions = [
-        {
-          muscles: ['chest', 'triceps'],
-          exercises: [
-            { sets: 4, exerciseName: 'Barbell Bench Press' },
-            { sets: 3, exerciseName: 'Cable Tricep Pushdown' },
-          ],
-        },
-      ];
-
-      const volume = calculateWeeklyVolumePerMuscle(sessions);
-
-      expect(volume).toBeDefined();
-    });
-
-    it('counts secondary muscles at reduced rate', () => {
-      const sessions = [
-        {
-          muscles: ['chest'],
-          exercises: [
-            { sets: 4, exerciseName: 'Barbell Bench Press' }, // Works triceps as secondary
-          ],
-        },
-      ];
-
-      const volume = calculateWeeklyVolumePerMuscle(sessions);
-
-      // Should have chest volume, and potentially some triceps from secondary
-      expect(volume.chest || 0).toBeGreaterThanOrEqual(0);
-    });
-
-    it('handles empty sessions', () => {
-      const volume = calculateWeeklyVolumePerMuscle([]);
-      expect(volume).toEqual({});
-    });
-
-    it('handles exercises not in database', () => {
-      const sessions = [
-        {
-          muscles: ['chest'],
-          exercises: [
-            { sets: 3, exerciseName: 'Unknown Exercise' },
-          ],
-        },
-      ];
-
-      const volume = calculateWeeklyVolumePerMuscle(sessions);
-      // Should not throw, may have no volume tracked
-      expect(volume).toBeDefined();
-    });
-  });
-
   describe('generateMesocycleRecommendation (legacy)', () => {
     it('generates a recommendation for a user profile', () => {
       const profile = {
@@ -1125,5 +1078,118 @@ describe('mesocycleBuilder', () => {
 
       expect(recommendation.focusMuscles.length).toBeGreaterThan(0);
     });
+  });
+});
+
+describe('applyIndirectAwareAllocation (convention-conversion v2)', () => {
+  type MinimalSession = { exercises: { exercise: { primaryMuscle: string; secondaryMuscles: string[] }; sets: number }[] };
+  const ex = (primary: string, secondaries: string[], sets: number) => ({
+    exercise: { primaryMuscle: primary, secondaryMuscles: secondaries },
+    sets,
+  });
+  const cast = (s: MinimalSession[]) => s as unknown as Parameters<typeof applyIndirectAwareAllocation>[0];
+
+  it('trims press-inflated front-delt work, never the side/rear delt work (per-standard deduction)', () => {
+    const sessions: MinimalSession[] = [
+      {
+        exercises: [
+          ex('front_delts', [], 8), // OHP-style
+          ex('lateral_delts', [], 6),
+          ex('rear_delts', [], 3),
+          ex('chest', ['front_delts', 'triceps'], 8), // bench: 4 front-delt inflow
+        ],
+      },
+    ];
+    // Credited shoulders total = 8 + 6 + 3 + 4 = 21 vs target 19 → trim 2.
+    const notes = applyIndirectAwareAllocation(cast(sessions), { shoulders: { sets: 19 } });
+
+    expect(sessions[0].exercises[0].sets).toBe(6); // front delts absorbed both trims
+    expect(sessions[0].exercises[1].sets).toBe(6); // side delts untouched
+    expect(sessions[0].exercises[2].sets).toBe(3); // rear delts untouched
+    expect(sessions[0].exercises[3].sets).toBe(8); // other groups' exercises untouched
+    expect(notes.join(' ')).toMatch(/trimmed 2 direct shoulders sets/);
+  });
+
+  it('respects direct floors: accepts residual overshoot rather than starving a subdivision', () => {
+    const sessions: MinimalSession[] = [
+      {
+        exercises: [
+          ex('front_delts', [], 8),
+          ex('lateral_delts', [], 6), // at its child MEV floor (6) — untouchable
+          ex('rear_delts', [], 3), // at its floor (3) — untouchable
+          ex('chest', ['front_delts', 'triceps'], 8),
+        ],
+      },
+    ];
+    // Absurdly low target: only front delts can give (floor 2 → 6 trims),
+    // then the group blocks instead of cutting side/rear work.
+    applyIndirectAwareAllocation(cast(sessions), { shoulders: { sets: 10 } });
+
+    expect(sessions[0].exercises[0].sets).toBe(2); // trimmed to its child-MEV floor
+    expect(sessions[0].exercises[1].sets).toBe(6); // side delts protected
+    expect(sessions[0].exercises[2].sets).toBe(3); // rear delts protected
+  });
+
+  it('a trim also removes the trimmed exercise secondary credit from other groups (recomputed per iteration)', () => {
+    const sessions: MinimalSession[] = [
+      {
+        exercises: [
+          ex('biceps', [], 14),
+          ex('lats', ['biceps', 'upper_back', 'rear_delts'], 8), // 4 biceps inflow
+        ],
+      },
+    ];
+    // biceps credited = 14 + 4 = 18 vs target 17 → one trim lands on curls
+    // (largest direct surplus), not on the pulldown.
+    applyIndirectAwareAllocation(cast(sessions), { biceps: { sets: 17 } });
+    expect(sessions[0].exercises[0].sets).toBe(13);
+    expect(sessions[0].exercises[1].sets).toBe(8);
+  });
+});
+
+describe('straggler-removal movement-pattern floor (close-out 3a)', () => {
+  type MinimalSession = { exercises: { exercise: { primaryMuscle: string; secondaryMuscles: string[] }; sets: number }[] };
+  const ex2 = (primary: string, secondaries: string[], sets: number) => ({
+    exercise: { primaryMuscle: primary, secondaryMuscles: secondaries },
+    sets,
+  });
+  const cast2 = (s: MinimalSession[]) => s as unknown as Parameters<typeof applyIndirectAwareAllocation>[0];
+
+  it('never removes the LAST direct movement for a standard muscle, even over-target on credited terms', () => {
+    // Biceps: one 1-set curl (the only direct movement) + heavy pull inflow.
+    // Credited 1 + 12 = 13 vs target 10 → overshoot 3, direct floor 0 (band
+    // MEV 10 − inflow 12) — the curl is trimmable by volume arithmetic, but
+    // indirect credit maintains volume, not movement patterns: it must stay.
+    const sessions: MinimalSession[] = [
+      {
+        exercises: [
+          ex2('biceps', [], 1),
+          ex2('lats', ['biceps', 'upper_back', 'rear_delts'], 24), // 12 biceps inflow
+        ],
+      },
+    ];
+    applyIndirectAwareAllocation(cast2(sessions), { biceps: { sets: 10 } });
+
+    expect(sessions[0].exercises).toHaveLength(2); // nothing pruned
+    expect(sessions[0].exercises[0].sets).toBe(1); // the sole curl survives
+  });
+
+  it('removal is allowed when another direct movement for the muscle remains', () => {
+    const sessions: MinimalSession[] = [
+      {
+        exercises: [
+          ex2('biceps', [], 1), // straggler — removable, a second curl exists
+          ex2('biceps', [], 1),
+          ex2('lats', ['biceps', 'upper_back', 'rear_delts'], 24),
+        ],
+      },
+    ];
+    applyIndirectAwareAllocation(cast2(sessions), { biceps: { sets: 12 } });
+
+    const bicepsMovements = sessions[0].exercises.filter(
+      (e) => e.exercise.primaryMuscle === 'biceps'
+    );
+    expect(bicepsMovements).toHaveLength(1); // one removed, one kept
+    expect(bicepsMovements[0].sets).toBe(1);
   });
 });

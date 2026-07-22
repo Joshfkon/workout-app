@@ -153,7 +153,10 @@ describe('cross-surface agreement on one fixture', () => {
   it('widget/warning stats and readiness counts report identical per-muscle sets', () => {
     const stats = computeWeeklyMuscleVolume(blocks); // widget + warning source
     const statsByMuscle: Record<string, number> = {};
-    for (const s of stats) statsByMuscle[s.muscle] = s.sets;
+    // Stats carry full-precision credited sets; whole-set rounding happens at
+    // each display surface — compare at the same whole-set precision the
+    // readiness accumulator emits.
+    for (const s of stats) statsByMuscle[s.muscle] = Math.round(s.sets);
 
     const readiness = readinessSetsByMuscle(blocks);
 
@@ -167,7 +170,7 @@ describe('cross-surface agreement on one fixture', () => {
     const summary = computeWeeklyMevSummary(stats, computeReachableMuscles(blocks))!;
     for (const s of stats) {
       const entry = summary.entries.find((e) => e.muscle === s.muscle)!;
-      expect(entry.sets).toBe(s.sets);
+      expect(entry.sets).toBe(Math.round(s.sets));
     }
   });
 

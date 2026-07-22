@@ -8,7 +8,8 @@ import {
   type RolloverSession,
 } from '../weeklyRollover';
 import type { MuscleWeekFeedback, PerformanceTrend } from '@/services/weeklyProgressionEngine';
-import { DEFAULT_VOLUME_LANDMARKS, scaleLandmarksForEnhanced } from '@/types/schema';
+import { DEFAULT_VOLUME_LANDMARKS } from '@/types/schema';
+import { applyRecoveryProfileToLandmarks } from '@/services/volumeBands';
 import type { StandardMuscleGroup, VolumeLandmarks } from '@/types/schema';
 
 function landmarks(overrides: Partial<Record<StandardMuscleGroup, VolumeLandmarks>> = {}) {
@@ -76,12 +77,50 @@ describe('computeWeeklySetsByMuscle', () => {
     expect(sets.get('biceps')).toBe(2);
   });
 
-  it('credits legacy primaries to every mapped standard muscle', () => {
+  it('SPLITS a legacy primary across its standard muscles (tracker parity, no double-count)', () => {
+    // The old counter gave a legacy 'chest' exercise FULL credit to BOTH
+    // heads (4/4 from 4 sets — 8 credited from 4 performed). The credited
+    // model matches services/volumeTracker: ½/½.
     const sets = computeWeeklySetsByMuscle([
       { exercises: [{ exerciseName: 'Bench', primaryMuscle: 'chest', sets: 4 }] },
     ]);
-    expect(sets.get('chest_upper')).toBe(4);
-    expect(sets.get('chest_lower')).toBe(4);
+    expect(sets.get('chest_upper')).toBe(2);
+    expect(sets.get('chest_lower')).toBe(2);
+  });
+
+  it('counts secondary tags at 0.5 credit — pressing feeds front delts here like on every tracking surface', () => {
+    const sets = computeWeeklySetsByMuscle([
+      {
+        exercises: [
+          {
+            exerciseName: 'Bench',
+            primaryMuscle: 'chest',
+            secondaryMuscles: ['front_delts', 'triceps'],
+            sets: 4,
+          },
+        ],
+      },
+    ]);
+    expect(sets.get('front_delts')).toBe(2); // 4 × 0.5 — no longer invisible
+    expect(sets.get('triceps')).toBe(2);
+    expect(sets.get('chest_upper')).toBe(2);
+  });
+
+  it('never double-credits a muscle the primary already covers', () => {
+    const sets = computeWeeklySetsByMuscle([
+      {
+        exercises: [
+          {
+            exerciseName: 'Arnold Press',
+            primaryMuscle: 'front_delts',
+            secondaryMuscles: ['front_delts', 'lateral_delts'],
+            sets: 6,
+          },
+        ],
+      },
+    ]);
+    expect(sets.get('front_delts')).toBe(6); // primary only — secondary self-tag ignored
+    expect(sets.get('lateral_delts')).toBe(3);
   });
 });
 
@@ -108,11 +147,11 @@ describe('resolveVolumeLandmarks', () => {
       true
     );
     expect(resolved.quads).toEqual(
-      scaleLandmarksForEnhanced({ mev: 8, mav: 16, mrv: 24 }, true)
+      applyRecoveryProfileToLandmarks({ mev: 8, mav: 16, mrv: 24 }, 'quads', { recoveryProfile: 'enhanced' })
     );
     // Non-custom muscles scale off the experience defaults
     expect(resolved.lats).toEqual(
-      scaleLandmarksForEnhanced(DEFAULT_VOLUME_LANDMARKS.intermediate.lats, true)
+      applyRecoveryProfileToLandmarks(DEFAULT_VOLUME_LANDMARKS.intermediate.lats, 'lats', { recoveryProfile: 'enhanced' })
     );
   });
 
@@ -139,6 +178,45 @@ describe('planWeeklySetAdjustments', () => {
     );
     expect(plan.byExercise.size).toBe(0);
     expect(plan.summary.find((s) => s.muscle === 'quads')?.reason).toMatch(/deload/i);
+  });
+
+  it('NEVER proposes an add for a muscle already at its landmark MRV (clamped targets stay clamped)', () => {
+    // The generator clamps goal-adjusted targets at the band MRV — the
+    // rollover must not re-inflate them week over week. Quads at exactly
+    // MRV with perfect recovery feedback: hold, not add.
+    const plan = planWeeklySetAdjustments(
+      makeInput({
+        feedbackByMuscle: new Map([['quads', [goodFeedback()]]]),
+        landmarksByMuscle: landmarks({ quads: { mev: 4, mav: 5, mrv: 6 } }), // week trains 6
+      })
+    );
+    const quads = plan.summary.find((s) => s.muscle === 'quads');
+    expect(quads?.action).toBe('hold');
+    expect(quads?.reason).toMatch(/maximum recoverable/i);
+    expect(Array.from(plan.byExercise.values()).some((a) => a.muscle === 'quads')).toBe(false);
+  });
+
+  it('the at-MRV guard works in CREDITED terms — secondary inflow counts toward the ceiling', () => {
+    // Biceps: 2 direct curl sets + 0.5 × 3 row sets = 3.5 credited. With
+    // MRV 4, an add would land at 4.5 > 4 — the engine must hold even
+    // though DIRECT sets alone (2) look nowhere near the ceiling.
+    const sessions = week();
+    sessions[0].exercises[1] = {
+      exerciseName: 'Row',
+      primaryMuscle: 'lats',
+      secondaryMuscles: ['biceps'],
+      sets: 3,
+    };
+    const plan = planWeeklySetAdjustments(
+      makeInput({
+        weekSessions: sessions,
+        feedbackByMuscle: new Map([['biceps', [goodFeedback()]]]),
+        landmarksByMuscle: landmarks({ biceps: { mev: 2, mav: 3, mrv: 4 } }),
+      })
+    );
+    const biceps = plan.summary.find((s) => s.muscle === 'biceps');
+    expect(biceps?.action).toBe('hold');
+    expect(Array.from(plan.byExercise.values()).some((a) => a.muscle === 'biceps')).toBe(false);
   });
 
   it('adds a set to the LAST exercise targeting the muscle as primary', () => {
@@ -268,5 +346,87 @@ describe('planWeeklySetAdjustments', () => {
     );
     const adjustment = plan.byExercise.get(exerciseKey(1, 0));
     expect(adjustment).toMatchObject({ action: 'remove', delta: -1 });
+  });
+});
+
+describe('group add budget (signed-off spec)', () => {
+  // Shoulders fixture: three delt heads each fed directly, group credited
+  // total sits 1 below the standard band ceiling (26) — only ONE add fits.
+  function deltWeek(): RolloverSession[] {
+    return [
+      {
+        exercises: [
+          { exerciseName: 'OHP', primaryMuscle: 'front_delts', sets: 9 },
+          { exerciseName: 'Lateral Raise', primaryMuscle: 'lateral_delts', sets: 12 },
+          { exerciseName: 'Rear Fly', primaryMuscle: 'rear_delts', sets: 4 },
+        ],
+      },
+    ];
+  }
+  const goodAll = () =>
+    new Map<StandardMuscleGroup, MuscleWeekFeedback[]>([
+      ['front_delts', [goodFeedback()]],
+      ['lateral_delts', [goodFeedback()]],
+      ['rear_delts', [goodFeedback()]],
+    ]);
+
+  it('grants the muscle furthest below its own MEV; defers the rest with "held" copy', () => {
+    // Group total 25, standard shoulders ceiling 26 → budget 1. Per-muscle
+    // landmarks make front (9 < mev 12, deficit 3) the neediest; lateral is
+    // above its mev; rear (4 < mev 6, deficit 2) is second.
+    const plan = planWeeklySetAdjustments(
+      makeInput({
+        weekSessions: deltWeek(),
+        feedbackByMuscle: goodAll(),
+        landmarksByMuscle: landmarks({
+          front_delts: { mev: 12, mav: 14, mrv: 16 },
+          lateral_delts: { mev: 6, mav: 14, mrv: 20 },
+          rear_delts: { mev: 6, mav: 10, mrv: 14 },
+        }),
+      })
+    );
+
+    const front = plan.summary.find((s) => s.muscle === 'front_delts')!;
+    const rear = plan.summary.find((s) => s.muscle === 'rear_delts')!;
+    // Furthest below own MEV wins the single budget unit…
+    expect(front.action).toBe('add');
+    expect(front.delta).toBe(1);
+    expect(front.heldByGroupBudget).toBeFalsy();
+    // …the other earned add is deferred, not cancelled, with ceiling copy.
+    expect(rear.action).toBe('hold');
+    expect(rear.delta).toBe(0);
+    expect(rear.heldByGroupBudget).toBe(true);
+    expect(rear.deferredDelta).toBe(1);
+    expect(rear.reason).toMatch(/ceiling/i);
+    expect(rear.reason).toMatch(/deferred/i);
+    // byExercise carries ONLY the granted add.
+    const applied = Array.from(plan.byExercise.values());
+    expect(applied.filter((a) => a.action === 'add').map((a) => a.muscle)).toEqual(['front_delts']);
+  });
+
+  it('a group already at its ceiling holds every add', () => {
+    const week: RolloverSession[] = [
+      {
+        exercises: [
+          { exerciseName: 'OHP', primaryMuscle: 'front_delts', sets: 10 },
+          { exerciseName: 'Lateral Raise', primaryMuscle: 'lateral_delts', sets: 12 },
+          { exerciseName: 'Rear Fly', primaryMuscle: 'rear_delts', sets: 4 },
+        ],
+      },
+    ];
+    const plan = planWeeklySetAdjustments(
+      makeInput({
+        weekSessions: week,
+        feedbackByMuscle: goodAll(),
+        landmarksByMuscle: landmarks({
+          front_delts: { mev: 12, mav: 14, mrv: 16 },
+          rear_delts: { mev: 6, mav: 10, mrv: 14 },
+        }),
+      })
+    );
+    expect(
+      plan.summary.filter((s) => s.heldByGroupBudget).every((s) => s.action === 'hold' && s.delta === 0)
+    ).toBe(true);
+    expect(Array.from(plan.byExercise.values()).some((a) => a.action === 'add')).toBe(false);
   });
 });

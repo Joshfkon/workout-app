@@ -28,6 +28,12 @@ export interface MuscleMapDatum {
   value: number;
   /** Volume mode: the row's zone, from the shared volumeZone helper. */
   zone?: VolumeZone;
+  /**
+   * Volume mode, coarse-sourced regions only: the source row has a reachable
+   * fine child below its own MEV, so its color demotes from success to
+   * warning (rowColorToken) — the map must match the bar it mirrors.
+   */
+  lagging?: boolean;
   /** Recovery mode: the row's status, matching the readiness badges. */
   status?: RecoveryStatus;
 }
@@ -49,7 +55,7 @@ export function volumeRowsToMapData(rows: VolumeRow[]): MuscleMapData {
     const children = COARSE_CHILDREN[row.muscle as CoarseMuscle];
     if (!children) continue;
     for (const std of children) {
-      out[std] = { value: row.sets, zone: row.zone };
+      out[std] = { value: row.sets, zone: row.zone, lagging: row.laggingChildren };
     }
     for (const child of row.children) {
       out[child.muscle as MuscleId] = { value: child.sets, zone: child.zone };

@@ -23,9 +23,9 @@
 import { useState } from 'react';
 import { IconChevronDown } from '@tabler/icons-react';
 import {
-  zoneBandLabel,
-  zoneBarClass,
-  zoneTextClass,
+  groupZoneBandLabel,
+  rowBarClass,
+  rowTextClass,
 } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 import {
   READINESS_AMBER_THRESHOLD,
@@ -150,13 +150,13 @@ export function WorkoutVolumeStrip({ rows, isLoading, onOpenDetail }: WorkoutVol
               onClick={onOpenDetail}
               className="flex-shrink-0 snap-start w-[104px] text-left rounded-lg border border-surface-800 bg-surface-900/60 px-2.5 py-2 hover:border-surface-700 transition-colors"
               data-testid={`workout-volume-chip-${row.muscle}`}
-              aria-label={`${row.displayName}: ${formatEffectiveVolume(row.effectiveSets)} effective of ${row.sets} weekly sets, ${zoneBandLabel(row.band)}, ${
+              aria-label={`${row.displayName}: ${formatEffectiveVolume(row.effectiveSets)} effective of ${row.sets} weekly sets, ${groupZoneBandLabel(row.band)}, ${
                 row.readyInHours <= 0 ? 'ready' : `ready in ${readyInLabel(row.readyInHours)}`
               }`}
             >
               {/* Name gets the full card width — the set count lives on its own
-                  line below so wide values ("16.6/17") can never crush the name
-                  down to its first letter. */}
+                  line below so wide values ("16.6 eff") can never crush the
+                  name down to its first letter. */}
               <div className="flex items-center gap-1.5 min-w-0">
                 <span
                   className={`h-[9px] w-[9px] flex-shrink-0 rounded-full ${
@@ -171,20 +171,27 @@ export function WorkoutVolumeStrip({ rows, isLoading, onOpenDetail }: WorkoutVol
                 {isLoading ? (
                   <span className="inline-block h-4 w-8 rounded bg-surface-700 animate-pulse" aria-hidden />
                 ) : (
-                  <span
-                    className={`text-sm font-semibold tabular-nums ${zoneTextClass(row.zone, row.sets)}`}
-                    data-testid={`workout-volume-sets-${row.muscle}`}
-                  >
-                    {/* Effective (RIR-weighted) primary, raw secondary */}
-                    {formatEffectiveVolume(row.effectiveSets)}
-                    <span className="text-[10px] font-normal text-surface-500">/{row.sets}</span>
-                  </span>
+                  <>
+                    <span
+                      className={`text-sm font-semibold tabular-nums ${rowTextClass(row)}`}
+                      data-testid={`workout-volume-sets-${row.muscle}`}
+                    >
+                      {/* Effective (RIR-weighted) primary; the raw count rides
+                          below with its unit — never "16.6/17", which reads as
+                          current/target. */}
+                      {formatEffectiveVolume(row.effectiveSets)}
+                      <span className="text-[10px] font-normal text-surface-500"> eff</span>
+                    </span>
+                    <span className="block text-[10px] tabular-nums text-surface-500">
+                      of {row.sets} sets
+                    </span>
+                  </>
                 )}
               </div>
               <div className="mt-1.5 h-1.5 rounded-full bg-surface-800 overflow-hidden">
                 {!isLoading && (
                   <div
-                    className={`h-full rounded-full ${zoneBarClass(row.zone, row.sets)}`}
+                    className={`h-full rounded-full ${rowBarClass(row)}`}
                     style={{ width: `${barFillPct(row.sets, row.band.mrv)}%` }}
                   />
                 )}

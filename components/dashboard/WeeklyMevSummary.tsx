@@ -2,10 +2,11 @@
 
 import { Card } from '@/components/ui/Card';
 import { useWeeklyMevSummary } from '@/hooks/useWeeklyMevSummary';
+import { useUserStore } from '@/stores';
 import {
   buildVolumeRows,
   coarseMevTiles,
-  zoneBandLabel,
+  groupZoneBandLabel,
 } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 import { formatEffectiveVolume } from '@/services/effectiveVolume';
 
@@ -19,13 +20,14 @@ import { formatEffectiveVolume } from '@/services/effectiveVolume';
  */
 export function WeeklyMevSummary() {
   const { stats, reachable, loaded } = useWeeklyMevSummary();
+  const enhanced = useUserStore((s) => s.user?.enhancedAthleteMode === true);
 
   if (!loaded) {
     return <Card className="p-4 mb-6 h-24 animate-pulse" aria-hidden="true"><div /></Card>;
   }
   if (stats.length === 0) return null;
 
-  const rows = buildVolumeRows(stats, reachable);
+  const rows = buildVolumeRows(stats, reachable, { recoveryProfile: enhanced ? 'enhanced' : 'standard' });
   const tiles = coarseMevTiles(rows);
   const below = rows.filter((r) => r.zone === 'below_mev');
 
@@ -39,7 +41,7 @@ export function WeeklyMevSummary() {
           <span className="font-semibold text-surface-100">
             {formatEffectiveVolume(tiles.totalEffectiveSets)} effective
           </span>
-          <span className="text-surface-500"> / {tiles.totalSets} total sets</span>
+          <span className="text-surface-500"> · {tiles.totalSets} total sets</span>
         </span>
       </div>
       <p className={`text-xs mb-3 ${tiles.lowCount > 0 ? 'text-warning-400' : 'text-success-400'}`}>
@@ -56,7 +58,7 @@ export function WeeklyMevSummary() {
             >
               {row.displayName}
               <span className="text-warning-400/70">
-                {formatEffectiveVolume(row.effectiveSets)} eff / {row.sets} · {zoneBandLabel(row.band)}
+                {formatEffectiveVolume(row.effectiveSets)} eff · {row.sets} sets · {groupZoneBandLabel(row.band)}
               </span>
             </span>
           ))}

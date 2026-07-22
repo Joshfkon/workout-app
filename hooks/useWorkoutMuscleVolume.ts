@@ -227,6 +227,7 @@ export function useWorkoutMuscleVolume({
   // Same config resolution as the readiness sheet: athlete profile, learned
   // per-muscle multipliers, sleep and wearable modifiers.
   const enhancedAthleteMode = useUserStore((s) => s.user?.enhancedAthleteMode === true);
+  const recoveryProfile = enhancedAthleteMode ? ('enhanced' as const) : ('standard' as const);
   const { multipliers } = useRecoveryMultipliers();
   const { state: wearableRecovery } = useWearableRecovery();
   const { entries: sleepEntries } = useSleepLog();
@@ -260,7 +261,7 @@ export function useWorkoutMuscleVolume({
       );
     }
     const out = new Map<CoarseMuscle, number>();
-    for (const row of buildVolumeRows(volumeAccumulatorToStats(acc))) {
+    for (const row of buildVolumeRows(volumeAccumulatorToStats(acc), undefined, { recoveryProfile })) {
       out.set(row.muscle as CoarseMuscle, row.sets);
     }
     return out;
@@ -289,7 +290,7 @@ export function useWorkoutMuscleVolume({
   // which to render (session muscles by default, all behind "Show all"). The
   // frozen daily order is applied on top below.
   const sortedRows = useMemo<WorkoutMuscleVolumeRow[]>(() => {
-    const coarseRows = buildVolumeRows(stats, reachable);
+    const coarseRows = buildVolumeRows(stats, reachable, { recoveryProfile });
     return coarseRows
       .map((row) => {
         const recovery = coarseRecovery(

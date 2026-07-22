@@ -1,13 +1,18 @@
 'use client';
 
 /**
- * Muscle Group Multi-Selector
+ * Muscle Multi-Selector
  *
- * Allows selecting multiple muscle groups with visual feedback.
- * Supports both legacy MuscleGroup and DetailedMuscleGroup values.
+ * Chip picker over the grouped taxonomy: each coarse group renders alongside
+ * its fine standard-muscle heads (Front/Side/Rear Delts, …), so custom
+ * exercises can be tagged precisely instead of coarse-only. A coarse chip for
+ * a group WITH subdivisions stays selectable as an explicit "whole group"
+ * fallback — with a warning that volume credit will be split evenly across
+ * the heads (that split is how "Lateral Raise" customs ended up crediting
+ * front and rear delts).
  */
 
-import { MUSCLE_GROUP_OPTIONS } from '@/lib/exercises/types';
+import { GROUPED_MUSCLE_OPTIONS, coarseSplitWarning } from '@/lib/exercises/types';
 
 interface MuscleSelectorProps {
   selected: string[];
@@ -20,10 +25,6 @@ export function MuscleSelector({
   onChange,
   exclude = [],
 }: MuscleSelectorProps) {
-  const availableOptions = MUSCLE_GROUP_OPTIONS.filter(
-    (opt) => !exclude.includes(opt.value)
-  );
-
   const toggleMuscle = (muscle: string) => {
     if (selected.includes(muscle)) {
       onChange(selected.filter((m) => m !== muscle));
@@ -32,27 +33,49 @@ export function MuscleSelector({
     }
   };
 
+  const chip = (value: string, label: string, isFine: boolean) => {
+    const isSelected = selected.includes(value);
+    return (
+      <button
+        key={value}
+        type="button"
+        onClick={() => toggleMuscle(value)}
+        className={`${isFine ? 'px-2.5 py-1 text-xs' : 'px-3 py-1.5 text-sm'} rounded-lg transition-all duration-200
+          ${
+            isSelected
+              ? 'bg-primary-600 text-white'
+              : 'bg-surface-800 text-surface-300 hover:bg-surface-700'
+          }
+        `}
+      >
+        {label}
+      </button>
+    );
+  };
+
+  const splitWarnings = selected
+    .map((m) => coarseSplitWarning(m))
+    .filter((w): w is string => w !== null);
+
   return (
-    <div className="flex flex-wrap gap-2">
-      {availableOptions.map((option) => {
-        const isSelected = selected.includes(option.value);
-        return (
-          <button
-            key={option.value}
-            type="button"
-            onClick={() => toggleMuscle(option.value)}
-            className={`px-3 py-1.5 text-sm rounded-lg transition-all duration-200
-              ${
-                isSelected
-                  ? 'bg-primary-600 text-white'
-                  : 'bg-surface-800 text-surface-300 hover:bg-surface-700'
-              }
-            `}
-          >
-            {option.label}
-          </button>
-        );
-      })}
+    <div>
+      <div className="space-y-2">
+        {GROUPED_MUSCLE_OPTIONS.filter((group) => !exclude.includes(group.value)).map((group) => (
+          <div key={group.value} className="flex flex-wrap items-center gap-1.5">
+            {chip(
+              group.value,
+              group.subMuscles.length > 0 ? `${group.label} (all)` : group.label,
+              false
+            )}
+            {group.subMuscles
+              .filter((s) => !exclude.includes(s.value))
+              .map((s) => chip(s.value, s.label, true))}
+          </div>
+        ))}
+      </div>
+      {splitWarnings.length > 0 && (
+        <p className="mt-2 text-xs text-warning-400">{splitWarnings[0]}</p>
+      )}
     </div>
   );
 }

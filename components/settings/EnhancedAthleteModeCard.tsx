@@ -13,7 +13,7 @@ import {
 
 /**
  * Settings-screen caption. Kept accurate to the differentiated scaling
- * (ENHANCED_SCALING) — the old "baselines increased by 40%" copy overstated
+ * (volumeBands profile scaling) — the old "baselines increased by 40%" copy overstated
  * the floor and never mentioned the connective-tissue carve-out.
  */
 const ENHANCED_MODE_CAPTION =

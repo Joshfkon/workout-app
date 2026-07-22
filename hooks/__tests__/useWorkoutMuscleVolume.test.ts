@@ -1,6 +1,7 @@
 import { renderHook } from '@testing-library/react';
+import { RESEARCH_VOLUME_BANDS } from '@/services/volumeBands';
 import { useWorkoutMuscleVolume } from '../useWorkoutMuscleVolume';
-import { COARSE_MUSCLES, RESEARCH_VOLUME_BANDS } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
+import { COARSE_MUSCLES } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 import { getLocalDateString } from '@/lib/utils';
 import type { ExerciseBlockWithExercise } from '@/app/(dashboard)/dashboard/workout/[id]/_lib/types';
 import type { SetLog } from '@/types/schema';

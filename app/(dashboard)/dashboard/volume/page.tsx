@@ -214,9 +214,10 @@ export default function VolumeProfilePage() {
   // the same rows the readiness sheet, widget and warning render, so counts and
   // zone-status agree everywhere. The volume page's old primary-only counting
   // (and its separate MEV/MRV taxonomy) is retired.
+  const recoveryProfile = user?.enhancedAthleteMode ? ('enhanced' as const) : ('standard' as const);
   const volumeRows = useMemo(
-    () => buildVolumeRows(volumeStats, reachable),
-    [volumeStats, reachable]
+    () => buildVolumeRows(volumeStats, reachable, { recoveryProfile }),
+    [volumeStats, reachable, recoveryProfile]
   );
 
   // Shared hierarchy expansion (persisted per user for this surface); lagging

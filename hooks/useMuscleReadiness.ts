@@ -342,7 +342,16 @@ export function useMuscleReadiness({
   );
 
   const rows = useMemo(
-    () => buildReadinessRows(stats, recoveryHistory, now, reachable, recoveryConfig, sorenessOverrides),
+    () =>
+      buildReadinessRows(
+        stats,
+        recoveryHistory,
+        now,
+        reachable,
+        recoveryConfig,
+        sorenessOverrides,
+        enhancedAthleteMode ? 'enhanced' : 'standard'
+      ),
     [stats, recoveryHistory, now, reachable, recoveryConfig, sorenessOverrides]
   );
 
