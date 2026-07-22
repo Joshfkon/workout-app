@@ -1146,3 +1146,50 @@ describe('applyIndirectAwareAllocation (convention-conversion v2)', () => {
     expect(sessions[0].exercises[1].sets).toBe(8);
   });
 });
+
+describe('straggler-removal movement-pattern floor (close-out 3a)', () => {
+  type MinimalSession = { exercises: { exercise: { primaryMuscle: string; secondaryMuscles: string[] }; sets: number }[] };
+  const ex2 = (primary: string, secondaries: string[], sets: number) => ({
+    exercise: { primaryMuscle: primary, secondaryMuscles: secondaries },
+    sets,
+  });
+  const cast2 = (s: MinimalSession[]) => s as unknown as Parameters<typeof applyIndirectAwareAllocation>[0];
+
+  it('never removes the LAST direct movement for a standard muscle, even over-target on credited terms', () => {
+    // Biceps: one 1-set curl (the only direct movement) + heavy pull inflow.
+    // Credited 1 + 12 = 13 vs target 10 → overshoot 3, direct floor 0 (band
+    // MEV 10 − inflow 12) — the curl is trimmable by volume arithmetic, but
+    // indirect credit maintains volume, not movement patterns: it must stay.
+    const sessions: MinimalSession[] = [
+      {
+        exercises: [
+          ex2('biceps', [], 1),
+          ex2('lats', ['biceps', 'upper_back', 'rear_delts'], 24), // 12 biceps inflow
+        ],
+      },
+    ];
+    applyIndirectAwareAllocation(cast2(sessions), { biceps: { sets: 10 } });
+
+    expect(sessions[0].exercises).toHaveLength(2); // nothing pruned
+    expect(sessions[0].exercises[0].sets).toBe(1); // the sole curl survives
+  });
+
+  it('removal is allowed when another direct movement for the muscle remains', () => {
+    const sessions: MinimalSession[] = [
+      {
+        exercises: [
+          ex2('biceps', [], 1), // straggler — removable, a second curl exists
+          ex2('biceps', [], 1),
+          ex2('lats', ['biceps', 'upper_back', 'rear_delts'], 24),
+        ],
+      },
+    ];
+    applyIndirectAwareAllocation(cast2(sessions), { biceps: { sets: 12 } });
+
+    const bicepsMovements = sessions[0].exercises.filter(
+      (e) => e.exercise.primaryMuscle === 'biceps'
+    );
+    expect(bicepsMovements).toHaveLength(1); // one removed, one kept
+    expect(bicepsMovements[0].sets).toBe(1);
+  });
+});

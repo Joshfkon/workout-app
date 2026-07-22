@@ -845,8 +845,17 @@ export function recommendVolume(
   // allocates less (see applyIndirectAwareAllocation). Converted values
   // (novice/intermediate/advanced, old → new):
   //
-  //   shoulders 10/14/18 → 14/19/24  (observed group inflow 8.5–16; the
-  //                                   per-standard deduction governs heads)
+  //   shoulders 10/14/18 → 14/19/24  (observed group inflow 8.5–16)
+  //
+  //     The shoulders GROUP preset is a LIVE input, not an ambient number:
+  //     calculateVolumeDistribution feeds it into volumePerMuscle.shoulders,
+  //     which (1) buildDetailedSession uses to allocate the initial direct
+  //     shoulder sets in each session, and (2) applyIndirectAwareAllocation
+  //     uses as the roll-up CEILING its per-standard trim converges the
+  //     group's credited total to. The delt heads are governed by the
+  //     per-standard floors during that trim; this group number decides how
+  //     much TOTAL shoulder stimulus a program carries. Gate-verified
+  //     against band 12–26 across all three templates.
   //   biceps     8/12/16 → 12/17/22  (observed 6–8)
   //   triceps    8/12/16 → 11/15/20  (observed 0–7: fly-based programs 0,
   //                                   bench-based 4–7 — shifted by the mean)
@@ -1494,6 +1503,25 @@ export function applyIndirectAwareAllocation(
       .filter((c) => c.surplus >= 1)
       .sort((a, b) => b.surplus - a.surplus);
 
+    // Movement-pattern floor for outright removals: indirect credit maintains
+    // VOLUME, not movement patterns — every standard muscle that had any
+    // direct movement keeps at least one. A 1-set straggler is removable only
+    // if every standard muscle its primary credits retains another direct
+    // exercise afterward.
+    const directMovementCount = new Map<StandardMuscleGroup, number>();
+    for (const session of sessions) {
+      for (const ex of session.exercises) {
+        if (ex.sets < 1) continue;
+        for (const { muscle } of resolvePrimaryMuscleCredits(ex.exercise.primaryMuscle)) {
+          directMovementCount.set(muscle, (directMovementCount.get(muscle) ?? 0) + 1);
+        }
+      }
+    }
+    const removalKeepsMovements = (ex: DetailedExercise): boolean =>
+      resolvePrimaryMuscleCredits(ex.exercise.primaryMuscle).every(
+        ({ muscle }) => (directMovementCount.get(muscle) ?? 0) >= 2
+      );
+
     let trimmed = false;
     // Pass 1 prefers taking a set from a multi-set exercise; pass 2 (only
     // when the whole group has no multi-set candidate left) removes a 1-set
@@ -1507,6 +1535,9 @@ export function applyIndirectAwareAllocation(
         for (const session of sessions) {
           for (const ex of session.exercises) {
             if (ex.sets < minSets) continue;
+            // A trim that would DELETE the exercise must pass the
+            // movement-pattern floor.
+            if (ex.sets === 1 && !removalKeepsMovements(ex)) continue;
             const credit = resolvePrimaryMuscleCredits(ex.exercise.primaryMuscle).find(
               (c) => c.muscle === std
             );

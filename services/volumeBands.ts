@@ -63,8 +63,11 @@ export interface VolumeBand {
  *   hamstrings {6,16} → {8,20}  (observed 3.5–7, least template-stable —
  *                                shifted by the low-mean)
  *
- * back {10,25} deliberately NOT converted (observed hinge spillover 3.5–7;
- * raise to ~{12,28} only if real-user programs read hot against 25).
+ *   back      {10,25} → {12,28} (observed hinge spillover 3.5–7; converted
+ *                                per sign-off amendment alongside its
+ *                                14/18/23 presets — the v2 "hold" was
+ *                                overridden at review)
+ *
  * chest / quads / calves / abs / forearms / adductors: direct and
  * total-inclusive readings coincide (little cross-group inflow).
  *
@@ -74,7 +77,7 @@ export interface VolumeBand {
  */
 export const RESEARCH_VOLUME_BANDS: Record<CoarseMuscle, VolumeBand> = {
   chest: { mev: 8, mrv: 22 },
-  back: { mev: 10, mrv: 25 },
+  back: { mev: 12, mrv: 28 },
   shoulders: { mev: 12, mrv: 26 },
   biceps: { mev: 10, mrv: 26 },
   triceps: { mev: 8, mrv: 24 },
