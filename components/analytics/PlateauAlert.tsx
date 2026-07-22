@@ -2,24 +2,48 @@
 
 import { useState } from 'react';
 import { Card, Button, Badge } from '@/components/ui';
+import { convertWeightForDisplay, formatWeight } from '@/lib/utils';
 import type { PlateauDetectionResult } from '@/services/plateauDetector';
 
 interface PlateauAlertProps {
   exerciseName: string;
   result: PlateauDetectionResult;
+  /** User's display unit preference — E1RM values are stored in kg. */
+  units: 'kg' | 'lb';
   onDismiss?: () => void;
   onViewSuggestions?: () => void;
+}
+
+/** "3 weeks" / "1 week" — duration strings must agree in number. */
+function formatWeeks(weeks: number): string {
+  return `${weeks} week${weeks === 1 ? '' : 's'}`;
 }
 
 export function PlateauAlert({
   exerciseName,
   result,
+  units,
   onDismiss,
   onViewSuggestions,
 }: PlateauAlertProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
   if (!result.isPlateaued) return null;
+
+  // Never let an invalid unit pref or E1RM reach the UI silently.
+  let safeUnits: 'kg' | 'lb' = units;
+  if (units !== 'kg' && units !== 'lb') {
+    console.warn(`PlateauAlert: invalid units ${JSON.stringify(units)}, falling back to kg`);
+    safeUnits = 'kg';
+  }
+  const hasValidE1RM = Number.isFinite(result.currentE1RM) && result.currentE1RM > 0;
+  if (!hasValidE1RM) {
+    console.warn(
+      `PlateauAlert: non-displayable currentE1RM (${result.currentE1RM}) for ${exerciseName}`
+    );
+  }
+  const deltaFromPeakKg = result.currentE1RM - result.peakE1RM;
+  const unitLabel = safeUnits === 'lb' ? 'lbs' : 'kg';
 
   const getSeverityColor = () => {
     if (result.weeksSinceProgress >= 6) return 'border-danger-500/50 bg-danger-500/5';
@@ -65,12 +89,20 @@ export function PlateauAlert({
               </Badge>
             </div>
             <p className="text-sm text-surface-400">
-              No progress in {result.weeksSinceProgress} weeks • Current E1RM:{' '}
-              <span className="font-mono text-surface-300">{result.currentE1RM}kg</span>
-              {result.currentE1RM < result.peakE1RM && (
-                <span className="text-danger-400 ml-2">
-                  ({(result.currentE1RM - result.peakE1RM).toFixed(1)}kg from peak)
-                </span>
+              No progress in {formatWeeks(result.weeksSinceProgress)}
+              {hasValidE1RM && (
+                <>
+                  {' '}• Current E1RM:{' '}
+                  <span className="font-mono text-surface-300">
+                    {formatWeight(result.currentE1RM, safeUnits)}
+                  </span>
+                  {result.currentE1RM < result.peakE1RM && (
+                    <span className="text-danger-400 ml-2">
+                      ({convertWeightForDisplay(deltaFromPeakKg, safeUnits).toFixed(1)} {unitLabel}{' '}
+                      from peak)
+                    </span>
+                  )}
+                </>
               )}
             </p>
           </div>
@@ -127,10 +159,12 @@ interface PlateauAlertListProps {
     exerciseName: string;
     result: PlateauDetectionResult;
   }>;
+  /** User's display unit preference, threaded to every alert. */
+  units: 'kg' | 'lb';
   onDismiss?: (exerciseId: string) => void;
 }
 
-export function PlateauAlertList({ alerts, onDismiss }: PlateauAlertListProps) {
+export function PlateauAlertList({ alerts, units, onDismiss }: PlateauAlertListProps) {
   const activeAlerts = alerts.filter((a) => a.result.isPlateaued);
 
   if (activeAlerts.length === 0) {
@@ -163,6 +197,7 @@ export function PlateauAlertList({ alerts, onDismiss }: PlateauAlertListProps) {
           key={alert.exerciseId}
           exerciseName={alert.exerciseName}
           result={alert.result}
+          units={units}
           onDismiss={() => onDismiss?.(alert.exerciseId)}
         />
       ))}

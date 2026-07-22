@@ -1696,7 +1696,7 @@ function AnalyticsPageContent() {
           )}
           {/* Plateau alerts derived from per-exercise E1RM trends. Hidden when none. */}
           {plateauAlerts.length > 0 && (
-            <PlateauAlertList alerts={plateauAlerts} />
+            <PlateauAlertList alerts={plateauAlerts} units={units === 'lb' ? 'lb' : 'kg'} />
           )}
           {/* Progression pace per muscle group vs the expected rate for the
               user's experience level (services/progressionInsights) */}

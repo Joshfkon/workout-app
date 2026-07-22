@@ -27,6 +27,21 @@ export type PlateauGoal = Goal | 'maintain';
 /** Minimum weeks of data needed for plateau detection */
 const MIN_WEEKS_FOR_ANALYSIS = 4;
 
+/**
+ * Minimum weeks since the in-window peak before any plateau alert fires.
+ * The endpoint check below can trip on ~1.3 weeks of data (4 sessions at
+ * 3x/wk) — too little signal to call anything a stall.
+ */
+const MIN_STALL_WEEKS = 3;
+
+/**
+ * Regression slope (%/wk of current E1RM) at or above which plateau alerts
+ * are suppressed outright. The fitted trend over the whole analysis window
+ * wins over the single-peak / endpoint comparisons: a rising lift cannot be
+ * plateaued even while sitting below a recent peak.
+ */
+const RISING_SLOPE_SUPPRESSION_PCT_PER_WEEK = 0.5;
+
 interface GoalPlateauProfile {
   /**
    * E1RM percent change over the recent window below which it's a plateau.
@@ -309,10 +324,21 @@ export function detectPlateau(input: DetectPlateauInput): PlateauDetectionResult
   // Analyze trend against goal-adjusted expectations
   const profile = resolveProfile(input.goal);
   const trend = analyzeExerciseTrend(recent, input.goal);
+
+  // A lift whose regression slope over the window is clearly positive is
+  // progressing, full stop — suppress the alert regardless of what the
+  // endpoint or peak comparisons say (they see dips a rising lift makes
+  // while climbing back toward a recent peak).
+  const slopePctPerWeek =
+    currentE1RM > 0 ? (trend.weeklyChange / currentE1RM) * 100 : 0;
+  const isRising = slopePctPerWeek >= RISING_SLOPE_SUPPRESSION_PCT_PER_WEEK;
+
   const isPlateaued =
-    trend.isPlateaued ||
-    (profile.weeksWithoutPeak !== null &&
-      weeksSinceProgress >= profile.weeksWithoutPeak);
+    !isRising &&
+    weeksSinceProgress >= MIN_STALL_WEEKS &&
+    (trend.isPlateaued ||
+      (profile.weeksWithoutPeak !== null &&
+        weeksSinceProgress >= profile.weeksWithoutPeak));
 
   // Generate suggestions if plateaued
   const suggestions = isPlateaued
