@@ -81,6 +81,44 @@ describe('the derivation is arithmetically tied to getEffectiveBand', () => {
   });
 });
 
+describe('fatigue-integrated generator respects the effective ceilings (live path)', () => {
+  // sessionBuilderWithFatigue used to carry its own (dead, silently-fallback)
+  // DEFAULT_VOLUME_LANDMARKS read; it is deleted, and the live volume source
+  // (mesocycleBuilder.calculateVolumeDistribution) is pinned here by VALUE:
+  // weekly per-muscle sets never exceed getEffectiveBand's MRV, both profiles.
+  const profiles: Array<['standard' | 'enhanced', boolean]> = [
+    ['standard', false],
+    ['enhanced', true],
+  ];
+
+  it.each(profiles)('%s profile: volumePerMuscle ≤ effective MRV per coarse muscle', (recoveryProfile, enhancedAthleteMode) => {
+    // Lazy require keeps the heavy generator out of the suites above.
+    const { generateFullMesocycleWithFatigue } = require('@/services/sessionBuilderWithFatigue');
+    const profile = {
+      goal: 'bulk',
+      experience: 'intermediate',
+      heightCm: 175,
+      latestDexa: null,
+      age: 30,
+      sleepQuality: 3,
+      stressLevel: 3,
+      trainingAge: 2,
+      availableEquipment: ['barbell', 'dumbbell', 'cable', 'machine'],
+      injuryHistory: [],
+      enhancedAthleteMode,
+    };
+    const program = generateFullMesocycleWithFatigue(4, profile, 60);
+    const overCeiling: Array<{ muscle: string; sets: number; mrv: number }> = [];
+    for (const [muscle, vol] of Object.entries(program.volumePerMuscle) as Array<
+      [Parameters<typeof getEffectiveBand>[0], { sets: number }]
+    >) {
+      const band = getEffectiveBand(muscle, { recoveryProfile });
+      if (vol.sets > band.mrv) overCeiling.push({ muscle, sets: vol.sets, mrv: band.mrv });
+    }
+    expect(overCeiling).toEqual([]);
+  });
+});
+
 describe('base landmark tables stay self-consistent', () => {
   it('DEFAULT_VOLUME_LANDMARKS: mev ≤ mav ≤ mrv everywhere', () => {
     for (const experience of EXPERIENCES) {

@@ -283,8 +283,14 @@ export function planWeeklySetAdjustments(
   // EFFECTIVE band MRV (getEffectiveBand — profile-aware, the same ceiling
   // the tracking card renders). Each granted delta unit is counted as +1
   // group credit: an added set's primary credit lands entirely inside its
-  // own group (secondary spill into OTHER groups is not budgeted — a known,
-  // conservative-enough simplification).
+  // own group. Secondary spill into OTHER groups is deliberately not
+  // budgeted, and that is safe for two reasons: (1) it is bounded — one
+  // added set throws at most SECONDARY_MUSCLE_CREDIT (0.5) at another
+  // group, so a group already at its ceiling can be pushed past it by at
+  // most 0.5 per granted set; (2) it self-corrects — the budget reads
+  // CREDITED totals, so week N+1's group total includes the spill and the
+  // budget holds further adds there. Do not add cross-group spill
+  // accounting without re-deriving both properties.
   const recoveryProfile = { recoveryProfile: input.enhancedAthleteMode ? 'enhanced' : 'standard' } as const;
   const groupTotals = new Map<CoarseMuscle, number>();
   for (const [muscle, sets] of Array.from(setsByMuscle.entries())) {
