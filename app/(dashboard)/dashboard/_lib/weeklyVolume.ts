@@ -770,7 +770,7 @@ export function fineChildMev(muscle: StandardMuscleGroup): number {
  * warning can never disagree); MRV overrides live in
  * FINE_BAND_TOTAL_INCLUSIVE_MRV below.
  *
- * ─── CONVENTION-CONVERSION REVIEW (PROPOSED — NOT APPLIED, awaiting
+ * ─── CONVENTION-CONVERSION REVIEW v2 (PROPOSED — NOT APPLIED, awaiting
  * sign-off; covers the remaining direct-assuming RESEARCH_VOLUME_BANDS and
  * the mesocycleBuilder recommendVolume presets in ONE pass) ────────────────
  *
@@ -778,28 +778,51 @@ export function fineChildMev(muscle: StandardMuscleGroup): number {
  * convention, not the researchers'), but the bands below and the generator's
  * presets still read as DIRECT-set landmarks: RP-style "~14 biceps sets"
  * already assumes you also row and pull down. Comparing a total-inclusive
- * count against those numbers is apples-to-oranges (a generated bulk reads
- * "biceps 22 vs 6–20 — over MRV!" when its 14 direct sets are exactly the
- * research prescription), and naively allocating `target − indirect` against
- * them double-corrects into under-prescription. Conversion is judgment, not
- * arithmetic — the proposals below shift each landmark by the indirect
- * inflow a typical program's tagged exercises actually produce under our
- * counter (measured on generated programs), following the precedent of the
- * adopted shoulders {8,22}→{12,26} shift:
+ * count against those numbers is apples-to-oranges, and naively allocating
+ * `target − indirect` against them double-corrects into under-prescription.
  *
- *   biceps {6, 20} → {10, 26}   (+ pulls: 12–16 weekly pull sets ≈ +6–8)
- *   triceps {6, 18} → {9, 24}   (+ presses: 8–14 press sets ≈ +4–7)
- *   traps {4, 16} → {6, 20}     (+ hinges/rows/carries/upright rows ≈ +2–4)
+ * v2 calibration: shifts are anchored to indirect inflow MEASURED across
+ * three generated templates (intermediate bulk; Full Body 3d / Upper-Lower
+ * 4d / PPL 6d) rather than one program — each proposal cites its observed
+ * range. Bench-based user programs add triceps/front-delt press inflow the
+ * fly-leaning generator doesn't produce, widening the triceps range to 0–7.
  *
- * Unchanged (indirect inflow arrives via the same coarse-tagged exercises or
- * is small): chest, quads, calves, abs, forearms, adductors, hamstrings
- * {6,16} and back {10,25} sit borderline (+2-ish typical inflow from hinge
- * secondaries) — proposed unchanged, flag if generated programs read hot.
+ *   biceps {6, 20} → {10, 26}   (observed inflow 6–8; MEV +4, MRV +6)
+ *   triceps {6, 18} → {8, 24}   (observed 0–7 — the most program-dependent:
+ *                                fly-based programs 0, bench-based 4–7; MEV
+ *                                shifts by the low-mid, MRV absorbs the top)
+ *   traps {4, 16} → {6, 20}     (observed 0.5–5)
+ *   glutes {4, 16} → {6, 24}    (observed 5.5–9 — NOT modest; MEV +2 = the
+ *                                minimal-program floor, MRV + mean ≈ +8.
+ *                                v1 left this band unconverted while raising
+ *                                the preset — recreating the target-above-
+ *                                zone contradiction; fixed here)
+ *   hamstrings {6, 16} → {8, 20} (observed 3.5–7, least template-stable —
+ *                                shifted by the low-mean; same v1 bug fixed)
+ *   back {10, 25}: flagged, proposed unchanged — observed inflow 3.5–7 is
+ *   larger than v1 assumed; raise to {12, 28} only if real-user programs
+ *   read hot against 25.
+ *
+ * INVARIANT (enforced by bandPresetInvariant.test.ts): every generator
+ * preset target must sit ≤ its coarse band's MRV, per muscle × experience.
+ * Goal multipliers (bulk ×1.1) can push past the ceiling — the conversion
+ * pass adds a clamp of the goal-adjusted target to the band MRV so the
+ * invariant holds for every goal too (today glutes advanced×bulk = 18 > 16
+ * is a live pre-existing violation the clamp retires).
+ *
+ * ALLOCATION SPEC (held policy, revised per review): project indirect and
+ * deduct PER STANDARD MUSCLE — never against the coarse group budget — then
+ * roll up, flooring direct work for each fine child at its child MEV.
+ * Measured evidence: side delts receive 0.0 indirect in ALL templates while
+ * front+rear absorb 8–16; a coarse-level `shoulders target − group inflow`
+ * deduction would cut exactly the direct sets that exist to serve side/rear
+ * delts and generate the side-delt-deficient program the tracking card
+ * flags. The counter already works at standard-muscle granularity; the
+ * allocator must too.
  *
  * The recommendVolume preset conversions live in the matching review block
  * at services/mesocycleBuilder.ts (same sign-off, same pass). Until BOTH are
- * approved and applied, the held `direct = target − projectedIndirect`
- * allocation policy must not ship.
+ * approved and applied, the held allocation policy must not ship.
  * ──────────────────────────────────────────────────────────────────────────
  */
 

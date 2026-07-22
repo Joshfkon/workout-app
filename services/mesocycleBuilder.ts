@@ -823,7 +823,7 @@ export function recommendVolume(
 ): number {
   // Base volumes (MAV - Maximum Adaptive Volume estimates)
   //
-  // ─── CONVENTION-CONVERSION REVIEW (PROPOSED — NOT APPLIED, awaiting
+  // ─── CONVENTION-CONVERSION REVIEW v2 (PROPOSED — NOT APPLIED, awaiting
   // sign-off; the bands half of this review lives at RESEARCH_VOLUME_BANDS
   // in app/(dashboard)/dashboard/_lib/weeklyVolume.ts) ─────────────────────
   //
@@ -833,25 +833,40 @@ export function recommendVolume(
   // `target − projectedIndirect` against DIRECT-assuming presets would
   // double-correct (biceps on a bulk would drop to ~6 direct sets where the
   // research said ~14) — so the held allocation policy requires converting
-  // these to total-inclusive TARGETS first. Proposed conversions
-  // (novice/intermediate/advanced), shifted by the indirect inflow a typical
-  // generated program's tagged exercises produce under the counter:
+  // these to total-inclusive TARGETS first.
   //
-  //   shoulders 10/14/18 → 14/19/24  (presses +0.5/set on front delts, rows/
-  //                                   pulls +0.5/set on rear delts ≈ +4–6)
-  //   biceps     8/12/16 → 12/17/22  (pull secondaries ≈ +4–6)
-  //   triceps    8/12/16 → 12/17/22  (press secondaries ≈ +4–6)
-  //   glutes     8/12/16 → 12/17/22  (squat/leg-press/lunge/hinge
-  //                                   secondaries ≈ +4–6; generated programs
-  //                                   measure ~+9 at intermediate volume)
-  //   hamstrings 8/12/14 → 10/14/17  (hinge secondaries ≈ +2–3)
-  //   back      12/16/20 → 13/18/22  (hinge erector/trap spillover ≈ +2)
+  // v2: shifts anchored to inflow MEASURED across three generated templates
+  // (Full Body 3d / Upper-Lower 4d / PPL 6d, intermediate bulk) — total
+  // target ≈ direct preset + MEAN observed inflow, so a program whose
+  // projected inflow matches the mean allocates exactly the research direct
+  // prescription, one with none allocates more, one with extra allocates
+  // less. Proposed (novice/intermediate/advanced):
+  //
+  //   shoulders 10/14/18 → 14/19/24  (observed group inflow 8.5–16 — but see
+  //                                   the per-standard-muscle rule below;
+  //                                   the group total is informational)
+  //   biceps     8/12/16 → 12/17/22  (observed 6–8)
+  //   triceps    8/12/16 → 11/15/20  (observed 0–7: fly-based programs 0,
+  //                                   bench-based 4–7 — shifted by the mean)
+  //   glutes     8/12/16 → 15/19/23  (observed 5.5–9 — not modest; band
+  //                                   converts with it to {6,24}, restoring
+  //                                   the target-≤-MRV invariant v1 broke)
+  //   hamstrings 8/12/14 → 12/16/19  (observed 3.5–7; band → {8,20})
+  //   back      12/16/20 → 14/18/23  (observed 3.5–7 hinge spillover)
   //   chest / quads / calves / abs: unchanged (little cross-group inflow).
   //
-  // Applying these means allocation reads `direct = target − indirect` in a
-  // currency where both numbers mean the same thing. Do NOT apply piecemeal:
-  // presets and bands convert together or the tracking card and generator
-  // disagree again.
+  // INVARIANT: preset target ≤ coarse band MRV for every muscle ×
+  // experience (bandPresetInvariant.test.ts). Goal multipliers can exceed
+  // the ceiling (glutes advanced ×1.1 bulk = 18 > band 16 is a LIVE
+  // pre-existing violation) — the conversion adds a clamp of the
+  // goal-adjusted target to the band MRV, retiring that class of bug.
+  //
+  // ALLOCATION SPEC (held, revised per review): project and deduct indirect
+  // PER STANDARD MUSCLE, then roll up; floor each fine child's direct work
+  // at its child MEV. Side delts measure 0.0 indirect in every template —
+  // a coarse `shoulders − group inflow` deduction would cut the direct work
+  // that exists to serve side/rear delts. Do NOT apply piecemeal: presets
+  // and bands convert together or the card and generator disagree again.
   // ─────────────────────────────────────────────────────────────────────────
   const baseVolumes: Record<string, Record<Experience, number>> = {
     chest: { novice: 10, intermediate: 14, advanced: 18 },
