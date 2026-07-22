@@ -1,3 +1,4 @@
+import { applyRecoveryProfileToLandmarks } from '@/services/volumeBands';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type {
@@ -11,7 +12,6 @@ import type {
 import {
   DEFAULT_USER_PREFERENCES,
   DEFAULT_VOLUME_LANDMARKS,
-  scaleLandmarksForEnhanced,
 } from '@/types/schema';
 
 interface UserState {
@@ -100,9 +100,11 @@ export const useUserStore = create<UserState>()(
           user.volumeLandmarks[muscle as StandardMuscleGroup] ||
           userExperienceLandmarks[muscle] ||
           defaultFallback;
-        // Enhanced Athlete Mode scales landmarks through the central
-        // derivation function (differentiated per landmark, not a flat bump).
-        return scaleLandmarksForEnhanced(base, user.enhancedAthleteMode);
+        // Enhanced Athlete Mode scales landmarks through the SINGLE profile
+        // derivation (per-muscle-tiered MRV; MEV never rises).
+        return applyRecoveryProfileToLandmarks(base, muscle as StandardMuscleGroup, {
+          recoveryProfile: user.enhancedAthleteMode ? 'enhanced' : 'standard',
+        });
       },
 
       getPreference: (key) => {

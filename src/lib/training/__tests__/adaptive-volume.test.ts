@@ -5,7 +5,8 @@ import {
   compareProfileToResearch,
   BASELINE_VOLUME_RECOMMENDATIONS,
 } from '@/src/lib/training/adaptive-volume';
-import { MUSCLE_GROUPS, ENHANCED_SCALING } from '@/types/schema';
+import { MUSCLE_GROUPS } from '@/types/schema';
+import { ENHANCED_MRV_MULTIPLIERS, ENHANCED_MAV_MULTIPLIER, type CoarseMuscle } from '@/services/volumeBands';
 
 describe('setEnhancedStatus', () => {
   it('applies differentiated per-landmark scaling when enabling enhanced mode', () => {
@@ -17,8 +18,9 @@ describe('setEnhancedStatus', () => {
       const before = profile.muscleTolerance[muscle];
       const after = updated.muscleTolerance[muscle];
       // The ceiling rises far more than the floor — no flat 40% anywhere.
-      expect(after.estimatedMEV).toBe(Math.round(before.estimatedMEV * ENHANCED_SCALING.mev));
-      expect(after.estimatedMRV).toBe(Math.round(before.estimatedMRV * ENHANCED_SCALING.mrv));
+      // MEV invariant: enhanced never raises (or changes) a floor.
+      expect(after.estimatedMEV).toBe(before.estimatedMEV);
+      expect(after.estimatedMRV).toBe(Math.round(before.estimatedMRV * (ENHANCED_MRV_MULTIPLIERS[muscle as CoarseMuscle] ?? 1)));
     }
   });
 
@@ -112,7 +114,17 @@ describe('compareProfileToResearch', () => {
     const profile = createInitialVolumeProfile('user-1', 'intermediate', true);
     const comparison = compareProfileToResearch(profile);
 
-    expect(comparison.higher).toHaveLength(MUSCLE_GROUPS.length);
+    // Under tiered MRV scaling the conservative axial tier (x1.15) leaves
+    // hamstrings' midpoint shift at exactly the +10% tolerance boundary, so
+    // it classifies 'average'; every other muscle clears the threshold.
+    const higherMuscles = comparison.higher.map((e) => e.muscle);
+    expect(higherMuscles).toEqual(
+      MUSCLE_GROUPS.filter((m) => m !== 'hamstrings')
+    );
+    const hamstrings = comparison.entries.find((e) => e.muscle === 'hamstrings');
+    expect(hamstrings?.status).toBe('average');
+    expect(hamstrings?.percentDiff).toBe(10);
+    // The enhanced reason still surfaces everywhere the profile diverges.
     for (const entry of comparison.entries) {
       expect(entry.reasons.join(' ')).toMatch(/enhanced/i);
     }
@@ -156,9 +168,9 @@ describe('getAdjustedBaseline (enhanced scaling)', () => {
     const natural = getAdjustedBaseline('chest', 'intermediate', false);
     const enhanced = getAdjustedBaseline('chest', 'intermediate', true);
 
-    expect(enhanced.mev).toBe(Math.round(natural.mev * ENHANCED_SCALING.mev));
-    expect(enhanced.mrv).toBe(Math.round(natural.mrv * ENHANCED_SCALING.mrv));
-    expect(enhanced.optimal).toBe(Math.round(natural.optimal * ENHANCED_SCALING.mav));
+    expect(enhanced.mev).toBe(natural.mev); // MEV invariant
+    expect(enhanced.mrv).toBe(Math.round(natural.mrv * ENHANCED_MRV_MULTIPLIERS.chest));
+    expect(enhanced.optimal).toBe(Math.round(natural.optimal * ENHANCED_MAV_MULTIPLIER));
   });
 
   it('raises the ceiling proportionally more than the floor', () => {

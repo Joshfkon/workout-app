@@ -11,7 +11,7 @@
  * tracking card would flag (bandPresetInvariant.test.ts).
  */
 
-import { DEFAULT_VOLUME_LANDMARKS, type StandardMuscleGroup } from '@/types/schema';
+import { DEFAULT_VOLUME_LANDMARKS, type StandardMuscleGroup, type VolumeLandmarks } from '@/types/schema';
 
 /** The 13 coarse muscle groups that are the default ROW in every surface. */
 export const COARSE_MUSCLES = [
@@ -241,6 +241,47 @@ function isCoarse(muscle: string): muscle is CoarseMuscle {
   return (COARSE_MUSCLES as readonly string[]).includes(muscle);
 }
 
+/** MAV shift under enhanced — mirrors the preset rule: at most +10%, always
+ *  below the smallest MRV tier (1.15). */
+export const ENHANCED_MAV_MULTIPLIER = 1.1;
+
+/** The one MRV-scaling arithmetic — getEffectiveBand and
+ *  applyRecoveryProfileToLandmarks both go through here, so a parallel
+ *  multiplier table can't diverge without failing the parity test. */
+function scaleMrvForProfile(mrv: number, tierKey: CoarseMuscle, ctx?: BandContext): number {
+  if (ctx?.recoveryProfile !== 'enhanced') return mrv;
+  return roundHalf(mrv * (ENHANCED_MRV_MULTIPLIERS[tierKey] ?? 1));
+}
+
+/**
+ * Recovery-profile scaling for a FULL landmark triple (mev/mav/mrv) — the
+ * replacement for the retired schema ENHANCED_SCALING table, which flat-
+ * scaled every landmark (including MEV ×1.10, violating the enhanced-MEV-
+ * never-rises invariant) and gave every muscle the same MRV bump. This is
+ * the ONLY profile-scaling derivation: the weekly rollover's per-standard
+ * landmarks and the user store's landmark accessor route through it, and
+ * landmarkSourceParity.test.ts asserts its arithmetic agrees with
+ * getEffectiveBand for every (muscle, profile) pair.
+ *
+ *   mev: ×1.0 — INVARIANT, enhanced never raises a floor
+ *   mav: ×1.10, capped at the scaled MRV (matches the preset-shift rule)
+ *   mrv: × the muscle's tier (ENHANCED_MRV_MULTIPLIERS), 0.5-set granularity
+ */
+export function applyRecoveryProfileToLandmarks(
+  base: VolumeLandmarks,
+  muscle: StandardMuscleGroup | CoarseMuscle,
+  ctx?: BandContext
+): VolumeLandmarks {
+  if (ctx?.recoveryProfile !== 'enhanced') return base;
+  const tierKey = isCoarse(muscle) ? muscle : STANDARD_TO_COARSE[muscle];
+  const mrv = scaleMrvForProfile(base.mrv, tierKey, ctx);
+  return {
+    mev: base.mev,
+    mav: Math.min(Math.round(base.mav * ENHANCED_MAV_MULTIPLIER), mrv),
+    mrv,
+  };
+}
+
 /**
  * THE single landmark read (close-out 3b): card rendering, the allocator
  * clamp, the goal-clamp, child-band synthesis — every consumer resolves
@@ -283,6 +324,5 @@ export function getEffectiveBand(
     base = { mev, mrv: Math.max(mev + 2, mrv) };
     tierKey = STANDARD_TO_COARSE[muscle];
   }
-  if (ctx?.recoveryProfile !== 'enhanced') return base;
-  return { mev: base.mev, mrv: roundHalf(base.mrv * (ENHANCED_MRV_MULTIPLIERS[tierKey] ?? 1)) };
+  return { mev: base.mev, mrv: scaleMrvForProfile(base.mrv, tierKey, ctx) };
 }

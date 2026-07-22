@@ -9,10 +9,8 @@
  * - mesocycle generator consumption (volume, ramp, accumulation length)
  * - joint-stress caps provably unaffected by the toggle
  */
-import { getEffectiveBand } from '../volumeBands';
+import { getEffectiveBand, applyRecoveryProfileToLandmarks, ENHANCED_MRV_MULTIPLIERS, ENHANCED_MAV_MULTIPLIER } from '../volumeBands';
 import {
-  ENHANCED_SCALING,
-  scaleLandmarksForEnhanced,
   DEFAULT_VOLUME_LANDMARKS,
   type VolumeLandmarks,
 } from '@/types/schema';
@@ -67,33 +65,29 @@ function createProfile(overrides: Partial<ExtendedUserProfile> = {}): ExtendedUs
 // 1. Central landmark scaling
 // ============================================
 
-describe('scaleLandmarksForEnhanced', () => {
+describe('applyRecoveryProfileToLandmarks (the single profile derivation)', () => {
   const base: VolumeLandmarks = { mev: 8, mav: 14, mrv: 22 };
+  const enhancedCtx = { recoveryProfile: 'enhanced' as const };
 
-  it('uses the documented differentiated multipliers', () => {
-    expect(ENHANCED_SCALING).toEqual({ mev: 1.1, mav: 1.25, mrv: 1.375 });
-  });
-
-  it('scales each landmark by its own multiplier, rounded to whole sets', () => {
-    const scaled = scaleLandmarksForEnhanced(base, true);
+  it('scales the ceiling by the muscle TIER, never the floor', () => {
+    const scaled = applyRecoveryProfileToLandmarks(base, 'chest', enhancedCtx);
     expect(scaled).toEqual({
-      mev: Math.round(8 * 1.1),   // 9
-      mav: Math.round(14 * 1.25), // 18
-      mrv: Math.round(22 * 1.375), // 30
+      mev: 8, // INVARIANT: enhanced never raises (or changes) a floor
+      mav: Math.min(Math.round(14 * ENHANCED_MAV_MULTIPLIER), Math.round(22 * ENHANCED_MRV_MULTIPLIERS.chest * 2) / 2),
+      mrv: Math.round(22 * ENHANCED_MRV_MULTIPLIERS.chest * 2) / 2,
     });
   });
 
-  it('returns landmarks unchanged when the mode is off or undefined', () => {
-    expect(scaleLandmarksForEnhanced(base, false)).toBe(base);
-    expect(scaleLandmarksForEnhanced(base, undefined)).toBe(base);
+  it('returns landmarks unchanged for the standard profile (or no context)', () => {
+    expect(applyRecoveryProfileToLandmarks(base, 'chest')).toBe(base);
+    expect(applyRecoveryProfileToLandmarks(base, 'chest', { recoveryProfile: 'standard' })).toBe(base);
   });
 
-  it('raises the ceiling far more than the floor (no flat multiplier)', () => {
-    const scaled = scaleLandmarksForEnhanced(base, true);
-    expect(scaled.mrv / base.mrv).toBeGreaterThan(scaled.mev / base.mev);
-    // MRV rises 35-40%, MEV only ~10%
-    expect(scaled.mrv / base.mrv).toBeGreaterThanOrEqual(1.35);
-    expect(scaled.mev / base.mev).toBeLessThanOrEqual(1.15);
+  it('tiers differ by axial load: isolation-friendly muscles scale more', () => {
+    const biceps = applyRecoveryProfileToLandmarks(base, 'biceps', enhancedCtx);
+    const quads = applyRecoveryProfileToLandmarks(base, 'quads', enhancedCtx);
+    expect(biceps.mrv).toBeGreaterThan(quads.mrv); // x1.35 vs x1.15
+    expect(biceps.mev).toBe(quads.mev); // floors identical, never scaled
   });
 });
 
@@ -429,11 +423,10 @@ describe('connective-tissue safety caps (invariant under the toggle)', () => {
 // ============================================
 
 describe('DEFAULT_VOLUME_LANDMARKS + central scaling', () => {
-  it('scaled intermediate chest_upper matches the table in the spec', () => {
+  it('scaled intermediate chest_upper: MEV unchanged, MRV by the chest tier', () => {
     const base = DEFAULT_VOLUME_LANDMARKS.intermediate.chest_upper; // {6, 10, 16}
-    const scaled = scaleLandmarksForEnhanced(base, true);
-    expect(scaled.mev).toBe(Math.round(base.mev * 1.1));
-    expect(scaled.mav).toBe(Math.round(base.mav * 1.25));
-    expect(scaled.mrv).toBe(Math.round(base.mrv * 1.375));
+    const scaled = applyRecoveryProfileToLandmarks(base, 'chest_upper', { recoveryProfile: 'enhanced' });
+    expect(scaled.mev).toBe(base.mev); // invariant
+    expect(scaled.mrv).toBe(Math.round(base.mrv * ENHANCED_MRV_MULTIPLIERS.chest * 2) / 2);
   });
 });

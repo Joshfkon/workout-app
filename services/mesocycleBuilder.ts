@@ -51,9 +51,7 @@ import {
 import { resolveMuscleToStandard } from '@/types/schema';
 import {
   DEFAULT_VOLUME_LANDMARKS,
-  ENHANCED_SCALING,
   muscleMatchesGroup,
-  scaleLandmarksForEnhanced,
   toLegacyMuscleGroup,
 } from '@/types/schema';
 import { calculateFFMI, getNaturalFFMILimit } from './bodyCompEngine';
@@ -65,21 +63,8 @@ export { isMuscleExcludedByInjury } from './shared/injuryExclusion';
 /** Fallback volume landmarks for muscles missing from DEFAULT_VOLUME_LANDMARKS */
 const FALLBACK_VOLUME_LANDMARK = { mev: 4, mav: 10, mrv: 16 };
 
-/**
- * Look up the experience-specific MRV for a muscle, with a sane fallback.
- * Enhanced Athlete Mode raises the ceiling through the central
- * scaleLandmarksForEnhanced derivation (never a local multiplier).
- */
-function getMuscleMRV(
-  experience: Experience,
-  muscle: string,
-  enhancedAthleteMode?: boolean
-): number {
-  const base =
-    DEFAULT_VOLUME_LANDMARKS[experience]?.[muscle as StandardMuscleGroup] ??
-    FALLBACK_VOLUME_LANDMARK;
-  return scaleLandmarksForEnhanced(base, enhancedAthleteMode).mrv;
-}
+// (getMuscleMRV retired: every distribution muscle is a coarse group and
+// clamps at getEffectiveBand; the old path fell back to a flat {mrv:16}.)
 
 /**
  * Extra accumulation weeks before deload for enhanced athletes. Faster
@@ -276,7 +261,7 @@ export function calculateRecoveryFactors(profile: ExtendedUserProfile): Recovery
   }
 
   // Enhanced athletes sustain accumulation longer before needing a deload.
-  // Volume itself is NOT bumped here — landmark scaling (ENHANCED_SCALING)
+  // Volume itself is NOT bumped here — profile landmark scaling
   // handles that at derivation time.
   if (profile.enhancedAthleteMode) {
     baseDeloadWeeks += ENHANCED_EXTRA_ACCUMULATION_WEEKS;
@@ -709,7 +694,7 @@ export function buildPeriodizationPlan(
  * Extra end-of-ramp volume modifier for enhanced athletes. Weekly base sets
  * are MAV-derived (already scaled x1.25 when enhanced); ramping the final
  * accumulation week to ~110% instead of 100% lands weekly volume in
- * scaled-MRV territory (1.1 x 1.25 ≈ 1.375 ≈ ENHANCED_SCALING.mrv), so the
+ * scaled-MRV territory, so the
  * lifter actually approaches the raised ceiling before deload instead of
  * running the same shallow ramp under a higher roof.
  */
@@ -891,7 +876,7 @@ export function recommendVolume(
   // Enhanced preset shift is capped at +10% — deliberately LESS than the
   // enhanced MRV scaling (min tier ×1.15, see ENHANCED_MRV_MULTIPLIERS): the
   // extra ceiling is headroom for autoregulated exploration, not a
-  // prescription. (Replaces the old ENHANCED_SCALING.mav ×1.25 bump.)
+  // prescription. (Replaces the old flat ×1.25 MAV bump.)
   if (enhancedAthleteMode) {
     volume = Math.round(volume * 1.10);
   }
@@ -1047,10 +1032,7 @@ export function calculateVolumeDistribution(
           recoveryProfile: enhancedAthleteMode ? 'enhanced' : 'standard',
         }).mrv
       : undefined;
-    adjustedVolume = Math.min(
-      adjustedVolume,
-      bandMrv ?? getMuscleMRV(experience, muscle, enhancedAthleteMode)
-    );
+    adjustedVolume = Math.min(adjustedVolume, bandMrv ?? FALLBACK_VOLUME_LANDMARK.mrv);
 
     const frequency = Math.round(frequencies[muscle] * recoveryFactors.frequencyMultiplier);
 

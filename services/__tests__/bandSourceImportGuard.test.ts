@@ -15,7 +15,7 @@ import * as path from 'path';
 
 const ROOT = path.join(__dirname, '..', '..');
 const SCAN_DIRS = ['services', 'app', 'components', 'hooks', 'lib', 'stores', 'src'];
-const BANNED = /\b(RESEARCH_VOLUME_BANDS|MEV_TARGETS|fineChildBand)\b/;
+const BANNED = /\b(RESEARCH_VOLUME_BANDS|MEV_TARGETS|fineChildBand|ENHANCED_SCALING|scaleLandmarksForEnhanced)\b/;
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {

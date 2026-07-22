@@ -83,7 +83,7 @@ describe.each([
     expect(plan.summary.every((s) => s.action === 'hold')).toBe(true);
   });
 
-  it('pinned disagreement: with positive feedback, per-standard adds have no group band budget (shoulders on 4d/6d)', () => {
+  it('group add budget: positive-feedback adds can never push a group past its effective band ceiling', () => {
     const good: MuscleWeekFeedback = { sorenessBefore: 1, pump: 2, workload: 1 };
     const counted = computeWeeklySetsByMuscle(weekSessions);
     const feedbackByMuscle = new Map<StandardMuscleGroup, MuscleWeekFeedback[]>();
@@ -118,11 +118,18 @@ describe.each([
       .map(([group]) => group)
       .sort();
 
-    // Pins: STANDARD 4d/6d push shoulders past the band (side +1 AND rear +1
-    // in one week, no group budget); the ENHANCED shoulders ceiling (×1.35 →
-    // 35) absorbs the same adds, so no bust in that profile. The group-aware
-    // add budget (awaiting sign-off) flips these to empty lists.
-    const expected = !enhanced && days !== 3 ? ['shoulders'] : [];
-    expect(groupsPushedPastBand).toEqual(expected);
+    // The group-aware add budget landed (close-out follow-up): collective
+    // per-standard adds are granted against the group's effective band MRV,
+    // furthest-below-own-MEV first, remainder deferred-not-cancelled. The
+    // former standard-profile shoulders pins are now empty lists.
+    expect(groupsPushedPastBand).toEqual([]);
+
+    // Deferred adds surface as held, never silently dropped.
+    for (const s of plan.summary) {
+      if (s.heldByGroupBudget) {
+        expect(s.deferredDelta ?? 0).toBeGreaterThan(0);
+        expect(s.reason).toMatch(/ceiling/i);
+      }
+    }
   });
 });

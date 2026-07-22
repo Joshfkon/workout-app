@@ -39,12 +39,17 @@ import {
   isStandardMuscle,
   legacyToStandardMuscles,
   resolveMuscleToStandard,
-  scaleLandmarksForEnhanced,
 } from '@/types/schema';
 import {
   resolvePrimaryMuscleCredits,
   SECONDARY_MUSCLE_CREDIT,
 } from '@/services/volumeTracker';
+import {
+  applyRecoveryProfileToLandmarks,
+  getEffectiveBand,
+  STANDARD_TO_COARSE,
+  type CoarseMuscle,
+} from '@/services/volumeBands';
 import type {
   Experience,
   PumpRating0to3,
@@ -95,6 +100,14 @@ export interface MuscleAdjustmentSummary {
   action: SetAdjustmentAction;
   delta: number;
   reason: string;
+  /**
+   * The group add budget bound: this muscle earned an add but its coarse
+   * group sits at (or would cross) the effective band ceiling. The add is
+   * DEFERRED, not cancelled — `deferredDelta` sets are held and the reason
+   * carries "held: group at ceiling" copy for the UI.
+   */
+  heldByGroupBudget?: boolean;
+  deferredDelta?: number;
 }
 
 export interface WeeklyAdjustmentPlan {
@@ -212,9 +225,14 @@ export function resolveVolumeLandmarks(
   }
 
   if (!enhancedAthleteMode) return merged;
+  // Profile scaling via the SINGLE derivation (volumeBands) — MEV never
+  // rises, MRV scales by the muscle's tier. The retired schema-level flat
+  // multiplier table inflated MEV x1.10 here for enhanced users.
   const scaled = {} as Record<StandardMuscleGroup, VolumeLandmarks>;
   for (const muscle of STANDARD_MUSCLE_GROUPS) {
-    scaled[muscle] = scaleLandmarksForEnhanced(merged[muscle], true);
+    scaled[muscle] = applyRecoveryProfileToLandmarks(merged[muscle], muscle, {
+      recoveryProfile: 'enhanced',
+    });
   }
   return scaled;
 }
@@ -256,8 +274,32 @@ export function planWeeklySetAdjustments(
   // Deterministic iteration order over the muscles present in the plan.
   const planMuscles = STANDARD_MUSCLE_GROUPS.filter((m) => setsByMuscle.has(m));
 
-  for (const muscle of planMuscles) {
-    const recommendation = recommendWeeklySetAdjustment({
+  // ── GROUP ADD BUDGET ──────────────────────────────────────────────────
+  // Per-standard adds each respect their OWN landmark MRV, but nothing used
+  // to stop side delts +1 AND rear delts +1 in the same week from pushing
+  // the shoulders GROUP past the band ceiling the generator just clamped to
+  // (the pinned equilibrium disagreement). Budget: for each coarse group,
+  // collective adds may not lift the group's credited total past its
+  // EFFECTIVE band MRV (getEffectiveBand — profile-aware, the same ceiling
+  // the tracking card renders). Each granted delta unit is counted as +1
+  // group credit: an added set's primary credit lands entirely inside its
+  // own group (secondary spill into OTHER groups is not budgeted — a known,
+  // conservative-enough simplification).
+  const recoveryProfile = { recoveryProfile: input.enhancedAthleteMode ? 'enhanced' : 'standard' } as const;
+  const groupTotals = new Map<CoarseMuscle, number>();
+  for (const [muscle, sets] of Array.from(setsByMuscle.entries())) {
+    const coarse = STANDARD_TO_COARSE[muscle];
+    if (coarse) groupTotals.set(coarse, (groupTotals.get(coarse) ?? 0) + sets);
+  }
+  const groupBudget = new Map<CoarseMuscle, number>();
+  for (const [coarse, total] of Array.from(groupTotals.entries())) {
+    groupBudget.set(coarse, Math.max(0, getEffectiveBand(coarse, recoveryProfile).mrv - total));
+  }
+
+  // Pass 1: engine recommendations for every plan muscle.
+  const recommendations = planMuscles.map((muscle) => ({
+    muscle,
+    recommendation: recommendWeeklySetAdjustment({
       muscle,
       currentWeeklySets: setsByMuscle.get(muscle) ?? 0,
       landmarks: landmarksByMuscle[muscle],
@@ -266,17 +308,58 @@ export function planWeeklySetAdjustments(
       weekInMeso: input.weekInMeso,
       isDeloadWeek: input.isDeloadWeek,
       enhancedAthleteMode: input.enhancedAthleteMode,
-    });
+    }),
+  }));
 
-    summary.push({
-      muscle,
-      action: recommendation.action,
-      delta: recommendation.delta,
-      reason: recommendation.reason,
+  // Pass 2: grant adds against the group budget. Priority when the budget
+  // binds: the muscle FURTHEST below its own MEV wins (per-standard deficit
+  // against the muscle's own landmarks). Ungranted adds are DEFERRED, not
+  // cancelled — surfaced as "held: group at ceiling" in the summary.
+  const addOrder = recommendations
+    .filter((r) => r.recommendation.delta > 0)
+    .sort((a, b) => {
+      const deficit = (m: StandardMuscleGroup) =>
+        (landmarksByMuscle[m]?.mev ?? 0) - (setsByMuscle.get(m) ?? 0);
+      return deficit(b.muscle) - deficit(a.muscle);
     });
+  const grantedDelta = new Map<StandardMuscleGroup, number>();
+  for (const { muscle, recommendation } of addOrder) {
+    const coarse = STANDARD_TO_COARSE[muscle];
+    const remaining = coarse ? groupBudget.get(coarse) ?? Infinity : Infinity;
+    const grant = Math.max(0, Math.min(recommendation.delta, Math.floor(remaining)));
+    grantedDelta.set(muscle, grant);
+    if (coarse && Number.isFinite(remaining)) groupBudget.set(coarse, remaining - grant);
+  }
 
-    if (recommendation.delta === 0) continue;
-    const delta = recommendation.delta > 0 ? recommendation.delta : -1;
+  for (const { muscle, recommendation } of recommendations) {
+    let action = recommendation.action;
+    let delta = recommendation.delta;
+    let reason = recommendation.reason;
+    let heldByGroupBudget = false;
+    let deferredDelta: number | undefined;
+
+    if (recommendation.delta > 0) {
+      const grant = grantedDelta.get(muscle) ?? 0;
+      if (grant < recommendation.delta) {
+        deferredDelta = recommendation.delta - grant;
+        heldByGroupBudget = true;
+        const group = STANDARD_TO_COARSE[muscle];
+        const groupLabel = group ? group.charAt(0).toUpperCase() + group.slice(1) : 'group';
+        if (grant === 0) {
+          action = 'hold';
+          delta = 0;
+          reason = `Held — ${groupLabel} is at its weekly ceiling; +${deferredDelta} set${deferredDelta === 1 ? '' : 's'} deferred, not cancelled (${recommendation.reason})`;
+        } else {
+          delta = grant;
+          reason = `${recommendation.reason} (+${deferredDelta} more deferred — ${groupLabel} at its weekly ceiling)`;
+        }
+      }
+    }
+
+    summary.push({ muscle, action, delta, reason, heldByGroupBudget, deferredDelta });
+
+    if (delta === 0) continue;
+    const appliedDelta = delta > 0 ? delta : -1;
 
     // Walk the week's exercises from the end, looking for the last one that
     // targets this muscle as primary (and, for removals, still has >1 set).
@@ -286,7 +369,7 @@ export function planWeeklySetAdjustments(
       for (let e = exercises.length - 1; e >= 0; e--) {
         const exercise = exercises[e];
         if (!standardMusclesFor(exercise.primaryMuscle).includes(muscle)) continue;
-        if (delta === -1 && exercise.sets <= 1) continue; // never below 1 set/exercise
+        if (appliedDelta === -1 && exercise.sets <= 1) continue; // never below 1 set/exercise
         target = { key: exerciseKey(s, e), sets: exercise.sets };
         break outer;
       }
@@ -297,10 +380,10 @@ export function planWeeklySetAdjustments(
 
     byExercise.set(target.key, {
       muscle,
-      action: delta > 0 ? 'add' : 'remove',
-      delta,
-      adjustedSets: Math.max(1, target.sets + delta),
-      label: adjustmentLabel(muscle, delta, recommendation.reason),
+      action: appliedDelta > 0 ? 'add' : 'remove',
+      delta: appliedDelta,
+      adjustedSets: Math.max(1, target.sets + appliedDelta),
+      label: adjustmentLabel(muscle, appliedDelta, reason),
     });
   }
 
