@@ -1,25 +1,47 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Card, Button, Badge } from '@/components/ui';
+import { formatWeight, convertWeightForDisplay } from '@/lib/utils';
 import type { PlateauDetectionResult } from '@/services/plateauDetector';
 
 interface PlateauAlertProps {
   exerciseName: string;
   result: PlateauDetectionResult;
+  /** Display unit preference — same value the trend cards receive. */
+  units: 'kg' | 'lb';
   onDismiss?: () => void;
   onViewSuggestions?: () => void;
 }
 
+const weeksLabel = (weeks: number) => `${weeks} week${weeks === 1 ? '' : 's'}`;
+
 export function PlateauAlert({
   exerciseName,
   result,
+  units,
   onDismiss,
   onViewSuggestions,
 }: PlateauAlertProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
+  // E1RM values come from the detector in kg; a non-positive value means the
+  // upstream snapshot pipeline fed bad data — surface it, don't render "0kg".
+  const hasValidE1RM = Number.isFinite(result.currentE1RM) && result.currentE1RM > 0;
+  useEffect(() => {
+    if (result.isPlateaued && !hasValidE1RM) {
+      console.warn(
+        `PlateauAlert: invalid current E1RM (${result.currentE1RM}) for ${exerciseName}; hiding weight display`
+      );
+    }
+  }, [result.isPlateaued, result.currentE1RM, hasValidE1RM, exerciseName]);
+
   if (!result.isPlateaued) return null;
+
+  // Magnitude only: convertWeight clamps negative inputs to 0, and this span
+  // renders only when current < peak, so the sign is added explicitly below.
+  const deltaFromPeak = convertWeightForDisplay(result.peakE1RM - result.currentE1RM, units);
+  const unitLabel = units === 'lb' ? 'lbs' : 'kg';
 
   const getSeverityColor = () => {
     if (result.weeksSinceProgress >= 6) return 'border-danger-500/50 bg-danger-500/5';
@@ -65,12 +87,19 @@ export function PlateauAlert({
               </Badge>
             </div>
             <p className="text-sm text-surface-400">
-              No progress in {result.weeksSinceProgress} weeks • Current E1RM:{' '}
-              <span className="font-mono text-surface-300">{result.currentE1RM}kg</span>
-              {result.currentE1RM < result.peakE1RM && (
-                <span className="text-danger-400 ml-2">
-                  ({(result.currentE1RM - result.peakE1RM).toFixed(1)}kg from peak)
-                </span>
+              No progress in {weeksLabel(result.weeksSinceProgress)}
+              {hasValidE1RM && (
+                <>
+                  {' '}• Current E1RM:{' '}
+                  <span className="font-mono text-surface-300">
+                    {formatWeight(result.currentE1RM, units)}
+                  </span>
+                  {result.currentE1RM < result.peakE1RM && (
+                    <span className="text-danger-400 ml-2">
+                      (-{deltaFromPeak} {unitLabel} from peak)
+                    </span>
+                  )}
+                </>
               )}
             </p>
           </div>
@@ -127,10 +156,12 @@ interface PlateauAlertListProps {
     exerciseName: string;
     result: PlateauDetectionResult;
   }>;
+  /** Display unit preference — same value the trend cards receive. */
+  units: 'kg' | 'lb';
   onDismiss?: (exerciseId: string) => void;
 }
 
-export function PlateauAlertList({ alerts, onDismiss }: PlateauAlertListProps) {
+export function PlateauAlertList({ alerts, units, onDismiss }: PlateauAlertListProps) {
   const activeAlerts = alerts.filter((a) => a.result.isPlateaued);
 
   if (activeAlerts.length === 0) {
@@ -163,6 +194,7 @@ export function PlateauAlertList({ alerts, onDismiss }: PlateauAlertListProps) {
           key={alert.exerciseId}
           exerciseName={alert.exerciseName}
           result={alert.result}
+          units={units}
           onDismiss={() => onDismiss?.(alert.exerciseId)}
         />
       ))}

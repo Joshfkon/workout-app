@@ -342,6 +342,77 @@ describe('detectPlateau', () => {
   });
 });
 
+describe('detectPlateau rising-trend suppression and minimum stall window', () => {
+  it('suppresses the alert when the fitted trend is rising, even weeks past the peak', () => {
+    // Peak 4 weeks ago, but the regression over the window is clearly
+    // positive (~+1.9%/wk) — a rising lift cannot be plateaued, so the
+    // weeks-without-peak trigger must not fire.
+    const result = detectPlateau({
+      exerciseId: 'arnold-press',
+      snapshots: [
+        createSnapshot('2024-01-01', 100),
+        createSnapshot('2024-01-08', 120), // window peak
+        createSnapshot('2024-01-15', 112),
+        createSnapshot('2024-01-22', 114),
+        createSnapshot('2024-01-29', 116),
+        createSnapshot('2024-02-05', 118),
+      ],
+    });
+
+    expect(result.weeksSinceProgress).toBeGreaterThanOrEqual(3);
+    expect(result.isPlateaued).toBe(false);
+    expect(result.suggestions).toHaveLength(0);
+  });
+
+  it('does not fire within the first 2 weeks regardless of endpoint delta', () => {
+    // Twice-weekly flat sessions across only 2 weeks: the endpoint check
+    // sees 4+ stagnant sessions, but the stall is younger than
+    // MIN_STALL_WEEKS — no alert.
+    const result = detectPlateau({
+      exerciseId: 'bench-press',
+      snapshots: [
+        createSnapshot('2024-01-01', 100),
+        createSnapshot('2024-01-04', 100),
+        createSnapshot('2024-01-08', 100),
+        createSnapshot('2024-01-11', 100),
+        createSnapshot('2024-01-15', 100),
+      ],
+    });
+
+    expect(result.weeksSinceProgress).toBeLessThan(3);
+    expect(result.isPlateaued).toBe(false);
+  });
+
+  it('still fires for a flat lift once the stall reaches 3 weeks', () => {
+    const result = detectPlateau({
+      exerciseId: 'bench-press',
+      snapshots: [
+        createSnapshot('2024-01-01', 100),
+        createSnapshot('2024-01-08', 100),
+        createSnapshot('2024-01-15', 100),
+        createSnapshot('2024-01-22', 100),
+      ],
+    });
+
+    expect(result.weeksSinceProgress).toBe(3);
+    expect(result.isPlateaued).toBe(true);
+  });
+
+  it('still fires for a declining lift (negative slope never suppresses)', () => {
+    const result = detectPlateau({
+      exerciseId: 'cable-fly',
+      snapshots: [
+        createSnapshot('2024-01-01', 105),
+        createSnapshot('2024-01-08', 103),
+        createSnapshot('2024-01-15', 101),
+        createSnapshot('2024-01-22', 100),
+      ],
+    });
+
+    expect(result.isPlateaued).toBe(true);
+  });
+});
+
 describe('detectPlateau goal awareness', () => {
   const flatSnapshots = [
     createSnapshot('2024-01-01', 100),

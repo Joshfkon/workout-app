@@ -27,6 +27,21 @@ export type PlateauGoal = Goal | 'maintain';
 /** Minimum weeks of data needed for plateau detection */
 const MIN_WEEKS_FOR_ANALYSIS = 4;
 
+/**
+ * Minimum weeks since the window-peak E1RM before any plateau alert may
+ * fire. 1-2 weeks without a new peak is normal session-to-session noise,
+ * not a stall — no alert regardless of the endpoint/peak deltas.
+ */
+const MIN_STALL_WEEKS = 3;
+
+/**
+ * Fitted E1RM regression slope (%/wk of current E1RM) at or above which the
+ * lift is clearly still progressing. The whole-window regression outranks
+ * the endpoint and single-peak comparisons: a rising lift cannot be
+ * plateaued, even if the last few sessions sit below the window peak.
+ */
+const RISING_TREND_SUPPRESSION_PCT_PER_WEEK = 0.5;
+
 interface GoalPlateauProfile {
   /**
    * E1RM percent change over the recent window below which it's a plateau.
@@ -309,10 +324,28 @@ export function detectPlateau(input: DetectPlateauInput): PlateauDetectionResult
   // Analyze trend against goal-adjusted expectations
   const profile = resolveProfile(input.goal);
   const trend = analyzeExerciseTrend(recent, input.goal);
+
+  // Regression slope as %/wk of current E1RM. A lift still rising at
+  // ≥ RISING_TREND_SUPPRESSION_PCT_PER_WEEK is progressing by definition —
+  // suppress the alert even when recent sessions dipped below the peak.
+  let weeklySlopePct = 0;
+  if (currentE1RM > 0) {
+    weeklySlopePct = (trend.weeklyChange / currentE1RM) * 100;
+  } else {
+    // Snapshot builders filter zero-load sets, so this indicates bad input —
+    // surface it instead of silently treating the lift as flat.
+    console.warn(
+      `plateauDetector: non-positive current E1RM for exercise ${input.exerciseId}; rising-trend suppression skipped`
+    );
+  }
+  const isRising = weeklySlopePct >= RISING_TREND_SUPPRESSION_PCT_PER_WEEK;
+
   const isPlateaued =
-    trend.isPlateaued ||
-    (profile.weeksWithoutPeak !== null &&
-      weeksSinceProgress >= profile.weeksWithoutPeak);
+    !isRising &&
+    weeksSinceProgress >= MIN_STALL_WEEKS &&
+    (trend.isPlateaued ||
+      (profile.weeksWithoutPeak !== null &&
+        weeksSinceProgress >= profile.weeksWithoutPeak));
 
   // Generate suggestions if plateaued
   const suggestions = isPlateaued

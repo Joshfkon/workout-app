@@ -1694,9 +1694,11 @@ function AnalyticsPageContent() {
           {liftTrendsSummary && (
             <LiftTrendsCard summary={liftTrendsSummary} units={units === 'lb' ? 'lb' : 'kg'} />
           )}
-          {/* Plateau alerts derived from per-exercise E1RM trends. Hidden when none. */}
+          {/* Plateau alerts derived from per-exercise E1RM trends. Hidden when
+              none. Same units value as LiftTrendsCard so both surfaces format
+              E1RM through the shared formatWeight path. */}
           {plateauAlerts.length > 0 && (
-            <PlateauAlertList alerts={plateauAlerts} />
+            <PlateauAlertList alerts={plateauAlerts} units={units === 'lb' ? 'lb' : 'kg'} />
           )}
           {/* Progression pace per muscle group vs the expected rate for the
               user's experience level (services/progressionInsights) */}
