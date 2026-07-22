@@ -24,6 +24,7 @@ import {
   insertCustomExercise,
   removeCustomExercise,
 } from '@/lib/actions/exercises';
+import { SEED_EXERCISE_TAGS } from '@/services/generated/seedExerciseTags';
 
 // ============================================
 // TYPES
@@ -572,7 +573,12 @@ function getFallbackExercises(): Exercise[] {
   return FALLBACK_EXERCISES;
 }
 
-const FALLBACK_EXERCISES: Exercise[] = [
+// Muscle tags below are OVERRIDDEN per entry by the seed-derived canonical
+// tags (SEED_EXERCISE_TAGS) — see FALLBACK_EXERCISES at the bottom of this
+// array. Hand-editing primaryMuscle/secondaryMuscles here has no effect for
+// exercises the seed knows; run `npm run generate:exercise-tags` after a seed
+// migration instead.
+const FALLBACK_EXERCISES_RAW: Exercise[] = [
   // CHEST
   { id: 'bench-press', name: 'Barbell Bench Press', primaryMuscle: 'chest', secondaryMuscles: ['triceps', 'shoulders'], pattern: 'horizontal_push', equipment: 'barbell', difficulty: 'intermediate', fatigueRating: 2, defaultRepRange: [6, 10], defaultRir: 2, minWeightIncrementKg: 2.5, mechanic: 'compound', isCustom: false, hypertrophyScore: { tier: 'A', stretchUnderLoad: 4, resistanceProfile: 3, progressionEase: 5 }, stabilizers: ['back', 'abs'], spinalLoading: 'moderate', requiresBackArch: true, requiresSpinalFlexion: false, requiresSpinalExtension: false, requiresSpinalRotation: false, positionStress: { lowerBack: true, shoulders: true, wrists: true }, contraindications: ['lower_back_strain', 'herniated_disc', 'shoulder_impingement'], isBodyweight: false },
   { id: 'db-bench-press', name: 'Dumbbell Bench Press', primaryMuscle: 'chest', secondaryMuscles: ['triceps', 'shoulders'], pattern: 'horizontal_push', equipment: 'dumbbell', difficulty: 'beginner', fatigueRating: 2, defaultRepRange: [8, 12], defaultRir: 2, minWeightIncrementKg: 2.0, mechanic: 'compound', isCustom: false, hypertrophyScore: { tier: 'A', stretchUnderLoad: 4, resistanceProfile: 3, progressionEase: 4 }, stabilizers: ['back', 'abs'], spinalLoading: 'low', requiresBackArch: true, requiresSpinalFlexion: false, requiresSpinalExtension: false, requiresSpinalRotation: false, positionStress: { lowerBack: true, shoulders: true }, contraindications: ['lower_back_strain', 'shoulder_impingement'], isBodyweight: false },
@@ -727,6 +733,29 @@ const FALLBACK_EXERCISES: Exercise[] = [
   { id: '45-deg-preacher-curl', name: '45° Preacher Curl', primaryMuscle: 'biceps', secondaryMuscles: [], pattern: 'isolation', equipment: 'dumbbell', difficulty: 'beginner', fatigueRating: 1, defaultRepRange: [10, 15], defaultRir: 2, minWeightIncrementKg: 1.0, mechanic: 'isolation', isCustom: false, notes: 'Nippard S-tier - angled preacher', hypertrophyScore: { tier: 'S', stretchUnderLoad: 5, resistanceProfile: 4, progressionEase: 4 }, stabilizers: [], spinalLoading: 'none', requiresBackArch: false, requiresSpinalFlexion: false, requiresSpinalExtension: false, requiresSpinalRotation: false, positionStress: { elbows: true }, contraindications: ['elbow_tendinitis'], isBodyweight: false },
   { id: 'katana-tricep-extension', name: 'Katana Tricep Extension', primaryMuscle: 'triceps', secondaryMuscles: [], pattern: 'isolation', equipment: 'cable', difficulty: 'intermediate', fatigueRating: 1, defaultRepRange: [10, 15], defaultRir: 2, minWeightIncrementKg: 2.5, mechanic: 'isolation', isCustom: false, notes: 'Nippard A-tier - single arm overhead', hypertrophyScore: { tier: 'S', stretchUnderLoad: 5, resistanceProfile: 5, progressionEase: 4 }, stabilizers: [], spinalLoading: 'low', requiresBackArch: false, requiresSpinalFlexion: false, requiresSpinalExtension: false, requiresSpinalRotation: false, positionStress: { elbows: true, shoulders: true }, contraindications: ['elbow_tendinitis'], isBodyweight: false },
 ];
+
+/**
+ * The static fallback DB with muscle tags DERIVED from the canonical seed
+ * source (services/generated/seedExerciseTags.ts — regenerated from
+ * supabase/seed.sql + migrations by `npm run generate:exercise-tags`).
+ *
+ * This file used to be a third, hand-synced tag source (seed SQL, user
+ * customs, and this array) — which is how the generator kept coarse
+ * 'shoulders' bench secondaries and empty fly secondaries long after the
+ * 20260702000001 retag audit fixed the live database. Entries whose name the
+ * seed doesn't know (generator-only variants like 'Bayesian Cable Curl')
+ * keep their authored tags. Drift between this derivation and a fresh parse
+ * of the SQL corpus fails services/__tests__/seedExerciseTags.test.ts.
+ */
+const FALLBACK_EXERCISES: Exercise[] = FALLBACK_EXERCISES_RAW.map((exercise) => {
+  const seed = SEED_EXERCISE_TAGS[exercise.name];
+  if (!seed) return exercise;
+  return {
+    ...exercise,
+    primaryMuscle: seed.primary as Exercise['primaryMuscle'],
+    secondaryMuscles: seed.secondaries as Exercise['secondaryMuscles'],
+  };
+});
 
 // Export fallback for use in other modules (seed data)
 export { FALLBACK_EXERCISES };

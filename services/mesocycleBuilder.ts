@@ -822,6 +822,37 @@ export function recommendVolume(
   enhancedAthleteMode?: boolean
 ): number {
   // Base volumes (MAV - Maximum Adaptive Volume estimates)
+  //
+  // ─── CONVENTION-CONVERSION REVIEW (PROPOSED — NOT APPLIED, awaiting
+  // sign-off; the bands half of this review lives at RESEARCH_VOLUME_BANDS
+  // in app/(dashboard)/dashboard/_lib/weeklyVolume.ts) ─────────────────────
+  //
+  // These presets are DIRECT-set MAV estimates (RP-style guidance that
+  // already assumes the indirect work exists uncounted), while the tracking
+  // surfaces count total-inclusive (0.5-credit per secondary set). Allocating
+  // `target − projectedIndirect` against DIRECT-assuming presets would
+  // double-correct (biceps on a bulk would drop to ~6 direct sets where the
+  // research said ~14) — so the held allocation policy requires converting
+  // these to total-inclusive TARGETS first. Proposed conversions
+  // (novice/intermediate/advanced), shifted by the indirect inflow a typical
+  // generated program's tagged exercises produce under the counter:
+  //
+  //   shoulders 10/14/18 → 14/19/24  (presses +0.5/set on front delts, rows/
+  //                                   pulls +0.5/set on rear delts ≈ +4–6)
+  //   biceps     8/12/16 → 12/17/22  (pull secondaries ≈ +4–6)
+  //   triceps    8/12/16 → 12/17/22  (press secondaries ≈ +4–6)
+  //   glutes     8/12/16 → 12/17/22  (squat/leg-press/lunge/hinge
+  //                                   secondaries ≈ +4–6; generated programs
+  //                                   measure ~+9 at intermediate volume)
+  //   hamstrings 8/12/14 → 10/14/17  (hinge secondaries ≈ +2–3)
+  //   back      12/16/20 → 13/18/22  (hinge erector/trap spillover ≈ +2)
+  //   chest / quads / calves / abs: unchanged (little cross-group inflow).
+  //
+  // Applying these means allocation reads `direct = target − indirect` in a
+  // currency where both numbers mean the same thing. Do NOT apply piecemeal:
+  // presets and bands convert together or the tracking card and generator
+  // disagree again.
+  // ─────────────────────────────────────────────────────────────────────────
   const baseVolumes: Record<string, Record<Experience, number>> = {
     chest: { novice: 10, intermediate: 14, advanced: 18 },
     back: { novice: 12, intermediate: 16, advanced: 20 },

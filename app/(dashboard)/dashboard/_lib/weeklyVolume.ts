@@ -770,11 +770,36 @@ export function fineChildMev(muscle: StandardMuscleGroup): number {
  * warning can never disagree); MRV overrides live in
  * FINE_BAND_TOTAL_INCLUSIVE_MRV below.
  *
- * Still flagged direct-only vs our total-inclusive counter (unreviewed):
- * RESEARCH_VOLUME_BANDS biceps {6,20} / triceps {6,18} (pulls/presses add
- * ~0.5/set here) and traps {4,16} (deadlifts/rows/carries feed it
- * indirectly). shoulders was shifted total-inclusive in the same adoption —
- * see its entry. chest/quads/hamstrings/glutes read the same either way.
+ * ─── CONVENTION-CONVERSION REVIEW (PROPOSED — NOT APPLIED, awaiting
+ * sign-off; covers the remaining direct-assuming RESEARCH_VOLUME_BANDS and
+ * the mesocycleBuilder recommendVolume presets in ONE pass) ────────────────
+ *
+ * The counter is total-inclusive (0.5-credit per secondary set — OUR
+ * convention, not the researchers'), but the bands below and the generator's
+ * presets still read as DIRECT-set landmarks: RP-style "~14 biceps sets"
+ * already assumes you also row and pull down. Comparing a total-inclusive
+ * count against those numbers is apples-to-oranges (a generated bulk reads
+ * "biceps 22 vs 6–20 — over MRV!" when its 14 direct sets are exactly the
+ * research prescription), and naively allocating `target − indirect` against
+ * them double-corrects into under-prescription. Conversion is judgment, not
+ * arithmetic — the proposals below shift each landmark by the indirect
+ * inflow a typical program's tagged exercises actually produce under our
+ * counter (measured on generated programs), following the precedent of the
+ * adopted shoulders {8,22}→{12,26} shift:
+ *
+ *   biceps {6, 20} → {10, 26}   (+ pulls: 12–16 weekly pull sets ≈ +6–8)
+ *   triceps {6, 18} → {9, 24}   (+ presses: 8–14 press sets ≈ +4–7)
+ *   traps {4, 16} → {6, 20}     (+ hinges/rows/carries/upright rows ≈ +2–4)
+ *
+ * Unchanged (indirect inflow arrives via the same coarse-tagged exercises or
+ * is small): chest, quads, calves, abs, forearms, adductors, hamstrings
+ * {6,16} and back {10,25} sit borderline (+2-ish typical inflow from hinge
+ * secondaries) — proposed unchanged, flag if generated programs read hot.
+ *
+ * The recommendVolume preset conversions live in the matching review block
+ * at services/mesocycleBuilder.ts (same sign-off, same pass). Until BOTH are
+ * approved and applied, the held `direct = target − projectedIndirect`
+ * allocation policy must not ship.
  * ──────────────────────────────────────────────────────────────────────────
  */
 
