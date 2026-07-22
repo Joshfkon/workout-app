@@ -323,6 +323,49 @@ describe('detectPlateau', () => {
     expect(result.isPlateaued).toBe(true);
   });
 
+  it('suppresses the alert when the regression trend is rising, even below a recent peak', () => {
+    // Overall slope ≈ +1.6%/wk. The last four sessions' endpoints dip below
+    // the peak (112 -> 110, under the bulk +2% endpoint threshold) and the
+    // peak is exactly 3 weeks old — both legacy triggers fire. The fitted
+    // trend must win: a rising lift cannot be plateaued.
+    const input: DetectPlateauInput = {
+      exerciseId: 'arnold-press',
+      snapshots: [
+        createSnapshot('2024-01-01', 100),
+        createSnapshot('2024-01-08', 104),
+        createSnapshot('2024-01-15', 112), // peak
+        createSnapshot('2024-01-22', 108),
+        createSnapshot('2024-01-29', 109),
+        createSnapshot('2024-02-05', 110),
+      ],
+    };
+
+    const result = detectPlateau(input);
+
+    expect(result.isPlateaued).toBe(false);
+  });
+
+  it('never fires with fewer than 3 weeks since the peak, regardless of peak delta', () => {
+    // 3x/wk training: the endpoint check sees 4 flat sessions spanning ~1.3
+    // weeks and would have flagged this, but the peak is only ~1 week old.
+    const input: DetectPlateauInput = {
+      exerciseId: 'arnold-press',
+      snapshots: [
+        createSnapshot('2024-01-01', 102),
+        createSnapshot('2024-01-04', 101),
+        createSnapshot('2024-01-08', 102.5), // peak, ~1 week before the last session
+        createSnapshot('2024-01-11', 101.5),
+        createSnapshot('2024-01-13', 101),
+        createSnapshot('2024-01-15', 101.5),
+      ],
+    };
+
+    const result = detectPlateau(input);
+
+    expect(result.isPlateaued).toBe(false);
+    expect(result.weeksSinceProgress).toBeLessThan(3);
+  });
+
   it('requires enough sessions inside the window, not just overall', () => {
     // Two year-old sessions + two recent ones: four snapshots total, but
     // only two are recent — not enough signal to call a plateau.
