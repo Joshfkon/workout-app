@@ -38,8 +38,13 @@ import {
   STANDARD_MUSCLE_GROUPS,
   isStandardMuscle,
   legacyToStandardMuscles,
+  resolveMuscleToStandard,
   scaleLandmarksForEnhanced,
 } from '@/types/schema';
+import {
+  resolvePrimaryMuscleCredits,
+  SECONDARY_MUSCLE_CREDIT,
+} from '@/services/volumeTracker';
 import type {
   Experience,
   PumpRating0to3,
@@ -58,6 +63,13 @@ export interface RolloverExercise {
   exerciseName: string;
   /** Legacy ('chest') or standard ('chest_upper') muscle name. */
   primaryMuscle: string;
+  /**
+   * Secondary-muscle tags, when the program data carries them. Feeds the
+   * 0.5-credit share of the weekly count so the progression engine sees the
+   * same total-inclusive volume the tracking surfaces show; omitted (older
+   * program_data) degrades to primary-credit-only counting.
+   */
+  secondaryMuscles?: string[];
   sets: number;
 }
 
@@ -120,7 +132,10 @@ export function exerciseKey(sessionIndex: number, exerciseIndex: number): string
 
 /**
  * Normalize an exercise's primary muscle (legacy or standard taxonomy) to
- * the standard muscle groups it trains. Unknown names yield [].
+ * the standard muscle groups it trains. Unknown names yield []. Used for
+ * TARGETING adjustments at exercises (a "+1 front delts" set belongs on an
+ * exercise whose primary trains front delts) — counting uses the credited
+ * model below.
  */
 export function standardMusclesFor(muscle: string): StandardMuscleGroup[] {
   const normalized = muscle.toLowerCase();
@@ -129,18 +144,42 @@ export function standardMusclesFor(muscle: string): StandardMuscleGroup[] {
 }
 
 /**
- * Weekly working sets per standard muscle across the week's plan, counting an
- * exercise's sets toward every standard muscle its primary maps to (a legacy
- * 'chest' exercise counts for both chest_upper and chest_lower).
+ * Weekly CREDITED working sets per standard muscle across the week's plan —
+ * the same model the tracking surfaces count with (volumeTracker /
+ * weeklyVolume): a legacy coarse primary SPLITS its credit across the
+ * group's standard muscles (½/½ for 'chest', ⅓ each for 'shoulders'), and
+ * secondary tags contribute the 0.5-credit share.
+ *
+ * This replaced two upstream-of-the-audit bugs: the old counter (a) gave a
+ * legacy 'chest' exercise FULL credit to BOTH heads (double-counting vs the
+ * tracker's split), and (b) ignored secondary credit entirely — so front
+ * delts fed 5+ weekly sets by pressing read as 0 here, and the progression
+ * engine kept prescribing direct front-delt sets the tracking card said were
+ * already covered. Counts and landmarks are now compared in the same
+ * total-inclusive currency as every volume surface.
  */
 export function computeWeeklySetsByMuscle(
   sessions: RolloverSession[]
 ): Map<StandardMuscleGroup, number> {
   const setsByMuscle = new Map<StandardMuscleGroup, number>();
+  const add = (muscle: StandardMuscleGroup, credit: number) =>
+    setsByMuscle.set(muscle, (setsByMuscle.get(muscle) ?? 0) + credit);
+
   for (const session of sessions) {
     for (const exercise of session.exercises) {
-      for (const muscle of standardMusclesFor(exercise.primaryMuscle)) {
-        setsByMuscle.set(muscle, (setsByMuscle.get(muscle) ?? 0) + exercise.sets);
+      const primaryCredits = resolvePrimaryMuscleCredits(exercise.primaryMuscle);
+      const primarySet = new Set(primaryCredits.map((c) => c.muscle));
+      for (const { muscle, weight } of primaryCredits) {
+        add(muscle, exercise.sets * weight);
+      }
+      for (const secondary of exercise.secondaryMuscles ?? []) {
+        const standards = resolveMuscleToStandard(secondary);
+        if (standards.length === 0) continue;
+        const per = SECONDARY_MUSCLE_CREDIT / standards.length;
+        for (const std of standards) {
+          if (primarySet.has(std)) continue;
+          add(std, exercise.sets * per);
+        }
       }
     }
   }

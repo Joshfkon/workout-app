@@ -19,6 +19,12 @@ export interface ExtractedExercise {
   exerciseId?: string;
   exerciseName: string;
   primaryMuscle: MuscleGroup;
+  /**
+   * Secondary-muscle tags from the program's exercise entry. Carried so the
+   * weekly rollover can count credited (0.5-secondary) volume the same way
+   * the tracking surfaces do; [] for entries without tags.
+   */
+  secondaryMuscles?: string[];
   sets: number;
   repRange: { min: number; max: number };
   targetRir: number;
@@ -92,6 +98,7 @@ function convertFatigueExercise(ex: DetailedExerciseWithFatigue): ExtractedExerc
     exerciseId: ex.exercise.id, // Now available in ExerciseEntry
     exerciseName: ex.exercise.name,
     primaryMuscle: ex.exercise.primaryMuscle as MuscleGroup,
+    secondaryMuscles: ex.exercise.secondaryMuscles ?? [],
     sets: ex.sets,
     repRange: {
       min: ex.reps.min,
@@ -112,6 +119,7 @@ function convertLegacyExercise(ex: DetailedExercise): ExtractedExercise {
     exerciseId: ex.exercise.id, // Now available in ExerciseEntry
     exerciseName: ex.exercise.name,
     primaryMuscle: ex.exercise.primaryMuscle as MuscleGroup,
+    secondaryMuscles: ex.exercise.secondaryMuscles ?? [],
     sets: ex.sets,
     repRange: parseRepRange(ex.repRange),
     targetRir: 2, // Default RIR for legacy format

@@ -44,9 +44,15 @@ export function weeklyVolumeWindowStartISO(now: Date = new Date()): string {
 }
 
 // MEV per standard muscle (24 muscles) — the threshold for the 'low' status.
+// TOTAL-INCLUSIVE (Phase 5b, adopted): the counter credits secondary work at
+// 0.5/set, so thresholds are stated against that total. front_delts 2 and
+// rear_delts 3 are deliberately below their direct-work literature values —
+// pressing routinely supplies 4–6 indirect front-delt sets (rows/pulldowns
+// 1–3 rear-delt sets), and warning at a direct-work threshold would nag users
+// whose indirect volume already covers the muscle.
 export const MEV_TARGETS: Record<StandardMuscleGroup, number> = {
   chest_upper: 4, chest_lower: 4,
-  front_delts: 4, lateral_delts: 6, rear_delts: 4,
+  front_delts: 2, lateral_delts: 6, rear_delts: 3,
   lats: 6, upper_back: 4, traps: 4, upper_traps: 3, mid_lower_traps: 2,
   biceps: 4, triceps: 4, forearms: 4,
   quads: 6, hamstrings: 4, glutes: 4, glute_med: 2, adductors: 4,
@@ -690,7 +696,15 @@ export const FINE_CHILD_MUSCLES = new Set<StandardMuscleGroup>([
 export const RESEARCH_VOLUME_BANDS: Record<CoarseMuscle, { mev: number; mrv: number }> = {
   chest: { mev: 8, mrv: 22 },
   back: { mev: 10, mrv: 25 },
-  shoulders: { mev: 8, mrv: 22 },
+  // shoulders is TOTAL-INCLUSIVE (Phase 5b, adopted): the literature's "8–22
+  // shoulder sets" counts DIRECT lateral/rear work, with pressing existing
+  // but landing under chest — our counter adds ~0.5/press set to this row
+  // (typically +4) plus ~1 rear-delt set from pulls. Shifted by that routine
+  // inflow so the same training reads the same zone: {8+4, 22+4}. Coheres
+  // with the adopted children: Σ child MEVs (2+6+3) ≈ 12. Someone ONLY
+  // pressing (11 sets → 5.5 here) still reads below MEV — correct, side/rear
+  // delts need their own work.
+  shoulders: { mev: 12, mrv: 26 },
   biceps: { mev: 6, mrv: 20 },
   triceps: { mev: 6, mrv: 18 },
   quads: { mev: 8, mrv: 20 },
@@ -733,44 +747,49 @@ export function fineChildMev(muscle: StandardMuscleGroup): number {
  * band — subdivision landmarks are independent of the group aggregate (see
  * RESEARCH_VOLUME_BANDS semantics note).
  *
- * ─── PHASE 5b REVIEW: total-inclusive band values (NOT applied — awaiting
- * sign-off; the counter now splits direct vs indirect credit, so bands can be
- * stated honestly instead of fudging credit weights) ───────────────────────
+ * ─── PHASE 5b — ADOPTED total-inclusive values ─────────────────────────────
  *
  * Zone placement uses the TOTAL (direct + indirect) — never direct-only — so
- * every band below must be read as a total-inclusive threshold. The current
- * values (MEV_TARGETS × DEFAULT_VOLUME_LANDMARKS.intermediate) read as
- * DIRECT-work landmarks from the source literature; muscles with heavy
- * routine indirect credit deserve explicit total-inclusive values:
+ * every band is a total-inclusive threshold. Most values in MEV_TARGETS ×
+ * DEFAULT_VOLUME_LANDMARKS.intermediate already behave as totals (their
+ * indirect share arrives via the same coarse-tagged exercises that feed them
+ * directly). The muscles with heavy CROSS-group indirect inflow carry
+ * explicit adopted overrides:
  *
- *   front_delts: current {mev 4, mrv 12} → proposed {mev 2, mrv 14}.
- *     Pressing alone (0.5/set) routinely supplies 4–6 indirect sets — near-
- *     zero direct work is fine when pressing volume exists, and the MRV
- *     ceiling should absorb the indirect load a chest day adds.
- *   rear_delts: current {mev 4, mrv 18} → proposed {mev 3, mrv 18}.
- *     Rows/pulldowns supply 1–3 indirect sets in most programs — a smaller
- *     discount than front delts since pulls credit rear delts less densely.
- *   lateral_delts: current {mev 6, mrv 20} → keep.
- *     Almost nothing credits side delts indirectly (upright rows are tagged
- *     primary); the direct-work reading and total-inclusive reading coincide.
- *   chest_upper / chest_lower / lats / upper_back: keep — their indirect
- *     share comes from the SAME coarse-tagged exercises that feed them
- *     directly, so the intermediate-table values already behave as totals.
+ *   front_delts {2, 14}: pressing (0.5/set) routinely supplies 4–6 indirect
+ *     sets — near-zero direct work is fine when pressing volume exists, and
+ *     the +2 MRV headroom absorbs the indirect load a chest day adds.
+ *   rear_delts {3, 20}: rows/pulldowns supply 1–3 indirect sets — a smaller
+ *     MEV discount than front delts (pulls credit rear delts less densely),
+ *     with the same +2 MRV absorption for routine pulling inflow (revisited
+ *     from the direct-reading 18 when the parent band went total-inclusive).
+ *   lateral_delts {6, 20}, chest/back children: unchanged — direct-work and
+ *     total-inclusive readings coincide (little cross-group inflow).
  *
- * RESEARCH_VOLUME_BANDS entries that assume DIRECT-ONLY counting in their
- * source but are compared against our total-inclusive counter (flagged for
- * the same review): shoulders {8,22} (Israetel-style "shoulders sets" =
- * direct lateral/rear work — presses land under chest; our counter adds
- * ~0.5/press to this row), biceps {6,20} and triceps {6,18} (pulls/presses
- * add ~0.5/set here), traps {4,16} (deadlifts/rows/carries feed it
- * indirectly). chest/quads/hamstrings/glutes read the same either way
- * (little cross-group secondary credit flows in).
+ * MEVs live in MEV_TARGETS (shared with the warning surface — bar and
+ * warning can never disagree); MRV overrides live in
+ * FINE_BAND_TOTAL_INCLUSIVE_MRV below.
+ *
+ * Still flagged direct-only vs our total-inclusive counter (unreviewed):
+ * RESEARCH_VOLUME_BANDS biceps {6,20} / triceps {6,18} (pulls/presses add
+ * ~0.5/set here) and traps {4,16} (deadlifts/rows/carries feed it
+ * indirectly). shoulders was shifted total-inclusive in the same adoption —
+ * see its entry. chest/quads/hamstrings/glutes read the same either way.
  * ──────────────────────────────────────────────────────────────────────────
  */
+
+/** Adopted total-inclusive MRV overrides for cross-group-inflow muscles. */
+const FINE_BAND_TOTAL_INCLUSIVE_MRV: Partial<Record<StandardMuscleGroup, number>> = {
+  front_delts: 14,
+  rear_delts: 20,
+};
+
 export function fineChildBand(muscle: StandardMuscleGroup): VolumeBand {
   const mev = MEV_TARGETS[muscle];
-  const research = DEFAULT_VOLUME_LANDMARKS.intermediate[muscle];
-  return { mev, mrv: Math.max(mev + 2, research.mrv) };
+  const mrv =
+    FINE_BAND_TOTAL_INCLUSIVE_MRV[muscle] ??
+    DEFAULT_VOLUME_LANDMARKS.intermediate[muscle].mrv;
+  return { mev, mrv: Math.max(mev + 2, mrv) };
 }
 
 export type VolumeZone = 'below_mev' | 'in_zone' | 'over_mrv';

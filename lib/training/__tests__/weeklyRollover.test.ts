@@ -76,12 +76,50 @@ describe('computeWeeklySetsByMuscle', () => {
     expect(sets.get('biceps')).toBe(2);
   });
 
-  it('credits legacy primaries to every mapped standard muscle', () => {
+  it('SPLITS a legacy primary across its standard muscles (tracker parity, no double-count)', () => {
+    // The old counter gave a legacy 'chest' exercise FULL credit to BOTH
+    // heads (4/4 from 4 sets — 8 credited from 4 performed). The credited
+    // model matches services/volumeTracker: ½/½.
     const sets = computeWeeklySetsByMuscle([
       { exercises: [{ exerciseName: 'Bench', primaryMuscle: 'chest', sets: 4 }] },
     ]);
-    expect(sets.get('chest_upper')).toBe(4);
-    expect(sets.get('chest_lower')).toBe(4);
+    expect(sets.get('chest_upper')).toBe(2);
+    expect(sets.get('chest_lower')).toBe(2);
+  });
+
+  it('counts secondary tags at 0.5 credit — pressing feeds front delts here like on every tracking surface', () => {
+    const sets = computeWeeklySetsByMuscle([
+      {
+        exercises: [
+          {
+            exerciseName: 'Bench',
+            primaryMuscle: 'chest',
+            secondaryMuscles: ['front_delts', 'triceps'],
+            sets: 4,
+          },
+        ],
+      },
+    ]);
+    expect(sets.get('front_delts')).toBe(2); // 4 × 0.5 — no longer invisible
+    expect(sets.get('triceps')).toBe(2);
+    expect(sets.get('chest_upper')).toBe(2);
+  });
+
+  it('never double-credits a muscle the primary already covers', () => {
+    const sets = computeWeeklySetsByMuscle([
+      {
+        exercises: [
+          {
+            exerciseName: 'Arnold Press',
+            primaryMuscle: 'front_delts',
+            secondaryMuscles: ['front_delts', 'lateral_delts'],
+            sets: 6,
+          },
+        ],
+      },
+    ]);
+    expect(sets.get('front_delts')).toBe(6); // primary only — secondary self-tag ignored
+    expect(sets.get('lateral_delts')).toBe(3);
   });
 });
 

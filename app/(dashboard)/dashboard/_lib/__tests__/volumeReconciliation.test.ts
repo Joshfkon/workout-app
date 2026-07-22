@@ -92,9 +92,9 @@ describe('reference reconstruction — shoulders header', () => {
     expect(child('rear_delts').effectiveSets).toBe(6.2);
   });
 
-  it('front delts at 9.8 is IN ZONE under its research band (4–12) — normal press+shoulder training is not structurally red', () => {
+  it('front delts at 9.8 is IN ZONE under its total-inclusive band (2–14) — normal press+shoulder training is not structurally red', () => {
     const front = shoulders.children.find((c) => c.muscle === 'front_delts')!;
-    expect(front.band).toEqual({ mev: 4, mrv: 12 });
+    expect(front.band).toEqual({ mev: 2, mrv: 14 });
     expect(front.zone).toBe('in_zone');
     // No head is lagging in the reference week, so the parent keeps success.
     expect(shoulders.laggingChildren).toBe(false);
@@ -220,7 +220,7 @@ describe('direct vs indirect composition — AFTER the Phase 3 retag mappings (f
 });
 
 describe('zero direct work + sufficient indirect renders in-zone (the "pressing covers it" case)', () => {
-  it('front delts fed only by bench secondaries (5.5 ≥ MEV 4) is in_zone, not under', () => {
+  it('front delts fed only by bench secondaries (5.5 ≥ MEV 2) is in_zone, not under', () => {
     const pressesOnly: WeeklyVolumeBlockRow[] = [
       block('db', 'Dumbbell Bench Press', 'chest', ['front_delts', 'triceps'], rir2(3)),
       block('bb', 'Barbell Bench Press', 'chest', ['front_delts', 'triceps'], rir2(3)),
@@ -234,7 +234,7 @@ describe('zero direct work + sufficient indirect renders in-zone (the "pressing 
 
     expect(front.directSets).toBe(0);
     expect(front.sets).toBe(5.5); // all indirect
-    expect(front.zone).toBe('in_zone'); // 5.5 ≥ MEV 4 — zone judges the TOTAL
+    expect(front.zone).toBe('in_zone'); // 5.5 ≥ MEV 2 — zone judges the TOTAL
     expect(front.belowMev).toBe(false);
   });
 });

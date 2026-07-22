@@ -1675,30 +1675,5 @@ export function generateWorkoutTemplates(
   return templates;
 }
 
-/**
- * Calculate weekly volume per muscle for a given split
- */
-export function calculateWeeklyVolumePerMuscle(
-  sessions: { muscles: string[]; exercises: { sets: number; exerciseName: string }[] }[]
-): Record<string, number> {
-  const volume: Record<string, number> = {};
-  const exerciseDb = getExerciseDatabase();
-
-  sessions.forEach(session => {
-    session.exercises.forEach(ex => {
-      // Try to find the exercise in our database
-      const dbExercise = exerciseDb.find(e => e.name === ex.exerciseName);
-      if (dbExercise) {
-        volume[dbExercise.primaryMuscle] = (volume[dbExercise.primaryMuscle] || 0) + ex.sets;
-        dbExercise.secondaryMuscles.forEach(m => {
-          volume[m] = (volume[m] || 0) + Math.floor(ex.sets * 0.5); // Count secondary at 50%
-        });
-      }
-    });
-  });
-  
-  return volume;
-}
-
 // Re-export from exercise service for backward compatibility
 export { getExercisesSync as getExerciseDatabase } from './exerciseService';

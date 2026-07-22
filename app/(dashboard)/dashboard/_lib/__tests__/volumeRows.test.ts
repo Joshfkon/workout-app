@@ -114,27 +114,31 @@ describe('buildVolumeRows — coarse rows + fine children', () => {
 });
 
 describe('fine-child bands are per-subdivision research landmarks (not parent slices)', () => {
-  it('shoulders heads use their own MEV/MRV — front delts no longer capped at parent/3', () => {
+  it('shoulders heads use their own total-inclusive bands — front delts no longer capped at parent/3', () => {
     const rows = buildVolumeRows([stat('front_delts', 10)]);
     const shoulders = rows.find((r) => r.muscle === 'shoulders')!;
     const front = shoulders.children.find((c) => c.muscle === 'front_delts')!;
     // Old synthesis: mrv = max(mev+2, round(22/3)) = 7 → 10 sets read over-MRV
-    // red for anyone who benches. Research band: front delts tolerate ~12.
-    expect(front.band).toEqual({ mev: 4, mrv: 12 });
+    // red for anyone who benches. Adopted total-inclusive band: {2, 14}
+    // (pressing routinely supplies 4–6 indirect sets; MEV near 0 direct is
+    // fine when pressing volume exists).
+    expect(front.band).toEqual({ mev: 2, mrv: 14 });
     expect(front.zone).toBe('in_zone');
     expect(shoulders.children.find((c) => c.muscle === 'lateral_delts')!.band).toEqual({ mev: 6, mrv: 20 });
-    expect(shoulders.children.find((c) => c.muscle === 'rear_delts')!.band).toEqual({ mev: 4, mrv: 18 });
+    // Rear MRV revisited with the total-inclusive shift: 18 direct-reading
+    // → 20 to absorb routine pulling inflow, MEV 4 → 3.
+    expect(shoulders.children.find((c) => c.muscle === 'rear_delts')!.band).toEqual({ mev: 3, mrv: 20 });
   });
 });
 
 describe('parent color is gated on child states (rowColorToken)', () => {
-  it('a parent in its group zone can NEVER read green while every child is under its own MEV', () => {
-    // 3 sets per head: parent 9 ≥ group MEV 8 (in_zone), but front 3 < 4,
-    // side 3 < 6, rear 3 < 4 — every subdivision is lagging.
+  it('a parent in its group zone can NEVER read green while a reachable child is under its own MEV', () => {
+    // Parent 13 ≥ total-inclusive group MEV 12 (in_zone), but side delts sit
+    // at 4 < their MEV 6 — a lagging subdivision behind an in-zone aggregate.
     const blocks = [
-      block('fr', 'front_delts', [], 3),
-      block('la', 'lateral_delts', [], 3),
-      block('re', 'rear_delts', [], 3),
+      block('fr', 'front_delts', [], 5),
+      block('la', 'lateral_delts', [], 4),
+      block('re', 'rear_delts', [], 4),
     ];
     const stats = computeWeeklyMuscleVolume(blocks);
     const reachable = computeReachableMuscles(blocks);

@@ -16,7 +16,6 @@ import {
   getRecommendedExercises,
   estimateStartingWeight,
   generateWorkoutTemplates,
-  calculateWeeklyVolumePerMuscle,
   generateMesocycleRecommendation,
 } from '../mesocycleBuilder';
 import type { ExtendedUserProfile, RecoveryFactors, Rating, Goal, Experience, MuscleGroup, StandardMuscleGroup, Split, Equipment, SessionTemplate } from '@/types/schema';
@@ -995,60 +994,6 @@ describe('mesocycleBuilder', () => {
           expect(ex.suggestedWeightKg).toBe(0);
         });
       });
-    });
-  });
-
-  describe('calculateWeeklyVolumePerMuscle', () => {
-    it('calculates volume from session data', () => {
-      const sessions = [
-        {
-          muscles: ['chest', 'triceps'],
-          exercises: [
-            { sets: 4, exerciseName: 'Barbell Bench Press' },
-            { sets: 3, exerciseName: 'Cable Tricep Pushdown' },
-          ],
-        },
-      ];
-
-      const volume = calculateWeeklyVolumePerMuscle(sessions);
-
-      expect(volume).toBeDefined();
-    });
-
-    it('counts secondary muscles at reduced rate', () => {
-      const sessions = [
-        {
-          muscles: ['chest'],
-          exercises: [
-            { sets: 4, exerciseName: 'Barbell Bench Press' }, // Works triceps as secondary
-          ],
-        },
-      ];
-
-      const volume = calculateWeeklyVolumePerMuscle(sessions);
-
-      // Should have chest volume, and potentially some triceps from secondary
-      expect(volume.chest || 0).toBeGreaterThanOrEqual(0);
-    });
-
-    it('handles empty sessions', () => {
-      const volume = calculateWeeklyVolumePerMuscle([]);
-      expect(volume).toEqual({});
-    });
-
-    it('handles exercises not in database', () => {
-      const sessions = [
-        {
-          muscles: ['chest'],
-          exercises: [
-            { sets: 3, exerciseName: 'Unknown Exercise' },
-          ],
-        },
-      ];
-
-      const volume = calculateWeeklyVolumePerMuscle(sessions);
-      // Should not throw, may have no volume tracked
-      expect(volume).toBeDefined();
     });
   });
 
