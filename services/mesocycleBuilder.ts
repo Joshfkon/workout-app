@@ -39,8 +39,8 @@ import {
   COARSE_CHILDREN,
   COARSE_MUSCLES,
   FINE_CHILD_MUSCLES,
-  MEV_TARGETS,
-  RESEARCH_VOLUME_BANDS,
+  getEffectiveBand,
+  getStandardMev,
   STANDARD_TO_COARSE,
   type CoarseMuscle,
 } from '@/services/volumeBands';
@@ -881,15 +881,19 @@ export function recommendVolume(
     glutes: { novice: 15, intermediate: 19, advanced: 23 },
     calves: { novice: 10, intermediate: 14, advanced: 18 },
     abs: { novice: 8, intermediate: 12, advanced: 16 },
+    // Total-inclusive like the rest: generated inflow (rows/hinges/carries)
+    // measures 2.5–5, so a small direct share (shrugs) closes the gap to MEV 6.
+    traps: { novice: 6, intermediate: 8, advanced: 10 },
   };
 
   let volume = baseVolumes[muscleGroup]?.[experience] || 12;
 
-  // These base volumes are MAV estimates, so enhanced mode applies the MAV
-  // multiplier from the central scaling table (the MRV ceiling is applied
-  // separately in calculateVolumeDistribution via getMuscleMRV).
+  // Enhanced preset shift is capped at +10% — deliberately LESS than the
+  // enhanced MRV scaling (min tier ×1.15, see ENHANCED_MRV_MULTIPLIERS): the
+  // extra ceiling is headroom for autoregulated exploration, not a
+  // prescription. (Replaces the old ENHANCED_SCALING.mav ×1.25 bump.)
   if (enhancedAthleteMode) {
-    volume = Math.round(volume * ENHANCED_SCALING.mav);
+    volume = Math.round(volume * 1.10);
   }
 
   // Adjust for goal
@@ -899,13 +903,16 @@ export function recommendVolume(
     volume = Math.round(volume * 1.1); // Slightly increase during surplus
   }
 
-  // Goal-clamp: the adjusted target never exceeds the coarse band's MRV —
-  // the same ceiling the tracking card colors red past. The band table is
-  // natural-athlete and un-scaled on the card for enhanced users too, so the
-  // clamp deliberately applies to enhanced targets as well (a target the
-  // card would flag is wrong regardless of recovery capacity).
-  const band = RESEARCH_VOLUME_BANDS[muscleGroup as CoarseMuscle];
-  if (band) volume = Math.min(volume, band.mrv);
+  // Goal-clamp: the adjusted target never exceeds the muscle's EFFECTIVE
+  // band MRV — the same ceiling the tracking card renders for this user's
+  // recovery profile (enhanced scales the ceiling per muscle tier; MEV never
+  // scales). Single band source: getEffectiveBand.
+  if ((COARSE_MUSCLES as readonly string[]).includes(muscleGroup)) {
+    const band = getEffectiveBand(muscleGroup as CoarseMuscle, {
+      recoveryProfile: enhancedAthleteMode ? 'enhanced' : 'standard',
+    });
+    volume = Math.min(volume, band.mrv);
+  }
 
   return volume;
 }
@@ -934,7 +941,10 @@ export function calculateVolumeDistribution(
   enhancedAthleteMode?: boolean
 ): Record<MuscleGroup, { sets: number; frequency: number }> {
 
-  const muscles: MuscleGroup[] = ['chest', 'back', 'shoulders', 'biceps', 'triceps', 'quads', 'hamstrings', 'glutes', 'calves', 'abs'];
+  // traps added in the residuals pass: it was absent from planning entirely
+  // (no preset, no template slot), so no template produced direct traps work
+  // and credited totals (2.5–5) sat under the band MEV 6.
+  const muscles: MuscleGroup[] = ['chest', 'back', 'shoulders', 'biceps', 'triceps', 'quads', 'hamstrings', 'glutes', 'calves', 'abs', 'traps'];
   const result: Record<MuscleGroup, { sets: number; frequency: number }> = {} as Record<MuscleGroup, { sets: number; frequency: number }>;
 
   // Determine frequency based on split
@@ -1032,7 +1042,11 @@ export function calculateVolumeDistribution(
     // looked coarse keys ('chest', 'shoulders') up in the per-STANDARD-muscle
     // landmark table, silently fell through to the {mrv:16} fallback, and
     // capped every big group at 16; it remains only for non-coarse keys.
-    const bandMrv = RESEARCH_VOLUME_BANDS[muscle as CoarseMuscle]?.mrv;
+    const bandMrv = (COARSE_MUSCLES as readonly string[]).includes(muscle)
+      ? getEffectiveBand(muscle as CoarseMuscle, {
+          recoveryProfile: enhancedAthleteMode ? 'enhanced' : 'standard',
+        }).mrv
+      : undefined;
     adjustedVolume = Math.min(
       adjustedVolume,
       bandMrv ?? getMuscleMRV(experience, muscle, enhancedAthleteMode)
@@ -1134,11 +1148,16 @@ export function selectExercises(
   let remainingSets = setsNeeded;
   let fatigueBudget = sessionFatigueBudget;
   
-  // Pick exercises
+  // Pick exercises. The fatigue budget gates ADDITIONAL exercises, not the
+  // first one: a muscle with an allocation is guaranteed one movement even on
+  // a crowded day (residuals pass — small muscles late in the compound-first
+  // order, e.g. traps, otherwise selected NOTHING once the budget was spent,
+  // and no session produced their direct work at all). Mirrors the
+  // allocator's movement-pattern floor.
   for (const exercise of candidates) {
     if (remainingSets <= 0) break;
-    if (fatigueBudget < exercise.fatigueRating) continue;
-    
+    if (exercises.length > 0 && fatigueBudget < exercise.fatigueRating) continue;
+
     // Determine sets for this exercise
     // Compounds get more sets, isolations get fewer
     const maxSetsForExercise = exercise.pattern === 'isolation' ? 3 : 4;
@@ -1260,18 +1279,21 @@ export function buildSessionTemplates(
   const templates: Record<Split, SessionTemplate[]> = {
     'Full Body': [
       { day: 'Full Body A', focus: 'Quad/Push emphasis', targetMuscles: ['quads', 'chest', 'shoulders', 'triceps', 'abs'] },
-      { day: 'Full Body B', focus: 'Hinge/Pull emphasis', targetMuscles: ['hamstrings', 'back', 'biceps', 'glutes', 'calves'] },
-      { day: 'Full Body C', focus: 'Balanced', targetMuscles: ['quads', 'back', 'shoulders', 'biceps', 'triceps'] },
+      // chest added (residuals pass): the FB frequency map declares chest 3×/wk
+      // but only day A carried a chest slot — 15-set target ÷ 3 landed 5 weekly
+      // sets (< MEV 8). A full-body day with zero push work was a template bug.
+      { day: 'Full Body B', focus: 'Hinge/Pull emphasis', targetMuscles: ['hamstrings', 'back', 'chest', 'biceps', 'glutes', 'calves', 'traps'] },
+      { day: 'Full Body C', focus: 'Balanced', targetMuscles: ['quads', 'back', 'chest', 'shoulders', 'biceps', 'triceps', 'traps'] },
     ],
     'Upper/Lower': [
       { day: 'Upper A', focus: 'Horizontal emphasis', targetMuscles: ['chest', 'back', 'shoulders', 'biceps', 'triceps'] },
       { day: 'Lower A', focus: 'Quad emphasis', targetMuscles: ['quads', 'hamstrings', 'glutes', 'calves', 'abs'] },
-      { day: 'Upper B', focus: 'Vertical emphasis', targetMuscles: ['back', 'chest', 'shoulders', 'triceps', 'biceps'] },
+      { day: 'Upper B', focus: 'Vertical emphasis', targetMuscles: ['back', 'chest', 'shoulders', 'triceps', 'biceps', 'traps'] },
       { day: 'Lower B', focus: 'Hinge emphasis', targetMuscles: ['hamstrings', 'quads', 'glutes', 'calves', 'abs'] },
     ],
     'PPL': [
       { day: 'Push', focus: 'Chest, shoulders, triceps', targetMuscles: ['chest', 'shoulders', 'triceps'] },
-      { day: 'Pull', focus: 'Back, biceps, rear delts', targetMuscles: ['back', 'biceps', 'shoulders'] },
+      { day: 'Pull', focus: 'Back, biceps, rear delts', targetMuscles: ['back', 'biceps', 'shoulders', 'traps'] },
       { day: 'Legs', focus: 'Quads, hamstrings, glutes', targetMuscles: ['quads', 'hamstrings', 'glutes', 'calves', 'abs'] },
     ],
     'Arnold': [
@@ -1322,7 +1344,7 @@ export function buildDetailedSession(
     'quads', 'hamstrings', 'glutes',  // Legs first if present
     'back', 'chest',                   // Big upper body
     'shoulders',                       // Medium
-    'biceps', 'triceps', 'calves', 'abs'  // Small/isolation last
+    'biceps', 'triceps', 'calves', 'abs', 'traps'  // Small/isolation last
   ];
   
   const orderedMuscles = sessionTemplate.targetMuscles.sort((a, b) =>
@@ -1438,14 +1460,15 @@ function creditWeek(sessions: DetailedSession[]): WeekCredit {
 /**
  * Direct-work floor for one standard muscle when trimming:
  * - fine children (delt heads, chest heads, …) floor DIRECT sets at their own
- *   MEV_TARGETS — side delts get 0.0 indirect in every measured template, so
+ *   their own MEVs — side delts get 0.0 indirect in every measured template, so
  *   group-level arithmetic must never cut the direct work that serves them;
  * - single-muscle groups (biceps, quads, …) floor so the TOTAL (direct +
  *   indirect) stays at or above the group band MEV.
  */
 function directFloor(std: StandardMuscleGroup, indirect: number): number {
-  if (FINE_CHILD_MUSCLES.has(std)) return MEV_TARGETS[std];
-  const band = RESEARCH_VOLUME_BANDS[STANDARD_TO_COARSE[std]];
+  // MEVs never scale with recovery profile — no context needed here.
+  if (FINE_CHILD_MUSCLES.has(std)) return getStandardMev(std);
+  const band = getEffectiveBand(STANDARD_TO_COARSE[std]);
   return Math.max(0, (band?.mev ?? 0) - indirect);
 }
 

@@ -14,7 +14,6 @@ import {
   type MuscleVolumeData,
 } from '@/services/volumeTracker';
 import {
-  DEFAULT_VOLUME_LANDMARKS,
   isStandardMuscle,
   legacyToStandardMuscles,
   resolveMuscleToStandard,
@@ -28,9 +27,11 @@ import {
   COARSE_CHILDREN,
   STANDARD_TO_COARSE,
   FINE_CHILD_MUSCLES,
-  MEV_TARGETS,
-  RESEARCH_VOLUME_BANDS,
+  getEffectiveBand,
+  getStandardMev,
+  type BandContext,
   type CoarseMuscle,
+  type RecoveryProfile,
   type VolumeBand,
 } from '@/services/volumeBands';
 import { rollingWindowStartISO } from '@/lib/date/localDay';
@@ -53,7 +54,7 @@ export function weeklyVolumeWindowStartISO(now: Date = new Date()): string {
   return rollingWindowStartISO(WEEKLY_VOLUME_WINDOW_DAYS, now);
 }
 
-// (MEV_TARGETS moved to services/volumeBands — re-exported below.)
+// (The per-standard MEV table lives in services/volumeBands; read it via getEffectiveBand.)
 
 export const ALL_MUSCLE_GROUPS: readonly StandardMuscleGroup[] = STANDARD_MUSCLE_GROUPS;
 
@@ -132,9 +133,10 @@ export function isMuscleWarnable(
 
 export function getMevForMuscle(muscle: string): number {
   const standardMuscle = toStandardMuscleForVolume(muscle);
-  if (standardMuscle && standardMuscle in MEV_TARGETS) {
-    return MEV_TARGETS[standardMuscle as StandardMuscleGroup];
-  }
+  // PER-STANDARD MEV (warning threshold) — NOT the coarse group band MEV,
+  // which differs for dual-id muscles like hamstrings (4 vs 8). Profile-
+  // independent: enhanced never raises an MEV.
+  if (standardMuscle) return getStandardMev(standardMuscle);
   return 4;
 }
 
@@ -622,94 +624,25 @@ export {
   COARSE_CHILDREN,
   STANDARD_TO_COARSE,
   FINE_CHILD_MUSCLES,
-  MEV_TARGETS,
-  RESEARCH_VOLUME_BANDS,
+  getEffectiveBand,
+  type BandContext,
   type CoarseMuscle,
+  type RecoveryProfile,
   type VolumeBand,
 } from '@/services/volumeBands';
 
 
 
 
-// (RESEARCH_VOLUME_BANDS moved to services/volumeBands — see re-export above.)
+// (The coarse research bands live in services/volumeBands; read them via getEffectiveBand.)
 
-/** MEV target for a fine child row (its own subdivision-level threshold). */
+/** MEV target for a fine child row (its own subdivision-level threshold).
+ *  Profile-independent — enhanced scaling never raises an MEV. */
 export function fineChildMev(muscle: StandardMuscleGroup): number {
-  return MEV_TARGETS[muscle];
+  return getStandardMev(muscle);
 }
 
-/**
- * MEV–MRV band for a fine child row, from PER-SUBDIVISION research landmarks —
- * NOT a slice of the parent band. The old synthesis (parent MRV ÷ child count)
- * capped front delts at ⌈22/3⌉ = 7 weekly sets, which anyone who both presses
- * (0.5 front-delt credit per bench set) and does direct shoulder work blows
- * past immediately — the bar was structurally red for normal training.
- *
- * Sources, both already in the codebase:
- *   - mev: MEV_TARGETS — the same table the below-MEV warning surface uses, so
- *     a child bar can never read amber while the warning says it's fine (or
- *     vice versa). Where DEFAULT_VOLUME_LANDMARKS disagrees slightly (its
- *     intermediate front_delts MEV is 3 vs MEV_TARGETS' 4), MEV_TARGETS wins
- *     for exactly that consistency reason.
- *   - mrv: DEFAULT_VOLUME_LANDMARKS.intermediate — the per-muscle research
- *     table (types/schema.ts) that volumeTracker already falls back to.
- *     Intermediate tier: these bands are population defaults, matching the
- *     coarse RESEARCH_VOLUME_BANDS above (per-user learning only nudges
- *     coarse bands today).
- *
- * The mev+2 floor guards subdivisions whose research MRV sits at/below the
- * warning-table MEV (can't happen with today's values; kept as an invariant).
- * Fine-child bands are deliberately NOT rescaled by a learned/override coarse
- * band — subdivision landmarks are independent of the group aggregate (see
- * RESEARCH_VOLUME_BANDS semantics note).
- *
- * ─── PHASE 5b — ADOPTED total-inclusive values ─────────────────────────────
- *
- * Zone placement uses the TOTAL (direct + indirect) — never direct-only — so
- * every band is a total-inclusive threshold. Most values in MEV_TARGETS ×
- * DEFAULT_VOLUME_LANDMARKS.intermediate already behave as totals (their
- * indirect share arrives via the same coarse-tagged exercises that feed them
- * directly). The muscles with heavy CROSS-group indirect inflow carry
- * explicit adopted overrides:
- *
- *   front_delts {2, 14}: pressing (0.5/set) routinely supplies 4–6 indirect
- *     sets — near-zero direct work is fine when pressing volume exists, and
- *     the +2 MRV headroom absorbs the indirect load a chest day adds.
- *   rear_delts {3, 20}: rows/pulldowns supply 1–3 indirect sets — a smaller
- *     MEV discount than front delts (pulls credit rear delts less densely),
- *     with the same +2 MRV absorption for routine pulling inflow (revisited
- *     from the direct-reading 18 when the parent band went total-inclusive).
- *   lateral_delts {6, 20}, chest/back children: unchanged — direct-work and
- *     total-inclusive readings coincide (little cross-group inflow).
- *
- * MEVs live in MEV_TARGETS (shared with the warning surface — bar and
- * warning can never disagree); MRV overrides live in
- * FINE_BAND_TOTAL_INCLUSIVE_MRV below.
- *
- * ─── CONVENTION-CONVERSION v2: ADOPTED ────────────────────────────────────
- * The direct-assuming bands (biceps/triceps/traps/glutes/hamstrings) and the
- * generator presets were converted to total-inclusive values in one pass —
- * the adopted band values, their measured inflow ranges, and the semantics
- * doc live at services/volumeBands.ts; the preset conversions, the
- * goal-clamp (goal-adjusted target ≤ band MRV) and the per-standard-muscle
- * indirect deduction with child-MEV floors live in
- * services/mesocycleBuilder.ts. Invariants: bandPresetInvariant.test.ts.
- * ──────────────────────────────────────────────────────────────────────────
- */
-
-/** Adopted total-inclusive MRV overrides for cross-group-inflow muscles. */
-const FINE_BAND_TOTAL_INCLUSIVE_MRV: Partial<Record<StandardMuscleGroup, number>> = {
-  front_delts: 14,
-  rear_delts: 20,
-};
-
-export function fineChildBand(muscle: StandardMuscleGroup): VolumeBand {
-  const mev = MEV_TARGETS[muscle];
-  const mrv =
-    FINE_BAND_TOTAL_INCLUSIVE_MRV[muscle] ??
-    DEFAULT_VOLUME_LANDMARKS.intermediate[muscle].mrv;
-  return { mev, mrv: Math.max(mev + 2, mrv) };
-}
+// (Fine-child band synthesis moved into services/volumeBands.getEffectiveBand.)
 
 export type VolumeZone = 'below_mev' | 'in_zone' | 'over_mrv';
 
@@ -821,7 +754,7 @@ export function zoneBandLabel(band: VolumeBand): string {
 /**
  * Denominator label for a COARSE row: same band, prefixed "group" so an
  * independent group-level landmark can't be misread as the sum of the child
- * zones shown beneath it (see RESEARCH_VOLUME_BANDS semantics note).
+ * zones shown beneath it (see the band semantics note in services/volumeBands).
  */
 export function groupZoneBandLabel(band: VolumeBand): string {
   return `group zone ${band.mev}–${band.mrv}`;
@@ -886,6 +819,8 @@ export interface VolumeRow {
 export interface BuildVolumeRowsOptions {
   /** Per-coarse band overrides (e.g. the reset/learned table). */
   bands?: Partial<Record<CoarseMuscle, VolumeBand>>;
+  /** Recovery profile — enhanced scales band MRVs (never MEVs). */
+  recoveryProfile?: RecoveryProfile;
 }
 
 /** Per-standard-muscle rollup carried into the row model (full precision). */
@@ -966,7 +901,8 @@ export function buildVolumeRows(
 
   const rows: VolumeRow[] = COARSE_MUSCLES.map((coarse) => {
     const children = COARSE_CHILDREN[coarse];
-    const band = opts.bands?.[coarse] ?? RESEARCH_VOLUME_BANDS[coarse];
+    const bandCtx: BandContext = { recoveryProfile: opts.recoveryProfile };
+    const band = opts.bands?.[coarse] ?? getEffectiveBand(coarse, bandCtx);
 
     // The chevron rule: a coarse row is expandable when the user's own exercise
     // tagging can feed at least one of its fine children. When no reachability
@@ -1024,8 +960,8 @@ export function buildVolumeRows(
       const childBelowMev = childSets < childMev;
 
       // A fine child's band is its OWN subdivision-level research landmark —
-      // never a slice of the parent band (see fineChildBand for why).
-      const childBand: VolumeBand = fineChildBand(child);
+      // never a slice of the parent band (resolved by the single band source).
+      const childBand: VolumeBand = getEffectiveBand(child, bandCtx);
       childRows.push({
         key: `${coarse}:${child}`,
         muscle: child,

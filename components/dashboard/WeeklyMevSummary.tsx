@@ -2,6 +2,7 @@
 
 import { Card } from '@/components/ui/Card';
 import { useWeeklyMevSummary } from '@/hooks/useWeeklyMevSummary';
+import { useUserStore } from '@/stores';
 import {
   buildVolumeRows,
   coarseMevTiles,
@@ -19,13 +20,14 @@ import { formatEffectiveVolume } from '@/services/effectiveVolume';
  */
 export function WeeklyMevSummary() {
   const { stats, reachable, loaded } = useWeeklyMevSummary();
+  const enhanced = useUserStore((s) => s.user?.enhancedAthleteMode === true);
 
   if (!loaded) {
     return <Card className="p-4 mb-6 h-24 animate-pulse" aria-hidden="true"><div /></Card>;
   }
   if (stats.length === 0) return null;
 
-  const rows = buildVolumeRows(stats, reachable);
+  const rows = buildVolumeRows(stats, reachable, { recoveryProfile: enhanced ? 'enhanced' : 'standard' });
   const tiles = coarseMevTiles(rows);
   const below = rows.filter((r) => r.zone === 'below_mev');
 

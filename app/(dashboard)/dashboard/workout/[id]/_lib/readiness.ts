@@ -28,6 +28,7 @@ import {
   type ExerciseVolume,
   type VolumeBand,
   type VolumeZone,
+  type RecoveryProfile,
   type VolumeRow,
   type MuscleVolumeStats,
 } from '../../../_lib/weeklyVolume';
@@ -292,9 +293,10 @@ export function buildReadinessRows(
   now: Date,
   reachable?: Set<StandardMuscleGroup>,
   config: RecoveryConfig = RECOVERY_CONFIG,
-  sorenessOverrides?: ReadonlySet<StandardMuscleGroup>
+  sorenessOverrides?: ReadonlySet<StandardMuscleGroup>,
+  recoveryProfile?: RecoveryProfile
 ): ReadinessRow[] {
-  const volumeRows = buildVolumeRows(stats, reachable);
+  const volumeRows = buildVolumeRows(stats, reachable, { recoveryProfile });
 
   const rows = volumeRows.map((vr: VolumeRow): ReadinessRow => {
     const coarse = vr.muscle as CoarseMuscle;

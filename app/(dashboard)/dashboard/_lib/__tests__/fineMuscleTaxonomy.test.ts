@@ -20,10 +20,10 @@ import {
   COARSE_MUSCLES,
   COARSE_CHILDREN,
   FINE_MUSCLE_PARENTS,
-  MEV_TARGETS,
   type WeeklyVolumeBlockRow,
   type CoarseMuscle,
 } from '../weeklyVolume';
+import { RESEARCH_VOLUME_BANDS, MEV_TARGETS } from '@/services/volumeBands';
 import { isMuscleWarnable } from '../weeklyVolume';
 import { buildReadinessRows, selectGoodTargets } from '../../workout/[id]/_lib/readiness';
 import { withVisibleChildren } from '@/components/muscle/MuscleGroupList';

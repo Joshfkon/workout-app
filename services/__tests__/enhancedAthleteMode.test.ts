@@ -9,7 +9,7 @@
  * - mesocycle generator consumption (volume, ramp, accumulation length)
  * - joint-stress caps provably unaffected by the toggle
  */
-import { RESEARCH_VOLUME_BANDS } from '../volumeBands';
+import { getEffectiveBand } from '../volumeBands';
 import {
   ENHANCED_SCALING,
   scaleLandmarksForEnhanced,
@@ -264,13 +264,15 @@ describe('mesocycle generator (enhanced mode)', () => {
     );
   });
 
-  it('scales MAV-derived base volume by the MAV multiplier', () => {
+  it('shifts base volume by at most +10% (residuals pass: less than any MRV tier)', () => {
+    // The old ENHANCED_SCALING.mav (x1.25) preset bump was replaced: the
+    // enhanced ceiling is exploration headroom, not a prescription.
     const natural = recommendVolume('intermediate', 'maintenance', 'chest');
     const enhanced = recommendVolume('intermediate', 'maintenance', 'chest', true);
-    expect(enhanced).toBe(Math.round(natural * ENHANCED_SCALING.mav));
+    expect(enhanced).toBe(Math.round(natural * 1.10));
   });
 
-  it('clamps weekly volume at the shared band MRV for BOTH natural and enhanced', () => {
+  it('clamps weekly volume at each profile\'s EFFECTIVE band MRV', () => {
     // Max out every recovery multiplier so the clamp actually binds.
     const boostedRecovery = calculateRecoveryFactors(
       createProfile({ age: 22, sleepQuality: 5 as Rating, stressLevel: 1 as Rating })
@@ -289,10 +291,13 @@ describe('mesocycle generator (enhanced mode)', () => {
     // card would flag is wrong regardless of recovery capacity. (The old
     // behavior clamped 'chest' at the {mrv:16} legacy fallback because the
     // coarse key missed the per-standard landmark table entirely.)
-    const bandMrv = RESEARCH_VOLUME_BANDS.chest.mrv;
-    expect(natural.chest.sets).toBeLessThanOrEqual(bandMrv);
-    expect(enhanced.chest.sets).toBeLessThanOrEqual(bandMrv);
-    // Enhanced never allocates LESS; at the shared ceiling both may saturate.
+    const naturalMrv = getEffectiveBand('chest', { recoveryProfile: 'standard' }).mrv;
+    const enhancedMrv = getEffectiveBand('chest', { recoveryProfile: 'enhanced' }).mrv;
+    expect(natural.chest.sets).toBeLessThanOrEqual(naturalMrv);
+    expect(enhanced.chest.sets).toBeLessThanOrEqual(enhancedMrv);
+    // The enhanced ceiling is strictly higher (chest tier x1.25: 22 -> 27.5)…
+    expect(enhancedMrv).toBeGreaterThan(naturalMrv);
+    // …and enhanced never allocates less than natural.
     expect(enhanced.chest.sets).toBeGreaterThanOrEqual(natural.chest.sets);
   });
 

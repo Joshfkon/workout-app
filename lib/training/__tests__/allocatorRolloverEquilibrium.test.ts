@@ -27,28 +27,31 @@ import {
   type RolloverSession,
 } from '../weeklyRollover';
 import {
-  RESEARCH_VOLUME_BANDS,
+  getEffectiveBand,
   STANDARD_TO_COARSE,
   type CoarseMuscle,
 } from '@/services/volumeBands';
 import type { MuscleWeekFeedback } from '@/services/weeklyProgressionEngine';
 import type { ExtendedUserProfile, Rating, StandardMuscleGroup } from '@/types/schema';
 
-const profile: ExtendedUserProfile = {
-  goal: 'bulk',
-  experience: 'intermediate',
-  heightCm: 175,
-  latestDexa: null,
-  age: 30,
-  sleepQuality: 3 as Rating,
-  stressLevel: 3 as Rating,
-  trainingAge: 2,
-  availableEquipment: ['barbell', 'dumbbell', 'cable', 'machine'],
-  injuryHistory: [],
-};
+function profileFor(enhanced: boolean): ExtendedUserProfile {
+  return {
+    goal: 'bulk',
+    experience: 'intermediate',
+    heightCm: 175,
+    latestDexa: null,
+    age: 30,
+    sleepQuality: 3 as Rating,
+    stressLevel: 3 as Rating,
+    trainingAge: 2,
+    availableEquipment: ['barbell', 'dumbbell', 'cable', 'machine'],
+    injuryHistory: [],
+    enhancedAthleteMode: enhanced,
+  };
+}
 
-function generatedWeek(days: number): RolloverSession[] {
-  return generateFullProgram(days, profile, 60).sessions.map((s) => ({
+function generatedWeek(days: number, enhanced: boolean): RolloverSession[] {
+  return generateFullProgram(days, profileFor(enhanced), 60).sessions.map((s) => ({
     exercises: s.exercises.map((e) => ({
       exerciseName: e.exercise.name,
       primaryMuscle: e.exercise.primaryMuscle,
@@ -58,9 +61,13 @@ function generatedWeek(days: number): RolloverSession[] {
   }));
 }
 
-describe.each([[3], [4], [6]])('%sd template', (days) => {
-  const weekSessions = generatedWeek(days);
-  const landmarks = resolveVolumeLandmarks('intermediate');
+describe.each([
+  ['standard', 3], ['standard', 4], ['standard', 6],
+  ['enhanced', 3], ['enhanced', 4], ['enhanced', 6],
+] as ['standard' | 'enhanced', number][])('%s / %sd template', (recoveryProfile, days) => {
+  const enhanced = recoveryProfile === 'enhanced';
+  const weekSessions = generatedWeek(days, enhanced);
+  const landmarks = resolveVolumeLandmarks('intermediate', null, enhanced);
 
   it('fixed point: a completed no-progress week produces zero adjustments', () => {
     const plan = planWeeklySetAdjustments({
@@ -70,6 +77,7 @@ describe.each([[3], [4], [6]])('%sd template', (days) => {
       landmarksByMuscle: landmarks,
       weekInMeso: 2,
       isDeloadWeek: false,
+      enhancedAthleteMode: enhanced,
     });
     expect(plan.byExercise.size).toBe(0);
     expect(plan.summary.every((s) => s.action === 'hold')).toBe(true);
@@ -88,6 +96,7 @@ describe.each([[3], [4], [6]])('%sd template', (days) => {
       landmarksByMuscle: landmarks,
       weekInMeso: 2,
       isDeloadWeek: false,
+      enhancedAthleteMode: enhanced,
     });
 
     const deltaByGroup = new Map<CoarseMuscle, number>();
@@ -103,11 +112,17 @@ describe.each([[3], [4], [6]])('%sd template', (days) => {
     const groupsPushedPastBand = Array.from(deltaByGroup.entries())
       .filter(
         ([group, delta]) =>
-          (totalByGroup.get(group) ?? 0) + delta > RESEARCH_VOLUME_BANDS[group].mrv
+          (totalByGroup.get(group) ?? 0) + delta >
+          getEffectiveBand(group, { recoveryProfile }).mrv
       )
       .map(([group]) => group)
       .sort();
 
-    expect(groupsPushedPastBand).toEqual(days === 3 ? [] : ['shoulders']);
+    // Pins: STANDARD 4d/6d push shoulders past the band (side +1 AND rear +1
+    // in one week, no group budget); the ENHANCED shoulders ceiling (×1.35 →
+    // 35) absorbs the same adds, so no bust in that profile. The group-aware
+    // add budget (awaiting sign-off) flips these to empty lists.
+    const expected = !enhanced && days !== 3 ? ['shoulders'] : [];
+    expect(groupsPushedPastBand).toEqual(expected);
   });
 });

@@ -1,7 +1,7 @@
 /**
  * Coarse muscle groups and their research MEV–MRV bands — the SINGLE shared
  * denominator for every volume surface AND the program generator's target
- * ceiling. Pure data: type-only imports, no side effects.
+ * ceiling. Pure data + the getEffectiveBand resolver; no side effects.
  *
  * Lives in /services (not the dashboard lib) because BOTH sides of the
  * volume contract consume it: the tracking surfaces read it through
@@ -11,7 +11,7 @@
  * tracking card would flag (bandPresetInvariant.test.ts).
  */
 
-import type { StandardMuscleGroup } from '@/types/schema';
+import { DEFAULT_VOLUME_LANDMARKS, type StandardMuscleGroup } from '@/types/schema';
 
 /** The 13 coarse muscle groups that are the default ROW in every surface. */
 export const COARSE_MUSCLES = [
@@ -159,3 +159,130 @@ export const MEV_TARGETS: Record<StandardMuscleGroup, number> = {
   calves: 6, gastrocnemius: 4, soleus: 3,
   abs: 6, obliques: 4, erectors: 4,
 };
+
+// ============================================
+// RECOVERY PROFILE + THE SINGLE BAND SOURCE
+// ============================================
+
+/**
+ * Self-reported recovery profile, derived from the existing
+ * users.enhanced_athlete_mode flag (neutral naming; the field is excluded
+ * from share formatters, exports and analytics — audited in the residuals
+ * pass). Default 'standard'.
+ */
+export type RecoveryProfile = 'standard' | 'enhanced';
+
+export interface BandContext {
+  recoveryProfile?: RecoveryProfile;
+}
+
+/**
+ * ─── ENHANCED MRV SCALING (asymmetric, per-muscle-tiered) ──────────────────
+ *
+ * Rationale (definition-site record): enhanced recovery scales LOCAL muscular
+ * recovery most, systemic/axial fatigue much less, and connective-tissue
+ * adaptation not at all — so tolerance bumps concentrate in small,
+ * isolation-friendly muscles, and spinal-loading-heavy groups stay closest
+ * to natural ceilings.
+ *
+ * Approved multiplier tiers (MRV only):
+ *   × 1.35 — delt heads (front/side/rear), biceps, triceps, calves
+ *            (incl. gastrocnemius/soleus), forearms
+ *   × 1.25 — chest (both heads), glutes (incl. glute_med), traps (all
+ *            regions), abs/obliques, adductors
+ *   × 1.15 — quads, back (lats/upper_back/erectors), hamstrings
+ * Coarse group bands scale with their children's tier (each group's children
+ * share one tier, so the roll-up is unambiguous).
+ *
+ * MEV × 1.0 everywhere — INVARIANT (pinned in bandPresetInvariant.test.ts):
+ * enhanced MEV never exceeds standard MEV. Presets shift at most +10%
+ * (see recommendVolume) — always less than the MRV scaling: the extra
+ * ceiling is headroom for autoregulated exploration, not a prescription.
+ *
+ * DESIGN INTENT: the scaled MRV is a safe upper bound on rollover
+ * exploration, NOT a claim about true individual MRV — the recovery-feedback
+ * ramp (with its group budget, once landed) discovers the individual
+ * ceiling; the band just bounds the search. Conservative-by-default is
+ * deliberate.
+ *
+ * COMPUTED SCALED TABLE (0.5-set granularity — review record; flag anything
+ * implausible here before amending tiers):
+ *   coarse: chest 22→27.5, back 28→32, shoulders 26→35, biceps 26→35,
+ *           triceps 24→32.5, quads 20→23, hamstrings 20→23, glutes 24→30,
+ *           calves 20→27, abs 20→25, traps 20→25, forearms 14→19,
+ *           adductors 12→15
+ *   fine:   front_delts 14→19, lateral_delts 20→27, rear_delts 20→27,
+ *           chest_upper 16→20, chest_lower 12→15, lats 20→23,
+ *           upper_back 16→18.5, erectors 12→14, glute_med 10→12.5,
+ *           obliques 10→12.5, upper_traps 12→15, mid_lower_traps 10→12.5,
+ *           gastrocnemius 16→21.5, soleus 12→17 (via max(mev+2, table))
+ *   FLAGGED as aggressive-looking but intentional: shoulders/biceps 35 —
+ *   these are CREDITED (indirect-inclusive) ceilings; typical indirect
+ *   inflow of 6–16 means the direct-work exploration bound is ~20–29.
+ * ───────────────────────────────────────────────────────────────────────────
+ */
+export const ENHANCED_MRV_MULTIPLIERS: Record<CoarseMuscle, number> = {
+  shoulders: 1.35, biceps: 1.35, triceps: 1.35, calves: 1.35, forearms: 1.35,
+  chest: 1.25, glutes: 1.25, traps: 1.25, abs: 1.25, adductors: 1.25,
+  quads: 1.15, back: 1.15, hamstrings: 1.15,
+};
+
+/** Adopted total-inclusive MRV overrides for cross-group-inflow fine muscles
+ *  (moved here from weeklyVolume — part of the single band source). */
+const FINE_BAND_TOTAL_INCLUSIVE_MRV: Partial<Record<StandardMuscleGroup, number>> = {
+  front_delts: 14,
+  rear_delts: 20,
+};
+
+/** Round a scaled ceiling to 0.5-set granularity. */
+const roundHalf = (v: number): number => Math.round(v * 2) / 2;
+
+function isCoarse(muscle: string): muscle is CoarseMuscle {
+  return (COARSE_MUSCLES as readonly string[]).includes(muscle);
+}
+
+/**
+ * THE single landmark read (close-out 3b): card rendering, the allocator
+ * clamp, the goal-clamp, child-band synthesis — every consumer resolves
+ * bands through this function; nothing outside this module (tests excepted)
+ * may touch RESEARCH_VOLUME_BANDS / MEV_TARGETS / the fine-band table
+ * directly (enforced by the band-source import-guard test).
+ *
+ * Coarse ids resolve to the group band; standard-muscle ids resolve to the
+ * subdivision band (MEV from MEV_TARGETS — shared with the warning surface —
+ * and MRV from the total-inclusive overrides or the intermediate research
+ * table, floored at mev+2). Enhanced profiles scale the MRV by the muscle's
+ * tier; MEV is NEVER scaled.
+ */
+/**
+ * Per-STANDARD-muscle MEV — the warning-surface threshold. Distinct from
+ * getEffectiveBand for the ten muscles whose id is both a standard muscle and
+ * a coarse group (hamstrings: per-standard MEV 4, group band MEV 8): the MEV
+ * summary and fine-child thresholds read the per-standard value; group rows
+ * and generator clamps read the group band. Profile-independent — enhanced
+ * scaling never touches an MEV.
+ */
+export function getStandardMev(muscle: StandardMuscleGroup): number {
+  return MEV_TARGETS[muscle];
+}
+
+export function getEffectiveBand(
+  muscle: CoarseMuscle | StandardMuscleGroup,
+  ctx?: BandContext
+): VolumeBand {
+  let base: VolumeBand;
+  let tierKey: CoarseMuscle;
+  if (isCoarse(muscle)) {
+    base = RESEARCH_VOLUME_BANDS[muscle];
+    tierKey = muscle;
+  } else {
+    const mev = MEV_TARGETS[muscle];
+    const mrv =
+      FINE_BAND_TOTAL_INCLUSIVE_MRV[muscle] ??
+      DEFAULT_VOLUME_LANDMARKS.intermediate[muscle].mrv;
+    base = { mev, mrv: Math.max(mev + 2, mrv) };
+    tierKey = STANDARD_TO_COARSE[muscle];
+  }
+  if (ctx?.recoveryProfile !== 'enhanced') return base;
+  return { mev: base.mev, mrv: roundHalf(base.mrv * (ENHANCED_MRV_MULTIPLIERS[tierKey] ?? 1)) };
+}
