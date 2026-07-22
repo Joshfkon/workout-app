@@ -23,6 +23,16 @@ import {
   type StandardMuscleGroup,
 } from '@/types/schema';
 import { toStandardMuscleForVolume } from '@/lib/migrations/muscle-groups';
+import {
+  COARSE_MUSCLES,
+  COARSE_CHILDREN,
+  STANDARD_TO_COARSE,
+  FINE_CHILD_MUSCLES,
+  MEV_TARGETS,
+  RESEARCH_VOLUME_BANDS,
+  type CoarseMuscle,
+  type VolumeBand,
+} from '@/services/volumeBands';
 import { rollingWindowStartISO } from '@/lib/date/localDay';
 import { rirFromFeedback, sumEffectiveVolume } from '@/services/effectiveVolume';
 
@@ -43,22 +53,7 @@ export function weeklyVolumeWindowStartISO(now: Date = new Date()): string {
   return rollingWindowStartISO(WEEKLY_VOLUME_WINDOW_DAYS, now);
 }
 
-// MEV per standard muscle (24 muscles) — the threshold for the 'low' status.
-// TOTAL-INCLUSIVE (Phase 5b, adopted): the counter credits secondary work at
-// 0.5/set, so thresholds are stated against that total. front_delts 2 and
-// rear_delts 3 are deliberately below their direct-work literature values —
-// pressing routinely supplies 4–6 indirect front-delt sets (rows/pulldowns
-// 1–3 rear-delt sets), and warning at a direct-work threshold would nag users
-// whose indirect volume already covers the muscle.
-export const MEV_TARGETS: Record<StandardMuscleGroup, number> = {
-  chest_upper: 4, chest_lower: 4,
-  front_delts: 2, lateral_delts: 6, rear_delts: 3,
-  lats: 6, upper_back: 4, traps: 4, upper_traps: 3, mid_lower_traps: 2,
-  biceps: 4, triceps: 4, forearms: 4,
-  quads: 6, hamstrings: 4, glutes: 4, glute_med: 2, adductors: 4,
-  calves: 6, gastrocnemius: 4, soleus: 3,
-  abs: 6, obliques: 4, erectors: 4,
-};
+// (MEV_TARGETS moved to services/volumeBands — re-exported below.)
 
 export const ALL_MUSCLE_GROUPS: readonly StandardMuscleGroup[] = STANDARD_MUSCLE_GROUPS;
 
@@ -618,104 +613,25 @@ export function mevSummaryToVolumeData(summary: WeeklyMevSummary | null): Muscle
 // counter), denominator (the MEV–MRV band below) or taxonomy (coarse rows with
 // fine children). See buildVolumeRows.
 
-/** The 13 coarse muscle groups that are the default ROW in every surface. */
-export const COARSE_MUSCLES = [
-  'chest', 'back', 'shoulders', 'biceps', 'triceps', 'quads', 'hamstrings',
-  'glutes', 'calves', 'abs', 'traps', 'forearms', 'adductors',
-] as const;
-export type CoarseMuscle = (typeof COARSE_MUSCLES)[number];
+// The coarse-group taxonomy and the research bands live in
+// services/volumeBands (pure data) so the program generator can clamp its
+// targets against the SAME ceilings the tracking surfaces render —
+// re-exported here so every existing consumer keeps its import path.
+export {
+  COARSE_MUSCLES,
+  COARSE_CHILDREN,
+  STANDARD_TO_COARSE,
+  FINE_CHILD_MUSCLES,
+  MEV_TARGETS,
+  RESEARCH_VOLUME_BANDS,
+  type CoarseMuscle,
+  type VolumeBand,
+} from '@/services/volumeBands';
 
-/**
- * Coarse group → the standard muscles it aggregates. A coarse row's set count
- * is the sum of its children's credited sets; the "fine" children (subdivisions
- * — see FINE_CHILD_MUSCLES) are carried on the row wherever reachable, and the
- * shared list component decides which are VISIBLE (pinned-lagging or expanded).
- */
-export const COARSE_CHILDREN: Record<CoarseMuscle, StandardMuscleGroup[]> = {
-  chest: ['chest_upper', 'chest_lower'],
-  back: ['lats', 'upper_back', 'erectors'],
-  shoulders: ['front_delts', 'lateral_delts', 'rear_delts'],
-  biceps: ['biceps'],
-  triceps: ['triceps'],
-  quads: ['quads'],
-  hamstrings: ['hamstrings'],
-  glutes: ['glutes', 'glute_med'],
-  calves: ['calves', 'gastrocnemius', 'soleus'],
-  abs: ['abs', 'obliques'],
-  traps: ['traps', 'upper_traps', 'mid_lower_traps'],
-  forearms: ['forearms'],
-  adductors: ['adductors'],
-};
 
-/** Reverse map: every standard muscle to its coarse display parent. */
-export const STANDARD_TO_COARSE: Record<StandardMuscleGroup, CoarseMuscle> = (() => {
-  const map = {} as Record<StandardMuscleGroup, CoarseMuscle>;
-  for (const coarse of COARSE_MUSCLES) {
-    for (const child of COARSE_CHILDREN[coarse]) map[child] = coarse;
-  }
-  return map;
-})();
 
-/**
- * Standard muscles that render as INDENTED child rows under their coarse parent
- * (anatomical subdivisions). The single-muscle coarse groups (biceps, quads, …)
- * have no fine children and never expand.
- */
-export const FINE_CHILD_MUSCLES = new Set<StandardMuscleGroup>([
-  'chest_upper', 'chest_lower',
-  'front_delts', 'lateral_delts', 'rear_delts',
-  'lats', 'upper_back', 'erectors',
-  'glute_med', 'obliques',
-  'upper_traps', 'mid_lower_traps',
-  'gastrocnemius', 'soleus',
-]);
 
-/**
- * Research-based coarse MEV–MRV bands (Israetel / Schoenfeld), expressed in
- * inclusive direct+indirect set terms so they sit sensibly against the
- * secondary-credit counter. This is the SINGLE shared denominator: a bar is
- * gray/amber below MEV, green across the MEV–MRV zone, red only past MRV — so
- * hitting MEV is never punished with a red bar. Per-user learning may nudge the
- * volume page's band; these are the defaults every glance surface uses (and the
- * baseline the learned table resets to).
- *
- * SEMANTICS (decided in the shoulders-card audit): a coarse band is an
- * INDEPENDENT group-level landmark — it is deliberately NOT the sum of its
- * fine children's bands. Group MEVs assume overlapping stimulus (8 "shoulders"
- * sets can touch every head), while a fine child's band (see fineChildBand) is
- * that subdivision's own research landmark, so Σ(child MEVs) is expected to
- * exceed the group MEV. Two consequences every surface must respect:
- *   1. Labels must distinguish the scopes — groupZoneBandLabel ("group zone
- *      8–22") for coarse rows vs zoneBandLabel ("zone 4–12") for children.
- *   2. A parent may NOT render green while a reachable fine child sits below
- *      its own MEV — the aggregate would be hiding a lagging subdivision. The
- *      row-aware color helpers (rowColorToken and friends) demote such a
- *      parent from success to warning; use them, not the raw zone helpers,
- *      wherever a coarse row is colorized.
- */
-export const RESEARCH_VOLUME_BANDS: Record<CoarseMuscle, { mev: number; mrv: number }> = {
-  chest: { mev: 8, mrv: 22 },
-  back: { mev: 10, mrv: 25 },
-  // shoulders is TOTAL-INCLUSIVE (Phase 5b, adopted): the literature's "8–22
-  // shoulder sets" counts DIRECT lateral/rear work, with pressing existing
-  // but landing under chest — our counter adds ~0.5/press set to this row
-  // (typically +4) plus ~1 rear-delt set from pulls. Shifted by that routine
-  // inflow so the same training reads the same zone: {8+4, 22+4}. Coheres
-  // with the adopted children: Σ child MEVs (2+6+3) ≈ 12. Someone ONLY
-  // pressing (11 sets → 5.5 here) still reads below MEV — correct, side/rear
-  // delts need their own work.
-  shoulders: { mev: 12, mrv: 26 },
-  biceps: { mev: 6, mrv: 20 },
-  triceps: { mev: 6, mrv: 18 },
-  quads: { mev: 8, mrv: 20 },
-  hamstrings: { mev: 6, mrv: 16 },
-  glutes: { mev: 4, mrv: 16 },
-  calves: { mev: 8, mrv: 20 },
-  abs: { mev: 6, mrv: 20 },
-  traps: { mev: 4, mrv: 16 },
-  forearms: { mev: 4, mrv: 14 },
-  adductors: { mev: 4, mrv: 12 },
-};
+// (RESEARCH_VOLUME_BANDS moved to services/volumeBands — see re-export above.)
 
 /** MEV target for a fine child row (its own subdivision-level threshold). */
 export function fineChildMev(muscle: StandardMuscleGroup): number {
@@ -770,59 +686,14 @@ export function fineChildMev(muscle: StandardMuscleGroup): number {
  * warning can never disagree); MRV overrides live in
  * FINE_BAND_TOTAL_INCLUSIVE_MRV below.
  *
- * ─── CONVENTION-CONVERSION REVIEW v2 (PROPOSED — NOT APPLIED, awaiting
- * sign-off; covers the remaining direct-assuming RESEARCH_VOLUME_BANDS and
- * the mesocycleBuilder recommendVolume presets in ONE pass) ────────────────
- *
- * The counter is total-inclusive (0.5-credit per secondary set — OUR
- * convention, not the researchers'), but the bands below and the generator's
- * presets still read as DIRECT-set landmarks: RP-style "~14 biceps sets"
- * already assumes you also row and pull down. Comparing a total-inclusive
- * count against those numbers is apples-to-oranges, and naively allocating
- * `target − indirect` against them double-corrects into under-prescription.
- *
- * v2 calibration: shifts are anchored to indirect inflow MEASURED across
- * three generated templates (intermediate bulk; Full Body 3d / Upper-Lower
- * 4d / PPL 6d) rather than one program — each proposal cites its observed
- * range. Bench-based user programs add triceps/front-delt press inflow the
- * fly-leaning generator doesn't produce, widening the triceps range to 0–7.
- *
- *   biceps {6, 20} → {10, 26}   (observed inflow 6–8; MEV +4, MRV +6)
- *   triceps {6, 18} → {8, 24}   (observed 0–7 — the most program-dependent:
- *                                fly-based programs 0, bench-based 4–7; MEV
- *                                shifts by the low-mid, MRV absorbs the top)
- *   traps {4, 16} → {6, 20}     (observed 0.5–5)
- *   glutes {4, 16} → {6, 24}    (observed 5.5–9 — NOT modest; MEV +2 = the
- *                                minimal-program floor, MRV + mean ≈ +8.
- *                                v1 left this band unconverted while raising
- *                                the preset — recreating the target-above-
- *                                zone contradiction; fixed here)
- *   hamstrings {6, 16} → {8, 20} (observed 3.5–7, least template-stable —
- *                                shifted by the low-mean; same v1 bug fixed)
- *   back {10, 25}: flagged, proposed unchanged — observed inflow 3.5–7 is
- *   larger than v1 assumed; raise to {12, 28} only if real-user programs
- *   read hot against 25.
- *
- * INVARIANT (enforced by bandPresetInvariant.test.ts): every generator
- * preset target must sit ≤ its coarse band's MRV, per muscle × experience.
- * Goal multipliers (bulk ×1.1) can push past the ceiling — the conversion
- * pass adds a clamp of the goal-adjusted target to the band MRV so the
- * invariant holds for every goal too (today glutes advanced×bulk = 18 > 16
- * is a live pre-existing violation the clamp retires).
- *
- * ALLOCATION SPEC (held policy, revised per review): project indirect and
- * deduct PER STANDARD MUSCLE — never against the coarse group budget — then
- * roll up, flooring direct work for each fine child at its child MEV.
- * Measured evidence: side delts receive 0.0 indirect in ALL templates while
- * front+rear absorb 8–16; a coarse-level `shoulders target − group inflow`
- * deduction would cut exactly the direct sets that exist to serve side/rear
- * delts and generate the side-delt-deficient program the tracking card
- * flags. The counter already works at standard-muscle granularity; the
- * allocator must too.
- *
- * The recommendVolume preset conversions live in the matching review block
- * at services/mesocycleBuilder.ts (same sign-off, same pass). Until BOTH are
- * approved and applied, the held allocation policy must not ship.
+ * ─── CONVENTION-CONVERSION v2: ADOPTED ────────────────────────────────────
+ * The direct-assuming bands (biceps/triceps/traps/glutes/hamstrings) and the
+ * generator presets were converted to total-inclusive values in one pass —
+ * the adopted band values, their measured inflow ranges, and the semantics
+ * doc live at services/volumeBands.ts; the preset conversions, the
+ * goal-clamp (goal-adjusted target ≤ band MRV) and the per-standard-muscle
+ * indirect deduction with child-MEV floors live in
+ * services/mesocycleBuilder.ts. Invariants: bandPresetInvariant.test.ts.
  * ──────────────────────────────────────────────────────────────────────────
  */
 
@@ -841,11 +712,6 @@ export function fineChildBand(muscle: StandardMuscleGroup): VolumeBand {
 }
 
 export type VolumeZone = 'below_mev' | 'in_zone' | 'over_mrv';
-
-export interface VolumeBand {
-  mev: number;
-  mrv: number;
-}
 
 /**
  * The one zone rule everywhere: below MEV, inside the MEV–MRV band, or past MRV.

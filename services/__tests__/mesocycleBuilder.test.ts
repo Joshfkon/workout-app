@@ -17,9 +17,11 @@ import {
   estimateStartingWeight,
   generateWorkoutTemplates,
   generateMesocycleRecommendation,
+  applyIndirectAwareAllocation,
 } from '../mesocycleBuilder';
 import type { ExtendedUserProfile, RecoveryFactors, Rating, Goal, Experience, MuscleGroup, StandardMuscleGroup, Split, Equipment, SessionTemplate } from '@/types/schema';
 import { DEFAULT_VOLUME_LANDMARKS } from '@/types/schema';
+import { RESEARCH_VOLUME_BANDS, type CoarseMuscle } from '../volumeBands';
 import { makeDexaScan } from '@/test-utils/factories';
 
 // Helper to create a profile with defaults
@@ -583,7 +585,13 @@ describe('mesocycleBuilder', () => {
         );
 
         for (const muscle of Object.keys(distribution) as MuscleGroup[]) {
-          const mrv = DEFAULT_VOLUME_LANDMARKS[experience][muscle as unknown as StandardMuscleGroup]?.mrv ?? 16;
+          // Coarse groups clamp at the SHARED band MRV (services/volumeBands)
+          // — the same total-inclusive ceiling the tracking card colors red
+          // past; non-coarse keys keep the legacy landmark fallback.
+          const mrv =
+            RESEARCH_VOLUME_BANDS[muscle as unknown as CoarseMuscle]?.mrv ??
+            DEFAULT_VOLUME_LANDMARKS[experience][muscle as unknown as StandardMuscleGroup]?.mrv ??
+            16;
           expect(distribution[muscle].sets).toBeLessThanOrEqual(mrv);
         }
       }
@@ -1070,5 +1078,71 @@ describe('mesocycleBuilder', () => {
 
       expect(recommendation.focusMuscles.length).toBeGreaterThan(0);
     });
+  });
+});
+
+describe('applyIndirectAwareAllocation (convention-conversion v2)', () => {
+  type MinimalSession = { exercises: { exercise: { primaryMuscle: string; secondaryMuscles: string[] }; sets: number }[] };
+  const ex = (primary: string, secondaries: string[], sets: number) => ({
+    exercise: { primaryMuscle: primary, secondaryMuscles: secondaries },
+    sets,
+  });
+  const cast = (s: MinimalSession[]) => s as unknown as Parameters<typeof applyIndirectAwareAllocation>[0];
+
+  it('trims press-inflated front-delt work, never the side/rear delt work (per-standard deduction)', () => {
+    const sessions: MinimalSession[] = [
+      {
+        exercises: [
+          ex('front_delts', [], 8), // OHP-style
+          ex('lateral_delts', [], 6),
+          ex('rear_delts', [], 3),
+          ex('chest', ['front_delts', 'triceps'], 8), // bench: 4 front-delt inflow
+        ],
+      },
+    ];
+    // Credited shoulders total = 8 + 6 + 3 + 4 = 21 vs target 19 → trim 2.
+    const notes = applyIndirectAwareAllocation(cast(sessions), { shoulders: { sets: 19 } });
+
+    expect(sessions[0].exercises[0].sets).toBe(6); // front delts absorbed both trims
+    expect(sessions[0].exercises[1].sets).toBe(6); // side delts untouched
+    expect(sessions[0].exercises[2].sets).toBe(3); // rear delts untouched
+    expect(sessions[0].exercises[3].sets).toBe(8); // other groups' exercises untouched
+    expect(notes.join(' ')).toMatch(/trimmed 2 direct shoulders sets/);
+  });
+
+  it('respects direct floors: accepts residual overshoot rather than starving a subdivision', () => {
+    const sessions: MinimalSession[] = [
+      {
+        exercises: [
+          ex('front_delts', [], 8),
+          ex('lateral_delts', [], 6), // at its child MEV floor (6) — untouchable
+          ex('rear_delts', [], 3), // at its floor (3) — untouchable
+          ex('chest', ['front_delts', 'triceps'], 8),
+        ],
+      },
+    ];
+    // Absurdly low target: only front delts can give (floor 2 → 6 trims),
+    // then the group blocks instead of cutting side/rear work.
+    applyIndirectAwareAllocation(cast(sessions), { shoulders: { sets: 10 } });
+
+    expect(sessions[0].exercises[0].sets).toBe(2); // trimmed to its child-MEV floor
+    expect(sessions[0].exercises[1].sets).toBe(6); // side delts protected
+    expect(sessions[0].exercises[2].sets).toBe(3); // rear delts protected
+  });
+
+  it('a trim also removes the trimmed exercise secondary credit from other groups (recomputed per iteration)', () => {
+    const sessions: MinimalSession[] = [
+      {
+        exercises: [
+          ex('biceps', [], 14),
+          ex('lats', ['biceps', 'upper_back', 'rear_delts'], 8), // 4 biceps inflow
+        ],
+      },
+    ];
+    // biceps credited = 14 + 4 = 18 vs target 17 → one trim lands on curls
+    // (largest direct surplus), not on the pulldown.
+    applyIndirectAwareAllocation(cast(sessions), { biceps: { sets: 17 } });
+    expect(sessions[0].exercises[0].sets).toBe(13);
+    expect(sessions[0].exercises[1].sets).toBe(8);
   });
 });

@@ -35,10 +35,10 @@ describe('preset target ≤ band MRV (muscle × experience)', () => {
     const band = RESEARCH_VOLUME_BANDS[muscle as keyof typeof RESEARCH_VOLUME_BANDS];
     expect(band).toBeDefined();
     expect(preset).toBeLessThanOrEqual(band.mrv);
-    // NOTE: no preset ≥ band.MEV assertion yet — shoulders' band is already
-    // total-inclusive ({12,26}) while its preset is still a direct number
-    // (novice 10), so a low-side check only becomes coherent once the
-    // conversion pass moves the presets into the same currency. Add it then.
+    // Low-side check (live since the conversion put presets and bands in the
+    // same total-inclusive currency): a MAV-ish target below the band's own
+    // MEV would be equally incoherent.
+    expect(preset).toBeGreaterThanOrEqual(band.mev);
   });
 });
 
@@ -53,9 +53,12 @@ describe('goal-adjusted targets vs the band ceiling', () => {
     )
   );
 
-  it('exactly one KNOWN pre-existing violation: glutes advanced ×1.1 bulk (18 > band 16) — retired by the conversion-time clamp, at which point this pin must become an empty-list assertion', () => {
-    expect(violations).toEqual(['glutes/advanced/bulk']);
-    expect(recommendVolume('advanced', 'bulk', 'glutes')).toBe(18);
+  it('NO goal can push a target past the band ceiling — the conversion-time clamp retired the glutes/advanced/bulk violation', () => {
+    // Historical note: before the convention conversion this list contained
+    // exactly ['glutes/advanced/bulk'] (16 ×1.1 = 18 > the old band MRV 16)
+    // — a live violation shipped to advanced bulkers. recommendVolume now
+    // clamps the goal-adjusted target to the band MRV.
+    expect(violations).toEqual([]);
   });
 });
 

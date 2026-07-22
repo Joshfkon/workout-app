@@ -9,6 +9,7 @@
  * - mesocycle generator consumption (volume, ramp, accumulation length)
  * - joint-stress caps provably unaffected by the toggle
  */
+import { RESEARCH_VOLUME_BANDS } from '../volumeBands';
 import {
   ENHANCED_SCALING,
   scaleLandmarksForEnhanced,
@@ -269,7 +270,7 @@ describe('mesocycle generator (enhanced mode)', () => {
     expect(enhanced).toBe(Math.round(natural * ENHANCED_SCALING.mav));
   });
 
-  it('clamps weekly volume to the SCALED MRV when enhanced, natural MRV when not', () => {
+  it('clamps weekly volume at the shared band MRV for BOTH natural and enhanced', () => {
     // Max out every recovery multiplier so the clamp actually binds.
     const boostedRecovery = calculateRecoveryFactors(
       createProfile({ age: 22, sleepQuality: 5 as Rating, stressLevel: 1 as Rating })
@@ -282,13 +283,17 @@ describe('mesocycle generator (enhanced mode)', () => {
       'Upper/Lower', 4, 'advanced', 'bulk', boostedRecovery, undefined, undefined, true
     );
 
-    // The legacy 'chest' key doesn't resolve in DEFAULT_VOLUME_LANDMARKS
-    // (standard keys), so the fallback landmark {mrv:16} applies — the clamp
-    // is still exercised: enhanced ceiling = round-scaled fallback MRV.
-    const fallbackMrv = 16;
-    expect(natural.chest.sets).toBeLessThanOrEqual(fallbackMrv);
-    expect(enhanced.chest.sets).toBeLessThanOrEqual(Math.round(fallbackMrv * ENHANCED_SCALING.mrv));
-    expect(enhanced.chest.sets).toBeGreaterThan(natural.chest.sets);
+    // Coarse groups clamp at the SHARED band MRV (services/volumeBands) —
+    // the tracking card renders that ceiling un-scaled for enhanced users
+    // too, so the clamp deliberately applies to both modes: a target the
+    // card would flag is wrong regardless of recovery capacity. (The old
+    // behavior clamped 'chest' at the {mrv:16} legacy fallback because the
+    // coarse key missed the per-standard landmark table entirely.)
+    const bandMrv = RESEARCH_VOLUME_BANDS.chest.mrv;
+    expect(natural.chest.sets).toBeLessThanOrEqual(bandMrv);
+    expect(enhanced.chest.sets).toBeLessThanOrEqual(bandMrv);
+    // Enhanced never allocates LESS; at the shared ceiling both may saturate.
+    expect(enhanced.chest.sets).toBeGreaterThanOrEqual(natural.chest.sets);
   });
 
   it('ramps weekly volume proportionally faster so the lifter approaches MRV before deload', () => {

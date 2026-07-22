@@ -179,6 +179,45 @@ describe('planWeeklySetAdjustments', () => {
     expect(plan.summary.find((s) => s.muscle === 'quads')?.reason).toMatch(/deload/i);
   });
 
+  it('NEVER proposes an add for a muscle already at its landmark MRV (clamped targets stay clamped)', () => {
+    // The generator clamps goal-adjusted targets at the band MRV — the
+    // rollover must not re-inflate them week over week. Quads at exactly
+    // MRV with perfect recovery feedback: hold, not add.
+    const plan = planWeeklySetAdjustments(
+      makeInput({
+        feedbackByMuscle: new Map([['quads', [goodFeedback()]]]),
+        landmarksByMuscle: landmarks({ quads: { mev: 4, mav: 5, mrv: 6 } }), // week trains 6
+      })
+    );
+    const quads = plan.summary.find((s) => s.muscle === 'quads');
+    expect(quads?.action).toBe('hold');
+    expect(quads?.reason).toMatch(/maximum recoverable/i);
+    expect(Array.from(plan.byExercise.values()).some((a) => a.muscle === 'quads')).toBe(false);
+  });
+
+  it('the at-MRV guard works in CREDITED terms — secondary inflow counts toward the ceiling', () => {
+    // Biceps: 2 direct curl sets + 0.5 × 3 row sets = 3.5 credited. With
+    // MRV 4, an add would land at 4.5 > 4 — the engine must hold even
+    // though DIRECT sets alone (2) look nowhere near the ceiling.
+    const sessions = week();
+    sessions[0].exercises[1] = {
+      exerciseName: 'Row',
+      primaryMuscle: 'lats',
+      secondaryMuscles: ['biceps'],
+      sets: 3,
+    };
+    const plan = planWeeklySetAdjustments(
+      makeInput({
+        weekSessions: sessions,
+        feedbackByMuscle: new Map([['biceps', [goodFeedback()]]]),
+        landmarksByMuscle: landmarks({ biceps: { mev: 2, mav: 3, mrv: 4 } }),
+      })
+    );
+    const biceps = plan.summary.find((s) => s.muscle === 'biceps');
+    expect(biceps?.action).toBe('hold');
+    expect(Array.from(plan.byExercise.values()).some((a) => a.muscle === 'biceps')).toBe(false);
+  });
+
   it('adds a set to the LAST exercise targeting the muscle as primary', () => {
     const plan = planWeeklySetAdjustments(
       makeInput({ feedbackByMuscle: new Map([['quads', [goodFeedback()]]]) })

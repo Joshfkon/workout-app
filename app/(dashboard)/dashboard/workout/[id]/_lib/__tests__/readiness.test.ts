@@ -56,7 +56,7 @@ describe('buildReadinessRows (coarse rows)', () => {
   });
 
   it('within Fresh groups, ranks the bigger volume gap first', () => {
-    // Both Fresh (untrained). shoulders MEV 8, biceps MEV 6 → shoulders first.
+    // Both Fresh (untrained). shoulders MEV 12, biceps MEV 10 → shoulders first.
     const rows = buildReadinessRows([], [], NOW);
     expect(rows.findIndex((r) => r.muscle === 'shoulders')).toBeLessThan(
       rows.findIndex((r) => r.muscle === 'biceps')
@@ -64,7 +64,7 @@ describe('buildReadinessRows (coarse rows)', () => {
   });
 
   it('a group at MEV ranks below an equally-recovered group behind target', () => {
-    const rows = buildReadinessRows([stat('biceps', 6)], [], NOW); // biceps MEV 6 → gap 0
+    const rows = buildReadinessRows([stat('biceps', 10)], [], NOW); // biceps MEV 10 → gap 0
     expect(rowFor(rows, 'biceps').volumeGap).toBe(0);
     expect(rows.findIndex((r) => r.muscle === 'triceps')).toBeLessThan(
       rows.findIndex((r) => r.muscle === 'biceps')
