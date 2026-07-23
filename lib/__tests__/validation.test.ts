@@ -55,6 +55,23 @@ describe('validateReps', () => {
     expect(validateReps(null).valid).toBe(false);
     expect(validateReps(undefined).valid).toBe(false);
   });
+
+  it('widens the bound to 600 seconds for duration_based exercises', () => {
+    expect(validateReps(300, 'duration_based')).toEqual({ valid: true, value: 300 });
+    expect(validateReps(600, 'duration_based')).toEqual({ valid: true, value: 600 });
+    expect(validateReps(601, 'duration_based').valid).toBe(false);
+    expect(validateReps(0, 'duration_based').valid).toBe(false);
+    // Explicit rep_based keeps the strict bound
+    expect(validateReps(300, 'rep_based').valid).toBe(false);
+  });
+
+  it('phrases duration errors in seconds', () => {
+    const result = validateReps(601, 'duration_based');
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.error).toContain('seconds');
+    }
+  });
 });
 
 // ============================================

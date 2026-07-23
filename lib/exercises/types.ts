@@ -10,6 +10,7 @@
 import type {
   MuscleGroup,
   Equipment,
+  ExerciseType,
   MovementPattern,
   ExerciseDifficulty,
   FatigueRating,
@@ -59,7 +60,14 @@ export interface BasicExerciseInput {
   /** Fatigue rating (1-3) */
   fatigueRating?: FatigueRating;
 
-  /** Default rep range [min, max] */
+  /**
+   * Modality: rep_based (default) or duration_based. For duration exercises
+   * defaultRepRange holds a seconds range and logged sets store seconds in
+   * the reps field.
+   */
+  exerciseType?: ExerciseType;
+
+  /** Default rep range [min, max] — seconds for duration_based exercises */
   defaultRepRange?: [number, number];
   /** Default RIR target */
   defaultRir?: number;
@@ -130,6 +138,8 @@ export interface CompletedExerciseData {
   mechanic: 'compound' | 'isolation';
   difficulty: ExerciseDifficulty;
   fatigueRating: FatigueRating;
+  /** Modality: rep_based (default) or duration_based (defaultRepRange = seconds) */
+  exerciseType: ExerciseType;
   defaultRepRange: [number, number];
   defaultRir: number;
   minWeightIncrementKg: number;
