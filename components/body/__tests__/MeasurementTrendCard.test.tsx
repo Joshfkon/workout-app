@@ -16,7 +16,11 @@ jest.mock('recharts', () => ({
     <div data-testid="chart">{children}</div>
   ),
   LineChart: ({ data }: { data?: unknown[] }) => (
-    <div data-testid="line-chart" data-points={data?.length ?? 0} />
+    <div
+      data-testid="line-chart"
+      data-points={data?.length ?? 0}
+      data-chart={JSON.stringify(data ?? [])}
+    />
   ),
   Line: () => null,
   XAxis: () => null,
@@ -197,6 +201,76 @@ describe('MeasurementTrendCard date ranges', () => {
     const user = userEvent.setup();
     await user.click(screen.getByTestId('measurement-trend-row-waist'));
     expect(screen.getByText('Waist detail')).toBeInTheDocument();
+  });
+});
+
+describe('MeasurementTrendCard rolling trend line', () => {
+  beforeEach(() => {
+    mockRows = [];
+    mockMutations = [];
+  });
+
+  const chartPoints = () =>
+    JSON.parse(
+      screen.getByTestId('line-chart').getAttribute('data-chart') ?? '[]'
+    ) as Array<{ value: number; trend?: number }>;
+
+  it('overlays a smoothed trend once a site has enough entries', async () => {
+    mockRows = [
+      chestRow(daysAgo(30), 100),
+      chestRow(daysAgo(20), 104),
+      chestRow(daysAgo(10), 101),
+      chestRow(daysAgo(1), 105),
+    ];
+    render(<MeasurementTrendCard tapeUnit="cm" />);
+
+    await screen.findByTestId('line-chart');
+    const points = chartPoints();
+    expect(points).toHaveLength(4);
+    // Every point carries a trend value; the EWMA seeds on the first entry...
+    expect(points.every((p) => typeof p.trend === 'number')).toBe(true);
+    expect(points[0].trend).toBe(points[0].value);
+    // ...then lags the raw series (smoothing, not tracing).
+    const last = points[points.length - 1];
+    expect(last.trend!).toBeLessThan(last.value);
+    expect(last.trend!).toBeGreaterThan(points[0].value);
+
+    expect(screen.getByTestId('measurement-detail-legend')).toHaveTextContent('Trend');
+  });
+
+  it('carries prior trend state into a shorter window instead of re-seeding', async () => {
+    mockRows = [
+      chestRow(daysAgo(45), 100),
+      chestRow(daysAgo(35), 110),
+      chestRow(daysAgo(25), 104),
+      chestRow(daysAgo(15), 101),
+      chestRow(daysAgo(5), 105),
+    ];
+    render(<MeasurementTrendCard tapeUnit="cm" />);
+    const user = userEvent.setup();
+
+    await screen.findByTestId('line-chart');
+    const fullPoints = chartPoints();
+    expect(fullPoints).toHaveLength(5);
+    const fullLatestTrend = fullPoints[fullPoints.length - 1].trend;
+
+    await user.click(screen.getByTestId('measurement-trend-range-1m'));
+    const windowPoints = chartPoints();
+    expect(windowPoints).toHaveLength(3);
+    // First visible point keeps the EWMA state accumulated before the cutoff
+    // — it is NOT re-seeded to its own raw value...
+    expect(windowPoints[0].trend).not.toBe(windowPoints[0].value);
+    // ...and a shared date's trend is identical in every window.
+    expect(windowPoints[windowPoints.length - 1].trend).toBe(fullLatestTrend);
+  });
+
+  it('shows no trend line below the entry floor', async () => {
+    mockRows = [chestRow(daysAgo(10), 100), chestRow(daysAgo(1), 102)];
+    render(<MeasurementTrendCard tapeUnit="cm" />);
+
+    await screen.findByTestId('line-chart');
+    expect(chartPoints().every((p) => p.trend === undefined)).toBe(true);
+    expect(screen.queryByTestId('measurement-detail-legend')).not.toBeInTheDocument();
   });
 });
 
