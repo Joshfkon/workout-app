@@ -1177,8 +1177,15 @@ export function selectExercises(
  * Get rep range based on exercise type and goal
  */
 function getRepRange(exercise: ExerciseEntry, goal: Goal): string {
+  // Duration exercises keep their own seconds range regardless of goal —
+  // goal-based rep schemes have no meaning for a timed hold or carry.
+  if (exercise.exerciseType === 'duration_based') {
+    const [min, max] = exercise.defaultRepRange ?? [30, 60];
+    return `${min}-${max}s`;
+  }
+
   const isCompound = exercise.pattern !== 'isolation';
-  
+
   if (goal === 'cut') {
     // Maintain strength on cut: lower reps, heavier weight
     return isCompound ? '4-6' : '8-12';

@@ -341,31 +341,56 @@ export function getPositionCategory(
 }
 
 /**
- * Format rep range as string
+ * Rep-range config for a DURATION exercise: a passthrough of the exercise's
+ * own seconds range. Duration ranges must NEVER be routed through
+ * calculateRepRange — its final bounds check clamps into rep-count territory
+ * (≤25), which would destroy a 30–60s time target.
  */
-export function formatRepRange(config: RepRangeConfig): string {
-  const rirText = config.targetRIR === 0 
-    ? 'to failure' 
-    : `${config.targetRIR} RIR (RPE ${10 - config.targetRIR})`;
-  
-  return `${config.min}-${config.max} reps @ ${rirText}`;
+export function durationRepRangeConfig(exercise: {
+  defaultRepRange?: [number, number];
+  defaultRir?: number;
+}): RepRangeConfig {
+  const [min, max] = exercise.defaultRepRange ?? [30, 60];
+  return {
+    min,
+    max,
+    targetRIR: exercise.defaultRir ?? 2,
+    tempoRecommendation: 'Steady, braced hold — no sagging or shifting',
+    notes: 'Timed exercise — range is seconds, not reps',
+  };
 }
 
 /**
- * Build load guidance string
+ * Format rep range as string. Pass isDuration for timed exercises (the range
+ * is seconds).
+ */
+export function formatRepRange(config: RepRangeConfig, isDuration = false): string {
+  const rirText = config.targetRIR === 0
+    ? 'to failure'
+    : `${config.targetRIR} RIR (RPE ${10 - config.targetRIR})`;
+
+  return isDuration
+    ? `${config.min}-${config.max}s hold @ ${rirText}`
+    : `${config.min}-${config.max} reps @ ${rirText}`;
+}
+
+/**
+ * Build load guidance string. Pass isDuration for timed exercises.
  */
 export function buildLoadGuidance(
   reps: RepRangeConfig,
-  weekFocus?: string
+  weekFocus?: string,
+  isDuration = false
 ): string {
-  const rirText = reps.targetRIR === 0 
-    ? 'to failure' 
+  const rirText = reps.targetRIR === 0
+    ? 'to failure'
     : `${reps.targetRIR} RIR (RPE ${10 - reps.targetRIR})`;
-  
-  const tempoText = reps.tempoRecommendation 
-    ? `Tempo: ${reps.tempoRecommendation}` 
+
+  const tempoText = reps.tempoRecommendation
+    ? `Tempo: ${reps.tempoRecommendation}`
     : '';
-  
-  return `${reps.min}-${reps.max} reps @ ${rirText}. ${tempoText}`.trim();
+
+  const rangeText = isDuration ? `${reps.min}-${reps.max}s hold` : `${reps.min}-${reps.max} reps`;
+  return `${rangeText} @ ${rirText}. ${tempoText}`.trim();
 }
 

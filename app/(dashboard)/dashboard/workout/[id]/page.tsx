@@ -1214,7 +1214,12 @@ export default function WorkoutPage() {
                   currentLocationId: loadedLocationId,
                   scopeForExercise: (id) => scopeByExercise.get(id) ?? 'global',
                 }
-              : undefined
+              : undefined,
+            // Modality per exercise: duration exercises get no e1RM anchor and
+            // a heaviest-load/longest-hold PR instead of an Epley one.
+            Object.fromEntries(
+              transformedBlocks.map((b) => [b.exerciseId, b.exercise.exerciseType])
+            )
           );
 
           setExerciseHistories(histories);
@@ -3682,12 +3687,21 @@ export default function WorkoutPage() {
       const exerciseRepRange = exercise.default_rep_range || (isCompound ? [6, 10] : [10, 15]) as [number, number];
       const exerciseRir = exercise.default_rir ?? 2;
 
-      // Get weight recommendation for the new exercise
+      // Get weight recommendation for the new exercise. Duration exercises
+      // (seconds in the reps field) never get an e1RM/bodyweight-heuristic
+      // load estimate — the engine seeds from logged history only.
+      const addedIsDuration =
+        (exercise as { exercise_type?: string | null }).exercise_type === 'duration_based';
       let suggestedWeight = 0;
+      if (addedIsDuration) {
+        console.warn(
+          `[workout] ${exercise.name} is duration-based — skipping cold-start load estimation; the time range is the prescription.`
+        );
+      }
       if (userProfile && session?.userId) {
         const repRange = { min: exerciseRepRange[0], max: exerciseRepRange[1] };
         const targetRir = exerciseRir;
-        let weightRec: WorkingWeightRecommendation;
+        let weightRec: WorkingWeightRecommendation | undefined;
 
         // Check if we have exercise history for this exercise (using exercise.id)
         // If not in cache, fetch it from the database (for exercises added mid-workout)
@@ -3709,7 +3723,8 @@ export default function WorkoutPage() {
             session.userId,
             sessionLocationId
               ? { progressionScope: addedScope, currentLocationId: sessionLocationId }
-              : undefined
+              : undefined,
+            (exercise as { exercise_type?: ExerciseType | null }).exercise_type ?? undefined
           );
           exerciseHistory = fetchedHistory ?? undefined;
 
@@ -3723,6 +3738,15 @@ export default function WorkoutPage() {
         }
         const knownE1RM = exerciseHistory?.estimatedE1RM;
 
+        // Duration exercise: seed the load from last session if any; never
+        // from the e1RM/bodyweight-heuristic estimator.
+        if (addedIsDuration) {
+          const lastSet = exerciseHistory?.lastWorkoutSets?.[0];
+          suggestedWeight = lastSet?.weightKg ?? 0;
+          // Fall through to the warmup/insert logic below with the seeded (or
+          // zero) load — zero renders as "find a challenging load" in the card.
+        }
+
         // Cold-start transfer inputs: no direct history → seed from a related
         // logged exercise's e1RM before profile heuristics.
         const estimateOpts = {
@@ -3735,7 +3759,9 @@ export default function WorkoutPage() {
         };
 
         // Use calibration data if available
-        if (userProfile.calibratedLifts && userProfile.calibratedLifts.length > 0) {
+        if (addedIsDuration) {
+          // handled above — no estimator call
+        } else if (userProfile.calibratedLifts && userProfile.calibratedLifts.length > 0) {
           weightRec = quickWeightEstimateWithCalibration(
             exercise.name,
             repRange,
@@ -3766,7 +3792,7 @@ export default function WorkoutPage() {
           );
         }
 
-        if (weightRec.confidence !== 'find_working_weight') {
+        if (weightRec && weightRec.confidence !== 'find_working_weight') {
           // recommendedWeight is in display units (kg or lb based on user preference)
           // Convert back to kg for storage since target_weight_kg expects kg
           suggestedWeight = inputWeightToKg(weightRec.recommendedWeight, preferences.units);

@@ -1419,7 +1419,8 @@ export interface ExerciseEntry {
   notes?: string;
 
   // Progression-related fields (optional for backwards compatibility)
-  /** Default rep range [min, max] - derived from pattern if not set */
+  /** Default rep range [min, max] - derived from pattern if not set.
+   *  A SECONDS range when exerciseType is 'duration_based'. */
   defaultRepRange?: [number, number];
   /** Default RIR target - derived from difficulty if not set */
   defaultRir?: number;
@@ -1427,6 +1428,8 @@ export interface ExerciseEntry {
   minWeightIncrementKg?: number;
   /** Mechanic type for progression engine */
   mechanic?: Mechanic;
+  /** Modality: rep_based (default when absent) or duration_based (timed) */
+  exerciseType?: ExerciseType;
 
   // Hypertrophy scoring (Nippard methodology)
   /** Hypertrophy effectiveness score for exercise selection prioritization */

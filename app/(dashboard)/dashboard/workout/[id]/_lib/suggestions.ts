@@ -34,6 +34,7 @@ import {
   type LocatedSet,
   type ProgressionScope,
 } from '@/services/progressionScope';
+import type { ExerciseType } from '@/types/schema';
 import type {
   ExerciseBlockWithExercise,
   ExerciseHistoryData,
@@ -182,8 +183,13 @@ function applyLocationScope(
  */
 function computeHistoryFromBlocks(
   historyBlocks: HistoryBlockRow[],
-  scopeConfig?: HistoryScopeConfig
+  scopeConfig?: HistoryScopeConfig,
+  exerciseType?: ExerciseType
 ): ExerciseHistoryData {
+  // Duration exercises store seconds in `reps`; feeding those into Epley
+  // fabricates an e1RM ~2.5× the load. Their history therefore carries NO
+  // e1RM anchor, and the PR is heaviest-load-then-longest-hold instead.
+  const isDuration = exerciseType === 'duration_based';
   let estimatedFromOtherLocation = false;
   let calibrationNote: string | undefined;
   let scope: ProgressionScope | undefined;
@@ -260,6 +266,23 @@ function computeHistoryFromBlocks(
 
     const sets = (block.set_logs || []).filter((s) => !s.is_warmup);
     sets.forEach((set) => {
+      if (isDuration) {
+        // Duration PR: heaviest load first, longest hold at that load second.
+        // No anchor entries — there is no e1RM curve for a timed set.
+        if (
+          !personalRecord ||
+          set.weight_kg > personalRecord.weightKg ||
+          (set.weight_kg === personalRecord.weightKg && set.reps > personalRecord.reps)
+        ) {
+          personalRecord = {
+            weightKg: set.weight_kg,
+            reps: set.reps,
+            e1rm: 0,
+            date: session?.completed_at || set.logged_at,
+          };
+        }
+        return;
+      }
       // Pass RPE to get accurate E1RM - without RPE it assumes failure (RPE 10)
       // which underestimates true strength for sets done with reps in reserve
       const e1rm = calculateE1RM(set.weight_kg, set.reps, set.rpe);
@@ -349,7 +372,13 @@ function summarizeLocationUsage(blocks: HistoryBlockRow[]): {
  */
 export function buildExerciseHistories(
   allHistoryBlocks: HistoryBlockRow[],
-  scopeOptions?: HistoryScopeOptions
+  scopeOptions?: HistoryScopeOptions,
+  /**
+   * Modality per exercise_id (from today's session blocks). Duration
+   * exercises get no e1RM anchor and a heaviest-load/longest-hold PR.
+   * Omitted or missing an id → rep_based.
+   */
+  modalityByExercise?: Record<string, ExerciseType | undefined>
 ): Record<string, ExerciseHistoryData> {
   // Derive legacy null-location attribution once from the whole result set
   // (most-used location wins; ties stay ambiguous → global-visible).
@@ -389,7 +418,11 @@ export function buildExerciseHistories(
             legacy,
           }
         : undefined;
-      histories[exerciseId] = computeHistoryFromBlocks(historyBlocks, scopeConfig);
+      histories[exerciseId] = computeHistoryFromBlocks(
+        historyBlocks,
+        scopeConfig,
+        modalityByExercise?.[exerciseId]
+      );
     }
   }
 
@@ -407,7 +440,9 @@ export function buildExerciseHistories(
 export async function fetchExerciseHistory(
   exerciseId: string,
   userId: string,
-  scope?: { progressionScope: ProgressionScope; currentLocationId: string | null }
+  scope?: { progressionScope: ProgressionScope; currentLocationId: string | null },
+  /** Exercise modality — duration exercises get no e1RM anchor (seconds ≠ reps). */
+  exerciseType?: ExerciseType
 ): Promise<ExerciseHistoryData | null> {
   const supabase = createUntypedClient();
 
@@ -453,7 +488,7 @@ export async function fetchExerciseHistory(
       }
     : undefined;
 
-  return computeHistoryFromBlocks(blocks, scopeConfig);
+  return computeHistoryFromBlocks(blocks, scopeConfig, exerciseType);
 }
 
 // Generate coach message based on workout structure and user context
@@ -592,8 +627,21 @@ export function generateCoachMessage(
     const repRange = block.targetRepRange;
     const isFirst = idx === 0;
     const isCompound = ex.mechanic === 'compound';
+    const isDuration = ex.exerciseType === 'duration_based';
 
     let reason = '';
+
+    if (isDuration) {
+      // Timed exercise: the range is SECONDS and no load is estimated from
+      // bodyweight/e1RM heuristics (there is no capacity curve for holds).
+      reason = `Timed ${isCompound ? 'carry' : 'hold'} for ${ex.primaryMuscle}: target ${repRange[0]}–${repRange[1]} seconds per set at the prescribed effort.`;
+      if (!ex.isBodyweight && !exerciseHistories?.[block.exerciseId]?.lastWorkoutSets?.length) {
+        reason +=
+          ' No load prescription yet — pick a weight you can hold for the low end of the time range, and the engine will progress it from what you log.';
+      }
+      exerciseNotes.push({ name: ex.name, reason });
+      return;
+    }
 
     if (isFirst && isCompound) {
       reason = `Leading with this compound to maximize neural drive while fresh. ${repRange[0]}-${repRange[1]} reps keeps intensity high for strength gains.`;

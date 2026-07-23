@@ -702,7 +702,7 @@ export async function startMesocycleWorkoutSession(
       // transfer matching)
       const { data: dbExercise } = await supabase
         .from('exercises')
-        .select('id, mechanic, default_rep_range, default_rir, primary_muscle, movement_pattern, equipment_required, min_weight_increment_kg')
+        .select('id, mechanic, default_rep_range, default_rir, primary_muscle, movement_pattern, equipment_required, min_weight_increment_kg, exercise_type, is_bodyweight')
         .eq('name', exercise.exerciseName)
         // Hide merge-soft-deleted duplicates: without this, a name shared with
         // a merged loser returns 2+ rows and .single() errors -> block skipped.
@@ -733,6 +733,9 @@ export async function startMesocycleWorkoutSession(
       //  2. TRUE COLD START: no direct history → the existing
       //     quickWeightEstimate transfer/profile ladder, unchanged.
       let targetWeight = 0;
+      const dbExerciseType = (dbExercise as { exercise_type?: string | null } | null)?.exercise_type;
+      const dbIsBodyweight = (dbExercise as { is_bodyweight?: boolean | null } | null)?.is_bodyweight;
+      const isDurationExercise = dbExerciseType === 'duration_based';
       const direct = directAnchors.get(exerciseId);
       if (direct) {
         const seed = recommendSeedForSlot({
@@ -746,14 +749,26 @@ export async function startMesocycleWorkoutSession(
           recentWorkingWeightKg: direct.recentWorkingWeightKg || undefined,
           prevSessionSets: direct.prevSessionSets,
           priorSessionSets: direct.priorSessionSets,
+          exerciseType: isDurationExercise ? 'duration_based' : 'rep_based',
+          isBodyweight: dbIsBodyweight ?? undefined,
         });
         if (seed.weightKg > 0) {
-          targetWeight = progressionModifiers.isDeload
+          // Duration seeds are last-session loads on a time-then-load ladder —
+          // scaling them by the weekly intensity modifier has no meaning.
+          targetWeight = progressionModifiers.isDeload && !isDurationExercise
             ? Math.round(seed.weightKg * progressionModifiers.intensityModifier * 2) / 2
             : seed.weightKg;
         }
       }
-      if (targetWeight <= 0 && userData?.height_cm && userData?.weight_kg) {
+      if (isDurationExercise && targetWeight <= 0) {
+        // LOUD skip: no cold-start load estimation for timed work — there is
+        // no capacity curve for holds/carries. The block ships with the time
+        // range and no fabricated load.
+        console.warn(
+          `[startMesocycleSession] ${exercise.exerciseName} is duration-based with no history — skipping cold-start load estimation.`
+        );
+      }
+      if (!isDurationExercise && targetWeight <= 0 && userData?.height_cm && userData?.weight_kg) {
         const weightRec = quickWeightEstimate(
           exercise.exerciseName,
           exercise.repRange,
@@ -863,10 +878,17 @@ export async function startMesocycleWorkoutSession(
 
         for (const exercise of selected) {
           const isCompound = exercise.mechanic === 'compound';
+          const fallbackIsDuration =
+            (exercise as { exercise_type?: string | null }).exercise_type === 'duration_based';
 
-          // Get weight estimate with progressive overload
+          // Get weight estimate with progressive overload. Duration exercises
+          // are skipped loudly: no capacity curve exists for timed work.
           let targetWeight = 0;
-          if (userData?.height_cm && userData?.weight_kg) {
+          if (fallbackIsDuration) {
+            console.warn(
+              `[startMesocycleSession] ${exercise.name} is duration-based — skipping cold-start load estimation.`
+            );
+          } else if (userData?.height_cm && userData?.weight_kg) {
             const repRange = exercise.default_rep_range || [8, 12];
             const weightRec = quickWeightEstimate(
               exercise.name,

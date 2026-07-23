@@ -532,6 +532,8 @@ export const ExerciseCard = memo(function ExerciseCard({
   // Anchor on the freshest/strongest E1RM this exercise so late-set predictions
   // aren't double-fatigued.
   const sessionBestE1RM = useMemo(() => {
+    // Duration sets carry seconds in `reps` — Epley on them fabricates an e1RM.
+    if (exercise.exerciseType === 'duration_based') return undefined;
     let best = 0;
     for (const s of completedSets) {
       if (s.weightKg > 0 && s.reps > 0) {
@@ -541,7 +543,7 @@ export const ExerciseCard = memo(function ExerciseCard({
       }
     }
     return best > 0 ? best : undefined;
-  }, [completedSets, effectiveTargetRir]);
+  }, [completedSets, effectiveTargetRir, exercise.exerciseType]);
 
   // Prescription e1RM ladder (unified prescribe() contract, services/setRecommender):
   //   1. session-best — a set logged THIS session (sessionBestE1RM above);
@@ -555,6 +557,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   // edit — that inconsistency is what saturated the rep estimate into the
   // constant "× 20". With no rung available, weight edits leave reps untouched.
   const lastSessionE1RM = useMemo(() => {
+    if (exercise.exerciseType === 'duration_based') return undefined;
     let best = 0;
     for (const s of previousSets) {
       if (s.weightKg > 0 && s.reps > 0) {
@@ -564,13 +567,14 @@ export const ExerciseCard = memo(function ExerciseCard({
       }
     }
     return best > 0 ? best : undefined;
-  }, [previousSets, effectiveTargetRir]);
+  }, [previousSets, effectiveTargetRir, exercise.exerciseType]);
 
   const coldStartE1RM = useMemo(() => {
+    if (exercise.exerciseType === 'duration_based') return undefined;
     if (!coldStartSuggestion || !(coldStartSuggestion.weightKg > 0)) return undefined;
     const mid = Math.round((block.targetRepRange[0] + block.targetRepRange[1]) / 2);
     return coldStartSuggestion.weightKg * (1 + (mid + effectiveTargetRir) / 30);
-  }, [coldStartSuggestion, block.targetRepRange, effectiveTargetRir]);
+  }, [coldStartSuggestion, block.targetRepRange, effectiveTargetRir, exercise.exerciseType]);
 
   // Grade the next set against the effort ACTUALLY logged on `last` — read from
   // the persisted set record (feedback.repsInTank first, then rpe), never the
@@ -591,6 +595,8 @@ export const ExerciseCard = memo(function ExerciseCard({
       targetRir: effectiveTargetRir,
       minIncrementKg: exercise.minWeightIncrementKg,
       coldStart: isColdStartExercise,
+      exerciseType: exercise.exerciseType,
+      isBodyweight: exercise.isBodyweight,
     });
 
   // RPE→RIR adapter for the recommender's AMRAP prediction.
@@ -839,10 +845,12 @@ export const ExerciseCard = memo(function ExerciseCard({
         prevRir: prevSet?.rpe != null ? rpeToRir(prevSet.rpe) : undefined,
         prevSessionSets: prevSessionSetsForGating,
         priorSessionSets: priorSessionSetsForGating,
+        exerciseType: exercise.exerciseType,
+        isBodyweight: exercise.isBodyweight,
       });
       return { seed, prevSet };
     },
-    [previousSets, previousTopSetWeightKg, anchorE1RMKg, block.targetRepRange, effectiveTargetRir, exercise.minWeightIncrementKg, prevSessionSetsForGating, priorSessionSetsForGating]
+    [previousSets, previousTopSetWeightKg, anchorE1RMKg, block.targetRepRange, effectiveTargetRir, exercise.minWeightIncrementKg, exercise.exerciseType, exercise.isBodyweight, prevSessionSetsForGating, priorSessionSetsForGating]
   );
 
   // Curve-consistent reps for a session-start seed: answer the seeded weight
@@ -1602,6 +1610,14 @@ export const ExerciseCard = memo(function ExerciseCard({
       } else if (weight) {
         reason = 'starting point estimated from your training profile';
         explanation.push('No history for this exercise yet — the starting weight is estimated from your profile and calibrated lifts.');
+      } else if (isDurationBased) {
+        // Loud-skip surface (durationPolicy): the engine deliberately does not
+        // fabricate a load for a timed exercise with no history — say so here
+        // instead of leaving only a console warning.
+        reason = 'no load prescription for this timed exercise yet';
+        explanation.push(
+          `Timed exercise: no history to anchor a load on, so none is suggested. Pick a weight you can hold for ~${block.targetRepRange[0]}s at the target effort — the engine progresses from what you log.`
+        );
       } else {
         reason = 'enter your working weight to calibrate';
         explanation.push('Log a first set and future suggestions will anchor to it.');

@@ -44,6 +44,12 @@ export interface SetPrescriptionContext {
    * intensity stays below what their raised landmarks would allow).
    */
   enhancedAthleteMode?: boolean;
+  /**
+   * Exercise modality. 'duration_based' means baseRepRange is a SECONDS
+   * range: display text says "30-60s hold", and AMRAP prescriptions are
+   * suppressed (a timed hold has no meaningful rep-out analogue here).
+   */
+  exerciseType?: 'rep_based' | 'duration_based';
 }
 
 /**
@@ -108,6 +114,20 @@ export function prescribeSetType(
   const tier = getFailureSafetyTier(exerciseName);
   const rirFloor = getRIRFloor(exerciseName);
   const isLastSet = context.setNumber === context.totalSets;
+  const isDuration = context.exerciseType === 'duration_based';
+
+  // Duration exercise: the range is seconds, never AMRAP — a timed hold's
+  // "max test" is just holding to the effort target, not a rep-out.
+  if (isDuration) {
+    const prescription = createStandardPrescription(
+      baseRepRange,
+      Math.max(baseRIR, rirFloor),
+      tier,
+      rirFloor,
+      true
+    );
+    return prescription;
+  }
 
   // Determine if this should be AMRAP
   let shouldAMRAP = false;
@@ -185,9 +205,12 @@ function createStandardPrescription(
   baseRepRange: RepRange,
   effectiveRIR: number,
   tier: FailureSafetyTier,
-  rirFloor: number
+  rirFloor: number,
+  isDuration = false
 ): SetPrescription {
-  const displayText = `${baseRepRange.min}-${baseRepRange.max} reps @ ${effectiveRIR} RIR`;
+  const displayText = isDuration
+    ? `${baseRepRange.min}-${baseRepRange.max}s hold @ ${effectiveRIR} RIR`
+    : `${baseRepRange.min}-${baseRepRange.max} reps @ ${effectiveRIR} RIR`;
 
   const instructions = rirFloor >= 2
     ? `Keep ${rirFloor}+ reps in reserve. High injury risk at failure.`

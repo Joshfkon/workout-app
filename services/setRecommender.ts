@@ -20,7 +20,11 @@
  */
 
 import { roundToIncrement, clamp } from '@/lib/utils';
-import { rpeToRir } from '@/types/schema';
+import { rpeToRir, type ExerciseType } from '@/types/schema';
+import {
+  recommendDurationSet,
+  recommendDurationSessionStart,
+} from './suggestionEngine/durationPolicy';
 import {
   COLD_START_EASY_RIR,
   COLD_START_STEP_PCT,
@@ -79,6 +83,19 @@ export interface SetRecommenderInput {
    * cap widens to COLD_START_STEP_PCT so the session converges fast.
    */
   coldStart?: boolean;
+  /**
+   * Exercise modality. 'duration_based' routes to the duration policy
+   * (services/suggestionEngine/durationPolicy.ts): lastReps / targetRepRange /
+   * the returned reps all carry SECONDS, and none of the e1RM math runs.
+   * Absent = rep_based.
+   */
+  exerciseType?: ExerciseType;
+  /**
+   * True for bodyweight exercises. Duration policy only: a bodyweight hold has
+   * no external-load lever, so it progresses by time alone and holds at the
+   * range ceiling as a stable state.
+   */
+  isBodyweight?: boolean;
 }
 
 export interface SetRecommendation {
@@ -470,6 +487,11 @@ function predictRepsAtWeight(
 // ============================================
 
 export function recommendSet(input: SetRecommenderInput): SetRecommendation {
+  // Duration exercises (seconds in the reps field) never enter the e1RM curve.
+  if (input.exerciseType === 'duration_based') {
+    return recommendDurationSet(input, !input.isBodyweight);
+  }
+
   const { lastWeightKg, lastReps, lastRir, targetRepRange, targetRir } = input;
   const [repMin, repMax] = targetRepRange;
   const inc = input.minIncrementKg && input.minIncrementKg > 0 ? input.minIncrementKg : 2.5;
@@ -568,6 +590,14 @@ export interface SessionStartInput {
   targetRir: number;
   minIncrementKg?: number;
   /**
+   * Exercise modality. 'duration_based' routes to the duration policy —
+   * prevReps / targetRepRange / the returned reps carry SECONDS and the
+   * session lists / stall / e1RM machinery below are not consulted.
+   */
+  exerciseType?: ExerciseType;
+  /** True for bodyweight exercises (duration policy: time-only progression). */
+  isBodyweight?: boolean;
+  /**
    * ALL sets from the previous session (in performed order), for the success
    * predicate: a load increase is earned when the TOP working set(s) reached
    * the top of the range (sessionMetPrescription). Omitted → single-set
@@ -636,6 +666,11 @@ function stallStreak(prevGraded: GradedSession, input: SessionStartInput): numbe
  *  - Ungradable previous-session data → log and hold (never crash or guess).
  */
 export function recommendSessionStart(input: SessionStartInput): SetRecommendation {
+  // Duration exercises: time-then-load double progression, no e1RM/stall math.
+  if (input.exerciseType === 'duration_based') {
+    return recommendDurationSessionStart(input, !input.isBodyweight);
+  }
+
   const [repMin, repMax] = input.targetRepRange;
   const rec = recommendSet({
     lastWeightKg: input.prevWeightKg,
@@ -855,6 +890,15 @@ export interface SeedSlotInput {
    * regression check.
    */
   priorSessionSets?: PrevSessionSet[];
+  /**
+   * Exercise modality. 'duration_based' bypasses the e1RM anchor entirely:
+   * the seed comes from the duration policy off the previous-session set
+   * (targetRepRange and prevReps carry SECONDS), anchorSource is
+   * 'last_session' or 'none' — never 'e1rm'.
+   */
+  exerciseType?: ExerciseType;
+  /** True for bodyweight exercises (duration policy: time-only progression). */
+  isBodyweight?: boolean;
 }
 
 export interface SeedRecommendation {
@@ -932,6 +976,69 @@ function workingWeightFromAnchor(
 export function recommendSeedForSlot(input: SeedSlotInput): SeedRecommendation {
   const inc = input.minIncrementKg && input.minIncrementKg > 0 ? input.minIncrementKg : 2.5;
   const [repMin, repMax] = input.targetRepRange;
+
+  // ---- Duration exercise: no e1RM curve, no ramp %, seed from last session ----
+  if (input.exerciseType === 'duration_based') {
+    // Reference hold: the slot's own previous set, else the previous session's
+    // top set (heaviest load, then longest hold).
+    type DurationRef = { weightKg: number; reps: number; rir?: number };
+    let ref: DurationRef | undefined =
+      input.prevReps && input.prevReps > 0
+        ? { weightKg: input.prevWeightKg ?? 0, reps: input.prevReps, rir: input.prevRir }
+        : undefined;
+    if (!ref && input.prevSessionSets && input.prevSessionSets.length > 0) {
+      ref = input.prevSessionSets.reduce<DurationRef | undefined>((best, s) => {
+        if (!(s.reps > 0)) return best;
+        if (!best || s.weightKg > best.weightKg || (s.weightKg === best.weightKg && s.reps > best.reps)) {
+          return { weightKg: s.weightKg, reps: s.reps, rir: s.rir };
+        }
+        return best;
+      }, undefined);
+    }
+    if (ref) {
+      const rec = recommendDurationSessionStart(
+        {
+          prevWeightKg: ref.weightKg,
+          prevReps: ref.reps,
+          prevRir: ref.rir,
+          targetRepRange: input.targetRepRange,
+          targetRir: input.targetRir,
+          minIncrementKg: input.minIncrementKg,
+        },
+        !input.isBodyweight
+      );
+      return {
+        weightKg: rec.weightKg,
+        repRange: input.targetRepRange,
+        rir: input.targetRir,
+        role: 'working',
+        showRirTarget: true,
+        anchorSource: 'last_session',
+        clamped: false,
+        engineVersion: SUGGESTION_ENGINE_VERSION,
+      };
+    }
+    // No history to anchor a load on. For a loaded duration exercise this is a
+    // LOUD skip: the range is shown but no weight is fabricated (there is no
+    // capacity curve to estimate a carry load from). Bodyweight holds need no
+    // load at all, so 'none' with weight 0 is their normal cold start.
+    if (!input.isBodyweight) {
+      console.warn(
+        '[setRecommender] recommendSeedForSlot: duration exercise with no history — cannot prescribe a load; showing the time range only.'
+      );
+    }
+    return {
+      weightKg: 0,
+      repRange: [repMin, repMax],
+      rir: input.targetRir,
+      role: 'working',
+      showRirTarget: true,
+      anchorSource: 'none',
+      clamped: false,
+      engineVersion: SUGGESTION_ENGINE_VERSION,
+    };
+  }
+
   const hasAnchor = !!(input.anchorE1RMKg && input.anchorE1RMKg > 0);
 
   // All-sets bump gate (audit failure mode #5): with the previous session's

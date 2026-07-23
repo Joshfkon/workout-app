@@ -242,3 +242,47 @@ export const COLD_START_EASY_RIR = 4;
  * session; from set two onward the normal history-anchored math takes over.
  */
 export const COLD_START_STEP_PCT = 0.15;
+
+// ============================================================
+// DURATION-BASED EXERCISE DIALS (services/suggestionEngine/durationPolicy.ts)
+// ============================================================
+//
+// Duration exercises (planks, carries, hangs — exerciseType 'duration_based')
+// never enter the Epley/e1RM curve: seconds are not reps and a "1RM" derived
+// from a hold time is fiction. Their progression is time-then-load double
+// progression, driven by the dials below.
+
+/**
+ * Expected hold-time decline per set at a fixed load — the duration analogue
+ * of HOLD_DROP_RATE. Isometric endurance drops set-to-set roughly like rep
+ * endurance does, so the same 7% haircut is the starting dial.
+ */
+export const DURATION_HOLD_DROP_RATE = 0.07;
+
+/**
+ * Seconds of hold time one RIR is worth, as a fraction of the last hold. Used
+ * to shift the next-set time target by the logged effort gap (easier than
+ * target → more seconds in hand), mirroring the rep engine honoring logged RIR.
+ */
+export const DURATION_RIR_SECONDS_FRACTION = 0.08;
+
+/**
+ * Max seconds shown above the range top (honest overshoot, duration analogue
+ * of OVERSHOOT_CEILING). Prevents absurd targets while keeping a genuinely
+ * long hold visible instead of clamping it back to the range.
+ */
+export const DURATION_OVERSHOOT_CEILING_S = 15;
+
+/**
+ * Seconds beyond the range top that objectively prove the load is too light
+ * for a LOADED duration exercise, regardless of self-reported RIR (duration
+ * analogue of REP_OVERSHOOT).
+ */
+export const DURATION_OVERSHOOT_S = 10;
+
+/**
+ * Session-to-session time progression step (seconds): a not-met session asks
+ * for this much more hold time at the same load, capped at the range top.
+ * Matches the logging UI's 5-second stepper granularity.
+ */
+export const DURATION_PROGRESSION_STEP_S = 5;
