@@ -13,8 +13,10 @@ jest.mock('../ShareWorkoutText', () => ({
 /**
  * Post-workout finish restructure:
  *  - Layer 1 (finish card, !readOnly): one compact input screen — stat strip,
- *    prefilled session RPE, workload-only muscle chips, deload toggle,
- *    collapsed notes. No analytics, no pump question.
+ *    prefilled session RPE, deload toggle, collapsed notes. No analytics.
+ *    Pump/workload are asked in the finish popup (MuscleGroupFeedbackModal)
+ *    BEFORE this card renders and arrive via initialMuscleRatings — the card
+ *    only forwards them on submit, it never asks.
  *  - Layer 2 (full report, readOnly): the analytics view. Zero-set muscles are
  *    filtered from Volume by Muscle and muscle keys render humanized
  *    ("glute_med" → "Glute Med").
@@ -93,12 +95,12 @@ describe('SessionSummary — finish card (layer 1)', () => {
     expect(screen.queryByText(/Intensity Distribution/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Exercise Details/i)).not.toBeInTheDocument();
 
-    // Pump capture moved to per-exercise in-workout — no pump question at all.
+    // Pump/workload were captured in the finish popup — never re-asked here.
     expect(document.body.textContent).not.toMatch(/pump/i);
+    expect(screen.queryByText(/Workload by muscle/i)).not.toBeInTheDocument();
 
     // Inputs that ARE capturable now.
     expect(screen.getByText(/How hard was this session/i)).toBeInTheDocument();
-    expect(screen.getByText(/Workload by muscle/i)).toBeInTheDocument();
     expect(screen.getByRole('switch', { name: /deload/i })).toBeInTheDocument();
     expect(screen.getByText('+ Add note')).toBeInTheDocument();
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
@@ -145,7 +147,7 @@ describe('SessionSummary — finish card (layer 1)', () => {
     expect(onSubmit.mock.calls[0][0].sessionRpe).toBe(6);
   });
 
-  it('submits workload-only feedback for exactly the muscles trained today', async () => {
+  it('submits default feedback for exactly the muscles trained today when nothing was rated', async () => {
     const user = userEvent.setup();
     const onSubmit = jest.fn();
     const { blocks, sets } = makeFixture();
@@ -162,7 +164,7 @@ describe('SessionSummary — finish card (layer 1)', () => {
     await user.click(screen.getByRole('button', { name: /Save & Finish/i }));
 
     const feedback = onSubmit.mock.calls[0][0].muscleFeedback;
-    // calves had no logged sets → no chip row, no feedback entry.
+    // calves had no logged sets → no feedback entry.
     expect(feedback.map((f: { muscleGroup: string }) => f.muscleGroup)).toEqual([
       'chest_upper',
       'lats',
@@ -172,8 +174,38 @@ describe('SessionSummary — finish card (layer 1)', () => {
     ]);
     feedback.forEach((entry: Record<string, unknown>) => {
       expect(entry).not.toHaveProperty('pump');
-      expect(entry.workload).toBe(1); // untouched default "Just right"
+      expect(entry.workload).toBe(1); // unanswered default "just right"
     });
+  });
+
+  it('forwards the finish-popup ratings (initialMuscleRatings) untouched on submit', async () => {
+    const user = userEvent.setup();
+    const onSubmit = jest.fn();
+    const { blocks, sets } = makeFixture();
+    render(
+      <SessionSummary
+        session={finishSession()}
+        exerciseBlocks={blocks}
+        allSets={sets}
+        onSubmit={onSubmit}
+        durationSeconds={3600}
+        initialMuscleRatings={{
+          chest_upper: { pump: 3, workload: 0 },
+          quads: { workload: 3 },
+        }}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: /Save & Finish/i }));
+
+    const feedback = onSubmit.mock.calls[0][0].muscleFeedback;
+    const byMuscle = Object.fromEntries(
+      feedback.map((f: { muscleGroup: string }) => [f.muscleGroup, f])
+    );
+    expect(byMuscle.chest_upper).toEqual({ muscleGroup: 'chest_upper', pump: 3, workload: 0 });
+    expect(byMuscle.quads).toEqual({ muscleGroup: 'quads', workload: 3 });
+    // Unrated muscles fall back to the default workload with no pump key.
+    expect(byMuscle.lats).toEqual({ muscleGroup: 'lats', workload: 1 });
   });
 
   it('expands the notes field from the "+ Add note" line and submits the text', async () => {
@@ -197,7 +229,7 @@ describe('SessionSummary — finish card (layer 1)', () => {
     expect(onSubmit.mock.calls[0][0].notes).toBe('felt strong');
   });
 
-  it('renders humanized muscle labels on the workload rows (never raw keys)', () => {
+  it('never renders raw muscle keys', () => {
     const { blocks, sets } = makeFixture();
     render(
       <SessionSummary
@@ -209,7 +241,6 @@ describe('SessionSummary — finish card (layer 1)', () => {
       />
     );
 
-    expect(screen.getByText('Glute Med')).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/glute_med/i);
   });
 });

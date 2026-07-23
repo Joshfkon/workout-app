@@ -4,7 +4,9 @@
  * FeedbackChips — inline one-tap chip rows for subjective feedback capture.
  *
  * Design rules (RP-style, low friction):
- *  - NO modals or popups: everything renders inline where the user already is.
+ *  - In-workout prompts render inline where the user already is — no
+ *    mid-workout modals. (Pump/workload moved to the end-of-workout
+ *    MuscleGroupFeedbackModal, asked once per muscle group at finish.)
  *  - Every prompt is skippable by simply not tapping — logging and navigation
  *    are never blocked, and ignoring a row costs zero extra taps.
  *  - One tap records and the row collapses to a small confirmation line.
@@ -82,7 +84,8 @@ export function SorenessChipRow({ muscleLabel, answered, onAnswer }: SorenessChi
 }
 
 // ---------------------------------------------------------------------------
-// 2. Pump / workload (stimulus quality) — per exercise, on the completed card
+// 2. Pump / workload (stimulus quality) — asked once per muscle group in the
+//    finish popup (MuscleGroupFeedbackModal), which renders these chip sets.
 // ---------------------------------------------------------------------------
 
 export const PUMP_CHIPS: { value: PumpRating0to3; bar: string; label: string }[] = [
@@ -96,51 +99,6 @@ export const WORKLOAD_CHIPS: { value: WorkloadRating; label: string }[] = [
   { value: 1, label: 'right' },
   { value: 3, label: 'too much' },
 ];
-
-export interface ExerciseFeedbackChipsProps {
-  pump: PumpRating0to3 | null | undefined;
-  workload: WorkloadRating | null | undefined;
-  onChange: (feedback: { pump?: PumpRating0to3; workload?: WorkloadRating }) => void;
-}
-
-/**
- * `Pump:` ▁ low · ▂ good · ▄ great  +  `Workload:` easy · right · too much
- * Both optional; the card completes visually regardless.
- */
-export function ExerciseFeedbackChips({ pump, workload, onChange }: ExerciseFeedbackChipsProps) {
-  return (
-    <div className="space-y-1.5 px-1 py-1.5" data-testid="exercise-feedback-chips">
-      <div className="flex items-center gap-1.5 overflow-x-auto">
-        <span className="text-[12px] text-surface-400 flex-shrink-0 w-[68px]">Pump:</span>
-        {PUMP_CHIPS.map((chip) => (
-          <button
-            key={chip.value}
-            type="button"
-            onClick={() => onChange({ pump: chip.value })}
-            className={`${chipBase} ${pump === chip.value ? chipSelected : chipIdle}`}
-            data-testid={`pump-chip-${chip.value}`}
-          >
-            {chip.bar} {chip.label}
-          </button>
-        ))}
-      </div>
-      <div className="flex items-center gap-1.5 overflow-x-auto">
-        <span className="text-[12px] text-surface-400 flex-shrink-0 w-[68px]">Workload:</span>
-        {WORKLOAD_CHIPS.map((chip) => (
-          <button
-            key={chip.value}
-            type="button"
-            onClick={() => onChange({ workload: chip.value })}
-            className={`${chipBase} ${workload === chip.value ? chipSelected : chipIdle}`}
-            data-testid={`workload-chip-${chip.value}`}
-          >
-            {chip.label}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // 3. Joint pain (event, user-initiated) — inline two-tap picker

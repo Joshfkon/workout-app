@@ -14,7 +14,6 @@ import type {
   JointPainJoint,
 } from '@/types/schema';
 import {
-  STANDARD_MUSCLE_DISPLAY_NAMES,
   DETAILED_TO_STANDARD_MAP,
   isDetailedMuscle,
   isStandardMuscle,
@@ -34,23 +33,17 @@ import type { ShareExercise, WorkoutShareTextInput } from '@/services/workoutSha
 import { ShareWorkoutText } from './ShareWorkoutText';
 
 /**
- * Per-muscle end-of-session feedback captured on the finish card.
- * Pump capture is moving to per-exercise in-workout prompts (subjective-
- * feedback ticket) — the finish card no longer asks for it, so `pump` is
- * optional and only present on legacy payloads.
+ * Per-muscle end-of-session feedback. Captured in the finish popup
+ * (MuscleGroupFeedbackModal, shown on the "Finish Workout" tap) and passed in
+ * via initialMuscleRatings — the finish card itself no longer asks; it only
+ * forwards the answers on submit. `pump` is optional: unanswered muscles
+ * submit no pump and the default workload.
  */
 export interface SessionMuscleFeedbackEntry {
   muscleGroup: StandardMuscleGroup;
   pump?: PumpRating0to3;
   workload: WorkloadRating;
 }
-
-const WORKLOAD_CHIP_OPTIONS: { value: WorkloadRating; label: string }[] = [
-  { value: 0, label: 'Too easy' },
-  { value: 1, label: 'Just right' },
-  { value: 2, label: 'Pushed it' },
-  { value: 3, label: 'Too much' },
-];
 
 const DEFAULT_WORKLOAD: WorkloadRating = 1;
 
@@ -93,7 +86,7 @@ interface AMRAPCalibration {
 export interface SessionSummarySubmitData {
   sessionRpe: number;
   notes: string;
-  /** Per-muscle workload chips (default 1 "Just right" submits as-is when untouched). */
+  /** Per-muscle feedback from the finish popup (unanswered → default workload 1). */
   muscleFeedback: SessionMuscleFeedbackEntry[];
   /** Whether the user marked this as a deload session. */
   isDeload: boolean;
@@ -129,10 +122,10 @@ interface SessionSummaryProps {
    */
   onSaveAndViewReport?: (data: SessionSummarySubmitData) => void;
   /**
-   * Per-muscle seed from the in-workout per-exercise pump/workload chips.
-   * Workload answers pre-fill the finish card's workload chips; pump answers
-   * (no longer asked here) ride the submit payload so the learner still
-   * receives them through session_muscle_feedback.
+   * Per-muscle pump/workload answers from the finish popup (plus any legacy
+   * per-exercise chip answers rolled up by the caller). Not asked again here —
+   * they ride the submit payload so the learner receives them through
+   * session_muscle_feedback.
    */
   initialMuscleRatings?: Partial<
     Record<StandardMuscleGroup, { pump?: PumpRating0to3; workload?: WorkloadRating }>
@@ -201,19 +194,6 @@ export function SessionSummary({
   // programmed deload weeks) so an already-flagged session shows the toggle on.
   // Drives PR suppression + the share tag live, and is persisted on submit.
   const [isDeload, setIsDeload] = useState<boolean>(session.isDeload ?? false);
-  // Per-muscle workload overrides; muscles not in the map use the "Just right"
-  // default. Seeded from the in-workout per-exercise chips so an answer given
-  // on the exercise card is never re-asked here.
-  const [muscleWorkloads, setMuscleWorkloads] = useState<
-    Partial<Record<StandardMuscleGroup, WorkloadRating>>
-  >(() => {
-    if (!initialMuscleRatings) return {};
-    const seeded: Partial<Record<StandardMuscleGroup, WorkloadRating>> = {};
-    for (const [muscle, fb] of Object.entries(initialMuscleRatings)) {
-      if (fb?.workload !== undefined) seeded[muscle as StandardMuscleGroup] = fb.workload;
-    }
-    return seeded;
-  });
   // "Any joint issues today?" — null until the user taps a chip (skippable).
   const [jointIssueSeverity, setJointIssueSeverity] = useState<
     'none' | 'minor' | 'significant' | null
@@ -553,7 +533,8 @@ export function SessionSummary({
   }, [exerciseBlocks, workingSets, allSets, exerciseHistories, isDeload]);
 
   // Muscles trained this session (blocks with at least one working set),
-  // resolved to standard muscle groups — drives the per-muscle workload chips.
+  // resolved to standard muscle groups — drives the per-muscle feedback rows
+  // of the submit payload.
   const trainedMuscles = useMemo<StandardMuscleGroup[]>(() => {
     const seen = new Set<StandardMuscleGroup>();
     const muscles: StandardMuscleGroup[] = [];
@@ -571,9 +552,6 @@ export function SessionSummary({
     return muscles;
   }, [exerciseBlocks, workingSets]);
 
-  const getMuscleWorkload = (muscle: StandardMuscleGroup): WorkloadRating =>
-    muscleWorkloads[muscle] ?? DEFAULT_WORKLOAD;
-
   const toggleExerciseExpanded = (blockId: string) => {
     setExpandedExercises(prev => {
       const next = new Set(prev);
@@ -589,15 +567,16 @@ export function SessionSummary({
   const buildSubmitData = (): SessionSummarySubmitData => ({
     sessionRpe,
     notes,
-    // Pump is captured per-exercise in-workout (not asked here); a rolled-up
-    // answer rides that muscle's entry so the learner still receives it. The
-    // key is omitted entirely when nothing was rated.
+    // Pump/workload were asked once per muscle in the finish popup and arrive
+    // via initialMuscleRatings — forwarded here so the learner receives them
+    // through session_muscle_feedback. The pump key is omitted entirely when
+    // nothing was rated; workload defaults to "just right".
     muscleFeedback: trainedMuscles.map((muscle) => {
       const pump = initialMuscleRatings?.[muscle]?.pump;
       return {
         muscleGroup: muscle,
         ...(pump !== undefined ? { pump } : {}),
-        workload: getMuscleWorkload(muscle),
+        workload: initialMuscleRatings?.[muscle]?.workload ?? DEFAULT_WORKLOAD,
       };
     }),
     isDeload,
@@ -744,46 +723,6 @@ export function SessionSummary({
             Prefilled from your set average — adjust if it felt different
           </p>
         </Card>
-
-        {/* Per-muscle workload chips (drives weekly set progression). Pump is
-            captured per-exercise during the workout, not here. */}
-        {trainedMuscles.length > 0 && (
-          <Card className="!p-3">
-            <h3 className="text-sm font-medium text-surface-200 mb-0.5">Workload by muscle</h3>
-            <p className="text-xs text-surface-500 mb-2">
-              Tunes next week&apos;s sets — defaults are fine if nothing stood out.
-            </p>
-            <div className="space-y-2">
-              {trainedMuscles.map((muscle) => {
-                const workload = getMuscleWorkload(muscle);
-                return (
-                  <div key={muscle} className="flex items-center gap-2">
-                    <span className="text-xs font-medium text-surface-300 w-20 shrink-0 truncate">
-                      {STANDARD_MUSCLE_DISPLAY_NAMES[muscle]}
-                    </span>
-                    <div className="flex flex-1 gap-1">
-                      {WORKLOAD_CHIP_OPTIONS.map((option) => (
-                        <button
-                          key={option.value}
-                          onClick={() =>
-                            setMuscleWorkloads((prev) => ({ ...prev, [muscle]: option.value }))
-                          }
-                          className={`flex-1 rounded-full px-1.5 py-1 text-[11px] font-medium transition-colors ${
-                            workload === option.value
-                              ? 'bg-primary-500 text-white'
-                              : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
-                          }`}
-                        >
-                          {option.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </Card>
-        )}
 
         {/* Joint issues — the ONLY proactive joint-pain ask, once per session.
             Skippable by not tapping; a "none" tap records nothing but confirms. */}
