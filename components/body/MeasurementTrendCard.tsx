@@ -187,19 +187,26 @@ export function MeasurementTrendCard({
       .sort((a, b) => b.date.localeCompare(a.date));
   }, [rows, site]);
 
+  /**
+   * Rolling trend (time-aware EWMA, τ=10d — same smoothing as the weight
+   * trend), keyed by date. Computed over the site's FULL history, before the
+   * range filter, so a short window carries in prior trend state instead of
+   * re-seeding on its first visible entry — a date's trend value is the same
+   * in every window. Gated on the same entry floor as the badge.
+   */
+  const trendByDate = useMemo(() => {
+    const map = new Map<string, number>();
+    if (siteEntries.length < MIN_POINTS_FOR_TREND) return map;
+    for (const p of computeEwmaTrend(
+      siteEntries.map((e) => ({ date: e.date, value: e.valueCm }))
+    )) {
+      map.set(p.date, p.trend);
+    }
+    return map;
+  }, [siteEntries]);
+
   const chartData = useMemo(() => {
     if (!selected) return [];
-    // Rolling trend (time-aware EWMA, τ=10d — same smoothing as the weight
-    // trend) once the site clears the same entry floor as its badge. Trend
-    // keeps 2 decimals so the overlay stays smooth; raw stays display-rounded.
-    const trendByDate = new Map<string, number>();
-    if (selected.history.length >= MIN_POINTS_FOR_TREND) {
-      for (const p of computeEwmaTrend(
-        selected.history.map((h) => ({ date: h.date, value: h.valueCm }))
-      )) {
-        trendByDate.set(p.date, p.trend);
-      }
-    }
     const toUnit = (cm: number) => (tapeUnit === 'in' ? cmToIn(cm) : cm);
     return selected.history.map((point) => {
       const trendCm = trendByDate.get(point.date);
@@ -209,11 +216,13 @@ export function MeasurementTrendCard({
           day: 'numeric',
         }),
         value: Math.round(toUnit(point.valueCm) * 10) / 10,
+        // Trend keeps 2 decimals so the overlay stays smooth; raw stays
+        // display-rounded.
         trend:
           trendCm != null ? Math.round(toUnit(trendCm) * 100) / 100 : undefined,
       };
     });
-  }, [selected, tapeUnit]);
+  }, [selected, trendByDate, tapeUnit]);
 
   const hasTrendLine = chartData.some((d) => d.trend != null);
 

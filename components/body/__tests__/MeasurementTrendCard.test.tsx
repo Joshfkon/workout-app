@@ -238,6 +238,32 @@ describe('MeasurementTrendCard rolling trend line', () => {
     expect(screen.getByTestId('measurement-detail-legend')).toHaveTextContent('Trend');
   });
 
+  it('carries prior trend state into a shorter window instead of re-seeding', async () => {
+    mockRows = [
+      chestRow(daysAgo(45), 100),
+      chestRow(daysAgo(35), 110),
+      chestRow(daysAgo(25), 104),
+      chestRow(daysAgo(15), 101),
+      chestRow(daysAgo(5), 105),
+    ];
+    render(<MeasurementTrendCard tapeUnit="cm" />);
+    const user = userEvent.setup();
+
+    await screen.findByTestId('line-chart');
+    const fullPoints = chartPoints();
+    expect(fullPoints).toHaveLength(5);
+    const fullLatestTrend = fullPoints[fullPoints.length - 1].trend;
+
+    await user.click(screen.getByTestId('measurement-trend-range-1m'));
+    const windowPoints = chartPoints();
+    expect(windowPoints).toHaveLength(3);
+    // First visible point keeps the EWMA state accumulated before the cutoff
+    // — it is NOT re-seeded to its own raw value...
+    expect(windowPoints[0].trend).not.toBe(windowPoints[0].value);
+    // ...and a shared date's trend is identical in every window.
+    expect(windowPoints[windowPoints.length - 1].trend).toBe(fullLatestTrend);
+  });
+
   it('shows no trend line below the entry floor', async () => {
     mockRows = [chestRow(daysAgo(10), 100), chestRow(daysAgo(1), 102)];
     render(<MeasurementTrendCard tapeUnit="cm" />);
