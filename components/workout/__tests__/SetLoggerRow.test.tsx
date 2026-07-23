@@ -190,6 +190,75 @@ describe('SetLoggerRow feedback sheet', () => {
     });
   });
 
+  describe('predicted RIR readout', () => {
+    const baseEffortCheck = {
+      predictedRir: 3,
+      weightLabel: '100 kg',
+      reps: 8,
+      softened: false,
+      reasoning: [
+        'Capacity anchor: ~140 kg estimated 1RM — from your strongest set logged this session.',
+        'Rep-max curve (Epley): at 100 kg, that capacity predicts about 11 reps to failure (0 RIR).',
+      ],
+    };
+
+    it('renders nothing without an effortCheck', () => {
+      render(<SetLoggerRow {...defaultProps} />);
+      expect(screen.queryByTestId('predicted-rir')).not.toBeInTheDocument();
+    });
+
+    it('shows the predicted RIR with its effort label', () => {
+      render(<SetLoggerRow {...defaultProps} effortCheck={baseEffortCheck} />);
+      expect(screen.getByTestId('predicted-rir')).toHaveTextContent('Predicted: ~3 RIR (easy)');
+    });
+
+    it('shows the honest number above 4 with the cruise label', () => {
+      render(
+        <SetLoggerRow {...defaultProps} effortCheck={{ ...baseEffortCheck, predictedRir: 7 }} />
+      );
+      expect(screen.getByTestId('predicted-rir')).toHaveTextContent('Predicted: ~7 RIR (cruise)');
+    });
+
+    it('turns amber at 0 RIR and reads past-max below 0', () => {
+      const { rerender } = render(
+        <SetLoggerRow {...defaultProps} effortCheck={{ ...baseEffortCheck, predictedRir: 0 }} />
+      );
+      const readout = screen.getByTestId('predicted-rir');
+      expect(readout).toHaveTextContent('Predicted: ~0 RIR (maxed)');
+      expect(readout.querySelector('[aria-live]')!.className).toContain('text-amber-400');
+
+      rerender(
+        <SetLoggerRow {...defaultProps} effortCheck={{ ...baseEffortCheck, predictedRir: -2 }} />
+      );
+      expect(screen.getByTestId('predicted-rir')).toHaveTextContent(
+        'Predicted: 2 reps past your max'
+      );
+    });
+
+    it('marks a transferred (no own history) estimate as rough', () => {
+      render(
+        <SetLoggerRow {...defaultProps} effortCheck={{ ...baseEffortCheck, softened: true }} />
+      );
+      expect(screen.getByTestId('predicted-rir')).toHaveTextContent('rough estimate');
+    });
+
+    it('opens the reasoning sheet from the (i) with every reasoning line', async () => {
+      const user = userEvent.setup();
+      render(<SetLoggerRow {...defaultProps} effortCheck={baseEffortCheck} />);
+
+      expect(screen.queryByTestId('predicted-rir-reasoning')).not.toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'How this RIR prediction works' }));
+
+      expect(screen.getByText('Why 100 kg × 8 ≈ 3 RIR')).toBeInTheDocument();
+      for (const line of baseEffortCheck.reasoning) {
+        expect(screen.getByText(line)).toBeInTheDocument();
+      }
+
+      await user.click(screen.getByRole('button', { name: 'Close' }));
+      expect(screen.queryByTestId('predicted-rir-reasoning')).not.toBeInTheDocument();
+    });
+  });
+
   it('shows a logged discomfort as a summary row with a Remove affordance', async () => {
     const user = userEvent.setup();
     render(<SetLoggerRow {...defaultProps} />);
