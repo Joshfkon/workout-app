@@ -357,9 +357,17 @@ function recentSessionsFromHistoryRow(row: DirectHistoryRow): {
   const nonDeload = (row.exercise_blocks ?? []).filter(
     (b) => b.workout_sessions && !b.workout_sessions.is_deload
   );
-  const lastBlock = nonDeload[0];
+  // "Last session" = the most recent block that actually HAS working sets: a
+  // completed session can hold an empty block for this exercise (skipped that
+  // day, or never logged), and anchoring on it would drop the clamp/bump-gate
+  // inputs while real history sits one session back. Mirrors the live card's
+  // computeHistoryFromBlocks fallback.
+  const lastBlock = nonDeload.find((b) => workingSetsFromBlock(b).length > 0);
   const lastSessionId = lastBlock?.workout_sessions?.id;
-  const priorBlock = nonDeload.find((b) => b.workout_sessions?.id !== lastSessionId);
+  const priorBlock = nonDeload.find(
+    (b) =>
+      b.workout_sessions?.id !== lastSessionId && workingSetsFromBlock(b).length > 0
+  );
   const prevSessionSets = lastBlock ? workingSetsFromBlock(lastBlock) : [];
   const priorSessionSets = priorBlock ? workingSetsFromBlock(priorBlock) : [];
   return {
