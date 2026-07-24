@@ -98,11 +98,31 @@ export interface SetRecommenderInput {
   isBodyweight?: boolean;
 }
 
+/**
+ * The exact rule that moved (or held) the load, so the banner copy can name the
+ * observed trigger instead of a shared "too light / too heavy" paraphrase.
+ * One value per distinct branch in recommendSet's weight decision:
+ *  - rep_overshoot:     lastReps > repMax + REP_OVERSHOOT (reps alone prove
+ *                       under-load, regardless of self-reported RIR)
+ *  - top_range_reserve: lastReps >= repMax AND RIR beat target by >= DEADBAND_RIR
+ *  - below_rep_min:     lastReps < repMin
+ *  - rir_deficit:       RIR fell short of target by >= DEADBAND_RIR
+ *  - none:              in the deadband (hold), or no usable reference set
+ */
+export type AdjustmentTrigger =
+  | 'rep_overshoot'
+  | 'top_range_reserve'
+  | 'below_rep_min'
+  | 'rir_deficit'
+  | 'none';
+
 export interface SetRecommendation {
   weightKg: number;
   reps: number;
   rir: number;
   rationale: 'maintain' | 'increase_load' | 'reduce_load';
+  /** Which rule fired for the weight decision (see AdjustmentTrigger). */
+  trigger: AdjustmentTrigger;
   /**
    * How the REFERENCE set's actual effort compared to the target RIR, derived
    * from the same `dev` (lastRir − targetRir) the weight/rep math uses. The
@@ -506,6 +526,7 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
       reps: clamp(lastReps || repMin, repMin, repMax),
       rir: targetRir,
       rationale: 'maintain',
+      trigger: 'none',
       effortVsTarget: 'on_target',
     };
   }
@@ -524,6 +545,7 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
   // ---- 1) Decide the WEIGHT (default: hold) ----
   let weightKg: number;
   let rationale: SetRecommendation['rationale'];
+  let trigger: AdjustmentTrigger;
 
   // Cold-start sets adapt aggressively: the starting weight was an estimate,
   // expected to be wrong low. The step cap widens, and an easy-rated set bumps
@@ -533,10 +555,11 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
   const stepCap = input.coldStart ? COLD_START_STEP_PCT : MAX_STEP_PCT;
 
   if (lastReps > repMax + REP_OVERSHOOT || (lastReps >= repMax && dev >= DEADBAND_RIR)) {
-    // Too light — either an unambiguous rep-overshoot (reps prove it regardless
+    // Under-loaded — either an unambiguous rep-overshoot (reps prove it regardless
     // of RIR — checked BEFORE the effort branch, so a rep range moved down by
     // the one-tap plateau switch reprices upward even off a near-failure set)
     // OR cleared the top of the range with >= DEADBAND reserve.
+    trigger = lastReps > repMax + REP_OVERSHOOT ? 'rep_overshoot' : 'top_range_reserve';
     const ideal = weightForReps(e1rm, repMax, targetRir);
     weightKg = roundToIncrement(Math.min(ideal, lastWeightKg * (1 + stepCap)), inc);
     if (weightKg <= lastWeightKg) weightKg = lastWeightKg + inc;
@@ -549,7 +572,10 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
     if (weightKg <= lastWeightKg) weightKg = lastWeightKg + inc;
     rationale = 'increase_load';
   } else if (lastReps < repMin || dev <= -DEADBAND_RIR) {
-    // Too heavy, or went too close to failure → reduce toward mid-range.
+    // Over-loaded (reps below range) or went too close to failure → reduce
+    // toward mid-range. Reps-below-min is the more objective signal, so it
+    // names the trigger when both conditions hold.
+    trigger = lastReps < repMin ? 'below_rep_min' : 'rir_deficit';
     const ideal = weightForReps(e1rm, mid, targetRir);
     weightKg = roundToIncrement(Math.max(ideal, lastWeightKg * (1 - MAX_REDUCE_PCT)), inc);
     if (weightKg >= lastWeightKg) weightKg = Math.max(inc, lastWeightKg - inc);
@@ -557,6 +583,7 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
   } else {
     weightKg = lastWeightKg;
     rationale = 'maintain';
+    trigger = 'none';
   }
 
   // ---- 2) Predict the REPS for the next set ----
@@ -577,7 +604,7 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
     reps = predictRepsAtWeight(e1rm, weightKg, targetRir, n, targetRepRange);
   }
 
-  return { weightKg, reps, rir: targetRir, rationale, effortVsTarget };
+  return { weightKg, reps, rir: targetRir, rationale, trigger, effortVsTarget };
 }
 
 /** Input for recommendSessionStart — the matching set from the PREVIOUS session. */
@@ -913,6 +940,12 @@ export interface SeedRecommendation {
   anchorSource: AnchorSource;
   /** True when the ±clamp bound the e1RM prescription (say so in provenance). */
   clamped: boolean;
+  /**
+   * For the `last_session` anchor: the rule that moved the seed off the previous
+   * session's load (see AdjustmentTrigger). 'none' for every other anchor and
+   * for a seed that repeats last session.
+   */
+  trigger: AdjustmentTrigger;
   engineVersion: number;
   /**
    * DURATION exercises only: the time-then-load policy's seeded SECONDS
@@ -1118,6 +1151,7 @@ export function recommendSeedForSlot(input: SeedSlotInput): SeedRecommendation {
       showRirTarget: false,
       anchorSource: topWorkingKg > 0 ? 'ramp_percent' : 'none',
       clamped: false,
+      trigger: 'none',
       engineVersion: SUGGESTION_ENGINE_VERSION,
     };
   }
@@ -1156,6 +1190,7 @@ export function recommendSeedForSlot(input: SeedSlotInput): SeedRecommendation {
       showRirTarget: true,
       anchorSource: 'e1rm',
       clamped: w.clamped || workingClamped,
+      trigger: 'none',
       engineVersion: SUGGESTION_ENGINE_VERSION,
     };
   }
@@ -1180,6 +1215,7 @@ export function recommendSeedForSlot(input: SeedSlotInput): SeedRecommendation {
       showRirTarget: true,
       anchorSource: 'last_session',
       clamped: false,
+      trigger: rec.trigger,
       engineVersion: SUGGESTION_ENGINE_VERSION,
     };
   }
@@ -1193,6 +1229,7 @@ export function recommendSeedForSlot(input: SeedSlotInput): SeedRecommendation {
     showRirTarget: true,
     anchorSource: 'none',
     clamped: false,
+    trigger: 'none',
     engineVersion: SUGGESTION_ENGINE_VERSION,
   };
 }

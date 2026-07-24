@@ -723,6 +723,72 @@ describe('ExerciseCard', () => {
       expect(screen.getByText(/starting point estimated/)).toBeInTheDocument();
     });
 
+    it('names the rep-overshoot rule with observed data on a load increase', () => {
+      // 100 kg × 20 @ RPE 6 (4 RIR): 20 reps is past the 8-12 top by more than
+      // the +2 overshoot line -> increase via rep_overshoot.
+      const sets = [
+        createMockSetLog({ id: 'set-1', setNumber: 1, weightKg: 100, reps: 20, rpe: 6 }),
+      ];
+      render(<ExerciseCard {...defaultProps} sets={sets} isActive={true} />);
+      expect(screen.getByText(/20 reps over 8–12 target — load \+/)).toBeInTheDocument();
+      expect(screen.queryByText(/too light/)).not.toBeInTheDocument();
+    });
+
+    it('names the top-of-range + reserve rule with observed RIR on a load increase', () => {
+      // 100 kg × 12 @ RPE 6 (4 RIR): top of range with >= deadband reserve.
+      const sets = [
+        createMockSetLog({ id: 'set-1', setNumber: 1, weightKg: 100, reps: 12, rpe: 6 }),
+      ];
+      render(<ExerciseCard {...defaultProps} sets={sets} isActive={true} />);
+      expect(
+        screen.getByText(/12 reps @ 4 RIR vs 2 target — load \+/)
+      ).toBeInTheDocument();
+    });
+
+    it('names the below-range rule with observed reps on a load reduction', () => {
+      // 100 kg × 6 @ RPE 10 (0 RIR): 6 reps under the 8-12 floor.
+      const sets = [
+        createMockSetLog({ id: 'set-1', setNumber: 1, weightKg: 100, reps: 6, rpe: 10 }),
+      ];
+      render(<ExerciseCard {...defaultProps} sets={sets} isActive={true} />);
+      expect(screen.getByText(/6 reps under 8–12 target — load -/)).toBeInTheDocument();
+      expect(screen.queryByText(/too heavy|harder than/)).not.toBeInTheDocument();
+    });
+
+    it('names the RIR-deficit rule on an in-range set taken to failure', () => {
+      // 100 kg × 10 @ RPE 10 (0 RIR vs 2 target): outside the deadband -> reduce.
+      const sets = [
+        createMockSetLog({ id: 'set-1', setNumber: 1, weightKg: 100, reps: 10, rpe: 10 }),
+      ];
+      render(<ExerciseCard {...defaultProps} sets={sets} isActive={true} />);
+      expect(screen.getByText(/hit 0 RIR vs 2 target — load -/)).toBeInTheDocument();
+    });
+
+    it('states observed vs target RIR on a hold (matched / easier)', () => {
+      // Matched: 100 kg × 10 @ RPE 8 (2 RIR on a 2 target).
+      const { rerender } = render(
+        <ExerciseCard
+          {...defaultProps}
+          sets={[createMockSetLog({ id: 'set-1', setNumber: 1, weightKg: 100, reps: 10, rpe: 8 })]}
+          isActive={true}
+        />
+      );
+      expect(screen.getByText(/2 RIR matched 2 target — holding load/)).toBeInTheDocument();
+
+      // Easier (inside deadband): 11 reps @ RPE 7 (3 RIR vs 2 target) -> hold,
+      // rep estimate raised.
+      rerender(
+        <ExerciseCard
+          {...defaultProps}
+          sets={[createMockSetLog({ id: 'set-2', setNumber: 1, weightKg: 100, reps: 11, rpe: 7 })]}
+          isActive={true}
+        />
+      );
+      expect(
+        screen.getByText(/3 RIR vs 2 target — holding load, rep estimate raised/)
+      ).toBeInTheDocument();
+    });
+
     it('surfaces the readiness easing in the suggestion reason', () => {
       render(
         <ExerciseCard
