@@ -188,7 +188,26 @@ const benchAllTopHistoryRow = {
   ],
 };
 
-type BenchHistoryRow = typeof benchHistoryRow | typeof benchAllTopHistoryRow | null;
+// Variant where the NEWEST completed session holds an EMPTY block for bench
+// (exercise skipped that day / never logged): the last-session inputs must
+// fall back to the newest block WITH working sets, not anchor on the empty
+// one (which would zero the clamp/bump-gate inputs).
+const benchSkippedNewestHistoryRow = {
+  id: EX_BENCH,
+  exercise_blocks: [
+    {
+      workout_sessions: { id: 'ws-0', completed_at: '2026-07-18T10:00:00Z', is_deload: false },
+      set_logs: [],
+    },
+    ...benchHistoryRow.exercise_blocks,
+  ],
+};
+
+type BenchHistoryRow =
+  | typeof benchHistoryRow
+  | typeof benchAllTopHistoryRow
+  | typeof benchSkippedNewestHistoryRow
+  | null;
 
 function makeResponder(benchRow: BenchHistoryRow): Responder {
   return (query) => {
@@ -266,6 +285,23 @@ describe('startMesocycleWorkoutSession — direct-history targets (Fix 5)', () =
     // sets were mid-range (10/9 vs top 12), so the all-sets bump gate ceilings
     // the target at the recent 100 kg working weight. Week 2's 1.05 modifier
     // is NOT applied (100 × 1.05 would be 105).
+    expect(bench.target_weight_kg).toBe(100);
+  });
+
+  it('an empty newest block (skipped exercise) falls back to the last session WITH sets', async () => {
+    const { supabase, queries } = createSupabaseMock(makeResponder(benchSkippedNewestHistoryRow));
+    await startMesocycleWorkoutSession({
+      supabase,
+      mesocycle: baseMesocycle,
+      todayWorkout: null,
+      completedSessions: 4,
+    });
+
+    const blocks = insertedBlocks(queries);
+    const bench = blocks.find((b) => b.exercise_id === EX_BENCH);
+    // Identical outcome to the plain benchHistoryRow case: the empty ws-0
+    // block carries no signal, so the clamp/bump gates still read the
+    // 2026-07-15 session and hold at its 100 kg working weight.
     expect(bench.target_weight_kg).toBe(100);
   });
 

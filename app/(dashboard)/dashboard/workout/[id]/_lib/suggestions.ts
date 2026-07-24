@@ -267,27 +267,40 @@ function computeHistoryFromBlocks(
             : undefined,
       }));
 
-  // Get last workout data
-  const lastBlock = historyBlocks[0];
-  const lastSession = lastBlock.workout_sessions;
-  const lastSets = workingSetsOf(lastBlock);
+  // Get last workout data. "Last workout" = the most recent block that
+  // actually HAS working sets — a completed session can contain an empty
+  // block for this exercise (skipped that day, or warmups only), and
+  // anchoring on it would blank the last-session line / Last Workout card
+  // while real history sits one session back. Mirrors the exercise detail
+  // sheet (useExerciseDetailHistory), which drops set-less sessions.
+  const lastBlock = historyBlocks.find((b) => workingSetsOf(b).length > 0);
+  const lastSession = lastBlock?.workout_sessions ?? null;
+  const lastSets = lastBlock ? workingSetsOf(lastBlock) : [];
 
-  // Session BEFORE last (first block from a different session), for the
-  // regression path: two consecutive below-floor sessions confirm a decrement.
+  // Session BEFORE last (first block from a different session WITH working
+  // sets), for the regression path: two consecutive below-floor sessions
+  // confirm a decrement.
   const priorBlock = historyBlocks.find(
-    (b) => b.workout_sessions && b.workout_sessions.id !== lastSession?.id
+    (b) =>
+      b.workout_sessions &&
+      b.workout_sessions.id !== lastSession?.id &&
+      workingSetsOf(b).length > 0
   );
   const priorSets = priorBlock ? workingSetsOf(priorBlock) : [];
 
   // Calculate best E1RM and PR
   historyBlocks.forEach((block) => {
     const session = block.workout_sessions;
-    if (session && !seenSessions.has(session.id)) {
+
+    const sets = (block.set_logs || []).filter((s) => !s.is_warmup);
+    // A session where nothing was logged for this exercise (skipped, or
+    // warmups only) carries no signal — don't count it toward "N sessions"
+    // (the exercise detail sheet drops these too), and an all-empty history
+    // stays totalSessions === 0 so cold-start mode is earned.
+    if (session && sets.length > 0 && !seenSessions.has(session.id)) {
       seenSessions.add(session.id);
       totalSessions++;
     }
-
-    const sets = (block.set_logs || []).filter((s) => !s.is_warmup);
     sets.forEach((set) => {
       if (isDuration) {
         // Duration PR: heaviest load first, longest hold at that load second.
