@@ -44,7 +44,7 @@
   "services/progressionInsights.ts": 1,
   "services/sanityChecks.ts": 3,
   "services/sessionBuilderWithFatigue.ts": 6,
-  "services/setRecommender.ts": 20,
+  "services/setRecommender.ts": 21,
   "services/volumeTrendsData.ts": 2,
   "services/weightEstimationEngine.ts": 13,
   "services/workoutShareText.ts": 1,
