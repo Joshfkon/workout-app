@@ -70,6 +70,18 @@ interface HistorySetLogRow {
   logged_at: string;
   /** Location the set was logged at (null = legacy/unknown). */
   location_id?: string | null;
+  /**
+   * Bodyweight breakdown (JSONB) for bodyweight-exercise sets: weight_kg
+   * stores the EFFECTIVE load (BW ± modification), this records how it was
+   * composed so displays can say "BW+25" instead of the blended number.
+   */
+  bodyweight_data?: {
+    modification?: 'none' | 'weighted' | 'assisted';
+    addedWeightKg?: number;
+    assistanceWeightKg?: number;
+    userBodyweightKg?: number;
+    _needsReview?: boolean;
+  } | null;
 }
 
 /** Raw exercise_blocks row (joined with workout_sessions + set_logs). */
@@ -242,6 +254,17 @@ function computeHistoryFromBlocks(
         weightKg: s.weight_kg,
         reps: s.reps,
         rpe: s.rpe,
+        // Bodyweight composition for display ("BW+25 × 14" instead of the
+        // blended effective load). Migration-backfilled rows flagged
+        // _needsReview keep the effective-load display.
+        bw:
+          s.bodyweight_data && !s.bodyweight_data._needsReview && s.bodyweight_data.modification
+            ? {
+                modification: s.bodyweight_data.modification,
+                addedWeightKg: s.bodyweight_data.addedWeightKg,
+                assistanceWeightKg: s.bodyweight_data.assistanceWeightKg,
+              }
+            : undefined,
       }));
 
   // Get last workout data
@@ -466,7 +489,8 @@ export async function fetchExerciseHistory(
         set_number,
         set_type,
         logged_at,
-        location_id
+        location_id,
+        bodyweight_data
       )
     `)
     .eq('exercise_id', exerciseId)

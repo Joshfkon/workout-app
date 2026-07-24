@@ -44,7 +44,13 @@ function exercisePrimaryMuscle(ex: { primaryMuscle?: string; primary_muscle?: st
 
 interface ExerciseHistory {
   lastWorkoutDate: string;
-  lastWorkoutSets: { weightKg: number; reps: number; rpe?: number }[];
+  lastWorkoutSets: {
+    weightKg: number;
+    reps: number;
+    rpe?: number;
+    /** Bodyweight composition, when recorded — drives the "BW+25" display. */
+    bw?: { modification: 'none' | 'weighted' | 'assisted'; addedWeightKg?: number; assistanceWeightKg?: number };
+  }[];
   /** Working sets from the session BEFORE last — regression-path evidence (Fix 4). */
   priorWorkoutSets?: { weightKg: number; reps: number; rpe?: number }[];
   estimatedE1RM: number;
@@ -735,6 +741,27 @@ export const ExerciseCard = memo(function ExerciseCard({
     return preserveExact ? convertWeightForDisplay(kg, unit) : formatWeightValue(kg, unit);
   }, [unit]);
   const weightLabel = unit === 'lb' ? 'lbs' : 'kg';
+
+  // Weight label for a history set: bodyweight sets break out the composition
+  // ("BW", "BW+25", "BW−30" in display units) instead of the blended effective
+  // load, which reads as a mystery number ("222") on the card. Sets without a
+  // recorded breakdown (legacy rows, or migration rows flagged _needsReview)
+  // keep the effective-load display. The effective load remains the engine's
+  // number everywhere — this is display only.
+  const historySetWeightLabel = useCallback(
+    (set: { weightKg: number; bw?: { modification: string; addedWeightKg?: number; assistanceWeightKg?: number } }): string => {
+      const bw = set.bw;
+      if (!bw) return String(displayWeight(set.weightKg, true));
+      if (bw.modification === 'weighted' && (bw.addedWeightKg ?? 0) > 0) {
+        return `BW+${displayWeight(bw.addedWeightKg!, true)}`;
+      }
+      if (bw.modification === 'assisted' && (bw.assistanceWeightKg ?? 0) > 0) {
+        return `BW−${displayWeight(bw.assistanceWeightKg!, true)}`;
+      }
+      return 'BW';
+    },
+    [displayWeight]
+  );
 
   // Seed string for a pending weight input. When the seed comes verbatim from
   // a logged set (recommendation held the weight, or seeding from last
@@ -1718,6 +1745,8 @@ export const ExerciseCard = memo(function ExerciseCard({
 
   // Meta line under the header pills:
   // "{muscle} · last session 60 lbs × 9, × 8 @ 2 RIR"
+  // Bodyweight sets with a recorded breakdown read "BW+25 lbs × 14" so the
+  // added load is visible instead of the blended effective number.
   const lastSessionMeta = (() => {
     const lastSets = exerciseHistory?.lastWorkoutSets ?? [];
     if (lastSets.length === 0) return null;
@@ -1735,7 +1764,10 @@ export const ExerciseCard = memo(function ExerciseCard({
         ? ' · est. from another gym'
         : ' · here';
     }
-    return `last session ${displayWeight(lastSets[0].weightKg, true)} ${weightLabel} ${repsPart}${
+    const weightPart = lastSets[0].bw
+      ? `${historySetWeightLabel(lastSets[0])}${lastSets[0].bw.modification === 'none' ? '' : ` ${weightLabel}`}`
+      : `${displayWeight(lastSets[0].weightKg, true)} ${weightLabel}`;
+    return `last session ${weightPart} ${repsPart}${
       rir !== null ? ` @ ${rir} RIR` : ''
     }${locationTag}`;
   })();
@@ -2013,8 +2045,13 @@ export const ExerciseCard = memo(function ExerciseCard({
                       <span
                         key={idx}
                         className="px-2 py-1 bg-surface-700 rounded text-xs text-surface-300"
+                        title={
+                          set.bw && set.bw.modification !== 'none'
+                            ? `Effective load ${displayWeight(set.weightKg, true)} ${weightLabel}`
+                            : undefined
+                        }
                       >
-                        {displayWeight(set.weightKg, true)} × {set.reps}{isDurationBased ? 's' : ''}
+                        {historySetWeightLabel(set)} × {set.reps}{isDurationBased ? 's' : ''}
                         {set.rpe && <span className="text-surface-500"> @{set.rpe}</span>}
                       </span>
                     ))}

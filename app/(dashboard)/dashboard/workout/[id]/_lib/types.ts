@@ -56,9 +56,20 @@ export interface UserContext {
   mesocycleName?: string;
 }
 
+/**
+ * Bodyweight composition of a logged set, when recorded. `weightKg` on the
+ * set stays the EFFECTIVE load (BW ± modification) — the engine's number;
+ * this is how displays break it out as "BW+25" instead of the blended value.
+ */
+export interface HistorySetBodyweight {
+  modification: 'none' | 'weighted' | 'assisted';
+  addedWeightKg?: number;
+  assistanceWeightKg?: number;
+}
+
 export interface ExerciseHistoryData {
   lastWorkoutDate: string;
-  lastWorkoutSets: { weightKg: number; reps: number; rpe?: number }[];
+  lastWorkoutSets: { weightKg: number; reps: number; rpe?: number; bw?: HistorySetBodyweight }[];
   /**
    * Working sets from the session BEFORE last (same shape/filtering as
    * lastWorkoutSets). Feeds the regression path (Fix 4): two consecutive

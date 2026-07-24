@@ -1032,7 +1032,8 @@ export default function WorkoutPage() {
                       set_number,
                       set_type,
                       logged_at,
-                      location_id
+                      location_id,
+                      bodyweight_data
                     )
                   )
                 `)
