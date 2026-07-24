@@ -26,6 +26,7 @@ interface WorkoutSessionWithBlocks {
   planned_date: string;
   exercise_blocks: Array<{
     exercise_name: string;
+    exercises?: { exercise_type?: string | null } | null;
     set_logs: Array<Pick<SetLogRow, 'weight_kg' | 'reps' | 'rpe' | 'is_warmup'>>;
   }>;
 }
@@ -142,6 +143,9 @@ export async function fetchCoachingContextData(): Promise<RawCoachingData | null
         planned_date,
         exercise_blocks (
           exercise_name,
+          exercises (
+            exercise_type
+          ),
           set_logs (
             weight_kg,
             reps,

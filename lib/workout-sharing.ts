@@ -34,7 +34,8 @@ export async function serializeWorkoutForSharing(
         superset_group_id,
         exercises!inner (
           id,
-          name
+          name,
+          exercise_type
         )
       `)
       .eq('workout_session_id', workoutSessionId)
@@ -60,6 +61,8 @@ export async function serializeWorkoutForSharing(
         sets: block.target_sets || 0,
         rep_range: [repRange[0] || 0, repRange[1] || 0] as [number, number],
         target_rir: block.target_rir || 0,
+        // Duration exercises: rep_range carries seconds; consumers render "30-60s"
+        is_duration: block.exercises?.exercise_type === 'duration_based' || undefined,
         notes: block.note || undefined,
         superset_group: block.superset_group_id || undefined,
       };

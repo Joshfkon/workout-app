@@ -12,7 +12,7 @@
   "app/(dashboard)/dashboard/workout/[id]/page.tsx": 11,
   "app/(onboarding)/onboarding/calibrate/page.tsx": 1,
   "components/settings/ImportExportSettings.tsx": 6,
-  "components/social/feed/ActivityCard.tsx": 1,
+  "components/social/feed/ActivityCard.tsx": 2,
   "components/workout/BodyweightSetEditRow.tsx": 1,
   "components/workout/exercise-details/HistoryTab.tsx": 2,
   "components/workout/exercise-details/RecordsTab.tsx": 4,
@@ -25,7 +25,7 @@
   "hooks/useExerciseDetailHistory.ts": 2,
   "hooks/useMuscleProgression.ts": 3,
   "lib/actions/workout-calories.ts": 2,
-  "lib/data/coachingContext.ts": 7,
+  "lib/data/coachingContext.ts": 9,
   "lib/integrations/hyper-tracker-calories.ts": 3,
   "lib/integrations/workout-calories.ts": 1,
   "lib/migrations/migrateBodyweightSets.ts": 1,
@@ -48,5 +48,6 @@
   "services/volumeTrendsData.ts": 2,
   "services/weightEstimationEngine.ts": 13,
   "services/workoutShareText.ts": 1,
-  "stores/workoutStore.ts": 3
+  "stores/workoutStore.ts": 3,
+  "types/social.ts": 1
 }

@@ -46,9 +46,13 @@ export interface RecentLift {
   exerciseName: string;
   date: string;
   topSetWeight: number;
+  /** Rep count — or SECONDS held when isDuration is true */
   topSetReps: number;
   topSetRpe: number;
+  /** 0 for duration exercises — no e1RM exists for a timed set */
   estimated1RM: number;
+  /** Duration exercise (plank/carry/hold): serialize as time, never reps/e1RM */
+  isDuration?: boolean;
 }
 
 /** Calibrated strength data */

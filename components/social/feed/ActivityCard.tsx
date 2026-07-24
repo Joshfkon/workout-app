@@ -171,7 +171,9 @@ function WorkoutContent({ data, units }: { data: WorkoutCompletedData; units: 'k
             <div key={idx} className="flex items-center justify-between text-sm">
               <span className="text-surface-200">{exercise.name}</span>
               <span className="text-surface-400">
-                {exercise.sets} sets • {formatWeight(exercise.top_set.weight_kg, units, 0)} × {exercise.top_set.reps}
+                {exercise.is_duration
+                  ? `${exercise.sets} sets • ${exercise.top_set.reps}s @ ${formatWeight(exercise.top_set.weight_kg, units, 0)}`
+                  : `${exercise.sets} sets • ${formatWeight(exercise.top_set.weight_kg, units, 0)} × ${exercise.top_set.reps}`}
               </span>
             </div>
           ))}
@@ -192,6 +194,7 @@ function WorkoutContent({ data, units }: { data: WorkoutCompletedData; units: 'k
 function PRContent({ data, units }: { data: PersonalRecordData; units: 'kg' | 'lb' }) {
   const formatValue = () => {
     if (data.unit === 'reps') return `${data.new_value} reps`;
+    if (data.unit === 'seconds') return `${data.new_value}s hold`;
     return formatWeight(data.new_value, units, 1);
   };
 
@@ -199,6 +202,7 @@ function PRContent({ data, units }: { data: PersonalRecordData; units: 'kg' | 'l
     if (!data.previous_value) return null;
     const diff = data.new_value - data.previous_value;
     if (data.unit === 'reps') return `+${diff} reps`;
+    if (data.unit === 'seconds') return `+${diff}s`;
     return `+${formatWeight(diff, units, 1)}`;
   };
 

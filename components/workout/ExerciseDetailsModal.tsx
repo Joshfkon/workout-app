@@ -141,13 +141,14 @@ function DetailHeaderMeta({
  */
 function buildLastSessionSummary(
   session: { date: string; sets: { weightKg: number; reps: number; rpe: number | null }[] } | undefined,
-  unit: 'kg' | 'lb'
+  unit: 'kg' | 'lb',
+  isDuration = false
 ): string | null {
   if (!session || session.sets.length === 0) return null;
   const first = session.sets[0];
   const repsPart = session.sets
     .slice(0, 3)
-    .map((s) => `× ${s.reps}`)
+    .map((s) => `× ${s.reps}${isDuration ? 's' : ''}`)
     .join(', ');
   const rir = first.rpe != null ? Math.max(0, Math.round(10 - first.rpe)) : null;
   const unitLabel = unit === 'lb' ? 'lbs' : 'kg';
@@ -198,7 +199,11 @@ export function ExerciseDetailsModal({
   if (!isOpen || !exercise) return null;
 
   const sessionCount = sessions?.length ?? 0;
-  const lastSessionSummary = buildLastSessionSummary(sessions?.[0], unit);
+  const lastSessionSummary = buildLastSessionSummary(
+    sessions?.[0],
+    unit,
+    getExerciseProp(exercise, 'exerciseType', 'exercise_type') === 'duration_based'
+  );
 
   return (
     <div
