@@ -273,6 +273,24 @@ describe('SetLoggerRow hold timer (duration exercises)', () => {
     expect(onRepsChange).toHaveBeenCalledWith('27');
   });
 
+  it('does not wipe a running hold restored from localStorage on mount', () => {
+    // Simulate a hold that was running when the app reloaded: useDurationTimer
+    // restores it on mount, and the row's fresh-set reset must NOT clear it.
+    localStorage.setItem(
+      'workout_duration_timer',
+      JSON.stringify({ startTime: Date.now() - 12_000, elapsed: 0, isRunning: true, exerciseId: 'plank-1' })
+    );
+
+    render(<SetLoggerRow {...durationProps} />);
+    act(() => {
+      jest.advanceTimersByTime(200); // let the restored interval tick
+    });
+
+    // Still running (Stop visible) with the pre-reload elapsed time intact.
+    expect(screen.getByRole('button', { name: 'Stop hold timer' })).toBeInTheDocument();
+    expect(localStorage.getItem('workout_duration_timer')).not.toBeNull();
+  });
+
   it('offers Resume after a stop and Reset clears the run', async () => {
     const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
     render(<SetLoggerRow {...durationProps} />);

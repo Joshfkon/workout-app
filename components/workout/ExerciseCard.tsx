@@ -888,6 +888,9 @@ export const ExerciseCard = memo(function ExerciseCard({
   // answer, and later weight edits leave it alone.
   const seedRepsForWeight = useCallback(
     (weightKg: number, seed: SeedRecommendation): number => {
+      // Duration exercises: the time-then-load policy already seeded the
+      // seconds target — never replace it with a range midpoint.
+      if (seed.seedReps !== undefined) return seed.seedReps;
       const midPlan = Math.round((seed.repRange[0] + seed.repRange[1]) / 2);
       if (seed.role === 'ramp' || !(weightKg > 0)) return midPlan;
       const e1rm = lastSessionE1RM ?? coldStartE1RM;

@@ -1330,7 +1330,7 @@ export default function WorkoutPage() {
       const supabase = createUntypedClient();
       const { data } = await supabase
         .from('exercises')
-        .select('id, name, primary_muscle, secondary_muscles, movement_pattern, mechanic, equipment_required, equipment_class, default_rep_range, default_rir, is_bodyweight, hypertrophy_tier')
+        .select('id, name, primary_muscle, secondary_muscles, movement_pattern, mechanic, equipment_required, equipment_class, default_rep_range, default_rir, is_bodyweight, hypertrophy_tier, exercise_type')
         .is('deleted_at', null) // hide merge-soft-deleted duplicates
         .order('name');
       if (data) {
@@ -2766,7 +2766,7 @@ export default function WorkoutPage() {
     if (exercisesToUse.length === 0) {
       const { data: allExercises } = await supabase
         .from('exercises')
-        .select('id, name, primary_muscle, secondary_muscles, mechanic, equipment_required, default_rep_range, default_rir, is_bodyweight, hypertrophy_tier')
+        .select('id, name, primary_muscle, secondary_muscles, mechanic, equipment_required, default_rep_range, default_rir, is_bodyweight, hypertrophy_tier, exercise_type')
         .is('deleted_at', null) // hide merge-soft-deleted duplicates
         .order('name');
 
@@ -3615,7 +3615,7 @@ export default function WorkoutPage() {
     const supabase = createUntypedClient();
     let query = supabase
       .from('exercises')
-      .select('id, name, primary_muscle, secondary_muscles, movement_pattern, mechanic, equipment_required, equipment_class, default_rep_range, default_rir, is_bodyweight, hypertrophy_tier')
+      .select('id, name, primary_muscle, secondary_muscles, movement_pattern, mechanic, equipment_required, equipment_class, default_rep_range, default_rir, is_bodyweight, hypertrophy_tier, exercise_type')
       .is('deleted_at', null) // hide merge-soft-deleted duplicates
       .order('name');
 
@@ -4012,7 +4012,7 @@ export default function WorkoutPage() {
 
       const { data: lastBlocks, error: lastBlocksError } = await supabase
         .from('exercise_blocks')
-        .select('exercise_id, order, exercises(id, name, primary_muscle, mechanic, equipment_required, default_rep_range, default_rir, is_bodyweight)')
+        .select('exercise_id, order, exercises(id, name, primary_muscle, mechanic, equipment_required, default_rep_range, default_rir, is_bodyweight, exercise_type)')
         .eq('workout_session_id', lastSession.id)
         .is('skipped_at', null)
         .order('order', { ascending: true });
@@ -4065,7 +4065,7 @@ export default function WorkoutPage() {
       const supabase = createUntypedClient();
       const { data: newExercise, error } = await supabase
         .from('exercises')
-        .select('id, name, primary_muscle, secondary_muscles, mechanic, default_rep_range, default_rir')
+        .select('id, name, primary_muscle, secondary_muscles, mechanic, default_rep_range, default_rir, exercise_type')
         .eq('id', exerciseId)
         .single();
 

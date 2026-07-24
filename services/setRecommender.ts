@@ -914,6 +914,13 @@ export interface SeedRecommendation {
   /** True when the ±clamp bound the e1RM prescription (say so in provenance). */
   clamped: boolean;
   engineVersion: number;
+  /**
+   * DURATION exercises only: the time-then-load policy's seeded SECONDS
+   * target for this session (+step / hold at ceiling / reset to floor after
+   * a load bump). Rep exercises never set this — their reps come from the
+   * e1RM curve at the seeded weight.
+   */
+  seedReps?: number;
 }
 
 /**
@@ -1016,6 +1023,10 @@ export function recommendSeedForSlot(input: SeedSlotInput): SeedRecommendation {
         anchorSource: 'last_session',
         clamped: false,
         engineVersion: SUGGESTION_ENGINE_VERSION,
+        // The policy's seconds target (+step / ceiling hold / floor reset) —
+        // without this the card would fall back to the mid of the range and
+        // session-start time progression would be silently ignored.
+        seedReps: rec.reps,
       };
     }
     // No history to anchor a load on. For a loaded duration exercise this is a

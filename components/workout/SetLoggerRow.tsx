@@ -218,10 +218,19 @@ export function SetLoggerRow({
     }
   }, [isDurationBased, holdTimer.isRunning, holdTimer.hasStarted, holdTimer.elapsed, onRepsChange]);
 
-  // Fresh set → fresh timer.
+  // Fresh set → fresh timer. Skipped on the initial mount: useDurationTimer
+  // restores a running hold from localStorage in its own mount effect (the
+  // crash/reload persistence), and resetting here would immediately wipe it.
   const resetHoldTimer = holdTimer.reset;
+  const holdMountedForSetRef = useRef<number | null>(null);
   useEffect(() => {
     if (!isDurationBased) return;
+    if (holdMountedForSetRef.current === null) {
+      holdMountedForSetRef.current = setNumber;
+      return;
+    }
+    if (holdMountedForSetRef.current === setNumber) return;
+    holdMountedForSetRef.current = setNumber;
     resetHoldTimer();
     holdCommittedRef.current = false;
   }, [setNumber, isDurationBased, resetHoldTimer]);

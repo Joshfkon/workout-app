@@ -164,6 +164,24 @@ describe('duration policy — session-start seed (recommendSeedForSlot)', () => 
     expect(seed.repRange).toEqual(RANGE);
   });
 
+  it('carries the policy seconds target on the seed (not the range midpoint)', () => {
+    // Not-met previous session (44s vs a 60s ceiling) → the seed must ask for
+    // 44+5s, and the card must receive that via seedReps instead of falling
+    // back to the mid of the range (45).
+    const seed = recommendSeedForSlot({
+      role: 'working',
+      targetRepRange: RANGE,
+      targetRir: 2,
+      minIncrementKg: 2.5,
+      prevWeightKg: 40,
+      prevReps: 44,
+      prevRir: 1,
+      exerciseType: 'duration_based',
+      isBodyweight: false,
+    });
+    expect(seed.seedReps).toBe(44 + DURATION_PROGRESSION_STEP_S);
+  });
+
   it('falls back to the previous session set list when the slot has no direct prev set', () => {
     const seed = recommendSeedForSlot({
       role: 'working',

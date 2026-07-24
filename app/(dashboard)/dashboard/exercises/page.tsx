@@ -12,7 +12,7 @@ import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 // revisiting Exercises renders instantly instead of re-blocking on a spinner.
 const EXERCISE_CATALOG_KEY = ['exercises', 'catalog'] as const;
 const EXERCISE_CATALOG_COLUMNS =
-  'id, name, primary_muscle, secondary_muscles, mechanic, form_cues, common_mistakes, equipment_required, equipment, movement_pattern, is_bodyweight, bodyweight_type, assistance_type, is_custom, hypertrophy_tier, stretch_under_load, resistance_profile, progression_ease, demo_gif_url, demo_thumbnail_url, youtube_video_id';
+  'id, name, primary_muscle, secondary_muscles, mechanic, form_cues, common_mistakes, equipment_required, equipment, movement_pattern, is_bodyweight, bodyweight_type, assistance_type, exercise_type, is_custom, hypertrophy_tier, stretch_under_load, resistance_profile, progression_ease, demo_gif_url, demo_thumbnail_url, youtube_video_id';
 import { MUSCLE_GROUPS } from '@/types/schema';
 import {
   dedupeExercisesById,
