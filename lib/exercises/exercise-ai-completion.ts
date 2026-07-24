@@ -48,6 +48,7 @@ Please analyze this exercise and provide the following data in JSON format:
   "mechanic": "",
   "difficulty": "",
   "fatigueRating": 0,
+  "exerciseType": "",
   "defaultRepRange": [0, 0],
   "defaultRir": 0,
   "minWeightIncrementKg": 0,
@@ -136,7 +137,8 @@ FIELD INSTRUCTIONS:
 - mechanic: "compound" (multi-joint) or "isolation" (single-joint)
 - difficulty: "beginner" | "intermediate" | "advanced"
 - fatigueRating: 1 (low CNS demand) to 3 (high CNS demand)
-- defaultRepRange: [min, max] typical hypertrophy range for this exercise
+- exerciseType: "rep_based" for counted reps, "duration_based" for timed holds/carries/isometrics (planks, carries, hangs). For duration_based, defaultRepRange is a SECONDS range (e.g. [30, 60])
+- defaultRepRange: [min, max] typical hypertrophy range for this exercise (seconds if duration_based)
 - defaultRir: Typical RIR target (usually 2)
 - minWeightIncrementKg: Smallest practical weight jump
 - spinalLoading: "none" | "low" | "moderate" | "high" - compression/shear on spine
@@ -243,6 +245,7 @@ interface AIResponse {
   mechanic: string;
   difficulty: string;
   fatigueRating: number;
+  exerciseType: string;
   defaultRepRange: [number, number];
   defaultRir: number;
   minWeightIncrementKg: number;
@@ -429,6 +432,8 @@ function parseAIResponse(
     mechanic: input.mechanic || mechanic,
     difficulty: input.difficulty || difficulty,
     fatigueRating: input.fatigueRating || fatigueRating,
+    exerciseType: input.exerciseType
+      || (response.exerciseType === 'duration_based' ? 'duration_based' : 'rep_based'),
     defaultRepRange: input.defaultRepRange || (
       Array.isArray(response.defaultRepRange) && response.defaultRepRange.length === 2
         ? [response.defaultRepRange[0], response.defaultRepRange[1]]
@@ -536,6 +541,7 @@ export function getDefaultsByEquipment(input: BasicExerciseInput): CompletedExer
     mechanic,
     difficulty: defaults.difficulty,
     fatigueRating: defaults.fatigueRating,
+    exerciseType: input.exerciseType ?? 'rep_based',
     defaultRepRange: defaults.defaultRepRange,
     defaultRir: 2,
     minWeightIncrementKg: defaults.minWeightIncrementKg,
@@ -580,6 +586,7 @@ export function inheritFromBaseExercise(
     mechanic: baseExercise.mechanic,
     difficulty: baseExercise.difficulty,
     fatigueRating: baseExercise.fatigueRating,
+    exerciseType: baseExercise.exerciseType ?? 'rep_based',
     defaultRepRange: baseExercise.defaultRepRange,
     defaultRir: baseExercise.defaultRir,
     spinalLoading: baseExercise.spinalLoading,

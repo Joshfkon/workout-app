@@ -170,10 +170,13 @@ export interface WorkoutCompletedData {
   workout_name: string;
   duration_minutes: number;
   total_sets: number;
+  /** Tonnage across rep-based sets only — duration sets contribute 0 */
   total_volume_kg: number;
   exercises: Array<{
     name: string;
     sets: number;
+    /** Duration exercise: top_set.reps carries SECONDS (render "60s @ 20kg") */
+    is_duration?: boolean;
     top_set: { weight_kg: number; reps: number };
   }>;
   session_rpe?: number;
@@ -182,10 +185,10 @@ export interface WorkoutCompletedData {
 export interface PersonalRecordData {
   type: 'personal_record';
   exercise_name: string;
-  pr_type: 'weight' | 'reps' | 'volume' | 'e1rm';
+  pr_type: 'weight' | 'reps' | 'volume' | 'e1rm' | 'duration';
   new_value: number;
   previous_value: number | null;
-  unit: 'kg' | 'lb' | 'reps';
+  unit: 'kg' | 'lb' | 'reps' | 'seconds';
 }
 
 export interface StreakMilestoneData {
@@ -283,8 +286,11 @@ export interface SharedExercise {
   exercise_id: string;
   exercise_name: string;
   sets: number;
+  /** A SECONDS range when is_duration is true */
   rep_range: [number, number];
   target_rir: number;
+  /** Duration exercise (plank/carry/hold) — rep_range is seconds */
+  is_duration?: boolean;
   notes?: string;
   superset_group?: number;
 }

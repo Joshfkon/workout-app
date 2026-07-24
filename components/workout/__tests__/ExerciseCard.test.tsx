@@ -334,6 +334,62 @@ describe('ExerciseCard', () => {
       expect(screen.queryByText('Last Workout')).not.toBeInTheDocument();
     });
 
+    it('breaks out added weight for bodyweight sets ("BW+25") instead of the blended effective load', async () => {
+      const user = userEvent.setup();
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          exerciseHistory={{
+            lastWorkoutDate: '2024-01-10',
+            lastWorkoutSets: [
+              // Effective load 100 kg = 75 kg bodyweight + 25 kg added; the
+              // display must lead with the composition, not the mystery 100.
+              {
+                weightKg: 100,
+                reps: 14,
+                rpe: 7.5,
+                bw: { modification: 'weighted', addedWeightKg: 25 },
+              },
+              {
+                weightKg: 75,
+                reps: 12,
+                rpe: 7.5,
+                bw: { modification: 'none' },
+              },
+            ],
+            estimatedE1RM: 120,
+            personalRecord: null,
+            totalSessions: 5,
+          }}
+        />
+      );
+      // Meta line: "last session BW+25 kg × 14, × 12 @ 2 RIR" (RIR 2.5 → 3? rpe 7.5 → 10-7.5=2.5 rounds to 3)
+      expect(screen.getByText(/last session BW\+25 kg × 14, × 12/)).toBeInTheDocument();
+
+      // Chips in the expanded history keep the breakdown per set, with the
+      // effective load preserved as a tooltip.
+      await user.click(screen.getByText(/last session BW\+25/));
+      expect(screen.getByText(/BW\+25 × 14/)).toBeInTheDocument();
+      expect(screen.getByText(/BW × 12/)).toBeInTheDocument();
+      expect(screen.getByTitle('Effective load 100 kg')).toBeInTheDocument();
+    });
+
+    it('keeps the effective-load display for sets without a recorded breakdown', () => {
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          exerciseHistory={{
+            lastWorkoutDate: '2024-01-10',
+            lastWorkoutSets: [{ weightKg: 100, reps: 14, rpe: 8 }],
+            estimatedE1RM: 120,
+            personalRecord: null,
+            totalSessions: 5,
+          }}
+        />
+      );
+      expect(screen.getByText(/last session 100 kg × 14/)).toBeInTheDocument();
+    });
+
     it('calls onExerciseNameClick when exercise name is clicked', async () => {
       const user = userEvent.setup();
       const onExerciseNameClick = jest.fn();

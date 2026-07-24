@@ -147,6 +147,7 @@ export function SharedWorkoutCard({
                   <span className="text-surface-200">{exercise.exercise_name}</span>
                   <span className="text-surface-400">
                     {exercise.sets} x {exercise.rep_range[0]}-{exercise.rep_range[1]}
+                    {exercise.is_duration ? 's' : ''}
                   </span>
                 </div>
               ))}

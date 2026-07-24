@@ -40,7 +40,13 @@ const MAX_SNAPSHOTS_PER_EXERCISE = 12;
  * oldest-first, capped at the most recent MAX_SNAPSHOTS_PER_EXERCISE.
  */
 export function buildPerformanceSnapshots(
-  blocks: SnapshotSourceBlock[]
+  blocks: SnapshotSourceBlock[],
+  /**
+   * Modality per exercise_id. Duration exercises are excluded entirely —
+   * their "reps" are seconds, so an e1RM snapshot would be fiction and a
+   * stable hold ceiling must never read as a plateau.
+   */
+  modalityByExercise?: Record<string, string | undefined>
 ): Record<string, ExercisePerformanceSnapshot[]> {
   const byExercise: Record<string, ExercisePerformanceSnapshot[]> = {};
 
@@ -49,6 +55,7 @@ export function buildPerformanceSnapshots(
     if (!session?.completed_at) continue;
     // Deload sessions are held light — exclude from plateau / e1RM trend input.
     if (session.is_deload) continue;
+    if (modalityByExercise?.[block.exercise_id] === 'duration_based') continue;
 
     const workingSets = (block.set_logs || []).filter(
       (s) => !s.is_warmup && s.weight_kg > 0 && s.reps > 0

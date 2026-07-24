@@ -177,12 +177,28 @@ export function SessionSummary({
 
   const weightUnit = unit === 'lb' ? 'lbs' : 'kg';
 
+  // Duration blocks store SECONDS in each set's reps field — they contribute
+  // sets (and hold time) but never rep counts or tonnage.
+  const durationBlockIds = new Set(
+    exerciseBlocks
+      .filter(
+        (b) =>
+          (b as ExerciseBlock & { exercise?: { exerciseType?: string } }).exercise?.exerciseType ===
+          'duration_based'
+      )
+      .map((b) => b.id)
+  );
+  const isDurationSet = (s: SetLog) => durationBlockIds.has(s.exerciseBlockId);
+
   // Calculate stats (before state hooks — the set-derived average seeds the
   // session-RPE prefill).
   const workingSets = allSets.filter((s) => !s.isWarmup);
   const totalSets = workingSets.length;
-  const totalReps = workingSets.reduce((sum, s) => sum + s.reps, 0);
-  const totalVolume = workingSets.reduce((sum, s) => sum + s.weightKg * s.reps, 0);
+  const totalReps = workingSets.reduce((sum, s) => sum + (isDurationSet(s) ? 0 : s.reps), 0);
+  const totalVolume = workingSets.reduce(
+    (sum, s) => sum + (isDurationSet(s) ? 0 : s.weightKg * s.reps),
+    0
+  );
   const avgRpe = totalSets > 0
     ? Math.round((workingSets.reduce((sum, s) => sum + s.rpe, 0) / totalSets) * 10) / 10
     : 0;
@@ -265,7 +281,7 @@ export function SessionSummary({
     const prs: {
       blockId: string;
       exerciseName: string;
-      type: 'weight' | 'reps' | 'e1rm' | 'volume' | 'form';
+      type: 'weight' | 'reps' | 'e1rm' | 'volume' | 'form' | 'duration';
       value: number;
       improvement: number;
       form?: FormRating;
@@ -296,30 +312,31 @@ export function SessionSummary({
       const history = exerciseHistories?.[block.exerciseId || ''];
       if (!history?.previousBest) return;
 
+      const isDurationBlock = durationBlockIds.has(block.id);
+
       // Find best set this workout (considering form)
       let bestWeight = 0;
       let bestReps = 0;
       let bestE1RM = 0;
       let bestForm: FormRating = 'clean';
-      let totalVolume = 0;
 
       sets.forEach((set) => {
         const setForm = set.feedback?.form || 'clean';
 
         // Skip ugly form sets for PR consideration
-        if (setForm === 'ugly') {
-          totalVolume += set.weightKg * set.reps;
-          return;
-        }
+        if (setForm === 'ugly') return;
 
         if (set.weightKg > bestWeight) {
           bestWeight = set.weightKg;
           bestForm = setForm;
         }
         if (set.reps > bestReps) bestReps = set.reps;
-        const e1rm = estimateE1RM(set.weightKg, set.reps);
-        if (e1rm > bestE1RM) bestE1RM = e1rm;
-        totalVolume += set.weightKg * set.reps;
+        if (!isDurationBlock) {
+          // e1RM is explicitly excluded for duration blocks: seconds through
+          // Epley fabricate a 1RM.
+          const e1rm = estimateE1RM(set.weightKg, set.reps);
+          if (e1rm > bestE1RM) bestE1RM = e1rm;
+        }
       });
 
       const exerciseName = (block as any).exercise?.name || 'Exercise';
@@ -330,6 +347,38 @@ export function SessionSummary({
       );
       if (hasUglyBestSet) {
         // Could add a "potential PR" note here if desired
+        return;
+      }
+
+      // Duration exercise: the record is max seconds at (>=) weight — never
+      // e1RM/reps. bestReps carries SECONDS here.
+      if (isDurationBlock) {
+        if (bestWeight > history.previousBest.weight) {
+          prs.push({
+            blockId: block.id,
+            exerciseName,
+            type: 'weight',
+            value: bestWeight,
+            improvement: Math.round(
+              ((bestWeight - history.previousBest.weight) / history.previousBest.weight) * 100
+            ),
+            form: bestForm,
+            formNote: bestForm === 'clean' ? 'Clean form' : 'Some breakdown',
+          });
+        } else if (
+          bestReps > history.previousBest.reps &&
+          bestWeight >= history.previousBest.weight * 0.95
+        ) {
+          prs.push({
+            blockId: block.id,
+            exerciseName,
+            type: 'duration',
+            value: bestReps,
+            improvement: bestReps - history.previousBest.reps,
+            form: bestForm,
+            formNote: bestForm === 'clean' ? 'Clean form' : 'Some breakdown',
+          });
+        }
         return;
       }
 
@@ -405,6 +454,7 @@ export function SessionSummary({
           // Match by block, not name — the same exercise can appear in
           // multiple blocks and only the record-setting one gets the 🏆.
           hasPR: personalRecords.some((pr) => pr.blockId === block.id),
+          isDuration: durationBlockIds.has(block.id),
           sets: sets.map((set, index) => ({
             reps: set.reps,
             weightKg: set.weightKg,
@@ -478,7 +528,10 @@ export function SessionSummary({
 
       sets.forEach(set => {
         volumes[muscle].sets += 1;
-        volumes[muscle].volume += set.weightKg * set.reps;
+        // Duration sets count toward the muscle's set tally, never tonnage.
+        if (!durationBlockIds.has(block.id)) {
+          volumes[muscle].volume += set.weightKg * set.reps;
+        }
       });
     });
 
@@ -517,26 +570,35 @@ export function SessionSummary({
       const sets = workingSets.filter(s => s.exerciseBlockId === block.id);
       const warmupSets = allSets.filter(s => s.exerciseBlockId === block.id && s.isWarmup);
 
-      // Calculate stats for this exercise
-      const totalVolume = sets.reduce((sum, s) => sum + s.weightKg * s.reps, 0);
+      const isDuration = durationBlockIds.has(block.id);
+
+      // Calculate stats for this exercise. Duration sets: reps carry seconds —
+      // no tonnage, no e1RM; maxReps is the longest hold.
+      const totalVolume = isDuration
+        ? 0
+        : sets.reduce((sum, s) => sum + s.weightKg * s.reps, 0);
       const maxWeight = sets.length > 0 ? Math.max(...sets.map(s => s.weightKg)) : 0;
       const maxReps = sets.length > 0 ? Math.max(...sets.map(s => s.reps)) : 0;
       const avgRpe = sets.length > 0
         ? Math.round((sets.reduce((sum, s) => sum + s.rpe, 0) / sets.length) * 10) / 10
         : 0;
-      const bestE1RM = sets.length > 0
+      const bestE1RM = !isDuration && sets.length > 0
         ? Math.max(...sets.map(s => estimateE1RM(s.weightKg, s.reps)))
         : 0;
 
-      // Check if this exercise had a PR (never on a deload session).
+      // Check if this exercise had a PR (never on a deload session). Duration
+      // blocks defer to the modality-aware personalRecords list.
       const history = exerciseHistories?.[block.exerciseId || ''];
-      const hasPR = !isDeload && history?.previousBest && bestE1RM > history.previousBest.e1rm;
+      const hasPR = isDuration
+        ? personalRecords.some((pr) => pr.blockId === block.id)
+        : !isDeload && history?.previousBest && bestE1RM > history.previousBest.e1rm;
 
       return {
         blockId: block.id,
         exerciseId: block.exerciseId,
         name: exercise?.name || 'Unknown Exercise',
         muscle: exercise?.primaryMuscle || 'other',
+        isDuration,
         sets,
         warmupSets,
         totalVolume,
@@ -550,7 +612,7 @@ export function SessionSummary({
         targetRepsMax: (block as any).targetRepsMax,
       };
     }).filter(e => e.sets.length > 0); // Only show exercises with completed sets
-  }, [exerciseBlocks, workingSets, allSets, exerciseHistories, isDeload]);
+  }, [exerciseBlocks, workingSets, allSets, exerciseHistories, isDeload, personalRecords]);
 
   // Muscles trained this session (blocks with at least one working set),
   // resolved to standard muscle groups — drives the per-muscle workload chips.
@@ -961,6 +1023,7 @@ export function SessionSummary({
                     {pr.type === 'e1rm' && `New Est. 1RM: ${displayWeight(pr.value)}${weightUnit}`}
                     {pr.type === 'weight' && `New Weight PR: ${displayWeight(pr.value)}${weightUnit}`}
                     {pr.type === 'reps' && `New Reps PR: ${pr.value} reps`}
+                    {pr.type === 'duration' && `New Hold PR: ${pr.value}s`}
                     {pr.type === 'form' && 'Form PR: Cleaner technique!'}
                   </p>
                   {pr.formNote && (
@@ -971,7 +1034,7 @@ export function SessionSummary({
                 </div>
                 <div className="text-right">
                   <Badge variant="warning" className="bg-yellow-500/20 text-yellow-400">
-                    {pr.type === 'reps' ? `+${pr.improvement}` : pr.type === 'form' ? 'Form' : `+${pr.improvement}%`}
+                    {pr.type === 'reps' ? `+${pr.improvement}` : pr.type === 'duration' ? `+${pr.improvement}s` : pr.type === 'form' ? 'Form' : `+${pr.improvement}%`}
                   </Badge>
                 </div>
               </div>
@@ -1271,7 +1334,11 @@ export function SessionSummary({
                           <span>•</span>
                           <span>{exercise.sets.length} sets</span>
                           <span>•</span>
-                          <span>{displayWeight(exercise.totalVolume)}{weightUnit} vol</span>
+                          {exercise.isDuration ? (
+                            <span>{exercise.sets.reduce((sum, s) => sum + s.reps, 0)}s total</span>
+                          ) : (
+                            <span>{displayWeight(exercise.totalVolume)}{weightUnit} vol</span>
+                          )}
                           <span>•</span>
                           <span>RPE {exercise.avgRpe}</span>
                         </div>
@@ -1293,20 +1360,44 @@ export function SessionSummary({
                     {/* Expanded set details */}
                     {isExpanded && (
                       <div className="px-3 pb-3 border-t border-surface-700">
-                        {/* Quick stats */}
+                        {/* Quick stats — duration exercises track max seconds
+                            at weight, never an e1RM or tonnage */}
                         <div className="grid grid-cols-4 gap-2 py-3">
-                          <div className="text-center">
-                            <p className="text-sm font-bold text-surface-200">{displayWeight(exercise.bestE1RM)}{weightUnit}</p>
-                            <p className="text-xs text-surface-500">Est. 1RM</p>
-                          </div>
-                          <div className="text-center">
-                            <p className="text-sm font-bold text-surface-200">{exercise.maxReps}</p>
-                            <p className="text-xs text-surface-500">Max Reps</p>
-                          </div>
-                          <div className="text-center">
-                            <p className="text-sm font-bold text-surface-200">{displayWeight(exercise.totalVolume)}</p>
-                            <p className="text-xs text-surface-500">Vol ({weightUnit})</p>
-                          </div>
+                          {exercise.isDuration ? (
+                            <div className="text-center">
+                              <p className="text-sm font-bold text-surface-200">{exercise.maxReps}s</p>
+                              <p className="text-xs text-surface-500">Max Hold</p>
+                            </div>
+                          ) : (
+                            <div className="text-center">
+                              <p className="text-sm font-bold text-surface-200">{displayWeight(exercise.bestE1RM)}{weightUnit}</p>
+                              <p className="text-xs text-surface-500">Est. 1RM</p>
+                            </div>
+                          )}
+                          {exercise.isDuration ? (
+                            <div className="text-center">
+                              <p className="text-sm font-bold text-surface-200">
+                                {exercise.sets.reduce((sum, s) => sum + s.reps, 0)}s
+                              </p>
+                              <p className="text-xs text-surface-500">Total Time</p>
+                            </div>
+                          ) : (
+                            <div className="text-center">
+                              <p className="text-sm font-bold text-surface-200">{exercise.maxReps}</p>
+                              <p className="text-xs text-surface-500">Max Reps</p>
+                            </div>
+                          )}
+                          {exercise.isDuration ? (
+                            <div className="text-center">
+                              <p className="text-sm font-bold text-surface-200">{displayWeight(exercise.maxWeight)}</p>
+                              <p className="text-xs text-surface-500">Top Wt ({weightUnit})</p>
+                            </div>
+                          ) : (
+                            <div className="text-center">
+                              <p className="text-sm font-bold text-surface-200">{displayWeight(exercise.totalVolume)}</p>
+                              <p className="text-xs text-surface-500">Vol ({weightUnit})</p>
+                            </div>
+                          )}
                           <div className="text-center">
                             <p className="text-sm font-bold text-surface-200">{exercise.avgRpe}</p>
                             <p className="text-xs text-surface-500">Avg RPE</p>
@@ -1320,7 +1411,7 @@ export function SessionSummary({
                               <tr className="text-surface-500 text-xs">
                                 <th className="px-2 py-1.5 text-left">Set</th>
                                 <th className="px-2 py-1.5 text-center">Weight</th>
-                                <th className="px-2 py-1.5 text-center">Reps</th>
+                                <th className="px-2 py-1.5 text-center">{exercise.isDuration ? 'Sec' : 'Reps'}</th>
                                 <th className="px-2 py-1.5 text-center">RPE</th>
                                 <th className="px-2 py-1.5 text-right">Quality</th>
                               </tr>
@@ -1377,14 +1468,20 @@ export function SessionSummary({
                           </table>
                         </div>
 
-                        {/* E1RM comparison if PR */}
+                        {/* PR comparison: hold time for duration, e1RM otherwise */}
                         {exercise.hasPR && exerciseHistories?.[exercise.exerciseId || '']?.previousBest && (
                           <div className="mt-2 p-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
                             <div className="flex items-center justify-between text-sm">
                               <span className="text-yellow-400">🏆 New Personal Record!</span>
-                              <span className="text-surface-300">
-                                {displayWeight(exerciseHistories[exercise.exerciseId || ''].previousBest?.e1rm || 0)}{weightUnit} → <span className="font-bold text-yellow-400">{displayWeight(exercise.bestE1RM)}{weightUnit}</span>
-                              </span>
+                              {exercise.isDuration ? (
+                                <span className="text-surface-300">
+                                  {exerciseHistories[exercise.exerciseId || ''].previousBest?.reps || 0}s → <span className="font-bold text-yellow-400">{exercise.maxReps}s</span>
+                                </span>
+                              ) : (
+                                <span className="text-surface-300">
+                                  {displayWeight(exerciseHistories[exercise.exerciseId || ''].previousBest?.e1rm || 0)}{weightUnit} → <span className="font-bold text-yellow-400">{displayWeight(exercise.bestE1RM)}{weightUnit}</span>
+                                </span>
+                              )}
                             </div>
                           </div>
                         )}

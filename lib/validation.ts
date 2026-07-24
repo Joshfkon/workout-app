@@ -22,6 +22,14 @@ export type ValidationResult<T> =
 /** Valid range for reps in a set */
 export const REPS_RANGE = { min: 1, max: 100 } as const;
 
+/**
+ * Valid range for duration-based sets, in seconds. Duration exercises store
+ * seconds in the reps field (see ExerciseType in types/schema.ts), so this is
+ * the reps bound applied when the exercise is duration_based. Must stay in
+ * sync with the DB CHECK on set_logs.reps (0–600) and the logging UI ceiling.
+ */
+export const DURATION_SECONDS_RANGE = { min: 1, max: 600 } as const;
+
 /** Valid range for weight in kg */
 export const WEIGHT_RANGE = { min: 0, max: 1000 } as const;
 
@@ -38,19 +46,33 @@ export const REST_RANGE = { min: 0, max: 600 } as const;
 export const SETS_RANGE = { min: 1, max: 20 } as const;
 
 /**
- * Validate reps value
+ * Validate reps value.
+ *
+ * For duration-based exercises the reps field carries seconds, so pass the
+ * exercise's type to get the wider seconds bound (1–600) and time-phrased
+ * error messages. Omitting it keeps the strict rep-count bound (1–100).
  */
-export function validateReps(value: unknown): ValidationResult<number> {
+export function validateReps(
+  value: unknown,
+  exerciseType: 'rep_based' | 'duration_based' = 'rep_based'
+): ValidationResult<number> {
   const num = toNumber(value);
+  const isDuration = exerciseType === 'duration_based';
+  const range = isDuration ? DURATION_SECONDS_RANGE : REPS_RANGE;
+  const noun = isDuration ? 'Duration' : 'Reps';
 
   if (num === null || !Number.isInteger(num)) {
-    return { valid: false, error: 'Reps must be a whole number', field: 'reps' };
-  }
-
-  if (num < REPS_RANGE.min || num > REPS_RANGE.max) {
     return {
       valid: false,
-      error: `Reps must be between ${REPS_RANGE.min} and ${REPS_RANGE.max}`,
+      error: isDuration ? 'Duration must be a whole number of seconds' : 'Reps must be a whole number',
+      field: 'reps',
+    };
+  }
+
+  if (num < range.min || num > range.max) {
+    return {
+      valid: false,
+      error: `${noun} must be between ${range.min} and ${range.max}${isDuration ? ' seconds' : ''}`,
       field: 'reps',
     };
   }
@@ -172,6 +194,8 @@ export interface SetLogInput {
   weightKg: unknown;
   rpe?: unknown;
   restSeconds?: unknown;
+  /** Modality of the exercise this set belongs to; widens the reps bound to seconds for duration exercises */
+  exerciseType?: 'rep_based' | 'duration_based';
 }
 
 export interface ValidatedSetLog {
@@ -185,8 +209,8 @@ export interface ValidatedSetLog {
  * Validate a complete set log entry
  */
 export function validateSetLog(input: SetLogInput): ValidationResult<ValidatedSetLog> {
-  // Validate reps
-  const repsResult = validateReps(input.reps);
+  // Validate reps (seconds for duration-based exercises)
+  const repsResult = validateReps(input.reps, input.exerciseType ?? 'rep_based');
   if (!repsResult.valid) {
     return repsResult;
   }

@@ -44,7 +44,13 @@ function exercisePrimaryMuscle(ex: { primaryMuscle?: string; primary_muscle?: st
 
 interface ExerciseHistory {
   lastWorkoutDate: string;
-  lastWorkoutSets: { weightKg: number; reps: number; rpe?: number }[];
+  lastWorkoutSets: {
+    weightKg: number;
+    reps: number;
+    rpe?: number;
+    /** Bodyweight composition, when recorded — drives the "BW+25" display. */
+    bw?: { modification: 'none' | 'weighted' | 'assisted'; addedWeightKg?: number; assistanceWeightKg?: number };
+  }[];
   /** Working sets from the session BEFORE last — regression-path evidence (Fix 4). */
   priorWorkoutSets?: { weightKg: number; reps: number; rpe?: number }[];
   estimatedE1RM: number;
@@ -532,6 +538,8 @@ export const ExerciseCard = memo(function ExerciseCard({
   // Anchor on the freshest/strongest E1RM this exercise so late-set predictions
   // aren't double-fatigued.
   const sessionBestE1RM = useMemo(() => {
+    // Duration sets carry seconds in `reps` — Epley on them fabricates an e1RM.
+    if (exercise.exerciseType === 'duration_based') return undefined;
     let best = 0;
     for (const s of completedSets) {
       if (s.weightKg > 0 && s.reps > 0) {
@@ -541,7 +549,7 @@ export const ExerciseCard = memo(function ExerciseCard({
       }
     }
     return best > 0 ? best : undefined;
-  }, [completedSets, effectiveTargetRir]);
+  }, [completedSets, effectiveTargetRir, exercise.exerciseType]);
 
   // Prescription e1RM ladder (unified prescribe() contract, services/setRecommender):
   //   1. session-best — a set logged THIS session (sessionBestE1RM above);
@@ -555,6 +563,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   // edit — that inconsistency is what saturated the rep estimate into the
   // constant "× 20". With no rung available, weight edits leave reps untouched.
   const lastSessionE1RM = useMemo(() => {
+    if (exercise.exerciseType === 'duration_based') return undefined;
     let best = 0;
     for (const s of previousSets) {
       if (s.weightKg > 0 && s.reps > 0) {
@@ -564,13 +573,14 @@ export const ExerciseCard = memo(function ExerciseCard({
       }
     }
     return best > 0 ? best : undefined;
-  }, [previousSets, effectiveTargetRir]);
+  }, [previousSets, effectiveTargetRir, exercise.exerciseType]);
 
   const coldStartE1RM = useMemo(() => {
+    if (exercise.exerciseType === 'duration_based') return undefined;
     if (!coldStartSuggestion || !(coldStartSuggestion.weightKg > 0)) return undefined;
     const mid = Math.round((block.targetRepRange[0] + block.targetRepRange[1]) / 2);
     return coldStartSuggestion.weightKg * (1 + (mid + effectiveTargetRir) / 30);
-  }, [coldStartSuggestion, block.targetRepRange, effectiveTargetRir]);
+  }, [coldStartSuggestion, block.targetRepRange, effectiveTargetRir, exercise.exerciseType]);
 
   // Grade the next set against the effort ACTUALLY logged on `last` — read from
   // the persisted set record (feedback.repsInTank first, then rpe), never the
@@ -591,6 +601,8 @@ export const ExerciseCard = memo(function ExerciseCard({
       targetRir: effectiveTargetRir,
       minIncrementKg: exercise.minWeightIncrementKg,
       coldStart: isColdStartExercise,
+      exerciseType: exercise.exerciseType,
+      isBodyweight: exercise.isBodyweight,
     });
 
   // RPE→RIR adapter for the recommender's AMRAP prediction.
@@ -730,6 +742,27 @@ export const ExerciseCard = memo(function ExerciseCard({
   }, [unit]);
   const weightLabel = unit === 'lb' ? 'lbs' : 'kg';
 
+  // Weight label for a history set: bodyweight sets break out the composition
+  // ("BW", "BW+25", "BW−30" in display units) instead of the blended effective
+  // load, which reads as a mystery number ("222") on the card. Sets without a
+  // recorded breakdown (legacy rows, or migration rows flagged _needsReview)
+  // keep the effective-load display. The effective load remains the engine's
+  // number everywhere — this is display only.
+  const historySetWeightLabel = useCallback(
+    (set: { weightKg: number; bw?: { modification: string; addedWeightKg?: number; assistanceWeightKg?: number } }): string => {
+      const bw = set.bw;
+      if (!bw) return String(displayWeight(set.weightKg, true));
+      if (bw.modification === 'weighted' && (bw.addedWeightKg ?? 0) > 0) {
+        return `BW+${displayWeight(bw.addedWeightKg!, true)}`;
+      }
+      if (bw.modification === 'assisted' && (bw.assistanceWeightKg ?? 0) > 0) {
+        return `BW−${displayWeight(bw.assistanceWeightKg!, true)}`;
+      }
+      return 'BW';
+    },
+    [displayWeight]
+  );
+
   // Seed string for a pending weight input. When the seed comes verbatim from
   // a logged set (recommendation held the weight, or seeding from last
   // session), preserve the user's EXACT input via convertWeightForDisplay —
@@ -839,10 +872,12 @@ export const ExerciseCard = memo(function ExerciseCard({
         prevRir: prevSet?.rpe != null ? rpeToRir(prevSet.rpe) : undefined,
         prevSessionSets: prevSessionSetsForGating,
         priorSessionSets: priorSessionSetsForGating,
+        exerciseType: exercise.exerciseType,
+        isBodyweight: exercise.isBodyweight,
       });
       return { seed, prevSet };
     },
-    [previousSets, previousTopSetWeightKg, anchorE1RMKg, block.targetRepRange, effectiveTargetRir, exercise.minWeightIncrementKg, prevSessionSetsForGating, priorSessionSetsForGating]
+    [previousSets, previousTopSetWeightKg, anchorE1RMKg, block.targetRepRange, effectiveTargetRir, exercise.minWeightIncrementKg, exercise.exerciseType, exercise.isBodyweight, prevSessionSetsForGating, priorSessionSetsForGating]
   );
 
   // Curve-consistent reps for a session-start seed: answer the seeded weight
@@ -853,6 +888,9 @@ export const ExerciseCard = memo(function ExerciseCard({
   // answer, and later weight edits leave it alone.
   const seedRepsForWeight = useCallback(
     (weightKg: number, seed: SeedRecommendation): number => {
+      // Duration exercises: the time-then-load policy already seeded the
+      // seconds target — never replace it with a range midpoint.
+      if (seed.seedReps !== undefined) return seed.seedReps;
       const midPlan = Math.round((seed.repRange[0] + seed.repRange[1]) / 2);
       if (seed.role === 'ramp' || !(weightKg > 0)) return midPlan;
       const e1rm = lastSessionE1RM ?? coldStartE1RM;
@@ -1602,6 +1640,14 @@ export const ExerciseCard = memo(function ExerciseCard({
       } else if (weight) {
         reason = 'starting point estimated from your training profile';
         explanation.push('No history for this exercise yet — the starting weight is estimated from your profile and calibrated lifts.');
+      } else if (isDurationBased) {
+        // Loud-skip surface (durationPolicy): the engine deliberately does not
+        // fabricate a load for a timed exercise with no history — say so here
+        // instead of leaving only a console warning.
+        reason = 'no load prescription for this timed exercise yet';
+        explanation.push(
+          `Timed exercise: no history to anchor a load on, so none is suggested. Pick a weight you can hold for ~${block.targetRepRange[0]}s at the target effort — the engine progresses from what you log.`
+        );
       } else {
         reason = 'enter your working weight to calibrate';
         explanation.push('Log a first set and future suggestions will anchor to it.');
@@ -1702,6 +1748,8 @@ export const ExerciseCard = memo(function ExerciseCard({
 
   // Meta line under the header pills:
   // "{muscle} · last session 60 lbs × 9, × 8 @ 2 RIR"
+  // Bodyweight sets with a recorded breakdown read "BW+25 lbs × 14" so the
+  // added load is visible instead of the blended effective number.
   const lastSessionMeta = (() => {
     const lastSets = exerciseHistory?.lastWorkoutSets ?? [];
     if (lastSets.length === 0) return null;
@@ -1719,7 +1767,10 @@ export const ExerciseCard = memo(function ExerciseCard({
         ? ' · est. from another gym'
         : ' · here';
     }
-    return `last session ${displayWeight(lastSets[0].weightKg, true)} ${weightLabel} ${repsPart}${
+    const weightPart = lastSets[0].bw
+      ? `${historySetWeightLabel(lastSets[0])}${lastSets[0].bw.modification === 'none' ? '' : ` ${weightLabel}`}`
+      : `${displayWeight(lastSets[0].weightKg, true)} ${weightLabel}`;
+    return `last session ${weightPart} ${repsPart}${
       rir !== null ? ` @ ${rir} RIR` : ''
     }${locationTag}`;
   })();
@@ -1997,8 +2048,13 @@ export const ExerciseCard = memo(function ExerciseCard({
                       <span
                         key={idx}
                         className="px-2 py-1 bg-surface-700 rounded text-xs text-surface-300"
+                        title={
+                          set.bw && set.bw.modification !== 'none'
+                            ? `Effective load ${displayWeight(set.weightKg, true)} ${weightLabel}`
+                            : undefined
+                        }
                       >
-                        {displayWeight(set.weightKg, true)} × {set.reps}{isDurationBased ? 's' : ''}
+                        {historySetWeightLabel(set)} × {set.reps}{isDurationBased ? 's' : ''}
                         {set.rpe && <span className="text-surface-500"> @{set.rpe}</span>}
                       </span>
                     ))}
@@ -2661,6 +2717,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                 minIncrementKg={exercise.minWeightIncrementKg}
                 disabled={isCompletingSet}
                 isDurationBased={isDurationBased}
+                exerciseId={exercise.id}
                 isBodyweight={isBodyweightExercise}
                 weightMode={weightMode}
                 userBodyweightKg={userBodyweightKg}

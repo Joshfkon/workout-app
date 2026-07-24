@@ -75,7 +75,7 @@ export interface LiftTrendSessionRow {
   id: string;
   completed_at: string | null;
   exercise_blocks: {
-    exercises: { id: string; name: string } | null;
+    exercises: { id: string; name: string; exercise_type?: string | null } | null;
     set_logs: { weight_kg: number | null; reps: number | null; is_warmup: boolean | null }[] | null;
   }[] | null;
 }
@@ -123,6 +123,9 @@ export function computeLiftTrends(
     for (const block of session.exercise_blocks) {
       const exercise = block.exercises;
       if (!exercise) continue;
+      // Duration exercises store seconds in reps — an "E1RM trend" over hold
+      // times is fiction, so timed work never feeds the lift-trend tile.
+      if (exercise.exercise_type === 'duration_based') continue;
       const workingSets = (block.set_logs || []).filter(
         (s) => !s.is_warmup && (s.weight_kg ?? 0) > 0 && (s.reps ?? 0) > 0
       );

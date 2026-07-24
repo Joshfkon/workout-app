@@ -32,6 +32,7 @@ import type { ExerciseVarietyPreferences } from '@/types/user-exercise-preferenc
 
 import {
   calculateRepRange,
+  durationRepRangeConfig,
   getDUPRepRange,
   getDUPTempo,
   getDUPRestPeriod,
@@ -350,7 +351,11 @@ function buildDetailedExercise(
   weeklyProgression: WeeklyProgression
 ): DetailedExerciseWithFatigue {
   const restSeconds = getRestPeriod(exercise, goal);
-  const loadGuidance = buildLoadGuidance(reps, weeklyProgression.focus);
+  const loadGuidance = buildLoadGuidance(
+    reps,
+    weeklyProgression.focus,
+    (exercise as { exerciseType?: string }).exerciseType === 'duration_based'
+  );
 
   // Combine notes
   const notes = [exercise.notes, reps.notes, efficiency === 'suboptimal' ? 'Consider swapping for more efficient alternative' : '']
@@ -511,17 +516,23 @@ export function buildDetailedSessionWithFatigue(
       // Determine position category
       const positionCategory = getPositionCategory(exercisePosition, orderedMuscles.length * 2);
 
-      // Calculate rep range
-      const repConfig = calculateRepRange({
-        goal: profile.goal,
-        experience: profile.experience,
-        exercisePattern: selection.exercise.pattern,
-        muscleGroup: muscle,
-        positionInWorkout: positionCategory,
-        weekInMesocycle,
-        totalMesocycleWeeks,
-        periodizationModel,
-      });
+      // Calculate rep range. Duration exercises bypass calculateRepRange —
+      // its rep-count bounds check would clamp a seconds range — and keep
+      // their own time range instead.
+      const isDurationExercise =
+        (selection.exercise as { exerciseType?: string }).exerciseType === 'duration_based';
+      const repConfig = isDurationExercise
+        ? durationRepRangeConfig(selection.exercise)
+        : calculateRepRange({
+            goal: profile.goal,
+            experience: profile.experience,
+            exercisePattern: selection.exercise.pattern,
+            muscleGroup: muscle,
+            positionInWorkout: positionCategory,
+            weekInMesocycle,
+            totalMesocycleWeeks,
+            periodizationModel,
+          });
 
       // Apply weekly intensity modifier to RIR
       const adjustedRIR = Math.max(
@@ -722,17 +733,22 @@ export function buildDUPSession(
         continue; // Skip this exercise
       }
 
-      // Get DUP-specific rep range
+      // Get DUP-specific rep range. Duration exercises keep their own time
+      // range — DUP's heavy/moderate/light rep schemes have no seconds analogue.
+      const dupIsDuration =
+        (selection.exercise as { exerciseType?: string }).exerciseType === 'duration_based';
       const dupRepRange = getDUPRepRange(dupDayType, isCompound, muscle);
       const targetRIR = getDUPTargetRIR(dupDayType);
 
-      const repConfig: RepRangeConfig = {
-        min: dupRepRange.min,
-        max: dupRepRange.max,
-        targetRIR,
-        tempoRecommendation: getDUPTempo(dupDayType, isCompound),
-        notes: getDUPNotes(dupDayType),
-      };
+      const repConfig: RepRangeConfig = dupIsDuration
+        ? durationRepRangeConfig(selection.exercise)
+        : {
+            min: dupRepRange.min,
+            max: dupRepRange.max,
+            targetRIR,
+            tempoRecommendation: getDUPTempo(dupDayType, isCompound),
+            notes: getDUPNotes(dupDayType),
+          };
 
       const avgReps = Math.round((repConfig.min + repConfig.max) / 2);
       const exerciseFatigue = calculateExerciseFatigue(
@@ -762,7 +778,9 @@ export function buildDUPSession(
         sets: selection.sets,
         reps: repConfig,
         restSeconds,
-        loadGuidance: `${repConfig.min}-${repConfig.max} reps @ ${repConfig.targetRIR} RIR`,
+        loadGuidance: dupIsDuration
+          ? `${repConfig.min}-${repConfig.max}s hold @ ${repConfig.targetRIR} RIR`
+          : `${repConfig.min}-${repConfig.max} reps @ ${repConfig.targetRIR} RIR`,
         notes: repConfig.notes,
         fatigueProfile: {
           systemicCost: exerciseFatigue.systemicCost,

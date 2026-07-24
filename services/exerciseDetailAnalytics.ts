@@ -22,6 +22,16 @@ export interface ExerciseDetailSet {
   weightKg: number;
   reps: number;
   rpe: number | null;
+  /**
+   * Bodyweight composition, when recorded. `weightKg` stays the effective
+   * load (the number every derivation here uses); this only lets displays
+   * break it out as "BW+25" instead of the blended value.
+   */
+  bw?: {
+    modification: 'none' | 'weighted' | 'assisted';
+    addedWeightKg?: number;
+    assistanceWeightKg?: number;
+  };
 }
 
 export interface ExerciseDetailSessionInput {

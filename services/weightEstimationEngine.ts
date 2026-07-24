@@ -1497,7 +1497,11 @@ export class WeightEstimationEngine {
         : 'Estimated from a related exercise you\'ve logged'
     };
 
-    const percentage = Math.round(((37 - (targetReps + targetRIR)) / 36) * 100);
+    // Clamp effective reps exactly like calculateWorkingWeight does (max 15):
+    // unclamped, a high targetReps (e.g. a mis-routed seconds range) drove the
+    // Brzycki percentage negative and the rationale printed "→ −28%".
+    const effectiveReps = Math.min(targetReps + targetRIR, 15);
+    const percentage = Math.round(((37 - effectiveReps) / 36) * 100);
 
     return `${sourceExplanation[estimatedMax.source]}. Est. 1RM: ${estimatedMax.estimated1RM}kg → ${percentage}% for ${targetReps} reps @ ${targetRIR} RIR.`;
   }

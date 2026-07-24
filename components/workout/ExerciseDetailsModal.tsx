@@ -140,14 +140,25 @@ function DetailHeaderMeta({
  * workout card's old header meta line: "60 lbs × 9, × 8 @ 2 RIR".
  */
 function buildLastSessionSummary(
-  session: { date: string; sets: { weightKg: number; reps: number; rpe: number | null }[] } | undefined,
-  unit: 'kg' | 'lb'
+  session:
+    | {
+        date: string;
+        sets: {
+          weightKg: number;
+          reps: number;
+          rpe: number | null;
+          bw?: { modification: 'none' | 'weighted' | 'assisted'; addedWeightKg?: number; assistanceWeightKg?: number };
+        }[];
+      }
+    | undefined,
+  unit: 'kg' | 'lb',
+  isDuration = false
 ): string | null {
   if (!session || session.sets.length === 0) return null;
   const first = session.sets[0];
   const repsPart = session.sets
     .slice(0, 3)
-    .map((s) => `× ${s.reps}`)
+    .map((s) => `× ${s.reps}${isDuration ? 's' : ''}`)
     .join(', ');
   const rir = first.rpe != null ? Math.max(0, Math.round(10 - first.rpe)) : null;
   const unitLabel = unit === 'lb' ? 'lbs' : 'kg';
@@ -155,7 +166,16 @@ function buildLastSessionSummary(
     month: 'short',
     day: 'numeric',
   });
-  return `Last session (${date}): ${convertWeightForDisplay(first.weightKg, unit)} ${unitLabel} ${repsPart}${
+  // Bodyweight sets with a recorded breakdown lead with the composition
+  // ("BW+25 lbs") instead of the blended effective load.
+  const weightPart = first.bw
+    ? first.bw.modification === 'weighted' && (first.bw.addedWeightKg ?? 0) > 0
+      ? `BW+${convertWeightForDisplay(first.bw.addedWeightKg!, unit)} ${unitLabel}`
+      : first.bw.modification === 'assisted' && (first.bw.assistanceWeightKg ?? 0) > 0
+        ? `BW−${convertWeightForDisplay(first.bw.assistanceWeightKg!, unit)} ${unitLabel}`
+        : 'BW'
+    : `${convertWeightForDisplay(first.weightKg, unit)} ${unitLabel}`;
+  return `Last session (${date}): ${weightPart} ${repsPart}${
     rir !== null ? ` @ ${rir} RIR` : ''
   }`;
 }
@@ -198,7 +218,11 @@ export function ExerciseDetailsModal({
   if (!isOpen || !exercise) return null;
 
   const sessionCount = sessions?.length ?? 0;
-  const lastSessionSummary = buildLastSessionSummary(sessions?.[0], unit);
+  const lastSessionSummary = buildLastSessionSummary(
+    sessions?.[0],
+    unit,
+    getExerciseProp(exercise, 'exerciseType', 'exercise_type') === 'duration_based'
+  );
 
   return (
     <div

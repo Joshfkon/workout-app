@@ -15,39 +15,18 @@ ADD COLUMN IF NOT EXISTS exercise_type exercise_type NOT NULL DEFAULT 'rep_based
 
 -- Update known duration-based exercises
 -- These exercises track time (seconds) instead of reps
+--
+-- Note: this list once named ~30 exercises, most of which were never seeded
+-- anywhere — those UPDATEs matched zero rows. The dead names were removed
+-- (20260723) to keep the migration honest; exercises added after this
+-- migration are inserted with exercise_type = 'duration_based' directly.
 UPDATE exercises
 SET exercise_type = 'duration_based'
 WHERE name IN (
     'Plank',
     'Side Plank',
-    'Side Plank (Left)',
-    'Side Plank (Right)',
-    'Wall Sit',
-    'Dead Hang',
-    'L-Sit',
-    'L-Sit Hold',
-    'Hollow Body Hold',
-    'Superman Hold',
-    'Glute Bridge Hold',
-    'Single Leg Glute Bridge Hold',
-    'Pallof Press Hold',
     'Farmer''s Carry',
-    'Farmer''s Walk',
-    'Suitcase Carry',
-    'Waiter''s Walk',
-    'Overhead Carry',
-    'Rack Carry',
-    'Static Lunge Hold',
-    'Isometric Squat Hold',
-    'Wall Squat',
-    'Copenhagen Plank',
-    'Bird Dog Hold',
-    'Bear Crawl Hold',
-    'Plank with Shoulder Tap',
-    'RKC Plank',
-    'Body Saw',
-    'Hanging Knee Raise Hold',
-    'Hanging L-Sit'
+    'Suitcase Carry'
 );
 
 -- Add index for filtering by exercise type

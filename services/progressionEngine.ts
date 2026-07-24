@@ -167,9 +167,13 @@ export function getPeriodizationPhase(
 export interface CalculateSetQualityInput {
   rpe: number;
   targetRir: number;
+  /** Rep count — or SECONDS for a duration-based exercise's set */
   reps: number;
+  /** Rep range — or a SECONDS range for a duration-based exercise */
   targetRepRange: [number, number];
   isLastSet: boolean;
+  /** Modality: duration_based phrases range compliance in seconds/time */
+  exerciseType?: 'rep_based' | 'duration_based';
 }
 
 /**
@@ -182,6 +186,7 @@ export function calculateSetQuality(input: CalculateSetQualityInput): {
   const { rpe, targetRir, reps, targetRepRange, isLastSet } = input;
   const [minReps, maxReps] = targetRepRange;
   const rir = 10 - rpe;
+  const isDuration = input.exerciseType === 'duration_based';
 
   // Junk volume: too easy (high RIR, low RPE)
   if (rpe <= SET_QUALITY_THRESHOLDS.junk.maxRpe) {
@@ -199,11 +204,13 @@ export function calculateSetQuality(input: CalculateSetQualityInput): {
     };
   }
 
-  // Check rep range compliance
+  // Check range compliance (reps, or seconds for a timed exercise)
   if (reps < minReps) {
     return {
       quality: 'effective',
-      reason: `Below target rep range (${reps}/${minReps}-${maxReps}) - consider reducing weight`,
+      reason: isDuration
+        ? `Below target hold time (${reps}s/${minReps}-${maxReps}s) - consider reducing the load`
+        : `Below target rep range (${reps}/${minReps}-${maxReps}) - consider reducing weight`,
     };
   }
 
@@ -214,7 +221,9 @@ export function calculateSetQuality(input: CalculateSetQualityInput): {
   ) {
     return {
       quality: 'stimulative',
-      reason: `RPE ${rpe} with ${reps} reps - excellent hypertrophy stimulus`,
+      reason: isDuration
+        ? `RPE ${rpe} with a ${reps}s hold - excellent stimulus`
+        : `RPE ${rpe} with ${reps} reps - excellent hypertrophy stimulus`,
     };
   }
 

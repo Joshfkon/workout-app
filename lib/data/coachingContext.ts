@@ -38,6 +38,7 @@ interface WorkoutSessionWithBlocks {
   planned_date: string;
   exercise_blocks: Array<{
     exercise_name: string;
+    exercises?: { exercise_type?: string | null } | null;
     set_logs: Array<Pick<SetLogRow, 'weight_kg' | 'reps' | 'rpe' | 'is_warmup'>>;
   }>;
 }
@@ -184,6 +185,9 @@ export async function buildCoachingContext(): Promise<CoachingContext | null> {
       planned_date,
       exercise_blocks (
         exercise_name,
+        exercises (
+          exercise_type
+        ),
         set_logs (
           weight_kg,
           reps,
@@ -223,7 +227,14 @@ export async function buildCoachingContext(): Promise<CoachingContext | null> {
 
         if (workingSets.length === 0) continue;
 
+        // Duration exercises store seconds in reps: their top set is the
+        // longest hold and they carry NO e1RM (Epley on seconds is fiction).
+        const isDuration = block.exercises?.exercise_type === 'duration_based';
+
         const topSet = workingSets.reduce((best: SetLogSubset, current: SetLogSubset) => {
+          if (isDuration) {
+            return (current.reps || 0) > (best.reps || 0) ? current : best;
+          }
           const currentWeight = current.weight_kg || 0;
           const currentReps = current.reps || 0;
           const bestWeight = best.weight_kg || 0;
@@ -235,7 +246,7 @@ export async function buildCoachingContext(): Promise<CoachingContext | null> {
 
         if (!topSet.weight_kg || !topSet.reps) continue;
 
-        const estimated1RM = estimateE1RM(topSet.weight_kg, topSet.reps);
+        const estimated1RM = isDuration ? 0 : estimateE1RM(topSet.weight_kg, topSet.reps);
 
         const lift: RecentLift = {
           exerciseName: block.exercise_name,
@@ -244,6 +255,7 @@ export async function buildCoachingContext(): Promise<CoachingContext | null> {
           topSetReps: topSet.reps,
           topSetRpe: topSet.rpe || 0,
           estimated1RM,
+          ...(isDuration ? { isDuration: true } : {}),
         };
 
         // Keep most recent top set per exercise

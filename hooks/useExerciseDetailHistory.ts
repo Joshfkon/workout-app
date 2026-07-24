@@ -29,6 +29,12 @@ interface RawSetLog {
   rpe: number | null;
   is_warmup: boolean | null;
   set_number: number | null;
+  bodyweight_data?: {
+    modification?: 'none' | 'weighted' | 'assisted';
+    addedWeightKg?: number;
+    assistanceWeightKg?: number;
+    _needsReview?: boolean;
+  } | null;
 }
 
 interface RawSessionJoin {
@@ -69,7 +75,8 @@ async function fetchExerciseDetailHistory(
         reps,
         rpe,
         is_warmup,
-        set_number
+        set_number,
+        bodyweight_data
       )
     `
     )
@@ -95,6 +102,16 @@ async function fetchExerciseDetailHistory(
         weightKg: s.weight_kg ?? 0,
         reps: s.reps ?? 0,
         rpe: s.rpe ?? null,
+        // "BW+25" display breakdown; migration-backfilled rows flagged
+        // _needsReview keep the effective-load display.
+        bw:
+          s.bodyweight_data && !s.bodyweight_data._needsReview && s.bodyweight_data.modification
+            ? {
+                modification: s.bodyweight_data.modification,
+                addedWeightKg: s.bodyweight_data.addedWeightKg,
+                assistanceWeightKg: s.bodyweight_data.assistanceWeightKg,
+              }
+            : undefined,
       }));
 
     const existing = bySession.get(session.id);

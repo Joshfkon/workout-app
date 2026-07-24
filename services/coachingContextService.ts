@@ -105,6 +105,12 @@ export function formatCoachingContext(context: CoachingContext): string {
       const weight = lift.topSetWeight?.toFixed(1) || '?';
       const reps = lift.topSetReps || '?';
       const rpe = lift.topSetRpe || '?';
+      if (lift.isDuration) {
+        // Timed exercise: the value is a hold time — never present it as
+        // reps or attach an e1RM, which would mislead the coach.
+        formatted += `- ${lift.exerciseName}: ${reps}s hold @ ${weight}kg @ RPE ${rpe} (timed exercise) - ${lift.date}\n`;
+        continue;
+      }
       const e1rm = lift.estimated1RM?.toFixed(1) || '?';
       formatted += `- ${lift.exerciseName}: ${weight}kg × ${reps} @ RPE ${rpe} (e1RM: ${e1rm}kg) - ${lift.date}\n`;
     }

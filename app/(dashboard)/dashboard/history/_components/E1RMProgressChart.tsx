@@ -27,11 +27,18 @@ export default function E1RMProgressChart({
   chartData,
   unit,
   prLine,
+  seriesLabel = 'Est. 1RM',
 }: {
   chartData: E1RMChartPoint[];
   unit: string;
   /** All-time max E1RM already converted to display units. */
   prLine: number;
+  /**
+   * Tooltip label for the plotted series. Duration exercises reuse this chart
+   * to plot longest hold per session ("Longest Hold", unit "s") — e1RM is
+   * explicitly excluded for them.
+   */
+  seriesLabel?: string;
 }) {
   return (
     <ResponsiveContainer width="100%" height="100%">
@@ -58,7 +65,7 @@ export default function E1RMProgressChart({
           labelStyle={{ color: '#9CA3AF' }}
           formatter={(value: number, name: string) => [
             `${value} ${unit}`,
-            name === 'e1rm' ? 'Est. 1RM' : 'Best Weight',
+            name === 'e1rm' ? seriesLabel : 'Best Weight',
           ]}
         />
         <Line

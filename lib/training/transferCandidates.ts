@@ -11,6 +11,8 @@
  *  - warmup sets
  *  - deload-session sets (held light on purpose)
  *  - soft-deleted exercises (exercises.deleted_at)
+ *  - duration-based exercises (seconds in the reps field — Epley on a hold
+ *    time fabricates an e1RM, which must never seed a rep exercise)
  */
 
 import { createUntypedClient } from '@/lib/supabase/client';
@@ -77,13 +79,15 @@ export async function fetchTransferCandidates(
             primary_muscle,
             movement_pattern,
             equipment_required,
-            deleted_at
+            deleted_at,
+            exercise_type
           )
         )
       `
       )
       .eq('exercise_blocks.workout_sessions.user_id', userId)
       .eq('exercise_blocks.workout_sessions.state', 'completed')
+      .neq('exercise_blocks.exercises.exercise_type', 'duration_based')
       .is('is_warmup', false)
       .not('weight_kg', 'is', null)
       .not('reps', 'is', null)
