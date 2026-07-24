@@ -70,8 +70,9 @@ const SessionSummary = dynamic(() => import('@/components/workout').then(m => m.
 });
 const ExerciseDetailsModal = dynamic(() => import('@/components/workout').then(m => m.ExerciseDetailsModal), { ssr: false });
 const PlateCalculatorModal = dynamic(() => import('@/components/workout').then(m => m.PlateCalculatorModal), { ssr: false });
-import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaRegionalData, TemporaryInjury, PreWorkoutCheckIn, SetFeedback, Rating, BodyweightData, ExerciseType, StandardMuscleGroup, ExercisePerformanceSnapshot, RepsInTank, SorenessRating, PumpRating0to3, WorkloadRating, SetDiscomfort, JointPainJoint } from '@/types/schema';
+import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaRegionalData, TemporaryInjury, PreWorkoutCheckIn, SetFeedback, Rating, BodyweightData, ExerciseType, StandardMuscleGroup, ExercisePerformanceSnapshot, RepsInTank, SorenessRating, SetDiscomfort, JointPainJoint } from '@/types/schema';
 import type { SessionMuscleFeedbackEntry, SessionSummarySubmitData } from '@/components/workout/SessionSummary';
+import { MuscleGroupFeedbackModal, type MuscleFeedbackRatings } from '@/components/workout/MuscleGroupFeedbackModal';
 import type { MuscleSorenessRatings } from '@/components/workout/ReadinessCheckIn';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { getLocalUserId } from '@/lib/supabase/authState';
@@ -283,7 +284,6 @@ export default function WorkoutPage() {
   const setStoreBlockIndex = useWorkoutStore((state) => state.setCurrentBlock);
   const muscleSorenessAsked = useWorkoutStore((state) => state.muscleSorenessAsked);
   const recordSorenessAsked = useWorkoutStore((state) => state.recordSorenessAsked);
-  const setBlockFeedbackInStore = useWorkoutStore((state) => state.setBlockFeedback);
 
   // Recovery model inputs for the soreness-answer learning step: the shared
   // completed-session history (same React Query cache as the readiness sheet)
@@ -575,6 +575,10 @@ export default function WorkoutPage() {
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [showFinishConfirm, setShowFinishConfirm] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
+  // Per-muscle pump/workload answers from the finish popup, captured when the
+  // user confirms "Finish Workout". Rides into the summary's submit payload
+  // (session_muscle_feedback) via initialMuscleRatings.
+  const [finishMuscleRatings, setFinishMuscleRatings] = useState<MuscleFeedbackRatings>({});
   // Duration + completion timestamp frozen once when the user hits Finish, so
   // the summary shows a fixed value (excludes paused time) instead of a clock
   // that keeps ticking, and the SAME number is persisted with the completion.
@@ -1897,25 +1901,6 @@ export default function WorkoutPage() {
     // workout itself (blocks + resumed sets) has hydrated.
     liveDataReady: phase !== 'loading',
   });
-
-  // ---- Per-exercise pump/workload chips ------------------------------------
-  const handleExerciseFeedback = useCallback(
-    (blockId: string, feedback: { pump?: PumpRating0to3; workload?: WorkloadRating }) => {
-      setBlocks((prev) => prev.map((b) => (b.id === blockId ? { ...b, ...feedback } : b)));
-      setBlockFeedbackInStore(blockId, feedback);
-      // Best-effort persist per (workout, exercise); the finish-time rollup
-      // into session_muscle_feedback is what the learner reads.
-      const supabase = createUntypedClient();
-      void supabase
-        .from('exercise_blocks')
-        .update(feedback)
-        .eq('id', blockId)
-        .then(({ error }: { error: { message: string } | null }) => {
-          if (error) console.error('Failed to save exercise feedback:', error.message);
-        });
-    },
-    [setBlockFeedbackInStore]
-  );
 
   // ---- Joint pain: pattern notices per exercise ----------------------------
   useEffect(() => {
@@ -4197,13 +4182,54 @@ export default function WorkoutPage() {
   }, [phase, session, blocks, completedSets, skippedBlockIds]);
 
   // Finishing is easy to hit by accident (header + bottom bar) and the
-  // summary screen has no way back, so always confirm first.
+  // summary screen has no way back, so always confirm first. The confirm
+  // popup doubles as the per-muscle pump/workload ask (MuscleGroupFeedbackModal).
   const handleWorkoutComplete = () => {
     setShowFinishConfirm(true);
   };
 
-  const confirmFinishWorkout = () => {
+  // Muscle groups with at least one working set this session — the rows the
+  // finish popup asks about. Also seeds from any legacy per-exercise block
+  // feedback (resumed sessions logged before the popup existed).
+  const finishFeedbackMuscles = useMemo<StandardMuscleGroup[]>(() => {
+    const loggedBlockIds = new Set(
+      completedSets.filter((s) => !s.isWarmup).map((s) => s.exerciseBlockId)
+    );
+    const seen = new Set<StandardMuscleGroup>();
+    const muscles: StandardMuscleGroup[] = [];
+    for (const block of blocks) {
+      if (skippedBlockIds.has(block.id) || !loggedBlockIds.has(block.id)) continue;
+      const muscle = resolvePrimaryMuscle(block.exercise?.primaryMuscle);
+      if (muscle && !seen.has(muscle)) {
+        seen.add(muscle);
+        muscles.push(muscle);
+      }
+    }
+    return muscles;
+  }, [blocks, completedSets, skippedBlockIds]);
+
+  // Legacy per-exercise pump/workload answers (blocks logged before the
+  // finish popup existed, e.g. a resumed session). Seeds the popup so the
+  // visible selections match what would submit, and backstops the summary's
+  // initialMuscleRatings merge.
+  const finishLegacyRatings = useMemo<MuscleFeedbackRatings>(
+    () =>
+      rollUpExerciseFeedback(
+        blocks
+          .filter((b) => !skippedBlockIds.has(b.id))
+          .flatMap((b) => {
+            const muscle = resolvePrimaryMuscle(b.exercise?.primaryMuscle);
+            return muscle
+              ? [{ muscle, pump: b.pump ?? null, workload: b.workload ?? null }]
+              : [];
+          })
+      ),
+    [blocks, skippedBlockIds]
+  );
+
+  const confirmFinishWorkout = (ratings: MuscleFeedbackRatings = {}) => {
     setShowFinishConfirm(false);
+    setFinishMuscleRatings(ratings);
     // Snapshot the duration ONCE, from the same elapsed value the header timer
     // has been showing (paused time already excluded). Frozen here so the
     // summary never re-derives a live, still-ticking duration.
@@ -4475,16 +4501,16 @@ export default function WorkoutPage() {
           onSaveAndViewReport={
             isViewingCompleted ? undefined : (data) => handleSummarySubmit(data, { viewReport: true })
           }
-          initialMuscleRatings={rollUpExerciseFeedback(
-            blocks
-              .filter((b) => !skippedBlockIds.has(b.id))
-              .flatMap((b) => {
-                const muscle = resolvePrimaryMuscle(b.exercise?.primaryMuscle);
-                return muscle
-                  ? [{ muscle, pump: b.pump ?? null, workload: b.workload ?? null }]
-                  : [];
-              })
-          )}
+          initialMuscleRatings={(() => {
+            // Base: legacy per-exercise block feedback (sessions resumed from
+            // before the finish popup). The popup's answers win per field.
+            const merged: MuscleFeedbackRatings = { ...finishLegacyRatings };
+            for (const [muscle, rating] of Object.entries(finishMuscleRatings)) {
+              const key = muscle as StandardMuscleGroup;
+              merged[key] = { ...merged[key], ...rating };
+            }
+            return merged;
+          })()}
           readOnly={isViewingCompleted}
         />
         <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
@@ -4659,16 +4685,15 @@ export default function WorkoutPage() {
           />
         )}
 
-        {/* Finish confirmation — same early-return branch caveat as above */}
-        <ConfirmModal
+        {/* Finish confirmation — same early-return branch caveat as above.
+            No sets logged → no muscles to rate; degrades to a plain confirm. */}
+        <MuscleGroupFeedbackModal
           isOpen={showFinishConfirm}
           onClose={() => setShowFinishConfirm(false)}
           onConfirm={confirmFinishWorkout}
-          title="Finish Workout?"
+          muscles={finishFeedbackMuscles}
+          initialRatings={finishLegacyRatings}
           message="No sets have been logged yet. Finish anyway?"
-          confirmText="Finish"
-          cancelText="Keep Training"
-          variant="warning"
         />
       </div>
     );
@@ -5431,7 +5456,6 @@ export default function WorkoutPage() {
                     onSetJointPain={handleSetJointPain}
                     sorenessPrompt={sorenessPromptForBlock(block)}
                     onSorenessAnswer={handleSorenessAnswer}
-                    onExerciseFeedbackChange={(feedback) => handleExerciseFeedback(block.id, feedback)}
                     painNotice={painNoticeForExercise(block.exerciseId)}
                     onPainNoticeDismiss={() => {
                       setPainNoticeDismissed(block.exerciseId, new Date());
@@ -6371,20 +6395,19 @@ export default function WorkoutPage() {
         />
       )}
 
-      {/* Finish Workout Confirmation Modal */}
-      <ConfirmModal
+      {/* Finish Workout popup: confirmation + the once-per-muscle-group
+          pump/workload ask (replaces the old per-exercise chip rows). */}
+      <MuscleGroupFeedbackModal
         isOpen={showFinishConfirm}
         onClose={() => setShowFinishConfirm(false)}
         onConfirm={confirmFinishWorkout}
-        title="Finish Workout?"
+        muscles={finishFeedbackMuscles}
+        initialRatings={finishLegacyRatings}
         message={
           totalCompletedSets < totalPlannedSets
             ? `You've logged ${totalCompletedSets} of ${totalPlannedSets} sets. Remaining sets won't be logged.`
             : `All ${totalPlannedSets} sets logged. Wrap up and rate your session.`
         }
-        confirmText="Finish"
-        cancelText="Keep Training"
-        variant={totalCompletedSets < totalPlannedSets ? 'warning' : 'default'}
       />
       
       {/* Exercise Details Modal — carries the workout-context metadata the

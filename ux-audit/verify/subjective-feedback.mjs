@@ -12,8 +12,9 @@
  *     soreness ask for the session.
  *  3. Answering soreness is one tap and collapses the row to a ✓ line; the
  *     row is not re-asked on the same muscle.
- *  4. Pump/workload chips appear on the exercise's completed state and are
- *     one-tap each; the card completes visually regardless.
+ *  4. Pump/workload are NOT asked per exercise: the completed card shows no
+ *     chip rows. They're asked once per muscle group in the popup that opens
+ *     on "Finish Workout", one tap each and fully skippable.
  *  5. The joint-pain trigger opens an inline two-tap picker (joint, then
  *     severity) — never a modal.
  */
@@ -168,15 +169,33 @@ async function main() {
   await page.getByRole('button', { name: 'Done' }).click();
   await page.screenshot({ path: `${out}feedback-3-joint-picked.png` });
 
-  // 4. Log the final planned set → completed state shows pump/workload chips.
+  // 4. Log the final planned set → the completed card asks NOTHING; pump and
+  //    workload are asked per muscle group in the Finish Workout popup.
   await page.getByRole('button', { name: 'Log set' }).click();
-  const chips = page.getByTestId('exercise-feedback-chips');
-  await chips.waitFor({ state: 'visible', timeout: 10000 }).catch(() => {});
-  assert(await chips.isVisible().catch(() => false), 'pump/workload chips appear on the completed card state');
-  await page.getByTestId('pump-chip-2').click();
-  await page.getByTestId('workload-chip-1').click();
-  assert(true, 'pump + workload each one tap');
-  await page.screenshot({ path: `${out}feedback-4-pump-workload.png` });
+  await page.getByText(/Set 2 ·/).waitFor({ timeout: 10000 }).catch(() => {});
+  assert(
+    (await page.getByTestId('exercise-feedback-chips').count()) === 0,
+    'no per-exercise pump/workload chips on the completed card'
+  );
+  await page.getByRole('button', { name: 'Finish Workout' }).click();
+  const finishPopup = page.getByTestId('muscle-feedback-modal');
+  await finishPopup.waitFor({ state: 'visible', timeout: 10000 }).catch(() => {});
+  assert(await finishPopup.isVisible().catch(() => false), 'Finish Workout opens the per-muscle feedback popup');
+  assert(
+    (await page.getByTestId('muscle-feedback-quads').count()) === 1,
+    'popup asks once per trained muscle group (quads)'
+  );
+  await page.getByTestId('finish-pump-quads-2').click();
+  await page.getByTestId('finish-workload-quads-1').click();
+  assert(true, 'pump + workload each one tap in the popup');
+  await page.screenshot({ path: `${out}feedback-4-finish-popup.png` });
+  await page.getByTestId('muscle-feedback-finish').click();
+  await page.getByTestId('finish-card').waitFor({ timeout: 15000 }).catch(() => {});
+  assert(
+    await page.getByTestId('finish-card').isVisible().catch(() => false),
+    'confirming the popup lands on the finish card'
+  );
+  await page.screenshot({ path: `${out}feedback-5-finish-card.png` });
 
   await browser.close();
   const passed = list.filter(Boolean).length;

@@ -3,9 +3,9 @@
 import React, { useState, useEffect, useMemo, memo, useRef, useCallback } from 'react';
 import { Card, Button, ConfirmModal } from '@/components/ui';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/Accordion';
-import type { Exercise, ExerciseBlock, SetLog, WeightUnit, SetQuality, SetFeedback, BodyweightData, ExercisePerformanceSnapshot, StandardMuscleGroup, SorenessRating, PumpRating0to3, WorkloadRating, SetDiscomfort } from '@/types/schema';
+import type { Exercise, ExerciseBlock, SetLog, WeightUnit, SetQuality, SetFeedback, BodyweightData, ExercisePerformanceSnapshot, StandardMuscleGroup, SorenessRating, SetDiscomfort } from '@/types/schema';
 import { rpeToRir } from '@/types/schema';
-import { SorenessChipRow, ExerciseFeedbackChips, JointPainPicker } from './FeedbackChips';
+import { SorenessChipRow, JointPainPicker } from './FeedbackChips';
 import { filterExercises, dedupeExercisesById } from '@/services/exerciseFilter';
 import { convertWeight, formatMuscleName, formatWeightValue, convertWeightForDisplay, inputWeightToKg, roundToPlateIncrement } from '@/lib/utils';
 import { recommendSet, recommendSessionStart, estimateRepsForWeight, predictAmrapReps, recommendSeedForSlot, resolveLastRir, prescribe, type SeedRecommendation } from '@/services/setRecommender';
@@ -273,9 +273,6 @@ interface ExerciseCardProps {
     answered?: SorenessRating | null;
   } | null;
   onSorenessAnswer?: (muscle: StandardMuscleGroup, rating: SorenessRating) => void;
-  // Per-exercise pump/workload chips on the card's completed state. Values
-  // are read from block.pump / block.workload.
-  onExerciseFeedbackChange?: (feedback: { pump?: PumpRating0to3; workload?: WorkloadRating }) => void;
   // Exercise-level pain pattern notice (≥3 flags in 6 weeks): one-time,
   // dismissible, links to the swap picker's Similar tab.
   painNotice?: { joint: string; count: number } | null;
@@ -379,7 +376,6 @@ export const ExerciseCard = memo(function ExerciseCard({
   coldStartSuggestion,
   sorenessPrompt = null,
   onSorenessAnswer,
-  onExerciseFeedbackChange,
   painNotice = null,
   onPainNoticeDismiss,
   onSetJointPain,
@@ -2764,19 +2760,6 @@ export const ExerciseCard = memo(function ExerciseCard({
           );
         })}
 
-        {/* Completed-state pump/workload chips (RP stimulus-quality question,
-            once per exercise). Shown when the last planned set is logged, or
-            when a partially-done exercise is no longer the active one. Both
-            optional — the card completes visually regardless. */}
-        {onExerciseFeedbackChange &&
-          completedSets.length > 0 &&
-          (pendingSetsCount === 0 || !isActive) && (
-            <ExerciseFeedbackChips
-              pump={block.pump}
-              workload={block.workload}
-              onChange={onExerciseFeedbackChange}
-            />
-          )}
       </div>
 
       {/* Footer actions - prominent "Add set" (mockup style) + quiet secondary links */}
@@ -3453,9 +3436,6 @@ export const ExerciseCard = memo(function ExerciseCard({
     prevProps.block.targetRepRange[0] === nextProps.block.targetRepRange[0] &&
     prevProps.block.targetRepRange[1] === nextProps.block.targetRepRange[1] &&
     prevProps.block.targetRir === nextProps.block.targetRir &&
-    // Per-exercise feedback chips (pump/workload live on the block)
-    prevProps.block.pump === nextProps.block.pump &&
-    prevProps.block.workload === nextProps.block.workload &&
     // Subjective-feedback prompts arrive ASYNC after mount (previous-session
     // lookup, pain-event fetch) — without these comparisons the card would
     // never re-render to show them.
