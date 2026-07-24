@@ -542,7 +542,7 @@ function AnalyticsPageContent() {
           supabase
             .from('workout_sessions')
             .select(`id, completed_at,
-              exercise_blocks (exercises (id, name), set_logs (weight_kg, reps, is_warmup))`)
+              exercise_blocks (exercises (id, name, exercise_type), set_logs (weight_kg, reps, is_warmup))`)
             .eq('user_id', userId)
             .eq('state', 'completed')
             .gte('completed_at', since.toISOString())
@@ -1018,7 +1018,8 @@ function AnalyticsPageContent() {
                   exercises (
                     id,
                     name,
-                    primary_muscle
+                    primary_muscle,
+                    exercise_type
                   ),
                   set_logs (
                     id,
@@ -1079,6 +1080,10 @@ function AnalyticsPageContent() {
 
               const workingSets = block.set_logs.filter((s: any) => !s.is_warmup);
               if (muscle) muscleByExercise.set(exerciseId, muscle);
+
+              // Duration exercises carry seconds in reps: no e1RM snapshot, no
+              // plateau trend — a stable hold ceiling is not a plateau.
+              if (block.exercises.exercise_type === 'duration_based') return;
 
               // Build a per-session snapshot for this exercise (top set by E1RM)
               // so the plateau detector can analyze E1RM trends over time.

@@ -73,9 +73,13 @@ interface WorkoutState {
   // Session summary
   getSessionStats: () => {
     totalSets: number;
+    /** Rep count across rep-based working sets (duration sets excluded — their reps field is seconds) */
     totalReps: number;
+    /** Tonnage (kg) across rep-based working sets only — weight × seconds is not volume */
     totalVolume: number;
     avgRpe: number;
+    /** Seconds held across duration-based working sets */
+    totalDurationSeconds: number;
   };
 }
 
@@ -234,19 +238,35 @@ export const useWorkoutStore = create<WorkoutState>()(
       },
 
       getSessionStats: () => {
-        const { setLogs } = get();
+        const { setLogs, exerciseBlocks, exercises } = get();
         let totalSets = 0;
         let totalReps = 0;
         let totalVolume = 0;
         let totalRpe = 0;
+        let totalDurationSeconds = 0;
 
-        Object.values(setLogs).forEach((sets) => {
+        // Approved store exception (duration-based-sets feature): this
+        // selector must know each set's modality — duration sets store
+        // SECONDS in the reps field, so summing them as reps/tonnage
+        // produced garbage. Set CRUD, persistence, and sync are untouched.
+        const durationBlockIds = new Set(
+          exerciseBlocks
+            .filter((b) => exercises[b.exerciseId]?.exerciseType === 'duration_based')
+            .map((b) => b.id)
+        );
+
+        Object.entries(setLogs).forEach(([blockId, sets]) => {
           const workingSets = sets.filter((s) => !s.isWarmup);
+          const isDuration = durationBlockIds.has(blockId);
           totalSets += workingSets.length;
           workingSets.forEach((s) => {
-            totalReps += s.reps;
-            totalVolume += s.weightKg * s.reps;
             totalRpe += s.rpe;
+            if (isDuration) {
+              totalDurationSeconds += s.reps;
+            } else {
+              totalReps += s.reps;
+              totalVolume += s.weightKg * s.reps;
+            }
           });
         });
 
@@ -255,6 +275,7 @@ export const useWorkoutStore = create<WorkoutState>()(
           totalReps,
           totalVolume: Math.round(totalVolume),
           avgRpe: totalSets > 0 ? Math.round((totalRpe / totalSets) * 10) / 10 : 0,
+          totalDurationSeconds,
         };
       },
     }),

@@ -438,6 +438,35 @@ describe('useWorkoutStore', () => {
       expect(stats.totalReps).toBe(0);
       expect(stats.totalVolume).toBe(0);
       expect(stats.avgRpe).toBe(0);
+      expect(stats.totalDurationSeconds).toBe(0);
+    });
+
+    it('excludes duration sets from rep/tonnage totals and buckets their seconds', () => {
+      // Re-start with a duration exercise on block-2 (seconds in the reps field).
+      act(() => {
+        useWorkoutStore.getState().startSession(
+          createMockSession(),
+          [
+            createMockBlock({ id: 'block-1', exerciseId: 'exercise-1' }),
+            createMockBlock({ id: 'block-2', exerciseId: 'exercise-plank' }),
+          ],
+          [
+            createMockExercise(),
+            createMockExercise({ id: 'exercise-plank', name: 'Plank', exerciseType: 'duration_based' }),
+          ]
+        );
+        useWorkoutStore.getState().logSet('block-1', createMockSetLog({ id: 'set-1', weightKg: 100, reps: 10, rpe: 8 }));
+        // 60s plank at bodyweight-effective 80kg: must contribute NO reps and
+        // NO tonnage (80×60 = 4800 fake kg was the audited failure mode).
+        useWorkoutStore.getState().logSet('block-2', createMockSetLog({ id: 'set-2', weightKg: 80, reps: 60, rpe: 8 }));
+      });
+
+      const stats = useWorkoutStore.getState().getSessionStats();
+      expect(stats.totalSets).toBe(2); // both still count as working sets
+      expect(stats.totalReps).toBe(10);
+      expect(stats.totalVolume).toBe(1000);
+      expect(stats.totalDurationSeconds).toBe(60);
+      expect(stats.avgRpe).toBe(8);
     });
   });
 });

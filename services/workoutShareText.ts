@@ -57,6 +57,12 @@ export interface ShareExercise {
   /** Exercise skipped entirely — omitted from the share output. */
   skipped?: boolean;
   hasPR?: boolean;
+  /**
+   * Duration exercise (plank/carry/hold): each set's `reps` field carries
+   * SECONDS. Excluded from the footer tonnage and the volume-based collapse
+   * ranking — weight × seconds is not volume. Squares still work (RIR-based).
+   */
+  isDuration?: boolean;
 }
 
 export interface WorkoutShareTextInput {
@@ -144,6 +150,8 @@ function buildSquares(exercise: ShareExercise): string {
 }
 
 function exerciseVolumeKg(exercise: ShareExercise): number {
+  // Duration sets store seconds in reps — weight × seconds is not tonnage.
+  if (exercise.isDuration) return 0;
   return exercise.sets.reduce((sum, s) => sum + s.weightKg * s.reps, 0);
 }
 

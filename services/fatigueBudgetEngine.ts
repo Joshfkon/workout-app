@@ -109,8 +109,13 @@ export function calculateExerciseFatigue(
   const positionPenalty = 1 + (positionInWorkout - 1) * 0.05;
   systemicCost *= positionPenalty;
   
-  // Rep range affects fatigue differently
-  if (reps <= 5) {
+  // Rep range affects fatigue differently. Duration exercises pass SECONDS in
+  // the reps argument, so the rep-count heuristic would misread every hold
+  // (60s ≠ 60 reps): treat timed isometric work as metabolic, never CNS-heavy.
+  const isDurationExercise = exercise.exerciseType === 'duration_based';
+  if (isDurationExercise) {
+    systemicCost *= 0.9;
+  } else if (reps <= 5) {
     systemicCost *= 1.2;  // CNS-heavy
   } else if (reps >= 15) {
     systemicCost *= 0.9;  // Less CNS, more metabolic
@@ -157,7 +162,8 @@ export function calculateExerciseFatigue(
   // Fast-twitch dominant muscles recover slower from heavy work
   // Use type assertion since primaryMuscle may be any muscle group format
   const fiberType = (MUSCLE_FIBER_PROFILE as Record<string, string>)[exercise.primaryMuscle] ?? 'mixed';
-  if (fiberType === 'fast' && reps <= 6) {
+  // (Duration exercises excluded: a short hold is not a heavy low-rep set.)
+  if (fiberType === 'fast' && reps <= 6 && !isDurationExercise) {
     recoveryDays += 0.5;
   }
   

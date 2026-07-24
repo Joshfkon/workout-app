@@ -1224,8 +1224,17 @@ export default function WorkoutPage() {
 
           setExerciseHistories(histories);
 
-          // Same rows, mapped to per-session snapshots for plateau detection
-          setPerformanceSnapshots(buildPerformanceSnapshots(allHistoryBlocks as SnapshotSourceBlock[]));
+          // Same rows, mapped to per-session snapshots for plateau detection.
+          // Duration exercises are excluded — no e1RM trend exists for them and
+          // a stable hold ceiling must not read as a plateau.
+          setPerformanceSnapshots(
+            buildPerformanceSnapshots(
+              allHistoryBlocks as SnapshotSourceBlock[],
+              Object.fromEntries(
+                transformedBlocks.map((b) => [b.exerciseId, b.exercise.exerciseType])
+              )
+            )
+          );
 
           // Generate coach message with exercise history for accurate weight suggestions
           setCoachMessage(generateCoachMessage(transformedBlocks, profile, userContext, preferences.units, histories, fetchedTransferCandidates));

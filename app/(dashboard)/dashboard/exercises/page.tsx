@@ -53,6 +53,8 @@ interface Exercise {
   is_bodyweight?: boolean;
   bodyweight_type?: 'pure' | 'weighted_possible' | 'assisted_possible' | 'both' | null;
   assistance_type?: 'machine' | 'band' | 'partner' | null;
+  /** Modality — duration_based exercises store seconds in set reps fields */
+  exercise_type?: 'rep_based' | 'duration_based';
   is_custom?: boolean;
   // Hypertrophy scoring (Nippard methodology)
   hypertrophy_tier?: 'S' | 'A' | 'B' | 'C' | 'D' | 'F';
@@ -221,7 +223,12 @@ export default function ExercisesPage() {
 
   const fetchExerciseHistory = async (exerciseId: string) => {
     if (exerciseHistories[exerciseId]) return; // Already loaded
-    
+
+    // Duration exercises store seconds in reps: no e1RM, no tonnage — their
+    // record is heaviest load, then longest hold.
+    const isDuration =
+      exercises.find((e) => e.id === exerciseId)?.exercise_type === 'duration_based';
+
     setLoadingHistory(exerciseId);
     try {
       const supabase = createUntypedClient();
@@ -281,8 +288,25 @@ export default function ExercisesPage() {
           sets.forEach((set: any) => {
             const weight = set.weight_kg || 0;
             const reps = set.reps || 0;
+
+            if (isDuration) {
+              // reps carry seconds — session best is the longest hold.
+              if (reps > sessionBestReps || (reps === sessionBestReps && weight > sessionBestWeight)) {
+                sessionBestReps = reps;
+                sessionBestWeight = weight;
+              }
+              if (
+                !personalRecord ||
+                weight > personalRecord.weightKg ||
+                (weight === personalRecord.weightKg && reps > personalRecord.reps)
+              ) {
+                personalRecord = { weightKg: weight, reps, e1rm: 0, date };
+              }
+              return;
+            }
+
             sessionVolume += weight * reps;
-            
+
             const e1rm = estimateE1RM(weight, reps);
             if (e1rm > sessionBestE1RM) {
               sessionBestE1RM = e1rm;
@@ -935,17 +959,28 @@ export default function ExercisesPage() {
                     {/* Stats */}
                     {!isLoadingThis && history && history.totalSessions > 0 && (
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                        <div className="bg-surface-800/50 rounded-lg p-3 text-center">
-                          <p className="text-xs text-surface-500 uppercase">Est 1RM</p>
-                          <p className="text-lg font-bold text-primary-400">
-                            {formatWeight(history.estimatedE1RM, unit)} {unit}
-                          </p>
-                        </div>
+                        {exercise.exercise_type === 'duration_based' ? (
+                          <div className="bg-surface-800/50 rounded-lg p-3 text-center">
+                            <p className="text-xs text-surface-500 uppercase">Best Hold</p>
+                            <p className="text-lg font-bold text-primary-400">
+                              {history.personalRecord ? `${history.personalRecord.reps}s` : '—'}
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="bg-surface-800/50 rounded-lg p-3 text-center">
+                            <p className="text-xs text-surface-500 uppercase">Est 1RM</p>
+                            <p className="text-lg font-bold text-primary-400">
+                              {formatWeight(history.estimatedE1RM, unit)} {unit}
+                            </p>
+                          </div>
+                        )}
                         {history.personalRecord && (
                           <div className="bg-surface-800/50 rounded-lg p-3 text-center">
                             <p className="text-xs text-surface-500 uppercase">PR</p>
                             <p className="text-lg font-bold text-success-400">
-                              {formatWeight(history.personalRecord.weightKg, unit)} × {history.personalRecord.reps}
+                              {exercise.exercise_type === 'duration_based'
+                                ? `${history.personalRecord.reps}s @ ${formatWeight(history.personalRecord.weightKg, unit)}`
+                                : `${formatWeight(history.personalRecord.weightKg, unit)} × ${history.personalRecord.reps}`}
                             </p>
                           </div>
                         )}
@@ -970,32 +1005,37 @@ export default function ExercisesPage() {
                     {/* Charts */}
                     {!isLoadingThis && history && hasChartData && (
                       <div className="bg-surface-800/30 rounded-lg p-4">
-                        {/* Chart tabs */}
+                        {/* Chart tabs — e1RM/tonnage don't exist for duration
+                            exercises, so only Best Set (longest hold) shows */}
                         <div className="flex gap-2 mb-4">
-                          <button
-                            onClick={() => setActiveChart('e1rm')}
-                            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                              activeChart === 'e1rm'
-                                ? 'bg-primary-500 text-white'
-                                : 'bg-surface-700 text-surface-400 hover:text-surface-200'
-                            }`}
-                          >
-                            Est 1RM
-                          </button>
-                          <button
-                            onClick={() => setActiveChart('volume')}
-                            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                              activeChart === 'volume'
-                                ? 'bg-primary-500 text-white'
-                                : 'bg-surface-700 text-surface-400 hover:text-surface-200'
-                            }`}
-                          >
-                            Volume
-                          </button>
+                          {exercise.exercise_type !== 'duration_based' && (
+                            <>
+                              <button
+                                onClick={() => setActiveChart('e1rm')}
+                                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                                  activeChart === 'e1rm'
+                                    ? 'bg-primary-500 text-white'
+                                    : 'bg-surface-700 text-surface-400 hover:text-surface-200'
+                                }`}
+                              >
+                                Est 1RM
+                              </button>
+                              <button
+                                onClick={() => setActiveChart('volume')}
+                                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                                  activeChart === 'volume'
+                                    ? 'bg-primary-500 text-white'
+                                    : 'bg-surface-700 text-surface-400 hover:text-surface-200'
+                                }`}
+                              >
+                                Volume
+                              </button>
+                            </>
+                          )}
                           <button
                             onClick={() => setActiveChart('best')}
                             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                              activeChart === 'best'
+                              activeChart === 'best' || exercise.exercise_type === 'duration_based'
                                 ? 'bg-primary-500 text-white'
                                 : 'bg-surface-700 text-surface-400 hover:text-surface-200'
                             }`}
@@ -1008,7 +1048,7 @@ export default function ExercisesPage() {
                         <ExerciseHistoryCharts
                           chartData={chartData}
                           personalRecord={history.personalRecord}
-                          activeChart={activeChart}
+                          activeChart={exercise.exercise_type === 'duration_based' ? 'best' : activeChart}
                           unit={unit}
                         />
                       </div>

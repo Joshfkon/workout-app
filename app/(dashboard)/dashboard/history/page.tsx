@@ -40,6 +40,8 @@ interface ExerciseDetail {
   exerciseId: string;
   name: string;
   primaryMuscle: string;
+  /** Duration exercise — each set's reps field carries seconds */
+  isDuration?: boolean;
   sets: SetDetail[];
 }
 
@@ -73,6 +75,7 @@ function transformSessions(data: any[]): WorkoutHistory[] {
           exerciseId: block.exercise_id,
           name: block.exercises.name,
           primaryMuscle: block.exercises.primary_muscle,
+          isDuration: block.exercises.exercise_type === 'duration_based',
           sets: workingSets.map((set: any) => ({
             id: set.id,
             weight_kg: set.weight_kg,
@@ -83,8 +86,13 @@ function transformSessions(data: any[]): WorkoutHistory[] {
       });
 
     const totalSets = exercises.reduce((sum, ex) => sum + ex.sets.length, 0);
+    // Duration sets store seconds in reps — excluded from tonnage.
     const totalVolume = exercises.reduce(
-      (sum, ex) => sum + ex.sets.reduce((setSum, set) => setSum + set.weight_kg * set.reps, 0),
+      (sum, ex) =>
+        sum +
+        (ex.isDuration
+          ? 0
+          : ex.sets.reduce((setSum, set) => setSum + set.weight_kg * set.reps, 0)),
       0
     );
 
@@ -119,6 +127,8 @@ interface ExerciseHistoryData {
   exerciseId: string;
   exerciseName: string;
   primaryMuscle: string;
+  /** Duration exercise: e1RM fields stay 0; bestReps values carry seconds */
+  isDuration: boolean;
   history: ExerciseHistoryEntry[];
   currentE1RM: number;
   allTimeMaxE1RM: number;
@@ -272,7 +282,9 @@ function HistoryPageContent() {
   const saveSetEdit = async (workoutId: string, exerciseBlockId: string, setId: string) => {
     const weightNum = parseFloat(editWeight);
     const repsNum = parseInt(editReps, 10);
-    if (isNaN(weightNum) || weightNum < 0 || isNaN(repsNum) || repsNum < 1 || repsNum > 999) return;
+    // 600 matches the DB CHECK on set_logs.reps (duration sets store seconds,
+    // capped at 600) — the old 999 ceiling allowed values Postgres rejects.
+    if (isNaN(weightNum) || weightNum < 0 || isNaN(repsNum) || repsNum < 1 || repsNum > 600) return;
 
     setSavingSetEdit(true);
     try {
@@ -311,7 +323,9 @@ function HistoryPageContent() {
               : { ...ex, sets: ex.sets.map(s => (s.id === setId ? { ...s, weight_kg: weightKg, reps: repsNum } : s)) }
           );
           const totalVolume = exercises.reduce(
-            (sum, ex) => sum + ex.sets.reduce((s2, s) => s2 + s.weight_kg * s.reps, 0),
+            (sum, ex) =>
+              sum +
+              (ex.isDuration ? 0 : ex.sets.reduce((s2, s) => s2 + s.weight_kg * s.reps, 0)),
             0
           );
           return { ...w, exercises, totalVolume };
@@ -517,7 +531,12 @@ function HistoryPageContent() {
     }
   };
 
-  const fetchExerciseHistory = async (exerciseId: string, exerciseName: string, primaryMuscle: string) => {
+  const fetchExerciseHistory = async (
+    exerciseId: string,
+    exerciseName: string,
+    primaryMuscle: string,
+    isDuration = false
+  ) => {
     setLoadingExercise(true);
     try {
       const supabase = createUntypedClient();
@@ -560,6 +579,7 @@ function HistoryPageContent() {
           exerciseId,
           exerciseName,
           primaryMuscle,
+          isDuration,
           history: [],
           currentE1RM: 0,
           allTimeMaxE1RM: 0,
@@ -597,16 +617,36 @@ function HistoryPageContent() {
         const sets: { weight: number; reps: number; rpe: number | null }[] = [];
 
         workingSets.forEach((set: any) => {
-          const e1rm = estimateE1RM(set.weight_kg, set.reps);
           sets.push({ weight: set.weight_kg, reps: set.reps, rpe: set.rpe });
+
+          if (isDuration) {
+            // Duration exercise: reps carry seconds. No e1RM, no tonnage —
+            // the session best is the longest hold (heaviest load tiebreak).
+            if (
+              set.reps > sessionBestReps ||
+              (set.reps === sessionBestReps && set.weight_kg > sessionBestWeight)
+            ) {
+              sessionBestReps = set.reps;
+              sessionBestWeight = set.weight_kg;
+            }
+            if (set.weight_kg > allTimeBestWeight) {
+              allTimeBestWeight = set.weight_kg;
+            }
+            if (set.reps > allTimeBestReps && set.weight_kg >= allTimeBestWeight * 0.8) {
+              allTimeBestReps = set.reps;
+            }
+            return;
+          }
+
+          const e1rm = estimateE1RM(set.weight_kg, set.reps);
           sessionVolume += set.weight_kg * set.reps;
-          
+
           if (e1rm > sessionBestE1RM) {
             sessionBestE1RM = e1rm;
             sessionBestWeight = set.weight_kg;
             sessionBestReps = set.reps;
           }
-          
+
           if (e1rm > allTimeMaxE1RM) {
             allTimeMaxE1RM = e1rm;
           }
@@ -623,7 +663,7 @@ function HistoryPageContent() {
         // Merge with existing entry for same date or create new
         if (historyMap.has(dateKey)) {
           const existing = historyMap.get(dateKey)!;
-          if (sessionBestE1RM > existing.estimatedE1RM) {
+          if (isDuration ? sessionBestReps > existing.bestReps : sessionBestE1RM > existing.estimatedE1RM) {
             existing.estimatedE1RM = sessionBestE1RM;
             existing.bestWeight = sessionBestWeight;
             existing.bestReps = sessionBestReps;
@@ -649,15 +689,24 @@ function HistoryPageContent() {
         a.date.localeCompare(b.date)
       );
 
-      // Calculate progress
+      // Calculate progress. Duration exercises track longest hold, not e1RM.
       const currentE1RM = history.length > 0 ? history[history.length - 1].estimatedE1RM : 0;
       const firstE1RM = history.length > 0 ? history[0].estimatedE1RM : 0;
-      const progressPercent = firstE1RM > 0 ? ((currentE1RM - firstE1RM) / firstE1RM) * 100 : 0;
+      const currentHold = history.length > 0 ? history[history.length - 1].bestReps : 0;
+      const firstHold = history.length > 0 ? history[0].bestReps : 0;
+      const progressPercent = isDuration
+        ? firstHold > 0
+          ? ((currentHold - firstHold) / firstHold) * 100
+          : 0
+        : firstE1RM > 0
+          ? ((currentE1RM - firstE1RM) / firstE1RM) * 100
+          : 0;
 
       setSelectedExercise({
         exerciseId,
         exerciseName,
         primaryMuscle,
+        isDuration,
         history,
         currentE1RM,
         allTimeMaxE1RM,
@@ -694,7 +743,8 @@ function HistoryPageContent() {
             exercises (
               id,
               name,
-              primary_muscle
+              primary_muscle,
+              exercise_type
             ),
             set_logs (
               id,
@@ -796,12 +846,17 @@ function HistoryPageContent() {
         // Get exercise details
         const { data: exercise } = await supabase
           .from('exercises')
-          .select('id, name, primary_muscle')
+          .select('id, name, primary_muscle, exercise_type')
           .eq('id', exerciseIdParam)
           .single();
-        
+
         if (exercise) {
-          fetchExerciseHistory(exercise.id, exercise.name, exercise.primary_muscle);
+          fetchExerciseHistory(
+            exercise.id,
+            exercise.name,
+            exercise.primary_muscle,
+            exercise.exercise_type === 'duration_based'
+          );
         }
       } catch (err) {
         console.error('Failed to auto-fetch exercise:', err);
@@ -837,9 +892,12 @@ function HistoryPageContent() {
   const ExerciseHistoryModal = () => {
     if (!selectedExercise) return null;
 
+    // Duration exercises plot longest hold (seconds) per session — their e1RM
+    // is deliberately never computed.
+    const isDuration = selectedExercise.isDuration;
     const chartData = selectedExercise.history.map(h => ({
       date: h.displayDate,
-      e1rm: Math.round(convertWeight(h.estimatedE1RM, 'kg', unit)),
+      e1rm: isDuration ? h.bestReps : Math.round(convertWeight(h.estimatedE1RM, 'kg', unit)),
       weight: Math.round(convertWeight(h.bestWeight, 'kg', unit)),
     }));
 
@@ -876,24 +934,48 @@ function HistoryPageContent() {
               <div className="space-y-6">
                 {/* Stats cards */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {isDuration ? (
+                    <div className="bg-surface-800 rounded-lg p-3 text-center">
+                      <p className="text-xs text-surface-500 uppercase">Last Best Hold</p>
+                      <p className="text-xl font-bold text-primary-400">
+                        {selectedExercise.history.length > 0
+                          ? selectedExercise.history[selectedExercise.history.length - 1].bestReps
+                          : 0}s
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="bg-surface-800 rounded-lg p-3 text-center">
+                      <p className="text-xs text-surface-500 uppercase">Current E1RM</p>
+                      <p className="text-xl font-bold text-primary-400">
+                        {formatWeight(selectedExercise.currentE1RM, unit)}
+                      </p>
+                    </div>
+                  )}
+                  {isDuration ? (
+                    <div className="bg-surface-800 rounded-lg p-3 text-center">
+                      <p className="text-xs text-surface-500 uppercase">Longest Hold</p>
+                      <p className="text-xl font-bold text-success-400">
+                        {selectedExercise.allTimeBestReps}s
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="bg-surface-800 rounded-lg p-3 text-center">
+                      <p className="text-xs text-surface-500 uppercase">All-Time Best</p>
+                      <p className="text-xl font-bold text-success-400">
+                        {formatWeight(selectedExercise.allTimeMaxE1RM, unit)}
+                      </p>
+                    </div>
+                  )}
                   <div className="bg-surface-800 rounded-lg p-3 text-center">
-                    <p className="text-xs text-surface-500 uppercase">Current E1RM</p>
-                    <p className="text-xl font-bold text-primary-400">
-                      {formatWeight(selectedExercise.currentE1RM, unit)}
-                    </p>
-                  </div>
-                  <div className="bg-surface-800 rounded-lg p-3 text-center">
-                    <p className="text-xs text-surface-500 uppercase">All-Time Best</p>
-                    <p className="text-xl font-bold text-success-400">
-                      {formatWeight(selectedExercise.allTimeMaxE1RM, unit)}
-                    </p>
-                  </div>
-                  <div className="bg-surface-800 rounded-lg p-3 text-center">
-                    <p className="text-xs text-surface-500 uppercase">Best Lift</p>
+                    <p className="text-xs text-surface-500 uppercase">{isDuration ? 'Top Weight' : 'Best Lift'}</p>
                     <p className="text-xl font-bold text-surface-200">
                       {formatWeight(selectedExercise.allTimeBestWeight, unit)}
                     </p>
-                    <p className="text-xs text-surface-500">× {selectedExercise.allTimeBestReps} reps</p>
+                    <p className="text-xs text-surface-500">
+                      {isDuration
+                        ? `× ${selectedExercise.allTimeBestReps}s`
+                        : `× ${selectedExercise.allTimeBestReps} reps`}
+                    </p>
                   </div>
                   <div className="bg-surface-800 rounded-lg p-3 text-center">
                     <p className="text-xs text-surface-500 uppercase">Progress</p>
@@ -907,12 +989,19 @@ function HistoryPageContent() {
                 {/* Progress chart (recharts loads on demand — P1-2) */}
                 {chartData.length > 1 && (
                   <div className="bg-surface-800 rounded-lg p-4">
-                    <h3 className="text-sm font-semibold text-surface-300 mb-4">Estimated 1RM Progress</h3>
+                    <h3 className="text-sm font-semibold text-surface-300 mb-4">
+                      {isDuration ? 'Hold Time Progress' : 'Estimated 1RM Progress'}
+                    </h3>
                     <div className="h-48">
                       <E1RMProgressChart
                         chartData={chartData}
-                        unit={unit}
-                        prLine={Math.round(convertWeight(selectedExercise.allTimeMaxE1RM, 'kg', unit))}
+                        unit={isDuration ? 's' : unit}
+                        prLine={
+                          isDuration
+                            ? selectedExercise.allTimeBestReps
+                            : Math.round(convertWeight(selectedExercise.allTimeMaxE1RM, 'kg', unit))
+                        }
+                        seriesLabel={isDuration ? 'Longest Hold' : 'Est. 1RM'}
                       />
                     </div>
                   </div>
@@ -934,7 +1023,9 @@ function HistoryPageContent() {
                             })}
                           </span>
                           <Badge variant="info" size="sm">
-                            E1RM: {formatWeight(entry.estimatedE1RM, unit)}
+                            {isDuration
+                              ? `Best hold: ${entry.bestReps}s`
+                              : `E1RM: ${formatWeight(entry.estimatedE1RM, unit)}`}
                           </Badge>
                         </div>
                         <div className="flex flex-wrap gap-2">
@@ -943,7 +1034,9 @@ function HistoryPageContent() {
                               key={setIdx}
                               className="px-2 py-1 bg-surface-700 rounded text-xs text-surface-300"
                             >
-                              {formatWeight(set.weight, unit)} × {set.reps}
+                              {isDuration
+                                ? `${set.reps}s @ ${formatWeight(set.weight, unit)}`
+                                : `${formatWeight(set.weight, unit)} × ${set.reps}`}
                               {set.rpe && <span className="text-surface-500"> @{set.rpe}</span>}
                             </span>
                           ))}
@@ -1360,7 +1453,7 @@ function HistoryPageContent() {
                             onClick={(e) => {
                               e.preventDefault();
                               e.stopPropagation();
-                              fetchExerciseHistory(exercise.exerciseId, exercise.name, exercise.primaryMuscle);
+                              fetchExerciseHistory(exercise.exerciseId, exercise.name, exercise.primaryMuscle, exercise.isDuration);
                             }}
                             className="px-2 py-1 bg-surface-800 hover:bg-surface-700 rounded text-xs text-surface-300 transition-colors"
                           >
@@ -1379,7 +1472,7 @@ function HistoryPageContent() {
                               onClick={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                fetchExerciseHistory(exercise.exerciseId, exercise.name, exercise.primaryMuscle);
+                                fetchExerciseHistory(exercise.exerciseId, exercise.name, exercise.primaryMuscle, exercise.isDuration);
                               }}
                               className="flex items-center justify-between mb-2 w-full text-left group"
                             >
@@ -1444,13 +1537,27 @@ function HistoryPageContent() {
                                     className="flex items-center gap-4 text-sm py-1 px-2 rounded hover:bg-surface-700/50 group/set"
                                   >
                                     <span className="text-surface-500 w-8">#{idx + 1}</span>
-                                    <span className="text-surface-200 font-medium">
-                                      {formatWeight(set.weight_kg, unit)}
-                                    </span>
-                                    <span className="text-surface-400">×</span>
-                                    <span className="text-surface-200 font-medium">
-                                      {set.reps} reps
-                                    </span>
+                                    {exercise.isDuration ? (
+                                      <>
+                                        <span className="text-surface-200 font-medium">
+                                          {set.reps}s
+                                        </span>
+                                        <span className="text-surface-400">@</span>
+                                        <span className="text-surface-200 font-medium">
+                                          {formatWeight(set.weight_kg, unit)}
+                                        </span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <span className="text-surface-200 font-medium">
+                                          {formatWeight(set.weight_kg, unit)}
+                                        </span>
+                                        <span className="text-surface-400">×</span>
+                                        <span className="text-surface-200 font-medium">
+                                          {set.reps} reps
+                                        </span>
+                                      </>
+                                    )}
                                     {set.rpe && (
                                       <span className={`text-xs px-1.5 py-0.5 rounded ${
                                         set.rpe >= 9 ? 'bg-danger-500/20 text-danger-400' :
