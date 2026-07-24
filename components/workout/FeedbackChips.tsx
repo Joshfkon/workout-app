@@ -97,6 +97,7 @@ export const PUMP_CHIPS: { value: PumpRating0to3; bar: string; label: string }[]
 export const WORKLOAD_CHIPS: { value: WorkloadRating; label: string }[] = [
   { value: 0, label: 'easy' },
   { value: 1, label: 'right' },
+  { value: 2, label: 'pushed it' },
   { value: 3, label: 'too much' },
 ];
 

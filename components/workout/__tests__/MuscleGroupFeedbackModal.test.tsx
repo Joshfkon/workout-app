@@ -36,9 +36,12 @@ describe('MuscleGroupFeedbackModal', () => {
     expect(screen.getByText('Glute Med')).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/chest_upper|glute_med/);
 
-    // Each muscle gets both questions.
+    // Each muscle gets both questions, workload with all four ratings —
+    // 2 "pushed it" is the weekly engine's hold signal and must be offerable.
     expect(screen.getByTestId('finish-pump-chest_upper-2')).toBeInTheDocument();
-    expect(screen.getByTestId('finish-workload-chest_upper-1')).toBeInTheDocument();
+    for (const value of [0, 1, 2, 3]) {
+      expect(screen.getByTestId(`finish-workload-chest_upper-${value}`)).toBeInTheDocument();
+    }
     expect(screen.getByTestId('finish-pump-glute_med-3')).toBeInTheDocument();
     expect(screen.getByTestId('finish-workload-glute_med-3')).toBeInTheDocument();
   });

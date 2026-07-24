@@ -4172,6 +4172,25 @@ export default function WorkoutPage() {
     return muscles;
   }, [blocks, completedSets, skippedBlockIds]);
 
+  // Legacy per-exercise pump/workload answers (blocks logged before the
+  // finish popup existed, e.g. a resumed session). Seeds the popup so the
+  // visible selections match what would submit, and backstops the summary's
+  // initialMuscleRatings merge.
+  const finishLegacyRatings = useMemo<MuscleFeedbackRatings>(
+    () =>
+      rollUpExerciseFeedback(
+        blocks
+          .filter((b) => !skippedBlockIds.has(b.id))
+          .flatMap((b) => {
+            const muscle = resolvePrimaryMuscle(b.exercise?.primaryMuscle);
+            return muscle
+              ? [{ muscle, pump: b.pump ?? null, workload: b.workload ?? null }]
+              : [];
+          })
+      ),
+    [blocks, skippedBlockIds]
+  );
+
   const confirmFinishWorkout = (ratings: MuscleFeedbackRatings = {}) => {
     setShowFinishConfirm(false);
     setFinishMuscleRatings(ratings);
@@ -4449,16 +4468,7 @@ export default function WorkoutPage() {
           initialMuscleRatings={(() => {
             // Base: legacy per-exercise block feedback (sessions resumed from
             // before the finish popup). The popup's answers win per field.
-            const merged = rollUpExerciseFeedback(
-              blocks
-                .filter((b) => !skippedBlockIds.has(b.id))
-                .flatMap((b) => {
-                  const muscle = resolvePrimaryMuscle(b.exercise?.primaryMuscle);
-                  return muscle
-                    ? [{ muscle, pump: b.pump ?? null, workload: b.workload ?? null }]
-                    : [];
-                })
-            );
+            const merged: MuscleFeedbackRatings = { ...finishLegacyRatings };
             for (const [muscle, rating] of Object.entries(finishMuscleRatings)) {
               const key = muscle as StandardMuscleGroup;
               merged[key] = { ...merged[key], ...rating };
@@ -4646,6 +4656,7 @@ export default function WorkoutPage() {
           onClose={() => setShowFinishConfirm(false)}
           onConfirm={confirmFinishWorkout}
           muscles={finishFeedbackMuscles}
+          initialRatings={finishLegacyRatings}
           message="No sets have been logged yet. Finish anyway?"
         />
       </div>
@@ -6355,6 +6366,7 @@ export default function WorkoutPage() {
         onClose={() => setShowFinishConfirm(false)}
         onConfirm={confirmFinishWorkout}
         muscles={finishFeedbackMuscles}
+        initialRatings={finishLegacyRatings}
         message={
           totalCompletedSets < totalPlannedSets
             ? `You've logged ${totalCompletedSets} of ${totalPlannedSets} sets. Remaining sets won't be logged.`
