@@ -2677,6 +2677,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                 minIncrementKg={exercise.minWeightIncrementKg}
                 disabled={isCompletingSet}
                 isDurationBased={isDurationBased}
+                exerciseId={exercise.id}
                 isBodyweight={isBodyweightExercise}
                 weightMode={weightMode}
                 userBodyweightKg={userBodyweightKg}

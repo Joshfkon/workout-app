@@ -1,7 +1,16 @@
 'use client';
 
-import { useEffect, useId, useMemo, useState } from 'react';
-import { IconBarbell, IconMinus, IconPlus, IconMessagePlus } from '@tabler/icons-react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import {
+  IconBarbell,
+  IconMinus,
+  IconPlus,
+  IconMessagePlus,
+  IconPlayerPlayFilled,
+  IconPlayerStopFilled,
+  IconRotate,
+} from '@tabler/icons-react';
+import { useDurationTimer } from '@/hooks/useDurationTimer';
 import { BottomSheet } from './BottomSheet';
 import { FormRatingSelector } from './FormRatingSelector';
 import { JointPainPicker } from './FeedbackChips';
@@ -45,6 +54,11 @@ interface SetLoggerRowProps {
   disabled?: boolean;
   /** Duration-based exercise (plank, hold): reps column is seconds. */
   isDurationBased?: boolean;
+  /**
+   * Exercise ID — scopes the hold timer's crash/reload persistence so a
+   * running plank timer can never be restored into another exercise's row.
+   */
+  exerciseId?: string;
   /** Bodyweight exercise support */
   isBodyweight?: boolean;
   weightMode?: WeightMode;
@@ -139,6 +153,7 @@ export function SetLoggerRow({
   minIncrementKg,
   disabled = false,
   isDurationBased = false,
+  exerciseId,
   isBodyweight = false,
   weightMode = 'bodyweight',
   userBodyweightKg,
@@ -171,6 +186,46 @@ export function SetLoggerRow({
   const maxReps = isDurationBased ? 600 : 100;
   const repsStep = isDurationBased ? 5 : 1;
 
+  // ---- Hold timer (duration exercises) ----
+  // Start the hold, count up live (wall-clock based — survives phone lock),
+  // chime at the target, and on Stop commit the elapsed seconds into the
+  // seconds field, where the −/+ steppers and tap-to-type adjust it before
+  // logging. The prefilled suggestion IS the target. Hook is called
+  // unconditionally (rules of hooks); its UI renders only for duration rows,
+  // and persistence is scoped by exerciseId so a running plank timer can
+  // never restore into another exercise's row.
+  const parsedSeconds = parseInt(reps);
+  const holdTargetSeconds =
+    isDurationBased && !isNaN(parsedSeconds) && parsedSeconds > 0 ? parsedSeconds : undefined;
+  const holdTimer = useDurationTimer({
+    targetSeconds: holdTargetSeconds,
+    exerciseId,
+  });
+  const holdRunning = isDurationBased && holdTimer.isRunning;
+  const holdCommittedRef = useRef(false);
+
+  // Commit the hold time when the timer stops (never mid-run: the steppers
+  // and the field stay the single source of truth for what gets logged).
+  useEffect(() => {
+    if (!isDurationBased) return;
+    if (holdTimer.isRunning) {
+      holdCommittedRef.current = false;
+      return;
+    }
+    if (holdTimer.hasStarted && !holdCommittedRef.current && holdTimer.elapsed > 0) {
+      holdCommittedRef.current = true;
+      onRepsChange(String(Math.min(600, Math.max(1, holdTimer.elapsed))));
+    }
+  }, [isDurationBased, holdTimer.isRunning, holdTimer.hasStarted, holdTimer.elapsed, onRepsChange]);
+
+  // Fresh set → fresh timer.
+  const resetHoldTimer = holdTimer.reset;
+  useEffect(() => {
+    if (!isDurationBased) return;
+    resetHoldTimer();
+    holdCommittedRef.current = false;
+  }, [setNumber, isDurationBased, resetHoldTimer]);
+
   // Weight step in DISPLAY units, derived from the exercise's minimum kg
   // increment. For lb users the converted step snaps to real 2.5 lb plate
   // math (2.5 kg -> 5 lb, 1.25 kg -> 2.5 lb) instead of 5.51 lb.
@@ -188,7 +243,8 @@ export function SetLoggerRow({
   const repsNum = parseInt(reps);
   const weightValid = isPlainBodyweight || (!isNaN(weightNum) && weightNum >= 0 && (isBodyweight || weightNum > 0));
   const repsValid = !isNaN(repsNum) && repsNum >= 1 && repsNum <= maxReps;
-  const canLog = !disabled && weightValid && repsValid;
+  // Mid-hold you're holding, not logging: Stop commits the time first.
+  const canLog = !disabled && weightValid && repsValid && !holdRunning;
   const hasSheetFeedback = form !== null || discomfort !== undefined || note.trim().length > 0;
 
   const stepWeight = (direction: 1 | -1) => {
@@ -389,24 +445,42 @@ export function SetLoggerRow({
           <button
             type="button"
             onClick={() => stepReps(-1)}
-            disabled={disabled}
+            disabled={disabled || holdRunning}
             aria-label={isDurationBased ? 'Decrease seconds' : 'Decrease reps'}
             className={stepperButtonClass}
           >
             <IconMinus size={16} />
           </button>
-          {renderValue(
-            'reps',
-            `${reps || '0'}${isDurationBased ? 's' : ''}`,
-            reps,
-            onRepsChange,
-            isDurationBased ? 'Seconds' : 'Reps',
-            isDurationBased ? undefined : 'reps'
+          {holdRunning ? (
+            // Live hold readout while the timer runs — the field commits on Stop.
+            <div
+              className="w-full min-w-0 min-h-[52px] flex flex-col items-center justify-center leading-tight"
+              aria-live="polite"
+              aria-label={`Holding: ${holdTimer.elapsed} seconds`}
+            >
+              <span className="font-mono text-[15px] text-primary-400 whitespace-nowrap">
+                {holdTimer.elapsed}s
+              </span>
+              {holdTargetSeconds ? (
+                <span className="text-[10px] uppercase tracking-wide text-surface-500">
+                  of {holdTargetSeconds}s
+                </span>
+              ) : null}
+            </div>
+          ) : (
+            renderValue(
+              'reps',
+              `${reps || '0'}${isDurationBased ? 's' : ''}`,
+              reps,
+              onRepsChange,
+              isDurationBased ? 'Seconds' : 'Reps',
+              isDurationBased ? undefined : 'reps'
+            )
           )}
           <button
             type="button"
             onClick={() => stepReps(1)}
-            disabled={disabled}
+            disabled={disabled || holdRunning}
             aria-label={isDurationBased ? 'Increase seconds' : 'Increase reps'}
             className={stepperButtonClass}
           >
@@ -414,6 +488,64 @@ export function SetLoggerRow({
           </button>
         </div>
       </div>
+
+      {/* Hold timer row (duration exercises): start the hold, stop to capture,
+          then adjust with the −/+ steppers above before logging. */}
+      {isDurationBased && (
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => holdTimer.toggle()}
+            disabled={disabled}
+            aria-label={
+              holdTimer.isRunning ? 'Stop hold timer' : holdTimer.hasStarted ? 'Resume hold timer' : 'Start hold timer'
+            }
+            className={`relative flex-1 min-h-[44px] rounded-lg overflow-hidden flex items-center justify-center gap-2 text-[13px] font-semibold transition-colors ${
+              holdTimer.isRunning
+                ? 'bg-primary-500/20 text-primary-300 border border-primary-500/50'
+                : 'bg-surface-800/50 text-surface-200 hover:bg-surface-800 border border-surface-700'
+            } disabled:opacity-30`}
+          >
+            {/* Progress toward the target while running */}
+            {holdTimer.isRunning && holdTargetSeconds ? (
+              <span
+                className={`absolute inset-y-0 left-0 opacity-25 transition-all duration-200 ${
+                  holdTimer.hasReachedTarget ? 'bg-success-500' : 'bg-primary-500'
+                }`}
+                style={{ width: `${Math.min(100, holdTimer.progressPercent)}%` }}
+                aria-hidden="true"
+              />
+            ) : null}
+            <span className="relative z-10 flex items-center gap-2">
+              {holdTimer.isRunning ? (
+                <>
+                  <IconPlayerStopFilled size={16} aria-hidden="true" />
+                  Stop · {holdTimer.elapsed}s
+                </>
+              ) : (
+                <>
+                  <IconPlayerPlayFilled size={16} aria-hidden="true" />
+                  {holdTimer.hasStarted ? 'Resume hold' : 'Start hold'}
+                </>
+              )}
+            </span>
+          </button>
+          {holdTimer.hasStarted && !holdTimer.isRunning && (
+            <button
+              type="button"
+              onClick={() => {
+                holdTimer.reset();
+                holdCommittedRef.current = false;
+              }}
+              disabled={disabled}
+              aria-label="Reset hold timer"
+              className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg bg-surface-800/50 text-surface-400 hover:text-surface-200 transition-colors disabled:opacity-30"
+            >
+              <IconRotate size={16} />
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Row 2: RIR chips (labeled, full-width) + feedback sheet trigger */}
       <div className="flex items-stretch gap-2">

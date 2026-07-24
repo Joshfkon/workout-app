@@ -8,7 +8,7 @@
  */
 
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SetLoggerRow } from '../SetLoggerRow';
 import { SELECTOR_CHIP_BASE, SELECTOR_CHIP_IDLE } from '../selectorChips';
@@ -203,5 +203,89 @@ describe('SetLoggerRow feedback sheet', () => {
 
     await user.click(screen.getByRole('button', { name: 'Remove discomfort' }));
     expect(screen.getByText(/Log injury or discomfort/)).toBeInTheDocument();
+  });
+});
+
+describe('SetLoggerRow hold timer (duration exercises)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    localStorage.clear();
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  const durationProps = {
+    ...defaultProps,
+    reps: '45',
+    isDurationBased: true,
+    exerciseId: 'plank-1',
+  };
+
+  it('renders a Start hold button only for duration exercises', () => {
+    const { rerender } = render(<SetLoggerRow {...defaultProps} />);
+    expect(screen.queryByRole('button', { name: 'Start hold timer' })).not.toBeInTheDocument();
+
+    rerender(<SetLoggerRow {...durationProps} />);
+    expect(screen.getByRole('button', { name: 'Start hold timer' })).toBeInTheDocument();
+  });
+
+  it('start → stop commits the elapsed seconds into the seconds field', async () => {
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    const onRepsChange = jest.fn();
+    render(<SetLoggerRow {...durationProps} onRepsChange={onRepsChange} />);
+
+    await user.click(screen.getByRole('button', { name: 'Start hold timer' }));
+    act(() => {
+      jest.advanceTimersByTime(32_000);
+    });
+    await user.click(screen.getByRole('button', { name: 'Stop hold timer' }));
+
+    expect(onRepsChange).toHaveBeenCalledWith('32');
+  });
+
+  it('disables the seconds steppers and Log set while the hold is running', async () => {
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    render(<SetLoggerRow {...durationProps} />);
+
+    await user.click(screen.getByRole('button', { name: 'Start hold timer' }));
+
+    expect(screen.getByRole('button', { name: 'Decrease seconds' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Increase seconds' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Log set/i })).toBeDisabled();
+
+    await user.click(screen.getByRole('button', { name: 'Stop hold timer' }));
+    expect(screen.getByRole('button', { name: 'Decrease seconds' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /Log set/i })).toBeEnabled();
+  });
+
+  it('steppers adjust the committed time after stopping (±5s)', async () => {
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    const onRepsChange = jest.fn();
+    render(<SetLoggerRow {...durationProps} reps="32" onRepsChange={onRepsChange} />);
+
+    await user.click(screen.getByRole('button', { name: 'Increase seconds' }));
+    expect(onRepsChange).toHaveBeenCalledWith('37');
+
+    await user.click(screen.getByRole('button', { name: 'Decrease seconds' }));
+    expect(onRepsChange).toHaveBeenCalledWith('27');
+  });
+
+  it('offers Resume after a stop and Reset clears the run', async () => {
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    render(<SetLoggerRow {...durationProps} />);
+
+    await user.click(screen.getByRole('button', { name: 'Start hold timer' }));
+    act(() => {
+      jest.advanceTimersByTime(10_000);
+    });
+    await user.click(screen.getByRole('button', { name: 'Stop hold timer' }));
+
+    expect(screen.getByRole('button', { name: 'Resume hold timer' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Reset hold timer' }));
+    expect(screen.getByRole('button', { name: 'Start hold timer' })).toBeInTheDocument();
   });
 });

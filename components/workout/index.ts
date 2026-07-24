@@ -17,7 +17,6 @@ export { SessionSummary } from './SessionSummary';
 export { BodyweightInput } from './BodyweightInput';
 export { BodyweightDisplay, BodyweightDisplayInline, BodyweightPRBadge } from './BodyweightDisplay';
 export { BodyweightSetEditRow } from './BodyweightSetEditRow';
-export { DurationTimerInput } from './DurationTimerInput';
 export { SegmentedControl } from './SegmentedControl';
 
 // Plate Calculator
