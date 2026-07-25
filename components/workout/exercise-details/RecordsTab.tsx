@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import { convertWeight, convertWeightForDisplay } from '@/lib/utils';
 import {
   computeExerciseRecords,
+  isNormalDetailSet,
   type ExerciseDetailSession,
 } from '@/services/exerciseDetailAnalytics';
 import { formatDetailDate } from './helpers';
@@ -40,7 +41,10 @@ export function RecordsTab({ sessions, unit, repTotalMode = false }: RecordsTabP
     let best: { total: number; date: string } | null = null;
     for (const session of sessions) {
       if (session.isDeload) continue;
-      const total = session.sets.reduce((sum, st) => sum + st.reps, 0);
+      // Straight sets only — same rule the rep_total policy grades.
+      const total = session.sets
+        .filter(isNormalDetailSet)
+        .reduce((sum, st) => sum + st.reps, 0);
       if (total > 0 && (!best || total > best.total)) best = { total, date: session.date };
     }
     return best;

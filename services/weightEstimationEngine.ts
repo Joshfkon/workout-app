@@ -1016,7 +1016,8 @@ export class WeightEstimationEngine {
     if (recentHistory.length === 0) {
       const bestSet = this.findBestSet(history[0].sets);
       if (!bestSet) return null;
-
+      // findBestSet only returns a set with a positive canonical estimate,
+      // so this cannot be 0.
       return {
         exercise: canonicalName,
         estimated1RM: estimate1RM(bestSet.weight, bestSet.reps, bestSet.rpe),
@@ -1026,15 +1027,20 @@ export class WeightEstimationEngine {
       };
     }
 
-    // Collect estimates with dates for recency-weighted selection
+    // Collect estimates with dates for recency-weighted selection.
+    // estimate1RM returns 0 for "no estimate" (canonical estimator: > 15
+    // effective reps — a 12-rep set @ RPE 6 qualifies even though raw reps
+    // pass the <= 12 filter). Zeros must never enter the weighted average:
+    // an all-high-RIR history would otherwise return a 0 strength estimate
+    // instead of falling back to the transfer/profile ladder.
     const estimatesWithDates: Array<{ value: number; date: Date }> = [];
     for (const session of recentHistory) {
       for (const set of session.sets) {
         if (set.completed && set.reps >= 1 && set.reps <= 12) {
-          estimatesWithDates.push({
-            value: estimate1RM(set.weight, set.reps, set.rpe),
-            date: session.date
-          });
+          const value = estimate1RM(set.weight, set.reps, set.rpe);
+          if (value > 0) {
+            estimatesWithDates.push({ value, date: session.date });
+          }
         }
       }
     }

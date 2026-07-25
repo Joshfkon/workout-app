@@ -17,6 +17,7 @@ import { convertWeight } from '@/lib/utils';
 import {
   buildE1RMTrend,
   buildWeeklyVolume,
+  isNormalDetailSet,
   type ExerciseDetailSession,
   type TrendRange,
 } from '@/services/exerciseDetailAnalytics';
@@ -62,7 +63,8 @@ export function ChartsTab({ sessions, unit, repTotalMode = false }: ChartsTabPro
       .reverse()
       .map((sn) => ({
         label: new Date(sn.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        total: sn.sets.reduce((sum, st) => sum + st.reps, 0),
+        // Straight sets only — same rule the rep_total policy grades.
+        total: sn.sets.filter(isNormalDetailSet).reduce((sum, st) => sum + st.reps, 0),
       }));
   }, [repTotalMode, sessions, range]);
 

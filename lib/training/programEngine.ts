@@ -89,8 +89,9 @@ export function calculateBodyComposition(
  * Estimate 1RM — DELEGATES to the canonical estimator (services/shared/e1rm).
  * The old local three-formula copy (flagged "should be kept in sync" with
  * weightEstimationEngine's) is gone; there is exactly one formula now.
- * Returns 0 when no estimate exists — callers here already pre-filter to
- * reps ≤ 12, so 0 only occurs for degenerate inputs and never wins a max/avg.
+ * Returns 0 when no estimate exists (a reps-≤-12 set can still exceed the
+ * 15-effective-rep domain via RIR, e.g. 12 @ RPE 6) — every aggregation call
+ * site filters value > 0 so a missing estimate never enters a max/avg.
  */
 export function estimate1RM(weight: number, reps: number, rpe?: number): number {
   return e1rmValueFromRpe(weight, reps, rpe);
@@ -690,7 +691,9 @@ export class ProgramEngine {
     for (const session of history.slice(0, 10)) {
       for (const set of session.sets) {
         if (set.completed && set.reps >= 1 && set.reps <= 12) {
-          estimates.push(estimate1RM(set.weight, set.reps, set.rpe));
+          // 0 = no estimate (canonical estimator) — never aggregate it.
+          const value = estimate1RM(set.weight, set.reps, set.rpe);
+          if (value > 0) estimates.push(value);
         }
       }
     }
@@ -736,9 +739,10 @@ export class ProgramEngine {
       
       const parentHistory = this.exerciseHistory.get(relationship.parent);
       if (parentHistory && parentHistory.length > 0) {
-        const estimates = parentHistory.flatMap(h => 
+        const estimates = parentHistory.flatMap(h =>
           h.sets.filter(s => s.completed && s.reps <= 12)
             .map(s => estimate1RM(s.weight, s.reps, s.rpe))
+            .filter(v => v > 0) // 0 = no estimate — never a transfer basis
         );
         if (estimates.length > 0) {
           const best = Math.max(...estimates);
@@ -1536,8 +1540,12 @@ export class ProgramEngine {
     let estimated1RM: number | null = null;
     
     if (completedSets.length > 0) {
-      const estimates = completedSets.map(s => estimate1RM(s.weight, s.reps, s.rpe));
-      estimated1RM = Math.max(...estimates);
+      // 0 = no estimate; with no positive estimate the session stores NULL,
+      // never a fabricated 0.
+      const estimates = completedSets
+        .map(s => estimate1RM(s.weight, s.reps, s.rpe))
+        .filter(v => v > 0);
+      estimated1RM = estimates.length > 0 ? Math.max(...estimates) : null;
     }
     
     await this.supabase.from('exercise_history').insert({

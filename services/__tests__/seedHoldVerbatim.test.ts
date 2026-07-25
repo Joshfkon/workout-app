@@ -93,4 +93,11 @@ describe('sumDisplayVolume (native-unit tonnage)', () => {
     ];
     expect(sumDisplayVolume(sets, 'kg')).toBe(1640);
   });
+
+  it('kg path keeps full stored precision — no per-set display rounding', () => {
+    // 72.57 × 12 × 4 = 3483.36 → 3483. Rounding each set to one decimal
+    // first (72.6) would report 3485.
+    const sets = Array.from({ length: 4 }, () => ({ weightKg: 72.57, reps: 12 }));
+    expect(sumDisplayVolume(sets, 'kg')).toBe(3483);
+  });
 });

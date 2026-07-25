@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui';
 import { convertWeightForDisplay, convertWeight, sumDisplayVolume } from '@/lib/utils';
 import {
   effortColorClass,
+  isNormalDetailSet,
   setRir,
   type ExerciseDetailSession,
 } from '@/services/exerciseDetailAnalytics';
@@ -123,7 +124,11 @@ export function HistoryTab({ sessions, isLoading, unit, repTotalMode = false }: 
                   <p className="text-xs text-surface-500 pt-1">
                     Session rep total:{' '}
                     <span className="text-primary-400 font-medium">
-                      {session.sets.reduce((sum, st) => sum + st.reps, 0)} reps
+                      {/* Straight sets only — same rule the rep_total policy grades. */}
+                      {session.sets
+                        .filter(isNormalDetailSet)
+                        .reduce((sum, st) => sum + st.reps, 0)}{' '}
+                      reps
                     </span>
                   </p>
                 ) : (

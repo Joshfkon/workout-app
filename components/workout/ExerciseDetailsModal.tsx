@@ -21,6 +21,7 @@ import type { Exercise } from '@/types/schema';
 import { useKeyboardInset } from '@/hooks/useKeyboardInset';
 import { useExerciseDetailHistory } from '@/hooks/useExerciseDetailHistory';
 import { resolveProgressionModel } from '@/services/suggestionEngine/repTotalPolicy';
+import { isNormalDetailSet } from '@/services/exerciseDetailAnalytics';
 import { estimateE1RMFromRpe } from '@/services/shared/e1rm';
 import { HISTORY_SESSIONS_PER_EXERCISE } from '@/services/suggestionEngine/constants';
 import { resolveDefaultTab, type ExerciseDetailTab } from '@/services/exerciseDetailAnalytics';
@@ -219,6 +220,10 @@ export function ExerciseDetailsModal({
       .filter((sn) => !sn.isDeload)
       .slice(0, HISTORY_SESSIONS_PER_EXERCISE)) {
       for (const set of session.sets) {
+        // Same eligibility as the workout card's classification: NORMAL sets
+        // only — a stack of high-rep dropsets must not flip this sheet to
+        // rep-total while the card stays on e1RM.
+        if (!isNormalDetailSet(set)) continue;
         if (estimateE1RMFromRpe(set.weightKg, set.reps, set.rpe)) estimable++;
         else inestimable++;
       }

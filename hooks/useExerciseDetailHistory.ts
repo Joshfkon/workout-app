@@ -29,6 +29,7 @@ interface RawSetLog {
   rpe: number | null;
   is_warmup: boolean | null;
   set_number: number | null;
+  set_type: string | null;
   bodyweight_data?: {
     modification?: 'none' | 'weighted' | 'assisted';
     addedWeightKg?: number;
@@ -76,6 +77,7 @@ async function fetchExerciseDetailHistory(
         rpe,
         is_warmup,
         set_number,
+        set_type,
         bodyweight_data
       )
     `
@@ -102,6 +104,7 @@ async function fetchExerciseDetailHistory(
         weightKg: s.weight_kg ?? 0,
         reps: s.reps ?? 0,
         rpe: s.rpe ?? null,
+        setType: s.set_type ?? 'normal',
         // "BW+25" display breakdown; migration-backfilled rows flagged
         // _needsReview keep the effective-load display.
         bw:

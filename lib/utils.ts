@@ -283,6 +283,13 @@ export function sumDisplayVolume(
   sets: Array<{ weightKg: number; reps: number }>,
   unit: 'kg' | 'lb'
 ): number {
+  // kg users: the stored value IS the native input — sum it exactly and
+  // round once at the end. Running each set through the one-decimal display
+  // rounding first would ADD error (72.57 → 72.6 → ×48 = 3,485 instead of
+  // the correct 3,483).
+  if (unit === 'kg') {
+    return Math.round(sets.reduce((sum, s) => sum + s.weightKg * s.reps, 0));
+  }
   return Math.round(
     sets.reduce((sum, s) => sum + convertWeightForDisplay(s.weightKg, unit) * s.reps, 0)
   );
