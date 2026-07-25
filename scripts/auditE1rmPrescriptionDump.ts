@@ -35,14 +35,18 @@
 import { createClient } from '@supabase/supabase-js';
 import {
   historySetE1RM,
-  decayedE1RMMax,
-  type E1RMAnchorEntry,
+  bestQualifyingE1RM,
+  type AnchorCandidate,
 } from '../services/suggestionEngine/e1rmAnchor';
 import {
-  E1RM_RECENCY_TAU_DAYS,
+  ANCHOR_QUALIFYING_SESSIONS,
+  ANCHOR_MAX_AGE_DAYS,
   HISTORY_SESSIONS_PER_EXERCISE,
   WORKING_WEIGHT_CLAMP_FRACTION,
 } from '../services/suggestionEngine/constants';
+
+// Frozen pre-Phase-2 decay constant, for the legacy comparison only.
+const LEGACY_E1RM_RECENCY_TAU_DAYS = 45;
 import {
   recommendSeedForSlot,
   sessionMetPrescription,
@@ -149,7 +153,7 @@ async function main() {
   );
 
   // ---- 1+2. Raw sets + anchor candidates ----
-  const anchorEntries: (E1RMAnchorEntry & {
+  const anchorEntries: (AnchorCandidate & {
     label: string;
     raw: number;
     setType: string;
@@ -195,11 +199,13 @@ async function main() {
     const sess = block.workout_sessions;
     for (const s of block.set_logs ?? []) {
       if (s.is_warmup) continue;
+      if ((s.set_type ?? 'normal') !== 'normal') continue; // Phase 2: pool = normal sets only
       const est2 = historySetE1RM(s.weight_kg, s.reps, s.rpe ?? 10);
       if (!est2) continue; // canonical: no estimate -> never an anchor candidate
       const raw = est2.value;
       anchorEntries.push({
         e1rmKg: raw,
+        sessionId: sess?.id ?? block.id,
         raw,
         timeMs: Date.parse(sess?.completed_at || s.logged_at),
         setType: s.set_type ?? 'normal',
@@ -209,21 +215,20 @@ async function main() {
   }
 
   console.log('='.repeat(78));
-  console.log('ANCHOR AGGREGATION (decayedE1RMMax, tau=' + E1RM_RECENCY_TAU_DAYS + 'd)');
+  console.log(
+    `ANCHOR AGGREGATION (best qualifying set, newest ${ANCHOR_QUALIFYING_SESSIONS} sessions ` +
+      `within ${ANCHOR_MAX_AGE_DAYS}d of newest)`
+  );
   const ranked = anchorEntries
-    .map((e) => {
-      const ageDays = Math.max(0, (newestMs - e.timeMs) / 86400000);
-      const weight = Math.exp(-ageDays / E1RM_RECENCY_TAU_DAYS);
-      return { ...e, ageDays, weight, decayed: e.raw * weight };
-    })
-    .sort((a, b) => b.decayed - a.decayed);
+    .map((e) => ({ ...e, ageDays: Math.max(0, (newestMs - e.timeMs) / 86400000) }))
+    .sort((a, b) => b.raw - a.raw);
   ranked.slice(0, 8).forEach((e, i) => {
     console.log(
-      `  ${i === 0 ? 'WINNER' : `   #${i + 1}`}  ${e.label}  raw=${kgLb(e.raw)}  ` +
-        `age=${e.ageDays.toFixed(1)}d  decay=${e.weight.toFixed(3)}  decayed=${kgLb(e.decayed)}`
+      `  ${i === 0 ? 'TOP   ' : `   #${i + 1}`}  ${e.label}  e1RM=${kgLb(e.raw)}  ` +
+        `age=${e.ageDays.toFixed(1)}d vs newest  session=${e.sessionId}`
     );
   });
-  const anchor = decayedE1RMMax(anchorEntries);
+  const anchor = bestQualifyingE1RM(anchorEntries);
   console.log(`  → estimatedE1RM (card display + weight-pick anchor) = ${kgLb(anchor)}`);
 
   // ---- 4. Seed replay ----
@@ -601,6 +606,24 @@ async function main() {
     if (eff > 12) return w * (1 + eff / 30);
     return w * (36 / (37 - eff));
   };
+  // Frozen pre-Phase-2 aggregation (recency-decayed max) for the OLD side.
+  const legacyDecayedMax = (entries: { e1rmKg: number; timeMs: number }[]): number => {
+    let newest = -Infinity;
+    for (const e of entries) {
+      if (e.e1rmKg > 0 && Number.isFinite(e.timeMs) && e.timeMs > newest) newest = e.timeMs;
+    }
+    let best = 0;
+    for (const e of entries) {
+      if (!(e.e1rmKg > 0)) continue;
+      const age =
+        Number.isFinite(e.timeMs) && Number.isFinite(newest)
+          ? Math.max(0, (newest - e.timeMs) / 86400000)
+          : 0;
+      const d = e.e1rmKg * Math.exp(-age / LEGACY_E1RM_RECENCY_TAU_DAYS);
+      if (d > best) best = d;
+    }
+    return best;
+  };
 
   const { data: exListRows, error: exListErr } = await supabase
     .from('exercise_blocks')
@@ -628,24 +651,27 @@ async function main() {
       .order('workout_sessions(completed_at)', { ascending: false })
       .limit(HISTORY_SESSIONS_PER_EXERCISE);
 
-    const oldEntries: E1RMAnchorEntry[] = [];
-    const newEntries: E1RMAnchorEntry[] = [];
+    const oldEntries: { e1rmKg: number; timeMs: number }[] = [];
+    const newEntries: AnchorCandidate[] = [];
     for (const b of (hist ?? []) as any[]) {
       const sess = b.workout_sessions;
       if (!sess || sess.is_deload) continue;
       for (const s of b.set_logs ?? []) {
         if (s.is_warmup || !(s.weight_kg > 0) || !(s.reps > 0)) continue;
         const t = Date.parse(sess.completed_at || s.logged_at);
+        // OLD pool: every non-warmup set (incl. dropsets), legacy formula+decay.
         oldEntries.push({ e1rmKg: legacyHistorySetE1RM(s.weight_kg, s.reps, s.rpe ?? 10), timeMs: t });
+        // NEW pool: normal sets only, canonical estimate, session window.
+        if ((s.set_type ?? 'normal') !== 'normal') continue;
         const est = historySetE1RM(s.weight_kg, s.reps, s.rpe ?? 10);
-        if (est) newEntries.push({ e1rmKg: est.value, timeMs: t });
+        if (est) newEntries.push({ e1rmKg: est.value, sessionId: sess.id, timeMs: t });
       }
     }
     if (oldEntries.length === 0) continue;
     impact.push({
       name: exName,
-      oldKg: decayedE1RMMax(oldEntries),
-      newKg: decayedE1RMMax(newEntries), // 0 = no estimate under canonical rules
+      oldKg: legacyDecayedMax(oldEntries),
+      newKg: bestQualifyingE1RM(newEntries), // 0 = no estimate under canonical rules
     });
   }
   impact.sort((a, b) => (b.oldKg - b.newKg) - (a.oldKg - a.newKg));

@@ -54,9 +54,9 @@ import { insertWorkoutSessions } from '@/lib/training/sessionOrigin';
 import { quickWeightEstimate, type TransferCandidate } from '@/services/weightEstimationEngine';
 import { fetchTransferCandidates } from '@/lib/training/transferCandidates';
 import {
-  decayedE1RMMax,
+  bestQualifyingE1RM,
   historySetE1RM,
-  type E1RMAnchorEntry,
+  type AnchorCandidate,
 } from '@/services/suggestionEngine/e1rmAnchor';
 import { HISTORY_SESSIONS_PER_EXERCISE } from '@/services/suggestionEngine/constants';
 import { recommendSeedForSlot, type PrevSessionSet } from '@/services/setRecommender';
@@ -310,9 +310,14 @@ interface DirectHistorySummary {
   priorSessionSets: PrevSessionSet[];
 }
 
-/** Non-deload, non-warmup set e1RMs (with dates) from one exercise's history row. */
-function anchorEntriesFromHistoryRow(row: DirectHistoryRow): E1RMAnchorEntry[] {
-  const entries: E1RMAnchorEntry[] = [];
+/**
+ * Anchor candidates from one exercise's history row: non-deload sessions,
+ * non-warmup NORMAL sets only (cluster/myorep/rest-pause/dropset reps never
+ * enter the pool — same eligibility rule as the workout page's
+ * isAnchorEligibleSet), each with a non-null canonical estimate.
+ */
+function anchorCandidatesFromHistoryRow(row: DirectHistoryRow): AnchorCandidate[] {
+  const candidates: AnchorCandidate[] = [];
   for (const block of row.exercise_blocks ?? []) {
     const session = block.workout_sessions;
     // Deload sessions are held light on purpose — never anchor on them.
@@ -321,17 +326,19 @@ function anchorEntriesFromHistoryRow(row: DirectHistoryRow): E1RMAnchorEntry[] {
       const weightKg = s.weight_kg ?? 0;
       const reps = s.reps ?? 0;
       if (s.is_warmup || weightKg <= 0 || reps <= 0) continue;
+      if ((s.set_type ?? 'normal') !== 'normal') continue;
       // NULL = beyond the canonical estimator's domain (effective reps > 15):
       // the set is not an e1RM data point and never enters the anchor pool.
       const estimate = historySetE1RM(weightKg, reps, s.rpe ?? 10);
       if (!estimate) continue;
-      entries.push({
+      candidates.push({
         e1rmKg: estimate.value,
+        sessionId: session.id,
         timeMs: Date.parse(session.completed_at || s.logged_at || ''),
       });
     }
   }
-  return entries;
+  return candidates;
 }
 
 /**
@@ -436,7 +443,7 @@ async function fetchDirectHistoryAnchors(
     // (The generated client types infer to-one embeds as arrays — cast via
     // unknown to the runtime shape, same convention as the workout page.)
     for (const row of data as unknown as DirectHistoryRow[]) {
-      const anchorE1RMKg = decayedE1RMMax(anchorEntriesFromHistoryRow(row));
+      const anchorE1RMKg = bestQualifyingE1RM(anchorCandidatesFromHistoryRow(row));
       if (anchorE1RMKg > 0) {
         anchors.set(row.id, { anchorE1RMKg, ...recentSessionsFromHistoryRow(row) });
       }

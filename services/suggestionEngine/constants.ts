@@ -86,14 +86,23 @@ export const WORKING_WEIGHT_CLAMP_FRACTION = 0.10;
 export const HISTORY_SESSIONS_PER_EXERCISE = 10;
 
 /**
- * Half-life-style time constant (days) for the e1RM anchor's recency decay:
- * each history session's e1RM is weighted by exp(-age_days / tau) — age
- * relative to the newest session — before the max is taken
- * (services/suggestionEngine/e1rmAnchor.ts). 45 keeps a 30-day-old peak at
- * ~51% influence while a 300-day-old peak (~0.1%) is effectively gone, so a
- * pre-weight-cut PR cannot keep prescribing today's targets.
+ * The anchor aggregation window, in SESSIONS (Phase 2): the prescription
+ * anchor is the best qualifying set among the newest this-many sessions.
+ * Counted in sessions — not wall-clock — so the anchor moves only when the
+ * user trains. 5 balances stability (one odd session can't own the anchor
+ * for long) against freshness (a 10-session-old peak no longer qualifies).
  */
-export const E1RM_RECENCY_TAU_DAYS = 45;
+export const ANCHOR_QUALIFYING_SESSIONS = 5;
+
+/**
+ * Staleness guard on the anchor window: a session only qualifies if it is
+ * within this many days of the NEWEST session (never of "today" — ages are
+ * measured session-to-session so the anchor is calendar-independent). This
+ * is the crisp replacement for the old exp(-age/45d) decay: a 10-month-old
+ * pre-layoff peak can't anchor a comeback, while the newest session always
+ * qualifies by definition.
+ */
+export const ANCHOR_MAX_AGE_DAYS = 90;
 
 // ============================================================
 // LOGGED-SET OVERRIDE (Phase 4)

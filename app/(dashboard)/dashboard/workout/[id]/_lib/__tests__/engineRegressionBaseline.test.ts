@@ -98,12 +98,12 @@ describe('engine regression baseline — staple exercise, recent history', () =>
       { weightKg: 100, reps: 9, rpe: 9 },
       { weightKg: 100, reps: 8, rpe: 9.5 },
     ]);
-    // Canonical estimator on the newest session's 100 × 10 @ RPE 8.5: the
-    // single bucketed rpeToRir conversion reads RPE 8.5 as 1 RIR → 11
-    // effective reps → 100 × 36/26 = 138.46, rounded to 138.5 by the
-    // canonical estimator. (The old raw 10 − rpe read RPE 8.5 as 1.5 RIR →
-    // 141.18; half-point RPEs shift by design — one conversion app-wide now.)
-    expect(history.estimatedE1RM).toBeCloseTo(138.5, 2);
+    // Phase 2 aggregation: best qualifying set among the newest sessions —
+    // no decay. The winner is the Jul 14 97.5 × 11 @ RPE 8 set (2 RIR → 13
+    // effective reps → capped at 12 → 97.5 × 1.44 = 140.4), which beats the
+    // newest session's 100 × 10 @ 8.5 (1 RIR → 11 eff → 138.5). Under the
+    // old decayed max the Jul 14 value lost to its 3-day age haircut.
+    expect(history.estimatedE1RM).toBeCloseTo(140.4, 2);
     // The undecayed PR is now the Jul 14 97.5 × 11 @ RPE 8 set: 2 RIR → 13
     // effective reps → capped at 12 → 97.5 × 1.44 = 140.4, which beats the
     // newest session's 138.5. (Under the old formulas its 12.5 effective

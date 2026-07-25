@@ -1,10 +1,13 @@
 import { buildExerciseHistories, type HistoryBlockRow } from '../suggestions';
 
 /**
- * Fix 3 integration: buildExerciseHistories' estimatedE1RM anchors on the
- * recency-DECAYED max, so a stale peak (e.g. a 10-month-old pre-weight-cut
- * PR) no longer drives today's prescription — while the personal record
- * display stays the true undecayed best.
+ * Stale-peak integration (Phase 2 aggregation): buildExerciseHistories'
+ * estimatedE1RM is the best qualifying set among the newest sessions, where
+ * a session only qualifies within ANCHOR_MAX_AGE_DAYS of the NEWEST session.
+ * A 10-month-old pre-weight-cut PR therefore cannot drive today's
+ * prescription — while the personal record display stays the true window
+ * best. Unlike the old exp(-age/45d) decay, the anchor never moves with the
+ * calendar: only training a session can change it.
  */
 
 const BENCH = 'bench';
@@ -37,7 +40,7 @@ function sessionBlock(
   };
 }
 
-describe('e1RM anchor recency decay (Fix 3)', () => {
+describe('e1RM anchor staleness guard (Phase 2 aggregation)', () => {
   it('a 10-month-old peak does not anchor over a recent cluster 15% lower', () => {
     // Pre-cut peak in Sep 2025: 110 × 10 @ RPE 8 → Brzycki e1RM ≈ 158.4.
     // Recent cluster (July 2026): ~95 kg work, e1RM ≈ 134-137 — the user lost
@@ -57,8 +60,9 @@ describe('e1RM anchor recency decay (Fix 3)', () => {
 
     const history = buildExerciseHistories(blocks)[BENCH];
 
-    // The undecayed peak would be ≈158.4; the anchor must instead track the
-    // recent cluster (best recent set: 95 × 10 @ 8 → ≈136.8).
+    // The 10-month-old peak (≈158.4) is outside the 90-day window relative
+    // to the newest session and is excluded; the anchor tracks the recent
+    // cluster (best recent set: 95 × 10 @ 8 → ≈136.8).
     expect(history.estimatedE1RM).toBeCloseTo(136.8, 1);
     // The PR display stays the true all-time best.
     expect(history.personalRecord?.weightKg).toBe(110);
@@ -71,7 +75,8 @@ describe('e1RM anchor recency decay (Fix 3)', () => {
       sessionBlock('s1', '2026-07-12T10:00:00Z', [{ weightKg: 97.5, reps: 10, rpe: 8 }]),
     ];
     const history = buildExerciseHistories(blocks)[BENCH];
-    // Newest session holds the max → zero decay applied to it: 100 × 36/25.
+    // Best qualifying set is in the newest session — anchored at face value:
+    // 100 × 36/25.
     expect(history.estimatedE1RM).toBeCloseTo(144, 5);
   });
 });
