@@ -69,7 +69,7 @@ export const PlateCalculatorModal = memo(function PlateCalculatorModal({
       isOpen={isOpen}
       onClose={onClose}
       title="Plate Calculator"
-      description="Calculate which plates to load on each side of the barbell"
+      description="Calculate which plates to load on each side of the barbell or machine"
       size="lg"
     >
       {isLoading ? (
