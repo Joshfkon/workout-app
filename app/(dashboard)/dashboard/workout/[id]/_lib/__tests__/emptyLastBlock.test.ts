@@ -78,7 +78,11 @@ describe('empty most-recent block (skipped / unlogged exercise in a completed se
       { weightKg: 9, reps: 30, rpe: 8 },
       { weightKg: 15.9, reps: 15, rpe: 8 },
     ]);
-    expect(history.estimatedE1RM).toBeGreaterThan(0);
+    // Both sets (30 reps, 15 reps @ RPE 8) exceed the canonical estimator's
+    // 15-effective-rep domain: this history has real sets but NO valid e1RM
+    // anchor. 0 is the numeric-compat "no estimate" — the card renders it as
+    // absent and prescriptions fall back to the last-session path.
+    expect(history.estimatedE1RM).toBe(0);
   });
 
   it('treats a warmup-only newest block the same as an empty one', () => {

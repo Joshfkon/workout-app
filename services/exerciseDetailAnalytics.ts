@@ -23,6 +23,13 @@ export interface ExerciseDetailSet {
   reps: number;
   rpe: number | null;
   /**
+   * set_type of the logged row ('normal' | 'dropset' | 'myorep' |
+   * 'rest_pause'…; absent = legacy 'normal'). Special-scheme sets stay in
+   * the display list but are excluded from rep_total classification and
+   * rep-total sums — same eligibility rule as the anchor pool.
+   */
+  setType?: string | null;
+  /**
    * Bodyweight composition, when recorded. `weightKg` stays the effective
    * load (the number every derivation here uses); this only lets displays
    * break it out as "BW+25" instead of the blended value.
@@ -107,6 +114,16 @@ export interface ExerciseRecords {
 }
 
 // === Set-level helpers ===
+
+/**
+ * Straight-set eligibility for rep-total math — the display-side twin of the
+ * anchor pool's isAnchorEligibleSet: dropset/myorep/rest-pause reps are a
+ * different scheme and never count toward classification or rep totals.
+ * (The hook already excludes warmups.)
+ */
+export function isNormalDetailSet(set: Pick<ExerciseDetailSet, 'setType'>): boolean {
+  return (set.setType ?? 'normal') === 'normal';
+}
 
 /**
  * e1RM for a single logged set. Uses the canonical `estimateE1RM` with the

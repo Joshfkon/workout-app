@@ -39,6 +39,7 @@ import {
   REP_OVERSHOOT,
   RAMP_LOAD_FRACTION,
   WORKING_WEIGHT_CLAMP_FRACTION,
+  MIN_MEANINGFUL_CHANGE_FRACTION,
   OVERRIDE_DEVIATION_FRACTION,
   RECAL_FATIGUE_CORRECTION_PER_SET,
   RECAL_MAX_FRESHNESS_CORRECTION,
@@ -901,6 +902,18 @@ export interface SeedSlotInput {
   isBodyweight?: boolean;
 }
 
+/** Which rule bound the e1RM working prescription (loud clamps, Phase 4). */
+export type SeedClampBinder =
+  | 'none'
+  /** Raw curve pick fell below the ±band's floor. */
+  | 'band_low'
+  /** Raw curve pick exceeded the ±band's ceiling. */
+  | 'band_high'
+  /** All-sets bump gate: increase not earned → ceilinged at recent weight. */
+  | 'bump_gate'
+  /** Delta below max(2.5%, one increment) — noise, held at recent weight. */
+  | 'noise_floor';
+
 export interface SeedRecommendation {
   weightKg: number;
   /** Prescribe the RANGE, never a copied rep count. */
@@ -911,8 +924,12 @@ export interface SeedRecommendation {
   /** Ramp sets carry no RIR target and no "too light" nagging. */
   showRirTarget: boolean;
   anchorSource: AnchorSource;
-  /** True when the ±clamp bound the e1RM prescription (say so in provenance). */
+  /** True when a clamp/gate bound the e1RM prescription (say so in provenance). */
   clamped: boolean;
+  /** WHICH rule bound it — provenance must name the actual binder. */
+  clampBinder?: SeedClampBinder;
+  /** The raw curve pick (kg) BEFORE any clamp/gate/rounding, for provenance. */
+  preClampWeightKg?: number;
   engineVersion: number;
   /**
    * DURATION exercises only: the time-then-load policy's seeded SECONDS
@@ -926,8 +943,17 @@ export interface SeedRecommendation {
 /**
  * Compute the working-set weight from the e1RM anchor for the middle of the rep
  * range, clamped to ±WORKING_WEIGHT_CLAMP_FRACTION of the best recent working
- * weight. Returned separately so a ramp slot can base its percentage on the same
- * working weight the working slots would get.
+ * weight, gated by the all-sets bump rule, and floored by the
+ * minimum-meaningful-change threshold. Returned separately so a ramp slot can
+ * base its percentage on the same working weight the working slots would get.
+ *
+ * HOLD-VERBATIM RULE (Phase 3): whenever the outcome is "stay at the recent
+ * working weight" — the bump gate bound, or the prescribed delta is below
+ * max(MIN_MEANINGFUL_CHANGE_FRACTION, one increment) — the function returns
+ * `recentWorkingWeightKg` EXACTLY, never re-rounded to the increment grid.
+ * Re-rounding a held weight is how "hold 135 lb" (61.23 kg) became a phantom
+ * "132.5 lb" (60 kg on the old 5-kg grid). Mirrors recommendSessionStart's
+ * holdVerbatim. Only genuinely NEW prescriptions are rounded.
  */
 function workingWeightFromAnchor(
   anchorE1RMKg: number,
@@ -936,31 +962,57 @@ function workingWeightFromAnchor(
   inc: number,
   recentWorkingWeightKg?: number,
   bumpEarned?: boolean
-): { weightKg: number; clamped: boolean } {
+): { weightKg: number; clamped: boolean; binder: SeedClampBinder; preClampKg: number } {
   const [repMin, repMax] = targetRepRange;
   const mid = Math.round((repMin + repMax) / 2);
   const raw = weightForReps(anchorE1RMKg, mid, targetRir);
 
   let bounded = raw;
-  let clamped = false;
+  let binder: SeedClampBinder = 'none';
   if (recentWorkingWeightKg && recentWorkingWeightKg > 0) {
-    const lo = recentWorkingWeightKg * (1 - WORKING_WEIGHT_CLAMP_FRACTION);
-    const hi = recentWorkingWeightKg * (1 + WORKING_WEIGHT_CLAMP_FRACTION);
+    const recent = recentWorkingWeightKg;
+    const lo = recent * (1 - WORKING_WEIGHT_CLAMP_FRACTION);
+    const hi = recent * (1 + WORKING_WEIGHT_CLAMP_FRACTION);
     bounded = clamp(raw, lo, hi);
-    clamped = bounded !== raw;
+    if (bounded < raw) binder = 'band_high';
+    else if (bounded > raw) binder = 'band_low';
     // All-sets bump gate: a hot e1RM (usually one strong top set) may not
     // prescribe ABOVE the recent working weight unless the whole previous
-    // session earned it. Only reported as clamped when the gate actually
-    // moved the rounded prescription.
-    if (bumpEarned === false && bounded > recentWorkingWeightKg) {
-      const gated = recentWorkingWeightKg;
-      clamped =
-        clamped || roundToIncrement(gated, inc) !== roundToIncrement(bounded, inc);
-      bounded = gated;
+    // session earned it.
+    if (bumpEarned === false && bounded > recent) {
+      bounded = recent;
+      binder = 'bump_gate';
     }
+
+    // What the un-touched curve pick would have shown, for the "did anything
+    // actually move" comparison — `clamped` is a claim about the SHOWN
+    // number, not about which internal branch ran.
+    const rawRounded = roundToIncrement(raw, inc);
+    const rounded = roundToIncrement(bounded, inc);
+    // Minimum meaningful change: a session-start delta below max(2.5%, one
+    // increment) is noise (a 1.85% "adjustment" on a calf machine is not a
+    // prescription) → hold the recent weight VERBATIM. This also covers the
+    // bump-gate case (its delta is pure rounding), preserving e.g. 135 lb
+    // exactly instead of snapping it to the kg grid.
+    const threshold = Math.max(recent * MIN_MEANINGFUL_CHANGE_FRACTION, inc);
+    const final = Math.abs(rounded - recent) < threshold ? recent : rounded;
+    return {
+      weightKg: final,
+      clamped: final !== rawRounded,
+      binder:
+        binder === 'none' && final === recent && final !== rawRounded
+          ? 'noise_floor'
+          : binder,
+      preClampKg: raw,
+    };
   }
 
-  return { weightKg: roundToIncrement(bounded, inc), clamped };
+  return {
+    weightKg: roundToIncrement(bounded, inc),
+    clamped: false,
+    binder: 'none',
+    preClampKg: raw,
+  };
 }
 
 /**
@@ -1102,6 +1154,7 @@ export function recommendSeedForSlot(input: SeedSlotInput): SeedRecommendation {
     topWorkingKg = w.weightKg;
     workingClamped = w.clamped;
   }
+
   if (topWorkingKg <= 0 && input.prevWeightKg && input.prevWeightKg > 0) {
     topWorkingKg = input.prevWeightKg;
   }
@@ -1148,6 +1201,18 @@ export function recommendSeedForSlot(input: SeedSlotInput): SeedRecommendation {
       input.recentWorkingWeightKg,
       bumpEarned
     );
+    // Loud clamp (no silent failures): when a rule actually MOVED the shown
+    // prescription, log the pre-clamp value, the post-clamp value, and WHICH
+    // rule fired. (A gate that "bound" without changing the rounded number is
+    // not an event worth shouting about.)
+    if (w.clamped && w.binder !== 'none' && w.binder !== 'noise_floor') {
+      console.warn(
+        `[setRecommender] seed clamp fired (${w.binder}): raw curve pick ` +
+          `${w.preClampKg.toFixed(2)} kg from anchor ${input.anchorE1RMKg!.toFixed(1)} kg ` +
+          `→ prescribed ${w.weightKg.toFixed(2)} kg (recent working ` +
+          `${input.recentWorkingWeightKg?.toFixed(2) ?? '—'} kg)`
+      );
+    }
     return {
       weightKg: w.weightKg,
       repRange: input.targetRepRange,
@@ -1156,6 +1221,8 @@ export function recommendSeedForSlot(input: SeedSlotInput): SeedRecommendation {
       showRirTarget: true,
       anchorSource: 'e1rm',
       clamped: w.clamped || workingClamped,
+      clampBinder: w.binder,
+      preClampWeightKg: w.preClampKg,
       engineVersion: SUGGESTION_ENGINE_VERSION,
     };
   }

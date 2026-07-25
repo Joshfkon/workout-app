@@ -6,6 +6,7 @@
 
 import type { Experience, Equipment } from '@/types/schema';
 import type { MovementPattern } from '@/types/training';
+import { e1rmValueFromRpe } from '@/services/shared/e1rm';
 
 // ============================================================
 // TYPES
@@ -456,22 +457,13 @@ Note: We'll convert this to estimate your free weight squat potential.`,
 // 1RM ESTIMATION
 // ============================================================
 
-// The COACHING estimator: Brzycki base with a per-RIR capacity adjustment.
-// Intentionally distinct from the display `estimateE1RM` (lib/utils) and the
-// programming estimator (weightEstimationEngine) — different model for coaching
-// context messaging.
+// DELEGATES to the canonical estimator (services/shared/e1rm). The old
+// "coaching-specific" Brzycki-plus-2.5%/RIR model was one of five divergent
+// e1RM implementations; there is exactly one now. Returns 0 when no estimate
+// exists (effective reps > 15 or invalid inputs) — callers must treat 0 as
+// "no estimate", never as a strength value.
 export function estimate1RM(weight: number, reps: number, rpe?: number): number {
-  // Brzycki formula as base
-  let baseEstimate = weight * (36 / (37 - reps));
-
-  // Adjust for RPE if provided (each RPE point below 10 = ~2.5% more capacity)
-  if (rpe !== undefined && rpe < 10) {
-    const rirsRemaining = 10 - rpe;
-    const adjustmentFactor = 1 + (rirsRemaining * 0.025);
-    baseEstimate = baseEstimate * adjustmentFactor;
-  }
-
-  return Math.round(baseEstimate * 10) / 10;
+  return e1rmValueFromRpe(weight, reps, rpe);
 }
 
 // ============================================================
@@ -883,6 +875,10 @@ export class CoachingSessionManager {
       estimated1RM = reps;
     } else {
       estimated1RM = estimate1RM(weight, reps, rpe);
+      // No estimate (effective reps beyond the canonical domain): a benchmark
+      // test at 16+ effective reps measures endurance, not a 1RM — refuse to
+      // score it rather than rank a 0 against population standards.
+      if (estimated1RM <= 0) return null;
     }
     
     const percentileScore = calculatePercentileScore(

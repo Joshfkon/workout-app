@@ -25,6 +25,7 @@
 // ============================================================
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { e1rmValueFromRpe } from '@/services/shared/e1rm';
 import {
   computePerformanceTrend,
   recommendWeeklySetAdjustment,
@@ -415,7 +416,7 @@ interface FeedbackRow {
 interface BlockRow {
   workout_session_id: string;
   exercises: { primary_muscle: string | null } | { primary_muscle: string | null }[] | null;
-  set_logs: { weight_kg: number | null; reps: number | null; is_warmup: boolean | null }[] | null;
+  set_logs: { weight_kg: number | null; reps: number | null; rpe: number | null; is_warmup: boolean | null }[] | null;
 }
 
 /** Monday 00:00 (local time) of the week containing `now`. */
@@ -437,10 +438,8 @@ function asRating<T extends 0 | 1 | 2 | 3>(value: number | null): T | null {
   return value as T;
 }
 
-/** Epley estimated 1RM. */
-function epleyE1rm(weightKg: number, reps: number): number {
-  return weightKg * (1 + reps / 30);
-}
+// e1RM comes from the canonical estimator (services/shared/e1rm) — the local
+// Epley copy is gone. 0 = no estimate; the trend loop already skips ≤ 0.
 
 /**
  * Load the auto-regulation signals for a week rollover:
@@ -519,7 +518,7 @@ export async function loadWeeklyMuscleSignals(
   const allIds = Array.from(lastWeekIds).concat(Array.from(prevWeekIds));
   const { data: blockData, error: blockError } = await supabase
     .from('exercise_blocks')
-    .select('workout_session_id, exercises (primary_muscle), set_logs (weight_kg, reps, is_warmup)')
+    .select('workout_session_id, exercises (primary_muscle), set_logs (weight_kg, reps, rpe, is_warmup)')
     .in('workout_session_id', allIds);
 
   if (blockError) throw blockError;
@@ -539,7 +538,7 @@ export async function loadWeeklyMuscleSignals(
       const weight = set.weight_kg ?? 0;
       const reps = set.reps ?? 0;
       if (weight <= 0 || reps <= 0) continue;
-      bestSetE1rm = Math.max(bestSetE1rm, epleyE1rm(weight, reps));
+      bestSetE1rm = Math.max(bestSetE1rm, e1rmValueFromRpe(weight, reps, set.rpe));
     }
     if (bestSetE1rm <= 0) continue;
 

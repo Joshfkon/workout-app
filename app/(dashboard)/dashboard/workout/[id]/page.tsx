@@ -102,6 +102,8 @@ import { CreateCustomExercise } from '@/components/exercises/CreateCustomExercis
 import { ShareWorkoutModal } from '@/components/social/sharing/ShareWorkoutModal';
 import { checkSetSanity, type SanityCheckResult } from '@/services/sanityChecks';
 import { RPECalibrationEngine, type CalibrationResult, type CalibrationSetLog } from '@/services/rpeCalibration';
+import { resolveProgressionModel } from '@/services/suggestionEngine/repTotalPolicy';
+import { estimateE1RMFromRpe } from '@/services/shared/e1rm';
 import { applyReadinessModulation } from '@/services/fatigueEngine';
 import { buildPerformanceSnapshots, type SnapshotSourceBlock } from '@/components/workout/exercisePerformance';
 import { getFailureSafetyTier } from '@/services/exerciseSafety';
@@ -1463,7 +1465,8 @@ export default function WorkoutPage() {
               target_rir,
               exercises!inner (
                 id,
-                name
+                name,
+                progression_model
               ),
               workout_sessions!inner (
                 user_id,
@@ -1486,7 +1489,21 @@ export default function WorkoutPage() {
           return; // No historical data, engine stays empty
         }
 
-        // Convert to CalibrationSetLog format
+        // Convert to CalibrationSetLog format. rep_total exercises (explicit
+        // column, or auto-classified from the window's own estimability) are
+        // excluded ENTIRELY — neither their "AMRAP" rows nor their comparison
+        // sets may feed the RPE bias (ADD 2: no calibration input ingested).
+        const estimability = new Map<string, { est: number; inest: number }>();
+        for (const log of setLogsData) {
+          const block = log.exercise_blocks as any;
+          const exercise = block?.exercises as any;
+          if (!exercise) continue;
+          const counts = estimability.get(exercise.id) ?? { est: 0, inest: 0 };
+          if (estimateE1RMFromRpe(log.weight_kg, log.reps, log.rpe)) counts.est++;
+          else counts.inest++;
+          estimability.set(exercise.id, counts);
+        }
+
         const calibrationLogs: CalibrationSetLog[] = [];
         const calibrationResults: CalibrationResult[] = [];
 
@@ -1495,6 +1512,14 @@ export default function WorkoutPage() {
           const exercise = block.exercises as any;
           
           if (!exercise || !block) continue;
+
+          const counts = estimability.get(exercise.id) ?? { est: 0, inest: 0 };
+          if (
+            resolveProgressionModel(exercise.progression_model, counts.est, counts.inest) ===
+            'rep_total'
+          ) {
+            continue;
+          }
 
           const reportedRIR = Math.max(0, Math.round(10 - log.rpe));
           const wasAMRAP = log.rpe >= 9.5 && getFailureSafetyTier(exercise.name) === 'push_freely';
@@ -1559,7 +1584,15 @@ export default function WorkoutPage() {
     }
 
     const safetyTier = getFailureSafetyTier(currentExercise.name);
-    const isSafeExercise = safetyTier === 'push_freely';
+    // rep_total exercises never get an AMRAP prompt: its purpose is RPE
+    // calibration, and rep_total ingests no calibration input (ADD 2).
+    const isSafeExercise =
+      safetyTier === 'push_freely' &&
+      resolveProgressionModel(
+        (currentExercise as { progressionModel?: 'e1rm' | 'rep_total' | null }).progressionModel,
+        exerciseHistories[currentExercise.id]?.estimableSetCount ?? 0,
+        exerciseHistories[currentExercise.id]?.inestimableSetCount ?? 0
+      ) !== 'rep_total';
     
     // Count completed sets for this block
     const completedSetsForBlock = completedSets.filter(
@@ -1582,7 +1615,7 @@ export default function WorkoutPage() {
     } else {
       setAmrapSuggestion(null);
     }
-  }, [currentBlock, currentExercise, completedSets]);
+  }, [currentBlock, currentExercise, completedSets, exerciseHistories]);
 
   // Fetch frequently used exercises for sorting
   useEffect(() => {
@@ -2379,10 +2412,20 @@ export default function WorkoutPage() {
           setSanityCheckResult(checkResult);
         }
 
-        // Check if this is an AMRAP-eligible set (last set on a safe exercise)
+        // Check if this is an AMRAP-eligible set (last set on a safe exercise).
+        // rep_total exercises ingest NO calibration input at all (ADD 2):
+        // their reps aren't crisp units, so neither AMRAP results nor
+        // comparison sets from them may move the RPE bias.
+        const repTotalExercise =
+          resolveProgressionModel(
+            (currentExercise as { progressionModel?: 'e1rm' | 'rep_total' | null }).progressionModel,
+            exerciseHistories[currentExercise.id]?.estimableSetCount ?? 0,
+            exerciseHistories[currentExercise.id]?.inestimableSetCount ?? 0
+          ) === 'rep_total';
         const safetyTier = getFailureSafetyTier(currentExercise.name);
         const isLastSet = currentSetNumber >= currentBlock.targetSets;
-        const isAmrapEligible = safetyTier === 'push_freely' && isLastSet && data.rpe >= 9.5;
+        const isAmrapEligible =
+          !repTotalExercise && safetyTier === 'push_freely' && isLastSet && data.rpe >= 9.5;
 
         if (isAmrapEligible) {
           // Log to calibration engine and check for result
@@ -2443,7 +2486,7 @@ export default function WorkoutPage() {
         }
         
         // Also log non-AMRAP sets for calibration comparison (but don't show result)
-        if (safetyTier === 'push_freely' && !isAmrapEligible && setType === 'normal') {
+        if (!repTotalExercise && safetyTier === 'push_freely' && !isAmrapEligible && setType === 'normal') {
           const reportedRIR = 10 - data.rpe;
           calibrationEngineRef.current.addSetLog({
             exerciseId: currentExercise.id,

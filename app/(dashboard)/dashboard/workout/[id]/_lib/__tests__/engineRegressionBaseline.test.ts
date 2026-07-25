@@ -98,13 +98,23 @@ describe('engine regression baseline — staple exercise, recent history', () =>
       { weightKg: 100, reps: 9, rpe: 9 },
       { weightKg: 100, reps: 8, rpe: 9.5 },
     ]);
-    // Brzycki-with-RIR on the newest session's 100 × 10 @ RPE 8.5.
-    expect(history.estimatedE1RM).toBeCloseTo(141.176, 2);
+    // Phase 2 aggregation: best qualifying set among the newest sessions —
+    // no decay. The winner is the Jul 14 97.5 × 11 @ RPE 8 set (2 RIR → 13
+    // effective reps → capped at 12 → 97.5 × 1.44 = 140.4), which beats the
+    // newest session's 100 × 10 @ 8.5 (1 RIR → 11 eff → 138.5). Under the
+    // old decayed max the Jul 14 value lost to its 3-day age haircut.
+    expect(history.estimatedE1RM).toBeCloseTo(140.4, 2);
+    // The undecayed PR is now the Jul 14 97.5 × 11 @ RPE 8 set: 2 RIR → 13
+    // effective reps → capped at 12 → 97.5 × 1.44 = 140.4, which beats the
+    // newest session's 138.5. (Under the old formulas its 12.5 effective
+    // reps fell into the linear-Epley branch at 138.1 and lost.) The ANCHOR
+    // still comes from the newest session because the PR's 3-day decay drops
+    // it to ~131.3 in the decayed-max comparison.
     expect(history.personalRecord).toEqual({
-      weightKg: 100,
-      reps: 10,
-      e1rm: history.estimatedE1RM,
-      date: '2026-07-17T10:00:00Z',
+      weightKg: 97.5,
+      reps: 11,
+      e1rm: 140.4,
+      date: '2026-07-14T10:00:00Z',
     });
   });
 
@@ -128,6 +138,10 @@ describe('engine regression baseline — staple exercise, recent history', () =>
       showRirTarget: true,
       anchorSource: 'e1rm',
       clamped: false,
+      // No session list supplied → the bump gate never ran; the raw curve
+      // pick (100.29) rounds to the recent 100 on its own.
+      clampBinder: 'none',
+      preClampWeightKg: expect.any(Number),
       engineVersion: 4,
     });
   });
@@ -160,6 +174,8 @@ describe('engine regression baseline — staple exercise, recent history', () =>
       showRirTarget: true,
       anchorSource: 'e1rm',
       clamped: false,
+      clampBinder: 'bump_gate',
+      preClampWeightKg: expect.any(Number),
       engineVersion: 4,
     });
   });

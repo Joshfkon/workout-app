@@ -82,6 +82,8 @@ export interface Database {
           default_rep_range: number[];
           default_rir: number;
           min_weight_increment_kg: number;
+          progression_model: 'e1rm' | 'rep_total' | null;
+          rep_boundary: 'crisp' | 'drifting';
           form_cues: string[];
           common_mistakes: string[];
           setup_note: string;
@@ -102,6 +104,8 @@ export interface Database {
           default_rep_range?: number[];
           default_rir?: number;
           min_weight_increment_kg?: number;
+          progression_model?: 'e1rm' | 'rep_total' | null;
+          rep_boundary?: 'crisp' | 'drifting';
           form_cues?: string[];
           common_mistakes?: string[];
           setup_note?: string;
@@ -122,6 +126,8 @@ export interface Database {
           default_rep_range?: number[];
           default_rir?: number;
           min_weight_increment_kg?: number;
+          progression_model?: 'e1rm' | 'rep_total' | null;
+          rep_boundary?: 'crisp' | 'drifting';
           form_cues?: string[];
           common_mistakes?: string[];
           setup_note?: string;
@@ -559,7 +565,9 @@ export interface Database {
           top_set_reps: number;
           top_set_rpe: number;
           total_working_sets: number;
-          estimated_e1rm: number;
+          estimated_e1rm: number | null;
+          estimated_e1rm_legacy: number | null;
+          e1rm_version: number;
           is_deload: boolean;
         };
         Insert: {
@@ -571,7 +579,9 @@ export interface Database {
           top_set_reps: number;
           top_set_rpe?: number;
           total_working_sets?: number;
-          estimated_e1rm?: number;
+          estimated_e1rm?: number | null;
+          estimated_e1rm_legacy?: number | null;
+          e1rm_version?: number;
           is_deload?: boolean;
         };
         Update: {
@@ -583,7 +593,9 @@ export interface Database {
           top_set_reps?: number;
           top_set_rpe?: number;
           total_working_sets?: number;
-          estimated_e1rm?: number;
+          estimated_e1rm?: number | null;
+          estimated_e1rm_legacy?: number | null;
+          e1rm_version?: number;
           is_deload?: boolean;
         };
         Relationships: [];

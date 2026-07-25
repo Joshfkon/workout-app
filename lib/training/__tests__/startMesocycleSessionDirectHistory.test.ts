@@ -181,8 +181,11 @@ const benchAllTopHistoryRow = {
     {
       workout_sessions: { id: 'ws-1', completed_at: '2026-07-15T10:00:00Z', is_deload: false },
       set_logs: [
-        benchSet(100, 12, 6, 1, '2026-07-15T10:00:00Z'),
-        benchSet(100, 12, 6, 2, '2026-07-15T10:00:00Z'),
+        // RPE 8 (2 RIR spare): eff reps 14 — inside the canonical estimator's
+        // domain (capped at 12 → anchor 144). The old fixture's RPE 6 put the
+        // set at 16 effective reps, which now correctly yields NO anchor.
+        benchSet(100, 12, 8, 1, '2026-07-15T10:00:00Z'),
+        benchSet(100, 12, 8, 2, '2026-07-15T10:00:00Z'),
       ],
     },
   ],
@@ -316,8 +319,9 @@ describe('startMesocycleWorkoutSession — direct-history targets (Fix 5)', () =
 
     const blocks = insertedBlocks(queries);
     const bench = blocks.find((b) => b.exercise_id === EX_BENCH);
-    // Anchor: 100 × 12 @ RPE 6 → eff reps 16 → 100 × (1 + 16/30) ≈ 153.3.
-    // Curve ≈ 109.5, allowed up to the ±10% clamp of the recent 100 → 110.
+    // Anchor: 100 × 12 @ RPE 8 → eff reps 14 → canonical cap at 12 → 144.
+    // Curve mid of 8-12 @ 2 RIR ≈ 102.9, allowed up to the ±10% clamp of the
+    // recent 100 → 110.
     expect(bench.target_weight_kg).toBeGreaterThan(100);
     expect(bench.target_weight_kg).toBeLessThanOrEqual(110);
   });

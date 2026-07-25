@@ -21,9 +21,9 @@ import {
   type WorkingWeightRecommendation,
 } from '@/services/weightEstimationEngine';
 import {
-  decayedE1RMMax,
+  bestQualifyingE1RM,
   historySetE1RM,
-  type E1RMAnchorEntry,
+  type AnchorCandidate,
 } from '@/services/suggestionEngine/e1rmAnchor';
 import { HISTORY_SESSIONS_PER_EXERCISE } from '@/services/suggestionEngine/constants';
 import {
@@ -42,11 +42,28 @@ import type {
   UserProfileForWeights,
 } from './types';
 
-// Calculate E1RM using Brzycki formula
-// RPE adjusts for reps in reserve: effectiveReps = reps + (10 - rpe)
-// (Implementation moved verbatim to services/suggestionEngine/e1rmAnchor so
-// the mesocycle session build anchors on the same number.)
-export function calculateE1RM(weight: number, reps: number, rpe: number = 10): number {
+/**
+ * THE anchor-pool eligibility predicate — single source of truth, shared by
+ * the anchor/PR pool AND the last-session display (workingSetsOf), so a set
+ * can anchor a prescription ONLY if the user can see it in the history card.
+ * Non-warmup, plain straight sets only: cluster/myorep/rest-pause/dropset
+ * reps are a different scheme and never enter e1RM math.
+ */
+export function isAnchorEligibleSet(s: {
+  is_warmup: boolean;
+  set_type: string | null;
+}): boolean {
+  return !s.is_warmup && (s.set_type ?? 'normal') === 'normal';
+}
+
+// Canonical e1RM for a history set (services/shared/e1rm via historySetE1RM).
+// NULL means the set supports no e1RM claim (effective reps > 15) — such a
+// set never enters the anchor pool and never sets a PR e1RM.
+export function calculateE1RM(
+  weight: number,
+  reps: number,
+  rpe: number = 10
+): ReturnType<typeof historySetE1RM> {
   return historySetE1RM(weight, reps, rpe);
 }
 
@@ -230,6 +247,8 @@ function computeHistoryFromBlocks(
       estimatedE1RM: 0,
       personalRecord: null,
       totalSessions: 0,
+      estimableSetCount: 0,
+      inestimableSetCount: 0,
       progressionScope: scope,
       estimatedFromOtherLocation: false,
     };
@@ -238,17 +257,21 @@ function computeHistoryFromBlocks(
   let bestE1RM = 0;
   let personalRecord: ExerciseHistoryData['personalRecord'] = null;
   let totalSessions = 0;
+  let estimableSetCount = 0;
+  let inestimableSetCount = 0;
   const seenSessions = new Set<string>();
-  // Candidates for the recency-decayed prescription anchor (Fix 3): every
-  // kept set's e1RM with when it happened. The PR stays the undecayed best.
-  const anchorEntries: E1RMAnchorEntry[] = [];
+  // Candidates for the prescription anchor: qualifying sets only (see
+  // isAnchorEligibleSet), aggregated by bestQualifyingE1RM — the best
+  // canonical estimate among the newest sessions. The PR is the undecayed
+  // best over the whole window, same eligibility.
+  const anchorCandidates: AnchorCandidate[] = [];
 
   // Normal working sets of a block, ordered by set_number — so previousSets[i]
   // maps to that workout's i-th working set (not a dropset/rest-pause or
   // DB-ordering quirk).
   const workingSetsOf = (block: HistoryBlockRow) =>
     (block.set_logs || [])
-      .filter((s) => !s.is_warmup && (s.set_type ?? 'normal') === 'normal')
+      .filter(isAnchorEligibleSet)
       .sort((a, b) => (a.set_number ?? 0) - (b.set_number ?? 0))
       .map((s) => ({
         weightKg: s.weight_kg,
@@ -302,6 +325,13 @@ function computeHistoryFromBlocks(
       totalSessions++;
     }
     sets.forEach((set) => {
+      // Anchor/PR pool = EXACTLY the sets the history UI displays
+      // (isAnchorEligibleSet, shared with workingSetsOf): non-warmup,
+      // set_type 'normal'. Cluster / myorep / rest-pause / dropset / burnout
+      // reps are not commensurable with straight-set reps — no cap fixes
+      // that, they must not enter the pool. If a set anchors a prescription,
+      // the user must be able to see it in the history card.
+      if (!isAnchorEligibleSet(set)) return;
       if (isDuration) {
         // Duration PR: heaviest load first, longest hold at that load second.
         // No anchor entries — there is no e1RM curve for a timed set.
@@ -320,18 +350,30 @@ function computeHistoryFromBlocks(
         return;
       }
       // Pass RPE to get accurate E1RM - without RPE it assumes failure (RPE 10)
-      // which underestimates true strength for sets done with reps in reserve
-      const e1rm = calculateE1RM(set.weight_kg, set.reps, set.rpe);
-      anchorEntries.push({
-        e1rmKg: e1rm,
+      // which underestimates true strength for sets done with reps in reserve.
+      // NULL (effective reps > 15 — beyond the canonical formula's domain)
+      // means this set is not an e1RM data point: it contributes nothing to
+      // the anchor pool and cannot set the e1RM PR. That is the fix for the
+      // 137.5×30 "284 lbs" anchor — no cap salvages a set like that.
+      const estimate = calculateE1RM(set.weight_kg, set.reps, set.rpe);
+      if (!estimate) {
+        // Beyond the estimator's domain: counts toward rep_total
+        // auto-classification, contributes nothing to the anchor.
+        inestimableSetCount++;
+        return;
+      }
+      estimableSetCount++;
+      anchorCandidates.push({
+        e1rmKg: estimate.value,
+        sessionId: session?.id ?? block.id,
         timeMs: Date.parse(session?.completed_at || set.logged_at),
       });
-      if (e1rm > bestE1RM) {
-        bestE1RM = e1rm;
+      if (estimate.value > bestE1RM) {
+        bestE1RM = estimate.value;
         personalRecord = {
           weightKg: set.weight_kg,
           reps: set.reps,
-          e1rm,
+          e1rm: estimate.value,
           date: session?.completed_at || set.logged_at,
         };
       }
@@ -342,20 +384,23 @@ function computeHistoryFromBlocks(
     lastWorkoutDate: lastSession?.completed_at || '',
     lastWorkoutSets: lastSets,
     priorWorkoutSets: priorSets,
-    // Recency-decayed anchor (Fix 3): a stale peak fades by calendar age
-    // (exp(-age/tau), age relative to the newest session) instead of
-    // anchoring today's prescription; the newest session always keeps full
-    // weight, so an actively-trained exercise is unchanged. The PR above
-    // stays the true undecayed best.
+    // Anchor (Phase 2): best qualifying set among the newest
+    // ANCHOR_QUALIFYING_SESSIONS sessions within ANCHOR_MAX_AGE_DAYS of the
+    // newest session. Moves only when a session is trained — never with the
+    // calendar. 0 = no qualifying set → downstream treats it as "no anchor"
+    // and falls through to the last-session / double-progression path.
+    // The PR above stays the true window-wide best.
     // First session at a new implement: soften the seeded e1RM ~10% so the
     // suggestion is a conservative starting point, not another gym's target
     // (rule 4). Same-location history is untouched.
     estimatedE1RM: softenOtherLocationEstimate(
-      decayedE1RMMax(anchorEntries),
+      bestQualifyingE1RM(anchorCandidates),
       estimatedFromOtherLocation
     ),
     personalRecord,
     totalSessions,
+    estimableSetCount,
+    inestimableSetCount,
     progressionScope: scope,
     estimatedFromOtherLocation,
     calibrationNote,

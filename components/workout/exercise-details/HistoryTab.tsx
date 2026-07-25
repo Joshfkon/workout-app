@@ -2,9 +2,10 @@
 
 import { useState } from 'react';
 import { Badge } from '@/components/ui';
-import { convertWeightForDisplay, convertWeight } from '@/lib/utils';
+import { convertWeightForDisplay, convertWeight, sumDisplayVolume } from '@/lib/utils';
 import {
   effortColorClass,
+  isNormalDetailSet,
   setRir,
   type ExerciseDetailSession,
 } from '@/services/exerciseDetailAnalytics';
@@ -16,13 +17,15 @@ interface HistoryTabProps {
   sessions: ExerciseDetailSession[] | undefined;
   isLoading: boolean;
   unit: 'kg' | 'lb';
+  /** rep_total exercise: show session rep totals, never an e1RM (ADD 2). */
+  repTotalMode?: boolean;
 }
 
 function setLabel(weightKg: number, reps: number, unit: 'kg' | 'lb'): string {
   return `${convertWeightForDisplay(weightKg, unit, 1)} ${unit} × ${reps}`;
 }
 
-export function HistoryTab({ sessions, isLoading, unit }: HistoryTabProps) {
+export function HistoryTab({ sessions, isLoading, unit, repTotalMode = false }: HistoryTabProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
@@ -80,7 +83,9 @@ export function HistoryTab({ sessions, isLoading, unit }: HistoryTabProps) {
                   )}
                   <span>·</span>
                   <span>
-                    {Math.round(convertWeight(session.totalVolume, 'kg', unit)).toLocaleString()} {unit}
+                    {/* Native-unit volume: per-set conversion first, so
+                        160×12×4 reads 7,680 — not the kg-roundtrip 7,679. */}
+                    {sumDisplayVolume(session.sets, unit).toLocaleString()} {unit}
                   </span>
                 </div>
               </div>
@@ -113,13 +118,28 @@ export function HistoryTab({ sessions, isLoading, unit }: HistoryTabProps) {
                     );
                   })}
                 </div>
-                {session.bestE1RM > 0 && (
+                {repTotalMode ? (
+                  // rep_total: the progression metric IS the session total —
+                  // no e1RM exists for this exercise.
                   <p className="text-xs text-surface-500 pt-1">
-                    Session best e1RM:{' '}
+                    Session rep total:{' '}
                     <span className="text-primary-400 font-medium">
-                      {Math.round(convertWeight(session.bestE1RM, 'kg', unit))} {unit}
+                      {/* Straight sets only — same rule the rep_total policy grades. */}
+                      {session.sets
+                        .filter(isNormalDetailSet)
+                        .reduce((sum, st) => sum + st.reps, 0)}{' '}
+                      reps
                     </span>
                   </p>
+                ) : (
+                  session.bestE1RM > 0 && (
+                    <p className="text-xs text-surface-500 pt-1">
+                      Session best e1RM:{' '}
+                      <span className="text-primary-400 font-medium">
+                        {Math.round(convertWeight(session.bestE1RM, 'kg', unit))} {unit}
+                      </span>
+                    </p>
+                  )
                 )}
               </div>
             )}

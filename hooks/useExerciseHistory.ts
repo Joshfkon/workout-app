@@ -43,18 +43,23 @@ export function useExerciseHistory({ exerciseId, limit = 20 }: UseExerciseHistor
 
       if (fetchError) throw fetchError;
 
-      // Map database fields to TypeScript interface
-      const mappedData: ExercisePerformanceSnapshot[] = (data || []).map((row: ExercisePerformanceSnapshotRow) => ({
-        id: row.id,
-        userId: row.user_id,
-        exerciseId: row.exercise_id,
-        sessionDate: row.session_date,
-        topSetWeightKg: row.top_set_weight_kg,
-        topSetReps: row.top_set_reps,
-        topSetRpe: row.top_set_rpe,
-        totalWorkingSets: row.total_working_sets,
-        estimatedE1RM: row.estimated_e1rm,
-      }));
+      // Map database fields to TypeScript interface. Rows with a NULL
+      // estimated_e1rm ("no valid estimate" — canonical estimator, e.g. a
+      // >15-effective-rep session) are excluded: this hook feeds e1RM stats
+      // and trend charts, and a null must render as absent, never as 0.
+      const mappedData: ExercisePerformanceSnapshot[] = (data || [])
+        .filter((row: ExercisePerformanceSnapshotRow) => row.estimated_e1rm != null)
+        .map((row: ExercisePerformanceSnapshotRow) => ({
+          id: row.id,
+          userId: row.user_id,
+          exerciseId: row.exercise_id,
+          sessionDate: row.session_date,
+          topSetWeightKg: row.top_set_weight_kg,
+          topSetReps: row.top_set_reps,
+          topSetRpe: row.top_set_rpe,
+          totalWorkingSets: row.total_working_sets,
+          estimatedE1RM: row.estimated_e1rm as number,
+        }));
 
       setSnapshots(mappedData);
     } catch (err: unknown) {

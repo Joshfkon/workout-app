@@ -5,6 +5,7 @@ import {
   rpeToRir as rpeToRirDiscrete,
   type RepsInTank,
 } from '@/types/schema';
+import { e1rmValue } from '@/services/shared/e1rm';
 
 /**
  * Utility for merging class names conditionally.
@@ -271,6 +272,30 @@ export function convertWeightForDisplay(weightKg: number, unit: 'kg' | 'lb', dec
 }
 
 /**
+ * Session/tonnage volume in the DISPLAY unit, computed natively (Phase 3):
+ * each set's load converts to the display unit FIRST (recovering the exact
+ * value the user typed, e.g. 72.57 kg → 160.0 lb), THEN multiplies and sums.
+ * Summing in kg and converting once loses the native value to the
+ * DECIMAL(6,2) storage precision — 160 lb × 12 × 4 rendered "7,679 lb"
+ * instead of 7,680. Display-only: engine/analytics math stays in kg.
+ */
+export function sumDisplayVolume(
+  sets: Array<{ weightKg: number; reps: number }>,
+  unit: 'kg' | 'lb'
+): number {
+  // kg users: the stored value IS the native input — sum it exactly and
+  // round once at the end. Running each set through the one-decimal display
+  // rounding first would ADD error (72.57 → 72.6 → ×48 = 3,485 instead of
+  // the correct 3,483).
+  if (unit === 'kg') {
+    return Math.round(sets.reduce((sum, s) => sum + s.weightKg * s.reps, 0));
+  }
+  return Math.round(
+    sets.reduce((sum, s) => sum + convertWeightForDisplay(s.weightKg, unit) * s.reps, 0)
+  );
+}
+
+/**
  * Format a BODY metric (bodyweight, lean mass) with unit suffix, exactly.
  * formatWeight's 2.5-increment rounding is for barbell loads — on body
  * surfaces it turns a 177.2 lb weigh-in into "177.5 lbs".
@@ -387,27 +412,22 @@ export function rpeToRirLinear(rpe: number): number {
 }
 
 /**
- * Canonical estimated 1-rep-max (Epley formula with RIR adjustment).
+ * Estimated 1-rep-max — numeric-compat DELEGATE to the canonical estimator
+ * (services/shared/e1rm: Brzycki, effective reps capped at 12, no estimate
+ * beyond 15). The old local Epley-capped-at-12 variant is gone.
  *
- * Effective reps = reps + RIR, clamped to a ceiling (12) so very high-rep sets
- * don't wildly inflate the estimate. This is the single source of truth for
- * E1RM; service-layer code should import this rather than re-implementing it.
+ * Returns **0 when no estimate exists** (invalid inputs, or effective reps
+ * > 15). The 0 is for aggregation contexts (max/avg) only — display surfaces
+ * must gate on > 0 and render "no estimate", never the 0. Prefer importing
+ * `estimateE1RM` from '@/services/shared/e1rm' directly in new code to get
+ * the nullable form with confidence.
  *
  * @param weightKg Load in kg (or effective load for bodyweight exercises)
  * @param reps Reps completed
  * @param rir Reps in reserve (defaults to 0 = taken to failure)
  */
 export function estimateE1RM(weightKg: number, reps: number, rir: number = 0): number {
-  if (reps <= 0 || weightKg <= 0) return 0;
-
-  const safeRir = Math.max(0, rir);
-  // Clamp effective reps so high-rep sets don't over-inflate the estimate.
-  const effectiveReps = Math.min(reps + safeRir, 12);
-
-  if (effectiveReps === 1) return weightKg;
-
-  // Epley: weight * (1 + reps/30)
-  return Math.round(weightKg * (1 + effectiveReps / 30) * 100) / 100;
+  return e1rmValue(weightKg, reps, rir);
 }
 
 /**
@@ -833,4 +853,4 @@ export function calculateStreaks(dates: (Date | string)[]): StreakResult {
 }
 
 // Re-export E1RM calculations for convenient use by UI components
-export { estimate1RM, estimateE1RMSimple } from '@/services/shared/strengthCalculations';
+export { estimate1RM } from '@/services/shared/strengthCalculations';

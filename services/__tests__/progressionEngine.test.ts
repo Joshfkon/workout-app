@@ -171,36 +171,27 @@ describe('calculateE1RM', () => {
     expect(calculateE1RM(100, 0, 10)).toBe(0);
   });
 
-  it('calculates E1RM using Epley formula', () => {
-    // 100kg x 10 reps @ RPE 10 (0 RIR)
-    // Multi-formula average (Brzycki, Epley, Lombardi) for 100kg x 10 reps
-    // - Brzycki: 100 * 36 / (37 - 10) = 133.33
-    // - Epley: 100 * (1 + 10/30) = 133.33
-    // - Lombardi: 100 * 10^0.10 = 125.89
-    // Average ≈ 130.9
-    expect(calculateE1RM(100, 10, 10)).toBeCloseTo(130.9, 0);
+  it('calculates E1RM using the canonical (Brzycki) formula', () => {
+    // 100kg x 10 reps @ RPE 10 (0 RIR): 100 * 36/(37-10) = 133.33
+    expect(calculateE1RM(100, 10, 10)).toBeCloseTo(133.3, 0);
   });
 
   it('adjusts for RIR (RPE < 10)', () => {
-    // 100kg x 8 reps @ RPE 8 (2 RIR) = effective 10 reps
-    // Uses multi-formula average ≈ 130.9
+    // 100kg x 8 reps @ RPE 8 (2 RIR) = effective 10 reps -> 133.33
     const result = calculateE1RM(100, 8, 8);
-    expect(result).toBeCloseTo(130.9, 0);
+    expect(result).toBeCloseTo(133.3, 0);
   });
 
-  it('handles very high rep sets', () => {
-    const result = calculateE1RM(50, 20, 10);
-    expect(result).toBeGreaterThan(50);
+  it('computes 13-15 effective reps at the 12 cap', () => {
+    // 15 reps @ failure: computed at the cap -> 100 * 36/25 = 144.
+    expect(calculateE1RM(100, 15, 10)).toBeCloseTo(144, 1);
   });
 
-  it('uses a gentle high-rep formula (reps > 12) to avoid inflation', () => {
-    // For reps > 12 the adopted formula is weight * (1 + reps/40).
-    // 20 reps: 100 * (1 + 20/40) = 150.
-    expect(calculateE1RM(100, 20, 10)).toBeCloseTo(150, 1);
-    // 15 reps: 100 * (1 + 15/40) = 137.5.
-    expect(calculateE1RM(100, 15, 10)).toBeCloseTo(137.5, 1);
-    // Anti-inflation: stays well below a raw Epley estimate (100*(1+20/30)=166.7).
-    expect(calculateE1RM(100, 20, 10)).toBeLessThan(100 * (1 + 20 / 30));
+  it('returns 0 (no estimate) beyond 15 effective reps — never extrapolates', () => {
+    // The old formula fabricated 150 for a 20-rep set; the canonical
+    // estimator refuses: no formula is valid out there.
+    expect(calculateE1RM(100, 20, 10)).toBe(0);
+    expect(calculateE1RM(50, 20, 10)).toBe(0);
   });
 });
 
@@ -247,8 +238,8 @@ describe('calculateBodyweightE1RM', () => {
     });
 
     const result = calculateBodyweightE1RM(set);
-    // Uses multi-formula average ≈ 130.9
-    expect(result).toBeCloseTo(130.9, 0);
+    // Canonical Brzycki: 100 * 36/27 = 133.33
+    expect(result).toBeCloseTo(133.3, 0);
   });
 });
 

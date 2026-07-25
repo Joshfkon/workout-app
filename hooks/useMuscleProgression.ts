@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { createUntypedClient } from '@/lib/supabase/client';
-import { estimateE1RM, getLocalDateString } from '@/lib/utils';
+import { getLocalDateString } from '@/lib/utils';
+import { e1rmValueFromRpe } from '@/services/shared/e1rm';
 import {
   getMuscleGroupProgression,
   type MuscleGroupProgression,
@@ -16,6 +17,7 @@ const HISTORY_DAYS = 84;
 interface SessionSetRow {
   weight_kg: number;
   reps: number;
+  rpe: number | null;
   is_warmup: boolean | null;
 }
 
@@ -66,7 +68,7 @@ export function useMuscleProgression() {
               completed_at,
               exercise_blocks!inner (
                 exercises!inner (id, name, primary_muscle),
-                set_logs!inner (weight_kg, reps, is_warmup)
+                set_logs!inner (weight_kg, reps, rpe, is_warmup)
               )
             `)
             .eq('user_id', user.id)
@@ -110,7 +112,7 @@ export function useMuscleProgression() {
             let topWeight = 0;
             let topReps = 0;
             workingSets.forEach((set) => {
-              const e1rm = estimateE1RM(set.weight_kg, set.reps);
+              const e1rm = e1rmValueFromRpe(set.weight_kg, set.reps, set.rpe);
               if (e1rm > topE1RM) {
                 topE1RM = e1rm;
                 topWeight = set.weight_kg;
@@ -118,6 +120,9 @@ export function useMuscleProgression() {
               }
             });
 
+            // No estimable set in the session (canonical estimator: >15
+            // effective reps has no e1RM) -> no snapshot; never trend a 0.
+            if (topE1RM <= 0) return;
             const list = snapshotsByExercise.get(exerciseId) ?? [];
             list.push({
               id: `${session.id}-${exerciseId}`,

@@ -21,7 +21,7 @@ import type { ExercisePerformanceSnapshot, ExerciseTrend } from '@/types/schema'
 // E1RM CALCULATION TESTS
 // ============================================
 
-describe('calculateE1RM (multi-formula average)', () => {
+describe('calculateE1RM (canonical estimator)', () => {
   it('returns weight for 1 rep at RPE 10', () => {
     expect(calculateE1RM(100, 1, 10)).toBe(100);
   });
@@ -31,36 +31,27 @@ describe('calculateE1RM (multi-formula average)', () => {
     expect(calculateE1RM(100, 0, 10)).toBe(0);
   });
 
-  it('calculates E1RM using multi-formula average', () => {
-    // Uses average of Brzycki, Epley, and Lombardi for accuracy
-    // 100kg x 10 reps @ RPE 10:
-    // - Brzycki: 100 * 36 / (37 - 10) = 133.33
-    // - Epley: 100 * (1 + 10/30) = 133.33
-    // - Lombardi: 100 * 10^0.10 = 125.89
-    // Average ≈ 130.9
-    expect(calculateE1RM(100, 10, 10)).toBeCloseTo(130.9, 0);
+  it('calculates E1RM using the canonical (Brzycki) formula', () => {
+    // 100kg x 10 reps @ RPE 10: 100 * 36/(37-10) = 133.33
+    expect(calculateE1RM(100, 10, 10)).toBeCloseTo(133.3, 0);
   });
 
   it('adjusts for RPE (reps in reserve)', () => {
-    // 100kg x 8 reps @ RPE 8 = 2 RIR = effective 10 reps
-    // Uses multi-formula average ≈ 130.9
-    expect(calculateE1RM(100, 8, 8)).toBeCloseTo(130.9, 0);
+    // 100kg x 8 reps @ RPE 8 = 2 RIR = effective 10 reps -> 133.33
+    expect(calculateE1RM(100, 8, 8)).toBeCloseTo(133.3, 0);
   });
 
   it('handles low rep sets', () => {
-    // 100kg x 3 reps @ RPE 10
-    // Multi-formula average for 3 reps
+    // 100kg x 3 reps @ RPE 10: 100 * 36/34 = 105.9
     const result = calculateE1RM(100, 3, 10);
     expect(result).toBeGreaterThan(105);
     expect(result).toBeLessThan(115);
   });
 
-  it('handles high rep sets with conservative estimate', () => {
-    // For >12 reps, uses conservative linear estimate
-    // 50kg x 20 reps @ RPE 10
-    const result = calculateE1RM(50, 20, 10);
-    expect(result).toBeGreaterThan(70);
-    expect(result).toBeLessThan(90);
+  it('returns 0 (no estimate) beyond 15 effective reps — never extrapolates', () => {
+    // A 20-rep set is endurance work; it carries no e1RM claim, and the
+    // snapshot builders skip it rather than trending a fabricated number.
+    expect(calculateE1RM(50, 20, 10)).toBe(0);
   });
 });
 

@@ -15,11 +15,15 @@
  * the fetch lives in `hooks/useExerciseDetailHistory.ts`.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card } from '@/components/ui';
 import type { Exercise } from '@/types/schema';
 import { useKeyboardInset } from '@/hooks/useKeyboardInset';
 import { useExerciseDetailHistory } from '@/hooks/useExerciseDetailHistory';
+import { resolveProgressionModel } from '@/services/suggestionEngine/repTotalPolicy';
+import { isNormalDetailSet } from '@/services/exerciseDetailAnalytics';
+import { estimateE1RMFromRpe } from '@/services/shared/e1rm';
+import { HISTORY_SESSIONS_PER_EXERCISE } from '@/services/suggestionEngine/constants';
 import { resolveDefaultTab, type ExerciseDetailTab } from '@/services/exerciseDetailAnalytics';
 import { getFailureSafetyTier, getTierDisplayInfo } from '@/services/exerciseSafety';
 import { convertWeightForDisplay } from '@/lib/utils';
@@ -198,6 +202,35 @@ export function ExerciseDetailsModal({
   const historyQuery = useExerciseDetailHistory(exerciseId, isOpen);
   const sessions = historyQuery.data;
 
+  // rep_total routing (ADD 2 follow-up): the detail sheet must not present
+  // e1RM-derived records/charts for a rep_total exercise. Same resolution
+  // rule as the workout card: explicit progression_model wins; NULL
+  // auto-classifies from the recent window's estimability under the
+  // canonical estimator (majority of normal sets beyond its domain).
+  const repTotalMode = useMemo(() => {
+    if (!exercise) return false;
+    const explicit =
+      ((exercise as any).progressionModel ?? (exercise as any).progression_model ?? null) as
+        | 'e1rm'
+        | 'rep_total'
+        | null;
+    let estimable = 0;
+    let inestimable = 0;
+    for (const session of (sessions ?? [])
+      .filter((sn) => !sn.isDeload)
+      .slice(0, HISTORY_SESSIONS_PER_EXERCISE)) {
+      for (const set of session.sets) {
+        // Same eligibility as the workout card's classification: NORMAL sets
+        // only — a stack of high-rep dropsets must not flip this sheet to
+        // rep-total while the card stays on e1RM.
+        if (!isNormalDetailSet(set)) continue;
+        if (estimateE1RMFromRpe(set.weightKg, set.reps, set.rpe)) estimable++;
+        else inestimable++;
+      }
+    }
+    return resolveProgressionModel(explicit, estimable, inestimable) === 'rep_total';
+  }, [exercise, sessions]);
+
   // Reset per exercise / per open.
   useEffect(() => {
     setActiveTab(null);
@@ -327,10 +360,15 @@ export function ExerciseDetailsModal({
                     sessions={sessions}
                     isLoading={historyQuery.isLoading}
                     unit={unit}
+                    repTotalMode={repTotalMode}
                   />
                 )}
-                {activeTab === 'charts' && <ChartsTab sessions={sessions} unit={unit} />}
-                {activeTab === 'records' && <RecordsTab sessions={sessions} unit={unit} />}
+                {activeTab === 'charts' && (
+                  <ChartsTab sessions={sessions} unit={unit} repTotalMode={repTotalMode} />
+                )}
+                {activeTab === 'records' && (
+                  <RecordsTab sessions={sessions} unit={unit} repTotalMode={repTotalMode} />
+                )}
               </div>
             </>
           )}
