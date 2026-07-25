@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Badge } from '@/components/ui';
-import { convertWeightForDisplay, convertWeight } from '@/lib/utils';
+import { convertWeightForDisplay, convertWeight, sumDisplayVolume } from '@/lib/utils';
 import {
   effortColorClass,
   setRir,
@@ -80,7 +80,9 @@ export function HistoryTab({ sessions, isLoading, unit }: HistoryTabProps) {
                   )}
                   <span>·</span>
                   <span>
-                    {Math.round(convertWeight(session.totalVolume, 'kg', unit)).toLocaleString()} {unit}
+                    {/* Native-unit volume: per-set conversion first, so
+                        160×12×4 reads 7,680 — not the kg-roundtrip 7,679. */}
+                    {sumDisplayVolume(session.sets, unit).toLocaleString()} {unit}
                   </span>
                 </div>
               </div>

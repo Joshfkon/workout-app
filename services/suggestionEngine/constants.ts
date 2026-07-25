@@ -71,6 +71,15 @@ export const RAMP_LOAD_FRACTION = 0.575;
  */
 export const WORKING_WEIGHT_CLAMP_FRACTION = 0.10;
 
+/**
+ * Minimum meaningful session-start load change (Phase 3): a prescribed delta
+ * below max(this fraction of the recent working weight, one increment) is
+ * measurement noise, not a prescription — the seed holds the recent working
+ * weight VERBATIM instead (a 1.85% "adjustment" produced by unit-grid
+ * rounding is exactly the artifact this suppresses).
+ */
+export const MIN_MEANINGFUL_CHANGE_FRACTION = 0.025;
+
 // ============================================================
 // E1RM ANCHOR RECENCY (audit remediation Fix 3)
 // ============================================================

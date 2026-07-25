@@ -26,6 +26,7 @@ import {
   deriveWorkoutLabel,
   muscleDisplayName,
   resolveWorkoutDurationSeconds,
+  sumDisplayVolume,
 } from '@/lib/utils';
 import { e1rmValueFromRpe } from '@/services/shared/e1rm';
 import { getCalibrationVerdict, type CalibrationMethod } from '@/services/rpeCalibration';
@@ -685,7 +686,12 @@ export function SessionSummary({
         <div className="flex-1 px-1">
           <p className="text-lg font-bold text-blue-400 leading-tight">
             {(() => {
-              const vol = unit === 'lb' ? kgToLbs(totalVolume) : totalVolume;
+              // Native-unit volume (Phase 3): per-set conversion, not a
+              // kg-sum roundtrip that loses storage precision.
+              const vol = sumDisplayVolume(
+                workingSets.filter((s) => !isDurationSet(s)),
+                unit
+              );
               return vol >= 1000 ? `${(vol / 1000).toFixed(1)}k` : Math.round(vol);
             })()}
           </p>

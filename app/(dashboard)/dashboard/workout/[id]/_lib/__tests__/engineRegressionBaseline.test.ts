@@ -138,6 +138,10 @@ describe('engine regression baseline — staple exercise, recent history', () =>
       showRirTarget: true,
       anchorSource: 'e1rm',
       clamped: false,
+      // No session list supplied → the bump gate never ran; the raw curve
+      // pick (100.29) rounds to the recent 100 on its own.
+      clampBinder: 'none',
+      preClampWeightKg: expect.any(Number),
       engineVersion: 4,
     });
   });
@@ -170,6 +174,8 @@ describe('engine regression baseline — staple exercise, recent history', () =>
       showRirTarget: true,
       anchorSource: 'e1rm',
       clamped: false,
+      clampBinder: 'bump_gate',
+      preClampWeightKg: expect.any(Number),
       engineVersion: 4,
     });
   });

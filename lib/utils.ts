@@ -272,6 +272,23 @@ export function convertWeightForDisplay(weightKg: number, unit: 'kg' | 'lb', dec
 }
 
 /**
+ * Session/tonnage volume in the DISPLAY unit, computed natively (Phase 3):
+ * each set's load converts to the display unit FIRST (recovering the exact
+ * value the user typed, e.g. 72.57 kg → 160.0 lb), THEN multiplies and sums.
+ * Summing in kg and converting once loses the native value to the
+ * DECIMAL(6,2) storage precision — 160 lb × 12 × 4 rendered "7,679 lb"
+ * instead of 7,680. Display-only: engine/analytics math stays in kg.
+ */
+export function sumDisplayVolume(
+  sets: Array<{ weightKg: number; reps: number }>,
+  unit: 'kg' | 'lb'
+): number {
+  return Math.round(
+    sets.reduce((sum, s) => sum + convertWeightForDisplay(s.weightKg, unit) * s.reps, 0)
+  );
+}
+
+/**
  * Format a BODY metric (bodyweight, lean mass) with unit suffix, exactly.
  * formatWeight's 2.5-increment rounding is for barbell loads — on body
  * surfaces it turns a 177.2 lb weigh-in into "177.5 lbs".
