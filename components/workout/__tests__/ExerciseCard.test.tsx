@@ -1314,11 +1314,12 @@ describe('ExerciseCard', () => {
       })
     );
 
-    it('shows the Ahead pill for a lift progressing faster than expected', () => {
+    it('shows the trend-ahead pill for a lift progressing faster than expected', () => {
       render(
         <ExerciseCard {...defaultProps} performanceSnapshots={progressingSnapshots} />
       );
-      expect(screen.getByText(/Ahead/)).toBeInTheDocument();
+      // Phase 4 relabel: the pill is a TREND statement, not a prescription one.
+      expect(screen.getByText(/Trend: ahead/)).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Plateau' })).not.toBeInTheDocument();
     });
 
@@ -1327,9 +1328,9 @@ describe('ExerciseCard', () => {
         <ExerciseCard {...defaultProps} performanceSnapshots={plateauedSnapshots} />
       );
       expect(screen.getByRole('button', { name: 'Plateau' })).toBeInTheDocument();
-      expect(screen.queryByText(/Ahead/)).not.toBeInTheDocument();
-      expect(screen.queryByText('On track')).not.toBeInTheDocument();
-      expect(screen.queryByText(/Behind/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Trend: ahead/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Trend: on pace/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Trend: behind/)).not.toBeInTheDocument();
     });
 
     it('shows no pace pill without enough history', () => {
@@ -1339,8 +1340,8 @@ describe('ExerciseCard', () => {
           performanceSnapshots={progressingSnapshots.slice(0, 2)}
         />
       );
-      expect(screen.queryByText(/Ahead/)).not.toBeInTheDocument();
-      expect(screen.queryByText('On track')).not.toBeInTheDocument();
+      expect(screen.queryByText(/Trend: ahead/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Trend: on pace/)).not.toBeInTheDocument();
     });
   });
 

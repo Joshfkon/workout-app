@@ -876,9 +876,14 @@ export const ExerciseCard = memo(function ExerciseCard({
     [previousSets, previousTopSetWeightKg, anchorE1RMKg, block.targetRepRange, effectiveTargetRir, exercise.minWeightIncrementKg, exercise.exerciseType, exercise.isBodyweight, prevSessionSetsForGating, priorSessionSetsForGating]
   );
 
-  // Curve-consistent reps for a session-start seed: answer the seeded weight
-  // on the SAME e1RM ladder the weight-edit recompute uses, so the prefilled
-  // (weight, reps) pair sits on one curve and round-trips through prescribe().
+  // Curve-consistent reps for a session-start seed: ONE ANCHOR PER
+  // PRESCRIPTION (Phase 4). The reps answer comes from the SAME capacity
+  // value that picked the weight — the stored anchor when the seed is
+  // e1RM-anchored, the last-session/cold-start rung otherwise. (Pre-Phase-2
+  // the stored anchor could sit far off any honest curve, so reps had to be
+  // answered from a different, saner anchor — that dual-anchor split is what
+  // produced "132.5 × 12-20" with a 10-rep default. The anchor pool is now
+  // bounded and pool-validated, so it is safe — and required — to agree.)
   // Ramp slots keep the mid-range plan (no effort target → no curve claim);
   // with no e1RM rung the mid of the range is the plan target, not a curve
   // answer, and later weight edits leave it alone.
@@ -889,7 +894,10 @@ export const ExerciseCard = memo(function ExerciseCard({
       if (seed.seedReps !== undefined) return seed.seedReps;
       const midPlan = Math.round((seed.repRange[0] + seed.repRange[1]) / 2);
       if (seed.role === 'ramp' || !(weightKg > 0)) return midPlan;
-      const e1rm = lastSessionE1RM ?? coldStartE1RM;
+      const e1rm =
+        seed.anchorSource === 'e1rm' && anchorE1RMKg > 0
+          ? anchorE1RMKg
+          : lastSessionE1RM ?? coldStartE1RM;
       if (!e1rm) return midPlan;
       const p = prescribe({
         e1RMKg: e1rm,
@@ -899,21 +907,26 @@ export const ExerciseCard = memo(function ExerciseCard({
       });
       return p ? p.reps : midPlan;
     },
-    [lastSessionE1RM, coldStartE1RM, effectiveTargetRir]
+    [anchorE1RMKg, lastSessionE1RM, coldStartE1RM, effectiveTargetRir]
   );
 
   // Capacity anchor for a weight-edit recompute — the prescription e1RM
   // ladder: session-best first (a set logged this session); with no reference
-  // set at all, last-session resolved e1RM, then the cold-start estimate.
-  // NEVER the stored all-time e1RM: it can sit far off the curve the on-screen
-  // suggestion came from, and answering an edit from it is what saturated the
-  // reps into the constant "× 20". A planned target weight is not an anchor
-  // either — with no e1RM rung, weight edits must leave the reps field
-  // untouched.
+  // set at all, the SAME anchor the on-screen seed derived from (Phase 4
+  // single-anchor rule): the stored anchor when one exists, else the
+  // last-session rung, else the cold-start estimate. Pre-Phase-2 the stored
+  // anchor was excluded here because it could sit far off any honest curve
+  // (the "× 20" saturation); the pool is now bounded and validated, and
+  // answering an edit from a DIFFERENT anchor than the seed is exactly the
+  // two-sources-of-truth bug. A planned target weight is still not an anchor
+  // — with no e1RM rung, weight edits leave the reps field untouched.
   const resolveEditAnchorE1RM = useCallback(
     (hasReferenceSet: boolean): number | undefined =>
-      sessionBestE1RM ?? (hasReferenceSet ? undefined : lastSessionE1RM ?? coldStartE1RM),
-    [sessionBestE1RM, lastSessionE1RM, coldStartE1RM]
+      sessionBestE1RM ??
+      (hasReferenceSet
+        ? undefined
+        : (anchorE1RMKg > 0 ? anchorE1RMKg : undefined) ?? lastSessionE1RM ?? coldStartE1RM),
+    [sessionBestE1RM, anchorE1RMKg, lastSessionE1RM, coldStartE1RM]
   );
 
   // Rationale line for a weight-edit rep recompute ("35 lbs ⇒ ~6 reps @ 2 RIR
@@ -1610,15 +1623,57 @@ export const ExerciseCard = memo(function ExerciseCard({
           );
         }
       } else if (seed.anchorSource === 'e1rm') {
-        reason = seed.clamped
-          ? `working weight from your ~${displayWeight(anchorE1RMKg)} ${weightLabel} est. 1RM (held near recent working weight)`
+        // Name the ACTUAL binder (no silent failures): the parenthetical and
+        // the info-sheet line must say which rule moved the number, with the
+        // pre-clamp value — never describe the ±10% band when the bump gate
+        // (or the noise floor) was what bound.
+        const binder = seed.clampBinder ?? 'none';
+        const preClamp =
+          seed.preClampWeightKg && seed.preClampWeightKg > 0
+            ? `${displayWeight(seed.preClampWeightKg)} ${weightLabel}`
+            : null;
+        const holdNote =
+          binder === 'bump_gate'
+            ? '(held at recent working weight — increase not earned yet)'
+            : binder === 'band_high'
+              ? '(capped near recent working weight)'
+              : binder === 'band_low'
+                ? '(raised to near recent working weight)'
+                : binder === 'noise_floor'
+                  ? '(held — suggested change below the noise threshold)'
+                  : null;
+        reason = holdNote
+          ? `working weight from your ~${displayWeight(anchorE1RMKg)} ${weightLabel} est. 1RM ${holdNote}`
           : `working weight from your ~${displayWeight(anchorE1RMKg)} ${weightLabel} est. 1RM`;
         explanation.push(
           `Prescribed from your best estimated 1RM (${displayWeight(anchorE1RMKg)} ${weightLabel}) for ${seed.repRange[0]}–${seed.repRange[1]} reps at ${effectiveTargetRir} RIR.`
         );
-        if (seed.clamped) {
+        if (binder === 'bump_gate') {
           explanation.push(
-            `Capped to within ±${Math.round(WORKING_WEIGHT_CLAMP_FRACTION * 100)}% of your recent ${displayWeight(previousTopSetWeightKg)} ${weightLabel} working weight — a hot 1RM estimate can't prescribe a big jump in one session.`
+            `Held at your recent ${displayWeight(previousTopSetWeightKg, true)} ${weightLabel} working weight: last session's top set didn't reach the top of the rep range, so no load increase yet${preClamp ? ` (the 1RM curve alone suggested ${preClamp})` : ''}.`
+          );
+        } else if (binder === 'band_high') {
+          explanation.push(
+            `Capped to within ±${Math.round(WORKING_WEIGHT_CLAMP_FRACTION * 100)}% of your recent ${displayWeight(previousTopSetWeightKg)} ${weightLabel} working weight — a hot 1RM estimate can't prescribe a big jump in one session${preClamp ? ` (curve suggested ${preClamp})` : ''}.`
+          );
+        } else if (binder === 'band_low') {
+          explanation.push(
+            `Raised to within ±${Math.round(WORKING_WEIGHT_CLAMP_FRACTION * 100)}% of your recent ${displayWeight(previousTopSetWeightKg)} ${weightLabel} working weight — one weak estimate can't collapse the load in one session${preClamp ? ` (curve suggested ${preClamp})` : ''}.`
+          );
+        } else if (binder === 'noise_floor') {
+          explanation.push(
+            `Held: the curve suggested ${preClamp ?? 'a change'}, within the minimum-meaningful-change threshold of your recent working weight — sub-increment adjustments are noise, not prescriptions.`
+          );
+        }
+        // Honest-reps floor check (Phase 4): if the predicted rep count at
+        // this weight falls below the range floor, the weight — not the rep
+        // display — is the problem. Say so instead of silently prefilling
+        // e.g. 10 against a 12–20 target.
+        const predictedReps = seedRepsForWeight(seed.weightKg, seed);
+        if (predictedReps > 0 && predictedReps < seed.repRange[0]) {
+          reason += ` · predicted ~${predictedReps} reps — below your ${seed.repRange[0]}–${seed.repRange[1]} target`;
+          explanation.push(
+            `Heads-up: at this weight the curve predicts ~${predictedReps} reps — below the ${seed.repRange[0]}-rep floor of your target range. If that matches how it feels, the weight is set too high for this rep range (or the range should move down).`
           );
         }
       } else if (seed.anchorSource === 'last_session' && prevSet) {
@@ -1954,11 +2009,14 @@ export const ExerciseCard = memo(function ExerciseCard({
                 }`}
                 title={progressionTitle}
               >
+                {/* Trend labels (Phase 4): this pill is a statement about the
+                    multi-session e1RM TREND, never about today's prescription
+                    — 'Ahead' read as an endorsement while the load moved down. */}
                 {progressionInsight.pace === 'ahead'
-                  ? '▲ Ahead'
+                  ? '▲ Trend: ahead'
                   : progressionInsight.pace === 'on_track'
-                    ? 'On track'
-                    : '▼ Behind'}
+                    ? 'Trend: on pace'
+                    : '▼ Trend: behind'}
               </span>
             )}
             {block.supersetGroupId && (
