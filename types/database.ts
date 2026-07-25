@@ -559,7 +559,7 @@ export interface Database {
           top_set_reps: number;
           top_set_rpe: number;
           total_working_sets: number;
-          estimated_e1rm: number;
+          estimated_e1rm: number | null;
           is_deload: boolean;
         };
         Insert: {
@@ -571,7 +571,7 @@ export interface Database {
           top_set_reps: number;
           top_set_rpe?: number;
           total_working_sets?: number;
-          estimated_e1rm?: number;
+          estimated_e1rm?: number | null;
           is_deload?: boolean;
         };
         Update: {
@@ -583,7 +583,7 @@ export interface Database {
           top_set_reps?: number;
           top_set_rpe?: number;
           total_working_sets?: number;
-          estimated_e1rm?: number;
+          estimated_e1rm?: number | null;
           is_deload?: boolean;
         };
         Relationships: [];

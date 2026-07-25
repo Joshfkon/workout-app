@@ -62,7 +62,10 @@ export function buildPerformanceSnapshots(
     );
     if (workingSets.length === 0) continue;
 
-    // Top set = highest estimated 1RM in the session.
+    // Top set = highest estimated 1RM in the session (canonical estimator via
+    // calculateE1RM; 0 = no estimate). A session where NO set is estimable
+    // (all beyond 15 effective reps) contributes no snapshot — "no estimate"
+    // must never enter the trend as a 0.
     let topSet = workingSets[0];
     let bestE1RM = 0;
     for (const set of workingSets) {
@@ -72,6 +75,7 @@ export function buildPerformanceSnapshots(
         topSet = set;
       }
     }
+    if (bestE1RM <= 0) continue;
 
     const snapshot: ExercisePerformanceSnapshot = {
       id: block.id,

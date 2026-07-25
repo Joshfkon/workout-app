@@ -176,13 +176,15 @@ async function main() {
     );
     for (const s of sets) {
       const inAnchorPool = !s.is_warmup; // suggestions.ts:295 — ALL non-warmup sets
-      const e1rm = inAnchorPool ? historySetE1RM(s.weight_kg, s.reps, s.rpe ?? 10) : 0;
+      const est = inAnchorPool ? historySetE1RM(s.weight_kg, s.reps, s.rpe ?? 10) : null;
       console.log(
         `  set#${s.set_number ?? '?'}  ${kgLb(s.weight_kg)} × ${s.reps}  rpe=${s.rpe}  ` +
           `repsInTank=${s.feedback?.repsInTank ?? '—'}  type=${s.set_type ?? 'normal'}  ` +
           `warmup=${s.is_warmup}` +
           (inAnchorPool
-            ? `  → historySetE1RM=${kgLb(e1rm)}  effReps=${s.reps + (10 - (s.rpe ?? 10))}`
+            ? est
+              ? `  → historySetE1RM=${kgLb(est.value)} (${est.confidence})`
+              : '  → NO ESTIMATE (beyond canonical domain) — excluded from anchor pool'
             : '  → excluded (warmup)')
       );
     }
@@ -193,7 +195,9 @@ async function main() {
     const sess = block.workout_sessions;
     for (const s of block.set_logs ?? []) {
       if (s.is_warmup) continue;
-      const raw = historySetE1RM(s.weight_kg, s.reps, s.rpe ?? 10);
+      const est2 = historySetE1RM(s.weight_kg, s.reps, s.rpe ?? 10);
+      if (!est2) continue; // canonical: no estimate -> never an anchor candidate
+      const raw = est2.value;
       anchorEntries.push({
         e1rmKg: raw,
         raw,
@@ -454,7 +458,7 @@ async function main() {
     const biasBefore = engine.getCalibrationResult(log.exerciseName)?.bias ?? null;
 
     if (isTarget || log.wasAMRAP) {
-      const rawE1 = historySetE1RM(log.weight, log.actualReps, log.rpe);
+      const rawE1 = historySetE1RM(log.weight, log.actualReps, log.rpe)?.value ?? 0;
       if (isTarget) {
         console.log(
           `  ${log.timestamp.toISOString()}  ${kgLb(log.weight)} × ${log.actualReps}  rpe=${log.rpe}  ` +
@@ -580,6 +584,84 @@ async function main() {
   console.log(
     `  ${dist.length} calibrated exercise(s), ${exercisesWithoutCal} with sets but no AMRAP event, ` +
       `${drifting} with |bias| > 2 (drift candidates)`
+  );
+
+  // ============================================================
+  // PHASE 1 IMPACT — old vs new e1RM anchor for EVERY exercise
+  // ============================================================
+  console.log('='.repeat(78));
+  console.log('PHASE 1 IMPACT (old formula vs canonical, per exercise, decayed-max anchor)');
+
+  // Frozen copy of the pre-Phase-1 anchor formula (Brzycki ≤12 eff reps,
+  // linear Epley above, raw 10−rpe conversion, no upper bound) — for the
+  // before/after comparison only. Do not use anywhere else.
+  const legacyHistorySetE1RM = (w: number, reps: number, rpe: number = 10): number => {
+    if (reps === 1 && rpe === 10) return w;
+    const eff = rpe ? reps + (10 - rpe) : reps;
+    if (eff > 12) return w * (1 + eff / 30);
+    return w * (36 / (37 - eff));
+  };
+
+  const { data: exListRows, error: exListErr } = await supabase
+    .from('exercise_blocks')
+    .select('exercise_id, exercises!inner(name), workout_sessions!inner(user_id, state)')
+    .eq('workout_sessions.user_id', userId)
+    .eq('workout_sessions.state', 'completed');
+  if (exListErr) throw exListErr;
+  const exerciseIds = new Map<string, string>();
+  for (const r of (exListRows ?? []) as any[]) {
+    const nm = Array.isArray(r.exercises) ? r.exercises[0]?.name : r.exercises?.name;
+    if (r.exercise_id && nm) exerciseIds.set(r.exercise_id, nm);
+  }
+
+  const impact: { name: string; oldKg: number; newKg: number }[] = [];
+  for (const [exId, exName] of Array.from(exerciseIds.entries())) {
+    const { data: hist } = await supabase
+      .from('exercise_blocks')
+      .select(
+        `exercise_id, workout_sessions!inner ( id, completed_at, state, is_deload ),
+         set_logs ( weight_kg, reps, rpe, is_warmup, logged_at )`
+      )
+      .eq('exercise_id', exId)
+      .eq('workout_sessions.user_id', userId)
+      .eq('workout_sessions.state', 'completed')
+      .order('workout_sessions(completed_at)', { ascending: false })
+      .limit(HISTORY_SESSIONS_PER_EXERCISE);
+
+    const oldEntries: E1RMAnchorEntry[] = [];
+    const newEntries: E1RMAnchorEntry[] = [];
+    for (const b of (hist ?? []) as any[]) {
+      const sess = b.workout_sessions;
+      if (!sess || sess.is_deload) continue;
+      for (const s of b.set_logs ?? []) {
+        if (s.is_warmup || !(s.weight_kg > 0) || !(s.reps > 0)) continue;
+        const t = Date.parse(sess.completed_at || s.logged_at);
+        oldEntries.push({ e1rmKg: legacyHistorySetE1RM(s.weight_kg, s.reps, s.rpe ?? 10), timeMs: t });
+        const est = historySetE1RM(s.weight_kg, s.reps, s.rpe ?? 10);
+        if (est) newEntries.push({ e1rmKg: est.value, timeMs: t });
+      }
+    }
+    if (oldEntries.length === 0) continue;
+    impact.push({
+      name: exName,
+      oldKg: decayedE1RMMax(oldEntries),
+      newKg: decayedE1RMMax(newEntries), // 0 = no estimate under canonical rules
+    });
+  }
+  impact.sort((a, b) => (b.oldKg - b.newKg) - (a.oldKg - a.newKg));
+  for (const row of impact) {
+    const deltaPct = row.oldKg > 0 ? (((row.newKg - row.oldKg) / row.oldKg) * 100).toFixed(1) : '—';
+    console.log(
+      `  old=${kgLb(row.oldKg).padEnd(22)} new=${
+        row.newKg > 0 ? kgLb(row.newKg).padEnd(22) : 'NO ESTIMATE'.padEnd(22)
+      } Δ=${String(deltaPct).padStart(6)}%  ${row.name}`
+    );
+  }
+  const dropped = impact.filter((r) => r.newKg === 0).length;
+  const changed = impact.filter((r) => Math.abs(r.newKg - r.oldKg) > 0.05).length;
+  console.log(
+    `  ${impact.length} exercise(s) with history: ${changed} value changes, ` +
+      `${dropped} now report NO estimate (only out-of-domain sets in the window)`
   );
 
   console.log('='.repeat(78));

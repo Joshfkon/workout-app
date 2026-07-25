@@ -1753,7 +1753,10 @@ export const ExerciseCard = memo(function ExerciseCard({
       .slice(0, 3)
       .map((s) => `× ${s.reps}${isDurationBased ? 's' : ''}`)
       .join(', ');
-    const rir = lastSets[0].rpe != null ? Math.max(0, Math.round(10 - lastSets[0].rpe)) : null;
+    // Single RPE→RIR conversion app-wide: the bucketed rpeToRir the engine
+    // reads sets with (the raw Math.round(10 − rpe) disagreed at RPE 7.5:
+    // header said 3 where the engine graded 2).
+    const rir = lastSets[0].rpe != null ? Math.max(0, rpeToRir(lastSets[0].rpe)) : null;
     // Location-scoped calibration tag: for a local-scope exercise, mark whether
     // the last session shown is this gym's own track ("· here") or a softened
     // estimate carried over from another gym (rule 11).

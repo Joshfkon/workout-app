@@ -14,7 +14,7 @@
  * 'use client'. They surface errors (return them) rather than swallowing.
  */
 
-import { estimateE1RM } from '@/lib/utils';
+import { estimateE1RMFromRpe } from '@/services/shared/e1rm';
 import type { SetLog, Rating } from '@/types/schema';
 import type { ExerciseBlockWithExercise } from './types';
 
@@ -73,15 +73,32 @@ export async function writePerformanceSnapshots(
   for (const [exerciseId, working] of Array.from(workingByExercise.entries())) {
     if (working.length === 0) continue;
 
-    // Top set = highest estimated E1RM among working sets (best stimulus marker).
-    let topSet = working[0];
-    let bestE1rm = estimateE1RM(topSet.weightKg, topSet.reps);
+    // Top set = highest estimated E1RM among working sets (best stimulus
+    // marker), via the canonical estimator WITH the set's logged RPE — the
+    // old writer was RPE-blind, which under-stated every set left short of
+    // failure and was one of the five divergent e1RM implementations.
+    // Sets beyond the estimator's domain (effective reps > 15) carry no e1RM;
+    // if NO set is estimable, the snapshot keeps its top-by-load set stats
+    // and stores estimated_e1rm = NULL ("no estimate" — never 0, never an
+    // extrapolation).
+    let topSet: SetLog | null = null;
+    let bestE1rm: number | null = null;
     for (const s of working) {
-      const e1rm = estimateE1RM(s.weightKg, s.reps);
-      if (e1rm > bestE1rm) {
-        bestE1rm = e1rm;
+      const est = estimateE1RMFromRpe(s.weightKg, s.reps, s.rpe);
+      if (est && (bestE1rm === null || est.value > bestE1rm)) {
+        bestE1rm = est.value;
         topSet = s;
       }
+    }
+    if (!topSet) {
+      // No estimable set: fall back to heaviest load (then most reps) so the
+      // snapshot still records what was done.
+      topSet = working.reduce((best, s) =>
+        s.weightKg > best.weightKg ||
+        (s.weightKg === best.weightKg && s.reps > best.reps)
+          ? s
+          : best
+      );
     }
 
     rows.push({

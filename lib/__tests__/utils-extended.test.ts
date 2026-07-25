@@ -617,26 +617,29 @@ describe('estimateE1RM', () => {
     expect(estimateE1RM(100, 1, 0)).toBe(100);
   });
 
-  it('applies Epley formula for normal rep ranges', () => {
-    // 100 * (1 + 5/30) = 116.666... -> 116.67
-    expect(estimateE1RM(100, 5)).toBeCloseTo(116.67, 2);
+  it('applies the canonical (Brzycki) formula for normal rep ranges', () => {
+    // 100 * 36/(37-5) = 112.5
+    expect(estimateE1RM(100, 5)).toBeCloseTo(112.5, 2);
   });
 
   it('adds rir to effective reps', () => {
     // reps 3 + rir 2 = 5 effective -> same as 5 reps at rir 0
-    expect(estimateE1RM(100, 3, 2)).toBeCloseTo(116.67, 2);
+    expect(estimateE1RM(100, 3, 2)).toBeCloseTo(112.5, 2);
   });
 
   it('clamps a negative rir up to zero', () => {
     // rir clamped to 0, so effective reps = 5
-    expect(estimateE1RM(100, 5, -3)).toBeCloseTo(116.67, 2);
+    expect(estimateE1RM(100, 5, -3)).toBeCloseTo(112.5, 2);
   });
 
-  it('clamps very high effective reps to a ceiling of 12', () => {
-    // reps 20 -> clamped to 12: 100 * (1 + 12/30) = 140
-    expect(estimateE1RM(100, 20)).toBeCloseTo(140, 2);
-    // reps 10 + rir 8 = 18 -> clamped to 12 -> 140
-    expect(estimateE1RM(100, 10, 8)).toBeCloseTo(140, 2);
+  it('computes 13-15 effective reps at the 12 cap, and returns 0 (no estimate) beyond 15', () => {
+    // reps 13-15 -> computed at the cap: 100 * 36/25 = 144
+    expect(estimateE1RM(100, 13)).toBeCloseTo(144, 2);
+    expect(estimateE1RM(100, 15)).toBeCloseTo(144, 2);
+    // Beyond the canonical domain there is NO estimate (numeric-compat 0):
+    // the old ceiling silently computed 140 for a 20-rep set.
+    expect(estimateE1RM(100, 20)).toBe(0);
+    expect(estimateE1RM(100, 10, 8)).toBe(0); // eff 18
   });
 
   it('treats effectiveReps of 1 from reps+rir as the weight itself', () => {

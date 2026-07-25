@@ -42,11 +42,14 @@ import type {
   UserProfileForWeights,
 } from './types';
 
-// Calculate E1RM using Brzycki formula
-// RPE adjusts for reps in reserve: effectiveReps = reps + (10 - rpe)
-// (Implementation moved verbatim to services/suggestionEngine/e1rmAnchor so
-// the mesocycle session build anchors on the same number.)
-export function calculateE1RM(weight: number, reps: number, rpe: number = 10): number {
+// Canonical e1RM for a history set (services/shared/e1rm via historySetE1RM).
+// NULL means the set supports no e1RM claim (effective reps > 15) — such a
+// set never enters the anchor pool and never sets a PR e1RM.
+export function calculateE1RM(
+  weight: number,
+  reps: number,
+  rpe: number = 10
+): ReturnType<typeof historySetE1RM> {
   return historySetE1RM(weight, reps, rpe);
 }
 
@@ -320,18 +323,23 @@ function computeHistoryFromBlocks(
         return;
       }
       // Pass RPE to get accurate E1RM - without RPE it assumes failure (RPE 10)
-      // which underestimates true strength for sets done with reps in reserve
-      const e1rm = calculateE1RM(set.weight_kg, set.reps, set.rpe);
+      // which underestimates true strength for sets done with reps in reserve.
+      // NULL (effective reps > 15 — beyond the canonical formula's domain)
+      // means this set is not an e1RM data point: it contributes nothing to
+      // the anchor pool and cannot set the e1RM PR. That is the fix for the
+      // 137.5×30 "284 lbs" anchor — no cap salvages a set like that.
+      const estimate = calculateE1RM(set.weight_kg, set.reps, set.rpe);
+      if (!estimate) return;
       anchorEntries.push({
-        e1rmKg: e1rm,
+        e1rmKg: estimate.value,
         timeMs: Date.parse(session?.completed_at || set.logged_at),
       });
-      if (e1rm > bestE1RM) {
-        bestE1RM = e1rm;
+      if (estimate.value > bestE1RM) {
+        bestE1RM = estimate.value;
         personalRecord = {
           weightKg: set.weight_kg,
           reps: set.reps,
-          e1rm,
+          e1rm: estimate.value,
           date: session?.completed_at || set.logged_at,
         };
       }

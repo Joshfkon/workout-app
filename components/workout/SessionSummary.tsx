@@ -23,11 +23,11 @@ import {
 import { getJointDisplayName } from '@/services/discomfortTracker';
 import {
   formatWorkoutDuration,
-  estimateE1RM,
   deriveWorkoutLabel,
   muscleDisplayName,
   resolveWorkoutDurationSeconds,
 } from '@/lib/utils';
+import { e1rmValueFromRpe } from '@/services/shared/e1rm';
 import { getCalibrationVerdict, type CalibrationMethod } from '@/services/rpeCalibration';
 import type { ShareExercise, WorkoutShareTextInput } from '@/services/workoutShareText';
 import { ShareWorkoutText } from './ShareWorkoutText';
@@ -313,8 +313,9 @@ export function SessionSummary({
         if (set.reps > bestReps) bestReps = set.reps;
         if (!isDurationBlock) {
           // e1RM is explicitly excluded for duration blocks: seconds through
-          // Epley fabricate a 1RM.
-          const e1rm = estimateE1RM(set.weightKg, set.reps);
+          // the rep formula fabricate a 1RM. Canonical estimator with the
+          // set's logged RPE; 0 = no estimate (never displayed as a value).
+          const e1rm = e1rmValueFromRpe(set.weightKg, set.reps, set.rpe);
           if (e1rm > bestE1RM) bestE1RM = e1rm;
         }
       });
@@ -563,7 +564,7 @@ export function SessionSummary({
         ? Math.round((sets.reduce((sum, s) => sum + s.rpe, 0) / sets.length) * 10) / 10
         : 0;
       const bestE1RM = !isDuration && sets.length > 0
-        ? Math.max(...sets.map(s => estimateE1RM(s.weightKg, s.reps)))
+        ? Math.max(...sets.map(s => e1rmValueFromRpe(s.weightKg, s.reps, s.rpe)))
         : 0;
 
       // Check if this exercise had a PR (never on a deload session). Duration
@@ -1309,7 +1310,12 @@ export function SessionSummary({
                             </div>
                           ) : (
                             <div className="text-center">
-                              <p className="text-sm font-bold text-surface-200">{displayWeight(exercise.bestE1RM)}{weightUnit}</p>
+                              {/* 0 = no estimate (canonical estimator has no
+                                  answer beyond 15 effective reps) — render
+                                  absent, never a zero. */}
+                              <p className="text-sm font-bold text-surface-200">
+                                {exercise.bestE1RM > 0 ? <>{displayWeight(exercise.bestE1RM)}{weightUnit}</> : '—'}
+                              </p>
                               <p className="text-xs text-surface-500">Est. 1RM</p>
                             </div>
                           )}

@@ -38,7 +38,8 @@ import {
   getStrengthLevelColor,
   generatePercentileSegments
 } from '@/services/coachingEngine';
-import { kgToLbs, inputWeightToKg, roundToIncrement, estimateE1RM, getLocalDateString, muscleDisplayName, cmToIn, inToCm } from '@/lib/utils';
+import { kgToLbs, inputWeightToKg, roundToIncrement, getLocalDateString, muscleDisplayName, cmToIn, inToCm } from '@/lib/utils';
+import { e1rmValueFromRpe } from '@/services/shared/e1rm';
 import {
   computeWaistTrend,
   latestWaistTrendIn,
@@ -542,7 +543,7 @@ function AnalyticsPageContent() {
           supabase
             .from('workout_sessions')
             .select(`id, completed_at,
-              exercise_blocks (exercises (id, name, exercise_type), set_logs (weight_kg, reps, is_warmup))`)
+              exercise_blocks (exercises (id, name, exercise_type), set_logs (weight_kg, reps, rpe, is_warmup))`)
             .eq('user_id', userId)
             .eq('state', 'completed')
             .gte('completed_at', since.toISOString())
@@ -1025,6 +1026,7 @@ function AnalyticsPageContent() {
                     id,
                     weight_kg,
                     reps,
+                    rpe,
                     is_warmup,
                     logged_at
                   )
@@ -1093,7 +1095,7 @@ function AnalyticsPageContent() {
                 let topWeight = 0;
                 let topReps = 0;
                 workingSets.forEach((set: any) => {
-                  const e1rm = estimateE1RM(set.weight_kg, set.reps);
+                  const e1rm = e1rmValueFromRpe(set.weight_kg, set.reps, set.rpe);
                   if (e1rm > topE1RM) {
                     topE1RM = e1rm;
                     topWeight = set.weight_kg;
@@ -1102,6 +1104,9 @@ function AnalyticsPageContent() {
                 });
 
                 exerciseNameMap.set(exerciseId, exerciseName);
+                // No estimable set (canonical estimator: >15 effective reps
+                // has no e1RM) -> no snapshot; never trend a 0.
+                if (topE1RM <= 0) return;
                 if (!snapshotMap.has(exerciseId)) {
                   snapshotMap.set(exerciseId, []);
                 }
@@ -1112,8 +1117,8 @@ function AnalyticsPageContent() {
                   sessionDate,
                   topSetWeightKg: topWeight,
                   topSetReps: topReps,
-                  // RPE is not selected in this query; default to 10 (E1RM already
-                  // reflects logged performance, and the detector mainly trends E1RM).
+                  // topSetRpe is display metadata only; the e1RM above already
+                  // consumed the set's logged RPE via the canonical estimator.
                   topSetRpe: 10,
                   totalWorkingSets: workingSets.length,
                   estimatedE1RM: topE1RM,

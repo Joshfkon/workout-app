@@ -22,24 +22,27 @@
  */
 
 import { E1RM_RECENCY_TAU_DAYS } from './constants';
+import { estimateE1RMFromRpe, type E1RMEstimate } from '@/services/shared/e1rm';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 /**
- * The e1RM formula used for HISTORY sets on the prescription-anchor path
- * (Brzycki with RIR-adjusted reps, linear above 12 effective reps). Moved
- * verbatim from the workout page's suggestions glue so the mesocycle session
- * build can anchor on the SAME number the live card uses — not a sixth
- * formula. (App-wide e1RM formula unification is a known TODO — see
- * docs/WEIGHT_REP_ENGINE_AUDIT.md §4.4; the prescription path itself uses
- * Epley via setRecommender.prescribe.)
+ * The e1RM for a HISTORY set on the prescription-anchor path. Delegates to
+ * the canonical estimator (services/shared/e1rm) — Brzycki, effective reps
+ * capped at 12, **null above 15 effective reps**. The old local formula
+ * extrapolated linearly without bound (a 137.5 lb × 30 @ 2 RIR set produced
+ * "284 lbs" and anchored a whole exercise's prescriptions); a null candidate
+ * simply never enters the anchor pool.
+ *
+ * Returns the full estimate (value + confidence) so callers can also
+ * surface confidence; null = this set supports no e1RM claim.
  */
-export function historySetE1RM(weight: number, reps: number, rpe: number = 10): number {
-  if (reps === 1 && rpe === 10) return weight;
-  // Account for reps in reserve when RPE < 10
-  const effectiveReps = rpe ? reps + (10 - rpe) : reps;
-  if (effectiveReps > 12) return weight * (1 + effectiveReps / 30);
-  return weight * (36 / (37 - effectiveReps));
+export function historySetE1RM(
+  weight: number,
+  reps: number,
+  rpe: number = 10
+): E1RMEstimate | null {
+  return estimateE1RMFromRpe(weight, reps, rpe);
 }
 
 /** One anchor candidate: a set's estimated 1RM and when it was performed. */

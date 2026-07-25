@@ -22,6 +22,7 @@ import {
   getBandAssistanceKg,
 } from '@/types/schema';
 import { convertWeight } from '@/lib/utils';
+import { e1rmValueFromRpe } from '@/services/shared/e1rm';
 
 // Re-export for convenience
 export {
@@ -414,17 +415,14 @@ export function isBodyweightPR(
 // ============================================
 
 /**
- * Calculate E1RM for bodyweight exercises using effective load
+ * Calculate E1RM for bodyweight exercises using effective load.
+ * DELEGATES to the canonical estimator (services/shared/e1rm), passing the
+ * set's RPE. Returns 0 when no estimate exists (effective reps > 15) —
+ * callers must treat 0 as "no estimate", never display it.
  */
 export function calculateBodyweightE1RM(set: SetLog): number {
   const effectiveLoad = set.bodyweightData?.effectiveLoadKg || set.weightKg;
-  const reps = set.reps;
-
-  if (reps === 1) return effectiveLoad;
-  if (reps > 12) return effectiveLoad * (1 + reps / 40);
-
-  // Epley formula
-  return effectiveLoad * (1 + reps / 30);
+  return e1rmValueFromRpe(effectiveLoad, set.reps, set.rpe);
 }
 
 /**

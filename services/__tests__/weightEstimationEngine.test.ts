@@ -150,12 +150,11 @@ describe('estimate1RM', () => {
     expect(result).toBeLessThan(140);
   });
 
-  it('uses simpler formula for high reps (>12)', () => {
-    // For >12 reps: weight * (1 + reps/40)
-    const result = estimate1RM(50, 15);
-    const expected = 50 * (1 + 15 / 40); // 50 * 1.375 = 68.75
-
-    expect(result).toBeCloseTo(expected, 1);
+  it('computes 13-15 effective reps at the 12 cap, none beyond 15', () => {
+    // Canonical estimator: 13-15 effective reps compute at the cap
+    // (50 * 36/25 = 72); beyond 15 there is NO estimate (0).
+    expect(estimate1RM(50, 15)).toBeCloseTo(72, 1);
+    expect(estimate1RM(50, 16)).toBe(0);
   });
 
   it('adjusts for RPE when provided', () => {

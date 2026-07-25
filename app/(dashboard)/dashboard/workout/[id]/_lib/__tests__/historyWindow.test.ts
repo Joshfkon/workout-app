@@ -88,7 +88,11 @@ describe('per-exercise history window (Fix 1)', () => {
     expect(sparse.totalSessions).toBe(3);
     expect(sparse.lastWorkoutDate).toBe('2026-03-02T10:00:00Z');
     expect(sparse.lastWorkoutSets).toEqual([{ weightKg: 12.5, reps: 15, rpe: 8 }]);
-    expect(sparse.estimatedE1RM).toBeGreaterThan(0);
+    // All of this exercise's sets are 15+ reps @ RPE 8 (17+ effective reps):
+    // real history, but beyond the canonical estimator's domain — no e1RM
+    // anchor exists (0 = "no estimate"). Cold-start mode is still OFF because
+    // totalSessions > 0, which is what this test protects.
+    expect(sparse.estimatedE1RM).toBe(0);
   });
 
   it('staples still get their own full window alongside the sparse exercise', () => {

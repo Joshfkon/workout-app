@@ -321,8 +321,12 @@ function anchorEntriesFromHistoryRow(row: DirectHistoryRow): E1RMAnchorEntry[] {
       const weightKg = s.weight_kg ?? 0;
       const reps = s.reps ?? 0;
       if (s.is_warmup || weightKg <= 0 || reps <= 0) continue;
+      // NULL = beyond the canonical estimator's domain (effective reps > 15):
+      // the set is not an e1RM data point and never enters the anchor pool.
+      const estimate = historySetE1RM(weightKg, reps, s.rpe ?? 10);
+      if (!estimate) continue;
       entries.push({
-        e1rmKg: historySetE1RM(weightKg, reps, s.rpe ?? 10),
+        e1rmKg: estimate.value,
         timeMs: Date.parse(session.completed_at || s.logged_at || ''),
       });
     }

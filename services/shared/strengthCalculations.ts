@@ -9,6 +9,8 @@
  * Used by both weightEstimationEngine.ts and progressionEngine.ts
  */
 
+import { e1rmValueFromRpe } from './e1rm';
+
 /**
  * Convert RPE (Rate of Perceived Exertion) to RIR (Reps In Reserve)
  * with bounds and rep-range awareness.
@@ -48,66 +50,24 @@ export function rirToRPE(rir: number): number {
 
 /**
  * Estimate 1RM from weight, reps, and optional RPE.
- * Uses average of Brzycki, Epley, and Lombardi formulas for accuracy.
  *
- * For high-rep sets (>12), uses a conservative linear estimate since
- * the standard formulas become unreliable.
+ * DELEGATES to the canonical estimator (services/shared/e1rm): Brzycki,
+ * effective reps capped at 12, no estimate beyond 15. The old local
+ * three-formula average (and its >12-rep linear extrapolation) is gone —
+ * one formula app-wide.
+ *
+ * Numeric-compat signature: returns **0 when no estimate exists** (bad
+ * inputs, or effective reps beyond the domain). 0 is for aggregation
+ * contexts only (max/avg where "no estimate" must never win) — display
+ * surfaces must gate on > 0 and render "no estimate", never the 0.
  *
  * @param weight - Weight lifted
  * @param reps - Number of reps performed
- * @param rpe - Optional RPE (defaults to 10 / failure)
- * @returns Estimated 1RM
+ * @param rpe - Optional RPE (absent = taken to failure)
+ * @returns Estimated 1RM, or 0 when no valid estimate exists
  */
 export function estimate1RM(weight: number, reps: number, rpe?: number): number {
-  if (reps === 0) return 0;
-  if (reps === 1 && (!rpe || rpe >= 10)) return weight;
-
-  // High rep sets (>12): use conservative linear estimate
-  if (reps > 12) {
-    // For very high reps, the formulas become unreliable
-    // Use a conservative linear estimate
-    return Math.round(weight * (1 + reps / 40) * 10) / 10;
-  }
-
-  const rir = rpeToRIR(rpe, reps);
-  const effectiveReps = reps + rir;
-
-  // Clamp effective reps to prevent formula breakdown
-  const clampedEffectiveReps = Math.min(effectiveReps, 15);
-
-  // Multiple formulas for accuracy
-  // Brzycki: weight × 36 / (37 - reps)
-  const brzycki = weight * (36 / (37 - clampedEffectiveReps));
-
-  // Epley: weight × (1 + reps / 30)
-  const epley = weight * (1 + clampedEffectiveReps / 30);
-
-  // Lombardi: weight × reps^0.10
-  const lombardi = weight * Math.pow(clampedEffectiveReps, 0.10);
-
-  const average = (brzycki + epley + lombardi) / 3;
-  return Math.round(average * 10) / 10;
-}
-
-/**
- * Simple E1RM calculation using only Epley formula.
- * Useful when a simpler calculation is preferred.
- *
- * @param weight - Weight lifted
- * @param reps - Number of reps performed
- * @param rpe - Optional RPE (defaults to 10)
- * @returns Estimated 1RM
- */
-export function estimateE1RMSimple(weight: number, reps: number, rpe: number = 10): number {
-  if (reps === 0) return 0;
-  if (reps === 1 && rpe === 10) return weight;
-
-  // Adjust reps for RIR
-  const rir = 10 - rpe;
-  const effectiveReps = reps + rir;
-
-  // Epley formula: weight * (1 + reps/30)
-  return Math.round(weight * (1 + effectiveReps / 30) * 100) / 100;
+  return e1rmValueFromRpe(weight, reps, rpe);
 }
 
 /**

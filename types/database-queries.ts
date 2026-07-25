@@ -167,7 +167,7 @@ export interface ExercisePerformanceSnapshotRow {
   top_set_reps: number;
   top_set_rpe: number;
   total_working_sets: number;
-  estimated_e1rm: number;
+  estimated_e1rm: number | null;
 }
 
 // ============ USER QUERY RESULTS ============
