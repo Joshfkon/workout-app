@@ -623,13 +623,17 @@ function AnalyticsPageContent() {
             .eq('user_id', userId)
             .gte('logged_at', getLocalDateString(new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)))
             .order('logged_at', { ascending: true }),
-          // Latest body measurements
+          // Recent body measurements. Entries are sparse per-row (a waist-only
+          // log leaves every other column NULL), so fetch a batch and coalesce
+          // the latest non-null value per site below — a single latest row
+          // would blank out "How you compare" whenever the newest entry only
+          // logged one site.
           supabase
             .from('body_measurements')
             .select('*')
             .eq('user_id', userId)
             .order('logged_at', { ascending: false })
-            .limit(1),
+            .limit(30),
           // Waist history (cm) for the EWMA trend → proportions denoise +
           // partition anchor. 90 days covers the trailing window with margin.
           supabase
@@ -738,34 +742,54 @@ function AnalyticsPageContent() {
 
         // Process measurements and calculate proportions
         if (measurementsResult.data && measurementsResult.data.length > 0) {
-          const m = measurementsResult.data[0];
+          // Coalesce: rows come newest-first, and each row only carries the
+          // sites logged that day. Take the most recent non-null value per
+          // site so a waist-only entry doesn't hide the chest/arms/etc.
+          // logged in earlier entries.
+          const rows = measurementsResult.data as Array<Record<string, unknown>>;
+          const latestNonNull = (column: string): number | undefined => {
+            for (const row of rows) {
+              const v = row[column];
+              if (typeof v === 'number' && Number.isFinite(v)) return v;
+            }
+            return undefined;
+          };
           const measurements: Record<string, number> = {};
 
-          if (m.neck) measurements.neck = m.neck;
-          if (m.shoulders) measurements.shoulders = m.shoulders;
-          if (m.chest) measurements.chest = m.chest;
-          if (m.upper_back) measurements.upperBack = m.upper_back;
-          if (m.lower_back) measurements.lowerBack = m.lower_back;
-          if (m.left_bicep) measurements.leftBicep = m.left_bicep;
-          if (m.right_bicep) measurements.rightBicep = m.right_bicep;
-          if (m.left_forearm) measurements.leftForearm = m.left_forearm;
-          if (m.right_forearm) measurements.rightForearm = m.right_forearm;
+          const coalesced: Array<[string, string]> = [
+            ['neck', 'neck'],
+            ['shoulders', 'shoulders'],
+            ['chest', 'chest'],
+            ['upperBack', 'upper_back'],
+            ['lowerBack', 'lower_back'],
+            ['leftBicep', 'left_bicep'],
+            ['rightBicep', 'right_bicep'],
+            ['leftForearm', 'left_forearm'],
+            ['rightForearm', 'right_forearm'],
+            ['hips', 'hips'],
+            ['leftThigh', 'left_thigh'],
+            ['rightThigh', 'right_thigh'],
+            ['leftCalf', 'left_calf'],
+            ['rightCalf', 'right_calf'],
+          ];
+          for (const [key, column] of coalesced) {
+            const value = latestNonNull(column);
+            if (value != null) measurements[key] = value;
+          }
           // Proportions read the waist EWMA TREND (denoised), not the last raw
           // entry — daily waist is noisy and a stale single reading skews the
           // shoulder-to-waist ratio. Falls back to the latest raw value when
           // there is no trend yet.
+          const rawWaist = latestNonNull('waist');
           if (trendWaistCm != null) measurements.waist = Math.round(trendWaistCm * 10) / 10;
-          else if (m.waist) measurements.waist = m.waist;
-          if (m.hips) measurements.hips = m.hips;
-          if (m.left_thigh) measurements.leftThigh = m.left_thigh;
-          if (m.right_thigh) measurements.rightThigh = m.right_thigh;
-          if (m.left_calf) measurements.leftCalf = m.left_calf;
-          if (m.right_calf) measurements.rightCalf = m.right_calf;
+          else if (rawWaist != null) measurements.waist = rawWaist;
 
           setCurrentMeasurements(measurements);
 
-          // Calculate proportions analysis if we have height
-          if (userProfile?.heightCm && Object.keys(measurements).length > 3) {
+          // Calculate proportions analysis if we have height. Partial sets
+          // are fine — benchmarks/ratios each skip sites that are missing —
+          // so any logged site is enough to show something.
+          if (userProfile?.heightCm && Object.keys(measurements).length > 0) {
             try {
               const analysis = analyzeEnhancedProportions(
                 {
