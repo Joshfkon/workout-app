@@ -24,6 +24,8 @@ import {
 interface ChartsTabProps {
   sessions: ExerciseDetailSession[] | undefined;
   unit: 'kg' | 'lb';
+  /** rep_total exercise: chart session rep totals, never an e1RM (ADD 2). */
+  repTotalMode?: boolean;
 }
 
 const RANGE_OPTIONS = [
@@ -39,8 +41,30 @@ const TOOLTIP_STYLE = {
   color: '#f3f4f6',
 } as const;
 
-export function ChartsTab({ sessions, unit }: ChartsTabProps) {
+export function ChartsTab({ sessions, unit, repTotalMode = false }: ChartsTabProps) {
   const [range, setRange] = useState<TrendRange>('all');
+
+  // rep_total: the progression metric is the session rep total — chart that
+  // instead of an e1RM that doesn't exist for this exercise. Deload sessions
+  // are excluded (held light on purpose). Oldest-first for the time axis.
+  const repTotalTrend = useMemo(() => {
+    if (!repTotalMode || !sessions) return [];
+    const now = new Date();
+    const cutoff =
+      range === '3m'
+        ? new Date(now.getFullYear(), now.getMonth() - 3, now.getDate())
+        : range === '1y'
+          ? new Date(now.getFullYear() - 1, now.getMonth(), now.getDate())
+          : null;
+    return sessions
+      .filter((sn) => !sn.isDeload && (!cutoff || new Date(sn.date) >= cutoff))
+      .slice()
+      .reverse()
+      .map((sn) => ({
+        label: new Date(sn.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        total: sn.sets.reduce((sum, st) => sum + st.reps, 0),
+      }));
+  }, [repTotalMode, sessions, range]);
 
   // Lazy-computed: this component only mounts on first visit to the tab.
   const trendData = useMemo(() => {
@@ -83,7 +107,56 @@ export function ChartsTab({ sessions, unit }: ChartsTabProps) {
 
   return (
     <div className="space-y-5" data-testid="exercise-detail-charts">
-      {/* e1RM trend */}
+      {repTotalMode ? (
+        /* rep_total: session rep-total trend replaces the e1RM chart. */
+        <div className="bg-surface-800/30 rounded-lg p-3">
+          <div className="flex items-center justify-between mb-3 gap-2">
+            <p className="text-sm font-medium text-surface-200">Session rep total</p>
+            <SegmentedControl
+              options={RANGE_OPTIONS}
+              value={range}
+              onChange={(v) => setRange(v as TrendRange)}
+            />
+          </div>
+          {repTotalTrend.length >= 1 ? (
+            <div className="h-48">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={repTotalTrend}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                  <XAxis dataKey="label" stroke="#9ca3af" fontSize={11} tick={{ fill: '#9ca3af' }} />
+                  <YAxis
+                    stroke="#9ca3af"
+                    fontSize={11}
+                    tick={{ fill: '#9ca3af' }}
+                    domain={['dataMin - 2', 'dataMax + 2']}
+                    width={40}
+                  />
+                  <Tooltip
+                    contentStyle={TOOLTIP_STYLE}
+                    formatter={(value: number) => [`${value} reps`, 'Session total']}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="total"
+                    stroke="#8b5cf6"
+                    strokeWidth={2}
+                    dot={{ r: 3, fill: '#8b5cf6' }}
+                    activeDot={{ r: 5, fill: '#a78bfa' }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <p className="text-surface-500 text-sm py-8 text-center">
+              No sessions in this range
+            </p>
+          )}
+          <p className="text-[11px] text-surface-500 mt-1.5">
+            Rep-total progression: this exercise trends total reps at its working
+            load — no estimated 1RM is computed for it.
+          </p>
+        </div>
+      ) : (
       <div className="bg-surface-800/30 rounded-lg p-3">
         <div className="flex items-center justify-between mb-3 gap-2">
           <p className="text-sm font-medium text-surface-200">Est. 1RM trend</p>
@@ -146,6 +219,7 @@ export function ChartsTab({ sessions, unit }: ChartsTabProps) {
           </p>
         )}
       </div>
+      )}
 
       {/* Volume per week */}
       <div className="bg-surface-800/30 rounded-lg p-3">

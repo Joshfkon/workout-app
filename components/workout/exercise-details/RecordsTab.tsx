@@ -11,6 +11,8 @@ import { formatDetailDate } from './helpers';
 interface RecordsTabProps {
   sessions: ExerciseDetailSession[] | undefined;
   unit: 'kg' | 'lb';
+  /** rep_total exercise: no e1RM record; best session rep total instead. */
+  repTotalMode?: boolean;
 }
 
 function StatCard({
@@ -31,7 +33,18 @@ function StatCard({
   );
 }
 
-export function RecordsTab({ sessions, unit }: RecordsTabProps) {
+export function RecordsTab({ sessions, unit, repTotalMode = false }: RecordsTabProps) {
+  // rep_total headline record: the biggest session rep total (non-deload).
+  const bestSessionReps = useMemo(() => {
+    if (!repTotalMode || !sessions) return null;
+    let best: { total: number; date: string } | null = null;
+    for (const session of sessions) {
+      if (session.isDeload) continue;
+      const total = session.sets.reduce((sum, st) => sum + st.reps, 0);
+      if (total > 0 && (!best || total > best.total)) best = { total, date: session.date };
+    }
+    return best;
+  }, [repTotalMode, sessions]);
   // Lazy-computed on first tab visit — this component only mounts then.
   const records = useMemo(
     () => (sessions ? computeExerciseRecords(sessions) : null),
@@ -69,13 +82,23 @@ export function RecordsTab({ sessions, unit }: RecordsTabProps) {
     <div className="space-y-5" data-testid="exercise-detail-records">
       {/* Headline records */}
       <div className="grid grid-cols-2 gap-2">
-        {records.bestE1RM && (
-          <StatCard
-            label="Best est. 1RM"
-            value={`${Math.round(convertWeight(records.bestE1RM.valueKg, 'kg', unit))} ${unit}`}
-            detail={`${w(records.bestE1RM.set.weightKg)} × ${records.bestE1RM.set.reps} · ${formatDetailDate(records.bestE1RM.date)}`}
-          />
-        )}
+        {/* rep_total: no e1RM record exists — the headline is the best
+            session rep total (ADD 2). */}
+        {repTotalMode
+          ? bestSessionReps && (
+              <StatCard
+                label="Best session reps"
+                value={`${bestSessionReps.total} reps`}
+                detail={formatDetailDate(bestSessionReps.date)}
+              />
+            )
+          : records.bestE1RM && (
+              <StatCard
+                label="Best est. 1RM"
+                value={`${Math.round(convertWeight(records.bestE1RM.valueKg, 'kg', unit))} ${unit}`}
+                detail={`${w(records.bestE1RM.set.weightKg)} × ${records.bestE1RM.set.reps} · ${formatDetailDate(records.bestE1RM.date)}`}
+              />
+            )}
         {records.heaviestWeight && (
           <StatCard
             label="Heaviest weight"
