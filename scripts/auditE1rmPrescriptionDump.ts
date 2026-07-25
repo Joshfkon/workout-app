@@ -54,6 +54,12 @@ import { getExerciseProgression } from '../services/progressionInsights';
 import { rpeToRir } from '../types/schema';
 import { roundToIncrement } from '../lib/utils';
 import type { ExercisePerformanceSnapshot } from '../types/schema';
+import {
+  RPECalibrationEngine,
+  computeFatigueAdjustedPrediction,
+  type CalibrationSetLog,
+} from '../services/rpeCalibration';
+import { getFailureSafetyTier } from '../services/exerciseSafety';
 
 const KG_TO_LB = 2.20462262;
 const lb = (kg: number) => `${(kg * KG_TO_LB).toFixed(1)} lb`;
@@ -375,6 +381,207 @@ async function main() {
         `(expected ${insight.expectedWeeklyPct}%/wk)`
     );
   }
+  // ============================================================
+  // CALIBRATION REPLAY (mirrors page.tsx:1445-1537 exactly)
+  // ============================================================
+  console.log('='.repeat(78));
+  console.log('CALIBRATION REPLAY (28-day window, page.tsx ingestion rules)');
+
+  const fourWeeksAgo = new Date();
+  fourWeeksAgo.setDate(fourWeeksAgo.getDate() - 28);
+  const { data: calRows, error: calErr } = await supabase
+    .from('set_logs')
+    .select(
+      `id, weight_kg, reps, rpe, set_type, logged_at,
+       exercise_blocks!inner (
+         exercise_id, target_rep_range, target_rir,
+         exercises!inner ( id, name ),
+         workout_sessions!inner ( user_id, completed_at, state )
+       )`
+    )
+    .eq('exercise_blocks.workout_sessions.user_id', userId)
+    .eq('exercise_blocks.workout_sessions.state', 'completed')
+    .gte('logged_at', fourWeeksAgo.toISOString())
+    .eq('set_type', 'normal')
+    .order('logged_at', { ascending: true });
+  if (calErr) throw calErr;
+
+  interface ReplayLog extends CalibrationSetLog {
+    rpe: number;
+    blockTargetRir: number;
+  }
+  const replayLogs: ReplayLog[] = [];
+  for (const row of (calRows ?? []) as any[]) {
+    const block = row.exercise_blocks;
+    const ex = block?.exercises;
+    if (!ex || !block) continue;
+    // EXACT page conversions (page.tsx:1499-1500) — including the
+    // Math.round(10 - rpe) that turns RPE 7.5 into RIR 3 (not rpeToRir's 2),
+    // and the rpe>=9.5 && push_freely AMRAP inference.
+    replayLogs.push({
+      exerciseId: ex.id,
+      exerciseName: ex.name,
+      weight: row.weight_kg,
+      prescribedReps: {
+        min: block.target_rep_range?.[0] || 0,
+        max: block.target_rep_range?.[1] || null,
+      },
+      actualReps: row.reps,
+      reportedRIR: Math.max(0, Math.round(10 - row.rpe)),
+      wasAMRAP: row.rpe >= 9.5 && getFailureSafetyTier(ex.name) === 'push_freely',
+      timestamp: new Date(row.logged_at),
+      rpe: row.rpe,
+      blockTargetRir: block.target_rir ?? 2,
+    });
+  }
+  replayLogs.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+
+  // Match page.tsx:1442,1519 — enhanced athlete mode changes the engine's
+  // fatigue decay and sandbagging thresholds.
+  const { data: userRow } = await supabase
+    .from('users')
+    .select('enhanced_athlete_mode')
+    .eq('id', userId)
+    .single();
+  const enhancedAthleteMode = userRow?.enhanced_athlete_mode === true;
+  console.log(`  enhancedAthleteMode=${enhancedAthleteMode}`);
+
+  const engine = new RPECalibrationEngine([], [], { enhancedAthleteMode });
+  const targetKey = exercise.name.toLowerCase();
+  const seen: CalibrationSetLog[] = [];
+  for (const log of replayLogs) {
+    const isTarget = log.exerciseName.toLowerCase() === targetKey;
+    const biasBefore = engine.getCalibrationResult(log.exerciseName)?.bias ?? null;
+
+    if (isTarget || log.wasAMRAP) {
+      const rawE1 = historySetE1RM(log.weight, log.actualReps, log.rpe);
+      if (isTarget) {
+        console.log(
+          `  ${log.timestamp.toISOString()}  ${kgLb(log.weight)} × ${log.actualReps}  rpe=${log.rpe}  ` +
+            `reportedRIR(page)=${log.reportedRIR} (rpeToRir would say ${rpeToRir(log.rpe)})  ` +
+            `rawE1RM=${kgLb(rawE1)}  inferredAMRAP=${log.wasAMRAP}`
+        );
+      }
+      if (log.wasAMRAP) {
+        // Show the comparison pool the engine will use, BEFORE feeding it.
+        const pool = seen.filter(
+          (s) =>
+            s.exerciseName.toLowerCase() === log.exerciseName.toLowerCase() &&
+            !s.wasAMRAP &&
+            Math.abs(s.weight - log.weight) / Math.max(1, log.weight) < 0.1 &&
+            s.timestamp < log.timestamp &&
+            log.timestamp.getTime() - s.timestamp.getTime() < 28 * 86400000
+        );
+        const sameEx = seen.filter(
+          (s) =>
+            s.exerciseName.toLowerCase() === log.exerciseName.toLowerCase() &&
+            s.timestamp <= log.timestamp
+        );
+        if (pool.length > 0) {
+          const pred = computeFatigueAdjustedPrediction(log, pool, sameEx, enhancedAthleteMode);
+          console.log(
+            `    ⚡ AMRAP EVENT [${log.exerciseName}]: actual=${log.actualReps} reps  ` +
+              `pool=${pool.length} set(s)  rawPredicted=${pred.rawPredictedMaxReps.toFixed(1)}  ` +
+              `fatigueAdjusted=${pred.fatigueAdjustedMaxReps.toFixed(1)}`
+          );
+          for (const p of pool) {
+            console.log(
+              `       pool: ${p.timestamp.toISOString().slice(0, 10)}  ${p.weight}kg × ${p.actualReps} ` +
+                `+ RIR ${p.reportedRIR} ⇒ implied max ${p.actualReps + p.reportedRIR}`
+            );
+          }
+        } else {
+          console.log(
+            `    ⚡ AMRAP EVENT [${log.exerciseName}]: actual=${log.actualReps} — ` +
+              `NO comparison pool (±10% weight) → bias RESETS to 0 ("first calibration")`
+          );
+        }
+      }
+    }
+
+    engine.addSetLog(log);
+    seen.push(log);
+
+    const biasAfter = engine.getCalibrationResult(log.exerciseName)?.bias ?? null;
+    if (log.wasAMRAP && (isTarget || biasBefore !== biasAfter)) {
+      console.log(
+        `    → bias[${log.exerciseName}]: ${biasBefore ?? '—'} → ${biasAfter ?? '—'}  ` +
+          `(Δ ${biasBefore != null && biasAfter != null ? (biasAfter - biasBefore).toFixed(1) : 'n/a'})`
+      );
+    }
+  }
+
+  const finalCal = engine.getCalibrationResult(exercise.name);
+  const blockRirForAdjust =
+    replayLogs.filter((l) => l.exerciseName.toLowerCase() === targetKey).slice(-1)[0]
+      ?.blockTargetRir ?? (exercise.default_rir ?? 2);
+  const adjusted = engine.getAdjustedRIR(exercise.name, blockRirForAdjust);
+  const effectiveRir = Math.max(0, Math.min(4, adjusted.prescribedRIR));
+  console.log('-'.repeat(78));
+  console.log(
+    `  FINAL [${exercise.name}]: bias=${finalCal?.bias ?? '—'}  ` +
+      `confidence=${finalCal?.confidenceLevel ?? '—'}  dataPoints=${finalCal?.dataPoints ?? '—'}  ` +
+      `method=${finalCal?.method ?? '—'}  lastCalibrated=${finalCal?.lastCalibrated?.toISOString() ?? '—'}`
+  );
+  console.log(
+    `  getAdjustedRIR(target ${blockRirForAdjust}) → prescribedRIR=${adjusted.prescribedRIR} ` +
+      `(hasAdjustment=${adjusted.hasAdjustment}) → ExerciseCard clamp [0,4] → effectiveTargetRir=${effectiveRir} ` +
+      `→ banner display clamp [0,3] → shown "@ ${Math.max(0, Math.min(3, effectiveRir))} RIR"`
+  );
+  if (adjusted.adjustmentReason) console.log(`  reason copy: "${adjusted.adjustmentReason}"`);
+
+  // Audit trail cross-reference (in-session AMRAP events only; replay-inferred
+  // events write no rows here).
+  const { data: auditRows } = await supabase
+    .from('amrap_calibrations')
+    .select('calibrated_at, weight_kg, predicted_max_reps, actual_max_reps, bias, confidence_level, data_points, method, set_log_id')
+    .eq('user_id', userId)
+    .eq('exercise_id', exercise.id)
+    .order('calibrated_at', { ascending: true });
+  console.log(`  amrap_calibrations audit rows: ${auditRows?.length ?? 0}`);
+  for (const r of auditRows ?? []) {
+    console.log(
+      `    ${r.calibrated_at}  ${r.weight_kg}kg  predicted=${r.predicted_max_reps}  ` +
+        `actual=${r.actual_max_reps}  bias=${r.bias}  conf=${r.confidence_level}  ` +
+        `n=${r.data_points}  method=${r.method}  set_log_id=${r.set_log_id}`
+    );
+  }
+
+  // ============================================================
+  // ALL-EXERCISE BIAS DISTRIBUTION (same replayed engine)
+  // ============================================================
+  console.log('='.repeat(78));
+  console.log('ALL-EXERCISE BIAS DISTRIBUTION (28-day replay, current code rules)');
+  const names = Array.from(new Set(replayLogs.map((l) => l.exerciseName)));
+  const dist: { name: string; bias: number; conf: string; n: number; adj: number }[] = [];
+  for (const name of names) {
+    const cal = engine.getCalibrationResult(name);
+    if (!cal) continue;
+    const targetRirForName =
+      replayLogs.filter((l) => l.exerciseName === name).slice(-1)[0]?.blockTargetRir ?? 2;
+    const a = engine.getAdjustedRIR(name, targetRirForName);
+    dist.push({
+      name,
+      bias: cal.bias,
+      conf: cal.confidenceLevel,
+      n: cal.dataPoints,
+      adj: a.hasAdjustment ? a.prescribedRIR - targetRirForName : 0,
+    });
+  }
+  dist.sort((a, b) => a.bias - b.bias);
+  for (const d of dist) {
+    console.log(
+      `  bias=${String(d.bias).padStart(6)}  applied Δtarget=${String(d.adj).padStart(3)}  ` +
+        `conf=${d.conf.padEnd(6)}  n=${String(d.n).padStart(2)}  ${d.name}`
+    );
+  }
+  const exercisesWithoutCal = names.length - dist.length;
+  const drifting = dist.filter((d) => Math.abs(d.bias) > 2).length;
+  console.log(
+    `  ${dist.length} calibrated exercise(s), ${exercisesWithoutCal} with sets but no AMRAP event, ` +
+      `${drifting} with |bias| > 2 (drift candidates)`
+  );
+
   console.log('='.repeat(78));
   console.log('DONE (no writes performed).');
 }
