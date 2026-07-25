@@ -247,6 +247,8 @@ function computeHistoryFromBlocks(
       estimatedE1RM: 0,
       personalRecord: null,
       totalSessions: 0,
+      estimableSetCount: 0,
+      inestimableSetCount: 0,
       progressionScope: scope,
       estimatedFromOtherLocation: false,
     };
@@ -255,6 +257,8 @@ function computeHistoryFromBlocks(
   let bestE1RM = 0;
   let personalRecord: ExerciseHistoryData['personalRecord'] = null;
   let totalSessions = 0;
+  let estimableSetCount = 0;
+  let inestimableSetCount = 0;
   const seenSessions = new Set<string>();
   // Candidates for the prescription anchor: qualifying sets only (see
   // isAnchorEligibleSet), aggregated by bestQualifyingE1RM — the best
@@ -352,7 +356,13 @@ function computeHistoryFromBlocks(
       // the anchor pool and cannot set the e1RM PR. That is the fix for the
       // 137.5×30 "284 lbs" anchor — no cap salvages a set like that.
       const estimate = calculateE1RM(set.weight_kg, set.reps, set.rpe);
-      if (!estimate) return;
+      if (!estimate) {
+        // Beyond the estimator's domain: counts toward rep_total
+        // auto-classification, contributes nothing to the anchor.
+        inestimableSetCount++;
+        return;
+      }
+      estimableSetCount++;
       anchorCandidates.push({
         e1rmKg: estimate.value,
         sessionId: session?.id ?? block.id,
@@ -389,6 +399,8 @@ function computeHistoryFromBlocks(
     ),
     personalRecord,
     totalSessions,
+    estimableSetCount,
+    inestimableSetCount,
     progressionScope: scope,
     estimatedFromOtherLocation,
     calibrationNote,

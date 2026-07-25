@@ -1449,3 +1449,72 @@ describe('ExerciseCard', () => {
     });
   });
 });
+
+describe('rep_total progression path (ADD 2)', () => {
+  const LB135_KG = 61.23496995;
+  // Set 3 fell below the 12-rep floor → the increment is NOT earned:
+  // the session repeats the load (held VERBATIM) and chases the total.
+  const prevSets = [
+    { weightKg: LB135_KG, reps: 20, rpe: 9 },
+    { weightKg: LB135_KG, reps: 18, rpe: 9 },
+    { weightKg: LB135_KG, reps: 10, rpe: 9 },
+  ];
+  const repTotalProps = {
+    sets: [],
+    unit: 'lb' as const,
+    exercise: createMockExercise({
+      id: 'seated-calf',
+      name: 'Seated Calf Raise',
+      progressionModel: 'rep_total' as const,
+      repBoundary: 'drifting' as const,
+      minWeightIncrementKg: 4.54,
+    }),
+    block: createMockBlock({
+      exerciseId: 'seated-calf',
+      targetRepRange: [12, 20] as [number, number],
+      targetWeightKg: LB135_KG,
+    }),
+    previousSets: prevSets,
+    exerciseHistory: {
+      lastWorkoutDate: weeksAgo(1),
+      lastWorkoutSets: prevSets,
+      estimatedE1RM: 0, // all sets beyond the canonical domain
+      personalRecord: null,
+      totalSessions: 5,
+      estimableSetCount: 0,
+      inestimableSetCount: 9,
+    },
+    isActive: true,
+    onSetComplete: jest.fn().mockResolvedValue('id'),
+  };
+
+  it('banner frames rep-total progression and holds the load verbatim', () => {
+    render(<ExerciseCard {...repTotalProps} />);
+    // 61.23496995 kg round-trips to exactly 135 lbs — no grid snapping.
+    expect(screen.getByRole('button', { name: /Weight: 135 lbs/ })).toBeInTheDocument();
+    expect(screen.getByText(/rep-total/)).toBeInTheDocument();
+    // Increment not earned (set 3 below the floor) → chase-the-total copy.
+    expect(screen.getByText(/beat last session's 48 total reps/)).toBeInTheDocument();
+  });
+
+  it('shows no estimated 1RM and no trend pill', () => {
+    render(<ExerciseCard {...repTotalProps} performanceSnapshots={[]} />);
+    expect(screen.queryByText(/Estimated 1RM/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Trend:/)).not.toBeInTheDocument();
+  });
+
+  it('auto-classifies from history when no explicit model is set', () => {
+    render(
+      <ExerciseCard
+        {...repTotalProps}
+        exercise={createMockExercise({
+          id: 'seated-calf',
+          name: 'Seated Calf Raise',
+          progressionModel: null,
+          minWeightIncrementKg: 4.54,
+        })}
+      />
+    );
+    expect(screen.getByText(/rep-total/)).toBeInTheDocument();
+  });
+});

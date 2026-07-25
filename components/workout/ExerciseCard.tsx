@@ -10,6 +10,11 @@ import { filterExercises, dedupeExercisesById } from '@/services/exerciseFilter'
 import { convertWeight, formatMuscleName, formatWeightValue, convertWeightForDisplay, inputWeightToKg, roundToPlateIncrement } from '@/lib/utils';
 import { recommendSet, recommendSessionStart, estimateRepsForWeight, predictAmrapReps, recommendSeedForSlot, resolveLastRir, prescribe, type SeedRecommendation } from '@/services/setRecommender';
 import { inferSetRole, type SetRole } from '@/services/suggestionEngine/setRoles';
+import {
+  resolveProgressionModel,
+  recommendRepTotalSessionStart,
+  recommendRepTotalNextSet,
+} from '@/services/suggestionEngine/repTotalPolicy';
 import { RAMP_LOAD_FRACTION, WORKING_WEIGHT_CLAMP_FRACTION } from '@/services/suggestionEngine/constants';
 import { findSimilarExercises, calculateSimilarityScore } from '@/services/exerciseSwapper';
 import { filterExercisesByEquipment } from '@/services/equipmentFilter';
@@ -56,6 +61,9 @@ interface ExerciseHistory {
   estimatedE1RM: number;
   personalRecord: { weightKg: number; reps: number; e1rm: number; date: string } | null;
   totalSessions: number;
+  /** Estimability of recent normal sets (ADD 2 rep_total auto-classification). */
+  estimableSetCount?: number;
+  inestimableSetCount?: number;
   /** Location-scoped calibration (services/progressionScope). */
   progressionScope?: 'global' | 'local';
   /** True when this history was seeded (softened) from another location. */
@@ -586,8 +594,27 @@ export const ExerciseCard = memo(function ExerciseCard({
   // an easy-rated set bumps the load even mid-range (services/setRecommender).
   const isColdStartExercise = (exerciseHistory?.totalSessions ?? 0) === 0;
 
-  const recommendNext = (last: { weightKg: number; reps: number; rpe?: number; feedback?: SetFeedback }) =>
-    recommendSet({
+  const recommendNext = (last: { weightKg: number; reps: number; rpe?: number; feedback?: SetFeedback }) => {
+    // rep_total path: the load NEVER moves within a session; the rep target
+    // follows the session plan's slot (chase the total). No e1RM math runs.
+    if (repTotalMode) {
+      const next = repTotalPlan
+        ? recommendRepTotalNextSet({
+            sessionPlan: repTotalPlan,
+            completedReps: completedSets.map((s) => s.reps),
+          })
+        : null;
+      return {
+        weightKg: last.weightKg,
+        reps:
+          next?.reps ??
+          Math.min(Math.max(last.reps, block.targetRepRange[0]), block.targetRepRange[1]),
+        rir: effectiveTargetRir,
+        rationale: 'maintain' as const,
+        effortVsTarget: 'on_target' as const,
+      };
+    }
+    return recommendSet({
       lastWeightKg: last.weightKg,
       lastReps: last.reps,
       lastRir: resolveLastRir(last, effectiveTargetRir),
@@ -600,6 +627,7 @@ export const ExerciseCard = memo(function ExerciseCard({
       exerciseType: exercise.exerciseType,
       isBodyweight: exercise.isBodyweight,
     });
+  };
 
   // RPE→RIR adapter for the recommender's AMRAP prediction.
   const amrapReps = (last: { reps: number; rpe?: number }) =>
@@ -842,6 +870,35 @@ export const ExerciseCard = memo(function ExerciseCard({
   // The exercise's e1RM capacity anchor (kg) — the stored/best est. 1RM. This is
   // the number that was displayed-but-ignored before the roles fix.
   const anchorE1RMKg = exerciseHistory?.estimatedE1RM ?? 0;
+
+  // rep_total routing (ADD 2): explicit progression_model wins; NULL
+  // auto-classifies from the recent history's estimability counts (majority
+  // of normal sets beyond the canonical estimator's domain → rep_total).
+  // On this path NO e1RM is computed, displayed, or fed to calibration.
+  const repTotalMode =
+    exercise.exerciseType !== 'duration_based' &&
+    resolveProgressionModel(
+      exercise.progressionModel,
+      exerciseHistory?.estimableSetCount ?? 0,
+      exerciseHistory?.inestimableSetCount ?? 0
+    ) === 'rep_total';
+
+  // Session plan for a rep_total exercise: fixed load (verbatim), per-set rep
+  // targets from last session, beat-the-total target. Null = no history →
+  // cold-start path unchanged.
+  const repTotalPlan = useMemo(
+    () =>
+      repTotalMode
+        ? recommendRepTotalSessionStart({
+            prevSessionSets: prevSessionSetsForGating,
+            targetRepRange: block.targetRepRange,
+            targetRir: effectiveTargetRir,
+            minIncrementKg: exercise.minWeightIncrementKg,
+            plannedSets: block.targetSets,
+          })
+        : null,
+    [repTotalMode, prevSessionSetsForGating, block.targetRepRange, block.targetSets, effectiveTargetRir, exercise.minWeightIncrementKg]
+  );
 
   // Role-aware session-start seed for one slot (services/setRecommender).
   // The slot's role is inferred from the PREVIOUS session's set in that slot — a
@@ -1100,6 +1157,14 @@ export const ExerciseCard = memo(function ExerciseCard({
           const rec = recommendNext(lastSetData);
           defaultWeight = rec.weightKg;
           defaultReps = rec.reps;
+        } else if (repTotalMode && repTotalPlan) {
+          // rep_total seed: fixed load (verbatim from history), per-set rep
+          // target from the session plan — no e1RM curve consulted.
+          defaultWeight = repTotalPlan.weightKg;
+          defaultReps =
+            repTotalPlan.perSetRepTargets[setIndex] ??
+            repTotalPlan.perSetRepTargets[repTotalPlan.perSetRepTargets.length - 1] ??
+            block.targetRepRange[0];
         } else if (prevSet) {
           // Role-aware seed so the logger prefill matches the banner exactly
           // (working slots anchor on the e1RM; ramp slots take a % of top).
@@ -1355,6 +1420,8 @@ export const ExerciseCard = memo(function ExerciseCard({
                 // Re-check at fire time: a manual reps edit in the meantime
                 // makes the field user-owned.
                 if (manualEditsRef.current.get(index)?.reps) return;
+                // rep_total: no e1RM curve — weight edits leave reps alone.
+                if (repTotalMode) return;
                 setPendingInputs(prevInputs => {
                   const newInputs = [...prevInputs];
                   // Only update reps if user hasn't manually changed it since we scheduled
@@ -1568,6 +1635,30 @@ export const ExerciseCard = memo(function ExerciseCard({
       // anchors on whatever the user actually logged, so a logged override (Phase 4)
       // is reflected here with no stale "vs suggestion" commentary.
       const lastSetData = { weightKg: lastCompleted.weightKg, reps: lastCompleted.reps, rpe: lastCompleted.rpe, feedback: lastCompleted.feedback };
+      if (repTotalMode) {
+        // rep_total: hold the load, chase the session total. No e1RM claims.
+        const rec = recommendNext(lastSetData);
+        const done = completedSets.map((s) => s.reps);
+        const soFar = done.reduce((a, b) => a + b, 0);
+        weight = seedWeightString(rec.weightKg, lastCompleted.weightKg);
+        reps = rec.reps;
+        repsLabel = String(reps);
+        if (repTotalPlan) {
+          const remaining = Math.max(0, repTotalPlan.sessionRepTotalTarget - soFar);
+          reason = `rep-total — ${soFar} of ${repTotalPlan.sessionRepTotalTarget} reps (${remaining} to beat last session)`;
+          explanation.push(
+            `Rep-total progression: the load stays fixed for the whole session. Beat last session's total of ${repTotalPlan.prevSessionRepTotal} reps at this weight; ${soFar} logged so far.`
+          );
+        } else {
+          reason = `rep-total — hold the weight and accumulate reps (${soFar} so far)`;
+          explanation.push(
+            'Rep-total progression: the load stays fixed for the whole session; progress is the session rep total.'
+          );
+        }
+        explanation.push(
+          `Add ${exercise.minWeightIncrementKg ? `${displayWeight(exercise.minWeightIncrementKg)} ${weightLabel}` : 'one increment'} next session once every set clears ${block.targetRepRange[0]} reps at the target effort. No estimated 1RM is used for this exercise.`
+        );
+      } else {
       const rec = recommendNext(lastSetData);
       weight = seedWeightString(rec.weightKg, lastCompleted.weightKg);
       reps = rec.reps;
@@ -1594,6 +1685,24 @@ export const ExerciseCard = memo(function ExerciseCard({
       }
       explanation.push(
         `Anchored to your last set: ${displayWeight(lastCompleted.weightKg, true)} ${weightLabel} × ${lastCompleted.reps} at RPE ${lastCompleted.rpe}. Its estimated 1RM sets the capacity this prescription works back from.`
+      );
+      }
+    } else if (repTotalMode && repTotalPlan) {
+      // rep_total session start: fixed load from history (verbatim), first-set
+      // rep target from the plan, beat-the-total framing. No e1RM anywhere.
+      weight = seedWeightString(repTotalPlan.weightKg, repTotalPlan.bumped ? undefined : repTotalPlan.weightKg);
+      reps = repTotalPlan.perSetRepTargets[0] ?? block.targetRepRange[0];
+      repsLabel = String(reps);
+      reason = repTotalPlan.bumped
+        ? `rep-total — every set cleared ${block.targetRepRange[0]} reps last time: load up one increment, reps reset to ${block.targetRepRange[0]}`
+        : `rep-total — hold the load, beat last session's ${repTotalPlan.prevSessionRepTotal} total reps`;
+      explanation.push(
+        'Rep-total progression: this exercise progresses on the session rep total at a fixed load — most of its sets sit past the point where 1RM formulas mean anything, so no estimated 1RM is computed or shown.'
+      );
+      explanation.push(
+        repTotalPlan.bumped
+          ? `Last session every set reached the ${block.targetRepRange[0]}-rep floor at the target effort, so the load steps up by the smallest increment and reps rebuild from the floor.`
+          : `Target: beat ${repTotalPlan.prevSessionRepTotal} total reps at this load (aim ${repTotalPlan.sessionRepTotalTarget}+). When every set clears ${block.targetRepRange[0]} at the target effort, the load steps up one increment.`
       );
     } else {
       // Session start: role-aware seed for this slot (services/setRecommender).
@@ -1859,13 +1968,15 @@ export const ExerciseCard = memo(function ExerciseCard({
 
   // Status pills line (plateau/pace/superset) renders only when at least one
   // pill exists — most exercises keep a single-line header.
-  const showPacePill =
+  // rep_total exercises show no e1RM-derived chrome: the pace pill and the
+  // plateau badge are both e1RM-trend readings.
+  const showPacePill = !repTotalMode &&
     !plateau &&
     !!progressionInsight &&
     (progressionInsight.pace === 'ahead' ||
       progressionInsight.pace === 'on_track' ||
       progressionInsight.pace === 'behind');
-  const hasHeaderPills = !!plateau || showPacePill || !!block.supersetGroupId;
+  const hasHeaderPills = (!repTotalMode && !!plateau) || showPacePill || !!block.supersetGroupId;
 
   // Enhanced mode: surface (never alter) a binding joint-stress cap. The RIR
   // floor is computed from the exercise alone; when it raises the effective
@@ -1986,7 +2097,7 @@ export const ExerciseCard = memo(function ExerciseCard({
         {hasHeaderPills && (
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
             {/* Plateau badge (services/plateauDetector) — opens the suggestions sheet */}
-            {plateau && (
+            {!repTotalMode && plateau && (
               <button
                 onClick={() => setShowPlateauSheet(true)}
                 className="rounded-full px-2.5 py-1 text-[11px] font-medium leading-none flex-shrink-0 bg-warning-500/10 text-warning-400 hover:bg-warning-500/20 transition-colors"
@@ -2075,8 +2186,15 @@ export const ExerciseCard = memo(function ExerciseCard({
         {exerciseHistory && showHistory && (
           <div className="mt-3 pt-3 border-t border-surface-800">
             <div className="space-y-3">
-              {/* Estimated 1RM + session count */}
-              {exerciseHistory.estimatedE1RM > 0 && (
+              {/* Estimated 1RM + session count. rep_total exercises show the
+                  model instead — no e1RM is computed or displayed for them. */}
+              {repTotalMode ? (
+                <p className="text-xs text-surface-400">
+                  Progression <span className="text-surface-200">rep total</span>
+                  <span className="text-surface-600"> · </span>
+                  {exerciseHistory.totalSessions} session{exerciseHistory.totalSessions === 1 ? '' : 's'}
+                </p>
+              ) : exerciseHistory.estimatedE1RM > 0 && (
                 <p className="text-xs text-surface-400">
                   Estimated 1RM{' '}
                   <span className="text-surface-200">
@@ -2674,6 +2792,9 @@ export const ExerciseCard = memo(function ExerciseCard({
           // the 250ms flip re-renders only the banner.
           const effortCheck = (() => {
             if (isDurationBased) return null;
+            // rep_total: no e1RM curve exists for this exercise — no
+            // near-max predictions either.
+            if (repTotalMode) return null;
             const enteredReps = parseInt(input.reps);
             if (isNaN(enteredReps) || enteredReps < 1) return null;
 

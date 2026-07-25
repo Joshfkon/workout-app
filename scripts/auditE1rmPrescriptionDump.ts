@@ -64,6 +64,7 @@ import {
   type CalibrationSetLog,
 } from '../services/rpeCalibration';
 import { getFailureSafetyTier } from '../services/exerciseSafety';
+import { resolveProgressionModel } from '../services/suggestionEngine/repTotalPolicy';
 
 const KG_TO_LB = 2.20462262;
 const lb = (kg: number) => `${(kg * KG_TO_LB).toFixed(1)} lb`;
@@ -627,17 +628,28 @@ async function main() {
 
   const { data: exListRows, error: exListErr } = await supabase
     .from('exercise_blocks')
-    .select('exercise_id, exercises!inner(name), workout_sessions!inner(user_id, state)')
+    .select('exercise_id, exercises!inner(name, progression_model), workout_sessions!inner(user_id, state)')
     .eq('workout_sessions.user_id', userId)
     .eq('workout_sessions.state', 'completed');
   if (exListErr) throw exListErr;
   const exerciseIds = new Map<string, string>();
+  const explicitModel = new Map<string, 'e1rm' | 'rep_total' | null>();
   for (const r of (exListRows ?? []) as any[]) {
-    const nm = Array.isArray(r.exercises) ? r.exercises[0]?.name : r.exercises?.name;
-    if (r.exercise_id && nm) exerciseIds.set(r.exercise_id, nm);
+    const ex = Array.isArray(r.exercises) ? r.exercises[0] : r.exercises;
+    if (r.exercise_id && ex?.name) {
+      exerciseIds.set(r.exercise_id, ex.name);
+      explicitModel.set(r.exercise_id, ex.progression_model ?? null);
+    }
   }
 
   const impact: { name: string; oldKg: number; newKg: number }[] = [];
+  const classification: {
+    name: string;
+    explicit: string;
+    est: number;
+    inest: number;
+    resolved: string;
+  }[] = [];
   for (const [exId, exName] of Array.from(exerciseIds.entries())) {
     const { data: hist } = await supabase
       .from('exercise_blocks')
@@ -667,6 +679,29 @@ async function main() {
         if (est) newEntries.push({ e1rmKg: est.value, sessionId: sess.id, timeMs: t });
       }
     }
+    // Progression-model classification (ADD 2): explicit column wins; NULL
+    // auto-classifies from the window's estimability counts.
+    let est = 0;
+    let inest = 0;
+    for (const b of (hist ?? []) as any[]) {
+      const sess = b.workout_sessions;
+      if (!sess || sess.is_deload) continue;
+      for (const sl of b.set_logs ?? []) {
+        if (sl.is_warmup || !(sl.weight_kg > 0) || !(sl.reps > 0)) continue;
+        if ((sl.set_type ?? 'normal') !== 'normal') continue;
+        if (historySetE1RM(sl.weight_kg, sl.reps, sl.rpe ?? 10)) est++;
+        else inest++;
+      }
+    }
+    const explicit = explicitModel.get(exId) ?? null;
+    classification.push({
+      name: exName,
+      explicit: explicit ?? 'auto',
+      est,
+      inest,
+      resolved: resolveProgressionModel(explicit, est, inest),
+    });
+
     if (oldEntries.length === 0) continue;
     impact.push({
       name: exName,
@@ -688,6 +723,25 @@ async function main() {
   console.log(
     `  ${impact.length} exercise(s) with history: ${changed} value changes, ` +
       `${dropped} now report NO estimate (only out-of-domain sets in the window)`
+  );
+
+  // ============================================================
+  // PROGRESSION MODEL CLASSIFICATION (ADD 2) — the assigned list
+  // ============================================================
+  console.log('='.repeat(78));
+  console.log('PROGRESSION MODEL CLASSIFICATION (explicit column wins; auto = majority rule)');
+  classification.sort((a, b) =>
+    a.resolved === b.resolved ? a.name.localeCompare(b.name) : a.resolved === 'rep_total' ? -1 : 1
+  );
+  for (const c of classification) {
+    console.log(
+      `  ${c.resolved.padEnd(9)}  estimable=${String(c.est).padStart(3)}  ` +
+        `inestimable=${String(c.inest).padStart(3)}  source=${c.explicit.padEnd(9)}  ${c.name}`
+    );
+  }
+  console.log(
+    `  ${classification.filter((c) => c.resolved === 'rep_total').length} exercise(s) on rep_total, ` +
+      `${classification.filter((c) => c.resolved === 'e1rm').length} on e1rm`
   );
 
   console.log('='.repeat(78));

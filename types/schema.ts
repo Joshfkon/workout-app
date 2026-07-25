@@ -415,6 +415,17 @@ export interface Exercise {
   
   /** Smallest weight increment possible (e.g., 2.5kg for barbell, 2kg for dumbbells) */
   minWeightIncrementKg: number;
+
+  /**
+   * Progression model (ADD 2): 'rep_total' = fixed session load, progress on
+   * session rep total, no e1RM anywhere; 'e1rm' = anchor-driven loads.
+   * Absent/null = auto-classify from recent history (majority-inestimable
+   * sets → rep_total). See services/suggestionEngine/repTotalPolicy.
+   */
+  progressionModel?: 'e1rm' | 'rep_total' | null;
+
+  /** Rep-boundary quality: 'drifting' reps (calves/abs) aren't crisp units. */
+  repBoundary?: 'crisp' | 'drifting';
   
   /** Key form cues for proper execution */
   formCues: string[];

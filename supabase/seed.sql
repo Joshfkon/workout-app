@@ -384,3 +384,10 @@ INSERT INTO exercises (name, primary_muscle, secondary_muscles, mechanic, defaul
 -- the already-present (migration) row win and the rest of the seed proceed.
 ON CONFLICT (name) DO NOTHING;
 
+
+-- rep_total assignment (ADD 2): explicit model for exercises whose rep
+-- boundary drifts. Runs after the insert so it applies whether the row came
+-- from the seed or an earlier migration.
+UPDATE exercises
+SET progression_model = 'rep_total', rep_boundary = 'drifting'
+WHERE name = 'Seated Calf Raise';

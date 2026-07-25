@@ -81,6 +81,15 @@ export interface ExerciseHistoryData {
   personalRecord: { weightKg: number; reps: number; e1rm: number; date: string } | null;
   totalSessions: number;
   /**
+   * Estimability of the recent NORMAL working sets under the canonical e1RM
+   * estimator (ADD 2): sets with a valid estimate vs sets beyond the
+   * 15-effective-rep domain. Drives rep_total auto-classification
+   * (services/suggestionEngine/repTotalPolicy.resolveProgressionModel) for
+   * exercises without an explicit progression_model.
+   */
+  estimableSetCount?: number;
+  inestimableSetCount?: number;
+  /**
    * Location-scoped calibration (services/progressionScope). `global` exercises
    * read full cross-location history; `local` exercises read history filtered to
    * the current location. Undefined when history wasn't location-scoped.
