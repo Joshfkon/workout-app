@@ -566,6 +566,8 @@ export interface Database {
           top_set_rpe: number;
           total_working_sets: number;
           estimated_e1rm: number | null;
+          estimated_e1rm_legacy: number | null;
+          e1rm_version: number;
           is_deload: boolean;
         };
         Insert: {
@@ -578,6 +580,8 @@ export interface Database {
           top_set_rpe?: number;
           total_working_sets?: number;
           estimated_e1rm?: number | null;
+          estimated_e1rm_legacy?: number | null;
+          e1rm_version?: number;
           is_deload?: boolean;
         };
         Update: {
@@ -590,6 +594,8 @@ export interface Database {
           top_set_rpe?: number;
           total_working_sets?: number;
           estimated_e1rm?: number | null;
+          estimated_e1rm_legacy?: number | null;
+          e1rm_version?: number;
           is_deload?: boolean;
         };
         Relationships: [];
