@@ -363,14 +363,19 @@ describe('ExerciseCard', () => {
           }}
         />
       );
-      // Meta line: "last session BW+25 kg × 14, × 12 @ 2 RIR" (RIR 2.5 → 3? rpe 7.5 → 10-7.5=2.5 rounds to 3)
-      expect(screen.getByText(/last session BW\+25 kg × 14, × 12/)).toBeInTheDocument();
+      // Meta line (Phase 0b honest per-set loads): set 1 was weighted
+      // (BW+25), set 2 was PLAIN bodyweight — the old single-load line
+      // attributed BW+25 to both, which is exactly the header corruption
+      // formatSetHistoryLine exists to prevent.
+      expect(screen.getByText(/last session BW\+25 kg × 14 · BW × 12/)).toBeInTheDocument();
 
       // Chips in the expanded history keep the breakdown per set, with the
       // effective load preserved as a tooltip.
       await user.click(screen.getByText(/last session BW\+25/));
       expect(screen.getByText(/BW\+25 × 14/)).toBeInTheDocument();
-      expect(screen.getByText(/BW × 12/)).toBeInTheDocument();
+      // The honest meta line ALSO contains "BW × 12" now, so assert the
+      // chip's presence without requiring uniqueness across the card.
+      expect(screen.getAllByText(/BW × 12/).length).toBeGreaterThanOrEqual(2);
       expect(screen.getByTitle('Effective load 100 kg')).toBeInTheDocument();
     });
 

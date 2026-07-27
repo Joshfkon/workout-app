@@ -5,6 +5,7 @@ import { Card, Button, ConfirmModal } from '@/components/ui';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/Accordion';
 import type { Exercise, ExerciseBlock, SetLog, WeightUnit, SetQuality, SetFeedback, BodyweightData, ExercisePerformanceSnapshot, StandardMuscleGroup, SorenessRating, SetDiscomfort } from '@/types/schema';
 import { rpeToRir } from '@/types/schema';
+import { formatSetHistoryLine } from '@/lib/formatSetHistory';
 import { SorenessChipRow, JointPainPicker } from './FeedbackChips';
 import { filterExercises, dedupeExercisesById } from '@/services/exerciseFilter';
 import { convertWeight, formatMuscleName, formatWeightValue, convertWeightForDisplay, inputWeightToKg, roundToPlateIncrement } from '@/lib/utils';
@@ -2027,20 +2028,34 @@ export const ExerciseCard = memo(function ExerciseCard({
   });
 
   // Meta line under the header pills:
-  // "{muscle} · last session 60 lbs × 9, × 8 @ 2 RIR"
+  // "{muscle} · last session 45 lbs × 8, × 8 · 40 lbs × 10, × 8 @ 0–3 RIR"
+  //
+  // Phase 0b: rendered through formatSetHistoryLine (lib/formatSetHistory) —
+  // per-set loads honestly grouped, ALL sets included (long sessions become
+  // an explicit range summary, never a silent slice), and effort shown as the
+  // honest span across sets instead of set 1's RIR standing in for the whole
+  // session. The old inline version attributed set 1's load to every set,
+  // sliced to 3 sets, and collapsed the RIR — live corruption on Arnold
+  // Press ("45 lbs x 8, x 8, x 10 @ 3 RIR" for a 45/45/40/40 session).
   // Bodyweight sets with a recorded breakdown read "BW+25 lbs × 14" so the
   // added load is visible instead of the blended effective number.
   const lastSessionMeta = (() => {
     const lastSets = exerciseHistory?.lastWorkoutSets ?? [];
     if (lastSets.length === 0) return null;
-    const repsPart = lastSets
-      .slice(0, 3)
-      .map((s) => `× ${s.reps}${isDurationBased ? 's' : ''}`)
-      .join(', ');
-    // Single RPE→RIR conversion app-wide: the bucketed rpeToRir the engine
-    // reads sets with (the raw Math.round(10 − rpe) disagreed at RPE 7.5:
-    // header said 3 where the engine graded 2).
-    const rir = lastSets[0].rpe != null ? Math.max(0, rpeToRir(lastSets[0].rpe)) : null;
+    const line = formatSetHistoryLine(
+      lastSets.map((s) => ({
+        weightLabel: s.bw
+          ? `${historySetWeightLabel(s)}${s.bw.modification === 'none' ? '' : ` ${weightLabel}`}`
+          : `${displayWeight(s.weightKg, true)} ${weightLabel}`,
+        reps: s.reps,
+        // Single RPE→RIR conversion app-wide: the bucketed rpeToRir the
+        // engine reads sets with (raw Math.round(10 − rpe) disagreed at RPE
+        // 7.5: header said 3 where the engine graded 2).
+        rir: s.rpe != null ? Math.max(0, rpeToRir(s.rpe)) : null,
+      })),
+      { secondsSuffix: isDurationBased }
+    );
+    if (!line) return null;
     // Location-scoped calibration tag: for a local-scope exercise, mark whether
     // the last session shown is this gym's own track ("· here") or a softened
     // estimate carried over from another gym (rule 11).
@@ -2050,12 +2065,7 @@ export const ExerciseCard = memo(function ExerciseCard({
         ? ' · est. from another gym'
         : ' · here';
     }
-    const weightPart = lastSets[0].bw
-      ? `${historySetWeightLabel(lastSets[0])}${lastSets[0].bw.modification === 'none' ? '' : ` ${weightLabel}`}`
-      : `${displayWeight(lastSets[0].weightKg, true)} ${weightLabel}`;
-    return `last session ${weightPart} ${repsPart}${
-      rir !== null ? ` @ ${rir} RIR` : ''
-    }${locationTag}`;
+    return `last session ${line}${locationTag}`;
   })();
 
   // Tooltip for the progression pace pill: E1RM trend vs expectation, plus
