@@ -6,7 +6,8 @@ Companion to `docs/MUSCLE_ATTRIBUTION_AUDIT.md` (Phase 1).
 three Phase 2 tables"). D stands as decided (no value change). The
 muscleRecovery involvement unification in E is **HELD** per the same review —
 revisit after the retag with a count of rows still on the legacy-primary
-path (query below). Section F (triceps split) remains proposed-only.
+path (query below). Section F (triceps split) APPLIED per follow-up
+sign-off — see the status block at F.
 
 The structural fix accompanying the retags: **new exercises can no longer be
 created with a group-level (splitting) primary** — enforced in
@@ -143,7 +144,30 @@ decision changes what a credited set means.
 
 ---
 
-## F. Phase 4 — triceps split by head (PROPOSED, not applied; blocked on A–C sign-off)
+## F. Phase 4 — triceps split by head — APPLIED (signed off 2026-07-27)
+
+Applied exactly as proposed below. Implementation notes:
+- Taxonomy: `types/schema.ts` (STANDARD_MUSCLE_GROUPS 24→26, detailed heads
+  routed to the fine members, landmarks + display names), `services/volumeBands.ts`
+  (children/bands/MEVs), `weeklyVolume.ts` FINE_MUSCLE_PARENTS, body-map
+  `lib/muscleMap/taxonomy.ts` (triceps regionless-coarse like traps/calves —
+  the artwork already ships separate long/lateral regions), edit-form picker.
+- Retags: `supabase/migrations/20260727000002_split_triceps_heads.sql` —
+  name-keyed stock updates (+ matching `supabase/seed.sql` edits, required
+  because the tag parser replays seed.sql last) and audited pattern-keyed
+  rules for user rows (same exercise_muscle_retag_audit table). Program pool
+  and seed-uncovered fallback entries edited in place; generated tags
+  regenerated (`npm run generate:exercise-tags`) — no coarse 'triceps' left
+  in the stock snapshot.
+- Fiber-profile lookups (`services/fatigueBudgetEngine.ts`) now resolve fine
+  primaries through STANDARD_TO_COARSE, so 'triceps_lat_med' still reads the
+  triceps fast-twitch profile (and 'front_delts' the shoulders profile).
+- Behavior pinned in `app/(dashboard)/dashboard/_lib/__tests__/tricepsSplit.test.ts`:
+  the motivating pushdown+pressing week reads group-in-zone with a pinned
+  lagging long head (1.5 credited), overhead work clears it, and a
+  coarse-only library never sees the split.
+
+Original proposal (as approved):
 
 Two sub-groups (long head; lateral + medial combined), following the
 traps/calves precedent exactly: coarse `triceps` remains a valid standard

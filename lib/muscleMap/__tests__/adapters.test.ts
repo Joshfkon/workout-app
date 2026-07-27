@@ -11,12 +11,14 @@ describe('exerciseHighlightData', () => {
 
   it('resolves legacy and detailed tokens through the canonical resolver', () => {
     // Legacy coarse 'shoulders' fans out to all three delts; detailed
-    // 'triceps_long' resolves to standard 'triceps'.
+    // 'triceps_long' resolves to the fine standard member 'triceps_long'
+    // (the Phase 4 head split — no longer collapsed into coarse 'triceps').
     const data = exerciseHighlightData('shoulders', ['triceps_long', 'Chest Upper']);
     expect(data.front_delts).toEqual({ value: 1 });
     expect(data.lateral_delts).toEqual({ value: 1 });
     expect(data.rear_delts).toEqual({ value: 1 });
-    expect(data.triceps).toEqual({ value: SECONDARY_HIGHLIGHT_EMPHASIS });
+    expect(data.triceps_long).toEqual({ value: SECONDARY_HIGHLIGHT_EMPHASIS });
+    expect(data.triceps).toBeUndefined();
     expect(data.chest_upper).toEqual({ value: SECONDARY_HIGHLIGHT_EMPHASIS });
   });
 

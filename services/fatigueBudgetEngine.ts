@@ -20,9 +20,24 @@ import type {
   MuscleRecoveryStatus,
   WeeklyMuscleVolumeStatus,
 } from '@/types/schema';
-import { MUSCLE_GROUPS } from '@/types/schema';
+import { MUSCLE_GROUPS, isStandardMuscle, toLegacyMuscleGroup } from '@/types/schema';
+import { STANDARD_TO_COARSE } from '@/services/volumeBands';
 import { MUSCLE_FIBER_PROFILE } from './repRangeEngine';
 import { toStandardMuscleForVolume } from '@/lib/migrations/muscle-groups';
+
+/**
+ * Fiber type for ANY muscle token: the fiber table is keyed by coarse legacy
+ * group ('triceps', 'shoulders'), so standard fine muscles resolve through
+ * STANDARD_TO_COARSE (triceps_lat_med → triceps, front_delts → shoulders)
+ * and legacy tokens pass through; anything unresolvable reads 'mixed'.
+ */
+function lookupFiberType(muscle: string): string {
+  const token = muscle?.toLowerCase?.() ?? '';
+  const coarse = isStandardMuscle(token)
+    ? STANDARD_TO_COARSE[token]
+    : toLegacyMuscleGroup(token) ?? token;
+  return (MUSCLE_FIBER_PROFILE as Record<string, string>)[coarse] ?? 'mixed';
+}
 
 // ============================================================
 // FATIGUE COST CONSTANTS
@@ -159,9 +174,10 @@ export function calculateExerciseFatigue(
     recoveryDays += 0.5;
   }
   
-  // Fast-twitch dominant muscles recover slower from heavy work
-  // Use type assertion since primaryMuscle may be any muscle group format
-  const fiberType = (MUSCLE_FIBER_PROFILE as Record<string, string>)[exercise.primaryMuscle] ?? 'mixed';
+  // Fast-twitch dominant muscles recover slower from heavy work. The fiber
+  // table is keyed by coarse legacy group, so resolve fine-grained primaries
+  // ('front_delts', 'triceps_lat_med') to their coarse parent first.
+  const fiberType = lookupFiberType(exercise.primaryMuscle);
   // (Duration exercises excluded: a short hold is not a heavy low-rep set.)
   if (fiberType === 'fast' && reps <= 6 && !isDurationExercise) {
     recoveryDays += 0.5;
@@ -450,9 +466,8 @@ export class WeeklyFatigueTracker {
     // Adjust by sleep
     rate *= 0.7 + (this.profile.sleepQuality / 5) * 0.6;
 
-    // Fiber type affects recovery
-    // Use type assertion since muscle may be any muscle group format
-    const fiberType = (MUSCLE_FIBER_PROFILE as Record<string, string>)[muscle] ?? 'mixed';
+    // Fiber type affects recovery (coarse-resolved — see lookupFiberType).
+    const fiberType = lookupFiberType(muscle);
     if (fiberType === 'fast') {
       rate *= 0.9;  // Fast-twitch recovers slower
     } else if (fiberType === 'slow') {

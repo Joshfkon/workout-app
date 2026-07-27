@@ -29,6 +29,8 @@ import type { StandardMuscleGroup } from '@/types/schema';
  *   value, and a rendered fine row overrides its own sub-region).
  * - Same for calves: `gastrocnemius` takes the calves-gastroc-* regions,
  *   `soleus` takes calves-soleus-*, and the coarse `calves` id is regionless.
+ * - Same for triceps: `triceps_long` takes triceps-long-*, `triceps_lat_med`
+ *   takes triceps-lateral-*, and the coarse `triceps` id is regionless.
  * - `upper_back` (standard) covers rhomboids / mid-back, so it takes the
  *   traps-mid-* regions (the between-the-shoulder-blades area).
  * - `erectors` includes the lower-back-ql-* (quadratus lumborum) regions:
@@ -59,12 +61,11 @@ export const MUSCLE_TO_REGIONS = {
   upper_traps: ['traps-upper-left', 'traps-upper-right'],
   mid_lower_traps: ['traps-lower-left', 'traps-lower-right'],
   biceps: ['biceps-left', 'biceps-right'],
-  triceps: [
-    'triceps-long-left',
-    'triceps-lateral-left',
-    'triceps-long-right',
-    'triceps-lateral-right',
-  ],
+  // Regionless coarse id — area owned by triceps_long + triceps_lat_med
+  // below (same pattern as traps/calves).
+  triceps: [],
+  triceps_long: ['triceps-long-left', 'triceps-long-right'],
+  triceps_lat_med: ['triceps-lateral-left', 'triceps-lateral-right'],
   forearms: [
     'forearm-left',
     'forearm-right',
@@ -132,4 +133,5 @@ export const REGION_TO_MUSCLE: ReadonlyMap<string, MuscleId> = new Map(
 export const REGIONLESS_COARSE_MEMBERS: Partial<Record<MuscleId, readonly MuscleId[]>> = {
   traps: ['upper_traps', 'mid_lower_traps'],
   calves: ['gastrocnemius', 'soleus'],
+  triceps: ['triceps_long', 'triceps_lat_med'],
 };

@@ -62,14 +62,15 @@ export const ALL_MUSCLE_GROUPS: readonly StandardMuscleGroup[] = STANDARD_MUSCLE
 // FINE-GRAINED MUSCLE REACHABILITY (warning gating)
 // ============================================
 //
-// Of the 24 standard muscles, seven have NO coarse legacy tag that can
+// Of the 26 standard muscles, nine have NO coarse legacy tag that can
 // credit them: the runtime resolver is standard-first, so a set tagged with a
-// coarse token ('glutes','abs','traps','calves') or a legacy coarse token
-// ('back') resolves to [glutes] / [abs] / [traps] / [calves] /
-// [lats,upper_back] respectively — it never leaks credit into glute_med /
-// obliques / erectors / upper_traps / mid_lower_traps / gastrocnemius /
-// soleus. These "fine" muscles are therefore only reachable when the user
-// logs an exercise tagged at fine grain for them.
+// coarse token ('glutes','abs','traps','calves','triceps') or a legacy coarse
+// token ('back') resolves to [glutes] / [abs] / [traps] / [calves] /
+// [triceps] / [lats,upper_back] respectively — it never leaks credit into
+// glute_med / obliques / erectors / upper_traps / mid_lower_traps /
+// gastrocnemius / soleus / triceps_long / triceps_lat_med. These "fine"
+// muscles are therefore only reachable when the user logs an exercise tagged
+// at fine grain for them.
 //
 // Their coarse "parent" region (below) is where that work physiologically
 // lands. When a user's data is entirely coarse (e.g. only 'glutes'/'back'/'abs'
@@ -87,6 +88,8 @@ export const FINE_MUSCLE_PARENTS: Partial<Record<StandardMuscleGroup, StandardMu
   mid_lower_traps: ['traps'], // coarse 'traps'
   gastrocnemius: ['calves'], // coarse 'calves'
   soleus: ['calves'], // coarse 'calves'
+  triceps_long: ['triceps'], // coarse 'triceps'
+  triceps_lat_med: ['triceps'], // coarse 'triceps'
 };
 
 /** The standard muscles that only a fine-grained tag can credit. */
