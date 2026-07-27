@@ -128,6 +128,26 @@ describe('reference reconstruction — counted-sets list', () => {
     );
   });
 
+  it('every entry carries the sets actually PERFORMED, un-split (Phase 3)', () => {
+    // Credited counts are fractions of these — the panel renders
+    // "8 sets → 2.7 credited" so its inputs are visible.
+    expect(byId.get('arnold')!.performedSets).toBe(8);
+    expect(byId.get('pd')!.performedSets).toBe(4); // credited 2 (0.5 secondary)
+    expect(byId.get('db')!.performedSets).toBe(3); // credited 1.5
+    expect(byId.get('mcp')!.performedSets).toBe(2); // credited 1
+  });
+
+  it('merging heads into the group row never sums performed work', () => {
+    // Arnold appears on all three head rows (⅓ credit each); the group entry
+    // still reports 8 performed sets, not 24 — and each head row reports the
+    // same 8 (the SAME performed work, differently credited).
+    const child = (m: string) => shoulders.children.find((c) => c.muscle === m)!;
+    for (const m of ['front_delts', 'lateral_delts', 'rear_delts']) {
+      expect(child(m).exercises.find((e) => e.id === 'arnold')!.performedSets).toBe(8);
+    }
+    expect(byId.get('arnold')!.performedSets).toBe(8);
+  });
+
   it('every child list also sums exactly to its own header (both metrics)', () => {
     for (const child of shoulders.children) {
       expect(sumTenths(child.exercises.map((e) => e.sets))).toBe(tenths(child.sets));

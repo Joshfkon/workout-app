@@ -197,6 +197,15 @@ export interface ExerciseVolume {
   id: string;
   name: string;
   /**
+   * Working sets the user actually PERFORMED on this exercise in the window
+   * (warm-ups excluded) — the input the credited fraction is computed from.
+   * Whole sets, identical under every muscle row the exercise appears on
+   * (merging rows across heads must NOT sum it: it's the same performed
+   * work). Rendered as "4 sets → 1.3 credited" so the panel shows its own
+   * inputs instead of only the post-split output.
+   */
+  performedSets: number;
+  /**
    * Credited (fractional) working sets this exercise contributed — the
    * canonical display TOTAL (= direct + indirect; sum-preserving rounded at
    * emission so lists reconcile exactly against their header).
@@ -310,6 +319,13 @@ export function accumulateExerciseVolume(
 ): void {
   if (!exercise.primary_muscle || workingSets === 0) return;
 
+  // Performed sets are per (muscle row, exercise, this call): the first credit
+  // this call lands on a muscle's entry adds the block's performed count once —
+  // NOT once per credit component (a direct + an indirect share, or two
+  // secondary tokens resolving to the same standard muscle, are still the same
+  // performed sets).
+  const performedCredited = new Set<string>();
+
   // Direct (primary-tag) vs indirect (secondary-tag) credit is tracked in the
   // SAME pass through the same accumulator — totals stay direct + indirect by
   // construction, never a second computation path.
@@ -339,6 +355,7 @@ export function accumulateExerciseVolume(
     const ex = existing ?? {
       id: exercise.id,
       name: exercise.name,
+      performedSets: 0,
       sets: 0,
       effective: 0,
       direct: 0,
@@ -346,6 +363,10 @@ export function accumulateExerciseVolume(
       directEffective: 0,
       indirectEffective: 0,
     };
+    if (!performedCredited.has(muscle)) {
+      performedCredited.add(muscle);
+      ex.performedSets += workingSets;
+    }
     ex.sets += sets;
     ex.effective += effective;
     if (isDirect) {
@@ -866,6 +887,9 @@ function setsByStandardMuscle(
         existing.indirect += ex.indirect;
         existing.directEffective += ex.directEffective;
         existing.indirectEffective += ex.indirectEffective;
+        // Same exercise arriving via another stat key is the SAME performed
+        // work — never summed, only reconciled.
+        existing.performedSets = Math.max(existing.performedSets, ex.performedSets);
       } else {
         cur.exercises.push({ ...ex });
       }
@@ -938,6 +962,9 @@ export function buildVolumeRows(
           existing.indirect += ex.indirect;
           existing.directEffective += ex.directEffective;
           existing.indirectEffective += ex.indirectEffective;
+          // The group row shows the same performed sets, credit merged across
+          // heads — performed work never sums when heads merge.
+          existing.performedSets = Math.max(existing.performedSets, ex.performedSets);
         } else {
           coarseExercises.push({ ...ex });
         }
