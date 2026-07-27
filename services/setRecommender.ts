@@ -54,7 +54,7 @@ import {
   POSITION_MATCH_LOAD_TOLERANCE,
   SESSION_CAPACITY_TOLERANCE,
 } from './suggestionEngine/constants';
-import { estimateE1RM } from './shared/e1rm';
+import { estimateE1RM, E1RM_HIGH_CONFIDENCE_MAX_EFFECTIVE_REPS } from './shared/e1rm';
 import { inferRolesForSession, type SetRole } from './suggestionEngine/setRoles';
 import {
   smallestIncrement,
@@ -226,6 +226,29 @@ function epleyE1RM(weightKg: number, reps: number, rir: number): number {
 /** Inverse Epley: the load at which `reps` are achievable leaving `rir` in reserve. */
 function weightForReps(e1rm: number, reps: number, rir: number): number {
   return e1rm / (1 + (reps + rir) / 30);
+}
+
+/**
+ * Inverse pricing for a CANONICAL (capped-estimator) anchor — the cap
+ * asymmetry fix. Stored anchors come from capped Brzycki: any set past 12
+ * effective reps contributes a FLOOR value computed AT the cap, so the anchor
+ * never encodes capability beyond 12 effective reps. Inverting such an anchor
+ * at a higher effective count (a 12-20 range's mid + RIR = 18) divides a
+ * deflated number by an extrapolated divisor — double deflation, which is how
+ * a lateral raise priced at nonsense loads. Structural for every high-rep
+ * exercise on the e1rm path.
+ *
+ * Fix: the effective reps used to price a load off a capped anchor are
+ * clamped to the same cap. Beyond it the curve cannot price — the eff-12 load
+ * is the best in-domain answer, and the honest-reps check downstream (the
+ * below-floor warning / INV-1) surfaces the range-vs-anchor tension instead
+ * of a fabricated light load. Within-session Epley-on-Epley math (session
+ * e1rm from today's sets) is deliberately NOT capped — both sides of that
+ * inversion live on the same uncapped curve.
+ */
+function weightForRepsCappedAnchor(e1rm: number, reps: number, rir: number): number {
+  const eff = Math.min(reps + Math.max(0, rir), E1RM_HIGH_CONFIDENCE_MAX_EFFECTIVE_REPS);
+  return e1rm / (1 + eff / 30);
 }
 
 // ============================================
@@ -662,7 +685,10 @@ export function prescribe(input: PrescribeInput): Prescription | null {
 
   const inc = smallestIncrement(input.availableIncrementsKg, input.minIncrementKg);
   const mid = Math.round((repRange[0] + repRange[1]) / 2);
-  const weightKg = roundToIncrement(weightForReps(e1RMKg, mid, rir), inc);
+  // Anchor-domain pricing (cap asymmetry fix): the weight pick never inverts
+  // beyond the canonical estimator's 12-effective-rep cap — an anchor cannot
+  // encode capability past it, so pricing a high-rep mid off it double-deflates.
+  const weightKg = roundToIncrement(weightForRepsCappedAnchor(e1RMKg, mid, rir), inc);
   if (!(weightKg > 0)) return null;
   return { weightKg, reps: repsAt(weightKg), rir };
 }
@@ -1366,7 +1392,11 @@ function workingWeightFromAnchor(
 ): { weightKg: number; clamped: boolean; binder: SeedClampBinder; preClampKg: number } {
   const [repMin, repMax] = targetRepRange;
   const mid = Math.round((repMin + repMax) / 2);
-  const raw = weightForReps(anchorE1RMKg, mid, targetRir);
+  // anchorE1RMKg is a CANONICAL (capped) estimate — price within its domain
+  // (see weightForRepsCappedAnchor). For ranges whose mid + RIR exceed the
+  // cap this raises the pick to the eff-12 load; the downstream honest-reps
+  // below-floor warning then surfaces the range-vs-anchor tension.
+  const raw = weightForRepsCappedAnchor(anchorE1RMKg, mid, targetRir);
 
   let bounded = raw;
   let binder: SeedClampBinder = 'none';

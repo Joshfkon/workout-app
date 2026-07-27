@@ -1,17 +1,23 @@
 /**
  * Effective Volume — RIR-weighted set counting.
  *
- * Covers the single-source-of-truth weight table, the conservative
- * null/unknown-RIR rule (warn + weight 1.0, never drop), feedback parsing
- * from both in-memory and raw-JSONB shapes, and the weighted-sum helper.
+ * Covers the single-source-of-truth weight table, the unrated-RIR rule
+ * (excluded from the effective sum and SURFACED as a count — never max
+ * credit for missing data), feedback parsing from both in-memory and
+ * raw-JSONB shapes, and the weighted-sum helpers.
+ *
+ * NOTE: earlier revisions of this file pinned the old unknown → 1.0 rule as
+ * expected behavior. That rule was itself a defect (missing data receiving
+ * maximum credit, inflating effective volume until eff ≡ sets everywhere);
+ * these tests now pin the corrected semantics.
  */
 
 import {
   EFFECTIVE_VOLUME_WEIGHTS,
-  UNKNOWN_RIR_WEIGHT,
   effectiveVolumeWeight,
   rirFromFeedback,
   sumEffectiveVolume,
+  summarizeEffectiveVolume,
   formatEffectiveVolume,
 } from '../effectiveVolume';
 
@@ -42,22 +48,23 @@ describe('effectiveVolumeWeight', () => {
     expect(warnSpy).not.toHaveBeenCalled();
   });
 
-  it('weights null RIR 1.0 (conservative) and logs a console warning', () => {
-    expect(effectiveVolumeWeight(null)).toBe(UNKNOWN_RIR_WEIGHT);
-    expect(effectiveVolumeWeight(undefined)).toBe(UNKNOWN_RIR_WEIGHT);
-    expect(warnSpy).toHaveBeenCalledTimes(2);
-    expect(warnSpy.mock.calls[0][0]).toMatch(/null\/unknown RIR/);
+  it('returns null (unrated, excluded) for a missing RIR — never max credit', () => {
+    expect(effectiveVolumeWeight(null)).toBeNull();
+    expect(effectiveVolumeWeight(undefined)).toBeNull();
+    // Missing data is an expected legacy state; the unrated COUNT is the
+    // surfacing mechanism, not a per-set warning.
+    expect(warnSpy).not.toHaveBeenCalled();
   });
 
-  it('weights out-of-range RIR 1.0 and warns instead of dropping the set', () => {
-    expect(effectiveVolumeWeight(-1)).toBe(UNKNOWN_RIR_WEIGHT);
-    expect(effectiveVolumeWeight(7)).toBe(UNKNOWN_RIR_WEIGHT);
-    expect(effectiveVolumeWeight(NaN)).toBe(UNKNOWN_RIR_WEIGHT);
-    expect(warnSpy).toHaveBeenCalledTimes(3);
+  it('treats out-of-range RIR as unrated and warns (malformed, not merely missing)', () => {
+    expect(effectiveVolumeWeight(-1)).toBeNull();
+    expect(effectiveVolumeWeight(7)).toBeNull();
+    expect(effectiveVolumeWeight(NaN)).toBeNull();
+    expect(warnSpy).toHaveBeenCalledTimes(2); // NaN is missing-shaped, not out-of-range
   });
 
-  it('includes the caller context in the warning for traceability', () => {
-    effectiveVolumeWeight(null, 'Back Squat');
+  it('includes the caller context in the out-of-range warning for traceability', () => {
+    effectiveVolumeWeight(9, 'Back Squat');
     expect(warnSpy.mock.calls[0][0]).toContain('Back Squat');
   });
 
@@ -101,9 +108,24 @@ describe('sumEffectiveVolume', () => {
     expect(sumEffectiveVolume([0, 1, 2, 3, 4])).toBeCloseTo(3.85, 5);
   });
 
-  it('never drops a null-RIR set — it counts 1.0 with a warning', () => {
-    expect(sumEffectiveVolume([2, null, 4])).toBeCloseTo(1.0 + 1.0 + 0.25, 5);
-    expect(warnSpy).toHaveBeenCalledTimes(1);
+  it('excludes a null-RIR set from the sum (surfaced via summarize, not inflated)', () => {
+    expect(sumEffectiveVolume([2, null, 4])).toBeCloseTo(1.0 + 0.25, 5);
+  });
+
+  it('summarizeEffectiveVolume reports the rated/unrated split', () => {
+    expect(summarizeEffectiveVolume([2, null, 4, undefined])).toEqual({
+      effectiveSets: 1.25,
+      ratedSets: 2,
+      unratedSets: 2,
+    });
+  });
+
+  it('a fully-unrated session reads 0 effective of N — never N of N', () => {
+    expect(summarizeEffectiveVolume([null, null, null])).toEqual({
+      effectiveSets: 0,
+      ratedSets: 0,
+      unratedSets: 3,
+    });
   });
 
   it('returns 0 for an empty session', () => {

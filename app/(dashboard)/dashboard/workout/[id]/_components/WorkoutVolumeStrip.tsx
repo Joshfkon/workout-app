@@ -150,7 +150,9 @@ export function WorkoutVolumeStrip({ rows, isLoading, onOpenDetail }: WorkoutVol
               onClick={onOpenDetail}
               className="flex-shrink-0 snap-start w-[104px] text-left rounded-lg border border-surface-800 bg-surface-900/60 px-2.5 py-2 hover:border-surface-700 transition-colors"
               data-testid={`workout-volume-chip-${row.muscle}`}
-              aria-label={`${row.displayName}: ${formatEffectiveVolume(row.effectiveSets)} effective of ${row.sets} weekly sets, ${groupZoneBandLabel(row.band)}, ${
+              aria-label={`${row.displayName}: ${formatEffectiveVolume(row.effectiveSets)} effective of ${row.sets} weekly sets${
+                row.unratedSets > 0 ? `, ${formatEffectiveVolume(row.unratedSets)} unrated` : ''
+              }, ${groupZoneBandLabel(row.band)}, ${
                 row.readyInHours <= 0 ? 'ready' : `ready in ${readyInLabel(row.readyInHours)}`
               }`}
             >
@@ -184,6 +186,13 @@ export function WorkoutVolumeStrip({ rows, isLoading, onOpenDetail }: WorkoutVol
                     </span>
                     <span className="block text-[10px] tabular-nums text-surface-500">
                       of {row.sets} sets
+                      {/* Unrated sets are EXCLUDED from the effective number
+                          (services/effectiveVolume) — surfacing the count here
+                          is the other half of that rule: never an effective
+                          value silently computed over a subset. */}
+                      {row.unratedSets > 0 && (
+                        <span className="text-warning-400"> · {formatEffectiveVolume(row.unratedSets)} unrated</span>
+                      )}
                     </span>
                   </>
                 )}

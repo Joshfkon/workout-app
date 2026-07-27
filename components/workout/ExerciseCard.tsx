@@ -63,7 +63,12 @@ interface ExerciseHistory {
   estimatedE1RM: number;
   personalRecord: { weightKg: number; reps: number; e1rm: number; date: string } | null;
   totalSessions: number;
-  /** Estimability of recent normal sets (ADD 2 rep_total auto-classification). */
+  /**
+   * Estimability of recent normal sets (ADD 2 rep_total auto-classification).
+   * "Estimable" = a HIGH-confidence canonical estimate (≤ 12 effective reps);
+   * above-cap sets (capped floors that can't track rep progress) count
+   * inestimable alongside beyond-domain sets.
+   */
   estimableSetCount?: number;
   inestimableSetCount?: number;
   /** Location-scoped calibration (services/progressionScope). */

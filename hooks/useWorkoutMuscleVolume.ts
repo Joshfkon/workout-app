@@ -19,7 +19,7 @@ import {
 } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 import { resolveMuscleToStandard, type StandardMuscleGroup } from '@/types/schema';
 import type { SetLog } from '@/types/schema';
-import { rirFromFeedback, sumEffectiveVolume } from '@/services/effectiveVolume';
+import { rirFromFeedback, summarizeEffectiveVolume } from '@/services/effectiveVolume';
 import type { ExerciseBlockWithExercise } from '@/app/(dashboard)/dashboard/workout/[id]/_lib/types';
 import {
   computeSleepWindowMultiplier,
@@ -148,11 +148,16 @@ function useWeeklyStats(
 
     for (const s of historyRows) {
       for (const ex of s.exercises) {
+        const hist = summarizeEffectiveVolume(
+          ex.sets.map((set) => set.reportedRir),
+          ex.primaryMuscle ?? undefined
+        );
         accumulateExerciseVolume(
           acc,
           { id: ex.primaryMuscle || 'x', name: ex.primaryMuscle || 'x', primary_muscle: ex.primaryMuscle, secondary_muscles: ex.secondaryMuscles },
           ex.sets.length,
-          sumEffectiveVolume(ex.sets.map((set) => set.reportedRir), ex.primaryMuscle ?? undefined)
+          hist.effectiveSets,
+          hist.unratedSets
         );
         markReachable(ex.primaryMuscle, ex.secondaryMuscles);
       }
@@ -162,6 +167,10 @@ function useWeeklyStats(
       markReachable(block.exercise.primaryMuscle, block.exercise.secondaryMuscles);
       const workingSets = liveWorkingSetsByBlock.get(block.id) ?? [];
       if (workingSets.length === 0) continue;
+      const live = summarizeEffectiveVolume(
+        workingSets.map((s) => rirFromFeedback(s.feedback)),
+        block.exercise.name
+      );
       accumulateExerciseVolume(
         acc,
         {
@@ -171,10 +180,8 @@ function useWeeklyStats(
           secondary_muscles: block.exercise.secondaryMuscles,
         },
         workingSets.length,
-        sumEffectiveVolume(
-          workingSets.map((s) => rirFromFeedback(s.feedback)),
-          block.exercise.name
-        )
+        live.effectiveSets,
+        live.unratedSets
       );
     }
 

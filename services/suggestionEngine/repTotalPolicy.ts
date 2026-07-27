@@ -16,7 +16,12 @@
  *
  * Which exercises route here: an explicit `exercises.progression_model`
  * ('rep_total' | 'e1rm') always wins; NULL auto-classifies from history —
- * majority-inestimable recent sets (> 15 effective reps) → rep_total.
+ * majority-inestimable recent sets → rep_total. "Inestimable" for
+ * classification means ABOVE THE CANONICAL CAP (12 effective reps): capped
+ * estimates are floors computed at the cap (w × 36/25 regardless of the
+ * actual count), so an exercise living above it has an anchor that cannot
+ * move with rep progress — frozen. Beyond-domain sets (> 15 eff) are the
+ * extreme case of the same family.
  *
  * Pure functions — no DB calls or side effects.
  */

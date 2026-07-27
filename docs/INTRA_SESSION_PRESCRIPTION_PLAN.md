@@ -147,28 +147,54 @@ round-trip through `convertWeightForDisplay` exact-preservation, and the
 ±5% atLoad tolerance already absorbs it for grading. Blast radius:
 repTotalPolicy + ExerciseCard rep_total branches + tests. Held for approval.
 
-### Carried-over item 2 — effort-weighted volume reading ×1.0 (verified)
+### Carried-over item 2 — effort-weighted volume (FIXED: unrated excluded + surfaced)
 
-The weighting IS applied; three compounding reasons make ×1.0 near-universal
-on the strip (`services/effectiveVolume.ts`, `useWorkoutMuscleVolume`):
+Original verdict ("arithmetically correct") was true and beside the point —
+review feedback accepted: a metric where ≤2 RIR plateaus at 1.0, unknown
+weighs 1.0, and the UI pre-selects 2 can only ever print eff ≡ sets, and
+unknown-RIR at maximum credit was a silent failure (missing data inflating
+the number).
 
-1. The weight table is a plateau: RIR 0, 1, 2 → 1.0 by design (stimulative
-   sets count fully); only 3 → 0.6 and 4 → 0.25 down-weight.
-2. Unknown RIR → 1.0 (deliberate conservative rule), and the strip reads
-   `feedback.repsInTank` ONLY — it never falls back to RPE (because the DB
-   defaults rpe to 7, which would silently grade legacy sets as RIR 3). A
-   set logged without touching the chips weighs 1.0 HERE while the set ROW
-   grades quality from RPE — two read paths, visibly inconsistent.
-3. Phase E contamination: pre-selected chips record the target (usually 2)
-   → weight 1.0.
+Shipped: `services/effectiveVolume.ts` now EXCLUDES unrated sets (missing or
+garbage RIR) from the effective sum and surfaces them
+(`summarizeEffectiveVolume` → `unratedSets`), threaded through the volume
+accumulator, `VolumeRow`, and the workout strip ("of 22 sets · 3 unrated").
+Raw set counts still show everything performed; the effective number only
+claims what was rated. A fully-unrated session reads "0 eff of N", never
+"N of N". Two test files had the old max-credit rule pinned as expected
+behavior — rewritten with the reversal documented.
 
-So "22 of 22, 9 of 9, 7 of 7, 1.5 of 1.5" is arithmetically correct for a
-session whose counted sets all resolved to RIR ≤ 2 or null — the strip only
-separates from raw counts when sets carry an explicit repsInTank of 3 or 4.
-Recommendation (held): after Phase E lands (no pre-selection +
-`rir_unconfirmed`), revisit whether unconfirmed sets should weigh 1.0 on the
-strip, and unify the strip's RIR read with the set-row grading read
-(`resolveLastRir` family) so the two surfaces can't disagree.
+Still true and unchanged: the 1.0 plateau at RIR ≤ 2 (stimulative sets count
+fully — the model's intent) and chip pre-selection (Phase E) remain the
+other two reasons eff tracked sets so closely; Phase E's no-pre-selection +
+`rir_unconfirmed` flag is what restores discriminative power for rated sets.
+The strip-vs-set-row read-path unification recommendation stands.
+
+### Cap asymmetry + frozen anchors (FIXED — `capAsymmetry.test.ts`)
+
+Review feedback accepted; both were structural for every high-rep exercise:
+
+1. **Inversion asymmetry.** Stored anchors come from the CAPPED estimator
+   (floors, never encoding capability past 12 effective reps), but the
+   inverse curve priced loads at the range's raw mid + RIR (a 12-20 range
+   inverted at 18 eff) — dividing a deflated number by an extrapolated
+   divisor. Double deflation: the 10 lb lateral-raise / 132.5 rear-delt
+   family. Fixed: `weightForRepsCappedAnchor` — anchor-domain pricing never
+   inverts past the cap (prescribe() weight-pick and the e1RM seed path).
+   For ranges beyond the cap the eff-12 load is the best in-domain answer,
+   and the existing below-floor honest-reps warning surfaces the
+   range-vs-anchor tension. Within-session Epley-on-Epley math is
+   deliberately untouched (both sides share one uncapped curve).
+
+2. **Frozen anchor / classifier miss.** A set at 12 < eff ≤ 15 returns
+   w × 36/25 REGARDLESS of the actual rep count — a 10 lb lateral raise says
+   "14.4 ≈ 15" forever; rep progress is literally invisible to the anchor.
+   Those same capped sets counted as "estimable", so the auto-classifier
+   kept such exercises on the e1rm path. Fixed: above-cap sets now count
+   toward rep_total classification (a lateral raise living above the cap
+   auto-routes to rep_total); capped values still enter the anchor pool as
+   floors so e1rm-path exercises with occasional above-cap sets keep their
+   display continuity.
 
 ### Also — "· here" on the Cable Fly header: identified, not a bug
 
