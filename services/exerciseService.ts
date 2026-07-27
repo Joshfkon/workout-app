@@ -62,6 +62,11 @@ export interface Exercise {
   defaultRepRange: [number, number];
   defaultRir: number;
   minWeightIncrementKg: number;
+  /**
+   * Phase D — available increment set (kg); the achievable-load grid is
+   * multiples of the smallest entry. Null/absent → minWeightIncrementKg.
+   */
+  availableIncrementsKg?: number[] | null;
 
   /** Modality: rep_based (default when absent) or duration_based (timed holds/carries) */
   exerciseType?: ExerciseType;
@@ -322,6 +327,7 @@ export async function createCustomExercise(
       default_rep_range: exercise.defaultRepRange || [8, 12],
       default_rir: exercise.defaultRir ?? 2,
       min_weight_increment_kg: exercise.minWeightIncrementKg ?? 2.5,
+      available_increments_kg: exercise.availableIncrementsKg ?? null,
       movement_pattern: exercise.pattern || exercise.movementPattern || 'compound',
       equipment_required: exercise.equipmentRequired || (exercise.equipment ? [exercise.equipment] : []),
       notes: exercise.notes || '',
@@ -424,6 +430,7 @@ function mapDbExercise(row: Record<string, unknown>): Exercise {
     defaultRepRange: parseRepRange(row.default_rep_range) || [8, 12],
     defaultRir: (row.default_rir as number) ?? 2,
     minWeightIncrementKg: (row.min_weight_increment_kg as number) ?? getDefaultIncrement(equipment),
+    availableIncrementsKg: (row.available_increments_kg as number[] | null) ?? null,
     mechanic: mechanic as 'compound' | 'isolation',
     isCustom: (row.is_custom as boolean) || false,
     createdBy: row.created_by as string | undefined,

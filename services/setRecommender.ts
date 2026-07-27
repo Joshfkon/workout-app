@@ -50,8 +50,17 @@ import {
   STALL_LOAD_TOLERANCE,
   LIGHT_LOAD_INCREMENT_FRACTION,
   LIGHT_LOAD_REP_CEILING_EXTENSION,
+  POSITION_MATCH_SET_COUNT_TOLERANCE,
+  POSITION_MATCH_LOAD_TOLERANCE,
+  SESSION_CAPACITY_TOLERANCE,
 } from './suggestionEngine/constants';
+import { estimateE1RM, E1RM_HIGH_CONFIDENCE_MAX_EFFECTIVE_REPS } from './shared/e1rm';
 import { inferRolesForSession, type SetRole } from './suggestionEngine/setRoles';
+import {
+  smallestIncrement,
+  smallestKnownIncrement,
+  roundPrescribedLoad,
+} from './suggestionEngine/loadGrid';
 
 // Tunable constants now live in services/suggestionEngine/constants.ts (one
 // module for the whole suggestion surface — see task constraints). The design
@@ -75,8 +84,15 @@ export interface SetRecommenderInput {
   targetRepRange: [number, number];
   /** Target reps in reserve for working sets. */
   targetRir: number;
-  /** Smallest load increment for this exercise (kg). */
+  /** Smallest load increment for this exercise (kg). Legacy single value. */
   minIncrementKg?: number;
+  /**
+   * Phase D — the exercise's available increment SET (e.g. [4.54, 1.13] for a
+   * 10 lb stack with 2.5 lb add-ons). The achievable-load grid is multiples
+   * of the smallest entry; when present it supersedes `minIncrementKg` for
+   * all rounding (services/suggestionEngine/loadGrid).
+   */
+  availableIncrementsKg?: number[];
   /**
    * True on the exercise's FIRST-EVER session (no logged history): the weight
    * was a cold-start estimate, expected to be wrong low. An easy-rated set
@@ -97,6 +113,32 @@ export interface SetRecommenderInput {
    * range ceiling as a stable state.
    */
   isBodyweight?: boolean;
+  /**
+   * Phase A — set-position matching. When provided (and the sessions are
+   * comparable), the next set's target is what the SAME set position did last
+   * session plus the smallest meaningful progression, instead of a
+   * re-derivation from the session-start anchor. Omitted → anchor path only
+   * (legacy behavior, and the fall-through when matching doesn't apply).
+   */
+  positionContext?: PositionContext;
+  /**
+   * Phase 0 (INV-2) — ALL sets completed THIS session with their resolved
+   * effort, in performed order. Their best canonical implied capacity is the
+   * ceiling no prescription may exceed. The just-completed set (the last*
+   * fields) is always included in the ceiling pool automatically; pass the
+   * earlier sets here. Omitted → the ceiling is the last set alone.
+   */
+  sessionObservedSets?: Array<{ weightKg: number; reps: number; rir: number }>;
+}
+
+/** The session-comparison inputs for set-position matching. */
+export interface PositionContext {
+  /** ALL sets from the previous session, in performed order. */
+  prevSessionSets: PrevSessionSet[];
+  /** Today's completed working sets so far, in performed order. */
+  todaySets: Array<{ weightKg: number; reps: number }>;
+  /** Planned working-set count for this exercise today. */
+  plannedSetCount: number;
 }
 
 export interface SetRecommendation {
@@ -117,6 +159,36 @@ export interface SetRecommendation {
    * later surface it as a deload suggestion; nothing consumes it yet.
    */
   suggestDeload?: boolean;
+  /**
+   * Present when the recommendation came from set-position matching (Phase A):
+   * the target is last session's set at this position plus the smallest
+   * meaningful progression, NOT an anchor-curve derivation. Carries the
+   * matched set for provenance so the banner can say exactly what it matched.
+   */
+  positionMatch?: PositionMatchedTarget;
+  /**
+   * Phase D: the engine WANTED to move the load, but the true prescription
+   * sat within half an increment of the current load — no meaningful change
+   * is available at this increment. The load is held and the UI must say so
+   * rather than rendering the no-op as a decision (or fabricating a full
+   * increment the curve doesn't support).
+   */
+  noMeaningfulChange?: boolean;
+  /**
+   * Phase 0 (INV-1): the predicted reps fall outside the stated target rep
+   * range. Honest reps are kept (a fatigue-driven decline below the floor on
+   * late sets is real, and an under-load overshoot is the double-progression
+   * signal) — but the UI MUST acknowledge the mismatch instead of rendering
+   * the range header and the out-of-range number side by side silently.
+   */
+  outsideRange?: 'below' | 'above';
+  /**
+   * Phase 0 (INV-2): the rep ask was trimmed because the prescription's
+   * implied capacity (canonical estimator, at the asked effort) exceeded the
+   * best set OBSERVED this session — the engine was about to demand a
+   * session best under fatigue.
+   */
+  sessionCapacityClamped?: boolean;
 }
 
 /**
@@ -154,6 +226,29 @@ function epleyE1RM(weightKg: number, reps: number, rir: number): number {
 /** Inverse Epley: the load at which `reps` are achievable leaving `rir` in reserve. */
 function weightForReps(e1rm: number, reps: number, rir: number): number {
   return e1rm / (1 + (reps + rir) / 30);
+}
+
+/**
+ * Inverse pricing for a CANONICAL (capped-estimator) anchor — the cap
+ * asymmetry fix. Stored anchors come from capped Brzycki: any set past 12
+ * effective reps contributes a FLOOR value computed AT the cap, so the anchor
+ * never encodes capability beyond 12 effective reps. Inverting such an anchor
+ * at a higher effective count (a 12-20 range's mid + RIR = 18) divides a
+ * deflated number by an extrapolated divisor — double deflation, which is how
+ * a lateral raise priced at nonsense loads. Structural for every high-rep
+ * exercise on the e1rm path.
+ *
+ * Fix: the effective reps used to price a load off a capped anchor are
+ * clamped to the same cap. Beyond it the curve cannot price — the eff-12 load
+ * is the best in-domain answer, and the honest-reps check downstream (the
+ * below-floor warning / INV-1) surfaces the range-vs-anchor tension instead
+ * of a fabricated light load. Within-session Epley-on-Epley math (session
+ * e1rm from today's sets) is deliberately NOT capped — both sides of that
+ * inversion live on the same uncapped curve.
+ */
+function weightForRepsCappedAnchor(e1rm: number, reps: number, rir: number): number {
+  const eff = Math.min(reps + Math.max(0, rir), E1RM_HIGH_CONFIDENCE_MAX_EFFECTIVE_REPS);
+  return e1rm / (1 + eff / 30);
 }
 
 // ============================================
@@ -314,6 +409,166 @@ export function earnedSessionBump(
 }
 
 // ============================================
+// SET-POSITION MATCHING (Phase A — intra-session prescription)
+// ============================================
+
+/**
+ * A position-matched target: last session's set at the SAME position, plus
+ * the smallest meaningful progression. `prev*` fields echo the matched set
+ * for provenance (the banner must say what was matched, not just a number).
+ */
+export interface PositionMatchedTarget {
+  weightKg: number;
+  reps: number;
+  rir: number;
+  /**
+   * Which progression was applied to the matched set:
+   *  - 'add_rep'  — one more rep at the same load (positional set had target
+   *    reserve, room existed);
+   *  - 'add_load' — one increment up, one rep traded (positional set was at
+   *    the rep ceiling with target reserve);
+   *  - 'hold'     — matched verbatim (positional set was taken harder than
+   *    target: repeating it at better effort IS the progression).
+   */
+  progression: 'add_rep' | 'add_load' | 'hold';
+  prevWeightKg: number;
+  prevReps: number;
+  prevRir?: number;
+}
+
+/** Inputs for matchPositionTarget. Loads are unit-agnostic pure numbers. */
+export interface PositionMatchInput {
+  /** 0-indexed position of the set being prescribed (= working sets done today). */
+  position: number;
+  /** ALL sets from the previous session, in performed order. */
+  prevSessionSets: PrevSessionSet[];
+  /** Today's completed working sets so far, in performed order. */
+  todaySets: Array<{ weightKg: number; reps: number }>;
+  /** Planned working-set count for this exercise today. */
+  plannedSetCount: number;
+  targetRepRange: [number, number];
+  targetRir: number;
+  minIncrementKg?: number;
+  /** Phase D — available increment set; smallest entry drives the load step. */
+  availableIncrementsKg?: number[];
+}
+
+/**
+ * THE set-position match (Phase A). Fixes the root defect of per-set
+ * re-derivation from a session-START anchor: a static anchor has no term for
+ * what already happened this session, so set 4 was prescribed the same value
+ * as set 2 while the late sets measure the same capacity under accumulated
+ * fatigue (the Iso-Lateral Incline Press fixture shows a ~13% e1RM spread
+ * inside one session, monotonically ordered by fatigue). Last session's set
+ * at the SAME position already embeds that session shape — no fitted fatigue
+ * model needed.
+ *
+ * Target = the positional set, plus the smallest meaningful progression:
+ *  - positional set at/above target reserve (within the half-chip effort
+ *    tolerance) → one more rep at the same load; at the rep ceiling → one
+ *    increment up, one rep traded;
+ *  - positional set harder than target → held VERBATIM. It was already past
+ *    the prescribed effort; asking for one more rep would demand exceeding
+ *    failure (the fixture's set 4: 182.5×7 @0 must re-prescribe ×7, never 8).
+ *
+ * Returns null — fall through to the anchor path — when the sessions are not
+ * comparable:
+ *  - no valid previous-session set at this position;
+ *  - set counts differ by more than POSITION_MATCH_SET_COUNT_TOLERANCE;
+ *  - any completed set today deviates more than POSITION_MATCH_LOAD_TOLERANCE
+ *    from the load the same position carried last session (plan override /
+ *    restructure — last session is not being repeated);
+ *  - the positional set was a ramp/feeder set (role inference): feeder work
+ *    never receives working-set progression.
+ *
+ * KNOWN LIMIT: exercise ORDER within the workout is not checked — the stored
+ * history shape doesn't carry the exercise's position in the previous workout.
+ * The load-comparability gate catches most order-driven divergence (an
+ * exercise moved from first to last shows up as lighter early sets today).
+ */
+export function matchPositionTarget(input: PositionMatchInput): PositionMatchedTarget | null {
+  const { position, plannedSetCount, targetRepRange, targetRir } = input;
+  const [repMin, repMax] = targetRepRange;
+  if (!Number.isInteger(position) || position < 0) return null;
+  if (!(plannedSetCount > 0)) return null;
+
+  // Valid rows only, in performed order (malformed rows are skipped, never throw).
+  const prev = input.prevSessionSets.filter(
+    (s) => Number.isFinite(s.weightKg) && s.weightKg > 0 && Number.isFinite(s.reps) && s.reps > 0
+  );
+  if (prev.length === 0) return null;
+
+  // Gate 1: comparable set counts.
+  if (Math.abs(prev.length - plannedSetCount) > POSITION_MATCH_SET_COUNT_TOLERANCE) return null;
+
+  // Gate 2: a working positional set exists.
+  const ref = prev[position];
+  if (!ref) return null;
+  const roles = inferRolesForSession(prev.map((s) => ({ weightKg: s.weightKg })));
+  if (roles[position] !== 'working') return null;
+
+  // Gate 3: today's session so far is load-comparable, position by position.
+  const compared = Math.min(position, input.todaySets.length);
+  for (let i = 0; i < compared; i++) {
+    const today = input.todaySets[i];
+    const past = prev[i];
+    if (!today || !past) continue;
+    if (!(today.weightKg > 0) || !(past.weightKg > 0)) continue;
+    if (Math.abs(today.weightKg - past.weightKg) / past.weightKg > POSITION_MATCH_LOAD_TOLERANCE) {
+      return null;
+    }
+  }
+
+  // Gate 4 (Codex review): a positional set FAR beyond the range is a
+  // different scheme / an objective-underload session, not a repeatable
+  // position — replaying it (or one-increment-trading it) would seed a
+  // target outside the exercise's own stated range and bypass the anchor
+  // path's genuine-overshoot repricing. Fall through instead.
+  if (ref.reps > repMax + REP_OVERSHOOT) return null;
+
+  const inc = smallestIncrement(input.availableIncrementsKg, input.minIncrementKg);
+  const prevRir = ref.rir;
+  // Missing RIR → assume the set landed on target (same convention as the
+  // rest of the engine). The half-chip tolerance keeps the RIR-2 "good" chip
+  // (stored RPE 7.5 → RIR 2.5) and a 1.5 both counting as at-target.
+  const effRir = prevRir ?? targetRir;
+  const provenance = {
+    rir: targetRir,
+    prevWeightKg: ref.weightKg,
+    prevReps: ref.reps,
+    ...(prevRir !== undefined ? { prevRir } : {}),
+  };
+
+  if (effRir >= targetRir - EFFORT_MATCH_TOLERANCE) {
+    // Room existed at this position last time → smallest meaningful progression.
+    // Ceiling extension keys on the smallest KNOWN step (never the default).
+    const ceiling = effectiveRepCeiling(
+      repMax,
+      ref.weightKg,
+      smallestKnownIncrement(input.availableIncrementsKg, input.minIncrementKg)
+    );
+    if (ref.reps + 1 <= ceiling) {
+      return { weightKg: ref.weightKg, reps: ref.reps + 1, progression: 'add_rep', ...provenance };
+    }
+    // The one-increment/one-rep trade applies only to a set EXACTLY at the
+    // rep ceiling (textbook double progression). Past the ceiling — but
+    // under the gate-4 overshoot proof — the set is between schemes: fall
+    // through to the anchor path rather than trading from an out-of-range
+    // count (Codex review: a 15-rep set against 8-12 must not seed ×14).
+    if (ref.reps > ceiling) return null;
+    return {
+      weightKg: ref.weightKg + inc,
+      reps: Math.max(repMin, ref.reps - 1),
+      progression: 'add_load',
+      ...provenance,
+    };
+  }
+
+  // Positional set was harder than target → hold it verbatim.
+  return { weightKg: ref.weightKg, reps: ref.reps, progression: 'hold', ...provenance };
+}
+
+// ============================================
 // SESSION-TO-SESSION REGRESSION (confirmed underperformance → step down)
 // ============================================
 
@@ -399,8 +654,10 @@ export interface PrescribeInput {
   repRange: [number, number];
   /** When given, answer "how many reps at THIS weight". When omitted, pick the weight. */
   weightKg?: number;
-  /** Smallest load increment (kg) for weight picking. */
+  /** Smallest load increment (kg) for weight picking. Legacy single value. */
   minIncrementKg?: number;
+  /** Phase D — available increment set; smallest entry drives weight picking. */
+  availableIncrementsKg?: number[];
 }
 
 export interface Prescription {
@@ -437,9 +694,12 @@ export function prescribe(input: PrescribeInput): Prescription | null {
     return { weightKg: input.weightKg, reps: repsAt(input.weightKg), rir };
   }
 
-  const inc = input.minIncrementKg && input.minIncrementKg > 0 ? input.minIncrementKg : 2.5;
+  const inc = smallestIncrement(input.availableIncrementsKg, input.minIncrementKg);
   const mid = Math.round((repRange[0] + repRange[1]) / 2);
-  const weightKg = roundToIncrement(weightForReps(e1RMKg, mid, rir), inc);
+  // Anchor-domain pricing (cap asymmetry fix): the weight pick never inverts
+  // beyond the canonical estimator's 12-effective-rep cap — an anchor cannot
+  // encode capability past it, so pricing a high-rep mid off it double-deflates.
+  const weightKg = roundToIncrement(weightForRepsCappedAnchor(e1RMKg, mid, rir), inc);
   if (!(weightKg > 0)) return null;
   return { weightKg, reps: repsAt(weightKg), rir };
 }
@@ -495,7 +755,9 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
 
   const { lastWeightKg, lastReps, lastRir, targetRepRange, targetRir } = input;
   const [repMin, repMax] = targetRepRange;
-  const inc = input.minIncrementKg && input.minIncrementKg > 0 ? input.minIncrementKg : 2.5;
+  // Phase D: the load step is the smallest AVAILABLE increment (grid =
+  // multiples of it) — a 10 lb stack with 2.5 lb add-ons steps by 2.5, not 10.
+  const inc = smallestIncrement(input.availableIncrementsKg, input.minIncrementKg);
   const n = Math.max(0, Math.floor(input.setsCompletedThisExercise ?? 0));
 
   // Guard bad inputs: keep the last set's load, but pull the rep target into
@@ -522,9 +784,140 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
   const effortVsTarget: SetRecommendation['effortVsTarget'] =
     dev >= EFFORT_MATCH_TOLERANCE ? 'easier' : dev <= -EFFORT_MATCH_TOLERANCE ? 'harder' : 'on_target';
 
+  // ---- Phase 0 hard invariants — applied to EVERY prescription returned ----
+  //
+  // INV-2: never prescribe an implied capacity above the session's best
+  // OBSERVED set. Implied capacity = canonical capped Brzycki at the ASKED
+  // effort — the target RIR, except for a position-matched rec, which asks
+  // the lifter to repeat a set performed at its RECORDED effort (grading a
+  // repeat-ask at the stricter target effort would strip fixture-validated
+  // targets whose evidence set was taken past target). The ceiling pool is
+  // today's completed sets (sessionObservedSets + the just-completed set);
+  // it only applies once at least one set is done THIS session — a
+  // session-start replay off last session's reference set is not an
+  // observation of today. Cheap proxy for the full fatigue model: confirmed
+  // by two independent live reproductions (Iso-Lateral MISS B, Arnold Press
+  // 42.5×10 = 61.2 implied against a 60.0 session best).
+  //
+  // INV-1: a prescription whose reps fall outside the stated range keeps its
+  // honest count but carries `outsideRange` so the banner must re-render the
+  // contradiction (never "8-12 @ 2 RIR" silently over a ×7 prefill).
+  const finalizeRec = (rec: SetRecommendation): SetRecommendation => {
+    const out = { ...rec };
+
+    if (n >= 1 && out.weightKg > 0) {
+      let ceiling = 0;
+      const pool = [
+        ...(input.sessionObservedSets ?? []),
+        { weightKg: lastWeightKg, reps: lastReps, rir: safeRir },
+      ];
+      for (const s of pool) {
+        const est =
+          s.weightKg > 0 && s.reps > 0 ? estimateE1RM(s.weightKg, s.reps, Math.max(0, s.rir)) : null;
+        if (est && est.value > ceiling) ceiling = est.value;
+      }
+      if (ceiling > 0) {
+        // Asked effort for the invariant (Codex review, partially accepted):
+        // a position-matched HOLD demands "repeat the set you did at this
+        // position" — its expected effort is the HISTORICAL RIR (grading a
+        // repeat of an @1 set at the stricter target effort would strip
+        // fixture-validated targets whose evidence set was taken past
+        // target). But the historical RIR is only ever used when it is
+        // HARDER than the target: an unusually easy historical set (@4)
+        // must not inflate the implied ask and over-trim a progression that
+        // is only asked for at the target effort. min() gives holds their
+        // recorded effort and caps progressions at the target.
+        const askedRir = out.positionMatch
+          ? Math.min(out.positionMatch.prevRir ?? out.rir, out.rir)
+          : out.rir;
+        let reps = out.reps;
+        for (;;) {
+          if (reps <= 1) break;
+          const implied = estimateE1RM(out.weightKg, reps, Math.max(0, askedRir));
+          // null = beyond the estimator's domain (> 15 effective reps): the
+          // ask is not even measurable — keep trimming until it is.
+          if (implied && implied.value <= ceiling * (1 + SESSION_CAPACITY_TOLERANCE)) break;
+          reps -= 1;
+        }
+        if (reps !== out.reps) {
+          out.reps = reps;
+          out.sessionCapacityClamped = true;
+        }
+      }
+    }
+
+    if (out.reps < repMin) out.outsideRange = 'below';
+    else if (out.reps > repMax) out.outsideRange = 'above';
+
+    return out;
+  };
+
+  // ---- 0) SET-POSITION MATCH (Phase A) ----
+  // When the previous session is comparable, the next set's target is what
+  // the SAME set position did last time (plus the smallest meaningful
+  // progression) — the positional set already embeds the session's fatigue
+  // shape, which a static session-start anchor cannot see. Two reactive
+  // guards keep today's evidence in charge when it clearly contradicts the
+  // replay; on either, fall through to the anchor path below.
+  if (input.positionContext) {
+    const pm = matchPositionTarget({
+      position: n,
+      prevSessionSets: input.positionContext.prevSessionSets,
+      todaySets: input.positionContext.todaySets,
+      plannedSetCount: input.positionContext.plannedSetCount,
+      targetRepRange,
+      targetRir,
+      minIncrementKg: input.minIncrementKg,
+      availableIncrementsKg: input.availableIncrementsKg,
+    });
+    // Guard A: the set just completed was a CLEAR too-heavy miss — below the
+    // rep-range floor or past the failure deadband. A position match may
+    // still prescribe DOWN (that's the fixture's set 4: 182.5 after the 195
+    // grind), but a match that does not actually reduce the load contradicts
+    // today's direct evidence: replaying a same-load positional set after a
+    // 50×3 @0 would ask the capacity clamp to trim reps when the LOAD is the
+    // problem — the too-heavy branch below owns that lever. (Codex review:
+    // the original guard only rejected matches that INCREASED the load.)
+    const clearMiss = dev <= -DEADBAND_RIR || lastReps < repMin;
+    const groundOut = clearMiss && !!pm && pm.weightKg >= lastWeightKg;
+    // Guard B: the set just completed proved objective under-load (reps past
+    // the overshoot proof) — today is running far stronger than last session;
+    // replaying last session's positions would under-prescribe.
+    const provenUnderload = lastReps > repMax + REP_OVERSHOOT;
+    if (pm && !groundOut && !provenUnderload) {
+      return finalizeRec({
+        weightKg: pm.weightKg,
+        reps: pm.reps,
+        rir: targetRir,
+        rationale:
+          pm.weightKg > lastWeightKg
+            ? 'increase_load'
+            : pm.weightKg < lastWeightKg
+              ? 'reduce_load'
+              : 'maintain',
+        effortVsTarget,
+        positionMatch: pm,
+      });
+    }
+  }
+
   // ---- 1) Decide the WEIGHT (default: hold) ----
   let weightKg: number;
   let rationale: SetRecommendation['rationale'];
+  let noMeaningfulChange = false;
+
+  // Grid rounding for an intended load CHANGE against the just-completed
+  // set's load (Phase D — services/suggestionEngine/loadGrid):
+  //  - never renders an intended change as the reference load (grid ties
+  //    round in the direction of the intent);
+  //  - a true prescription within HALF an increment of the reference is not
+  //    a decision: hold and say so, never fabricate a full-increment jump.
+  const gridRound = (rawKg: number) =>
+    roundPrescribedLoad(rawKg, {
+      availableIncrementsKg: input.availableIncrementsKg,
+      minIncrementKg: input.minIncrementKg,
+      referenceKg: lastWeightKg,
+    });
 
   // Cold-start sets adapt aggressively: the starting weight was an estimate,
   // expected to be wrong low. The step cap widens, and an easy-rated set bumps
@@ -539,22 +932,40 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
     // the one-tap plateau switch reprices upward even off a near-failure set)
     // OR cleared the top of the range with >= DEADBAND reserve.
     const ideal = weightForReps(e1rm, repMax, targetRir);
-    weightKg = roundToIncrement(Math.min(ideal, lastWeightKg * (1 + stepCap)), inc);
-    if (weightKg <= lastWeightKg) weightKg = lastWeightKg + inc;
-    rationale = 'increase_load';
+    const r = gridRound(Math.max(Math.min(ideal, lastWeightKg * (1 + stepCap)), lastWeightKg));
+    if (r.noMeaningfulChange) {
+      weightKg = lastWeightKg;
+      rationale = 'maintain';
+      noMeaningfulChange = true;
+    } else {
+      weightKg = r.weightKg;
+      rationale = 'increase_load';
+    }
   } else if (coldStartEasy) {
     // Cold-start "easy" rating: the RIR chip caps at 4+, so Epley can't see
     // the real headroom — a rated-easy first set means the estimate was low.
     // Bump by the full cold-start step rather than deriving from reported RIR.
-    weightKg = roundToIncrement(lastWeightKg * (1 + COLD_START_STEP_PCT), inc);
-    if (weightKg <= lastWeightKg) weightKg = lastWeightKg + inc;
-    rationale = 'increase_load';
+    const r = gridRound(lastWeightKg * (1 + COLD_START_STEP_PCT));
+    if (r.noMeaningfulChange) {
+      weightKg = lastWeightKg;
+      rationale = 'maintain';
+      noMeaningfulChange = true;
+    } else {
+      weightKg = r.weightKg;
+      rationale = 'increase_load';
+    }
   } else if (lastReps < repMin || dev <= -DEADBAND_RIR) {
     // Too heavy, or went too close to failure → reduce toward mid-range.
     const ideal = weightForReps(e1rm, mid, targetRir);
-    weightKg = roundToIncrement(Math.max(ideal, lastWeightKg * (1 - MAX_REDUCE_PCT)), inc);
-    if (weightKg >= lastWeightKg) weightKg = Math.max(inc, lastWeightKg - inc);
-    rationale = 'reduce_load';
+    const r = gridRound(Math.min(Math.max(ideal, lastWeightKg * (1 - MAX_REDUCE_PCT)), lastWeightKg));
+    if (r.noMeaningfulChange) {
+      weightKg = lastWeightKg;
+      rationale = 'maintain';
+      noMeaningfulChange = true;
+    } else {
+      weightKg = Math.max(inc, r.weightKg);
+      rationale = 'reduce_load';
+    }
   } else {
     weightKg = lastWeightKg;
     rationale = 'maintain';
@@ -578,7 +989,14 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
     reps = predictRepsAtWeight(e1rm, weightKg, targetRir, n, targetRepRange);
   }
 
-  return { weightKg, reps, rir: targetRir, rationale, effortVsTarget };
+  return finalizeRec({
+    weightKg,
+    reps,
+    rir: targetRir,
+    rationale,
+    effortVsTarget,
+    ...(noMeaningfulChange ? { noMeaningfulChange } : {}),
+  });
 }
 
 /** Input for recommendSessionStart — the matching set from the PREVIOUS session. */
@@ -590,6 +1008,8 @@ export interface SessionStartInput {
   targetRepRange: [number, number];
   targetRir: number;
   minIncrementKg?: number;
+  /** Phase D — available increment set; smallest entry drives the load step. */
+  availableIncrementsKg?: number[];
   /**
    * Exercise modality. 'duration_based' routes to the duration policy —
    * prevReps / targetRepRange / the returned reps carry SECONDS and the
@@ -634,13 +1054,14 @@ export interface SessionStartInput {
  */
 function stallStreak(prevGraded: GradedSession, input: SessionStartInput): number {
   if (!input.priorSessionSets || input.priorSessionSets.length === 0) return 0;
-  const prior = gradeSession(input.priorSessionSets, input.targetRepRange, input.minIncrementKg);
+  const knownInc = smallestKnownIncrement(input.availableIncrementsKg, input.minIncrementKg);
+  const prior = gradeSession(input.priorSessionSets, input.targetRepRange, knownInc);
   if (!prior) return 0;
   const sameLoad = (a: number, b: number) => b > 0 && Math.abs(a - b) / b <= STALL_LOAD_TOLERANCE;
   if (!sameLoad(prevGraded.topWeightKg, prior.topWeightKg)) return 0;
   if (prevGraded.topReps > prior.topReps) return 0; // reps moved — that IS progress
   if (input.earlierSessionSets && input.earlierSessionSets.length > 0) {
-    const earlier = gradeSession(input.earlierSessionSets, input.targetRepRange, input.minIncrementKg);
+    const earlier = gradeSession(input.earlierSessionSets, input.targetRepRange, knownInc);
     if (earlier && sameLoad(prior.topWeightKg, earlier.topWeightKg) && prior.topReps <= earlier.topReps) {
       return 3;
     }
@@ -681,6 +1102,7 @@ export function recommendSessionStart(input: SessionStartInput): SetRecommendati
     targetRepRange: input.targetRepRange,
     targetRir: input.targetRir,
     minIncrementKg: input.minIncrementKg,
+    availableIncrementsKg: input.availableIncrementsKg,
   });
 
   // Degenerate reference (zero load / zero reps): recommendSet's guard already
@@ -706,8 +1128,7 @@ export function recommendSessionStart(input: SessionStartInput): SetRecommendati
         ? input.prevSessionSets
         : [{ weightKg: input.prevWeightKg, reps: input.prevReps, rir: input.prevRir }];
     if (confirmedRegression(lastSessionSets, input.priorSessionSets, input.targetRepRange)) {
-      const inc =
-        input.minIncrementKg && input.minIncrementKg > 0 ? input.minIncrementKg : 2.5;
+      const inc = smallestIncrement(input.availableIncrementsKg, input.minIncrementKg);
       return {
         weightKg: regressionStepDown(input.prevWeightKg, inc),
         // Recenter the rep expectation on the plan at the reduced load.
@@ -728,7 +1149,11 @@ export function recommendSessionStart(input: SessionStartInput): SetRecommendati
     input.prevSessionSets && input.prevSessionSets.length > 0
       ? input.prevSessionSets
       : [{ weightKg: input.prevWeightKg, reps: input.prevReps, rir: input.prevRir }];
-  const graded = gradeSession(lastSessionSets, input.targetRepRange, input.minIncrementKg);
+  const graded = gradeSession(
+    lastSessionSets,
+    input.targetRepRange,
+    smallestKnownIncrement(input.availableIncrementsKg, input.minIncrementKg)
+  );
 
   if (!graded) {
     // No silent failures: malformed / ungradable session data → hold the last
@@ -744,15 +1169,28 @@ export function recommendSessionStart(input: SessionStartInput): SetRecommendati
     // the existing e1RM anchor math — ideal for repMax @ target RIR off the
     // reference set's capacity estimate, capped +MAX_STEP_PCT, one-increment
     // escape — and the rep seed RESETS to the range floor for the new load.
-    const inc = input.minIncrementKg && input.minIncrementKg > 0 ? input.minIncrementKg : 2.5;
+    const inc = smallestIncrement(input.availableIncrementsKg, input.minIncrementKg);
     const e1rm = epleyE1RM(
       input.prevWeightKg,
       input.prevReps,
       Math.max(0, input.prevRir ?? input.targetRir)
     );
     const ideal = weightForReps(e1rm, repMax, input.targetRir);
-    let weightKg = roundToIncrement(Math.min(ideal, input.prevWeightKg * (1 + MAX_STEP_PCT)), inc);
-    if (weightKg <= input.prevWeightKg) weightKg = input.prevWeightKg + inc;
+    // Grid rule (Phase D): an EARNED bump must land strictly above the
+    // previous load — a grid tie rounds up, never down to last session's load.
+    const r = roundPrescribedLoad(
+      Math.max(Math.min(ideal, input.prevWeightKg * (1 + MAX_STEP_PCT)), input.prevWeightKg),
+      {
+        availableIncrementsKg: input.availableIncrementsKg,
+        minIncrementKg: input.minIncrementKg,
+        referenceKg: input.prevWeightKg,
+      }
+    );
+    // An earned bump within half an increment of the previous load still
+    // steps: unlike a curve-noise adjustment, this change was EARNED by
+    // hitting the rep ceiling, and the smallest real step is the honest
+    // double-progression move.
+    const weightKg = r.noMeaningfulChange ? input.prevWeightKg + inc : r.weightKg;
     return {
       weightKg,
       reps: repMin,
@@ -774,7 +1212,11 @@ export function recommendSessionStart(input: SessionStartInput): SetRecommendati
   // exercises where the smallest increment is a >10% jump, so reps substitute
   // for unavailable fractional load). A slot already at/above the ceiling
   // keeps its honest count (never seed fewer reps than the lifter did).
-  const ceiling = effectiveRepCeiling(repMax, input.prevWeightKg, input.minIncrementKg);
+  const ceiling = effectiveRepCeiling(
+    repMax,
+    input.prevWeightKg,
+    smallestKnownIncrement(input.availableIncrementsKg, input.minIncrementKg)
+  );
   return {
     weightKg: input.prevWeightKg,
     reps: Math.min(input.prevReps + 1, Math.max(ceiling, input.prevReps)),
@@ -843,7 +1285,7 @@ export function predictAmrapReps(
  * What anchor the prescribed weight was actually computed from — surfaced in the
  * provenance sheet so we never list a number that didn't influence the output.
  */
-export type AnchorSource = 'e1rm' | 'last_session' | 'ramp_percent' | 'none';
+export type AnchorSource = 'e1rm' | 'last_session' | 'ramp_percent' | 'position_match' | 'none';
 
 export interface SeedSlotInput {
   /** Resolved role for this slot (user tag beats inference — resolve upstream). */
@@ -852,8 +1294,10 @@ export interface SeedSlotInput {
   targetRepRange: [number, number];
   /** Target reps in reserve for WORKING sets. */
   targetRir: number;
-  /** Smallest load increment for this exercise (kg). */
+  /** Smallest load increment for this exercise (kg). Legacy single value. */
   minIncrementKg?: number;
+  /** Phase D — available increment set; smallest entry drives the load step. */
+  availableIncrementsKg?: number[];
   /**
    * The exercise's e1RM capacity anchor (kg) — the stored / session-best e1RM.
    * This is the number that was being displayed-but-ignored before the fix.
@@ -900,6 +1344,16 @@ export interface SeedSlotInput {
   exerciseType?: ExerciseType;
   /** True for bodyweight exercises (duration policy: time-only progression). */
   isBodyweight?: boolean;
+  /**
+   * Phase A — this slot's 0-indexed position. With `plannedSetCount` and a
+   * comparable `prevSessionSets`, a WORKING slot seeds from set-position
+   * matching (what the same position did last session + smallest meaningful
+   * progression) before consulting the e1RM anchor. Confirmed regression
+   * still wins (two below-floor sessions step down regardless of position).
+   */
+  slotIndex?: number;
+  /** Planned working-set count today (position-match comparability gate). */
+  plannedSetCount?: number;
 }
 
 /** Which rule bound the e1RM working prescription (loud clamps, Phase 4). */
@@ -932,12 +1386,14 @@ export interface SeedRecommendation {
   preClampWeightKg?: number;
   engineVersion: number;
   /**
-   * DURATION exercises only: the time-then-load policy's seeded SECONDS
-   * target for this session (+step / hold at ceiling / reset to floor after
-   * a load bump). Rep exercises never set this — their reps come from the
-   * e1RM curve at the seeded weight.
+   * The specific rep target that comes WITH the seeded weight, when the seed
+   * carries one: duration exercises (the time policy's seconds target) and
+   * position-matched slots (the matched set's rep target). Absent → the reps
+   * come from the e1RM curve at the seeded weight.
    */
   seedReps?: number;
+  /** Present when anchorSource is 'position_match' — the matched set, for provenance. */
+  positionMatch?: PositionMatchedTarget;
 }
 
 /**
@@ -965,7 +1421,11 @@ function workingWeightFromAnchor(
 ): { weightKg: number; clamped: boolean; binder: SeedClampBinder; preClampKg: number } {
   const [repMin, repMax] = targetRepRange;
   const mid = Math.round((repMin + repMax) / 2);
-  const raw = weightForReps(anchorE1RMKg, mid, targetRir);
+  // anchorE1RMKg is a CANONICAL (capped) estimate — price within its domain
+  // (see weightForRepsCappedAnchor). For ranges whose mid + RIR exceed the
+  // cap this raises the pick to the eff-12 load; the downstream honest-reps
+  // below-floor warning then surfaces the range-vs-anchor tension.
+  const raw = weightForRepsCappedAnchor(anchorE1RMKg, mid, targetRir);
 
   let bounded = raw;
   let binder: SeedClampBinder = 'none';
@@ -1033,7 +1493,7 @@ function workingWeightFromAnchor(
  * displayed-but-ignored.
  */
 export function recommendSeedForSlot(input: SeedSlotInput): SeedRecommendation {
-  const inc = input.minIncrementKg && input.minIncrementKg > 0 ? input.minIncrementKg : 2.5;
+  const inc = smallestIncrement(input.availableIncrementsKg, input.minIncrementKg);
   const [repMin, repMax] = input.targetRepRange;
 
   // ---- Duration exercise: no e1RM curve, no ramp %, seed from last session ----
@@ -1114,9 +1574,10 @@ export function recommendSeedForSlot(input: SeedSlotInput): SeedRecommendation {
           input.prevSessionSets,
           input.targetRepRange,
           input.targetRir,
-          // Raw increment (not the 2.5 rounding default): the light-load
-          // rep-ceiling extension applies only to a KNOWN equipment step.
-          input.minIncrementKg
+          // KNOWN increment only (never the 2.5 rounding default): the
+          // light-load rep-ceiling extension applies only to a recorded
+          // equipment step — smallest of the increment set when present.
+          smallestKnownIncrement(input.availableIncrementsKg, input.minIncrementKg)
         )
       : undefined;
 
@@ -1173,6 +1634,48 @@ export function recommendSeedForSlot(input: SeedSlotInput): SeedRecommendation {
       clamped: false,
       engineVersion: SUGGESTION_ENGINE_VERSION,
     };
+  }
+
+  // ---- WORKING slot, set-position match (Phase A) ----
+  // Before the anchor path: when last session is comparable, this slot's
+  // target is what the SAME position did last time plus the smallest
+  // meaningful progression. Confirmed regression (checked below via
+  // regressionWeightKg, computed above) is stronger evidence and must win,
+  // so the match only runs when no regression fired.
+  if (
+    input.role === 'working' &&
+    regressionWeightKg <= 0 &&
+    input.slotIndex !== undefined &&
+    input.plannedSetCount !== undefined &&
+    input.prevSessionSets &&
+    input.prevSessionSets.length > 0
+  ) {
+    const pm = matchPositionTarget({
+      position: input.slotIndex,
+      prevSessionSets: input.prevSessionSets,
+      // Session start: nothing performed yet, so comparability is decided by
+      // set count and the positional set's role alone.
+      todaySets: [],
+      plannedSetCount: input.plannedSetCount,
+      targetRepRange: input.targetRepRange,
+      targetRir: input.targetRir,
+      minIncrementKg: input.minIncrementKg,
+      availableIncrementsKg: input.availableIncrementsKg,
+    });
+    if (pm) {
+      return {
+        weightKg: pm.weightKg,
+        repRange: input.targetRepRange,
+        rir: input.targetRir,
+        role: 'working',
+        showRirTarget: true,
+        anchorSource: 'position_match',
+        clamped: false,
+        engineVersion: SUGGESTION_ENGINE_VERSION,
+        seedReps: pm.reps,
+        positionMatch: pm,
+      };
+    }
   }
 
   // ---- WORKING slot, confirmed regression → step down one increment ----
@@ -1236,6 +1739,7 @@ export function recommendSeedForSlot(input: SeedSlotInput): SeedRecommendation {
       targetRepRange: input.targetRepRange,
       targetRir: input.targetRir,
       minIncrementKg: inc,
+      availableIncrementsKg: input.availableIncrementsKg,
       prevSessionSets: input.prevSessionSets,
       priorSessionSets: input.priorSessionSets,
     });

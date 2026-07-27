@@ -34,12 +34,19 @@ export const EFFECTIVE_VOLUME_WEIGHTS: Readonly<Record<RepsInTank, number>> = {
 };
 
 /**
- * Conservative fallback weight for sets whose RIR is unknown (legacy sets
- * logged before structured feedback, imports, or malformed data). Counting
- * them fully is the conservative choice for volume tracking: it never hides
- * volume a user actually performed.
+ * Sets whose RIR is unknown (legacy sets, imports, malformed data, or a set
+ * logged without touching the effort chips) are UNRATED: they are EXCLUDED
+ * from the effective sum and surfaced as a count instead.
+ *
+ * History: unknown used to weigh 1.0 ("conservative — never hides volume").
+ * That was a silent failure by this module's own rule: missing data received
+ * MAXIMUM credit, inflating effective volume — and combined with the 1.0
+ * plateau at RIR ≤ 2 it made eff ≡ sets on every surface, so the metric
+ * could not answer the question it exists for. Excluded-and-surfaced is the
+ * honest treatment: the raw set count still shows everything performed; the
+ * effective number only claims what was actually rated.
  */
-export const UNKNOWN_RIR_WEIGHT = 1.0;
+export const UNRATED_EXCLUDED = null;
 
 /**
  * Extract the reported RIR from a set's feedback payload.
@@ -69,9 +76,13 @@ export function rirFromFeedback(feedback: unknown): number | null {
 /**
  * Effectiveness weight for a single set given its reported RIR.
  *
- * No silent failures: a null/unknown/out-of-range RIR logs a console warning
- * and is weighted {@link UNKNOWN_RIR_WEIGHT} (1.0, conservative) — the set is
- * never dropped.
+ * Returns null for an UNRATED set (no RIR, or out-of-range garbage): the set
+ * is excluded from the effective sum and counted in
+ * {@link summarizeEffectiveVolume}'s `unratedSets` — the surfacing IS the
+ * no-silent-failures mechanism (a per-set console warning was noise; a
+ * maximum-credit fallback was worse: missing data inflating the metric).
+ * Out-of-range values still warn — they are malformed data, not merely
+ * missing.
  *
  * @param rir - reported RIR (0-4), or null/undefined when the set has none
  * @param context - optional label (exercise/surface) to make warnings traceable
@@ -79,21 +90,52 @@ export function rirFromFeedback(feedback: unknown): number | null {
 export function effectiveVolumeWeight(
   rir: number | null | undefined,
   context?: string
-): number {
+): number | null {
   if (rir == null || !Number.isFinite(rir)) {
-    console.warn(
-      `[effectiveVolume] Set has null/unknown RIR${context ? ` (${context})` : ''}; weighting 1.0 (conservative).`
-    );
-    return UNKNOWN_RIR_WEIGHT;
+    return UNRATED_EXCLUDED;
   }
   const rounded = Math.round(rir);
   if (rounded < 0 || rounded > 4) {
     console.warn(
-      `[effectiveVolume] Set has out-of-range RIR ${rir}${context ? ` (${context})` : ''}; weighting 1.0 (conservative).`
+      `[effectiveVolume] Set has out-of-range RIR ${rir}${context ? ` (${context})` : ''}; treating as unrated (excluded).`
     );
-    return UNKNOWN_RIR_WEIGHT;
+    return UNRATED_EXCLUDED;
   }
   return EFFECTIVE_VOLUME_WEIGHTS[rounded as RepsInTank];
+}
+
+/** Effective volume with its rated/unrated composition — the display shape. */
+export interface EffectiveVolumeSummary {
+  /** Σ weight over RATED sets only. */
+  effectiveSets: number;
+  /** Sets that carried a usable RIR. */
+  ratedSets: number;
+  /** Sets excluded for missing/garbage RIR — surface this next to the number. */
+  unratedSets: number;
+}
+
+/**
+ * Effective volume plus the rated/unrated split. Any surface that shows
+ * `effectiveSets` alongside a raw count MUST also surface `unratedSets` when
+ * it is non-zero — an effective number silently computed over a subset of
+ * the sets is the exact inflation bug this module just removed, inverted.
+ */
+export function summarizeEffectiveVolume(
+  rirs: Array<number | null | undefined>,
+  context?: string
+): EffectiveVolumeSummary {
+  let effectiveSets = 0;
+  let ratedSets = 0;
+  let unratedSets = 0;
+  for (const rir of rirs) {
+    const w = effectiveVolumeWeight(rir, context);
+    if (w === null) unratedSets += 1;
+    else {
+      effectiveSets += w;
+      ratedSets += 1;
+    }
+  }
+  return { effectiveSets, ratedSets, unratedSets };
 }
 
 /**
@@ -108,7 +150,7 @@ export function sumEffectiveVolume(
   rirs: Array<number | null | undefined>,
   context?: string
 ): number {
-  return rirs.reduce<number>((sum, rir) => sum + effectiveVolumeWeight(rir, context), 0);
+  return summarizeEffectiveVolume(rirs, context).effectiveSets;
 }
 
 /** Display helper: one-decimal effective volume (e.g. "14.2"). */
