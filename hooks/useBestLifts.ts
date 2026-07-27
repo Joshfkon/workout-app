@@ -174,6 +174,9 @@ export function useBestLifts(userId: string): UseBestLiftsReturn {
           if (!keyExercises.includes(exerciseName)) return;
 
           const e1rm = estimateE1RM(log.weight_kg, log.reps);
+          // 0 = no valid estimate (>15 effective reps) — it must never seed a
+          // "best lift" record of 0 lbs.
+          if (e1rm <= 0) return;
           const existing = exerciseBests.get(exerciseName);
 
           if (!existing || e1rm > existing.estimated1rmKg) {

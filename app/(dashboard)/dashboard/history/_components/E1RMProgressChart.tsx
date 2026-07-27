@@ -20,7 +20,10 @@ import {
 
 export interface E1RMChartPoint {
   date: string;
-  e1rm: number;
+  /** Trend value; null on deload days (the point moves to `deloadE1rm`). */
+  e1rm: number | null;
+  /** Deload-day value, rendered as a muted dot outside the trend line. */
+  deloadE1rm?: number | null;
 }
 
 export default function E1RMProgressChart({
@@ -65,7 +68,7 @@ export default function E1RMProgressChart({
           labelStyle={{ color: '#9CA3AF' }}
           formatter={(value: number, name: string) => [
             `${value} ${unit}`,
-            name === 'e1rm' ? seriesLabel : 'Best Weight',
+            name === 'deloadE1rm' ? 'Deload (not in trend)' : seriesLabel,
           ]}
         />
         <Line
@@ -75,6 +78,14 @@ export default function E1RMProgressChart({
           strokeWidth={2}
           dot={{ fill: '#8B5CF6', strokeWidth: 0, r: 4 }}
           activeDot={{ r: 6 }}
+          connectNulls
+        />
+        {/* Deload sessions: visible as muted dots, excluded from the trend line */}
+        <Line
+          dataKey="deloadE1rm"
+          stroke="none"
+          dot={{ fill: '#6B7280', strokeWidth: 0, r: 4 }}
+          activeDot={{ r: 5, fill: '#9CA3AF' }}
         />
         <ReferenceLine
           y={prLine}

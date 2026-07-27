@@ -903,12 +903,16 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
             .eq('workout_sessions.state', 'completed')
             .gte('workout_sessions.completed_at', weeklyVolumeStartIso),
 
-          // Lift-trend history (12 weeks) for the "Lifts" glance tile
+          // Lift-trend history (12 weeks) for the "Lifts" glance tile.
+          // exercise_type: duration exercises are excluded from the trend
+          // (same as the server path); is_deload: light-on-purpose sessions
+          // must not read as a declining lift.
           supabase.from('workout_sessions')
-            .select(`id, completed_at,
-              exercise_blocks (exercises (id, name), set_logs (weight_kg, reps, is_warmup))`)
+            .select(`id, completed_at, is_deload,
+              exercise_blocks (exercises (id, name, exercise_type), set_logs (weight_kg, reps, is_warmup))`)
             .eq('user_id', user.id)
             .eq('state', 'completed')
+            .eq('is_deload', false)
             .gte('completed_at', new Date(today.getTime() - LIFT_TREND_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString())
             .order('completed_at', { ascending: true }),
         ]);

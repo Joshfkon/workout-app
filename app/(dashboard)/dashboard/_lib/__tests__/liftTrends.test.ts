@@ -190,4 +190,21 @@ describe('computeLiftTrends', () => {
     expect(summary.lifts).toHaveLength(1);
     expect(summary.lifts[0].direction).toBe('rising');
   });
+
+  it('excludes deload sessions so a light week never reads as a declining lift', () => {
+    const sessions = [
+      session('s1', '2026-06-01T10:00:00Z', bench, 80, 8),
+      session('s2', '2026-06-08T10:00:00Z', bench, 82.5, 8),
+      session('s3', '2026-06-15T10:00:00Z', bench, 85, 8),
+      // Deload week: held deliberately light — must not enter the fit.
+      { ...session('s4', '2026-06-22T10:00:00Z', bench, 50, 8), is_deload: true },
+    ];
+
+    const summary = computeLiftTrends(sessions, 'bulk', new Date('2026-06-23'));
+
+    expect(summary.lifts).toHaveLength(1);
+    expect(summary.lifts[0].direction).toBe('rising');
+    expect(summary.lifts[0].sessionCount).toBe(3);
+    expect(summary.lifts[0].history.map((p) => p.date)).not.toContain('2026-06-22');
+  });
 });

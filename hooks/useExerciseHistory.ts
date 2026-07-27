@@ -5,7 +5,6 @@ import { createUntypedClient } from '@/lib/supabase/client';
 import { getErrorMessage } from '@/lib/errors';
 import type { ExercisePerformanceSnapshot } from '@/types/schema';
 import type { ExercisePerformanceSnapshotRow } from '@/types/database-queries';
-import { calculateE1RM } from '@/services/plateauDetector';
 
 interface UseExerciseHistoryOptions {
   exerciseId: string;

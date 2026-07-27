@@ -15,7 +15,8 @@ import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 // v2: evicts entries poisoned by the old queryFn, which cached an EMPTY page
 // for 24h whenever the network getUser() round trip failed on a cold reload.
 const HISTORY_FIRST_PAGE_KEY = ['history', 'sessions', 'page0', 'v2'] as const;
-import { formatWeight, convertWeight, convertWeightForDisplay, inputWeightToKg, estimateE1RM, getLocalDateString, muscleDisplayName } from '@/lib/utils';
+import { formatWeight, convertWeight, convertWeightForDisplay, inputWeightToKg, getLocalDateString, muscleDisplayName } from '@/lib/utils';
+import { e1rmValueFromRpe } from '@/services/shared/e1rm';
 import { createRepeatSession } from '@/lib/training/repeatWorkout';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import HistoryCalendar from './_components/HistoryCalendar';
@@ -119,7 +120,10 @@ interface ExerciseHistoryEntry {
   bestReps: number;
   totalSets: number;
   totalVolume: number;
+  /** Best single-set e1RM (kg); 0 = no valid estimate (e.g. all sets >15 effective reps). */
   estimatedE1RM: number;
+  /** Every session on this date was a deload — shown in history, excluded from trend/PRs. */
+  isDeload: boolean;
   sets: { weight: number; reps: number; rpe: number | null }[];
 }
 
@@ -569,9 +573,10 @@ function HistoryPageContent() {
         .eq('exercise_id', exerciseId)
         .eq('workout_sessions.user_id', user.id)
         .eq('workout_sessions.state', 'completed')
-        // Deload sessions are held light on purpose — exclude them so a light
-        // week doesn't read as an e1RM regression / PR in the trend.
-        .eq('workout_sessions.is_deload', false)
+        // Deload sessions ARE fetched: hiding them entirely made recent
+        // (deload-flagged) workouts vanish from the modal. They're tagged per
+        // entry below and excluded from PRs/trend, matching the exercise
+        // detail sheet (services/exerciseDetailAnalytics.ts).
         .order('workout_sessions(completed_at)', { ascending: true });
 
       if (!blocks || blocks.length === 0) {
@@ -602,11 +607,15 @@ function HistoryPageContent() {
         const session = block.workout_sessions;
         if (!session?.completed_at) return;
 
+        // Deload sessions are held light on purpose — they stay visible in
+        // the history list/chart but never set PRs or anchor the trend.
+        const sessionIsDeload = session.is_deload === true;
+
         // Group by LOCAL calendar day — completed_at is a UTC timestamp, so
         // splitting on 'T' would bucket evening workouts into the next day.
         const dateKey = getLocalDateString(new Date(session.completed_at));
         const workingSets = (block.set_logs || []).filter((s: any) => !s.is_warmup);
-        
+
         if (workingSets.length === 0) return;
 
         // Calculate stats for this session
@@ -629,16 +638,21 @@ function HistoryPageContent() {
               sessionBestReps = set.reps;
               sessionBestWeight = set.weight_kg;
             }
-            if (set.weight_kg > allTimeBestWeight) {
-              allTimeBestWeight = set.weight_kg;
-            }
-            if (set.reps > allTimeBestReps && set.weight_kg >= allTimeBestWeight * 0.8) {
-              allTimeBestReps = set.reps;
+            if (!sessionIsDeload) {
+              if (set.weight_kg > allTimeBestWeight) {
+                allTimeBestWeight = set.weight_kg;
+              }
+              if (set.reps > allTimeBestReps && set.weight_kg >= allTimeBestWeight * 0.8) {
+                allTimeBestReps = set.reps;
+              }
             }
             return;
           }
 
-          const e1rm = estimateE1RM(set.weight_kg, set.reps);
+          // Canonical RPE-aware estimator (same as the snapshot writer and
+          // exercise detail sheet). 0 = no valid estimate — sets beyond the
+          // formula's domain (>15 effective reps) never produce a number.
+          const e1rm = e1rmValueFromRpe(set.weight_kg, set.reps, set.rpe);
           sessionVolume += set.weight_kg * set.reps;
 
           if (e1rm > sessionBestE1RM) {
@@ -647,14 +661,16 @@ function HistoryPageContent() {
             sessionBestReps = set.reps;
           }
 
-          if (e1rm > allTimeMaxE1RM) {
-            allTimeMaxE1RM = e1rm;
-          }
-          if (set.weight_kg > allTimeBestWeight) {
-            allTimeBestWeight = set.weight_kg;
-          }
-          if (set.reps > allTimeBestReps && set.weight_kg >= allTimeBestWeight * 0.8) {
-            allTimeBestReps = set.reps;
+          if (!sessionIsDeload) {
+            if (e1rm > allTimeMaxE1RM) {
+              allTimeMaxE1RM = e1rm;
+            }
+            if (set.weight_kg > allTimeBestWeight) {
+              allTimeBestWeight = set.weight_kg;
+            }
+            if (set.reps > allTimeBestReps && set.weight_kg >= allTimeBestWeight * 0.8) {
+              allTimeBestReps = set.reps;
+            }
           }
         });
 
@@ -671,6 +687,8 @@ function HistoryPageContent() {
           existing.totalSets += workingSets.length;
           existing.totalVolume += sessionVolume;
           existing.sets.push(...sets);
+          // A day only counts as a deload if every session on it was one.
+          existing.isDeload = existing.isDeload && sessionIsDeload;
         } else {
           historyMap.set(dateKey, {
             date: dateKey,
@@ -680,6 +698,7 @@ function HistoryPageContent() {
             totalSets: workingSets.length,
             totalVolume: sessionVolume,
             estimatedE1RM: sessionBestE1RM,
+            isDeload: sessionIsDeload,
             sets,
           });
         }
@@ -690,10 +709,14 @@ function HistoryPageContent() {
       );
 
       // Calculate progress. Duration exercises track longest hold, not e1RM.
-      const currentE1RM = history.length > 0 ? history[history.length - 1].estimatedE1RM : 0;
-      const firstE1RM = history.length > 0 ? history[0].estimatedE1RM : 0;
-      const currentHold = history.length > 0 ? history[history.length - 1].bestReps : 0;
-      const firstHold = history.length > 0 ? history[0].bestReps : 0;
+      // Anchors skip deload days (held light on purpose) AND days with no
+      // valid estimate (estimatedE1RM 0 must never read as a 0-lb lift).
+      const e1rmDays = history.filter((h) => !h.isDeload && h.estimatedE1RM > 0);
+      const holdDays = history.filter((h) => !h.isDeload && h.bestReps > 0);
+      const currentE1RM = e1rmDays.length > 0 ? e1rmDays[e1rmDays.length - 1].estimatedE1RM : 0;
+      const firstE1RM = e1rmDays.length > 0 ? e1rmDays[0].estimatedE1RM : 0;
+      const currentHold = holdDays.length > 0 ? holdDays[holdDays.length - 1].bestReps : 0;
+      const firstHold = holdDays.length > 0 ? holdDays[0].bestReps : 0;
       const progressPercent = isDuration
         ? firstHold > 0
           ? ((currentHold - firstHold) / firstHold) * 100
@@ -895,11 +918,23 @@ function HistoryPageContent() {
     // Duration exercises plot longest hold (seconds) per session — their e1RM
     // is deliberately never computed.
     const isDuration = selectedExercise.isDuration;
-    const chartData = selectedExercise.history.map(h => ({
-      date: h.displayDate,
-      e1rm: isDuration ? h.bestReps : Math.round(convertWeight(h.estimatedE1RM, 'kg', unit)),
-      weight: Math.round(convertWeight(h.bestWeight, 'kg', unit)),
-    }));
+    // Days with no plottable value (no valid e1RM estimate) are dropped — a
+    // missing estimate must render as absent, never as a point at 0. Deload
+    // days plot as muted dots outside the trend line.
+    const chartData = selectedExercise.history
+      .filter(h => (isDuration ? h.bestReps > 0 : h.estimatedE1RM > 0))
+      .map(h => {
+        const value = isDuration ? h.bestReps : Math.round(convertWeight(h.estimatedE1RM, 'kg', unit));
+        return {
+          date: h.displayDate,
+          e1rm: h.isDeload ? null : value,
+          deloadE1rm: h.isDeload ? value : null,
+        };
+      });
+    const hasDeloadPoints = chartData.some(p => p.deloadE1rm !== null);
+    // Latest non-deload hold for the duration stat card.
+    const lastHoldEntry = [...selectedExercise.history].reverse()
+      .find(h => !h.isDeload && h.bestReps > 0);
 
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
@@ -938,9 +973,7 @@ function HistoryPageContent() {
                     <div className="bg-surface-800 rounded-lg p-3 text-center">
                       <p className="text-xs text-surface-500 uppercase">Last Best Hold</p>
                       <p className="text-xl font-bold text-primary-400">
-                        {selectedExercise.history.length > 0
-                          ? selectedExercise.history[selectedExercise.history.length - 1].bestReps
-                          : 0}s
+                        {lastHoldEntry?.bestReps ?? 0}s
                       </p>
                     </div>
                   ) : (
@@ -1004,6 +1037,12 @@ function HistoryPageContent() {
                         seriesLabel={isDuration ? 'Longest Hold' : 'Est. 1RM'}
                       />
                     </div>
+                    {hasDeloadPoints && (
+                      <p className="text-[11px] text-surface-500 mt-1.5 flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-surface-500 inline-block" />
+                        Deload sessions shown as gray dots, excluded from the trend
+                      </p>
+                    )}
                   </div>
                 )}
 
@@ -1022,11 +1061,20 @@ function HistoryPageContent() {
                               year: 'numeric',
                             })}
                           </span>
-                          <Badge variant="info" size="sm">
-                            {isDuration
-                              ? `Best hold: ${entry.bestReps}s`
-                              : `E1RM: ${formatWeight(entry.estimatedE1RM, unit)}`}
-                          </Badge>
+                          <div className="flex items-center gap-1.5">
+                            {entry.isDeload && (
+                              <Badge variant="outline" size="sm">Deload</Badge>
+                            )}
+                            {isDuration ? (
+                              <Badge variant="info" size="sm">Best hold: {entry.bestReps}s</Badge>
+                            ) : entry.estimatedE1RM > 0 ? (
+                              <Badge variant="info" size="sm">E1RM: {formatWeight(entry.estimatedE1RM, unit)}</Badge>
+                            ) : (
+                              // High-rep day (>15 effective reps): no formula
+                              // gives a valid 1RM estimate — never show 0.
+                              <Badge variant="default" size="sm">No e1RM estimate</Badge>
+                            )}
+                          </div>
                         </div>
                         <div className="flex flex-wrap gap-2">
                           {entry.sets.map((set, setIdx) => (

@@ -74,6 +74,9 @@ export interface LiftTrendsSummary {
 export interface LiftTrendSessionRow {
   id: string;
   completed_at: string | null;
+  /** Deload sessions never feed the trend; callers filter in the query, this
+   *  field is the belt-and-suspenders guard when they forget. */
+  is_deload?: boolean | null;
   exercise_blocks: {
     exercises: { id: string; name: string; exercise_type?: string | null } | null;
     set_logs: { weight_kg: number | null; reps: number | null; is_warmup: boolean | null }[] | null;
@@ -118,6 +121,9 @@ export function computeLiftTrends(
 
   for (const session of sessions) {
     if (!session.completed_at || !session.exercise_blocks) continue;
+    // Deload sessions are held light on purpose — a light week must not fit
+    // as a declining trend (same rule as every other e1RM trend surface).
+    if (session.is_deload) continue;
     const sessionDate = getLocalDateString(new Date(session.completed_at));
 
     for (const block of session.exercise_blocks) {

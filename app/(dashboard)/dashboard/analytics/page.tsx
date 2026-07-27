@@ -542,10 +542,13 @@ function AnalyticsPageContent() {
         const [{ data: sessions }, { data: goalRow }, { data: activeMesos }] = await Promise.all([
           supabase
             .from('workout_sessions')
-            .select(`id, completed_at,
+            .select(`id, completed_at, is_deload,
               exercise_blocks (exercises (id, name, exercise_type), set_logs (weight_kg, reps, rpe, is_warmup))`)
             .eq('user_id', userId)
             .eq('state', 'completed')
+            // Deload sessions are held light on purpose — excluded from the
+            // lift-trend fit, same as every other e1RM trend surface.
+            .eq('is_deload', false)
             .gte('completed_at', since.toISOString())
             .order('completed_at', { ascending: true }),
           supabase.from('users').select('goal').eq('id', userId).single(),
