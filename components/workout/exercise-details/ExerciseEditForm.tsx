@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { Exercise } from '@/types/schema';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { parseYouTubeVideoId } from '@/lib/youtube';
+import { updateExerciseRow } from '@/lib/exercises/updateExerciseRow';
 import { getExerciseProp } from './helpers';
 
 import { MOVEMENT_PATTERN_OPTIONS, MUSCLE_GROUP_OPTIONS, ALL_MUSCLE_TOKENS, EQUIPMENT_OPTIONS } from './editFormOptions';
@@ -33,6 +34,40 @@ interface EditData {
   youtubeVideoInput?: string;
 }
 
+/** Field-level labels for naming exactly what a blocked save discarded. */
+const CATALOG_FIELD_LABELS: Array<[keyof EditData, string]> = [
+  ['name', 'Name'],
+  ['isBodyweight', 'Bodyweight setting'],
+  ['bodyweightType', 'Bodyweight type'],
+  ['assistanceType', 'Assistance type'],
+  ['equipment', 'Equipment'],
+  ['equipmentRequired', 'Equipment required'],
+  ['movementPattern', 'Movement pattern'],
+  ['primaryMuscle', 'Primary muscle'],
+  ['secondaryMuscles', 'Secondary muscles'],
+  ['hypertrophyTier', 'Hypertrophy tier'],
+  ['defaultRepRangeMin', 'Rep range'],
+  ['defaultRepRangeMax', 'Rep range'],
+  ['defaultRir', 'Default RIR'],
+  ['setupNote', 'Setup note'],
+  ['youtubeVideoInput', 'Curated video'],
+];
+
+/** Labels of the catalog fields that differ between the two snapshots. */
+function diffCatalogFields(before: EditData | null, after: EditData): string[] {
+  if (!before) return CATALOG_FIELD_LABELS.map(([, label]) => label);
+  const changed: string[] = [];
+  for (const [key, label] of CATALOG_FIELD_LABELS) {
+    const a = before[key];
+    const b = after[key];
+    const same = Array.isArray(a) || Array.isArray(b)
+      ? JSON.stringify(a ?? []) === JSON.stringify(b ?? [])
+      : (a ?? null) === (b ?? null) || ((a ?? '') === '' && (b ?? '') === '');
+    if (!same && !changed.includes(label)) changed.push(label);
+  }
+  return changed;
+}
+
 /**
  * The exercise metadata edit form (formerly inline in ExerciseDetailsModal).
  * Replaces the tab content while editing; saving reloads the page so every
@@ -40,6 +75,9 @@ interface EditData {
  */
 export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) {
   const [editData, setEditData] = useState<EditData | null>(null);
+  // Snapshot of the initialized values, so save can name exactly which
+  // catalog fields changed (and skip the exercises UPDATE when none did).
+  const initialEditDataRef = useRef<EditData | null>(null);
   const [showAdvancedFields, setShowAdvancedFields] = useState(false);
   const [equipmentTypes, setEquipmentTypes] = useState<Array<{ id: string; name: string }>>([]);
   const [gymLocations, setGymLocations] = useState<Array<{ id: string; name: string; is_default: boolean }>>([]);
@@ -47,6 +85,9 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  // true = stock catalog row (is_custom false): RLS silently drops catalog
+  // UPDATEs on these, so the form must warn up-front and report honestly.
+  const [isCatalogExercise, setIsCatalogExercise] = useState<boolean | null>(null);
 
   // Load equipment types + gym locations when the form opens
   useEffect(() => {
@@ -93,7 +134,7 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
     const setupNote = getExerciseProp(exercise, 'setupNote', 'setup_note');
     const youtubeVideoId = getExerciseProp(exercise, 'youtubeVideoId', 'youtube_video_id');
 
-    setEditData({
+    const initialData: EditData = {
       name: typeof name === 'string' ? name : '',
       isBodyweight,
       bodyweightType,
@@ -109,8 +150,24 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
       defaultRir,
       setupNote,
       youtubeVideoInput: typeof youtubeVideoId === 'string' ? youtubeVideoId : '',
-    });
+    };
+    initialEditDataRef.current = initialData;
+    setEditData(initialData);
     setShowAdvancedFields(false);
+
+    // Ownership check: catalog rows (is_custom false) are not updatable under
+    // RLS — surface that BEFORE the user invests in edits that can't save.
+    const loadOwnership = async () => {
+      if (!exercise.id) return;
+      const supabase = createUntypedClient();
+      const { data } = await supabase
+        .from('exercises')
+        .select('is_custom')
+        .eq('id', exercise.id)
+        .maybeSingle();
+      if (data) setIsCatalogExercise(!data.is_custom);
+    };
+    loadOwnership();
 
     // Load location availability for this exercise
     const loadLocationAvailability = async () => {
@@ -189,21 +246,32 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
       // an emptied field actually removes the video.
       updatePayload.youtube_video_id = parseYouTubeVideoId(editData.youtubeVideoInput);
 
-      const { error } = await supabase
-        .from('exercises')
-        .update(updatePayload)
-        .eq('id', exercise.id);
+      // Which catalog fields did the user actually change? Named in the error
+      // when a write is blocked, and lets an availability-only save skip the
+      // exercises UPDATE entirely.
+      const changedCatalogFields = diffCatalogFields(initialEditDataRef.current, {
+        ...editData,
+        name: trimmedName,
+      });
 
-      if (error) {
-        console.error('Failed to update exercise:', error);
-        setSaveError(error.message || 'Failed to update exercise');
-        return;
+      let catalogWriteFailure: string | null = null;
+      if (changedCatalogFields.length > 0) {
+        const result = await updateExerciseRow(supabase, exercise.id, updatePayload);
+        if (!result.ok) {
+          catalogWriteFailure =
+            result.outcome === 'blocked'
+              ? `Not saved — ${changedCatalogFields.join(', ')}: ${result.message}`
+              : `Failed to update exercise: ${result.message || 'unknown error'}`;
+        }
       }
 
-      // Save location availability if user has gym locations
+      // Save location availability if user has gym locations. This table is
+      // per-user, so it saves even when the catalog row itself is locked.
+      let availabilityFailure: string | null = null;
+      let availabilitySaved = false;
       if (gymLocations.length > 0 && Object.keys(locationAvailability).length > 0) {
         for (const [locationId, isAvailable] of Object.entries(locationAvailability)) {
-          await supabase
+          const { error: availError } = await supabase
             .from('exercise_location_availability')
             .upsert({
               user_id: user.id,
@@ -213,7 +281,21 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
             }, {
               onConflict: 'user_id,exercise_id,location_id',
             });
+          if (availError) {
+            availabilityFailure = `Failed to save gym availability: ${availError.message}`;
+          } else {
+            availabilitySaved = true;
+          }
         }
+      }
+
+      if (catalogWriteFailure || availabilityFailure) {
+        const parts = [catalogWriteFailure, availabilityFailure].filter(Boolean) as string[];
+        if (catalogWriteFailure && availabilitySaved && !availabilityFailure) {
+          parts.push('(Your gym availability settings WERE saved.)');
+        }
+        setSaveError(parts.join(' '));
+        return;
       }
 
       setSaveSuccess(true);
@@ -283,6 +365,19 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
           </button>
         </div>
       </div>
+
+      {/* Catalog rows are not editable under RLS — say so before the user
+          invests in changes that would be discarded. */}
+      {isCatalogExercise === true && (
+        <div className="p-3 bg-warning-900/30 border border-warning-700 rounded-lg" data-testid="catalog-exercise-notice">
+          <p className="text-sm text-warning-400">
+            Built-in catalog exercise — its fields are shared by every user and
+            can&apos;t be edited here, so changes to them will not save. Gym
+            availability below is yours and does save. Muscle-tag corrections to
+            the catalog ship as data migrations.
+          </p>
+        </div>
+      )}
 
       {/* Name */}
       <div>

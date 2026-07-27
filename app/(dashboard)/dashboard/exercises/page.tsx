@@ -28,6 +28,7 @@ import { ExerciseOptionsMenu } from '@/components/exercises/ExerciseOptionsMenu'
 import { ExerciseStatusModal } from '@/components/exercises/ExerciseStatusModal';
 import type { ExerciseVisibilityStatus, ExerciseHideReason } from '@/types/user-exercise-preferences';
 import { batchCompleteAllExercises } from '@/lib/actions/exercise-completion';
+import { updateExerciseRow } from '@/lib/exercises/updateExerciseRow';
 import { useKeyboardInset } from '@/hooks/useKeyboardInset';
 
 // Dynamic import for charts - only loaded when user expands an exercise
@@ -459,28 +460,40 @@ export default function ExercisesPage() {
         }
       });
       
-      const { error } = await supabase
-        .from('exercises')
-        .update(updatePayload)
-        .eq('id', editingExercise.id);
-      
-      if (error) throw error;
-      
-      // Update local state
-      mutateExercises(prev => prev.map(ex => 
-        ex.id === editingExercise.id 
-          ? { 
-              ...ex, 
+      // Verified write: a stock catalog row is excluded from the update set
+      // by RLS and comes back as ZERO rows with NO error — that must surface
+      // as a failure, never as "updated successfully" (the silent-discard bug).
+      const result = await updateExerciseRow(supabase, editingExercise.id, updatePayload);
+      if (!result.ok) {
+        setSaveResult({
+          success: false,
+          message:
+            result.outcome === 'blocked'
+              ? `❌ ${result.message}`
+              : `❌ Failed to update exercise: ${result.message || 'Please try again.'}`,
+        });
+        return;
+      }
+
+      // Update local state — every field the update wrote, so the list can't
+      // show a mix of saved and pre-edit values until the next refetch.
+      mutateExercises(prev => prev.map(ex =>
+        ex.id === editingExercise.id
+          ? {
+              ...ex,
               primary_muscle: editData.primaryMuscle,
+              secondary_muscles: editData.secondaryMuscles || [],
               is_bodyweight: editData.isBodyweight,
               bodyweight_type: editData.bodyweightType,
               assistance_type: editData.assistanceType,
               equipment: editData.equipment,
+              equipment_required: editData.equipmentRequired,
               movement_pattern: editData.movementPattern,
+              hypertrophy_tier: editData.hypertrophyTier,
             }
           : ex
       ));
-      
+
       setSaveResult({ success: true, message: '✅ Exercise updated successfully!' });
       
       // Close modal after a short delay
@@ -1339,6 +1352,22 @@ export default function ExercisesPage() {
                   <label className="block text-sm text-surface-400 mb-1">Exercise Name</label>
                   <p className="text-surface-100 font-medium">{editingExercise.name}</p>
                 </div>
+
+                {/* Catalog rows are not updatable under RLS — warn up-front
+                    instead of discarding the edit silently on save. */}
+                {!editingExercise.is_custom && (
+                  <div
+                    className="p-3 bg-warning-900/30 border border-warning-700 rounded-lg"
+                    data-testid="catalog-exercise-notice"
+                  >
+                    <p className="text-sm text-warning-400">
+                      Built-in catalog exercise — its fields are shared by every
+                      user and can&apos;t be edited here, so changes will not
+                      save. Muscle-tag corrections to the catalog ship as data
+                      migrations.
+                    </p>
+                  </div>
+                )}
 
                 {editData && (
                   <>
