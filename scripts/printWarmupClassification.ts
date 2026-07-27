@@ -30,7 +30,6 @@ import {
   type WarmupExerciseMeta,
 } from '../services/warmupEngine';
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
 const { deriveSeedExerciseTags, stripComments } = require('./seedTagParser');
 
 const root = path.join(__dirname, '..');

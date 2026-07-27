@@ -76,6 +76,20 @@ interface WarmupSetData {
   targetReps: number;
   purpose: string;
   restSeconds?: number;  // Rest time after this warmup set
+  /** Why this set exists (targeted ramp sets name their unpaid dimension) */
+  reason?: string;
+}
+
+/**
+ * Warmup decision from services/warmupEngine — when provided it supersedes
+ * the legacy warmupSets prop, and the card ALWAYS renders the decision:
+ * protocol table, targeted ramp set with its reason, or the explicit null
+ * decision line ("No warmup needed — …"). Never silent empty space.
+ */
+interface WarmupDecisionData {
+  kind: 'full_protocol' | 'partial_protocol' | 'targeted_ramp' | 'none';
+  reason: string;
+  sets: WarmupSetData[];
 }
 
 import {
@@ -216,7 +230,8 @@ interface ExerciseCardProps {
   recommendedWeight?: number;  // AI-suggested weight in kg
   previousSets?: { weightKg: number; reps: number; rpe?: number }[];  // Previous workout's sets for this exercise
   exerciseHistory?: ExerciseHistory;  // Historical data for this exercise
-  warmupSets?: WarmupSetData[];  // Warmup protocol for this exercise
+  warmupSets?: WarmupSetData[];  // Warmup protocol for this exercise (legacy path)
+  warmupDecision?: WarmupDecisionData;  // Per-dimension warmup decision (supersedes warmupSets)
   workingWeight?: number;  // Working weight in kg for warmup calculations
   showSwapOnMount?: boolean;  // Auto-show swap modal when mounted (for injury-related swaps)
   currentInjuries?: TemporaryInjury[];  // Current injuries to filter swap suggestions
@@ -346,6 +361,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   onExerciseDelete,
   onBlockNoteUpdate,
   onWarmupComplete,
+  warmupDecision,
   availableExercises = [],
   unavailableEquipmentIds = [],
   frequentExerciseIds = new Map(),
@@ -668,7 +684,12 @@ export const ExerciseCard = memo(function ExerciseCard({
   // so the set count and percentages match the actual load. A non-empty
   // warmupSets prop is the page's eligibility signal (first exercise for a
   // not-yet-warm muscle), so an empty prop stays empty here.
+  //
+  // When a warmupDecision is provided it is authoritative: its sets render
+  // as-is (including an intentionally empty list — the null decision), and
+  // the legacy regeneration fallback is skipped.
   const effectiveWarmupSets = useMemo(() => {
+    if (warmupDecision) return warmupDecision.sets;
     if (workingWeight > 0 || typedFirstSetWeightKg <= 0 || warmupSets.length === 0) {
       return warmupSets;
     }
@@ -677,7 +698,7 @@ export const ExerciseCard = memo(function ExerciseCard({
       exercise,
       isFirstExercise: listIndex === 0,
     });
-  }, [warmupSets, workingWeight, typedFirstSetWeightKg, exercise, listIndex]);
+  }, [warmupDecision, warmupSets, workingWeight, typedFirstSetWeightKg, exercise, listIndex]);
 
   // Auto-collapse warmup sets when all are completed
   useEffect(() => {
@@ -2241,6 +2262,18 @@ export const ExerciseCard = memo(function ExerciseCard({
         )}
       </div>
 
+      {/* Warmup decision — the null decision renders its reason instead of
+          empty space (no-silent-failures rule) */}
+      {isActive && warmupDecision && warmupDecision.sets.length === 0 && (
+        <div
+          className="border-b border-surface-800 px-3 py-2 flex items-start gap-2"
+          data-testid="warmup-decision-none"
+        >
+          <span className="text-success-400 text-xs mt-0.5">✓</span>
+          <span className="text-xs text-surface-400">{warmupDecision.reason}</span>
+        </div>
+      )}
+
       {/* Warmup sets - keep in separate table for now (legacy) */}
       {isActive && effectiveWarmupSets.length > 0 && warmupWorkingWeightKg > 0 && (
         <div className="border-b border-surface-800">
@@ -2260,7 +2293,11 @@ export const ExerciseCard = memo(function ExerciseCard({
                 {completedWarmups.size === effectiveWarmupSets.length ? '✓' : completedWarmups.size}
               </div>
               <span className="text-sm font-medium text-surface-200">
-                Warmup Protocol
+                {warmupDecision?.kind === 'targeted_ramp'
+                  ? 'Ramp Set'
+                  : warmupDecision?.kind === 'partial_protocol'
+                    ? 'Warmup (shortened)'
+                    : 'Warmup Protocol'}
               </span>
               <span className="text-xs text-surface-500">
                 ({completedWarmups.size}/{effectiveWarmupSets.length})
@@ -2281,6 +2318,16 @@ export const ExerciseCard = memo(function ExerciseCard({
           {/* Warmup table - only show when expanded */}
           {isWarmupExpanded && (
             <div className="overflow-hidden">
+              {/* The decision itself, stated — why these sets (or this one
+                  ramp set) exist */}
+              {warmupDecision && (
+                <p
+                  className="px-3 pb-2 text-xs text-surface-400"
+                  data-testid="warmup-decision-reason"
+                >
+                  {warmupDecision.reason}
+                </p>
+              )}
               <table className="w-full text-sm">
                 <thead className="bg-surface-800/50">
                   <tr>
@@ -2370,6 +2417,11 @@ export const ExerciseCard = memo(function ExerciseCard({
                       <td className="px-1 py-2 text-center text-surface-500 text-xs">—</td>
                       <td className="px-1 py-2 text-center">
                         <span className="text-xs text-amber-400/70">{warmup.purpose}</span>
+                        {warmup.reason && (
+                          <div className="text-[10px] text-amber-400/50 leading-tight">
+                            {warmup.reason}
+                          </div>
+                        )}
                       </td>
                       <td className="px-1 py-2">
                         <button

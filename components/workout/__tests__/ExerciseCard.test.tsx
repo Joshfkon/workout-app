@@ -1518,3 +1518,108 @@ describe('rep_total progression path (ADD 2)', () => {
     expect(screen.getByText(/rep-total/)).toBeInTheDocument();
   });
 });
+
+describe('warmup decision rendering (warmup engine)', () => {
+  const decisionProps = {
+    exercise: createMockExercise({
+      id: 'arnold',
+      name: 'Arnold Press',
+      primaryMuscle: 'front_delts',
+      minWeightIncrementKg: 2.5,
+    }),
+    block: createMockBlock({ exerciseId: 'arnold', targetWeightKg: 20.4 }),
+    sets: [],
+    unit: 'lb' as const,
+    isActive: true,
+    workingWeight: 20.4,
+    onSetComplete: jest.fn().mockResolvedValue('id'),
+    onWarmupComplete: jest.fn(),
+  };
+
+  const rampDecision = {
+    kind: 'targeted_ramp' as const,
+    reason:
+      'Muscle is warm (7 prior sets overlap the target muscle), but rotation not yet loaded today — one targeted ramp set, full ROM.',
+    sets: [
+      {
+        setNumber: 1,
+        percentOfWorking: 60,
+        targetReps: 10,
+        purpose: 'Groove rotation',
+        restSeconds: 45,
+        reason: 'rotation not yet loaded today',
+      },
+    ],
+  };
+
+  it('renders the null decision WITH its reason — never silent empty space', () => {
+    render(
+      <ExerciseCard
+        {...decisionProps}
+        warmupDecision={{
+          kind: 'none',
+          reason: 'No warmup needed — 7 prior sets warmed the target muscle, load is modest.',
+          sets: [],
+        }}
+      />
+    );
+    expect(screen.getByTestId('warmup-decision-none')).toHaveTextContent(
+      /No warmup needed — 7 prior sets/
+    );
+    expect(screen.queryByText('Warmup Protocol')).not.toBeInTheDocument();
+  });
+
+  it('renders a targeted ramp set with its stated reason', async () => {
+    const user = userEvent.setup();
+    render(<ExerciseCard {...decisionProps} warmupDecision={rampDecision} />);
+
+    // Header names the decision kind, not a generic protocol
+    expect(screen.getByText('Ramp Set')).toBeInTheDocument();
+    await user.click(screen.getByText('Ramp Set'));
+
+    // Decision reason + per-set reason are visible
+    expect(screen.getByTestId('warmup-decision-reason')).toHaveTextContent(/rotation not yet loaded today/);
+    expect(screen.getByText('Groove rotation')).toBeInTheDocument();
+    expect(screen.getByText('rotation not yet loaded today')).toBeInTheDocument();
+    expect(screen.getByText('W1')).toBeInTheDocument();
+  });
+
+  it('completing a ramp set never logs it as a set row (set_type stays out of the anchor pool)', async () => {
+    const user = userEvent.setup();
+    const onSetComplete = jest.fn().mockResolvedValue('id');
+    const onWarmupComplete = jest.fn();
+    render(
+      <ExerciseCard
+        {...decisionProps}
+        onSetComplete={onSetComplete}
+        onWarmupComplete={onWarmupComplete}
+        warmupDecision={rampDecision}
+      />
+    );
+
+    await user.click(screen.getByText('Ramp Set'));
+    // The completion toggle is the last cell's button in the W1 row
+    const rampRow = screen.getByText('W1').closest('tr')!;
+    const toggle = Array.from(rampRow.querySelectorAll('button')).pop()!;
+    await user.click(toggle);
+
+    // Rest timer fires; no set_logs write path is ever invoked
+    expect(onWarmupComplete).toHaveBeenCalledWith(45);
+    expect(onSetComplete).not.toHaveBeenCalled();
+  });
+
+  it('a decision with sets supersedes the legacy warmupSets prop', () => {
+    render(
+      <ExerciseCard
+        {...decisionProps}
+        warmupSets={[
+          { setNumber: 1, percentOfWorking: 50, targetReps: 10, purpose: 'Legacy set' },
+          { setNumber: 2, percentOfWorking: 75, targetReps: 5, purpose: 'Legacy set 2' },
+        ]}
+        warmupDecision={rampDecision}
+      />
+    );
+    expect(screen.getByText('Ramp Set')).toBeInTheDocument();
+    expect(screen.getByText(/\(0\/1\)/)).toBeInTheDocument();
+  });
+});
