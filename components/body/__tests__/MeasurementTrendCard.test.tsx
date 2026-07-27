@@ -135,7 +135,9 @@ describe('MeasurementTrendCard date ranges', () => {
     render(<MeasurementTrendCard tapeUnit="cm" />);
 
     const chart = await screen.findByTestId('line-chart');
-    expect(chart).toHaveAttribute('data-points', '3');
+    // 3 entries + 1 gap-breaker row (the 200d→10d span exceeds the sparse
+    // threshold, so the solid line breaks and a dashed bridge spans it).
+    expect(chart).toHaveAttribute('data-points', '4');
     expect(screen.getByTestId('measurement-trend-range-1y')).toHaveAttribute(
       'aria-pressed',
       'true'
@@ -158,7 +160,8 @@ describe('MeasurementTrendCard date ranges', () => {
     expect(screen.getByTestId('line-chart')).toHaveAttribute('data-points', '2');
 
     await user.click(screen.getByTestId('measurement-trend-range-all'));
-    expect(screen.getByTestId('line-chart')).toHaveAttribute('data-points', '4');
+    // 4 entries + 2 gap-breaker rows (400→200 and 200→10 sparse spans).
+    expect(screen.getByTestId('line-chart')).toHaveAttribute('data-points', '6');
   });
 
   it('points at a longer range when all history is outside the window', async () => {
@@ -171,7 +174,8 @@ describe('MeasurementTrendCard date ranges', () => {
 
     const user = userEvent.setup();
     await user.click(screen.getByTestId('measurement-trend-range-all'));
-    expect(screen.getByTestId('line-chart')).toHaveAttribute('data-points', '2');
+    // 2 entries + 1 gap-breaker row (the 100d span renders dashed).
+    expect(screen.getByTestId('line-chart')).toHaveAttribute('data-points', '3');
   });
 
   it('lists each measured site with a direction badge and rate', async () => {

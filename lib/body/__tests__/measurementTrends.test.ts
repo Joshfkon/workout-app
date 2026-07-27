@@ -98,3 +98,79 @@ describe('computeMeasurementTrends', () => {
     expect(summary.sites.map((s) => s.site)).toEqual(['waist', 'chest', 'neck']);
   });
 });
+
+// ============================================
+// TREND-ROBUSTNESS VERIFICATION FIXTURES
+// (chest / hips repro — see the trend-robustness task)
+// ============================================
+
+describe('robust tape trends', () => {
+  it('chest repro: flags the −1.6" single-week drop as an outlier and clears "Down"', () => {
+    const rows = [
+      { logged_at: '2026-07-09', chest: 111.0 }, // ≈43.7"
+      { logged_at: '2026-07-16', chest: 111.0 },
+      { logged_at: '2026-07-19', chest: 111.8 }, // ≈44.0"
+      { logged_at: '2026-07-26', chest: 107.7 }, // ≈42.4" — tape error
+    ];
+    const chest = computeMeasurementTrends(rows, FIELDS).sites.find((s) => s.site === 'chest')!;
+    expect(chest.excludedDates).toEqual(['2026-07-26']);
+    expect(chest.direction).not.toBe('down'); // "Down" clears
+    expect(chest.monthlyChangeCm).toBeGreaterThanOrEqual(0);
+  });
+
+  it('suppresses the per-month rate on a short span (raw delta instead)', () => {
+    // 3 entries over 17 days: rendering in/mo would be a 1.8× extrapolation.
+    const rows = [
+      { logged_at: '2026-07-09', chest: 109.5 },
+      { logged_at: '2026-07-19', chest: 110.6 },
+      { logged_at: '2026-07-26', chest: 111.8 },
+    ];
+    const chest = computeMeasurementTrends(rows, FIELDS).sites.find((s) => s.site === 'chest')!;
+    expect(chest.rateIsReliable).toBe(false);
+    expect(chest.spanDays).toBe(17);
+    expect(chest.observedDeltaCm).toBeCloseTo(2.3, 1);
+    // Direction still classifies — only the RATE is withheld.
+    expect(chest.direction).toBe('rising');
+  });
+
+  it('hips repro: 1M and 12M windows agree in sign and rough magnitude', () => {
+    const rows = [
+      { logged_at: '2025-08-01', waist: 101.6 },
+      { logged_at: '2025-10-01', waist: 101.6 },
+      { logged_at: '2025-12-01', waist: 101.9 },
+      { logged_at: '2026-02-01', waist: 101.6 },
+      { logged_at: '2026-04-01', waist: 101.9 },
+      { logged_at: '2026-06-28', waist: 101.6 },
+      { logged_at: '2026-07-05', waist: 101.9 },
+      { logged_at: '2026-07-12', waist: 101.6 },
+      { logged_at: '2026-07-19', waist: 101.9 },
+      { logged_at: '2026-07-26', waist: 99.6 }, // tape error
+    ];
+    const year = computeMeasurementTrends(rows, FIELDS, '2025-08-01')
+      .sites.find((s) => s.site === 'waist')!;
+    const month = computeMeasurementTrends(rows, FIELDS, '2026-06-27')
+      .sites.find((s) => s.site === 'waist')!;
+    // The old OLS-through-the-outlier produced a 33× divergence (−3.3 vs
+    // −0.1 in/mo). Robust fits over both windows must read ~flat.
+    expect(Math.abs(year.monthlyChangeCm)).toBeLessThan(0.4);
+    expect(Math.abs(month.monthlyChangeCm)).toBeLessThan(1.0);
+  });
+
+  it('hard-rejects an impossible zero circumference instead of trending through it', () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const rows = [
+        { logged_at: '2026-06-01', neck: 38 },
+        { logged_at: '2026-06-15', neck: 0 }, // corrupt
+        { logged_at: '2026-07-01', neck: 38.4 },
+        { logged_at: '2026-07-15', neck: 38.8 },
+      ];
+      const neck = computeMeasurementTrends(rows, FIELDS).sites.find((s) => s.site === 'neck')!;
+      expect(neck.direction).toBe('rising');
+      expect(neck.monthlyChangeCm).toBeGreaterThan(0);
+      expect(warnSpy).toHaveBeenCalled();
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+});

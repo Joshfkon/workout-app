@@ -55,7 +55,7 @@ export function useMuscleProgression() {
         const since = new Date();
         since.setDate(since.getDate() - HISTORY_DAYS);
 
-        const [profileRes, sessionsRes] = await Promise.all([
+        const [profileRes, sessionsRes, mesoRes] = await Promise.all([
           supabase
             .from('users')
             .select('goal, experience')
@@ -75,6 +75,17 @@ export function useMuscleProgression() {
             .eq('state', 'completed')
             .gte('completed_at', since.toISOString())
             .order('completed_at', { ascending: true }),
+          // Active program start — same boundary liftTrends gates on, so the
+          // rollup can never average a post-program-switch lift's noisy slope
+          // into a group verdict while Lift Trends calls the same lift
+          // "Calibrating".
+          supabase
+            .from('mesocycles')
+            .select('start_date')
+            .eq('user_id', user.id)
+            .or('is_active.eq.true,state.eq.active')
+            .order('created_at', { ascending: false })
+            .limit(1),
         ]);
 
         if (cancelled) return;
@@ -147,6 +158,7 @@ export function useMuscleProgression() {
           experience,
           referenceDate: new Date(),
           goal: userGoal,
+          programStartDate: (mesoRes.data?.[0]?.start_date as string | null) ?? null,
         });
 
         setGroups(result);

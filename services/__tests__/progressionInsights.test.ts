@@ -425,3 +425,78 @@ describe('program-boundary confidence gating', () => {
     expect(getPaceDisplay('calibrating')).toEqual({ label: 'Calibrating', tone: 'muted' });
   });
 });
+
+// ============================================
+// TREND-ROBUSTNESS VERIFICATION FIXTURES
+// (Glutes +35.4%/wk repro — see the trend-robustness task)
+// ============================================
+
+describe('muscle rollup weighting and sanity ceiling', () => {
+  it('a 3-session outlier lift cannot outvote a 12-session staple (weighted rollup)', () => {
+    // Back Extension: 3 sessions rocketing +35%/wk (calibration noise).
+    // Hip Thrust: 12 sessions at a plausible +1%/wk.
+    const backExtension = buildSnapshots('ex-back-ext', 3, 60, 35);
+    const hipThrust = buildSnapshots('ex-hip-thrust', 12, 140, 1);
+
+    const groups = getMuscleGroupProgression({
+      snapshotsByExercise: new Map([
+        ['ex-back-ext', backExtension],
+        ['ex-hip-thrust', hipThrust],
+      ]),
+      muscleByExercise: new Map([
+        ['ex-back-ext', 'glutes'],
+        ['ex-hip-thrust', 'glutes'],
+      ]),
+      experience: 'intermediate',
+    });
+
+    const glutes = groups.find((g) => g.muscleGroup === 'glutes')!;
+    // The group rate must sit near the staple's rate, nowhere near +35.
+    expect(glutes.avgWeeklyChangePct).toBeLessThan(10);
+    expect(glutes.rateImplausible).toBe(false);
+    expect(Math.abs(glutes.avgWeeklyChangePct - 1)).toBeLessThan(2.5);
+  });
+
+  it('renders Building history (insufficient_data) when no lift qualifies, never a fabricated rate', () => {
+    const groups = getMuscleGroupProgression({
+      snapshotsByExercise: new Map([
+        ['ex-new-1', buildSnapshots('ex-new-1', 2, 60, 5)],
+        ['ex-new-2', buildSnapshots('ex-new-2', 1, 80, 0)],
+      ]),
+      muscleByExercise: new Map([
+        ['ex-new-1', 'quads'],
+        ['ex-new-2', 'quads'],
+      ]),
+      experience: 'novice',
+    });
+    const quads = groups.find((g) => g.muscleGroup === 'quads')!;
+    expect(quads.pace).toBe('insufficient_data');
+    expect(quads.avgWeeklyChangePct).toBe(0);
+    expect(getPaceDisplay(quads.pace).label).toBe('Building history');
+  });
+
+  it('clamps and flags a physiologically implausible group rate that survives all filters', () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      // Every contributor rockets — nothing to outvote it, so the ceiling
+      // must catch it: +20%/wk is a bug signal, not a verdict.
+      const groups = getMuscleGroupProgression({
+        snapshotsByExercise: new Map([
+          ['ex-a', buildSnapshots('ex-a', 6, 60, 20)],
+          ['ex-b', buildSnapshots('ex-b', 6, 80, 22)],
+        ]),
+        muscleByExercise: new Map([
+          ['ex-a', 'forearms'],
+          ['ex-b', 'forearms'],
+        ]),
+        experience: 'novice',
+      });
+      const forearms = groups.find((g) => g.muscleGroup === 'forearms')!;
+      expect(forearms.rateImplausible).toBe(true);
+      expect(Math.abs(forearms.avgWeeklyChangePct)).toBeLessThanOrEqual(5);
+      expect(warnSpy).toHaveBeenCalled();
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+});

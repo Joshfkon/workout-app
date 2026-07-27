@@ -28,7 +28,9 @@ export function PlateauAlert({
 }: PlateauAlertProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
-  if (!result.isPlateaued) return null;
+  // Never render a stall verdict while the lift's trend is rebuilding after
+  // an equipment change — set-level context is missing, not progress.
+  if (!result.isPlateaued || result.isCalibrating) return null;
 
   // Never let an invalid unit pref or E1RM reach the UI silently.
   let safeUnits: 'kg' | 'lb' = units;
@@ -42,7 +44,15 @@ export function PlateauAlert({
       `PlateauAlert: non-displayable currentE1RM (${result.currentE1RM}) for ${exerciseName}`
     );
   }
-  const deltaFromPeakKg = result.currentE1RM - result.peakE1RM;
+  // PEAK VOCABULARY: this banner compares against the RECENT peak (the
+  // plateau detector's analysis window, current calibration segment only) —
+  // NOT the all-time best other surfaces show. Naming it in the copy is what
+  // keeps "0.0 lbs from peak" from contradicting an all-time-best stat from
+  // a pre-equipment-change segment. The delta only renders when it is
+  // visibly non-zero in display units.
+  const deltaFromPeakKg = result.currentE1RM - result.recentPeakE1RM;
+  const displayDelta = convertWeightForDisplay(deltaFromPeakKg, safeUnits);
+  const showDelta = result.currentE1RM < result.recentPeakE1RM && displayDelta <= -0.1;
   const unitLabel = safeUnits === 'lb' ? 'lbs' : 'kg';
 
   const getSeverityColor = () => {
@@ -96,10 +106,9 @@ export function PlateauAlert({
                   <span className="font-mono text-surface-300">
                     {formatWeight(result.currentE1RM, safeUnits)}
                   </span>
-                  {result.currentE1RM < result.peakE1RM && (
+                  {showDelta && (
                     <span className="text-danger-400 ml-2">
-                      ({convertWeightForDisplay(deltaFromPeakKg, safeUnits).toFixed(1)} {unitLabel}{' '}
-                      from peak)
+                      ({displayDelta.toFixed(1)} {unitLabel} from recent peak)
                     </span>
                   )}
                 </>

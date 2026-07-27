@@ -6,6 +6,7 @@
  */
 
 import { getDisplayWeight } from '@/lib/weightUtils';
+import { computeTrend } from '@/services/shared/trend';
 
 export interface WeightHistoryEntry {
   /** YYYY-MM-DD (or ISO) log date. */
@@ -31,10 +32,11 @@ export function goalTargetRate(goal: WeightGoal, displayUnit: 'lb' | 'kg'): numb
 }
 
 /**
- * Weekly weight-change rate (linear regression over the last `windowDays`
- * of entries — ~3 weeks by default — falling back to the last two entries
- * when the window is sparse) vs the goal-implied target rate, in the
- * preferred display unit.
+ * Weekly weight-change rate (robust regression — services/shared/trend —
+ * over the last `windowDays` of entries, ~3 weeks by default, falling back
+ * to the last two entries when the window is sparse) vs the goal-implied
+ * target rate, in the preferred display unit. A single fat-fingered weigh-in
+ * cannot dominate the rate.
  */
 export function computeWeightRate(
   weightHistory: WeightHistoryEntry[],
@@ -49,19 +51,25 @@ export function computeWeightRate(
   let windowEntries = sorted.filter((w) => Date.parse(w.date) >= windowStart);
   if (windowEntries.length < 2) windowEntries = sorted.slice(-2);
 
-  const points = windowEntries.map((w) => ({
-    x: Date.parse(w.date) / (24 * 60 * 60 * 1000),
-    y: getDisplayWeight(w.weight, w.unit as 'lb' | 'kg' | null, displayUnit),
-  }));
-  const n = points.length;
-  const sumX = points.reduce((a, p) => a + p.x, 0);
-  const sumY = points.reduce((a, p) => a + p.y, 0);
-  const sumXY = points.reduce((a, p) => a + p.x * p.y, 0);
-  const sumX2 = points.reduce((a, p) => a + p.x * p.x, 0);
-  const denominator = n * sumX2 - sumX * sumX;
-  if (denominator === 0) return null;
-  const slopePerDay = (n * sumXY - sumX * sumY) / denominator;
-  const perWeek = Math.round(slopePerDay * 7 * 10) / 10;
+  const result = computeTrend(
+    windowEntries.map((w) => ({
+      date: w.date,
+      value: getDisplayWeight(w.weight, w.unit as 'lb' | 'kg' | null, displayUnit),
+    })),
+    {
+      minPoints: 2,
+      // Bodyweight legitimately steps on diet-phase changes; within a ~3-week
+      // tile window a persistent shift IS the signal, not a data boundary.
+      detectDiscontinuity: false,
+      // The tile renders whatever the window supports — short spans already
+      // fall back to two entries; span gating is the nutrition page's job.
+      lowConfidenceSpanDays: 0,
+      lowConfidenceGapDays: Number.POSITIVE_INFINITY,
+      label: 'weightRate',
+    }
+  );
+  if (result.confidence === 'insufficient' || result.nPoints < 2) return null;
+  const perWeek = Math.round(result.slopePerWeek * 10) / 10;
 
   return { perWeek, target: goalTargetRate(goal, displayUnit) };
 }

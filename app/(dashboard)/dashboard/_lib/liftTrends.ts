@@ -10,10 +10,12 @@
  * rows in.
  */
 
-import { estimateE1RM, getLocalDateString } from '@/lib/utils';
+import { getLocalDateString } from '@/lib/utils';
+import { e1rmValueFromRpe } from '@/services/shared/e1rm';
 import {
   analyzeExerciseTrend,
   detectPlateau,
+  MIN_SESSIONS_AFTER_DISCONTINUITY,
   type PlateauGoal,
 } from '@/services/plateauDetector';
 import type { ExercisePerformanceSnapshot } from '@/types/schema';
@@ -45,9 +47,20 @@ export interface LiftTrend {
    * and it has fewer than MIN_SESSIONS_FOR_TREND sessions since the switch —
    * new exercise selection, rep ranges, and fatigue make the fitted trend
    * noise until a few sessions rebuild it. Same confidence-gating idea as
-   * AMRAP calibration: show the data, don't shout a verdict.
+   * AMRAP calibration: show the data, don't shout a verdict. Also true while
+   * the trend rebuilds after a data discontinuity (equipment change) — see
+   * calibrationReason.
    */
   lowConfidence: boolean;
+  /** Why the lift is calibrating, when lowConfidence is true. */
+  calibrationReason: 'program_change' | 'equipment_change' | null;
+  /**
+   * Session dates the robust fit rejected as outliers — surfaced so the UI
+   * can mark them instead of silently dropping data.
+   */
+  excludedDates: string[];
+  /** Session date the current calibration segment starts at, if any. */
+  discontinuityDate: string | null;
 }
 
 export interface LiftTrendsSummary {
@@ -76,7 +89,14 @@ export interface LiftTrendSessionRow {
   completed_at: string | null;
   exercise_blocks: {
     exercises: { id: string; name: string; exercise_type?: string | null } | null;
-    set_logs: { weight_kg: number | null; reps: number | null; is_warmup: boolean | null }[] | null;
+    /** User marked this session's equipment as different (segment boundary). */
+    equipment_changed?: boolean | null;
+    set_logs: {
+      weight_kg: number | null;
+      reps: number | null;
+      rpe?: number | null;
+      is_warmup: boolean | null;
+    }[] | null;
   }[] | null;
 }
 
@@ -115,6 +135,10 @@ export function computeLiftTrends(
 ): LiftTrendsSummary {
   const snapshotsByExercise = new Map<string, ExercisePerformanceSnapshot[]>();
   const nameByExercise = new Map<string, string>();
+  // User-marked "different equipment" sessions per exercise — permanent
+  // segment boundaries for the robust trend (heuristic detection remains the
+  // backstop for unmarked changes).
+  const equipmentBoundariesByExercise = new Map<string, string[]>();
 
   for (const session of sessions) {
     if (!session.completed_at || !session.exercise_blocks) continue;
@@ -134,17 +158,32 @@ export function computeLiftTrends(
       let topE1RM = 0;
       let topWeight = 0;
       let topReps = 0;
+      let topRpe: number | null = null;
       for (const set of workingSets) {
-        const e1rm = estimateE1RM(set.weight_kg as number, set.reps as number);
+        // Canonical RPE-aware estimator: same load/reps at a lower RPE is a
+        // HIGHER estimate (set-level progress an RPE-blind compare discards).
+        // Returns 0 for "no estimate" (>15 effective reps) — such sets never
+        // enter the trend.
+        const e1rm = e1rmValueFromRpe(
+          set.weight_kg as number,
+          set.reps as number,
+          set.rpe ?? null
+        );
         if (e1rm > topE1RM) {
           topE1RM = e1rm;
           topWeight = set.weight_kg as number;
           topReps = set.reps as number;
+          topRpe = set.rpe ?? null;
         }
       }
       if (topE1RM <= 0) continue;
 
       nameByExercise.set(exercise.id, exercise.name);
+      if (block.equipment_changed) {
+        const boundaries = equipmentBoundariesByExercise.get(exercise.id) ?? [];
+        boundaries.push(sessionDate);
+        equipmentBoundariesByExercise.set(exercise.id, boundaries);
+      }
       const list = snapshotsByExercise.get(exercise.id) ?? [];
       list.push({
         id: `${session.id}-${exercise.id}`,
@@ -153,9 +192,7 @@ export function computeLiftTrends(
         sessionDate,
         topSetWeightKg: topWeight,
         topSetReps: topReps,
-        // RPE isn't selected in the dashboard query; E1RM already reflects
-        // logged performance and the detector mainly trends E1RM.
-        topSetRpe: 10,
+        topSetRpe: topRpe ?? 10,
         totalWorkingSets: workingSets.length,
         estimatedE1RM: topE1RM,
       });
@@ -194,7 +231,8 @@ export function computeLiftTrends(
   let stalled: { name: string; weeks: number } | null = null;
 
   for (const [exerciseId, snapshots] of ranked) {
-    const trend = analyzeExerciseTrend(snapshots, goal);
+    const knownDiscontinuities = equipmentBoundariesByExercise.get(exerciseId);
+    const trend = analyzeExerciseTrend(snapshots, goal, { knownDiscontinuities });
     const sorted = [...snapshots].sort((a, b) => a.sessionDate.localeCompare(b.sessionDate));
     const currentE1RM = sorted[sorted.length - 1].estimatedE1RM;
     const weeklyChangePct =
@@ -207,10 +245,25 @@ export function computeLiftTrends(
     // old-program and new-program sessions, and fewer than
     // MIN_SESSIONS_FOR_TREND have happened since the switch.
     let lowConfidence = false;
+    let calibrationReason: LiftTrend['calibrationReason'] = null;
     if (programStart) {
       const before = sorted.filter((s) => s.sessionDate < programStart).length;
       const since = sorted.length - before;
-      lowConfidence = before > 0 && since < MIN_SESSIONS_FOR_TREND;
+      if (before > 0 && since < MIN_SESSIONS_FOR_TREND) {
+        lowConfidence = true;
+        calibrationReason = 'program_change';
+      }
+    }
+    // Data-discontinuity gating (robust trend detected/was told about an
+    // equipment change): the trend rebuilds over the post-shift sessions,
+    // exactly like a program switch.
+    if (
+      !lowConfidence &&
+      trend.discontinuityDate &&
+      (trend.pointsUsed ?? sorted.length) < MIN_SESSIONS_AFTER_DISCONTINUITY
+    ) {
+      lowConfidence = true;
+      calibrationReason = 'equipment_change';
     }
 
     lifts.push({
@@ -225,12 +278,21 @@ export function computeLiftTrends(
         e1rmKg: Math.round(s.estimatedE1RM * 10) / 10,
       })),
       lowConfidence,
+      calibrationReason: lowConfidence ? calibrationReason : null,
+      excludedDates: trend.excludedDates ?? [],
+      discontinuityDate: trend.discontinuityDate ?? null,
     });
 
     // A "stalled N wks" verdict across a program boundary is the same noise
     // as the direction verdict — skip low-confidence lifts.
     if (!lowConfidence) {
-      const plateau = detectPlateau({ exerciseId, snapshots: sorted, referenceDate, goal });
+      const plateau = detectPlateau({
+        exerciseId,
+        snapshots: sorted,
+        referenceDate,
+        goal,
+        knownDiscontinuities,
+      });
       if (plateau.isPlateaued) {
         const weeks = Math.max(1, Math.round(plateau.weeksSinceProgress));
         if (!stalled || weeks > stalled.weeks) {

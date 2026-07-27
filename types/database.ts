@@ -364,6 +364,7 @@ export interface Database {
           skipped_at: string | null;
           pump: number | null;
           workload: number | null;
+          equipment_changed: boolean;
         };
         Insert: {
           id?: string;
@@ -386,6 +387,7 @@ export interface Database {
           skipped_at?: string | null;
           pump?: number | null;
           workload?: number | null;
+          equipment_changed?: boolean;
         };
         Update: {
           id?: string;
@@ -408,6 +410,7 @@ export interface Database {
           skipped_at?: string | null;
           pump?: number | null;
           workload?: number | null;
+          equipment_changed?: boolean;
         };
         Relationships: [];
       };

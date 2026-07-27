@@ -20,7 +20,8 @@ import {
 
 export interface E1RMChartPoint {
   date: string;
-  e1rm: number;
+  /** null = no estimable set that day — rendered as a gap, never a 0. */
+  e1rm: number | null;
 }
 
 export default function E1RMProgressChart({

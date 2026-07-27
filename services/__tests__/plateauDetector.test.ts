@@ -140,8 +140,11 @@ describe('analyzeExerciseTrend', () => {
 
     const result = analyzeExerciseTrend(snapshots);
     expect(Number.isNaN(result.weeklyChange)).toBe(false);
-    // Zero baseline + zero progress => treated as plateaued, not NaN.
-    expect(result.isPlateaued).toBe(true);
+    // An all-zero e1RM series is corrupt DATA, not a training outcome: the
+    // robust trend hard-rejects every point and no verdict fires — a
+    // "plateau" measured against zeros would be as fictional as the zeros.
+    expect(result.isPlateaued).toBe(false);
+    expect(result.confidence).toBe('insufficient');
   });
 });
 
@@ -620,10 +623,15 @@ describe('createPlateauAlert', () => {
   it('returns null when not plateaued', () => {
     const result = {
       isPlateaued: false,
+      isCalibrating: false,
+      calibrationReason: null,
       weeksSinceProgress: 0,
       lastProgressDate: null,
       currentE1RM: 100,
+      recentPeakE1RM: 100,
+      segmentBestE1RM: 100,
       peakE1RM: 100,
+      discontinuityDate: null,
       suggestions: [],
     };
 
@@ -634,10 +642,15 @@ describe('createPlateauAlert', () => {
   it('creates alert when plateaued', () => {
     const result = {
       isPlateaued: true,
+      isCalibrating: false,
+      calibrationReason: null,
       weeksSinceProgress: 4,
       lastProgressDate: '2024-01-01',
       currentE1RM: 100,
+      recentPeakE1RM: 105,
+      segmentBestE1RM: 105,
       peakE1RM: 105,
+      discontinuityDate: null,
       suggestions: ['Try lower reps', 'Add volume'],
     };
 
@@ -757,6 +770,91 @@ describe('calculateProgressScore', () => {
 // ============================================
 // HELPER FUNCTIONS
 // ============================================
+
+// ============================================
+// TREND-ROBUSTNESS VERIFICATION FIXTURES
+// (real Progress-tab repro cases — see the trend-robustness task)
+// ============================================
+
+describe('Cable Fly repro — equipment discontinuity + zero', () => {
+  /**
+   * Jun 29 was logged on a different machine (57.5); Jul 4's corrupt zero
+   * never reaches snapshots (builders skip inestimable sessions); current
+   * sessions are on the correct machine at the 40–42.5 level.
+   */
+  const cableFly = [
+    createSnapshot('2026-06-29', 57.5),
+    createSnapshot('2026-07-14', 40),
+    createSnapshot('2026-07-21', 40),
+    createSnapshot('2026-07-27', 42.5),
+  ];
+
+  it('anchors the trend to the post-shift segment: mildly positive, not −24.9%/wk', () => {
+    const trend = analyzeExerciseTrend(cableFly);
+    expect(trend.discontinuityDate).toBe('2026-07-14');
+    const pctPerWeek = (trend.weeklyChange / 42.5) * 100;
+    expect(pctPerWeek).toBeGreaterThan(1);
+    expect(pctPerWeek).toBeLessThan(6);
+  });
+
+  it('does not fire a plateau while the segment is rebuilding, and reports segment vocabulary', () => {
+    const result = detectPlateau({
+      exerciseId: 'cable-fly',
+      snapshots: cableFly,
+      referenceDate: '2026-07-27',
+    });
+    // 42.5 is the segment best; 57.5 belongs to the pre-shift segment and
+    // must not be the peak that "No progress in 4 weeks" is measured from.
+    expect(result.isPlateaued).toBe(false);
+    expect(result.segmentBestE1RM).toBe(42.5);
+    expect(result.discontinuityDate).toBe('2026-07-14');
+    // No self-contradiction: recent peak equals current → no "0.0 from peak".
+    expect(result.recentPeakE1RM).toBeLessThanOrEqual(42.5);
+  });
+
+  it('suppresses all verdicts (isCalibrating) with fewer than 3 post-shift sessions', () => {
+    const rebuilding = [
+      createSnapshot('2026-06-22', 56),
+      createSnapshot('2026-06-29', 57.5),
+      createSnapshot('2026-07-14', 40),
+      createSnapshot('2026-07-21', 40),
+    ];
+    const result = detectPlateau({
+      exerciseId: 'cable-fly',
+      snapshots: rebuilding,
+      referenceDate: '2026-07-21',
+    });
+    expect(result.isCalibrating).toBe(true);
+    expect(result.calibrationReason).toBe('equipment_change');
+    expect(result.isPlateaued).toBe(false);
+  });
+
+  it('honors a user-marked equipment change even below the heuristic threshold', () => {
+    const subtle = [
+      createSnapshot('2026-06-22', 50),
+      createSnapshot('2026-06-29', 50.5),
+      createSnapshot('2026-07-14', 44), // −13%: below the 25% heuristic
+      createSnapshot('2026-07-21', 44.5),
+      createSnapshot('2026-07-27', 45),
+    ];
+    const trend = analyzeExerciseTrend(subtle, undefined, {
+      knownDiscontinuities: ['2026-07-14'],
+    });
+    expect(trend.discontinuityDate).toBe('2026-07-14');
+    expect(trend.pointsUsed).toBe(3);
+    expect(trend.weeklyChange).toBeGreaterThan(0);
+  });
+
+  it('RPE-aware progress: same load/reps at lower RPE is a higher e1RM (set-level progress counts)', () => {
+    // Same 30 kg × 8, but 1.5 RPE cheaper — the RPE-blind comparison the old
+    // detector ran would call these identical; the canonical estimator reads
+    // the extra reps in reserve as a higher capacity.
+    expect(calculateE1RM(30, 8, 7.5)).toBeGreaterThan(calculateE1RM(30, 8, 9));
+    // At/beyond the effective-rep cap the estimate saturates (a floor, not an
+    // extrapolation) — it must never DECREASE from a cheaper set.
+    expect(calculateE1RM(30, 12, 7.5)).toBeGreaterThanOrEqual(calculateE1RM(30, 11, 9));
+  });
+});
 
 function createSnapshot(date: string, e1rm: number): ExercisePerformanceSnapshot {
   return {

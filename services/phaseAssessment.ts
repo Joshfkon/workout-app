@@ -20,6 +20,7 @@
 import type { DexaScan, TrainingPhase, PhaseType } from '@/types/schema';
 import { computeTrendWeights, type WeighIn } from '@/lib/nutrition/interval-tdee';
 import { addLocalDays, localDaysBetweenDays, parseLocalDay } from '@/lib/date/localDay';
+import { computeTrend } from '@/services/shared/trend';
 
 // === TYPES ===
 
@@ -176,18 +177,21 @@ function rateOverTrailing(
   const first = inWin[0];
   const spanDays = localDaysBetweenDays(first.date, inWin[inWin.length - 1].date);
   if (spanDays < MIN_RATE_SPAN_DAYS) return null;
-  const xs = inWin.map((p) => localDaysBetweenDays(first.date, p.date));
-  const n = inWin.length;
-  const meanX = xs.reduce((sum, x) => sum + x, 0) / n;
-  const meanY = inWin.reduce((sum, p) => sum + p.raw, 0) / n;
-  let num = 0;
-  let den = 0;
-  for (let i = 0; i < n; i++) {
-    num += (xs[i] - meanX) * (inWin[i].raw - meanY);
-    den += (xs[i] - meanX) ** 2;
-  }
-  if (den === 0) return null;
-  return { rate: (num / den) * 7, spanDays };
+  // Canonical robust slope (services/shared/trend): Theil–Sen over elapsed
+  // days, single corrupt weigh-ins MAD-excluded. Discontinuity segmentation
+  // is off — within a phase window a persistent weight step IS the signal.
+  const result = computeTrend(
+    inWin.map((p) => ({ date: p.date, value: p.raw })),
+    {
+      minPoints: 2,
+      detectDiscontinuity: false,
+      lowConfidenceSpanDays: 0,
+      lowConfidenceGapDays: Number.POSITIVE_INFINITY,
+      label: 'phaseAssessment',
+    }
+  );
+  if (result.confidence === 'insufficient') return null;
+  return { rate: result.slopePerWeek, spanDays };
 }
 
 /** DEXA scans inside [start, end], sorted ascending by scan date. */
