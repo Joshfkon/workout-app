@@ -190,22 +190,39 @@ export function MeasurementTrendCard({
   }, [rows, site]);
 
   /**
+   * Outlier entries over the site's FULL history (window-independent), from
+   * the same robust fit that powers the badges. The EWMA overlay must skip
+   * them: drawing the raw point as an excluded red marker while the yellow
+   * trend line still bends toward that same bad measurement would be
+   * excluding it in name only.
+   */
+  const fullHistoryExcludedDates = useMemo(() => {
+    if (!site) return new Set<string>();
+    const fullSite = computeMeasurementTrends(rows, MEASUREMENT_FIELDS, null).sites.find(
+      (s) => s.site === site
+    );
+    return new Set(fullSite?.excludedDates ?? []);
+  }, [rows, site]);
+
+  /**
    * Rolling trend (time-aware EWMA, τ=10d — same smoothing as the weight
-   * trend), keyed by date. Computed over the site's FULL history, before the
-   * range filter, so a short window carries in prior trend state instead of
-   * re-seeding on its first visible entry — a date's trend value is the same
-   * in every window. Gated on the same entry floor as the badge.
+   * trend), keyed by date. Computed over the site's FULL history minus
+   * excluded outliers, before the range filter, so a short window carries in
+   * prior trend state instead of re-seeding on its first visible entry — a
+   * date's trend value is the same in every window. Gated on the same entry
+   * floor as the badge.
    */
   const trendByDate = useMemo(() => {
     const map = new Map<string, number>();
-    if (siteEntries.length < MIN_POINTS_FOR_TREND) return map;
+    const cleanEntries = siteEntries.filter((e) => !fullHistoryExcludedDates.has(e.date));
+    if (cleanEntries.length < MIN_POINTS_FOR_TREND) return map;
     for (const p of computeEwmaTrend(
-      siteEntries.map((e) => ({ date: e.date, value: e.valueCm }))
+      cleanEntries.map((e) => ({ date: e.date, value: e.valueCm }))
     )) {
       map.set(p.date, p.trend);
     }
     return map;
-  }, [siteEntries]);
+  }, [siteEntries, fullHistoryExcludedDates]);
 
   /**
    * Detail-chart rows on a TRUE TIME axis (x = ms epoch): a 6-month gap must

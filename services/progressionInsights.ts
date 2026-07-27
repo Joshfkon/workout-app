@@ -199,6 +199,13 @@ export interface GetExerciseProgressionInput {
    * surfaces can never disagree about which lifts are trustworthy.
    */
   programStartDate?: string | null;
+  /**
+   * Session dates the user explicitly marked as "different equipment"
+   * (exercise_blocks.equipment_changed) — hard trend-segment boundaries,
+   * honored even when the level shift is below the 25% heuristic, so this
+   * surface restarts exactly where Lift Trends and History do.
+   */
+  knownDiscontinuities?: Array<string | Date>;
 }
 
 /**
@@ -207,7 +214,7 @@ export interface GetExerciseProgressionInput {
 export function getExerciseProgression(
   input: GetExerciseProgressionInput
 ): ExerciseProgressionInsight {
-  const { exerciseId, snapshots, experience, referenceDate, goal, programStartDate } = input;
+  const { exerciseId, snapshots, experience, referenceDate, goal, programStartDate, knownDiscontinuities } = input;
   const expected = getExpectedPace(experience, goal);
   const expectedWeeklyPct = expected.expectedWeeklyPct;
 
@@ -271,8 +278,14 @@ export function getExerciseProgression(
     }
   }
 
-  const trend = analyzeExerciseTrend(sorted, goal);
-  const plateau = detectPlateau({ exerciseId, snapshots: sorted, referenceDate, goal });
+  const trend = analyzeExerciseTrend(sorted, goal, { knownDiscontinuities });
+  const plateau = detectPlateau({
+    exerciseId,
+    snapshots: sorted,
+    referenceDate,
+    goal,
+    knownDiscontinuities,
+  });
 
   // Data-discontinuity gate (equipment change detected by the robust trend):
   // same calibrating treatment as a program switch — the fitted slope mixes
@@ -342,6 +355,11 @@ export interface GetMuscleGroupProgressionInput {
   goal?: PlateauGoal;
   /** Active program start date — see GetExerciseProgressionInput. */
   programStartDate?: string | null;
+  /**
+   * Per-exercise user-marked equipment-change dates — see
+   * GetExerciseProgressionInput.knownDiscontinuities.
+   */
+  discontinuitiesByExercise?: Map<string, Array<string | Date>>;
 }
 
 /**
@@ -357,7 +375,7 @@ export interface GetMuscleGroupProgressionInput {
 export function getMuscleGroupProgression(
   input: GetMuscleGroupProgressionInput
 ): MuscleGroupProgression[] {
-  const { snapshotsByExercise, muscleByExercise, experience, referenceDate, goal, programStartDate } = input;
+  const { snapshotsByExercise, muscleByExercise, experience, referenceDate, goal, programStartDate, discontinuitiesByExercise } = input;
   const expected = getExpectedPace(experience, goal);
   const expectedWeeklyPct = expected.expectedWeeklyPct;
 
@@ -373,6 +391,7 @@ export function getMuscleGroupProgression(
       referenceDate,
       goal,
       programStartDate,
+      knownDiscontinuities: discontinuitiesByExercise?.get(exerciseId),
     });
     const list = byMuscle.get(muscle) ?? [];
     list.push(insight);

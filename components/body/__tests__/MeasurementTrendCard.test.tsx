@@ -220,11 +220,14 @@ describe('MeasurementTrendCard rolling trend line', () => {
     ) as Array<{ value: number; trend?: number }>;
 
   it('overlays a smoothed trend once a site has enough entries', async () => {
+    // Realistic tape wobble (±0.7%) — large enough to smooth, small enough
+    // that the robust fit keeps every entry (outlier exclusion has its own
+    // spec below).
     mockRows = [
       chestRow(daysAgo(30), 100),
-      chestRow(daysAgo(20), 104),
-      chestRow(daysAgo(10), 101),
-      chestRow(daysAgo(1), 105),
+      chestRow(daysAgo(20), 101.5),
+      chestRow(daysAgo(10), 100.8),
+      chestRow(daysAgo(1), 102),
     ];
     render(<MeasurementTrendCard tapeUnit="cm" />);
 
@@ -397,5 +400,52 @@ describe('MeasurementTrendCard entry editor', () => {
       { type: 'delete', filters: { user_id: 'user-1', logged_at: daysAgo(1) } },
     ]);
     expect(onDataChanged).toHaveBeenCalled();
+  });
+});
+
+describe('MeasurementTrendCard excluded outliers', () => {
+  beforeEach(() => {
+    mockRows = [];
+    mockMutations = [];
+  });
+
+  const chartRows = () =>
+    JSON.parse(
+      screen.getByTestId('line-chart').getAttribute('data-chart') ?? '[]'
+    ) as Array<{ value?: number | null; excluded?: number; trend?: number }>;
+
+  it('marks the outlier as excluded and keeps it out of both the solid line and the EWMA overlay', async () => {
+    mockRows = [
+      chestRow(daysAgo(35), 100),
+      chestRow(daysAgo(28), 100.2),
+      chestRow(daysAgo(21), 100.1),
+      chestRow(daysAgo(14), 90), // tape error — robust fit excludes it
+      chestRow(daysAgo(7), 100.3),
+      chestRow(daysAgo(1), 100.2),
+    ];
+    render(<MeasurementTrendCard tapeUnit="cm" />);
+
+    await screen.findByTestId('line-chart');
+    const rows = chartRows();
+
+    // The bad entry renders as a marked excluded dot, not a line point.
+    const outlier = rows.find((r) => r.excluded != null);
+    expect(outlier?.excluded).toBe(90);
+    expect(outlier?.value).toBeUndefined();
+
+    // The EWMA overlay is fitted WITHOUT the excluded entry: with the 90
+    // included, the trend after it would dip ~95; clean it stays near 100.
+    for (const row of rows) {
+      if (typeof row.trend === 'number') {
+        expect(row.trend).toBeGreaterThan(99);
+      }
+    }
+
+    expect(screen.getByTestId('measurement-detail-legend')).toHaveTextContent(
+      'Excluded outlier'
+    );
+    expect(
+      screen.getByTestId('measurement-trend-row-chest')
+    ).toHaveTextContent('1 outlier excluded');
   });
 });

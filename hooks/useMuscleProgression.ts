@@ -23,6 +23,8 @@ interface SessionSetRow {
 
 interface SessionBlockRow {
   exercises: { id: string; name: string; primary_muscle: string | null } | null;
+  /** User marked this session's equipment as different (segment boundary). */
+  equipment_changed: boolean | null;
   set_logs: SessionSetRow[] | null;
 }
 
@@ -67,6 +69,7 @@ export function useMuscleProgression() {
               id,
               completed_at,
               exercise_blocks!inner (
+                equipment_changed,
                 exercises!inner (id, name, primary_muscle),
                 set_logs!inner (weight_kg, reps, rpe, is_warmup)
               )
@@ -96,18 +99,30 @@ export function useMuscleProgression() {
         const snapshotsByExercise = new Map<string, ExercisePerformanceSnapshot[]>();
         const muscleByExercise = new Map<string, string>();
         const names = new Map<string, string>();
+        // User-marked "different equipment" session dates per exercise —
+        // hard segment boundaries, same as Lift Trends / History, so a shift
+        // below the 25% heuristic still restarts this surface's trend.
+        const discontinuitiesByExercise = new Map<string, Array<string | Date>>();
 
         ((sessionsRes.data ?? []) as SessionRow[]).forEach((session) => {
+          const sessionDay = getLocalDateString(new Date(session.completed_at));
           // Aggregate working sets per exercise first — an exercise can span
           // multiple blocks in one session but should yield one snapshot.
           const setsByExercise = new Map<string, SessionSetRow[]>();
           (session.exercise_blocks ?? []).forEach((block) => {
             if (!block.exercises) return;
+            const exerciseId = block.exercises.id;
+            // Record the boundary BEFORE any estimability skips: a marked
+            // session with no estimable set still segments the trend.
+            if (block.equipment_changed) {
+              const list = discontinuitiesByExercise.get(exerciseId) ?? [];
+              list.push(sessionDay);
+              discontinuitiesByExercise.set(exerciseId, list);
+            }
             const workingSets = (block.set_logs ?? []).filter(
               (s) => !s.is_warmup && s.weight_kg > 0 && s.reps > 0
             );
             if (workingSets.length === 0) return;
-            const exerciseId = block.exercises.id;
             names.set(exerciseId, block.exercises.name);
             if (block.exercises.primary_muscle) {
               muscleByExercise.set(exerciseId, block.exercises.primary_muscle);
@@ -159,6 +174,7 @@ export function useMuscleProgression() {
           referenceDate: new Date(),
           goal: userGoal,
           programStartDate: (mesoRes.data?.[0]?.start_date as string | null) ?? null,
+          discontinuitiesByExercise,
         });
 
         setGroups(result);

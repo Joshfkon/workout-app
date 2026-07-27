@@ -500,3 +500,57 @@ describe('muscle rollup weighting and sanity ceiling', () => {
     }
   });
 });
+
+describe('explicit equipment markers in the rollup path', () => {
+  it('honors a user-marked boundary below the 25% heuristic (calibrating until rebuilt)', () => {
+    // −15% shift at the marker: invisible to the heuristic, but the user
+    // said the equipment changed — with only 2 post-marker sessions the lift
+    // must read calibrating, not mix old and new levels into a rate.
+    const pre = buildSnapshots('ex-marked', 4, 100, 0.5);
+    const post = buildSnapshots('ex-marked', 2, 85, 0.5).map((s, i) => ({
+      ...s,
+      id: `post-${i}`,
+      sessionDate: i === 0 ? '2026-07-06' : '2026-07-13',
+    }));
+    const snapshots = [...pre, ...post];
+
+    const withMarker = getExerciseProgression({
+      exerciseId: 'ex-marked',
+      snapshots,
+      experience: 'intermediate',
+      referenceDate: '2026-07-13',
+      knownDiscontinuities: ['2026-07-06'],
+    });
+    expect(withMarker.pace).toBe('calibrating');
+    expect(withMarker.weeklyChangePct).toBe(0);
+
+    // Without the marker the −15% shift is below the heuristic: the lift
+    // classifies normally (this is exactly why the explicit marker exists).
+    const withoutMarker = getExerciseProgression({
+      exerciseId: 'ex-marked',
+      snapshots,
+      experience: 'intermediate',
+      referenceDate: '2026-07-13',
+    });
+    expect(withoutMarker.pace).not.toBe('calibrating');
+  });
+
+  it('threads per-exercise markers through getMuscleGroupProgression', () => {
+    const pre = buildSnapshots('ex-m', 4, 100, 0.5);
+    const post = buildSnapshots('ex-m', 2, 85, 0.5).map((s, i) => ({
+      ...s,
+      id: `post-${i}`,
+      sessionDate: i === 0 ? '2026-07-06' : '2026-07-13',
+    }));
+    const groups = getMuscleGroupProgression({
+      snapshotsByExercise: new Map([['ex-m', [...pre, ...post]]]),
+      muscleByExercise: new Map([['ex-m', 'chest']]),
+      experience: 'intermediate',
+      referenceDate: '2026-07-13',
+      discontinuitiesByExercise: new Map([['ex-m', ['2026-07-06']]]),
+    });
+    const chest = groups.find((g) => g.muscleGroup === 'chest')!;
+    expect(chest.pace).toBe('calibrating');
+    expect(chest.avgWeeklyChangePct).toBe(0);
+  });
+});

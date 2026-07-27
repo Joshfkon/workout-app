@@ -150,6 +150,16 @@ export function computeLiftTrends(
       // Duration exercises store seconds in reps — an "E1RM trend" over hold
       // times is fiction, so timed work never feeds the lift-trend tile.
       if (exercise.exercise_type === 'duration_based') continue;
+      // Record explicit equipment markers BEFORE any estimability skips: a
+      // marked session whose sets are outside the estimator's domain (e.g. a
+      // 20-rep day) contributes no e1RM point, but its boundary must still
+      // segment the trend — computeTrend anchors at the first point at/after
+      // the boundary date, so the boundary works without a point on it.
+      if (block.equipment_changed) {
+        const boundaries = equipmentBoundariesByExercise.get(exercise.id) ?? [];
+        boundaries.push(sessionDate);
+        equipmentBoundariesByExercise.set(exercise.id, boundaries);
+      }
       const workingSets = (block.set_logs || []).filter(
         (s) => !s.is_warmup && (s.weight_kg ?? 0) > 0 && (s.reps ?? 0) > 0
       );
@@ -179,11 +189,6 @@ export function computeLiftTrends(
       if (topE1RM <= 0) continue;
 
       nameByExercise.set(exercise.id, exercise.name);
-      if (block.equipment_changed) {
-        const boundaries = equipmentBoundariesByExercise.get(exercise.id) ?? [];
-        boundaries.push(sessionDate);
-        equipmentBoundariesByExercise.set(exercise.id, boundaries);
-      }
       const list = snapshotsByExercise.get(exercise.id) ?? [];
       list.push({
         id: `${session.id}-${exercise.id}`,

@@ -265,3 +265,32 @@ describe('equipment discontinuity + inestimable sessions', () => {
     expect(lift.weeklyChangePct).toBeGreaterThan(0);
   });
 });
+
+describe('marked boundary on an inestimable session', () => {
+  const cableFly = { id: 'ex-cable-fly', name: 'Cable Fly' };
+
+  it('keeps a marked boundary even when the marked session itself has no estimable set', () => {
+    const marked: LiftTrendSessionRow[] = [
+      session('s0', '2026-06-15T10:00:00Z', cableFly, 20, 8),
+      session('s1', '2026-06-22T10:00:00Z', cableFly, 20.5, 8),
+      session('s2', '2026-06-29T10:00:00Z', cableFly, 21, 8),
+      // Marked equipment-change day logged as a 20-rep burnout: outside the
+      // estimator's domain, so it contributes NO e1RM point — the boundary
+      // must survive anyway.
+      session('s3', '2026-07-03T10:00:00Z', cableFly, 10, 20),
+      session('s4', '2026-07-06T10:00:00Z', cableFly, 18, 8),
+      session('s5', '2026-07-13T10:00:00Z', cableFly, 18.5, 8),
+      session('s6', '2026-07-20T10:00:00Z', cableFly, 19, 8),
+    ];
+    marked[3].exercise_blocks![0].equipment_changed = true;
+
+    const summary = computeLiftTrends(marked, 'bulk', new Date('2026-07-21'));
+    const lift = summary.lifts[0];
+
+    // 6 e1RM points (the 20-rep day contributes none), segment anchored at
+    // the first point at/after the marked date.
+    expect(lift.history).toHaveLength(6);
+    expect(lift.discontinuityDate).toBe('2026-07-06');
+    expect(lift.weeklyChangePct).toBeGreaterThan(0);
+  });
+});
