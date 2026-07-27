@@ -52,7 +52,9 @@ import {
   LIGHT_LOAD_REP_CEILING_EXTENSION,
   POSITION_MATCH_SET_COUNT_TOLERANCE,
   POSITION_MATCH_LOAD_TOLERANCE,
+  SESSION_CAPACITY_TOLERANCE,
 } from './suggestionEngine/constants';
+import { estimateE1RM } from './shared/e1rm';
 import { inferRolesForSession, type SetRole } from './suggestionEngine/setRoles';
 import {
   smallestIncrement,
@@ -119,6 +121,14 @@ export interface SetRecommenderInput {
    * (legacy behavior, and the fall-through when matching doesn't apply).
    */
   positionContext?: PositionContext;
+  /**
+   * Phase 0 (INV-2) — ALL sets completed THIS session with their resolved
+   * effort, in performed order. Their best canonical implied capacity is the
+   * ceiling no prescription may exceed. The just-completed set (the last*
+   * fields) is always included in the ceiling pool automatically; pass the
+   * earlier sets here. Omitted → the ceiling is the last set alone.
+   */
+  sessionObservedSets?: Array<{ weightKg: number; reps: number; rir: number }>;
 }
 
 /** The session-comparison inputs for set-position matching. */
@@ -164,6 +174,21 @@ export interface SetRecommendation {
    * increment the curve doesn't support).
    */
   noMeaningfulChange?: boolean;
+  /**
+   * Phase 0 (INV-1): the predicted reps fall outside the stated target rep
+   * range. Honest reps are kept (a fatigue-driven decline below the floor on
+   * late sets is real, and an under-load overshoot is the double-progression
+   * signal) — but the UI MUST acknowledge the mismatch instead of rendering
+   * the range header and the out-of-range number side by side silently.
+   */
+  outsideRange?: 'below' | 'above';
+  /**
+   * Phase 0 (INV-2): the rep ask was trimmed because the prescription's
+   * implied capacity (canonical estimator, at the asked effort) exceeded the
+   * best set OBSERVED this session — the engine was about to demand a
+   * session best under fatigue.
+   */
+  sessionCapacityClamped?: boolean;
 }
 
 /**
@@ -722,6 +747,62 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
   const effortVsTarget: SetRecommendation['effortVsTarget'] =
     dev >= EFFORT_MATCH_TOLERANCE ? 'easier' : dev <= -EFFORT_MATCH_TOLERANCE ? 'harder' : 'on_target';
 
+  // ---- Phase 0 hard invariants — applied to EVERY prescription returned ----
+  //
+  // INV-2: never prescribe an implied capacity above the session's best
+  // OBSERVED set. Implied capacity = canonical capped Brzycki at the ASKED
+  // effort — the target RIR, except for a position-matched rec, which asks
+  // the lifter to repeat a set performed at its RECORDED effort (grading a
+  // repeat-ask at the stricter target effort would strip fixture-validated
+  // targets whose evidence set was taken past target). The ceiling pool is
+  // today's completed sets (sessionObservedSets + the just-completed set);
+  // it only applies once at least one set is done THIS session — a
+  // session-start replay off last session's reference set is not an
+  // observation of today. Cheap proxy for the full fatigue model: confirmed
+  // by two independent live reproductions (Iso-Lateral MISS B, Arnold Press
+  // 42.5×10 = 61.2 implied against a 60.0 session best).
+  //
+  // INV-1: a prescription whose reps fall outside the stated range keeps its
+  // honest count but carries `outsideRange` so the banner must re-render the
+  // contradiction (never "8-12 @ 2 RIR" silently over a ×7 prefill).
+  const finalizeRec = (rec: SetRecommendation): SetRecommendation => {
+    const out = { ...rec };
+
+    if (n >= 1 && out.weightKg > 0) {
+      let ceiling = 0;
+      const pool = [
+        ...(input.sessionObservedSets ?? []),
+        { weightKg: lastWeightKg, reps: lastReps, rir: safeRir },
+      ];
+      for (const s of pool) {
+        const est =
+          s.weightKg > 0 && s.reps > 0 ? estimateE1RM(s.weightKg, s.reps, Math.max(0, s.rir)) : null;
+        if (est && est.value > ceiling) ceiling = est.value;
+      }
+      if (ceiling > 0) {
+        const askedRir = out.positionMatch ? out.positionMatch.prevRir ?? out.rir : out.rir;
+        let reps = out.reps;
+        for (;;) {
+          if (reps <= 1) break;
+          const implied = estimateE1RM(out.weightKg, reps, Math.max(0, askedRir));
+          // null = beyond the estimator's domain (> 15 effective reps): the
+          // ask is not even measurable — keep trimming until it is.
+          if (implied && implied.value <= ceiling * (1 + SESSION_CAPACITY_TOLERANCE)) break;
+          reps -= 1;
+        }
+        if (reps !== out.reps) {
+          out.reps = reps;
+          out.sessionCapacityClamped = true;
+        }
+      }
+    }
+
+    if (out.reps < repMin) out.outsideRange = 'below';
+    else if (out.reps > repMax) out.outsideRange = 'above';
+
+    return out;
+  };
+
   // ---- 0) SET-POSITION MATCH (Phase A) ----
   // When the previous session is comparable, the next set's target is what
   // the SAME set position did last time (plus the smallest meaningful
@@ -749,7 +830,7 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
     // replaying last session's positions would under-prescribe.
     const provenUnderload = lastReps > repMax + REP_OVERSHOOT;
     if (pm && !groundOut && !provenUnderload) {
-      return {
+      return finalizeRec({
         weightKg: pm.weightKg,
         reps: pm.reps,
         rir: targetRir,
@@ -761,7 +842,7 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
               : 'maintain',
         effortVsTarget,
         positionMatch: pm,
-      };
+      });
     }
   }
 
@@ -853,14 +934,14 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
     reps = predictRepsAtWeight(e1rm, weightKg, targetRir, n, targetRepRange);
   }
 
-  return {
+  return finalizeRec({
     weightKg,
     reps,
     rir: targetRir,
     rationale,
     effortVsTarget,
     ...(noMeaningfulChange ? { noMeaningfulChange } : {}),
-  };
+  });
 }
 
 /** Input for recommendSessionStart — the matching set from the PREVIOUS session. */

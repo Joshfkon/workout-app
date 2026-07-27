@@ -9,6 +9,7 @@ import { SorenessChipRow, JointPainPicker } from './FeedbackChips';
 import { filterExercises, dedupeExercisesById } from '@/services/exerciseFilter';
 import { convertWeight, formatMuscleName, formatWeightValue, convertWeightForDisplay, inputWeightToKg, roundToPlateIncrement } from '@/lib/utils';
 import { recommendSet, recommendSessionStart, estimateRepsForWeight, predictAmrapReps, recommendSeedForSlot, resolveLastRir, prescribe, type SeedRecommendation } from '@/services/setRecommender';
+import { framePositionalDelta } from '@/services/suggestionEngine/deltaFraming';
 import { inferSetRole, type SetRole } from '@/services/suggestionEngine/setRoles';
 import {
   resolveProgressionModel,
@@ -631,6 +632,13 @@ export const ExerciseCard = memo(function ExerciseCard({
       coldStart: isColdStartExercise,
       exerciseType: exercise.exerciseType,
       isBodyweight: exercise.isBodyweight,
+      // Phase 0 (INV-2): today's completed sets with their logged effort —
+      // the ceiling no prescription may imply more capacity than.
+      sessionObservedSets: completedSets.map((s) => ({
+        weightKg: s.weightKg,
+        reps: s.reps,
+        rir: resolveLastRir(s, effectiveTargetRir),
+      })),
       // Phase A — set-position matching: when last session is comparable, the
       // next set's target is what the SAME position did last time, not a
       // re-derivation from the session-start anchor.
@@ -1640,15 +1648,23 @@ export const ExerciseCard = memo(function ExerciseCard({
     let showRir = true;
     let role: SetRole = 'working';
 
-    // Delta between the anchor set and the weight the banner actually shows
-    // (display units, after plate rounding) so the copy can't contradict the
-    // numbers on screen — a raw-kg delta said "down -1.5 kg" for a 4 kg → 3 kg
-    // drop. Unsigned: "up"/"down" in the sentence already carries direction.
-    const deltaLabel = (anchorKg: number, shownWeight: string) => {
+    // INV-4: a delta number in the copy must compare LIKE TO LIKE — the
+    // prescribed set vs the SAME set position last session — or say nothing.
+    // The just-completed set is a different position under different fatigue;
+    // framing off it read "down 5 lbs" on a set that was UP 2.5 vs its
+    // position (Arnold Press live defect). framePositionalDelta returns null
+    // without a positional reference, and then NO number is rendered.
+    const positionalDelta = (shownWeight: string): string | null => {
       const shown = parseFloat(shownWeight);
-      if (!Number.isFinite(shown)) return '';
-      const delta = Number(Math.abs(shown - convertWeightForDisplay(anchorKg, unit)).toFixed(1));
-      return delta > 0 ? `${delta} ${weightLabel}` : '';
+      const positionalPrev = previousSets[completedSets.length];
+      return framePositionalDelta(
+        shown,
+        positionalPrev && positionalPrev.weightKg > 0
+          ? convertWeightForDisplay(positionalPrev.weightKg, unit)
+          : undefined,
+        completedSets.length + 1,
+        weightLabel
+      );
     };
 
     if (lastCompleted) {
@@ -1690,7 +1706,7 @@ export const ExerciseCard = memo(function ExerciseCard({
       // the fatigue-driven decline (12→11→10→9), not a copied historical target —
       // show it as the single predicted number.
       repsLabel = String(reps);
-      const deltaText = deltaLabel(lastCompleted.weightKg, weight);
+      const posDelta = positionalDelta(weight);
       if (rec.positionMatch) {
         // Phase A — position-matched: the target came from what the SAME set
         // position did last session, not from the anchor curve. Say exactly
@@ -1723,9 +1739,11 @@ export const ExerciseCard = memo(function ExerciseCard({
           'The prescribed adjustment is smaller than half of the smallest loadable increment for this exercise, so the load holds. Record finer add-on increments for this equipment to unlock smaller steps.'
         );
       } else if (rec.rationale === 'increase_load') {
-        reason = `up ${deltaText || 'slightly'} — last set was clearly too light`;
+        // Like-for-like framing only (INV-4): the number compares this set to
+        // its own position last session, never to the just-completed set.
+        reason = `raising the load — last set was clearly too light${posDelta ? ` (${posDelta})` : ''}`;
       } else if (rec.rationale === 'reduce_load') {
-        reason = `down ${deltaText || 'slightly'} — last set was harder than the target effort`;
+        reason = `reducing the load — last set ran harder than the target effort${posDelta ? ` (${posDelta})` : ''}`;
       } else if (rec.effortVsTarget === 'easier') {
         // Held the weight, but the logged effort was BELOW target (more reps in
         // reserve than asked) — say so and aim a little higher, never "matched".
@@ -1738,6 +1756,28 @@ export const ExerciseCard = memo(function ExerciseCard({
       if (!rec.positionMatch) {
         explanation.push(
           `Anchored to your last set: ${displayWeight(lastCompleted.weightKg, true)} ${weightLabel} × ${lastCompleted.reps} at RPE ${lastCompleted.rpe}. Its estimated 1RM sets the capacity this prescription works back from.`
+        );
+      }
+      // Phase 0 (INV-2): the ask was trimmed because it implied more capacity
+      // than the best set observed this session — say so, never demand a
+      // silent session best under fatigue.
+      if (rec.sessionCapacityClamped) {
+        reason += ' · capped at today’s best';
+        explanation.push(
+          'Capped: the un-capped suggestion implied more capacity than your best set this session. A late set is never asked to beat what fresh sets demonstrated today.'
+        );
+      }
+      // Phase 0 (INV-1): the predicted reps fall outside the stated range —
+      // acknowledge the mismatch instead of rendering "8-12" beside a 7.
+      if (rec.outsideRange === 'below') {
+        reason += ` · predicted ${reps} — below the ${block.targetRepRange[0]}–${block.targetRepRange[1]} range`;
+        explanation.push(
+          `Predicted ${reps} reps is below the ${block.targetRepRange[0]}-rep floor of the target range. A rep drop under accumulated fatigue on later sets is normal; if predictions sit below the floor from set 1, the load is too heavy for this range.`
+        );
+      } else if (rec.outsideRange === 'above') {
+        reason += ` · predicted ${reps} — above the ${block.targetRepRange[0]}–${block.targetRepRange[1]} range`;
+        explanation.push(
+          `Predicted ${reps} reps is above the ${block.targetRepRange[1]}-rep top of the target range — the load is running light for this range, which is the signal that earns a load increase next session.`
         );
       }
       }

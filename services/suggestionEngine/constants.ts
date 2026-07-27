@@ -42,8 +42,14 @@
  *       from a static session-start anchor that ignored accumulated fatigue.
  *       Anchor-path prescriptions are unchanged when position matching does
  *       not apply.
+ *  v6 = Phase 0 hard invariants on every within-session prescription:
+ *       INV-2 clamps any ask whose implied capacity (canonical capped
+ *       Brzycki, at the asked effort) exceeds the session's best OBSERVED
+ *       set (sessionCapacityClamped flag); INV-1 flags a prescription whose
+ *       reps fall outside its own stated range (outsideRange) so the banner
+ *       re-renders instead of silently contradicting itself.
  */
-export const SUGGESTION_ENGINE_VERSION = 5;
+export const SUGGESTION_ENGINE_VERSION = 6;
 
 // ============================================================
 // SET ROLES (Phase 2)
@@ -205,6 +211,20 @@ export const OVERSHOOT_CEILING = 5;
  * self-reported RIR.
  */
 export const REP_OVERSHOOT = 2;
+
+// ============================================================
+// SESSION-CAPACITY INVARIANT (Phase 0, INV-2)
+// ============================================================
+
+/**
+ * Rounding slack on the INV-2 ceiling: a prescription's implied capacity
+ * (canonical capped Brzycki at the asked effort) may exceed the session's
+ * best observed set by at most this fraction before the rep ask is trimmed.
+ * 1% ≈ the slack a half-rep of Math.round can introduce; anything beyond it
+ * is a genuine "session best demanded under fatigue" ask (the Arnold Press
+ * 42.5×10 = 61.2-implied case against a 60.0 session best).
+ */
+export const SESSION_CAPACITY_TOLERANCE = 0.01;
 
 // ============================================================
 // SET-POSITION MATCHING (Phase A — intra-session prescription)
