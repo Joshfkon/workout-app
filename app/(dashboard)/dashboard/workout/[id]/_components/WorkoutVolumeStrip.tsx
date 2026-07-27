@@ -65,11 +65,12 @@ function writeFlag(key: string, value: boolean): void {
   }
 }
 
-/** Fill fraction within the band scale (MRV sits at ~83%, headroom for overrun). */
+/** Fill fraction of the MRV scale — full bar at the band's high end. This bar
+ *  has no MRV tick (unlike BarTrack), so headroom past MRV would just read as
+ *  "not done" at the target; overrun past MRV is signaled by color instead. */
 function barFillPct(sets: number, mrv: number): number {
-  const maxDisplay = mrv * 1.2;
-  if (maxDisplay <= 0) return 0;
-  return Math.min(100, Math.max(0, (sets / maxDisplay) * 100));
+  if (mrv <= 0) return 0;
+  return Math.min(100, Math.max(0, (sets / mrv) * 100));
 }
 
 /** Status-dot colour for a readiness score (green / amber / red). */
@@ -202,6 +203,7 @@ export function WorkoutVolumeStrip({ rows, isLoading, onOpenDetail }: WorkoutVol
                   <div
                     className={`h-full rounded-full ${rowBarClass(row)}`}
                     style={{ width: `${barFillPct(row.sets, row.band.mrv)}%` }}
+                    data-testid={`workout-volume-bar-${row.muscle}`}
                   />
                 )}
               </div>

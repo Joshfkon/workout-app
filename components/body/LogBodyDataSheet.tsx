@@ -24,6 +24,7 @@ import { createUntypedClient } from '@/lib/supabase/client';
 import { getLocalUserId } from '@/lib/supabase/authState';
 import { BottomSheet } from '@/components/workout/BottomSheet';
 import { SegmentedControl } from '@/components/workout/SegmentedControl';
+import { InfoTooltip } from '@/components/ui/InfoTooltip';
 import {
   MEASUREMENT_FIELDS,
   type Measurements,
@@ -321,27 +322,30 @@ export function LogBodyDataSheet({
 
         {segment === 'measurements' && (
           <div className="space-y-3">
-            <div className="flex items-end justify-between gap-2">
-              <div className="flex-1">
+            <div>
+              {/* Hint lives on the label row, not beside the input — the native
+                  date field's intrinsic width overflows a shared flex row on iOS
+                  and the hint text ends up overlapping it. */}
+              <div className="flex items-baseline justify-between gap-2">
                 <label className={labelClass} htmlFor="body-log-measure-date">
                   Date
                 </label>
-                <input
-                  id="body-log-measure-date"
-                  type="date"
-                  value={measureDate}
-                  max={getLocalDateString()}
-                  onChange={(e) => setMeasureDate(e.target.value)}
-                  className={inputClass}
-                />
+                <p className="text-[11px] text-surface-500 mb-1 whitespace-nowrap">
+                  {previousLoggedAt
+                    ? `Previous: ${new Date(`${previousLoggedAt}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+                    : 'First entry'}
+                  {' · '}
+                  {tapeUnit}
+                </p>
               </div>
-              <p className="text-[11px] text-surface-500 pb-2.5">
-                {previousLoggedAt
-                  ? `Previous: ${new Date(`${previousLoggedAt}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
-                  : 'First entry'}
-                {' · '}
-                {tapeUnit}
-              </p>
+              <input
+                id="body-log-measure-date"
+                type="date"
+                value={measureDate}
+                max={getLocalDateString()}
+                onChange={(e) => setMeasureDate(e.target.value)}
+                className={inputClass}
+              />
             </div>
 
             <div className="max-h-[45vh] overflow-y-auto space-y-3 pr-1">
@@ -353,9 +357,21 @@ export function LogBodyDataSheet({
                   <div className="grid grid-cols-2 gap-2">
                     {fields.map((field) => (
                       <div key={field.key}>
-                        <label className={labelClass} htmlFor={`body-log-${field.key}`}>
-                          {field.label}
-                        </label>
+                        {/* Tooltip sits beside the label (portal-rendered, so the
+                            scroll container can't clip it) with how-to-measure
+                            guidance for taking the tape reading consistently. */}
+                        <div className="flex items-center mb-1">
+                          <label
+                            className="text-[11px] font-medium text-surface-400"
+                            htmlFor={`body-log-${field.key}`}
+                          >
+                            {field.label}
+                          </label>
+                          <InfoTooltip
+                            content={{ term: field.label, shortExplanation: field.instructions }}
+                            size="sm"
+                          />
+                        </div>
                         <input
                           id={`body-log-${field.key}`}
                           type="number"

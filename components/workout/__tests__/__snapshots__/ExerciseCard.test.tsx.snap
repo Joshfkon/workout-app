@@ -36,6 +36,20 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
           </span>
         </p>
       </button>
+      <p
+        class="mt-1 text-[11px] text-surface-500"
+        data-testid="session-volume-line"
+      >
+        Projected volume
+         
+        <span
+          class="text-surface-300"
+        >
+          1,800
+           
+          kg
+        </span>
+      </p>
     </div>
     <div
       class="px-3 py-3 space-y-1.5"
@@ -1152,6 +1166,29 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
           </span>
         </p>
       </button>
+      <p
+        class="mt-1 text-[11px] text-surface-500"
+        data-testid="session-volume-line"
+      >
+        Volume
+         
+        <span
+          class="text-surface-300"
+        >
+          1,900
+           
+          kg
+        </span>
+        <span
+          class="text-surface-600"
+        >
+           · 
+        </span>
+        2,700
+         
+        kg
+         projected
+      </p>
     </div>
     <div
       class="px-3 py-3 space-y-1.5"
@@ -1376,7 +1413,7 @@ exports[`ExerciseCard Snapshot Tests renders with exercise history 1`] = `
             Chest
           </span>
            · 
-          last session 100 kg × 10, × 9 @ 1–2 RIR
+          last session 100 kg × 10, × 9 @ 1–2 RIR · 1,900 kg vol
         </p>
         <svg
           aria-hidden="true"

@@ -8,7 +8,7 @@ import { rpeToRir } from '@/types/schema';
 import { formatSetHistoryLine } from '@/lib/formatSetHistory';
 import { SorenessChipRow, JointPainPicker } from './FeedbackChips';
 import { filterExercises, dedupeExercisesById } from '@/services/exerciseFilter';
-import { convertWeight, formatMuscleName, formatWeightValue, convertWeightForDisplay, inputWeightToKg, roundToPlateIncrement } from '@/lib/utils';
+import { convertWeight, formatMuscleName, formatWeightValue, convertWeightForDisplay, inputWeightToKg, roundToPlateIncrement, sumDisplayVolume } from '@/lib/utils';
 import { recommendSet, recommendSessionStart, estimateRepsForWeight, predictAmrapReps, recommendSeedForSlot, resolveLastRir, prescribe, type SeedRecommendation } from '@/services/setRecommender';
 import { framePositionalDelta } from '@/services/suggestionEngine/deltaFraming';
 import { inferSetRole, type SetRole } from '@/services/suggestionEngine/setRoles';
@@ -825,6 +825,49 @@ export const ExerciseCard = memo(function ExerciseCard({
     },
     [displayWeight]
   );
+
+  // Last session's total tonnage (weight × reps across all sets), in the
+  // display unit. Duration sets carry seconds in `reps`, so no volume there.
+  // Bodyweight sets use the stored EFFECTIVE load — that's the real tonnage.
+  const lastSessionVolume = useMemo(() => {
+    if (isDurationBased) return null;
+    const lastSets = exerciseHistory?.lastWorkoutSets ?? [];
+    if (lastSets.length === 0) return null;
+    const vol = sumDisplayVolume(lastSets, unit);
+    return vol > 0 ? vol : null;
+  }, [isDurationBased, exerciseHistory, unit]);
+
+  // This session's tonnage: `current` sums the logged working sets; `projected`
+  // adds an estimate for each remaining programmed set — the pending input's
+  // live prefill/typed value when parseable, falling back to the last logged
+  // set, then last session's matching set. Display-only, native display units
+  // (sumDisplayVolume convention); engine math stays in kg.
+  const sessionVolume = useMemo(() => {
+    if (isDurationBased) return null;
+    const current = sumDisplayVolume(completedSets, unit);
+    let projected = current;
+    const lastCompleted = completedSets[completedSets.length - 1];
+    for (let i = 0; i < pendingSetsCount; i++) {
+      const input = pendingInputs[i];
+      const inputWeight = input ? parseFloat(input.weight) : NaN;
+      const inputReps = input ? parseInt(input.reps, 10) : NaN;
+      const fallback =
+        lastCompleted ??
+        previousSets[completedSets.length + i] ??
+        previousSets[previousSets.length - 1];
+      // Bodyweight modes log an EFFECTIVE load that differs from the typed
+      // add/assist number, so those estimate from history instead.
+      const weight =
+        !isBodyweightExercise && Number.isFinite(inputWeight) && inputWeight > 0
+          ? inputWeight
+          : fallback
+            ? convertWeightForDisplay(fallback.weightKg, unit)
+            : 0;
+      const reps = Number.isFinite(inputReps) && inputReps > 0 ? inputReps : fallback?.reps ?? 0;
+      projected += weight * reps;
+    }
+    return { current, projected: Math.round(projected) };
+  }, [isDurationBased, completedSets, pendingSetsCount, pendingInputs, previousSets, isBodyweightExercise, unit]);
 
   // The previous session's FULL set list (performed order) for the all-sets
   // bump gate: a session-to-session load increase is earned only when every
@@ -2070,7 +2113,15 @@ export const ExerciseCard = memo(function ExerciseCard({
         ? ' · est. from another gym'
         : ' · here';
     }
-    return `last session ${line}${locationTag}`;
+    // Total tonnage of the last session (from main's volume-display work),
+    // so the summary line answers "how much total weight did I move" without
+    // expanding the history detail — appended to the Phase 0b honest per-set
+    // line rather than the old single-load format it originally rode on.
+    const volPart =
+      lastSessionVolume != null
+        ? ` · ${lastSessionVolume.toLocaleString('en-US')} ${weightLabel} vol`
+        : '';
+    return `last session ${line}${volPart}${locationTag}`;
   })();
 
   // Tooltip for the progression pace pill: E1RM trend vs expectation, plus
@@ -2294,6 +2345,36 @@ export const ExerciseCard = memo(function ExerciseCard({
           )}
         </button>
 
+        {/* Session tonnage — logged volume so far, plus the projection if all
+            remaining programmed sets are finished at their suggested/typed
+            numbers. Shown once there's something concrete: a logged set, or
+            the active card's live plan. */}
+        {sessionVolume && sessionVolume.projected > 0 && (isActive || completedSets.length > 0) && (
+          <p className="mt-1 text-[11px] text-surface-500" data-testid="session-volume-line">
+            {completedSets.length > 0 ? (
+              <>
+                Volume{' '}
+                <span className="text-surface-300">
+                  {sessionVolume.current.toLocaleString('en-US')} {weightLabel}
+                </span>
+                {pendingSetsCount > 0 && sessionVolume.projected > sessionVolume.current && (
+                  <>
+                    <span className="text-surface-600"> · </span>
+                    {sessionVolume.projected.toLocaleString('en-US')} {weightLabel} projected
+                  </>
+                )}
+              </>
+            ) : (
+              <>
+                Projected volume{' '}
+                <span className="text-surface-300">
+                  {sessionVolume.projected.toLocaleString('en-US')} {weightLabel}
+                </span>
+              </>
+            )}
+          </p>
+        )}
+
         {/* Enhanced mode: the joint-stress RIR floor is constraining this
             exercise below what the raised landmarks would allow */}
         {connectiveTissueCapBinds && (
@@ -2369,6 +2450,14 @@ export const ExerciseCard = memo(function ExerciseCard({
                       </span>
                     ))}
                   </div>
+                  {lastSessionVolume != null && (
+                    <p className="mt-2 text-xs text-surface-400">
+                      Total volume{' '}
+                      <span className="text-surface-200">
+                        {lastSessionVolume.toLocaleString('en-US')} {weightLabel}
+                      </span>
+                    </p>
+                  )}
                 </div>
               )}
             </div>
