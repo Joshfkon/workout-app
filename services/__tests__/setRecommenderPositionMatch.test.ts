@@ -273,6 +273,37 @@ describe('matchPositionTarget — applicability gates (fall through to the ancho
     ).toEqual(expect.objectContaining({ weightKg: 182.5, reps: 7 }));
   });
 
+  it('returns null for a positional set far beyond the range (different scheme — Codex review)', () => {
+    // A previous 192.5×15 against 8-12 proves under-load / another scheme:
+    // trading one increment off it would seed ×14, outside the exercise's
+    // own stated range and bypassing the anchor path's overshoot repricing.
+    expect(
+      matchPositionTarget({
+        ...base,
+        prevSessionSets: [
+          { weightKg: 192.5, reps: 15, rir: 2 },
+          ...JUL_21_SESSION.slice(1),
+        ],
+        position: 0,
+      })
+    ).toBeNull();
+  });
+
+  it('returns null past the ceiling but under the overshoot proof (no trade from ×13)', () => {
+    // 13 vs a 12 ceiling is not "at the ceiling": the trade is reserved for
+    // textbook double progression; between-scheme counts fall through.
+    expect(
+      matchPositionTarget({
+        ...base,
+        prevSessionSets: [
+          { weightKg: 192.5, reps: 13, rir: 2 },
+          ...JUL_21_SESSION.slice(1),
+        ],
+        position: 0,
+      })
+    ).toBeNull();
+  });
+
   it('returns null when the positional set was a ramp/feeder set', () => {
     expect(
       matchPositionTarget({
@@ -313,6 +344,49 @@ describe('recommendSet — safety guards on the position-matched path', () => {
     });
     expect(rec.positionMatch).toBeUndefined();
     expect(rec.weightKg).toBeLessThan(192.5);
+  });
+
+  it('falls through when the last set was a clear miss and the match does not REDUCE the load (Codex review)', () => {
+    // Today's set 1 collapsed: 182.5×3 @0 — below the floor AND past the
+    // deadband. Last session's position 2 was at the same-ish load (182.5×8
+    // via a same-load history) — replaying it would hand the problem to the
+    // rep-trimming capacity clamp when the LOAD is what failed. The
+    // too-heavy branch must own this: no position match, load reduced.
+    const rec = recommendSet({
+      lastWeightKg: 182.5,
+      lastReps: 3,
+      lastRir: 0,
+      setsCompletedThisExercise: 1,
+      ...fixtureCtx,
+      positionContext: {
+        prevSessionSets: [
+          { weightKg: 182.5, reps: 8, rir: 2 },
+          { weightKg: 182.5, reps: 8, rir: 1 },
+          { weightKg: 182.5, reps: 7, rir: 1 },
+          { weightKg: 182.5, reps: 7, rir: 0 },
+        ],
+        todaySets: [{ weightKg: 182.5, reps: 3 }],
+        plannedSetCount: ISO_INCLINE_PLANNED_SETS,
+      },
+    });
+    expect(rec.positionMatch).toBeUndefined();
+    expect(rec.rationale).toBe('reduce_load');
+    expect(rec.weightKg).toBeLessThan(182.5);
+  });
+
+  it('still allows a position match that genuinely reduces the load after a miss (fixture set 4)', () => {
+    // The MISS B shape must survive the tightened guard: 195×6 @0 is a clear
+    // miss, and the positional 182.5×7 REDUCES the load — allowed.
+    const rec = recommendSet({
+      lastWeightKg: JUL_27_SESSION[2].weightKg,
+      lastReps: JUL_27_SESSION[2].reps,
+      lastRir: JUL_27_SESSION[2].rir,
+      setsCompletedThisExercise: 3,
+      ...fixtureCtx,
+      positionContext: positionContext(3),
+    });
+    expect(rec.positionMatch?.progression).toBe('hold');
+    expect(rec.weightKg).toBe(182.5);
   });
 
   it('falls through when the last set proved objective under-load and the match holds or drops', () => {

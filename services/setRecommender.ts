@@ -519,6 +519,13 @@ export function matchPositionTarget(input: PositionMatchInput): PositionMatchedT
     }
   }
 
+  // Gate 4 (Codex review): a positional set FAR beyond the range is a
+  // different scheme / an objective-underload session, not a repeatable
+  // position — replaying it (or one-increment-trading it) would seed a
+  // target outside the exercise's own stated range and bypass the anchor
+  // path's genuine-overshoot repricing. Fall through instead.
+  if (ref.reps > repMax + REP_OVERSHOOT) return null;
+
   const inc = smallestIncrement(input.availableIncrementsKg, input.minIncrementKg);
   const prevRir = ref.rir;
   // Missing RIR → assume the set landed on target (same convention as the
@@ -543,8 +550,12 @@ export function matchPositionTarget(input: PositionMatchInput): PositionMatchedT
     if (ref.reps + 1 <= ceiling) {
       return { weightKg: ref.weightKg, reps: ref.reps + 1, progression: 'add_rep', ...provenance };
     }
-    // At the rep ceiling: one increment up, one rep traded (double progression
-    // at the smallest available step, not a curve-derived jump).
+    // The one-increment/one-rep trade applies only to a set EXACTLY at the
+    // rep ceiling (textbook double progression). Past the ceiling — but
+    // under the gate-4 overshoot proof — the set is between schemes: fall
+    // through to the anchor path rather than trading from an out-of-range
+    // count (Codex review: a 15-rep set against 8-12 must not seed ×14).
+    if (ref.reps > ceiling) return null;
     return {
       weightKg: ref.weightKg + inc,
       reps: Math.max(repMin, ref.reps - 1),
@@ -806,7 +817,19 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
         if (est && est.value > ceiling) ceiling = est.value;
       }
       if (ceiling > 0) {
-        const askedRir = out.positionMatch ? out.positionMatch.prevRir ?? out.rir : out.rir;
+        // Asked effort for the invariant (Codex review, partially accepted):
+        // a position-matched HOLD demands "repeat the set you did at this
+        // position" — its expected effort is the HISTORICAL RIR (grading a
+        // repeat of an @1 set at the stricter target effort would strip
+        // fixture-validated targets whose evidence set was taken past
+        // target). But the historical RIR is only ever used when it is
+        // HARDER than the target: an unusually easy historical set (@4)
+        // must not inflate the implied ask and over-trim a progression that
+        // is only asked for at the target effort. min() gives holds their
+        // recorded effort and caps progressions at the target.
+        const askedRir = out.positionMatch
+          ? Math.min(out.positionMatch.prevRir ?? out.rir, out.rir)
+          : out.rir;
         let reps = out.reps;
         for (;;) {
           if (reps <= 1) break;
@@ -847,10 +870,16 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
       minIncrementKg: input.minIncrementKg,
       availableIncrementsKg: input.availableIncrementsKg,
     });
-    // Guard A: the set just completed ground past the failure deadband — a
-    // position match may still prescribe DOWN (that's the fixture's set 4),
-    // but never MORE load than the set that just ground out.
-    const groundOut = dev <= -DEADBAND_RIR && !!pm && pm.weightKg > lastWeightKg;
+    // Guard A: the set just completed was a CLEAR too-heavy miss — below the
+    // rep-range floor or past the failure deadband. A position match may
+    // still prescribe DOWN (that's the fixture's set 4: 182.5 after the 195
+    // grind), but a match that does not actually reduce the load contradicts
+    // today's direct evidence: replaying a same-load positional set after a
+    // 50×3 @0 would ask the capacity clamp to trim reps when the LOAD is the
+    // problem — the too-heavy branch below owns that lever. (Codex review:
+    // the original guard only rejected matches that INCREASED the load.)
+    const clearMiss = dev <= -DEADBAND_RIR || lastReps < repMin;
+    const groundOut = clearMiss && !!pm && pm.weightKg >= lastWeightKg;
     // Guard B: the set just completed proved objective under-load (reps past
     // the overshoot proof) — today is running far stronger than last session;
     // replaying last session's positions would under-prescribe.

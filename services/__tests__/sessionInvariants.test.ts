@@ -118,6 +118,36 @@ describe('INV-2 — implied capacity never exceeds the session best observed set
     expect(rec.sessionCapacityClamped).toBeUndefined();
   });
 
+  it('caps the asked effort at the TARGET for progressions off easy historical sets (Codex review)', () => {
+    // Positional set 100×7 @4 (easy) → add_rep → 100×8 asked at the target
+    // 2 RIR. Grading that ask at the HISTORICAL RIR 4 would imply 12 eff
+    // (144) against today's observed 133.3 and trim a rep the target-effort
+    // ask (10 eff → 133.3) fully supports. min(prevRir, targetRir) keeps
+    // holds graded at their recorded effort while progressions grade at the
+    // effort actually asked.
+    const rec = recommendSet({
+      lastWeightKg: 100,
+      lastReps: 8,
+      lastRir: 2,
+      setsCompletedThisExercise: 1,
+      targetRepRange: [8, 12],
+      targetRir: 2,
+      minIncrementKg: 2.5,
+      sessionObservedSets: [{ weightKg: 100, reps: 8, rir: 2 }],
+      positionContext: {
+        prevSessionSets: [
+          { weightKg: 100, reps: 8, rir: 2 },
+          { weightKg: 100, reps: 7, rir: 4 },
+        ],
+        todaySets: [{ weightKg: 100, reps: 8 }],
+        plannedSetCount: 2,
+      },
+    });
+    expect(rec.positionMatch?.progression).toBe('add_rep');
+    expect(rec.reps).toBe(8);
+    expect(rec.sessionCapacityClamped).toBeUndefined();
+  });
+
   it('position-matched holds grade at the matched set\'s recorded effort, not the target', () => {
     // Iso-Lateral set 2: matched 192.5×8 @1. At the TARGET effort (2 RIR)
     // that pair would imply 256.7 — above today's observed 252.7 — but the
