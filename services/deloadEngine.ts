@@ -14,6 +14,7 @@ import type {
   DiscomfortSeverity,
 } from '@/types/schema';
 import { DELOAD_MODIFIERS } from '@/services/shared/fatigueConstants';
+import { legacyPatternFamily } from '@/services/warmupEngine';
 import {
   wearableDeloadEvidence,
   wearableDeloadPoints,
@@ -333,8 +334,11 @@ export function getExerciseDeloadMultiplier(
     carry: { volume: 0.85, intensity: 0.9 },
   };
 
-  if (exerciseInfo.movementPattern && movementAdjustments[exerciseInfo.movementPattern]) {
-    const adj = movementAdjustments[exerciseInfo.movementPattern];
+  // Table is keyed by the legacy pattern vocabulary — bridge canonical
+  // (post-backfill) tokens through the legacy family so lookups keep hitting.
+  const patternFamily = legacyPatternFamily(exerciseInfo.movementPattern);
+  if (patternFamily && movementAdjustments[patternFamily]) {
+    const adj = movementAdjustments[patternFamily];
     volumeMultiplier *= adj.volume;
     intensityMultiplier *= adj.intensity;
   }

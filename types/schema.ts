@@ -438,7 +438,15 @@ export interface Exercise {
   
   /** Movement pattern for finding similar exercises (e.g., 'horizontal_push', 'hip_hinge') */
   movementPattern: string;
-  
+
+  /**
+   * ROM / joint-position demand tags (exercises.rom_demands) for the warmup
+   * engine — loaded end-ranges and rotational demands generic muscle warmth
+   * does not prepare. Absent/empty on rows classified before the column
+   * existed; services/warmupEngine derives them on read in that case.
+   */
+  romDemands?: string[];
+
   /** Equipment needed for this exercise */
   equipmentRequired: string[];
 
@@ -866,6 +874,13 @@ export interface WarmupSet {
 
   /** Indicates this is a bar-only warmup for barbell exercises (no plates) */
   isBarOnly?: boolean;
+
+  /**
+   * Why this set exists — set on targeted ramp sets from the warmup engine
+   * (e.g. "rotation not yet loaded today"), so the card can show the
+   * decision, not just weight × reps.
+   */
+  reason?: string;
 }
 
 // ============ BODYWEIGHT EXERCISE TYPES ============
@@ -2226,6 +2241,74 @@ export const MOVEMENT_PATTERNS = [
 ] as const;
 
 export type MovementPattern = (typeof MOVEMENT_PATTERNS)[number];
+
+// ============ WARMUP READINESS TAXONOMY ============
+
+/**
+ * Canonical movement patterns for warmup readiness (warmup engine).
+ *
+ * This is the canonical evolution of MOVEMENT_PATTERNS above: presses are
+ * split from generic "push", hinge/squat/lunge/carry stay, and isolation
+ * work is typed by joint + action so pattern warmth never leaks across
+ * antagonists (a triceps pushdown must not pay the pattern debt of a curl).
+ * Legacy tokens resolve here via canonicalizeMovementPattern() — one
+ * mapping, no parallel taxonomy.
+ */
+export const CANONICAL_MOVEMENT_PATTERNS = [
+  'horizontal_press',
+  'vertical_press',
+  'horizontal_pull',
+  'vertical_pull',
+  'squat',
+  'hinge',
+  'lunge',
+  'carry',
+  // Isolation patterns, typed by joint + action
+  'isolation_elbow_flexion',
+  'isolation_elbow_extension',
+  'isolation_wrist_flexion',
+  'isolation_wrist_extension',
+  'isolation_shoulder_abduction',        // lateral/Y raises
+  'isolation_shoulder_flexion',          // front raises
+  'isolation_shoulder_horizontal_abduction', // rear-delt flys, face pulls
+  'isolation_shoulder_horizontal_adduction', // chest flys, pec deck
+  'isolation_shoulder_extension',        // pullovers, straight-arm pulldowns
+  'isolation_scapular_elevation',        // shrugs
+  'isolation_knee_extension',            // leg extensions
+  'isolation_knee_flexion',              // leg curls
+  'isolation_ankle_plantar',             // calf raises
+  'isolation_hip_abduction',
+  'isolation_hip_adduction',
+  'isolation_hip_flexion',               // hanging/captain's chair raises
+  'isolation_spinal_flexion',            // crunches
+  'isolation_spinal_extension',          // back extensions, supermans
+  'isolation_spinal_rotation',           // woodchops, twists
+  'isolation_anti_extension',            // planks, rollouts, dead bugs
+  'isolation_anti_rotation',             // pallof press
+] as const;
+
+export type CanonicalMovementPattern = (typeof CANONICAL_MOVEMENT_PATTERNS)[number];
+
+/**
+ * ROM / joint-position demand tags (exercises.rom_demands).
+ *
+ * Each tag names a loaded end-range or rotational demand that generic
+ * muscle warmth does NOT prepare — the warmup engine treats a demand as
+ * unpaid until something in the session has loaded that same position.
+ */
+export const ROM_DEMAND_TAGS = [
+  'overhead',               // arm loaded overhead
+  'overhead_lockout',       // elbow lockout under load overhead (jerks, push press)
+  'supination_pronation',   // loaded forearm/shoulder rotation (Arnold press, Zottman)
+  'deep_stretch',           // loaded lengthened position (flys, preacher, overhead extension)
+  'deep_knee_flexion',      // deep squat/leg-press bottom position
+  'hip_hinge_deep',         // loaded end-range hip flexion (RDL, good morning)
+  'spinal_flexion_loaded',  // loaded spinal flexion (Jefferson curl, cable crunch)
+  'shoulder_external_rotation', // loaded external rotation (face pull, cuban press)
+  'behind_back',            // behind-the-back positions
+] as const;
+
+export type RomDemand = (typeof ROM_DEMAND_TAGS)[number];
 
 // ============ DEXA SCAN & BODY COMPOSITION ============
 

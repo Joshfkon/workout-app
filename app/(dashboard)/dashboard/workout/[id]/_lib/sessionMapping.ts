@@ -75,6 +75,7 @@ export interface LoadedExerciseRow {
   common_mistakes: string[] | null;
   setup_note: string | null;
   movement_pattern: string | null;
+  rom_demands: string[] | null;
   equipment_required: string[] | null;
   equipment: string | null;
   hypertrophy_tier: HypertrophyTier | null;
@@ -179,6 +180,7 @@ export function mapLoadedBlockRow(
     commonMistakes: block.exercises.common_mistakes || [],
     setupNote: block.exercises.setup_note || '',
     movementPattern: block.exercises.movement_pattern || '',
+    romDemands: block.exercises.rom_demands || [],
     equipmentRequired: block.exercises.equipment_required || [],
     equipment: block.exercises.equipment || (block.exercises.equipment_required?.[0] || 'barbell'),
     // Include hypertrophy scoring for tier badges
