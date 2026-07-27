@@ -14,6 +14,7 @@ import { CustomExerciseReviewForm } from './CustomExerciseReviewForm';
 import type { BasicExerciseInput, CompletedExerciseData } from '@/lib/exercises/types';
 import { completeExerciseWithAI } from '@/lib/actions/exercise-completion';
 import { createCustomExercise, clearExerciseCache } from '@/services/exerciseService';
+import { isGroupSplitPrimary } from '@/services/muscleAttributionAudit';
 import { createUntypedClient } from '@/lib/supabase/client';
 
 interface CreateCustomExerciseProps {
@@ -78,7 +79,13 @@ export function CreateCustomExercise({
       const exercise = await createCustomExercise(
         {
           name: data.name,
-          primaryMuscle: data.primaryMuscle,
+          // A group-splitting coarse primary ('shoulders'/'chest'/'back') is
+          // rejected at save (validateExercisePrimary) — store the AI's
+          // detailed head classification instead, which is what the
+          // completion flow computed it for. Precise picks pass through.
+          primaryMuscle: isGroupSplitPrimary(data.primaryMuscle)
+            ? data.primaryMuscleDetailed
+            : data.primaryMuscle,
           secondaryMuscles: data.secondaryMuscles,
           mechanic: data.mechanic,
           pattern: data.pattern,

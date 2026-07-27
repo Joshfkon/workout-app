@@ -21,6 +21,7 @@ import type {
 } from '@/types/schema';
 
 import { STANDARD_MUSCLE_GROUPS, STANDARD_MUSCLE_DISPLAY_NAMES } from '@/types/schema';
+import { isGroupSplitPrimary } from '@/services/muscleAttributionAudit';
 import type { SpinalLoading, PositionStress } from '@/services/exerciseService';
 
 // ============================================
@@ -374,7 +375,7 @@ export const GROUPED_MUSCLE_OPTIONS: GroupedMuscleOption[] = [
   { value: 'back', label: 'Back', subMuscles: [fine('lats'), fine('upper_back'), fine('erectors')] },
   { value: 'shoulders', label: 'Shoulders', subMuscles: [fine('front_delts'), fine('lateral_delts'), fine('rear_delts')] },
   { value: 'biceps', label: 'Biceps', subMuscles: [] },
-  { value: 'triceps', label: 'Triceps', subMuscles: [] },
+  { value: 'triceps', label: 'Triceps', subMuscles: [fine('triceps_long'), fine('triceps_lat_med')] },
   { value: 'forearms', label: 'Forearms', subMuscles: [] },
   { value: 'traps', label: 'Traps', subMuscles: [fine('upper_traps'), fine('mid_lower_traps')] },
   { value: 'quads', label: 'Quads', subMuscles: [] },
@@ -393,10 +394,19 @@ export const GROUPED_MUSCLE_OPTIONS: GroupedMuscleOption[] = [
  */
 export const PRECISE_MUSCLE_GROUP_OPTIONS: { value: string; label: string }[] =
   GROUPED_MUSCLE_OPTIONS.flatMap((group) => [
-    {
-      value: group.value,
-      label: group.subMuscles.length > 0 ? `${group.label} (whole group)` : group.label,
-    },
+    // A whole-group PRIMARY is only offered when the coarse token does not
+    // split its credit ('glutes', 'traps', …). Splitting groups
+    // (chest/back/shoulders) require a head: createCustomExercise rejects a
+    // splitting primary (validateExercisePrimary), so advertising one here
+    // only sets up a failed save at the end of the flow.
+    ...(isGroupSplitPrimary(group.value)
+      ? []
+      : [
+          {
+            value: group.value,
+            label: group.subMuscles.length > 0 ? `${group.label} (whole group)` : group.label,
+          },
+        ]),
     ...group.subMuscles.map((s) => ({ value: s.value, label: `${group.label} · ${s.label}` })),
   ]);
 

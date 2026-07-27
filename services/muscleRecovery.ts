@@ -111,6 +111,8 @@ export const RECOVERY_CONFIG: RecoveryConfig = {
     // Small/fast recoverers.
     biceps: 36,
     triceps: 36,
+    triceps_long: 36,
+    triceps_lat_med: 36,
     forearms: 36,
     calves: 36,
     gastrocnemius: 36,

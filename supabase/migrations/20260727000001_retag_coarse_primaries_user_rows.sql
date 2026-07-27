@@ -24,9 +24,13 @@
 -- target user rows by pattern, not stock rows by name, so they must NOT
 -- feed the stock snapshot.
 
+-- exercise_id is deliberately NOT a foreign key: the audit row must outlive
+-- its subject. removeCustomExercise hard-deletes unused custom rows, and a
+-- restricting FK here would turn every retagged custom exercise into an
+-- undeletable one (and CASCADE would silently destroy the audit trail).
 CREATE TABLE IF NOT EXISTS exercise_muscle_retag_audit (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  exercise_id UUID NOT NULL REFERENCES exercises(id),
+  exercise_id UUID NOT NULL,
   migration TEXT NOT NULL,
   rule TEXT NOT NULL,
   old_primary TEXT,

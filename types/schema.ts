@@ -1944,7 +1944,12 @@ export const LEGACY_TO_STANDARD_MAP: Record<string, StandardMuscleGroup[]> = {
   'back': ['lats', 'upper_back'],
   'shoulders': ['front_delts', 'lateral_delts', 'rear_delts'],
   'biceps': ['biceps'],
-  'triceps': ['triceps'],
+  // Matching/filter expansion: a coarse 'triceps' target must keep matching
+  // head-tagged exercises (triceps_long / triceps_lat_med) — programs,
+  // pickers and injury exclusions rely on this map. Volume credit is NOT
+  // affected: the standard-first resolver returns ['triceps'] for the coarse
+  // token, so coarse credit never smears across the heads (traps precedent).
+  'triceps': ['triceps', 'triceps_long', 'triceps_lat_med'],
   'quads': ['quads'],
   'hamstrings': ['hamstrings'],
   'glutes': ['glutes', 'glute_med'],

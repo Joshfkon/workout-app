@@ -13,6 +13,7 @@ import {
 } from '../weeklyVolume';
 import { getEffectiveBand, FINE_CHILD_MUSCLES, COARSE_CHILDREN } from '@/services/volumeBands';
 import { resolvePrimaryMuscleCredits } from '@/services/volumeTracker';
+import { muscleMatchesGroup, resolveMuscleToStandard, toLegacyMuscleGroup } from '@/types/schema';
 
 function block(
   id: string,
@@ -34,6 +35,23 @@ function block(
 describe('taxonomy: the heads are fine members, coarse stays coarse', () => {
   it('coarse triceps NEVER smears across the heads (the banned rule)', () => {
     expect(resolvePrimaryMuscleCredits('triceps')).toEqual([{ muscle: 'triceps', weight: 1 }]);
+    // Secondary credit likewise stays on the coarse member (standard-first).
+    expect(resolveMuscleToStandard('triceps')).toEqual(['triceps']);
+  });
+
+  it('coarse triceps still MATCHES head-tagged exercises (filters, pickers, injury exclusion)', () => {
+    // Credit resolution and match expansion are different questions: a
+    // 'triceps' program slot or injury exclusion must catch a retagged
+    // pushdown, even though coarse credit never flows to the heads.
+    expect(muscleMatchesGroup('triceps_lat_med', 'triceps')).toBe(true);
+    expect(muscleMatchesGroup('triceps_long', 'triceps')).toBe(true);
+    // The REVERSE is deliberately false (traps precedent): a coarse-tagged
+    // exercise doesn't claim to hit one specific head.
+    expect(muscleMatchesGroup('triceps', 'triceps_long')).toBe(false);
+    expect(muscleMatchesGroup('biceps', 'triceps')).toBe(false);
+    // Legacy round-trip for coarse-keyed tables (fiber profile, rep ranges).
+    expect(toLegacyMuscleGroup('triceps_lat_med')).toBe('triceps');
+    expect(toLegacyMuscleGroup('triceps_long')).toBe('triceps');
   });
 
   it('the triceps group carries both heads as fine children', () => {
