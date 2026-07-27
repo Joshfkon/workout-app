@@ -253,7 +253,17 @@ const NAME_RULES: NameRule[] = [
   { pattern: /pallof/i, canonical: 'isolation_anti_rotation' },
   { pattern: /plank|rollout|dead bug|body saw/i, canonical: 'isolation_anti_extension' },
   { pattern: /back extension|superman|hyperextension/i, canonical: 'isolation_spinal_extension', when: (ex) => muscleIs(ex, ['erectors']) },
-  // Compounds
+  // Static holds / band accessories
+  { pattern: /pull[- ]apart/i, canonical: 'isolation_shoulder_horizontal_abduction' },
+  { pattern: /lateral walk|monster walk|clamshell/i, canonical: 'isolation_hip_abduction' },
+  { pattern: /side bend/i, canonical: 'isolation_spinal_flexion' },
+  { pattern: /hollow body/i, canonical: 'isolation_anti_extension' },
+  { pattern: /\bl[- ]sit\b/i, canonical: 'isolation_hip_flexion' },
+  { pattern: /dead hang|pinch hold|grip hold/i, canonical: 'carry' },
+  { pattern: /wall sit/i, canonical: 'squat' },
+  // Compounds — leg press before the incline-press rule ("Incline Leg
+  // Press" must classify as squat pattern, not horizontal press)
+  { pattern: /leg press/i, canonical: 'squat' },
   { pattern: /arnold/i, canonical: 'vertical_press' },
   { pattern: /(shoulder|overhead|military|viking|push)\s*press|press.*overhead/i, canonical: 'vertical_press' },
   { pattern: /jerk/i, canonical: 'vertical_press' },
@@ -264,7 +274,7 @@ const NAME_RULES: NameRule[] = [
   { pattern: /dip/i, canonical: 'horizontal_press' },
   { pattern: /deadlift|rdl|good morning|pull[- ]?through|hip thrust|glute bridge|glute drive|swing/i, canonical: 'hinge' },
   { pattern: /split squat|lunge|step[- ]?up/i, canonical: 'lunge' },
-  { pattern: /squat|leg press|hack/i, canonical: 'squat' },
+  { pattern: /squat|hack/i, canonical: 'squat' },
   { pattern: /carry|farmer|suitcase/i, canonical: 'carry' },
   // Generic press with shoulder primary → vertical, chest primary → horizontal
   { pattern: /press/i, canonical: 'vertical_press', when: (ex) => muscleIs(ex, ['front_delts', 'lateral_delts', 'rear_delts']) },
@@ -323,13 +333,22 @@ const ROM_NAME_RULES: RomRule[] = [
   { pattern: /face pull|cuban/i, demands: ['shoulder_external_rotation'] },
   { pattern: /behind[- ](the[- ])?back/i, demands: ['behind_back'] },
   { pattern: /deep squat|atg|hack squat|pendulum/i, demands: ['deep_knee_flexion'] },
+  { pattern: /sissy/i, demands: ['deep_knee_flexion', 'deep_stretch'] },
+  { pattern: /deadlift/i, demands: ['hip_hinge_deep'] },
+  { pattern: /overhead carry|overhead hold/i, demands: ['overhead', 'overhead_lockout'] },
+  { pattern: /dead hang/i, demands: ['overhead', 'deep_stretch'] },
 ];
 
+/**
+ * Pattern-level ROM defaults, deliberately narrow: only patterns whose
+ * DEFINING position is an end-range get one. vertical_pull is NOT here
+ * (upright rows top at the chin — pull-ups/pulldowns get 'overhead' by
+ * name), and hinge is NOT here (hip thrusts and glute bridges never reach
+ * deep hip flexion — deadlift/RDL variants get 'hip_hinge_deep' by name).
+ */
 const PATTERN_ROM_DEFAULTS: Partial<Record<CanonicalMovementPattern, RomDemand[]>> = {
   vertical_press: ['overhead'],
-  vertical_pull: ['overhead'],
   squat: ['deep_knee_flexion'],
-  hinge: ['hip_hinge_deep'],
 };
 
 /**

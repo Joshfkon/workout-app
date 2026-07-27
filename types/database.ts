@@ -88,6 +88,7 @@ export interface Database {
           common_mistakes: string[];
           setup_note: string;
           movement_pattern: string;
+          rom_demands: string[];
           equipment_required: string[];
           equipment_class: string | null;
           demo_gif_url: string | null;
@@ -110,6 +111,7 @@ export interface Database {
           common_mistakes?: string[];
           setup_note?: string;
           movement_pattern?: string;
+          rom_demands?: string[];
           equipment_required?: string[];
           equipment_class?: string | null;
           demo_gif_url?: string | null;
@@ -132,6 +134,7 @@ export interface Database {
           common_mistakes?: string[];
           setup_note?: string;
           movement_pattern?: string;
+          rom_demands?: string[];
           equipment_required?: string[];
           equipment_class?: string | null;
           demo_gif_url?: string | null;
