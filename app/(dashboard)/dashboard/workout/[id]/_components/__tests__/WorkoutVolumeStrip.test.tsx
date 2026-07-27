@@ -65,6 +65,25 @@ describe('WorkoutVolumeStrip', () => {
     expect(screen.getByTestId('workout-volume-readiness-glutes')).toHaveTextContent('~36h');
   });
 
+  it('fills the bar completely at the top of the band (sets = MRV)', () => {
+    render(
+      <WorkoutVolumeStrip
+        rows={[
+          row('chest', { sets: 22, band: { mev: 8, mrv: 22 } }),
+          row('back', { sets: 11, band: { mev: 8, mrv: 22 } }),
+          row('quads', { sets: 30, band: { mev: 8, mrv: 22 } }),
+        ]}
+        isLoading={false}
+        onOpenDetail={noop}
+      />
+    );
+
+    expect(screen.getByTestId('workout-volume-bar-chest')).toHaveStyle({ width: '100%' });
+    expect(screen.getByTestId('workout-volume-bar-back')).toHaveStyle({ width: '50%' });
+    // Overrun past MRV stays capped at a full bar (color signals the overrun).
+    expect(screen.getByTestId('workout-volume-bar-quads')).toHaveStyle({ width: '100%' });
+  });
+
   it('collapses and re-expands the card row via the header toggle', async () => {
     const user = userEvent.setup();
     render(<WorkoutVolumeStrip rows={[row('chest')]} isLoading={false} onOpenDetail={noop} />);

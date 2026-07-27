@@ -106,10 +106,12 @@ function formatReadyIn(hours: number): string {
   return `ready in ~${days}d`;
 }
 
-/** Fill fraction within the band scale (MRV at ~83%, headroom for overrun). */
+/** Fill fraction of the MRV scale — full bar at the band's high end. These
+ *  bars have no MRV tick (unlike BarTrack), so headroom past MRV would just
+ *  read as "not done" at the target; overrun is signaled by color instead. */
 function barFillPct(sets: number, mrv: number): number {
-  const maxDisplay = mrv * 1.2;
-  return Math.min(100, Math.max(0, (sets / maxDisplay) * 100));
+  if (mrv <= 0) return 0;
+  return Math.min(100, Math.max(0, (sets / mrv) * 100));
 }
 
 /**
