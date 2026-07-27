@@ -494,7 +494,13 @@ export default function ExercisesPage() {
           : ex
       ));
 
-      setSaveResult({ success: true, message: '✅ Exercise updated successfully!' });
+      setSaveResult({
+        success: true,
+        message:
+          result.outcome === 'updated_catalog'
+            ? '✅ Catalog exercise updated for all users (audited).'
+            : '✅ Exercise updated successfully!',
+      });
       
       // Close modal after a short delay
       setTimeout(() => {
@@ -1353,18 +1359,17 @@ export default function ExercisesPage() {
                   <p className="text-surface-100 font-medium">{editingExercise.name}</p>
                 </div>
 
-                {/* Catalog rows are not updatable under RLS — warn up-front
-                    instead of discarding the edit silently on save. */}
+                {/* Catalog rows are shared — edits go through the audited
+                    catalog write path and apply to every user. */}
                 {!editingExercise.is_custom && (
                   <div
                     className="p-3 bg-warning-900/30 border border-warning-700 rounded-lg"
                     data-testid="catalog-exercise-notice"
                   >
                     <p className="text-sm text-warning-400">
-                      Built-in catalog exercise — its fields are shared by every
-                      user and can&apos;t be edited here, so changes will not
-                      save. Muscle-tag corrections to the catalog ship as data
-                      migrations.
+                      Built-in catalog exercise — saving edits the shared
+                      catalog for every user (previous values are kept in the
+                      audit trail).
                     </p>
                   </div>
                 )}

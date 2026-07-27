@@ -84,9 +84,10 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
   const [locationAvailability, setLocationAvailability] = useState<Record<string, boolean>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [saveSuccess, setSaveSuccess] = useState(false);
-  // true = stock catalog row (is_custom false): RLS silently drops catalog
-  // UPDATEs on these, so the form must warn up-front and report honestly.
+  const [saveSuccessMessage, setSaveSuccessMessage] = useState<string | null>(null);
+  // true = stock catalog row (is_custom false): saved through the audited
+  // update_catalog_exercise RPC and applied to the shared catalog for every
+  // user — the form says so up-front and in the success confirmation.
   const [isCatalogExercise, setIsCatalogExercise] = useState<boolean | null>(null);
 
   // Load equipment types + gym locations when the form opens
@@ -206,7 +207,7 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
 
     setIsSaving(true);
     setSaveError(null);
-    setSaveSuccess(false);
+    setSaveSuccessMessage(null);
 
     try {
       const supabase = createUntypedClient();
@@ -255,6 +256,7 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
       });
 
       let catalogWriteFailure: string | null = null;
+      let wroteSharedCatalog = false;
       if (changedCatalogFields.length > 0) {
         const result = await updateExerciseRow(supabase, exercise.id, updatePayload);
         if (!result.ok) {
@@ -262,6 +264,8 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
             result.outcome === 'blocked'
               ? `Not saved — ${changedCatalogFields.join(', ')}: ${result.message}`
               : `Failed to update exercise: ${result.message || 'unknown error'}`;
+        } else {
+          wroteSharedCatalog = result.outcome === 'updated_catalog';
         }
       }
 
@@ -298,7 +302,11 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
         return;
       }
 
-      setSaveSuccess(true);
+      setSaveSuccessMessage(
+        wroteSharedCatalog
+          ? 'Catalog exercise updated for all users (audited). Refreshing...'
+          : 'Exercise updated successfully! Refreshing...'
+      );
       setTimeout(() => {
         window.location.reload(); // Refresh to show updated data
       }, 1500);
@@ -366,15 +374,14 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
         </div>
       </div>
 
-      {/* Catalog rows are not editable under RLS — say so before the user
-          invests in changes that would be discarded. */}
+      {/* Catalog rows are shared — edits go through the audited catalog
+          write path and apply to every user. Say so before saving. */}
       {isCatalogExercise === true && (
         <div className="p-3 bg-warning-900/30 border border-warning-700 rounded-lg" data-testid="catalog-exercise-notice">
           <p className="text-sm text-warning-400">
-            Built-in catalog exercise — its fields are shared by every user and
-            can&apos;t be edited here, so changes to them will not save. Gym
-            availability below is yours and does save. Muscle-tag corrections to
-            the catalog ship as data migrations.
+            Built-in catalog exercise — saving edits the shared catalog for
+            every user (previous values are kept in the audit trail). Gym
+            availability below stays personal to you.
           </p>
         </div>
       )}
@@ -753,9 +760,9 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
           <p className="text-sm text-danger-400">{saveError}</p>
         </div>
       )}
-      {saveSuccess && (
+      {saveSuccessMessage && (
         <div className="p-3 bg-success-900/30 border border-success-700 rounded-lg">
-          <p className="text-sm text-success-400">Exercise updated successfully! Refreshing...</p>
+          <p className="text-sm text-success-400">{saveSuccessMessage}</p>
         </div>
       )}
     </div>
