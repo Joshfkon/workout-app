@@ -3,7 +3,7 @@
 // Comprehensive types for the program engine and coaching system
 // ============================================================
 
-import type { MuscleGroup, Goal, Experience } from './schema';
+import type { MuscleGroup, StandardMuscleGroup, Goal, Experience } from './schema';
 
 // Re-export Goal and Experience from schema.ts for convenience
 export type { Goal, Experience };
@@ -199,8 +199,15 @@ export interface PeriodizationPlan {
 export interface Exercise {
   id?: string;
   name: string;
-  primaryMuscle: MuscleGroup;
-  secondaryMuscles: MuscleGroup[];
+  /**
+   * Legacy coarse tag OR a standard-taxonomy muscle. New entries must use a
+   * specific muscle for the PRIMARY — a splitting coarse primary ('shoulders',
+   * 'chest', 'back') ranks the exercise's own target below its 0.5-credit
+   * secondaries (see docs/MUSCLE_ATTRIBUTION_AUDIT.md). Consumers match with
+   * muscleMatchesGroup, never raw equality.
+   */
+  primaryMuscle: MuscleGroup | StandardMuscleGroup;
+  secondaryMuscles: Array<MuscleGroup | StandardMuscleGroup>;
   pattern: MovementPattern;
   equipment: Equipment;
   difficulty: 'beginner' | 'intermediate' | 'advanced';

@@ -29,6 +29,8 @@ import {
   droppedTokenRows,
   formatAttributionReport,
   perSetStandardCredit,
+  isGroupSplitPrimary,
+  validateExercisePrimary,
   type AttributionEntry,
 } from '../muscleAttributionAudit';
 import { SEED_EXERCISE_TAGS } from '../generated/seedExerciseTags';
@@ -91,6 +93,21 @@ describe('muscle attribution audit (Phase 1 — report only)', () => {
   it('pins the uniform head-split primaries (the coarse-smear mechanism class)', () => {
     const uniform = uniformSplitRows(rows);
     expect(uniform.map((r) => `${r.source} | ${r.name} | ${r.primary}`)).toMatchSnapshot();
+  });
+
+  it('creation-time constraint: group-level (splitting) primaries are rejected', () => {
+    // The one bad rule: a split share (⅓ or ½) never beats the 0.5 secondary
+    // credit, so these can never rank their own target first.
+    for (const bad of ['shoulders', 'chest', 'back', 'Shoulders']) {
+      expect(isGroupSplitPrimary(bad)).toBe(true);
+      expect(validateExercisePrimary(bad)).toMatch(/specific muscle/);
+    }
+    // Specific heads, single-muscle groups, and NON-splitting coarse tokens
+    // (glutes/abs/traps/calves stay on their own standard muscle) all pass.
+    for (const ok of ['front_delts', 'lateral_delts', 'biceps', 'glutes', 'traps', 'calves', 'abs', 'chest_upper', 'lats']) {
+      expect(isGroupSplitPrimary(ok)).toBe(false);
+      expect(validateExercisePrimary(ok)).toBeNull();
+    }
   });
 
   it('pins tags that resolve to nothing (silently dropped credit)', () => {

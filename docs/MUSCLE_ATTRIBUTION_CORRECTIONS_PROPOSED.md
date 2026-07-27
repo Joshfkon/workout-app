@@ -1,9 +1,21 @@
-# Muscle Attribution — Proposed Corrections (Phases 2 & 4, AWAITING REVIEW)
+# Muscle Attribution — Corrections (Phases 2 & 4)
 
-Companion to `docs/MUSCLE_ATTRIBUTION_AUDIT.md` (Phase 1). **Nothing in
-sections A–D is applied.** Values are data; each block below is the full
-proposed diff for one attribution source, derived from the audit failure
-list (not one-off patches). Apply only after explicit sign-off, per source.
+Companion to `docs/MUSCLE_ATTRIBUTION_AUDIT.md` (Phase 1).
+
+**REVIEW STATUS (2026-07-27): tables A–C APPLIED per sign-off** ("Apply all
+three Phase 2 tables"). D stands as decided (no value change). The
+muscleRecovery involvement unification in E is **HELD** per the same review —
+revisit after the retag with a count of rows still on the legacy-primary
+path (query below). Section F (triceps split) remains proposed-only.
+
+The structural fix accompanying the retags: **new exercises can no longer be
+created with a group-level (splitting) primary** — enforced in
+`createCustomExercise` (`services/exerciseService.ts`), the
+`insertCustomExercise` server action, and the edit form's primary picker
+(splitting groups offer their heads only; `validateExercisePrimary` /
+`isGroupSplitPrimary` in `services/muscleAttributionAudit.ts`). ⅓ < 0.5 was
+one bad rule that 58 rows happened to hit; the constraint stops recurrence,
+the retags fix the instances.
 
 Convention used throughout: the stock library's 20260702000001 retag
 decisions (presses → `front_delts`; lateral raises → `lateral_delts`;
@@ -12,13 +24,31 @@ coarse `chest`; Arnold keeps a real side-delt secondary).
 
 ---
 
-## A. User-DB exercise rows (the observed panel defect) — runtime apply path
+## A. User-DB exercise rows (the observed panel defect) — APPLIED
 
-The two observed exercises are user-library rows with `primary_muscle =
-'shoulders'`. `lib/migrations/coarsePrimaryRetag.ts` already computes these
-proposals at runtime (report-only). Proposed: build the **apply step** —
-per-exercise, review-listed, reversible (store the previous tags alongside
-the update; no silent bulk migration):
+Applied by `supabase/migrations/20260727000001_retag_coarse_primaries_user_rows.sql`:
+pattern-keyed, first-match-wins retags mirroring the confirmed
+`name_pattern` rules, covering ALL rows the name disambiguates (user customs
+and stray stock). Previous tags are recorded in
+`exercise_muscle_retag_audit` before each update — reversible, nothing
+deleted. Rows no rule matches are untouched and keep surfacing in the
+runtime dry-run report.
+
+Post-apply verification (run against production):
+
+```sql
+-- What was retagged, by rule:
+SELECT rule, count(*) FROM exercise_muscle_retag_audit
+WHERE migration = '20260727000001' GROUP BY rule ORDER BY rule;
+
+-- The muscleRecovery-unification revisit count (E): rows still carrying a
+-- splitting group primary. 'shoulders' should be ~0; 'chest'/'back' rows
+-- that remain are the intentionally-coarse bench/row policy class.
+SELECT lower(primary_muscle) AS primary, count(*)
+FROM exercises
+WHERE lower(primary_muscle) IN ('shoulders', 'chest', 'back')
+GROUP BY 1;
+```
 
 | Exercise | Current (per set) | Proposed (per set) |
 |---|---|---|
@@ -39,10 +69,10 @@ Only `name_pattern`-rule proposals are eligible for apply;
 The panel would now point at side delts (and marginal rear delts) instead
 of telling you rear delts are covered by an Arnold press.
 
-## B. `services/exerciseService.ts` fallback entries the seed doesn't cover
+## B. `services/exerciseService.ts` fallback entries the seed doesn't cover — APPLIED
 
-These entries keep authored legacy tags because their names are absent from
-the SQL corpus. Proposed retags (data-only edit in `FALLBACK_EXERCISES_RAW`):
+These entries kept authored legacy tags because their names are absent from
+the SQL corpus. Applied as data-only edits in `FALLBACK_EXERCISES_RAW`:
 
 | Exercise | Current | Proposed |
 |---|---|---|
@@ -53,11 +83,13 @@ the SQL corpus. Proposed retags (data-only edit in `FALLBACK_EXERCISES_RAW`):
 | Cable Lateral Raise | shoulders | `lateral_delts` |
 | Reverse Fly | shoulders + [traps, back] | `rear_delts` + [`upper_back`, traps] (coarse 'back' secondary → the muscle actually hit) |
 
-## C. `lib/training/constants.ts` `EXERCISE_DATABASE` (program-template pool)
+## C. `lib/training/constants.ts` `EXERCISE_DATABASE` (program-template pool) — APPLIED
 
-Never retagged; every coarse tag below smears. Proposed: align with the
-seed tags where the name exists in the corpus, else the same name rules.
-Secondary `'shoulders'` on presses/rows becomes the specific head.
+Applied per the table below, with the pool's consumers made overlap-aware
+in the same change (`getExercisesByMuscle` and the program engine's
+candidate filters now use `muscleMatchesGroup` instead of raw equality, so
+a 'front_delts' press still fills a 'shoulders' slot). `types/training.ts`
+Exercise widened to `MuscleGroup | StandardMuscleGroup`.
 
 | Exercise | Current | Proposed |
 |---|---|---|
@@ -100,14 +132,14 @@ decision changes what a credited set means.
 - **Recovery/readiness dose** (`services/muscleRecovery.ts`): its
   `secondaryDoseFactor` now READS `SECONDARY_MUSCLE_CREDIT` (applied in this
   phase — same value 0.5, zero behavior change, one constant).
-- **PROPOSED (behavior change, needs review):** `involvementFactor` in
+- **HELD (review decision, 2026-07-27):** `involvementFactor` in
   muscleRecovery gives a legacy `'shoulders'` primary involvement **1.0 to
-  every head** (vs the volume counter's ⅓). Unifying it on
-  `resolvePrimaryMuscleCredits` weights would make one Arnold set dose a
-  rear delt at 0.33 instead of 1.0 for recovery purposes. Flagging rather
-  than applying: it lengthens/shortens readiness windows for coarse-tagged
-  exercises and deserves its own sign-off. (Once user/static tags are
-  retagged per A–C, the divergence mostly vanishes on its own.)
+  every head** (vs the volume counter's ⅓). The divergence only bites on
+  rows still carrying a legacy group primary — which the A–C retags largely
+  eliminate — so unifying that path now would be converging a convention
+  about to become vestigial. Revisit after the retag with the count query in
+  §A: if it is near zero, the creation-time constraint (already in place)
+  is the durable fix and the unification stays unnecessary.
 
 ---
 

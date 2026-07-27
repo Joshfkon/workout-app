@@ -88,6 +88,32 @@ export function perSetStandardCredit(
   return out;
 }
 
+/**
+ * Whether a primary-muscle token splits its credit across more than one
+ * standard muscle ('shoulders' ⅓/⅓/⅓, 'chest'/'back' ½/½). This is the ONE
+ * BAD RULE behind every audited inversion: a split share is ≤ the 0.5
+ * secondary credit, so the exercise's own target can never strictly
+ * out-rank its secondaries. New exercises must not be created with one.
+ */
+export function isGroupSplitPrimary(muscle: string): boolean {
+  return resolvePrimaryMuscleCredits(muscle).length > 1;
+}
+
+/**
+ * Creation-time constraint for an exercise's PRIMARY muscle: returns a
+ * user-facing error message when the token is a group-level (splitting)
+ * primary, null when it is acceptable. Enforced in createCustomExercise and
+ * the insert server action so no new exercise can reintroduce the smear the
+ * 2026-07 retag removed.
+ */
+export function validateExercisePrimary(muscle: string): string | null {
+  if (!isGroupSplitPrimary(muscle)) return null;
+  const heads = resolvePrimaryMuscleCredits(muscle)
+    .map((c) => c.muscle)
+    .join(', ');
+  return `Pick the specific muscle this exercise targets (${heads}). A whole-group primary ("${muscle}") splits its credit evenly across every head, so the actual target gets under-counted.`;
+}
+
 /** Audit one entry against the primary-gets-the-largest-coefficient invariant. */
 export function auditAttributionEntry(entry: AttributionEntry): AttributionRow {
   const credits = perSetStandardCredit(entry.primary, entry.secondaries);
