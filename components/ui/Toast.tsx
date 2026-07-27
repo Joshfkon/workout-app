@@ -109,9 +109,11 @@ export const Toast = memo(function Toast({
         'rounded-lg border shadow-lg max-w-sm w-full bg-surface-900 overflow-hidden',
         styles.border,
         'transform transition-all duration-200',
+        // Mobile toasts live at the bottom of the screen, so slide up/down
+        // there and keep the right-edge slide for the desktop top-right stack.
         isExiting
-          ? 'opacity-0 translate-x-4'
-          : 'opacity-100 translate-x-0 animate-in slide-in-from-right-4 fade-in-0'
+          ? 'opacity-0 translate-y-4 sm:translate-y-0 sm:translate-x-4'
+          : 'opacity-100 translate-x-0 translate-y-0 animate-in fade-in-0 slide-in-from-bottom-4 sm:slide-in-from-bottom-0 sm:slide-in-from-right-4'
       )}
     >
       <div className={cn('p-4', styles.bg)}>
@@ -170,8 +172,12 @@ export interface ToastContainerProps {
 }
 
 /**
- * Container for managing multiple toasts
- * Renders toasts in a fixed position at the top-right of the screen
+ * Container for managing multiple toasts.
+ *
+ * Mobile: bottom-center snackbar, raised above the bottom nav / safe area.
+ * A top-anchored toast covers full-screen sheet headers (e.g. Add food's
+ * close button) because toasts sit at z-[100], above the modal's z-50 —
+ * so the top-right stack is desktop (sm+) only.
  */
 export const ToastContainer = memo(function ToastContainer({
   toasts,
@@ -186,7 +192,7 @@ export const ToastContainer = memo(function ToastContainer({
   if (!mounted || toasts.length === 0) return null;
 
   const content = (
-    <div className="fixed top-4 right-4 z-[100] flex flex-col gap-2">
+    <div className="fixed z-[100] flex flex-col gap-2 inset-x-4 bottom-[calc(5rem+env(safe-area-inset-bottom))] items-center sm:inset-x-auto sm:bottom-auto sm:top-4 sm:right-4 sm:items-end">
       {toasts.map((toast) => (
         <Toast
           key={toast.id}
