@@ -322,3 +322,58 @@ describe('programSessionHasUsableExercises', () => {
     expect(await programSessionHasUsableExercises(supabase, session, overrides)).toBe(true);
   });
 });
+
+describe('startMesocycleWorkoutSession — programmed deload auto-flag', () => {
+  // program_data whose week 2 is the programmed deload. Week sessions are
+  // empty so the block-building tail stays inert — the auto-flag write (the
+  // behavior under test) happens before it.
+  const deloadWeekProgram = {
+    mesocycleWeeks: [
+      { weekNumber: 1, intensityModifier: 1, volumeModifier: 1, isDeload: false, sessions: [] },
+      { weekNumber: 2, intensityModifier: 0.9, volumeModifier: 0.5, isDeload: true, sessions: [] },
+    ],
+  };
+
+  const deloadMeso: StartableMesocycle = {
+    id: 'meso-1',
+    current_week: 2,
+    total_weeks: 2,
+    deload_week: 2,
+    days_per_week: 4,
+    program_data: deloadWeekProgram,
+  };
+
+  async function deloadFlagWrites(completedSessions: number) {
+    const { supabase, queries } = createSupabaseMock(makeResponder({ existingSession: null }));
+    try {
+      await startMesocycleWorkoutSession({
+        supabase,
+        mesocycle: deloadMeso,
+        todayWorkout: null,
+        completedSessions,
+      });
+    } catch {
+      // The empty-program block-building tail may throw; the auto-flag write
+      // (or its absence) has been recorded before that point.
+    }
+    return queries.filter(
+      (q) =>
+        q.table === 'workout_sessions' &&
+        q.method === 'update' &&
+        (q.payload as Record<string, unknown> | undefined)?.is_deload === true
+    );
+  }
+
+  it('flags a session started inside the programmed deload week', async () => {
+    // 4 of 8 programmed sessions done (week 2 of 2 at 4/wk): genuinely in the
+    // deload week, block not complete.
+    expect(await deloadFlagWrites(4)).toHaveLength(1);
+  });
+
+  it('does not flag sessions once the block is complete', async () => {
+    // All 8 programmed sessions done: current_week clamps at the final
+    // (deload) week forever, but post-block sessions are real training — they
+    // must not be silently deload-flagged and hidden from e1RM/PR trends.
+    expect(await deloadFlagWrites(8)).toHaveLength(0);
+  });
+});

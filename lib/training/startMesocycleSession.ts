@@ -49,7 +49,10 @@ import {
   exerciseKey,
   type WeeklyAdjustmentPlan,
 } from '@/lib/training/weeklyRollover';
-import { sessionIndexFromCompleted } from '@/lib/training/mesocycleProgress';
+import {
+  computeCurrentWeekFromSessions,
+  sessionIndexFromCompleted,
+} from '@/lib/training/mesocycleProgress';
 import { insertWorkoutSessions } from '@/lib/training/sessionOrigin';
 import { quickWeightEstimate, type TransferCandidate } from '@/services/weightEstimationEngine';
 import { fetchTransferCandidates } from '@/lib/training/transferCandidates';
@@ -626,7 +629,18 @@ export async function startMesocycleWorkoutSession(
   // trends, stagnation baselines, adaptive volume) skip it without the user
   // having to remember to toggle it. The user can still override via the
   // finish/summary toggle or retroactively from history.
-  if (progressionModifiers.isDeload) {
+  //
+  // NOT once the block is complete: past the programmed end, current_week
+  // clamps at the final week (usually the deload) and week-template lookups
+  // cap at the last generated week — without this gate every session after
+  // the block would be silently deload-flagged forever, hiding real training
+  // from e1RM/PR trends.
+  const blockComplete = computeCurrentWeekFromSessions(
+    completedSessions,
+    mesocycle.days_per_week,
+    mesocycle.total_weeks
+  ).isComplete;
+  if (progressionModifiers.isDeload && !blockComplete) {
     const { error: deloadFlagError } = await supabase
       .from('workout_sessions')
       .update({ is_deload: true })
