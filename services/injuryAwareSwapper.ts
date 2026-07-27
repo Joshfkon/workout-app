@@ -12,6 +12,7 @@ import type { Exercise } from '@/types/schema';
 import { muscleMatchesGroup, toLegacyMuscleGroup } from '@/types/schema';
 import type { InjuryArea } from '@/types/training';
 import { filterExercisesByEquipment } from '@/services/equipmentFilter';
+import { canonicalizePatternToken } from '@/services/warmupEngine';
 
 export type { InjuryArea };
 
@@ -230,7 +231,9 @@ function inferInjuryRisk(exercise: Exercise, injury: string): InjuryRisk {
   // Coarse legacy group for the heuristics below ('chest_upper' -> 'chest')
   const muscleLower = toLegacyMuscleGroup(exercise.primaryMuscle) ?? exercise.primaryMuscle.toLowerCase();
   const mechanic = exercise.mechanic;
-  const pattern = exercise.movementPattern?.toLowerCase() || '';
+  // Canonical vocabulary ('vertical_press', 'hinge', …) so the token checks
+  // below hold for both legacy and backfilled pattern values
+  const pattern = canonicalizePatternToken(exercise.movementPattern);
   const equipment = exercise.equipmentRequired?.[0]?.toLowerCase() || '';
   
   switch (injury) {
@@ -324,7 +327,7 @@ function inferUpperBackRisk(name: string, muscle: string, mechanic: string): Inj
 
 function inferShoulderRisk(name: string, muscle: string, mechanic: string, pattern: string): InjuryRisk {
   // Overhead pressing = highest risk
-  if (name.includes('overhead') || name.includes('military') || pattern.includes('vertical_push')) {
+  if (name.includes('overhead') || name.includes('military') || pattern.includes('vertical_press')) {
     return 'avoid';
   }
   
@@ -667,8 +670,13 @@ function calculateMatchScore(source: Exercise, candidate: Exercise): number {
   // Same primary muscle (already filtered)
   if (source.primaryMuscle === candidate.primaryMuscle) score += 40;
   
-  // Same movement pattern
-  if (source.movementPattern === candidate.movementPattern) score += 25;
+  // Same movement pattern (canonicalized: legacy and backfilled values match)
+  if (
+    canonicalizePatternToken(source.movementPattern) !== '' &&
+    canonicalizePatternToken(source.movementPattern) === canonicalizePatternToken(candidate.movementPattern)
+  ) {
+    score += 25;
+  }
   
   // Same mechanic
   if (source.mechanic === candidate.mechanic) score += 15;

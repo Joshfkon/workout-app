@@ -377,15 +377,21 @@ describe('exerciseSwapper', () => {
   });
 
   describe('getRelatedPatterns', () => {
-    it('returns related patterns for horizontal push', () => {
+    // Returns the CANONICAL vocabulary (services/warmupEngine) — legacy
+    // tokens are accepted as input and canonicalized.
+    it('returns related patterns for horizontal push (canonical vocabulary)', () => {
       const related = getRelatedPatterns('horizontal_push');
-      expect(related).toContain('vertical_push');
+      expect(related).toContain('vertical_press');
+    });
+
+    it('accepts canonical input and returns the same relations', () => {
+      expect(getRelatedPatterns('horizontal_press')).toEqual(getRelatedPatterns('horizontal_push'));
     });
 
     it('returns related patterns for squat', () => {
       const related = getRelatedPatterns('squat');
       expect(related).toContain('lunge');
-      expect(related).toContain('hip_hinge');
+      expect(related).toContain('hinge');
     });
 
     it('returns empty array for isolation patterns', () => {

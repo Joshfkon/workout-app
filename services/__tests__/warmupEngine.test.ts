@@ -384,3 +384,37 @@ describe('deriveRomDemands', () => {
     expect(demands).toContain('hip_hinge_deep');
   });
 });
+
+// ---- vocabulary bridge (backfill interop) ----
+
+import { canonicalizePatternToken, legacyPatternFamily } from '../warmupEngine';
+
+describe('canonicalizePatternToken / legacyPatternFamily (vocabulary bridge)', () => {
+  it('maps legacy tokens to canonical so mixed-vocab rows compare equal', () => {
+    expect(canonicalizePatternToken('horizontal_push')).toBe('horizontal_press');
+    expect(canonicalizePatternToken('horizontal_press')).toBe('horizontal_press');
+    expect(canonicalizePatternToken('hip_hinge')).toBe('hinge');
+    expect(canonicalizePatternToken('elbow_flexion')).toBe('isolation_elbow_flexion');
+    // A legacy-valued custom row equals a backfilled canonical seed row
+    expect(canonicalizePatternToken('vertical_push')).toBe(canonicalizePatternToken('vertical_press'));
+  });
+
+  it('passes unknown free text through instead of guessing', () => {
+    expect(canonicalizePatternToken('compound')).toBe('compound');
+    expect(canonicalizePatternToken('')).toBe('');
+    expect(canonicalizePatternToken(null)).toBe('');
+  });
+
+  it('bridges canonical tokens back to the legacy families the SFR/fatigue tables know', () => {
+    expect(legacyPatternFamily('horizontal_press')).toBe('horizontal_push');
+    expect(legacyPatternFamily('hinge')).toBe('hip_hinge');
+    expect(legacyPatternFamily('isolation_elbow_flexion')).toBe('elbow_flexion');
+    expect(legacyPatternFamily('isolation_ankle_plantar')).toBe('calf_raise');
+    expect(legacyPatternFamily('isolation_shoulder_horizontal_adduction')).toBe('shoulder_isolation');
+    // Tokens the tables never had a row for fall to the isolation bucket
+    expect(legacyPatternFamily('isolation_knee_extension')).toBe('isolation');
+    // Legacy input works too (canonicalized on the way in)
+    expect(legacyPatternFamily('horizontal_push')).toBe('horizontal_push');
+    expect(legacyPatternFamily('squat')).toBe('squat');
+  });
+});

@@ -19,6 +19,7 @@ import {
   DELOAD_THRESHOLDS,
   effectiveFatigueRecoveryRate,
 } from '@/services/shared/fatigueConstants';
+import { legacyPatternFamily } from '@/services/warmupEngine';
 
 // ============================================
 // CONSTANTS (local to this engine)
@@ -318,7 +319,10 @@ export interface EnhancedFatigueUpdateInput extends FatigueUpdateInput {
  * Calculate fatigue multiplier for an exercise based on its characteristics
  */
 export function getExerciseFatigueMultiplier(exercise: ExerciseFatigueInfo): number {
-  const movementMultiplier = MOVEMENT_FATIGUE_MULTIPLIERS[exercise.movementPattern] ?? 1.0;
+  // Table is keyed by the legacy pattern vocabulary — bridge canonical
+  // (post-backfill) tokens through the legacy family so lookups keep hitting.
+  const movementMultiplier =
+    MOVEMENT_FATIGUE_MULTIPLIERS[legacyPatternFamily(exercise.movementPattern)] ?? 1.0;
   const equipmentMultiplier = EQUIPMENT_FATIGUE_MULTIPLIERS[exercise.equipment] ?? 1.0;
   const mechanicMultiplier = exercise.mechanic === 'compound' ? 1.0 : 0.7;
 

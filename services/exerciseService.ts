@@ -20,6 +20,7 @@ import type {
   HypertrophyRating
 } from '@/types/schema';
 import { muscleMatchesGroup } from '@/types/schema';
+import { canonicalizePatternToken } from '@/services/warmupEngine';
 import {
   fetchAllExercises,
   insertCustomExercise,
@@ -249,9 +250,11 @@ export async function getExercisesByPattern(
   equipment?: Equipment[]
 ): Promise<Exercise[]> {
   const all = await getExercises();
+  // Canonicalized so legacy and backfilled pattern values match
+  const target = canonicalizePatternToken(pattern);
   return all.filter(e => {
-    const patternMatch = e.pattern === pattern;
-    const equipmentMatch = !equipment || equipment.length === 0 || 
+    const patternMatch = canonicalizePatternToken(e.pattern) === target;
+    const equipmentMatch = !equipment || equipment.length === 0 ||
       equipment.includes(e.equipment);
     return patternMatch && equipmentMatch;
   });

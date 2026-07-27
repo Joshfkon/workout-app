@@ -43,16 +43,20 @@ import { generateWarmupProtocol } from './progressionEngine';
 // ============================================
 
 /**
- * Half-life (minutes) for warmth decay.
+ * ⚠ TUNABLE — Half-life (minutes) for warmth decay. A FITTED CONSTANT ON
+ * ZERO USER DATA: when warmup decisions feel wrong in real sessions (ramp
+ * sets appearing for still-warm muscles → raise it; "no warmup needed" on
+ * gone-cold muscles → lower it), THIS is the knob to turn. Overridable
+ * per-call via WarmupReadinessInput.halfLifeMinutes.
  *
- * Intramuscular temperature rises ~2–3 °C during resistance work and decays
- * toward baseline with half-times of roughly 10–15 minutes in the classic
- * intramuscular-temperature literature (Saltin's curves and later re-warmup
- * studies) — measured under PASSIVE rest. Mid-session the lifter is
- * semi-active (walking between stations, racking plates), which slows the
- * decline, so we take the top of that range: 15 minutes. A set from 15 min
- * ago retains half its warmth credit; from ~40 min ago, ~16% — partial
- * credit, decay applied, exactly the "40+ min elapsed" regression case.
+ * Rationale for 15: intramuscular temperature rises ~2–3 °C during
+ * resistance work and decays toward baseline with half-times of roughly
+ * 10–15 minutes in the classic intramuscular-temperature literature
+ * (Saltin's curves and later re-warmup studies) — measured under PASSIVE
+ * rest. Mid-session the lifter is semi-active (walking between stations,
+ * racking plates), which slows the decline, so we take the top of that
+ * range. A set from 15 min ago retains half its warmth credit; from ~40 min
+ * ago, ~16% — partial credit, decay applied.
  */
 export const WARMTH_HALF_LIFE_MINUTES = 15;
 
@@ -146,6 +150,8 @@ export interface WarmupReadinessInput {
   /** True when this is the first exercise of the session (general warmup). */
   isFirstExercise: boolean;
   barbellType?: 'olympic' | 'womens' | 'ez_curl' | 'trap';
+  /** Warmth-decay half-life override (minutes). Default WARMTH_HALF_LIFE_MINUTES — the tunable. */
+  halfLifeMinutes?: number;
 }
 
 export interface WarmupDimensionStatus {
@@ -282,18 +288,68 @@ const NAME_RULES: NameRule[] = [
 ];
 
 /**
+ * Token-level canonicalization: maps a stored movement_pattern value (legacy
+ * or canonical vocabulary) to its canonical token WITHOUT name-rule
+ * fallback. Unknown free text passes through lowercased, so equality
+ * comparisons between two exercises still work on whatever vocabulary they
+ * share. This is THE bridge every pattern comparison in the codebase should
+ * route through — it makes legacy-valued rows (custom exercises the backfill
+ * can't reach by name) compare equal to canonical-valued seed rows.
+ */
+export function canonicalizePatternToken(raw: string | null | undefined): string {
+  const t = (raw ?? '').trim().toLowerCase();
+  if (!t) return '';
+  if (LEGACY_PATTERN_MAP[t] !== undefined) return LEGACY_PATTERN_MAP[t];
+  return t;
+}
+
+/**
+ * Legacy-family token for lookup tables still keyed by the legacy
+ * vocabulary (BASE_SFR, fatigue multipliers, deload adjustments). Collapses
+ * canonical isolation patterns onto the nearest legacy family the tables
+ * know; tokens the tables never knew (wrist work, spinal extension) map to
+ * their historical stored value so lookups miss exactly as they did before
+ * the backfill. Retire this once those tables are re-keyed canonically.
+ */
+export function legacyPatternFamily(raw: string | null | undefined): string {
+  const canonical = canonicalizePatternToken(raw);
+  const families: Record<string, string> = {
+    horizontal_press: 'horizontal_push',
+    vertical_press: 'vertical_push',
+    hinge: 'hip_hinge',
+    isolation_elbow_flexion: 'elbow_flexion',
+    isolation_elbow_extension: 'elbow_extension',
+    isolation_knee_flexion: 'knee_flexion',
+    isolation_ankle_plantar: 'calf_raise',
+    isolation_wrist_flexion: 'wrist_flexion',
+    isolation_wrist_extension: 'wrist_extension',
+    isolation_scapular_elevation: 'shoulder_isolation',
+    isolation_shoulder_abduction: 'shoulder_isolation',
+    isolation_shoulder_flexion: 'shoulder_isolation',
+    isolation_shoulder_horizontal_abduction: 'shoulder_isolation',
+    isolation_shoulder_horizontal_adduction: 'shoulder_isolation',
+    isolation_shoulder_extension: 'shoulder_isolation',
+    isolation_spinal_extension: 'spinal_extension',
+    isolation_spinal_flexion: 'core',
+    isolation_spinal_rotation: 'core',
+    isolation_anti_extension: 'core',
+    isolation_anti_rotation: 'core',
+    isolation_hip_flexion: 'core',
+  };
+  if (families[canonical]) return families[canonical];
+  if (canonical.startsWith('isolation_')) return 'isolation';
+  return canonical;
+}
+
+/**
  * Resolve an exercise's canonical movement pattern from its stored
  * movement_pattern (legacy tokens included) or, failing that, its name and
  * primary muscle. Returns null when unclassifiable — the pattern dimension
  * then reports "unknown" and stays conservatively unpaid.
  */
 export function canonicalizeMovementPattern(ex: WarmupExerciseMeta): CanonicalMovementPattern | null {
-  const raw = (ex.movementPattern ?? '').trim().toLowerCase();
-  if (LEGACY_PATTERN_MAP[raw] !== undefined) {
-    return LEGACY_PATTERN_MAP[raw];
-  }
+  const raw = canonicalizePatternToken(ex.movementPattern);
   if ((CANONICAL_MOVEMENT_PATTERNS as readonly string[]).includes(raw)) {
-    // Already-canonical token
     return raw as CanonicalMovementPattern;
   }
   for (const rule of NAME_RULES) {
@@ -378,9 +434,10 @@ export function deriveRomDemands(ex: WarmupExerciseMeta): RomDemand[] {
 // ============================================
 
 /** Exponential warmth decay: 1.0 at Δt=0, 0.5 at the half-life. */
-export function warmthDecay(minutesElapsed: number): number {
+export function warmthDecay(minutesElapsed: number, halfLifeMinutes: number = WARMTH_HALF_LIFE_MINUTES): number {
   if (!Number.isFinite(minutesElapsed) || minutesElapsed <= 0) return 1;
-  return Math.pow(2, -minutesElapsed / WARMTH_HALF_LIFE_MINUTES);
+  const halfLife = halfLifeMinutes > 0 ? halfLifeMinutes : WARMTH_HALF_LIFE_MINUTES;
+  return Math.pow(2, -minutesElapsed / halfLife);
 }
 
 function minutesBetween(now: Date, iso: string): number {
@@ -489,6 +546,7 @@ export function evaluateWarmupReadiness(input: WarmupReadinessInput): WarmupDeci
     e1rmKg,
     isFirstExercise,
     barbellType,
+    halfLifeMinutes = WARMTH_HALF_LIFE_MINUTES,
   } = input;
 
   const blocksById = new Map(blocks.map((b) => [b.id, b]));
@@ -504,7 +562,7 @@ export function evaluateWarmupReadiness(input: WarmupReadinessInput): WarmupDeci
       return {
         block,
         isWorking: !isWarmupTypeSet(s),
-        decay: warmthDecay(minutesBetween(now, s.loggedAt)),
+        decay: warmthDecay(minutesBetween(now, s.loggedAt), halfLifeMinutes),
       };
     })
     .filter((x): x is NonNullable<typeof x> => x !== null);

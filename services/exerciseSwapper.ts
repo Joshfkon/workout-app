@@ -13,6 +13,7 @@ import type {
 import { muscleMatchesGroup } from '@/types/schema';
 import { BASE_SFR } from './fatigueBudgetEngine';
 import { exerciseNameSimilarity } from './exerciseNameMatch';
+import { canonicalizePatternToken, legacyPatternFamily } from './warmupEngine';
 
 // ============================================
 // STIMULUS-TO-FATIGUE (SFR)
@@ -24,7 +25,9 @@ import { exerciseNameSimilarity } from './exerciseNameMatch';
  * callers must treat unknown as neutral, never as bad.
  */
 export function estimateExerciseSFR(exercise: Exercise): number | null {
-  const patternTable = BASE_SFR[exercise.movementPattern as keyof typeof BASE_SFR];
+  // BASE_SFR is keyed by the legacy pattern vocabulary; route canonical
+  // tokens (post-backfill values) through the legacy-family bridge.
+  const patternTable = BASE_SFR[legacyPatternFamily(exercise.movementPattern) as keyof typeof BASE_SFR];
   if (!patternTable) return null;
   const equipment = exercise.equipmentRequired.find(
     (eq): eq is keyof typeof patternTable => eq in patternTable
@@ -59,7 +62,10 @@ export interface SwapContext {
  */
 function getPattern(ex: Exercise): string {
   const raw = ex.movementPattern || (ex as { pattern?: string }).pattern || '';
-  return raw.toString().trim().toLowerCase();
+  // Canonicalize so a legacy-valued row (e.g. a custom exercise with
+  // 'horizontal_push') still pattern-matches a backfilled canonical row
+  // ('horizontal_press').
+  return canonicalizePatternToken(raw.toString());
 }
 
 /**
@@ -268,7 +274,7 @@ function generateSwapReason(
   }
 
   // Movement pattern match
-  if (source.movementPattern === candidate.movementPattern) {
+  if (getPattern(source) && getPattern(source) === getPattern(candidate)) {
     reasons.push(`uses the same movement pattern`);
   } else {
     // Explain the difference
@@ -362,30 +368,30 @@ export function getExercisesByPattern(
   pattern: MovementPattern,
   exercises: Exercise[]
 ): Exercise[] {
-  return exercises.filter((e) => e.movementPattern === pattern);
+  const target = canonicalizePatternToken(pattern);
+  return exercises.filter((e) => getPattern(e) === target);
 }
 
 /**
- * Get related movement patterns for variety suggestions
+ * Get related movement patterns for variety suggestions.
+ *
+ * Keyed by the CANONICAL vocabulary (services/warmupEngine); legacy tokens
+ * are canonicalized on the way in, and returned values are canonical — so
+ * compare candidates via canonicalizePatternToken, never raw stored values.
  */
-export function getRelatedPatterns(pattern: MovementPattern): MovementPattern[] {
-  const relations: Record<MovementPattern, MovementPattern[]> = {
-    'horizontal_push': ['vertical_push'],
+export function getRelatedPatterns(pattern: MovementPattern | string): string[] {
+  const relations: Record<string, string[]> = {
+    'horizontal_press': ['vertical_press'],
     'horizontal_pull': ['vertical_pull'],
-    'vertical_push': ['horizontal_push'],
+    'vertical_press': ['horizontal_press'],
     'vertical_pull': ['horizontal_pull'],
-    'hip_hinge': ['squat'],
-    'squat': ['lunge', 'hip_hinge'],
+    'hinge': ['squat'],
+    'squat': ['lunge', 'hinge'],
     'lunge': ['squat'],
-    'knee_flexion': ['hip_hinge'],
-    'elbow_flexion': [],
-    'elbow_extension': [],
-    'shoulder_isolation': [],
-    'calf_raise': [],
-    'core': [],
+    'isolation_knee_flexion': ['hinge'],
   };
 
-  return relations[pattern] || [];
+  return relations[canonicalizePatternToken(pattern)] || [];
 }
 
 // ============================================
@@ -410,12 +416,12 @@ export function analyzeSwapOptions(
   const directSwaps = suggestSwap(source, allExercises, context);
 
   // Pattern variations (related patterns, same muscle)
-  const relatedPatterns = getRelatedPatterns(source.movementPattern as MovementPattern);
+  const relatedPatterns = getRelatedPatterns(source.movementPattern);
   const patternCandidates = allExercises.filter(
     (e) =>
       e.id !== source.id &&
       muscleMatchesGroup(e.primaryMuscle, source.primaryMuscle) &&
-      relatedPatterns.includes(e.movementPattern as MovementPattern)
+      relatedPatterns.includes(getPattern(e))
   );
   const patternVariations = patternCandidates.slice(0, 3).map((exercise) => ({
     exercise,
@@ -456,7 +462,8 @@ export function getBestSwap(
 export function areExercisesInterchangeable(a: Exercise, b: Exercise): boolean {
   return (
     a.primaryMuscle === b.primaryMuscle &&
-    a.movementPattern === b.movementPattern &&
+    getPattern(a) !== '' &&
+    getPattern(a) === getPattern(b) &&
     a.mechanic === b.mechanic
   );
 }
