@@ -53,7 +53,7 @@ describe('generated seedExerciseTags module', () => {
     // pulls are lat-dominant with rear-delt secondaries.
     expect(SEED_EXERCISE_TAGS['Barbell Bench Press']).toEqual({
       primary: 'chest',
-      secondaries: ['front_delts', 'triceps'],
+      secondaries: ['front_delts', 'triceps_lat_med'],
     });
     expect(SEED_EXERCISE_TAGS['Cable Fly']).toEqual({
       primary: 'chest',
@@ -105,7 +105,7 @@ describe('static fallback DB applies the seed-derived tags', () => {
     const byName = new Map(getExercisesSync().map((e) => [e.name, e]));
     expect(byName.get('Barbell Bench Press')!.secondaryMuscles).toEqual([
       'front_delts',
-      'triceps',
+      'triceps_lat_med',
     ]);
     expect(byName.get('Cable Fly')!.secondaryMuscles).toEqual(['front_delts']);
     expect(byName.get('Pec Deck')!.secondaryMuscles).toEqual(['front_delts']);

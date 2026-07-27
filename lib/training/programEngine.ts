@@ -37,6 +37,7 @@ import type {
   FFMIBracket,
 } from '@/types/training';
 import type { MuscleGroup } from '@/types/schema';
+import { muscleMatchesGroup } from '@/types/schema';
 import {
   computeSleepDebtSignal,
   SLEEP_DEBT_WINDOW_DAYS,
@@ -1296,9 +1297,10 @@ export class ProgramEngine {
   ): { exercise: Exercise; sets: number }[] {
     const profile = this.getUserProfile();
     
-    // Filter exercises
+    // Filter exercises. Overlap-aware muscle match: the pool's primaries are
+    // fine-grained ('front_delts'), the program slots are coarse ('shoulders').
     let candidates = EXERCISE_DATABASE.filter(e =>
-      e.primaryMuscle === muscle &&
+      muscleMatchesGroup(e.primaryMuscle, muscle) &&
       profile.availableEquipment.includes(e.equipment) &&
       !profile.injuryHistory.includes(muscle)
     );
@@ -1311,7 +1313,7 @@ export class ProgramEngine {
     }
     
     if (candidates.length === 0) {
-      candidates = EXERCISE_DATABASE.filter(e => e.primaryMuscle === muscle);
+      candidates = EXERCISE_DATABASE.filter(e => muscleMatchesGroup(e.primaryMuscle, muscle));
     }
     
     // Sort by SFR

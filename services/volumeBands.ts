@@ -103,7 +103,9 @@ export const COARSE_CHILDREN: Record<CoarseMuscle, StandardMuscleGroup[]> = {
   back: ['lats', 'upper_back', 'erectors'],
   shoulders: ['front_delts', 'lateral_delts', 'rear_delts'],
   biceps: ['biceps'],
-  triceps: ['triceps'],
+  // Coarse 'triceps' credit stays on the coarse member; the heads are fed
+  // only by fine tags (traps/calves precedent — no uniform smear).
+  triceps: ['triceps', 'triceps_long', 'triceps_lat_med'],
   quads: ['quads'],
   hamstrings: ['hamstrings'],
   glutes: ['glutes', 'glute_med'],
@@ -136,6 +138,7 @@ export const FINE_CHILD_MUSCLES = new Set<StandardMuscleGroup>([
   'glute_med', 'obliques',
   'upper_traps', 'mid_lower_traps',
   'gastrocnemius', 'soleus',
+  'triceps_long', 'triceps_lat_med',
 ]);
 
 /**
@@ -154,7 +157,10 @@ export const MEV_TARGETS: Record<StandardMuscleGroup, number> = {
   chest_upper: 4, chest_lower: 4,
   front_delts: 2, lateral_delts: 6, rear_delts: 3,
   lats: 6, upper_back: 4, traps: 4, upper_traps: 3, mid_lower_traps: 2,
-  biceps: 4, triceps: 4, forearms: 4,
+  // triceps_long sits near the direct-work literature (pressing gives the
+  // long head little); triceps_lat_med is total-inclusive (retagged press
+  // secondaries land there, like front_delts' press inflow).
+  biceps: 4, triceps: 4, triceps_long: 4, triceps_lat_med: 6, forearms: 4,
   quads: 6, hamstrings: 4, glutes: 4, glute_med: 2, adductors: 4,
   calves: 6, gastrocnemius: 4, soleus: 3,
   abs: 6, obliques: 4, erectors: 4,
@@ -232,6 +238,8 @@ export const ENHANCED_MRV_MULTIPLIERS: Record<CoarseMuscle, number> = {
 const FINE_BAND_TOTAL_INCLUSIVE_MRV: Partial<Record<StandardMuscleGroup, number>> = {
   front_delts: 14,
   rear_delts: 20,
+  triceps_long: 18,
+  triceps_lat_med: 20,
 };
 
 /** Round a scaled ceiling to 0.5-set granularity. */

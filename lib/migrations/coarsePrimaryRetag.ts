@@ -14,11 +14,9 @@
  * confirmed step (audit policy: no silent migration of user data).
  */
 
-import {
-  resolvePrimaryMuscleCredits,
-  SECONDARY_MUSCLE_CREDIT,
-} from '@/services/volumeTracker';
-import { normalizeMuscleToken, resolveMuscleToStandard } from '@/types/schema';
+import { resolvePrimaryMuscleCredits } from '@/services/volumeTracker';
+import { perSetStandardCredit } from '@/services/muscleAttributionAudit';
+import { normalizeMuscleToken } from '@/types/schema';
 
 /** Minimum exercise shape the report needs (matches the weekly-volume rows). */
 export interface RetagExerciseRow {
@@ -174,25 +172,19 @@ const AI_COMPLETION_DEFAULT: Record<string, string> = {
   back: 'lats',
 };
 
-/** Per-set standard-muscle credit for a tag set, exactly as the counter sees it. */
+/**
+ * Per-set standard-muscle credit for a tag set, exactly as the counter sees
+ * it — delegates to the shared derivation in services/muscleAttributionAudit
+ * (one credit formula everywhere), rounded to 2 decimals for display.
+ */
 export function perSetCredit(
   primary: string,
   secondaries: string[]
 ): Record<string, number> {
+  const raw = perSetStandardCredit(primary, secondaries);
   const out: Record<string, number> = {};
-  const credits = resolvePrimaryMuscleCredits(primary);
-  const primarySet = new Set(credits.map((c) => c.muscle));
-  for (const { muscle, weight } of credits) {
-    out[muscle] = Math.round(((out[muscle] ?? 0) + weight) * 100) / 100;
-  }
-  for (const secondary of secondaries) {
-    const standards = resolveMuscleToStandard(secondary);
-    if (standards.length === 0) continue;
-    const per = SECONDARY_MUSCLE_CREDIT / standards.length;
-    for (const std of standards) {
-      if (primarySet.has(std)) continue;
-      out[std] = Math.round(((out[std] ?? 0) + per) * 100) / 100;
-    }
+  for (const [muscle, credit] of Object.entries(raw)) {
+    out[muscle] = Math.round(credit * 100) / 100;
   }
   return out;
 }

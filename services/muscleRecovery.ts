@@ -19,6 +19,7 @@
 import { resolveMuscleToStandard, type StandardMuscleGroup, type SleepQuality } from '@/types/schema';
 import { ENHANCED_RECOVERY_MULTIPLIER } from '@/services/shared/fatigueConstants';
 import { composeGlobalRecoveryScale } from '@/services/wearableRecovery';
+import { SECONDARY_MUSCLE_CREDIT } from '@/services/volumeTracker';
 
 // ---------------------------------------------------------------------------
 // Tunable heuristic constants — edit here to re-tune the whole model.
@@ -110,6 +111,8 @@ export const RECOVERY_CONFIG: RecoveryConfig = {
     // Small/fast recoverers.
     biceps: 36,
     triceps: 36,
+    triceps_long: 36,
+    triceps_lat_med: 36,
     forearms: 36,
     calves: 36,
     gastrocnemius: 36,
@@ -121,7 +124,9 @@ export const RECOVERY_CONFIG: RecoveryConfig = {
   highDoseExtraHours: 24,
   lowDoseSetThreshold: 3,
   lowDoseReducedHours: 12,
-  secondaryDoseFactor: 0.5,
+  // The ONE secondary-credit coefficient (services/volumeTracker) — recovery
+  // dose and volume counting must agree on what a secondary set is worth.
+  secondaryDoseFactor: SECONDARY_MUSCLE_CREDIT,
   recoveringThreshold: 0.6,
   windowScale: 1,
   recoveryMultiplierByMuscle: {},

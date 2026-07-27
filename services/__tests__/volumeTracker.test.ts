@@ -249,8 +249,8 @@ describe('calculateWeeklyVolume', () => {
 
     const result = calculateWeeklyVolume(input);
 
-    // Should have entries for all 24 standard muscle groups with 0 sets
-    expect(result.size).toBe(24);
+    // Should have entries for all 26 standard muscle groups with 0 sets
+    expect(result.size).toBe(26);
     result.forEach((data) => {
       expect(data.totalSets).toBe(0);
       // Muscles with MEV=0 (glute_med, obliques) will have status 'effective' not 'below_mev'
@@ -437,7 +437,7 @@ describe('resolvePrimaryMuscleCredits', () => {
   it('gives full credit for precise standard/detailed tags', () => {
     expect(resolvePrimaryMuscleCredits('lateral_delts')).toEqual([{ muscle: 'lateral_delts', weight: 1 }]);
     expect(resolvePrimaryMuscleCredits('chest_upper')).toEqual([{ muscle: 'chest_upper', weight: 1 }]);
-    expect(resolvePrimaryMuscleCredits('triceps_long')).toEqual([{ muscle: 'triceps', weight: 1 }]);
+    expect(resolvePrimaryMuscleCredits('triceps_long')).toEqual([{ muscle: 'triceps_long', weight: 1 }]);
   });
 
   it('does not leak legacy glutes/abs onto glute_med/obliques', () => {

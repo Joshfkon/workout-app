@@ -58,7 +58,7 @@ export const MUSCLE_GROUP_OPTIONS: MuscleGroupOption[] = [
   { value: 'back', label: 'Back', subMuscles: [sub('lats'), sub('upper_back'), sub('erectors')] },
   { value: 'shoulders', label: 'Shoulders', subMuscles: [sub('front_delts'), sub('lateral_delts'), sub('rear_delts')] },
   { value: 'biceps', label: 'Biceps', subMuscles: [] },
-  { value: 'triceps', label: 'Triceps', subMuscles: [] },
+  { value: 'triceps', label: 'Triceps', subMuscles: [sub('triceps_long'), sub('triceps_lat_med')] },
   { value: 'forearms', label: 'Forearms', subMuscles: [] },
   { value: 'traps', label: 'Traps', subMuscles: [sub('upper_traps'), sub('mid_lower_traps')] },
   { value: 'quads', label: 'Quads', subMuscles: [] },

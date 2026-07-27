@@ -7,6 +7,7 @@ import { parseYouTubeVideoId } from '@/lib/youtube';
 import { getExerciseProp } from './helpers';
 
 import { MOVEMENT_PATTERN_OPTIONS, MUSCLE_GROUP_OPTIONS, ALL_MUSCLE_TOKENS, EQUIPMENT_OPTIONS } from './editFormOptions';
+import { isGroupSplitPrimary } from '@/services/muscleAttributionAudit';
 
 interface ExerciseEditFormProps {
   exercise: Exercise;
@@ -415,9 +416,13 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
           onChange={(e) => setEditData({ ...editData, primaryMuscle: e.target.value })}
           className="w-full px-3 py-2 bg-surface-900 border border-surface-600 rounded-lg text-surface-100 text-sm"
         >
-          {!primaryInList && (
+          {/* Keep a legacy/unknown current value visible (e.g. an existing
+              exercise still tagged 'shoulders') without offering it as a
+              fresh choice — group-level splitting primaries are barred at
+              creation (see validateExercisePrimary). */}
+          {(!primaryInList || isGroupSplitPrimary(editData.primaryMuscle)) && (
             <option value={editData.primaryMuscle}>
-              {editData.primaryMuscle.charAt(0).toUpperCase() + editData.primaryMuscle.slice(1)}
+              {editData.primaryMuscle.charAt(0).toUpperCase() + editData.primaryMuscle.slice(1)} (legacy)
             </option>
           )}
           {MUSCLE_GROUP_OPTIONS.map((group) =>
@@ -425,7 +430,12 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
               <option key={group.value} value={group.value}>{group.label}</option>
             ) : (
               <optgroup key={group.value} label={group.label}>
-                <option value={group.value}>{group.label} (all)</option>
+                {/* A whole-group primary is only offered when the token does
+                    NOT split its credit ('glutes', 'traps', 'calves', 'abs');
+                    splitting groups (chest/back/shoulders) require a head. */}
+                {!isGroupSplitPrimary(group.value) && (
+                  <option value={group.value}>{group.label} (all)</option>
+                )}
                 {group.subMuscles.map((s) => (
                   <option key={s.value} value={s.value}>{s.label}</option>
                 ))}
@@ -434,7 +444,7 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
           )}
         </select>
         <p className="mt-1 text-xs text-surface-500">
-          Pick a specific head (e.g. Side Delts) to target a sub-muscle, or the group for even credit.
+          Pick the specific head this exercise targets (e.g. Side Delts) — that&apos;s where its volume credit lands.
         </p>
       </div>
 

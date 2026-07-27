@@ -357,7 +357,14 @@ export function MuscleReadinessContent({
               // something to expand to.
               renderRowDetail={(row) =>
                 row.exercises.length > 0 ? (
-                  <ContributingSets exercises={row.exercises} muscle={row.muscle} testIdPrefix="readiness-sources" />
+                  // The scope label keeps this group-wide panel (rendered below
+                  // the last fine child) from reading as that child's breakdown.
+                  <ContributingSets
+                    exercises={row.exercises}
+                    muscle={row.muscle}
+                    testIdPrefix="readiness-sources"
+                    scopeLabel={row.children.length > 0 ? `${row.displayName} · whole group` : row.displayName}
+                  />
                 ) : null
               }
               testIdPrefix="readiness-row"

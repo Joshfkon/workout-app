@@ -1241,6 +1241,8 @@ export const DEFAULT_VOLUME_LANDMARKS: Record<Experience, Record<StandardMuscleG
     mid_lower_traps: { mev: 0, mav: 4, mrv: 8 },
     biceps: { mev: 4, mav: 10, mrv: 14 },
     triceps: { mev: 4, mav: 10, mrv: 14 },
+    triceps_long: { mev: 3, mav: 7, mrv: 12 },
+    triceps_lat_med: { mev: 4, mav: 9, mrv: 14 },
     forearms: { mev: 2, mav: 6, mrv: 12 },
     quads: { mev: 6, mav: 12, mrv: 18 },
     hamstrings: { mev: 4, mav: 10, mrv: 14 },
@@ -1267,6 +1269,8 @@ export const DEFAULT_VOLUME_LANDMARKS: Record<Experience, Record<StandardMuscleG
     mid_lower_traps: { mev: 0, mav: 6, mrv: 10 },
     biceps: { mev: 6, mav: 12, mrv: 18 },
     triceps: { mev: 6, mav: 12, mrv: 18 },
+    triceps_long: { mev: 4, mav: 10, mrv: 18 },
+    triceps_lat_med: { mev: 6, mav: 12, mrv: 20 },
     forearms: { mev: 3, mav: 8, mrv: 14 },
     quads: { mev: 8, mav: 14, mrv: 22 },
     hamstrings: { mev: 6, mav: 12, mrv: 18 },
@@ -1293,6 +1297,8 @@ export const DEFAULT_VOLUME_LANDMARKS: Record<Experience, Record<StandardMuscleG
     mid_lower_traps: { mev: 0, mav: 8, mrv: 12 },
     biceps: { mev: 8, mav: 16, mrv: 22 },
     triceps: { mev: 8, mav: 16, mrv: 22 },
+    triceps_long: { mev: 6, mav: 13, mrv: 20 },
+    triceps_lat_med: { mev: 8, mav: 15, mrv: 24 },
     forearms: { mev: 4, mav: 10, mrv: 16 },
     quads: { mev: 10, mav: 18, mrv: 26 },
     hamstrings: { mev: 8, mav: 14, mrv: 22 },
@@ -1780,10 +1786,13 @@ export interface DeloadTriggers {
  * Standard Muscle Groups (24) - UI Display & Volume Tracking
  * These are what users see in the interface and what volume landmarks are defined against.
  *
- * Four of these are FINE members of a coarse group that is ITSELF a standard
- * muscle ('traps', 'calves'): upper_traps / mid_lower_traps and
- * gastrocnemius / soleus. Like glute_med under 'glutes', a coarse 'traps' or
- * 'calves' tag stays valid and NEVER leaks credit into the fine members — only
+ * Six of these are FINE members of a coarse group that is ITSELF a standard
+ * muscle ('traps', 'calves', 'triceps'): upper_traps / mid_lower_traps,
+ * gastrocnemius / soleus, and triceps_long / triceps_lat_med (long head vs
+ * lateral+medial — the heads are programmed by shoulder position, and lateral
+ * vs medial never separately, so two members, not three). Like glute_med
+ * under 'glutes', a coarse 'traps', 'calves' or 'triceps' tag stays valid
+ * and NEVER leaks credit into the fine members — only
  * an exercise tagged at fine grain feeds them (see FINE_MUSCLE_PARENTS in
  * app/(dashboard)/dashboard/_lib/weeklyVolume.ts).
  */
@@ -1800,6 +1809,8 @@ export const STANDARD_MUSCLE_GROUPS = [
   'mid_lower_traps',
   'biceps',
   'triceps',
+  'triceps_long',
+  'triceps_lat_med',
   'forearms',
   'quads',
   'hamstrings',
@@ -1892,10 +1903,11 @@ export const DETAILED_TO_STANDARD_MAP: Record<DetailedMuscleGroup, StandardMuscl
   upper_traps: 'upper_traps',
   // Spine
   erectors: 'erectors',
-  // Triceps
-  triceps_long: 'triceps',
-  triceps_lateral: 'triceps',
-  triceps_medial: 'triceps',
+  // Triceps — detailed heads feed the fine members (long vs lateral+medial);
+  // only the coarse 'triceps' token stays on the coarse standard muscle.
+  triceps_long: 'triceps_long',
+  triceps_lateral: 'triceps_lat_med',
+  triceps_medial: 'triceps_lat_med',
   // Biceps
   biceps_long: 'biceps',
   biceps_short: 'biceps',
@@ -1932,7 +1944,12 @@ export const LEGACY_TO_STANDARD_MAP: Record<string, StandardMuscleGroup[]> = {
   'back': ['lats', 'upper_back'],
   'shoulders': ['front_delts', 'lateral_delts', 'rear_delts'],
   'biceps': ['biceps'],
-  'triceps': ['triceps'],
+  // Matching/filter expansion: a coarse 'triceps' target must keep matching
+  // head-tagged exercises (triceps_long / triceps_lat_med) — programs,
+  // pickers and injury exclusions rely on this map. Volume credit is NOT
+  // affected: the standard-first resolver returns ['triceps'] for the coarse
+  // token, so coarse credit never smears across the heads (traps precedent).
+  'triceps': ['triceps', 'triceps_long', 'triceps_lat_med'],
   'quads': ['quads'],
   'hamstrings': ['hamstrings'],
   'glutes': ['glutes', 'glute_med'],
@@ -2151,6 +2168,8 @@ export const STANDARD_MUSCLE_DISPLAY_NAMES: Record<StandardMuscleGroup, string> 
   mid_lower_traps: 'Mid/Lower Traps',
   biceps: 'Biceps',
   triceps: 'Triceps',
+  triceps_long: 'Triceps Long Head',
+  triceps_lat_med: 'Triceps Lateral/Medial',
   forearms: 'Forearms',
   quads: 'Quads',
   hamstrings: 'Hamstrings',

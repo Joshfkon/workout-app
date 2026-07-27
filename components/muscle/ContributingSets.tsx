@@ -20,15 +20,47 @@ export function formatCreditedSets(sets: number): string {
   return `${rounded} ${rounded === 1 ? 'set' : 'sets'}`;
 }
 
+/**
+ * "4 sets → 1.3 credited" — performed working sets first, the fractional
+ * credit this row actually received second, so the panel shows the input of
+ * the fractional math, not just its output. Collapses to plain "4 sets" when
+ * credit equals the performed count (full-credit direct work — an arrow to
+ * the same number is noise). Falls back to credited-only when the performed
+ * count is unavailable (performedSets 0 with positive credit: pre-migration
+ * cached shapes).
+ */
+export function formatPerformedToCredited(
+  performedSets: number | undefined,
+  credited: number
+): string {
+  const roundedCredit = Math.round(credited * 10) / 10;
+  if (
+    performedSets === undefined ||
+    !Number.isFinite(performedSets) ||
+    performedSets <= 0 ||
+    Math.abs(performedSets - roundedCredit) < 0.05
+  ) {
+    return formatCreditedSets(credited);
+  }
+  return `${performedSets} ${performedSets === 1 ? 'set' : 'sets'} → ${roundedCredit} credited`;
+}
+
 export function ContributingSets({
   exercises,
   muscle,
   testIdPrefix,
+  scopeLabel,
 }: {
   exercises: ExerciseVolume[];
   muscle: string;
   /** Panels get `${testIdPrefix}-${muscle}` (e.g. readiness-sources-chest). */
   testIdPrefix: string;
+  /**
+   * Which muscle scope this panel counts for ("Rear Delts", "Shoulders ·
+   * whole group"). Rendered in the header so a group-scope panel sitting
+   * beneath the last child row can't be misread as that child's breakdown.
+   */
+  scopeLabel?: string;
 }) {
   const isFractional = (v: number) => !Number.isInteger(Math.round(v * 10) / 10);
   const hasFractional = exercises.some((ex) => isFractional(ex.sets));
@@ -38,7 +70,7 @@ export function ContributingSets({
   return (
     <div className="rounded-lg bg-surface-800/40 px-2.5 py-2" data-testid={`${testIdPrefix}-${muscle}`}>
       <p className="text-[10px] uppercase tracking-wide text-surface-500 mb-1">
-        Counted sets · last 7 days · effective (RIR-weighted)
+        {scopeLabel ? `${scopeLabel} · ` : ''}Counted sets · last 7 days · effective (RIR-weighted)
       </p>
       <ul className="space-y-0.5">
         {exercises.map((ex) => (
@@ -58,7 +90,10 @@ export function ContributingSets({
             </span>
             <span className="tabular-nums flex-shrink-0">
               <span className="text-surface-300">{formatEffectiveVolume(ex.effective)} eff</span>
-              <span className="text-surface-500"> · {formatCreditedSets(ex.sets)}</span>
+              <span className="text-surface-500">
+                {' '}
+                · {formatPerformedToCredited(ex.performedSets, ex.sets)}
+              </span>
             </span>
           </li>
         ))}
@@ -116,7 +151,14 @@ export function SourcesDisclosure({
       >
         {children}
       </button>
-      {open && <ContributingSets exercises={exercises} muscle={muscle} testIdPrefix={testIdPrefix} />}
+      {open && (
+        <ContributingSets
+          exercises={exercises}
+          muscle={muscle}
+          testIdPrefix={testIdPrefix}
+          scopeLabel={displayName}
+        />
+      )}
     </div>
   );
 }
