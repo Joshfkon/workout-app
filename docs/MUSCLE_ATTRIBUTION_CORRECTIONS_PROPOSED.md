@@ -1,4 +1,4 @@
-# Muscle Attribution — Proposed Corrections (Phase 2, AWAITING REVIEW)
+# Muscle Attribution — Proposed Corrections (Phases 2 & 4, AWAITING REVIEW)
 
 Companion to `docs/MUSCLE_ATTRIBUTION_AUDIT.md` (Phase 1). **Nothing in
 sections A–D is applied.** Values are data; each block below is the full
@@ -108,3 +108,97 @@ decision changes what a credited set means.
   than applying: it lengthens/shortens readiness windows for coarse-tagged
   exercises and deserves its own sign-off. (Once user/static tags are
   retagged per A–C, the divergence mostly vanishes on its own.)
+
+---
+
+## F. Phase 4 — triceps split by head (PROPOSED, not applied; blocked on A–C sign-off)
+
+Two sub-groups (long head; lateral + medial combined), following the
+traps/calves precedent exactly: coarse `triceps` remains a valid standard
+muscle, the two fine members are fed ONLY by fine-grained tags, and
+reachability gating hides the split from users whose library can't feed it
+(no permanently-amber bar a user can't clear).
+
+### Taxonomy changes (types/schema.ts + services/volumeBands.ts)
+
+- `STANDARD_MUSCLE_GROUPS` += `triceps_long`, `triceps_lat_med`
+- `DETAILED_TO_STANDARD_MAP`: `triceps_long → triceps_long`;
+  `triceps_lateral`, `triceps_medial → triceps_lat_med` (today all three
+  collapse into coarse `triceps`)
+- `COARSE_CHILDREN.triceps = ['triceps', 'triceps_long', 'triceps_lat_med']`;
+  both new members join `FINE_CHILD_MUSCLES`
+- `FINE_MUSCLE_PARENTS`: `triceps_long`/`triceps_lat_med → ['triceps']`
+  (coarse-tag credit stays on coarse `triceps`, never leaks into a head)
+- Legacy `'triceps'` keeps resolving to `['triceps']` — NO uniform head
+  smear; that mechanism is exactly what Phase 1 flagged for shoulders
+
+### Proposed bands (values as data — review before applying)
+
+| Muscle | MEV | MRV | Rationale |
+|---|---|---|---|
+| `triceps_long` | 4 | 18 | Near the direct-work literature: pressing gives the long head little, so no total-inclusive discount |
+| `triceps_lat_med` | 6 | 20 | Receives the pressing inflow once press secondaries are retagged (below) — MEV stated total-inclusive, like front_delts |
+
+Group band `triceps {8, 24}` unchanged. Enhanced MRV tier inherits ×1.35
+from the coarse group.
+
+### Proposed retags (attribution rule: shoulder position at the elbow-extension)
+
+| Shoulder position | Exercises (seed names) | Proposed primary | Proposed secondaries |
+|---|---|---|---|
+| Overhead / flexed — long head lengthened, credits substantially | Overhead Tricep Extension, Cable Overhead Tricep Extension, Katana Tricep Extension | `triceps_long` | + `triceps_lat_med` |
+| ~90° flexed (lying extensions) — long head still meaningfully lengthened | Skull Crusher, Triceps Extension (Dumbbell), Machine Tricep Extension | `triceps_long` | + `triceps_lat_med` — **medium confidence, review** |
+| Neutral — long head credit drops sharply (0.5 secondary is the coarsest available step) | Tricep Pushdown, Cable Tricep Pushdown, Rope Tricep Pushdown | `triceps_lat_med` | + `triceps_long` |
+| Extended — long head maximally shortened, ~no credit | Dumbbell Kickback | `triceps_lat_med` | (none) |
+| Pressing — lateral/medial do the elbow work | Close Grip Bench Press, Dips (Tricep Focus), Assisted Dip Machine | `triceps_lat_med` | keep existing |
+| Pressing secondaries | every press/dip with secondary `triceps` (benches, OHP variants, machine presses, push-up, L-Sit) | — | secondary `triceps` → `triceps_lat_med` |
+
+### Effect on the reported week (rope pushdown + triceps press + 4 pressing movements, 11 eff total)
+
+Group stays ~11 vs 8–24 (mid-zone, unchanged). `triceps_long` collects only
+the pushdowns' 0.5 secondaries (≈1.5–2 credited) → **below its MEV 4, amber,
+pinned open** — the zero-overhead-work gap becomes visible instead of hiding
+inside a mid-range group number. `triceps_lat_med` lands comfortably in
+zone.
+
+---
+
+## G. Phase 5 — zone units: provenance + recommendation
+
+### Where the numbers come from
+
+- **Group zones are ALREADY stated in the blended (credited) metric.** The
+  v2 "convention conversion" (documented at `services/volumeBands.ts:50-77`)
+  shifted the direct-set literature bands by measured indirect inflow:
+  triceps {6,18}→**{8,24}**, shoulders {8,22}→**{12,26}**, biceps
+  {6,20}→{10,26}, etc. So the panel is NOT comparing a blended number
+  against direct-set literature zones — the zones were converted for exactly
+  this comparison. What's missing is any UI statement of that unit.
+- **Sub-group zones** (`getEffectiveBand` for a standard muscle: MEV from
+  `MEV_TARGETS`, MRV from `FINE_BAND_TOTAL_INCLUSIVE_MRV` else the
+  intermediate `DEFAULT_VOLUME_LANDMARKS` table):
+  - front delts **2–14**: both ends deliberately total-inclusive (MEV 2 is
+    below direct literature because pressing supplies 4–6 indirect sets;
+    MRV 14 is an explicit total-inclusive override).
+  - rear delts **3–20**: same construction (MEV 3; MRV 20 override).
+  - side delts **6–20**: MEV 6 total-inclusive, but MRV 20 comes from the
+    UN-converted intermediate landmarks table — converted by omission, not
+    decision. Defensible (side delts receive almost no secondary inflow, so
+    direct ≈ credited), but it should be recorded as such.
+- **RIR weighting never moves a zone.** `volumeZone` judges the credited RAW
+  set count (`row.sets`); the eff number is informational display only. So
+  the comparison is credited-sets vs credited-zones — units already agree.
+
+### Recommendation (pick one): STATE THE UNIT EXPLICITLY
+
+Rescaling zones again would double-count the v2 conversion, and comparing
+direct-only against the literature zone would throw away the reason
+secondary credit exists. The remaining defect is labeling, so:
+
+1. Zone labels / the panel footnote state the unit once: "zones are stated
+   in credited sets (direct + ½-credit secondary work)".
+2. Keep the existing "(2.2 direct)" annotation as the direct-sets view — it
+   already gives the literature-comparable number alongside.
+3. Record side delts' MRV 20 as "direct ≈ credited, adopted as-is" in
+   volumeBands (or nudge it in review if you disagree with that equivalence).
+4. No zone value changes.
