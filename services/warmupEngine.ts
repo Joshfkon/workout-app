@@ -553,8 +553,17 @@ export function evaluateWarmupReadiness(input: WarmupReadinessInput): WarmupDeci
   const targetPattern = canonicalizeMovementPattern(exercise);
   const targetDemands = deriveRomDemands(exercise);
 
-  // Prior sets on OTHER blocks (sets already logged on this exercise mean
-  // the lifter is past warmup on it), with resolved metadata + decay.
+  // A completed WORKING set on this exercise (same block, or an earlier
+  // duplicate block of the same exercise) means the lifter is past warmup on
+  // it — decided explicitly below, never by silently dropping those sets.
+  const targetWorkingSetLogged = completedSets.some((s) => {
+    const block = blocksById.get(s.exerciseBlockId);
+    return !!block && block.exercise.id === exercise.id && !isWarmupTypeSet(s);
+  });
+
+  // Prior sets on OTHER blocks, with resolved metadata + decay. The target
+  // exercise's own sets are handled by the guard above instead of flowing
+  // through dimension math.
   const priorSets = completedSets
     .map((s) => {
       const block = blocksById.get(s.exerciseBlockId);
@@ -673,6 +682,18 @@ export function evaluateWarmupReadiness(input: WarmupReadinessInput): WarmupDeci
   const dimensions = { muscleTemperature, movementPattern, jointRom, loadRamp };
 
   // ---- Decision synthesis ----
+
+  // Already into working sets on this exercise this session → warmup is
+  // behind the lifter. An explicit null decision, not a re-prescription.
+  if (targetWorkingSetLogged) {
+    return decision(
+      'none',
+      'Warmup complete — working sets already logged on this exercise this session.',
+      [],
+      dimensions
+    );
+  }
+
   const fullProtocol = (): WarmupSet[] =>
     generateWarmupProtocol({
       workingWeight: workingWeightKg > 0 ? workingWeightKg : 60,
@@ -699,11 +720,16 @@ export function evaluateWarmupReadiness(input: WarmupReadinessInput): WarmupDeci
     );
   }
 
-  // Cold or stale tissue
-  if (!tempPaid && !patternPaid) {
-    if (tempScore > PARTIAL_CREDIT_FLOOR) {
-      // Partial warmth credit (e.g. same muscle worked 40+ min ago): decay
-      // applied, shortened protocol — skip the general warmup and lightest step.
+  // Cold or stale tissue. Gated on temperature ALONE: a grooved pattern on a
+  // different muscle (e.g. biceps curls before forearm curls — same
+  // isolation_elbow_flexion pattern, no muscle overlap) must never talk a
+  // cold muscle out of its protocol. Pattern/ROM credit can shorten a ramp,
+  // never replace one.
+  if (!tempPaid) {
+    if (tempScore > PARTIAL_CREDIT_FLOOR || (patternPaid && tempScore > 0)) {
+      // Partial warmth credit (e.g. same muscle worked 40+ min ago, or a
+      // grooved pattern with some overlap): decay applied, shortened
+      // protocol — skip the general warmup and lightest step.
       const sets = fullProtocol();
       const shortened = sets
         .filter((s, i) => !(i === 0 && sets.length > 2) && s.percentOfWorking >= 40)
@@ -718,7 +744,7 @@ export function evaluateWarmupReadiness(input: WarmupReadinessInput): WarmupDeci
     }
     return decision(
       'full_protocol',
-      `Cold start — ${muscleTemperature.reason.toLowerCase()}, and no ${patternLabel} yet. Full ramp protocol.`,
+      `Cold start — ${muscleTemperature.reason.toLowerCase()}${patternPaid ? ` (${patternLabel} is grooved, but the target muscle is cold)` : `, and no ${patternLabel} yet`}. Full ramp protocol.`,
       fullProtocol(),
       dimensions
     );

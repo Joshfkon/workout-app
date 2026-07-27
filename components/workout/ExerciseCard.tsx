@@ -686,10 +686,37 @@ export const ExerciseCard = memo(function ExerciseCard({
   // not-yet-warm muscle), so an empty prop stays empty here.
   //
   // When a warmupDecision is provided it is authoritative: its sets render
-  // as-is (including an intentionally empty list — the null decision), and
-  // the legacy regeneration fallback is skipped.
+  // as-is (including an intentionally empty list — the null decision).
+  //
+  // One exception, mirroring the legacy fallback below: a protocol-shaped
+  // decision computed with NO known working weight was step-shaped for the
+  // engine's 60 kg placeholder. Once the user types their actual first-set
+  // weight, rebuild the step ladder from that load (a 30 kg load needs the
+  // two-step 50/75 ramp, not the 60 kg three-step one). The decision's kind
+  // and reason stand; only the ladder is re-derived. Targeted ramp sets are
+  // single percentage sets and rescale cleanly — they pass through.
   const effectiveWarmupSets = useMemo(() => {
-    if (warmupDecision) return warmupDecision.sets;
+    if (warmupDecision) {
+      const isProtocolShaped =
+        warmupDecision.kind === 'full_protocol' || warmupDecision.kind === 'partial_protocol';
+      if (isProtocolShaped && workingWeight <= 0 && typedFirstSetWeightKg > 0) {
+        const rebuilt = generateWarmupProtocol({
+          workingWeight: typedFirstSetWeightKg,
+          exercise,
+          isFirstExercise: listIndex === 0,
+        });
+        if (warmupDecision.kind === 'partial_protocol') {
+          // Re-apply the engine's shortening (drop the general-warmup set
+          // and sub-40% steps) so partial credit keeps its meaning.
+          const shortened = rebuilt
+            .filter((s, i) => !(i === 0 && rebuilt.length > 2) && s.percentOfWorking >= 40)
+            .map((s, i) => ({ ...s, setNumber: i + 1 }));
+          return shortened.length > 0 ? shortened : rebuilt;
+        }
+        return rebuilt;
+      }
+      return warmupDecision.sets;
+    }
     if (workingWeight > 0 || typedFirstSetWeightKg <= 0 || warmupSets.length === 0) {
       return warmupSets;
     }

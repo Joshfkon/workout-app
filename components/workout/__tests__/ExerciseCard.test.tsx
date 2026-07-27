@@ -1623,3 +1623,55 @@ describe('warmup decision rendering (warmup engine)', () => {
     expect(screen.getByText(/\(0\/1\)/)).toBeInTheDocument();
   });
 });
+
+describe('warmup decision with unknown working weight (Codex review fix)', () => {
+  // A cold-start decision computed with workingWeightKg = 0 was step-shaped
+  // for the engine's 60 kg placeholder. Typing the real first-set weight
+  // must rebuild the ladder for THAT load, not just rescale percentages.
+  const unknownLoadProps = {
+    exercise: createMockExercise({ equipmentRequired: ['dumbbells'] }),
+    block: createMockBlock({ targetWeightKg: 0 }),
+    sets: [],
+    unit: 'kg' as const,
+    isActive: true,
+    workingWeight: 0,
+    onSetComplete: jest.fn().mockResolvedValue('id'),
+  };
+  // The 60 kg placeholder shape: three steps (40/60/80)
+  const placeholderDecision = {
+    kind: 'full_protocol' as const,
+    reason: 'Cold start — no prior sets this session overlap the target muscle. Full ramp protocol.',
+    sets: [
+      { setNumber: 1, percentOfWorking: 40, targetReps: 8, purpose: 'Movement groove', restSeconds: 30 },
+      { setNumber: 2, percentOfWorking: 60, targetReps: 5, purpose: 'Neuro prep', restSeconds: 60 },
+      { setNumber: 3, percentOfWorking: 80, targetReps: 3, purpose: 'CNS activation', restSeconds: 75 },
+    ],
+  };
+
+  const typeWeight = async (user: ReturnType<typeof userEvent.setup>, value: string) => {
+    await user.click(screen.getByRole('button', { name: /^Weight:/ }));
+    const weightInput = screen.getByRole('spinbutton', { name: 'Weight' });
+    await user.clear(weightInput);
+    await user.type(weightInput, value);
+  };
+
+  it('rebuilds the step ladder from the typed weight instead of keeping the 60 kg shape', async () => {
+    const user = userEvent.setup();
+    render(<ExerciseCard {...unknownLoadProps} warmupDecision={placeholderDecision} />);
+
+    // 30 kg belongs in the two-step 50/75 ladder, not the 60 kg three-step one
+    await typeWeight(user, '30');
+    await user.click(screen.getByText('Warmup Protocol'));
+
+    expect(screen.getByText('W1')).toBeInTheDocument();
+    expect(screen.getByText('W2')).toBeInTheDocument();
+    expect(screen.queryByText('W3')).not.toBeInTheDocument();
+  });
+
+  it('keeps the decision sets verbatim when the working weight was known', () => {
+    render(
+      <ExerciseCard {...unknownLoadProps} workingWeight={60} warmupDecision={placeholderDecision} />
+    );
+    expect(screen.getByText(/\(0\/3\)/)).toBeInTheDocument();
+  });
+});

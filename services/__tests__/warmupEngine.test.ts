@@ -418,3 +418,87 @@ describe('canonicalizePatternToken / legacyPatternFamily (vocabulary bridge)', (
     expect(legacyPatternFamily('squat')).toBe('squat');
   });
 });
+
+// ---- Codex review fixes (PR #551) ----
+
+describe('cold muscle with a grooved pattern on a DIFFERENT muscle (review fix)', () => {
+  // Biceps curls groove isolation_elbow_flexion; a following forearm
+  // reverse curl shares the pattern but has zero muscle overlap. The null
+  // decision must never fire for a cold muscle.
+  const bicepsCurl: WarmupExerciseMeta = {
+    id: 'ex-curl',
+    name: 'Dumbbell Curl',
+    primaryMuscle: 'biceps',
+    secondaryMuscles: [],
+    movementPattern: 'elbow_flexion',
+    mechanic: 'isolation',
+  };
+  const reverseCurl: WarmupExerciseMeta = {
+    id: 'ex-reverse-curl',
+    name: 'EZ Bar Reverse Curl',
+    primaryMuscle: 'forearms',
+    secondaryMuscles: [],
+    movementPattern: 'elbow_flexion',
+    mechanic: 'isolation',
+  };
+  const curlBlocks = [
+    { id: 'b-curl', exercise: bicepsCurl },
+    { id: 'b-reverse', exercise: reverseCurl },
+  ];
+  const result = evaluateWarmupReadiness(
+    baseInput({
+      exercise: reverseCurl,
+      workingWeightKg: 30,
+      targetReps: 10,
+      targetRir: 2,
+      blocks: curlBlocks,
+      completedSets: [workingSet('b-curl', 8), workingSet('b-curl', 5), workingSet('b-curl', 2)],
+    })
+  );
+
+  it('pattern is paid but temperature is not', () => {
+    expect(result.dimensions.movementPattern.paid).toBe(true);
+    expect(result.dimensions.muscleTemperature.paid).toBe(false);
+  });
+
+  it('never returns the null decision for a cold muscle — prescribes a protocol', () => {
+    expect(result.kind).not.toBe('none');
+    expect(result.sets.length).toBeGreaterThan(0);
+  });
+});
+
+describe('working sets already logged on the target exercise (review fix)', () => {
+  it('returns an explicit null decision once a working set is logged, not a stale cold protocol', () => {
+    const result = evaluateWarmupReadiness(
+      baseInput({
+        completedSets: [workingSet('b3', 3)], // b3 = the Arnold Press block itself
+      })
+    );
+    expect(result.kind).toBe('none');
+    expect(result.sets).toHaveLength(0);
+    expect(result.reason).toMatch(/working sets already logged/i);
+  });
+
+  it('covers duplicate blocks of the same exercise', () => {
+    const dupBlocks = [...blocks, { id: 'b3-dup', exercise: arnoldPress }];
+    const result = evaluateWarmupReadiness(
+      baseInput({
+        blocks: dupBlocks,
+        completedSets: [workingSet('b3-dup', 10)],
+      })
+    );
+    expect(result.kind).toBe('none');
+    expect(result.reason).toMatch(/working sets already logged/i);
+  });
+
+  it('a logged warmup-type set on the target does NOT count as being past warmup', () => {
+    const result = evaluateWarmupReadiness(
+      baseInput({
+        completedSets: [
+          { exerciseBlockId: 'b3', loggedAt: minsAgo(2), isWarmup: true, setType: 'warmup' },
+        ],
+      })
+    );
+    expect(result.kind).not.toBe('none');
+  });
+});
