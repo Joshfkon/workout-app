@@ -25,6 +25,13 @@
  *      and (b) the best true-failure (0 RIR) set, per exercise — the exact
  *      delta Phase B would apply to the stored anchors.
  *
+ *   4. LOAD %-BAND CHECK (Phase 0c related audit): the top working load as a
+ *      % of the anchor, vs the band the exercise's own rep range implies
+ *      (canonical Brzycki: load% for R reps @ target RIR = (37−eff)/36, eff
+ *      capped at the estimator's 12). An 8-12 @ 2 band is ~69-75%; a load
+ *      sitting at/below the bottom is why a lifter parks at one weight for
+ *      sessions (Arnold Press: 45 = 69% of the 65 anchor). Report only.
+ *
  * Usage:
  *   NEXT_PUBLIC_SUPABASE_URL=xxx SUPABASE_SERVICE_ROLE_KEY=xxx \
  *   AUDIT_USER_ID=<uuid> npx -y tsx scripts/auditIntraSessionPrescription.ts
@@ -149,6 +156,7 @@ async function main() {
   });
 
   const unreachable: string[] = [];
+  const bandFindings: string[] = [];
   let totalSets = 0;
   let setsAtTarget = 0;
   let setsWithSignal = 0;
@@ -228,6 +236,24 @@ async function main() {
             `needs e1RM ${lb(required.value)} — anchor is ${lb(currentAnchor)} (+${pct}% needed)`
         );
       }
+
+      // ---- 4. Load %-band check ----
+      // Canonical %1RM at eff = reps + targetRir (eff capped at the
+      // estimator's 12): the range floor gives the band top (heaviest valid
+      // load), the range ceiling gives the band bottom.
+      const effFloor = Math.min(12, repRange[0] + targetRir);
+      const effCeil = Math.min(12, repMax + targetRir);
+      const bandHi = (37 - effFloor) / 36;
+      const bandLo = (37 - effCeil) / 36;
+      const actualPct = topWorking / currentAnchor;
+      if (actualPct < bandLo || actualPct > bandHi) {
+        bandFindings.push(
+          `${ex.name}: top working ${lb(topWorking)} = ${(actualPct * 100).toFixed(1)}% of the ` +
+            `${lb(currentAnchor)} anchor — ${actualPct < bandLo ? 'BELOW' : 'ABOVE'} the ` +
+            `${(bandLo * 100).toFixed(0)}-${(bandHi * 100).toFixed(0)}% band implied by ` +
+            `${repRange[0]}-${repMax} @ ${targetRir} RIR`
+        );
+      }
     }
 
     // ---- 2. RIR contamination ----
@@ -294,6 +320,12 @@ async function main() {
   console.log('='.repeat(96));
   console.log('3. PHASE B ANCHOR PREVIEW (no writes — what a freshness anchor would change)');
   anchorPreview.forEach((l) => console.log(`   ${l}`));
+
+  console.log('='.repeat(96));
+  console.log('4. LOAD %-BAND CHECK (prescribed load vs the band its own rep range implies)');
+  console.log('   A load at/below the band bottom is the "stuck at one weight" signature.');
+  if (bandFindings.length === 0) console.log('   none');
+  bandFindings.forEach((l) => console.log(`   ${l}`));
   console.log('='.repeat(96));
 }
 

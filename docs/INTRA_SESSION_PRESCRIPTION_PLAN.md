@@ -1,8 +1,43 @@
-# Intra-Session Prescription — Phase A/D shipped, B/C/E held for approval
+# Intra-Session Prescription — Phase 0/0b/A/D shipped, 0c/B/C/E held for approval
 
-Status, 2026-07-27. Builds on the merged Phases 2–4 + rep_total pull-forward.
-Reference regression fixture: Iso-Lateral Incline Press, Jul 21 → Jul 27
-(`services/__tests__/fixtures/isoLateralInclinePress.ts` — FROZEN).
+Status, 2026-07-27 (amended same day). Builds on the merged Phases 2–4 +
+rep_total pull-forward. TWO frozen regression fixtures:
+Iso-Lateral Incline Press Jul 21 → Jul 27
+(`services/__tests__/fixtures/isoLateralInclinePress.ts`) and Arnold Press
+Jul 20 → Jul 27 (`services/__tests__/fixtures/arnoldPress.ts`). With two
+independent reproductions of the same defect, the fatigue term is treated as
+confirmed.
+
+## Shipped (amendment)
+
+### Phase 0 — hard invariants (engine v6, `sessionInvariants.test.ts`)
+
+INV-1 `outsideRange` flag + explicit banner copy (honest reps kept; the
+contradiction is rendered, never silent). INV-2 session-capacity ceiling:
+implied capacity (canonical capped Brzycki at the asked effort — the matched
+set's recorded effort on position-matched recs, target RIR otherwise) may
+never exceed today's best observed set (+1% rounding slack); trims the rep
+ask, flags `sessionCapacityClamped`, banner says "capped at today's best".
+Applies only once ≥1 set is logged this session. INV-3 re-asserted as named
+property tests over the Phase D grid. INV-4 `framePositionalDelta`: delta
+copy compares the prescribed set to the SAME position last session or shows
+no number — last-set-relative framing removed.
+
+Honesty note: the Arnold set-4 headline case (42.5×10 → 61.2 implied) was
+already fixed by the shipped Phase A+D anchor repair (current output 42.5×9,
+implied 58.9); the fixture pins it and INV-2 makes it structural. The
+genuinely-failing-today invariant tests were INV-1 (both directions) and an
+INV-2 Epley-vs-canonical divergence case (45×10 @4 → unclamped 47.5×9 asks
+65.8 against a 64.8 observed).
+
+### Phase 0b — set-history header (`lib/formatSetHistory.ts`)
+
+Per-set loads grouped honestly, all sets rendered (>6 sets becomes an
+explicit range summary, never a silent slice), RIR shown as the honest span.
+The old inline line attributed set 1's load to every set, sliced to 3, and
+collapsed RIR to set 1's — the pinned Arnold corruption. One legacy UI test
+had the defect ENCODED in its expectation (a plain-BW set asserted as
+"BW+25") — updated to the honest form.
 
 ## Shipped
 
@@ -52,6 +87,97 @@ AUDIT_USER_ID=<uuid> npx -y tsx scripts/auditIntraSessionPrescription.ts
 ```
 
 ## Held for approval
+
+### Phase 0c — read the sequence, not the last set (approach)
+
+Live case: 45×8 @2, 45×8 @2 — identical load, identical reps, target
+effort, ZERO decay — and the engine proposed trimming to ×7. Two identical
+at-target sets with no decay is a different state than one set at target:
+the load is too light, and the natural fatigue decline the hold rule prices
+in did not materialize.
+
+Proposed rule (new branch in `recommendSet`, evaluated BEFORE position
+matching — the sequence evidence is from TODAY and beats last session's
+replay; the user's own 47.5×7 override at exactly this point validates the
+precedence):
+
+- Trigger: the last `NO_DECAY_SETS_REQUIRED = 2` consecutive completed sets
+  at the same load (within grid half-step), same reps, and RIR within
+  `EFFORT_MATCH_TOLERANCE` of target (reads `sessionObservedSets`, which
+  Phase 0 already threads in — no new plumbing).
+- Action: `increase_load` by one grid step; reps predicted from the curve at
+  the new load; INV-1/INV-2 apply on the way out (the Arnold case:
+  47.5 at ~×7-8 predicted, implied ≤ 60 — passes).
+- Interactions: the reactive too-heavy guards still win (a triggering pair
+  followed by a grind cannot happen — the grind breaks the pair); cold-start
+  keeps its own faster path; rep_total exercises never enter (fixed-load
+  model).
+
+Blast radius: recommendSet only, plus banner copy ("two identical sets at
+target effort with no drop-off — the load is light; up one increment") and
+fixture tests. Small; ships alone once approved.
+
+Related audit shipped (report-only): audit script section 4 prints every
+exercise whose top working load sits outside the %-of-anchor band its own
+rep range implies (canonical Brzycki, eff capped at 12 — 8-12 @ 2 ⇒ ~69-75%;
+Arnold's 45 = 69.2% of 65 sits at the very bottom, the "stuck at 45"
+signature).
+
+### Carried-over item 1 — rep_total must not compare across a load change (approach)
+
+Confirmed in code (`services/suggestionEngine/repTotalPolicy.ts` +
+ExerciseCard): the session plan (fixed load + "beat N total") is computed
+ONCE from history; `recommendRepTotalNextSet` and the banner keep the plan
+verbatim and never compare the load actually being logged against
+`sessionPlan.weightKg`. Cable Fly live case: plan said ~28.8 (beat 40
+total), user loaded 30, card still demanded the 40-total — double
+progression in one step.
+
+Proposed fix: in the rep_total banner/next-set path, when any completed
+set's load deviates from the plan load by more than half a grid step (or
+2.5%, whichever is larger), the prior total is INVALID as a target: copy
+becomes "load changed (30 vs 28.8 last session) — previous total doesn't
+apply; today sets the new baseline at 30", `sessionRepTotalTarget` is not
+rendered, and next-session history compares totals only at matched loads
+(the policy's existing ±5% atLoad grouping tightens to the grid half-step).
+Also noted: the 28.7 vs 28.8 same-session artifact is the lb→kg→lb
+round-trip (values stored from converted input on different days/rows);
+family fix = the lb-native increment work — the display side should
+round-trip through `convertWeightForDisplay` exact-preservation, and the
+±5% atLoad tolerance already absorbs it for grading. Blast radius:
+repTotalPolicy + ExerciseCard rep_total branches + tests. Held for approval.
+
+### Carried-over item 2 — effort-weighted volume reading ×1.0 (verified)
+
+The weighting IS applied; three compounding reasons make ×1.0 near-universal
+on the strip (`services/effectiveVolume.ts`, `useWorkoutMuscleVolume`):
+
+1. The weight table is a plateau: RIR 0, 1, 2 → 1.0 by design (stimulative
+   sets count fully); only 3 → 0.6 and 4 → 0.25 down-weight.
+2. Unknown RIR → 1.0 (deliberate conservative rule), and the strip reads
+   `feedback.repsInTank` ONLY — it never falls back to RPE (because the DB
+   defaults rpe to 7, which would silently grade legacy sets as RIR 3). A
+   set logged without touching the chips weighs 1.0 HERE while the set ROW
+   grades quality from RPE — two read paths, visibly inconsistent.
+3. Phase E contamination: pre-selected chips record the target (usually 2)
+   → weight 1.0.
+
+So "22 of 22, 9 of 9, 7 of 7, 1.5 of 1.5" is arithmetically correct for a
+session whose counted sets all resolved to RIR ≤ 2 or null — the strip only
+separates from raw counts when sets carry an explicit repsInTank of 3 or 4.
+Recommendation (held): after Phase E lands (no pre-selection +
+`rir_unconfirmed`), revisit whether unconfirmed sets should weigh 1.0 on the
+strip, and unify the strip's RIR read with the set-row grading read
+(`resolveLastRir` family) so the two surfaces can't disagree.
+
+### Also — "· here" on the Cable Fly header: identified, not a bug
+
+It is the location-scoped calibration tag (rule 11): for an exercise with
+`progressionScope === 'local'`, the header marks whether the last-session
+line is this gym's own track ("· here") vs "· est. from another gym"
+(ExerciseCard, lastSessionMeta). Not truncation. The copy is admittedly
+cryptic out of context — "· this gym" would read better; trivial change if
+wanted.
 
 ### Phase B — anchor on freshness, not max
 
