@@ -417,6 +417,15 @@ export interface Exercise {
   minWeightIncrementKg: number;
 
   /**
+   * Phase D — the AVAILABLE increment set (kg) for this exercise's loading
+   * reality, e.g. [4.54, 1.13] for a 10 lb stack machine with 2.5 lb
+   * hand-loaded add-ons. The achievable-load grid is multiples of the
+   * smallest entry (services/suggestionEngine/loadGrid). Absent/null → the
+   * engine falls back to `minWeightIncrementKg`.
+   */
+  availableIncrementsKg?: number[] | null;
+
+  /**
    * Progression model (ADD 2): 'rep_total' = fixed session load, progress on
    * session rep total, no e1RM anywhere; 'e1rm' = anchor-driven loads.
    * Absent/null = auto-classify from recent history (majority-inestimable

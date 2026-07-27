@@ -721,7 +721,7 @@ export async function startMesocycleWorkoutSession(
       // transfer matching)
       const { data: dbExercise } = await supabase
         .from('exercises')
-        .select('id, mechanic, default_rep_range, default_rir, primary_muscle, movement_pattern, equipment_required, min_weight_increment_kg, exercise_type, is_bodyweight')
+        .select('id, mechanic, default_rep_range, default_rir, primary_muscle, movement_pattern, equipment_required, min_weight_increment_kg, available_increments_kg, exercise_type, is_bodyweight')
         .eq('name', exercise.exerciseName)
         // Hide merge-soft-deleted duplicates: without this, a name shared with
         // a merged loser returns 2+ rows and .single() errors -> block skipped.
@@ -764,6 +764,9 @@ export async function startMesocycleWorkoutSession(
           minIncrementKg:
             (dbExercise as { min_weight_increment_kg?: number } | null)
               ?.min_weight_increment_kg || undefined,
+          availableIncrementsKg:
+            (dbExercise as { available_increments_kg?: number[] | null } | null)
+              ?.available_increments_kg ?? undefined,
           anchorE1RMKg: direct.anchorE1RMKg,
           recentWorkingWeightKg: direct.recentWorkingWeightKg || undefined,
           prevSessionSets: direct.prevSessionSets,

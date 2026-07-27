@@ -82,6 +82,7 @@ export interface Database {
           default_rep_range: number[];
           default_rir: number;
           min_weight_increment_kg: number;
+          available_increments_kg: number[] | null;
           progression_model: 'e1rm' | 'rep_total' | null;
           rep_boundary: 'crisp' | 'drifting';
           form_cues: string[];
@@ -104,6 +105,7 @@ export interface Database {
           default_rep_range?: number[];
           default_rir?: number;
           min_weight_increment_kg?: number;
+          available_increments_kg?: number[] | null;
           progression_model?: 'e1rm' | 'rep_total' | null;
           rep_boundary?: 'crisp' | 'drifting';
           form_cues?: string[];
@@ -126,6 +128,7 @@ export interface Database {
           default_rep_range?: number[];
           default_rir?: number;
           min_weight_increment_kg?: number;
+          available_increments_kg?: number[] | null;
           progression_model?: 'e1rm' | 'rep_total' | null;
           rep_boundary?: 'crisp' | 'drifting';
           form_cues?: string[];

@@ -627,6 +627,7 @@ export const ExerciseCard = memo(function ExerciseCard({
       targetRepRange: block.targetRepRange,
       targetRir: effectiveTargetRir,
       minIncrementKg: exercise.minWeightIncrementKg,
+      availableIncrementsKg: exercise.availableIncrementsKg ?? undefined,
       coldStart: isColdStartExercise,
       exerciseType: exercise.exerciseType,
       isBodyweight: exercise.isBodyweight,
@@ -868,8 +869,9 @@ export const ExerciseCard = memo(function ExerciseCard({
         targetRepRange: range,
         targetRir: effectiveTargetRir,
         minIncrementKg: exercise.minWeightIncrementKg,
+        availableIncrementsKg: exercise.availableIncrementsKg ?? undefined,
       }),
-    [effectiveTargetRir, exercise.minWeightIncrementKg]
+    [effectiveTargetRir, exercise.minWeightIncrementKg, exercise.availableIncrementsKg]
   );
 
   // Best recent WORKING weight last session (the top set). Doubles as the role-
@@ -930,6 +932,7 @@ export const ExerciseCard = memo(function ExerciseCard({
         targetRepRange: block.targetRepRange,
         targetRir: effectiveTargetRir,
         minIncrementKg: exercise.minWeightIncrementKg,
+        availableIncrementsKg: exercise.availableIncrementsKg ?? undefined,
         anchorE1RMKg,
         recentWorkingWeightKg: previousTopSetWeightKg || undefined,
         prevWeightKg: prevSet?.weightKg,
@@ -947,7 +950,7 @@ export const ExerciseCard = memo(function ExerciseCard({
       });
       return { seed, prevSet };
     },
-    [previousSets, previousTopSetWeightKg, anchorE1RMKg, block.targetRepRange, effectiveTargetRir, exercise.minWeightIncrementKg, exercise.exerciseType, exercise.isBodyweight, prevSessionSetsForGating, priorSessionSetsForGating]
+    [previousSets, previousTopSetWeightKg, anchorE1RMKg, block.targetRepRange, block.targetSets, effectiveTargetRir, exercise.minWeightIncrementKg, exercise.availableIncrementsKg, exercise.exerciseType, exercise.isBodyweight, prevSessionSetsForGating, priorSessionSetsForGating]
   );
 
   // Curve-consistent reps for a session-start seed: ONE ANCHOR PER
@@ -1711,6 +1714,14 @@ export const ExerciseCard = memo(function ExerciseCard({
                 : ' — held as-is, because it was taken harder than the target effort (repeating it at better effort is the progression).'
           }`
         );
+      } else if (rec.noMeaningfulChange) {
+        // Phase D: the engine wanted to move the load, but the true
+        // prescription sits within half an increment of the current load —
+        // say so instead of rendering the no-op as a decision.
+        reason = 'holding — no meaningful change available at this increment';
+        explanation.push(
+          'The prescribed adjustment is smaller than half of the smallest loadable increment for this exercise, so the load holds. Record finer add-on increments for this equipment to unlock smaller steps.'
+        );
       } else if (rec.rationale === 'increase_load') {
         reason = `up ${deltaText || 'slightly'} — last set was clearly too light`;
       } else if (rec.rationale === 'reduce_load') {
@@ -1795,7 +1806,7 @@ export const ExerciseCard = memo(function ExerciseCard({
               : binder === 'band_low'
                 ? '(raised to near recent working weight)'
                 : binder === 'noise_floor'
-                  ? '(held — suggested change below the noise threshold)'
+                  ? '(held — no meaningful change available at this increment)'
                   : null;
         reason = holdNote
           ? `working weight from your ~${displayWeight(anchorE1RMKg)} ${weightLabel} est. 1RM ${holdNote}`

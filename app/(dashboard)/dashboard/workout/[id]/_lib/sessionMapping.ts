@@ -69,6 +69,7 @@ export interface LoadedExerciseRow {
   default_rep_range: [number, number] | null;
   default_rir: number | null;
   min_weight_increment_kg: number | null;
+  available_increments_kg?: number[] | null;
   progression_model?: 'e1rm' | 'rep_total' | null;
   rep_boundary?: 'crisp' | 'drifting' | null;
   form_cues: string[] | null;
@@ -173,6 +174,7 @@ export function mapLoadedBlockRow(
     defaultRepRange: block.exercises.default_rep_range || [8, 12],
     defaultRir: block.exercises.default_rir || 2,
     minWeightIncrementKg: block.exercises.min_weight_increment_kg || 2.5,
+    availableIncrementsKg: block.exercises.available_increments_kg ?? null,
     progressionModel: block.exercises.progression_model ?? null,
     repBoundary: block.exercises.rep_boundary ?? 'crisp',
     formCues: block.exercises.form_cues || [],
