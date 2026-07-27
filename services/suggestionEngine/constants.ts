@@ -35,8 +35,15 @@
  *       bump reseeds reps at repMin; a not-met session seeds prevReps + 1
  *       (capped at repMax) instead of replaying last session; 2-session stalls
  *       hold and a 3rd consecutive miss sets the suggestDeload flag.
+ *  v5 = set-position matching (Phase A, intra-session prescription): when the
+ *       previous session is comparable (set count, exercise loads so far),
+ *       set N's target is what set position N did LAST session plus the
+ *       smallest meaningful progression — replacing the per-set re-derivation
+ *       from a static session-start anchor that ignored accumulated fatigue.
+ *       Anchor-path prescriptions are unchanged when position matching does
+ *       not apply.
  */
-export const SUGGESTION_ENGINE_VERSION = 4;
+export const SUGGESTION_ENGINE_VERSION = 5;
 
 // ============================================================
 // SET ROLES (Phase 2)
@@ -198,6 +205,29 @@ export const OVERSHOOT_CEILING = 5;
  * self-reported RIR.
  */
 export const REP_OVERSHOOT = 2;
+
+// ============================================================
+// SET-POSITION MATCHING (Phase A — intra-session prescription)
+// ============================================================
+
+/**
+ * Position matching applies only when today's planned working-set count is
+ * within this many sets of the previous session's performed count. A 4-set
+ * plan against a 5-set history is the same session shape; a 4 vs 6 is a
+ * different scheme and falls through to the anchor path.
+ */
+export const POSITION_MATCH_SET_COUNT_TOLERANCE = 1;
+
+/**
+ * Session-comparability gate: every already-completed set today must sit
+ * within this fraction of the load the SAME position carried last session,
+ * or position matching disengages (the lifter overrode the plan / a swap or
+ * pyramid restructure happened — replaying last session's positions would
+ * prescribe against a session that is not being repeated). 10% absorbs
+ * micro-loading self-adjustments (e.g. 195 vs 202.5 = 3.7%) while catching
+ * genuine divergence.
+ */
+export const POSITION_MATCH_LOAD_TOLERANCE = 0.10;
 
 // ============================================================
 // SESSION SUCCESS PREDICATE (sessionMetPrescription) DIALS

@@ -50,6 +50,8 @@ import {
   STALL_LOAD_TOLERANCE,
   LIGHT_LOAD_INCREMENT_FRACTION,
   LIGHT_LOAD_REP_CEILING_EXTENSION,
+  POSITION_MATCH_SET_COUNT_TOLERANCE,
+  POSITION_MATCH_LOAD_TOLERANCE,
 } from './suggestionEngine/constants';
 import { inferRolesForSession, type SetRole } from './suggestionEngine/setRoles';
 
@@ -97,6 +99,24 @@ export interface SetRecommenderInput {
    * range ceiling as a stable state.
    */
   isBodyweight?: boolean;
+  /**
+   * Phase A — set-position matching. When provided (and the sessions are
+   * comparable), the next set's target is what the SAME set position did last
+   * session plus the smallest meaningful progression, instead of a
+   * re-derivation from the session-start anchor. Omitted → anchor path only
+   * (legacy behavior, and the fall-through when matching doesn't apply).
+   */
+  positionContext?: PositionContext;
+}
+
+/** The session-comparison inputs for set-position matching. */
+export interface PositionContext {
+  /** ALL sets from the previous session, in performed order. */
+  prevSessionSets: PrevSessionSet[];
+  /** Today's completed working sets so far, in performed order. */
+  todaySets: Array<{ weightKg: number; reps: number }>;
+  /** Planned working-set count for this exercise today. */
+  plannedSetCount: number;
 }
 
 export interface SetRecommendation {
@@ -117,6 +137,13 @@ export interface SetRecommendation {
    * later surface it as a deload suggestion; nothing consumes it yet.
    */
   suggestDeload?: boolean;
+  /**
+   * Present when the recommendation came from set-position matching (Phase A):
+   * the target is last session's set at this position plus the smallest
+   * meaningful progression, NOT an anchor-curve derivation. Carries the
+   * matched set for provenance so the banner can say exactly what it matched.
+   */
+  positionMatch?: PositionMatchedTarget;
 }
 
 /**
@@ -311,6 +338,148 @@ export function earnedSessionBump(
   minIncrementKg?: number
 ): boolean {
   return sessionMetPrescription(prevSessionSets, { targetRepRange, targetRir, minIncrementKg });
+}
+
+// ============================================
+// SET-POSITION MATCHING (Phase A — intra-session prescription)
+// ============================================
+
+/**
+ * A position-matched target: last session's set at the SAME position, plus
+ * the smallest meaningful progression. `prev*` fields echo the matched set
+ * for provenance (the banner must say what was matched, not just a number).
+ */
+export interface PositionMatchedTarget {
+  weightKg: number;
+  reps: number;
+  rir: number;
+  /**
+   * Which progression was applied to the matched set:
+   *  - 'add_rep'  — one more rep at the same load (positional set had target
+   *    reserve, room existed);
+   *  - 'add_load' — one increment up, one rep traded (positional set was at
+   *    the rep ceiling with target reserve);
+   *  - 'hold'     — matched verbatim (positional set was taken harder than
+   *    target: repeating it at better effort IS the progression).
+   */
+  progression: 'add_rep' | 'add_load' | 'hold';
+  prevWeightKg: number;
+  prevReps: number;
+  prevRir?: number;
+}
+
+/** Inputs for matchPositionTarget. Loads are unit-agnostic pure numbers. */
+export interface PositionMatchInput {
+  /** 0-indexed position of the set being prescribed (= working sets done today). */
+  position: number;
+  /** ALL sets from the previous session, in performed order. */
+  prevSessionSets: PrevSessionSet[];
+  /** Today's completed working sets so far, in performed order. */
+  todaySets: Array<{ weightKg: number; reps: number }>;
+  /** Planned working-set count for this exercise today. */
+  plannedSetCount: number;
+  targetRepRange: [number, number];
+  targetRir: number;
+  minIncrementKg?: number;
+}
+
+/**
+ * THE set-position match (Phase A). Fixes the root defect of per-set
+ * re-derivation from a session-START anchor: a static anchor has no term for
+ * what already happened this session, so set 4 was prescribed the same value
+ * as set 2 while the late sets measure the same capacity under accumulated
+ * fatigue (the Iso-Lateral Incline Press fixture shows a ~13% e1RM spread
+ * inside one session, monotonically ordered by fatigue). Last session's set
+ * at the SAME position already embeds that session shape — no fitted fatigue
+ * model needed.
+ *
+ * Target = the positional set, plus the smallest meaningful progression:
+ *  - positional set at/above target reserve (within the half-chip effort
+ *    tolerance) → one more rep at the same load; at the rep ceiling → one
+ *    increment up, one rep traded;
+ *  - positional set harder than target → held VERBATIM. It was already past
+ *    the prescribed effort; asking for one more rep would demand exceeding
+ *    failure (the fixture's set 4: 182.5×7 @0 must re-prescribe ×7, never 8).
+ *
+ * Returns null — fall through to the anchor path — when the sessions are not
+ * comparable:
+ *  - no valid previous-session set at this position;
+ *  - set counts differ by more than POSITION_MATCH_SET_COUNT_TOLERANCE;
+ *  - any completed set today deviates more than POSITION_MATCH_LOAD_TOLERANCE
+ *    from the load the same position carried last session (plan override /
+ *    restructure — last session is not being repeated);
+ *  - the positional set was a ramp/feeder set (role inference): feeder work
+ *    never receives working-set progression.
+ *
+ * KNOWN LIMIT: exercise ORDER within the workout is not checked — the stored
+ * history shape doesn't carry the exercise's position in the previous workout.
+ * The load-comparability gate catches most order-driven divergence (an
+ * exercise moved from first to last shows up as lighter early sets today).
+ */
+export function matchPositionTarget(input: PositionMatchInput): PositionMatchedTarget | null {
+  const { position, plannedSetCount, targetRepRange, targetRir } = input;
+  const [repMin, repMax] = targetRepRange;
+  if (!Number.isInteger(position) || position < 0) return null;
+  if (!(plannedSetCount > 0)) return null;
+
+  // Valid rows only, in performed order (malformed rows are skipped, never throw).
+  const prev = input.prevSessionSets.filter(
+    (s) => Number.isFinite(s.weightKg) && s.weightKg > 0 && Number.isFinite(s.reps) && s.reps > 0
+  );
+  if (prev.length === 0) return null;
+
+  // Gate 1: comparable set counts.
+  if (Math.abs(prev.length - plannedSetCount) > POSITION_MATCH_SET_COUNT_TOLERANCE) return null;
+
+  // Gate 2: a working positional set exists.
+  const ref = prev[position];
+  if (!ref) return null;
+  const roles = inferRolesForSession(prev.map((s) => ({ weightKg: s.weightKg })));
+  if (roles[position] !== 'working') return null;
+
+  // Gate 3: today's session so far is load-comparable, position by position.
+  const compared = Math.min(position, input.todaySets.length);
+  for (let i = 0; i < compared; i++) {
+    const today = input.todaySets[i];
+    const past = prev[i];
+    if (!today || !past) continue;
+    if (!(today.weightKg > 0) || !(past.weightKg > 0)) continue;
+    if (Math.abs(today.weightKg - past.weightKg) / past.weightKg > POSITION_MATCH_LOAD_TOLERANCE) {
+      return null;
+    }
+  }
+
+  const inc = input.minIncrementKg && input.minIncrementKg > 0 ? input.minIncrementKg : 2.5;
+  const prevRir = ref.rir;
+  // Missing RIR → assume the set landed on target (same convention as the
+  // rest of the engine). The half-chip tolerance keeps the RIR-2 "good" chip
+  // (stored RPE 7.5 → RIR 2.5) and a 1.5 both counting as at-target.
+  const effRir = prevRir ?? targetRir;
+  const provenance = {
+    rir: targetRir,
+    prevWeightKg: ref.weightKg,
+    prevReps: ref.reps,
+    ...(prevRir !== undefined ? { prevRir } : {}),
+  };
+
+  if (effRir >= targetRir - EFFORT_MATCH_TOLERANCE) {
+    // Room existed at this position last time → smallest meaningful progression.
+    const ceiling = effectiveRepCeiling(repMax, ref.weightKg, input.minIncrementKg);
+    if (ref.reps + 1 <= ceiling) {
+      return { weightKg: ref.weightKg, reps: ref.reps + 1, progression: 'add_rep', ...provenance };
+    }
+    // At the rep ceiling: one increment up, one rep traded (double progression
+    // at the smallest available step, not a curve-derived jump).
+    return {
+      weightKg: ref.weightKg + inc,
+      reps: Math.max(repMin, ref.reps - 1),
+      progression: 'add_load',
+      ...provenance,
+    };
+  }
+
+  // Positional set was harder than target → hold it verbatim.
+  return { weightKg: ref.weightKg, reps: ref.reps, progression: 'hold', ...provenance };
 }
 
 // ============================================
@@ -521,6 +690,48 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
   // harder than target within the deadband.
   const effortVsTarget: SetRecommendation['effortVsTarget'] =
     dev >= EFFORT_MATCH_TOLERANCE ? 'easier' : dev <= -EFFORT_MATCH_TOLERANCE ? 'harder' : 'on_target';
+
+  // ---- 0) SET-POSITION MATCH (Phase A) ----
+  // When the previous session is comparable, the next set's target is what
+  // the SAME set position did last time (plus the smallest meaningful
+  // progression) — the positional set already embeds the session's fatigue
+  // shape, which a static session-start anchor cannot see. Two reactive
+  // guards keep today's evidence in charge when it clearly contradicts the
+  // replay; on either, fall through to the anchor path below.
+  if (input.positionContext) {
+    const pm = matchPositionTarget({
+      position: n,
+      prevSessionSets: input.positionContext.prevSessionSets,
+      todaySets: input.positionContext.todaySets,
+      plannedSetCount: input.positionContext.plannedSetCount,
+      targetRepRange,
+      targetRir,
+      minIncrementKg: input.minIncrementKg,
+    });
+    // Guard A: the set just completed ground past the failure deadband — a
+    // position match may still prescribe DOWN (that's the fixture's set 4),
+    // but never MORE load than the set that just ground out.
+    const groundOut = dev <= -DEADBAND_RIR && !!pm && pm.weightKg > lastWeightKg;
+    // Guard B: the set just completed proved objective under-load (reps past
+    // the overshoot proof) — today is running far stronger than last session;
+    // replaying last session's positions would under-prescribe.
+    const provenUnderload = lastReps > repMax + REP_OVERSHOOT;
+    if (pm && !groundOut && !provenUnderload) {
+      return {
+        weightKg: pm.weightKg,
+        reps: pm.reps,
+        rir: targetRir,
+        rationale:
+          pm.weightKg > lastWeightKg
+            ? 'increase_load'
+            : pm.weightKg < lastWeightKg
+              ? 'reduce_load'
+              : 'maintain',
+        effortVsTarget,
+        positionMatch: pm,
+      };
+    }
+  }
 
   // ---- 1) Decide the WEIGHT (default: hold) ----
   let weightKg: number;
@@ -843,7 +1054,7 @@ export function predictAmrapReps(
  * What anchor the prescribed weight was actually computed from — surfaced in the
  * provenance sheet so we never list a number that didn't influence the output.
  */
-export type AnchorSource = 'e1rm' | 'last_session' | 'ramp_percent' | 'none';
+export type AnchorSource = 'e1rm' | 'last_session' | 'ramp_percent' | 'position_match' | 'none';
 
 export interface SeedSlotInput {
   /** Resolved role for this slot (user tag beats inference — resolve upstream). */
@@ -900,6 +1111,16 @@ export interface SeedSlotInput {
   exerciseType?: ExerciseType;
   /** True for bodyweight exercises (duration policy: time-only progression). */
   isBodyweight?: boolean;
+  /**
+   * Phase A — this slot's 0-indexed position. With `plannedSetCount` and a
+   * comparable `prevSessionSets`, a WORKING slot seeds from set-position
+   * matching (what the same position did last session + smallest meaningful
+   * progression) before consulting the e1RM anchor. Confirmed regression
+   * still wins (two below-floor sessions step down regardless of position).
+   */
+  slotIndex?: number;
+  /** Planned working-set count today (position-match comparability gate). */
+  plannedSetCount?: number;
 }
 
 /** Which rule bound the e1RM working prescription (loud clamps, Phase 4). */
@@ -932,12 +1153,14 @@ export interface SeedRecommendation {
   preClampWeightKg?: number;
   engineVersion: number;
   /**
-   * DURATION exercises only: the time-then-load policy's seeded SECONDS
-   * target for this session (+step / hold at ceiling / reset to floor after
-   * a load bump). Rep exercises never set this — their reps come from the
-   * e1RM curve at the seeded weight.
+   * The specific rep target that comes WITH the seeded weight, when the seed
+   * carries one: duration exercises (the time policy's seconds target) and
+   * position-matched slots (the matched set's rep target). Absent → the reps
+   * come from the e1RM curve at the seeded weight.
    */
   seedReps?: number;
+  /** Present when anchorSource is 'position_match' — the matched set, for provenance. */
+  positionMatch?: PositionMatchedTarget;
 }
 
 /**
@@ -1173,6 +1396,47 @@ export function recommendSeedForSlot(input: SeedSlotInput): SeedRecommendation {
       clamped: false,
       engineVersion: SUGGESTION_ENGINE_VERSION,
     };
+  }
+
+  // ---- WORKING slot, set-position match (Phase A) ----
+  // Before the anchor path: when last session is comparable, this slot's
+  // target is what the SAME position did last time plus the smallest
+  // meaningful progression. Confirmed regression (checked below via
+  // regressionWeightKg, computed above) is stronger evidence and must win,
+  // so the match only runs when no regression fired.
+  if (
+    input.role === 'working' &&
+    regressionWeightKg <= 0 &&
+    input.slotIndex !== undefined &&
+    input.plannedSetCount !== undefined &&
+    input.prevSessionSets &&
+    input.prevSessionSets.length > 0
+  ) {
+    const pm = matchPositionTarget({
+      position: input.slotIndex,
+      prevSessionSets: input.prevSessionSets,
+      // Session start: nothing performed yet, so comparability is decided by
+      // set count and the positional set's role alone.
+      todaySets: [],
+      plannedSetCount: input.plannedSetCount,
+      targetRepRange: input.targetRepRange,
+      targetRir: input.targetRir,
+      minIncrementKg: input.minIncrementKg,
+    });
+    if (pm) {
+      return {
+        weightKg: pm.weightKg,
+        repRange: input.targetRepRange,
+        rir: input.targetRir,
+        role: 'working',
+        showRirTarget: true,
+        anchorSource: 'position_match',
+        clamped: false,
+        engineVersion: SUGGESTION_ENGINE_VERSION,
+        seedReps: pm.reps,
+        positionMatch: pm,
+      };
+    }
   }
 
   // ---- WORKING slot, confirmed regression → step down one increment ----
