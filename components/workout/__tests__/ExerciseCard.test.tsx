@@ -373,14 +373,19 @@ describe('ExerciseCard', () => {
           }}
         />
       );
-      // Meta line: "last session BW+25 kg × 14, × 12 @ 2 RIR" (RIR 2.5 → 3? rpe 7.5 → 10-7.5=2.5 rounds to 3)
-      expect(screen.getByText(/last session BW\+25 kg × 14, × 12/)).toBeInTheDocument();
+      // Meta line (Phase 0b honest per-set loads): set 1 was weighted
+      // (BW+25), set 2 was PLAIN bodyweight — the old single-load line
+      // attributed BW+25 to both, which is exactly the header corruption
+      // formatSetHistoryLine exists to prevent.
+      expect(screen.getByText(/last session BW\+25 kg × 14 · BW × 12/)).toBeInTheDocument();
 
       // Chips in the expanded history keep the breakdown per set, with the
       // effective load preserved as a tooltip.
       await user.click(screen.getByText(/last session BW\+25/));
       expect(screen.getByText(/BW\+25 × 14/)).toBeInTheDocument();
-      expect(screen.getByText(/BW × 12/)).toBeInTheDocument();
+      // The honest meta line ALSO contains "BW × 12" now, so assert the
+      // chip's presence without requiring uniqueness across the card.
+      expect(screen.getAllByText(/BW × 12/).length).toBeGreaterThanOrEqual(2);
       expect(screen.getByTitle('Effective load 100 kg')).toBeInTheDocument();
     });
 
@@ -1572,5 +1577,162 @@ describe('rep_total progression path (ADD 2)', () => {
       />
     );
     expect(screen.getByText(/rep-total/)).toBeInTheDocument();
+  });
+});
+
+describe('warmup decision rendering (warmup engine)', () => {
+  const decisionProps = {
+    exercise: createMockExercise({
+      id: 'arnold',
+      name: 'Arnold Press',
+      primaryMuscle: 'front_delts',
+      minWeightIncrementKg: 2.5,
+    }),
+    block: createMockBlock({ exerciseId: 'arnold', targetWeightKg: 20.4 }),
+    sets: [],
+    unit: 'lb' as const,
+    isActive: true,
+    workingWeight: 20.4,
+    onSetComplete: jest.fn().mockResolvedValue('id'),
+    onWarmupComplete: jest.fn(),
+  };
+
+  const rampDecision = {
+    kind: 'targeted_ramp' as const,
+    reason:
+      'Muscle is warm (7 prior sets overlap the target muscle), but rotation not yet loaded today — one targeted ramp set, full ROM.',
+    sets: [
+      {
+        setNumber: 1,
+        percentOfWorking: 60,
+        targetReps: 10,
+        purpose: 'Groove rotation',
+        restSeconds: 45,
+        reason: 'rotation not yet loaded today',
+      },
+    ],
+  };
+
+  it('renders the null decision WITH its reason — never silent empty space', () => {
+    render(
+      <ExerciseCard
+        {...decisionProps}
+        warmupDecision={{
+          kind: 'none',
+          reason: 'No warmup needed — 7 prior sets warmed the target muscle, load is modest.',
+          sets: [],
+        }}
+      />
+    );
+    expect(screen.getByTestId('warmup-decision-none')).toHaveTextContent(
+      /No warmup needed — 7 prior sets/
+    );
+    expect(screen.queryByText('Warmup Protocol')).not.toBeInTheDocument();
+  });
+
+  it('renders a targeted ramp set with its stated reason', async () => {
+    const user = userEvent.setup();
+    render(<ExerciseCard {...decisionProps} warmupDecision={rampDecision} />);
+
+    // Header names the decision kind, not a generic protocol
+    expect(screen.getByText('Ramp Set')).toBeInTheDocument();
+    await user.click(screen.getByText('Ramp Set'));
+
+    // Decision reason + per-set reason are visible
+    expect(screen.getByTestId('warmup-decision-reason')).toHaveTextContent(/rotation not yet loaded today/);
+    expect(screen.getByText('Groove rotation')).toBeInTheDocument();
+    expect(screen.getByText('rotation not yet loaded today')).toBeInTheDocument();
+    expect(screen.getByText('W1')).toBeInTheDocument();
+  });
+
+  it('completing a ramp set never logs it as a set row (set_type stays out of the anchor pool)', async () => {
+    const user = userEvent.setup();
+    const onSetComplete = jest.fn().mockResolvedValue('id');
+    const onWarmupComplete = jest.fn();
+    render(
+      <ExerciseCard
+        {...decisionProps}
+        onSetComplete={onSetComplete}
+        onWarmupComplete={onWarmupComplete}
+        warmupDecision={rampDecision}
+      />
+    );
+
+    await user.click(screen.getByText('Ramp Set'));
+    // The completion toggle is the last cell's button in the W1 row
+    const rampRow = screen.getByText('W1').closest('tr')!;
+    const toggle = Array.from(rampRow.querySelectorAll('button')).pop()!;
+    await user.click(toggle);
+
+    // Rest timer fires; no set_logs write path is ever invoked
+    expect(onWarmupComplete).toHaveBeenCalledWith(45);
+    expect(onSetComplete).not.toHaveBeenCalled();
+  });
+
+  it('a decision with sets supersedes the legacy warmupSets prop', () => {
+    render(
+      <ExerciseCard
+        {...decisionProps}
+        warmupSets={[
+          { setNumber: 1, percentOfWorking: 50, targetReps: 10, purpose: 'Legacy set' },
+          { setNumber: 2, percentOfWorking: 75, targetReps: 5, purpose: 'Legacy set 2' },
+        ]}
+        warmupDecision={rampDecision}
+      />
+    );
+    expect(screen.getByText('Ramp Set')).toBeInTheDocument();
+    expect(screen.getByText(/\(0\/1\)/)).toBeInTheDocument();
+  });
+});
+
+describe('warmup decision with unknown working weight (Codex review fix)', () => {
+  // A cold-start decision computed with workingWeightKg = 0 was step-shaped
+  // for the engine's 60 kg placeholder. Typing the real first-set weight
+  // must rebuild the ladder for THAT load, not just rescale percentages.
+  const unknownLoadProps = {
+    exercise: createMockExercise({ equipmentRequired: ['dumbbells'] }),
+    block: createMockBlock({ targetWeightKg: 0 }),
+    sets: [],
+    unit: 'kg' as const,
+    isActive: true,
+    workingWeight: 0,
+    onSetComplete: jest.fn().mockResolvedValue('id'),
+  };
+  // The 60 kg placeholder shape: three steps (40/60/80)
+  const placeholderDecision = {
+    kind: 'full_protocol' as const,
+    reason: 'Cold start — no prior sets this session overlap the target muscle. Full ramp protocol.',
+    sets: [
+      { setNumber: 1, percentOfWorking: 40, targetReps: 8, purpose: 'Movement groove', restSeconds: 30 },
+      { setNumber: 2, percentOfWorking: 60, targetReps: 5, purpose: 'Neuro prep', restSeconds: 60 },
+      { setNumber: 3, percentOfWorking: 80, targetReps: 3, purpose: 'CNS activation', restSeconds: 75 },
+    ],
+  };
+
+  const typeWeight = async (user: ReturnType<typeof userEvent.setup>, value: string) => {
+    await user.click(screen.getByRole('button', { name: /^Weight:/ }));
+    const weightInput = screen.getByRole('spinbutton', { name: 'Weight' });
+    await user.clear(weightInput);
+    await user.type(weightInput, value);
+  };
+
+  it('rebuilds the step ladder from the typed weight instead of keeping the 60 kg shape', async () => {
+    const user = userEvent.setup();
+    render(<ExerciseCard {...unknownLoadProps} warmupDecision={placeholderDecision} />);
+
+    // 30 kg belongs in the two-step 50/75 ladder, not the 60 kg three-step one
+    await typeWeight(user, '30');
+    await user.click(screen.getByText('Warmup Protocol'));
+
+    expect(screen.getByText('W1')).toBeInTheDocument();
+    expect(screen.getByText('W2')).toBeInTheDocument();
+    expect(screen.queryByText('W3')).not.toBeInTheDocument();
+  });
+
+  it('keeps the decision sets verbatim when the working weight was known', () => {
+    render(
+      <ExerciseCard {...unknownLoadProps} workingWeight={60} warmupDecision={placeholderDecision} />
+    );
+    expect(screen.getByText(/\(0\/3\)/)).toBeInTheDocument();
   });
 });

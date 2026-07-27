@@ -5,10 +5,12 @@ import { Card, Button, ConfirmModal } from '@/components/ui';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/Accordion';
 import type { Exercise, ExerciseBlock, SetLog, WeightUnit, SetQuality, SetFeedback, BodyweightData, ExercisePerformanceSnapshot, StandardMuscleGroup, SorenessRating, SetDiscomfort } from '@/types/schema';
 import { rpeToRir } from '@/types/schema';
+import { formatSetHistoryLine } from '@/lib/formatSetHistory';
 import { SorenessChipRow, JointPainPicker } from './FeedbackChips';
 import { filterExercises, dedupeExercisesById } from '@/services/exerciseFilter';
 import { convertWeight, formatMuscleName, formatWeightValue, convertWeightForDisplay, inputWeightToKg, roundToPlateIncrement, sumDisplayVolume } from '@/lib/utils';
 import { recommendSet, recommendSessionStart, estimateRepsForWeight, predictAmrapReps, recommendSeedForSlot, resolveLastRir, prescribe, type SeedRecommendation } from '@/services/setRecommender';
+import { framePositionalDelta } from '@/services/suggestionEngine/deltaFraming';
 import { inferSetRole, type SetRole } from '@/services/suggestionEngine/setRoles';
 import {
   resolveProgressionModel,
@@ -61,7 +63,12 @@ interface ExerciseHistory {
   estimatedE1RM: number;
   personalRecord: { weightKg: number; reps: number; e1rm: number; date: string } | null;
   totalSessions: number;
-  /** Estimability of recent normal sets (ADD 2 rep_total auto-classification). */
+  /**
+   * Estimability of recent normal sets (ADD 2 rep_total auto-classification).
+   * "Estimable" = a HIGH-confidence canonical estimate (≤ 12 effective reps);
+   * above-cap sets (capped floors that can't track rep progress) count
+   * inestimable alongside beyond-domain sets.
+   */
   estimableSetCount?: number;
   inestimableSetCount?: number;
   /** Location-scoped calibration (services/progressionScope). */
@@ -76,6 +83,20 @@ interface WarmupSetData {
   targetReps: number;
   purpose: string;
   restSeconds?: number;  // Rest time after this warmup set
+  /** Why this set exists (targeted ramp sets name their unpaid dimension) */
+  reason?: string;
+}
+
+/**
+ * Warmup decision from services/warmupEngine — when provided it supersedes
+ * the legacy warmupSets prop, and the card ALWAYS renders the decision:
+ * protocol table, targeted ramp set with its reason, or the explicit null
+ * decision line ("No warmup needed — …"). Never silent empty space.
+ */
+interface WarmupDecisionData {
+  kind: 'full_protocol' | 'partial_protocol' | 'targeted_ramp' | 'none';
+  reason: string;
+  sets: WarmupSetData[];
 }
 
 import {
@@ -216,7 +237,8 @@ interface ExerciseCardProps {
   recommendedWeight?: number;  // AI-suggested weight in kg
   previousSets?: { weightKg: number; reps: number; rpe?: number }[];  // Previous workout's sets for this exercise
   exerciseHistory?: ExerciseHistory;  // Historical data for this exercise
-  warmupSets?: WarmupSetData[];  // Warmup protocol for this exercise
+  warmupSets?: WarmupSetData[];  // Warmup protocol for this exercise (legacy path)
+  warmupDecision?: WarmupDecisionData;  // Per-dimension warmup decision (supersedes warmupSets)
   workingWeight?: number;  // Working weight in kg for warmup calculations
   showSwapOnMount?: boolean;  // Auto-show swap modal when mounted (for injury-related swaps)
   currentInjuries?: TemporaryInjury[];  // Current injuries to filter swap suggestions
@@ -346,6 +368,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   onExerciseDelete,
   onBlockNoteUpdate,
   onWarmupComplete,
+  warmupDecision,
   availableExercises = [],
   unavailableEquipmentIds = [],
   frequentExerciseIds = new Map(),
@@ -594,7 +617,11 @@ export const ExerciseCard = memo(function ExerciseCard({
   // an easy-rated set bumps the load even mid-range (services/setRecommender).
   const isColdStartExercise = (exerciseHistory?.totalSessions ?? 0) === 0;
 
-  const recommendNext = (last: { weightKg: number; reps: number; rpe?: number; feedback?: SetFeedback }) => {
+  // `positionOffset` = which pending slot is being prescribed, relative to the
+  // next set (0 = next). Position matching (Phase A) targets each slot from
+  // the SAME set position last session, so later pending slots get their own
+  // positional target instead of a copy of the next set's.
+  const recommendNext = (last: { weightKg: number; reps: number; rpe?: number; feedback?: SetFeedback }, positionOffset = 0) => {
     // rep_total path: the load NEVER moves within a session; the rep target
     // follows the session plan's slot (chase the total). No e1RM math runs.
     if (repTotalMode) {
@@ -618,14 +645,30 @@ export const ExerciseCard = memo(function ExerciseCard({
       lastWeightKg: last.weightKg,
       lastReps: last.reps,
       lastRir: resolveLastRir(last, effectiveTargetRir),
-      setsCompletedThisExercise: completedSets.length,
+      setsCompletedThisExercise: completedSets.length + positionOffset,
       sessionBestE1RMKg: sessionBestE1RM,
       targetRepRange: block.targetRepRange,
       targetRir: effectiveTargetRir,
       minIncrementKg: exercise.minWeightIncrementKg,
+      availableIncrementsKg: exercise.availableIncrementsKg ?? undefined,
       coldStart: isColdStartExercise,
       exerciseType: exercise.exerciseType,
       isBodyweight: exercise.isBodyweight,
+      // Phase 0 (INV-2): today's completed sets with their logged effort —
+      // the ceiling no prescription may imply more capacity than.
+      sessionObservedSets: completedSets.map((s) => ({
+        weightKg: s.weightKg,
+        reps: s.reps,
+        rir: resolveLastRir(s, effectiveTargetRir),
+      })),
+      // Phase A — set-position matching: when last session is comparable, the
+      // next set's target is what the SAME position did last time, not a
+      // re-derivation from the session-start anchor.
+      positionContext: {
+        prevSessionSets: prevSessionSetsForGating,
+        todaySets: completedSets.map((s) => ({ weightKg: s.weightKg, reps: s.reps })),
+        plannedSetCount: block.targetSets,
+      },
     });
   };
 
@@ -668,7 +711,39 @@ export const ExerciseCard = memo(function ExerciseCard({
   // so the set count and percentages match the actual load. A non-empty
   // warmupSets prop is the page's eligibility signal (first exercise for a
   // not-yet-warm muscle), so an empty prop stays empty here.
+  //
+  // When a warmupDecision is provided it is authoritative: its sets render
+  // as-is (including an intentionally empty list — the null decision).
+  //
+  // One exception, mirroring the legacy fallback below: a protocol-shaped
+  // decision computed with NO known working weight was step-shaped for the
+  // engine's 60 kg placeholder. Once the user types their actual first-set
+  // weight, rebuild the step ladder from that load (a 30 kg load needs the
+  // two-step 50/75 ramp, not the 60 kg three-step one). The decision's kind
+  // and reason stand; only the ladder is re-derived. Targeted ramp sets are
+  // single percentage sets and rescale cleanly — they pass through.
   const effectiveWarmupSets = useMemo(() => {
+    if (warmupDecision) {
+      const isProtocolShaped =
+        warmupDecision.kind === 'full_protocol' || warmupDecision.kind === 'partial_protocol';
+      if (isProtocolShaped && workingWeight <= 0 && typedFirstSetWeightKg > 0) {
+        const rebuilt = generateWarmupProtocol({
+          workingWeight: typedFirstSetWeightKg,
+          exercise,
+          isFirstExercise: listIndex === 0,
+        });
+        if (warmupDecision.kind === 'partial_protocol') {
+          // Re-apply the engine's shortening (drop the general-warmup set
+          // and sub-40% steps) so partial credit keeps its meaning.
+          const shortened = rebuilt
+            .filter((s, i) => !(i === 0 && rebuilt.length > 2) && s.percentOfWorking >= 40)
+            .map((s, i) => ({ ...s, setNumber: i + 1 }));
+          return shortened.length > 0 ? shortened : rebuilt;
+        }
+        return rebuilt;
+      }
+      return warmupDecision.sets;
+    }
     if (workingWeight > 0 || typedFirstSetWeightKg <= 0 || warmupSets.length === 0) {
       return warmupSets;
     }
@@ -677,7 +752,7 @@ export const ExerciseCard = memo(function ExerciseCard({
       exercise,
       isFirstExercise: listIndex === 0,
     });
-  }, [warmupSets, workingWeight, typedFirstSetWeightKg, exercise, listIndex]);
+  }, [warmupDecision, warmupSets, workingWeight, typedFirstSetWeightKg, exercise, listIndex]);
 
   // Auto-collapse warmup sets when all are completed
   useEffect(() => {
@@ -899,8 +974,9 @@ export const ExerciseCard = memo(function ExerciseCard({
         targetRepRange: range,
         targetRir: effectiveTargetRir,
         minIncrementKg: exercise.minWeightIncrementKg,
+        availableIncrementsKg: exercise.availableIncrementsKg ?? undefined,
       }),
-    [effectiveTargetRir, exercise.minWeightIncrementKg]
+    [effectiveTargetRir, exercise.minWeightIncrementKg, exercise.availableIncrementsKg]
   );
 
   // Best recent WORKING weight last session (the top set). Doubles as the role-
@@ -961,6 +1037,7 @@ export const ExerciseCard = memo(function ExerciseCard({
         targetRepRange: block.targetRepRange,
         targetRir: effectiveTargetRir,
         minIncrementKg: exercise.minWeightIncrementKg,
+        availableIncrementsKg: exercise.availableIncrementsKg ?? undefined,
         anchorE1RMKg,
         recentWorkingWeightKg: previousTopSetWeightKg || undefined,
         prevWeightKg: prevSet?.weightKg,
@@ -970,10 +1047,15 @@ export const ExerciseCard = memo(function ExerciseCard({
         priorSessionSets: priorSessionSetsForGating,
         exerciseType: exercise.exerciseType,
         isBodyweight: exercise.isBodyweight,
+        // Phase A — position-matched seed: this slot targets what the SAME
+        // set position did last session (plus the smallest progression) when
+        // the sessions are comparable; anchor path otherwise.
+        slotIndex: setIndex,
+        plannedSetCount: block.targetSets,
       });
       return { seed, prevSet };
     },
-    [previousSets, previousTopSetWeightKg, anchorE1RMKg, block.targetRepRange, effectiveTargetRir, exercise.minWeightIncrementKg, exercise.exerciseType, exercise.isBodyweight, prevSessionSetsForGating, priorSessionSetsForGating]
+    [previousSets, previousTopSetWeightKg, anchorE1RMKg, block.targetRepRange, block.targetSets, effectiveTargetRir, exercise.minWeightIncrementKg, exercise.availableIncrementsKg, exercise.exerciseType, exercise.isBodyweight, prevSessionSetsForGating, priorSessionSetsForGating]
   );
 
   // Curve-consistent reps for a session-start seed: ONE ANCHOR PER
@@ -1073,15 +1155,18 @@ export const ExerciseCard = memo(function ExerciseCard({
 
     // Calculate smart defaults using the within-session recommender
     const lastSetData = { weightKg: lastCompleted.weightKg, reps: lastCompleted.reps, rpe: lastCompleted.rpe, feedback: lastCompleted.feedback };
-    const rec = recommendNext(lastSetData);
-    const smartWeight = rec.weightKg;
-    const smartReps = rec.reps;
 
     // Update all pending inputs. Functional update so fields the user manually
     // edited (dirty-field rules) survive the recalc instead of being clobbered.
     setPendingInputs(prev => {
       const updatedInputs: { weight: string; reps: string; rpe: string }[] = [];
       for (let i = 0; i < pendingSetsCount; i++) {
+        // Per-slot recommendation (Phase A): with a comparable previous
+        // session, each pending slot targets its OWN set position from last
+        // time instead of copying the next set's suggestion.
+        const rec = recommendNext(lastSetData, i);
+        const smartWeight = rec.weightKg;
+        const smartReps = rec.reps;
         const isLastSet = i === pendingSetsCount - 1;
         // If this is the last set and AMRAP is suggested, use 9.5 for RPE
         const setRpe = (isLastSet && isAmrapSuggested) ? 9.5 : targetRpe;
@@ -1126,24 +1211,22 @@ export const ExerciseCard = memo(function ExerciseCard({
 
       const targetRpe = 10 - effectiveTargetRir;
       const lastCompleted = completedSets[completedSets.length - 1];
-      
-      // Calculate smart defaults using the shared suggestion engine
-      let smartWeight: number;
-      let smartReps: number;
 
-      if (lastCompleted) {
-        const lastSetData = { weightKg: lastCompleted.weightKg, reps: lastCompleted.reps, rpe: lastCompleted.rpe, feedback: lastCompleted.feedback };
-        const rec = recommendNext(lastSetData);
-        smartWeight = rec.weightKg;
-        smartReps = rec.reps;
-      } else {
-        smartWeight = suggestedWeight;
-        smartReps = Math.round((block.targetRepRange[0] + block.targetRepRange[1]) / 2);
-      }
-
-      // Create updated pending inputs - all based on the last completed set
+      // Create updated pending inputs - based on the last completed set, with
+      // each pending slot targeting its own set position (Phase A).
       const updatedInputs: { weight: string; reps: string; rpe: string }[] = [];
       for (let i = 0; i < pendingSetsCount; i++) {
+        let smartWeight: number;
+        let smartReps: number;
+        if (lastCompleted) {
+          const lastSetData = { weightKg: lastCompleted.weightKg, reps: lastCompleted.reps, rpe: lastCompleted.rpe, feedback: lastCompleted.feedback };
+          const rec = recommendNext(lastSetData, i);
+          smartWeight = rec.weightKg;
+          smartReps = rec.reps;
+        } else {
+          smartWeight = suggestedWeight;
+          smartReps = Math.round((block.targetRepRange[0] + block.targetRepRange[1]) / 2);
+        }
         const isLastSet = i === pendingSetsCount - 1;
         // If this is the last set and AMRAP is suggested, use 9.5 for RPE
         const setRpe = (isLastSet && isAmrapSuggested) ? 9.5 : targetRpe;
@@ -1197,7 +1280,7 @@ export const ExerciseCard = memo(function ExerciseCard({
         
         if (lastCompleted) {
           const lastSetData = { weightKg: lastCompleted.weightKg, reps: lastCompleted.reps, rpe: lastCompleted.rpe, feedback: lastCompleted.feedback };
-          const rec = recommendNext(lastSetData);
+          const rec = recommendNext(lastSetData, i);
           defaultWeight = rec.weightKg;
           defaultReps = rec.reps;
         } else if (repTotalMode && repTotalPlan) {
@@ -1662,15 +1745,23 @@ export const ExerciseCard = memo(function ExerciseCard({
     let showRir = true;
     let role: SetRole = 'working';
 
-    // Delta between the anchor set and the weight the banner actually shows
-    // (display units, after plate rounding) so the copy can't contradict the
-    // numbers on screen — a raw-kg delta said "down -1.5 kg" for a 4 kg → 3 kg
-    // drop. Unsigned: "up"/"down" in the sentence already carries direction.
-    const deltaLabel = (anchorKg: number, shownWeight: string) => {
+    // INV-4: a delta number in the copy must compare LIKE TO LIKE — the
+    // prescribed set vs the SAME set position last session — or say nothing.
+    // The just-completed set is a different position under different fatigue;
+    // framing off it read "down 5 lbs" on a set that was UP 2.5 vs its
+    // position (Arnold Press live defect). framePositionalDelta returns null
+    // without a positional reference, and then NO number is rendered.
+    const positionalDelta = (shownWeight: string): string | null => {
       const shown = parseFloat(shownWeight);
-      if (!Number.isFinite(shown)) return '';
-      const delta = Number(Math.abs(shown - convertWeightForDisplay(anchorKg, unit)).toFixed(1));
-      return delta > 0 ? `${delta} ${weightLabel}` : '';
+      const positionalPrev = previousSets[completedSets.length];
+      return framePositionalDelta(
+        shown,
+        positionalPrev && positionalPrev.weightKg > 0
+          ? convertWeightForDisplay(positionalPrev.weightKg, unit)
+          : undefined,
+        completedSets.length + 1,
+        weightLabel
+      );
     };
 
     if (lastCompleted) {
@@ -1712,11 +1803,44 @@ export const ExerciseCard = memo(function ExerciseCard({
       // the fatigue-driven decline (12→11→10→9), not a copied historical target —
       // show it as the single predicted number.
       repsLabel = String(reps);
-      const deltaText = deltaLabel(lastCompleted.weightKg, weight);
-      if (rec.rationale === 'increase_load') {
-        reason = `up ${deltaText || 'slightly'} — last set was clearly too light`;
+      const posDelta = positionalDelta(weight);
+      if (rec.positionMatch) {
+        // Phase A — position-matched: the target came from what the SAME set
+        // position did last session, not from the anchor curve. Say exactly
+        // that; the rationale copy below would wrongly grade it against the
+        // just-completed set.
+        const pm = rec.positionMatch;
+        const setNo = completedSets.length + 1;
+        const prevDesc = `${displayWeight(pm.prevWeightKg, true)} ${weightLabel} × ${pm.prevReps}`;
+        reason =
+          pm.progression === 'add_rep'
+            ? `matching set ${setNo} from last session (${prevDesc}) — go one more rep`
+            : pm.progression === 'add_load'
+              ? `set ${setNo} last session hit the rep ceiling (${prevDesc}) — one increment up`
+              : `matching set ${setNo} from last session (${prevDesc})`;
+        explanation.push(
+          `Set-position matching: last session's set ${setNo} was ${prevDesc}${pm.prevRir != null ? ` at ${pm.prevRir} RIR` : ''}. That set carries the same accumulated fatigue this set will, so it anchors the target${
+            pm.progression === 'add_rep'
+              ? ' — plus one rep, since it was left at or above the target reserve.'
+              : pm.progression === 'add_load'
+                ? ' — at the top of the rep range with reserve, so the load steps up one increment and trades a rep.'
+                : ' — held as-is, because it was taken harder than the target effort (repeating it at better effort is the progression).'
+          }`
+        );
+      } else if (rec.noMeaningfulChange) {
+        // Phase D: the engine wanted to move the load, but the true
+        // prescription sits within half an increment of the current load —
+        // say so instead of rendering the no-op as a decision.
+        reason = 'holding — no meaningful change available at this increment';
+        explanation.push(
+          'The prescribed adjustment is smaller than half of the smallest loadable increment for this exercise, so the load holds. Record finer add-on increments for this equipment to unlock smaller steps.'
+        );
+      } else if (rec.rationale === 'increase_load') {
+        // Like-for-like framing only (INV-4): the number compares this set to
+        // its own position last session, never to the just-completed set.
+        reason = `raising the load — last set was clearly too light${posDelta ? ` (${posDelta})` : ''}`;
       } else if (rec.rationale === 'reduce_load') {
-        reason = `down ${deltaText || 'slightly'} — last set was harder than the target effort`;
+        reason = `reducing the load — last set ran harder than the target effort${posDelta ? ` (${posDelta})` : ''}`;
       } else if (rec.effortVsTarget === 'easier') {
         // Held the weight, but the logged effort was BELOW target (more reps in
         // reserve than asked) — say so and aim a little higher, never "matched".
@@ -1726,9 +1850,33 @@ export const ExerciseCard = memo(function ExerciseCard({
       } else {
         reason = 'holding the weight — your last set matched the target effort';
       }
-      explanation.push(
-        `Anchored to your last set: ${displayWeight(lastCompleted.weightKg, true)} ${weightLabel} × ${lastCompleted.reps} at RPE ${lastCompleted.rpe}. Its estimated 1RM sets the capacity this prescription works back from.`
-      );
+      if (!rec.positionMatch) {
+        explanation.push(
+          `Anchored to your last set: ${displayWeight(lastCompleted.weightKg, true)} ${weightLabel} × ${lastCompleted.reps} at RPE ${lastCompleted.rpe}. Its estimated 1RM sets the capacity this prescription works back from.`
+        );
+      }
+      // Phase 0 (INV-2): the ask was trimmed because it implied more capacity
+      // than the best set observed this session — say so, never demand a
+      // silent session best under fatigue.
+      if (rec.sessionCapacityClamped) {
+        reason += ' · capped at today’s best';
+        explanation.push(
+          'Capped: the un-capped suggestion implied more capacity than your best set this session. A late set is never asked to beat what fresh sets demonstrated today.'
+        );
+      }
+      // Phase 0 (INV-1): the predicted reps fall outside the stated range —
+      // acknowledge the mismatch instead of rendering "8-12" beside a 7.
+      if (rec.outsideRange === 'below') {
+        reason += ` · predicted ${reps} — below the ${block.targetRepRange[0]}–${block.targetRepRange[1]} range`;
+        explanation.push(
+          `Predicted ${reps} reps is below the ${block.targetRepRange[0]}-rep floor of the target range. A rep drop under accumulated fatigue on later sets is normal; if predictions sit below the floor from set 1, the load is too heavy for this range.`
+        );
+      } else if (rec.outsideRange === 'above') {
+        reason += ` · predicted ${reps} — above the ${block.targetRepRange[0]}–${block.targetRepRange[1]} range`;
+        explanation.push(
+          `Predicted ${reps} reps is above the ${block.targetRepRange[1]}-rep top of the target range — the load is running light for this range, which is the signal that earns a load increase next session.`
+        );
+      }
       }
     } else if (repTotalMode && repTotalPlan) {
       // rep_total session start: fixed load from history (verbatim), first-set
@@ -1754,7 +1902,10 @@ export const ExerciseCard = memo(function ExerciseCard({
       const { seed, prevSet } = buildSlotSeed(completedSets.length);
       role = seed.role;
       showRir = seed.showRirTarget;
-      reps = Math.round((seed.repRange[0] + seed.repRange[1]) / 2);
+      reps =
+        seed.anchorSource === 'position_match' && seed.seedReps !== undefined
+          ? seed.seedReps
+          : Math.round((seed.repRange[0] + seed.repRange[1]) / 2);
       repsLabel = `${seed.repRange[0]}–${seed.repRange[1]}`;
 
       if (seed.weightKg > 0) {
@@ -1792,7 +1943,7 @@ export const ExerciseCard = memo(function ExerciseCard({
               : binder === 'band_low'
                 ? '(raised to near recent working weight)'
                 : binder === 'noise_floor'
-                  ? '(held — suggested change below the noise threshold)'
+                  ? '(held — no meaningful change available at this increment)'
                   : null;
         reason = holdNote
           ? `working weight from your ~${displayWeight(anchorE1RMKg)} ${weightLabel} est. 1RM ${holdNote}`
@@ -1828,6 +1979,29 @@ export const ExerciseCard = memo(function ExerciseCard({
             `Heads-up: at this weight the curve predicts ~${predictedReps} reps — below the ${seed.repRange[0]}-rep floor of your target range. If that matches how it feels, the weight is set too high for this rep range (or the range should move down).`
           );
         }
+      } else if (seed.anchorSource === 'position_match' && seed.positionMatch) {
+        // Phase A — position-matched seed: the target is last session's set at
+        // this position plus the smallest meaningful progression, so show the
+        // specific target instead of the range midpoint.
+        const pm = seed.positionMatch;
+        const setNo = completedSets.length + 1;
+        const prevDesc = `${displayWeight(pm.prevWeightKg, true)} ${weightLabel} × ${pm.prevReps}`;
+        if (seed.seedReps !== undefined) repsLabel = String(seed.seedReps);
+        reason =
+          pm.progression === 'add_rep'
+            ? `matching set ${setNo} from last session (${prevDesc}) — go one more rep`
+            : pm.progression === 'add_load'
+              ? `set ${setNo} last session hit the rep ceiling (${prevDesc}) — one increment up`
+              : `matching set ${setNo} from last session (${prevDesc})`;
+        explanation.push(
+          `Set-position matching: last session's set ${setNo} was ${prevDesc}${pm.prevRir != null ? ` at ${pm.prevRir} RIR` : ''} — the same position in a comparable session carries the same accumulated fatigue, so it anchors this target${
+            pm.progression === 'add_rep'
+              ? ', plus one rep (it was left at or above the target reserve).'
+              : pm.progression === 'add_load'
+                ? '; at the top of the rep range with reserve, the load steps up one increment and trades a rep.'
+                : '; held as-is because it was taken harder than the target effort.'
+          }`
+        );
       } else if (seed.anchorSource === 'last_session' && prevSet) {
         const prevRir = prevSet.rpe != null ? rpeToRir(prevSet.rpe) : null;
         reason = 'starting from last session';
@@ -1950,20 +2124,34 @@ export const ExerciseCard = memo(function ExerciseCard({
   });
 
   // Meta line under the header pills:
-  // "{muscle} · last session 60 lbs × 9, × 8 @ 2 RIR"
+  // "{muscle} · last session 45 lbs × 8, × 8 · 40 lbs × 10, × 8 @ 0–3 RIR"
+  //
+  // Phase 0b: rendered through formatSetHistoryLine (lib/formatSetHistory) —
+  // per-set loads honestly grouped, ALL sets included (long sessions become
+  // an explicit range summary, never a silent slice), and effort shown as the
+  // honest span across sets instead of set 1's RIR standing in for the whole
+  // session. The old inline version attributed set 1's load to every set,
+  // sliced to 3 sets, and collapsed the RIR — live corruption on Arnold
+  // Press ("45 lbs x 8, x 8, x 10 @ 3 RIR" for a 45/45/40/40 session).
   // Bodyweight sets with a recorded breakdown read "BW+25 lbs × 14" so the
   // added load is visible instead of the blended effective number.
   const lastSessionMeta = (() => {
     const lastSets = exerciseHistory?.lastWorkoutSets ?? [];
     if (lastSets.length === 0) return null;
-    const repsPart = lastSets
-      .slice(0, 3)
-      .map((s) => `× ${s.reps}${isDurationBased ? 's' : ''}`)
-      .join(', ');
-    // Single RPE→RIR conversion app-wide: the bucketed rpeToRir the engine
-    // reads sets with (the raw Math.round(10 − rpe) disagreed at RPE 7.5:
-    // header said 3 where the engine graded 2).
-    const rir = lastSets[0].rpe != null ? Math.max(0, rpeToRir(lastSets[0].rpe)) : null;
+    const line = formatSetHistoryLine(
+      lastSets.map((s) => ({
+        weightLabel: s.bw
+          ? `${historySetWeightLabel(s)}${s.bw.modification === 'none' ? '' : ` ${weightLabel}`}`
+          : `${displayWeight(s.weightKg, true)} ${weightLabel}`,
+        reps: s.reps,
+        // Single RPE→RIR conversion app-wide: the bucketed rpeToRir the
+        // engine reads sets with (raw Math.round(10 − rpe) disagreed at RPE
+        // 7.5: header said 3 where the engine graded 2).
+        rir: s.rpe != null ? Math.max(0, rpeToRir(s.rpe)) : null,
+      })),
+      { secondsSuffix: isDurationBased }
+    );
+    if (!line) return null;
     // Location-scoped calibration tag: for a local-scope exercise, mark whether
     // the last session shown is this gym's own track ("· here") or a softened
     // estimate carried over from another gym (rule 11).
@@ -1973,18 +2161,15 @@ export const ExerciseCard = memo(function ExerciseCard({
         ? ' · est. from another gym'
         : ' · here';
     }
-    const weightPart = lastSets[0].bw
-      ? `${historySetWeightLabel(lastSets[0])}${lastSets[0].bw.modification === 'none' ? '' : ` ${weightLabel}`}`
-      : `${displayWeight(lastSets[0].weightKg, true)} ${weightLabel}`;
-    // Total tonnage of the last session, so the summary line answers "how
-    // much total weight did I move" without expanding the history detail.
+    // Total tonnage of the last session (from main's volume-display work),
+    // so the summary line answers "how much total weight did I move" without
+    // expanding the history detail — appended to the Phase 0b honest per-set
+    // line rather than the old single-load format it originally rode on.
     const volPart =
       lastSessionVolume != null
         ? ` · ${lastSessionVolume.toLocaleString('en-US')} ${weightLabel} vol`
         : '';
-    return `last session ${weightPart} ${repsPart}${
-      rir !== null ? ` @ ${rir} RIR` : ''
-    }${volPart}${locationTag}`;
+    return `last session ${line}${volPart}${locationTag}`;
   })();
 
   // Tooltip for the progression pace pill: E1RM trend vs expectation, plus
@@ -2328,6 +2513,18 @@ export const ExerciseCard = memo(function ExerciseCard({
         )}
       </div>
 
+      {/* Warmup decision — the null decision renders its reason instead of
+          empty space (no-silent-failures rule) */}
+      {isActive && warmupDecision && warmupDecision.sets.length === 0 && (
+        <div
+          className="border-b border-surface-800 px-3 py-2 flex items-start gap-2"
+          data-testid="warmup-decision-none"
+        >
+          <span className="text-success-400 text-xs mt-0.5">✓</span>
+          <span className="text-xs text-surface-400">{warmupDecision.reason}</span>
+        </div>
+      )}
+
       {/* Warmup sets - keep in separate table for now (legacy) */}
       {isActive && effectiveWarmupSets.length > 0 && warmupWorkingWeightKg > 0 && (
         <div className="border-b border-surface-800">
@@ -2347,7 +2544,11 @@ export const ExerciseCard = memo(function ExerciseCard({
                 {completedWarmups.size === effectiveWarmupSets.length ? '✓' : completedWarmups.size}
               </div>
               <span className="text-sm font-medium text-surface-200">
-                Warmup Protocol
+                {warmupDecision?.kind === 'targeted_ramp'
+                  ? 'Ramp Set'
+                  : warmupDecision?.kind === 'partial_protocol'
+                    ? 'Warmup (shortened)'
+                    : 'Warmup Protocol'}
               </span>
               <span className="text-xs text-surface-500">
                 ({completedWarmups.size}/{effectiveWarmupSets.length})
@@ -2368,6 +2569,16 @@ export const ExerciseCard = memo(function ExerciseCard({
           {/* Warmup table - only show when expanded */}
           {isWarmupExpanded && (
             <div className="overflow-hidden">
+              {/* The decision itself, stated — why these sets (or this one
+                  ramp set) exist */}
+              {warmupDecision && (
+                <p
+                  className="px-3 pb-2 text-xs text-surface-400"
+                  data-testid="warmup-decision-reason"
+                >
+                  {warmupDecision.reason}
+                </p>
+              )}
               <table className="w-full text-sm">
                 <thead className="bg-surface-800/50">
                   <tr>
@@ -2457,6 +2668,11 @@ export const ExerciseCard = memo(function ExerciseCard({
                       <td className="px-1 py-2 text-center text-surface-500 text-xs">—</td>
                       <td className="px-1 py-2 text-center">
                         <span className="text-xs text-amber-400/70">{warmup.purpose}</span>
+                        {warmup.reason && (
+                          <div className="text-[10px] text-amber-400/50 leading-tight">
+                            {warmup.reason}
+                          </div>
+                        )}
                       </td>
                       <td className="px-1 py-2">
                         <button

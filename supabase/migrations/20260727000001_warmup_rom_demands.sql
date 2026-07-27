@@ -1,0 +1,31 @@
+-- Warmup readiness engine: ROM / joint-position demand tags.
+--
+--   rom_demands: tags for loaded end-ranges and rotational demands
+--   (e.g. 'overhead', 'supination_pronation', 'deep_stretch',
+--   'overhead_lockout') — the warmup engine treats each tag as a debt
+--   that prior work in the SAME session must pay before the exercise
+--   counts as position-ready. See services/warmupEngine.ts
+--   (deriveRomDemands) for the canonical tag list and the name-based
+--   fallback used while this column is empty.
+--
+-- STRUCTURAL ONLY. Per the review protocol established with
+-- progression_model (20260725000003): no bulk value assignment ships
+-- until the printed classification list is approved. Empty rom_demands
+-- → services/warmupEngine derives tags on read from name + pattern, so
+-- behavior is identical before and after the approved backfill; the
+-- backfill just makes the column the single source of truth.
+--
+-- Movement patterns: exercises.movement_pattern already exists and is
+-- the single source of truth; legacy tokens ('horizontal_push',
+-- 'hip_hinge', 'compound', …) resolve through one mapping in
+-- services/warmupEngine.canonicalizeMovementPattern. Normalizing stored
+-- values to the canonical vocabulary is part of the same pending
+-- reviewed backfill — no parallel column is added here.
+--
+-- Decay prerequisite check (satisfied, no schema change needed):
+-- set_logs.logged_at already stamps every set, and the workout page
+-- threads it through SetLog.loggedAt, so the engine's per-set decay
+-- term has its timestamp.
+
+ALTER TABLE exercises
+  ADD COLUMN IF NOT EXISTS rom_demands TEXT[] NOT NULL DEFAULT '{}';

@@ -77,6 +77,7 @@ import type { MuscleSorenessRatings } from '@/components/workout/ReadinessCheckI
 import { createUntypedClient } from '@/lib/supabase/client';
 import { getLocalUserId } from '@/lib/supabase/authState';
 import { generateWarmupProtocol, isMuscleWarmedUp } from '@/services/progressionEngine';
+import { evaluateWarmupReadiness } from '@/services/warmupEngine';
 import { MUSCLE_GROUPS, muscleMatchesGroup, rirToRpe, rpeToRir, STANDARD_MUSCLE_DISPLAY_NAMES } from '@/types/schema';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { quickWeightEstimate, quickWeightEstimateWithCalibration, type WorkingWeightRecommendation, type TransferCandidate } from '@/services/weightEstimationEngine';
@@ -2870,6 +2871,7 @@ export default function WorkoutPage() {
               defaultRepRange: fullExData.default_rep_range || [8, 12],
               defaultRir: fullExData.default_rir || 2,
               minWeightIncrementKg: fullExData.min_weight_increment_kg || 2.5,
+              availableIncrementsKg: fullExData.available_increments_kg ?? null,
               formCues: fullExData.form_cues || [],
               commonMistakes: fullExData.common_mistakes || [],
               setupNote: fullExData.setup_note || '',
@@ -3364,6 +3366,7 @@ export default function WorkoutPage() {
           defaultRepRange: fullExerciseData.default_rep_range || [8, 12],
           defaultRir: fullExerciseData.default_rir || 2,
           minWeightIncrementKg: fullExerciseData.min_weight_increment_kg || 2.5,
+          availableIncrementsKg: fullExerciseData.available_increments_kg ?? null,
           formCues: fullExerciseData.form_cues || [],
           commonMistakes: fullExerciseData.common_mistakes || [],
           setupNote: fullExerciseData.setup_note || '',
@@ -3946,6 +3949,7 @@ export default function WorkoutPage() {
           defaultRepRange: exerciseData.default_rep_range || [8, 12],
           defaultRir: exerciseData.default_rir || 2,
           minWeightIncrementKg: exerciseData.min_weight_increment_kg || 2.5,
+          availableIncrementsKg: exerciseData.available_increments_kg ?? null,
           formCues: exerciseData.form_cues || [],
           commonMistakes: exerciseData.common_mistakes || [],
           setupNote: exerciseData.setup_note || '',
@@ -5569,52 +5573,26 @@ export default function WorkoutPage() {
                       (amrapSuggestion?.blockId === block.id && amrapSuggestion?.setNumber === (completedSets.filter(s => s.exerciseBlockId === block.id && s.setType === 'normal').length + 1)) ||
                       amrapAcceptedBlockId === block.id
                     }
-                    warmupSets={(() => {
-                      if (!isCurrent) return undefined;
-
-                      // If the muscle is already warm (sets completed this
-                      // session on an exercise hitting it as primary, or
-                      // working sets hitting it as secondary), remove the
-                      // warmup option — even if this block has a stored
-                      // protocol (e.g. exercises done out of order)
-                      const muscleGroup = block.exercise.primaryMuscle;
-                      if (isMuscleWarmedUp(muscleGroup, { completedSets, blocks })) {
-                        return undefined;
-                      }
-
-                      // Check if this block has warmup protocol defined
-                      if (block.warmupProtocol && block.warmupProtocol.length > 0) {
-                        return block.warmupProtocol;
-                      }
-
-                      // Check if another exercise in this muscle group has warmups defined
-                      const blockWithWarmups = blocks.find(
-                        b => muscleMatchesGroup(b.exercise.primaryMuscle, muscleGroup) &&
-                             b.warmupProtocol &&
-                             b.warmupProtocol.length > 0
-                      );
-                      
-                      // Use the warmups from the first exercise of this muscle group
-                      if (blockWithWarmups && blockWithWarmups.warmupProtocol) {
-                        return blockWithWarmups.warmupProtocol;
-                      }
-                      
-                      // Generate warmups dynamically for first exercise of each muscle group
-                      // (includes isolation exercises if they're the first for that muscle)
-                      const isFirstForMuscle = !blocks.some(
-                        (b, i) => i < index && muscleMatchesGroup(b.exercise.primaryMuscle, muscleGroup)
-                      );
-
-                      if (isFirstForMuscle) {
-                        return generateWarmupProtocol({
-                          workingWeight: effectiveWorkingWeight,
-                          exercise: block.exercise,
-                          isFirstExercise: index === 0,
-                        });
-                      }
-
-                      return undefined;
-                    })()}
+                    warmupDecision={
+                      // Per-dimension warmup readiness (services/warmupEngine).
+                      // Replaces the old isMuscleWarmedUp gate that silently
+                      // returned undefined — the engine ALWAYS returns a
+                      // decision (protocol / targeted ramp / explicit "no
+                      // warmup needed" with its reason), computed from THIS
+                      // session's completed sets only, with time decay.
+                      isCurrent
+                        ? evaluateWarmupReadiness({
+                            exercise: block.exercise,
+                            workingWeightKg: effectiveWorkingWeight,
+                            targetReps: block.targetRepRange?.[0] ?? 8,
+                            targetRir: block.targetRir ?? 2,
+                            completedSets,
+                            blocks: blocks.map((b) => ({ id: b.id, exercise: b.exercise })),
+                            now: new Date(),
+                            isFirstExercise: index === 0,
+                          })
+                        : undefined
+                    }
                     workingWeight={effectiveWorkingWeight}
                     showSwapOnMount={showSwapForInjury === block.id}
                     currentInjuries={temporaryInjuries}

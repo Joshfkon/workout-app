@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Exercise, MuscleGroup, MovementPattern } from '@/types/schema';
+import { canonicalizePatternToken } from '@/services/warmupEngine';
 
 interface ExerciseState {
   // Exercise library cache
@@ -73,8 +74,10 @@ export const useExerciseStore = create<ExerciseState>()(
 
       getExercisesByPattern: (pattern) => {
         const { exercises } = get();
+        // Canonicalized so legacy and backfilled pattern values match
+        const target = canonicalizePatternToken(pattern);
         return exercises.filter(
-          (ex) => ex.movementPattern.toLowerCase() === pattern.toLowerCase()
+          (ex) => canonicalizePatternToken(ex.movementPattern) === target
         );
       },
 

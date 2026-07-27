@@ -11,6 +11,7 @@ import type { Experience, MuscleGroup, DexaRegionalData, RegionalAnalysis } from
 import { analyzeRegionalComposition, getAverageRegionalLeanMass } from './regionalAnalysis';
 import { normalizeExerciseName, findExerciseMatch, isSameExercise } from './exerciseCanonical';
 import { deriveProgressionScope } from './progressionScope';
+import { canonicalizePatternToken } from './warmupEngine';
 import {
   rpeToRIR,
   calculateWorkingWeight,
@@ -210,7 +211,10 @@ export function estimateFromTransferCandidates(
   if (usable.length === 0) return null;
 
   const targetMuscle = normalizeToken(targetMeta?.primaryMuscle);
-  const targetPattern = normalizeToken(targetMeta?.movementPattern);
+  // Patterns route through the canonical vocabulary bridge so a
+  // legacy-valued custom ('horizontal_push') still matches a backfilled
+  // canonical row ('horizontal_press').
+  const targetPattern = canonicalizePatternToken(targetMeta?.movementPattern);
   const targetClass = equipmentClass(targetName, targetMeta?.equipmentRequired);
 
   const sameMuscle = (c: TransferCandidate) =>
@@ -225,7 +229,7 @@ export function estimateFromTransferCandidates(
       const patternMatch =
         sameMuscle(c) &&
         !!targetPattern &&
-        normalizeToken(c.movementPattern) === targetPattern &&
+        canonicalizePatternToken(c.movementPattern) === targetPattern &&
         equipmentClass(c.exerciseName, c.equipmentRequired) === targetClass;
       if (patternMatch) factor = DEFAULT_SAME_PATTERN_TRANSFER_FACTOR;
     }

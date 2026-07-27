@@ -27,6 +27,7 @@ import {
   exerciseRequiresUnavailableEquipment,
 } from '@/services/equipmentFilter';
 import { getRelatedPatterns } from '@/services/exerciseSwapper';
+import { canonicalizePatternToken } from '@/services/warmupEngine';
 import { plannedSetsForDuration, type SuggestedWorkoutPick, type SuggestedWorkoutPlan } from '@/services/suggestedWorkout';
 import type { MovementPattern } from '@/types/schema';
 
@@ -130,12 +131,14 @@ function patternScore(
   original: LocationSubstitutionExercise,
   candidate: LocationSubstitutionExercise
 ): number {
-  const a = original.movementPattern ?? null;
-  const b = candidate.movementPattern ?? null;
+  // Canonicalized so legacy-valued rows (customs) and backfilled canonical
+  // rows compare equal (services/warmupEngine vocabulary bridge).
+  const a = canonicalizePatternToken(original.movementPattern);
+  const b = canonicalizePatternToken(candidate.movementPattern);
   if (!a || !b) return 0;
   if (a === b) return 40;
-  const related = getRelatedPatterns(a as MovementPattern);
-  return related.includes(b as MovementPattern) ? 20 : 0;
+  const related = getRelatedPatterns(a);
+  return related.includes(b) ? 20 : 0;
 }
 
 /** Best-match score for a same-muscle candidate (higher is better). */

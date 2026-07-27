@@ -35,7 +35,7 @@ import {
   type VolumeBand,
 } from '@/services/volumeBands';
 import { rollingWindowStartISO } from '@/lib/date/localDay';
-import { rirFromFeedback, sumEffectiveVolume } from '@/services/effectiveVolume';
+import { rirFromFeedback, summarizeEffectiveVolume } from '@/services/effectiveVolume';
 
 /**
  * The "this week" window for weekly volume: a trailing 7 local days including
@@ -281,6 +281,14 @@ export interface MuscleVolumeStats {
    */
   effectiveSets: number;
   /**
+   * Credited count of sets EXCLUDED from `effectiveSets` for missing/garbage
+   * RIR (services/effectiveVolume unrated rule). Any surface showing
+   * `effectiveSets` must surface this when non-zero — an effective number
+   * silently computed over a subset of the sets misleads in the other
+   * direction from the old max-credit inflation.
+   */
+  unratedSets: number;
+  /**
    * Composition split of `sets`/`effectiveSets` (Phase 5), full precision:
    * direct = primary-tag credit, indirect = secondary-tag (0.5) credit.
    * Invariant by construction (single accumulator, single pass):
@@ -301,6 +309,7 @@ export type VolumeAccumulator = Record<
     /** Totals (= direct + indirect, maintained in the same pass). */
     sets: number;
     effectiveSets: number;
+    unratedSets: number;
     /** Composition (Phase 5): primary-tag vs secondary-tag credit. */
     directSets: number;
     indirectSets: number;
@@ -318,7 +327,8 @@ export function accumulateExerciseVolume(
   volumeByMuscle: VolumeAccumulator,
   exercise: { id: string; name: string; primary_muscle?: string | null; secondary_muscles?: string[] | null },
   workingSets: number,
-  effectiveVolume: number = workingSets
+  effectiveVolume: number = workingSets,
+  unratedSets: number = 0
 ): void {
   if (!exercise.primary_muscle || workingSets === 0) return;
 
@@ -337,6 +347,7 @@ export function accumulateExerciseVolume(
       volumeByMuscle[muscle] = {
         sets: 0,
         effectiveSets: 0,
+        unratedSets: 0,
         directSets: 0,
         indirectSets: 0,
         directEffectiveSets: 0,
@@ -347,6 +358,10 @@ export function accumulateExerciseVolume(
     const entry = volumeByMuscle[muscle];
     entry.sets += sets;
     entry.effectiveSets += effective;
+    // Unrated credit scales with the same factor as the raw sets, so the
+    // "of X sets · Y unrated" pair stays proportional under 0.5-secondary
+    // crediting.
+    entry.unratedSets += workingSets > 0 ? unratedSets * (sets / workingSets) : 0;
     if (isDirect) {
       entry.directSets += sets;
       entry.directEffectiveSets += effective;
@@ -425,6 +440,7 @@ export function volumeAccumulatorToStats(volumeByMuscle: VolumeAccumulator): Mus
         muscle,
         sets: data.sets,
         effectiveSets: data.effectiveSets,
+        unratedSets: data.unratedSets,
         directSets: data.directSets,
         indirectSets: data.indirectSets,
         directEffectiveSets: data.directEffectiveSets,
@@ -458,13 +474,19 @@ export function computeWeeklyMuscleVolume(blocks: WeeklyVolumeBlockRow[]): Muscl
     // WITHOUT the unknown-RIR warning — the data was never fetched, which is
     // different from a fetched set that genuinely lacks an RIR report.
     const hasFeedbackColumn = workingSets.some((s) => 'feedback' in s);
-    const effectiveVolume = hasFeedbackColumn
-      ? sumEffectiveVolume(
+    const summary = hasFeedbackColumn
+      ? summarizeEffectiveVolume(
           workingSets.map((s) => rirFromFeedback(s.feedback)),
           exercise.name
         )
-      : workingSets.length;
-    accumulateExerciseVolume(volumeByMuscle, exercise, workingSets.length, effectiveVolume);
+      : null;
+    accumulateExerciseVolume(
+      volumeByMuscle,
+      exercise,
+      workingSets.length,
+      summary ? summary.effectiveSets : workingSets.length,
+      summary ? summary.unratedSets : 0
+    );
   }
   return volumeAccumulatorToStats(volumeByMuscle);
 }
@@ -803,6 +825,9 @@ export interface VolumeRow {
   sets: number;
   /** RIR-weighted effective volume for the same sets (one decimal). */
   effectiveSets: number;
+  /** Credited sets excluded from `effectiveSets` for missing RIR (one decimal).
+   *  Surfaced next to the effective number whenever non-zero. */
+  unratedSets: number;
   /**
    * Composition (Phase 5): the share of `sets`/`effectiveSets` that came from
    * PRIMARY-muscle tags (one decimal; indirect = total − direct). Lets the UI
@@ -851,6 +876,7 @@ export interface BuildVolumeRowsOptions {
 interface StandardMuscleRollup {
   sets: number;
   effectiveSets: number;
+  unratedSets: number;
   directSets: number;
   indirectSets: number;
   directEffectiveSets: number;
@@ -861,6 +887,7 @@ interface StandardMuscleRollup {
 const emptyRollup = (): StandardMuscleRollup => ({
   sets: 0,
   effectiveSets: 0,
+  unratedSets: 0,
   directSets: 0,
   indirectSets: 0,
   directEffectiveSets: 0,
@@ -877,6 +904,7 @@ function setsByStandardMuscle(
     const cur = out.get(m) ?? emptyRollup();
     cur.sets += stat.sets * share;
     cur.effectiveSets += stat.effectiveSets * share;
+    cur.unratedSets += stat.unratedSets * share;
     cur.directSets += stat.directSets * share;
     cur.indirectSets += stat.indirectSets * share;
     cur.directEffectiveSets += stat.directEffectiveSets * share;
@@ -940,6 +968,7 @@ export function buildVolumeRows(
 
     let coarseSetsRaw = 0;
     let coarseEffectiveRaw = 0;
+    let coarseUnratedRaw = 0;
     let coarseDirectRaw = 0;
     let coarseDirectEffectiveRaw = 0;
     // Accumulate the per-exercise breakdown at FULL precision; rounding
@@ -954,6 +983,7 @@ export function buildVolumeRows(
       const data = byStd.get(child) ?? emptyRollup();
       coarseSetsRaw += data.sets;
       coarseEffectiveRaw += data.effectiveSets;
+      coarseUnratedRaw += data.unratedSets;
       coarseDirectRaw += data.directSets;
       coarseDirectEffectiveRaw += data.directEffectiveSets;
       for (const ex of data.exercises) {
@@ -1000,6 +1030,7 @@ export function buildVolumeRows(
         parent: coarse,
         sets: childSets,
         effectiveSets: round1(data.effectiveSets),
+        unratedSets: round1(data.unratedSets),
         directSets: round1(data.directSets),
         directEffectiveSets: round1(data.directEffectiveSets),
         band: childBand,
@@ -1022,6 +1053,7 @@ export function buildVolumeRows(
       parent: null,
       sets: coarseSets,
       effectiveSets: round1(coarseEffectiveRaw),
+      unratedSets: round1(coarseUnratedRaw),
       directSets: round1(coarseDirectRaw),
       directEffectiveSets: round1(coarseDirectEffectiveRaw),
       band,

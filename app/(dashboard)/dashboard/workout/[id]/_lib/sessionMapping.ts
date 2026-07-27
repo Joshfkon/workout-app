@@ -69,12 +69,14 @@ export interface LoadedExerciseRow {
   default_rep_range: [number, number] | null;
   default_rir: number | null;
   min_weight_increment_kg: number | null;
+  available_increments_kg?: number[] | null;
   progression_model?: 'e1rm' | 'rep_total' | null;
   rep_boundary?: 'crisp' | 'drifting' | null;
   form_cues: string[] | null;
   common_mistakes: string[] | null;
   setup_note: string | null;
   movement_pattern: string | null;
+  rom_demands: string[] | null;
   equipment_required: string[] | null;
   equipment: string | null;
   hypertrophy_tier: HypertrophyTier | null;
@@ -173,12 +175,14 @@ export function mapLoadedBlockRow(
     defaultRepRange: block.exercises.default_rep_range || [8, 12],
     defaultRir: block.exercises.default_rir || 2,
     minWeightIncrementKg: block.exercises.min_weight_increment_kg || 2.5,
+    availableIncrementsKg: block.exercises.available_increments_kg ?? null,
     progressionModel: block.exercises.progression_model ?? null,
     repBoundary: block.exercises.rep_boundary ?? 'crisp',
     formCues: block.exercises.form_cues || [],
     commonMistakes: block.exercises.common_mistakes || [],
     setupNote: block.exercises.setup_note || '',
     movementPattern: block.exercises.movement_pattern || '',
+    romDemands: block.exercises.rom_demands || [],
     equipmentRequired: block.exercises.equipment_required || [],
     equipment: block.exercises.equipment || (block.exercises.equipment_required?.[0] || 'barbell'),
     // Include hypertrophy scoring for tier badges

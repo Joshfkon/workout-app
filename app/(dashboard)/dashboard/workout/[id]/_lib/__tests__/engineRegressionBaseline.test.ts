@@ -4,6 +4,7 @@ import {
   recommendSessionStart,
   recommendSet,
 } from '@/services/setRecommender';
+import { SUGGESTION_ENGINE_VERSION } from '@/services/suggestionEngine/constants';
 
 /**
  * REGRESSION BASELINE for the weight/rep engine remediation pass
@@ -142,7 +143,7 @@ describe('engine regression baseline — staple exercise, recent history', () =>
       // pick (100.29) rounds to the recent 100 on its own.
       clampBinder: 'none',
       preClampWeightKg: expect.any(Number),
-      engineVersion: 4,
+      engineVersion: SUGGESTION_ENGINE_VERSION,
     });
   });
 
@@ -176,7 +177,7 @@ describe('engine regression baseline — staple exercise, recent history', () =>
       clamped: false,
       clampBinder: 'bump_gate',
       preClampWeightKg: expect.any(Number),
-      engineVersion: 4,
+      engineVersion: SUGGESTION_ENGINE_VERSION,
     });
   });
 

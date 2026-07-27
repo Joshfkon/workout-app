@@ -898,7 +898,11 @@ describe('calculateWeeklyVolume — effectiveVolumeSets (RIR-weighted)', () => {
     expect(chest.effectiveVolumeSets).toBeCloseTo(2.0, 5);
   });
 
-  it('weights sets with null/unknown RIR 1.0 (conservative), warns, and never drops them', () => {
+  it('excludes null/unknown-RIR sets from effective volume (unrated — never max credit)', () => {
+    // The old rule pinned here (unknown → 1.0 "conservative") was itself a
+    // defect: missing data receiving maximum credit inflated effective volume
+    // until eff ≡ sets everywhere. Unrated sets stay in totalSets (real work
+    // performed) and are excluded from the effective sum.
     const exercise = createMockExercise('chest_upper');
     const block = createMockBlock(exercise.id);
     const input: CalculateVolumeInput = {
@@ -916,9 +920,8 @@ describe('calculateWeeklyVolume — effectiveVolumeSets (RIR-weighted)', () => {
     const result = calculateWeeklyVolume(input);
     const chest = result.get('chest_upper')!;
     expect(chest.totalSets).toBe(2);
-    expect(chest.effectiveVolumeSets).toBeCloseTo(1.6, 5); // 1.0 (unknown) + 0.6
-    expect(warnSpy).toHaveBeenCalledTimes(1);
-    expect(warnSpy.mock.calls[0][0]).toMatch(/null\/unknown RIR/);
+    expect(chest.effectiveVolumeSets).toBeCloseTo(0.6, 5); // RIR 3 only; unrated excluded
+    expect(warnSpy).not.toHaveBeenCalled();
   });
 
   it('applies the 0.5x secondary-muscle credit to effective volume too', () => {

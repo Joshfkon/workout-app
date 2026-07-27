@@ -362,7 +362,21 @@ function computeHistoryFromBlocks(
         inestimableSetCount++;
         return;
       }
-      estimableSetCount++;
+      if (estimate.confidence === 'medium') {
+        // ABOVE THE CAP (12 < effective reps ≤ 15): the estimate exists but
+        // is computed AT the cap — w × 36/25 regardless of the actual rep
+        // count, a FLOOR that cannot rise with rep progress. An exercise
+        // living up here has a permanently frozen anchor (the lateral-raise
+        // failure: every rep gained changes the estimate by exactly
+        // nothing), so for progression-model classification these sets count
+        // toward rep_total exactly like beyond-domain sets. The value still
+        // enters the anchor pool below — as a floor it remains the best
+        // available capacity statement for exercises that stay on the e1rm
+        // path with only occasional above-cap sets.
+        inestimableSetCount++;
+      } else {
+        estimableSetCount++;
+      }
       anchorCandidates.push({
         e1rmKg: estimate.value,
         sessionId: session?.id ?? block.id,
