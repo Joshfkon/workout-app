@@ -86,6 +86,16 @@ jest.mock('@/lib/utils', () => ({
     unit === 'lb' ? Math.round(w * 2.20462 * 10) / 10 : Math.round(w * 10) / 10
   ),
   inputWeightToKg: jest.fn((w, unit) => (unit === 'lb' ? w / 2.20462 : w)),
+  sumDisplayVolume: jest.fn(
+    (sets: { weightKg: number; reps: number }[], unit: 'kg' | 'lb') =>
+      Math.round(
+        sets.reduce(
+          (sum, s) =>
+            sum + (unit === 'lb' ? Math.round(s.weightKg * 2.20462 * 10) / 10 : s.weightKg) * s.reps,
+          0
+        )
+      )
+  ),
   roundToPlateIncrement: jest.fn((w) => Math.round(w / 2.5) * 2.5),
   roundToIncrement: jest.fn((w, inc) => (inc > 0 ? Math.round(w / inc) * inc : w)),
   clamp: jest.fn((v, min, max) => Math.max(min, Math.min(max, v))),
@@ -388,6 +398,52 @@ describe('ExerciseCard', () => {
         />
       );
       expect(screen.getByText(/last session 100 kg × 14/)).toBeInTheDocument();
+    });
+
+    it('shows the last session total volume in the meta line and history detail', async () => {
+      const user = userEvent.setup();
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          exerciseHistory={{
+            lastWorkoutDate: '2024-01-10',
+            lastWorkoutSets: [
+              { weightKg: 60, reps: 9, rpe: 8 },
+              { weightKg: 60, reps: 8, rpe: 8 },
+            ],
+            estimatedE1RM: 80,
+            personalRecord: null,
+            totalSessions: 5,
+          }}
+        />
+      );
+      // 60×9 + 60×8 = 1,020 kg appended to the last-session summary
+      const metaLine = screen.getByText(/last session 60 kg × 9, × 8 @ 2 RIR · 1,020 kg vol/);
+      expect(metaLine).toBeInTheDocument();
+
+      // Expanded history detail repeats it as "Total volume"
+      await user.click(metaLine);
+      expect(screen.getByText(/Total volume/)).toBeInTheDocument();
+      expect(screen.getByText('1,020 kg')).toBeInTheDocument();
+    });
+
+    it('shows current session volume plus the projection for remaining programmed sets', () => {
+      // 2 of 3 programmed sets logged: 100×10 + 100×9 = 1,900 kg so far, and
+      // the third set's prefill projects the finish-all-sets total above that.
+      const sets = [
+        createMockSetLog({ id: 'set-1', setNumber: 1, weightKg: 100, reps: 10, rpe: 7 }),
+        createMockSetLog({ id: 'set-2', setNumber: 2, weightKg: 100, reps: 9, rpe: 8 }),
+      ];
+      render(<ExerciseCard {...defaultProps} sets={sets} isActive={true} />);
+
+      const line = screen.getByTestId('session-volume-line');
+      expect(line).toHaveTextContent(/Volume 1,900 kg/);
+      expect(line).toHaveTextContent(/projected/);
+    });
+
+    it('renders no session volume line on an untouched inactive exercise', () => {
+      render(<ExerciseCard {...defaultProps} />);
+      expect(screen.queryByTestId('session-volume-line')).not.toBeInTheDocument();
     });
 
     it('calls onExerciseNameClick when exercise name is clicked', async () => {
