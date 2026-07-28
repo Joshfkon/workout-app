@@ -386,13 +386,23 @@ export function useRestTimer({
       } else {
         void cancelRestCompleteNotification();
       }
+    } else if (isFinished) {
+      // Timer already completed: adding time means "give me more rest", so
+      // restart the countdown with the added amount. Without this the display
+      // just shows a frozen number that never counts down. start() also
+      // re-persists state and reschedules the native completion notification.
+      const newSeconds = Math.max(0, seconds + amount);
+      if (newSeconds > 0) {
+        start(newSeconds);
+      }
     } else {
-      // When not running, just update the seconds state
+      // Paused (or never started): adjust the pending duration without
+      // auto-resuming.
       const newSeconds = Math.max(0, seconds + amount);
       setSeconds(newSeconds);
       setInitialSeconds(newSeconds || defaultSeconds);
     }
-  }, [seconds, isRunning, initialSeconds, saveTimerState, defaultSeconds]);
+  }, [seconds, isRunning, isFinished, initialSeconds, saveTimerState, defaultSeconds, start]);
 
   const skip = useCallback(() => {
     // Calculate how long they rested before skipping
