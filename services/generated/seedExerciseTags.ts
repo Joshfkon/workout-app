@@ -87,7 +87,7 @@ export const SEED_EXERCISE_TAGS: Record<string, SeedExerciseTags> = {
   "Front Raise": { primary: "front_delts", secondaries: [] },
   "Glute Bridge": { primary: "glutes", secondaries: ["hamstrings"] },
   "Glute Bridge Hold": { primary: "glutes", secondaries: ["hamstrings"] },
-  "Glute Drive Machine": { primary: "glutes", secondaries: ["hamstrings"] },
+  "Glute Drive Machine": { primary: "glutes", secondaries: ["hamstrings","quads"] },
   "Good Morning": { primary: "hamstrings", secondaries: ["glutes","erectors"] },
   "Hack Squat": { primary: "quads", secondaries: ["glutes","adductors"] },
   "Hammer Curl": { primary: "biceps", secondaries: ["forearms"] },
