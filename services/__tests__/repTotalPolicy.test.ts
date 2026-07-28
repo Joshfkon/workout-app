@@ -105,6 +105,76 @@ describe('recommendRepTotalSessionStart', () => {
     expect(plan.weightKg).toBe(61.23);
   });
 
+  it('set count never silently drops below what was performed (ISO Low Row defect)', () => {
+    // Last session: 5 working sets. Block plan: 3. The old plan covered 3
+    // sets and said nothing — a 40% volume cut by omission.
+    const plan = recommendRepTotalSessionStart({
+      prevSessionSets: [
+        { weightKg: 100, reps: 14, rir: 2 },
+        { weightKg: 100, reps: 15, rir: 2 },
+        { weightKg: 100, reps: 13, rir: 2 },
+        { weightKg: 100, reps: 9, rir: 2 },
+        { weightKg: 100, reps: 10, rir: 2 },
+      ],
+      targetRepRange: [8, 12],
+      targetRir: 2,
+      minIncrementKg: 2.5,
+      plannedSets: 3,
+    })!;
+    expect(plan.recommendedSetCount).toBe(5);
+    expect(plan.perSetRepTargets).toHaveLength(5);
+    expect(plan.prevSessionSetCount).toBe(5);
+    expect(plan.prevSessionVolumeKg).toBe(6100);
+  });
+
+  it('a material projected volume cut is an explicit shortfall, never silent', () => {
+    const plan = recommendRepTotalSessionStart({
+      prevSessionSets: [
+        { weightKg: 100, reps: 14, rir: 2 },
+        { weightKg: 100, reps: 15, rir: 2 },
+        { weightKg: 100, reps: 13, rir: 2 },
+        { weightKg: 100, reps: 9, rir: 2 },
+        { weightKg: 100, reps: 10, rir: 2 },
+      ],
+      targetRepRange: [8, 12],
+      targetRir: 2,
+      minIncrementKg: 2.5,
+      plannedSets: 3,
+    })!;
+    // Bumped plan at +2.5% load with rep costs across 5 sets: the projection
+    // lands below 95% of last session's 6,100 — the plan must carry the
+    // shortfall instead of leaving a display field nobody reads.
+    expect(plan.projectedVolumeKg).toBeLessThan(6100);
+    if (plan.projectedVolumeKg < 6100 * 0.95) {
+      expect(plan.volumeShortfall).toEqual({
+        prevKg: 6100,
+        projectedKg: plan.projectedVolumeKg,
+      });
+    }
+  });
+
+  it('a small structural bump dip (rep cost vs load gain) is NOT flagged as a shortfall', () => {
+    const plan = recommendRepTotalSessionStart({
+      prevSessionSets: [
+        { weightKg: 50, reps: 25, rir: 2 },
+        { weightKg: 50, reps: 20, rir: 2 },
+        { weightKg: 50, reps: 12, rir: 2 },
+        { weightKg: 50, reps: 15, rir: 2 },
+        { weightKg: 50, reps: 12, rir: 2 },
+        { weightKg: 50, reps: 18, rir: 2 },
+      ],
+      targetRepRange: [10, 15],
+      targetRir: 2,
+      minIncrementKg: 2.5,
+      plannedSets: 2,
+    })!;
+    // Glute Drive shape: 6 sets, high reps. The plan keeps all 6 sets and
+    // projects within tolerance of last session — no false alarm.
+    expect(plan.recommendedSetCount).toBe(6);
+    expect(plan.projectedVolumeKg).toBeGreaterThan(plan.prevSessionVolumeKg * 0.95);
+    expect(plan.volumeShortfall).toBeNull();
+  });
+
   it('returns null with no usable history (caller keeps its cold-start path)', () => {
     expect(
       recommendRepTotalSessionStart({

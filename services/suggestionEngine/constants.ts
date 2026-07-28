@@ -251,6 +251,15 @@ export const HIGH_REP_COST_TAPER_PER_REP = 0.045;
  */
 export const HIGH_REP_COST_MIN_PER_PCT = 0.15;
 
+/**
+ * A rep_total plan's projected tonnage may land below last session's by at
+ * most this fraction before the plan carries an explicit volumeShortfall (a
+ * bump structurally trades a little volume — rep cost slightly outruns the
+ * load gain — and a ~2% dip is that trade, not a cut worth alarming on; the
+ * live defects were −21% to −53%).
+ */
+export const REP_TOTAL_VOLUME_SHORTFALL_TOLERANCE = 0.05;
+
 // ============================================================
 // SET-POSITION MATCHING (Phase A — intra-session prescription)
 // ============================================================

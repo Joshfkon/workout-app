@@ -1960,6 +1960,25 @@ export const ExerciseCard = memo(function ExerciseCard({
             ? `You cleared the ${block.targetRepRange[0]}-rep floor on every top-load set, but at the smallest available increment the heavier load would price your current reps below the floor. The load holds; keep adding reps until the increase fits inside the range.`
             : `Target: beat ${repTotalPlan.prevSessionRepTotal} total reps at this load (aim ${repTotalPlan.sessionRepTotalTarget}+). When every set clears ${block.targetRepRange[0]} at the target effort, the load steps up one increment.`
       );
+      // Volume is a CONSTRAINT (planner parity Phase 3): a plan covering
+      // fewer sets than the volume baseline requires, or projecting a
+      // material tonnage cut, says so explicitly — never a silent readout.
+      if (repTotalPlan.recommendedSetCount > block.targetSets) {
+        const missing = repTotalPlan.recommendedSetCount - block.targetSets;
+        reason += ` · add ${missing} set${missing === 1 ? '' : 's'} to match last session`;
+        explanation.push(
+          `Last session was ${repTotalPlan.prevSessionSetCount} sets (${Math.round(convertWeightForDisplay(repTotalPlan.prevSessionVolumeKg, unit)).toLocaleString('en-US')} ${weightLabel} of volume); today's plan only has ${block.targetSets}. Add ${missing} more set${missing === 1 ? '' : 's'} so the plan doesn't cut your volume.`
+        );
+      }
+      if (repTotalPlan.volumeShortfall) {
+        const prevVol = Math.round(convertWeightForDisplay(repTotalPlan.volumeShortfall.prevKg, unit));
+        const projVol = Math.round(convertWeightForDisplay(repTotalPlan.volumeShortfall.projectedKg, unit));
+        const pct = Math.round((1 - repTotalPlan.volumeShortfall.projectedKg / repTotalPlan.volumeShortfall.prevKg) * 100);
+        reason += ` · projects ${pct}% below last session's volume`;
+        explanation.push(
+          `Heads-up: even at ${repTotalPlan.recommendedSetCount} sets this plan projects ${projVol.toLocaleString('en-US')} ${weightLabel} of volume vs ${prevVol.toLocaleString('en-US')} last session (−${pct}%).`
+        );
+      }
     } else {
       // Session start: role-aware seed for this slot (services/setRecommender).
       // Working slots anchor on the e1RM (clamped ±10% of recent working weight);

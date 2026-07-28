@@ -63,6 +63,7 @@ import {
   MAX_REDUCE_PCT,
   HIGH_REP_COST_TAPER_PER_REP,
   HIGH_REP_COST_MIN_PER_PCT,
+  REP_TOTAL_VOLUME_SHORTFALL_TOLERANCE,
 } from './constants';
 import { smallestIncrement, roundPrescribedLoad } from './loadGrid';
 
@@ -187,6 +188,28 @@ export interface RepTotalSessionStart {
   bumpDeferred?: 'load_cost';
   /** The load the targets were derived FROM (last session's top load). */
   refLoadKg: number;
+  /** Last session's total tonnage (kg) across ALL valid working sets. */
+  prevSessionVolumeKg: number;
+  /** Last session's valid working-set count (all loads). */
+  prevSessionSetCount: number;
+  /** This plan's projected tonnage: plan load × Σ per-set targets. */
+  projectedVolumeKg: number;
+  /**
+   * Sets this plan actually covers (perSetRepTargets.length). VOLUME IS A
+   * CONSTRAINT: starts at max(planned sets, last session's at-load count) —
+   * set count never silently drops below what was performed — and extends up
+   * to last session's total set count while the projection at equal-or-
+   * greater load falls short of last session's tonnage. When this exceeds
+   * the block's planned sets, the banner must tell the lifter to add them.
+   */
+  recommendedSetCount: number;
+  /**
+   * Non-null when the projection STILL lands materially below last session's
+   * tonnage after set extension (beyond REP_TOTAL_VOLUME_SHORTFALL_TOLERANCE)
+   * — the banner must state the shortfall explicitly; it is never a silent
+   * display field.
+   */
+  volumeShortfall: { prevKg: number; projectedKg: number } | null;
 }
 
 /**
@@ -223,6 +246,37 @@ export function recommendRepTotalSessionStart(input: {
   const inc = input.minIncrementKg && input.minIncrementKg > 0 ? input.minIncrementKg : 2.5;
   const sets = Math.max(1, plannedSets);
 
+  // ---- Volume constraint (nothing about this plan may silently cut volume) ----
+  // Baseline: last session's tonnage across ALL valid working sets. The plan
+  // starts at max(planned sets, at-load count) — set count never silently
+  // drops below what was performed — and extends (up to last session's total
+  // set count) while the projection falls short of the baseline. A residual
+  // gap beyond the tolerance is surfaced as an explicit shortfall.
+  const prevSessionVolumeKg = valid.reduce((s, x) => s + x.weightKg * x.reps, 0);
+  const maxSetCount = Math.max(valid.length, sets);
+  const applyVolumeConstraint = (
+    weightKg: number,
+    targets: number[],
+    padValue: number
+  ): Pick<
+    RepTotalSessionStart,
+    'projectedVolumeKg' | 'recommendedSetCount' | 'volumeShortfall'
+  > => {
+    const sum = () => targets.reduce((a, b) => a + b, 0);
+    while (weightKg * sum() < prevSessionVolumeKg && targets.length < maxSetCount) {
+      targets.push(padValue);
+    }
+    const projectedVolumeKg = Math.round(weightKg * sum() * 10) / 10;
+    const volumeShortfall =
+      projectedVolumeKg < prevSessionVolumeKg * (1 - REP_TOTAL_VOLUME_SHORTFALL_TOLERANCE)
+        ? {
+            prevKg: Math.round(prevSessionVolumeKg * 10) / 10,
+            projectedKg: projectedVolumeKg,
+          }
+        : null;
+    return { projectedVolumeKg, recommendedSetCount: targets.length, volumeShortfall };
+  };
+
   // Gate cleared → price the increment: every at-load observed count is
   // exchanged to the bumped load through the non-linear rep-cost model. The
   // bump is EARNED only when every exchanged target stays at/above the range
@@ -237,17 +291,22 @@ export function recommendRepTotalSessionStart(input: {
     if (scaled.every((r) => r >= repMin)) {
       // Targets anchor to OBSERVED reps at the prior load, exchanged for the
       // load change — never reset to the range floor. Planned sets beyond
-      // history pad with the LAST exchanged target (the fatigue end).
+      // history pad with the LAST exchanged target (the fatigue end); the
+      // plan covers at least the at-load count actually performed.
       const tail = scaled[scaled.length - 1];
-      const perSet = Array.from({ length: sets }, (_, i) => scaled[i] ?? tail);
+      const perSet = Array.from({ length: Math.max(sets, atLoad.length) }, (_, i) => scaled[i] ?? tail);
+      const volume = applyVolumeConstraint(bumpedLoad, perSet, tail);
       return {
         weightKg: bumpedLoad,
         perSetRepTargets: perSet,
-        perSetRefReps: Array.from({ length: sets }, (_, i) => atLoad[i]?.reps),
+        perSetRefReps: Array.from({ length: perSet.length }, (_, i) => atLoad[i]?.reps),
         sessionRepTotalTarget: perSet.reduce((a, b) => a + b, 0),
         prevSessionRepTotal: prevTotal,
         bumped: true,
         refLoadKg: topLoad,
+        prevSessionVolumeKg: Math.round(prevSessionVolumeKg * 10) / 10,
+        prevSessionSetCount: valid.length,
+        ...volume,
       };
     }
     bumpDeferred = 'load_cost';
@@ -255,20 +314,25 @@ export function recommendRepTotalSessionStart(input: {
 
   // Repeat the load VERBATIM and chase the total: per-set seeds mirror last
   // session's counts (floored at repMin so a collapsed set re-asks the floor),
-  // padded with the floor for any extra planned sets.
-  const perSet = Array.from({ length: sets }, (_, i) => {
+  // padded with the floor for any extra planned sets. The plan covers at
+  // least the at-load count actually performed (no silent set-count drop).
+  const perSet = Array.from({ length: Math.max(sets, atLoad.length) }, (_, i) => {
     const prev = atLoad[i]?.reps;
     return Math.max(repMin, prev ?? repMin);
   });
+  const volume = applyVolumeConstraint(topLoad, perSet, repMin);
   return {
     weightKg: topLoad,
     perSetRepTargets: perSet,
-    perSetRefReps: Array.from({ length: sets }, (_, i) => atLoad[i]?.reps),
+    perSetRefReps: Array.from({ length: perSet.length }, (_, i) => atLoad[i]?.reps),
     sessionRepTotalTarget: prevTotal + 1,
     prevSessionRepTotal: prevTotal,
     bumped: false,
     ...(bumpDeferred ? { bumpDeferred } : {}),
     refLoadKg: topLoad,
+    prevSessionVolumeKg: Math.round(prevSessionVolumeKg * 10) / 10,
+    prevSessionSetCount: valid.length,
+    ...volume,
   };
 }
 
