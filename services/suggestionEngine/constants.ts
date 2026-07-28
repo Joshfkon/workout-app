@@ -48,8 +48,14 @@
  *       set (sessionCapacityClamped flag); INV-1 flags a prescription whose
  *       reps fall outside its own stated range (outsideRange) so the banner
  *       re-renders instead of silently contradicting itself.
+ *  v7 = rep_total planner parity: the rep_total path re-derives every set
+ *       from the sets observed this session (rep-space INV-1/INV-2 analogs,
+ *       too-heavy load reduction, positional provenance) instead of
+ *       re-serving the session-start plan verbatim; session-start bump
+ *       targets derive from OBSERVED reps exchanged through the non-linear
+ *       rep-cost model, never a reset to the range floor.
  */
-export const SUGGESTION_ENGINE_VERSION = 6;
+export const SUGGESTION_ENGINE_VERSION = 7;
 
 // ============================================================
 // SET ROLES (Phase 2)
@@ -225,6 +231,25 @@ export const REP_OVERSHOOT = 2;
  * 42.5×10 = 61.2-implied case against a 60.0 session best).
  */
 export const SESSION_CAPACITY_TOLERANCE = 0.01;
+
+// ============================================================
+// REP-TOTAL LOAD↔REP EXCHANGE (rep_total planner parity)
+// ============================================================
+
+/**
+ * Above 12 reps the load-rep relationship flattens: each rep past 12 tapers
+ * the rep cost of a 1% load change by this much (from Epley's 0.42/% at 12).
+ * Calibrated against live evidence: a +10% load change at ~17 observed reps
+ * cost ~1 rep, where Epley's slope predicts ~4.7 — high-rep sets live in the
+ * endurance domain where reps are cheap relative to load.
+ */
+export const HIGH_REP_COST_TAPER_PER_REP = 0.045;
+
+/**
+ * Floor on the high-rep cost slope (reps lost per 1% load increase): even
+ * deep in the endurance domain a load increase is never free.
+ */
+export const HIGH_REP_COST_MIN_PER_PCT = 0.15;
 
 // ============================================================
 // SET-POSITION MATCHING (Phase A — intra-session prescription)

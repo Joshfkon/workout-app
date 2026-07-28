@@ -627,23 +627,20 @@ export const ExerciseCard = memo(function ExerciseCard({
   // the SAME set position last session, so later pending slots get their own
   // positional target instead of a copy of the next set's.
   const recommendNext = (last: { weightKg: number; reps: number; rpe?: number; feedback?: SetFeedback }, positionOffset = 0) => {
-    // rep_total path: the load NEVER moves within a session; the rep target
-    // follows the session plan's slot (chase the total). No e1RM math runs.
+    // rep_total path: re-derived per set from today's observed sets
+    // (repTotalNextSet, memoized below) — rep-space invariants, no e1RM math.
     if (repTotalMode) {
-      const next = repTotalPlan
-        ? recommendRepTotalNextSet({
-            sessionPlan: repTotalPlan,
-            completedReps: completedSets.map((s) => s.reps),
-          })
-        : null;
+      const next = repTotalNextSet;
       return {
-        weightKg: last.weightKg,
+        weightKg: next?.weightKg ?? last.weightKg,
         reps:
           next?.reps ??
           Math.min(Math.max(last.reps, block.targetRepRange[0]), block.targetRepRange[1]),
         rir: effectiveTargetRir,
-        rationale: 'maintain' as const,
-        effortVsTarget: 'on_target' as const,
+        rationale: (next?.rationale === 'reduce_load' ? 'reduce_load' : 'maintain') as
+          | 'reduce_load'
+          | 'maintain',
+        effortVsTarget: next?.effortVsTarget ?? ('on_target' as const),
       };
     }
     return recommendSet({
@@ -1024,6 +1021,29 @@ export const ExerciseCard = memo(function ExerciseCard({
           })
         : null,
     [repTotalMode, prevSessionSetsForGating, block.targetRepRange, block.targetSets, effectiveTargetRir, exercise.minWeightIncrementKg]
+  );
+
+  // Re-derived next-set target for a rep_total exercise (planner parity with
+  // recommendSet): recomputed from the sets actually logged this session, so
+  // a set that contradicts the session-start plan moves the next prescription
+  // instead of the plan being re-served verbatim.
+  const repTotalNextSet = useMemo(
+    () =>
+      repTotalMode && repTotalPlan
+        ? recommendRepTotalNextSet({
+            sessionPlan: repTotalPlan,
+            observedSets: completedSets.map((s) => ({
+              weightKg: s.weightKg,
+              reps: s.reps,
+              rir: resolveLastRir(s, effectiveTargetRir),
+            })),
+            targetRepRange: block.targetRepRange,
+            targetRir: effectiveTargetRir,
+            minIncrementKg: exercise.minWeightIncrementKg,
+            availableIncrementsKg: exercise.availableIncrementsKg ?? undefined,
+          })
+        : null,
+    [repTotalMode, repTotalPlan, completedSets, block.targetRepRange, effectiveTargetRir, exercise.minWeightIncrementKg, exercise.availableIncrementsKg]
   );
 
   // Role-aware session-start seed for one slot (services/setRecommender).
@@ -1777,19 +1797,50 @@ export const ExerciseCard = memo(function ExerciseCard({
       // is reflected here with no stale "vs suggestion" commentary.
       const lastSetData = { weightKg: lastCompleted.weightKg, reps: lastCompleted.reps, rpe: lastCompleted.rpe, feedback: lastCompleted.feedback };
       if (repTotalMode) {
-        // rep_total: hold the load, chase the session total. No e1RM claims.
-        const rec = recommendNext(lastSetData);
-        const done = completedSets.map((s) => s.reps);
-        const soFar = done.reduce((a, b) => a + b, 0);
-        weight = seedWeightString(rec.weightKg, lastCompleted.weightKg);
-        reps = rec.reps;
+        // rep_total: re-derived from today's observed sets (planner parity).
+        // No e1RM claims; the invariant flags render like the e1RM path's.
+        const next = repTotalNextSet;
+        const soFar = next?.totalSoFar ?? completedSets.reduce((a, s) => a + s.reps, 0);
+        weight = seedWeightString(next?.weightKg ?? lastCompleted.weightKg, lastCompleted.weightKg);
+        reps = next?.reps ?? Math.min(Math.max(lastCompleted.reps, block.targetRepRange[0]), block.targetRepRange[1]);
         repsLabel = String(reps);
-        if (repTotalPlan) {
-          const remaining = Math.max(0, repTotalPlan.sessionRepTotalTarget - soFar);
-          reason = `rep-total — ${soFar} of ${repTotalPlan.sessionRepTotalTarget} reps (${remaining} to beat last session)`;
-          explanation.push(
-            `Rep-total progression: the load stays fixed for the whole session. Beat last session's total of ${repTotalPlan.prevSessionRepTotal} reps at this weight; ${soFar} logged so far.`
-          );
+        if (next && repTotalPlan) {
+          if (next.rationale === 'reduce_load') {
+            reason = `rep-total — reducing the load: last set fell below the ${block.targetRepRange[0]}-rep floor at failure`;
+            explanation.push(
+              `The last set missed the ${block.targetRepRange[0]}-rep range floor with nothing left in reserve — the load is too heavy for this range, so it steps down to put your demonstrated capacity back at the middle of the range.`
+            );
+          } else {
+            const remaining = Math.max(0, next.sessionRepTotalTarget - soFar);
+            reason = `rep-total — ${soFar} of ${next.sessionRepTotalTarget} reps (${remaining} to beat last session)`;
+            if (next.positionRef) {
+              // INV-4 analog: the only delta claim allowed is like-to-like —
+              // this slot vs the SAME set position last session.
+              explanation.push(
+                `Set ${next.positionRef.setNo} last session was ${next.positionRef.prevReps} reps at this load — that position anchors this set's target.`
+              );
+            }
+            explanation.push(
+              `Rep-total progression: beat last session's total of ${repTotalPlan.prevSessionRepTotal} reps at this weight; ${soFar} logged so far.`
+            );
+          }
+          if (next.sessionCapacityClamped) {
+            reason += ' · capped at today’s best';
+            explanation.push(
+              'Capped: the plan asked for more reps than your best set today demonstrates at this load and effort. A rep target is never allowed to exceed what you’ve actually shown this session.'
+            );
+          }
+          if (next.outsideRange === 'below') {
+            reason += ` · target ${reps} — below the ${block.targetRepRange[0]}–${block.targetRepRange[1]} range`;
+            explanation.push(
+              `The re-derived target of ${reps} reps sits below the ${block.targetRepRange[0]}-rep floor — today's sets show the load is running heavy for this range.`
+            );
+          } else if (next.outsideRange === 'above') {
+            reason += ` · target ${reps} — above the ${block.targetRepRange[0]}–${block.targetRepRange[1]} range`;
+            explanation.push(
+              `The re-derived target of ${reps} reps sits above the ${block.targetRepRange[1]}-rep top of the range — the load is running light.`
+            );
+          }
         } else {
           reason = `rep-total — hold the weight and accumulate reps (${soFar} so far)`;
           explanation.push(

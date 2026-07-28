@@ -6,13 +6,43 @@
  * most sets sit beyond the canonical estimator's 15-effective-rep domain.
  * These exercises progress on REP TOTALS instead:
  *
- *   - FIXED load for the whole session (held verbatim, never re-rounded);
+ *   - FIXED load planned for the session (held verbatim on a repeat, never
+ *     re-rounded);
  *   - progress target = beat last session's rep TOTAL at that load;
- *   - add the smallest native increment only when EVERY working set cleared
- *     the range floor at target effort last session;
+ *   - add the smallest native increment only when EVERY top-load working set
+ *     cleared the range floor at target effort last session;
  *   - otherwise repeat the load and chase reps.
  *
  * No e1RM is computed, displayed, or ingested for calibration on this path.
+ *
+ * PLANNER PARITY (rep_total re-derivation): the session-start plan is a
+ * BASELINE, not a script. `recommendRepTotalNextSet` re-derives every set
+ * from the sets actually logged this session (`observedSets`), mirroring the
+ * e1RM path's `recommendSet` contract:
+ *   - INV-1 analog: a rep ask outside the stated range carries `outsideRange`
+ *     so the banner renders the contradiction, never silently;
+ *   - INV-2 analog (session-capacity ceiling, in REP space): an ask may never
+ *     imply more rep capacity at the asked effort than the best set OBSERVED
+ *     today demonstrates (`sessionCapacityClamped`) — the fix for "did 6 @ 0
+ *     RIR, engine re-asked 10 at the same load";
+ *   - too-heavy reaction (recommendSet's reduce branch, rep-space): a set
+ *     below the range floor at/past the failure deadband steps the LOAD down
+ *     toward the range mid — holding a proven-too-heavy load and re-serving
+ *     the plan is not a prescription;
+ *   - INV-4 analog: banner deltas compare a slot to the SAME set position
+ *     last session (`positionRef` provenance) or show no number.
+ *
+ * The load↔rep exchange rate is `expectedRepsAfterLoadChange` — Epley-slope
+ * below 12 reps, flattened above it (the load-rep relationship is NOT linear
+ * at high reps; Epley's slope overstates the cost of a load change in the
+ * endurance domain).
+ *
+ * The e1RM prescription core (`prescribe`) is deliberately NOT shared with
+ * this path: on rep_total exercises the e1RM curve is the documented fiction
+ * this policy exists to avoid. What IS shared: the invariant vocabulary
+ * (flags and their banner obligations), the loading-grid rules
+ * (services/suggestionEngine/loadGrid), and the effort/deadband dials
+ * (services/suggestionEngine/constants).
  *
  * Which exercises route here: an explicit `exercises.progression_model`
  * ('rep_total' | 'e1rm') always wins; NULL auto-classifies from history —
@@ -27,6 +57,14 @@
  */
 
 import type { PrevSessionSet } from '@/services/setRecommender';
+import {
+  DEADBAND_RIR,
+  EFFORT_MATCH_TOLERANCE,
+  MAX_REDUCE_PCT,
+  HIGH_REP_COST_TAPER_PER_REP,
+  HIGH_REP_COST_MIN_PER_PCT,
+} from './constants';
+import { smallestIncrement, roundPrescribedLoad } from './loadGrid';
 
 export type ProgressionModel = 'e1rm' | 'rep_total';
 export type RepBoundary = 'crisp' | 'drifting';
@@ -47,11 +85,85 @@ export function resolveProgressionModel(
 /** Effort tolerance: a set "at target effort" may be up to this much easier. */
 const EFFORT_TOLERANCE_RIR = 1;
 
+// ============================================================
+// LOAD↔REP EXCHANGE RATE (rep-space, no e1RM)
+// ============================================================
+
+/**
+ * Rep cost of a load change, per 1% of load, at a given rep count.
+ *
+ * Below 12 reps this is Epley's own local slope — reps(w) = 30(E/w − 1)
+ * differentiates to (30 + r) / 100 reps per 1% load — so the rep_total policy
+ * and the e1RM path agree wherever both are defined. ABOVE 12 reps the real
+ * load-rep curve flattens (the endurance domain: the observed +10% on a
+ * ~17-rep cable curl cost ~1 rep, where Epley's slope predicts ~4.7), so the
+ * slope tapers per rep past 12, floored at HIGH_REP_COST_MIN_PER_PCT.
+ */
+function repCostPerPctLoad(reps: number): number {
+  const epleySlope = (30 + Math.min(reps, 12)) / 100;
+  if (reps <= 12) return epleySlope;
+  return Math.max(
+    HIGH_REP_COST_MIN_PER_PCT,
+    epleySlope - HIGH_REP_COST_TAPER_PER_REP * (reps - 12)
+  );
+}
+
+/**
+ * Expected reps at a NEW load, given an observed rep count at a reference
+ * load — THE rep_total load↔rep exchange function (both directions: a load
+ * increase costs reps, a decrease returns them). Non-linear above 12 reps
+ * (see repCostPerPctLoad). Never returns below 1; malformed inputs echo the
+ * observation instead of throwing.
+ */
+export function expectedRepsAfterLoadChange(
+  obsReps: number,
+  fromKg: number,
+  toKg: number
+): number {
+  if (!(obsReps > 0) || !(fromKg > 0) || !(toKg > 0)) {
+    return Math.max(1, Math.round(obsReps || 1));
+  }
+  const pctChange = ((toKg - fromKg) / fromKg) * 100;
+  if (pctChange === 0) return Math.max(1, Math.round(obsReps));
+  return Math.max(1, Math.round(obsReps - repCostPerPctLoad(obsReps) * pctChange));
+}
+
+/** One set logged THIS session, with its resolved effort. */
+export interface RepTotalObservedSet {
+  weightKg: number;
+  reps: number;
+  /** Resolved RIR (resolveLastRir convention). Omitted → no effort signal. */
+  rir?: number;
+}
+
+/**
+ * The rep ask an observed set supports at `atLoadKg` and `targetRir` — the
+ * INV-2 analog's unit of account. The set's zero-RIR capacity (reps + RIR
+ * left) is exchanged to the asked load, then the asked reserve is paid out
+ * of it.
+ */
+function observedAskCeiling(
+  s: RepTotalObservedSet,
+  atLoadKg: number,
+  targetRir: number
+): number {
+  const zeroRirCapacity = s.reps + Math.max(0, s.rir ?? 0);
+  const capacityAtLoad = expectedRepsAfterLoadChange(zeroRirCapacity, s.weightKg, atLoadKg);
+  return Math.max(1, capacityAtLoad - Math.max(0, targetRir));
+}
+
 export interface RepTotalSessionStart {
   /** Fixed load for the session (kg) — held VERBATIM from history on a repeat. */
   weightKg: number;
   /** Per-set rep targets, one per planned set (prev session's counts, floored). */
   perSetRepTargets: number[];
+  /**
+   * The previous session's OBSERVED reps behind each slot's target (same
+   * index), for like-to-like banner framing (INV-4 analog): a delta claim
+   * compares a slot to the SAME position last session or shows nothing.
+   * Undefined entries = the slot had no positional reference (padding).
+   */
+  perSetRefReps: Array<number | undefined>;
   /** Session target: beat this total (prev total + 1 on a repeat). */
   sessionRepTotalTarget: number;
   /** Last session's rep total at the fixed load (0 when no history). */
@@ -99,6 +211,7 @@ export function recommendRepTotalSessionStart(input: {
     return {
       weightKg: topLoad + inc,
       perSetRepTargets: Array.from({ length: sets }, () => repMin),
+      perSetRefReps: Array.from({ length: sets }, (_, i) => atLoad[i]?.reps),
       sessionRepTotalTarget: sets * repMin,
       prevSessionRepTotal: prevTotal,
       bumped: true,
@@ -115,45 +228,163 @@ export function recommendRepTotalSessionStart(input: {
   return {
     weightKg: topLoad,
     perSetRepTargets: perSet,
+    perSetRefReps: Array.from({ length: sets }, (_, i) => atLoad[i]?.reps),
     sessionRepTotalTarget: prevTotal + 1,
     prevSessionRepTotal: prevTotal,
     bumped: false,
   };
 }
 
+export interface RepTotalNextSetInput {
+  sessionPlan: RepTotalSessionStart;
+  /** Sets completed THIS session, in performed order, with resolved effort. */
+  observedSets: RepTotalObservedSet[];
+  targetRepRange: [number, number];
+  targetRir: number;
+  minIncrementKg?: number;
+  availableIncrementsKg?: number[];
+}
+
 export interface RepTotalNextSet {
-  /** Hold the session's fixed load, verbatim. */
+  /** The load to lift next — today's actual load; stepped down on a clear miss. */
   weightKg: number;
-  /** Rep target for the next set. */
+  /** Rep target for the next set, re-derived from today's observations. */
   reps: number;
   /** Session total logged so far. */
   totalSoFar: number;
-  /** Reps still needed to beat the session target (0 when already beaten). */
+  /** Reps still needed to reach the session PLAN total (0 when reached). */
   remainingToTarget: number;
   sessionRepTotalTarget: number;
+  /**
+   * Why this target: 'follow_plan' = the session plan's slot target survived
+   * today's evidence; 'reduce_load' = the last set proved the load too heavy
+   * (below the range floor at/past the failure deadband) and the load steps
+   * down toward the range mid.
+   */
+  rationale: 'follow_plan' | 'reduce_load';
+  /** How the LAST observed set's effort compared to target (banner grammar). */
+  effortVsTarget: 'easier' | 'on_target' | 'harder';
+  /**
+   * INV-2 analog: the plan's ask implied more rep capacity at the asked
+   * effort than the best set observed today — trimmed to the observed
+   * ceiling. The banner must say so.
+   */
+  sessionCapacityClamped?: boolean;
+  /** INV-1 analog: the ask falls outside the stated rep range — banner must acknowledge. */
+  outsideRange?: 'below' | 'above';
+  /**
+   * INV-4 analog: the positional reference behind this slot's target — the
+   * SAME set position last session. Absent → no delta claim may be rendered.
+   */
+  positionRef?: { setNo: number; prevReps: number };
 }
 
 /**
- * Within-session next-set target for a rep_total exercise: the load NEVER
- * moves mid-session; the rep target mirrors the session-start plan for that
- * slot, and the remaining-total tells the user what beats last session.
+ * Within-session next-set target for a rep_total exercise — RE-DERIVED from
+ * the sets actually logged this session on every call (parity with
+ * `recommendSet`; the session plan is a baseline, not a script).
  */
-export function recommendRepTotalNextSet(input: {
-  sessionPlan: RepTotalSessionStart;
-  completedReps: number[];
-}): RepTotalNextSet {
-  const { sessionPlan, completedReps } = input;
-  const totalSoFar = completedReps.reduce((s, r) => s + r, 0);
-  const slot = completedReps.length;
-  const reps =
+export function recommendRepTotalNextSet(input: RepTotalNextSetInput): RepTotalNextSet {
+  const { sessionPlan, observedSets, targetRepRange, targetRir } = input;
+  const [repMin, repMax] = targetRepRange;
+  const mid = Math.round((repMin + repMax) / 2);
+
+  const valid = observedSets.filter((s) => s.weightKg > 0 && s.reps > 0);
+  const totalSoFar = valid.reduce((sum, s) => sum + s.reps, 0);
+  // Slot index counts LOGGED sets (invalid rows still consume their slot so
+  // plan alignment survives a malformed row instead of shifting every target).
+  const slot = observedSets.length;
+  const last = valid[valid.length - 1];
+
+  // Today's actual working load: what was last lifted, else the plan's load.
+  const currentLoadKg = last && last.weightKg > 0 ? last.weightKg : sessionPlan.weightKg;
+
+  // Effort classification of the last set, same grammar as recommendSet.
+  const dev = last && last.rir !== undefined ? last.rir - targetRir : 0;
+  const effortVsTarget: RepTotalNextSet['effortVsTarget'] =
+    !last || last.rir === undefined
+      ? 'on_target'
+      : dev >= EFFORT_MATCH_TOLERANCE
+        ? 'easier'
+        : dev <= -EFFORT_MATCH_TOLERANCE
+          ? 'harder'
+          : 'on_target';
+
+  // Plan slot target, exchanged onto today's actual load when it differs from
+  // the planned load (a lifter-chosen load must not be graded on the plan's).
+  const planSlotReps =
     sessionPlan.perSetRepTargets[slot] ??
     sessionPlan.perSetRepTargets[sessionPlan.perSetRepTargets.length - 1] ??
-    1;
+    repMin;
+  let reps =
+    currentLoadKg !== sessionPlan.weightKg
+      ? expectedRepsAfterLoadChange(planSlotReps, sessionPlan.weightKg, currentLoadKg)
+      : planSlotReps;
+  let weightKg = currentLoadKg;
+  let rationale: RepTotalNextSet['rationale'] = 'follow_plan';
+
+  // Too-heavy reaction (recommendSet's reduce branch, rep-space): the last
+  // set fell below the range floor at/past the failure deadband — the LOAD is
+  // the problem, and no rep target at this load is a prescription. Step the
+  // load down so the set's demonstrated capacity prices out at the range mid,
+  // capped at −MAX_REDUCE_PCT, on the loading grid.
+  if (last && last.reps < repMin && last.rir !== undefined && dev <= -DEADBAND_RIR) {
+    const zeroRirCapacity = last.reps + Math.max(0, last.rir);
+    const neededZeroRir = mid + Math.max(0, targetRir);
+    const pctDrop = (zeroRirCapacity - neededZeroRir) / repCostPerPctLoad(zeroRirCapacity);
+    const rawKg = Math.max(
+      currentLoadKg * (1 + pctDrop / 100),
+      currentLoadKg * (1 - MAX_REDUCE_PCT)
+    );
+    const r = roundPrescribedLoad(Math.min(rawKg, currentLoadKg), {
+      availableIncrementsKg: input.availableIncrementsKg,
+      minIncrementKg: input.minIncrementKg,
+      referenceKg: currentLoadKg,
+    });
+    if (!r.noMeaningfulChange && r.weightKg < currentLoadKg) {
+      weightKg = Math.max(smallestIncrement(input.availableIncrementsKg, input.minIncrementKg), r.weightKg);
+      rationale = 'reduce_load';
+      reps = observedAskCeiling(last, weightKg, targetRir);
+    }
+  }
+
+  // INV-2 analog: once ≥1 set is logged, the ask may not exceed what today's
+  // best observed set supports at the asked load and effort.
+  let sessionCapacityClamped = false;
+  if (valid.length > 0) {
+    let ceiling = 0;
+    for (const s of valid) {
+      const c = observedAskCeiling(s, weightKg, targetRir);
+      if (c > ceiling) ceiling = c;
+    }
+    if (ceiling > 0 && reps > ceiling) {
+      reps = ceiling;
+      sessionCapacityClamped = true;
+    }
+  }
+
+  // INV-1 analog: the contradiction is rendered, never silent.
+  const outsideRange: RepTotalNextSet['outsideRange'] =
+    reps < repMin ? 'below' : reps > repMax ? 'above' : undefined;
+
+  // INV-4 analog: positional provenance — only when this slot still follows
+  // the plan at the planned load (a reduced/deviated load has no like-to-like
+  // positional claim).
+  const refReps =
+    rationale === 'follow_plan' && weightKg === sessionPlan.weightKg
+      ? sessionPlan.perSetRefReps?.[slot]
+      : undefined;
+
   return {
-    weightKg: sessionPlan.weightKg,
+    weightKg,
     reps,
     totalSoFar,
     remainingToTarget: Math.max(0, sessionPlan.sessionRepTotalTarget - totalSoFar),
     sessionRepTotalTarget: sessionPlan.sessionRepTotalTarget,
+    rationale,
+    effortVsTarget,
+    ...(sessionCapacityClamped ? { sessionCapacityClamped } : {}),
+    ...(outsideRange ? { outsideRange } : {}),
+    ...(refReps !== undefined ? { positionRef: { setNo: slot + 1, prevReps: refReps } } : {}),
   };
 }
