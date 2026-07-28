@@ -106,6 +106,7 @@ import { RPECalibrationEngine, type CalibrationResult, type CalibrationSetLog } 
 import { resolveProgressionModel } from '@/services/suggestionEngine/repTotalPolicy';
 import { estimateE1RMFromRpe } from '@/services/shared/e1rm';
 import { applyReadinessModulation } from '@/services/fatigueEngine';
+import { prescribeRestSeconds } from '@/services/restPrescription';
 import { buildPerformanceSnapshots, collectEquipmentBoundaries, type SnapshotSourceBlock } from '@/components/workout/exercisePerformance';
 import { getFailureSafetyTier } from '@/services/exerciseSafety';
 import { SanityCheckToast } from '@/components/workout/SanityCheckToast';
@@ -386,6 +387,10 @@ export default function WorkoutPage() {
   const [currentSetNumber, setCurrentSetNumber] = useState(1);
   const [showRestTimer, setShowRestTimer] = useState(false);
   const [restTimerDuration, setRestTimerDuration] = useState<number | null>(null); // Custom rest time (for warmups)
+  // Why the running rest isn't the plain stored prescription (effort
+  // extension / default fallback, from services/restPrescription) — rendered
+  // in the rest bar. Null = stock rest, nothing to explain.
+  const [restAdjustmentNote, setRestAdjustmentNote] = useState<string | null>(null);
   // Live next-set suggestion reported by the current ExerciseCard's banner
   // (e.g. "60 kg × 7"). The sticky rest bar prefers this over the block's
   // planned target, which goes stale as soon as the suggestion moves.
@@ -635,7 +640,11 @@ export default function WorkoutPage() {
     defaultSeconds: restTimerDuration ?? currentBlock?.targetRestSeconds ?? 180,
     autoStart: false,
     onComplete: () => {
-      // Timer completed - could optionally auto-dismiss
+      // A finished countdown releases any custom duration (a warmup's short
+      // rest used to stick as the hook default, so a dismiss/reset/toggle
+      // BEFORE the next working set restarted at e.g. 30s instead of the
+      // block's rest).
+      setRestTimerDuration(null);
     },
   }), [restTimerDuration, currentBlock?.targetRestSeconds]);
 
@@ -2098,6 +2107,23 @@ export default function WorkoutPage() {
   // (session-local; the check-in itself is untouched).
   const readinessModulation = readinessOverridden ? null : baseReadinessModulation;
 
+  // The EFFECTIVE target RIR for a block — calibration-adjusted, then eased
+  // by readiness, clamped to the chip range. MUST mirror ExerciseCard's
+  // effectiveTargetRir derivation exactly: rest modulation and the banner
+  // grade "harder than target" against the same number or they disagree
+  // about the same set.
+  const effectiveTargetRirForBlock = useCallback(
+    (block: ExerciseBlockWithExercise): number => {
+      const adjusted = calibrationEngineRef.current.getAdjustedRIR(
+        block.exercise.name,
+        block.targetRir
+      );
+      const base = adjusted.hasAdjustment ? adjusted.prescribedRIR : block.targetRir;
+      return Math.max(0, Math.min(4, base + (readinessModulation?.rirDelta ?? 0)));
+    },
+    [readinessModulation]
+  );
+
   const handleSetComplete = async (data: {
     weightKg: number;
     reps: number;
@@ -2136,6 +2162,28 @@ export default function WorkoutPage() {
 
     const loggedAt = new Date().toISOString();
     const setType = data.setType || 'normal';
+
+    // Effort-modulated rest for the timer this set starts
+    // (services/restPrescription): a set taken past the prescribed effort
+    // earns extended rest; the note renders in the rest bar so a modulated
+    // timer never looks stock. Effort is the set's resolved RIR (logged chip
+    // first, then rpe — resolveLastRir's read order) graded against the SAME
+    // effective target the suggestion banner uses. Dropset finales are
+    // to-failure by design: base rest, no modulation.
+    const restRx = prescribeRestSeconds({
+      baseSeconds: currentBlock.targetRestSeconds,
+      lastSetRir:
+        setType === 'normal'
+          ? data.feedback?.repsInTank ?? Math.max(0, rpeToRir(data.rpe))
+          : undefined,
+      targetRir: effectiveTargetRirForBlock(currentBlock),
+    });
+    const startWorkingRest = () => {
+      setShowRestTimer(true);
+      setRestTimerDuration(null);
+      setRestAdjustmentNote(restRx.note);
+      restTimer.start(restRx.seconds);
+    };
 
     // Offline-first persistence (P0-2): the set id is generated CLIENT-side
     // so local state, the outbox, and the eventual DB row all agree; the
@@ -2351,9 +2399,7 @@ export default function WorkoutPage() {
         } else {
           // Final drop complete - NOW start rest timer
           setPendingDropset(null);
-          setShowRestTimer(true);
-          setRestTimerDuration(null);
-          restTimer.start(currentBlock?.targetRestSeconds ?? 180);
+          startWorkingRest();
         }
       } else if (currentBlock.supersetGroupId) {
         // Superset flow (pairs, manual, rest-after-last) — decision in the pure
@@ -2370,8 +2416,7 @@ export default function WorkoutPage() {
         if (step) {
           setShowRestTimer(step.startRest);
           if (step.startRest) {
-            setRestTimerDuration(null);
-            restTimer.start(currentBlock?.targetRestSeconds ?? 180);
+            startWorkingRest();
           }
           if (step.nextIndex !== currentBlockIndex) {
             setCurrentBlockIndex(step.nextIndex);
@@ -2379,16 +2424,12 @@ export default function WorkoutPage() {
           }
         } else {
           // Degenerate group -> normal rest.
-          setShowRestTimer(true);
-          setRestTimerDuration(null);
-          restTimer.start(currentBlock?.targetRestSeconds ?? 180);
+          startWorkingRest();
         }
       } else {
         // Normal flow - start rest timer
         setPendingDropset(null);
-        setShowRestTimer(true);
-        setRestTimerDuration(null);
-        restTimer.start(currentBlock?.targetRestSeconds ?? 180);
+        startWorkingRest();
       }
       setError(null);
 
@@ -5502,6 +5543,7 @@ export default function WorkoutPage() {
                     }}
                     onWarmupComplete={(restSeconds) => {
                       setRestTimerDuration(restSeconds);
+                      setRestAdjustmentNote(null); // warmup rest is never effort-modulated
                       setShowRestTimer(true);
                       restTimer.start(restSeconds);
                     }}
@@ -5876,6 +5918,10 @@ export default function WorkoutPage() {
               onSkip={() => {
                 restTimer.skip();
                 setShowRestTimer(false);
+                // Release the custom duration + note with the timer they
+                // described (same reason as the onComplete release).
+                setRestTimerDuration(null);
+                setRestAdjustmentNote(null);
               }}
               nextLabel={
                 activeSuggestionLabel
@@ -5884,6 +5930,7 @@ export default function WorkoutPage() {
                     ? `next · ${formatWeight(currentBlock.targetWeightKg, preferences.units)} × ${currentBlock.targetRepRange[0]}–${currentBlock.targetRepRange[1]}`
                     : undefined
               }
+              adjustmentNote={restAdjustmentNote}
               onBarTap={() => {
                 document
                   .getElementById(`exercise-${currentBlockIndex}`)

@@ -101,6 +101,35 @@ describe('RestTimer', () => {
     });
   });
 
+  describe('adjustment note (effort-modulated rest)', () => {
+    it('renders the modulation note while counting down', () => {
+      render(
+        <RestTimer {...defaultProps} adjustmentNote="+60s — last set at/near failure" />
+      );
+      expect(screen.getByTestId('rest-adjustment-note')).toHaveTextContent(
+        '+60s — last set at/near failure'
+      );
+    });
+
+    it('hides the note when finished (the countdown it explained is over)', () => {
+      render(
+        <RestTimer
+          {...defaultProps}
+          seconds={0}
+          isRunning={false}
+          isFinished={true}
+          adjustmentNote="+60s — last set at/near failure"
+        />
+      );
+      expect(screen.queryByTestId('rest-adjustment-note')).not.toBeInTheDocument();
+    });
+
+    it('renders nothing extra for stock rest (no note)', () => {
+      render(<RestTimer {...defaultProps} />);
+      expect(screen.queryByTestId('rest-adjustment-note')).not.toBeInTheDocument();
+    });
+  });
+
   describe('structure', () => {
     it('renders as a single slim bar with both action buttons', () => {
       render(<RestTimer {...defaultProps} />);

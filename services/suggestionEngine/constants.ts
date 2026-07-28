@@ -271,6 +271,34 @@ export const REP_TOTAL_VOLUME_SHORTFALL_TOLERANCE = 0.05;
 export const REP_TOTAL_LOAD_MATCH_FRACTION = 0.025;
 
 // ============================================================
+// REST PRESCRIPTION (services/restPrescription.ts)
+// ============================================================
+
+/**
+ * Fallback working rest when a block has no usable stored rest (the DB CHECK
+ * allows 0–600, and legacy paths wrote `?? 180` at every call site — this is
+ * that same default given one name).
+ */
+export const DEFAULT_REST_SECONDS = 180;
+
+/**
+ * Rest extension when the last set ran a full rep hotter than the target
+ * reserve (dev ≤ −1): recovery debt is real but bounded.
+ */
+export const REST_EXTEND_HARD_S = 30;
+
+/**
+ * Rest extension when the last set hit/passed the failure deadband
+ * (dev ≤ −DEADBAND_RIR — e.g. 0 RIR against a 2-RIR target): the next set is
+ * being asked to perform after a maximal effort; the base rest was priced
+ * for a submaximal one.
+ */
+export const REST_EXTEND_FAILURE_S = 60;
+
+/** Ceiling on any prescribed rest — matches the DB CHECK bound (0–600). */
+export const REST_MAX_S = 600;
+
+// ============================================================
 // SET-POSITION MATCHING (Phase A — intra-session prescription)
 // ============================================================
 

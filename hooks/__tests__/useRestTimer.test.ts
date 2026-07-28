@@ -262,6 +262,31 @@ describe('useRestTimer', () => {
     });
   });
 
+  describe('pause/resume denominator (live 0:27 sighting)', () => {
+    it('resuming a paused countdown keeps the ORIGINAL allotment as initialSeconds', () => {
+      const { result } = renderHook(() => useRestTimer({ defaultSeconds: 180 }));
+
+      act(() => {
+        result.current.start(180);
+      });
+      act(() => {
+        jest.advanceTimersByTime(150000); // 150s in → 30s remaining
+      });
+      act(() => {
+        result.current.toggle(); // pause
+      });
+      act(() => {
+        result.current.toggle(); // resume
+      });
+
+      // The old resume called start(remaining), re-anchoring initialSeconds
+      // to ~30 — a resumed tail read like a fresh 30s prescription and
+      // skip()'s rested math collapsed. The allotment must survive.
+      expect(result.current.initialSeconds).toBe(180);
+      expect(result.current.seconds).toBeLessThanOrEqual(31);
+    });
+  });
+
   describe('addTime', () => {
     it('adds time when running', () => {
       const { result } = renderHook(() => useRestTimer({ defaultSeconds: 60 }));
@@ -292,6 +317,44 @@ describe('useRestTimer', () => {
       });
 
       expect(result.current.seconds).toBe(90);
+    });
+
+    it('grows the allotment with the adjustment instead of re-anchoring to remaining (live 0:14 sighting)', () => {
+      const { result } = renderHook(() => useRestTimer({ defaultSeconds: 180 }));
+
+      act(() => {
+        result.current.start(180);
+      });
+      act(() => {
+        jest.advanceTimersByTime(180000); // run to finish → seconds 0
+      });
+      expect(result.current.isFinished).toBe(true);
+
+      act(() => {
+        result.current.addTime(15); // "+15s" on an idle/finished timer
+      });
+
+      // Old behavior: initialSeconds became 15 — the timer then read like a
+      // fresh 15s prescription (counting 0:15 → 0:14…). The allotment must
+      // instead grow: 180 prescribed + 15 added.
+      expect(result.current.seconds).toBe(15);
+      expect(result.current.initialSeconds).toBe(195);
+    });
+
+    it('running +15s also grows the allotment so progress/rested stay truthful', () => {
+      const { result } = renderHook(() => useRestTimer({ defaultSeconds: 60 }));
+
+      act(() => {
+        result.current.start(60);
+      });
+      act(() => {
+        jest.advanceTimersByTime(10000);
+      });
+      act(() => {
+        result.current.addTime(15);
+      });
+
+      expect(result.current.initialSeconds).toBe(75);
     });
 
     it('subtracts time correctly', () => {

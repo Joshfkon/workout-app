@@ -30,6 +30,12 @@ export interface RestTimerProps {
   onSkip: () => void;
   /** e.g. "next · 145 lbs × 6–10" — shown under the countdown. */
   nextLabel?: string;
+  /**
+   * Why this rest isn't the plain stored prescription (e.g. "+60s — last set
+   * at/near failure", from services/restPrescription). Rendered above the
+   * next-set label — a modulated timer must say so, never look stock.
+   */
+  adjustmentNote?: string | null;
   /** Tap anywhere outside the buttons (e.g. scroll back to current exercise). */
   onBarTap?: () => void;
 }
@@ -42,6 +48,7 @@ export function RestTimer({
   onAddTime,
   onSkip,
   nextLabel,
+  adjustmentNote,
   onBarTap,
 }: RestTimerProps) {
   const elapsedFraction =
@@ -73,6 +80,14 @@ export function RestTimer({
         <span className="block text-[11px] text-surface-400 mt-0.5 truncate">
           {isFinished ? 'rest done — next set' : nextLabel ?? 'resting'}
         </span>
+        {!isFinished && adjustmentNote && (
+          <span
+            className="block text-[11px] text-warning-400/90 mt-0.5 truncate"
+            data-testid="rest-adjustment-note"
+          >
+            {adjustmentNote}
+          </span>
+        )}
       </div>
       {/* Progress bar - elapsed fraction */}
       <div
