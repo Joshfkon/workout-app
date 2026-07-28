@@ -48,8 +48,14 @@
  *       set (sessionCapacityClamped flag); INV-1 flags a prescription whose
  *       reps fall outside its own stated range (outsideRange) so the banner
  *       re-renders instead of silently contradicting itself.
+ *  v7 = rep_total planner parity: the rep_total path re-derives every set
+ *       from the sets observed this session (rep-space INV-1/INV-2 analogs,
+ *       too-heavy load reduction, positional provenance) instead of
+ *       re-serving the session-start plan verbatim; session-start bump
+ *       targets derive from OBSERVED reps exchanged through the non-linear
+ *       rep-cost model, never a reset to the range floor.
  */
-export const SUGGESTION_ENGINE_VERSION = 6;
+export const SUGGESTION_ENGINE_VERSION = 7;
 
 // ============================================================
 // SET ROLES (Phase 2)
@@ -225,6 +231,72 @@ export const REP_OVERSHOOT = 2;
  * 42.5×10 = 61.2-implied case against a 60.0 session best).
  */
 export const SESSION_CAPACITY_TOLERANCE = 0.01;
+
+// ============================================================
+// REP-TOTAL LOAD↔REP EXCHANGE (rep_total planner parity)
+// ============================================================
+
+/**
+ * Above 12 reps the load-rep relationship flattens: each rep past 12 tapers
+ * the rep cost of a 1% load change by this much (from Epley's 0.42/% at 12).
+ * Calibrated against live evidence: a +10% load change at ~17 observed reps
+ * cost ~1 rep, where Epley's slope predicts ~4.7 — high-rep sets live in the
+ * endurance domain where reps are cheap relative to load.
+ */
+export const HIGH_REP_COST_TAPER_PER_REP = 0.045;
+
+/**
+ * Floor on the high-rep cost slope (reps lost per 1% load increase): even
+ * deep in the endurance domain a load increase is never free.
+ */
+export const HIGH_REP_COST_MIN_PER_PCT = 0.15;
+
+/**
+ * A rep_total plan's projected tonnage may land below last session's by at
+ * most this fraction before the plan carries an explicit volumeShortfall (a
+ * bump structurally trades a little volume — rep cost slightly outruns the
+ * load gain — and a ~2% dip is that trade, not a cut worth alarming on; the
+ * live defects were −21% to −53%).
+ */
+export const REP_TOTAL_VOLUME_SHORTFALL_TOLERANCE = 0.05;
+
+/**
+ * Two rep_total loads count as THE SAME load when they differ by no more
+ * than max(half the smallest increment, this fraction). Everything beyond it
+ * is a genuine load change: rep totals stop being comparable (the prior
+ * total is invalidated as a target and today sets the new baseline), and in
+ * history grouping it separates ramp steps from micro-loading / lb↔kg
+ * conversion noise.
+ */
+export const REP_TOTAL_LOAD_MATCH_FRACTION = 0.025;
+
+// ============================================================
+// REST PRESCRIPTION (services/restPrescription.ts)
+// ============================================================
+
+/**
+ * Fallback working rest when a block has no usable stored rest (the DB CHECK
+ * allows 0–600, and legacy paths wrote `?? 180` at every call site — this is
+ * that same default given one name).
+ */
+export const DEFAULT_REST_SECONDS = 180;
+
+/**
+ * Rest extension when the last set ran a full rep hotter than the target
+ * reserve (dev ≤ −1): recovery debt is real but bounded.
+ */
+export const REST_EXTEND_HARD_S = 30;
+
+/**
+ * Rest extension when the last set hit/passed the failure deadband
+ * (dev ≤ −DEADBAND_RIR — e.g. 0 RIR against a 2-RIR target): the next set is
+ * being asked to perform after a maximal effort; the base rest was priced
+ * for a submaximal one.
+ */
+export const REST_EXTEND_FAILURE_S = 60;
+
+/** Ceiling on any prescribed rest — matches the DB CHECK bound (0–600). */
+export const REST_MAX_S = 600;
 
 // ============================================================
 // SET-POSITION MATCHING (Phase A — intra-session prescription)

@@ -259,11 +259,16 @@ export function useRestTimer({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const start = useCallback((duration?: number) => {
+  const start = useCallback((duration?: number, opts?: { totalSeconds?: number }) => {
     // Reset skipped state when starting a new timer
     setIsSkipped(false);
     setRestedSeconds(0);
     const durationToUse = duration ?? defaultSeconds;
+    // `totalSeconds` (>= duration) keeps the ORIGINAL allotment as the
+    // progress denominator when this start is really a RESUME of a paused
+    // countdown: resuming 27s of a 180s rest must not re-anchor the bar (and
+    // the skip()'s rested math) to a fresh-looking 27s prescription.
+    const totalForProgress = Math.max(opts?.totalSeconds ?? durationToUse, durationToUse);
     const endTime = Date.now() + durationToUse * 1000;
 
     // Clear any existing interval
@@ -274,10 +279,10 @@ export function useRestTimer({
 
     endTimeRef.current = endTime;
     setSeconds(durationToUse);
-    setInitialSeconds(durationToUse);
+    setInitialSeconds(totalForProgress);
     setIsFinished(false);
     hasPlayedAlarm.current = false;
-    saveTimerState(endTime, durationToUse);
+    saveTimerState(endTime, totalForProgress);
 
     // Create/resume the shared AudioContext now, while we're inside a user
     // gesture, so the foreground beep can actually play later (esp. on iOS).
@@ -340,11 +345,14 @@ export function useRestTimer({
       clearTimerState();
       void cancelRestCompleteNotification();
     } else {
-      // Resume/Start
+      // Resume/Start. A resume keeps the original allotment as the progress
+      // denominator (totalSeconds) — re-anchoring initialSeconds to the
+      // remaining count made a resumed 0:27 read like a fresh 27s
+      // prescription and corrupted skip()'s rested-seconds math.
       const restartSeconds = secondsRef.current > 0
         ? secondsRef.current
         : (initialSeconds > 0 ? initialSeconds : defaultSeconds);
-      start(restartSeconds);
+      start(restartSeconds, { totalSeconds: initialSeconds > 0 ? initialSeconds : undefined });
     }
     setIsFinished(false);
   }, [isRunning, start, clearTimerState, initialSeconds, defaultSeconds]);
@@ -366,6 +374,14 @@ export function useRestTimer({
   const addTime = useCallback((amount: number) => {
     setIsFinished(false);
 
+    // `initialSeconds` is the TOTAL rest allotment (prescription +
+    // adjustments): it grows/shrinks with the adjustment in BOTH the running
+    // and paused cases, so progressPercent and skip()'s rested-seconds math
+    // stay truthful. The old paused branch instead re-anchored it to the
+    // remaining count — "+15s" on an idle timer produced a 15s "prescription"
+    // (the 0:14 live sighting) and skip() then under-reported the rest taken.
+    const newInitial = Math.max(1, initialSeconds + amount);
+
     if (isRunning && endTimeRef.current !== null) {
       // When running, adjust the endTime
       const newEndTime = endTimeRef.current + (amount * 1000);
@@ -375,9 +391,10 @@ export function useRestTimer({
       const now = Date.now();
       const newRemaining = Math.max(0, Math.ceil((newEndTime - now) / 1000));
       setSeconds(newRemaining);
+      setInitialSeconds(newInitial);
 
       // Update localStorage
-      saveTimerState(newEndTime, initialSeconds);
+      saveTimerState(newEndTime, newInitial);
 
       // Reschedule the native notification at the new endTime (same id replaces
       // the prior one). If we ran the clock down to <= 0, just cancel it.
@@ -390,9 +407,9 @@ export function useRestTimer({
       // When not running, just update the seconds state
       const newSeconds = Math.max(0, seconds + amount);
       setSeconds(newSeconds);
-      setInitialSeconds(newSeconds || defaultSeconds);
+      setInitialSeconds(newInitial);
     }
-  }, [seconds, isRunning, initialSeconds, saveTimerState, defaultSeconds]);
+  }, [seconds, isRunning, initialSeconds, saveTimerState]);
 
   const skip = useCallback(() => {
     // Calculate how long they rested before skipping
