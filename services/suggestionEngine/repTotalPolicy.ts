@@ -357,6 +357,25 @@ export interface RepTotalNextSet {
   remainingToTarget: number;
   sessionRepTotalTarget: number;
   /**
+   * TWO CLAIMS, TWO NUMBERS (the old counter measured progress against the
+   * PLAN total while labeling it "to beat last session", declared victory
+   * early, and floored at the denominator):
+   *  - remainingToBeatPrev — reps still needed to BEAT last session's ACTUAL
+   *    total (prevSessionRepTotal + 1), 0 once beaten;
+   *  - beatPrevBy — how far past last session's total the session is.
+   * Valid only when `totalComparable`; the banner must not render any
+   * beat-last-session framing otherwise.
+   */
+  remainingToBeatPrev: number;
+  beatPrevBy: number;
+  prevSessionRepTotal: number;
+  /**
+   * False when the session's rep total cannot honestly be compared to last
+   * session's (the load changed — a bumped plan's prior total was earned at
+   * the old load). Beat-last-session copy is forbidden when false.
+   */
+  totalComparable: boolean;
+  /**
    * Why this target: 'follow_plan' = the session plan's slot target survived
    * today's evidence; 'reduce_load' = the last set proved the load too heavy
    * (below the range floor at/past the failure deadband) and the load steps
@@ -476,12 +495,22 @@ export function recommendRepTotalNextSet(input: RepTotalNextSetInput): RepTotalN
       ? sessionPlan.perSetRefReps?.[slot]
       : undefined;
 
+  // Beat-last-session accounting — against last session's ACTUAL total,
+  // never the plan total, and only when the totals are comparable (same
+  // load). A bumped plan's prior total was earned at the old load.
+  const prevTotal = sessionPlan.prevSessionRepTotal;
+  const totalComparable = !sessionPlan.bumped && rationale !== 'reduce_load';
+
   return {
     weightKg,
     reps,
     totalSoFar,
     remainingToTarget: Math.max(0, sessionPlan.sessionRepTotalTarget - totalSoFar),
     sessionRepTotalTarget: sessionPlan.sessionRepTotalTarget,
+    remainingToBeatPrev: Math.max(0, prevTotal + 1 - totalSoFar),
+    beatPrevBy: Math.max(0, totalSoFar - prevTotal),
+    prevSessionRepTotal: prevTotal,
+    totalComparable,
     rationale,
     effortVsTarget,
     ...(sessionCapacityClamped ? { sessionCapacityClamped } : {}),

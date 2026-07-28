@@ -241,6 +241,53 @@ describe('recommendRepTotalNextSet (re-derived per set — planner parity)', () 
     expect(next.remainingToTarget).toBe(7);
     expect(next.rationale).toBe('follow_plan');
     expect(next.sessionCapacityClamped).toBeUndefined();
+    // Beat-last-session accounting reads last session's ACTUAL total (30).
+    expect(next.totalComparable).toBe(true);
+    expect(next.prevSessionRepTotal).toBe(30);
+    expect(next.remainingToBeatPrev).toBe(7); // 30 + 1 − 24
+    expect(next.beatPrevBy).toBe(0);
+  });
+
+  it('counts PAST last session instead of flooring at the plan total (ISO Low Row defect)', () => {
+    // Old counter: denominator was the plan total, labeled "to beat last
+    // session", declared victory early and froze at 0. Now: once the actual
+    // prev total is passed, beatPrevBy keeps counting.
+    const next = recommendRepTotalNextSet({
+      sessionPlan: plan3x(),
+      observedSets: [
+        { weightKg: 61.23, reps: 14, rir: 2 },
+        { weightKg: 61.23, reps: 13, rir: 2 },
+        { weightKg: 61.23, reps: 12, rir: 2 },
+      ],
+      targetRepRange: [12, 20],
+      targetRir: 2,
+      minIncrementKg: 4.54,
+    });
+    expect(next.totalSoFar).toBe(39);
+    expect(next.remainingToBeatPrev).toBe(0);
+    expect(next.beatPrevBy).toBe(9); // 39 − 30, not floored at the plan total
+  });
+
+  it('a bumped plan forbids beat-last-session framing (totals not comparable)', () => {
+    const plan = recommendRepTotalSessionStart({
+      prevSessionSets: [
+        { weightKg: 60, reps: 18, rir: 2 },
+        { weightKg: 60, reps: 17, rir: 2 },
+      ],
+      targetRepRange: [12, 20],
+      targetRir: 2,
+      minIncrementKg: 2.5,
+      plannedSets: 2,
+    })!;
+    expect(plan.bumped).toBe(true);
+    const next = recommendRepTotalNextSet({
+      sessionPlan: plan,
+      observedSets: [{ weightKg: plan.weightKg, reps: 16, rir: 2 }],
+      targetRepRange: [12, 20],
+      targetRir: 2,
+      minIncrementKg: 2.5,
+    });
+    expect(next.totalComparable).toBe(false);
   });
 
   it('carries positional provenance (INV-4 analog) for a plan-following slot', () => {

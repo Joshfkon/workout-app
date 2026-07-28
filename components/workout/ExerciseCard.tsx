@@ -1811,8 +1811,27 @@ export const ExerciseCard = memo(function ExerciseCard({
               `The last set missed the ${block.targetRepRange[0]}-rep range floor with nothing left in reserve — the load is too heavy for this range, so it steps down to put your demonstrated capacity back at the middle of the range.`
             );
           } else {
-            const remaining = Math.max(0, next.sessionRepTotalTarget - soFar);
-            reason = `rep-total — ${soFar} of ${next.sessionRepTotalTarget} reps (${remaining} to beat last session)`;
+            // TWO claims, TWO strings (never one string making both): plan
+            // progress is "X of Y planned"; beating last session is measured
+            // against last session's ACTUAL total — and only when the totals
+            // are honestly comparable (same load).
+            const planLine = `${soFar} of ${next.sessionRepTotalTarget} planned`;
+            if (!next.totalComparable) {
+              reason = `rep-total — ${planLine} (new load — last session's ${next.prevSessionRepTotal} was at ${displayWeight(repTotalPlan.refLoadKg, true)} ${weightLabel})`;
+              explanation.push(
+                `The load changed this session, so last session's ${next.prevSessionRepTotal}-rep total doesn't apply as a target — today sets the new baseline at this load.`
+              );
+            } else if (next.beatPrevBy > 0) {
+              reason = `rep-total — ${planLine} · beat last session's ${next.prevSessionRepTotal} by ${next.beatPrevBy}`;
+              explanation.push(
+                `You're past last session's actual total of ${next.prevSessionRepTotal} reps at this load by ${next.beatPrevBy} — everything from here extends the win.`
+              );
+            } else {
+              reason = `rep-total — ${planLine} · ${next.remainingToBeatPrev} to beat last session's ${next.prevSessionRepTotal}`;
+              explanation.push(
+                `Beat last session's ACTUAL total of ${next.prevSessionRepTotal} reps at this load; ${soFar} logged so far.`
+              );
+            }
             if (next.positionRef) {
               // INV-4 analog: the only delta claim allowed is like-to-like —
               // this slot vs the SAME set position last session.
@@ -1820,9 +1839,6 @@ export const ExerciseCard = memo(function ExerciseCard({
                 `Set ${next.positionRef.setNo} last session was ${next.positionRef.prevReps} reps at this load — that position anchors this set's target.`
               );
             }
-            explanation.push(
-              `Rep-total progression: beat last session's total of ${repTotalPlan.prevSessionRepTotal} reps at this weight; ${soFar} logged so far.`
-            );
           }
           if (next.sessionCapacityClamped) {
             reason += ' · capped at today’s best';
