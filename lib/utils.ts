@@ -305,6 +305,16 @@ export function formatBodyWeight(weightKg: number, unit: 'kg' | 'lb', decimals: 
 }
 
 /**
+ * Format an ESTIMATE (e1RM and friends) with unit suffix, exactly, one
+ * decimal. An estimate is not a prescribed load — snapping it to
+ * formatWeight's 2.5 plate grid renders a different number than the math
+ * produced (a 54.0 lb e1RM read "55.0 lbs" while the chart's PR line said 54).
+ */
+export function formatEstimateWeight(weightKg: number, unit: 'kg' | 'lb'): string {
+  return `${convertWeightForDisplay(weightKg, unit, 1).toFixed(1)} ${unit === 'kg' ? 'kg' : 'lbs'}`;
+}
+
+/**
  * Format weight value only (no unit suffix), rounded to plate increments
  * - lb: 2.5lb increments (or 1lb for weights < 45lb)
  * - kg: 2.5kg increments (or 1kg for weights < 20kg)

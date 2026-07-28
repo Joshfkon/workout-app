@@ -3,7 +3,7 @@
   "app/(dashboard)/dashboard/analytics/page.tsx": 2,
   "app/(dashboard)/dashboard/exercises/page.tsx": 7,
   "app/(dashboard)/dashboard/feed/page.tsx": 1,
-  "app/(dashboard)/dashboard/history/page.tsx": 21,
+  "app/(dashboard)/dashboard/history/page.tsx": 27,
   "app/(dashboard)/dashboard/profile/page.tsx": 1,
   "app/(dashboard)/dashboard/train/page.tsx": 1,
   "app/(dashboard)/dashboard/workout/[id]/_lib/sessionMapping.ts": 1,

@@ -15,7 +15,7 @@ import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 // v2: evicts entries poisoned by the old queryFn, which cached an EMPTY page
 // for 24h whenever the network getUser() round trip failed on a cold reload.
 const HISTORY_FIRST_PAGE_KEY = ['history', 'sessions', 'page0', 'v2'] as const;
-import { formatWeight, convertWeight, convertWeightForDisplay, inputWeightToKg, getLocalDateString, muscleDisplayName } from '@/lib/utils';
+import { formatWeight, formatEstimateWeight, convertWeight, convertWeightForDisplay, inputWeightToKg, getLocalDateString, muscleDisplayName } from '@/lib/utils';
 import { e1rmValueFromRpe } from '@/services/shared/e1rm';
 import { computeTrend } from '@/services/shared/trend';
 import { createRepeatSession } from '@/lib/training/repeatWorkout';
@@ -130,6 +130,23 @@ interface ExerciseHistoryEntry {
   sets: { weight: number; reps: number; rpe: number | null }[];
 }
 
+/**
+ * The single best REAL set — one set_logs row, selected whole, its fields
+ * always rendered together. Never assemble this from per-column aggregates:
+ * max(weight) and max(reps) taken independently once rendered as a
+ * fabricated "42.5 × 18" lift that was never performed.
+ */
+interface BestSetRecord {
+  weightKg: number;
+  /** Duration exercises: seconds held. */
+  reps: number;
+  /** e1RM of THIS set; 0 = no estimate (see services/shared/e1rm.ts). */
+  e1rm: number;
+  /** Local YYYY-MM-DD of the session the set belongs to. */
+  date: string;
+  loggedAt: string;
+}
+
 interface ExerciseHistoryData {
   exerciseId: string;
   exerciseName: string;
@@ -149,8 +166,11 @@ interface ExerciseHistoryData {
   segmentBestE1RM: number;
   /** First date of the current calibration segment (null = single segment). */
   segmentStartDate: string | null;
-  allTimeBestWeight: number;
-  allTimeBestReps: number;
+  /** Best single set over full history (null only when history is empty). */
+  bestSet: BestSetRecord | null;
+  /** Duration exercises: longest hold in seconds — a lone scalar, never
+   *  paired with a load from a different set. */
+  longestHoldSeconds: number;
   totalSetsAllTime: number;
   progressPercent: number;
 }
@@ -603,8 +623,8 @@ function HistoryPageContent() {
           allTimeMaxE1RM: 0,
           segmentBestE1RM: 0,
           segmentStartDate: null,
-          allTimeBestWeight: 0,
-          allTimeBestReps: 0,
+          bestSet: null,
+          longestHoldSeconds: 0,
           totalSetsAllTime: 0,
           progressPercent: 0,
         });
@@ -614,9 +634,25 @@ function HistoryPageContent() {
       // Process history by date
       const historyMap = new Map<string, ExerciseHistoryEntry>();
       let allTimeMaxE1RM = 0;
-      let allTimeBestWeight = 0;
-      let allTimeBestReps = 0;
+      let longestHoldSeconds = 0;
       let totalSetsAllTime = 0;
+
+      // Best set = ONE real row, selected whole (see BestSetRecord).
+      // Strength rule: highest e1RM wins. e1RM ties are common (the estimate
+      // clamps at 12 effective reps), broken by heaviest load, then most
+      // reps, then most recent. When no set has an estimable e1RM (> 15
+      // effective reps → null, per services/shared/e1rm.ts) every candidate
+      // carries e1rm 0 and the same tiebreaks select the heaviest set — the
+      // stat card labels itself accordingly.
+      // Duration rule: heaviest load, then longest hold, then most recent.
+      let bestSet: BestSetRecord | null = null;
+      const beatsBestSet = (cand: BestSetRecord): boolean => {
+        if (!bestSet) return true;
+        if (!isDuration && cand.e1rm !== bestSet.e1rm) return cand.e1rm > bestSet.e1rm;
+        if (cand.weightKg !== bestSet.weightKg) return cand.weightKg > bestSet.weightKg;
+        if (cand.reps !== bestSet.reps) return cand.reps > bestSet.reps;
+        return cand.loggedAt >= bestSet.loggedAt;
+      };
 
       blocks.forEach((block: any) => {
         const session = block.workout_sessions;
@@ -649,12 +685,17 @@ function HistoryPageContent() {
               sessionBestReps = set.reps;
               sessionBestWeight = set.weight_kg;
             }
-            if (set.weight_kg > allTimeBestWeight) {
-              allTimeBestWeight = set.weight_kg;
+            if (set.reps > longestHoldSeconds) {
+              longestHoldSeconds = set.reps;
             }
-            if (set.reps > allTimeBestReps && set.weight_kg >= allTimeBestWeight * 0.8) {
-              allTimeBestReps = set.reps;
-            }
+            const cand: BestSetRecord = {
+              weightKg: set.weight_kg,
+              reps: set.reps,
+              e1rm: 0,
+              date: dateKey,
+              loggedAt: set.logged_at ?? '',
+            };
+            if (beatsBestSet(cand)) bestSet = cand;
             return;
           }
 
@@ -673,12 +714,14 @@ function HistoryPageContent() {
           if (e1rm > allTimeMaxE1RM) {
             allTimeMaxE1RM = e1rm;
           }
-          if (set.weight_kg > allTimeBestWeight) {
-            allTimeBestWeight = set.weight_kg;
-          }
-          if (set.reps > allTimeBestReps && set.weight_kg >= allTimeBestWeight * 0.8) {
-            allTimeBestReps = set.reps;
-          }
+          const cand: BestSetRecord = {
+            weightKg: set.weight_kg,
+            reps: set.reps,
+            e1rm,
+            date: dateKey,
+            loggedAt: set.logged_at ?? '',
+          };
+          if (beatsBestSet(cand)) bestSet = cand;
         });
 
         totalSetsAllTime += workingSets.length;
@@ -773,8 +816,8 @@ function HistoryPageContent() {
         allTimeMaxE1RM,
         segmentBestE1RM,
         segmentStartDate,
-        allTimeBestWeight,
-        allTimeBestReps,
+        bestSet,
+        longestHoldSeconds,
         totalSetsAllTime,
         progressPercent,
       });
@@ -1046,7 +1089,7 @@ function HistoryPageContent() {
                     <div className="bg-surface-800 rounded-lg p-3 text-center">
                       <p className="text-xs text-surface-500 uppercase">Current E1RM</p>
                       <p className="text-xl font-bold text-primary-400">
-                        {formatWeight(selectedExercise.currentE1RM, unit)}
+                        {formatEstimateWeight(selectedExercise.currentE1RM, unit)}
                       </p>
                     </div>
                   )}
@@ -1054,14 +1097,14 @@ function HistoryPageContent() {
                     <div className="bg-surface-800 rounded-lg p-3 text-center">
                       <p className="text-xs text-surface-500 uppercase">Longest Hold</p>
                       <p className="text-xl font-bold text-success-400">
-                        {selectedExercise.allTimeBestReps}s
+                        {selectedExercise.longestHoldSeconds}s
                       </p>
                     </div>
                   ) : (
                     <div className="bg-surface-800 rounded-lg p-3 text-center">
                       <p className="text-xs text-surface-500 uppercase">All-Time Best</p>
                       <p className="text-xl font-bold text-success-400">
-                        {formatWeight(selectedExercise.allTimeMaxE1RM, unit)}
+                        {formatEstimateWeight(selectedExercise.allTimeMaxE1RM, unit)}
                       </p>
                       {/* An all-time best set before an equipment change is
                           not comparable to current work — say so instead of
@@ -1069,21 +1112,44 @@ function HistoryPageContent() {
                       {hasPreCalibrationBest && (
                         <p className="text-[10px] text-surface-500 mt-0.5">
                           pre-calibration · since equipment change:{' '}
-                          {formatWeight(selectedExercise.segmentBestE1RM, unit)}
+                          {formatEstimateWeight(selectedExercise.segmentBestE1RM, unit)}
                         </p>
                       )}
                     </div>
                   )}
+                  {/* One REAL set, fields rendered together (never independent
+                      column maxes — see BestSetRecord). The label states the
+                      selection rule; the date makes a fabricated pairing
+                      self-evident. */}
                   <div className="bg-surface-800 rounded-lg p-3 text-center">
-                    <p className="text-xs text-surface-500 uppercase">{isDuration ? 'Top Weight' : 'Best Lift'}</p>
-                    <p className="text-xl font-bold text-surface-200">
-                      {formatWeight(selectedExercise.allTimeBestWeight, unit)}
-                    </p>
-                    <p className="text-xs text-surface-500">
+                    <p className="text-xs text-surface-500 uppercase">
                       {isDuration
-                        ? `× ${selectedExercise.allTimeBestReps}s`
-                        : `× ${selectedExercise.allTimeBestReps} reps`}
+                        ? 'Top Weight Set'
+                        : selectedExercise.bestSet && selectedExercise.bestSet.e1rm > 0
+                          ? 'Best Set (e1RM)'
+                          : 'Best Set (heaviest)'}
                     </p>
+                    {selectedExercise.bestSet ? (
+                      <>
+                        <p className="text-xl font-bold text-surface-200">
+                          {formatWeight(selectedExercise.bestSet.weightKg, unit)}
+                        </p>
+                        <p className="text-xs text-surface-500">
+                          {isDuration
+                            ? `× ${selectedExercise.bestSet.reps}s`
+                            : `× ${selectedExercise.bestSet.reps} reps`}
+                        </p>
+                        <p className="text-[10px] text-surface-500 mt-0.5">
+                          {parseDateKey(selectedExercise.bestSet.date).toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric',
+                          })}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-xl font-bold text-surface-200">—</p>
+                    )}
                   </div>
                   <div className="bg-surface-800 rounded-lg p-3 text-center">
                     <p className="text-xs text-surface-500 uppercase">Progress</p>
@@ -1106,8 +1172,10 @@ function HistoryPageContent() {
                         unit={isDuration ? 's' : unit}
                         prLine={
                           isDuration
-                            ? selectedExercise.allTimeBestReps
-                            : Math.round(convertWeight(selectedExercise.allTimeMaxE1RM, 'kg', unit))
+                            ? selectedExercise.longestHoldSeconds
+                            // Raw estimate, one decimal — never snapped to a
+                            // plate grid (must agree with the stat block).
+                            : Math.round(convertWeight(selectedExercise.allTimeMaxE1RM, 'kg', unit) * 10) / 10
                         }
                         seriesLabel={isDuration ? 'Longest Hold' : 'Est. 1RM'}
                       />
@@ -1138,7 +1206,7 @@ function HistoryPageContent() {
                               {isDuration
                                 ? `Best hold: ${entry.bestReps}s`
                                 : entry.estimatedE1RM > 0
-                                  ? `E1RM: ${formatWeight(entry.estimatedE1RM, unit)}`
+                                  ? `E1RM: ${formatEstimateWeight(entry.estimatedE1RM, unit)}`
                                   : 'No E1RM estimate'}
                             </Badge>
                           </span>
