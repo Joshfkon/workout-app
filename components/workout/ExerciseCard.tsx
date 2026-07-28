@@ -270,6 +270,10 @@ interface ExerciseCardProps {
   readinessModulation?: ReadinessModulation | null;
   // Per-session performance history for plateau detection (services/plateauDetector)
   performanceSnapshots?: ExercisePerformanceSnapshot[];
+  // User-marked "different equipment" session dates for this exercise —
+  // explicit trend-segment boundaries both analyzers must honor even when
+  // the level shift is below the detection heuristic.
+  equipmentBoundaries?: string[];
   // Diet phase for plateau detection: gains expected on a bulk, holding
   // strength counts as progress on a cut
   userGoal?: PlateauGoal;
@@ -397,6 +401,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   readinessModulation,
   setSyncStatus,
   performanceSnapshots,
+  equipmentBoundaries,
   userGoal,
   onRepRangeChange,
   isAmrapSuggested = false,
@@ -781,9 +786,10 @@ export const ExerciseCard = memo(function ExerciseCard({
       snapshots: performanceSnapshots,
       referenceDate: new Date(),
       goal: userGoal,
+      knownDiscontinuities: equipmentBoundaries,
     });
     return result.isPlateaued ? result : null;
-  }, [performanceSnapshots, exercise.id, userGoal]);
+  }, [performanceSnapshots, equipmentBoundaries, exercise.id, userGoal]);
 
   // Progression pace vs what's expected for the user's experience level
   // (services/progressionInsights). Complements the plateau badge: the pace
@@ -797,8 +803,9 @@ export const ExerciseCard = memo(function ExerciseCard({
       experience,
       referenceDate: new Date(),
       goal: userGoal,
+      knownDiscontinuities: equipmentBoundaries,
     });
-  }, [performanceSnapshots, exercise.id, experience, userGoal]);
+  }, [performanceSnapshots, equipmentBoundaries, exercise.id, experience, userGoal]);
 
   // One-tap "Try X-Y reps" action: first rep range embedded in the suggestions.
   const plateauRepRange: [number, number] | null = useMemo(() => {
@@ -3963,6 +3970,7 @@ export const ExerciseCard = memo(function ExerciseCard({
     prevProps.readinessModulation?.rirDelta === nextProps.readinessModulation?.rirDelta &&
     prevProps.readinessModulation?.banner === nextProps.readinessModulation?.banner &&
     prevProps.performanceSnapshots === nextProps.performanceSnapshots &&
+    prevProps.equipmentBoundaries === nextProps.equipmentBoundaries &&
     prevProps.userGoal === nextProps.userGoal &&
     prevProps.isAmrapSuggested === nextProps.isAmrapSuggested &&
     prevProps.userBodyweightKg === nextProps.userBodyweightKg &&

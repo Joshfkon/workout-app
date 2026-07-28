@@ -554,3 +554,40 @@ describe('explicit equipment markers in the rollup path', () => {
     expect(chest.avgWeeklyChangePct).toBe(0);
   });
 });
+
+describe('two-point post-shift segments', () => {
+  it('classifies a lift as calibrating when only two sessions follow a detected shift', () => {
+    // 3 total snapshots, persistent −40% shift at the second: the two-point
+    // post-shift fit succeeds at 'low' confidence, but two sessions on new
+    // equipment must not produce an ahead/behind rate for the rollup.
+    const snapshots = [
+      { ...buildSnapshots('ex-two', 1, 100, 0)[0], sessionDate: '2026-06-22' },
+      { ...buildSnapshots('ex-two', 1, 60, 0)[0], id: 'p1', sessionDate: '2026-06-29' },
+      { ...buildSnapshots('ex-two', 1, 61, 0)[0], id: 'p2', sessionDate: '2026-07-06' },
+    ];
+    const insight = getExerciseProgression({
+      exerciseId: 'ex-two',
+      snapshots,
+      experience: 'intermediate',
+      referenceDate: '2026-07-06',
+      knownDiscontinuities: ['2026-06-29'],
+    });
+    expect(insight.pace).toBe('calibrating');
+    expect(insight.weeklyChangePct).toBe(0);
+  });
+
+  it('stays calibrating when a marked boundary has no estimable session after it yet', () => {
+    const snapshots = buildSnapshots('ex-empty-seg', 4, 100, 0.5);
+    const insight = getExerciseProgression({
+      exerciseId: 'ex-empty-seg',
+      snapshots,
+      experience: 'intermediate',
+      referenceDate: '2026-07-06',
+      // Marked AFTER every snapshot (the marked session itself had no
+      // estimable set): the old segment must not read as the current trend.
+      knownDiscontinuities: ['2026-07-03'],
+    });
+    expect(insight.pace).toBe('calibrating');
+    expect(insight.weeklyChangePct).toBe(0);
+  });
+});

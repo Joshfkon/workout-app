@@ -289,8 +289,15 @@ export function getExerciseProgression(
 
   // Data-discontinuity gate (equipment change detected by the robust trend):
   // same calibrating treatment as a program switch — the fitted slope mixes
-  // two incomparable levels until a few sessions rebuild it. No rate.
-  if (plateau.isCalibrating || (trend.confidence === 'insufficient' && trend.discontinuityDate)) {
+  // two incomparable levels until a few sessions rebuild it. No rate. Gated
+  // on the SEGMENT's point count, not just fit confidence: a two-point
+  // post-shift fit succeeds at 'low' confidence, but two sessions on new
+  // equipment are still below this module's own session floor.
+  if (
+    plateau.isCalibrating ||
+    (trend.discontinuityDate != null &&
+      (trend.pointsUsed ?? 0) < MIN_SESSIONS_FOR_INSIGHT)
+  ) {
     return {
       exerciseId,
       pace: 'calibrating',

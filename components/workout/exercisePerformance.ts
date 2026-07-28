@@ -21,6 +21,8 @@ interface SnapshotSourceSet {
 export interface SnapshotSourceBlock {
   id: string;
   exercise_id: string;
+  /** User marked this session's equipment as different (segment boundary). */
+  equipment_changed?: boolean | null;
   workout_sessions: {
     id: string;
     completed_at: string | null;
@@ -33,6 +35,26 @@ export interface SnapshotSourceBlock {
 
 /** Most sessions kept per exercise for trend analysis. */
 const MAX_SNAPSHOTS_PER_EXERCISE = 12;
+
+/**
+ * Collect user-marked "different equipment" session dates per exercise —
+ * the explicit calibration-segment boundaries the trend analyzers honor via
+ * knownDiscontinuities. Collected from EVERY completed block (deload or not,
+ * estimable or not): a boundary is a boundary even when the session that
+ * carries it contributes no e1RM point.
+ */
+export function collectEquipmentBoundaries(
+  blocks: SnapshotSourceBlock[]
+): Record<string, string[]> {
+  const byExercise: Record<string, string[]> = {};
+  for (const block of blocks || []) {
+    if (!block.equipment_changed) continue;
+    const completedAt = block.workout_sessions?.completed_at;
+    if (!completedAt) continue;
+    (byExercise[block.exercise_id] ??= []).push(completedAt);
+  }
+  return byExercise;
+}
 
 /**
  * Build per-exercise performance snapshots (one per completed session) from

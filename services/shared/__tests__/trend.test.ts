@@ -315,3 +315,26 @@ describe('uniformSeriesSlope', () => {
     expect(uniformSeriesSlope([10, 11, 0, 13, 14])).toBeCloseTo(1, 1);
   });
 });
+
+describe('computeTrend — boundary with no later estimable point', () => {
+  it('reports an empty, insufficient current segment instead of trending the old one', () => {
+    // The user marked an equipment change on a session with no estimable set
+    // and hasn't logged an estimable session since: every fitted point
+    // predates the boundary. Fitting them as the CURRENT trend would keep
+    // the old machine's numbers alive.
+    const r = computeTrend(
+      [
+        { date: '2026-06-01', value: 100 },
+        { date: '2026-06-08', value: 101 },
+        { date: '2026-06-15', value: 102 },
+      ],
+      { knownDiscontinuities: ['2026-06-20'] }
+    );
+    expect(r.confidence).toBe('insufficient');
+    expect(r.nPoints).toBe(0);
+    expect(r.usedIndices).toEqual([]);
+    expect(r.slopePerDay).toBe(0);
+    expect(r.discontinuityAt).toBeDefined();
+    expect(r.discontinuityAt!.getDate()).toBe(20);
+  });
+});

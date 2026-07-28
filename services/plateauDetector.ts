@@ -195,6 +195,17 @@ export function analyzeExerciseTrend(
   // or a pre-equipment-change level must not set the comparison baseline.
   const isPlateaued = checkForPlateau(usedPoints, resolveProfile(goal).threshold);
 
+  // The segment can start at a session with a data point (discontinuityIndex)
+  // OR at a user-marked boundary that no estimable session has followed yet —
+  // the latter still must reach callers so they report "calibrating" instead
+  // of confidently trending the old segment.
+  const discontinuityDate =
+    trend.discontinuityIndex != null
+      ? dataPoints[trend.discontinuityIndex].date
+      : trend.discontinuityAt
+        ? toLocalDay(trend.discontinuityAt)
+        : null;
+
   return {
     exerciseId: snapshots[0].exerciseId,
     dataPoints,
@@ -202,10 +213,16 @@ export function analyzeExerciseTrend(
     isPlateaued,
     confidence: trend.confidence,
     excludedDates: trend.excludedIndices.map((i) => dataPoints[i].date),
-    discontinuityDate:
-      trend.discontinuityIndex != null ? dataPoints[trend.discontinuityIndex].date : null,
+    discontinuityDate,
     pointsUsed: trend.nPoints,
   };
+}
+
+/** Local YYYY-MM-DD of a Date (house convention — never UTC-shifted). */
+function toLocalDay(d: Date): string {
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${m}-${day}`;
 }
 
 /**

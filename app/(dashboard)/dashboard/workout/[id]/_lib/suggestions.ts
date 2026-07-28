@@ -105,6 +105,8 @@ interface HistorySetLogRow {
 export interface HistoryBlockRow {
   id: string;
   exercise_id: string;
+  /** User marked this session's equipment as different (segment boundary). */
+  equipment_changed?: boolean | null;
   workout_sessions: {
     id: string;
     completed_at: string | null;

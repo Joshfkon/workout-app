@@ -260,6 +260,20 @@ export function computeTrend(points: TrendPoint[], opts: TrendOptions = {}): Tre
     .filter((t) => Number.isFinite(t))
     .sort((a, b) => a - b);
   for (const bt of boundaryTimes) {
+    // A boundary AFTER every fitted point means the current segment has no
+    // data yet (e.g. the user marked an equipment change on a session whose
+    // sets weren't estimable, and hasn't logged since). The pre-boundary
+    // points are a DIFFERENT segment — fitting them as the current trend
+    // would keep showing the old machine's numbers, so report the
+    // discontinuity with an empty, insufficient current segment instead.
+    if (bt > valid[valid.length - 1].time) {
+      const r = empty('insufficient');
+      r.nPoints = 0;
+      r.usedIndices = [];
+      r.observedDelta = 0;
+      r.discontinuityAt = new Date(bt);
+      return r;
+    }
     const firstAtOrAfter = valid.findIndex((v) => v.time >= bt);
     if (firstAtOrAfter > 0) {
       segmentStart = Math.max(segmentStart, firstAtOrAfter);
