@@ -10,6 +10,7 @@ import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 import { resolveAuthState } from '@/lib/supabase/authState';
 import { useMusclePriorities } from '@/components/settings/MusclePrioritySettings';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { selectWithOptionalColumn } from '@/lib/supabase/columnFallback';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import type { DexaScan, Goal, Experience, FFMIResult, ProgressPhoto, MuscleGroup, StandardMuscleGroup } from '@/types/schema';
 import { STANDARD_MUSCLE_DISPLAY_NAMES } from '@/types/schema';
@@ -539,15 +540,20 @@ function AnalyticsPageContent() {
       since.setDate(since.getDate() - LIFT_TREND_WINDOW_DAYS);
 
       try {
-        const [{ data: sessions }, { data: goalRow }, { data: activeMesos }] = await Promise.all([
+        // equipment_changed ships ahead of its migration on fresh deploys —
+        // fall back to a marker-less select rather than blanking the card.
+        const sessionsPromise = selectWithOptionalColumn('equipment_changed', (withMarker) =>
           supabase
             .from('workout_sessions')
             .select(`id, completed_at,
-              exercise_blocks (equipment_changed, exercises (id, name, exercise_type), set_logs (weight_kg, reps, rpe, is_warmup))`)
+              exercise_blocks (${withMarker ? 'equipment_changed, ' : ''}exercises (id, name, exercise_type), set_logs (weight_kg, reps, rpe, is_warmup))`)
             .eq('user_id', userId)
             .eq('state', 'completed')
             .gte('completed_at', since.toISOString())
-            .order('completed_at', { ascending: true }),
+            .order('completed_at', { ascending: true })
+        );
+        const [{ data: sessions, error: sessionsError }, { data: goalRow }, { data: activeMesos }] = await Promise.all([
+          sessionsPromise,
           supabase.from('users').select('goal').eq('id', userId).single(),
           supabase
             .from('mesocycles')
@@ -557,6 +563,14 @@ function AnalyticsPageContent() {
             .order('created_at', { ascending: false })
             .limit(1),
         ]);
+
+        // A failed fetch must NOT become "No lift has enough history" — leave
+        // the summary unset (card hidden) instead of rendering a false empty
+        // state over real data.
+        if (sessionsError) {
+          console.error('Failed to fetch lift trend sessions:', sessionsError);
+          return;
+        }
 
         setLiftTrendsSummary(
           computeLiftTrends(

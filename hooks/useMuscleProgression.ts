@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { selectWithOptionalColumn } from '@/lib/supabase/columnFallback';
 import { getLocalDateString } from '@/lib/utils';
 import { e1rmValueFromRpe } from '@/services/shared/e1rm';
 import {
@@ -23,8 +24,9 @@ interface SessionSetRow {
 
 interface SessionBlockRow {
   exercises: { id: string; name: string; primary_muscle: string | null } | null;
-  /** User marked this session's equipment as different (segment boundary). */
-  equipment_changed: boolean | null;
+  /** User marked this session's equipment as different (segment boundary).
+   *  Absent when the column's migration hasn't been applied yet. */
+  equipment_changed?: boolean | null;
   set_logs: SessionSetRow[] | null;
 }
 
@@ -63,21 +65,25 @@ export function useMuscleProgression() {
             .select('goal, experience')
             .eq('id', user.id)
             .single(),
-          supabase
-            .from('workout_sessions')
-            .select(`
-              id,
-              completed_at,
-              exercise_blocks!inner (
-                equipment_changed,
-                exercises!inner (id, name, primary_muscle),
-                set_logs!inner (weight_kg, reps, rpe, is_warmup)
-              )
-            `)
-            .eq('user_id', user.id)
-            .eq('state', 'completed')
-            .gte('completed_at', since.toISOString())
-            .order('completed_at', { ascending: true }),
+          // equipment_changed may not exist yet (deploy ahead of migration) —
+          // degrade to a marker-less select instead of an empty Train card.
+          selectWithOptionalColumn('equipment_changed', (withMarker) =>
+            supabase
+              .from('workout_sessions')
+              .select(`
+                id,
+                completed_at,
+                exercise_blocks!inner (
+                  ${withMarker ? 'equipment_changed,' : ''}
+                  exercises!inner (id, name, primary_muscle),
+                  set_logs!inner (weight_kg, reps, rpe, is_warmup)
+                )
+              `)
+              .eq('user_id', user.id)
+              .eq('state', 'completed')
+              .gte('completed_at', since.toISOString())
+              .order('completed_at', { ascending: true })
+          ),
           // Active program start — same boundary liftTrends gates on, so the
           // rollup can never average a post-program-switch lift's noisy slope
           // into a group verdict while Lift Trends calls the same lift

@@ -6,6 +6,7 @@ import { Card, Badge, Button, FullPageLoading, LoadingAnimation, ConfirmModal } 
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { selectWithOptionalColumn } from '@/lib/supabase/columnFallback';
 import { getLocalUserId } from '@/lib/supabase/authState';
 import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 
@@ -561,36 +562,40 @@ function HistoryPageContent() {
       
       if (!user) return;
 
-      // Fetch all exercise blocks for this exercise
-      const { data: blocks } = await supabase
-        .from('exercise_blocks')
-        .select(`
-          id,
-          workout_session_id,
-          equipment_changed,
-          workout_sessions!inner (
+      // Fetch all exercise blocks for this exercise. equipment_changed may
+      // not exist yet in the connected database (deploy ahead of migration) —
+      // fall back to a marker-less select rather than showing no history.
+      const { data: blocks } = await selectWithOptionalColumn<any[]>('equipment_changed', (withMarker) =>
+        supabase
+          .from('exercise_blocks')
+          .select(`
             id,
-            completed_at,
-            state,
-            user_id,
-            is_deload
-          ),
-          set_logs (
-            id,
-            weight_kg,
-            reps,
-            rpe,
-            is_warmup,
-            logged_at
-          )
-        `)
-        .eq('exercise_id', exerciseId)
-        .eq('workout_sessions.user_id', user.id)
-        .eq('workout_sessions.state', 'completed')
-        // Deload sessions are held light on purpose — exclude them so a light
-        // week doesn't read as an e1RM regression / PR in the trend.
-        .eq('workout_sessions.is_deload', false)
-        .order('workout_sessions(completed_at)', { ascending: true });
+            workout_session_id,
+            ${withMarker ? 'equipment_changed,' : ''}
+            workout_sessions!inner (
+              id,
+              completed_at,
+              state,
+              user_id,
+              is_deload
+            ),
+            set_logs (
+              id,
+              weight_kg,
+              reps,
+              rpe,
+              is_warmup,
+              logged_at
+            )
+          `)
+          .eq('exercise_id', exerciseId)
+          .eq('workout_sessions.user_id', user.id)
+          .eq('workout_sessions.state', 'completed')
+          // Deload sessions are held light on purpose — exclude them so a light
+          // week doesn't read as an e1RM regression / PR in the trend.
+          .eq('workout_sessions.is_deload', false)
+          .order('workout_sessions(completed_at)', { ascending: true })
+      );
 
       if (!blocks || blocks.length === 0) {
         setSelectedExercise({

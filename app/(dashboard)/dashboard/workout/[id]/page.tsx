@@ -75,6 +75,7 @@ import type { SessionMuscleFeedbackEntry, SessionSummarySubmitData } from '@/com
 import { MuscleGroupFeedbackModal, type MuscleFeedbackRatings } from '@/components/workout/MuscleGroupFeedbackModal';
 import type { MuscleSorenessRatings } from '@/components/workout/ReadinessCheckIn';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { selectWithOptionalColumn } from '@/lib/supabase/columnFallback';
 import { getLocalUserId } from '@/lib/supabase/authState';
 import { generateWarmupProtocol, isMuscleWarmedUp } from '@/services/progressionEngine';
 import { evaluateWarmupReadiness } from '@/services/warmupEngine';
@@ -1020,43 +1021,49 @@ export default function WorkoutPage() {
           // exercise could get zero rows and be misread as a cold start
           // (+15% steps, easy-RIR auto-bumps) despite years of history —
           // audit failure mode #2 (docs/WEIGHT_REP_ENGINE_AUDIT.md).
+          // equipment_changed may not exist yet in the connected database
+          // (deploy ahead of migration). A failed select here would blank ALL
+          // exercise history — every lift misread as a cold start — so fall
+          // back to a marker-less select instead.
           exerciseIds.length > 0
-            ? supabase
-                .from('exercises')
-                .select(`
-                  id,
-                  exercise_blocks (
+            ? selectWithOptionalColumn('equipment_changed', (withMarker) =>
+                supabase
+                  .from('exercises')
+                  .select(`
                     id,
-                    exercise_id,
-                    equipment_changed,
-                    workout_sessions!inner (
+                    exercise_blocks (
                       id,
-                      completed_at,
-                      state,
-                      user_id,
-                      is_deload
-                    ),
-                    set_logs (
-                      weight_kg,
-                      reps,
-                      rpe,
-                      is_warmup,
-                      set_number,
-                      set_type,
-                      logged_at,
-                      location_id,
-                      bodyweight_data
+                      exercise_id,
+                      ${withMarker ? 'equipment_changed,' : ''}
+                      workout_sessions!inner (
+                        id,
+                        completed_at,
+                        state,
+                        user_id,
+                        is_deload
+                      ),
+                      set_logs (
+                        weight_kg,
+                        reps,
+                        rpe,
+                        is_warmup,
+                        set_number,
+                        set_type,
+                        logged_at,
+                        location_id,
+                        bodyweight_data
+                      )
                     )
-                  )
-                `)
-                .in('id', exerciseIds)
-                .eq('exercise_blocks.workout_sessions.user_id', sessionData.user_id)
-                .eq('exercise_blocks.workout_sessions.state', 'completed')
-                .order('workout_sessions(completed_at)', {
-                  referencedTable: 'exercise_blocks',
-                  ascending: false,
-                })
-                .limit(HISTORY_SESSIONS_PER_EXERCISE, { referencedTable: 'exercise_blocks' })
+                  `)
+                  .in('id', exerciseIds)
+                  .eq('exercise_blocks.workout_sessions.user_id', sessionData.user_id)
+                  .eq('exercise_blocks.workout_sessions.state', 'completed')
+                  .order('workout_sessions(completed_at)', {
+                    referencedTable: 'exercise_blocks',
+                    ascending: false,
+                  })
+                  .limit(HISTORY_SESSIONS_PER_EXERCISE, { referencedTable: 'exercise_blocks' })
+              )
             : Promise.resolve({ data: null }),
           // Cross-exercise strength summary for cold-start transfer estimation
           // (never-trained exercises seed from a related exercise's e1RM).

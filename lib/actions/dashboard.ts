@@ -1,6 +1,7 @@
 'use server';
 
 import { createUntypedServerClient } from '@/lib/supabase/server';
+import { selectWithOptionalColumn } from '@/lib/supabase/columnFallback';
 import { getLocalDateString } from '@/lib/utils';
 import { buildPersonalizedBodyCompTrend } from '@/lib/body-composition/trendBuilder';
 import { localDay, rollingWindowStart } from '@/lib/date/localDay';
@@ -357,15 +358,20 @@ export async function fetchLiftTrends(userId: string): Promise<LiftTrendsSummary
   const since = new Date();
   since.setDate(since.getDate() - LIFT_TREND_WINDOW_DAYS);
 
+  // equipment_changed may not exist yet in the connected database (deploy
+  // ahead of migration) — degrade to a marker-less select so the tile keeps
+  // rendering trends instead of an empty state.
   const [{ data: sessions }, { data: profile }, { data: activeMesos }] = await Promise.all([
-    supabase
-      .from('workout_sessions')
-      .select(`id, completed_at,
-        exercise_blocks (equipment_changed, exercises (id, name, exercise_type), set_logs (weight_kg, reps, rpe, is_warmup))`)
-      .eq('user_id', userId)
-      .eq('state', 'completed')
-      .gte('completed_at', since.toISOString())
-      .order('completed_at', { ascending: true }),
+    selectWithOptionalColumn('equipment_changed', (withMarker) =>
+      supabase
+        .from('workout_sessions')
+        .select(`id, completed_at,
+          exercise_blocks (${withMarker ? 'equipment_changed, ' : ''}exercises (id, name, exercise_type), set_logs (weight_kg, reps, rpe, is_warmup))`)
+        .eq('user_id', userId)
+        .eq('state', 'completed')
+        .gte('completed_at', since.toISOString())
+        .order('completed_at', { ascending: true })
+    ),
     supabase.from('users').select('goal').eq('id', userId).single(),
     // Active program start — trend verdicts across this boundary are
     // low-confidence until a few sessions rebuild the history.
