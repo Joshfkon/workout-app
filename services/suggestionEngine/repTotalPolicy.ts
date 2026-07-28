@@ -155,7 +155,14 @@ function observedAskCeiling(
 export interface RepTotalSessionStart {
   /** Fixed load for the session (kg) — held VERBATIM from history on a repeat. */
   weightKg: number;
-  /** Per-set rep targets, one per planned set (prev session's counts, floored). */
+  /**
+   * Per-set rep targets, one per planned set. On a repeat: prev session's
+   * counts, floored at the range floor. On a bump: prev session's OBSERVED
+   * at-load counts exchanged to the new load through the non-linear rep-cost
+   * model — NEVER a reset to the range floor (a floor a lifter clears by 5-8
+   * reps is a tautology, not a target, and resetting to it is where the
+   * silent volume cuts came from).
+   */
   perSetRepTargets: number[];
   /**
    * The previous session's OBSERVED reps behind each slot's target (same
@@ -170,6 +177,16 @@ export interface RepTotalSessionStart {
   prevSessionRepTotal: number;
   /** True when last session earned the increment (all sets ≥ floor at effort). */
   bumped: boolean;
+  /**
+   * The gate cleared but the increment was WITHHELD: exchanging the observed
+   * reps to the bumped load would price some set below the range floor — the
+   * lifter can't yet absorb the smallest available load step and stay in
+   * range (high-rep history / coarse increments). The plan holds the load and
+   * chases reps, and the banner must say why the bump didn't happen.
+   */
+  bumpDeferred?: 'load_cost';
+  /** The load the targets were derived FROM (last session's top load). */
+  refLoadKg: number;
 }
 
 /**
@@ -206,16 +223,34 @@ export function recommendRepTotalSessionStart(input: {
   const inc = input.minIncrementKg && input.minIncrementKg > 0 ? input.minIncrementKg : 2.5;
   const sets = Math.max(1, plannedSets);
 
+  // Gate cleared → price the increment: every at-load observed count is
+  // exchanged to the bumped load through the non-linear rep-cost model. The
+  // bump is EARNED only when every exchanged target stays at/above the range
+  // floor — clearing the floor while the smallest load step would price a
+  // set below it (high-rep history, coarse increment) DEFERS the bump: hold
+  // the load and keep chasing reps instead of buying a guaranteed range
+  // violation (the Bayesian Cable Curl failure).
+  let bumpDeferred: RepTotalSessionStart['bumpDeferred'];
   if (bumped) {
-    // New load: reps reset to the floor across the board.
-    return {
-      weightKg: topLoad + inc,
-      perSetRepTargets: Array.from({ length: sets }, () => repMin),
-      perSetRefReps: Array.from({ length: sets }, (_, i) => atLoad[i]?.reps),
-      sessionRepTotalTarget: sets * repMin,
-      prevSessionRepTotal: prevTotal,
-      bumped: true,
-    };
+    const bumpedLoad = topLoad + inc;
+    const scaled = atLoad.map((s) => expectedRepsAfterLoadChange(s.reps, topLoad, bumpedLoad));
+    if (scaled.every((r) => r >= repMin)) {
+      // Targets anchor to OBSERVED reps at the prior load, exchanged for the
+      // load change — never reset to the range floor. Planned sets beyond
+      // history pad with the LAST exchanged target (the fatigue end).
+      const tail = scaled[scaled.length - 1];
+      const perSet = Array.from({ length: sets }, (_, i) => scaled[i] ?? tail);
+      return {
+        weightKg: bumpedLoad,
+        perSetRepTargets: perSet,
+        perSetRefReps: Array.from({ length: sets }, (_, i) => atLoad[i]?.reps),
+        sessionRepTotalTarget: perSet.reduce((a, b) => a + b, 0),
+        prevSessionRepTotal: prevTotal,
+        bumped: true,
+        refLoadKg: topLoad,
+      };
+    }
+    bumpDeferred = 'load_cost';
   }
 
   // Repeat the load VERBATIM and chase the total: per-set seeds mirror last
@@ -232,6 +267,8 @@ export function recommendRepTotalSessionStart(input: {
     sessionRepTotalTarget: prevTotal + 1,
     prevSessionRepTotal: prevTotal,
     bumped: false,
+    ...(bumpDeferred ? { bumpDeferred } : {}),
+    refLoadKg: topLoad,
   };
 }
 

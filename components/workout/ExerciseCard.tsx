@@ -1937,21 +1937,28 @@ export const ExerciseCard = memo(function ExerciseCard({
       }
       }
     } else if (repTotalMode && repTotalPlan) {
-      // rep_total session start: fixed load from history (verbatim), first-set
-      // rep target from the plan, beat-the-total framing. No e1RM anywhere.
+      // rep_total session start: fixed load from history (verbatim on a
+      // repeat), first-set rep target from the plan. On a bump the targets
+      // derive from OBSERVED reps exchanged for the load change — the banner
+      // states the observation they came from, never a floor reset.
       weight = seedWeightString(repTotalPlan.weightKg, repTotalPlan.bumped ? undefined : repTotalPlan.weightKg);
       reps = repTotalPlan.perSetRepTargets[0] ?? block.targetRepRange[0];
       repsLabel = String(reps);
+      const firstRef = repTotalPlan.perSetRefReps?.[0];
       reason = repTotalPlan.bumped
-        ? `rep-total — every set cleared ${block.targetRepRange[0]} reps last time: load up one increment, reps reset to ${block.targetRepRange[0]}`
-        : `rep-total — hold the load, beat last session's ${repTotalPlan.prevSessionRepTotal} total reps`;
+        ? `rep-total — load up one increment; set 1 targets ${reps} (you did ${firstRef ?? '—'} at ${displayWeight(repTotalPlan.refLoadKg, true)} ${weightLabel})`
+        : repTotalPlan.bumpDeferred === 'load_cost'
+          ? `rep-total — holding the load: a step up would drop you below the ${block.targetRepRange[0]}-rep floor`
+          : `rep-total — hold the load, beat last session's ${repTotalPlan.prevSessionRepTotal} total reps`;
       explanation.push(
         'Rep-total progression: this exercise progresses on the session rep total at a fixed load — most of its sets sit past the point where 1RM formulas mean anything, so no estimated 1RM is computed or shown.'
       );
       explanation.push(
         repTotalPlan.bumped
-          ? `Last session every set reached the ${block.targetRepRange[0]}-rep floor at the target effort, so the load steps up by the smallest increment and reps rebuild from the floor.`
-          : `Target: beat ${repTotalPlan.prevSessionRepTotal} total reps at this load (aim ${repTotalPlan.sessionRepTotalTarget}+). When every set clears ${block.targetRepRange[0]} at the target effort, the load steps up one increment.`
+          ? `Every top-load set cleared the ${block.targetRepRange[0]}-rep floor at the target effort, so the load steps up by the smallest increment. Each set's target is what you actually did at ${displayWeight(repTotalPlan.refLoadKg, true)} ${weightLabel} last session, priced for the heavier load — reps are not reset to the range floor.`
+          : repTotalPlan.bumpDeferred === 'load_cost'
+            ? `You cleared the ${block.targetRepRange[0]}-rep floor on every top-load set, but at the smallest available increment the heavier load would price your current reps below the floor. The load holds; keep adding reps until the increase fits inside the range.`
+            : `Target: beat ${repTotalPlan.prevSessionRepTotal} total reps at this load (aim ${repTotalPlan.sessionRepTotalTarget}+). When every set clears ${block.targetRepRange[0]} at the target effort, the load steps up one increment.`
       );
     } else {
       // Session start: role-aware seed for this slot (services/setRecommender).

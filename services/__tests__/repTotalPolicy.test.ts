@@ -41,7 +41,38 @@ describe('recommendRepTotalSessionStart', () => {
     expect(plan.perSetRepTargets).toEqual([12, 12, 12]);
   });
 
-  it('bump: every set at/above the floor at target effort adds ONE native increment', () => {
+  it('bump: targets derive from OBSERVED reps exchanged for the load change — never a floor reset', () => {
+    // High-rep history with room to absorb the increment: the bump is earned
+    // and each set's target is the observed count priced for the new load
+    // (behavior reversal — the old policy reset every target to the floor,
+    // which is where the silent volume cuts came from).
+    const plan = recommendRepTotalSessionStart({
+      prevSessionSets: [
+        { weightKg: 61.23, reps: 18, rir: 2 },
+        { weightKg: 61.23, reps: 17, rir: 2 },
+        { weightKg: 61.23, reps: 16, rir: 2 },
+      ],
+      targetRepRange: range,
+      targetRir: 2,
+      minIncrementKg: 4.54,
+      plannedSets: 3,
+    })!;
+    expect(plan.bumped).toBe(true);
+    expect(plan.weightKg).toBeCloseTo(61.23 + 4.54, 5); // +10 lb, additive
+    expect(plan.refLoadKg).toBe(61.23);
+    // Derived from 18/17/16, not reset to 12 — each above the floor, each
+    // below its observation (the load increase costs something).
+    expect(plan.perSetRepTargets.every((r) => r > 12)).toBe(true);
+    expect(plan.perSetRepTargets[0]).toBeLessThanOrEqual(18);
+    expect(plan.perSetRepTargets[0]).toBeGreaterThanOrEqual(16);
+    expect(plan.sessionRepTotalTarget).toBe(plan.perSetRepTargets.reduce((a, b) => a + b, 0));
+    expect(plan.perSetRefReps).toEqual([18, 17, 16]);
+  });
+
+  it('bump DEFERRED when the exchanged targets would fall below the range floor', () => {
+    // Reps just clearing the floor + a coarse increment (+7.4%): the gate
+    // clears but pricing the heavier load drops sets below the floor — hold
+    // the load and keep chasing reps, and say why (bumpDeferred).
     const plan = recommendRepTotalSessionStart({
       prevSessionSets: [
         { weightKg: 61.23, reps: 14, rir: 2 },
@@ -53,10 +84,10 @@ describe('recommendRepTotalSessionStart', () => {
       minIncrementKg: 4.54,
       plannedSets: 3,
     })!;
-    expect(plan.bumped).toBe(true);
-    expect(plan.weightKg).toBeCloseTo(61.23 + 4.54, 5); // +10 lb, additive
-    expect(plan.perSetRepTargets).toEqual([12, 12, 12]); // reps reset to floor
-    expect(plan.sessionRepTotalTarget).toBe(36);
+    expect(plan.bumped).toBe(false);
+    expect(plan.bumpDeferred).toBe('load_cost');
+    expect(plan.weightKg).toBe(61.23); // load held verbatim
+    expect(plan.perSetRepTargets).toEqual([14, 13, 12]);
   });
 
   it('too-easy sets (RIR way above target) do NOT earn the bump — chase reps instead', () => {
@@ -153,11 +184,11 @@ describe('recommendRepTotalNextSet (re-derived per set — planner parity)', () 
     expect(next.positionRef).toEqual({ setNo: 2, prevReps: 10 });
   });
 
-  it('INV-2 analog: never re-asks the plan after a set that disproves it', () => {
-    // The Bayesian Cable Curl defect: bumped plan asks 10, first set delivers
-    // 6 @ 0 RIR. The old code re-served 10 at the same load. The rep ask must
-    // be bounded by observed capacity — and a below-floor failure set steps
-    // the LOAD down instead of re-prescribing at it.
+  it('the Bayesian Cable Curl bump no longer happens at all (deferred)', () => {
+    // Live defect fixture: one at-load set 37.5×11 @1 against a 10-15 range.
+    // The old gate bumped off "cleared the floor" and reset the target to 10
+    // — then the lifter got 42.5×6 @0. Pricing the increment now shows 11
+    // reps can't absorb it inside the range → the bump is deferred.
     const plan = recommendRepTotalSessionStart({
       prevSessionSets: [{ weightKg: 37.5, reps: 11, rir: 1 }],
       targetRepRange: [10, 15],
@@ -165,21 +196,37 @@ describe('recommendRepTotalNextSet (re-derived per set — planner parity)', () 
       minIncrementKg: 2.5,
       plannedSets: 4,
     })!;
-    expect(plan.bumped).toBe(true); // 11 ≥ 10 at ≤ target+1 effort
+    expect(plan.bumped).toBe(false);
+    expect(plan.bumpDeferred).toBe('load_cost');
+    expect(plan.weightKg).toBe(37.5);
+  });
+
+  it('INV-2 analog: never re-asks the plan after a set that disproves it', () => {
+    // Earned bump (high-rep history), then set 1 collapses at the new load:
+    // 6 @ 0 RIR. The old code re-served the plan at the same load. The load
+    // must step DOWN and the rep ask must derive from the observed set.
+    const plan = recommendRepTotalSessionStart({
+      prevSessionSets: [
+        { weightKg: 60, reps: 18, rir: 2 },
+        { weightKg: 60, reps: 17, rir: 2 },
+      ],
+      targetRepRange: [12, 20],
+      targetRir: 2,
+      minIncrementKg: 2.5,
+      plannedSets: 2,
+    })!;
+    expect(plan.bumped).toBe(true);
     const next = recommendRepTotalNextSet({
       sessionPlan: plan,
       observedSets: [{ weightKg: plan.weightKg, reps: 6, rir: 0 }],
-      targetRepRange: [10, 15],
+      targetRepRange: [12, 20],
       targetRir: 2,
       minIncrementKg: 2.5,
     });
-    // Load steps DOWN (below-floor set at failure = too heavy), and the rep
-    // ask derives from the observed set exchanged to the reduced load — the
-    // plan's 10 must be gone.
     expect(next.rationale).toBe('reduce_load');
     expect(next.weightKg).toBeLessThan(plan.weightKg);
     expect(next.weightKg).toBeGreaterThanOrEqual(plan.weightKg * 0.7);
-    expect(next.reps).toBeLessThanOrEqual(15);
+    expect(next.reps).toBeLessThanOrEqual(20);
     expect(next.reps).toBeGreaterThanOrEqual(8);
   });
 
@@ -196,8 +243,8 @@ describe('recommendRepTotalNextSet (re-derived per set — planner parity)', () 
       minIncrementKg: 2.5,
       plannedSets: 2,
     })!;
-    // Repeat plan (18 @2 cleared floor... actually bumped). Use the plan as
-    // built; observe a first set of 13 @ 0 RIR — capacity 13 → ask ceiling 11.
+    // Bumped plan (18/17 @2 absorb the increment). Observe a first set of
+    // 13 @ 0 RIR at the new load — capacity 13 → ask ceiling 11 at 2 RIR.
     const next = recommendRepTotalNextSet({
       sessionPlan: plan,
       observedSets: [{ weightKg: plan.weightKg, reps: 13, rir: 0 }],
