@@ -313,6 +313,47 @@ describe('useRestTimer', () => {
 
       expect(result.current.seconds).toBe(0);
     });
+
+    it('restarts the countdown when time is added to a finished timer', () => {
+      const { result } = renderHook(() => useRestTimer({ defaultSeconds: 5 }));
+
+      act(() => {
+        result.current.start();
+      });
+
+      // Run the timer to completion
+      act(() => {
+        jest.advanceTimersByTime(6000);
+      });
+
+      expect(result.current.isFinished).toBe(true);
+      expect(result.current.isRunning).toBe(false);
+      expect(result.current.seconds).toBe(0);
+
+      act(() => {
+        result.current.addTime(15);
+      });
+
+      expect(result.current.isRunning).toBe(true);
+      expect(result.current.isFinished).toBe(false);
+      expect(result.current.seconds).toBe(15);
+
+      // It must actually count down, not sit frozen
+      act(() => {
+        jest.advanceTimersByTime(3000);
+      });
+
+      expect(result.current.seconds).toBeLessThanOrEqual(12);
+      expect(result.current.isRunning).toBe(true);
+
+      // And it finishes again when the added time elapses
+      act(() => {
+        jest.advanceTimersByTime(13000);
+      });
+
+      expect(result.current.isFinished).toBe(true);
+      expect(result.current.seconds).toBe(0);
+    });
   });
 
   describe('skip', () => {
