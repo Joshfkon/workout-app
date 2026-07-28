@@ -23,6 +23,7 @@ import type {
 import { MUSCLE_GROUPS } from '@/types/schema';
 import { ENHANCED_MRV_MULTIPLIERS, ENHANCED_MAV_MULTIPLIER, type CoarseMuscle } from '@/services/volumeBands';
 import { estimateE1RM } from '@/lib/utils';
+import { uniformSeriesSlope } from '@/services/shared/trend';
 
 // ============================================
 // TYPE DEFINITIONS
@@ -644,28 +645,15 @@ export function sum(values: number[]): number {
 }
 
 /**
- * Calculate linear regression slope to detect trends
+ * Slope of a uniformly-spaced aggregate series (per-week rates, form
+ * scores), in value units per step. Delegates to the canonical robust
+ * estimator (services/shared/trend#uniformSeriesSlope) — index is only a
+ * valid x here BECAUSE the callers pass one aggregated value per uniform
+ * week; per-session/per-entry series must go through computeTrend with real
+ * dates instead.
  */
 export function linearRegressionSlope(values: number[]): number {
-  if (values.length < 2) return 0;
-
-  const n = values.length;
-  let sumX = 0;
-  let sumY = 0;
-  let sumXY = 0;
-  let sumXX = 0;
-
-  for (let i = 0; i < n; i++) {
-    sumX += i;
-    sumY += values[i];
-    sumXY += i * values[i];
-    sumXX += i * i;
-  }
-
-  const denominator = n * sumXX - sumX * sumX;
-  if (denominator === 0) return 0;
-
-  return (n * sumXY - sumX * sumY) / denominator;
+  return uniformSeriesSlope(values);
 }
 
 /**

@@ -133,10 +133,15 @@ export function LiftTrendsCard({ summary, units }: LiftTrendsCardProps) {
                     )}
                   </div>
                   {/* A calibrating lift shows NO rate — a fitted slope over a
-                      program boundary is noise with a decimal point. */}
+                      program boundary or an equipment change is noise with a
+                      decimal point. */}
                   <p className="text-xs text-surface-500 mt-0.5">
                     {lift.lowConfidence
-                      ? `${formatWeight(lift.currentE1RMKg, units)} E1RM · ${lift.sessionCount} sessions · new program — trend rebuilds over 2–3 sessions`
+                      ? `${formatWeight(lift.currentE1RMKg, units)} E1RM · ${lift.sessionCount} sessions · ${
+                          lift.calibrationReason === 'equipment_change'
+                            ? 'possible equipment change — trend rebuilding'
+                            : 'new program — trend rebuilds over 2–3 sessions'
+                        }`
                       : `${formatWeight(lift.currentE1RMKg, units)} E1RM · ${signedPct(lift.weeklyChangePct)} · ${lift.sessionCount} sessions`}
                   </p>
                 </div>

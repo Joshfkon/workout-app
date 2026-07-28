@@ -361,7 +361,7 @@ export async function fetchLiftTrends(userId: string): Promise<LiftTrendsSummary
     supabase
       .from('workout_sessions')
       .select(`id, completed_at,
-        exercise_blocks (exercises (id, name, exercise_type), set_logs (weight_kg, reps, is_warmup))`)
+        exercise_blocks (equipment_changed, exercises (id, name, exercise_type), set_logs (weight_kg, reps, rpe, is_warmup))`)
       .eq('user_id', userId)
       .eq('state', 'completed')
       .gte('completed_at', since.toISOString())

@@ -12,7 +12,8 @@ import type {
   PlateauAlert,
   Goal,
 } from '@/types/schema';
-import { estimate1RM } from './shared/strengthCalculations';
+import { e1rmValueFromRpe } from './shared/e1rm';
+import { computeTrend, type TrendOptions } from './shared/trend';
 
 /**
  * Some parts of the app (coaching PhaseType, workout page check-in) use
@@ -96,17 +97,23 @@ const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 // ============================================
 
 /**
- * Calculate Estimated 1 Rep Max using multi-formula average
- * Uses shared strength calculations for consistency across the codebase
- * (Brzycki, Epley, Lombardi average for accuracy)
+ * Estimated 1RM for plateau/trend snapshots — delegates to THE canonical
+ * estimator (services/shared/e1rm), same as every other e1RM surface. The
+ * old private multi-formula average here was one of the divergent
+ * implementations the e1rm consolidation retired; a plateau verdict computed
+ * from a different e1RM than the history card displays produced
+ * self-contradicting banners.
+ *
+ * RPE-aware on purpose: same load, same reps at a lower RPE is a HIGHER
+ * estimate — set-level progress the old RPE-blind comparison discarded.
+ * Returns 0 for "no estimate" (aggregation convention; never display the 0).
  */
 export function calculateE1RM(
   weight: number,
   reps: number,
   rpe: number = 10
 ): number {
-  if (reps === 0 || weight === 0) return 0;
-  return estimate1RM(weight, reps, rpe);
+  return e1rmValueFromRpe(weight, reps, rpe);
 }
 
 // ============================================
@@ -114,13 +121,49 @@ export function calculateE1RM(
 // ============================================
 
 /**
- * Analyze exercise performance trend over time.
+ * Sessions required after a detected discontinuity (equipment change, etc.)
+ * before the fitted trend is trusted again — mirrors liftTrends'
+ * MIN_SESSIONS_FOR_TREND so every strength surface rebuilds over the same
+ * 2–3 sessions the "Calibrating" copy promises.
+ */
+export const MIN_SESSIONS_AFTER_DISCONTINUITY = 3;
+
+/**
+ * Shared robust-trend options for per-session e1RM series: ~2 sessions/week
+ * means a weekly rate is meaningful from ~10 observed days, and a lift
+ * untrained for 6+ weeks mid-window makes the fit low-confidence.
+ */
+const E1RM_TREND_OPTIONS: TrendOptions = {
+  minPoints: 2,
+  lowConfidenceSpanDays: 10,
+  lowConfidenceGapDays: 45,
+  // Session-to-session e1RM legitimately wobbles several percent — only
+  // clearly-implausible jumps (fat-fingered loads) are outliers.
+  minResidualFraction: 0.03,
+  label: 'e1rm',
+};
+
+export interface ExerciseTrendOptions {
+  /**
+   * Session dates the USER explicitly marked as "different equipment" — a
+   * permanent segment boundary, far more reliable than the heuristic (which
+   * still runs as a backstop). Persisted on exercise_blocks.equipment_changed.
+   */
+  knownDiscontinuities?: Array<string | Date>;
+}
+
+/**
+ * Analyze exercise performance trend over time via the canonical robust
+ * estimator (services/shared/trend): Theil–Sen over elapsed days, corrupt
+ * values hard-rejected, outliers MAD-excluded, and equipment-change level
+ * shifts segmenting the fit instead of being smoothed into a fake decline.
  * Pass the user's diet goal so "stalled" is judged against what the phase
  * can realistically deliver (gains on a bulk, maintenance on a cut).
  */
 export function analyzeExerciseTrend(
   snapshots: ExercisePerformanceSnapshot[],
-  goal?: PlateauGoal
+  goal?: PlateauGoal,
+  options?: ExerciseTrendOptions
 ): ExerciseTrend {
   if (snapshots.length === 0) {
     return {
@@ -141,50 +184,45 @@ export function analyzeExerciseTrend(
     e1rm: s.estimatedE1RM,
   }));
 
-  // Calculate weekly change (linear regression slope)
-  const weeklyChange = calculateWeeklyChange(dataPoints);
+  const trend = computeTrend(dataPoints.map((p) => ({ date: p.date, value: p.e1rm })), {
+    ...E1RM_TREND_OPTIONS,
+    knownDiscontinuities: options?.knownDiscontinuities,
+  });
 
-  // Determine if plateaued
-  const isPlateaued = checkForPlateau(dataPoints, resolveProfile(goal).threshold);
+  const usedPoints = trend.usedIndices.map((i) => dataPoints[i]);
+
+  // Plateau check runs on the points the fit actually used — a corrupt zero
+  // or a pre-equipment-change level must not set the comparison baseline.
+  const isPlateaued = checkForPlateau(usedPoints, resolveProfile(goal).threshold);
+
+  // The segment can start at a session with a data point (discontinuityIndex)
+  // OR at a user-marked boundary that no estimable session has followed yet —
+  // the latter still must reach callers so they report "calibrating" instead
+  // of confidently trending the old segment.
+  const discontinuityDate =
+    trend.discontinuityIndex != null
+      ? dataPoints[trend.discontinuityIndex].date
+      : trend.discontinuityAt
+        ? toLocalDay(trend.discontinuityAt)
+        : null;
 
   return {
     exerciseId: snapshots[0].exerciseId,
     dataPoints,
-    weeklyChange,
+    weeklyChange: Math.round(trend.slopePerWeek * 100) / 100,
     isPlateaued,
+    confidence: trend.confidence,
+    excludedDates: trend.excludedIndices.map((i) => dataPoints[i].date),
+    discontinuityDate,
+    pointsUsed: trend.nPoints,
   };
 }
 
-/**
- * Calculate average weekly E1RM change using linear regression
- */
-function calculateWeeklyChange(
-  dataPoints: Array<{ date: string; e1rm: number }>
-): number {
-  if (dataPoints.length < 2) return 0;
-
-  // Convert dates to week numbers (from first date)
-  const firstDate = new Date(dataPoints[0].date);
-  const points = dataPoints.map((p) => {
-    const date = new Date(p.date);
-    const weeks = (date.getTime() - firstDate.getTime()) / (7 * 24 * 60 * 60 * 1000);
-    return { x: weeks, y: p.e1rm };
-  });
-
-  // Simple linear regression
-  const n = points.length;
-  const sumX = points.reduce((a, p) => a + p.x, 0);
-  const sumY = points.reduce((a, p) => a + p.y, 0);
-  const sumXY = points.reduce((a, p) => a + p.x * p.y, 0);
-  const sumX2 = points.reduce((a, p) => a + p.x * p.x, 0);
-
-  // Guard against a zero denominator (e.g. all points share the same x / week).
-  const denominator = n * sumX2 - sumX * sumX;
-  if (denominator === 0) return 0;
-
-  const slope = (n * sumXY - sumX * sumY) / denominator;
-
-  return Math.round(slope * 100) / 100;
+/** Local YYYY-MM-DD of a Date (house convention — never UTC-shifted). */
+function toLocalDay(d: Date): string {
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${m}-${day}`;
 }
 
 /**
@@ -232,15 +270,69 @@ export interface DetectPlateauInput {
    * cut. Omitted = bulk-like behavior (the pre-goal-awareness default).
    */
   goal?: PlateauGoal;
+  /** User-marked equipment-change boundaries — see ExerciseTrendOptions. */
+  knownDiscontinuities?: Array<string | Date>;
 }
 
 export interface PlateauDetectionResult {
   isPlateaued: boolean;
+  /**
+   * True while the lift's trend is rebuilding after a detected data
+   * discontinuity (e.g. equipment change): fewer than
+   * MIN_SESSIONS_AFTER_DISCONTINUITY sessions at the new level. A
+   * calibrating lift NEVER fires a plateau — set-level context is missing,
+   * not progress.
+   */
+  isCalibrating: boolean;
+  /** Set when isCalibrating: what interrupted the trend. */
+  calibrationReason: 'equipment_change' | null;
   weeksSinceProgress: number;
   lastProgressDate: string | null;
   currentE1RM: number;
+  /**
+   * PEAK VOCABULARY — three different "peaks" exist and every surface must
+   * say which one it means (the old single `peakE1RM` let one banner claim
+   * "0.0 from peak" beside an all-time-best stat 15 lbs higher):
+   *  - allTimeBest: max over FULL history, all segments — NOT computed here
+   *    (this function only sees the analysis window); history surfaces own it.
+   *  - segmentBestE1RM: max within the current calibration segment (after
+   *    the last detected discontinuity, full passed history).
+   *  - recentPeakE1RM: max within the active trend window (the last
+   *    ANALYSIS_WINDOW_WEEKS, post-discontinuity, outliers excluded). This
+   *    is what weeksSinceProgress counts from.
+   */
+  recentPeakE1RM: number;
+  segmentBestE1RM: number;
+  /**
+   * @deprecated Alias of recentPeakE1RM (the analysis-window peak). Kept so
+   * existing readers don't silently break; new code must use the explicit
+   * vocabulary above.
+   */
   peakE1RM: number;
+  /** Session date of the discontinuity the segment is anchored to, if any. */
+  discontinuityDate: string | null;
   suggestions: string[];
+}
+
+/** The no-alert result shape (insufficient data / stale / calibrating). */
+function noAlert(
+  currentE1RM: number,
+  overrides: Partial<PlateauDetectionResult> = {}
+): PlateauDetectionResult {
+  return {
+    isPlateaued: false,
+    isCalibrating: false,
+    calibrationReason: null,
+    weeksSinceProgress: 0,
+    lastProgressDate: null,
+    currentE1RM,
+    recentPeakE1RM: 0,
+    segmentBestE1RM: 0,
+    peakE1RM: 0,
+    discontinuityDate: null,
+    suggestions: [],
+    ...overrides,
+  };
 }
 
 /**
@@ -250,14 +342,7 @@ export function detectPlateau(input: DetectPlateauInput): PlateauDetectionResult
   const { snapshots } = input;
 
   if (snapshots.length < MIN_WEEKS_FOR_ANALYSIS) {
-    return {
-      isPlateaued: false,
-      weeksSinceProgress: 0,
-      lastProgressDate: null,
-      currentE1RM: snapshots[snapshots.length - 1]?.estimatedE1RM ?? 0,
-      peakE1RM: 0,
-      suggestions: [],
-    };
+    return noAlert(snapshots[snapshots.length - 1]?.estimatedE1RM ?? 0);
   }
 
   // Sort by date
@@ -273,14 +358,7 @@ export function detectPlateau(input: DetectPlateauInput): PlateauDetectionResult
   // Exercise not trained recently: stale history isn't a plateau, it's an
   // exercise the user stopped doing. No alert.
   if (referenceDate.getTime() - latestDate.getTime() > STALE_AFTER_WEEKS * WEEK_MS) {
-    return {
-      isPlateaued: false,
-      weeksSinceProgress: 0,
-      lastProgressDate: null,
-      currentE1RM: sorted[sorted.length - 1].estimatedE1RM,
-      peakE1RM: 0,
-      suggestions: [],
-    };
+    return noAlert(sorted[sorted.length - 1].estimatedE1RM);
   }
 
   // Only judge against recent training. Sessions older than the analysis
@@ -292,27 +370,65 @@ export function detectPlateau(input: DetectPlateauInput): PlateauDetectionResult
   );
 
   if (recent.length < MIN_WEEKS_FOR_ANALYSIS) {
-    return {
-      isPlateaued: false,
-      weeksSinceProgress: 0,
-      lastProgressDate: null,
-      currentE1RM: sorted[sorted.length - 1].estimatedE1RM,
-      peakE1RM: 0,
-      suggestions: [],
-    };
+    return noAlert(sorted[sorted.length - 1].estimatedE1RM);
   }
 
-  // Find peak E1RM within the window and when it occurred
-  let peakE1RM = 0;
+  // Robust trend over the window (Theil–Sen, outliers excluded, level shifts
+  // segmenting the fit — see analyzeExerciseTrend).
+  const profile = resolveProfile(input.goal);
+  const trend = analyzeExerciseTrend(recent, input.goal, {
+    knownDiscontinuities: input.knownDiscontinuities,
+  });
+  const discontinuityDate = trend.discontinuityDate ?? null;
+
+  // Segment best: max within the CURRENT calibration segment over the full
+  // passed history (not just the analysis window) — the honest "best" once
+  // an equipment change makes pre-shift numbers incomparable.
+  const segmentSnapshots = discontinuityDate
+    ? sorted.filter(
+        (s) =>
+          new Date(s.sessionDate).getTime() >=
+          new Date(discontinuityDate).getTime()
+      )
+    : sorted;
+  const segmentBestE1RM = segmentSnapshots.reduce(
+    (max, s) => Math.max(max, s.estimatedE1RM),
+    0
+  );
+
+  // Recent peak: max over the points the fit actually USED (window ∩ current
+  // segment, outliers excluded) — a corrupt spike or a pre-shift level must
+  // not set the bar that "weeks since progress" counts from.
+  const excludedDates = new Set(trend.excludedDates ?? []);
+  const usable = recent.filter((s) => {
+    if (excludedDates.has(s.sessionDate)) return false;
+    if (!discontinuityDate) return true;
+    return new Date(s.sessionDate).getTime() >= new Date(discontinuityDate).getTime();
+  });
+
+  const currentE1RM = recent[recent.length - 1].estimatedE1RM;
+
+  // Trend still rebuilding after a discontinuity: verdicts wait. This is the
+  // Cable Fly fix — a 57.5 → 40 stack-relabel must produce "Calibrating",
+  // never "No progress in 4 weeks" measured against the old machine.
+  if (discontinuityDate && usable.length < MIN_SESSIONS_AFTER_DISCONTINUITY) {
+    return noAlert(currentE1RM, {
+      isCalibrating: true,
+      calibrationReason: 'equipment_change',
+      segmentBestE1RM,
+      discontinuityDate,
+    });
+  }
+
+  let recentPeakE1RM = 0;
   let peakDate = '';
-  for (const s of recent) {
-    if (s.estimatedE1RM > peakE1RM) {
-      peakE1RM = s.estimatedE1RM;
+  for (const s of usable) {
+    if (s.estimatedE1RM > recentPeakE1RM) {
+      recentPeakE1RM = s.estimatedE1RM;
       peakDate = s.sessionDate;
     }
   }
 
-  const currentE1RM = recent[recent.length - 1].estimatedE1RM;
   const currentDate = new Date(recent[recent.length - 1].sessionDate);
   const peakDateTime = new Date(peakDate);
 
@@ -320,10 +436,6 @@ export function detectPlateau(input: DetectPlateauInput): PlateauDetectionResult
   const weeksSinceProgress = Math.floor(
     (currentDate.getTime() - peakDateTime.getTime()) / WEEK_MS
   );
-
-  // Analyze trend against goal-adjusted expectations
-  const profile = resolveProfile(input.goal);
-  const trend = analyzeExerciseTrend(recent, input.goal);
 
   // A lift whose regression slope over the window is clearly positive is
   // progressing, full stop — suppress the alert regardless of what the
@@ -333,8 +445,13 @@ export function detectPlateau(input: DetectPlateauInput): PlateauDetectionResult
     currentE1RM > 0 ? (trend.weeklyChange / currentE1RM) * 100 : 0;
   const isRising = slopePctPerWeek >= RISING_SLOPE_SUPPRESSION_PCT_PER_WEEK;
 
+  // The endpoint/peak comparisons also need enough USED points to mean
+  // anything (the raw window count can be padded with excluded outliers).
+  const hasEnoughUsable = usable.length >= MIN_WEEKS_FOR_ANALYSIS;
+
   const isPlateaued =
     !isRising &&
+    hasEnoughUsable &&
     weeksSinceProgress >= MIN_STALL_WEEKS &&
     (trend.isPlateaued ||
       (profile.weeksWithoutPeak !== null &&
@@ -347,10 +464,15 @@ export function detectPlateau(input: DetectPlateauInput): PlateauDetectionResult
 
   return {
     isPlateaued,
+    isCalibrating: false,
+    calibrationReason: null,
     weeksSinceProgress,
-    lastProgressDate: peakDate,
+    lastProgressDate: peakDate || null,
     currentE1RM,
-    peakE1RM,
+    recentPeakE1RM,
+    segmentBestE1RM,
+    peakE1RM: recentPeakE1RM,
+    discontinuityDate,
     suggestions,
   };
 }

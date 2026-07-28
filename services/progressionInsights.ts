@@ -53,6 +53,14 @@ const ZERO_EXPECTATION_AHEAD_PCT = 0.1;
 /** Recomp expects roughly half the bulk-rate gains */
 const RECOMP_RATE_MULTIPLIER = 0.5;
 
+/**
+ * Physiological sanity ceiling for a muscle group's weekly E1RM rate (%).
+ * Elite novice whole-lift gains top out ~1–2%/week; anything past this is a
+ * data artifact (a mis-scaled machine, a corrupted series) that survived the
+ * filters — clamp it and flag it rather than display +35%/wk as a verdict.
+ */
+export const GROUP_RATE_SANITY_CEILING_PCT = 5;
+
 // ============================================
 // TYPES
 // ============================================
@@ -82,6 +90,13 @@ export interface ExerciseProgressionInsight {
   currentE1RM: number;
   isPlateaued: boolean;
   sessionsAnalyzed: number;
+  /**
+   * Robust-fit confidence (services/shared/trend). 'insufficient' means the
+   * rate is 0-by-construction and the lift must not feed a group rollup.
+   */
+  confidence: 'high' | 'low' | 'insufficient';
+  /** Working sets across the analyzed snapshots — the lift's volume share. */
+  workingSetsAnalyzed: number;
   /** Top-set change vs the previous session (undefined with <2 sessions) */
   lastSessionDelta?: {
     weightKg: number;
@@ -141,8 +156,19 @@ export function getExpectedPace(experience: Experience, goal?: PlateauGoal): Exp
 export interface MuscleGroupProgression {
   muscleGroup: string;
   pace: ProgressionPace;
-  /** Average weekly E1RM change % across exercises with enough data */
+  /**
+   * Weekly E1RM change % for the group: a WEIGHTED average across qualifying
+   * lifts (weight = session count × share of the group's working sets), so a
+   * 3-session lift cannot outvote a 12-session one. Clamped at the sanity
+   * ceiling — see rateImplausible.
+   */
   avgWeeklyChangePct: number;
+  /**
+   * True when the weighted rate exceeded GROUP_RATE_SANITY_CEILING_PCT and
+   * was clamped. A physiologically impossible group rate is a data-quality
+   * bug signal, not a result — the UI must show it flagged, not celebrated.
+   */
+  rateImplausible: boolean;
   expectedWeeklyPct: number;
   exerciseCount: number;
   /** Exercises with enough history to classify */
@@ -173,6 +199,13 @@ export interface GetExerciseProgressionInput {
    * surfaces can never disagree about which lifts are trustworthy.
    */
   programStartDate?: string | null;
+  /**
+   * Session dates the user explicitly marked as "different equipment"
+   * (exercise_blocks.equipment_changed) — hard trend-segment boundaries,
+   * honored even when the level shift is below the 25% heuristic, so this
+   * surface restarts exactly where Lift Trends and History do.
+   */
+  knownDiscontinuities?: Array<string | Date>;
 }
 
 /**
@@ -181,7 +214,7 @@ export interface GetExerciseProgressionInput {
 export function getExerciseProgression(
   input: GetExerciseProgressionInput
 ): ExerciseProgressionInsight {
-  const { exerciseId, snapshots, experience, referenceDate, goal, programStartDate } = input;
+  const { exerciseId, snapshots, experience, referenceDate, goal, programStartDate, knownDiscontinuities } = input;
   const expected = getExpectedPace(experience, goal);
   const expectedWeeklyPct = expected.expectedWeeklyPct;
 
@@ -190,6 +223,7 @@ export function getExerciseProgression(
   );
 
   const currentE1RM = sorted.length > 0 ? sorted[sorted.length - 1].estimatedE1RM : 0;
+  const workingSetsAnalyzed = sorted.reduce((sum, s) => sum + (s.totalWorkingSets || 0), 0);
 
   const lastSessionDelta =
     sorted.length >= 2
@@ -213,6 +247,8 @@ export function getExerciseProgression(
       currentE1RM,
       isPlateaued: false,
       sessionsAnalyzed: sorted.length,
+      confidence: 'insufficient',
+      workingSetsAnalyzed,
       lastSessionDelta,
     };
   }
@@ -235,13 +271,47 @@ export function getExerciseProgression(
         currentE1RM,
         isPlateaued: false,
         sessionsAnalyzed: sorted.length,
+        confidence: 'insufficient',
+        workingSetsAnalyzed,
         lastSessionDelta,
       };
     }
   }
 
-  const trend = analyzeExerciseTrend(sorted, goal);
-  const plateau = detectPlateau({ exerciseId, snapshots: sorted, referenceDate, goal });
+  const trend = analyzeExerciseTrend(sorted, goal, { knownDiscontinuities });
+  const plateau = detectPlateau({
+    exerciseId,
+    snapshots: sorted,
+    referenceDate,
+    goal,
+    knownDiscontinuities,
+  });
+
+  // Data-discontinuity gate (equipment change detected by the robust trend):
+  // same calibrating treatment as a program switch — the fitted slope mixes
+  // two incomparable levels until a few sessions rebuild it. No rate. Gated
+  // on the SEGMENT's point count, not just fit confidence: a two-point
+  // post-shift fit succeeds at 'low' confidence, but two sessions on new
+  // equipment are still below this module's own session floor.
+  if (
+    plateau.isCalibrating ||
+    (trend.discontinuityDate != null &&
+      (trend.pointsUsed ?? 0) < MIN_SESSIONS_FOR_INSIGHT)
+  ) {
+    return {
+      exerciseId,
+      pace: 'calibrating',
+      weeklyChangePct: 0,
+      weeklyChangeKg: 0,
+      expectedWeeklyPct,
+      currentE1RM,
+      isPlateaued: false,
+      sessionsAnalyzed: sorted.length,
+      confidence: 'insufficient',
+      workingSetsAnalyzed,
+      lastSessionDelta,
+    };
+  }
 
   const weeklyChangeKg = trend.weeklyChange;
   const weeklyChangePct =
@@ -271,6 +341,8 @@ export function getExerciseProgression(
     currentE1RM,
     isPlateaued: plateau.isPlateaued,
     sessionsAnalyzed: sorted.length,
+    confidence: trend.confidence ?? 'high',
+    workingSetsAnalyzed,
     lastSessionDelta,
   };
 }
@@ -290,6 +362,11 @@ export interface GetMuscleGroupProgressionInput {
   goal?: PlateauGoal;
   /** Active program start date — see GetExerciseProgressionInput. */
   programStartDate?: string | null;
+  /**
+   * Per-exercise user-marked equipment-change dates — see
+   * GetExerciseProgressionInput.knownDiscontinuities.
+   */
+  discontinuitiesByExercise?: Map<string, Array<string | Date>>;
 }
 
 /**
@@ -305,7 +382,7 @@ export interface GetMuscleGroupProgressionInput {
 export function getMuscleGroupProgression(
   input: GetMuscleGroupProgressionInput
 ): MuscleGroupProgression[] {
-  const { snapshotsByExercise, muscleByExercise, experience, referenceDate, goal, programStartDate } = input;
+  const { snapshotsByExercise, muscleByExercise, experience, referenceDate, goal, programStartDate, discontinuitiesByExercise } = input;
   const expected = getExpectedPace(experience, goal);
   const expectedWeeklyPct = expected.expectedWeeklyPct;
 
@@ -321,6 +398,7 @@ export function getMuscleGroupProgression(
       referenceDate,
       goal,
       programStartDate,
+      knownDiscontinuities: discontinuitiesByExercise?.get(exerciseId),
     });
     const list = byMuscle.get(muscle) ?? [];
     list.push(insight);
@@ -331,18 +409,46 @@ export function getMuscleGroupProgression(
 
   byMuscle.forEach((insights, muscleGroup) => {
     // Only CONFIDENT trends may feed the rollup rate — calibrating lifts'
-    // slopes are noise and must not average into a real-looking number.
+    // slopes are noise and must not average into a real-looking number, and
+    // a lift whose own fit is 'insufficient' has no rate to contribute. If
+    // nothing qualifies, the group renders "Building history", never a
+    // fabricated rate.
     const analyzed = insights.filter(
-      (i) => i.pace !== 'insufficient_data' && i.pace !== 'calibrating'
+      (i) =>
+        i.pace !== 'insufficient_data' &&
+        i.pace !== 'calibrating' &&
+        i.confidence !== 'insufficient'
     );
     const calibratingCount = insights.filter((i) => i.pace === 'calibrating').length;
     const plateauedCount = analyzed.filter((i) => i.isPlateaued).length;
-    const avgWeeklyChangePct =
-      analyzed.length > 0
-        ? Math.round(
-            (analyzed.reduce((sum, i) => sum + i.weeklyChangePct, 0) / analyzed.length) * 10
-          ) / 10
-        : 0;
+
+    // Weighted by session count × share of the group's working volume: a
+    // 3-session lift must not outvote a 12-session staple (the +35.4%/wk
+    // Glutes bug was one 3-session lift promoted unweighted to the verdict).
+    const totalSets = analyzed.reduce((sum, i) => sum + i.workingSetsAnalyzed, 0);
+    let rawAvg = 0;
+    if (analyzed.length > 0) {
+      let weightSum = 0;
+      let weighted = 0;
+      for (const i of analyzed) {
+        const volumeShare = totalSets > 0 ? i.workingSetsAnalyzed / totalSets : 1;
+        const w = Math.max(i.sessionsAnalyzed * volumeShare, 1e-6);
+        weighted += w * i.weeklyChangePct;
+        weightSum += w;
+      }
+      rawAvg = weightSum > 0 ? weighted / weightSum : 0;
+    }
+
+    let rateImplausible = false;
+    if (Math.abs(rawAvg) > GROUP_RATE_SANITY_CEILING_PCT) {
+      console.warn(
+        `getMuscleGroupProgression(${muscleGroup}): weighted rate ${rawAvg.toFixed(1)}%/wk ` +
+          `exceeds the ${GROUP_RATE_SANITY_CEILING_PCT}%/wk sanity ceiling — clamping and flagging (data-quality signal)`
+      );
+      rawAvg = Math.sign(rawAvg) * GROUP_RATE_SANITY_CEILING_PCT;
+      rateImplausible = true;
+    }
+    const avgWeeklyChangePct = analyzed.length > 0 ? Math.round(rawAvg * 10) / 10 : 0;
 
     // Same precedence as per-exercise: a healthy average trend wins;
     // "plateaued" only when the trend is weak AND most lifts are flagged.
@@ -363,6 +469,7 @@ export function getMuscleGroupProgression(
       muscleGroup,
       pace,
       avgWeeklyChangePct,
+      rateImplausible,
       expectedWeeklyPct,
       exerciseCount: insights.length,
       analyzedCount: analyzed.length,

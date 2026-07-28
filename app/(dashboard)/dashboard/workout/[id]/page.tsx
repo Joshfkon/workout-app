@@ -106,7 +106,7 @@ import { RPECalibrationEngine, type CalibrationResult, type CalibrationSetLog } 
 import { resolveProgressionModel } from '@/services/suggestionEngine/repTotalPolicy';
 import { estimateE1RMFromRpe } from '@/services/shared/e1rm';
 import { applyReadinessModulation } from '@/services/fatigueEngine';
-import { buildPerformanceSnapshots, type SnapshotSourceBlock } from '@/components/workout/exercisePerformance';
+import { buildPerformanceSnapshots, collectEquipmentBoundaries, type SnapshotSourceBlock } from '@/components/workout/exercisePerformance';
 import { getFailureSafetyTier } from '@/services/exerciseSafety';
 import { SanityCheckToast } from '@/components/workout/SanityCheckToast';
 import { CalibrationResultCard } from '@/components/workout/CalibrationResultCard';
@@ -412,6 +412,10 @@ export default function WorkoutPage() {
   const [transferCandidates, setTransferCandidates] = useState<TransferCandidate[]>([]);
   // Per-session performance snapshots per exercise (plateau detection input)
   const [performanceSnapshots, setPerformanceSnapshots] = useState<Record<string, ExercisePerformanceSnapshot[]>>({});
+  // Per-exercise user-marked "different equipment" session dates — explicit
+  // trend-segment boundaries the card's plateau/pace analyzers must honor
+  // even when the shift is below the 25% detection heuristic.
+  const [equipmentBoundaries, setEquipmentBoundaries] = useState<Record<string, string[]>>({});
   const [allCollapsed, setAllCollapsed] = useState(false);
   const [collapsedBlocks, setCollapsedBlocks] = useState<Set<string>>(new Set());
   
@@ -1024,6 +1028,7 @@ export default function WorkoutPage() {
                   exercise_blocks (
                     id,
                     exercise_id,
+                    equipment_changed,
                     workout_sessions!inner (
                       id,
                       completed_at,
@@ -1242,6 +1247,9 @@ export default function WorkoutPage() {
                 transformedBlocks.map((b) => [b.exerciseId, b.exercise.exerciseType])
               )
             )
+          );
+          setEquipmentBoundaries(
+            collectEquipmentBoundaries(allHistoryBlocks as SnapshotSourceBlock[])
           );
 
           // Generate coach message with exercise history for accurate weight suggestions
@@ -5566,6 +5574,7 @@ export default function WorkoutPage() {
                     }
                     readinessModulation={readinessModulation}
                     performanceSnapshots={performanceSnapshots[block.exerciseId]}
+                    equipmentBoundaries={equipmentBoundaries[block.exerciseId]}
                     userGoal={userGoal}
                     onRepRangeChange={(range) => handleRepRangeChange(block.id, range)}
                     isAmrapSuggested={

@@ -3,7 +3,19 @@
  * list — the measurement analog of the Strength tab's liftTrends module
  * (same visual language: direction badge + rate + sparkline). Pure: callers
  * pass the queried body_measurements rows in; no React, no Supabase.
+ *
+ * Slopes come from the canonical robust estimator (services/shared/trend):
+ * Theil–Sen over ELAPSED DAYS, impossible values (≤ 0 cm) hard-rejected,
+ * single-entry tape errors MAD-excluded and SURFACED via excludedDates so
+ * the chart can mark them instead of silently dropping data.
+ *
+ * Honesty rule for rates (see the trend-robustness task, 6b): a per-month
+ * figure is only rendered when the observed span actually supports it
+ * (confidence 'high'). A 17-day span with 3 entries reports the raw delta
+ * ("+0.9 in over 17 days"), never an extrapolated "+1.5 in/mo".
  */
+
+import { computeTrend } from '@/services/shared/trend';
 
 export type MeasurementDirection = 'rising' | 'flat' | 'down';
 
@@ -21,10 +33,22 @@ export interface MeasurementSiteField {
 export interface MeasurementSiteTrend {
   site: string;
   label: string;
-  /** Null while the site has fewer than MIN_POINTS_FOR_TREND entries. */
+  /** Null while the site has fewer than MIN_POINTS_FOR_TREND usable entries. */
   direction: MeasurementDirection | null;
-  /** Fitted change per 30 days, cm (least-squares slope). 0 when unclassified. */
+  /** Fitted change per 30 days, cm (robust Theil–Sen slope). 0 when unclassified. */
   monthlyChangeCm: number;
+  /**
+   * Whether monthlyChangeCm may be RENDERED as a rate. False when the
+   * observed span is too short for the per-month unit (or the series is
+   * gappy) — callers show observedDeltaCm over spanDays instead.
+   */
+  rateIsReliable: boolean;
+  /** First-to-last observed change across the fitted entries, cm. */
+  observedDeltaCm: number;
+  /** Days between the first and last fitted entries. */
+  spanDays: number;
+  /** Entry dates rejected as outliers (e.g. a −1.6" single-week tape error). */
+  excludedDates: string[];
   /** Latest entry in the window, cm. */
   currentCm: number;
   pointCount: number;
@@ -52,6 +76,21 @@ export interface MeasurementTrendsSummary {
 export const MIN_POINTS_FOR_TREND = 3;
 
 /**
+ * Observed span (days) below which a per-MONTH rate is not rendered — a
+ * 17-day span reported as in/mo is a 1.8× extrapolation dressed up as a
+ * measurement. The direction badge still shows; the rate becomes the raw
+ * observed delta.
+ */
+export const MIN_SPAN_DAYS_FOR_MONTHLY_RATE = 21;
+
+/**
+ * Gap (days) between consecutive tape entries beyond which the series —
+ * and any chart segment across it — is low-confidence (dashed rendering,
+ * no rate). Same convention as the Body Composition chart's dashed spans.
+ */
+export const MEASUREMENT_LOW_CONFIDENCE_GAP_DAYS = 45;
+
+/**
  * Weekly change (% of current value) within ±this band counts as flat. Tape
  * sites move far slower than E1RM, so the band is tighter than liftTrends'.
  */
@@ -59,25 +98,6 @@ const FLAT_BAND_PCT_PER_WEEK = 0.05;
 
 /** Sites where a DECREASE is the improvement (mirrors the compare grid). */
 const SHRINK_IS_GOOD = new Set(['waist']);
-
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
-
-/** Least-squares slope of valueCm over days. Returns cm/day. */
-function slopeCmPerDay(points: MeasurementTrendPoint[]): number {
-  const t0 = new Date(`${points[0].date}T00:00:00`).getTime();
-  const xs = points.map((p) => (new Date(`${p.date}T00:00:00`).getTime() - t0) / MS_PER_DAY);
-  const ys = points.map((p) => p.valueCm);
-  const n = points.length;
-  const meanX = xs.reduce((a, b) => a + b, 0) / n;
-  const meanY = ys.reduce((a, b) => a + b, 0) / n;
-  let cov = 0;
-  let varX = 0;
-  for (let i = 0; i < n; i++) {
-    cov += (xs[i] - meanX) * (ys[i] - meanY);
-    varX += (xs[i] - meanX) ** 2;
-  }
-  return varX === 0 ? 0 : cov / varX;
-}
 
 /**
  * Classify each measured site's trend over the rows at/after `cutoff`
@@ -105,12 +125,32 @@ export function computeMeasurementTrends<T extends { logged_at: string }>(
 
     const currentCm = history[history.length - 1].valueCm;
 
-    if (history.length < MIN_POINTS_FOR_TREND) {
+    const trend = computeTrend(
+      history.map((p) => ({ date: p.date, value: p.valueCm })),
+      {
+        minPoints: MIN_POINTS_FOR_TREND,
+        lowConfidenceSpanDays: MIN_SPAN_DAYS_FOR_MONTHLY_RATE,
+        lowConfidenceGapDays: MEASUREMENT_LOW_CONFIDENCE_GAP_DAYS,
+        // Tape sites don't level-shift the way equipment-bound e1RM does;
+        // a sudden persistent change IS the signal (or a re-measurement
+        // convention the outlier pass judges point by point).
+        detectDiscontinuity: false,
+        label: `measurement:${field.key}`,
+      }
+    );
+
+    const excludedDates = trend.excludedIndices.map((i) => history[i].date);
+
+    if (trend.confidence === 'insufficient') {
       sites.push({
         site: field.key,
         label: field.label,
         direction: null,
         monthlyChangeCm: 0,
+        rateIsReliable: false,
+        observedDeltaCm: Math.round(trend.observedDelta * 100) / 100,
+        spanDays: Math.round(trend.spanDays),
+        excludedDates,
         currentCm,
         pointCount: history.length,
         history,
@@ -119,8 +159,7 @@ export function computeMeasurementTrends<T extends { logged_at: string }>(
       continue;
     }
 
-    const slope = slopeCmPerDay(history);
-    const weeklyPct = currentCm > 0 ? ((slope * 7) / currentCm) * 100 : 0;
+    const weeklyPct = currentCm > 0 ? ((trend.slopePerDay * 7) / currentCm) * 100 : 0;
     const direction: MeasurementDirection =
       weeklyPct > FLAT_BAND_PCT_PER_WEEK
         ? 'rising'
@@ -134,7 +173,11 @@ export function computeMeasurementTrends<T extends { logged_at: string }>(
       site: field.key,
       label: field.label,
       direction,
-      monthlyChangeCm: Math.round(slope * 30 * 100) / 100,
+      monthlyChangeCm: Math.round(trend.slopePerMonth * 100) / 100,
+      rateIsReliable: trend.confidence === 'high',
+      observedDeltaCm: Math.round(trend.observedDelta * 100) / 100,
+      spanDays: Math.round(trend.spanDays),
+      excludedDates,
       currentCm,
       pointCount: history.length,
       history,

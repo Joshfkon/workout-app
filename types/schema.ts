@@ -1190,6 +1190,14 @@ export interface ExerciseTrend {
   }>;
   weeklyChange: number;
   isPlateaued: boolean;
+  /** Robust-fit confidence (services/shared/trend). Absent = not computed. */
+  confidence?: 'high' | 'low' | 'insufficient';
+  /** Session dates the robust fit rejected as outliers (UI must SHOW these). */
+  excludedDates?: string[];
+  /** Session date a persistent level shift (equipment change) was detected. */
+  discontinuityDate?: string | null;
+  /** Points the reported slope was actually fitted on. */
+  pointsUsed?: number;
 }
 
 /**

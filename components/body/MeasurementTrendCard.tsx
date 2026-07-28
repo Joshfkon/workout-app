@@ -26,6 +26,7 @@ import {
   CartesianGrid,
   Tooltip,
 } from 'recharts';
+import { findLowConfidenceGaps } from '@/services/bodyCompAnchor';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { getLocalUserId } from '@/lib/supabase/authState';
 import { Card, CardHeader, CardTitle, CardContent, Badge } from '@/components/ui';
@@ -35,6 +36,7 @@ import {
 } from '@/components/dashboard/BodyMeasurements';
 import {
   computeMeasurementTrends,
+  MEASUREMENT_LOW_CONFIDENCE_GAP_DAYS,
   MIN_POINTS_FOR_TREND,
   type MeasurementSiteTrend,
 } from '@/lib/body/measurementTrends';
@@ -188,49 +190,114 @@ export function MeasurementTrendCard({
   }, [rows, site]);
 
   /**
+   * Outlier entries over the site's FULL history (window-independent), from
+   * the same robust fit that powers the badges. The EWMA overlay must skip
+   * them: drawing the raw point as an excluded red marker while the yellow
+   * trend line still bends toward that same bad measurement would be
+   * excluding it in name only.
+   */
+  const fullHistoryExcludedDates = useMemo(() => {
+    if (!site) return new Set<string>();
+    const fullSite = computeMeasurementTrends(rows, MEASUREMENT_FIELDS, null).sites.find(
+      (s) => s.site === site
+    );
+    return new Set(fullSite?.excludedDates ?? []);
+  }, [rows, site]);
+
+  /**
    * Rolling trend (time-aware EWMA, τ=10d — same smoothing as the weight
-   * trend), keyed by date. Computed over the site's FULL history, before the
-   * range filter, so a short window carries in prior trend state instead of
-   * re-seeding on its first visible entry — a date's trend value is the same
-   * in every window. Gated on the same entry floor as the badge.
+   * trend), keyed by date. Computed over the site's FULL history minus
+   * excluded outliers, before the range filter, so a short window carries in
+   * prior trend state instead of re-seeding on its first visible entry — a
+   * date's trend value is the same in every window. Gated on the same entry
+   * floor as the badge.
    */
   const trendByDate = useMemo(() => {
     const map = new Map<string, number>();
-    if (siteEntries.length < MIN_POINTS_FOR_TREND) return map;
+    const cleanEntries = siteEntries.filter((e) => !fullHistoryExcludedDates.has(e.date));
+    if (cleanEntries.length < MIN_POINTS_FOR_TREND) return map;
     for (const p of computeEwmaTrend(
-      siteEntries.map((e) => ({ date: e.date, value: e.valueCm }))
+      cleanEntries.map((e) => ({ date: e.date, value: e.valueCm }))
     )) {
       map.set(p.date, p.trend);
     }
     return map;
-  }, [siteEntries]);
+  }, [siteEntries, fullHistoryExcludedDates]);
 
+  /**
+   * Detail-chart rows on a TRUE TIME axis (x = ms epoch): a 6-month gap must
+   * be 6 months wide, not one categorical tick. Solid segments break at
+   * spans > LOW_CONFIDENCE_GAP_DAYS without entries; each such span is
+   * bridged by a dedicated dashed `gapK` series instead (same convention as
+   * the Body Composition chart). Outlier-excluded entries plot as marked
+   * dots (`excluded`) — visible, never silently dropped — and are omitted
+   * from the fitted line.
+   */
   const chartData = useMemo(() => {
-    if (!selected) return [];
+    if (!selected) return { rows: [] as Record<string, number | null | undefined>[], gapCount: 0 };
     const toUnit = (cm: number) => (tapeUnit === 'in' ? cmToIn(cm) : cm);
-    return selected.history.map((point) => {
+    const toTime = (date: string) => new Date(`${date}T00:00:00`).getTime();
+    const excludedSet = new Set(selected.excludedDates);
+
+    // Tape-specific gap threshold (45d — tape is logged weekly/monthly, not
+    // daily like weigh-ins): spans beyond it render dashed, same convention
+    // as the Body Composition chart's low-confidence segments.
+    const included = selected.history.filter((p) => !excludedSet.has(p.date));
+    const gaps = findLowConfidenceGaps(
+      included.map((p) => p.date),
+      MEASUREMENT_LOW_CONFIDENCE_GAP_DAYS
+    );
+
+    const rows: Record<string, number | null | undefined>[] = [];
+    for (const point of selected.history) {
       const trendCm = trendByDate.get(point.date);
-      return {
-        label: new Date(`${point.date}T00:00:00`).toLocaleDateString('en-US', {
-          month: 'short',
-          day: 'numeric',
-        }),
-        value: Math.round(toUnit(point.valueCm) * 10) / 10,
+      const isExcluded = excludedSet.has(point.date);
+      rows.push({
+        t: toTime(point.date),
+        value: isExcluded ? undefined : Math.round(toUnit(point.valueCm) * 10) / 10,
+        excluded: isExcluded ? Math.round(toUnit(point.valueCm) * 10) / 10 : undefined,
         // Trend keeps 2 decimals so the overlay stays smooth; raw stays
         // display-rounded.
-        trend:
-          trendCm != null ? Math.round(toUnit(trendCm) * 100) / 100 : undefined,
-      };
+        trend: trendCm != null ? Math.round(toUnit(trendCm) * 100) / 100 : undefined,
+      });
+    }
+
+    // Bridge each sparse span with a dashed gapK series (values only at the
+    // two supported endpoints; connectNulls joins them) and break the solid
+    // line by interposing a null-value row mid-gap.
+    gaps.forEach((gap, k) => {
+      const from = included[gap.fromIndex];
+      const to = included[gap.toIndex];
+      if (!from || !to) return;
+      const fromT = toTime(from.date);
+      const toT = toTime(to.date);
+      const key = `gap${k}`;
+      for (const row of rows) {
+        if (row.t === fromT) row[key] = Math.round(toUnit(from.valueCm) * 10) / 10;
+        if (row.t === toT) row[key] = Math.round(toUnit(to.valueCm) * 10) / 10;
+      }
+      rows.push({ t: (fromT + toT) / 2, value: null });
     });
+    rows.sort((a, b) => (a.t as number) - (b.t as number));
+
+    return { rows, gapCount: gaps.length };
   }, [selected, trendByDate, tapeUnit]);
 
-  const hasTrendLine = chartData.some((d) => d.trend != null);
+  const hasTrendLine = chartData.rows.some((d) => d.trend != null);
+  const hasExcluded = (selected?.excludedDates.length ?? 0) > 0;
+  const formatTick = (t: number) =>
+    new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
   const formatValue = (cm: number) =>
     `${(tapeUnit === 'in' ? cmToIn(cm) : cm).toFixed(1)} ${tapeUnit}`;
   const formatRate = (cmPerMonth: number) => {
     const v = tapeUnit === 'in' ? cmToIn(cmPerMonth) : cmPerMonth;
     return `${v >= 0 ? '+' : ''}${v.toFixed(1)} ${tapeUnit}/mo`;
+  };
+  /** Raw observed change (no rate unit) for short-span/low-confidence sites. */
+  const formatDelta = (cmDelta: number) => {
+    const v = tapeUnit === 'in' ? cmToIn(cmDelta) : cmDelta;
+    return `${v >= 0 ? '+' : ''}${v.toFixed(1)} ${tapeUnit}`;
   };
 
   const aggregateParts: string[] = [];
@@ -321,13 +388,20 @@ export function MeasurementTrendCard({
                       )}
                     </div>
                     {/* A building site shows NO rate — a slope fitted through
-                        one or two tape entries is noise with a decimal point. */}
+                        one or two tape entries is noise with a decimal point.
+                        A short-span site shows the RAW observed delta: a
+                        per-month figure off a 17-day span is extrapolation
+                        dressed as measurement. */}
                     <p className="text-xs text-surface-500 mt-0.5">
                       {trend.direction == null
                         ? `${formatValue(trend.currentCm)} · ${trend.pointCount} ${
                             trend.pointCount === 1 ? 'entry' : 'entries'
                           } — trends appear after ${MIN_POINTS_FOR_TREND}`
+                        : !trend.rateIsReliable
+                        ? `${formatValue(trend.currentCm)} · ${formatDelta(trend.observedDeltaCm)} over ${trend.spanDays}d · ${trend.pointCount} entries`
                         : `${formatValue(trend.currentCm)} · ${formatRate(trend.monthlyChangeCm)} · ${trend.pointCount} entries`}
+                      {trend.excludedDates.length > 0 &&
+                        ` · ${trend.excludedDates.length} outlier excluded`}
                     </p>
                   </div>
                   <SiteSparkline trend={trend} />
@@ -341,7 +415,7 @@ export function MeasurementTrendCard({
                   <p className="text-xs font-medium text-surface-400">
                     {selected.label} detail
                   </p>
-                  {hasTrendLine && (
+                  {(hasTrendLine || chartData.gapCount > 0 || hasExcluded) && (
                     <span
                       className="flex items-center gap-3 text-[10px] text-surface-500"
                       data-testid="measurement-detail-legend"
@@ -350,14 +424,28 @@ export function MeasurementTrendCard({
                         <span className="inline-block w-3 h-0.5 rounded bg-[#818cf8]" />
                         Logged
                       </span>
-                      <span className="flex items-center gap-1">
-                        <span className="inline-block w-3 h-0.5 rounded bg-[#fbbf24]" />
-                        Trend
-                      </span>
+                      {hasTrendLine && (
+                        <span className="flex items-center gap-1">
+                          <span className="inline-block w-3 h-0.5 rounded bg-[#fbbf24]" />
+                          Trend
+                        </span>
+                      )}
+                      {chartData.gapCount > 0 && (
+                        <span className="flex items-center gap-1">
+                          <span className="inline-block w-3 border-t border-dashed border-[#818cf8]" />
+                          &gt;{MEASUREMENT_LOW_CONFIDENCE_GAP_DAYS}d gap (low confidence)
+                        </span>
+                      )}
+                      {hasExcluded && (
+                        <span className="flex items-center gap-1">
+                          <span className="inline-block w-2 h-2 rounded-full border border-danger-400" />
+                          Excluded outlier
+                        </span>
+                      )}
                     </span>
                   )}
                 </div>
-                {chartData.length < 2 ? (
+                {selected.history.length < 2 ? (
                   <p className="text-sm text-surface-500 py-6 text-center">
                     {sitePointCount >= 2
                       ? 'Fewer than two entries in this date range — try a longer range.'
@@ -366,9 +454,22 @@ export function MeasurementTrendCard({
                 ) : (
                   <div className="h-48">
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={chartData}>
+                      {/* True time axis: a 6-month gap renders 6 months wide,
+                          never one categorical tick. Straight (linear)
+                          segments on sparse tape data — a spline that rises
+                          above every observed point is inventing data. */}
+                      <LineChart data={chartData.rows}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                        <XAxis dataKey="label" stroke="#9ca3af" fontSize={11} minTickGap={24} />
+                        <XAxis
+                          dataKey="t"
+                          type="number"
+                          scale="time"
+                          domain={['dataMin', 'dataMax']}
+                          tickFormatter={formatTick}
+                          stroke="#9ca3af"
+                          fontSize={11}
+                          minTickGap={24}
+                        />
                         <YAxis
                           stroke="#9ca3af"
                           fontSize={11}
@@ -384,13 +485,14 @@ export function MeasurementTrendCard({
                             color: '#f3f4f6',
                             fontSize: 12,
                           }}
+                          labelFormatter={(t) => formatTick(Number(t))}
                           formatter={(value: number, name: string) => [
                             `${value} ${tapeUnit}`,
-                            name,
+                            name.startsWith('gap') ? 'Sparse span (interpolated)' : name,
                           ]}
                         />
                         <Line
-                          type="monotone"
+                          type="linear"
                           dataKey="value"
                           name="Logged"
                           stroke="#818cf8"
@@ -399,6 +501,38 @@ export function MeasurementTrendCard({
                           dot={{ r: 2.5 }}
                           isAnimationActive={false}
                         />
+                        {/* Dashed low-confidence bridges across sparse spans —
+                            same convention as the Body Composition chart. */}
+                        {Array.from({ length: chartData.gapCount }, (_, k) => (
+                          <Line
+                            key={`gap${k}`}
+                            type="linear"
+                            dataKey={`gap${k}`}
+                            name={`gap${k}`}
+                            stroke="#818cf8"
+                            strokeWidth={1.5}
+                            strokeOpacity={0.45}
+                            strokeDasharray="5 4"
+                            dot={false}
+                            activeDot={false}
+                            connectNulls
+                            isAnimationActive={false}
+                          />
+                        ))}
+                        {/* Outlier-excluded entries: visible, marked, never in
+                            the fitted line — hidden removal is worse than a
+                            visible outlier. */}
+                        {hasExcluded && (
+                          <Line
+                            type="linear"
+                            dataKey="excluded"
+                            name="Excluded outlier"
+                            stroke="none"
+                            dot={{ r: 3.5, fill: 'none', stroke: '#f87171', strokeWidth: 1.5 }}
+                            activeDot={{ r: 5 }}
+                            isAnimationActive={false}
+                          />
+                        )}
                         {hasTrendLine && (
                           <Line
                             type="monotone"

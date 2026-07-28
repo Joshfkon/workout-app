@@ -111,7 +111,15 @@ export function MuscleProgressionCard({ groups, exerciseNames, goal }: MusclePro
                   {muscleDisplayName(group.muscleGroup)}
                 </span>
                 {paceHasRate(group.pace) && (
-                  <span className="text-xs font-mono text-surface-400">
+                  <span
+                    className={`text-xs font-mono ${group.rateImplausible ? 'text-warning-400' : 'text-surface-400'}`}
+                    title={
+                      group.rateImplausible
+                        ? 'Rate exceeded the plausibility ceiling and was capped — usually a data issue (equipment change or mislogged load), not real progress'
+                        : undefined
+                    }
+                  >
+                    {group.rateImplausible && '⚠ '}
                     {formatWeeklyPct(group.avgWeeklyChangePct)}
                   </span>
                 )}

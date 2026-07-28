@@ -191,3 +191,106 @@ describe('computeLiftTrends', () => {
     expect(summary.lifts[0].direction).toBe('rising');
   });
 });
+
+// ============================================
+// TREND-ROBUSTNESS VERIFICATION FIXTURES
+// (Cable Fly repro — see the trend-robustness task)
+// ============================================
+
+describe('equipment discontinuity + inestimable sessions', () => {
+  const cableFly = { id: 'ex-cable-fly', name: 'Cable Fly' };
+
+  it('Cable Fly repro: 20-rep old-machine session yields no e1RM point, level shift segments the trend', () => {
+    const sessions = [
+      // Old machine (different stack labeling): heavy-looking e1RM.
+      session('s0', '2026-06-22T10:00:00Z', cableFly, 18, 12),
+      session('s1', '2026-06-29T10:00:00Z', cableFly, 26, 8),
+      // 20-rep day: outside the estimator's domain → NO snapshot, never a 0.
+      session('s2', '2026-07-04T10:00:00Z', cableFly, 18, 20),
+      // Correct machine from here on.
+      session('s3', '2026-07-14T10:00:00Z', cableFly, 13.5, 12),
+      session('s4', '2026-07-21T10:00:00Z', cableFly, 13.5, 13),
+      session('s5', '2026-07-27T10:00:00Z', cableFly, 14.5, 13),
+    ];
+
+    const summary = computeLiftTrends(sessions, 'bulk', new Date('2026-07-27'));
+    const lift = summary.lifts[0];
+
+    // The Jul 4 session contributed no point (5 points, not 6).
+    expect(lift.history).toHaveLength(5);
+    expect(lift.history.every((h) => h.e1rmKg > 0)).toBe(true);
+    // The old-machine level shift anchors the trend at Jul 14…
+    expect(lift.discontinuityDate).toBe('2026-07-14');
+    // …so the fitted slope reads the (mildly positive) new-machine segment,
+    // not a −25%/wk collapse across the machine swap.
+    expect(lift.weeklyChangePct).toBeGreaterThan(0);
+    expect(lift.direction).toBe('rising');
+  });
+
+  it('marks a lift calibrating (equipment change) with fewer than 3 post-shift sessions', () => {
+    const sessions = [
+      session('s0', '2026-06-15T10:00:00Z', cableFly, 26, 8),
+      session('s1', '2026-06-22T10:00:00Z', cableFly, 26, 8),
+      session('s2', '2026-06-29T10:00:00Z', cableFly, 26.5, 8),
+      session('s3', '2026-07-14T10:00:00Z', cableFly, 13.5, 12),
+      session('s4', '2026-07-21T10:00:00Z', cableFly, 13.5, 13),
+    ];
+
+    const summary = computeLiftTrends(sessions, 'bulk', new Date('2026-07-21'));
+    const lift = summary.lifts[0];
+
+    expect(lift.lowConfidence).toBe(true);
+    expect(lift.calibrationReason).toBe('equipment_change');
+    // Calibrating lifts never feed the stalled banner.
+    expect(summary.stalled).toBeNull();
+  });
+
+  it('honors the persisted equipment_changed marker as a hard boundary', () => {
+    const marked: LiftTrendSessionRow[] = [
+      session('s0', '2026-06-15T10:00:00Z', cableFly, 20, 8),
+      session('s1', '2026-06-22T10:00:00Z', cableFly, 20.5, 8),
+      session('s2', '2026-06-29T10:00:00Z', cableFly, 21, 8),
+      session('s3', '2026-07-06T10:00:00Z', cableFly, 18, 8),
+      session('s4', '2026-07-13T10:00:00Z', cableFly, 18.5, 8),
+      session('s5', '2026-07-20T10:00:00Z', cableFly, 19, 8),
+    ];
+    // −15% at Jul 6: below the heuristic threshold, but the user marked it.
+    marked[3].exercise_blocks![0].equipment_changed = true;
+
+    const summary = computeLiftTrends(marked, 'bulk', new Date('2026-07-21'));
+    const lift = summary.lifts[0];
+
+    expect(lift.discontinuityDate).toBe('2026-07-06');
+    // Slope fits the marked segment only (rising), not the cross-gym mix.
+    expect(lift.weeklyChangePct).toBeGreaterThan(0);
+  });
+});
+
+describe('marked boundary on an inestimable session', () => {
+  const cableFly = { id: 'ex-cable-fly', name: 'Cable Fly' };
+
+  it('keeps a marked boundary even when the marked session itself has no estimable set', () => {
+    const marked: LiftTrendSessionRow[] = [
+      session('s0', '2026-06-15T10:00:00Z', cableFly, 20, 8),
+      session('s1', '2026-06-22T10:00:00Z', cableFly, 20.5, 8),
+      session('s2', '2026-06-29T10:00:00Z', cableFly, 21, 8),
+      // Marked equipment-change day logged as a 20-rep burnout: outside the
+      // estimator's domain, so it contributes NO e1RM point — the boundary
+      // must survive anyway.
+      session('s3', '2026-07-03T10:00:00Z', cableFly, 10, 20),
+      session('s4', '2026-07-06T10:00:00Z', cableFly, 18, 8),
+      session('s5', '2026-07-13T10:00:00Z', cableFly, 18.5, 8),
+      session('s6', '2026-07-20T10:00:00Z', cableFly, 19, 8),
+    ];
+    marked[3].exercise_blocks![0].equipment_changed = true;
+
+    const summary = computeLiftTrends(marked, 'bulk', new Date('2026-07-21'));
+    const lift = summary.lifts[0];
+
+    // 6 e1RM points (the 20-rep day contributes none), segment anchored at
+    // the first point at/after the marked date.
+    expect(lift.history).toHaveLength(6);
+    expect(lift.discontinuityDate).toBe('2026-07-06');
+    expect(lift.weeklyChangePct).toBeGreaterThan(0);
+  });
+});

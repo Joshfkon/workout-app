@@ -15,7 +15,9 @@ import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 // v2: evicts entries poisoned by the old queryFn, which cached an EMPTY page
 // for 24h whenever the network getUser() round trip failed on a cold reload.
 const HISTORY_FIRST_PAGE_KEY = ['history', 'sessions', 'page0', 'v2'] as const;
-import { formatWeight, convertWeight, convertWeightForDisplay, inputWeightToKg, estimateE1RM, getLocalDateString, muscleDisplayName } from '@/lib/utils';
+import { formatWeight, convertWeight, convertWeightForDisplay, inputWeightToKg, getLocalDateString, muscleDisplayName } from '@/lib/utils';
+import { e1rmValueFromRpe } from '@/services/shared/e1rm';
+import { computeTrend } from '@/services/shared/trend';
 import { createRepeatSession } from '@/lib/training/repeatWorkout';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import HistoryCalendar from './_components/HistoryCalendar';
@@ -119,7 +121,12 @@ interface ExerciseHistoryEntry {
   bestReps: number;
   totalSets: number;
   totalVolume: number;
+  /** 0 = no estimable set that day ("no estimate", NEVER charted as a value). */
   estimatedE1RM: number;
+  /** exercise_blocks rows behind this date (equipment-marker writes). */
+  blockIds: string[];
+  /** User marked this day's work as done on different equipment. */
+  equipmentChanged: boolean;
   sets: { weight: number; reps: number; rpe: number | null }[];
 }
 
@@ -131,7 +138,17 @@ interface ExerciseHistoryData {
   isDuration: boolean;
   history: ExerciseHistoryEntry[];
   currentE1RM: number;
+  /** Max over FULL history, all calibration segments (see segmentBestE1RM). */
   allTimeMaxE1RM: number;
+  /**
+   * Max within the CURRENT calibration segment (after the last equipment
+   * change, marked or detected). Equals allTimeMaxE1RM when no discontinuity
+   * exists. The stat block annotates an all-time best from a previous
+   * segment as pre-calibration instead of letting the two numbers contradict.
+   */
+  segmentBestE1RM: number;
+  /** First date of the current calibration segment (null = single segment). */
+  segmentStartDate: string | null;
   allTimeBestWeight: number;
   allTimeBestReps: number;
   totalSetsAllTime: number;
@@ -550,6 +567,7 @@ function HistoryPageContent() {
         .select(`
           id,
           workout_session_id,
+          equipment_changed,
           workout_sessions!inner (
             id,
             completed_at,
@@ -583,6 +601,8 @@ function HistoryPageContent() {
           history: [],
           currentE1RM: 0,
           allTimeMaxE1RM: 0,
+          segmentBestE1RM: 0,
+          segmentStartDate: null,
           allTimeBestWeight: 0,
           allTimeBestReps: 0,
           totalSetsAllTime: 0,
@@ -638,7 +658,10 @@ function HistoryPageContent() {
             return;
           }
 
-          const e1rm = estimateE1RM(set.weight_kg, set.reps);
+          // Canonical RPE-aware estimator; 0 = "no estimate" (e.g. a 20-rep
+          // set is outside the formula's domain) and must NEVER be charted
+          // or trended as a value.
+          const e1rm = e1rmValueFromRpe(set.weight_kg, set.reps, set.rpe);
           sessionVolume += set.weight_kg * set.reps;
 
           if (e1rm > sessionBestE1RM) {
@@ -671,6 +694,8 @@ function HistoryPageContent() {
           existing.totalSets += workingSets.length;
           existing.totalVolume += sessionVolume;
           existing.sets.push(...sets);
+          existing.blockIds.push(block.id);
+          existing.equipmentChanged = existing.equipmentChanged || !!block.equipment_changed;
         } else {
           historyMap.set(dateKey, {
             date: dateKey,
@@ -680,6 +705,8 @@ function HistoryPageContent() {
             totalSets: workingSets.length,
             totalVolume: sessionVolume,
             estimatedE1RM: sessionBestE1RM,
+            blockIds: [block.id],
+            equipmentChanged: !!block.equipment_changed,
             sets,
           });
         }
@@ -689,9 +716,43 @@ function HistoryPageContent() {
         a.date.localeCompare(b.date)
       );
 
+      // Calibration segments: user-marked equipment changes are hard
+      // boundaries; the robust trend also detects unmarked persistent level
+      // shifts (e.g. a different stack labeling). Peaks and progress are
+      // scoped to the CURRENT segment — a 57.5 logged on the wrong machine
+      // must not be the baseline current work is judged against.
+      const e1rmEntries = history.filter((h) => h.estimatedE1RM > 0);
+      const segmentTrend = isDuration
+        ? null
+        : computeTrend(
+            e1rmEntries.map((h) => ({ date: h.date, value: h.estimatedE1RM })),
+            {
+              minPoints: 2,
+              minResidualFraction: 0.03,
+              knownDiscontinuities: history
+                .filter((h) => h.equipmentChanged)
+                .map((h) => h.date),
+              label: 'history-e1rm',
+            }
+          );
+      const segmentStartDate =
+        segmentTrend?.discontinuityIndex != null
+          ? e1rmEntries[segmentTrend.discontinuityIndex]?.date ?? null
+          : null;
+      const segmentEntries = segmentStartDate
+        ? e1rmEntries.filter((h) => h.date >= segmentStartDate)
+        : e1rmEntries;
+      const segmentBestE1RM = segmentEntries.reduce(
+        (max, h) => Math.max(max, h.estimatedE1RM),
+        0
+      );
+
       // Calculate progress. Duration exercises track longest hold, not e1RM.
-      const currentE1RM = history.length > 0 ? history[history.length - 1].estimatedE1RM : 0;
-      const firstE1RM = history.length > 0 ? history[0].estimatedE1RM : 0;
+      // E1RM progress reads the current segment's first/last ESTIMABLE days —
+      // a 0 ("no estimate") or a pre-equipment-change level is not a baseline.
+      const currentE1RM =
+        segmentEntries.length > 0 ? segmentEntries[segmentEntries.length - 1].estimatedE1RM : 0;
+      const firstE1RM = segmentEntries.length > 0 ? segmentEntries[0].estimatedE1RM : 0;
       const currentHold = history.length > 0 ? history[history.length - 1].bestReps : 0;
       const firstHold = history.length > 0 ? history[0].bestReps : 0;
       const progressPercent = isDuration
@@ -710,6 +771,8 @@ function HistoryPageContent() {
         history,
         currentE1RM,
         allTimeMaxE1RM,
+        segmentBestE1RM,
+        segmentStartDate,
         allTimeBestWeight,
         allTimeBestReps,
         totalSetsAllTime,
@@ -719,6 +782,32 @@ function HistoryPageContent() {
       console.error('Failed to fetch exercise history:', err);
     } finally {
       setLoadingExercise(false);
+    }
+  };
+
+  /**
+   * Mark/unmark a history day's work as done on DIFFERENT equipment — the
+   * explicit calibration-segment boundary (persisted on the exercise_blocks
+   * rows). Far more reliable than the heuristic level-shift detection; trend
+   * fitting, PR baselines, and the plateau detector all anchor to it.
+   */
+  const toggleEquipmentChanged = async (entry: ExerciseHistoryEntry) => {
+    if (!selectedExercise || entry.blockIds.length === 0) return;
+    try {
+      const supabase = createUntypedClient();
+      const { error } = await supabase
+        .from('exercise_blocks')
+        .update({ equipment_changed: !entry.equipmentChanged })
+        .in('id', entry.blockIds);
+      if (error) throw error;
+      await fetchExerciseHistory(
+        selectedExercise.exerciseId,
+        selectedExercise.exerciseName,
+        selectedExercise.primaryMuscle,
+        selectedExercise.isDuration
+      );
+    } catch (err) {
+      console.error('Failed to update equipment-change marker:', err);
     }
   };
 
@@ -895,11 +984,21 @@ function HistoryPageContent() {
     // Duration exercises plot longest hold (seconds) per session — their e1RM
     // is deliberately never computed.
     const isDuration = selectedExercise.isDuration;
+    // estimatedE1RM = 0 means "no estimable set that day" — charted as a gap
+    // (null), never as a 0 that drags the visual trend to the floor.
     const chartData = selectedExercise.history.map(h => ({
       date: h.displayDate,
-      e1rm: isDuration ? h.bestReps : Math.round(convertWeight(h.estimatedE1RM, 'kg', unit)),
+      e1rm: isDuration
+        ? h.bestReps
+        : h.estimatedE1RM > 0
+          ? Math.round(convertWeight(h.estimatedE1RM, 'kg', unit))
+          : null,
       weight: Math.round(convertWeight(h.bestWeight, 'kg', unit)),
     }));
+    const hasPreCalibrationBest =
+      !isDuration &&
+      selectedExercise.segmentStartDate != null &&
+      selectedExercise.allTimeMaxE1RM > selectedExercise.segmentBestE1RM;
 
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
@@ -964,6 +1063,15 @@ function HistoryPageContent() {
                       <p className="text-xl font-bold text-success-400">
                         {formatWeight(selectedExercise.allTimeMaxE1RM, unit)}
                       </p>
+                      {/* An all-time best set before an equipment change is
+                          not comparable to current work — say so instead of
+                          contradicting the current-segment numbers. */}
+                      {hasPreCalibrationBest && (
+                        <p className="text-[10px] text-surface-500 mt-0.5">
+                          pre-calibration · since equipment change:{' '}
+                          {formatWeight(selectedExercise.segmentBestE1RM, unit)}
+                        </p>
+                      )}
                     </div>
                   )}
                   <div className="bg-surface-800 rounded-lg p-3 text-center">
@@ -1022,15 +1130,22 @@ function HistoryPageContent() {
                               year: 'numeric',
                             })}
                           </span>
-                          <Badge variant="info" size="sm">
-                            {isDuration
-                              ? `Best hold: ${entry.bestReps}s`
-                              : `E1RM: ${formatWeight(entry.estimatedE1RM, unit)}`}
-                          </Badge>
+                          <span className="flex items-center gap-2">
+                            {entry.equipmentChanged && (
+                              <Badge variant="warning" size="sm">Different equipment</Badge>
+                            )}
+                            <Badge variant="info" size="sm">
+                              {isDuration
+                                ? `Best hold: ${entry.bestReps}s`
+                                : entry.estimatedE1RM > 0
+                                  ? `E1RM: ${formatWeight(entry.estimatedE1RM, unit)}`
+                                  : 'No E1RM estimate'}
+                            </Badge>
+                          </span>
                         </div>
                         <div className="flex flex-wrap gap-2">
                           {entry.sets.map((set, setIdx) => (
-                            <span 
+                            <span
                               key={setIdx}
                               className="px-2 py-1 bg-surface-700 rounded text-xs text-surface-300"
                             >
@@ -1041,6 +1156,21 @@ function HistoryPageContent() {
                             </span>
                           ))}
                         </div>
+                        {/* Explicit calibration boundary: marking a day as
+                            different equipment restarts the trend segment
+                            there — more reliable than the level-shift
+                            heuristic and persisted on the session's blocks. */}
+                        {!isDuration && (
+                          <button
+                            type="button"
+                            onClick={() => toggleEquipmentChanged(entry)}
+                            className="mt-2 text-[11px] text-surface-500 hover:text-surface-300 underline decoration-dotted transition-colors"
+                          >
+                            {entry.equipmentChanged
+                              ? 'Unmark different equipment'
+                              : 'Mark as different equipment'}
+                          </button>
+                        )}
                       </div>
                     ))}
                   </div>
