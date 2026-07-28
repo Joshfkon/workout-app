@@ -1816,7 +1816,14 @@ export const ExerciseCard = memo(function ExerciseCard({
             // against last session's ACTUAL total — and only when the totals
             // are honestly comparable (same load).
             const planLine = `${soFar} of ${next.sessionRepTotalTarget} planned`;
-            if (!next.totalComparable) {
+            if (next.loadDeviation) {
+              // Carried-over item 1, shipped: a lifter-chosen load off the
+              // plan invalidates the prior total as a target.
+              reason = `rep-total — load changed (${displayWeight(next.loadDeviation.observedKg, true)} vs ${displayWeight(next.loadDeviation.planKg, true)} ${weightLabel}) — previous total doesn't apply`;
+              explanation.push(
+                `You're working at ${displayWeight(next.loadDeviation.observedKg, true)} ${weightLabel}, not the planned ${displayWeight(next.loadDeviation.planKg, true)} ${weightLabel} — rep totals only compare at matched loads, so last session's ${next.prevSessionRepTotal} isn't a target today. Today sets the new baseline at this load; targets are re-priced for it.`
+              );
+            } else if (!next.totalComparable) {
               reason = `rep-total — ${planLine} (new load — last session's ${next.prevSessionRepTotal} was at ${displayWeight(repTotalPlan.refLoadKg, true)} ${weightLabel})`;
               explanation.push(
                 `The load changed this session, so last session's ${next.prevSessionRepTotal}-rep total doesn't apply as a target — today sets the new baseline at this load.`
@@ -1993,6 +2000,13 @@ export const ExerciseCard = memo(function ExerciseCard({
         reason += ` · projects ${pct}% below last session's volume`;
         explanation.push(
           `Heads-up: even at ${repTotalPlan.recommendedSetCount} sets this plan projects ${projVol.toLocaleString('en-US')} ${weightLabel} of volume vs ${prevVol.toLocaleString('en-US')} last session (−${pct}%).`
+        );
+      }
+      if (repTotalPlan.rampHistory) {
+        // Explicit ramped-history rule: grading and totals read the
+        // top-load sets only, and the banner names the load it graded at.
+        explanation.push(
+          `Last session ramped across loads. Rep-total rules grade only the top-load sets (${displayWeight(repTotalPlan.refLoadKg, true)} ${weightLabel}): lighter ramp sets neither earn nor block the increment, and rep totals compare only at that load.`
         );
       }
     } else {

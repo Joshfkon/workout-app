@@ -260,6 +260,16 @@ export const HIGH_REP_COST_MIN_PER_PCT = 0.15;
  */
 export const REP_TOTAL_VOLUME_SHORTFALL_TOLERANCE = 0.05;
 
+/**
+ * Two rep_total loads count as THE SAME load when they differ by no more
+ * than max(half the smallest increment, this fraction). Everything beyond it
+ * is a genuine load change: rep totals stop being comparable (the prior
+ * total is invalidated as a target and today sets the new baseline), and in
+ * history grouping it separates ramp steps from micro-loading / lb↔kg
+ * conversion noise.
+ */
+export const REP_TOTAL_LOAD_MATCH_FRACTION = 0.025;
+
 // ============================================================
 // SET-POSITION MATCHING (Phase A — intra-session prescription)
 // ============================================================

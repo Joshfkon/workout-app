@@ -64,6 +64,7 @@ import {
   HIGH_REP_COST_TAPER_PER_REP,
   HIGH_REP_COST_MIN_PER_PCT,
   REP_TOTAL_VOLUME_SHORTFALL_TOLERANCE,
+  REP_TOTAL_LOAD_MATCH_FRACTION,
 } from './constants';
 import { smallestIncrement, roundPrescribedLoad } from './loadGrid';
 
@@ -188,6 +189,15 @@ export interface RepTotalSessionStart {
   bumpDeferred?: 'load_cost';
   /** The load the targets were derived FROM (last session's top load). */
   refLoadKg: number;
+  /**
+   * Last session was a RAMP: valid working sets exist below the at-load
+   * tolerance of the top load. The fixed-load model's explicit rule for
+   * ramped history: grading and rep totals read the TOP-LOAD sets only —
+   * lighter ramp sets neither earn nor block the increment ("every set
+   * cleared the floor" must never be trivially true of the light end) — and
+   * the banner must name the load it graded at.
+   */
+  rampHistory: boolean;
   /** Last session's total tonnage (kg) across ALL valid working sets. */
   prevSessionVolumeKg: number;
   /** Last session's valid working-set count (all loads). */
@@ -231,9 +241,20 @@ export function recommendRepTotalSessionStart(input: {
   if (valid.length === 0) return null;
 
   // Fixed-load model: the session's load is the top load actually worked.
+  // The at-load group is a GRID tolerance — max(half the smallest increment,
+  // 2.5%) — not the old loose ±5%: rep totals only ever compare at matched
+  // loads, and the tolerance exists solely to absorb unit-conversion /
+  // micro-loading noise, never a genuine ramp step.
   const topLoad = valid.reduce((m, s) => (s.weightKg > m ? s.weightKg : m), 0);
-  const atLoad = valid.filter((s) => s.weightKg >= topLoad * 0.95);
+  const halfStepKg =
+    (input.minIncrementKg && input.minIncrementKg > 0 ? input.minIncrementKg : 2.5) / 2;
+  const atLoadToleranceKg = Math.max(halfStepKg, topLoad * REP_TOTAL_LOAD_MATCH_FRACTION);
+  const atLoad = valid.filter((s) => s.weightKg >= topLoad - atLoadToleranceKg);
   const prevTotal = atLoad.reduce((sum, s) => sum + s.reps, 0);
+  // Ramped history: working sets below the at-load tolerance. The explicit
+  // rule (this used to be undefined and "right by luck"): grade and total
+  // the TOP-LOAD sets only, and say so.
+  const rampHistory = atLoad.length < valid.length;
 
   // Increment earned when EVERY working set cleared the range floor at target
   // effort (missing RIR → assume it landed on target).
@@ -304,6 +325,7 @@ export function recommendRepTotalSessionStart(input: {
         prevSessionRepTotal: prevTotal,
         bumped: true,
         refLoadKg: topLoad,
+        rampHistory,
         prevSessionVolumeKg: Math.round(prevSessionVolumeKg * 10) / 10,
         prevSessionSetCount: valid.length,
         ...volume,
@@ -330,6 +352,7 @@ export function recommendRepTotalSessionStart(input: {
     bumped: false,
     ...(bumpDeferred ? { bumpDeferred } : {}),
     refLoadKg: topLoad,
+    rampHistory,
     prevSessionVolumeKg: Math.round(prevSessionVolumeKg * 10) / 10,
     prevSessionSetCount: valid.length,
     ...volume,
@@ -397,6 +420,14 @@ export interface RepTotalNextSet {
    * SAME set position last session. Absent → no delta claim may be rendered.
    */
   positionRef?: { setNo: number; prevReps: number };
+  /**
+   * The lifter is working at a load that deviates from the plan's by more
+   * than max(half grid step, 2.5%) — the prior total is INVALID as a target
+   * (`totalComparable` false), the slot targets are re-priced onto the
+   * actual load, and the banner must say "previous total doesn't apply;
+   * today sets the new baseline".
+   */
+  loadDeviation?: { planKg: number; observedKg: number };
 }
 
 /**
@@ -419,6 +450,18 @@ export function recommendRepTotalNextSet(input: RepTotalNextSetInput): RepTotalN
   // Today's actual working load: what was last lifted, else the plan's load.
   const currentLoadKg = last && last.weightKg > 0 ? last.weightKg : sessionPlan.weightKg;
 
+  // Load deviation (carried-over item 1, shipped): beyond max(half grid
+  // step, 2.5%) the lifter is on a DIFFERENT load than the plan priced —
+  // the prior total is invalid as a target and the slot targets re-price
+  // onto the actual load. Inside the tolerance, the difference is
+  // micro-loading / lb↔kg conversion noise and the plan load stands.
+  const halfStep = smallestIncrement(input.availableIncrementsKg, input.minIncrementKg) / 2;
+  const deviationToleranceKg = Math.max(
+    halfStep,
+    sessionPlan.weightKg * REP_TOTAL_LOAD_MATCH_FRACTION
+  );
+  const deviated = Math.abs(currentLoadKg - sessionPlan.weightKg) > deviationToleranceKg;
+
   // Effort classification of the last set, same grammar as recommendSet.
   const dev = last && last.rir !== undefined ? last.rir - targetRir : 0;
   const effortVsTarget: RepTotalNextSet['effortVsTarget'] =
@@ -436,10 +479,9 @@ export function recommendRepTotalNextSet(input: RepTotalNextSetInput): RepTotalN
     sessionPlan.perSetRepTargets[slot] ??
     sessionPlan.perSetRepTargets[sessionPlan.perSetRepTargets.length - 1] ??
     repMin;
-  let reps =
-    currentLoadKg !== sessionPlan.weightKg
-      ? expectedRepsAfterLoadChange(planSlotReps, sessionPlan.weightKg, currentLoadKg)
-      : planSlotReps;
+  let reps = deviated
+    ? expectedRepsAfterLoadChange(planSlotReps, sessionPlan.weightKg, currentLoadKg)
+    : planSlotReps;
   let weightKg = currentLoadKg;
   let rationale: RepTotalNextSet['rationale'] = 'follow_plan';
 
@@ -491,15 +533,16 @@ export function recommendRepTotalNextSet(input: RepTotalNextSetInput): RepTotalN
   // the plan at the planned load (a reduced/deviated load has no like-to-like
   // positional claim).
   const refReps =
-    rationale === 'follow_plan' && weightKg === sessionPlan.weightKg
+    rationale === 'follow_plan' && !deviated && weightKg === currentLoadKg
       ? sessionPlan.perSetRefReps?.[slot]
       : undefined;
 
   // Beat-last-session accounting — against last session's ACTUAL total,
   // never the plan total, and only when the totals are comparable (same
-  // load). A bumped plan's prior total was earned at the old load.
+  // load). A bumped plan's prior total was earned at the old load; a
+  // deviated or reduced load invalidates it mid-session the same way.
   const prevTotal = sessionPlan.prevSessionRepTotal;
-  const totalComparable = !sessionPlan.bumped && rationale !== 'reduce_load';
+  const totalComparable = !sessionPlan.bumped && rationale !== 'reduce_load' && !deviated;
 
   return {
     weightKg,
@@ -516,5 +559,8 @@ export function recommendRepTotalNextSet(input: RepTotalNextSetInput): RepTotalN
     ...(sessionCapacityClamped ? { sessionCapacityClamped } : {}),
     ...(outsideRange ? { outsideRange } : {}),
     ...(refReps !== undefined ? { positionRef: { setNo: slot + 1, prevReps: refReps } } : {}),
+    ...(deviated
+      ? { loadDeviation: { planKg: sessionPlan.weightKg, observedKg: currentLoadKg } }
+      : {}),
   };
 }

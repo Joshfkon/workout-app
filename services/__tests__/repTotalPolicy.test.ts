@@ -402,4 +402,76 @@ describe('recommendRepTotalNextSet (re-derived per set — planner parity)', () 
     expect(next.weightKg).toBe(55);
     expect(next.reps).toBeGreaterThan(plan.perSetRepTargets[1]);
   });
+
+  it('a load beyond max(half grid step, 2.5%) invalidates the prior total (carried-over item 1)', () => {
+    const next = recommendRepTotalNextSet({
+      sessionPlan: plan3x(),
+      observedSets: [{ weightKg: 55, reps: 14, rir: 2 }],
+      targetRepRange: [12, 20],
+      targetRir: 2,
+      minIncrementKg: 4.54,
+    });
+    expect(next.loadDeviation).toEqual({ planKg: 61.23, observedKg: 55 });
+    expect(next.totalComparable).toBe(false);
+    expect(next.positionRef).toBeUndefined(); // no like-to-like claim off-load
+  });
+
+  it('sub-tolerance load noise (lb↔kg round-trip) does NOT invalidate the total', () => {
+    // 61 vs the plan's 61.23 is conversion noise, inside half the 4.54
+    // increment — the plan stands, the totals stay comparable.
+    const next = recommendRepTotalNextSet({
+      sessionPlan: plan3x(),
+      observedSets: [{ weightKg: 61, reps: 13, rir: 2 }],
+      targetRepRange: [12, 20],
+      targetRir: 2,
+      minIncrementKg: 4.54,
+    });
+    expect(next.loadDeviation).toBeUndefined();
+    expect(next.totalComparable).toBe(true);
+    expect(next.reps).toBe(12); // plan slot target, un-exchanged
+  });
+});
+
+describe('ramped history (explicit rule)', () => {
+  it('grades and totals TOP-LOAD sets only, and flags rampHistory', () => {
+    // ISO-Lateral Low Row live shape: 170/170/180/190/190 lb ramp against an
+    // 8-12 range. "Every set cleared 8" must not be trivially true of the
+    // light end; the total must not mix loads.
+    const plan = recommendRepTotalSessionStart({
+      prevSessionSets: [
+        { weightKg: 77.11, reps: 14, rir: 2 },
+        { weightKg: 77.11, reps: 15, rir: 2 },
+        { weightKg: 81.65, reps: 13, rir: 2 },
+        { weightKg: 86.18, reps: 9, rir: 2 },
+        { weightKg: 86.18, reps: 10, rir: 2 },
+      ],
+      targetRepRange: [8, 12],
+      targetRir: 2,
+      minIncrementKg: 2.27,
+      plannedSets: 5,
+    })!;
+    expect(plan.rampHistory).toBe(true);
+    expect(plan.refLoadKg).toBe(86.18);
+    // Total counts the two top-load sets only (9 + 10), not all 61 reps.
+    expect(plan.prevSessionRepTotal).toBe(19);
+    // Volume baseline still reads the WHOLE session (tonnage is
+    // load-commensurable even when rep totals are not).
+    expect(plan.prevSessionVolumeKg).toBeCloseTo(4935.1, 1);
+    expect(plan.prevSessionSetCount).toBe(5);
+  });
+
+  it('the ±5% at-load group tightened to the grid: a 3.7% step is a ramp step, not the same load', () => {
+    const plan = recommendRepTotalSessionStart({
+      prevSessionSets: [
+        { weightKg: 100, reps: 12, rir: 2 },
+        { weightKg: 96.5, reps: 14, rir: 2 }, // −3.5%: inside the OLD ±5%, outside the new grid tolerance
+      ],
+      targetRepRange: [8, 12],
+      targetRir: 2,
+      minIncrementKg: 2.5,
+      plannedSets: 2,
+    })!;
+    expect(plan.rampHistory).toBe(true);
+    expect(plan.prevSessionRepTotal).toBe(12); // top-load set only
+  });
 });
