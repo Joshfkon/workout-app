@@ -1194,92 +1194,102 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
       class="px-3 py-3 space-y-1.5"
     >
       <div
-        class="flex items-center gap-2 px-1 py-2  "
+        class="relative overflow-hidden rounded-lg"
       >
-        <svg
-          aria-hidden="true"
-          class="tabler-icon tabler-icon-check text-success-400 flex-shrink-0"
-          fill="none"
-          height="16"
-          stroke="currentColor"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="2"
-          viewBox="0 0 24 24"
-          width="16"
-          xmlns="http://www.w3.org/2000/svg"
+        <div
+          class="flex items-center gap-2 px-1 py-2  "
+          style="transform: translateX(0); transition: transform 0.15s ease-out;"
         >
-          <path
-            d="M5 12l5 5l10 -10"
-          />
-        </svg>
-        <span
-          class="text-[13px] text-surface-300 truncate"
-        >
-          Set 
-          1
-           · 
-          100
-           
-          kg
-           × 
-          10
-        </span>
-        <span
-          class="ml-auto flex-shrink-0 text-[11px] text-surface-500"
-        >
-          3
-           RIR · 
-          <span
-            class="text-success-400"
+          <svg
+            aria-hidden="true"
+            class="tabler-icon tabler-icon-check text-success-400 flex-shrink-0"
+            fill="none"
+            height="16"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            viewBox="0 0 24 24"
+            width="16"
+            xmlns="http://www.w3.org/2000/svg"
           >
-            stimulative
+            <path
+              d="M5 12l5 5l10 -10"
+            />
+          </svg>
+          <span
+            class="text-[13px] text-surface-300 truncate"
+          >
+            Set 
+            1
+             · 
+            100
+             
+            kg
+             × 
+            10
           </span>
-        </span>
+          <span
+            class="ml-auto flex-shrink-0 text-[11px] text-surface-500"
+          >
+            3
+             RIR · 
+            <span
+              class="text-success-400"
+            >
+              stimulative
+            </span>
+          </span>
+        </div>
       </div>
       <div
-        class="flex items-center gap-2 px-1 py-2  "
+        class="relative overflow-hidden rounded-lg"
       >
-        <svg
-          aria-hidden="true"
-          class="tabler-icon tabler-icon-check text-success-400 flex-shrink-0"
-          fill="none"
-          height="16"
-          stroke="currentColor"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="2"
-          viewBox="0 0 24 24"
-          width="16"
-          xmlns="http://www.w3.org/2000/svg"
+        <div
+          class="flex items-center gap-2 px-1 py-2  "
+          style="transform: translateX(0); transition: transform 0.15s ease-out;"
         >
-          <path
-            d="M5 12l5 5l10 -10"
-          />
-        </svg>
-        <span
-          class="text-[13px] text-surface-300 truncate"
-        >
-          Set 
-          2
-           · 
-          100
-           
-          kg
-           × 
-          9
-        </span>
-        <span
-          class="ml-auto flex-shrink-0 text-[11px] text-surface-500"
-        >
-          2
-           RIR · 
-          <span
-            class="text-success-400"
+          <svg
+            aria-hidden="true"
+            class="tabler-icon tabler-icon-check text-success-400 flex-shrink-0"
+            fill="none"
+            height="16"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            viewBox="0 0 24 24"
+            width="16"
+            xmlns="http://www.w3.org/2000/svg"
           >
-            stimulative
+            <path
+              d="M5 12l5 5l10 -10"
+            />
+          </svg>
+          <span
+            class="text-[13px] text-surface-300 truncate"
+          >
+            Set 
+            2
+             · 
+            100
+             
+            kg
+             × 
+            9
           </span>
-        </span>
+          <span
+            class="ml-auto flex-shrink-0 text-[11px] text-surface-500"
+          >
+            2
+             RIR · 
+            <span
+              class="text-success-400"
+            >
+              stimulative
+            </span>
+          </span>
+        </div>
       </div>
       <div
         class="flex items-center gap-2 px-1 py-2 text-[12px] text-surface-500"

@@ -7,7 +7,7 @@
  */
 
 import React from 'react';
-import { render, screen, act, waitFor } from '@testing-library/react';
+import { render, screen, act, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ExerciseCard } from '../ExerciseCard';
 import type {
@@ -1734,5 +1734,73 @@ describe('warmup decision with unknown working weight (Codex review fix)', () =>
       <ExerciseCard {...unknownLoadProps} workingWeight={60} warmupDecision={placeholderDecision} />
     );
     expect(screen.getByText(/\(0\/3\)/)).toBeInTheDocument();
+  });
+});
+
+describe('swipe-to-delete requires tap to confirm', () => {
+  const swipeProps = () => ({
+    exercise: createMockExercise(),
+    block: createMockBlock(),
+    sets: [createMockSetLog({ id: 'set-1', setNumber: 1 })],
+    unit: 'kg' as const,
+    isActive: true,
+    onSetDelete: jest.fn(),
+  });
+
+  /** The completed set line that carries the touch handlers */
+  const getRow = () => screen.getByText(/Set 1 ·/).parentElement as HTMLElement;
+
+  const swipeLeft = (row: HTMLElement, distance: number) => {
+    fireEvent.touchStart(row, { touches: [{ clientX: 300 }] });
+    fireEvent.touchMove(row, { touches: [{ clientX: 300 - distance }] });
+    fireEvent.touchEnd(row);
+  };
+
+  it('does not delete on swipe alone — it reveals a Delete button', () => {
+    const props = swipeProps();
+    render(<ExerciseCard {...props} />);
+
+    swipeLeft(getRow(), 120);
+
+    expect(props.onSetDelete).not.toHaveBeenCalled();
+    expect(screen.getByTestId('confirm-delete-set-1')).toBeInTheDocument();
+  });
+
+  it('deletes only when the revealed Delete button is tapped', () => {
+    const props = swipeProps();
+    render(<ExerciseCard {...props} />);
+
+    swipeLeft(getRow(), 120);
+    fireEvent.click(screen.getByTestId('confirm-delete-set-1'));
+
+    expect(props.onSetDelete).toHaveBeenCalledTimes(1);
+    expect(props.onSetDelete).toHaveBeenCalledWith('set-1');
+  });
+
+  it('tapping the row dismisses the Delete button without deleting', () => {
+    const props = swipeProps();
+    render(<ExerciseCard {...props} />);
+
+    swipeLeft(getRow(), 120);
+    expect(screen.getByTestId('confirm-delete-set-1')).toBeInTheDocument();
+
+    // A real tap = touchstart + touchend (no move) followed by click
+    const row = getRow();
+    fireEvent.touchStart(row, { touches: [{ clientX: 300 }] });
+    fireEvent.touchEnd(row);
+    fireEvent.click(row);
+
+    expect(screen.queryByTestId('confirm-delete-set-1')).not.toBeInTheDocument();
+    expect(props.onSetDelete).not.toHaveBeenCalled();
+  });
+
+  it('a short swipe neither deletes nor reveals the Delete button', () => {
+    const props = swipeProps();
+    render(<ExerciseCard {...props} />);
+
+    swipeLeft(getRow(), 50);
+
+    expect(props.onSetDelete).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('confirm-delete-set-1')).not.toBeInTheDocument();
   });
 });
