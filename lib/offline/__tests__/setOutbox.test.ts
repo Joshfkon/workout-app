@@ -168,6 +168,33 @@ describe('setOutbox', () => {
       const result = await flushSetOutbox(client);
       expect(result.failedIds).toEqual(['bad']);
       expect(result.flushedIds).toEqual(['good']);
+      expect(result.rejectedIds).toEqual(['bad']); // server said no — callers reconcile
+    });
+
+    it('network failures are NOT reported as rejections', async () => {
+      await enqueueSetInsert('a', { id: 'a' });
+      const { client } = makeSupabase([{ error: NETWORK_ERROR }]);
+      const result = await flushSetOutbox(client);
+      expect(result.failedIds).toEqual(['a']);
+      expect(result.rejectedIds).toEqual([]);
+    });
+
+    it('a successful write keeps a same-id entry that was replaced mid-flight (newer patch wins)', async () => {
+      await enqueueSetInsert('a', { id: 'a', reps: 8 });
+      const { client } = makeSupabase([{ error: null, delayMs: 30 }, { error: null }]);
+
+      const flushPromise = flushSetOutbox(client);
+      await new Promise((r) => setTimeout(r, 5));
+      await updateQueuedSet('a', { reps: 99 }); // edit lands while the write is in flight
+
+      await flushPromise;
+      const entries = await listOutbox();
+      expect(entries).toHaveLength(1); // the newer payload survived the post-write delete
+      expect(entries[0].row).toEqual({ id: 'a', reps: 99 });
+
+      const second = await flushSetOutbox(client);
+      expect(second.flushedIds).toEqual(['a']);
+      expect(await outboxCount()).toBe(0);
     });
 
     it('retries without the optional columns when the DB is missing them (migration lag)', async () => {
@@ -391,6 +418,21 @@ describe('setOutbox', () => {
       const entries = await listOutbox();
       expect(entries.map((e) => e.id).sort()).toEqual(['finish:s1', 'later']);
       expect(entries.find((e) => e.id === 'finish:s1')?.attempts).toBe(1);
+    });
+
+    it('flushes an exercise_blocks target_sets patch (in-workout remove/add set while offline)', async () => {
+      await enqueueRowUpdate('block-target-sets:b1', 'exercise_blocks', 'b1', { target_sets: 3 });
+      // Adjusting again before sync replaces the queued patch (same entry id).
+      await enqueueRowUpdate('block-target-sets:b1', 'exercise_blocks', 'b1', { target_sets: 2 });
+      const { client, calls } = makeSupabase([{ error: null }]);
+
+      const result = await flushSetOutbox(client);
+
+      expect(result.flushedIds).toEqual(['block-target-sets:b1']);
+      expect(calls).toEqual([
+        { table: 'exercise_blocks', op: 'update', row: { target_sets: 2 }, matchId: 'b1' },
+      ]);
+      expect(await outboxCount()).toBe(0);
     });
 
     it('outboxCount(table) filters by table for the "N sets queued" banner', async () => {

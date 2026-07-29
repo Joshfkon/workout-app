@@ -344,6 +344,42 @@ export default function WorkoutPage() {
     }
   }, []);
 
+  // A queued target-sets patch the server REJECTED (RLS/constraint — the
+  // write reached the database and was refused, not a connectivity blip)
+  // must not keep steering the UI: stop retrying it, put the block back on
+  // the server's authoritative target, and say so.
+  const reconcileRejectedTargetSets = useCallback(async (rejectedIds: string[]) => {
+    const blockIds = rejectedIds
+      .filter((id) => id.startsWith('block-target-sets:'))
+      .map((id) => id.slice('block-target-sets:'.length));
+    if (blockIds.length === 0) return;
+    for (const blockId of blockIds) {
+      void removeQueuedSet(`block-target-sets:${blockId}`);
+    }
+    try {
+      const supabase = createUntypedClient();
+      const { data } = await supabase
+        .from('exercise_blocks')
+        .select('id, target_sets')
+        .in('id', blockIds);
+      const rows = (data ?? []) as Array<{ id: string; target_sets: number }>;
+      if (rows.length > 0) {
+        const serverTargets = new Map(rows.map((r) => [r.id, r.target_sets]));
+        setBlocks((prev) =>
+          prev.map((b) => {
+            const serverTarget = serverTargets.get(b.id);
+            return serverTarget !== undefined && serverTarget !== b.targetSets
+              ? { ...b, targetSets: serverTarget }
+              : b;
+          })
+        );
+      }
+    } catch {
+      // Refetch failed — the next full page load reconciles from the DB.
+    }
+    showError('Could not update sets — reverted to the saved plan');
+  }, [showError]);
+
   // Flush queued sets whenever connectivity returns (and once on mount, in
   // case the app reopened online with a non-empty queue). A slow poll keeps
   // the glyphs honest even if the browser never fires 'online' events.
@@ -353,7 +389,10 @@ export default function WorkoutPage() {
 
     const flush = () => {
       const supabase = createUntypedClient();
-      void flushSetOutbox(supabase).then(() => reconcileSetSync());
+      void flushSetOutbox(supabase).then((result) => {
+        void reconcileSetSync();
+        void reconcileRejectedTargetSets(result.rejectedIds);
+      });
     };
 
     const handleOnline = () => { setIsOnline(true); flush(); };
@@ -374,7 +413,7 @@ export default function WorkoutPage() {
       window.removeEventListener('offline', handleOffline);
       clearInterval(poll);
     };
-  }, [refreshOutboxCount, reconcileSetSync]);
+  }, [refreshOutboxCount, reconcileSetSync, reconcileRejectedTargetSets]);
 
   // Delete confirmation modal state for header row delete button
   const [deleteConfirmBlock, setDeleteConfirmBlock] = useState<{ id: string; name: string } | null>(null);
@@ -2837,9 +2876,6 @@ export default function WorkoutPage() {
     setCurrentSetNumber(prev => Math.max(1, prev - 1));
   };
 
-  // State for adding extra sets beyond target
-  const [addingExtraSet, setAddingExtraSet] = useState<string | null>(null);
-  
   // Auto-adjust message state
   const [autoAdjustMessage, setAutoAdjustMessage] = useState<string | null>(null);
 
@@ -3031,30 +3067,85 @@ export default function WorkoutPage() {
   };
 
   const handleTargetSetsChange = async (blockId: string, newTargetSets: number) => {
+    // Clamp to the DB CHECK range (1..10) and never below the sets already
+    // logged for the block — a target under the logged count would render the
+    // block "complete with missing sets" and corrupt next-session planning.
+    const loggedCount = completedSets.filter(
+      (s) => s.exerciseBlockId === blockId && !s.isWarmup && s.setType !== 'warmup'
+    ).length;
+    const targetSets = Math.min(10, Math.max(1, loggedCount, newTargetSets));
+
+    const prevTargetSets = blocks.find((b) => b.id === blockId)?.targetSets;
+    if (prevTargetSets === undefined || targetSets === prevTargetSets) return;
+
     // Update local state immediately
-    setBlocks(prevBlocks => prevBlocks.map(block => 
-      block.id === blockId 
-        ? { ...block, targetSets: newTargetSets }
+    setBlocks(prevBlocks => prevBlocks.map(block =>
+      block.id === blockId
+        ? { ...block, targetSets }
         : block
     ));
 
-    // Update in database
+    // Persist with the same offline posture as set logging (P0-2): a
+    // connectivity failure queues the patch (idempotent — keyed per block, so
+    // repeated adjustments replace each other) instead of erroring mid-workout;
+    // only a real server rejection rolls the optimistic change back.
+    const rollback = () =>
+      setBlocks(prevBlocks => prevBlocks.map(block =>
+        block.id === blockId ? { ...block, targetSets: prevTargetSets } : block
+      ));
+    const entryId = `block-target-sets:${blockId}`;
+    const enqueue = async () => {
+      await enqueueRowUpdate(entryId, 'exercise_blocks', blockId, {
+        target_sets: targetSets,
+      });
+      refreshOutboxCount();
+    };
+
     try {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        await enqueue();
+        setError(null);
+        return;
+      }
+
+      // An earlier adjustment for this block is still queued (edit-before-
+      // sync): merge the new value into the queued patch and let the flush
+      // deliver it — a direct write here could later be clobbered when the
+      // stale queued patch flushes after it.
+      if (await updateQueuedSet(entryId, { target_sets: targetSets })) {
+        refreshOutboxCount();
+        setError(null);
+        return;
+      }
+
       const supabase = createUntypedClient();
       const { error: updateError } = await supabase
         .from('exercise_blocks')
-        .update({ target_sets: newTargetSets })
+        .update({ target_sets: targetSets })
         .eq('id', blockId);
-      
-      if (updateError) {
+
+      if (updateError && isNetworkError(updateError)) {
+        // Connectivity died mid-write: queue it, keep the optimistic state.
+        await enqueue();
+        setError(null);
+      } else if (updateError) {
         console.error('Failed to update target sets:', updateError);
+        rollback();
         setError(`Failed to update sets: ${updateError.message}`);
+        showError('Could not update sets — please try again');
       } else {
         setError(null);
       }
     } catch (err) {
       console.error('Failed to update target sets:', err);
-      setError(err instanceof Error ? err.message : 'Failed to update sets');
+      // Thrown fetch failures are connectivity-shaped too — queue, don't error.
+      if (isNetworkError(err instanceof Error ? err : { message: String(err) })) {
+        await enqueue();
+        setError(null);
+      } else {
+        rollback();
+        setError(err instanceof Error ? err.message : 'Failed to update sets');
+      }
     }
   };
 
@@ -4822,10 +4913,8 @@ export default function WorkoutPage() {
   };
 
   // Calculate overall workout progress (skipped blocks excluded)
-  // Account for extra set being added - when user clicks "+ Add Set", we have a pending incomplete set
   const activeBlocks = blocks.filter(b => !skippedBlockIds.has(b.id));
-  const pendingExtraSets = addingExtraSet ? 1 : 0;
-  const totalPlannedSets = activeBlocks.reduce((sum, b) => sum + b.targetSets, 0) + pendingExtraSets;
+  const totalPlannedSets = activeBlocks.reduce((sum, b) => sum + b.targetSets, 0);
   const totalCompletedSets = completedSets.filter(s => !s.isWarmup && s.setType !== 'warmup').length;
   const overallProgress = totalPlannedSets > 0 ? (totalCompletedSets / totalPlannedSets) * 100 : 0;
 
@@ -5546,18 +5635,11 @@ export default function WorkoutPage() {
                     <div className="space-y-3">
                     <ExerciseCard
                     exercise={block.exercise}
-                    block={addingExtraSet === block.id
-                      ? { ...block, targetSets: block.targetSets + 1 }  // Add one more set when adding extra
-                      : block
-                    }
+                    block={block}
                     enhancedAthleteMode={enhancedAthleteModeActive}
                     isDeloadSession={session?.isDeload ?? false}
                     sets={blockSets}
-                    onSetComplete={async (data) => {
-                      const setId = await handleSetComplete(data);
-                      setAddingExtraSet(null);
-                      return setId;
-                    }}
+                    onSetComplete={handleSetComplete}
                     onWarmupComplete={(restSeconds) => {
                       setRestTimerDuration(restSeconds);
                       setRestAdjustmentNote(null); // warmup rest is never effort-modulated
@@ -5730,12 +5812,13 @@ export default function WorkoutPage() {
                   )}
 
                     {/* Exercise complete actions - only show for current exercise */}
-                    {isCurrent && isComplete && addingExtraSet !== block.id && (
+                    {isCurrent && isComplete && (
                       <div className="flex justify-center gap-3 py-4">
-                        <Button 
-                          variant="outline" 
+                        <Button
+                          variant="outline"
                           size="sm"
-                          onClick={() => setAddingExtraSet(block.id)}
+                          disabled={block.targetSets >= 10}
+                          onClick={() => handleTargetSetsChange(block.id, block.targetSets + 1)}
                         >
                           + Add Extra Set
                         </Button>
@@ -5943,7 +6026,10 @@ export default function WorkoutPage() {
               nextLabel={
                 activeSuggestionLabel
                   ? `next · ${activeSuggestionLabel}`
-                  : currentBlock
+                  : // A block with no pending sets (e.g. the final set was just
+                    // removed) has no "next" — don't advertise a set that no
+                    // longer exists.
+                    currentBlock && !isBlockComplete(currentBlock)
                     ? `next · ${formatWeight(currentBlock.targetWeightKg, preferences.units)} × ${currentBlock.targetRepRange[0]}–${currentBlock.targetRepRange[1]}`
                     : undefined
               }
