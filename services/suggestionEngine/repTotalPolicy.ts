@@ -211,7 +211,13 @@ export interface RepTotalSessionStart {
    * Undefined entries = the slot had no positional reference (padding).
    */
   perSetRefReps: Array<number | undefined>;
-  /** Session target: beat this total (prev total + 1 on a repeat). */
+  /**
+   * Session target — ALWAYS the sum of `perSetRepTargets` (spec §1: one
+   * number, one derivation; the projected-volume header divides back to the
+   * same total). On a repeat the increment (prev total + overshoot-scaled
+   * growth) is distributed INTO the per-set targets; on a bump the targets
+   * are the exchanged observations and the progression lives in the load.
+   */
   sessionRepTotalTarget: number;
   /** Last session's rep total at the fixed load (0 when no history). */
   prevSessionRepTotal: number;
@@ -289,7 +295,7 @@ export function recommendRepTotalSessionStart(input: {
   plannedSets: number;
 }): RepTotalSessionStart | null {
   const { targetRepRange, targetRir, plannedSets } = input;
-  const [repMin] = targetRepRange;
+  const [repMin, repMax] = targetRepRange;
   const valid = input.prevSessionSets.filter((s) => s.weightKg > 0 && s.reps > 0);
   if (valid.length === 0) return null;
 
@@ -430,12 +436,39 @@ export function recommendRepTotalSessionStart(input: {
     const prev = atLoad[i]?.reps;
     return Math.max(repMin, prev ?? repMin);
   });
+
+  // ONE total, ONE derivation (spec §1): the session target IS the sum of
+  // the per-set targets. When the mirrored seeds fall short of
+  // prevTotal + increment, the missing reps are distributed INTO the
+  // targets — front-loaded onto the freshest sets with range headroom,
+  // overflowing round-robin once every set sits at the ceiling (the
+  // deferred-bump case, where reps past the ceiling ARE the progression).
+  // The old shape carried "prevTotal + 1" beside per-set targets summing to
+  // a different number; the projected-volume header derived from one and
+  // the rationale from the other (the Kelso 1,875 lb vs "31 planned" split).
+  let needed = prevTotal + targetIncrement - perSet.reduce((a, b) => a + b, 0);
+  while (needed > 0) {
+    let placed = false;
+    for (let i = 0; i < perSet.length && needed > 0; i++) {
+      if (perSet[i] < repMax) {
+        perSet[i] += 1;
+        needed -= 1;
+        placed = true;
+      }
+    }
+    if (!placed) break; // every set at/above the ceiling — overflow below
+  }
+  for (let i = 0; needed > 0; i = (i + 1) % perSet.length) {
+    perSet[i] += 1;
+    needed -= 1;
+  }
+
   const volume = applyVolumeConstraint(topLoad, perSet, repMin);
   return {
     weightKg: topLoad,
     perSetRepTargets: perSet,
     perSetRefReps: Array.from({ length: perSet.length }, (_, i) => atLoad[i]?.reps),
-    sessionRepTotalTarget: prevTotal + targetIncrement,
+    sessionRepTotalTarget: perSet.reduce((a, b) => a + b, 0),
     prevSessionRepTotal: prevTotal,
     bumped: false,
     ...(bumpDeferred ? { bumpDeferred } : {}),

@@ -36,9 +36,12 @@ describe('recommendRepTotalSessionStart', () => {
     expect(plan.weightKg).toBe(LB135_KG); // no grid snapping, ever
     expect(plan.bumped).toBe(false); // sets 2-3 below the 12 floor
     expect(plan.prevSessionRepTotal).toBe(30);
-    expect(plan.sessionRepTotalTarget).toBe(31);
-    // Per-set seeds mirror last session, floored at 12: 12 / 12 / 12.
+    // Per-set seeds mirror last session, floored at 12: 12 / 12 / 12. The
+    // session target IS their sum (spec §1) — the floored seeds already
+    // exceed prev total + 1, so nothing is distributed; beating last
+    // session's 30 is tracked separately (remainingToBeatPrev).
     expect(plan.perSetRepTargets).toEqual([12, 12, 12]);
+    expect(plan.sessionRepTotalTarget).toBe(36);
   });
 
   it('bump: targets derive from OBSERVED reps exchanged for the load change — never a floor reset', () => {
@@ -87,7 +90,11 @@ describe('recommendRepTotalSessionStart', () => {
     expect(plan.bumped).toBe(false);
     expect(plan.bumpDeferred).toBe('load_cost');
     expect(plan.weightKg).toBe(61.23); // load held verbatim
-    expect(plan.perSetRepTargets).toEqual([14, 13, 12]);
+    // Seeds mirror 14/13/12; the target increment (+2 — the 12 @3 set left
+    // a rep of effort surplus) distributes into the sets with range
+    // headroom, and the session target is the resulting sum (spec §1/§3).
+    expect(plan.perSetRepTargets).toEqual([15, 14, 12]);
+    expect(plan.sessionRepTotalTarget).toBe(41);
   });
 
   it('too-easy sets (RIR way above target) do NOT earn the bump — chase reps instead', () => {
@@ -312,8 +319,10 @@ describe('recommendRepTotalNextSet (re-derived per set — planner parity)', () 
     expect(next.weightKg).toBe(61.23);
     expect(next.reps).toBe(12); // slot 3's plan (8 floored to 12)
     expect(next.totalSoFar).toBe(24);
-    expect(next.sessionRepTotalTarget).toBe(31);
-    expect(next.remainingToTarget).toBe(7);
+    // The session target is the per-set sum (12+12+12 — spec §1); beating
+    // last session's actual 30 is the separate claim below.
+    expect(next.sessionRepTotalTarget).toBe(36);
+    expect(next.remainingToTarget).toBe(12);
     expect(next.rationale).toBe('follow_plan');
     expect(next.sessionCapacityClamped).toBeUndefined();
     // Beat-last-session accounting reads last session's ACTUAL total (30).
@@ -566,8 +575,10 @@ describe('stale-total remainder + floor-not-budget (Step 2, 2026-07-29 live defe
     expect(next.sessionRepTotalTarget).not.toBe(stalePlanTotal);
     expect(next.sessionRepTotalTarget).toBe(38);
     expect(next.remainingToTarget).toBe(38 - 32);
-    // And the ask itself is not remainder arithmetic against either total.
-    expect(next.reps).not.toBe(Math.max(0, stalePlanTotal - next.totalSoFar));
+    // And the ask itself traces to today's observed evidence at 80 lb — one
+    // rep under the last set's demonstrated ask ceiling (10 @2 RIR → 9) —
+    // not to remainder arithmetic against any total.
+    expect(next.reps).toBe(9);
   });
 
   it('rep-total is a FLOOR: beating the pace never shrinks a later ask (spec §2)', () => {
@@ -724,6 +735,71 @@ describe('overshoot-scaled target increment (Step 3, 2026-07-29 live defects)', 
       plannedSets: 3,
     })!;
     expect(plan.sessionRepTotalTarget).toBe(31);
+  });
+});
+
+describe('one planned total — projected-volume parity (Step 4, regression 7)', () => {
+  const LB = 0.45359237;
+  const args = {
+    targetRepRange: [8, 12] as [number, number],
+    targetRir: 2,
+    plannedSets: 4,
+  };
+
+  it('Exercise A: header projection == engine planned total × load (single source)', () => {
+    // The live header read 3,178 lbs (77.5 × 41) because the pending-set
+    // prefills sum the per-set targets — the engine's session target must be
+    // that SAME sum, not a separately-derived prevTotal+1.
+    const plan = recommendRepTotalSessionStart({
+      prevSessionSets: [
+        { weightKg: 77.5 * LB, reps: 12, rir: 2 },
+        { weightKg: 77.5 * LB, reps: 11, rir: 2 },
+        { weightKg: 77.5 * LB, reps: 10, rir: 2 },
+      ],
+      minIncrementKg: 2.27, // live coarse config → held plan, 8-floor pad
+      ...args,
+    })!;
+    const perSetSum = plan.perSetRepTargets.reduce((a, b) => a + b, 0);
+    expect(plan.sessionRepTotalTarget).toBe(perSetSum);
+    expect(plan.sessionRepTotalTarget).toBe(41); // the live header's number
+    expect(plan.projectedVolumeKg).toBeCloseTo(plan.weightKg * perSetSum, 1);
+  });
+
+  it('Exercise B: the 1,875 lbs vs "31 planned" split cannot recur', () => {
+    // Live defect: header projected 30 reps × 62.5 while the rationale
+    // planned 31 — two totals from two derivations. Now the +1 lives inside
+    // the per-set targets and every consumer reads their sum.
+    const plan = recommendRepTotalSessionStart({
+      prevSessionSets: [
+        { weightKg: 62.5 * LB, reps: 10, rir: 2 },
+        { weightKg: 62.5 * LB, reps: 10, rir: 2 },
+        { weightKg: 62.5 * LB, reps: 10, rir: 2 },
+      ],
+      minIncrementKg: 2.27,
+      ...args,
+      plannedSets: 3,
+    })!;
+    const perSetSum = plan.perSetRepTargets.reduce((a, b) => a + b, 0);
+    expect(plan.perSetRepTargets).toEqual([11, 10, 10]); // +1 distributed in
+    expect(plan.sessionRepTotalTarget).toBe(31);
+    expect(plan.sessionRepTotalTarget).toBe(perSetSum);
+    expect(plan.projectedVolumeKg).toBeCloseTo(plan.weightKg * perSetSum, 1);
+  });
+
+  it('bumped plans hold the same invariant (target == per-set sum == volume/load)', () => {
+    const plan = recommendRepTotalSessionStart({
+      prevSessionSets: [
+        { weightKg: 77.5 * LB, reps: 12, rir: 2 },
+        { weightKg: 77.5 * LB, reps: 11, rir: 2 },
+        { weightKg: 77.5 * LB, reps: 10, rir: 2 },
+      ],
+      minIncrementKg: 1.13, // true dumbbell step → earned bump
+      ...args,
+    })!;
+    expect(plan.bumped).toBe(true);
+    const perSetSum = plan.perSetRepTargets.reduce((a, b) => a + b, 0);
+    expect(plan.sessionRepTotalTarget).toBe(perSetSum);
+    expect(plan.projectedVolumeKg).toBeCloseTo(plan.weightKg * perSetSum, 1);
   });
 });
 
