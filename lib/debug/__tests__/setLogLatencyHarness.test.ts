@@ -17,6 +17,17 @@
  * on the outbox-first path both stay flat.
  */
 
+// Give jsdom an IndexedDB so setOutbox selects its REAL idbDriver — the
+// outbox-first numbers then include the production indexedDB.open + readwrite
+// transaction per enqueue instead of the in-memory Map fallback's no-op cost.
+// jsdom's global set omits structuredClone (fake-indexeddb's record cloner);
+// a JSON round trip is equivalent for these plain snake_case rows. require()
+// (not import) so the polyfill runs first.
+if (typeof globalThis.structuredClone !== 'function') {
+  globalThis.structuredClone = ((v: unknown) =>
+    JSON.parse(JSON.stringify(v))) as typeof structuredClone;
+}
+require('fake-indexeddb/auto');
 import {
   enqueueSetInsert,
   flushSetOutbox,
@@ -125,7 +136,7 @@ async function measure(
   rttMs: number,
   path: 'current' | 'outbox-first'
 ): Promise<Record<string, number | string>> {
-  __setDriverForTests(null); // fresh memory driver per run (jsdom has no IndexedDB)
+  __setDriverForTests(null); // re-resolve the driver → real idbDriver over fake-indexeddb
   const supabase = fakeSupabase(() => rttMs);
   const background: Promise<unknown>[] = [];
   const timings: SetTiming[] = [];

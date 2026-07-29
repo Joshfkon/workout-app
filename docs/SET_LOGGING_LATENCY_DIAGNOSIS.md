@@ -156,28 +156,33 @@ the throttled numbers below come from the committed harness
 `npx jest lib/debug/__tests__/setLogLatencyHarness.test.ts`), which executes
 the exact awaited control flow traced above (with file:line refs inline)
 against a fake Supabase costing a configurable RTT per request, alongside the
-outbox-first shape using the **real** `lib/offline/setOutbox` module. Real
-wall-clock timers; 5 sets per condition, averaged. An on-device Network Link
-Conditioner run with the flag enabled will reproduce the same shape with
-device constants added; the harness numbers are the architecture's floor.
+outbox-first shape using the **real** `lib/offline/setOutbox` module and its
+**real `idbDriver`** (jsdom is given an IndexedDB via `fake-indexeddb`, so the
+outbox-first numbers include the production `indexedDB.open` + readwrite
+transaction per enqueue, not the in-memory fallback). Real wall-clock timers;
+5 sets per condition, averaged. An on-device Network Link Conditioner run with
+the flag enabled will reproduce the same shape with device constants added
+(expect a real WKWebView IndexedDB put to cost single-digit ms — visible as
+`t2_outbox_enqueued`); the harness numbers are the architecture's floor.
 
 | Profile | Path | RTT (ms) | t1 row rendered (ms) | rest timer started (ms) | t5 handler done (ms) | requests |
 |---|---|---:|---:|---:|---:|---:|
-| wifi | current | 30 | **31** | 61 | 61 | 10 |
-| wifi | outbox-first | 30 | **0** | 0 | 0 | 5 |
+| wifi | current | 30 | **31** | 62 | 62 | 10 |
+| wifi | outbox-first | 30 | **0** | 1 | 1 | 5 |
 | Slow 4G | current | 400 | **401** | 801 | 801 | 10 |
 | Slow 4G | outbox-first | 400 | **0** | 0 | 0 | 5 |
-| Very Bad Network | current | 1200 | **1201** | 2401 | 2401 | 10 |
+| Very Bad Network | current | 1200 | **1201** | 2402 | 2402 | 10 |
 | Very Bad Network | outbox-first | 1200 | **0** | 0 | 0 | 5 |
 
 Stall case (one request hangs 5 s — capped for test speed; the real path has
-**no** cap): current path starts the rest timer at **5400 ms**; outbox-first
+**no** cap): current path starts the rest timer at **5402 ms**; outbox-first
 at **0 ms**.
 
 **`t1 − t0` tracks RTT ≈ 1:1 on the current path** (31/401/1201 ms at
-30/400/1200 ms RTT) **and stays flat at ~0 ms outbox-first.** The UI is on the
-network's critical path. Also note the request count: the current path sends
-2 requests per set (probe + insert); outbox-first sends 1.
+30/400/1200 ms RTT) **and stays flat at ~0 ms outbox-first — the durable IDB
+enqueue costs ≤1 ms in-process.** The UI is on the network's critical path.
+Also note the request count: the current path sends 2 requests per set
+(probe + insert); outbox-first sends 1.
 
 ---
 
@@ -248,8 +253,11 @@ up separately).
 ### DO-NOT-BREAK check for this phase
 
 No behavior changed: instrumentation is a no-op unless the debug flag is set
-(guard at `lib/debug/setLogTiming.ts:55-63`). Verified: full `tsc --noEmit`
-clean; `lib/offline/__tests__/setOutbox.test.ts` +
+(guard at `lib/debug/setLogTiming.ts:55-63`). Verified: `tsc --noEmit`
+introduces no new errors (one pre-existing error in
+`hooks/__tests__/useWorkoutMuscleVolume.test.ts` exists on `main` — CI runs
+jest, not tsc, so it doesn't surface there);
+`lib/offline/__tests__/setOutbox.test.ts` +
 `components/workout/__tests__/ExerciseCard.test.tsx` — 105 tests pass. The
 Playwright throttled/offline before-vs-after run belongs to the fix phase
 (there is no "after" yet, and this environment has no app credentials to run

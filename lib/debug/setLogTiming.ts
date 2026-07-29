@@ -77,10 +77,8 @@ export function beginSetTiming(): void {
   }
 }
 
-/** Record a phase relative to t0. No-op when timing is off / no row is open. */
-export function markSetPhase(phase: SetLogPhase): void {
-  if (!current) return;
-  current.phases[phase] = Math.round((performance.now() - current.start) * 10) / 10;
+function recordPhase(row: OpenTiming, phase: SetLogPhase): void {
+  row.phases[phase] = Math.round((performance.now() - row.start) * 10) / 10;
   try {
     performance.mark(`set-log:${phase}`);
     performance.measure(`set-log:t0→${phase}`, 'set-log:t0_tap', `set-log:${phase}`);
@@ -89,7 +87,31 @@ export function markSetPhase(phase: SetLogPhase): void {
   }
 }
 
-/** Close the row (t5), publish it to window.__setLogTimings, log a table. */
+/** Record a phase relative to t0. No-op when timing is off / no row is open. */
+export function markSetPhase(phase: SetLogPhase): void {
+  if (!current) return;
+  recordPhase(current, phase);
+}
+
+/**
+ * Mark t1_painted on the row open NOW at the next animation frame. The row is
+ * captured in the closure, so a handler that finishes before the frame fires
+ * (offline path; outbox-first path once fixed) still gets its paint time into
+ * the correct — possibly already-closed — row, never into a later set's row.
+ * (endSetTiming publishes the live phases object, so a post-close write still
+ * shows up in window.__setLogTimings; only the console.table line misses it.)
+ */
+export function schedulePaintMark(): void {
+  if (!current || typeof requestAnimationFrame !== 'function') return;
+  const row = current;
+  requestAnimationFrame(() => recordPhase(row, 't1_painted'));
+}
+
+/**
+ * Close the row (t5), publish it to window.__setLogTimings, log a table.
+ * The phases object is published by reference: a pending schedulePaintMark
+ * callback may still fill t1_painted in after close.
+ */
 export function endSetTiming(): void {
   if (!current) return;
   markSetPhase('t5_handler_done');

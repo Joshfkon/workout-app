@@ -20,7 +20,7 @@ import {
   withoutOptionalSetLogColumns,
 } from '@/lib/offline/setOutbox';
 // setLogTiming: TEMPORARY latency instrumentation (docs/SET_LOGGING_LATENCY_DIAGNOSIS.md)
-import { beginSetTiming, markSetPhase, endSetTiming } from '@/lib/debug/setLogTiming';
+import { beginSetTiming, markSetPhase, schedulePaintMark, endSetTiming } from '@/lib/debug/setLogTiming';
 import type { SetSyncStatus } from '@/components/workout/ExerciseCard';
 import { InlineHint } from '@/components/ui/FirstTimeHint';
 import { RestTimer, PauseOverlay, RowOverflowMenu, type RowMenuItem } from '@/components/workout';
@@ -2288,9 +2288,7 @@ export default function WorkoutPage() {
       setSetSync(prev => ({ ...prev, [setId]: 'saving' }));
       // setLogTiming: local commit + first frame after it (approximates paint)
       markSetPhase('t1_local_commit');
-      if (typeof requestAnimationFrame === 'function') {
-        requestAnimationFrame(() => markSetPhase('t1_painted'));
-      }
+      schedulePaintMark();
 
       // Logging a set past a pending soreness ask dismisses it for the
       // session (records null; the muscle is never re-asked). Zero extra taps.
