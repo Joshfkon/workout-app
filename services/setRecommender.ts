@@ -48,13 +48,18 @@ import {
   TOP_SET_LOAD_TOLERANCE,
   SCHEME_REP_WINDOW_FLOOR_MULTIPLE,
   STALL_LOAD_TOLERANCE,
+  FATIGUE_K,
   LIGHT_LOAD_INCREMENT_FRACTION,
   LIGHT_LOAD_REP_CEILING_EXTENSION,
   POSITION_MATCH_SET_COUNT_TOLERANCE,
   POSITION_MATCH_LOAD_TOLERANCE,
   SESSION_CAPACITY_TOLERANCE,
 } from './suggestionEngine/constants';
-import { estimateE1RM, E1RM_HIGH_CONFIDENCE_MAX_EFFECTIVE_REPS } from './shared/e1rm';
+import {
+  estimateE1RM,
+  impliedE1RMFloor,
+  E1RM_HIGH_CONFIDENCE_MAX_EFFECTIVE_REPS,
+} from './shared/e1rm';
 import { inferRolesForSession, type SetRole } from './suggestionEngine/setRoles';
 import {
   smallestIncrement,
@@ -744,6 +749,64 @@ function predictRepsAtWeight(
 }
 
 // ============================================
+// SESSION-CAPACITY CAP (INV-2, e1RM space)
+// ============================================
+
+/**
+ * THE session-capacity cap (INV-2), computed in e1RM SPACE — the 2026-07-29
+ * pushdown fix. Input is today's logged sets for this exercise, IN PERFORMED
+ * ORDER. Each set's demonstrated capacity (canonical implied-floor e1RM) is
+ * discounted by FATIGUE_K per set performed since it, and the cap is the max:
+ *
+ *   cap_e1rm = max_i( e1rmFloor(set_i) × FATIGUE_K ^ (m − 1 − i) )
+ *
+ * The just-completed set carries exponent 0, so repeating it is always a
+ * legal ask. Because the discount deepens as sets log, the cap value moves
+ * with the session instead of freezing on an early top set (the stale-anchor
+ * defect: 72.5×12 on set 1 produced the identical cap for sets 2 AND 3).
+ *
+ * All values go through the canonical module — the cap is compared against
+ * an ask's implied-floor e1RM, never against a rep count at a different
+ * load.
+ *
+ * BEYOND-DOMAIN observations (> 15 effective reps — e.g. a 110×20 @4 rep-out)
+ * cannot produce a BINDING cap: the canonical module refuses to estimate
+ * them, and their flat floor is only a LOWER bound on what the set proved —
+ * capping an ask at a lower bound of demonstrated capacity would over-trim
+ * asks the set itself makes achievable. So when the strongest (decayed)
+ * evidence in the pool is a beyond-domain floor, the session's capacity is
+ * unbounded in canonical terms and the function returns null (no cap) —
+ * matching the pre-fix behavior for rep-out sets. A beyond-domain set that
+ * is DOMINATED by a measured, stronger observation changes nothing.
+ *
+ * Returns null when nothing in the pool yields a binding value.
+ */
+export function sessionCapacityCapE1RM(
+  observedSets: Array<{ weightKg: number; reps: number; rir: number }>
+): number | null {
+  let measuredCap = 0;
+  let unboundedFloor = 0;
+  const m = observedSets.length;
+  for (let i = 0; i < m; i++) {
+    const s = observedSets[i];
+    if (!(s.weightKg > 0) || !(s.reps > 0)) continue;
+    const rir = Math.max(0, s.rir);
+    const value = impliedE1RMFloor(s.weightKg, s.reps, rir);
+    if (value == null) continue;
+    const decayed = value * Math.pow(FATIGUE_K, m - 1 - i);
+    const measured = estimateE1RM(s.weightKg, s.reps, rir) != null;
+    if (measured) {
+      if (decayed > measuredCap) measuredCap = decayed;
+    } else if (decayed > unboundedFloor) {
+      unboundedFloor = decayed;
+    }
+  }
+  if (measuredCap <= 0) return null;
+  if (unboundedFloor >= measuredCap) return null;
+  return measuredCap;
+}
+
+// ============================================
 // MAIN
 // ============================================
 
@@ -786,18 +849,25 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
 
   // ---- Phase 0 hard invariants — applied to EVERY prescription returned ----
   //
-  // INV-2: never prescribe an implied capacity above the session's best
-  // OBSERVED set. Implied capacity = canonical capped Brzycki at the ASKED
-  // effort — the target RIR, except for a position-matched rec, which asks
-  // the lifter to repeat a set performed at its RECORDED effort (grading a
-  // repeat-ask at the stricter target effort would strip fixture-validated
-  // targets whose evidence set was taken past target). The ceiling pool is
-  // today's completed sets (sessionObservedSets + the just-completed set);
-  // it only applies once at least one set is done THIS session — a
-  // session-start replay off last session's reference set is not an
-  // observation of today. Cheap proxy for the full fatigue model: confirmed
-  // by two independent live reproductions (Iso-Lateral MISS B, Arnold Press
-  // 42.5×10 = 61.2 implied against a 60.0 session best).
+  // INV-2 (e1RM space — 2026-07-29 pushdown fix): never prescribe an implied
+  // capacity above the session-capacity cap. Both sides of the comparison are
+  // e1RM values from the canonical module:
+  //
+  //   cap_e1rm    = sessionCapacityCapE1RM(today's sets, performed order)
+  //                 — best observed implied e1RM, fatigue-discounted by
+  //                 FATIGUE_K per set performed since the observation;
+  //   ask implied = impliedE1RMFloor(weight, reps, asked effort).
+  //
+  // When the ask exceeds the cap, reps are re-solved DOWN at the prescribed
+  // load until the implied value fits (target_e1rm = min(ask, cap), inverted
+  // back to reps through the same canonical curve). Raw rep counts are never
+  // compared or capped across different loads — the old rep-space trim also
+  // treated "beyond the estimator's domain" as "over the cap", which is how
+  // a 65-load ask got trimmed below the 65×14 it claimed to progress from
+  // while a 72.5×12 top set anchored the cap. The ceiling pool is today's
+  // completed sets (sessionObservedSets + the just-completed set); it only
+  // applies once at least one set is done THIS session — a session-start
+  // replay off last session's reference set is not an observation of today.
   //
   // INV-1: a prescription whose reps fall outside the stated range keeps its
   // honest count but carries `outsideRange` so the banner must re-render the
@@ -806,17 +876,11 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
     const out = { ...rec };
 
     if (n >= 1 && out.weightKg > 0) {
-      let ceiling = 0;
-      const pool = [
+      const capE1RM = sessionCapacityCapE1RM([
         ...(input.sessionObservedSets ?? []),
         { weightKg: lastWeightKg, reps: lastReps, rir: safeRir },
-      ];
-      for (const s of pool) {
-        const est =
-          s.weightKg > 0 && s.reps > 0 ? estimateE1RM(s.weightKg, s.reps, Math.max(0, s.rir)) : null;
-        if (est && est.value > ceiling) ceiling = est.value;
-      }
-      if (ceiling > 0) {
+      ]);
+      if (capE1RM != null) {
         // Asked effort for the invariant (Codex review, partially accepted):
         // a position-matched HOLD demands "repeat the set you did at this
         // position" — its expected effort is the HISTORICAL RIR (grading a
@@ -827,18 +891,19 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
         // must not inflate the implied ask and over-trim a progression that
         // is only asked for at the target effort. min() gives holds their
         // recorded effort and caps progressions at the target.
-        const askedRir = out.positionMatch
-          ? Math.min(out.positionMatch.prevRir ?? out.rir, out.rir)
-          : out.rir;
+        const askedRir = Math.max(
+          0,
+          out.positionMatch
+            ? Math.min(out.positionMatch.prevRir ?? out.rir, out.rir)
+            : out.rir
+        );
+        const fits = (reps: number): boolean => {
+          const implied = impliedE1RMFloor(out.weightKg, reps, askedRir);
+          // No implied value (invalid inputs) → nothing measurable to cap.
+          return implied == null || implied <= capE1RM * (1 + SESSION_CAPACITY_TOLERANCE);
+        };
         let reps = out.reps;
-        for (;;) {
-          if (reps <= 1) break;
-          const implied = estimateE1RM(out.weightKg, reps, Math.max(0, askedRir));
-          // null = beyond the estimator's domain (> 15 effective reps): the
-          // ask is not even measurable — keep trimming until it is.
-          if (implied && implied.value <= ceiling * (1 + SESSION_CAPACITY_TOLERANCE)) break;
-          reps -= 1;
-        }
+        while (reps > 1 && !fits(reps)) reps -= 1;
         if (reps !== out.reps) {
           out.reps = reps;
           out.sessionCapacityClamped = true;
