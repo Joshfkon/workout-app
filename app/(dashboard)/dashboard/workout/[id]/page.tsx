@@ -2666,25 +2666,30 @@ export default function WorkoutPage() {
     [completedSets, session, blocks]
   );
 
-  const handleSetEdit = async (setId: string, data: { weightKg: number; reps: number; rpe: number; bodyweightData?: BodyweightData }) => {
+  const handleSetEdit = async (setId: string, data: { weightKg: number; reps: number; rpe: number; repsInTank?: RepsInTank; bodyweightData?: BodyweightData }) => {
     const quality = data.rpe >= 7.5 && data.rpe <= 9.5 ? 'stimulative' : data.rpe <= 5 ? 'junk' : 'effective' as const;
-    
+
     // Use provided bodyweightData if available, otherwise preserve existing
     const existingSet = completedSets.find(s => s.id === setId);
     const updatedBodyweightData = data.bodyweightData || existingSet?.bodyweightData;
 
-    // Keep feedback's RIR consistent with the edited RPE — the completed-set
-    // display prefers feedback.repsInTank over the RPE-derived value. Only
-    // resync when the new RPE disagrees with the existing RIR: the round trip
-    // is lossy (RIR 2 → RPE 7.5 → round(2.5) = 3), so an unconditional rewrite
-    // would mutate RIR on weight/reps-only edits.
+    // Keep feedback's RIR consistent with the edited effort — the completed-set
+    // display prefers feedback.repsInTank over the RPE-derived value.
+    // An explicit repsInTank (RIR chip in the inline editor) is stored exactly;
+    // otherwise resync from RPE only when the new RPE disagrees with the
+    // existing RIR: that round trip is lossy (RIR 2 → RPE 7.5 → round(2.5) = 3),
+    // so an unconditional rewrite would mutate RIR on weight/reps-only edits.
     const updatedFeedback: SetFeedback | undefined =
-      existingSet?.feedback && rirToRpe(existingSet.feedback.repsInTank) !== data.rpe
-        ? {
-            ...existingSet.feedback,
-            repsInTank: Math.max(0, Math.min(4, Math.round(10 - data.rpe))) as RepsInTank,
-          }
-        : undefined;
+      data.repsInTank !== undefined
+        ? existingSet?.feedback && existingSet.feedback.repsInTank !== data.repsInTank
+          ? { ...existingSet.feedback, repsInTank: data.repsInTank }
+          : undefined
+        : existingSet?.feedback && rirToRpe(existingSet.feedback.repsInTank) !== data.rpe
+          ? {
+              ...existingSet.feedback,
+              repsInTank: Math.max(0, Math.min(4, Math.round(10 - data.rpe))) as RepsInTank,
+            }
+          : undefined;
 
     // Update local state using functional update to avoid stale closure
     setCompletedSets(prevSets => prevSets.map(set =>
