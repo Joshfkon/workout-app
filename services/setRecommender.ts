@@ -134,6 +134,15 @@ export interface SetRecommenderInput {
    * earlier sets here. Omitted → the ceiling is the last set alone.
    */
   sessionObservedSets?: Array<{ weightKg: number; reps: number; rir: number }>;
+  /**
+   * 2026-07-29 step 2 — an EXPLICIT directive (deload week, readiness check
+   * flagged low, periodization phase change) that legitimately allows a
+   * prescription below the matched previous-session set's e1RM. When
+   * present, the monotonicity floor guard stands down for this prescription.
+   * Callers pass it only from a real user/plan directive — the engine never
+   * derives it internally.
+   */
+  regressionDirective?: 'deload' | 'readiness' | 'phase';
 }
 
 /** The session-comparison inputs for set-position matching. */
@@ -875,38 +884,102 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
   const finalizeRec = (rec: SetRecommendation): SetRecommendation => {
     const out = { ...rec };
 
-    if (n >= 1 && out.weightKg > 0) {
-      const capE1RM = sessionCapacityCapE1RM([
-        ...(input.sessionObservedSets ?? []),
-        { weightKg: lastWeightKg, reps: lastReps, rir: safeRir },
-      ]);
-      if (capE1RM != null) {
-        // Asked effort for the invariant (Codex review, partially accepted):
-        // a position-matched HOLD demands "repeat the set you did at this
-        // position" — its expected effort is the HISTORICAL RIR (grading a
-        // repeat of an @1 set at the stricter target effort would strip
-        // fixture-validated targets whose evidence set was taken past
-        // target). But the historical RIR is only ever used when it is
-        // HARDER than the target: an unusually easy historical set (@4)
-        // must not inflate the implied ask and over-trim a progression that
-        // is only asked for at the target effort. min() gives holds their
-        // recorded effort and caps progressions at the target.
-        const askedRir = Math.max(
-          0,
-          out.positionMatch
-            ? Math.min(out.positionMatch.prevRir ?? out.rir, out.rir)
-            : out.rir
-        );
-        const fits = (reps: number): boolean => {
-          const implied = impliedE1RMFloor(out.weightKg, reps, askedRir);
-          // No implied value (invalid inputs) → nothing measurable to cap.
-          return implied == null || implied <= capE1RM * (1 + SESSION_CAPACITY_TOLERANCE);
-        };
-        let reps = out.reps;
-        while (reps > 1 && !fits(reps)) reps -= 1;
-        if (reps !== out.reps) {
-          out.reps = reps;
-          out.sessionCapacityClamped = true;
+    const capE1RM =
+      n >= 1 && out.weightKg > 0
+        ? sessionCapacityCapE1RM([
+            ...(input.sessionObservedSets ?? []),
+            { weightKg: lastWeightKg, reps: lastReps, rir: safeRir },
+          ])
+        : null;
+    // Asked effort for the invariant (Codex review, partially accepted):
+    // a position-matched HOLD demands "repeat the set you did at this
+    // position" — its expected effort is the HISTORICAL RIR (grading a
+    // repeat of an @1 set at the stricter target effort would strip
+    // fixture-validated targets whose evidence set was taken past
+    // target). But the historical RIR is only ever used when it is
+    // HARDER than the target: an unusually easy historical set (@4)
+    // must not inflate the implied ask and over-trim a progression that
+    // is only asked for at the target effort. min() gives holds their
+    // recorded effort and caps progressions at the target.
+    const askedRir = Math.max(
+      0,
+      out.positionMatch ? Math.min(out.positionMatch.prevRir ?? out.rir, out.rir) : out.rir
+    );
+    const underCap = (reps: number): boolean => {
+      if (capE1RM == null) return true;
+      const implied = impliedE1RMFloor(out.weightKg, reps, askedRir);
+      // No implied value (invalid inputs) → nothing measurable to cap.
+      return implied == null || implied <= capE1RM * (1 + SESSION_CAPACITY_TOLERANCE);
+    };
+
+    if (capE1RM != null) {
+      let reps = out.reps;
+      while (reps > 1 && !underCap(reps)) reps -= 1;
+      if (reps !== out.reps) {
+        out.reps = reps;
+        out.sessionCapacityClamped = true;
+      }
+    }
+
+    // ---- Monotonicity floor (2026-07-29 step 2) ----
+    // FINAL guard: a prescription must never carry a LOWER implied e1RM than
+    // the matched set from the previous session — whichever upstream stage
+    // produced the number (the match branch itself, or the capacity cap
+    // trimming it). Both sides are measured through the canonical module at
+    // the SAME effort basis (the asked RIR above), so the comparison is
+    // like-to-like. Exceptions: an explicit deload/readiness/phase directive
+    // (input.regressionDirective) stands the guard down.
+    //
+    // When the guard fires it first tries to restore the floor by raising
+    // reps at the prescribed load (staying under the session-capacity cap);
+    // if the cap or the estimator's domain makes the floor unreachable, the
+    // sub-floor value stands — a fatigue-limited day is real — but the guard
+    // LOGS which upstream branch produced it, so a regression can never ship
+    // silently again.
+    if (out.positionMatch && !input.regressionDirective && out.weightKg > 0) {
+      const pm = out.positionMatch;
+      const refFloor = impliedE1RMFloor(
+        pm.prevWeightKg,
+        pm.prevReps,
+        Math.max(0, Math.min(pm.prevRir ?? out.rir, out.rir))
+      );
+      const impliedOf = (reps: number) => impliedE1RMFloor(out.weightKg, reps, askedRir);
+      const current = impliedOf(out.reps);
+      if (refFloor != null && current != null && current < refFloor) {
+        const producingBranch = out.sessionCapacityClamped
+          ? 'session_capacity_cap'
+          : `position_match:${pm.progression}`;
+        // Smallest rep raise at this load that restores the floor without
+        // busting the cap. The hard ceiling mirrors the honest-reps bound.
+        let restored: number | null = null;
+        let prevImplied = current;
+        for (let reps = out.reps + 1; reps <= repMax + OVERSHOOT_CEILING; reps++) {
+          const implied = impliedOf(reps);
+          if (implied == null || !underCap(reps)) break;
+          if (implied >= refFloor) {
+            restored = reps;
+            break;
+          }
+          // Flat region: more reps stop gaining measurable e1RM — no point
+          // inflating the ask past the first non-gaining step.
+          if (implied <= prevImplied) break;
+          prevImplied = implied;
+        }
+        if (restored != null) {
+          console.warn(
+            `[setRecommender] monotonicity floor: ${producingBranch} produced ` +
+              `${out.weightKg}×${out.reps} (implied ${current}) below the matched ` +
+              `set's ${refFloor} — raised to ×${restored}.`
+          );
+          out.reps = restored;
+        } else {
+          console.warn(
+            `[setRecommender] monotonicity floor: ${producingBranch} produced ` +
+              `${out.weightKg}×${out.reps} (implied ${current}) below the matched ` +
+              `set's ${refFloor}, and the session-capacity cap` +
+              `${capE1RM != null ? ` (${Math.round(capE1RM * 10) / 10})` : ''} ` +
+              `blocks restoring it — sub-floor prescription stands.`
+          );
         }
       }
     }

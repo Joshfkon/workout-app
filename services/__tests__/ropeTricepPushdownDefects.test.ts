@@ -44,7 +44,9 @@ const afterSets = (setsDone: number) => {
     lastRir: last.rir,
     setsCompletedThisExercise: setsDone,
     ...pushdownCtx,
-    sessionObservedSets: logged.map((s) => ({
+    // Earlier sets only — the just-completed set (the last* fields) is
+    // appended to the ceiling pool automatically.
+    sessionObservedSets: logged.slice(0, -1).map((s) => ({
       weightKg: s.weightKg,
       reps: s.reps,
       rir: s.rir,
