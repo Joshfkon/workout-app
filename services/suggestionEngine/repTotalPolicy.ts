@@ -1,6 +1,42 @@
 /**
  * rep_total progression policy (pulled forward from Phase 5).
  *
+ * ============================================================
+ * SPEC — rep-total semantics (normative; branches must not disagree)
+ * ============================================================
+ * 1. WHAT THE TARGET IS. The session target is the sum of the per-set rep
+ *    targets at the plan's fixed load — ONE number with ONE derivation.
+ *    Anything that displays a planned total (banner, projected-volume header)
+ *    must derive from the same per-set targets; there is no second
+ *    "prevTotal + increment" total living beside a different per-set sum.
+ * 2. FLOOR, NOT BUDGET. The target is a floor to meet or beat, never a
+ *    budget to ration. Logging more reps than the plan's pace on an early
+ *    set must NEVER lower a later set's ask; over-performance may only hold
+ *    or raise subsequent prescriptions (evidence floor). No ask is ever
+ *    derived by subtracting reps-done from reps-planned.
+ * 3. HOW IT INCREMENTS. On a load repeat, the target grows from last
+ *    session's actual total by at least 1 rep, scaled up by how far the
+ *    previous session overshot ITS floor (rep margin over the prior
+ *    session's total + effort left in reserve beyond the asked RIR), capped
+ *    per session so growth can't run away. On an earned load bump, targets
+ *    are last session's observed reps exchanged through the rep-cost model —
+ *    the increment lives in the load, not the total.
+ * 4. REP-RANGE INTERACTION. The configured range is a per-set zone, not the
+ *    target. The range floor gates the load bump (every top-load set must
+ *    clear it at target effort, priced at the exercise's TRUE smallest
+ *    increment). An emitted ask may sit outside the range ONLY when observed
+ *    evidence puts it there (a set proving the load too heavy/too light),
+ *    and then it carries `outsideRange`; an out-of-range ask produced by
+ *    plan/exchange ARITHMETIC alone is a bug and clamps into the range —
+ *    in both directions.
+ * 5. LOAD CHANGE MID-PROGRESSION. Rep totals compare only at matched loads
+ *    (max(half grid step, 2.5%) tolerance). A deviating load invalidates the
+ *    prior total AND the plan total as targets: no branch may keep consuming
+ *    them (remainders included). The per-set targets and the session target
+ *    are re-priced onto the actual load; beat-last-session framing is
+ *    forbidden (`totalComparable: false`); today sets the new baseline.
+ * ============================================================
+ *
  * For exercises whose rep boundary drifts (high-rep work where "a rep" is not
  * a crisp unit — calves, abs, burnout-style ranges), e1RM math is fiction:
  * most sets sit beyond the canonical estimator's 15-effective-rep domain.
