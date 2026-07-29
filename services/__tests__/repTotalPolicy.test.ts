@@ -507,6 +507,110 @@ describe('recommendRepTotalNextSet (re-derived per set — planner parity)', () 
   });
 });
 
+describe('stale-total remainder + floor-not-budget (Step 2, 2026-07-29 live defects)', () => {
+  const LB = 0.45359237;
+  // Exercise A's live plan: the coarse 5 lb increment deferred the bump, so
+  // the plan held 77.5 lb with per-set targets 12/11/10 + an 8-floor pad
+  // (4 planned sets). The lifter then overrode the load to 80 lb.
+  const heldPlan = () =>
+    recommendRepTotalSessionStart({
+      prevSessionSets: [
+        { weightKg: 77.5 * LB, reps: 12, rir: 2 },
+        { weightKg: 77.5 * LB, reps: 11, rir: 2 },
+        { weightKg: 77.5 * LB, reps: 10, rir: 2 },
+      ],
+      targetRepRange: [8, 12],
+      targetRir: 2,
+      minIncrementKg: 2.27,
+      plannedSets: 4,
+    })!;
+  const observed80 = [
+    { weightKg: 80 * LB, reps: 11, rir: 2 },
+    { weightKg: 80 * LB, reps: 11, rir: 2 },
+    { weightKg: 80 * LB, reps: 10, rir: 2 },
+  ];
+  // The exercise's TRUE increment (post Step 1 config fix) — makes 80 vs
+  // 77.5 a genuine load deviation, not half-step grid noise.
+  const nextSetArgs = {
+    targetRepRange: [8, 12] as [number, number],
+    targetRir: 2,
+    minIncrementKg: 1.13,
+  };
+
+  it('Exercise A set 4: never 7 — ≥ range floor and ≥ (prior set reps − 2) (regression 3)', () => {
+    const plan = heldPlan();
+    expect(plan.bumpDeferred).toBe('load_cost'); // the live plan reproduced
+    const next = recommendRepTotalNextSet({
+      sessionPlan: plan,
+      observedSets: observed80,
+      ...nextSetArgs,
+    });
+    expect(next.loadDeviation).toBeDefined();
+    expect(next.reps).toBeGreaterThanOrEqual(8); // range floor (spec §4)
+    expect(next.reps).toBeGreaterThanOrEqual(10 - 2); // last set − fatigue allowance
+    expect(next.reps).not.toBe(7);
+    expect(next.outsideRange).toBeUndefined(); // no arithmetic range violation
+  });
+
+  it('Exercise A set 4: no value is traceable to the total the rationale disclaimed (regression 4)', () => {
+    const plan = heldPlan();
+    const stalePlanTotal = plan.sessionRepTotalTarget; // priced at 77.5, inapplicable at 80
+    const next = recommendRepTotalNextSet({
+      sessionPlan: plan,
+      observedSets: observed80,
+      ...nextSetArgs,
+    });
+    expect(next.totalComparable).toBe(false);
+    // The effective target is the plan re-priced onto 80 lb (11+10+9+8=38):
+    // every remainder consumer reads THIS, never the 77.5-based total.
+    expect(next.sessionRepTotalTarget).not.toBe(stalePlanTotal);
+    expect(next.sessionRepTotalTarget).toBe(38);
+    expect(next.remainingToTarget).toBe(38 - 32);
+    // And the ask itself is not remainder arithmetic against either total.
+    expect(next.reps).not.toBe(Math.max(0, stalePlanTotal - next.totalSoFar));
+  });
+
+  it('rep-total is a FLOOR: beating the pace never shrinks a later ask (spec §2)', () => {
+    const plan = heldPlan();
+    const onPace = recommendRepTotalNextSet({
+      sessionPlan: plan,
+      observedSets: [
+        { weightKg: 77.5 * LB, reps: 12, rir: 2 },
+        { weightKg: 77.5 * LB, reps: 11, rir: 2 },
+      ],
+      ...nextSetArgs,
+    });
+    const overPace = recommendRepTotalNextSet({
+      sessionPlan: plan,
+      observedSets: [
+        { weightKg: 77.5 * LB, reps: 16, rir: 2 },
+        { weightKg: 77.5 * LB, reps: 15, rir: 2 },
+      ],
+      ...nextSetArgs,
+    });
+    // Over-performance may only hold or RAISE the next ask…
+    expect(overPace.reps).toBeGreaterThanOrEqual(onPace.reps);
+    // …and never dips below the slot's plan target because reps were banked.
+    expect(overPace.reps).toBeGreaterThanOrEqual(plan.perSetRepTargets[2]);
+  });
+
+  it('an ask raised off the plan slot by evidence drops the positional claim', () => {
+    const plan = heldPlan();
+    const next = recommendRepTotalNextSet({
+      sessionPlan: plan,
+      observedSets: [
+        { weightKg: 77.5 * LB, reps: 16, rir: 2 },
+        { weightKg: 77.5 * LB, reps: 15, rir: 2 },
+      ],
+      ...nextSetArgs,
+    });
+    // Set 3's ask now derives from today's set 2, not last session's set 3 —
+    // an INV-4 positional claim would be false provenance.
+    expect(next.reps).toBeGreaterThan(plan.perSetRepTargets[2]);
+    expect(next.positionRef).toBeUndefined();
+  });
+});
+
 describe('ramped history (explicit rule)', () => {
   it('grades and totals TOP-LOAD sets only, and flags rampHistory', () => {
     // ISO-Lateral Low Row live shape: 170/170/180/190/190 lb ramp against an

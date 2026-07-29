@@ -426,6 +426,13 @@ export interface RepTotalNextSet {
   totalSoFar: number;
   /** Reps still needed to reach the session PLAN total (0 when reached). */
   remainingToTarget: number;
+  /**
+   * The EFFECTIVE session target (spec §1/§5): the plan's total on the plan's
+   * load; on a deviating load it is the plan's per-set targets re-priced onto
+   * the actual load (in-range slots stay in-range through the exchange) — the
+   * stale plan total is never served beside a "previous total doesn't apply"
+   * disclaimer. `remainingToTarget` always measures against THIS number.
+   */
   sessionRepTotalTarget: number;
   /**
    * TWO CLAIMS, TWO NUMBERS (the old counter measured progress against the
@@ -521,15 +528,26 @@ export function recommendRepTotalNextSet(input: RepTotalNextSetInput): RepTotalN
           ? 'harder'
           : 'on_target';
 
+  // Re-price a plan rep target onto a different load. Spec §4: the exchange
+  // is a REPRICING, not evidence — an in-range plan target must come out of
+  // it in-range (clamped, both directions). A plan target already outside the
+  // range was put there by last session's observed reps and survives the
+  // exchange as-is (it stays flagged downstream).
+  const repriceOntoLoad = (planReps: number, toKg: number): number => {
+    const exchanged = expectedRepsAfterLoadChange(planReps, sessionPlan.weightKg, toKg);
+    if (planReps >= repMin && planReps <= repMax) {
+      return Math.min(repMax, Math.max(repMin, exchanged));
+    }
+    return exchanged;
+  };
+
   // Plan slot target, exchanged onto today's actual load when it differs from
   // the planned load (a lifter-chosen load must not be graded on the plan's).
   const planSlotReps =
     sessionPlan.perSetRepTargets[slot] ??
     sessionPlan.perSetRepTargets[sessionPlan.perSetRepTargets.length - 1] ??
     repMin;
-  let reps = deviated
-    ? expectedRepsAfterLoadChange(planSlotReps, sessionPlan.weightKg, currentLoadKg)
-    : planSlotReps;
+  let reps = deviated ? repriceOntoLoad(planSlotReps, currentLoadKg) : planSlotReps;
   let weightKg = currentLoadKg;
   let rationale: RepTotalNextSet['rationale'] = 'follow_plan';
 
@@ -558,6 +576,18 @@ export function recommendRepTotalNextSet(input: RepTotalNextSetInput): RepTotalN
     }
   }
 
+  // Evidence floor (spec §2 — the target is a FLOOR, not a budget): a set
+  // that beat its slot's ask raises the next ask instead of leaving a target
+  // the lifter just disproved. The floor is one rep under the last set's
+  // demonstrated ask ceiling at the asked load/effort (the natural
+  // set-to-set fatigue decline); it can only RAISE the ask — banked reps
+  // never reduce a later prescription, and no ask is ever remainder
+  // arithmetic against the session total.
+  if (rationale === 'follow_plan' && last) {
+    const lastSetAskCeiling = observedAskCeiling(last, weightKg, targetRir);
+    reps = Math.max(reps, lastSetAskCeiling - 1);
+  }
+
   // INV-2 analog: once ≥1 set is logged, the ask may not exceed what today's
   // best observed set supports at the asked load and effort.
   let sessionCapacityClamped = false;
@@ -578,12 +608,21 @@ export function recommendRepTotalNextSet(input: RepTotalNextSetInput): RepTotalN
     reps < repMin ? 'below' : reps > repMax ? 'above' : undefined;
 
   // INV-4 analog: positional provenance — only when this slot still follows
-  // the plan at the planned load (a reduced/deviated load has no like-to-like
-  // positional claim).
+  // the plan at the planned load AND the emitted ask is still the plan
+  // slot's number (an ask moved by the evidence floor or the capacity clamp
+  // is no longer anchored by last session's position — claiming so would be
+  // false provenance).
   const refReps =
-    rationale === 'follow_plan' && !deviated && weightKg === currentLoadKg
+    rationale === 'follow_plan' && !deviated && weightKg === currentLoadKg && reps === planSlotReps
       ? sessionPlan.perSetRefReps?.[slot]
       : undefined;
+
+  // Spec §5: a deviating load invalidates the plan total for EVERY consumer —
+  // no branch may emit remainder arithmetic against it. The effective session
+  // target is the plan's per-set targets re-priced onto the actual load.
+  const effectiveSessionTarget = deviated
+    ? sessionPlan.perSetRepTargets.reduce((sum, t) => sum + repriceOntoLoad(t, currentLoadKg), 0)
+    : sessionPlan.sessionRepTotalTarget;
 
   // Beat-last-session accounting — against last session's ACTUAL total,
   // never the plan total, and only when the totals are comparable (same
@@ -596,8 +635,8 @@ export function recommendRepTotalNextSet(input: RepTotalNextSetInput): RepTotalN
     weightKg,
     reps,
     totalSoFar,
-    remainingToTarget: Math.max(0, sessionPlan.sessionRepTotalTarget - totalSoFar),
-    sessionRepTotalTarget: sessionPlan.sessionRepTotalTarget,
+    remainingToTarget: Math.max(0, effectiveSessionTarget - totalSoFar),
+    sessionRepTotalTarget: effectiveSessionTarget,
     remainingToBeatPrev: Math.max(0, prevTotal + 1 - totalSoFar),
     beatPrevBy: Math.max(0, totalSoFar - prevTotal),
     prevSessionRepTotal: prevTotal,

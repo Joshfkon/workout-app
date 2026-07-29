@@ -1858,10 +1858,13 @@ export const ExerciseCard = memo(function ExerciseCard({
             const planLine = `${soFar} of ${next.sessionRepTotalTarget} planned`;
             if (next.loadDeviation) {
               // Carried-over item 1, shipped: a lifter-chosen load off the
-              // plan invalidates the prior total as a target.
-              reason = `rep-total — load changed (${displayWeight(next.loadDeviation.observedKg, true)} vs ${displayWeight(next.loadDeviation.planKg, true)} ${weightLabel}) — previous total doesn't apply`;
+              // plan invalidates the prior total as a target. The engine's
+              // sessionRepTotalTarget is already RE-PRICED onto the actual
+              // load (spec §5) — the copy states the number it now serves,
+              // never a remainder of the total it just disclaimed.
+              reason = `rep-total — load changed (${displayWeight(next.loadDeviation.observedKg, true)} vs ${displayWeight(next.loadDeviation.planKg, true)} ${weightLabel}) — targets re-priced: ${soFar} of ${next.sessionRepTotalTarget} at this load`;
               explanation.push(
-                `You're working at ${displayWeight(next.loadDeviation.observedKg, true)} ${weightLabel}, not the planned ${displayWeight(next.loadDeviation.planKg, true)} ${weightLabel} — rep totals only compare at matched loads, so last session's ${next.prevSessionRepTotal} isn't a target today. Today sets the new baseline at this load; targets are re-priced for it.`
+                `You're working at ${displayWeight(next.loadDeviation.observedKg, true)} ${weightLabel}, not the planned ${displayWeight(next.loadDeviation.planKg, true)} ${weightLabel} — rep totals only compare at matched loads, so last session's ${next.prevSessionRepTotal} isn't a target today. The plan's targets re-price to ${next.sessionRepTotalTarget} total reps at this load; today sets the new baseline.`
               );
             } else if (!next.totalComparable) {
               reason = `rep-total — ${planLine} (new load — last session's ${next.prevSessionRepTotal} was at ${displayWeight(repTotalPlan.refLoadKg, true)} ${weightLabel})`;
