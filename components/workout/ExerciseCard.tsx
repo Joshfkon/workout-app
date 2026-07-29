@@ -3,8 +3,8 @@
 import React, { useState, useEffect, useMemo, memo, useRef, useCallback } from 'react';
 import { Card, Button, ConfirmModal } from '@/components/ui';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/Accordion';
-import type { Exercise, ExerciseBlock, SetLog, WeightUnit, SetQuality, SetFeedback, BodyweightData, ExercisePerformanceSnapshot, StandardMuscleGroup, SorenessRating, SetDiscomfort } from '@/types/schema';
-import { rpeToRir } from '@/types/schema';
+import type { Exercise, ExerciseBlock, SetLog, WeightUnit, SetQuality, SetFeedback, BodyweightData, ExercisePerformanceSnapshot, StandardMuscleGroup, SorenessRating, SetDiscomfort, RepsInTank } from '@/types/schema';
+import { rpeToRir, rirToRpe } from '@/types/schema';
 import { formatSetHistoryLine } from '@/lib/formatSetHistory';
 import { SorenessChipRow, JointPainPicker } from './FeedbackChips';
 import { filterExercises, dedupeExercisesById } from '@/services/exerciseFilter';
@@ -42,6 +42,15 @@ import { BottomSheet } from './BottomSheet';
 import { useKeyboardInset } from '@/hooks/useKeyboardInset';
 
 const MUSCLE_GROUPS = ['chest', 'back', 'shoulders', 'traps', 'biceps', 'triceps', 'quads', 'hamstrings', 'glutes', 'adductors', 'calves', 'abs'];
+
+// Compact RIR chips for the inline set editor — same buckets as RIRSelector.
+// A stored RIR of 3 (logged as RPE 7) lights up the "2-3" chip.
+const EDIT_RIR_OPTIONS: { value: RepsInTank; label: string }[] = [
+  { value: 4, label: '4+' },
+  { value: 2, label: '2-3' },
+  { value: 1, label: '1' },
+  { value: 0, label: '0' },
+];
 
 // Read an exercise's primary muscle defensively: different call sites feed
 // ExerciseCard either camelCase (primaryMuscle, mapped) or raw snake_case
@@ -222,7 +231,7 @@ interface ExerciseCardProps {
   block: ExerciseBlock;
   sets: SetLog[];
   onSetComplete?: (setData: SetCompleteData) => Promise<string | null> | void;  // Returns set ID for feedback
-  onSetEdit?: (setId: string, data: { weightKg: number; reps: number; rpe: number; bodyweightData?: BodyweightData }) => void;
+  onSetEdit?: (setId: string, data: { weightKg: number; reps: number; rpe: number; repsInTank?: RepsInTank; bodyweightData?: BodyweightData }) => void;
   onSetDelete?: (setId: string) => void;
   onSetFeedbackUpdate?: (setId: string, feedback: SetFeedback) => void;  // Update feedback on existing set
   onTargetSetsChange?: (newTargetSets: number) => void;  // Callback to add/remove planned sets
@@ -486,6 +495,10 @@ export const ExerciseCard = memo(function ExerciseCard({
   const [editWeight, setEditWeight] = useState('');
   const [editReps, setEditReps] = useState('');
   const [editRpe, setEditRpe] = useState('');
+  const [editRir, setEditRir] = useState<RepsInTank | null>(null);
+  // RIR shown when editing began — RPE/feedback only change if the user taps
+  // a different chip, so weight/reps-only edits never mutate effort data.
+  const editInitialRirRef = useRef<RepsInTank | null>(null);
   
   // Swipe to delete state
   const [swipeState, setSwipeState] = useState<{
@@ -1691,6 +1704,10 @@ export const ExerciseCard = memo(function ExerciseCard({
     setEditWeight(String(displayWeight(set.weightKg, true))); // Preserve exact value when editing
     setEditReps(String(set.reps));
     setEditRpe(String(set.rpe));
+    // Same read order as the completed-line display: logged chip first, then RPE.
+    const currentRir = set.feedback?.repsInTank ?? rpeToRir(set.rpe);
+    setEditRir(currentRir);
+    editInitialRirRef.current = currentRir;
   };
 
   const cancelEditing = () => {
@@ -1698,6 +1715,8 @@ export const ExerciseCard = memo(function ExerciseCard({
     setEditWeight('');
     setEditReps('');
     setEditRpe('');
+    setEditRir(null);
+    editInitialRirRef.current = null;
   };
 
   const saveEdit = () => {
@@ -1721,7 +1740,20 @@ export const ExerciseCard = memo(function ExerciseCard({
     }
     
     const weightKg = inputWeightToKg(weightNum, unit);
-    onSetEdit(editingSetId, { weightKg, reps: repsNum, rpe: rpeNum });
+    // An RIR chip tap overrides the stored effort; otherwise the original RPE
+    // passes through untouched (the RIR→RPE mapping is coarser than raw RPE).
+    let rpeForSave = rpeNum;
+    let repsInTank: RepsInTank | undefined;
+    if (editRir !== null && editRir !== editInitialRirRef.current) {
+      rpeForSave = rirToRpe(editRir);
+      repsInTank = editRir;
+    }
+    onSetEdit(editingSetId, {
+      weightKg,
+      reps: repsNum,
+      rpe: rpeForSave,
+      ...(repsInTank !== undefined ? { repsInTank } : {}),
+    });
     cancelEditing();
   };
 
@@ -2924,10 +2956,11 @@ export const ExerciseCard = memo(function ExerciseCard({
             );
           }
 
-          // Editing: standard sets get inline weight/reps inputs
+          // Editing: standard sets get inline weight/reps inputs + RIR chips
           if (editingSetId === set.id) {
             return (
-              <div key={set.id} className="flex items-center gap-2 rounded-lg bg-primary-500/10 px-2 py-1.5">
+              <div key={set.id} className="rounded-lg bg-primary-500/10 px-2 py-1.5">
+                <div className="flex items-center gap-2">
                 <span className="w-6 flex-shrink-0 text-[12px] font-medium text-surface-300 text-center">
                   {set.setNumber}
                 </span>
@@ -2985,6 +3018,37 @@ export const ExerciseCard = memo(function ExerciseCard({
                       </svg>
                     </button>
                   )}
+                </div>
+                </div>
+                <div className="mt-1.5 flex items-center gap-1.5 pl-8">
+                  <span className="text-[11px] font-medium text-surface-400">RIR</span>
+                  {EDIT_RIR_OPTIONS.map((option) => {
+                    const isSelected =
+                      editRir === option.value || (option.value === 2 && editRir === 3);
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() =>
+                          // The "2-3" bucket is a band: when the set's exact
+                          // value is already 3, tapping it keeps 3 instead of
+                          // silently rewriting the logged effort to 2 / RPE 7.5.
+                          setEditRir(
+                            option.value === 2 && editInitialRirRef.current === 3 ? 3 : option.value
+                          )
+                        }
+                        aria-label={`Set RIR to ${option.label}`}
+                        aria-pressed={isSelected}
+                        className={`px-2.5 py-1 rounded-full border text-[12px] font-medium transition-colors ${
+                          isSelected
+                            ? 'bg-primary-500 border-primary-500 text-white'
+                            : 'bg-surface-900 border-surface-600 text-surface-300 hover:bg-surface-700'
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             );
