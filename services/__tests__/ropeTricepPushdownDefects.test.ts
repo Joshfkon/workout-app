@@ -119,6 +119,109 @@ describe('cap operates in e1RM space, never in rep counts across loads', () => {
   });
 });
 
+describe('regression 4 — rationale provenance: stated direction matches the actual change', () => {
+  /**
+   * The live defect was structural: the rationale string was composed from
+   * the match branch while the cap changed the number ("go one more rep"
+   * over one rep fewer). The provenance is now emitted from the FINAL
+   * numbers; this asserts its stated direction always equals the measured
+   * sign of the change vs. the referenced set, and that the source names
+   * the stage that actually produced the number.
+   */
+  const measuredDirection = (rec: ReturnType<typeof recommendSet>) => {
+    const ref = rec.provenance!.referenceSet!;
+    const basis = Math.min(ref.rir ?? rec.rir, rec.rir);
+    const refValue = impliedE1RMFloor(ref.weightKg, ref.reps, basis)!;
+    const finalValue = impliedE1RMFloor(rec.weightKg, rec.reps, basis)!;
+    return finalValue > refValue ? 'progress' : finalValue < refValue ? 'regress' : 'repeat';
+  };
+
+  it('pushdown set 2: a load-lever progression states progress — and actually progresses', () => {
+    const rec = recommendSet(afterSets(1));
+    expect(rec.provenance?.source).toBe('load_lever');
+    expect(rec.provenance?.direction).toBe('progress');
+    expect(measuredDirection(rec)).toBe('progress');
+  });
+
+  it('a cap-trimmed match states regress — never a progression claim', () => {
+    // Weak day: the positional replay is trimmed under today's demonstrated
+    // capacity. The provenance must own that as the capacity cap with a
+    // regress direction; a "go one more rep" claim is structurally gone.
+    const rec = recommendSet({
+      lastWeightKg: 100,
+      lastReps: 6,
+      lastRir: 2,
+      setsCompletedThisExercise: 1,
+      targetRepRange: [3, 12],
+      targetRir: 2,
+      minIncrementKg: 2.5,
+      positionContext: {
+        prevSessionSets: [
+          { weightKg: 100, reps: 10, rir: 2 },
+          { weightKg: 100, reps: 10, rir: 2 },
+          { weightKg: 100, reps: 9, rir: 1 },
+        ],
+        todaySets: [{ weightKg: 100, reps: 6 }],
+        plannedSetCount: 3,
+      },
+    });
+    expect(rec.provenance?.source).toBe('session_capacity_cap');
+    expect(rec.provenance?.direction).toBe('regress');
+    expect(measuredDirection(rec)).toBe('regress');
+  });
+
+  it('a verbatim hold states repeat — and actually repeats', () => {
+    const rec = recommendSet({
+      lastWeightKg: 182.5,
+      lastReps: 9,
+      lastRir: 2,
+      setsCompletedThisExercise: 1,
+      targetRepRange: [8, 12],
+      targetRir: 2,
+      minIncrementKg: 2.5,
+      positionContext: {
+        prevSessionSets: [
+          { weightKg: 182.5, reps: 8, rir: 2.5 },
+          { weightKg: 192.5, reps: 8, rir: 1 },
+          { weightKg: 202.5, reps: 5, rir: 0 },
+          { weightKg: 182.5, reps: 7, rir: 0 },
+        ],
+        todaySets: [{ weightKg: 182.5, reps: 9 }],
+        plannedSetCount: 4,
+      },
+    });
+    expect(rec.provenance?.source).toBe('position_match');
+    expect(rec.positionMatch?.progression).toBe('hold');
+    expect(rec.provenance?.direction).toBe('repeat');
+    expect(measuredDirection(rec)).toBe('repeat');
+  });
+
+  it('an in-domain add_rep states progress — and actually progresses', () => {
+    const rec = recommendSet({
+      lastWeightKg: 100,
+      lastReps: 8,
+      lastRir: 2,
+      setsCompletedThisExercise: 1,
+      targetRepRange: [8, 12],
+      targetRir: 2,
+      minIncrementKg: 2.5,
+      sessionObservedSets: [],
+      positionContext: {
+        prevSessionSets: [
+          { weightKg: 100, reps: 8, rir: 2 },
+          { weightKg: 100, reps: 7, rir: 2 },
+        ],
+        todaySets: [{ weightKg: 100, reps: 8 }],
+        plannedSetCount: 2,
+      },
+    });
+    expect(rec.positionMatch?.progression).toBe('add_rep');
+    expect(rec.provenance?.source).toBe('position_match');
+    expect(rec.provenance?.direction).toBe('progress');
+    expect(measuredDirection(rec)).toBe('progress');
+  });
+});
+
 describe('sessionCapacityCapE1RM — cap semantics', () => {
   const set1 = { weightKg: 72.5, reps: 12, rir: 2 };
   const set2 = { weightKg: 70, reps: 13, rir: 2 };

@@ -229,6 +229,7 @@ describe('engine regression baseline — staple exercise, recent history', () =>
       rir: TARGET_RIR,
       rationale: 'maintain',
       effortVsTarget: 'on_target',
+      provenance: { source: 'anchor' },
     });
   });
 

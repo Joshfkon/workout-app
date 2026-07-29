@@ -155,11 +155,43 @@ export interface PositionContext {
   plannedSetCount: number;
 }
 
+/**
+ * 2026-07-29 step 4 — rationale provenance. Emitted by `finalizeRec` from the
+ * FINAL numbers, after every stage that can change them, so it is
+ * structurally impossible for a prescription to carry a number from one
+ * branch and a rationale from another (the live defect: "go one more rep"
+ * attached to a cap-trimmed number one rep FEWER than the referenced set).
+ *
+ * `direction` is COMPUTED from the final numbers vs the referenced set in
+ * canonical implied-e1RM space — never asserted by a branch. UI copy must
+ * derive its claim from (source, direction): a progression phrase is only
+ * legal when the direction actually is 'progress'.
+ */
+export interface PrescriptionProvenance {
+  /** The stage that produced the FINAL numbers. */
+  source:
+    | 'position_match' // the matched branch's own ask survived untouched
+    | 'load_lever' // step 3: rep lever blocked → load stepped, reps re-solved
+    | 'rep_resolve' // step 3: reps re-solved at the same load
+    | 'session_capacity_cap' // INV-2 trimmed the ask (fatigue owns the set)
+    | 'monotonicity_floor' // step-2 guard restored the floor
+    | 'anchor'; // anchor-path branch (hold / increase / reduce)
+  /** The matched previous-session set the prescription references, when any. */
+  referenceSet?: { weightKg: number; reps: number; rir?: number };
+  /** Final prescription vs referenceSet, in canonical implied-e1RM space. */
+  direction?: 'progress' | 'repeat' | 'regress';
+}
+
 export interface SetRecommendation {
   weightKg: number;
   reps: number;
   rir: number;
   rationale: 'maintain' | 'increase_load' | 'reduce_load';
+  /**
+   * Rationale provenance (step 4) — present on every within-session
+   * prescription that ran the finalize pipeline. See PrescriptionProvenance.
+   */
+  provenance?: PrescriptionProvenance;
   /**
    * How the REFERENCE set's actual effort compared to the target RIR, derived
    * from the same `dev` (lastRir − targetRir) the weight/rep math uses. The
@@ -896,6 +928,7 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
   // contradiction (never "8-12 @ 2 RIR" silently over a ×7 prefill).
   const finalizeRec = (rec: SetRecommendation): SetRecommendation => {
     const out = { ...rec };
+    let floorRestored = false;
 
     const capE1RM =
       n >= 1 && out.weightKg > 0
@@ -1046,6 +1079,7 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
               `set's ${refFloor} — raised to ×${restored}.`
           );
           out.reps = restored;
+          floorRestored = true;
         } else {
           console.warn(
             `[setRecommender] monotonicity floor: ${producingBranch} produced ` +
@@ -1060,6 +1094,57 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
 
     if (out.reps < repMin) out.outsideRange = 'below';
     else if (out.reps > repMax) out.outsideRange = 'above';
+
+    // ---- Rationale provenance (2026-07-29 step 4) ----
+    // Emitted from the FINAL numbers, after every stage that can change
+    // them. The load-direction enum is recomputed here for the same reason:
+    // a lever/guard that moved the load must never leave a branch's stale
+    // 'maintain' behind.
+    out.rationale =
+      out.weightKg > lastWeightKg
+        ? 'increase_load'
+        : out.weightKg < lastWeightKg
+          ? 'reduce_load'
+          : 'maintain';
+    const source: PrescriptionProvenance['source'] = floorRestored
+      ? 'monotonicity_floor'
+      : out.progressionLever === 'load'
+        ? 'load_lever'
+        : out.progressionLever === 'reps'
+          ? 'rep_resolve'
+          : out.sessionCapacityClamped
+            ? 'session_capacity_cap'
+            : out.positionMatch
+              ? 'position_match'
+              : 'anchor';
+    if (out.positionMatch) {
+      const pm = out.positionMatch;
+      const refValue = impliedE1RMFloor(
+        pm.prevWeightKg,
+        pm.prevReps,
+        Math.max(0, Math.min(pm.prevRir ?? out.rir, out.rir))
+      );
+      const finalValue = impliedE1RMFloor(out.weightKg, out.reps, askedRir);
+      const direction =
+        refValue == null || finalValue == null
+          ? undefined
+          : finalValue > refValue
+            ? ('progress' as const)
+            : finalValue < refValue
+              ? ('regress' as const)
+              : ('repeat' as const);
+      out.provenance = {
+        source,
+        referenceSet: {
+          weightKg: pm.prevWeightKg,
+          reps: pm.prevReps,
+          ...(pm.prevRir !== undefined ? { rir: pm.prevRir } : {}),
+        },
+        ...(direction ? { direction } : {}),
+      };
+    } else {
+      out.provenance = { source };
+    }
 
     return out;
   };
