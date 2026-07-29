@@ -261,6 +261,24 @@ export const HIGH_REP_COST_MIN_PER_PCT = 0.15;
 export const REP_TOTAL_VOLUME_SHORTFALL_TOLERANCE = 0.05;
 
 /**
+ * Rep-total target growth per rep of demonstrated overshoot (spec §3). The
+ * overshoot is measured in rep space: the margin by which last session's
+ * total beat the session before it (at the same load) plus the effort left
+ * in reserve beyond the asked RIR. Half a rep of target growth per overshoot
+ * rep asks for real progress after a decisive session without demanding the
+ * whole demonstrated surplus at once. A session with no overshoot keeps the
+ * +1 baseline.
+ */
+export const REP_TOTAL_OVERSHOOT_GAIN = 0.5;
+
+/**
+ * Cap on per-session rep-total target growth, as a fraction of last
+ * session's total (min 2 so small totals can still scale) — overshoot
+ * scaling must never let one outlier session run the target away.
+ */
+export const REP_TOTAL_TARGET_GROWTH_CAP_FRACTION = 0.10;
+
+/**
  * Two rep_total loads count as THE SAME load when they differ by no more
  * than max(half the smallest increment, this fraction). Everything beyond it
  * is a genuine load change: rep totals stop being comparable (the prior

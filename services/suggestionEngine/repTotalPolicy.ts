@@ -101,6 +101,8 @@ import {
   HIGH_REP_COST_MIN_PER_PCT,
   REP_TOTAL_VOLUME_SHORTFALL_TOLERANCE,
   REP_TOTAL_LOAD_MATCH_FRACTION,
+  REP_TOTAL_OVERSHOOT_GAIN,
+  REP_TOTAL_TARGET_GROWTH_CAP_FRACTION,
 } from './constants';
 import { smallestIncrement, roundPrescribedLoad } from './loadGrid';
 
@@ -266,6 +268,13 @@ export interface RepTotalSessionStart {
  */
 export function recommendRepTotalSessionStart(input: {
   prevSessionSets: PrevSessionSet[];
+  /**
+   * Working sets from the session BEFORE last (same eligibility), when the
+   * history carries them. Feeds the overshoot-scaled target increment
+   * (spec §3): how far last session's total beat the one before it, at the
+   * same load. Omitted → the rep-margin component is simply 0.
+   */
+  priorSessionSets?: PrevSessionSet[];
   targetRepRange: [number, number];
   targetRir: number;
   minIncrementKg?: number;
@@ -382,6 +391,37 @@ export function recommendRepTotalSessionStart(input: {
     bumpDeferred = 'load_cost';
   }
 
+  // ---- Target increment (spec §3): scaled to last session's overshoot ----
+  // A constant +1 (~3% on a 30-rep total) is functionally a stall and blind
+  // to how decisively the prior target was beaten. Rep-space overshoot has
+  // two components, both observable without e1RM math:
+  //   - rep margin: how far last session's total beat the minimal target
+  //     implied by the session before it (prior total + 1), at the SAME load
+  //     (totals at different loads are not comparable — spec §5);
+  //   - effort surplus: reps left in reserve beyond the asked RIR across the
+  //     at-load sets (capacity shown but not banked as reps).
+  // Growth is capped per session so one outlier can't run the target away.
+  const effortSurplus = atLoad.reduce(
+    (s, x) => s + Math.max(0, (x.rir ?? targetRir) - targetRir),
+    0
+  );
+  let repMargin = 0;
+  const priorValid = (input.priorSessionSets ?? []).filter((s) => s.weightKg > 0 && s.reps > 0);
+  if (priorValid.length > 0) {
+    const priorTop = priorValid.reduce((m, s) => (s.weightKg > m ? s.weightKg : m), 0);
+    if (Math.abs(priorTop - topLoad) <= atLoadToleranceKg) {
+      const priorTotal = priorValid
+        .filter((s) => s.weightKg >= priorTop - atLoadToleranceKg)
+        .reduce((sum, s) => sum + s.reps, 0);
+      repMargin = Math.max(0, prevTotal - (priorTotal + 1));
+    }
+  }
+  const growthCap = Math.max(2, Math.round(prevTotal * REP_TOTAL_TARGET_GROWTH_CAP_FRACTION));
+  const targetIncrement = Math.min(
+    growthCap,
+    1 + Math.round(REP_TOTAL_OVERSHOOT_GAIN * (repMargin + effortSurplus))
+  );
+
   // Repeat the load VERBATIM and chase the total: per-set seeds mirror last
   // session's counts (floored at repMin so a collapsed set re-asks the floor),
   // padded with the floor for any extra planned sets. The plan covers at
@@ -395,7 +435,7 @@ export function recommendRepTotalSessionStart(input: {
     weightKg: topLoad,
     perSetRepTargets: perSet,
     perSetRefReps: Array.from({ length: perSet.length }, (_, i) => atLoad[i]?.reps),
-    sessionRepTotalTarget: prevTotal + 1,
+    sessionRepTotalTarget: prevTotal + targetIncrement,
     prevSessionRepTotal: prevTotal,
     bumped: false,
     ...(bumpDeferred ? { bumpDeferred } : {}),

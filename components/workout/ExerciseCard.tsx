@@ -1029,6 +1029,10 @@ export const ExerciseCard = memo(function ExerciseCard({
       repTotalMode
         ? recommendRepTotalSessionStart({
             prevSessionSets: prevSessionSetsForGating,
+            // Session BEFORE last: feeds the overshoot-scaled target
+            // increment (a target met with a wide margin grows by more
+            // than the +1 baseline).
+            priorSessionSets: priorSessionSetsForGating,
             targetRepRange: block.targetRepRange,
             targetRir: effectiveTargetRir,
             minIncrementKg: exercise.minWeightIncrementKg,
@@ -1039,7 +1043,7 @@ export const ExerciseCard = memo(function ExerciseCard({
             plannedSets: block.targetSets,
           })
         : null,
-    [repTotalMode, prevSessionSetsForGating, block.targetRepRange, block.targetSets, effectiveTargetRir, exercise.minWeightIncrementKg, exercise.availableIncrementsKg]
+    [repTotalMode, prevSessionSetsForGating, priorSessionSetsForGating, block.targetRepRange, block.targetSets, effectiveTargetRir, exercise.minWeightIncrementKg, exercise.availableIncrementsKg]
   );
 
   // Re-derived next-set target for a rep_total exercise (planner parity with

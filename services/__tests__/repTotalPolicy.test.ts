@@ -611,6 +611,122 @@ describe('stale-total remainder + floor-not-budget (Step 2, 2026-07-29 live defe
   });
 });
 
+describe('overshoot-scaled target increment (Step 3, 2026-07-29 live defects)', () => {
+  const LB = 0.45359237;
+  const epley = (w: number, reps: number, rir: number) => w * (1 + (reps + rir) / 30);
+  const kelsoArgs = {
+    targetRepRange: [8, 12] as [number, number],
+    targetRir: 2,
+    minIncrementKg: 2.27,
+  };
+
+  it('Exercise B set 2: the ask responds to a 14 @3RIR overshoot, never re-serving the plan slot (regression 5)', () => {
+    // Live defect: set 1 logged 62.5×14 @3 RIR (implied capacity ~12% above
+    // last session) and set 2 was still prescribed 62.5×10 — the range
+    // midpoint / last session's per-set reps. The evidence floor must raise
+    // the ask, and the range ceiling must not claw it back (Step 2b/3b).
+    const plan = recommendRepTotalSessionStart({
+      prevSessionSets: [
+        { weightKg: 62.5 * LB, reps: 10, rir: 2 },
+        { weightKg: 62.5 * LB, reps: 10, rir: 2 },
+        { weightKg: 62.5 * LB, reps: 10, rir: 2 },
+      ],
+      ...kelsoArgs,
+      plannedSets: 3,
+    })!;
+    const next = recommendRepTotalNextSet({
+      sessionPlan: plan,
+      observedSets: [{ weightKg: 62.5 * LB, reps: 14, rir: 3 }],
+      ...kelsoArgs,
+    });
+    expect(next.weightKg).toBeCloseTo(62.5 * LB, 5);
+    // The ask's implied capacity at target effort beats last session's sets.
+    expect(epley(next.weightKg, next.reps, 2)).toBeGreaterThan(epley(62.5 * LB, 10, 2));
+    expect(next.reps).toBeGreaterThan(10); // not last session's per-set reps
+    // Above the ceiling on the strength of today's evidence — flagged, not
+    // clamped back to the midpoint.
+    expect(next.outsideRange).toBe('above');
+  });
+
+  it('Exercise B next session: a target met with a wide margin grows by more than +1 (regression 6)', () => {
+    // Prior session 3×10 @2 (total 30); last session beat it at ~12% higher
+    // implied capacity (14 @3 top set, total 34). The old constant +1 was a
+    // stall dressed as progression.
+    const plan = recommendRepTotalSessionStart({
+      prevSessionSets: [
+        { weightKg: 62.5 * LB, reps: 14, rir: 3 },
+        { weightKg: 62.5 * LB, reps: 12, rir: 2 },
+        { weightKg: 62.5 * LB, reps: 8, rir: 2 },
+      ],
+      priorSessionSets: [
+        { weightKg: 62.5 * LB, reps: 10, rir: 2 },
+        { weightKg: 62.5 * LB, reps: 10, rir: 2 },
+        { weightKg: 62.5 * LB, reps: 10, rir: 2 },
+      ],
+      ...kelsoArgs,
+      plannedSets: 3,
+    })!;
+    // Still a load repeat (the 5 lb step prices the 8-rep set under the
+    // floor) — the growth must live in the TARGET.
+    expect(plan.bumpDeferred).toBe('load_cost');
+    const increment = plan.sessionRepTotalTarget - plan.prevSessionRepTotal;
+    expect(increment).toBeGreaterThan(1);
+  });
+
+  it('per-session target growth is capped — one outlier session cannot run the target away', () => {
+    const plan = recommendRepTotalSessionStart({
+      prevSessionSets: [
+        { weightKg: 62.5 * LB, reps: 20, rir: 4 },
+        { weightKg: 62.5 * LB, reps: 20, rir: 4 },
+        { weightKg: 62.5 * LB, reps: 20, rir: 4 },
+      ],
+      priorSessionSets: [
+        { weightKg: 62.5 * LB, reps: 10, rir: 2 },
+        { weightKg: 62.5 * LB, reps: 10, rir: 2 },
+        { weightKg: 62.5 * LB, reps: 10, rir: 2 },
+      ],
+      ...kelsoArgs,
+      plannedSets: 3,
+    })!;
+    const increment = plan.sessionRepTotalTarget - plan.prevSessionRepTotal;
+    expect(increment).toBeGreaterThan(1);
+    expect(increment).toBeLessThanOrEqual(Math.max(2, Math.round(60 * 0.1)));
+  });
+
+  it('no overshoot keeps the +1 baseline (on-target session, no prior margin)', () => {
+    const plan = recommendRepTotalSessionStart({
+      prevSessionSets: [
+        { weightKg: 62.5 * LB, reps: 10, rir: 2 },
+        { weightKg: 62.5 * LB, reps: 10, rir: 2 },
+        { weightKg: 62.5 * LB, reps: 10, rir: 2 },
+      ],
+      ...kelsoArgs,
+      plannedSets: 3,
+    })!;
+    expect(plan.sessionRepTotalTarget).toBe(31);
+  });
+
+  it('totals at DIFFERENT loads contribute no rep margin (spec §5)', () => {
+    const plan = recommendRepTotalSessionStart({
+      prevSessionSets: [
+        { weightKg: 62.5 * LB, reps: 10, rir: 2 },
+        { weightKg: 62.5 * LB, reps: 10, rir: 2 },
+        { weightKg: 62.5 * LB, reps: 10, rir: 2 },
+      ],
+      // Session before last was at a lighter load — its 36-rep total is not
+      // comparable and must not read as negative-or-positive margin.
+      priorSessionSets: [
+        { weightKg: 55 * LB, reps: 12, rir: 2 },
+        { weightKg: 55 * LB, reps: 12, rir: 2 },
+        { weightKg: 55 * LB, reps: 12, rir: 2 },
+      ],
+      ...kelsoArgs,
+      plannedSets: 3,
+    })!;
+    expect(plan.sessionRepTotalTarget).toBe(31);
+  });
+});
+
 describe('ramped history (explicit rule)', () => {
   it('grades and totals TOP-LOAD sets only, and flags rampHistory', () => {
     // ISO-Lateral Low Row live shape: 170/170/180/190/190 lb ramp against an
