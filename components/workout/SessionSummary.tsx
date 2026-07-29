@@ -295,77 +295,93 @@ export function SessionSummary({
 
       const isDurationBlock = durationBlockIds.has(block.id);
 
-      // Find best set this workout (considering form)
-      let bestWeight = 0;
-      let bestReps = 0;
-      let bestE1RM = 0;
-      let bestForm: FormRating = 'clean';
+      // Every PR candidate is a WHOLE row — one real set whose fields are
+      // compared and reported together. Independent per-column maxes spliced
+      // a light set's rep count with a heavy set's load, so the "reps at
+      // comparable weight" gate passed on two different sets and fired PRs
+      // for performances that never happened. Ugly-form sets can't set a
+      // record; each PR's form note describes the set that actually won it.
+      const setForm = (s: SetLog): FormRating => s.feedback?.form || 'clean';
+      const eligible = sets.filter((s) => setForm(s) !== 'ugly');
+      if (eligible.length === 0) return;
 
-      sets.forEach((set) => {
-        const setForm = set.feedback?.form || 'clean';
+      // Heaviest set (ties: most reps).
+      const heaviestSet = eligible.reduce((best, s) =>
+        s.weightKg > best.weightKg ||
+        (s.weightKg === best.weightKg && s.reps > best.reps)
+          ? s
+          : best
+      );
 
-        // Skip ugly form sets for PR consideration
-        if (setForm === 'ugly') return;
-
-        if (set.weightKg > bestWeight) {
-          bestWeight = set.weightKg;
-          bestForm = setForm;
-        }
-        if (set.reps > bestReps) bestReps = set.reps;
-        if (!isDurationBlock) {
-          // e1RM is explicitly excluded for duration blocks: seconds through
-          // the rep formula fabricate a 1RM. Canonical estimator with the
-          // set's logged RPE; 0 = no estimate (never displayed as a value).
-          const e1rm = e1rmValueFromRpe(set.weightKg, set.reps, set.rpe);
-          if (e1rm > bestE1RM) bestE1RM = e1rm;
-        }
-      });
+      // Reps/duration record candidate: the previous best's count must be
+      // beaten AT a comparable load — both conditions on the SAME set (reps
+      // carry seconds for duration blocks). Ties: heavier load.
+      const repsAtLoadSet = eligible
+        .filter((s) => s.weightKg >= history.previousBest!.weight * 0.95)
+        .reduce<SetLog | null>(
+          (best, s) =>
+            !best ||
+            s.reps > best.reps ||
+            (s.reps === best.reps && s.weightKg > best.weightKg)
+              ? s
+              : best,
+          null
+        );
 
       const exerciseName = (block as any).exercise?.name || 'Exercise';
 
-      // No PR if best set had ugly form
-      const hasUglyBestSet = sets.some(
-        (s) => s.weightKg === bestWeight && s.feedback?.form === 'ugly'
-      );
-      if (hasUglyBestSet) {
-        // Could add a "potential PR" note here if desired
-        return;
-      }
-
       // Duration exercise: the record is max seconds at (>=) weight — never
-      // e1RM/reps. bestReps carries SECONDS here.
+      // e1RM/reps.
       if (isDurationBlock) {
-        if (bestWeight > history.previousBest.weight) {
+        if (heaviestSet.weightKg > history.previousBest.weight) {
           prs.push({
             blockId: block.id,
             exerciseName,
             type: 'weight',
-            value: bestWeight,
+            value: heaviestSet.weightKg,
             improvement: Math.round(
-              ((bestWeight - history.previousBest.weight) / history.previousBest.weight) * 100
+              ((heaviestSet.weightKg - history.previousBest.weight) / history.previousBest.weight) * 100
             ),
-            form: bestForm,
-            formNote: bestForm === 'clean' ? 'Clean form' : 'Some breakdown',
+            form: setForm(heaviestSet),
+            formNote: setForm(heaviestSet) === 'clean' ? 'Clean form' : 'Some breakdown',
           });
-        } else if (
-          bestReps > history.previousBest.reps &&
-          bestWeight >= history.previousBest.weight * 0.95
-        ) {
+        } else if (repsAtLoadSet && repsAtLoadSet.reps > history.previousBest.reps) {
           prs.push({
             blockId: block.id,
             exerciseName,
             type: 'duration',
-            value: bestReps,
-            improvement: bestReps - history.previousBest.reps,
-            form: bestForm,
-            formNote: bestForm === 'clean' ? 'Clean form' : 'Some breakdown',
+            value: repsAtLoadSet.reps,
+            improvement: repsAtLoadSet.reps - history.previousBest.reps,
+            form: setForm(repsAtLoadSet),
+            formNote: setForm(repsAtLoadSet) === 'clean' ? 'Clean form' : 'Some breakdown',
           });
         }
         return;
       }
 
+      // Best-e1RM set, whole row (ties: heavier, then more reps). e1RM is
+      // explicitly excluded for duration blocks: seconds through the rep
+      // formula fabricate a 1RM. Canonical estimator with the set's logged
+      // RPE; 0 = no estimate (never displayed as a value).
+      let bestE1rmSet: SetLog | null = null;
+      let bestE1RM = 0;
+      eligible.forEach((s) => {
+        const e1rm = e1rmValueFromRpe(s.weightKg, s.reps, s.rpe);
+        if (e1rm <= 0) return;
+        if (
+          !bestE1rmSet ||
+          e1rm > bestE1RM ||
+          (e1rm === bestE1RM &&
+            (s.weightKg > bestE1rmSet.weightKg ||
+              (s.weightKg === bestE1rmSet.weightKg && s.reps > bestE1rmSet.reps)))
+        ) {
+          bestE1rmSet = s;
+          bestE1RM = e1rm;
+        }
+      });
+
       // Check for E1RM PR (most meaningful)
-      if (bestE1RM > history.previousBest.e1rm) {
+      if (bestE1rmSet && bestE1RM > history.previousBest.e1rm) {
         prs.push({
           blockId: block.id,
           exerciseName,
@@ -374,34 +390,34 @@ export function SessionSummary({
           improvement: Math.round(
             ((bestE1RM - history.previousBest.e1rm) / history.previousBest.e1rm) * 100
           ),
-          form: bestForm,
-          formNote: bestForm === 'clean' ? 'Clean form' : 'Some breakdown',
+          form: setForm(bestE1rmSet),
+          formNote: setForm(bestE1rmSet) === 'clean' ? 'Clean form' : 'Some breakdown',
         });
       }
       // Check for weight PR
-      else if (bestWeight > history.previousBest.weight) {
+      else if (heaviestSet.weightKg > history.previousBest.weight) {
         prs.push({
           blockId: block.id,
           exerciseName,
           type: 'weight',
-          value: bestWeight,
+          value: heaviestSet.weightKg,
           improvement: Math.round(
-            ((bestWeight - history.previousBest.weight) / history.previousBest.weight) * 100
+            ((heaviestSet.weightKg - history.previousBest.weight) / history.previousBest.weight) * 100
           ),
-          form: bestForm,
-          formNote: bestForm === 'clean' ? 'Clean form' : 'Some breakdown',
+          form: setForm(heaviestSet),
+          formNote: setForm(heaviestSet) === 'clean' ? 'Clean form' : 'Some breakdown',
         });
       }
-      // Check for reps PR (at same or higher weight)
-      else if (bestReps > history.previousBest.reps && bestWeight >= history.previousBest.weight * 0.95) {
+      // Check for reps PR (same set beat the count at comparable weight)
+      else if (repsAtLoadSet && repsAtLoadSet.reps > history.previousBest.reps) {
         prs.push({
           blockId: block.id,
           exerciseName,
           type: 'reps',
-          value: bestReps,
-          improvement: bestReps - history.previousBest.reps,
-          form: bestForm,
-          formNote: bestForm === 'clean' ? 'Clean form' : 'Some breakdown',
+          value: repsAtLoadSet.reps,
+          improvement: repsAtLoadSet.reps - history.previousBest.reps,
+          form: setForm(repsAtLoadSet),
+          formNote: setForm(repsAtLoadSet) === 'clean' ? 'Clean form' : 'Some breakdown',
         });
       }
     });
@@ -568,12 +584,27 @@ export function SessionSummary({
         ? Math.max(...sets.map(s => e1rmValueFromRpe(s.weightKg, s.reps, s.rpe)))
         : 0;
 
+      // Longest-hold set as a WHOLE row (duration only) — its seconds and
+      // load render together; never the pool max of each column, which reads
+      // as a hold that was never performed. Ties: heavier load.
+      const bestHoldSet = isDuration && sets.length > 0
+        ? sets.reduce((best, s) =>
+            s.reps > best.reps || (s.reps === best.reps && s.weightKg > best.weightKg)
+              ? s
+              : best
+          )
+        : null;
+
       // Check if this exercise had a PR (never on a deload session). Duration
       // blocks defer to the modality-aware personalRecords list.
       const history = exerciseHistories?.[block.exerciseId || ''];
       const hasPR = isDuration
         ? personalRecords.some((pr) => pr.blockId === block.id)
         : !isDeload && history?.previousBest && bestE1RM > history.previousBest.e1rm;
+
+      // The PR this block earned, if any — the comparison row renders the
+      // record's own value, not a pool-wide column max.
+      const pr = personalRecords.find((p) => p.blockId === block.id) ?? null;
 
       return {
         blockId: block.id,
@@ -588,6 +619,8 @@ export function SessionSummary({
         maxReps,
         avgRpe,
         bestE1RM,
+        bestHoldSet,
+        pr,
         hasPR,
         targetSets: block.targetSets,
         targetRepsMin: (block as any).targetRepsMin,
@@ -1311,8 +1344,18 @@ export function SessionSummary({
                         <div className="grid grid-cols-4 gap-2 py-3">
                           {exercise.isDuration ? (
                             <div className="text-center">
-                              <p className="text-sm font-bold text-surface-200">{exercise.maxReps}s</p>
-                              <p className="text-xs text-surface-500">Max Hold</p>
+                              {/* One real set: the hold and the load it was
+                                  held at come from the same row (a pool-max
+                                  pair beside "Top Wt" read as a hold that
+                                  never happened). */}
+                              <p className="text-sm font-bold text-surface-200">
+                                {exercise.bestHoldSet ? `${exercise.bestHoldSet.reps}s` : '—'}
+                              </p>
+                              <p className="text-xs text-surface-500">
+                                {exercise.bestHoldSet && exercise.bestHoldSet.weightKg > 0
+                                  ? `Best Hold @ ${displayWeight(exercise.bestHoldSet.weightKg)}${weightUnit}`
+                                  : 'Best Hold'}
+                              </p>
                             </div>
                           ) : (
                             <div className="text-center">
@@ -1425,9 +1468,19 @@ export function SessionSummary({
                             <div className="flex items-center justify-between text-sm">
                               <span className="text-yellow-400">🏆 New Personal Record!</span>
                               {exercise.isDuration ? (
-                                <span className="text-surface-300">
-                                  {exerciseHistories[exercise.exerciseId || ''].previousBest?.reps || 0}s → <span className="font-bold text-yellow-400">{exercise.maxReps}s</span>
-                                </span>
+                                // The progression line shows the winning
+                                // record's own value (a weight PR compares
+                                // loads, a hold PR compares seconds) — not a
+                                // pool-wide column max at an unstated load.
+                                exercise.pr?.type === 'weight' ? (
+                                  <span className="text-surface-300">
+                                    {displayWeight(exerciseHistories[exercise.exerciseId || ''].previousBest?.weight || 0)}{weightUnit} → <span className="font-bold text-yellow-400">{displayWeight(exercise.pr.value)}{weightUnit}</span>
+                                  </span>
+                                ) : (
+                                  <span className="text-surface-300">
+                                    {exerciseHistories[exercise.exerciseId || ''].previousBest?.reps || 0}s → <span className="font-bold text-yellow-400">{exercise.pr ? exercise.pr.value : exercise.bestHoldSet?.reps ?? 0}s</span>
+                                  </span>
+                                )
                               ) : (
                                 <span className="text-surface-300">
                                   {displayWeight(exerciseHistories[exercise.exerciseId || ''].previousBest?.e1rm || 0)}{weightUnit} → <span className="font-bold text-yellow-400">{displayWeight(exercise.bestE1RM)}{weightUnit}</span>

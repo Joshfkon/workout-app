@@ -19,7 +19,7 @@
   "components/workout/ExerciseCard.tsx": 56,
   "components/workout/ExerciseDetailsModal.tsx": 1,
   "components/workout/exercisePerformance.ts": 3,
-  "components/workout/SessionSummary.tsx": 19,
+  "components/workout/SessionSummary.tsx": 37,
   "components/workout/SuggestionBanner.tsx": 3,
   "hooks/useBestLifts.ts": 5,
   "hooks/useExerciseDetailHistory.ts": 2,
