@@ -220,6 +220,14 @@ export interface OutboxSupabase {
 export interface FlushResult {
   flushedIds: string[];
   failedIds: string[];
+  /**
+   * Subset of failedIds the SERVER rejected (RLS, constraint, deleted
+   * parent…) — the write reached the database and was refused, as opposed
+   * to a connectivity failure. Entries are still retried up to the attempt
+   * cap, but callers holding optimistic state that assumed the write would
+   * land should reconcile it against the server when an id shows up here.
+   */
+  rejectedIds: string[];
 }
 
 /** True for connectivity-shaped failures (retry later), false for real rejections. */
@@ -307,6 +315,7 @@ async function doFlush(supabase: OutboxSupabase, timeoutMs: number): Promise<Flu
   const entries = await listOutbox();
   const flushedIds: string[] = [];
   const failedIds: string[] = [];
+  const rejectedIds: string[] = [];
 
   for (const entry of entries) {
     try {
@@ -333,7 +342,14 @@ async function doFlush(supabase: OutboxSupabase, timeoutMs: number): Promise<Flu
       }
 
       if (!error) {
-        await d.delete(entry.id);
+        // Delete only the payload we actually sent: a same-id entry may have
+        // been replaced with a newer patch while this write was in flight
+        // (edit-before-sync semantics) — deleting blindly would drop that
+        // newer write. A kept entry goes out on the next flush.
+        const current = await d.get(entry.id);
+        if (!current || JSON.stringify(current.row) === JSON.stringify(entry.row)) {
+          await d.delete(entry.id);
+        }
         flushedIds.push(entry.id);
       } else if (isNetworkError(error)) {
         // Still offline (or flapping) — keep the entry, stop hammering.
@@ -349,6 +365,7 @@ async function doFlush(supabase: OutboxSupabase, timeoutMs: number): Promise<Flu
           await d.put({ ...entry, attempts: entry.attempts + 1 });
         }
         failedIds.push(entry.id);
+        rejectedIds.push(entry.id);
       }
     } catch (e) {
       await d.put({ ...entry, attempts: entry.attempts + 1 });
@@ -357,5 +374,5 @@ async function doFlush(supabase: OutboxSupabase, timeoutMs: number): Promise<Flu
     }
   }
 
-  return { flushedIds, failedIds };
+  return { flushedIds, failedIds, rejectedIds };
 }

@@ -168,6 +168,33 @@ describe('setOutbox', () => {
       const result = await flushSetOutbox(client);
       expect(result.failedIds).toEqual(['bad']);
       expect(result.flushedIds).toEqual(['good']);
+      expect(result.rejectedIds).toEqual(['bad']); // server said no — callers reconcile
+    });
+
+    it('network failures are NOT reported as rejections', async () => {
+      await enqueueSetInsert('a', { id: 'a' });
+      const { client } = makeSupabase([{ error: NETWORK_ERROR }]);
+      const result = await flushSetOutbox(client);
+      expect(result.failedIds).toEqual(['a']);
+      expect(result.rejectedIds).toEqual([]);
+    });
+
+    it('a successful write keeps a same-id entry that was replaced mid-flight (newer patch wins)', async () => {
+      await enqueueSetInsert('a', { id: 'a', reps: 8 });
+      const { client } = makeSupabase([{ error: null, delayMs: 30 }, { error: null }]);
+
+      const flushPromise = flushSetOutbox(client);
+      await new Promise((r) => setTimeout(r, 5));
+      await updateQueuedSet('a', { reps: 99 }); // edit lands while the write is in flight
+
+      await flushPromise;
+      const entries = await listOutbox();
+      expect(entries).toHaveLength(1); // the newer payload survived the post-write delete
+      expect(entries[0].row).toEqual({ id: 'a', reps: 99 });
+
+      const second = await flushSetOutbox(client);
+      expect(second.flushedIds).toEqual(['a']);
+      expect(await outboxCount()).toBe(0);
     });
 
     it('retries without the optional columns when the DB is missing them (migration lag)', async () => {

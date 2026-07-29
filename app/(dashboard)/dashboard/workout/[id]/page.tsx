@@ -342,6 +342,42 @@ export default function WorkoutPage() {
     }
   }, []);
 
+  // A queued target-sets patch the server REJECTED (RLS/constraint — the
+  // write reached the database and was refused, not a connectivity blip)
+  // must not keep steering the UI: stop retrying it, put the block back on
+  // the server's authoritative target, and say so.
+  const reconcileRejectedTargetSets = useCallback(async (rejectedIds: string[]) => {
+    const blockIds = rejectedIds
+      .filter((id) => id.startsWith('block-target-sets:'))
+      .map((id) => id.slice('block-target-sets:'.length));
+    if (blockIds.length === 0) return;
+    for (const blockId of blockIds) {
+      void removeQueuedSet(`block-target-sets:${blockId}`);
+    }
+    try {
+      const supabase = createUntypedClient();
+      const { data } = await supabase
+        .from('exercise_blocks')
+        .select('id, target_sets')
+        .in('id', blockIds);
+      const rows = (data ?? []) as Array<{ id: string; target_sets: number }>;
+      if (rows.length > 0) {
+        const serverTargets = new Map(rows.map((r) => [r.id, r.target_sets]));
+        setBlocks((prev) =>
+          prev.map((b) => {
+            const serverTarget = serverTargets.get(b.id);
+            return serverTarget !== undefined && serverTarget !== b.targetSets
+              ? { ...b, targetSets: serverTarget }
+              : b;
+          })
+        );
+      }
+    } catch {
+      // Refetch failed — the next full page load reconciles from the DB.
+    }
+    showError('Could not update sets — reverted to the saved plan');
+  }, [showError]);
+
   // Flush queued sets whenever connectivity returns (and once on mount, in
   // case the app reopened online with a non-empty queue). A slow poll keeps
   // the glyphs honest even if the browser never fires 'online' events.
@@ -351,7 +387,10 @@ export default function WorkoutPage() {
 
     const flush = () => {
       const supabase = createUntypedClient();
-      void flushSetOutbox(supabase).then(() => reconcileSetSync());
+      void flushSetOutbox(supabase).then((result) => {
+        void reconcileSetSync();
+        void reconcileRejectedTargetSets(result.rejectedIds);
+      });
     };
 
     const handleOnline = () => { setIsOnline(true); flush(); };
@@ -372,7 +411,7 @@ export default function WorkoutPage() {
       window.removeEventListener('offline', handleOffline);
       clearInterval(poll);
     };
-  }, [refreshOutboxCount, reconcileSetSync]);
+  }, [refreshOutboxCount, reconcileSetSync, reconcileRejectedTargetSets]);
 
   // Delete confirmation modal state for header row delete button
   const [deleteConfirmBlock, setDeleteConfirmBlock] = useState<{ id: string; name: string } | null>(null);
@@ -3037,8 +3076,9 @@ export default function WorkoutPage() {
       setBlocks(prevBlocks => prevBlocks.map(block =>
         block.id === blockId ? { ...block, targetSets: prevTargetSets } : block
       ));
+    const entryId = `block-target-sets:${blockId}`;
     const enqueue = async () => {
-      await enqueueRowUpdate(`block-target-sets:${blockId}`, 'exercise_blocks', blockId, {
+      await enqueueRowUpdate(entryId, 'exercise_blocks', blockId, {
         target_sets: targetSets,
       });
       refreshOutboxCount();
@@ -3047,6 +3087,16 @@ export default function WorkoutPage() {
     try {
       if (typeof navigator !== 'undefined' && !navigator.onLine) {
         await enqueue();
+        setError(null);
+        return;
+      }
+
+      // An earlier adjustment for this block is still queued (edit-before-
+      // sync): merge the new value into the queued patch and let the flush
+      // deliver it — a direct write here could later be clobbered when the
+      // stale queued patch flushes after it.
+      if (await updateQueuedSet(entryId, { target_sets: targetSets })) {
+        refreshOutboxCount();
         setError(null);
         return;
       }
