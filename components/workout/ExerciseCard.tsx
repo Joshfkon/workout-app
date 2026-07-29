@@ -1032,10 +1032,14 @@ export const ExerciseCard = memo(function ExerciseCard({
             targetRepRange: block.targetRepRange,
             targetRir: effectiveTargetRir,
             minIncrementKg: exercise.minWeightIncrementKg,
+            // The bump gate must price the step at the TRUE smallest
+            // increment — a rep-floor deferral computed against a coarse
+            // legacy increment is the Dumbbell Shrug hold defect.
+            availableIncrementsKg: exercise.availableIncrementsKg ?? undefined,
             plannedSets: block.targetSets,
           })
         : null,
-    [repTotalMode, prevSessionSetsForGating, block.targetRepRange, block.targetSets, effectiveTargetRir, exercise.minWeightIncrementKg]
+    [repTotalMode, prevSessionSetsForGating, block.targetRepRange, block.targetSets, effectiveTargetRir, exercise.minWeightIncrementKg, exercise.availableIncrementsKg]
   );
 
   // Re-derived next-set target for a rep_total exercise (planner parity with

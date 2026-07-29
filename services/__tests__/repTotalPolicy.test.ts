@@ -175,6 +175,81 @@ describe('recommendRepTotalSessionStart', () => {
     expect(plan.volumeShortfall).toBeNull();
   });
 
+  describe('bump-gate increment pricing (2026-07-29 live defects, Step 1)', () => {
+    const LB = 0.45359237;
+    // Exercise A — Shrug (Dumbbell), 8-12 rep-total. Jul 23: 77.5×12/11/10 @2RIR.
+    const shrugPrev = [
+      { weightKg: 77.5 * LB, reps: 12, rir: 2 },
+      { weightKg: 77.5 * LB, reps: 11, rir: 2 },
+      { weightKg: 77.5 * LB, reps: 10, rir: 2 },
+    ];
+    // Exercise B — Kelso Shrug, 8-12 rep-total. Jul 23: 62.5×10/10/10 @2RIR.
+    const kelsoPrev = [
+      { weightKg: 62.5 * LB, reps: 10, rir: 2 },
+      { weightKg: 62.5 * LB, reps: 10, rir: 2 },
+      { weightKg: 62.5 * LB, reps: 10, rir: 2 },
+    ];
+
+    it('Exercise A: a 2.5 lb dumbbell step is NOT rejected on rep-floor grounds (regression 1)', () => {
+      // The live hold priced a 5 lb step (legacy dumbbell default) and
+      // projected sub-floor reps. At the rack's true 2.5 lb granularity the
+      // step prices to ~11/10/9 — all in range — and the lifter's manual
+      // override (80×11/11/10 @2RIR) proved exactly that.
+      const plan = recommendRepTotalSessionStart({
+        prevSessionSets: shrugPrev,
+        targetRepRange: [8, 12],
+        targetRir: 2,
+        minIncrementKg: 1.13,
+        plannedSets: 4,
+      })!;
+      expect(plan.bumped).toBe(true);
+      expect(plan.bumpDeferred).toBeUndefined();
+      expect(plan.weightKg).toBeCloseTo(77.5 * LB + 1.13, 5); // ≈ 80 lb
+      expect(plan.perSetRepTargets.slice(0, 3).every((r) => r >= 8)).toBe(true);
+    });
+
+    it('Exercise A: the increment SET re-verifies a step a coarse legacy increment would reject', () => {
+      // Same history with the WRONG legacy 5 lb single increment, but the
+      // rack's real 2.5 lb step recorded in availableIncrementsKg: the gate
+      // must price the TRUE smallest step, not the legacy field.
+      const wrong = recommendRepTotalSessionStart({
+        prevSessionSets: shrugPrev,
+        targetRepRange: [8, 12],
+        targetRir: 2,
+        minIncrementKg: 2.27,
+        plannedSets: 4,
+      })!;
+      expect(wrong.bumped).toBe(false);
+      expect(wrong.bumpDeferred).toBe('load_cost'); // the live defect, reproduced
+      const verified = recommendRepTotalSessionStart({
+        prevSessionSets: shrugPrev,
+        targetRepRange: [8, 12],
+        targetRir: 2,
+        minIncrementKg: 2.27,
+        availableIncrementsKg: [2.27, 1.13],
+        plannedSets: 4,
+      })!;
+      expect(verified.bumped).toBe(true);
+      expect(verified.weightKg).toBeCloseTo(77.5 * LB + 1.13, 5);
+    });
+
+    it('Exercise B: a 5 lb step IS still rejected on rep-floor grounds (regression 2 — counter-case)', () => {
+      // At 62.5×10 @2RIR a 5 lb step prices to ~7 reps — genuinely below the
+      // 8-rep floor. The Step 1 fix is a correct increment, not a disabled
+      // floor check: with a true 5 lb smallest step the deferral must fire.
+      const plan = recommendRepTotalSessionStart({
+        prevSessionSets: kelsoPrev,
+        targetRepRange: [8, 12],
+        targetRir: 2,
+        minIncrementKg: 2.27,
+        plannedSets: 3,
+      })!;
+      expect(plan.bumped).toBe(false);
+      expect(plan.bumpDeferred).toBe('load_cost');
+      expect(plan.weightKg).toBeCloseTo(62.5 * LB, 5); // load held
+    });
+  });
+
   it('returns null with no usable history (caller keeps its cold-start path)', () => {
     expect(
       recommendRepTotalSessionStart({

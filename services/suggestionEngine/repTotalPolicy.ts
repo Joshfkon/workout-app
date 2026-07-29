@@ -269,6 +269,14 @@ export function recommendRepTotalSessionStart(input: {
   targetRepRange: [number, number];
   targetRir: number;
   minIncrementKg?: number;
+  /**
+   * The exercise's recorded increment SET. The bump gate must price the load
+   * step at the exercise's TRUE smallest step (spec §4): a rep-floor
+   * rejection computed against a coarser legacy/default increment is the
+   * live Dumbbell Shrug defect (a 5 lb assumption on a 2.5 lb rack held a
+   * load the lifter then stepped up manually, in range).
+   */
+  availableIncrementsKg?: number[];
   plannedSets: number;
 }): RepTotalSessionStart | null {
   const { targetRepRange, targetRir, plannedSets } = input;
@@ -276,14 +284,19 @@ export function recommendRepTotalSessionStart(input: {
   const valid = input.prevSessionSets.filter((s) => s.weightKg > 0 && s.reps > 0);
   if (valid.length === 0) return null;
 
+  // The exercise's true smallest loadable step: the increment SET when one
+  // is recorded, else the legacy single increment, else the engine default.
+  // Every use below (at-load grid tolerance, bump pricing) reads THIS —
+  // never the raw legacy field.
+  const inc = smallestIncrement(input.availableIncrementsKg, input.minIncrementKg);
+
   // Fixed-load model: the session's load is the top load actually worked.
   // The at-load group is a GRID tolerance — max(half the smallest increment,
   // 2.5%) — not the old loose ±5%: rep totals only ever compare at matched
   // loads, and the tolerance exists solely to absorb unit-conversion /
   // micro-loading noise, never a genuine ramp step.
   const topLoad = valid.reduce((m, s) => (s.weightKg > m ? s.weightKg : m), 0);
-  const halfStepKg =
-    (input.minIncrementKg && input.minIncrementKg > 0 ? input.minIncrementKg : 2.5) / 2;
+  const halfStepKg = inc / 2;
   const atLoadToleranceKg = Math.max(halfStepKg, topLoad * REP_TOTAL_LOAD_MATCH_FRACTION);
   const atLoad = valid.filter((s) => s.weightKg >= topLoad - atLoadToleranceKg);
   const prevTotal = atLoad.reduce((sum, s) => sum + s.reps, 0);
@@ -300,7 +313,6 @@ export function recommendRepTotalSessionStart(input: {
       (s) => s.reps >= repMin && (s.rir === undefined || s.rir <= targetRir + EFFORT_TOLERANCE_RIR)
     );
 
-  const inc = input.minIncrementKg && input.minIncrementKg > 0 ? input.minIncrementKg : 2.5;
   const sets = Math.max(1, plannedSets);
 
   // ---- Volume constraint (nothing about this plan may silently cut volume) ----
