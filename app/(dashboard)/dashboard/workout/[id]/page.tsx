@@ -19,6 +19,8 @@ import {
   updateQueuedSet,
   withoutOptionalSetLogColumns,
 } from '@/lib/offline/setOutbox';
+// setLogTiming: TEMPORARY latency instrumentation (docs/SET_LOGGING_LATENCY_DIAGNOSIS.md)
+import { beginSetTiming, markSetPhase, schedulePaintMark, endSetTiming } from '@/lib/debug/setLogTiming';
 import type { SetSyncStatus } from '@/components/workout/ExerciseCard';
 import { InlineHint } from '@/components/ui/FirstTimeHint';
 import { RestTimer, PauseOverlay, RowOverflowMenu, type RowMenuItem } from '@/components/workout';
@@ -2135,6 +2137,7 @@ export default function WorkoutPage() {
     bodyweightData?: BodyweightData;
   }) => {
     if (!currentBlock) return null;
+    beginSetTiming(); // setLogTiming: no-op if ExerciseCard already opened the row at the tap
 
     // Determine quality - factor in form if available
     let quality: 'stimulative' | 'effective' | 'junk';
@@ -2198,6 +2201,7 @@ export default function WorkoutPage() {
       // to local numbering when offline.
       let nextSetNumber = currentSetNumber;
       if (online) {
+        markSetPhase('probe_sent'); // setLogTiming
         try {
           const { data: maxSetResult } = await supabase
             .from('set_logs')
@@ -2217,6 +2221,7 @@ export default function WorkoutPage() {
         } catch {
           // Numbering probe failed (flaky network) — local numbering is fine.
         }
+        markSetPhase('probe_done'); // setLogTiming
       }
 
       // Infer the set role (working | ramp) from this set's load vs the block's
@@ -2281,6 +2286,9 @@ export default function WorkoutPage() {
       setCurrentSetNumber(nextSetNumber + 1);
       logSetToStore(currentBlock.id, newSet);
       setSetSync(prev => ({ ...prev, [setId]: 'saving' }));
+      // setLogTiming: local commit + first frame after it (approximates paint)
+      markSetPhase('t1_local_commit');
+      schedulePaintMark();
 
       // Logging a set past a pending soreness ask dismisses it for the
       // session (records null; the muscle is never re-asked). Zero extra taps.
@@ -2303,10 +2311,12 @@ export default function WorkoutPage() {
 
       if (!online) {
         await enqueueSetInsert(setId, row);
+        markSetPhase('t2_outbox_enqueued'); // setLogTiming
         setSetSync(prev => ({ ...prev, [setId]: 'queued' }));
         refreshOutboxCount();
       } else {
         let insertError: { message: string; code?: string } | null = null;
+        markSetPhase('t3_insert_sent'); // setLogTiming
         try {
           const result = await supabase.from('set_logs').insert(row);
           insertError = result.error;
@@ -2322,10 +2332,12 @@ export default function WorkoutPage() {
         } catch (e) {
           insertError = { message: e instanceof Error ? e.message : String(e) };
         }
+        markSetPhase('t4_insert_done'); // setLogTiming
 
         if (insertError && isNetworkError(insertError)) {
           // Connectivity died mid-write: queue it, keep the optimistic state.
           await enqueueSetInsert(setId, row);
+          markSetPhase('t2_outbox_enqueued'); // setLogTiming
           setSetSync(prev => ({ ...prev, [setId]: 'queued' }));
           refreshOutboxCount();
         } else if (insertError) {
@@ -2337,6 +2349,7 @@ export default function WorkoutPage() {
           setSetSync(prev => { const next = { ...prev }; delete next[setId]; return next; });
           setError(`Failed to save set: ${insertError.message}`);
           showError('Failed to save set - please try again');
+          endSetTiming(); // setLogTiming
           return null;
         } else {
           setRowPersisted = true;
@@ -2507,7 +2520,9 @@ export default function WorkoutPage() {
             // Persist calibration to database (best-effort: skipped offline —
             // the local calibration engine still holds the data point).
             try {
+              markSetPhase('auth_getuser_sent'); // setLogTiming
               const { data: { user } } = await supabase.auth.getUser();
+              markSetPhase('auth_getuser_done'); // setLogTiming
               if (user) {
                 supabase.from('amrap_calibrations').insert({
                   user_id: user.id,
@@ -2557,11 +2572,13 @@ export default function WorkoutPage() {
       }
 
       // Return the set ID for optional feedback
+      endSetTiming(); // setLogTiming
       return setId;
     } catch (err) {
       console.error('Failed to save set:', err);
       setError(err instanceof Error ? err.message : 'Failed to save set - please try again');
       showError('Failed to save set - please try again');
+      endSetTiming(); // setLogTiming
       return null;
     }
   };

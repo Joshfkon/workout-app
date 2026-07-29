@@ -27,6 +27,8 @@ import { useUserStore } from '@/stores';
 import type { AdjustedRIRResult } from '@/services/rpeCalibration';
 import type { ReadinessModulation } from '@/services/fatigueEngine';
 import { lightHaptic } from '@/lib/integrations/notifications';
+// setLogTiming: TEMPORARY latency instrumentation (docs/SET_LOGGING_LATENCY_DIAGNOSIS.md)
+import { beginSetTiming } from '@/lib/debug/setLogTiming';
 import { Input } from '@/components/ui';
 import { IconBone, IconCheck, IconChevronDown, IconCloudPause, IconGripVertical, IconInfoCircle } from '@tabler/icons-react';
 import { RowOverflowMenu, type RowMenuItem } from './RowOverflowMenu';
@@ -1636,6 +1638,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   }) => {
     if (isCompletingSet || !onSetComplete) return;
     if (isNaN(data.weightKg) || data.weightKg < 0 || data.reps < 1) return;
+    beginSetTiming(); // setLogTiming: t0 = the log tap (TEMPORARY, see lib/debug/setLogTiming.ts)
 
     // Lock to prevent double-clicks
     setIsCompletingSet(true);
