@@ -19,7 +19,11 @@
  * construction, so retries after a lost ack are safe there too.
  */
 
-export type OutboxTable = 'set_logs' | 'workout_sessions' | 'session_muscle_feedback';
+export type OutboxTable =
+  | 'set_logs'
+  | 'workout_sessions'
+  | 'session_muscle_feedback'
+  | 'exercise_blocks';
 
 export interface OutboxEntry {
   /**
@@ -50,6 +54,8 @@ const UPSERT_OPTIONS: Record<OutboxTable, { onConflict: string; ignoreDuplicates
   session_muscle_feedback: { onConflict: 'session_id,muscle_group', ignoreDuplicates: false },
   // workout_sessions rows only ever go through op:'update'.
   workout_sessions: { onConflict: 'id', ignoreDuplicates: true },
+  // exercise_blocks rows only ever go through op:'update' (target_sets patches).
+  exercise_blocks: { onConflict: 'id', ignoreDuplicates: true },
 };
 
 interface OutboxDriver {

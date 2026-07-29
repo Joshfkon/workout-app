@@ -393,6 +393,21 @@ describe('setOutbox', () => {
       expect(entries.find((e) => e.id === 'finish:s1')?.attempts).toBe(1);
     });
 
+    it('flushes an exercise_blocks target_sets patch (in-workout remove/add set while offline)', async () => {
+      await enqueueRowUpdate('block-target-sets:b1', 'exercise_blocks', 'b1', { target_sets: 3 });
+      // Adjusting again before sync replaces the queued patch (same entry id).
+      await enqueueRowUpdate('block-target-sets:b1', 'exercise_blocks', 'b1', { target_sets: 2 });
+      const { client, calls } = makeSupabase([{ error: null }]);
+
+      const result = await flushSetOutbox(client);
+
+      expect(result.flushedIds).toEqual(['block-target-sets:b1']);
+      expect(calls).toEqual([
+        { table: 'exercise_blocks', op: 'update', row: { target_sets: 2 }, matchId: 'b1' },
+      ]);
+      expect(await outboxCount()).toBe(0);
+    });
+
     it('outboxCount(table) filters by table for the "N sets queued" banner', async () => {
       await enqueueSetInsert('set-1', { id: 'set-1' });
       await enqueueRowUpdate('finish:s1', 'workout_sessions', 's1', { state: 'completed' });

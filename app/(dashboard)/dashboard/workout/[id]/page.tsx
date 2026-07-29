@@ -2820,9 +2820,6 @@ export default function WorkoutPage() {
     setCurrentSetNumber(prev => Math.max(1, prev - 1));
   };
 
-  // State for adding extra sets beyond target
-  const [addingExtraSet, setAddingExtraSet] = useState<string | null>(null);
-  
   // Auto-adjust message state
   const [autoAdjustMessage, setAutoAdjustMessage] = useState<string | null>(null);
 
@@ -3014,30 +3011,74 @@ export default function WorkoutPage() {
   };
 
   const handleTargetSetsChange = async (blockId: string, newTargetSets: number) => {
+    // Clamp to the DB CHECK range (1..10) and never below the sets already
+    // logged for the block — a target under the logged count would render the
+    // block "complete with missing sets" and corrupt next-session planning.
+    const loggedCount = completedSets.filter(
+      (s) => s.exerciseBlockId === blockId && !s.isWarmup && s.setType !== 'warmup'
+    ).length;
+    const targetSets = Math.min(10, Math.max(1, loggedCount, newTargetSets));
+
+    const prevTargetSets = blocks.find((b) => b.id === blockId)?.targetSets;
+    if (prevTargetSets === undefined || targetSets === prevTargetSets) return;
+
     // Update local state immediately
-    setBlocks(prevBlocks => prevBlocks.map(block => 
-      block.id === blockId 
-        ? { ...block, targetSets: newTargetSets }
+    setBlocks(prevBlocks => prevBlocks.map(block =>
+      block.id === blockId
+        ? { ...block, targetSets }
         : block
     ));
 
-    // Update in database
+    // Persist with the same offline posture as set logging (P0-2): a
+    // connectivity failure queues the patch (idempotent — keyed per block, so
+    // repeated adjustments replace each other) instead of erroring mid-workout;
+    // only a real server rejection rolls the optimistic change back.
+    const rollback = () =>
+      setBlocks(prevBlocks => prevBlocks.map(block =>
+        block.id === blockId ? { ...block, targetSets: prevTargetSets } : block
+      ));
+    const enqueue = async () => {
+      await enqueueRowUpdate(`block-target-sets:${blockId}`, 'exercise_blocks', blockId, {
+        target_sets: targetSets,
+      });
+      refreshOutboxCount();
+    };
+
     try {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        await enqueue();
+        setError(null);
+        return;
+      }
+
       const supabase = createUntypedClient();
       const { error: updateError } = await supabase
         .from('exercise_blocks')
-        .update({ target_sets: newTargetSets })
+        .update({ target_sets: targetSets })
         .eq('id', blockId);
-      
-      if (updateError) {
+
+      if (updateError && isNetworkError(updateError)) {
+        // Connectivity died mid-write: queue it, keep the optimistic state.
+        await enqueue();
+        setError(null);
+      } else if (updateError) {
         console.error('Failed to update target sets:', updateError);
+        rollback();
         setError(`Failed to update sets: ${updateError.message}`);
+        showError('Could not update sets — please try again');
       } else {
         setError(null);
       }
     } catch (err) {
       console.error('Failed to update target sets:', err);
-      setError(err instanceof Error ? err.message : 'Failed to update sets');
+      // Thrown fetch failures are connectivity-shaped too — queue, don't error.
+      if (isNetworkError(err instanceof Error ? err : { message: String(err) })) {
+        await enqueue();
+        setError(null);
+      } else {
+        rollback();
+        setError(err instanceof Error ? err.message : 'Failed to update sets');
+      }
     }
   };
 
@@ -4805,10 +4846,8 @@ export default function WorkoutPage() {
   };
 
   // Calculate overall workout progress (skipped blocks excluded)
-  // Account for extra set being added - when user clicks "+ Add Set", we have a pending incomplete set
   const activeBlocks = blocks.filter(b => !skippedBlockIds.has(b.id));
-  const pendingExtraSets = addingExtraSet ? 1 : 0;
-  const totalPlannedSets = activeBlocks.reduce((sum, b) => sum + b.targetSets, 0) + pendingExtraSets;
+  const totalPlannedSets = activeBlocks.reduce((sum, b) => sum + b.targetSets, 0);
   const totalCompletedSets = completedSets.filter(s => !s.isWarmup && s.setType !== 'warmup').length;
   const overallProgress = totalPlannedSets > 0 ? (totalCompletedSets / totalPlannedSets) * 100 : 0;
 
@@ -5529,18 +5568,11 @@ export default function WorkoutPage() {
                     <div className="space-y-3">
                     <ExerciseCard
                     exercise={block.exercise}
-                    block={addingExtraSet === block.id
-                      ? { ...block, targetSets: block.targetSets + 1 }  // Add one more set when adding extra
-                      : block
-                    }
+                    block={block}
                     enhancedAthleteMode={enhancedAthleteModeActive}
                     isDeloadSession={session?.isDeload ?? false}
                     sets={blockSets}
-                    onSetComplete={async (data) => {
-                      const setId = await handleSetComplete(data);
-                      setAddingExtraSet(null);
-                      return setId;
-                    }}
+                    onSetComplete={handleSetComplete}
                     onWarmupComplete={(restSeconds) => {
                       setRestTimerDuration(restSeconds);
                       setRestAdjustmentNote(null); // warmup rest is never effort-modulated
@@ -5713,12 +5745,13 @@ export default function WorkoutPage() {
                   )}
 
                     {/* Exercise complete actions - only show for current exercise */}
-                    {isCurrent && isComplete && addingExtraSet !== block.id && (
+                    {isCurrent && isComplete && (
                       <div className="flex justify-center gap-3 py-4">
-                        <Button 
-                          variant="outline" 
+                        <Button
+                          variant="outline"
                           size="sm"
-                          onClick={() => setAddingExtraSet(block.id)}
+                          disabled={block.targetSets >= 10}
+                          onClick={() => handleTargetSetsChange(block.id, block.targetSets + 1)}
                         >
                           + Add Extra Set
                         </Button>
@@ -5926,7 +5959,10 @@ export default function WorkoutPage() {
               nextLabel={
                 activeSuggestionLabel
                   ? `next · ${activeSuggestionLabel}`
-                  : currentBlock
+                  : // A block with no pending sets (e.g. the final set was just
+                    // removed) has no "next" — don't advertise a set that no
+                    // longer exists.
+                    currentBlock && !isBlockComplete(currentBlock)
                     ? `next · ${formatWeight(currentBlock.targetWeightKg, preferences.units)} × ${currentBlock.targetRepRange[0]}–${currentBlock.targetRepRange[1]}`
                     : undefined
               }

@@ -1465,8 +1465,9 @@ export const ExerciseCard = memo(function ExerciseCard({
       if (isCompleted && onSetDelete) {
         onSetDelete(setId);
       } else if (!isCompleted) {
-        // Remove pending set by reducing target sets
-        if (onTargetSetsChange && Number(block.targetSets) > completedSets.length) {
+        // Remove pending set by reducing target sets (never below the DB's
+        // target_sets >= 1 check constraint)
+        if (onTargetSetsChange && Number(block.targetSets) > Math.max(1, completedSets.length)) {
           onTargetSetsChange(Number(block.targetSets) - 1);
         }
       }
