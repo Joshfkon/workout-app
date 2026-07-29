@@ -48,18 +48,19 @@ describe('monotonicity floor — restore when possible', () => {
     },
   };
 
-  it('raises an add_load trade that priced below the matched set', () => {
+  it('re-solves an add_load trade that priced below the matched set (strictly above it)', () => {
     const rec = recommendSet(base);
     expect(rec.positionMatch?.progression).toBe('add_load');
     expect(rec.weightKg).toBe(102.5);
-    // Un-guarded trade would be 102.5×5 (implied 123.0) against the matched
-    // 100×6 @2 (124.1) — the guard restores ×6 (127.2).
+    // The raw trade would be 102.5×5 (implied 123.0) against the matched
+    // 100×6 @2 (124.1) — the lever re-solves reps at the traded load to ×6
+    // (127.2), a genuine progression, with no guard warning needed.
     expect(rec.reps).toBe(6);
+    expect(rec.progressionLever).toBe('reps');
     const prescribed = impliedE1RMFloor(rec.weightKg, rec.reps, 2)!;
     const matched = impliedE1RMFloor(100, 6, 2)!;
-    expect(prescribed).toBeGreaterThanOrEqual(matched);
-    expect(warnings()).toContain('monotonicity floor');
-    expect(warnings()).toContain('position_match:add_load');
+    expect(prescribed).toBeGreaterThan(matched);
+    expect(warnings()).not.toContain('monotonicity floor');
   });
 
   it('stands down under an explicit deload/readiness/phase directive', () => {

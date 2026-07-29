@@ -203,6 +203,19 @@ export interface SetRecommendation {
    * session best under fatigue.
    */
   sessionCapacityClamped?: boolean;
+  /**
+   * 2026-07-29 step 3: the position-matched progression could not express a
+   * measurably higher e1RM than the matched set as originally asked, so the
+   * prescription was re-solved through the canonical curve —
+   *  - 'load': the rep lever was blocked within the rep range at the matched
+   *    load (the canonical flat region, or the range ceiling); the load
+   *    stepped to the next available increment and reps were re-solved at
+   *    the new load. The banner must describe a LOAD step, never "go one
+   *    more rep".
+   *  - 'reps': the reps were re-solved at the same load (e.g. an
+   *    increment/rep trade that priced below the matched set at low reps).
+   */
+  progressionLever?: 'load' | 'reps';
 }
 
 /**
@@ -905,12 +918,13 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
       0,
       out.positionMatch ? Math.min(out.positionMatch.prevRir ?? out.rir, out.rir) : out.rir
     );
-    const underCap = (reps: number): boolean => {
+    const underCapAt = (weightKg: number, reps: number): boolean => {
       if (capE1RM == null) return true;
-      const implied = impliedE1RMFloor(out.weightKg, reps, askedRir);
+      const implied = impliedE1RMFloor(weightKg, reps, askedRir);
       // No implied value (invalid inputs) → nothing measurable to cap.
       return implied == null || implied <= capE1RM * (1 + SESSION_CAPACITY_TOLERANCE);
     };
+    const underCap = (reps: number): boolean => underCapAt(out.weightKg, reps);
 
     if (capE1RM != null) {
       let reps = out.reps;
@@ -918,6 +932,66 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
       if (reps !== out.reps) {
         out.reps = reps;
         out.sessionCapacityClamped = true;
+      }
+    }
+
+    // ---- Load-lever fallback (2026-07-29 step 3) ----
+    // A position-matched PROGRESSION (add_rep / add_load) must express a
+    // measurable, strictly higher e1RM than the matched set. In the
+    // canonical flat region — a rep range living at/past the estimator's
+    // 12-effective-rep cap, like the pushdown's 12-15 @2 — the rep lever
+    // cannot do that: every in-range count at the same load measures the
+    // SAME implied e1RM. The old engine failed closed there (trimmed the ask
+    // and still claimed progression). Instead, re-solve through the
+    // canonical curve: at each candidate load (the prescribed load first,
+    // then the next available increments, capped at +MAX_STEP_PCT but always
+    // trying at least one step so coarse machines keep their granularity),
+    // take the SMALLEST in-range, in-domain rep count whose implied value
+    // strictly exceeds the matched set's.
+    //
+    // The session-capacity cap stays senior: if the first candidate that
+    // clears the floor is blocked by the cap, the search ABORTS (higher
+    // loads only imply more) and the monotonicity guard below logs the
+    // outcome — fatigue owns the set; the lever never scrapes for a number.
+    if (
+      out.positionMatch &&
+      (out.positionMatch.progression === 'add_rep' ||
+        out.positionMatch.progression === 'add_load') &&
+      !out.sessionCapacityClamped &&
+      !input.regressionDirective &&
+      out.weightKg > 0
+    ) {
+      const pm = out.positionMatch;
+      const required = impliedE1RMFloor(
+        pm.prevWeightKg,
+        pm.prevReps,
+        Math.max(0, Math.min(pm.prevRir ?? out.rir, out.rir))
+      );
+      const current = impliedE1RMFloor(out.weightKg, out.reps, askedRir);
+      if (required != null && current != null && current <= required) {
+        const leverInc = smallestIncrement(input.availableIncrementsKg, input.minIncrementKg);
+        const maxLoad = out.weightKg * (1 + MAX_STEP_PCT);
+        search: for (let step = 0; ; step++) {
+          const w = out.weightKg + step * leverInc;
+          // Step 0 re-solves reps at the prescribed load; step 1 (the next
+          // available increment) is always tried; further steps respect the
+          // per-set load cap.
+          if (step > 1 && w > maxLoad + 1e-9) break;
+          for (let r = repMin; r <= repMax; r++) {
+            const est = estimateE1RM(w, r, askedRir);
+            // Beyond the estimator's domain at this count — higher counts
+            // only go further out; nothing measurable left at this load.
+            if (est == null) break;
+            if (est.value <= required) continue;
+            if (!underCapAt(w, r)) break search; // cap is the binding constraint
+            if (w !== out.weightKg || r !== out.reps) {
+              out.progressionLever = w !== out.weightKg ? 'load' : 'reps';
+              out.weightKg = w;
+              out.reps = r;
+            }
+            break search;
+          }
+        }
       }
     }
 

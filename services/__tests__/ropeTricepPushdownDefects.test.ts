@@ -63,27 +63,26 @@ const afterSets = (setsDone: number) => {
 const MATCHED_REF_FLOOR = impliedE1RMFloor(65, 14, Math.min(2.5, PUSHDOWN_TARGET_RIR))!;
 
 describe('cap operates in e1RM space, never in rep counts across loads', () => {
-  it('regression 1 — set 2: prescribed e1RM is never below the matched 65×14', () => {
+  it('regression 1 — set 2: prescribed e1RM strictly above the matched 65×14 (canonical)', () => {
     // LIVE DEFECT: 65×13 @2 — implied e1RM BELOW the 65×14 it claimed to
     // progress from, because set 1's 12 reps (+1) at 72.5 became a rep
-    // ceiling at 65.
+    // ceiling at 65. The whole 12-15 @2 range at 65 measures the same
+    // canonical e1RM (flat region), so a true progression requires the LOAD
+    // lever: one increment up, reps re-solved within the range.
     const rec = recommendSet(afterSets(1));
     const prescribed = impliedE1RMFloor(rec.weightKg, rec.reps, rec.rir)!;
-    expect(prescribed).toBeGreaterThanOrEqual(MATCHED_REF_FLOOR);
-    // The specific dead state: a 65-load ask trimmed to fewer reps than the
-    // reference set at the same load can never recur.
-    if (rec.weightKg === 65) {
-      expect(rec.reps).toBeGreaterThanOrEqual(14);
-    }
+    expect(prescribed).toBeGreaterThan(MATCHED_REF_FLOOR);
+    expect(rec.weightKg).toBeGreaterThan(65);
+    expect(rec.reps).toBeGreaterThanOrEqual(PUSHDOWN_TARGET_REP_RANGE[0]);
+    expect(rec.reps).toBeLessThanOrEqual(PUSHDOWN_TARGET_REP_RANGE[1]);
+    expect(rec.progressionLever).toBe('load');
   });
 
-  it('regression 2 — set 3: prescribed e1RM never below 65×14, and the cap is not stale', () => {
+  it('regression 2 — set 3: prescribed e1RM strictly above 65×14, and the cap is not stale', () => {
     const rec = recommendSet(afterSets(2));
     const prescribed = impliedE1RMFloor(rec.weightKg, rec.reps, rec.rir)!;
-    expect(prescribed).toBeGreaterThanOrEqual(MATCHED_REF_FLOOR);
-    if (rec.weightKg === 65) {
-      expect(rec.reps).toBeGreaterThanOrEqual(14);
-    }
+    expect(prescribed).toBeGreaterThan(MATCHED_REF_FLOOR);
+    expect(rec.weightKg).toBeGreaterThan(65);
 
     // Pins the stale-anchor bug specifically: the cap computed for set 3
     // (after 70×13 logged) must DIFFER from the cap computed for set 2 —
@@ -95,6 +94,19 @@ describe('cap operates in e1RM space, never in rep counts across loads', () => {
       PUSHDOWN_JUL_29_LOGGED.slice(0, 2).map((s) => ({ ...s }))
     )!;
     expect(capAtSet3).not.toBe(capAtSet2);
+  });
+
+  it('regression 3 — an e1RM unreachable at 15 reps in a 12-15 range returns an increased load, not a clamped rep count', () => {
+    // The rep lever is dead here: at 65, reps 12-15 @2 all measure 93.6 and
+    // counts past 13 are beyond the estimator's domain. The engine must not
+    // fail closed at the range ceiling (or under the cap) — it steps the
+    // load by the exercise's increment and re-solves reps inside the range.
+    const rec = recommendSet(afterSets(1));
+    expect(rec.positionMatch?.progression).toBe('add_rep'); // the branch asked for reps…
+    expect(rec.progressionLever).toBe('load'); // …the lever answered with load
+    expect(rec.weightKg).toBe(65 + PUSHDOWN_MIN_INCREMENT); // grid granularity respected
+    expect(rec.reps).toBeLessThanOrEqual(PUSHDOWN_TARGET_REP_RANGE[1]);
+    expect(rec.reps).toBeGreaterThanOrEqual(PUSHDOWN_TARGET_REP_RANGE[0]);
   });
 
   it('a heavier top set can only RAISE the cap for a lighter-load ask, never trim its reps', () => {
