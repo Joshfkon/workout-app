@@ -81,6 +81,12 @@ const customJestConfig = {
       branches: 50,
       statements: 70,
     },
+    'services/progressionHealth.ts': {
+      lines: 70,
+      functions: 60,
+      branches: 50,
+      statements: 70,
+    },
     'services/warmupEngine.ts': {
       lines: 70,
       functions: 60,

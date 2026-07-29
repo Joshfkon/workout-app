@@ -54,8 +54,17 @@
  *       re-serving the session-start plan verbatim; session-start bump
  *       targets derive from OBSERVED reps exchanged through the non-linear
  *       rep-cost model, never a reset to the range floor.
+ *  v8 = rep_total spec alignment (2026-07-29): the bump gate prices the
+ *       exercise's TRUE smallest increment (availableIncrementsKg honored,
+ *       dumbbell default 2.5 lb); a deviating load re-prices the session
+ *       target for every consumer (no remainder off a disclaimed total);
+ *       exchange arithmetic clamps into the range in both directions while
+ *       evidence stays flagged; an evidence floor keeps over-performance
+ *       from shrinking later asks; the session target IS the per-set-target
+ *       sum, with the overshoot-scaled (capped) increment distributed into
+ *       the targets.
  */
-export const SUGGESTION_ENGINE_VERSION = 7;
+export const SUGGESTION_ENGINE_VERSION = 8;
 
 // ============================================================
 // SET ROLES (Phase 2)

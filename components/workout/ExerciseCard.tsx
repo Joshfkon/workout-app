@@ -21,6 +21,11 @@ import { RAMP_LOAD_FRACTION, WORKING_WEIGHT_CLAMP_FRACTION } from '@/services/su
 import { findSimilarExercises, calculateSimilarityScore } from '@/services/exerciseSwapper';
 import { filterExercisesByEquipment } from '@/services/equipmentFilter';
 import { detectPlateau, type PlateauDetectionResult, type PlateauGoal } from '@/services/plateauDetector';
+import {
+  detectProgressionStall,
+  detectLoadUnderprescribed,
+  type ProgressionHealthSession,
+} from '@/services/progressionHealth';
 import { getExerciseProgression, type ExerciseProgressionInsight } from '@/services/progressionInsights';
 import { generateWarmupProtocol } from '@/services/progressionEngine';
 import { useUserStore } from '@/stores';
@@ -281,6 +286,10 @@ interface ExerciseCardProps {
   readinessModulation?: ReadinessModulation | null;
   // Per-session performance history for plateau detection (services/plateauDetector)
   performanceSnapshots?: ExercisePerformanceSnapshot[];
+  // Per-session summaries for the stall / load-appropriateness detectors
+  // (services/progressionHealth) — snapshot-independent, so rep_total
+  // exercises with no estimable e1RM are covered. Oldest first.
+  progressionHealthSessions?: ProgressionHealthSession[];
   // User-marked "different equipment" session dates for this exercise —
   // explicit trend-segment boundaries both analyzers must honor even when
   // the level shift is below the detection heuristic.
@@ -412,6 +421,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   readinessModulation,
   setSyncStatus,
   performanceSnapshots,
+  progressionHealthSessions,
   equipmentBoundaries,
   userGoal,
   onRepRangeChange,
@@ -818,6 +828,48 @@ export const ExerciseCard = memo(function ExerciseCard({
       knownDiscontinuities: equipmentBoundaries,
     });
   }, [performanceSnapshots, equipmentBoundaries, exercise.id, experience, userGoal]);
+
+  // Progression-health detectors (services/progressionHealth, Step 5): the
+  // stall flag and the load-appropriateness flag surface a jammed
+  // progression IN-APP instead of letting the engine keep reporting a
+  // constraint. Today's completed sets count as the most recent session so
+  // an in-progress session can complete the under-load evidence.
+  const healthSessionsWithToday: ProgressionHealthSession[] = useMemo(() => {
+    const history = progressionHealthSessions ?? [];
+    if (completedSets.length === 0) return history;
+    return [
+      ...history,
+      {
+        // Detectors read order, not dates — the appended entry is only ever
+        // "the most recent session".
+        date: 'in-progress',
+        sets: completedSets.map((s) => ({
+          weightKg: s.weightKg,
+          reps: s.reps,
+          rir: resolveLastRir(s, effectiveTargetRir),
+        })),
+      },
+    ];
+  }, [progressionHealthSessions, completedSets, effectiveTargetRir]);
+
+  const progressionStall = useMemo(
+    () =>
+      isDeloadSession
+        ? null
+        : detectProgressionStall(healthSessionsWithToday, {
+            minIncrementKg: exercise.minWeightIncrementKg,
+            availableIncrementsKg: exercise.availableIncrementsKg ?? undefined,
+          }),
+    [healthSessionsWithToday, isDeloadSession, exercise.minWeightIncrementKg, exercise.availableIncrementsKg]
+  );
+
+  const loadIncreaseFlag = useMemo(
+    () =>
+      isDeloadSession
+        ? null
+        : detectLoadUnderprescribed(healthSessionsWithToday, block.targetRepRange[1]),
+    [healthSessionsWithToday, isDeloadSession, block.targetRepRange]
+  );
 
   // One-tap "Try X-Y reps" action: first rep range embedded in the suggestions.
   const plateauRepRange: [number, number] | null = useMemo(() => {
@@ -2371,7 +2423,12 @@ export const ExerciseCard = memo(function ExerciseCard({
     (progressionInsight.pace === 'ahead' ||
       progressionInsight.pace === 'on_track' ||
       progressionInsight.pace === 'behind');
-  const hasHeaderPills = (!repTotalMode && !!plateau) || showPacePill || !!block.supersetGroupId;
+  const hasHeaderPills =
+    (!repTotalMode && !!plateau) ||
+    showPacePill ||
+    !!block.supersetGroupId ||
+    !!progressionStall ||
+    !!loadIncreaseFlag;
 
   // Enhanced mode: surface (never alter) a binding joint-stress cap. The RIR
   // floor is computed from the exercise alone; when it raises the effective
@@ -2523,6 +2580,36 @@ export const ExerciseCard = memo(function ExerciseCard({
                   : progressionInsight.pace === 'on_track'
                     ? 'Trend: on pace'
                     : '▼ Trend: behind'}
+              </span>
+            )}
+            {/* Progression stall (services/progressionHealth 5a): the load or
+                the rep-total target has been effectively parked. Surfaced as
+                its own claim — never disguised as a constraint rationale. */}
+            {progressionStall && (
+              <span
+                className="rounded-full px-2.5 py-1 text-[11px] font-medium leading-none flex-shrink-0 bg-warning-500/10 text-warning-400"
+                data-testid="progression-stall-pill"
+                title={
+                  progressionStall.kind === 'target_stall'
+                    ? `Rep-total target has only crept +1–2/session for ${progressionStall.sessions} sessions at ${displayWeight(progressionStall.loadKg, true)} ${weightLabel} — met every time, going nowhere. Consider a load increase or an exercise/range change.`
+                    : `Load unchanged for ${progressionStall.sessions} consecutive sessions (${displayWeight(progressionStall.loadKg, true)} ${weightLabel}). Progression may be jammed — review the load, range, or exercise.`
+                }
+              >
+                {progressionStall.kind === 'target_stall'
+                  ? `Stalled: target creeping ${progressionStall.sessions} sessions`
+                  : `Stalled: ${progressionStall.sessions} sessions at same load`}
+              </span>
+            )}
+            {/* Load-appropriateness (services/progressionHealth 5b): reps past
+                the range ceiling at RIR ≥ 2, multiple sessions running — an
+                explicit load-increase recommendation, in words. */}
+            {loadIncreaseFlag && (
+              <span
+                className="rounded-full px-2.5 py-1 text-[11px] font-medium leading-none flex-shrink-0 bg-emerald-500/10 text-emerald-400"
+                data-testid="load-increase-pill"
+                title={`Reps have exceeded the ${loadIncreaseFlag.repMax}-rep range ceiling with ≥2 RIR in ${loadIncreaseFlag.sessions} consecutive sessions (up to ${loadIncreaseFlag.worstReps} reps). The load is too light for this range — increase it.`}
+              >
+                ▲ Increase load
               </span>
             )}
             {block.supersetGroupId && (
