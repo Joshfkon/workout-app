@@ -2027,7 +2027,7 @@ export const ExerciseCard = memo(function ExerciseCard({
       repsLabel = String(reps);
       const firstRef = repTotalPlan.perSetRefReps?.[0];
       reason = repTotalPlan.bumped
-        ? `rep-total — load up one increment; set 1 targets ${reps} (you did ${firstRef ?? '—'} at ${displayWeight(repTotalPlan.refLoadKg, true)} ${weightLabel})`
+        ? `rep-total — load up; set 1 targets ${reps} (you did ${firstRef ?? '—'} at ${displayWeight(repTotalPlan.refLoadKg, true)} ${weightLabel})`
         : repTotalPlan.bumpDeferred === 'load_cost'
           ? `rep-total — holding the load: a step up would drop you below the ${block.targetRepRange[0]}-rep floor`
           : `rep-total — hold the load, beat last session's ${repTotalPlan.prevSessionRepTotal} total reps`;
@@ -2036,7 +2036,7 @@ export const ExerciseCard = memo(function ExerciseCard({
       );
       explanation.push(
         repTotalPlan.bumped
-          ? `Every top-load set cleared the ${block.targetRepRange[0]}-rep floor at the target effort, so the load steps up by the smallest increment. Each set's target is what you actually did at ${displayWeight(repTotalPlan.refLoadKg, true)} ${weightLabel} last session, priced for the heavier load — reps are not reset to the range floor.`
+          ? `Every top-load set cleared the ${block.targetRepRange[0]}-rep floor at the target effort, so the load steps up by the smallest increments that keep every target inside the ${block.targetRepRange[0]}–${block.targetRepRange[1]} range. Each set's target is what you actually did at ${displayWeight(repTotalPlan.refLoadKg, true)} ${weightLabel} last session, priced for the heavier load — reps are not reset to the range floor.`
           : repTotalPlan.bumpDeferred === 'load_cost'
             ? `You cleared the ${block.targetRepRange[0]}-rep floor on every top-load set, but at the smallest available increment the heavier load would price your current reps below the floor. The load holds; keep adding reps until the increase fits inside the range.`
             : `Target: beat ${repTotalPlan.prevSessionRepTotal} total reps at this load (aim ${repTotalPlan.sessionRepTotalTarget}+). When every set clears ${block.targetRepRange[0]} at the target effort, the load steps up one increment.`

@@ -286,6 +286,17 @@ export const HIGH_REP_COST_MIN_PER_PCT = 0.15;
 export const REP_TOTAL_VOLUME_SHORTFALL_TOLERANCE = 0.05;
 
 /**
+ * 2026-07-29 step 5(a) — ceiling on the load increase a rep_total bump may
+ * take in ONE session while fitting the observed rep counts back inside the
+ * configured range ceiling. The bump must land INSIDE the range at both
+ * ends: fitting a 15-rep history into an 8-12 range costs ~10.5% of load; a
+ * fit needing more than this bound stops stepping and clamps the residual
+ * targets to the range ceiling instead (the volume constraint pads sets).
+ * Mirrors MAX_REDUCE_PCT's role in the other direction.
+ */
+export const REP_TOTAL_RANGE_FIT_MAX_STEP_PCT = 0.3;
+
+/**
  * Two rep_total loads count as THE SAME load when they differ by no more
  * than max(half the smallest increment, this fraction). Everything beyond it
  * is a genuine load change: rep totals stop being comparable (the prior
