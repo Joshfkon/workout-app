@@ -1290,6 +1290,16 @@ describe('ExerciseCard', () => {
       await user.click(screen.getByText(/Set 1 · 100 kg × 10/));
       expect(screen.getByRole('button', { name: 'Set RIR to 2-3' })).toHaveAttribute('aria-pressed', 'true');
       expect(screen.getByRole('button', { name: 'Set RIR to 4+' })).toHaveAttribute('aria-pressed', 'false');
+
+      // Codex review fix: the 2-3 chip is a band — tapping it (even after
+      // visiting another chip) must preserve the exact stored RIR 3, not
+      // silently rewrite the set to RIR 2 / RPE 7.5.
+      await user.click(screen.getByRole('button', { name: 'Set RIR to 2-3' }));
+      await user.click(screen.getByRole('button', { name: 'Set RIR to 1' }));
+      await user.click(screen.getByRole('button', { name: 'Set RIR to 2-3' }));
+      await user.click(screen.getByRole('button', { name: 'Save set edit' }));
+
+      expect(onSetEdit).toHaveBeenCalledWith('set-1', { weightKg: 100, reps: 10, rpe: 7 });
     });
   });
 

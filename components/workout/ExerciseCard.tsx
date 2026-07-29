@@ -3025,7 +3025,14 @@ export const ExerciseCard = memo(function ExerciseCard({
                       <button
                         key={option.value}
                         type="button"
-                        onClick={() => setEditRir(option.value)}
+                        onClick={() =>
+                          // The "2-3" bucket is a band: when the set's exact
+                          // value is already 3, tapping it keeps 3 instead of
+                          // silently rewriting the logged effort to 2 / RPE 7.5.
+                          setEditRir(
+                            option.value === 2 && editInitialRirRef.current === 3 ? 3 : option.value
+                          )
+                        }
                         aria-label={`Set RIR to ${option.label}`}
                         aria-pressed={isSelected}
                         className={`px-2.5 py-1 rounded-full border text-[12px] font-medium transition-colors ${
