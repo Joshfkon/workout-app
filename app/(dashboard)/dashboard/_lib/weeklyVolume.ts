@@ -244,6 +244,16 @@ export interface ExerciseVolume {
    * pre-existing cached shapes; the accumulator always writes it.
    */
   unrated?: number;
+  /**
+   * Segment identity: `id` + the tag signature the credit was computed under.
+   * The SAME exercise id can appear with DIFFERENT tags in one window (a
+   * mid-week tag edit: cached history rows carry the old tags while live
+   * blocks carry the new ones — Codex P2 on #568). The group cap assumes one
+   * credit rate per entry, so entries accumulate and cap PER SEGMENT; display
+   * merges segments by `id` only after capping. Optional for pre-existing
+   * cached shapes; treated as `id` when absent.
+   */
+  creditKey?: string;
 }
 
 /**
@@ -255,7 +265,29 @@ export interface ExerciseVolume {
 function emitExerciseList(
   entries: ExerciseVolume[],
 ): ExerciseVolume[] {
-  const kept = entries
+  // Merge tag-version SEGMENTS of the same exercise id for display — this
+  // runs AFTER any group capping (segments cap independently upstream), so a
+  // retagged exercise renders as one row whose credit is the sum of its
+  // correctly-capped segments. performedSets SUM here: different segments are
+  // different performed blocks (unlike the same segment seen via two heads,
+  // which reconciles by max upstream).
+  const byId = new Map<string, ExerciseVolume>();
+  for (const e of entries) {
+    const existing = byId.get(e.id);
+    if (!existing) {
+      byId.set(e.id, { ...e });
+      continue;
+    }
+    existing.performedSets += e.performedSets;
+    existing.sets += e.sets;
+    existing.effective += e.effective;
+    existing.direct += e.direct;
+    existing.indirect += e.indirect;
+    existing.directEffective += e.directEffective;
+    existing.indirectEffective += e.indirectEffective;
+    existing.unrated = (existing.unrated ?? 0) + (e.unrated ?? 0);
+  }
+  const kept = Array.from(byId.values())
     .filter((e) => e.sets > ROUNDING_EPSILON)
     .sort((a, b) => b.sets - a.sets);
   const sets = allocateRounded(kept.map((e) => e.sets));
@@ -348,6 +380,17 @@ export function accumulateExerciseVolume(
   // performed sets).
   const performedCredited = new Set<string>();
 
+  // Entries are keyed by id + TAG SIGNATURE, not id alone: the same exercise
+  // id arriving with different tags (mid-week edit; cached vs live rows) must
+  // accumulate as separate segments so the group cap sees one credit rate per
+  // entry. Display merges segments by id only after capping (emitExerciseList).
+  const creditKey = `${exercise.id}::${(exercise.primary_muscle || '').toLowerCase()}|${(
+    exercise.secondary_muscles || []
+  )
+    .map((s) => s.toLowerCase())
+    .sort()
+    .join(',')}`;
+
   // Direct (primary-tag) vs indirect (secondary-tag) credit is tracked in the
   // SAME pass through the same accumulator — totals stay direct + indirect by
   // construction, never a second computation path.
@@ -378,7 +421,7 @@ export function accumulateExerciseVolume(
       entry.indirectSets += sets;
       entry.indirectEffectiveSets += effective;
     }
-    const existing = entry.exercises.get(exercise.id);
+    const existing = entry.exercises.get(creditKey);
     const ex = existing ?? {
       id: exercise.id,
       name: exercise.name,
@@ -390,6 +433,7 @@ export function accumulateExerciseVolume(
       directEffective: 0,
       indirectEffective: 0,
       unrated: 0,
+      creditKey,
     };
     if (!performedCredited.has(muscle)) {
       performedCredited.add(muscle);
@@ -405,7 +449,7 @@ export function accumulateExerciseVolume(
       ex.indirect += sets;
       ex.indirectEffective += effective;
     }
-    if (!existing) entry.exercises.set(exercise.id, ex);
+    if (!existing) entry.exercises.set(creditKey, ex);
   };
 
   // Per-set credits come from the CANONICAL module (services/shared/
@@ -910,7 +954,11 @@ function setsByStandardMuscle(
     cur.directEffectiveSets += stat.directEffectiveSets * share;
     cur.indirectEffectiveSets += stat.indirectEffectiveSets * share;
     for (const ex of stat.exercises) {
-      const existing = cur.exercises.find((e) => e.id === ex.id);
+      // Segment identity (id + tag signature), NOT display id: same-id entries
+      // with different tags must stay separate until the group cap has run.
+      const existing = cur.exercises.find(
+        (e) => (e.creditKey ?? e.id) === (ex.creditKey ?? ex.id)
+      );
       // The exercise entries carry the SAME share as the numeric rollup — a
       // legacy-keyed stat split across N standards contributes 1/N of each
       // entry to each, so Σ(entries) always equals the rollup totals (the
@@ -991,7 +1039,13 @@ export function buildVolumeRows(
     for (const child of children) {
       const data = byStd.get(child) ?? emptyRollup();
       for (const ex of data.exercises) {
-        const existing = coarseExercises.find((e) => e.id === ex.id);
+        // Match by SEGMENT (id + tag signature): the per-exercise cap below
+        // assumes one credit rate per entry (Codex P2 on #568) — segments of
+        // a retagged exercise merge by display id only AFTER capping, inside
+        // emitExerciseList.
+        const existing = coarseExercises.find(
+          (e) => (e.creditKey ?? e.id) === (ex.creditKey ?? ex.id)
+        );
         if (existing) {
           existing.sets += ex.sets;
           existing.effective += ex.effective;

@@ -207,6 +207,45 @@ describe('group credit never exceeds performed sets touching the group', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Mid-week tag edit (Codex P2 on #568): the SAME exercise id can appear with
+// DIFFERENT tags in one window (cached history rows carry the old tags for up
+// to a minute while live blocks carry the edit). The cap assumes one credit
+// rate per entry, so each tag version caps as its own segment; display merges
+// segments by id only after capping.
+// ---------------------------------------------------------------------------
+describe('same exercise id under two tag versions caps per segment', () => {
+  const blocks: WeeklyVolumeBlockRow[] = [
+    // Cached tag version: chest_upper primary + chest_lower secondary → 1.5
+    // chest credit per set, capped to 1.0 (4 sets → 4).
+    block('iso', 'Iso-Lateral Incline Press', 'chest_upper', ['chest_lower'], rir2(4)),
+    // Live tag version after an edit: delt-primary with a chest secondary →
+    // 0.5 chest credit per set, cap is a no-op (4 sets → 2).
+    block('iso', 'Iso-Lateral Incline Press', 'front_delts', ['chest_upper'], rir2(4)),
+  ];
+  const chest = rowsFor(blocks).find((r) => r.muscle === 'chest')!;
+
+  it('group credit is the sum of the per-segment caps (6), not the merged-then-capped 8', () => {
+    // Pre-fix: both versions merged into one entry (8 performed, 8 credited)
+    // before capping — f = min(1, 8/8) = 1 let the over-credited cached
+    // segment through uncapped.
+    expect(chest.sets).toBe(6);
+    expect(chest.effectiveSets).toBe(6);
+  });
+
+  it('the panel shows ONE row for the exercise, summing its capped segments', () => {
+    expect(chest.exercises).toHaveLength(1);
+    expect(chest.exercises[0].id).toBe('iso');
+    expect(chest.exercises[0].sets).toBe(6);
+    expect(chest.exercises[0].performedSets).toBe(8);
+  });
+
+  it('header still reconciles exactly with the panel', () => {
+    expect(sumTenths(chest.exercises.map((e) => e.sets))).toBe(tenths(chest.sets));
+    expect(sumTenths(chest.exercises.map((e) => e.effective))).toBe(tenths(chest.effectiveSets));
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Authoring invariant for the zone config (decision: bands stay AUTHORED).
 // Group bands are independent research landmarks, deliberately NOT derived
 // from sub-zones (sub-muscle zones legitimately overlap — deriving would
