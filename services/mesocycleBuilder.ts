@@ -48,6 +48,7 @@ import {
   resolvePrimaryMuscleCredits,
   SECONDARY_MUSCLE_CREDIT,
 } from '@/services/volumeTracker';
+import { groupCapScale, perSetCredits } from '@/services/shared/volumeCredit';
 import { resolveMuscleToStandard } from '@/types/schema';
 import {
   DEFAULT_VOLUME_LANDMARKS,
@@ -1431,24 +1432,90 @@ interface WeekCredit {
 type AllocatableExercise = { exercise: ExerciseEntry; sets: number };
 type AllocatableSession = { exercises: AllocatableExercise[] };
 
-function creditWeek(sessions: readonly AllocatableSession[]): WeekCredit {
+// ─── CAPPED CREDIT PROJECTION (Change 3 — GATED, DEFAULT OFF) ───────────────
+//
+// Tracking applies the per-group set-credit cap (services/shared/volumeCredit)
+// but this projection historically did not, so the generator believes a
+// cap-binding exercise (triceps pushdown, calf raise: 1.5 within-group
+// credit/set) delivers 1.5× what tracking will report. Routing the projection
+// through the cap makes the generator prescribe MORE REAL SETS to hit the
+// same credited target (≈1/ρ, up to +50% for triceps/calves) — a TRAINING
+// PRESCRIPTION change, not bookkeeping, so it must never ship as a silent
+// side effect:
+//
+//  - Default OFF (CAPPED_CREDIT_PROJECTION_DEFAULT / env
+//    NEXT_PUBLIC_CAPPED_CREDIT_PROJECTION=1). Callers may override per call.
+//  - DO NOT enable against the un-recalibrated presets: the preset values
+//    are being re-derived into capped currency first (see
+//    docs/PRESET_RECALIBRATION_PROPOSAL.md finding 4) — enabling early
+//    over-allocates the cap-binding groups by ~1/ρ.
+//  - A RAMP is available so the real-set increase phases in across a
+//    mesocycle instead of stepping in one week: rampFraction 0 = legacy
+//    uncapped projection, 1 = fully capped; per-exercise scale blends
+//    linearly (see cappedProjectionRampFraction).
+export const CAPPED_CREDIT_PROJECTION_DEFAULT =
+  process.env.NEXT_PUBLIC_CAPPED_CREDIT_PROJECTION === '1';
+
+export interface CreditProjectionOptions {
+  /** Project group credit CAPPED (the tracking currency). Default: the flag. */
+  capped?: boolean;
+  /**
+   * Blend between legacy uncapped (0) and fully capped (1) projection while
+   * `capped` is on — the mesocycle ramp. Default 1 (fully capped).
+   */
+  rampFraction?: number;
+}
+
+/**
+ * Ramp schedule for enabling the capped projection mid-lifecycle: week w of
+ * an N-week ramp projects at fraction min(1, w/N), so the real-set increase
+ * arrives in N even steps instead of one. Week ≥ N (and every later meso)
+ * is fully capped.
+ */
+export function cappedProjectionRampFraction(weekInMeso: number, rampWeeks: number): number {
+  if (rampWeeks <= 1) return 1;
+  return Math.min(1, Math.max(0, weekInMeso / rampWeeks));
+}
+
+/** Per-exercise credit scale for the projection: 1 when uncapped; blended
+ *  toward the canonical groupCapScale as rampFraction → 1. */
+function projectionScale(
+  ex: AllocatableExercise,
+  groupUncappedPerSet: number,
+  opts: CreditProjectionOptions | undefined
+): number {
+  const capped = opts?.capped ?? CAPPED_CREDIT_PROJECTION_DEFAULT;
+  if (!capped) return 1;
+  const ramp = Math.min(1, Math.max(0, opts?.rampFraction ?? 1));
+  const f = groupCapScale(ex.sets, groupUncappedPerSet * ex.sets);
+  return 1 - ramp * (1 - f);
+}
+
+function creditWeek(
+  sessions: readonly AllocatableSession[],
+  opts?: CreditProjectionOptions
+): WeekCredit {
   const direct = new Map<StandardMuscleGroup, number>();
   const indirect = new Map<StandardMuscleGroup, number>();
   const add = (m: Map<StandardMuscleGroup, number>, k: StandardMuscleGroup, v: number) =>
     m.set(k, (m.get(k) ?? 0) + v);
   for (const session of sessions) {
     for (const ex of session.exercises) {
-      const primaryCredits = resolvePrimaryMuscleCredits(ex.exercise.primaryMuscle);
-      const primarySet = new Set(primaryCredits.map((c) => c.muscle));
-      for (const { muscle, weight } of primaryCredits) add(direct, muscle, ex.sets * weight);
-      for (const secondary of ex.exercise.secondaryMuscles ?? []) {
-        const standards = resolveMuscleToStandard(secondary);
-        if (standards.length === 0) continue;
-        const per = SECONDARY_MUSCLE_CREDIT / standards.length;
-        for (const std of standards) {
-          if (primarySet.has(std)) continue;
-          add(indirect, std, ex.sets * per);
-        }
+      // Canonical per-set credits (services/shared/volumeCredit) — one source
+      // of set-credit math; the projection layer only chooses the currency.
+      const credits = perSetCredits(ex.exercise.primaryMuscle, ex.exercise.secondaryMuscles ?? []);
+      // Per-group uncapped per-set totals → the cap scale each member's
+      // credit is blended by (proportional distribution, identical to the
+      // tracking rollup in buildVolumeRows).
+      const groupPerSet = new Map<CoarseMuscle, number>();
+      for (const { muscle, credit } of credits) {
+        const coarse = STANDARD_TO_COARSE[muscle];
+        if (coarse) groupPerSet.set(coarse, (groupPerSet.get(coarse) ?? 0) + credit);
+      }
+      for (const { muscle, credit, isDirect } of credits) {
+        const coarse = STANDARD_TO_COARSE[muscle];
+        const scale = coarse ? projectionScale(ex, groupPerSet.get(coarse) ?? 0, opts) : 1;
+        add(isDirect ? direct : indirect, muscle, ex.sets * credit * scale);
       }
     }
   }
@@ -1486,7 +1553,9 @@ function directFloor(std: StandardMuscleGroup, indirect: number): number {
  */
 export function applyIndirectAwareAllocation(
   sessions: AllocatableSession[],
-  targets: Record<string, { sets: number }>
+  targets: Record<string, { sets: number }>,
+  /** Credit-projection currency — see the capped-projection gate above. */
+  projection?: CreditProjectionOptions
 ): string[] {
   const notes: string[] = [];
   const trimmedByGroup = new Map<CoarseMuscle, number>();
@@ -1494,7 +1563,7 @@ export function applyIndirectAwareAllocation(
 
   // Safety valve far above any real trim count (weekly sets are ~100).
   for (let iteration = 0; iteration < 300; iteration++) {
-    const { direct, indirect } = creditWeek(sessions);
+    const { direct, indirect } = creditWeek(sessions, projection);
 
     // Largest-overshoot group first, recomputed every iteration because a
     // trim also removes the trimmed exercise's OWN secondary credit from
@@ -1602,7 +1671,10 @@ export function generateFullProgram(
   profile: ExtendedUserProfile,
   sessionMinutes: number = 60,
   laggingAreas?: string[],  // From regional body composition analysis
-  volumeAdjustments?: VolumeAdjustmentInput[]  // From imbalance engine or user priorities
+  volumeAdjustments?: VolumeAdjustmentInput[],  // From imbalance engine or user priorities
+  /** Credit-projection currency for the allocation pass (gated — see the
+   *  capped-projection block above creditWeek; default = the OFF flag). */
+  projection?: CreditProjectionOptions
 ): FullProgramRecommendation {
 
   const warnings: string[] = [];
@@ -1670,7 +1742,7 @@ export function generateFullProgram(
   // toward them, so direct sets are trimmed per standard muscle (side/rear
   // delt work floored at child MEVs) until each group's credited total lands
   // at its target instead of overshooting by the inflow.
-  programNotes.push(...applyIndirectAwareAllocation(sessions, volumePerMuscle));
+  programNotes.push(...applyIndirectAwareAllocation(sessions, volumePerMuscle, projection));
 
 
   // Step 7: Generate schedule
