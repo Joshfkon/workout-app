@@ -170,7 +170,7 @@ describe('recommendRepTotalSessionStart', () => {
         { weightKg: 50, reps: 12, rir: 2 },
         { weightKg: 50, reps: 18, rir: 2 },
       ],
-      targetRepRange: [10, 15],
+      targetRepRange: [10, 25],
       targetRir: 2,
       minIncrementKg: 2.5,
       plannedSets: 2,
@@ -445,31 +445,68 @@ describe('recommendRepTotalNextSet (re-derived per set — planner parity)', () 
       plannedSets: 2,
     })!;
     // Bumped plan (18/17 @2 absorb the increment). Observe a first set of
-    // 13 @ 0 RIR at the new load — capacity 13 → ask ceiling 11 at 2 RIR.
+    // 15 @ 0 RIR at the new load — capacity 15 → ask ceiling 13 at 2 RIR,
+    // still inside the range, so the load holds and only the reps trim.
     const next = recommendRepTotalNextSet({
       sessionPlan: plan,
-      observedSets: [{ weightKg: plan.weightKg, reps: 13, rir: 0 }],
+      observedSets: [{ weightKg: plan.weightKg, reps: 15, rir: 0 }],
       targetRepRange: [12, 20],
       targetRir: 2,
       minIncrementKg: 2.5,
     });
-    expect(next.reps).toBeLessThanOrEqual(11);
+    expect(next.weightKg).toBe(plan.weightKg);
+    expect(next.rationale).toBe('follow_plan');
+    expect(next.reps).toBe(13);
     expect(next.sessionCapacityClamped).toBe(true);
   });
 
-  it('INV-1 analog: an out-of-range re-derived ask carries outsideRange', () => {
+  it('step 5: a capacity-trimmed ask BELOW the floor steps the load down instead of shipping it', () => {
+    // The old behavior: capacity 12 @ 0 RIR → ask ceiling 10 at 2 RIR —
+    // below the 12 floor — shipped with a "below the range" banner. The
+    // range is config: the engine now moves the LOAD (its other lever) so
+    // the demonstrated capacity prices back inside the range.
+    const plan = recommendRepTotalSessionStart({
+      prevSessionSets: [
+        { weightKg: 60, reps: 18, rir: 2 },
+        { weightKg: 60, reps: 17, rir: 2 },
+      ],
+      targetRepRange: [12, 20],
+      targetRir: 2,
+      minIncrementKg: 2.5,
+      plannedSets: 2,
+    })!;
+    const next = recommendRepTotalNextSet({
+      sessionPlan: plan,
+      observedSets: [{ weightKg: plan.weightKg, reps: 12, rir: 0 }],
+      targetRepRange: [12, 20],
+      targetRir: 2,
+      minIncrementKg: 2.5,
+    });
+    expect(next.rationale).toBe('reduce_load');
+    expect(next.weightKg).toBeLessThan(plan.weightKg);
+    expect(next.reps).toBeGreaterThanOrEqual(12);
+    expect(next.reps).toBeLessThanOrEqual(20);
+    expect(next.sessionCapacityClamped).toBe(true);
+    expect(next.outsideRange).toBeUndefined();
+  });
+
+  it('INV-1 analog: even a catastrophic collapse re-prices into the range via the load', () => {
+    // Step 5 removed the below-floor ship for capacity trims: the load is
+    // the lever. Even a 3 @ 0 collapse steps the load down far enough that
+    // the re-derived ask lands back inside the configured range.
     const plan = plan3x();
     const next = recommendRepTotalNextSet({
       sessionPlan: plan,
-      observedSets: [{ weightKg: 61.23, reps: 12, rir: 0 }],
+      observedSets: [{ weightKg: 61.23, reps: 3, rir: 0 }],
       targetRepRange: [12, 20],
       targetRir: 2,
       minIncrementKg: 4.54,
     });
-    // Capacity 12 @ 0 RIR → ask ceiling 10 at 2 RIR — below the 12 floor.
-    expect(next.reps).toBeLessThan(12);
-    expect(next.outsideRange).toBe('below');
-    expect(next.sessionCapacityClamped).toBe(true);
+    expect(next.rationale).toBe('reduce_load');
+    expect(next.weightKg).toBeLessThan(61.23);
+    expect(next.reps).toBeGreaterThanOrEqual(12);
+    expect(next.reps).toBeLessThanOrEqual(20);
+    expect(next.outsideRange).toBeUndefined();
   });
 
   it('exchanges the plan target onto a lifter-chosen load instead of grading it on the plan load', () => {
@@ -686,9 +723,11 @@ describe('overshoot-scaled target increment (Step 3, 2026-07-29 live defects)', 
     // The ask's implied capacity at target effort beats last session's sets.
     expect(epley(next.weightKg, next.reps, 2)).toBeGreaterThan(epley(62.5 * LB, 10, 2));
     expect(next.reps).toBeGreaterThan(10); // not last session's per-set reps
-    // Above the ceiling on the strength of today's evidence — flagged, not
-    // clamped back to the midpoint.
-    expect(next.outsideRange).toBe('above');
+    // The evidence floor raises the ask to the range CEILING and stops there
+    // (AM-5 option a: a target above repMax never ships) — capacity past the
+    // ceiling is the load-appropriateness detector's signal, not a bigger
+    // rep ask. Never the 8-12 midpoint.
+    expect(next.reps).toBe(12);
   });
 
   it('Exercise B next session: a target met with a wide margin grows by more than +1 (regression 6)', () => {
@@ -716,24 +755,30 @@ describe('overshoot-scaled target increment (Step 3, 2026-07-29 live defects)', 
     expect(increment).toBeGreaterThan(1);
   });
 
-  it('per-session target growth is capped — one outlier session cannot run the target away', () => {
+  it('per-session target growth is capped and never distributes past the range ceiling', () => {
+    // Decisive overshoot with headroom under the ceiling: effort way above
+    // target (fails the bump's effort gate → repeat branch) plus a rep
+    // margin over the prior session. The increment scales past +1 but is
+    // capped, and every distributed target stays inside the range (AM-5
+    // option a — growth the ceiling can't absorb belongs to the load lever).
     const plan = recommendRepTotalSessionStart({
       prevSessionSets: [
-        { weightKg: 62.5 * LB, reps: 20, rir: 4 },
-        { weightKg: 62.5 * LB, reps: 20, rir: 4 },
-        { weightKg: 62.5 * LB, reps: 20, rir: 4 },
+        { weightKg: 62.5 * LB, reps: 10, rir: 4 },
+        { weightKg: 62.5 * LB, reps: 10, rir: 4 },
+        { weightKg: 62.5 * LB, reps: 10, rir: 4 },
       ],
       priorSessionSets: [
-        { weightKg: 62.5 * LB, reps: 10, rir: 2 },
-        { weightKg: 62.5 * LB, reps: 10, rir: 2 },
-        { weightKg: 62.5 * LB, reps: 10, rir: 2 },
+        { weightKg: 62.5 * LB, reps: 9, rir: 2 },
+        { weightKg: 62.5 * LB, reps: 9, rir: 2 },
+        { weightKg: 62.5 * LB, reps: 9, rir: 2 },
       ],
       ...kelsoArgs,
       plannedSets: 3,
     })!;
     const increment = plan.sessionRepTotalTarget - plan.prevSessionRepTotal;
     expect(increment).toBeGreaterThan(1);
-    expect(increment).toBeLessThanOrEqual(Math.max(2, Math.round(60 * 0.1)));
+    expect(increment).toBeLessThanOrEqual(Math.max(2, Math.round(30 * 0.1)));
+    expect(plan.perSetRepTargets.every((r) => r <= 12)).toBe(true);
   });
 
   it('no overshoot keeps the +1 baseline (on-target session, no prior margin)', () => {
@@ -876,5 +921,110 @@ describe('ramped history (explicit rule)', () => {
     })!;
     expect(plan.rampHistory).toBe(true);
     expect(plan.prevSessionRepTotal).toBe(12); // top-load set only
+  });
+});
+
+describe('regression 5 (2026-07-29) — rep-total mode never knowingly emits a config-violating target', () => {
+  // MTS Abdominal Crunch shape: configured 8-12, previous session 4×15 at a
+  // fixed load. The live engine divided the 60-rep total into 4×15 and
+  // shipped it with "target 15 — above the 8-12 range" — it detected the
+  // violation and proceeded. Option (a): clamp to the range and adjust the
+  // LOAD to carry the capacity.
+  const mtsRange: [number, number] = [8, 12];
+  const mtsPrev = [
+    { weightKg: 50, reps: 15, rir: 2 },
+    { weightKg: 50, reps: 15, rir: 2 },
+    { weightKg: 50, reps: 15, rir: 2 },
+    { weightKg: 50, reps: 15, rir: 2 },
+  ];
+
+  it('MTS shape: the bump steps the load until every target fits inside 8-12', () => {
+    const plan = recommendRepTotalSessionStart({
+      prevSessionSets: mtsPrev,
+      targetRepRange: mtsRange,
+      targetRir: 2,
+      minIncrementKg: 2.5,
+      plannedSets: 4,
+    })!;
+    expect(plan.bumped).toBe(true);
+    // 15 observed reps price into a 12-rep ceiling at roughly +10% load —
+    // two 2.5 increments on 50, not one.
+    expect(plan.weightKg).toBe(55);
+    for (const target of plan.perSetRepTargets) {
+      expect(target).toBeGreaterThanOrEqual(mtsRange[0]);
+      expect(target).toBeLessThanOrEqual(mtsRange[1]);
+    }
+    // The tonnage consequence of the range clamp is explicit, never silent.
+    expect(plan.volumeShortfall).not.toBeNull();
+  });
+
+  it('MTS shape: within-session follow-plan asks stay inside the range', () => {
+    const plan = recommendRepTotalSessionStart({
+      prevSessionSets: mtsPrev,
+      targetRepRange: mtsRange,
+      targetRir: 2,
+      minIncrementKg: 2.5,
+      plannedSets: 4,
+    })!;
+    let observed: Array<{ weightKg: number; reps: number; rir: number }> = [];
+    for (let set = 0; set < 4; set++) {
+      const next = recommendRepTotalNextSet({
+        sessionPlan: plan,
+        observedSets: observed,
+        targetRepRange: mtsRange,
+        targetRir: 2,
+        minIncrementKg: 2.5,
+      });
+      expect(next.reps).toBeGreaterThanOrEqual(mtsRange[0]);
+      expect(next.reps).toBeLessThanOrEqual(mtsRange[1]);
+      expect(next.outsideRange).toBeUndefined();
+      // Lifter performs the ask exactly at target effort.
+      observed = [...observed, { weightKg: next.weightKg, reps: next.reps, rir: 2 }];
+    }
+  });
+
+  it('repeat path clamps over-range history counts to the ceiling', () => {
+    // The bump gate failed (a set left far too easy — RIR 4 against the
+    // 2+1 tolerance), so the load repeats — the 15-rep counts must still
+    // not ship as targets against 8-12.
+    const plan = recommendRepTotalSessionStart({
+      prevSessionSets: [
+        { weightKg: 50, reps: 15, rir: 2 },
+        { weightKg: 50, reps: 15, rir: 4 },
+        { weightKg: 50, reps: 15, rir: 2 },
+      ],
+      targetRepRange: mtsRange,
+      targetRir: 2,
+      minIncrementKg: 2.5,
+      plannedSets: 3,
+    })!;
+    expect(plan.bumped).toBe(false);
+    expect(plan.weightKg).toBe(50);
+    for (const target of plan.perSetRepTargets) {
+      expect(target).toBeGreaterThanOrEqual(mtsRange[0]);
+      expect(target).toBeLessThanOrEqual(mtsRange[1]);
+    }
+  });
+
+  it('a lifter-chosen lighter load cannot pull the exchanged ask above the ceiling', () => {
+    const plan = recommendRepTotalSessionStart({
+      prevSessionSets: mtsPrev,
+      targetRepRange: mtsRange,
+      targetRir: 2,
+      minIncrementKg: 2.5,
+      plannedSets: 4,
+    })!;
+    // Lifter loads well below the plan: the exchange would price the slot
+    // target far above 12 — it must clamp to the ceiling instead.
+    const next = recommendRepTotalNextSet({
+      sessionPlan: plan,
+      observedSets: [{ weightKg: 45, reps: 12, rir: 2 }],
+      targetRepRange: mtsRange,
+      targetRir: 2,
+      minIncrementKg: 2.5,
+    });
+    expect(next.weightKg).toBe(45);
+    expect(next.reps).toBeLessThanOrEqual(mtsRange[1]);
+    expect(next.outsideRange).toBeUndefined();
   });
 });

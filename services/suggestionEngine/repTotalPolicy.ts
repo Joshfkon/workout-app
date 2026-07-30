@@ -24,11 +24,18 @@
  * 4. REP-RANGE INTERACTION. The configured range is a per-set zone, not the
  *    target. The range floor gates the load bump (every top-load set must
  *    clear it at target effort, priced at the exercise's TRUE smallest
- *    increment). An emitted ask may sit outside the range ONLY when observed
- *    evidence puts it there (a set proving the load too heavy/too light),
- *    and then it carries `outsideRange`; an out-of-range ask produced by
- *    plan/exchange ARITHMETIC alone is a bug and clamps into the range —
- *    in both directions.
+ *    increment). The engine never knowingly emits a config-violating target
+ *    when a LOAD lever exists instead (AM-5, option a): asks above the
+ *    ceiling clamp to it — over-range capacity drives load increases (the
+ *    multi-step bump fit; the load-appropriateness detector), never bigger
+ *    rep asks; asks below the floor step the load down, and only when no
+ *    meaningful step-down exists does the honest below-floor ask ship,
+ *    carrying `outsideRange`. An out-of-range ask produced by plan/exchange
+ *    ARITHMETIC alone is a bug in either direction.
+ *    (Resolved conflict, 2026-07-29 PM merge: this spec originally allowed
+ *    evidence-backed asks ABOVE the ceiling with a flag; the merged AM-5
+ *    fix decided the ceiling always wins, so the ceiling rule above is the
+ *    binding one and over-range pressure routes to the load lever.)
  * 5. LOAD CHANGE MID-PROGRESSION. Rep totals compare only at matched loads
  *    (max(half grid step, 2.5%) tolerance). A deviating load invalidates the
  *    prior total AND the plan total as targets: no branch may keep consuming
@@ -103,6 +110,7 @@ import {
   REP_TOTAL_LOAD_MATCH_FRACTION,
   REP_TOTAL_OVERSHOOT_GAIN,
   REP_TOTAL_TARGET_GROWTH_CAP_FRACTION,
+  REP_TOTAL_RANGE_FIT_MAX_STEP_PCT,
 } from './constants';
 import { smallestIncrement, roundPrescribedLoad } from './loadGrid';
 
@@ -370,15 +378,34 @@ export function recommendRepTotalSessionStart(input: {
   // violation (the Bayesian Cable Curl failure).
   let bumpDeferred: RepTotalSessionStart['bumpDeferred'];
   if (bumped) {
-    const bumpedLoad = topLoad + inc;
-    const scaled = atLoad.map((s) => expectedRepsAfterLoadChange(s.reps, topLoad, bumpedLoad));
+    // 2026-07-29 step 5(a): the bump must land INSIDE the configured range
+    // at BOTH ends — the old path checked only the floor, which is how a
+    // 4×15 history against an 8-12 range shipped 15-rep targets with a
+    // "detected the violation and proceeded anyway" banner. Keep stepping
+    // increments while any exchanged target still sits above the range
+    // ceiling, bounded by the floor (never price a set below repMin) and by
+    // REP_TOTAL_RANGE_FIT_MAX_STEP_PCT; any residual over-ceiling target is
+    // clamped to the ceiling — the configured range wins, and the volume
+    // constraint pads sets to protect the total.
+    let bumpedLoad = topLoad + inc;
+    let scaled = atLoad.map((s) => expectedRepsAfterLoadChange(s.reps, topLoad, bumpedLoad));
+    while (scaled.some((r) => r > repMax)) {
+      const nextLoad = bumpedLoad + inc;
+      if (nextLoad > topLoad * (1 + REP_TOTAL_RANGE_FIT_MAX_STEP_PCT)) break;
+      const nextScaled = atLoad.map((s) => expectedRepsAfterLoadChange(s.reps, topLoad, nextLoad));
+      if (!nextScaled.every((r) => r >= repMin)) break; // the floor binds — stop
+      bumpedLoad = nextLoad;
+      scaled = nextScaled;
+    }
     if (scaled.every((r) => r >= repMin)) {
       // Targets anchor to OBSERVED reps at the prior load, exchanged for the
-      // load change — never reset to the range floor. Planned sets beyond
-      // history pad with the LAST exchanged target (the fatigue end); the
-      // plan covers at least the at-load count actually performed.
-      const tail = scaled[scaled.length - 1];
-      const perSet = Array.from({ length: Math.max(sets, atLoad.length) }, (_, i) => scaled[i] ?? tail);
+      // load change — never reset to the range floor, and never above the
+      // range ceiling. Planned sets beyond history pad with the LAST
+      // exchanged target (the fatigue end); the plan covers at least the
+      // at-load count actually performed.
+      const fitted = scaled.map((r) => Math.min(r, repMax));
+      const tail = fitted[fitted.length - 1];
+      const perSet = Array.from({ length: Math.max(sets, atLoad.length) }, (_, i) => fitted[i] ?? tail);
       const volume = applyVolumeConstraint(bumpedLoad, perSet, tail);
       return {
         weightKg: bumpedLoad,
@@ -429,20 +456,25 @@ export function recommendRepTotalSessionStart(input: {
   );
 
   // Repeat the load VERBATIM and chase the total: per-set seeds mirror last
-  // session's counts (floored at repMin so a collapsed set re-asks the floor),
-  // padded with the floor for any extra planned sets. The plan covers at
-  // least the at-load count actually performed (no silent set-count drop).
+  // session's counts clamped INTO the configured range (floored at repMin so
+  // a collapsed set re-asks the floor; ceilinged at repMax so an over-range
+  // count never ships as a target — step 5: the engine must not knowingly
+  // emit a config-violating target), padded with the floor for any extra
+  // planned sets. The plan covers at least the at-load count actually
+  // performed (no silent set-count drop); a total the clamp can no longer
+  // reach in the planned sets surfaces through the volume constraint.
   const perSet = Array.from({ length: Math.max(sets, atLoad.length) }, (_, i) => {
     const prev = atLoad[i]?.reps;
-    return Math.max(repMin, prev ?? repMin);
+    return Math.min(repMax, Math.max(repMin, prev ?? repMin));
   });
 
   // ONE total, ONE derivation (spec §1): the session target IS the sum of
   // the per-set targets. When the mirrored seeds fall short of
   // prevTotal + increment, the missing reps are distributed INTO the
-  // targets — front-loaded onto the freshest sets with range headroom,
-  // overflowing round-robin once every set sits at the ceiling (the
-  // deferred-bump case, where reps past the ceiling ARE the progression).
+  // targets — front-loaded onto the freshest sets, but never past the range
+  // ceiling (spec §4 / AM-5: a target above repMax never ships). Growth the
+  // ceiling can no longer absorb is the load's job, surfaced by the stall /
+  // load-appropriateness detectors — not by a config-violating rep target.
   // The old shape carried "prevTotal + 1" beside per-set targets summing to
   // a different number; the projected-volume header derived from one and
   // the rationale from the other (the Kelso 1,875 lb vs "31 planned" split).
@@ -456,11 +488,7 @@ export function recommendRepTotalSessionStart(input: {
         placed = true;
       }
     }
-    if (!placed) break; // every set at/above the ceiling — overflow below
-  }
-  for (let i = 0; needed > 0; i = (i + 1) % perSet.length) {
-    perSet[i] += 1;
-    needed -= 1;
+    if (!placed) break; // every set at the ceiling — the load lever owns the rest
   }
 
   const volume = applyVolumeConstraint(topLoad, perSet, repMin);
@@ -620,7 +648,13 @@ export function recommendRepTotalNextSet(input: RepTotalNextSetInput): RepTotalN
     sessionPlan.perSetRepTargets[slot] ??
     sessionPlan.perSetRepTargets[sessionPlan.perSetRepTargets.length - 1] ??
     repMin;
-  let reps = deviated ? repriceOntoLoad(planSlotReps, currentLoadKg) : planSlotReps;
+  // AM-5 option (a): a target above repMax must never ship — the exchange
+  // repricing keeps in-range sources in-range in BOTH directions
+  // (repriceOntoLoad), and the ceiling binds unconditionally on top.
+  let reps = Math.min(
+    repMax,
+    deviated ? repriceOntoLoad(planSlotReps, currentLoadKg) : planSlotReps
+  );
   let weightKg = currentLoadKg;
   let rationale: RepTotalNextSet['rationale'] = 'follow_plan';
 
@@ -645,7 +679,7 @@ export function recommendRepTotalNextSet(input: RepTotalNextSetInput): RepTotalN
     if (!r.noMeaningfulChange && r.weightKg < currentLoadKg) {
       weightKg = Math.max(smallestIncrement(input.availableIncrementsKg, input.minIncrementKg), r.weightKg);
       rationale = 'reduce_load';
-      reps = observedAskCeiling(last, weightKg, targetRir);
+      reps = Math.min(repMax, observedAskCeiling(last, weightKg, targetRir));
     }
   }
 
@@ -655,10 +689,12 @@ export function recommendRepTotalNextSet(input: RepTotalNextSetInput): RepTotalN
   // demonstrated ask ceiling at the asked load/effort (the natural
   // set-to-set fatigue decline); it can only RAISE the ask — banked reps
   // never reduce a later prescription, and no ask is ever remainder
-  // arithmetic against the session total.
+  // arithmetic against the session total. Bounded by the range ceiling
+  // (spec §4 / AM-5): capacity past repMax is the load-appropriateness
+  // detector's signal, never a bigger rep ask.
   if (rationale === 'follow_plan' && last) {
     const lastSetAskCeiling = observedAskCeiling(last, weightKg, targetRir);
-    reps = Math.max(reps, lastSetAskCeiling - 1);
+    reps = Math.min(repMax, Math.max(reps, lastSetAskCeiling - 1));
   }
 
   // INV-2 analog: once ≥1 set is logged, the ask may not exceed what today's
@@ -673,6 +709,45 @@ export function recommendRepTotalNextSet(input: RepTotalNextSetInput): RepTotalN
     if (ceiling > 0 && reps > ceiling) {
       reps = ceiling;
       sessionCapacityClamped = true;
+    }
+  }
+
+  // Step 5: a capacity-trimmed ask below the range floor is a config
+  // violation with a lever available — the LOAD. Instead of shipping a
+  // target the configured range forbids (the old "target N — below the
+  // range" state), step the load down so the best observed set's
+  // demonstrated capacity delivers the range mid, on the loading grid.
+  // When no meaningful step-down exists (already at the smallest load),
+  // the honest below-floor ask remains and carries `outsideRange`.
+  if (reps < repMin && rationale === 'follow_plan' && valid.length > 0) {
+    let best = valid[0];
+    let bestCeiling = 0;
+    for (const s of valid) {
+      const c = observedAskCeiling(s, weightKg, targetRir);
+      if (c > bestCeiling) {
+        bestCeiling = c;
+        best = s;
+      }
+    }
+    const zeroRirCapacity = best.reps + Math.max(0, best.rir ?? 0);
+    const capacityAtLoad = expectedRepsAfterLoadChange(zeroRirCapacity, best.weightKg, weightKg);
+    const neededZeroRir = mid + Math.max(0, targetRir);
+    const pctDrop = (capacityAtLoad - neededZeroRir) / repCostPerPctLoad(capacityAtLoad);
+    if (pctDrop < 0) {
+      const rawKg = Math.max(weightKg * (1 + pctDrop / 100), weightKg * (1 - MAX_REDUCE_PCT));
+      const r = roundPrescribedLoad(Math.min(rawKg, weightKg), {
+        availableIncrementsKg: input.availableIncrementsKg,
+        minIncrementKg: input.minIncrementKg,
+        referenceKg: weightKg,
+      });
+      if (!r.noMeaningfulChange && r.weightKg < weightKg) {
+        weightKg = Math.max(
+          smallestIncrement(input.availableIncrementsKg, input.minIncrementKg),
+          r.weightKg
+        );
+        rationale = 'reduce_load';
+        reps = Math.min(repMax, observedAskCeiling(best, weightKg, targetRir));
+      }
     }
   }
 

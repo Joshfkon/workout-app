@@ -3,6 +3,7 @@ import {
   estimateE1RMFromRpe,
   e1rmValue,
   e1rmValueFromRpe,
+  impliedE1RMFloor,
   E1RM_HIGH_CONFIDENCE_MAX_EFFECTIVE_REPS,
   E1RM_MAX_EFFECTIVE_REPS,
 } from '../e1rm';
@@ -98,5 +99,44 @@ describe('canonical estimateE1RM', () => {
     expect(e1rmValue(137.5, 30, 2)).toBe(0);
     expect(e1rmValueFromRpe(137.5, 30, 8)).toBe(0);
     expect(e1rmValue(100, 10, 0)).toBeCloseTo(133.3, 1);
+  });
+
+  // === Prescription-space floor (cap/floor comparisons, never display) ===
+
+  describe('impliedE1RMFloor', () => {
+    it('agrees exactly with estimateE1RM everywhere an estimate exists', () => {
+      for (const [reps, rir] of [
+        [5, 0],
+        [10, 2],
+        [12, 0],
+        [12, 2], // 14 eff — clamped region
+        [13, 2], // 15 eff — domain edge
+      ] as const) {
+        expect(impliedE1RMFloor(100, reps, rir)).toBe(estimateE1RM(100, reps, rir)!.value);
+      }
+    });
+
+    it('lifts the beyond-domain null to the flat eff-12 floor', () => {
+      // 137.5 × 30 @2 (32 eff): estimateE1RM is null; the floor is the
+      // eff-12 value — true capacity is provably at least this.
+      expect(estimateE1RM(137.5, 30, 2)).toBeNull();
+      expect(impliedE1RMFloor(137.5, 30, 2)).toBe(estimateE1RM(137.5, 12, 0)!.value);
+    });
+
+    it('is monotone non-decreasing in reps at a fixed load (flat past the cap)', () => {
+      let prev = 0;
+      for (let reps = 1; reps <= 25; reps++) {
+        const v = impliedE1RMFloor(100, reps, 2)!;
+        expect(v).toBeGreaterThanOrEqual(prev);
+        prev = v;
+      }
+      expect(impliedE1RMFloor(100, 25, 2)).toBe(impliedE1RMFloor(100, 10, 2));
+    });
+
+    it('rejects invalid inputs with null, like the estimator', () => {
+      expect(impliedE1RMFloor(0, 10, 2)).toBeNull();
+      expect(impliedE1RMFloor(100, 0, 2)).toBeNull();
+      expect(impliedE1RMFloor(NaN, 10, 2)).toBeNull();
+    });
   });
 });
