@@ -181,11 +181,14 @@ describe('INV-2 — implied capacity never exceeds the session best observed set
 });
 
 describe('INV-1 — a prescription outside its own stated range must say so', () => {
-  it('Arnold Press: a maintain-branch 45×7 against an 8-12 range carries the below-range flag', () => {
+  it('Arnold Press: a sub-floor maintain prediction re-solves as a LOAD reduction into the range', () => {
     // Two sets of 45×8 @2 done; the hold rule decrements to 7 — BELOW the
-    // stated 8-12 floor. Honest reps stay (fatigue decline is real), but the
-    // contradiction must be flagged so the banner re-renders instead of
-    // silently claiming "8-12 @ 2 RIR" over a 7-rep prescription.
+    // stated 8-12 floor. The range-floor rule (fatigue-aware prescription,
+    // Part 1 — the fixture's own "0c" defect note: "the engine proposed
+    // trimming reps rather than raising load", inverted here to reducing
+    // load rather than trimming reps) now discounts the LOAD instead of
+    // shipping the truncated count: one increment down puts the predicted
+    // reps (curve + session-capacity cap) back inside the range.
     const rec = recommendSet({
       lastWeightKg: 45,
       lastReps: 8,
@@ -193,7 +196,35 @@ describe('INV-1 — a prescription outside its own stated range must say so', ()
       setsCompletedThisExercise: 2,
       ...arnoldCtx,
     });
+    expect(rec.weightKg).toBe(42.5);
+    expect(rec.reps).toBe(9);
+    expect(rec.rationale).toBe('reduce_load');
+    expect(rec.rangeFloorLoadDrop).toBe(true);
+    expect(rec.provenance?.source).toBe('range_floor');
+    expect(rec.outsideRange).toBeUndefined();
+    // The resolved ask never demands more than the session demonstrated.
+    const implied = estimateE1RM(rec.weightKg, rec.reps, rec.rir)!;
+    expect(implied.value).toBeLessThanOrEqual(estimateE1RM(45, 8, 2)!.value * 1.01);
+  });
+
+  it('keeps the honest below-range flag when no achievable load reaches the floor', () => {
+    // Same Arnold shape, but the only loadable increment is a 20 lb jump —
+    // one step down (25) is past the −MAX_REDUCE_PCT bound, so no candidate
+    // load exists. The sub-floor count stands and the contradiction is
+    // flagged so the banner re-renders instead of silently claiming
+    // "8-12 @ 2 RIR" over a 7-rep prescription.
+    const rec = recommendSet({
+      lastWeightKg: 45,
+      lastReps: 8,
+      lastRir: 2,
+      setsCompletedThisExercise: 2,
+      targetRepRange: ARNOLD_TARGET_REP_RANGE,
+      targetRir: ARNOLD_TARGET_RIR,
+      minIncrementKg: 20,
+    });
+    expect(rec.weightKg).toBe(45);
     expect(rec.reps).toBe(7);
+    expect(rec.rangeFloorLoadDrop).toBeUndefined();
     expect(rec.outsideRange).toBe('below');
   });
 

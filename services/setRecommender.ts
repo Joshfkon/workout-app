@@ -179,6 +179,7 @@ export interface PrescriptionProvenance {
     | 'rep_resolve' // step 3: reps re-solved at the same load
     | 'session_capacity_cap' // INV-2 trimmed the ask (fatigue owns the set)
     | 'monotonicity_floor' // step-2 guard restored the floor
+    | 'range_floor' // Part 1: sub-floor reps re-solved as a LOAD reduction
     | 'anchor'; // anchor-path branch (hold / increase / reduce)
   /** The matched previous-session set the prescription references, when any. */
   referenceSet?: { weightKg: number; reps: number; rir?: number };
@@ -239,6 +240,18 @@ export interface SetRecommendation {
    * session best under fatigue.
    */
   sessionCapacityClamped?: boolean;
+  /**
+   * Range-floor rule (fatigue-aware prescription, Part 1): the predicted
+   * reps at the prescribed load fell BELOW the range floor, so the LOAD was
+   * stepped down the increment grid until the predicted reps (same curve +
+   * session-capacity cap that produced the sub-floor number) land inside the
+   * range. Fatigue is discounted on the load axis — reps are never truncated
+   * below the floor while the load holds (the `45 × 5 against an 8–12 range`
+   * live defect). Absent when no achievable load within MAX_REDUCE_PCT
+   * reaches the floor — the honest sub-floor count then stands, flagged by
+   * `outsideRange: 'below'`.
+   */
+  rangeFloorLoadDrop?: boolean;
   /**
    * 2026-07-29 step 3: the position-matched progression could not express a
    * measurably higher e1RM than the matched set as originally asked, so the
@@ -967,9 +980,9 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
       0,
       out.positionMatch ? Math.min(out.positionMatch.prevRir ?? out.rir, out.rir) : out.rir
     );
-    const underCapAt = (weightKg: number, reps: number): boolean => {
+    const underCapAt = (weightKg: number, reps: number, rirOverride?: number): boolean => {
       if (capE1RM == null) return true;
-      const implied = impliedE1RMFloor(weightKg, reps, askedRir);
+      const implied = impliedE1RMFloor(weightKg, reps, rirOverride ?? askedRir);
       // No implied value (invalid inputs) → nothing measurable to cap.
       return implied == null || implied <= capE1RM * (1 + SESSION_CAPACITY_TOLERANCE);
     };
@@ -1130,6 +1143,56 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
       }
     }
 
+    // ---- Range-floor load resolve (fatigue-aware prescription, Part 1) ----
+    // A within-session prescription whose reps sit below the range floor —
+    // whatever produced it (the INV-2 cap trim, the hold-branch fatigue
+    // decline, or a positional replay of a sub-floor historical set) — is a
+    // LOAD problem, not a rep problem: detected fatigue must discount the
+    // load axis, never truncate reps out of the prescribed stimulus range
+    // (the live `45 × 5 against 8–12` defect). Step the load DOWN the
+    // increment grid (bounded by MAX_REDUCE_PCT, mirroring the too-heavy
+    // branch) until the predicted reps land inside the range. The prediction
+    // at each candidate load is the SAME model that produced the sub-floor
+    // number: the fatigue-adjusted curve, ceilinged by the session-capacity
+    // cap — so the resolved ask never implies more than today demonstrated.
+    // The resolved prescription is a fresh curve ask at the TARGET effort
+    // (not a replay), so the cap grades it at out.rir, not the positional
+    // set's historical RIR. Session starts (n = 0) never enter: their
+    // seeding semantics (hold / +1 / confirmed-regression) live in
+    // recommendSessionStart and must not be converted into load drops here.
+    // If no candidate load reaches the floor, the honest sub-floor count
+    // stands and the INV-1 flag below still fires.
+    //
+    // Scope guard: only prescriptions at or below the just-completed set's
+    // load resolve. An intended INCREASE whose curve prediction reads
+    // sub-floor (cold-start "easy" bump, objective rep-overshoot reprice) is
+    // the anchor contradicting its own evidence-driven step — the estimate
+    // is known wrong-low there, and stepping the load back down would undo
+    // direct evidence with curve pessimism. Those keep the honest INV-1
+    // below-range flag instead.
+    let rangeFloorAdjusted = false;
+    if (out.reps < repMin && out.weightKg > 0 && n >= 1 && out.weightKg <= lastWeightKg) {
+      const resolveRir = Math.max(0, out.rir);
+      const stepInc = smallestIncrement(input.availableIncrementsKg, input.minIncrementKg);
+      const loadFloorKg = out.weightKg * (1 - MAX_REDUCE_PCT);
+      for (let step = 1; ; step++) {
+        const w = out.weightKg - step * stepInc;
+        if (!(w > 0) || w < loadFloorKg - 1e-9) break;
+        let reps = predictRepsAtWeight(e1rm, w, targetRir, n, targetRepRange);
+        while (reps > 1 && !underCapAt(w, reps, resolveRir)) reps -= 1;
+        if (reps >= repMin) {
+          out.weightKg = w;
+          out.reps = Math.min(reps, repMax);
+          out.rangeFloorLoadDrop = true;
+          // A grid-held "no meaningful change" claim cannot survive a full
+          // increment step down.
+          delete out.noMeaningfulChange;
+          rangeFloorAdjusted = true;
+          break;
+        }
+      }
+    }
+
     if (out.reps < repMin) out.outsideRange = 'below';
     else if (out.reps > repMax) out.outsideRange = 'above';
 
@@ -1144,17 +1207,23 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
         : out.weightKg < lastWeightKg
           ? 'reduce_load'
           : 'maintain';
-    const source: PrescriptionProvenance['source'] = floorRestored
-      ? 'monotonicity_floor'
-      : out.progressionLever === 'load'
-        ? 'load_lever'
-        : out.progressionLever === 'reps'
-          ? 'rep_resolve'
-          : out.sessionCapacityClamped
-            ? 'session_capacity_cap'
-            : out.positionMatch
-              ? 'position_match'
-              : 'anchor';
+    const source: PrescriptionProvenance['source'] = rangeFloorAdjusted
+      ? 'range_floor'
+      : floorRestored
+        ? 'monotonicity_floor'
+        : out.progressionLever === 'load'
+          ? 'load_lever'
+          : out.progressionLever === 'reps'
+            ? 'rep_resolve'
+            : out.sessionCapacityClamped
+              ? 'session_capacity_cap'
+              : out.positionMatch
+                ? 'position_match'
+                : 'anchor';
+    // A range-floor resolve re-based the ask to the TARGET effort — its
+    // direction must be measured at that basis, not the positional set's
+    // historical RIR (which graded the replay the resolve replaced).
+    const effortBasisRir = rangeFloorAdjusted ? Math.max(0, out.rir) : askedRir;
     if (out.positionMatch) {
       const pm = out.positionMatch;
       const refValue = impliedE1RMFloor(
@@ -1162,7 +1231,7 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
         pm.prevReps,
         Math.max(0, Math.min(pm.prevRir ?? out.rir, out.rir))
       );
-      const finalValue = impliedE1RMFloor(out.weightKg, out.reps, askedRir);
+      const finalValue = impliedE1RMFloor(out.weightKg, out.reps, effortBasisRir);
       const direction =
         refValue == null || finalValue == null
           ? undefined

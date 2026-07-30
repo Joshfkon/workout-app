@@ -254,9 +254,15 @@ describe('Codex review on #565 — cap pool must not double-count the just-compl
       sessionObservedSets: twice,
     });
     // Pool stays [set1, set2]: the last set anchors the cap at exponent 0 —
-    // repeating the just-done 45×8 @2 (implied 60.0) must remain legal.
-    expect(rec.weightKg).toBe(45);
+    // repeating the just-done 45×8 @2 (implied 60.0) remains legal, so the
+    // CAP must not clamp. (The prescription itself moves to 42.5×9 via the
+    // range-floor rule — the hold rule's ×7 sits below the 8-rep floor — but
+    // that is the load axis absorbing fatigue, not a capacity clamp; a
+    // double-counted pool would have shown up as sessionCapacityClamped.)
     expect(rec.sessionCapacityClamped).toBeUndefined();
+    expect(rec.weightKg).toBe(42.5);
+    expect(rec.reps).toBe(9);
+    expect(rec.rangeFloorLoadDrop).toBe(true);
   });
 });
 

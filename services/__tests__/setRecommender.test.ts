@@ -53,14 +53,17 @@ describe('recommendSet', () => {
       expect(r.effortVsTarget).toBe('easier');
     });
 
-    it('backs off reps deep into the exercise when the last set ran harder than target', () => {
-      // Set 5 (4 done), did 9 reps @ 1 RIR (1 harder than target) -> fewer reps,
-      // weight held, effort reads as harder.
+    it('backs off the LOAD deep into the exercise when the rep prediction falls below the floor', () => {
+      // Set 5 (4 done), did 9 reps @ 1 RIR (1 harder than target). The hold
+      // rule predicts 7 (9 + dev(-1) - fatigue(1)) — below the 8-rep floor —
+      // so the range-floor rule (fatigue-aware prescription, Part 1)
+      // discounts the LOAD until the predicted reps land back inside the
+      // range, instead of shipping a sub-floor rep target at the held load.
       const r = recommendSet(base({ lastReps: 9, lastRir: 1, setsCompletedThisExercise: 4 }));
-      expect(r.rationale).toBe('maintain');
-      expect(r.weightKg).toBe(100);
-      expect(r.reps).toBe(7); // 9 + dev(-1) - fatigue(1)
-      expect(r.reps).toBeLessThan(9);
+      expect(r.rationale).toBe('reduce_load');
+      expect(r.weightKg).toBe(95);
+      expect(r.reps).toBe(8);
+      expect(r.rangeFloorLoadDrop).toBe(true);
       expect(r.effortVsTarget).toBe('harder');
     });
 
