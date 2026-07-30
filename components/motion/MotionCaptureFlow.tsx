@@ -25,7 +25,6 @@ import {
 import { acquireScreenWakeLock, type WakeLockHandle } from '@/lib/motion/wakeLock';
 import {
   RAW_BUFFER_SESSION_CAP,
-  rawBuffersUsedForSession,
   saveMotionCapture,
   saveRawBufferIfAllowed,
 } from '@/lib/motion/motionPersistence';
@@ -73,7 +72,7 @@ export function MotionCaptureFlow({
   const [recordingLive, setRecordingLive] = useState(false); // armed → motion seen
   const [finished, setFinished] = useState<FinishedCapture | null>(null);
   const [attachSetId, setAttachSetId] = useState('');
-  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'synced' | 'queued'>('idle');
   const [rawNote, setRawNote] = useState<string | null>(null);
 
   const recorderRef = useRef<MotionRecorderHandle | null>(null);
@@ -102,6 +101,8 @@ export function MotionCaptureFlow({
       }));
   }, [calibration, exerciseBlocks, setLogs, units]);
 
+  const isMountedRef = useRef(true);
+
   const teardownSensors = () => {
     recorderRef.current?.stop();
     recorderRef.current = null;
@@ -110,13 +111,22 @@ export function MotionCaptureFlow({
     gateRef.current = null;
   };
 
-  useEffect(() => teardownSensors, []);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      teardownSensors();
+    };
+  }, []);
 
   const arm = async () => {
     if (!calibration) return;
     setError(null);
     // iOS: DeviceMotionEvent.requestPermission MUST run inside this tap.
     const permission = await requestMotionPermission();
+    // Navigated away while the permission dialog was up: starting sensors or
+    // a wake lock now would leak them past unmount.
+    if (!isMountedRef.current) return;
     if (permission !== 'granted') {
       setError(
         permission === 'unsupported'
@@ -192,31 +202,41 @@ export function MotionCaptureFlow({
         schemaVersion: MOTION_SCHEMA_VERSION,
       };
       const supabase = createUntypedClient();
-      await saveMotionCapture(supabase, capture, userId);
+      const saveResult = await saveMotionCapture(supabase, capture, userId);
 
-      if (rawRetentionEnabled && activeSession) {
+      // Raw buffers need the row to exist server-side (FK + ownership check),
+      // so only attempt when the metrics actually synced.
+      if (rawRetentionEnabled && activeSession && saveResult === 'synced') {
         const rawResult = await saveRawBufferIfAllowed(supabase, {
           captureId: capture.id,
           userId,
           workoutSessionId: activeSession.id,
           samples: finished.samples,
         });
-        if (rawResult === 'session-cap-reached') {
+        if (rawResult.status === 'session-cap-reached') {
           setRawNote(
             `Raw buffer not kept — session cap of ${RAW_BUFFER_SESSION_CAP} reached (metrics saved).`
           );
-        } else if (rawResult === 'failed') {
+        } else if (rawResult.status === 'failed') {
           setRawNote('Raw buffer upload failed (metrics saved — raw is best-effort).');
         } else {
           setRawNote(
-            `Raw buffer kept (${rawBuffersUsedForSession(activeSession.id)}/${RAW_BUFFER_SESSION_CAP} this session).`
+            `Raw buffer kept (${rawResult.usedThisSession}/${RAW_BUFFER_SESSION_CAP} this session).`
           );
         }
+      } else if (rawRetentionEnabled && saveResult === 'queued') {
+        setRawNote('Raw buffer skipped — metrics are queued offline; raw is online-only.');
       }
-      setSaveState('saved');
+      if (!isMountedRef.current) return;
+      setSaveState(saveResult);
     } catch (err) {
       console.error('[MotionCaptureFlow] save failed:', err);
-      setError('Failed to save the capture.');
+      if (!isMountedRef.current) return;
+      setError(
+        err instanceof Error && /rejected/.test(err.message)
+          ? err.message
+          : 'Failed to save the capture.'
+      );
       setSaveState('idle');
     }
   };
@@ -331,7 +351,7 @@ export function MotionCaptureFlow({
             </div>
           )}
 
-          {saveState !== 'saved' ? (
+          {saveState === 'idle' || saveState === 'saving' ? (
             <>
               {attachableSets.length > 0 ? (
                 <Select
@@ -367,7 +387,11 @@ export function MotionCaptureFlow({
           ) : (
             <div className="space-y-2">
               <div className="p-3 rounded-lg bg-success-500/10 border border-success-500/20">
-                <p className="text-sm text-success-400">Capture saved.</p>
+                <p className="text-sm text-success-400">
+                  {saveState === 'synced'
+                    ? 'Capture saved.'
+                    : 'Capture queued — it will sync when you’re back online.'}
+                </p>
                 {rawNote && <p className="text-xs text-surface-400 mt-1">{rawNote}</p>}
               </div>
               <Button variant="secondary" onClick={discard} className="w-full">

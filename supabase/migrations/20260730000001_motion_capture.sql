@@ -20,7 +20,7 @@ COMMENT ON COLUMN users.motion_capture_enabled IS
   'Experimental motion-capture feature flag. Off by default; gates all motion UI. Motion data is display-only and never feeds e1RM/prescription/volume.';
 
 COMMENT ON COLUMN users.motion_capture_raw_retention IS
-  'Opt-in retention of raw IMU sample buffers (motion_capture_raw_buffers). Off by default — only derived per-rep metrics are stored. Client enforces a per-workout-session cap.';
+  'Opt-in retention of raw IMU sample buffers (motion_capture_raw_buffers). Off by default — only derived per-rep metrics are stored. Capped per workout session, counted against the server (motion_capture_raw_buffers.workout_session_id).';
 
 -- One physical machine + seat + phone-mount position. Changing seat height
 -- or mount position invalidates the calibration (new row required).
@@ -92,15 +92,20 @@ CREATE INDEX idx_motion_captures_set ON motion_captures(set_id);
 CREATE INDEX idx_motion_captures_user ON motion_captures(user_id, created_at DESC);
 
 -- Raw IMU sample buffer, one per capture, opt-in only
--- (users.motion_capture_raw_retention). Session cap enforced client-side.
+-- (users.motion_capture_raw_retention). Carries the workout session id so
+-- the per-session cap is counted against the SERVER (shared across tabs and
+-- devices), not a per-tab counter.
 CREATE TABLE motion_capture_raw_buffers (
   capture_id UUID PRIMARY KEY REFERENCES motion_captures(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  workout_session_id UUID NOT NULL REFERENCES workout_sessions(id) ON DELETE CASCADE,
   sample_count INTEGER NOT NULL CHECK (sample_count >= 0),
   -- ImuSample[] (types/motion.ts), values rounded client-side to keep rows small.
   samples JSONB NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE INDEX idx_motion_raw_buffers_session ON motion_capture_raw_buffers(workout_session_id);
 
 -- RLS: all three tables carry user_id directly, so policies are plain
 -- auth.uid() checks (no join through blocks/sessions needed).
@@ -119,8 +124,26 @@ CREATE POLICY "Users can delete own calibrations" ON machine_calibrations
 
 CREATE POLICY "Users can view own motion captures" ON motion_captures
   FOR SELECT USING (auth.uid() = user_id);
+-- INSERT also verifies ownership of BOTH referenced rows: FK checks bypass
+-- the parent tables' RLS, so user_id alone would let a caller holding a
+-- foreign set/calibration UUID attach telemetry to another user's set (and,
+-- via ON DELETE RESTRICT, pin that user's calibration forever).
 CREATE POLICY "Users can insert own motion captures" ON motion_captures
-  FOR INSERT WITH CHECK (auth.uid() = user_id);
+  FOR INSERT WITH CHECK (
+    auth.uid() = user_id
+    AND EXISTS (
+      SELECT 1 FROM machine_calibrations mc
+      WHERE mc.id = motion_captures.calibration_id
+      AND mc.user_id = auth.uid()
+    )
+    AND EXISTS (
+      SELECT 1 FROM set_logs sl
+      JOIN exercise_blocks eb ON eb.id = sl.exercise_block_id
+      JOIN workout_sessions ws ON ws.id = eb.workout_session_id
+      WHERE sl.id = motion_captures.set_id
+      AND ws.user_id = auth.uid()
+    )
+  );
 CREATE POLICY "Users can update own motion captures" ON motion_captures
   FOR UPDATE USING (auth.uid() = user_id);
 CREATE POLICY "Users can delete own motion captures" ON motion_captures
@@ -128,7 +151,20 @@ CREATE POLICY "Users can delete own motion captures" ON motion_captures
 
 CREATE POLICY "Users can view own raw buffers" ON motion_capture_raw_buffers
   FOR SELECT USING (auth.uid() = user_id);
+-- Same referenced-row ownership rule as motion_captures.
 CREATE POLICY "Users can insert own raw buffers" ON motion_capture_raw_buffers
-  FOR INSERT WITH CHECK (auth.uid() = user_id);
+  FOR INSERT WITH CHECK (
+    auth.uid() = user_id
+    AND EXISTS (
+      SELECT 1 FROM motion_captures c
+      WHERE c.id = motion_capture_raw_buffers.capture_id
+      AND c.user_id = auth.uid()
+    )
+    AND EXISTS (
+      SELECT 1 FROM workout_sessions ws
+      WHERE ws.id = motion_capture_raw_buffers.workout_session_id
+      AND ws.user_id = auth.uid()
+    )
+  );
 CREATE POLICY "Users can delete own raw buffers" ON motion_capture_raw_buffers
   FOR DELETE USING (auth.uid() = user_id);

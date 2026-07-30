@@ -140,6 +140,7 @@ export interface Database {
         Row: {
           capture_id: string;
           user_id: string;
+          workout_session_id: string;
           sample_count: number;
           samples: Json;
           created_at: string;
@@ -147,6 +148,7 @@ export interface Database {
         Insert: {
           capture_id: string;
           user_id: string;
+          workout_session_id: string;
           sample_count: number;
           samples: Json;
           created_at?: string;

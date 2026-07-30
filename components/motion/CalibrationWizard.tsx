@@ -14,7 +14,7 @@
  * against the machine's real stroke before saving.
  */
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Card, CardContent, CardHeader, CardTitle, Input, Select } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
 import {
@@ -77,6 +77,19 @@ export function CalibrationWizard({ userId, exercises, onSaved, onClose }: Calib
   const transitRef = useRef<TransitSample[]>([]);
   const transitRecorderRef = useRef<MotionRecorderHandle | null>(null);
   const lastTransitTRef = useRef<number | null>(null);
+  const isMountedRef = useRef(true);
+
+  // The transit recorder runs between the bottom and top captures; if the
+  // user navigates away mid-wizard it must not keep a devicemotion listener
+  // (and this component's closure) alive.
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      transitRecorderRef.current?.stop();
+      transitRecorderRef.current = null;
+    };
+  }, []);
 
   const derivation: CalibrationDerivation | null = useMemo(() => {
     if (!gravityBottom || !gravityTop) return null;
@@ -106,6 +119,9 @@ export function CalibrationWizard({ userId, exercises, onSaved, onClose }: Calib
         return;
       }
       const samples = await recordForDuration(HOLD_CAPTURE_MS);
+      // Unmounted during the hold: starting the transit recorder now would
+      // leak a devicemotion listener with nothing left to stop it.
+      if (!isMountedRef.current) return;
       if (samples.length < 10) {
         setError('Too few sensor readings — try again.');
         return;
@@ -133,6 +149,7 @@ export function CalibrationWizard({ userId, exercises, onSaved, onClose }: Calib
       const samples = await recordForDuration(HOLD_CAPTURE_MS);
       transitRecorderRef.current?.stop();
       transitRecorderRef.current = null;
+      if (!isMountedRef.current) return;
       if (samples.length < 10) {
         setError('Too few sensor readings — try again.');
         return;
