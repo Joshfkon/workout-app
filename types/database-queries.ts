@@ -135,24 +135,6 @@ export interface ExerciseBlockFull extends ExerciseBlockRow {
   set_logs: SetLogRow[];
 }
 
-// ============ VOLUME QUERY RESULTS ============
-
-/**
- * Weekly muscle volume as returned from database
- */
-export interface WeeklyMuscleVolumeRow {
-  id?: string;
-  user_id: string;
-  week_start: string;
-  muscle_group: string;
-  total_sets: number;
-  effective_sets?: number;
-  average_rir?: number;
-  average_form_score?: number;
-  mesocycle_id?: string;
-  status: VolumeStatus;
-}
-
 // ============ EXERCISE PERFORMANCE QUERY RESULTS ============
 
 /**

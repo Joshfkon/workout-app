@@ -5,12 +5,10 @@ import { createUntypedClient } from '@/lib/supabase/client';
 import { useUserStore } from '@/stores';
 import {
   assessVolumeStatus,
-  resolvePrimaryMuscleCredits,
-  SECONDARY_MUSCLE_CREDIT,
   type MuscleVolumeData,
 } from '@/services/volumeTracker';
-import type { WeeklyMuscleVolumeRow } from '@/types/database-queries';
-import { STANDARD_MUSCLE_GROUPS, resolveMuscleToStandard, type StandardMuscleGroup } from '@/types/schema';
+import { perSetCredits } from '@/services/shared/volumeCredit';
+import { STANDARD_MUSCLE_GROUPS, type StandardMuscleGroup } from '@/types/schema';
 import {
   computeReachableMuscles,
   isMuscleWarnable,
@@ -45,40 +43,13 @@ export function useWeeklyVolume(options: UseWeeklyVolumeOptions = {}) {
     try {
       const supabase = createUntypedClient();
 
-      // Try to get pre-computed volume from database first
-      const { data: storedVolume, error: volumeError } = await supabase
-        .from('weekly_muscle_volume')
-        .select('*')
-        .eq('week_start', weekStart);
-
-      if (storedVolume && storedVolume.length > 0) {
-        // Use stored volume data - convert to standard muscle groups.
-        // Stored rows may use legacy coarse groups ('chest'); distribute their
-        // sets across the standard muscles they cover instead of assigning
-        // everything to the first match.
-        const storedSets = new Map<StandardMuscleGroup, number>();
-        storedVolume.forEach((row: WeeklyMuscleVolumeRow) => {
-          resolvePrimaryMuscleCredits(row.muscle_group).forEach(({ muscle, weight }) => {
-            storedSets.set(muscle, (storedSets.get(muscle) ?? 0) + row.total_sets * weight);
-          });
-        });
-        const mapped: MuscleVolumeData[] = [];
-        storedSets.forEach((sets, standardMuscle) => {
-          const totalSets = Math.round(sets);
-          const landmarks = getVolumeLandmarks(standardMuscle);
-          mapped.push({
-            muscleGroup: standardMuscle,
-            totalSets,
-            directSets: totalSets, // Not tracked separately in DB
-            indirectSets: 0,
-            landmarks,
-            status: assessVolumeStatus(totalSets, landmarks),
-            percentOfMrv: Math.round((totalSets / landmarks.mrv) * 100),
-          });
-        });
-        setVolumeData(mapped);
-      } else {
-        // Calculate from set logs if no pre-computed data
+      // ALWAYS derive from set_logs. The old weekly_muscle_volume stored-rows
+      // fast-path is gone: no production code ever wrote that table, and any
+      // rows an old build / migration / fixture might leave behind would
+      // freeze stale-convention (pre-group-cap) numbers over live derivation.
+      // The table itself is dropped (20260730000001) so the trap cannot be
+      // re-armed by a future writer.
+      {
         // Calculate end of week
         const weekEnd = new Date();
         weekEnd.setHours(23, 59, 59, 999);
@@ -134,24 +105,15 @@ export function useWeeklyVolume(options: UseWeeklyVolumeOptions = {}) {
             const primaryMuscle = exercise.primary_muscle;
             if (!primaryMuscle) return;
 
-            const primaryCredits = resolvePrimaryMuscleCredits(primaryMuscle);
-            const primarySet = new Set(primaryCredits.map((c) => c.muscle));
-            primaryCredits.forEach(({ muscle, weight }) => {
-              directByMuscle.set(muscle, (directByMuscle.get(muscle) ?? 0) + workingSets.length * weight);
-            });
-
-            (exercise.secondary_muscles || []).forEach((secondary: string) => {
-              const standards = resolveMuscleToStandard(secondary);
-              if (standards.length === 0) return;
-              const creditPerMuscle = SECONDARY_MUSCLE_CREDIT / standards.length;
-              standards.forEach((standardMuscle) => {
-                if (primarySet.has(standardMuscle)) return;
-                indirectByMuscle.set(
-                  standardMuscle,
-                  (indirectByMuscle.get(standardMuscle) ?? 0) + workingSets.length * creditPerMuscle
-                );
-              });
-            });
+            // Canonical per-set credit math (services/shared/volumeCredit) —
+            // this hook only multiplies by the working-set count.
+            for (const { muscle, credit, isDirect } of perSetCredits(
+              primaryMuscle,
+              exercise.secondary_muscles || []
+            )) {
+              const map = isDirect ? directByMuscle : indirectByMuscle;
+              map.set(muscle, (map.get(muscle) ?? 0) + workingSets.length * credit);
+            }
           });
 
           // Convert to MuscleVolumeData format with all standard muscles —

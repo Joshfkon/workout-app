@@ -609,30 +609,6 @@ export interface Database {
         };
         Relationships: [];
       };
-      weekly_muscle_volume: {
-        Row: {
-          user_id: string;
-          week_start: string;
-          muscle_group: string;
-          total_sets: number;
-          status: 'below_mev' | 'effective' | 'optimal' | 'approaching_mrv' | 'exceeding_mrv';
-        };
-        Insert: {
-          user_id: string;
-          week_start: string;
-          muscle_group: string;
-          total_sets?: number;
-          status?: 'below_mev' | 'effective' | 'optimal' | 'approaching_mrv' | 'exceeding_mrv';
-        };
-        Update: {
-          user_id?: string;
-          week_start?: string;
-          muscle_group?: string;
-          total_sets?: number;
-          status?: 'below_mev' | 'effective' | 'optimal' | 'approaching_mrv' | 'exceeding_mrv';
-        };
-        Relationships: [];
-      };
       plateau_alerts: {
         Row: {
           id: string;

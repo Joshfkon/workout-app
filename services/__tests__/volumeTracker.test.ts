@@ -10,7 +10,6 @@ import {
   generateVolumeRecommendations,
   calculateVolumeProgression,
   getVolumeSummary,
-  toWeeklyMuscleVolume,
   resolvePrimaryMuscleCredits,
   type CalculateVolumeInput,
   type MuscleVolumeData,
@@ -784,28 +783,8 @@ describe('getVolumeSummary', () => {
   });
 });
 
-// ============================================
-// WEEKLY MUSCLE VOLUME CONVERSION TESTS
-// ============================================
-
-describe('toWeeklyMuscleVolume', () => {
-  it('converts volume data to storage format', () => {
-    const volumeData = new Map<string, MuscleVolumeData>();
-    volumeData.set('chest_upper', createVolumeData('chest_upper', 16, 'optimal'));
-    volumeData.set('lats', createVolumeData('lats', 18, 'approaching_mrv'));
-
-    const records = toWeeklyMuscleVolume('user-1', '2024-01-01', volumeData as Map<never, MuscleVolumeData>);
-
-    expect(records).toHaveLength(2);
-
-    const chestRecord = records.find((r) => r.muscleGroup === 'chest_upper');
-    expect(chestRecord).toBeDefined();
-    expect(chestRecord!.userId).toBe('user-1');
-    expect(chestRecord!.weekStart).toBe('2024-01-01');
-    expect(chestRecord!.totalSets).toBe(16);
-    expect(chestRecord!.status).toBe('optimal');
-  });
-});
+// (toWeeklyMuscleVolume tests removed with the weekly_muscle_volume table —
+// see 20260730000001_drop_weekly_muscle_volume.sql.)
 
 // ============================================
 // HELPER FUNCTIONS

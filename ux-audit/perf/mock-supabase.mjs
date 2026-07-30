@@ -106,12 +106,6 @@ function restFixture(table, url, wantsObject) {
       return [{ logged_at: today, weight: 185.2, unit: 'lb' }];
     case 'user_preferences':
       return wantsObject ? { weight_unit: 'lb' } : [];
-    case 'weekly_muscle_volume':
-      return [
-        { muscle_group: 'chest', total_sets: 12, week_start: q.get('week_start')?.replace('eq.', '') },
-        { muscle_group: 'back', total_sets: 14 },
-        { muscle_group: 'quads', total_sets: 10 },
-      ];
     case 'exercises':
       return [{ id: '5f1b6f0a-1111-4222-8333-444455556666' }];
     case 'exercise_blocks':

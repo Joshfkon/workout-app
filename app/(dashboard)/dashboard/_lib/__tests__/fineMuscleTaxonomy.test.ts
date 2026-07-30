@@ -19,6 +19,7 @@ import {
   computeWeeklyMevSummary,
   COARSE_MUSCLES,
   COARSE_CHILDREN,
+  STANDARD_TO_COARSE,
   FINE_MUSCLE_PARENTS,
   type WeeklyVolumeBlockRow,
   type CoarseMuscle,
@@ -126,15 +127,17 @@ describe('calves fixture: seated + standing raises split soleus/gastrocnemius', 
     const calves = rows.find((r) => r.muscle === 'calves')!;
     const byMuscle = new Map(calves.children.map((c) => [c.muscle, c]));
 
-    // 4 primary + 0.5 × 4 secondary = 6 credited sets per head.
+    // 4 primary + 0.5 × 4 secondary = 6 credited sets per head — the heads
+    // legitimately overlap (one raise set feeds both).
     expect(byMuscle.get('gastrocnemius')!.sets).toBe(6);
     expect(byMuscle.get('soleus')!.sets).toBe(6);
     expect(byMuscle.get('gastrocnemius')!.reachable).toBe(true);
     expect(byMuscle.get('soleus')!.reachable).toBe(true);
 
-    // Parent = 12 credited sets (8 primary + 4 fractional secondary),
-    // NOT 6 + 6 double-counted against an extra coarse bucket.
-    expect(calves.sets).toBe(12);
+    // Parent = 8 credited sets: the per-group cap (services/shared/
+    // volumeCredit) limits each exercise to 1.0 group credit per performed
+    // set, so 8 performed calf sets can never read as 12 at group level.
+    expect(calves.sets).toBe(8);
   });
 
   it('a lagging soleus auto-surfaces without expansion (standing-only week)', () => {
@@ -168,7 +171,7 @@ describe('traps fixture: shrugs and face pulls feed the fine members', () => {
   });
 });
 
-describe('property: parent total == fine-child credits + coarse-tagged credits, once each', () => {
+describe('property: parent total == Σ per-exercise CAPPED group credit, once each', () => {
   // Mixed grains everywhere a coarse group has fine members.
   const blocks = [
     block('coarse-calf', 'calves', [], 5),
@@ -205,25 +208,60 @@ describe('property: parent total == fine-child credits + coarse-tagged credits, 
     return raw;
   }
 
-  it('every coarse row equals the rounded sum of its standard children — no set counted twice', () => {
+  /** Independent re-derivation of the CAPPED per-group credit: per block,
+   *  group credit = performedSets × min(1, Σ within-group per-set credit) —
+   *  straight from the set log + tags, never by summing muscle counters. */
+  function cappedGroupCredits(rows: WeeklyVolumeBlockRow[]): Map<CoarseMuscle, number> {
+    const out = new Map<CoarseMuscle, number>();
+    for (const b of rows) {
+      const ex = b.exercises!;
+      const sets = (b.set_logs ?? []).filter((s) => !s.is_warmup).length;
+      const perSetByGroup = new Map<CoarseMuscle, number>();
+      const addPerSet = (std: StandardMuscleGroup, v: number) => {
+        const coarse = STANDARD_TO_COARSE[std];
+        if (coarse) perSetByGroup.set(coarse, (perSetByGroup.get(coarse) ?? 0) + v);
+      };
+      const primaryCredits = resolvePrimaryMuscleCredits(ex.primary_muscle!);
+      const primarySet = new Set(primaryCredits.map((c) => c.muscle));
+      for (const { muscle, weight } of primaryCredits) addPerSet(muscle, weight);
+      for (const secondary of ex.secondary_muscles ?? []) {
+        const standards = resolveMuscleToStandard(secondary);
+        const per = SECONDARY_MUSCLE_CREDIT / standards.length;
+        for (const std of standards) {
+          if (primarySet.has(std)) continue;
+          addPerSet(std, per);
+        }
+      }
+      perSetByGroup.forEach((perSet, coarse) => {
+        out.set(coarse, (out.get(coarse) ?? 0) + sets * Math.min(1, perSet));
+      });
+    }
+    return out;
+  }
+
+  it('every coarse row equals the capped per-exercise group credit — no set counted twice', () => {
     const raw = rawCredits(blocks);
+    const capped = cappedGroupCredits(blocks);
     const { rows } = rowsFor(blocks);
 
     for (const row of rows) {
-      const expected = COARSE_CHILDREN[row.muscle as CoarseMuscle].reduce(
+      // The parent is NOT the sum of its (overlapping) standard children — it
+      // is the Σ of per-exercise capped group credit, computed from the set
+      // log. Children keep the uncapped per-head credit.
+      const expected = capped.get(row.muscle as CoarseMuscle) ?? 0;
+      expect(row.sets).toBeCloseTo(expected, 1);
+      const childSum = COARSE_CHILDREN[row.muscle as CoarseMuscle].reduce(
         (sum, std) => sum + (raw.get(std) ?? 0),
         0
       );
-      // Rows emit one-decimal credited sets (round-once) — compare against
-      // the raw expectation at that precision (max rounding error 0.05).
-      expect(row.sets).toBeCloseTo(expected, 1);
+      expect(row.sets).toBeLessThanOrEqual(childSum + 0.05);
     }
 
-    // Global conservation: the coarse rollup equals ALL credit handed out —
-    // every standard muscle belongs to exactly one coarse parent.
+    // Global conservation: the coarse rollup equals ALL capped credit handed
+    // out — every standard muscle belongs to exactly one coarse parent.
     const totalRows = rows.reduce((s, r) => s + r.sets, 0);
-    const totalRaw = Array.from(raw.values()).reduce((s, v) => s + v, 0);
-    expect(Math.abs(totalRows - totalRaw)).toBeLessThan(rows.length); // per-row rounding only
+    const totalCapped = Array.from(capped.values()).reduce((s, v) => s + v, 0);
+    expect(Math.abs(totalRows - totalCapped)).toBeLessThan(rows.length); // per-row rounding only
   });
 
   it('every standard muscle has exactly one coarse parent (rollup can never double-count)', () => {

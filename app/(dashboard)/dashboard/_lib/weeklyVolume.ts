@@ -8,11 +8,13 @@
  * volume fetch. Pure: no React, no Supabase client.
  */
 
+import { type MuscleVolumeData } from '@/services/volumeTracker';
 import {
+  groupCapScale,
+  perSetCredits,
+  perSetGroupCredits,
   resolvePrimaryMuscleCredits,
-  SECONDARY_MUSCLE_CREDIT,
-  type MuscleVolumeData,
-} from '@/services/volumeTracker';
+} from '@/services/shared/volumeCredit';
 import {
   isStandardMuscle,
   legacyToStandardMuscles,
@@ -235,6 +237,23 @@ export interface ExerciseVolume {
   indirect: number;
   directEffective: number;
   indirectEffective: number;
+  /**
+   * Credited share of the block's UNRATED sets (missing RIR — excluded from
+   * `effective`, surfaced separately). Carried per exercise so the group-cap
+   * scale can apply to it exactly like `sets`/`effective`. Optional only for
+   * pre-existing cached shapes; the accumulator always writes it.
+   */
+  unrated?: number;
+  /**
+   * Segment identity: `id` + the tag signature the credit was computed under.
+   * The SAME exercise id can appear with DIFFERENT tags in one window (a
+   * mid-week tag edit: cached history rows carry the old tags while live
+   * blocks carry the new ones — Codex P2 on #568). The group cap assumes one
+   * credit rate per entry, so entries accumulate and cap PER SEGMENT; display
+   * merges segments by `id` only after capping. Optional for pre-existing
+   * cached shapes; treated as `id` when absent.
+   */
+  creditKey?: string;
 }
 
 /**
@@ -246,7 +265,29 @@ export interface ExerciseVolume {
 function emitExerciseList(
   entries: ExerciseVolume[],
 ): ExerciseVolume[] {
-  const kept = entries
+  // Merge tag-version SEGMENTS of the same exercise id for display — this
+  // runs AFTER any group capping (segments cap independently upstream), so a
+  // retagged exercise renders as one row whose credit is the sum of its
+  // correctly-capped segments. performedSets SUM here: different segments are
+  // different performed blocks (unlike the same segment seen via two heads,
+  // which reconciles by max upstream).
+  const byId = new Map<string, ExerciseVolume>();
+  for (const e of entries) {
+    const existing = byId.get(e.id);
+    if (!existing) {
+      byId.set(e.id, { ...e });
+      continue;
+    }
+    existing.performedSets += e.performedSets;
+    existing.sets += e.sets;
+    existing.effective += e.effective;
+    existing.direct += e.direct;
+    existing.indirect += e.indirect;
+    existing.directEffective += e.directEffective;
+    existing.indirectEffective += e.indirectEffective;
+    existing.unrated = (existing.unrated ?? 0) + (e.unrated ?? 0);
+  }
+  const kept = Array.from(byId.values())
     .filter((e) => e.sets > ROUNDING_EPSILON)
     .sort((a, b) => b.sets - a.sets);
   const sets = allocateRounded(kept.map((e) => e.sets));
@@ -339,6 +380,17 @@ export function accumulateExerciseVolume(
   // performed sets).
   const performedCredited = new Set<string>();
 
+  // Entries are keyed by id + TAG SIGNATURE, not id alone: the same exercise
+  // id arriving with different tags (mid-week edit; cached vs live rows) must
+  // accumulate as separate segments so the group cap sees one credit rate per
+  // entry. Display merges segments by id only after capping (emitExerciseList).
+  const creditKey = `${exercise.id}::${(exercise.primary_muscle || '').toLowerCase()}|${(
+    exercise.secondary_muscles || []
+  )
+    .map((s) => s.toLowerCase())
+    .sort()
+    .join(',')}`;
+
   // Direct (primary-tag) vs indirect (secondary-tag) credit is tracked in the
   // SAME pass through the same accumulator — totals stay direct + indirect by
   // construction, never a second computation path.
@@ -369,7 +421,7 @@ export function accumulateExerciseVolume(
       entry.indirectSets += sets;
       entry.indirectEffectiveSets += effective;
     }
-    const existing = entry.exercises.get(exercise.id);
+    const existing = entry.exercises.get(creditKey);
     const ex = existing ?? {
       id: exercise.id,
       name: exercise.name,
@@ -380,6 +432,8 @@ export function accumulateExerciseVolume(
       indirect: 0,
       directEffective: 0,
       indirectEffective: 0,
+      unrated: 0,
+      creditKey,
     };
     if (!performedCredited.has(muscle)) {
       performedCredited.add(muscle);
@@ -387,6 +441,7 @@ export function accumulateExerciseVolume(
     }
     ex.sets += sets;
     ex.effective += effective;
+    ex.unrated = (ex.unrated ?? 0) + (workingSets > 0 ? unratedSets * (sets / workingSets) : 0);
     if (isDirect) {
       ex.direct += sets;
       ex.directEffective += effective;
@@ -394,33 +449,22 @@ export function accumulateExerciseVolume(
       ex.indirect += sets;
       ex.indirectEffective += effective;
     }
-    if (!existing) entry.exercises.set(exercise.id, ex);
+    if (!existing) entry.exercises.set(creditKey, ex);
   };
 
-  const primaryCredits = resolvePrimaryMuscleCredits(exercise.primary_muscle);
-  const primarySet = new Set<string>(primaryCredits.map((c) => c.muscle));
-  if (primaryCredits.length > 0) {
-    primaryCredits.forEach(({ muscle, weight }) =>
-      addCredit(muscle, workingSets * weight, effectiveVolume * weight, true)
-    );
-  } else {
+  // Per-set credits come from the CANONICAL module (services/shared/
+  // volumeCredit) — this accumulator only multiplies them by the block's
+  // working-set count / RIR-weighted sum and files them per muscle.
+  const credits = perSetCredits(exercise.primary_muscle, exercise.secondary_muscles || []);
+  const primaryResolved = credits.some((c) => c.isDirect);
+  credits.forEach(({ muscle, credit, isDirect }) =>
+    addCredit(muscle, workingSets * credit, effectiveVolume * credit, isDirect)
+  );
+  if (!primaryResolved) {
+    // Unresolvable primary token: keep the raw key so the volume isn't
+    // silently dropped from the per-muscle stats (legacy fallback).
     addCredit(exercise.primary_muscle.toLowerCase(), workingSets, effectiveVolume, true);
   }
-
-  (exercise.secondary_muscles || []).forEach((secondary) => {
-    const standards = resolveMuscleToStandard(secondary);
-    if (standards.length === 0) return;
-    const creditPerMuscle = SECONDARY_MUSCLE_CREDIT / standards.length;
-    standards.forEach((standardMuscle) => {
-      if (primarySet.has(standardMuscle)) return;
-      addCredit(
-        standardMuscle,
-        workingSets * creditPerMuscle,
-        effectiveVolume * creditPerMuscle,
-        false
-      );
-    });
-  });
 }
 
 export function volumeAccumulatorToStats(volumeByMuscle: VolumeAccumulator): MuscleVolumeStats[] {
@@ -910,19 +954,37 @@ function setsByStandardMuscle(
     cur.directEffectiveSets += stat.directEffectiveSets * share;
     cur.indirectEffectiveSets += stat.indirectEffectiveSets * share;
     for (const ex of stat.exercises) {
-      const existing = cur.exercises.find((e) => e.id === ex.id);
+      // Segment identity (id + tag signature), NOT display id: same-id entries
+      // with different tags must stay separate until the group cap has run.
+      const existing = cur.exercises.find(
+        (e) => (e.creditKey ?? e.id) === (ex.creditKey ?? ex.id)
+      );
+      // The exercise entries carry the SAME share as the numeric rollup — a
+      // legacy-keyed stat split across N standards contributes 1/N of each
+      // entry to each, so Σ(entries) always equals the rollup totals (the
+      // audit §5 latent double-count, closed).
       if (existing) {
-        existing.sets += ex.sets;
-        existing.effective += ex.effective;
-        existing.direct += ex.direct;
-        existing.indirect += ex.indirect;
-        existing.directEffective += ex.directEffective;
-        existing.indirectEffective += ex.indirectEffective;
+        existing.sets += ex.sets * share;
+        existing.effective += ex.effective * share;
+        existing.direct += ex.direct * share;
+        existing.indirect += ex.indirect * share;
+        existing.directEffective += ex.directEffective * share;
+        existing.indirectEffective += ex.indirectEffective * share;
+        existing.unrated = (existing.unrated ?? 0) + (ex.unrated ?? 0) * share;
         // Same exercise arriving via another stat key is the SAME performed
         // work — never summed, only reconciled.
         existing.performedSets = Math.max(existing.performedSets, ex.performedSets);
       } else {
-        cur.exercises.push({ ...ex });
+        cur.exercises.push({
+          ...ex,
+          sets: ex.sets * share,
+          effective: ex.effective * share,
+          direct: ex.direct * share,
+          indirect: ex.indirect * share,
+          directEffective: ex.directEffective * share,
+          indirectEffective: ex.indirectEffective * share,
+          unrated: (ex.unrated ?? 0) * share,
+        });
       }
     }
     out.set(m, cur);
@@ -966,11 +1028,6 @@ export function buildVolumeRows(
       (c) => FINE_CHILD_MUSCLES.has(c) && (!reachable || reachable.has(c))
     );
 
-    let coarseSetsRaw = 0;
-    let coarseEffectiveRaw = 0;
-    let coarseUnratedRaw = 0;
-    let coarseDirectRaw = 0;
-    let coarseDirectEffectiveRaw = 0;
     // Accumulate the per-exercise breakdown at FULL precision; rounding
     // happens once at emission (emitExerciseList), sum-preserving so the
     // list always reconciles exactly against the row header. Rounding at
@@ -981,13 +1038,14 @@ export function buildVolumeRows(
 
     for (const child of children) {
       const data = byStd.get(child) ?? emptyRollup();
-      coarseSetsRaw += data.sets;
-      coarseEffectiveRaw += data.effectiveSets;
-      coarseUnratedRaw += data.unratedSets;
-      coarseDirectRaw += data.directSets;
-      coarseDirectEffectiveRaw += data.directEffectiveSets;
       for (const ex of data.exercises) {
-        const existing = coarseExercises.find((e) => e.id === ex.id);
+        // Match by SEGMENT (id + tag signature): the per-exercise cap below
+        // assumes one credit rate per entry (Codex P2 on #568) — segments of
+        // a retagged exercise merge by display id only AFTER capping, inside
+        // emitExerciseList.
+        const existing = coarseExercises.find(
+          (e) => (e.creditKey ?? e.id) === (ex.creditKey ?? ex.id)
+        );
         if (existing) {
           existing.sets += ex.sets;
           existing.effective += ex.effective;
@@ -995,6 +1053,7 @@ export function buildVolumeRows(
           existing.indirect += ex.indirect;
           existing.directEffective += ex.directEffective;
           existing.indirectEffective += ex.indirectEffective;
+          existing.unrated = (existing.unrated ?? 0) + (ex.unrated ?? 0);
           // The group row shows the same performed sets, credit merged across
           // heads — performed work never sums when heads merge.
           existing.performedSets = Math.max(existing.performedSets, ex.performedSets);
@@ -1044,6 +1103,46 @@ export function buildVolumeRows(
       });
     }
 
+    // ── GROUP SET-CREDIT CAP (canonical: services/shared/volumeCredit) ──
+    // A group row's totals are NOT the sum of its (legitimately overlapping)
+    // sub-muscle counters: per exercise, the group's credit is capped at 1.0
+    // per performed set — an exercise tagged primary-to-one-head + secondary-
+    // to-another-head-in-the-same-group credits the group its performed sets,
+    // not 1.5×. The scale applies uniformly to raw, effective, composition
+    // and unrated shares, so RIR weighting rides ON TOP of the cap and the
+    // header always equals Σ(panel) for every metric. Sub-muscle child rows
+    // below keep their uncapped per-head credit — that overlap is correct for
+    // per-head programming decisions. Cross-group inflow is untouched
+    // (WITHIN-GROUP cap only — see volumeCredit's module header).
+    const cappedExercises = coarseExercises.map((ex) => {
+      const f = groupCapScale(ex.performedSets, ex.sets);
+      if (f === 1) return ex;
+      return {
+        ...ex,
+        sets: ex.sets * f,
+        effective: ex.effective * f,
+        direct: ex.direct * f,
+        indirect: ex.indirect * f,
+        directEffective: ex.directEffective * f,
+        indirectEffective: ex.indirectEffective * f,
+        unrated: (ex.unrated ?? 0) * f,
+      };
+    });
+    // Group totals derive from the SAME capped per-exercise entries the panel
+    // renders — never from summing sub-muscle counters.
+    let coarseSetsRaw = 0;
+    let coarseEffectiveRaw = 0;
+    let coarseUnratedRaw = 0;
+    let coarseDirectRaw = 0;
+    let coarseDirectEffectiveRaw = 0;
+    for (const ex of cappedExercises) {
+      coarseSetsRaw += ex.sets;
+      coarseEffectiveRaw += ex.effective;
+      coarseUnratedRaw += ex.unrated ?? 0;
+      coarseDirectRaw += ex.direct;
+      coarseDirectEffectiveRaw += ex.directEffective;
+    }
+
     const coarseSets = round1(coarseSetsRaw);
     return {
       key: coarse,
@@ -1064,7 +1163,7 @@ export function buildVolumeRows(
       laggingChildren: childRows.some((c) => c.reachable && c.belowMev),
       reachable: true,
       expandable,
-      exercises: emitExerciseList(coarseExercises),
+      exercises: emitExerciseList(cappedExercises),
       children: childRows.sort((a, b) => Number(b.belowMev) - Number(a.belowMev) || b.sets - a.sets),
     };
   });
@@ -1161,24 +1260,16 @@ export function computeSecondaryCreditRatio(
     const working = (block.set_logs || []).filter((s) => !s.is_warmup).length;
     if (working === 0) continue;
 
-    const primaryCredits = resolvePrimaryMuscleCredits(ex.primary_muscle);
-    const primaryStd = new Set(primaryCredits.map((c) => c.muscle));
-    for (const { muscle, weight } of primaryCredits) {
+    // Canonical per-set math: primary-only credit for the denominator, capped
+    // group credit for the numerator (this ratio is a GROUP-level reference
+    // metric, so it carries the same per-group cap the group rollup does).
+    for (const { muscle, weight } of resolvePrimaryMuscleCredits(ex.primary_muscle)) {
       const coarse = STANDARD_TO_COARSE[muscle];
       if (!coarse) continue;
       primary[coarse] += working * weight;
-      credited[coarse] += working * weight;
     }
-    for (const secondary of ex.secondary_muscles || []) {
-      const standards = resolveMuscleToStandard(secondary);
-      if (standards.length === 0) continue;
-      const per = SECONDARY_MUSCLE_CREDIT / standards.length;
-      for (const std of standards) {
-        if (primaryStd.has(std)) continue;
-        const coarse = STANDARD_TO_COARSE[std];
-        if (!coarse) continue;
-        credited[coarse] += working * per;
-      }
+    for (const { group, credit } of perSetGroupCredits(ex.primary_muscle, ex.secondary_muscles || [])) {
+      credited[group] += working * credit;
     }
   }
 

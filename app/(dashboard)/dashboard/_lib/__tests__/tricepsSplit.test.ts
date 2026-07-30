@@ -83,9 +83,11 @@ describe('the motivating week: pushdowns + pressing, zero overhead work', () => 
   const child = (m: string) => triceps.children.find((c) => c.muscle === m)!;
 
   it('group total is mid-zone — the number that used to hide the gap', () => {
-    // lat/med: 6 direct (rope 3 + machine 3) + 0.5 × 10 press sets = 11;
-    // long: 0.5 × 3 rope sets = 1.5; group = 12.5.
-    expect(triceps.sets).toBe(12.5);
+    // Group credit is CAPPED at 1.0/set (services/shared/volumeCredit): the
+    // rope pushdown's lat/med primary + long-head secondary is 1.5/set at the
+    // heads but only 3 (its performed sets) at the group. Group = rope 3 +
+    // machine 3 + presses 1.5 + 1.5 + 1 + ohp 1 = 11.
+    expect(triceps.sets).toBe(11);
     expect(triceps.zone).toBe('in_zone');
   });
 

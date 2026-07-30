@@ -131,7 +131,6 @@ The app uses these main tables:
 - `exercise_blocks` - Exercises within a session with targets
 - `set_logs` - Logged sets with quality classification
 - `exercise_performance_snapshots` - Historical performance for progress tracking
-- `weekly_muscle_volume` - Aggregated weekly volume per muscle
 - `plateau_alerts` - Detected plateaus with suggestions
 - `training_phases` - Cut/bulk/maintain phase tracking with goals
 - `ai_coaching_conversations` - AI coaching conversation history

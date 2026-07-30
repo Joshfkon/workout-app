@@ -22,9 +22,9 @@
  */
 
 import {
+  perSetStandardCredit as canonicalPerSetStandardCredit,
   resolvePrimaryMuscleCredits,
-  SECONDARY_MUSCLE_CREDIT,
-} from '@/services/volumeTracker';
+} from '@/services/shared/volumeCredit';
 import { normalizeMuscleToken, resolveMuscleToStandard } from '@/types/schema';
 
 /** One exercise's muscle tags, from any attribution source. */
@@ -70,22 +70,9 @@ export function perSetStandardCredit(
   primary: string,
   secondaries: string[]
 ): Record<string, number> {
-  const out: Record<string, number> = {};
-  const primaryCredits = resolvePrimaryMuscleCredits(primary);
-  const primarySet = new Set(primaryCredits.map((c) => c.muscle));
-  for (const { muscle, weight } of primaryCredits) {
-    out[muscle] = (out[muscle] ?? 0) + weight;
-  }
-  for (const secondary of secondaries) {
-    const standards = resolveMuscleToStandard(secondary);
-    if (standards.length === 0) continue;
-    const per = SECONDARY_MUSCLE_CREDIT / standards.length;
-    for (const std of standards) {
-      if (primarySet.has(std)) continue;
-      out[std] = (out[std] ?? 0) + per;
-    }
-  }
-  return out;
+  // Delegates to the CANONICAL set-credit module (services/shared/volumeCredit)
+  // so the audit can never drift from the live counter's math.
+  return canonicalPerSetStandardCredit(primary, secondaries);
 }
 
 /**

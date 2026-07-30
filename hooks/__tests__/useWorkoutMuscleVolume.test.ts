@@ -60,6 +60,8 @@ function historyRow(primaryMuscle: string, workingSets: number, secondaryMuscles
     completedAt: new Date().toISOString(),
     exercises: [
       {
+        id: `hist-${primaryMuscle}`,
+        name: `History ${primaryMuscle}`,
         primaryMuscle,
         secondaryMuscles,
         sets: Array.from({ length: workingSets }, () => ({ repsInTank: 2, reportedRir: 2 })),
