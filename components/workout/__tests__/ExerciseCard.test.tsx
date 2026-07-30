@@ -296,6 +296,59 @@ describe('ExerciseCard', () => {
     });
   });
 
+  describe('Progression-health pills (services/progressionHealth, in-app surfacing)', () => {
+    const healthSession = (date: string, weightKg: number, reps: number[], rir = 2) => ({
+      date,
+      sets: reps.map((r) => ({ weightKg, reps: r, rir })),
+    });
+
+    it('surfaces the stall pill after 4 consecutive sessions at a static load', () => {
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          progressionHealthSessions={[
+            healthSession(weeksAgo(3), 100, [10, 10, 9]),
+            healthSession(weeksAgo(2), 100, [10, 10, 10]),
+            healthSession(weeksAgo(1), 100, [11, 10, 10]),
+            healthSession(weeksAgo(0), 100, [11, 11, 10]),
+          ]}
+        />
+      );
+      expect(screen.getByTestId('progression-stall-pill')).toBeInTheDocument();
+    });
+
+    it('surfaces the explicit load-increase pill after 2 sessions above the range ceiling at reserve', () => {
+      // 14 reps @ RIR 3 against the block's 8-12 range, two sessions running
+      // (the Kelso Shrug case): the recommendation renders in words.
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          progressionHealthSessions={[
+            healthSession(weeksAgo(1), 100, [13, 11, 10], 2),
+            healthSession(weeksAgo(0), 100, [14, 10, 10], 3),
+          ]}
+        />
+      );
+      expect(screen.getByTestId('load-increase-pill')).toBeInTheDocument();
+      expect(screen.getByText(/increase load/i)).toBeInTheDocument();
+    });
+
+    it('renders neither pill on healthy progression', () => {
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          progressionHealthSessions={[
+            healthSession(weeksAgo(2), 95, [10, 10, 10]),
+            healthSession(weeksAgo(1), 97.5, [10, 10, 10]),
+            healthSession(weeksAgo(0), 100, [10, 10, 10]),
+          ]}
+        />
+      );
+      expect(screen.queryByTestId('progression-stall-pill')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('load-increase-pill')).not.toBeInTheDocument();
+    });
+  });
+
   describe('Header', () => {
     it('displays the exercise name and muscle meta line — grade/caution metadata moved to the info view', () => {
       render(<ExerciseCard {...defaultProps} />);

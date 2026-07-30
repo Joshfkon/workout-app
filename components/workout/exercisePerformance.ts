@@ -9,6 +9,7 @@
 
 import type { ExercisePerformanceSnapshot } from '@/types/schema';
 import { calculateE1RM } from '@/services/plateauDetector';
+import type { ProgressionHealthSession } from '@/services/progressionHealth';
 
 interface SnapshotSourceSet {
   weight_kg: number;
@@ -121,4 +122,74 @@ export function buildPerformanceSnapshots(
   }
 
   return byExercise;
+}
+
+/**
+ * Per-exercise session summaries for the progression-health detectors
+ * (services/progressionHealth) from the same batched history rows.
+ *
+ * Deliberately NOT the snapshot pipeline: snapshots require an estimable
+ * e1RM, which excludes exactly the rep_total exercises (all sets beyond the
+ * estimator's domain) whose stalls these detectors exist to surface. This
+ * builder keeps every completed non-deload session with valid working sets.
+ * Duration exercises are excluded — "reps" are seconds there, and both
+ * detectors reason in reps. Sessions return OLDEST FIRST, capped at the
+ * most recent MAX_SNAPSHOTS_PER_EXERCISE.
+ */
+export function buildProgressionHealthSessions(
+  blocks: SnapshotSourceBlock[],
+  modalityByExercise?: Record<string, string | undefined>
+): Record<string, ProgressionHealthSession[]> {
+  const byExercise: Record<string, Array<ProgressionHealthSession & { boundary: boolean }>> = {};
+
+  for (const block of blocks || []) {
+    const session = block.workout_sessions;
+    if (!session?.completed_at) continue;
+    // Deloads are held light by design — a parked load there is not a stall.
+    if (session.is_deload) continue;
+    if (modalityByExercise?.[block.exercise_id] === 'duration_based') continue;
+
+    const workingSets = (block.set_logs || []).filter(
+      (s) => !s.is_warmup && s.weight_kg > 0 && s.reps > 0
+    );
+    if (workingSets.length === 0) continue;
+
+    (byExercise[block.exercise_id] ??= []).push({
+      date: session.completed_at,
+      // User-marked "different equipment" — this session starts a new
+      // calibration segment.
+      boundary: !!block.equipment_changed,
+      sets: workingSets.map((s) => ({
+        weightKg: s.weight_kg,
+        reps: s.reps,
+        // RPE→RIR, the read-path convention; missing RPE stays undefined so
+        // the under-load detector never invents a reserve claim.
+        rir: s.rpe != null ? Math.max(0, 10 - s.rpe) : undefined,
+      })),
+    });
+  }
+
+  const result: Record<string, ProgressionHealthSession[]> = {};
+  for (const exerciseId of Object.keys(byExercise)) {
+    const sorted = byExercise[exerciseId].sort(
+      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+    );
+    // Honor explicit equipment boundaries the same way the plateau/pace
+    // analyzers do (knownDiscontinuities): the detectors read consecutive
+    // runs, and a run spanning two machines / loading scales is fiction —
+    // keep only the LATEST equipment segment (the boundary session starts it).
+    let segmentStart = 0;
+    for (let i = sorted.length - 1; i >= 0; i--) {
+      if (sorted[i].boundary) {
+        segmentStart = i;
+        break;
+      }
+    }
+    result[exerciseId] = sorted
+      .slice(segmentStart)
+      .slice(-MAX_SNAPSHOTS_PER_EXERCISE)
+      .map(({ date, sets }) => ({ date, sets }));
+  }
+
+  return result;
 }

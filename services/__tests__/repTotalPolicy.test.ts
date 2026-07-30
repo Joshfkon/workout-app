@@ -36,9 +36,12 @@ describe('recommendRepTotalSessionStart', () => {
     expect(plan.weightKg).toBe(LB135_KG); // no grid snapping, ever
     expect(plan.bumped).toBe(false); // sets 2-3 below the 12 floor
     expect(plan.prevSessionRepTotal).toBe(30);
-    expect(plan.sessionRepTotalTarget).toBe(31);
-    // Per-set seeds mirror last session, floored at 12: 12 / 12 / 12.
+    // Per-set seeds mirror last session, floored at 12: 12 / 12 / 12. The
+    // session target IS their sum (spec §1) — the floored seeds already
+    // exceed prev total + 1, so nothing is distributed; beating last
+    // session's 30 is tracked separately (remainingToBeatPrev).
     expect(plan.perSetRepTargets).toEqual([12, 12, 12]);
+    expect(plan.sessionRepTotalTarget).toBe(36);
   });
 
   it('bump: targets derive from OBSERVED reps exchanged for the load change — never a floor reset', () => {
@@ -87,7 +90,11 @@ describe('recommendRepTotalSessionStart', () => {
     expect(plan.bumped).toBe(false);
     expect(plan.bumpDeferred).toBe('load_cost');
     expect(plan.weightKg).toBe(61.23); // load held verbatim
-    expect(plan.perSetRepTargets).toEqual([14, 13, 12]);
+    // Seeds mirror 14/13/12; the target increment (+2 — the 12 @3 set left
+    // a rep of effort surplus) distributes into the sets with range
+    // headroom, and the session target is the resulting sum (spec §1/§3).
+    expect(plan.perSetRepTargets).toEqual([15, 14, 12]);
+    expect(plan.sessionRepTotalTarget).toBe(41);
   });
 
   it('too-easy sets (RIR way above target) do NOT earn the bump — chase reps instead', () => {
@@ -175,6 +182,81 @@ describe('recommendRepTotalSessionStart', () => {
     expect(plan.volumeShortfall).toBeNull();
   });
 
+  describe('bump-gate increment pricing (2026-07-29 live defects, Step 1)', () => {
+    const LB = 0.45359237;
+    // Exercise A — Shrug (Dumbbell), 8-12 rep-total. Jul 23: 77.5×12/11/10 @2RIR.
+    const shrugPrev = [
+      { weightKg: 77.5 * LB, reps: 12, rir: 2 },
+      { weightKg: 77.5 * LB, reps: 11, rir: 2 },
+      { weightKg: 77.5 * LB, reps: 10, rir: 2 },
+    ];
+    // Exercise B — Kelso Shrug, 8-12 rep-total. Jul 23: 62.5×10/10/10 @2RIR.
+    const kelsoPrev = [
+      { weightKg: 62.5 * LB, reps: 10, rir: 2 },
+      { weightKg: 62.5 * LB, reps: 10, rir: 2 },
+      { weightKg: 62.5 * LB, reps: 10, rir: 2 },
+    ];
+
+    it('Exercise A: a 2.5 lb dumbbell step is NOT rejected on rep-floor grounds (regression 1)', () => {
+      // The live hold priced a 5 lb step (legacy dumbbell default) and
+      // projected sub-floor reps. At the rack's true 2.5 lb granularity the
+      // step prices to ~11/10/9 — all in range — and the lifter's manual
+      // override (80×11/11/10 @2RIR) proved exactly that.
+      const plan = recommendRepTotalSessionStart({
+        prevSessionSets: shrugPrev,
+        targetRepRange: [8, 12],
+        targetRir: 2,
+        minIncrementKg: 1.13,
+        plannedSets: 4,
+      })!;
+      expect(plan.bumped).toBe(true);
+      expect(plan.bumpDeferred).toBeUndefined();
+      expect(plan.weightKg).toBeCloseTo(77.5 * LB + 1.13, 5); // ≈ 80 lb
+      expect(plan.perSetRepTargets.slice(0, 3).every((r) => r >= 8)).toBe(true);
+    });
+
+    it('Exercise A: the increment SET re-verifies a step a coarse legacy increment would reject', () => {
+      // Same history with the WRONG legacy 5 lb single increment, but the
+      // rack's real 2.5 lb step recorded in availableIncrementsKg: the gate
+      // must price the TRUE smallest step, not the legacy field.
+      const wrong = recommendRepTotalSessionStart({
+        prevSessionSets: shrugPrev,
+        targetRepRange: [8, 12],
+        targetRir: 2,
+        minIncrementKg: 2.27,
+        plannedSets: 4,
+      })!;
+      expect(wrong.bumped).toBe(false);
+      expect(wrong.bumpDeferred).toBe('load_cost'); // the live defect, reproduced
+      const verified = recommendRepTotalSessionStart({
+        prevSessionSets: shrugPrev,
+        targetRepRange: [8, 12],
+        targetRir: 2,
+        minIncrementKg: 2.27,
+        availableIncrementsKg: [2.27, 1.13],
+        plannedSets: 4,
+      })!;
+      expect(verified.bumped).toBe(true);
+      expect(verified.weightKg).toBeCloseTo(77.5 * LB + 1.13, 5);
+    });
+
+    it('Exercise B: a 5 lb step IS still rejected on rep-floor grounds (regression 2 — counter-case)', () => {
+      // At 62.5×10 @2RIR a 5 lb step prices to ~7 reps — genuinely below the
+      // 8-rep floor. The Step 1 fix is a correct increment, not a disabled
+      // floor check: with a true 5 lb smallest step the deferral must fire.
+      const plan = recommendRepTotalSessionStart({
+        prevSessionSets: kelsoPrev,
+        targetRepRange: [8, 12],
+        targetRir: 2,
+        minIncrementKg: 2.27,
+        plannedSets: 3,
+      })!;
+      expect(plan.bumped).toBe(false);
+      expect(plan.bumpDeferred).toBe('load_cost');
+      expect(plan.weightKg).toBeCloseTo(62.5 * LB, 5); // load held
+    });
+  });
+
   it('returns null with no usable history (caller keeps its cold-start path)', () => {
     expect(
       recommendRepTotalSessionStart({
@@ -237,8 +319,10 @@ describe('recommendRepTotalNextSet (re-derived per set — planner parity)', () 
     expect(next.weightKg).toBe(61.23);
     expect(next.reps).toBe(12); // slot 3's plan (8 floored to 12)
     expect(next.totalSoFar).toBe(24);
-    expect(next.sessionRepTotalTarget).toBe(31);
-    expect(next.remainingToTarget).toBe(7);
+    // The session target is the per-set sum (12+12+12 — spec §1); beating
+    // last session's actual 30 is the separate claim below.
+    expect(next.sessionRepTotalTarget).toBe(36);
+    expect(next.remainingToTarget).toBe(12);
     expect(next.rationale).toBe('follow_plan');
     expect(next.sessionCapacityClamped).toBeUndefined();
     // Beat-last-session accounting reads last session's ACTUAL total (30).
@@ -466,6 +550,333 @@ describe('recommendRepTotalNextSet (re-derived per set — planner parity)', () 
     expect(next.loadDeviation).toBeUndefined();
     expect(next.totalComparable).toBe(true);
     expect(next.reps).toBe(12); // plan slot target, un-exchanged
+  });
+});
+
+describe('stale-total remainder + floor-not-budget (Step 2, 2026-07-29 live defects)', () => {
+  const LB = 0.45359237;
+  // Exercise A's live plan: the coarse 5 lb increment deferred the bump, so
+  // the plan held 77.5 lb with per-set targets 12/11/10 + an 8-floor pad
+  // (4 planned sets). The lifter then overrode the load to 80 lb.
+  const heldPlan = () =>
+    recommendRepTotalSessionStart({
+      prevSessionSets: [
+        { weightKg: 77.5 * LB, reps: 12, rir: 2 },
+        { weightKg: 77.5 * LB, reps: 11, rir: 2 },
+        { weightKg: 77.5 * LB, reps: 10, rir: 2 },
+      ],
+      targetRepRange: [8, 12],
+      targetRir: 2,
+      minIncrementKg: 2.27,
+      plannedSets: 4,
+    })!;
+  const observed80 = [
+    { weightKg: 80 * LB, reps: 11, rir: 2 },
+    { weightKg: 80 * LB, reps: 11, rir: 2 },
+    { weightKg: 80 * LB, reps: 10, rir: 2 },
+  ];
+  // The exercise's TRUE increment (post Step 1 config fix) — makes 80 vs
+  // 77.5 a genuine load deviation, not half-step grid noise.
+  const nextSetArgs = {
+    targetRepRange: [8, 12] as [number, number],
+    targetRir: 2,
+    minIncrementKg: 1.13,
+  };
+
+  it('Exercise A set 4: never 7 — ≥ range floor and ≥ (prior set reps − 2) (regression 3)', () => {
+    const plan = heldPlan();
+    expect(plan.bumpDeferred).toBe('load_cost'); // the live plan reproduced
+    const next = recommendRepTotalNextSet({
+      sessionPlan: plan,
+      observedSets: observed80,
+      ...nextSetArgs,
+    });
+    expect(next.loadDeviation).toBeDefined();
+    expect(next.reps).toBeGreaterThanOrEqual(8); // range floor (spec §4)
+    expect(next.reps).toBeGreaterThanOrEqual(10 - 2); // last set − fatigue allowance
+    expect(next.reps).not.toBe(7);
+    expect(next.outsideRange).toBeUndefined(); // no arithmetic range violation
+  });
+
+  it('Exercise A set 4: no value is traceable to the total the rationale disclaimed (regression 4)', () => {
+    const plan = heldPlan();
+    const stalePlanTotal = plan.sessionRepTotalTarget; // priced at 77.5, inapplicable at 80
+    const next = recommendRepTotalNextSet({
+      sessionPlan: plan,
+      observedSets: observed80,
+      ...nextSetArgs,
+    });
+    expect(next.totalComparable).toBe(false);
+    // The effective target is the plan re-priced onto 80 lb (11+10+9+8=38):
+    // every remainder consumer reads THIS, never the 77.5-based total.
+    expect(next.sessionRepTotalTarget).not.toBe(stalePlanTotal);
+    expect(next.sessionRepTotalTarget).toBe(38);
+    expect(next.remainingToTarget).toBe(38 - 32);
+    // And the ask itself traces to today's observed evidence at 80 lb — one
+    // rep under the last set's demonstrated ask ceiling (10 @2 RIR → 9) —
+    // not to remainder arithmetic against any total.
+    expect(next.reps).toBe(9);
+  });
+
+  it('rep-total is a FLOOR: beating the pace never shrinks a later ask (spec §2)', () => {
+    const plan = heldPlan();
+    const onPace = recommendRepTotalNextSet({
+      sessionPlan: plan,
+      observedSets: [
+        { weightKg: 77.5 * LB, reps: 12, rir: 2 },
+        { weightKg: 77.5 * LB, reps: 11, rir: 2 },
+      ],
+      ...nextSetArgs,
+    });
+    const overPace = recommendRepTotalNextSet({
+      sessionPlan: plan,
+      observedSets: [
+        { weightKg: 77.5 * LB, reps: 16, rir: 2 },
+        { weightKg: 77.5 * LB, reps: 15, rir: 2 },
+      ],
+      ...nextSetArgs,
+    });
+    // Over-performance may only hold or RAISE the next ask…
+    expect(overPace.reps).toBeGreaterThanOrEqual(onPace.reps);
+    // …and never dips below the slot's plan target because reps were banked.
+    expect(overPace.reps).toBeGreaterThanOrEqual(plan.perSetRepTargets[2]);
+  });
+
+  it('an automatic load reduction re-prices the session target onto the returned load (Codex review)', () => {
+    // Bumped plan; set 1 collapses (6 @ 0 RIR) → reduce_load steps the load
+    // down. The target must follow the RETURNED load — serving the plan's
+    // total beside a prescription at a lighter load is the same
+    // stale-total defect as a lifter-chosen deviation.
+    const plan = recommendRepTotalSessionStart({
+      prevSessionSets: [
+        { weightKg: 60, reps: 18, rir: 2 },
+        { weightKg: 60, reps: 17, rir: 2 },
+      ],
+      targetRepRange: [12, 20],
+      targetRir: 2,
+      minIncrementKg: 2.5,
+      plannedSets: 2,
+    })!;
+    expect(plan.bumped).toBe(true);
+    const next = recommendRepTotalNextSet({
+      sessionPlan: plan,
+      observedSets: [{ weightKg: plan.weightKg, reps: 6, rir: 0 }],
+      targetRepRange: [12, 20],
+      targetRir: 2,
+      minIncrementKg: 2.5,
+    });
+    expect(next.rationale).toBe('reduce_load');
+    expect(next.weightKg).toBeLessThan(plan.weightKg);
+    // Re-priced onto the reduced load: more total reps at less weight —
+    // never the bumped plan's total.
+    expect(next.sessionRepTotalTarget).not.toBe(plan.sessionRepTotalTarget);
+    expect(next.sessionRepTotalTarget).toBeGreaterThan(plan.sessionRepTotalTarget);
+    expect(next.remainingToTarget).toBe(next.sessionRepTotalTarget - 6);
+  });
+
+  it('an ask raised off the plan slot by evidence drops the positional claim', () => {
+    const plan = heldPlan();
+    const next = recommendRepTotalNextSet({
+      sessionPlan: plan,
+      observedSets: [
+        { weightKg: 77.5 * LB, reps: 16, rir: 2 },
+        { weightKg: 77.5 * LB, reps: 15, rir: 2 },
+      ],
+      ...nextSetArgs,
+    });
+    // Set 3's ask now derives from today's set 2, not last session's set 3 —
+    // an INV-4 positional claim would be false provenance.
+    expect(next.reps).toBeGreaterThan(plan.perSetRepTargets[2]);
+    expect(next.positionRef).toBeUndefined();
+  });
+});
+
+describe('overshoot-scaled target increment (Step 3, 2026-07-29 live defects)', () => {
+  const LB = 0.45359237;
+  const epley = (w: number, reps: number, rir: number) => w * (1 + (reps + rir) / 30);
+  const kelsoArgs = {
+    targetRepRange: [8, 12] as [number, number],
+    targetRir: 2,
+    minIncrementKg: 2.27,
+  };
+
+  it('Exercise B set 2: the ask responds to a 14 @3RIR overshoot, never re-serving the plan slot (regression 5)', () => {
+    // Live defect: set 1 logged 62.5×14 @3 RIR (implied capacity ~12% above
+    // last session) and set 2 was still prescribed 62.5×10 — the range
+    // midpoint / last session's per-set reps. The evidence floor must raise
+    // the ask, and the range ceiling must not claw it back (Step 2b/3b).
+    const plan = recommendRepTotalSessionStart({
+      prevSessionSets: [
+        { weightKg: 62.5 * LB, reps: 10, rir: 2 },
+        { weightKg: 62.5 * LB, reps: 10, rir: 2 },
+        { weightKg: 62.5 * LB, reps: 10, rir: 2 },
+      ],
+      ...kelsoArgs,
+      plannedSets: 3,
+    })!;
+    const next = recommendRepTotalNextSet({
+      sessionPlan: plan,
+      observedSets: [{ weightKg: 62.5 * LB, reps: 14, rir: 3 }],
+      ...kelsoArgs,
+    });
+    expect(next.weightKg).toBeCloseTo(62.5 * LB, 5);
+    // The ask's implied capacity at target effort beats last session's sets.
+    expect(epley(next.weightKg, next.reps, 2)).toBeGreaterThan(epley(62.5 * LB, 10, 2));
+    expect(next.reps).toBeGreaterThan(10); // not last session's per-set reps
+    // The evidence floor raises the ask to the range CEILING and stops there
+    // (AM-5 option a: a target above repMax never ships) — capacity past the
+    // ceiling is the load-appropriateness detector's signal, not a bigger
+    // rep ask. Never the 8-12 midpoint.
+    expect(next.reps).toBe(12);
+  });
+
+  it('Exercise B next session: a target met with a wide margin grows by more than +1 (regression 6)', () => {
+    // Prior session 3×10 @2 (total 30); last session beat it at ~12% higher
+    // implied capacity (14 @3 top set, total 34). The old constant +1 was a
+    // stall dressed as progression.
+    const plan = recommendRepTotalSessionStart({
+      prevSessionSets: [
+        { weightKg: 62.5 * LB, reps: 14, rir: 3 },
+        { weightKg: 62.5 * LB, reps: 12, rir: 2 },
+        { weightKg: 62.5 * LB, reps: 8, rir: 2 },
+      ],
+      priorSessionSets: [
+        { weightKg: 62.5 * LB, reps: 10, rir: 2 },
+        { weightKg: 62.5 * LB, reps: 10, rir: 2 },
+        { weightKg: 62.5 * LB, reps: 10, rir: 2 },
+      ],
+      ...kelsoArgs,
+      plannedSets: 3,
+    })!;
+    // Still a load repeat (the 5 lb step prices the 8-rep set under the
+    // floor) — the growth must live in the TARGET.
+    expect(plan.bumpDeferred).toBe('load_cost');
+    const increment = plan.sessionRepTotalTarget - plan.prevSessionRepTotal;
+    expect(increment).toBeGreaterThan(1);
+  });
+
+  it('per-session target growth is capped and never distributes past the range ceiling', () => {
+    // Decisive overshoot with headroom under the ceiling: effort way above
+    // target (fails the bump's effort gate → repeat branch) plus a rep
+    // margin over the prior session. The increment scales past +1 but is
+    // capped, and every distributed target stays inside the range (AM-5
+    // option a — growth the ceiling can't absorb belongs to the load lever).
+    const plan = recommendRepTotalSessionStart({
+      prevSessionSets: [
+        { weightKg: 62.5 * LB, reps: 10, rir: 4 },
+        { weightKg: 62.5 * LB, reps: 10, rir: 4 },
+        { weightKg: 62.5 * LB, reps: 10, rir: 4 },
+      ],
+      priorSessionSets: [
+        { weightKg: 62.5 * LB, reps: 9, rir: 2 },
+        { weightKg: 62.5 * LB, reps: 9, rir: 2 },
+        { weightKg: 62.5 * LB, reps: 9, rir: 2 },
+      ],
+      ...kelsoArgs,
+      plannedSets: 3,
+    })!;
+    const increment = plan.sessionRepTotalTarget - plan.prevSessionRepTotal;
+    expect(increment).toBeGreaterThan(1);
+    expect(increment).toBeLessThanOrEqual(Math.max(2, Math.round(30 * 0.1)));
+    expect(plan.perSetRepTargets.every((r) => r <= 12)).toBe(true);
+  });
+
+  it('no overshoot keeps the +1 baseline (on-target session, no prior margin)', () => {
+    const plan = recommendRepTotalSessionStart({
+      prevSessionSets: [
+        { weightKg: 62.5 * LB, reps: 10, rir: 2 },
+        { weightKg: 62.5 * LB, reps: 10, rir: 2 },
+        { weightKg: 62.5 * LB, reps: 10, rir: 2 },
+      ],
+      ...kelsoArgs,
+      plannedSets: 3,
+    })!;
+    expect(plan.sessionRepTotalTarget).toBe(31);
+  });
+
+  it('totals at DIFFERENT loads contribute no rep margin (spec §5)', () => {
+    const plan = recommendRepTotalSessionStart({
+      prevSessionSets: [
+        { weightKg: 62.5 * LB, reps: 10, rir: 2 },
+        { weightKg: 62.5 * LB, reps: 10, rir: 2 },
+        { weightKg: 62.5 * LB, reps: 10, rir: 2 },
+      ],
+      // Session before last was at a lighter load — its 36-rep total is not
+      // comparable and must not read as negative-or-positive margin.
+      priorSessionSets: [
+        { weightKg: 55 * LB, reps: 12, rir: 2 },
+        { weightKg: 55 * LB, reps: 12, rir: 2 },
+        { weightKg: 55 * LB, reps: 12, rir: 2 },
+      ],
+      ...kelsoArgs,
+      plannedSets: 3,
+    })!;
+    expect(plan.sessionRepTotalTarget).toBe(31);
+  });
+});
+
+describe('one planned total — projected-volume parity (Step 4, regression 7)', () => {
+  const LB = 0.45359237;
+  const args = {
+    targetRepRange: [8, 12] as [number, number],
+    targetRir: 2,
+    plannedSets: 4,
+  };
+
+  it('Exercise A: header projection == engine planned total × load (single source)', () => {
+    // The live header read 3,178 lbs (77.5 × 41) because the pending-set
+    // prefills sum the per-set targets — the engine's session target must be
+    // that SAME sum, not a separately-derived prevTotal+1.
+    const plan = recommendRepTotalSessionStart({
+      prevSessionSets: [
+        { weightKg: 77.5 * LB, reps: 12, rir: 2 },
+        { weightKg: 77.5 * LB, reps: 11, rir: 2 },
+        { weightKg: 77.5 * LB, reps: 10, rir: 2 },
+      ],
+      minIncrementKg: 2.27, // live coarse config → held plan, 8-floor pad
+      ...args,
+    })!;
+    const perSetSum = plan.perSetRepTargets.reduce((a, b) => a + b, 0);
+    expect(plan.sessionRepTotalTarget).toBe(perSetSum);
+    expect(plan.sessionRepTotalTarget).toBe(41); // the live header's number
+    expect(plan.projectedVolumeKg).toBeCloseTo(plan.weightKg * perSetSum, 1);
+  });
+
+  it('Exercise B: the 1,875 lbs vs "31 planned" split cannot recur', () => {
+    // Live defect: header projected 30 reps × 62.5 while the rationale
+    // planned 31 — two totals from two derivations. Now the +1 lives inside
+    // the per-set targets and every consumer reads their sum.
+    const plan = recommendRepTotalSessionStart({
+      prevSessionSets: [
+        { weightKg: 62.5 * LB, reps: 10, rir: 2 },
+        { weightKg: 62.5 * LB, reps: 10, rir: 2 },
+        { weightKg: 62.5 * LB, reps: 10, rir: 2 },
+      ],
+      minIncrementKg: 2.27,
+      ...args,
+      plannedSets: 3,
+    })!;
+    const perSetSum = plan.perSetRepTargets.reduce((a, b) => a + b, 0);
+    expect(plan.perSetRepTargets).toEqual([11, 10, 10]); // +1 distributed in
+    expect(plan.sessionRepTotalTarget).toBe(31);
+    expect(plan.sessionRepTotalTarget).toBe(perSetSum);
+    expect(plan.projectedVolumeKg).toBeCloseTo(plan.weightKg * perSetSum, 1);
+  });
+
+  it('bumped plans hold the same invariant (target == per-set sum == volume/load)', () => {
+    const plan = recommendRepTotalSessionStart({
+      prevSessionSets: [
+        { weightKg: 77.5 * LB, reps: 12, rir: 2 },
+        { weightKg: 77.5 * LB, reps: 11, rir: 2 },
+        { weightKg: 77.5 * LB, reps: 10, rir: 2 },
+      ],
+      minIncrementKg: 1.13, // true dumbbell step → earned bump
+      ...args,
+    })!;
+    expect(plan.bumped).toBe(true);
+    const perSetSum = plan.perSetRepTargets.reduce((a, b) => a + b, 0);
+    expect(plan.sessionRepTotalTarget).toBe(perSetSum);
+    expect(plan.projectedVolumeKg).toBeCloseTo(plan.weightKg * perSetSum, 1);
   });
 });
 

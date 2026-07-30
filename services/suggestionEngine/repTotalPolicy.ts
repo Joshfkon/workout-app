@@ -1,6 +1,49 @@
 /**
  * rep_total progression policy (pulled forward from Phase 5).
  *
+ * ============================================================
+ * SPEC — rep-total semantics (normative; branches must not disagree)
+ * ============================================================
+ * 1. WHAT THE TARGET IS. The session target is the sum of the per-set rep
+ *    targets at the plan's fixed load — ONE number with ONE derivation.
+ *    Anything that displays a planned total (banner, projected-volume header)
+ *    must derive from the same per-set targets; there is no second
+ *    "prevTotal + increment" total living beside a different per-set sum.
+ * 2. FLOOR, NOT BUDGET. The target is a floor to meet or beat, never a
+ *    budget to ration. Logging more reps than the plan's pace on an early
+ *    set must NEVER lower a later set's ask; over-performance may only hold
+ *    or raise subsequent prescriptions (evidence floor). No ask is ever
+ *    derived by subtracting reps-done from reps-planned.
+ * 3. HOW IT INCREMENTS. On a load repeat, the target grows from last
+ *    session's actual total by at least 1 rep, scaled up by how far the
+ *    previous session overshot ITS floor (rep margin over the prior
+ *    session's total + effort left in reserve beyond the asked RIR), capped
+ *    per session so growth can't run away. On an earned load bump, targets
+ *    are last session's observed reps exchanged through the rep-cost model —
+ *    the increment lives in the load, not the total.
+ * 4. REP-RANGE INTERACTION. The configured range is a per-set zone, not the
+ *    target. The range floor gates the load bump (every top-load set must
+ *    clear it at target effort, priced at the exercise's TRUE smallest
+ *    increment). The engine never knowingly emits a config-violating target
+ *    when a LOAD lever exists instead (AM-5, option a): asks above the
+ *    ceiling clamp to it — over-range capacity drives load increases (the
+ *    multi-step bump fit; the load-appropriateness detector), never bigger
+ *    rep asks; asks below the floor step the load down, and only when no
+ *    meaningful step-down exists does the honest below-floor ask ship,
+ *    carrying `outsideRange`. An out-of-range ask produced by plan/exchange
+ *    ARITHMETIC alone is a bug in either direction.
+ *    (Resolved conflict, 2026-07-29 PM merge: this spec originally allowed
+ *    evidence-backed asks ABOVE the ceiling with a flag; the merged AM-5
+ *    fix decided the ceiling always wins, so the ceiling rule above is the
+ *    binding one and over-range pressure routes to the load lever.)
+ * 5. LOAD CHANGE MID-PROGRESSION. Rep totals compare only at matched loads
+ *    (max(half grid step, 2.5%) tolerance). A deviating load invalidates the
+ *    prior total AND the plan total as targets: no branch may keep consuming
+ *    them (remainders included). The per-set targets and the session target
+ *    are re-priced onto the actual load; beat-last-session framing is
+ *    forbidden (`totalComparable: false`); today sets the new baseline.
+ * ============================================================
+ *
  * For exercises whose rep boundary drifts (high-rep work where "a rep" is not
  * a crisp unit — calves, abs, burnout-style ranges), e1RM math is fiction:
  * most sets sit beyond the canonical estimator's 15-effective-rep domain.
@@ -65,6 +108,8 @@ import {
   HIGH_REP_COST_MIN_PER_PCT,
   REP_TOTAL_VOLUME_SHORTFALL_TOLERANCE,
   REP_TOTAL_LOAD_MATCH_FRACTION,
+  REP_TOTAL_OVERSHOOT_GAIN,
+  REP_TOTAL_TARGET_GROWTH_CAP_FRACTION,
   REP_TOTAL_RANGE_FIT_MAX_STEP_PCT,
 } from './constants';
 import { smallestIncrement, roundPrescribedLoad } from './loadGrid';
@@ -174,7 +219,13 @@ export interface RepTotalSessionStart {
    * Undefined entries = the slot had no positional reference (padding).
    */
   perSetRefReps: Array<number | undefined>;
-  /** Session target: beat this total (prev total + 1 on a repeat). */
+  /**
+   * Session target — ALWAYS the sum of `perSetRepTargets` (spec §1: one
+   * number, one derivation; the projected-volume header divides back to the
+   * same total). On a repeat the increment (prev total + overshoot-scaled
+   * growth) is distributed INTO the per-set targets; on a bump the targets
+   * are the exchanged observations and the progression lives in the load.
+   */
   sessionRepTotalTarget: number;
   /** Last session's rep total at the fixed load (0 when no history). */
   prevSessionRepTotal: number;
@@ -231,9 +282,24 @@ export interface RepTotalSessionStart {
  */
 export function recommendRepTotalSessionStart(input: {
   prevSessionSets: PrevSessionSet[];
+  /**
+   * Working sets from the session BEFORE last (same eligibility), when the
+   * history carries them. Feeds the overshoot-scaled target increment
+   * (spec §3): how far last session's total beat the one before it, at the
+   * same load. Omitted → the rep-margin component is simply 0.
+   */
+  priorSessionSets?: PrevSessionSet[];
   targetRepRange: [number, number];
   targetRir: number;
   minIncrementKg?: number;
+  /**
+   * The exercise's recorded increment SET. The bump gate must price the load
+   * step at the exercise's TRUE smallest step (spec §4): a rep-floor
+   * rejection computed against a coarser legacy/default increment is the
+   * live Dumbbell Shrug defect (a 5 lb assumption on a 2.5 lb rack held a
+   * load the lifter then stepped up manually, in range).
+   */
+  availableIncrementsKg?: number[];
   plannedSets: number;
 }): RepTotalSessionStart | null {
   const { targetRepRange, targetRir, plannedSets } = input;
@@ -241,14 +307,19 @@ export function recommendRepTotalSessionStart(input: {
   const valid = input.prevSessionSets.filter((s) => s.weightKg > 0 && s.reps > 0);
   if (valid.length === 0) return null;
 
+  // The exercise's true smallest loadable step: the increment SET when one
+  // is recorded, else the legacy single increment, else the engine default.
+  // Every use below (at-load grid tolerance, bump pricing) reads THIS —
+  // never the raw legacy field.
+  const inc = smallestIncrement(input.availableIncrementsKg, input.minIncrementKg);
+
   // Fixed-load model: the session's load is the top load actually worked.
   // The at-load group is a GRID tolerance — max(half the smallest increment,
   // 2.5%) — not the old loose ±5%: rep totals only ever compare at matched
   // loads, and the tolerance exists solely to absorb unit-conversion /
   // micro-loading noise, never a genuine ramp step.
   const topLoad = valid.reduce((m, s) => (s.weightKg > m ? s.weightKg : m), 0);
-  const halfStepKg =
-    (input.minIncrementKg && input.minIncrementKg > 0 ? input.minIncrementKg : 2.5) / 2;
+  const halfStepKg = inc / 2;
   const atLoadToleranceKg = Math.max(halfStepKg, topLoad * REP_TOTAL_LOAD_MATCH_FRACTION);
   const atLoad = valid.filter((s) => s.weightKg >= topLoad - atLoadToleranceKg);
   const prevTotal = atLoad.reduce((sum, s) => sum + s.reps, 0);
@@ -265,7 +336,6 @@ export function recommendRepTotalSessionStart(input: {
       (s) => s.reps >= repMin && (s.rir === undefined || s.rir <= targetRir + EFFORT_TOLERANCE_RIR)
     );
 
-  const inc = input.minIncrementKg && input.minIncrementKg > 0 ? input.minIncrementKg : 2.5;
   const sets = Math.max(1, plannedSets);
 
   // ---- Volume constraint (nothing about this plan may silently cut volume) ----
@@ -354,6 +424,37 @@ export function recommendRepTotalSessionStart(input: {
     bumpDeferred = 'load_cost';
   }
 
+  // ---- Target increment (spec §3): scaled to last session's overshoot ----
+  // A constant +1 (~3% on a 30-rep total) is functionally a stall and blind
+  // to how decisively the prior target was beaten. Rep-space overshoot has
+  // two components, both observable without e1RM math:
+  //   - rep margin: how far last session's total beat the minimal target
+  //     implied by the session before it (prior total + 1), at the SAME load
+  //     (totals at different loads are not comparable — spec §5);
+  //   - effort surplus: reps left in reserve beyond the asked RIR across the
+  //     at-load sets (capacity shown but not banked as reps).
+  // Growth is capped per session so one outlier can't run the target away.
+  const effortSurplus = atLoad.reduce(
+    (s, x) => s + Math.max(0, (x.rir ?? targetRir) - targetRir),
+    0
+  );
+  let repMargin = 0;
+  const priorValid = (input.priorSessionSets ?? []).filter((s) => s.weightKg > 0 && s.reps > 0);
+  if (priorValid.length > 0) {
+    const priorTop = priorValid.reduce((m, s) => (s.weightKg > m ? s.weightKg : m), 0);
+    if (Math.abs(priorTop - topLoad) <= atLoadToleranceKg) {
+      const priorTotal = priorValid
+        .filter((s) => s.weightKg >= priorTop - atLoadToleranceKg)
+        .reduce((sum, s) => sum + s.reps, 0);
+      repMargin = Math.max(0, prevTotal - (priorTotal + 1));
+    }
+  }
+  const growthCap = Math.max(2, Math.round(prevTotal * REP_TOTAL_TARGET_GROWTH_CAP_FRACTION));
+  const targetIncrement = Math.min(
+    growthCap,
+    1 + Math.round(REP_TOTAL_OVERSHOOT_GAIN * (repMargin + effortSurplus))
+  );
+
   // Repeat the load VERBATIM and chase the total: per-set seeds mirror last
   // session's counts clamped INTO the configured range (floored at repMin so
   // a collapsed set re-asks the floor; ceilinged at repMax so an over-range
@@ -366,12 +467,36 @@ export function recommendRepTotalSessionStart(input: {
     const prev = atLoad[i]?.reps;
     return Math.min(repMax, Math.max(repMin, prev ?? repMin));
   });
+
+  // ONE total, ONE derivation (spec §1): the session target IS the sum of
+  // the per-set targets. When the mirrored seeds fall short of
+  // prevTotal + increment, the missing reps are distributed INTO the
+  // targets — front-loaded onto the freshest sets, but never past the range
+  // ceiling (spec §4 / AM-5: a target above repMax never ships). Growth the
+  // ceiling can no longer absorb is the load's job, surfaced by the stall /
+  // load-appropriateness detectors — not by a config-violating rep target.
+  // The old shape carried "prevTotal + 1" beside per-set targets summing to
+  // a different number; the projected-volume header derived from one and
+  // the rationale from the other (the Kelso 1,875 lb vs "31 planned" split).
+  let needed = prevTotal + targetIncrement - perSet.reduce((a, b) => a + b, 0);
+  while (needed > 0) {
+    let placed = false;
+    for (let i = 0; i < perSet.length && needed > 0; i++) {
+      if (perSet[i] < repMax) {
+        perSet[i] += 1;
+        needed -= 1;
+        placed = true;
+      }
+    }
+    if (!placed) break; // every set at the ceiling — the load lever owns the rest
+  }
+
   const volume = applyVolumeConstraint(topLoad, perSet, repMin);
   return {
     weightKg: topLoad,
     perSetRepTargets: perSet,
     perSetRefReps: Array.from({ length: perSet.length }, (_, i) => atLoad[i]?.reps),
-    sessionRepTotalTarget: prevTotal + 1,
+    sessionRepTotalTarget: perSet.reduce((a, b) => a + b, 0),
     prevSessionRepTotal: prevTotal,
     bumped: false,
     ...(bumpDeferred ? { bumpDeferred } : {}),
@@ -402,6 +527,13 @@ export interface RepTotalNextSet {
   totalSoFar: number;
   /** Reps still needed to reach the session PLAN total (0 when reached). */
   remainingToTarget: number;
+  /**
+   * The EFFECTIVE session target (spec §1/§5): the plan's total on the plan's
+   * load; on a deviating load it is the plan's per-set targets re-priced onto
+   * the actual load (in-range slots stay in-range through the exchange) — the
+   * stale plan total is never served beside a "previous total doesn't apply"
+   * disclaimer. `remainingToTarget` always measures against THIS number.
+   */
   sessionRepTotalTarget: number;
   /**
    * TWO CLAIMS, TWO NUMBERS (the old counter measured progress against the
@@ -497,20 +629,31 @@ export function recommendRepTotalNextSet(input: RepTotalNextSetInput): RepTotalN
           ? 'harder'
           : 'on_target';
 
+  // Re-price a plan rep target onto a different load. Spec §4: the exchange
+  // is a REPRICING, not evidence — an in-range plan target must come out of
+  // it in-range (clamped, both directions). A plan target already outside the
+  // range was put there by last session's observed reps and survives the
+  // exchange as-is (it stays flagged downstream).
+  const repriceOntoLoad = (planReps: number, toKg: number): number => {
+    const exchanged = expectedRepsAfterLoadChange(planReps, sessionPlan.weightKg, toKg);
+    if (planReps >= repMin && planReps <= repMax) {
+      return Math.min(repMax, Math.max(repMin, exchanged));
+    }
+    return exchanged;
+  };
+
   // Plan slot target, exchanged onto today's actual load when it differs from
   // the planned load (a lifter-chosen load must not be graded on the plan's).
   const planSlotReps =
     sessionPlan.perSetRepTargets[slot] ??
     sessionPlan.perSetRepTargets[sessionPlan.perSetRepTargets.length - 1] ??
     repMin;
-  // Step 5: an exchanged ask (lifter-chosen lighter load) may price above
-  // the configured ceiling — clamp it. The plan's own targets are generated
-  // in-range; a target above repMax must never ship.
+  // AM-5 option (a): a target above repMax must never ship — the exchange
+  // repricing keeps in-range sources in-range in BOTH directions
+  // (repriceOntoLoad), and the ceiling binds unconditionally on top.
   let reps = Math.min(
     repMax,
-    deviated
-      ? expectedRepsAfterLoadChange(planSlotReps, sessionPlan.weightKg, currentLoadKg)
-      : planSlotReps
+    deviated ? repriceOntoLoad(planSlotReps, currentLoadKg) : planSlotReps
   );
   let weightKg = currentLoadKg;
   let rationale: RepTotalNextSet['rationale'] = 'follow_plan';
@@ -538,6 +681,20 @@ export function recommendRepTotalNextSet(input: RepTotalNextSetInput): RepTotalN
       rationale = 'reduce_load';
       reps = Math.min(repMax, observedAskCeiling(last, weightKg, targetRir));
     }
+  }
+
+  // Evidence floor (spec §2 — the target is a FLOOR, not a budget): a set
+  // that beat its slot's ask raises the next ask instead of leaving a target
+  // the lifter just disproved. The floor is one rep under the last set's
+  // demonstrated ask ceiling at the asked load/effort (the natural
+  // set-to-set fatigue decline); it can only RAISE the ask — banked reps
+  // never reduce a later prescription, and no ask is ever remainder
+  // arithmetic against the session total. Bounded by the range ceiling
+  // (spec §4 / AM-5): capacity past repMax is the load-appropriateness
+  // detector's signal, never a bigger rep ask.
+  if (rationale === 'follow_plan' && last) {
+    const lastSetAskCeiling = observedAskCeiling(last, weightKg, targetRir);
+    reps = Math.min(repMax, Math.max(reps, lastSetAskCeiling - 1));
   }
 
   // INV-2 analog: once ≥1 set is logged, the ask may not exceed what today's
@@ -599,12 +756,25 @@ export function recommendRepTotalNextSet(input: RepTotalNextSetInput): RepTotalN
     reps < repMin ? 'below' : reps > repMax ? 'above' : undefined;
 
   // INV-4 analog: positional provenance — only when this slot still follows
-  // the plan at the planned load (a reduced/deviated load has no like-to-like
-  // positional claim).
+  // the plan at the planned load AND the emitted ask is still the plan
+  // slot's number (an ask moved by the evidence floor or the capacity clamp
+  // is no longer anchored by last session's position — claiming so would be
+  // false provenance).
   const refReps =
-    rationale === 'follow_plan' && !deviated && weightKg === currentLoadKg
+    rationale === 'follow_plan' && !deviated && weightKg === currentLoadKg && reps === planSlotReps
       ? sessionPlan.perSetRefReps?.[slot]
       : undefined;
+
+  // Spec §5: a load off the plan's invalidates the plan total for EVERY
+  // consumer — no branch may emit remainder arithmetic against it. Judged on
+  // the RETURNED load, not the last-logged one, so an automatic reduce_load
+  // step re-prices the target exactly like a lifter-chosen deviation does
+  // (Codex review: the reduce branch used to ship the original total beside
+  // a prescription at the reduced load).
+  const effectiveSessionTarget =
+    Math.abs(weightKg - sessionPlan.weightKg) > deviationToleranceKg
+      ? sessionPlan.perSetRepTargets.reduce((sum, t) => sum + repriceOntoLoad(t, weightKg), 0)
+      : sessionPlan.sessionRepTotalTarget;
 
   // Beat-last-session accounting — against last session's ACTUAL total,
   // never the plan total, and only when the totals are comparable (same
@@ -617,8 +787,8 @@ export function recommendRepTotalNextSet(input: RepTotalNextSetInput): RepTotalN
     weightKg,
     reps,
     totalSoFar,
-    remainingToTarget: Math.max(0, sessionPlan.sessionRepTotalTarget - totalSoFar),
-    sessionRepTotalTarget: sessionPlan.sessionRepTotalTarget,
+    remainingToTarget: Math.max(0, effectiveSessionTarget - totalSoFar),
+    sessionRepTotalTarget: effectiveSessionTarget,
     remainingToBeatPrev: Math.max(0, prevTotal + 1 - totalSoFar),
     beatPrevBy: Math.max(0, totalSoFar - prevTotal),
     prevSessionRepTotal: prevTotal,

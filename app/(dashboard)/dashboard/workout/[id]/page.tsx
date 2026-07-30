@@ -109,7 +109,8 @@ import { resolveProgressionModel } from '@/services/suggestionEngine/repTotalPol
 import { estimateE1RMFromRpe } from '@/services/shared/e1rm';
 import { applyReadinessModulation } from '@/services/fatigueEngine';
 import { prescribeRestSeconds } from '@/services/restPrescription';
-import { buildPerformanceSnapshots, collectEquipmentBoundaries, type SnapshotSourceBlock } from '@/components/workout/exercisePerformance';
+import { buildPerformanceSnapshots, buildProgressionHealthSessions, collectEquipmentBoundaries, type SnapshotSourceBlock } from '@/components/workout/exercisePerformance';
+import type { ProgressionHealthSession } from '@/services/progressionHealth';
 import { getFailureSafetyTier } from '@/services/exerciseSafety';
 import { SanityCheckToast } from '@/components/workout/SanityCheckToast';
 import { CalibrationResultCard } from '@/components/workout/CalibrationResultCard';
@@ -462,6 +463,10 @@ export default function WorkoutPage() {
   // trend-segment boundaries the card's plateau/pace analyzers must honor
   // even when the shift is below the 25% detection heuristic.
   const [equipmentBoundaries, setEquipmentBoundaries] = useState<Record<string, string[]>>({});
+  // Per-exercise session summaries for the stall / load-appropriateness
+  // detectors (services/progressionHealth) — snapshot-independent so
+  // rep_total exercises (no estimable e1RM) are covered too.
+  const [progressionHealthSessions, setProgressionHealthSessions] = useState<Record<string, ProgressionHealthSession[]>>({});
   const [allCollapsed, setAllCollapsed] = useState(false);
   const [collapsedBlocks, setCollapsedBlocks] = useState<Set<string>>(new Set());
   
@@ -1300,6 +1305,14 @@ export default function WorkoutPage() {
           );
           setEquipmentBoundaries(
             collectEquipmentBoundaries(allHistoryBlocks as SnapshotSourceBlock[])
+          );
+          setProgressionHealthSessions(
+            buildProgressionHealthSessions(
+              allHistoryBlocks as SnapshotSourceBlock[],
+              Object.fromEntries(
+                transformedBlocks.map((b) => [b.exerciseId, b.exercise.exerciseType])
+              )
+            )
           );
 
           // Generate coach message with exercise history for accurate weight suggestions
@@ -5720,6 +5733,7 @@ export default function WorkoutPage() {
                     }
                     readinessModulation={readinessModulation}
                     performanceSnapshots={performanceSnapshots[block.exerciseId]}
+                    progressionHealthSessions={progressionHealthSessions[block.exerciseId]}
                     equipmentBoundaries={equipmentBoundaries[block.exerciseId]}
                     userGoal={userGoal}
                     onRepRangeChange={(range) => handleRepRangeChange(block.id, range)}

@@ -54,8 +54,20 @@
  *       re-serving the session-start plan verbatim; session-start bump
  *       targets derive from OBSERVED reps exchanged through the non-linear
  *       rep-cost model, never a reset to the range floor.
+ *  v8 = rep_total spec alignment (2026-07-29, AM range/provenance work
+ *       merged with the PM defect fixes): the bump gate prices the
+ *       exercise's TRUE smallest increment (availableIncrementsKg honored,
+ *       dumbbell default 2.5 lb); a deviating OR auto-reduced load re-prices
+ *       the session target for every consumer (no remainder off a
+ *       disclaimed total); targets and asks never ship above the range
+ *       ceiling (AM-5 option a — over-range capacity drives the LOAD lever
+ *       and the load-appropriateness detector), and below-floor asks step
+ *       the load down where a meaningful step exists; an evidence floor
+ *       keeps over-performance from shrinking later asks; the session
+ *       target IS the per-set-target sum, with the overshoot-scaled
+ *       (capped) increment distributed into the targets.
  */
-export const SUGGESTION_ENGINE_VERSION = 7;
+export const SUGGESTION_ENGINE_VERSION = 8;
 
 // ============================================================
 // SET ROLES (Phase 2)
@@ -284,6 +296,24 @@ export const HIGH_REP_COST_MIN_PER_PCT = 0.15;
  * live defects were −21% to −53%).
  */
 export const REP_TOTAL_VOLUME_SHORTFALL_TOLERANCE = 0.05;
+
+/**
+ * Rep-total target growth per rep of demonstrated overshoot (spec §3). The
+ * overshoot is measured in rep space: the margin by which last session's
+ * total beat the session before it (at the same load) plus the effort left
+ * in reserve beyond the asked RIR. Half a rep of target growth per overshoot
+ * rep asks for real progress after a decisive session without demanding the
+ * whole demonstrated surplus at once. A session with no overshoot keeps the
+ * +1 baseline.
+ */
+export const REP_TOTAL_OVERSHOOT_GAIN = 0.5;
+
+/**
+ * Cap on per-session rep-total target growth, as a fraction of last
+ * session's total (min 2 so small totals can still scale) — overshoot
+ * scaling must never let one outlier session run the target away.
+ */
+export const REP_TOTAL_TARGET_GROWTH_CAP_FRACTION = 0.10;
 
 /**
  * 2026-07-29 step 5(a) — ceiling on the load increase a rep_total bump may
