@@ -427,6 +427,17 @@ FITBIT_CLIENT_SECRET=
 
 6. **Database constraints**: Check migrations for constraints (e.g., reps have upper bounds of 999)
 
+7. **Motion capture is a parallel telemetry stream** (experimental,
+   `users.motion_capture_enabled`, off by default): `services/shared/motion/`
+   (pure signal processing), `lib/motion/` (sensors/persistence),
+   `components/motion/` + `app/(dashboard)/dashboard/motion/`. It is
+   display-only: it must NOT import or feed e1RM, the prescription engine,
+   or the volume model — enforced by
+   `services/shared/motion/__tests__/importGuard.test.ts`. A `MotionCapture`
+   references a set by id (sets know nothing about motion) and must always
+   reference a `MachineCalibration`. Raw IMU buffers are only persisted when
+   `users.motion_capture_raw_retention` is on, capped per session.
+
 ## Loading States & Data Caching (cached-first)
 
 Dashboard data views use a **cached-first / stale-while-revalidate** model via

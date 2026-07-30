@@ -23,7 +23,8 @@ export type OutboxTable =
   | 'set_logs'
   | 'workout_sessions'
   | 'session_muscle_feedback'
-  | 'exercise_blocks';
+  | 'exercise_blocks'
+  | 'motion_captures';
 
 export interface OutboxEntry {
   /**
@@ -56,6 +57,11 @@ const UPSERT_OPTIONS: Record<OutboxTable, { onConflict: string; ignoreDuplicates
   workout_sessions: { onConflict: 'id', ignoreDuplicates: true },
   // exercise_blocks rows only ever go through op:'update' (target_sets patches).
   exercise_blocks: { onConflict: 'id', ignoreDuplicates: true },
+  // Motion captures use client-generated ids like set_logs; retry after a
+  // lost ack must not double-log a capture. Enqueued AFTER their set's entry
+  // (flush is enqueuedAt-ordered), so the set_id FK is satisfied by the time
+  // a capture row is attempted.
+  motion_captures: { onConflict: 'id', ignoreDuplicates: true },
 };
 
 interface OutboxDriver {

@@ -141,6 +141,24 @@ const customJestConfig = {
       branches: 80,
       statements: 90,
     },
+    'services/shared/motion/pipeline.ts': {
+      lines: 85,
+      functions: 80,
+      branches: 70,
+      statements: 85,
+    },
+    'services/shared/motion/calibration.ts': {
+      lines: 85,
+      functions: 80,
+      branches: 70,
+      statements: 85,
+    },
+    'services/shared/motion/segmentation.ts': {
+      lines: 85,
+      functions: 80,
+      branches: 70,
+      statements: 85,
+    },
     'services/progressionInsights.ts': {
       lines: 70,
       functions: 60,

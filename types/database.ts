@@ -25,6 +25,8 @@ export interface Database {
           preferences: Json;
           volume_landmarks: Json;
           enhanced_athlete_mode: boolean;
+          motion_capture_enabled: boolean;
+          motion_capture_raw_retention: boolean;
         };
         Insert: {
           id: string;
@@ -35,6 +37,8 @@ export interface Database {
           preferences?: Json;
           volume_landmarks?: Json;
           enhanced_athlete_mode?: boolean;
+          motion_capture_enabled?: boolean;
+          motion_capture_raw_retention?: boolean;
         };
         Update: {
           id?: string;
@@ -45,7 +49,109 @@ export interface Database {
           preferences?: Json;
           volume_landmarks?: Json;
           enhanced_athlete_mode?: boolean;
+          motion_capture_enabled?: boolean;
+          motion_capture_raw_retention?: boolean;
         };
+        Relationships: [];
+      };
+      machine_calibrations: {
+        Row: {
+          id: string;
+          user_id: string;
+          exercise_id: string;
+          label: string;
+          seat_setting: string;
+          mount_radius_mm: number;
+          mount_orientation: 'top-edge' | 'bottom-edge' | 'left-edge' | 'right-edge';
+          gravity_ref_start: Json;
+          gravity_ref_end: Json;
+          derived_pivot_axis: Json;
+          derived_rom_degrees: number | null;
+          schema_version: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          exercise_id: string;
+          label: string;
+          seat_setting?: string;
+          mount_radius_mm: number;
+          mount_orientation: 'top-edge' | 'bottom-edge' | 'left-edge' | 'right-edge';
+          gravity_ref_start: Json;
+          gravity_ref_end: Json;
+          derived_pivot_axis: Json;
+          derived_rom_degrees?: number | null;
+          schema_version?: number;
+          created_at?: string;
+        };
+        Update: {
+          label?: string;
+          seat_setting?: string;
+          mount_radius_mm?: number;
+          mount_orientation?: 'top-edge' | 'bottom-edge' | 'left-edge' | 'right-edge';
+          derived_rom_degrees?: number | null;
+        };
+        Relationships: [];
+      };
+      motion_captures: {
+        Row: {
+          id: string;
+          user_id: string;
+          set_id: string;
+          calibration_id: string;
+          side: 'left' | 'right';
+          started_at: string;
+          duration_ms: number;
+          sample_rate_hz_mean: number;
+          sample_rate_hz_stddev: number;
+          dropped_sample_count: number;
+          clip_detected: boolean;
+          reps: Json;
+          quality_flags: string[];
+          provenance: string;
+          schema_version: number;
+          created_at: string;
+        };
+        Insert: {
+          id: string;
+          user_id: string;
+          set_id: string;
+          calibration_id: string;
+          side: 'left' | 'right';
+          started_at: string;
+          duration_ms: number;
+          sample_rate_hz_mean: number;
+          sample_rate_hz_stddev: number;
+          dropped_sample_count?: number;
+          clip_detected?: boolean;
+          reps: Json;
+          quality_flags?: string[];
+          provenance?: string;
+          schema_version?: number;
+          created_at?: string;
+        };
+        Update: {
+          quality_flags?: string[];
+        };
+        Relationships: [];
+      };
+      motion_capture_raw_buffers: {
+        Row: {
+          capture_id: string;
+          user_id: string;
+          sample_count: number;
+          samples: Json;
+          created_at: string;
+        };
+        Insert: {
+          capture_id: string;
+          user_id: string;
+          sample_count: number;
+          samples: Json;
+          created_at?: string;
+        };
+        Update: Record<string, never>;
         Relationships: [];
       };
       bodyweight_entries: {
