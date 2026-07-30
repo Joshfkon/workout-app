@@ -15,7 +15,6 @@ import type {
   Exercise,
   VolumeLandmarks,
   VolumeStatus,
-  WeeklyMuscleVolume,
   StandardMuscleGroup,
 } from '@/types/schema';
 import {
@@ -605,26 +604,8 @@ export function getVolumeSummary(volumeData: Map<StandardMuscleGroup, MuscleVolu
   };
 }
 
-/**
- * Convert volume data to WeeklyMuscleVolume format for storage
- */
-export function toWeeklyMuscleVolume(
-  userId: string,
-  weekStart: string,
-  volumeData: Map<StandardMuscleGroup, MuscleVolumeData>
-): WeeklyMuscleVolume[] {
-  const records: WeeklyMuscleVolume[] = [];
-
-  volumeData.forEach((data, muscleGroup) => {
-    records.push({
-      userId,
-      weekStart,
-      muscleGroup,
-      totalSets: data.totalSets,
-      status: data.status,
-    });
-  });
-
-  return records;
-}
+// (toWeeklyMuscleVolume — the formatter for the weekly_muscle_volume storage
+// table — was removed with the table itself (20260730000001): nothing ever
+// wrote those rows, and readers preferring them over set_log derivation was
+// the stale-aggregate trap the removal disarms.)
 

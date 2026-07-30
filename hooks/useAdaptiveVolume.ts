@@ -15,13 +15,9 @@ import {
   createInitialVolumeProfile,
   assessCurrentFatigueStatus,
   getVolumeSummary,
-  analyzeMesocycle,
-  aggregateSubjectiveSignals,
-  updateVolumeProfile,
   resetVolumeProfileToBaseline,
   VOLUME_COUNTER_VERSION,
   BASELINE_VOLUME_RECOMMENDATIONS,
-  type SubjectiveVolumeSignals,
 } from '@/src/lib/training/adaptive-volume';
 import type { MuscleGroup } from '@/types/schema';
 import { MUSCLE_GROUPS, resolveMuscleToStandard } from '@/types/schema';
@@ -30,7 +26,6 @@ import { rirFromFeedback, sumEffectiveVolume } from '@/services/effectiveVolume'
 import { STANDARD_TO_COARSE } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 import type {
   ExerciseBlockFull,
-  WeeklyMuscleVolumeRow,
   SetLogRow,
 } from '@/types/database-queries';
 
@@ -54,13 +49,15 @@ interface UseAdaptiveVolumeResult {
   updateProfile: (updates: Partial<UserVolumeProfile>) => Promise<void>;
 }
 
+/** Stable empty previous-week series (see the getVolumeSummary call site). */
+const EMPTY_PREVIOUS_WEEK: MuscleVolumeData[] = [];
+
 /**
  * Hook for accessing and managing adaptive volume data
  */
 export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
   const [volumeProfile, setVolumeProfile] = useState<UserVolumeProfile | null>(null);
   const [volumeData, setVolumeData] = useState<MuscleVolumeData[]>([]);
-  const [previousWeekData, setPreviousWeekData] = useState<MuscleVolumeData[]>([]);
   const [latestAnalysis, setLatestAnalysis] = useState<MesocycleAnalysis | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -86,30 +83,16 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
       weekStart.setHours(0, 0, 0, 0);
       const weekStartStr = getLocalDateString(weekStart);
 
-      const prevWeekStart = new Date(weekStart);
-      prevWeekStart.setDate(prevWeekStart.getDate() - 7);
-      const prevWeekStartStr = getLocalDateString(prevWeekStart);
-      
       const weekEnd = new Date(now);
       weekEnd.setHours(23, 59, 59, 999);
       const weekEndStr = weekEnd.toISOString();
 
-      // Fetch current week volume
-      const { data: currentData } = await supabase
-        .from('weekly_muscle_volume')
-        .select('*')
-        .eq('user_id', userId!)
-        .eq('week_start', weekStartStr);
-
-      // Fetch previous week volume
-      const { data: prevData } = await supabase
-        .from('weekly_muscle_volume')
-        .select('*')
-        .eq('user_id', userId!)
-        .eq('week_start', prevWeekStartStr);
-
-      // If no pre-computed data, calculate from set logs
-      if (!currentData || currentData.length === 0) {
+      // ALWAYS derive from set_logs. The weekly_muscle_volume stored-rows
+      // fast-path (current + previous week) is gone: no production code ever
+      // wrote that table, and stored aggregates would freeze stale-convention
+      // (pre-group-cap) numbers over live derivation. Table dropped in
+      // 20260730000001 so a future writer can't re-arm the trap.
+      {
         // Fetch exercise blocks and sets for current week
         const { data: blocks, error: blocksError } = await supabase
           .from('exercise_blocks')
@@ -230,39 +213,6 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
 
           setVolumeData(calculatedData);
         }
-      } else {
-        // Use pre-computed data
-        const mapped: MuscleVolumeData[] = currentData.map((row: WeeklyMuscleVolumeRow) => ({
-          id: row.id || `${row.muscle_group}-${weekStartStr}`,
-          muscle: row.muscle_group as MuscleGroup,
-          weekNumber: 1,
-          mesocycleId: row.mesocycle_id || '',
-          totalSets: row.total_sets,
-          workingSets: row.total_sets,
-          effectiveSets: row.effective_sets || row.total_sets,
-          totalVolume: 0,
-          averageRIR: row.average_rir || 2,
-          averageFormScore: row.average_form_score || 0.8,
-          exercisePerformance: [],
-        }));
-        setVolumeData(mapped);
-      }
-
-      if (prevData && prevData.length > 0) {
-        const mapped: MuscleVolumeData[] = prevData.map((row: WeeklyMuscleVolumeRow) => ({
-          id: row.id || `${row.muscle_group}-${prevWeekStartStr}`,
-          muscle: row.muscle_group as MuscleGroup,
-          weekNumber: 0,
-          mesocycleId: row.mesocycle_id || '',
-          totalSets: row.total_sets,
-          workingSets: row.total_sets,
-          effectiveSets: row.effective_sets || row.total_sets,
-          totalVolume: 0,
-          averageRIR: row.average_rir || 2,
-          averageFormScore: row.average_form_score || 0.8,
-          exercisePerformance: [],
-        }));
-        setPreviousWeekData(mapped);
       }
     } catch (err: unknown) {
       console.error('Failed to fetch volume data:', getErrorMessage(err));
@@ -430,8 +380,12 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
       }));
     }
 
-    return getVolumeSummary(volumeData, previousWeekData, volumeProfile);
-  }, [volumeProfile, volumeData, previousWeekData]);
+    // Previous-week input was only ever fed by the never-written
+    // weekly_muscle_volume table, so it has always been empty in production —
+    // [] preserves behavior (trend reads 'stable'). Deriving last week from
+    // set_logs is a possible follow-up, decided separately.
+    return getVolumeSummary(volumeData, EMPTY_PREVIOUS_WEEK, volumeProfile);
+  }, [volumeProfile, volumeData]);
 
   // Calculate fatigue alerts
   const fatigueAlerts = useMemo((): FatigueAlert[] => {
@@ -461,255 +415,6 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
   };
 }
 
-/**
- * Run the end-of-mesocycle volume-learning loop.
- *
- * Closes the adaptive-volume feedback loop that was previously dead code:
- *   1. Aggregates that mesocycle's weekly_muscle_volume rows into per-muscle
- *      weekly series.
- *   2. Calls analyzeMesocycle() to score volume vs. outcomes.
- *   3. Persists the analysis into mesocycle_analyses (so /dashboard/volume/review
- *      can surface latestAnalysis).
- *   4. Calls updateVolumeProfile() to grow muscleTolerance.dataPoints / confidence
- *      and upserts the result into user_volume_profiles (same shape the hook reads).
- *
- * Pure-data-fetch + pure-service composition; safe to call once when a mesocycle
- * transitions to 'completed'. Idempotent at the DB layer thanks to the
- * UNIQUE(user_id, mesocycle_id) constraint on mesocycle_analyses.
- *
- * Returns true if an analysis was written, false otherwise (e.g. no volume data
- * yet, or an error — errors are swallowed/logged so the UI flow is never blocked).
- */
-export async function runMesocycleCompletionAnalysis(
-  userId: string,
-  mesocycleId: string,
-  options?: {
-    startDate?: string | null;
-    endDate?: string | null;
-    experience?: 'novice' | 'intermediate' | 'advanced';
-  }
-): Promise<boolean> {
-  if (!userId || !mesocycleId) return false;
-
-  try {
-    const supabase = createUntypedClient();
-
-    // 1. Pull this mesocycle's weekly volume rows, ordered chronologically so
-    //    each muscle's array is week-1 -> week-N (analyzeMesocycle is order-sensitive).
-    //    NOTE: weekly_muscle_volume has no mesocycle_id column (the slim initial
-    //    schema is the one that applied), so scope by the mesocycle's date window
-    //    via week_start instead of filtering on mesocycle_id.
-    let weeklyQuery = supabase
-      .from('weekly_muscle_volume')
-      .select('*')
-      .eq('user_id', userId);
-    if (options?.startDate) weeklyQuery = weeklyQuery.gte('week_start', options.startDate);
-    if (options?.endDate) weeklyQuery = weeklyQuery.lte('week_start', options.endDate);
-    const { data: weeklyRows, error: weeklyError } = await weeklyQuery.order('week_start', {
-      ascending: true,
-    });
-
-    if (weeklyError) {
-      console.error('runMesocycleCompletionAnalysis: failed to load weekly volume:', weeklyError);
-      return false;
-    }
-
-    let rows = (weeklyRows as WeeklyMuscleVolumeRow[]) || [];
-    if (rows.length === 0) {
-      // No aggregated volume for this meso yet -> nothing to learn from.
-      return false;
-    }
-
-    // Deload weeks must be excluded from MEV/MRV *learning* (a light week would
-    // bias the learned landmarks downward), even though those same sets still
-    // count on the volume displays. weekly_muscle_volume carries no deload
-    // flag, so identify deload weeks from the sessions themselves: a week_start
-    // bucket (its rolling 7-day window) whose completed sessions are ALL
-    // deload-flagged is dropped from the learning input.
-    const { data: windowSessions } = await supabase
-      .from('workout_sessions')
-      .select('completed_at, is_deload')
-      .eq('user_id', userId)
-      .eq('state', 'completed')
-      .not('completed_at', 'is', null);
-
-    const deloadWeekStarts = new Set<string>();
-    const allWeekStarts = Array.from(new Set(rows.map((r) => r.week_start))).sort();
-    if (windowSessions && windowSessions.length > 0) {
-      for (const ws of allWeekStarts) {
-        const start = new Date(`${ws}T00:00:00`);
-        const end = new Date(start);
-        end.setDate(end.getDate() + 6);
-        end.setHours(23, 59, 59, 999);
-        const inWeek = windowSessions.filter((s: { completed_at: string | null; is_deload?: boolean | null }) => {
-          if (!s.completed_at) return false;
-          const t = new Date(s.completed_at);
-          return t >= start && t <= end;
-        });
-        if (inWeek.length > 0 && inWeek.every((s: { is_deload?: boolean | null }) => s.is_deload)) {
-          deloadWeekStarts.add(ws);
-        }
-      }
-    }
-    if (deloadWeekStarts.size > 0) {
-      rows = rows.filter((r) => !deloadWeekStarts.has(r.week_start));
-      if (rows.length === 0) return false;
-    }
-
-    // Build Record<MuscleGroup, MuscleVolumeData[]> grouped by muscle, in week order.
-    const muscleData: Record<MuscleGroup, MuscleVolumeData[]> = {} as Record<MuscleGroup, MuscleVolumeData[]>;
-    const weekIndexByStart = new Map<string, number>();
-    const orderedStarts = Array.from(new Set(rows.map((r) => r.week_start))).sort();
-    orderedStarts.forEach((ws, idx) => weekIndexByStart.set(ws, idx + 1));
-
-    for (const row of rows) {
-      const muscle = row.muscle_group as MuscleGroup;
-      if (!muscleData[muscle]) muscleData[muscle] = [];
-      muscleData[muscle].push({
-        id: row.id || `${muscle}-${row.week_start}`,
-        muscle,
-        weekNumber: weekIndexByStart.get(row.week_start) ?? muscleData[muscle].length + 1,
-        mesocycleId,
-        totalSets: row.total_sets,
-        workingSets: row.total_sets,
-        effectiveSets: row.effective_sets ?? row.total_sets,
-        totalVolume: 0,
-        averageRIR: row.average_rir ?? 2,
-        averageFormScore: row.average_form_score ?? 0.8,
-        exercisePerformance: [],
-      });
-    }
-
-    // 2. Load (or synthesize) the user's current volume profile.
-    const { data: profileData } = await supabase
-      .from('user_volume_profiles')
-      .select('*')
-      .eq('user_id', userId)
-      .maybeSingle();
-
-    let currentProfile: UserVolumeProfile;
-    if (profileData) {
-      currentProfile = {
-        userId: profileData.user_id,
-        updatedAt: new Date(profileData.updated_at),
-        muscleTolerance: profileData.muscle_tolerance || {},
-        globalRecoveryMultiplier: profileData.global_recovery_multiplier || 1.0,
-        isEnhanced: profileData.is_enhanced || false,
-        trainingAge: profileData.training_age || 'intermediate',
-      };
-    } else {
-      const trainingAge = (options?.experience || 'intermediate');
-      currentProfile = createInitialVolumeProfile(userId, trainingAge, false);
-    }
-
-    // Date range for the analysis record. Fall back to the volume rows' span.
-    const startDate = options?.startDate || orderedStarts[0];
-    const endDate = options?.endDate || orderedStarts[orderedStarts.length - 1];
-
-    // 2b. Subjective chip feedback (pump / workload / next-session soreness)
-    //     for this meso's non-deload sessions — additional INPUTS to the same
-    //     verdict scoring (see subjectiveVerdictNudges), not a separate path.
-    //     session_muscle_feedback is keyed on the 20-group standard vocabulary;
-    //     collapse to this learner's 13 coarse groups before aggregating.
-    let subjectiveByMuscle: Partial<Record<MuscleGroup, SubjectiveVolumeSignals>> | undefined;
-    try {
-      const windowEnd = new Date(`${endDate}T00:00:00`);
-      windowEnd.setDate(windowEnd.getDate() + 7); // include the last week's sessions
-      const { data: feedbackRows } = await supabase
-        .from('session_muscle_feedback')
-        .select('session_id, muscle_group, pump, workload, soreness_before, workout_sessions!inner(completed_at, is_deload, state)')
-        .eq('user_id', userId)
-        .eq('workout_sessions.state', 'completed')
-        .gte('workout_sessions.completed_at', `${startDate}T00:00:00`)
-        .lte('workout_sessions.completed_at', windowEnd.toISOString());
-
-      if (feedbackRows && feedbackRows.length > 0) {
-        // session_id rides along so the aggregation can merge subdivision rows
-        // (chest_upper + chest_lower → chest) into ONE rated session each.
-        const collapsed = (feedbackRows as {
-          session_id: string;
-          muscle_group: string;
-          pump: number | null;
-          workload: number | null;
-          soreness_before: number | null;
-          workout_sessions: { is_deload?: boolean | null } | null;
-        }[])
-          .filter((r) => !r.workout_sessions?.is_deload)
-          .flatMap((r) => {
-            const coarse = STANDARD_TO_COARSE[r.muscle_group as keyof typeof STANDARD_TO_COARSE];
-            if (!coarse) return [];
-            return [{
-              sessionId: r.session_id,
-              muscle: coarse as MuscleGroup,
-              pump: r.pump,
-              workload: r.workload,
-              sorenessBefore: r.soreness_before,
-            }];
-          });
-        subjectiveByMuscle = aggregateSubjectiveSignals(collapsed);
-      }
-    } catch (feedbackErr) {
-      // Subjective signals are optional inputs — never block the analysis.
-      console.error('runMesocycleCompletionAnalysis: failed to load muscle feedback:', feedbackErr);
-    }
-
-    // 3. Pure service: analyze the mesocycle.
-    const analysis = analyzeMesocycle(
-      mesocycleId,
-      muscleData,
-      currentProfile,
-      startDate,
-      endDate,
-      subjectiveByMuscle
-    );
-
-    // Persist analysis (UNIQUE(user_id, mesocycle_id) -> upsert is idempotent).
-    const { error: analysisError } = await supabase
-      .from('mesocycle_analyses')
-      .upsert(
-        {
-          user_id: userId,
-          mesocycle_id: mesocycleId,
-          start_date: analysis.startDate,
-          end_date: analysis.endDate,
-          weeks: analysis.weeks,
-          muscle_volumes: analysis.muscleVolumes,
-          muscle_outcomes: analysis.muscleOutcomes,
-          overall_recovery: analysis.overallRecovery,
-        },
-        { onConflict: 'user_id,mesocycle_id' }
-      );
-
-    if (analysisError) {
-      console.error('runMesocycleCompletionAnalysis: failed to persist analysis:', analysisError);
-      return false;
-    }
-
-    // 4. Pure service: learn from the analysis, then persist the grown profile
-    //    using the same upsert shape useAdaptiveVolume.saveProfile uses.
-    const learnedProfile = updateVolumeProfile(currentProfile, analysis);
-    const { error: profileError } = await supabase
-      .from('user_volume_profiles')
-      .upsert({
-        user_id: learnedProfile.userId,
-        muscle_tolerance: learnedProfile.muscleTolerance,
-        global_recovery_multiplier: learnedProfile.globalRecoveryMultiplier,
-        is_enhanced: learnedProfile.isEnhanced,
-        training_age: learnedProfile.trainingAge,
-        updated_at: new Date().toISOString(),
-      });
-
-    if (profileError) {
-      console.error('runMesocycleCompletionAnalysis: failed to persist learned profile:', profileError);
-      // Analysis was still written, so the review page populates. Treat as partial success.
-    }
-
-    return true;
-  } catch (err) {
-    console.error('runMesocycleCompletionAnalysis: unexpected error:', err);
-    return false;
-  }
-}
 
 /**
  * Hook for getting volume tolerance for a specific muscle
