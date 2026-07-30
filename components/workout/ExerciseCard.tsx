@@ -1923,27 +1923,47 @@ export const ExerciseCard = memo(function ExerciseCard({
       const posDelta = positionalDelta(weight);
       if (rec.positionMatch) {
         // Phase A — position-matched: the target came from what the SAME set
-        // position did last session, not from the anchor curve. Say exactly
-        // that; the rationale copy below would wrongly grade it against the
-        // just-completed set.
+        // position did last session, not from the anchor curve. The claim is
+        // derived from rec.provenance — the stage that produced the FINAL
+        // numbers — never from the match branch alone, so a progression
+        // phrase can no longer attach to a number a later stage changed
+        // (the live "go one more rep" over one rep fewer).
         const pm = rec.positionMatch;
         const setNo = completedSets.length + 1;
         const prevDesc = `${displayWeight(pm.prevWeightKg, true)} ${weightLabel} × ${pm.prevReps}`;
-        reason =
-          pm.progression === 'add_rep'
-            ? `matching set ${setNo} from last session (${prevDesc}) — go one more rep`
-            : pm.progression === 'add_load'
-              ? `set ${setNo} last session hit the rep ceiling (${prevDesc}) — one increment up`
-              : `matching set ${setNo} from last session (${prevDesc})`;
-        explanation.push(
-          `Set-position matching: last session's set ${setNo} was ${prevDesc}${pm.prevRir != null ? ` at ${pm.prevRir} RIR` : ''}. That set carries the same accumulated fatigue this set will, so it anchors the target${
+        const source = rec.provenance?.source ?? 'position_match';
+        if (source === 'load_lever') {
+          reason = `beating set ${setNo} from last session (${prevDesc}) — more reps can't top it at that load, so up one increment`;
+          explanation.push(
+            `Set-position matching: last session's set ${setNo} was ${prevDesc}${pm.prevRir != null ? ` at ${pm.prevRir} RIR` : ''}. At that load, every rep count inside the target range measures the same estimated capacity, so adding a rep is not a measurable progression — the load steps up by the smallest increment instead, with reps re-solved inside the range.`
+          );
+        } else if (source === 'rep_resolve') {
+          reason = `beating set ${setNo} from last session (${prevDesc}) — reps re-solved to stay ahead of it`;
+          explanation.push(
+            `Set-position matching: last session's set ${setNo} was ${prevDesc}${pm.prevRir != null ? ` at ${pm.prevRir} RIR` : ''}. The standard progression step priced below that set, so the reps were re-solved at this load until the target sits above it.`
+          );
+        } else if (source === 'session_capacity_cap' || source === 'monotonicity_floor') {
+          reason = `matched to set ${setNo} from last session (${prevDesc}) — capped at today’s best`;
+          explanation.push(
+            `Set-position matching: last session's set ${setNo} was ${prevDesc}${pm.prevRir != null ? ` at ${pm.prevRir} RIR` : ''}, but today's sets demonstrate less capacity than that progression asks for. The target is capped at what you've actually shown this session — no progression is claimed.`
+          );
+        } else {
+          reason =
             pm.progression === 'add_rep'
-              ? ' — plus one rep, since it was left at or above the target reserve.'
+              ? `matching set ${setNo} from last session (${prevDesc}) — go one more rep`
               : pm.progression === 'add_load'
-                ? ' — at the top of the rep range with reserve, so the load steps up one increment and trades a rep.'
-                : ' — held as-is, because it was taken harder than the target effort (repeating it at better effort is the progression).'
-          }`
-        );
+                ? `set ${setNo} last session hit the rep ceiling (${prevDesc}) — one increment up`
+                : `matching set ${setNo} from last session (${prevDesc})`;
+          explanation.push(
+            `Set-position matching: last session's set ${setNo} was ${prevDesc}${pm.prevRir != null ? ` at ${pm.prevRir} RIR` : ''}. That set carries the same accumulated fatigue this set will, so it anchors the target${
+              pm.progression === 'add_rep'
+                ? ' — plus one rep, since it was left at or above the target reserve.'
+                : pm.progression === 'add_load'
+                  ? ' — at the top of the rep range with reserve, so the load steps up one increment and trades a rep.'
+                  : ' — held as-is, because it was taken harder than the target effort (repeating it at better effort is the progression).'
+            }`
+          );
+        }
       } else if (rec.noMeaningfulChange) {
         // Phase D: the engine wanted to move the load, but the true
         // prescription sits within half an increment of the current load —
@@ -1974,8 +1994,10 @@ export const ExerciseCard = memo(function ExerciseCard({
       }
       // Phase 0 (INV-2): the ask was trimmed because it implied more capacity
       // than the best set observed this session — say so, never demand a
-      // silent session best under fatigue.
-      if (rec.sessionCapacityClamped) {
+      // silent session best under fatigue. (Position-matched prescriptions
+      // render the cap as their PRIMARY reason above — no suffix here, so a
+      // stale progression claim can never carry a "capped" postscript.)
+      if (rec.sessionCapacityClamped && !rec.positionMatch) {
         reason += ' · capped at today’s best';
         explanation.push(
           'Capped: the un-capped suggestion implied more capacity than your best set this session. A late set is never asked to beat what fresh sets demonstrated today.'
@@ -2005,7 +2027,7 @@ export const ExerciseCard = memo(function ExerciseCard({
       repsLabel = String(reps);
       const firstRef = repTotalPlan.perSetRefReps?.[0];
       reason = repTotalPlan.bumped
-        ? `rep-total — load up one increment; set 1 targets ${reps} (you did ${firstRef ?? '—'} at ${displayWeight(repTotalPlan.refLoadKg, true)} ${weightLabel})`
+        ? `rep-total — load up; set 1 targets ${reps} (you did ${firstRef ?? '—'} at ${displayWeight(repTotalPlan.refLoadKg, true)} ${weightLabel})`
         : repTotalPlan.bumpDeferred === 'load_cost'
           ? `rep-total — holding the load: a step up would drop you below the ${block.targetRepRange[0]}-rep floor`
           : `rep-total — hold the load, beat last session's ${repTotalPlan.prevSessionRepTotal} total reps`;
@@ -2014,7 +2036,7 @@ export const ExerciseCard = memo(function ExerciseCard({
       );
       explanation.push(
         repTotalPlan.bumped
-          ? `Every top-load set cleared the ${block.targetRepRange[0]}-rep floor at the target effort, so the load steps up by the smallest increment. Each set's target is what you actually did at ${displayWeight(repTotalPlan.refLoadKg, true)} ${weightLabel} last session, priced for the heavier load — reps are not reset to the range floor.`
+          ? `Every top-load set cleared the ${block.targetRepRange[0]}-rep floor at the target effort, so the load steps up by the smallest increments that keep every target inside the ${block.targetRepRange[0]}–${block.targetRepRange[1]} range. Each set's target is what you actually did at ${displayWeight(repTotalPlan.refLoadKg, true)} ${weightLabel} last session, priced for the heavier load — reps are not reset to the range floor.`
           : repTotalPlan.bumpDeferred === 'load_cost'
             ? `You cleared the ${block.targetRepRange[0]}-rep floor on every top-load set, but at the smallest available increment the heavier load would price your current reps below the floor. The load holds; keep adding reps until the increase fits inside the range.`
             : `Target: beat ${repTotalPlan.prevSessionRepTotal} total reps at this load (aim ${repTotalPlan.sessionRepTotalTarget}+). When every set clears ${block.targetRepRange[0]} at the target effort, the load steps up one increment.`

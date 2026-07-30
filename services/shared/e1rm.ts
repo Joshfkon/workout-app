@@ -119,3 +119,39 @@ export function e1rmValue(weight: number, reps: number, rir: number = 0): number
 export function e1rmValueFromRpe(weight: number, reps: number, rpe?: number | null): number {
   return estimateE1RMFromRpe(weight, reps, rpe)?.value ?? 0;
 }
+
+/**
+ * PRESCRIPTION-SPACE implied e1RM — the canonical estimator's value with the
+ * beyond-domain null lifted to its flat floor. Same Brzycki formula, same
+ * 12-effective-rep clamp; the ONLY difference from `estimateE1RM` is that
+ * effective reps past 15 return the eff-12 floor value instead of null.
+ *
+ * WHY IT EXISTS: cap/floor comparisons in the prescription pipeline need a
+ * TOTAL function. A high-rep ask (e.g. 65×15 @2 RIR = 17 effective reps) has
+ * no valid point ESTIMATE — but its true capacity is provably AT LEAST the
+ * flat floor (the estimator is monotone non-decreasing in reps), so for
+ * "does this ask exceed the session cap?" the floor is the honest, canonical
+ * answer. Comparing raw rep counts across different loads instead is the
+ * unit error that produced the 2026-07-29 pushdown defect (a 72.5-load rep
+ * count capping a 65-load ask).
+ *
+ * NEVER for display: surfaces must keep using `estimateE1RM` and render
+ * "no estimate" beyond the domain. Ordering caveat: within the flat region
+ * (eff ≥ 12 at one load) all rep counts compare EQUAL — callers needing
+ * strict progression there must move the load, not the reps.
+ *
+ * Returns null only for invalid inputs (non-finite / non-positive).
+ */
+export function impliedE1RMFloor(
+  weight: number,
+  reps: number,
+  rir: number = 0
+): number | null {
+  if (!Number.isFinite(weight) || !Number.isFinite(reps) || weight <= 0 || reps <= 0) {
+    return null;
+  }
+  const effectiveReps = reps + Math.max(0, Number.isFinite(rir) ? rir : 0);
+  return round1(
+    brzycki(weight, Math.min(effectiveReps, E1RM_HIGH_CONFIDENCE_MAX_EFFECTIVE_REPS))
+  );
+}

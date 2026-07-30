@@ -232,6 +232,31 @@ export const REP_OVERSHOOT = 2;
  */
 export const SESSION_CAPACITY_TOLERANCE = 0.01;
 
+/**
+ * Per-set fatigue discount on the session-capacity cap (INV-2), applied in
+ * e1RM SPACE — the 2026-07-29 pushdown fix. The cap on the next set is
+ *
+ *   cap_e1rm = max over today's logged sets i of
+ *              e1rm_floor(set i) × FATIGUE_K ^ (sets performed AFTER set i)
+ *
+ * so a set's demonstrated capacity decays 3% for each set that has since
+ * been performed. Two properties this encodes:
+ *
+ *  - The JUST-COMPLETED set always carries exponent 0 — repeating the set
+ *    you just did is always a legal ask (a cap below it would forbid
+ *    "match your last set", the engine's most basic prescription).
+ *  - The cap is RECOMPUTED as sets log, so an early top set cannot anchor
+ *    the whole session verbatim (the stale-anchor defect: set 1 at 72.5×12
+ *    capped both set-2 and set-3 prescriptions identically).
+ *
+ * The cap comparison itself is strictly e1RM vs e1RM via the canonical
+ * module (services/shared/e1rm.ts). Never compare or cap raw rep counts
+ * across different loads — reps are load-dependent, so a rep-count cap
+ * TIGHTENS as the top set gets heavier, which is the unit error this
+ * constant's introduction removed.
+ */
+export const FATIGUE_K = 0.97;
+
 // ============================================================
 // REP-TOTAL LOAD↔REP EXCHANGE (rep_total planner parity)
 // ============================================================
@@ -259,6 +284,17 @@ export const HIGH_REP_COST_MIN_PER_PCT = 0.15;
  * live defects were −21% to −53%).
  */
 export const REP_TOTAL_VOLUME_SHORTFALL_TOLERANCE = 0.05;
+
+/**
+ * 2026-07-29 step 5(a) — ceiling on the load increase a rep_total bump may
+ * take in ONE session while fitting the observed rep counts back inside the
+ * configured range ceiling. The bump must land INSIDE the range at both
+ * ends: fitting a 15-rep history into an 8-12 range costs ~10.5% of load; a
+ * fit needing more than this bound stops stepping and clamps the residual
+ * targets to the range ceiling instead (the volume constraint pads sets).
+ * Mirrors MAX_REDUCE_PCT's role in the other direction.
+ */
+export const REP_TOTAL_RANGE_FIT_MAX_STEP_PCT = 0.3;
 
 /**
  * Two rep_total loads count as THE SAME load when they differ by no more
