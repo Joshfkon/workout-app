@@ -222,6 +222,80 @@ describe('regression 4 — rationale provenance: stated direction matches the ac
   });
 });
 
+describe('Codex review on #565 — cap pool must not double-count the just-completed set', () => {
+  it('passing ALL completed sets (live caller) and earlier-sets-only give the same prescription', () => {
+    // ExerciseCard passes every completed set in sessionObservedSets; the
+    // engine also appends the last* fields. A duplicate makes the fatigue
+    // decay treat the pool as one set longer, over-discounting earlier
+    // anchors (set 1 at FATIGUE_K² instead of FATIGUE_K after two sets).
+    const base = afterSets(2); // helper passes earlier sets only
+    const fullPool = {
+      ...base,
+      sessionObservedSets: PUSHDOWN_JUL_29_LOGGED.map((s) => ({ ...s })),
+    };
+    expect(recommendSet(fullPool)).toEqual(recommendSet(base));
+  });
+
+  it('two identical consecutive sets both count when the full pool is passed', () => {
+    // Dedupe keys on the pool's FINAL entry only — an earlier identical set
+    // (Arnold 45×8 @2 twice) must stay in the pool with its own decay slot.
+    const twice = [
+      { weightKg: 45, reps: 8, rir: 2 },
+      { weightKg: 45, reps: 8, rir: 2 },
+    ];
+    const rec = recommendSet({
+      lastWeightKg: 45,
+      lastReps: 8,
+      lastRir: 2,
+      setsCompletedThisExercise: 2,
+      targetRepRange: [8, 12],
+      targetRir: 2,
+      minIncrementKg: 2.5,
+      sessionObservedSets: twice,
+    });
+    // Pool stays [set1, set2]: the last set anchors the cap at exponent 0 —
+    // repeating the just-done 45×8 @2 (implied 60.0) must remain legal.
+    expect(rec.weightKg).toBe(45);
+    expect(rec.sessionCapacityClamped).toBeUndefined();
+  });
+});
+
+describe('Codex review on #565 — load lever works for wholly beyond-domain ranges', () => {
+  it('a 15-20 @2 range (every count beyond the point-estimator domain) still steps the load', () => {
+    // repMin + RIR = 17 effective reps: estimateE1RM is null at EVERY
+    // in-range count, so the in-domain candidate tier can never fire. The
+    // implied floor still ranks loads — the add_rep replay must become a
+    // load step, never a "go one more rep" claim over a repeat direction.
+    const rec = recommendSet({
+      lastWeightKg: 60,
+      lastReps: 18,
+      lastRir: 2,
+      setsCompletedThisExercise: 1,
+      targetRepRange: [15, 20],
+      targetRir: 2,
+      minIncrementKg: 2.5,
+      positionContext: {
+        prevSessionSets: [
+          { weightKg: 60, reps: 18, rir: 2.5 },
+          { weightKg: 60, reps: 18, rir: 2.5 },
+          { weightKg: 60, reps: 16, rir: 1 },
+        ],
+        todaySets: [{ weightKg: 60, reps: 18 }],
+        plannedSetCount: 3,
+      },
+    });
+    expect(rec.positionMatch?.progression).toBe('add_rep');
+    expect(rec.progressionLever).toBe('load');
+    expect(rec.weightKg).toBe(62.5);
+    // Reps carry over from the matched set, clamped into the range.
+    expect(rec.reps).toBe(18);
+    expect(rec.provenance?.source).toBe('load_lever');
+    expect(rec.provenance?.direction).toBe('progress');
+    const prescribed = impliedE1RMFloor(rec.weightKg, rec.reps, 2)!;
+    expect(prescribed).toBeGreaterThan(impliedE1RMFloor(60, 18, 2)!);
+  });
+});
+
 describe('sessionCapacityCapE1RM — cap semantics', () => {
   const set1 = { weightKg: 72.5, reps: 12, rir: 2 };
   const set2 = { weightKg: 70, reps: 13, rir: 2 };

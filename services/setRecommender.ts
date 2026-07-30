@@ -130,8 +130,12 @@ export interface SetRecommenderInput {
    * Phase 0 (INV-2) — ALL sets completed THIS session with their resolved
    * effort, in performed order. Their best canonical implied capacity is the
    * ceiling no prescription may exceed. The just-completed set (the last*
-   * fields) is always included in the ceiling pool automatically; pass the
-   * earlier sets here. Omitted → the ceiling is the last set alone.
+   * fields) is included in the ceiling pool automatically UNLESS it is
+   * already the list's final entry (Codex review on #565: the live caller
+   * passes every completed set — appending a duplicate made the fatigue
+   * decay treat the pool as one set longer and over-discount earlier
+   * anchors). Passing all sets or only the earlier ones both work.
+   * Omitted → the ceiling is the last set alone.
    */
   sessionObservedSets?: Array<{ weightKg: number; reps: number; rir: number }>;
   /**
@@ -930,12 +934,24 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
     const out = { ...rec };
     let floorRestored = false;
 
+    // Ceiling pool: the passed sets plus the just-completed set — WITHOUT
+    // duplicating it when the caller already included it as the final entry
+    // (the index-based fatigue decay is length-sensitive; a duplicate
+    // over-discounts every earlier anchor by one extra FATIGUE_K).
+    const observed = input.sessionObservedSets ?? [];
+    const tail = observed[observed.length - 1];
+    const lastAlreadyIncluded =
+      !!tail &&
+      tail.weightKg === lastWeightKg &&
+      tail.reps === lastReps &&
+      Math.abs(Math.max(0, tail.rir) - safeRir) < 1e-9;
     const capE1RM =
       n >= 1 && out.weightKg > 0
-        ? sessionCapacityCapE1RM([
-            ...(input.sessionObservedSets ?? []),
-            { weightKg: lastWeightKg, reps: lastReps, rir: safeRir },
-          ])
+        ? sessionCapacityCapE1RM(
+            lastAlreadyIncluded
+              ? observed
+              : [...observed, { weightKg: lastWeightKg, reps: lastReps, rir: safeRir }]
+          )
         : null;
     // Asked effort for the invariant (Codex review, partially accepted):
     // a position-matched HOLD demands "repeat the set you did at this
@@ -1010,11 +1026,13 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
           // available increment) is always tried; further steps respect the
           // per-set load cap.
           if (step > 1 && w > maxLoad + 1e-9) break;
+          let anyInDomain = false;
           for (let r = repMin; r <= repMax; r++) {
             const est = estimateE1RM(w, r, askedRir);
             // Beyond the estimator's domain at this count — higher counts
             // only go further out; nothing measurable left at this load.
             if (est == null) break;
+            anyInDomain = true;
             if (est.value <= required) continue;
             if (!underCapAt(w, r)) break search; // cap is the binding constraint
             if (w !== out.weightKg || r !== out.reps) {
@@ -1023,6 +1041,26 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
               out.reps = r;
             }
             break search;
+          }
+          // Codex review on #565: a range whose ENTIRE span sits beyond the
+          // point-estimator's domain (e.g. 15-20 @2 → 17+ effective reps)
+          // has no in-domain candidate at ANY load, so the tier above can
+          // never select the load lever. The implied FLOOR still ranks
+          // loads — the same canonical comparison the cap uses — and in
+          // that regime every in-range count measures the same floor, so a
+          // load step whose floor clears `required` IS the measurable
+          // progression; the reps carry over from the matched set (clamped
+          // into range).
+          if (!anyInDomain && w > out.weightKg) {
+            const floorReps = clamp(pm.prevReps, repMin, repMax);
+            const floorValue = impliedE1RMFloor(w, floorReps, askedRir);
+            if (floorValue != null && floorValue > required) {
+              if (!underCapAt(w, floorReps)) break search; // cap binds
+              out.progressionLever = 'load';
+              out.weightKg = w;
+              out.reps = floorReps;
+              break search;
+            }
           }
         }
       }
