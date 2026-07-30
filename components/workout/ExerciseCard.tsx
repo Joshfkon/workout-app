@@ -910,7 +910,7 @@ export const ExerciseCard = memo(function ExerciseCard({
     if (isDurationBased) return null;
     const lastSets = exerciseHistory?.lastWorkoutSets ?? [];
     if (lastSets.length === 0) return null;
-    const vol = sumDisplayVolume(lastSets, unit);
+    const vol = sumDisplayVolume(lastSets, unit, null); // guarded: isDurationBased returns above
     return vol > 0 ? vol : null;
   }, [isDurationBased, exerciseHistory, unit]);
 
@@ -921,7 +921,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   // (sumDisplayVolume convention); engine math stays in kg.
   const sessionVolume = useMemo(() => {
     if (isDurationBased) return null;
-    const current = sumDisplayVolume(completedSets, unit);
+    const current = sumDisplayVolume(completedSets, unit, null); // guarded: isDurationBased returns above
     let projected = current;
     const lastCompleted = completedSets[completedSets.length - 1];
     for (let i = 0; i < pendingSetsCount; i++) {

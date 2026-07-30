@@ -17,6 +17,8 @@ interface HistoryTabProps {
   sessions: ExerciseDetailSession[] | undefined;
   isLoading: boolean;
   unit: 'kg' | 'lb';
+  /** duration_based exercise: seconds live in `reps`, so no tonnage line. */
+  isDuration?: boolean;
   /** rep_total exercise: show session rep totals, never an e1RM (ADD 2). */
   repTotalMode?: boolean;
 }
@@ -25,7 +27,7 @@ function setLabel(weightKg: number, reps: number, unit: 'kg' | 'lb'): string {
   return `${convertWeightForDisplay(weightKg, unit, 1)} ${unit} × ${reps}`;
 }
 
-export function HistoryTab({ sessions, isLoading, unit, repTotalMode = false }: HistoryTabProps) {
+export function HistoryTab({ sessions, isLoading, unit, repTotalMode = false, isDuration = false }: HistoryTabProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
@@ -81,12 +83,21 @@ export function HistoryTab({ sessions, isLoading, unit, repTotalMode = false }: 
                   {session.topSet && (
                     <span>Top: {setLabel(session.topSet.weightKg, session.topSet.reps, unit)}</span>
                   )}
-                  <span>·</span>
-                  <span>
-                    {/* Native-unit volume: per-set conversion first, so
-                        160×12×4 reads 7,680 — not the kg-roundtrip 7,679. */}
-                    {sumDisplayVolume(session.sets, unit).toLocaleString()} {unit}
-                  </span>
+                  {!isDuration && (
+                    <>
+                      <span>·</span>
+                      <span>
+                        {/* Native-unit volume: per-set conversion first, so
+                            160×12×4 reads 7,680 — not the kg-roundtrip 7,679.
+                            Hidden for duration exercises: seconds×weight is
+                            not tonnage (Codex P2 on #569). */}
+                        {sumDisplayVolume(session.sets, unit, {
+                          exerciseType: 'rep_based',
+                        }).toLocaleString()}{' '}
+                        {unit}
+                      </span>
+                    </>
+                  )}
                 </div>
               </div>
               <svg

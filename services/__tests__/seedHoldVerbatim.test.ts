@@ -83,7 +83,7 @@ describe('sumDisplayVolume (native-unit tonnage)', () => {
     // Storage precision: DECIMAL(6,2) keeps 72.57 kg, whose kg-sum converts
     // back to 7,679.49 lb. Per-set native conversion recovers 160.0 first.
     const sets = Array.from({ length: 4 }, () => ({ weightKg: 72.57, reps: 12 }));
-    expect(sumDisplayVolume(sets, 'lb')).toBe(7680);
+    expect(sumDisplayVolume(sets, 'lb', null)).toBe(7680);
   });
 
   it('kg users sum exactly in kg', () => {
@@ -91,13 +91,22 @@ describe('sumDisplayVolume (native-unit tonnage)', () => {
       { weightKg: 100, reps: 10 },
       { weightKg: 80, reps: 8 },
     ];
-    expect(sumDisplayVolume(sets, 'kg')).toBe(1640);
+    expect(sumDisplayVolume(sets, 'kg', null)).toBe(1640);
+  });
+
+  it('duration sets contribute NO tonnage (seconds in `reps` — Codex P2 on #569)', () => {
+    // A 60s weighted plank at 20 kg is not 1,200 kg of volume.
+    const sets = [{ weightKg: 20, reps: 60 }];
+    expect(sumDisplayVolume(sets, 'kg', { exerciseType: 'duration_based' })).toBe(0);
+    expect(sumDisplayVolume(sets, 'lb', { exerciseType: 'duration_based' })).toBe(0);
+    // The same sets under a rep-based source still count.
+    expect(sumDisplayVolume(sets, 'kg', { exerciseType: 'rep_based' })).toBe(1200);
   });
 
   it('kg path keeps full stored precision — no per-set display rounding', () => {
     // 72.57 × 12 × 4 = 3483.36 → 3483. Rounding each set to one decimal
     // first (72.6) would report 3485.
     const sets = Array.from({ length: 4 }, () => ({ weightKg: 72.57, reps: 12 }));
-    expect(sumDisplayVolume(sets, 'kg')).toBe(3483);
+    expect(sumDisplayVolume(sets, 'kg', null)).toBe(3483);
   });
 });
