@@ -72,12 +72,17 @@ const SessionSummary = dynamic(() => import('@/components/workout').then(m => m.
 });
 const ExerciseDetailsModal = dynamic(() => import('@/components/workout').then(m => m.ExerciseDetailsModal), { ssr: false });
 const PlateCalculatorModal = dynamic(() => import('@/components/workout').then(m => m.PlateCalculatorModal), { ssr: false });
+// Motion capture sheet (experimental, flag-gated) — loaded on demand.
+const MotionCaptureSheet = dynamic(() => import('@/components/motion/MotionCaptureSheet').then(m => m.MotionCaptureSheet), { ssr: false });
 import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaRegionalData, TemporaryInjury, PreWorkoutCheckIn, SetFeedback, Rating, BodyweightData, ExerciseType, StandardMuscleGroup, ExercisePerformanceSnapshot, RepsInTank, SorenessRating, SetDiscomfort, JointPainJoint } from '@/types/schema';
 import type { SessionMuscleFeedbackEntry, SessionSummarySubmitData } from '@/components/workout/SessionSummary';
 import { MuscleGroupFeedbackModal, type MuscleFeedbackRatings } from '@/components/workout/MuscleGroupFeedbackModal';
 import type { MuscleSorenessRatings } from '@/components/workout/ReadinessCheckIn';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { getLocalUserId } from '@/lib/supabase/authState';
+import { listCalibrations } from '@/lib/motion/calibrations';
+import { getPendingCapture } from '@/lib/motion/pendingCapture';
+import type { MachineCalibration } from '@/types/motion';
 import { generateWarmupProtocol, isMuscleWarmedUp } from '@/services/progressionEngine';
 import { evaluateWarmupReadiness } from '@/services/warmupEngine';
 import { MUSCLE_GROUPS, muscleMatchesGroup, rirToRpe, rpeToRir, STANDARD_MUSCLE_DISPLAY_NAMES } from '@/types/schema';
@@ -661,6 +666,16 @@ export default function WorkoutPage() {
   // Enhanced Athlete Mode (users.enhanced_athlete_mode): raises the sandbagging
   // threshold and drives the connective-tissue cap note on exercise cards.
   const [enhancedAthleteModeActive, setEnhancedAthleteModeActive] = useState(false);
+  // Motion capture (experimental, users.motion_capture_enabled): a "Record
+  // motion" affordance on the current exercise card opens the capture sheet
+  // for exercises that have a machine calibration. Display-only telemetry.
+  const [motionCaptureEnabled, setMotionCaptureEnabled] = useState(false);
+  const [motionRawRetention, setMotionRawRetention] = useState(false);
+  const [motionCalibrations, setMotionCalibrations] = useState<MachineCalibration[]>([]);
+  const [motionSheetBlock, setMotionSheetBlock] = useState<{
+    blockId: string;
+    exerciseId: string;
+  } | null>(null);
   const calibrationEngineRef = useRef<RPECalibrationEngine>(calibrationEngine);
   const [amrapSuggestion, setAmrapSuggestion] = useState<{
     exerciseName: string;
@@ -1510,11 +1525,22 @@ export default function WorkoutPage() {
         // sessions legitimately beat fatigued-week predictions by more).
         const { data: userRow } = await supabase
           .from('users')
-          .select('enhanced_athlete_mode')
+          .select('enhanced_athlete_mode, motion_capture_enabled, motion_capture_raw_retention')
           .eq('id', user.id)
           .single();
         const enhancedAthleteMode = userRow?.enhanced_athlete_mode === true;
         setEnhancedAthleteModeActive(enhancedAthleteMode);
+
+        // Motion capture (experimental): the card affordance only appears
+        // for exercises with a calibration, so load them alongside the flag.
+        const motionEnabled = userRow?.motion_capture_enabled === true;
+        setMotionCaptureEnabled(motionEnabled);
+        setMotionRawRetention(userRow?.motion_capture_raw_retention === true);
+        if (motionEnabled) {
+          listCalibrations(supabase, user.id)
+            .then(setMotionCalibrations)
+            .catch((err) => console.error('Failed to load machine calibrations:', err));
+        }
 
         // Load set logs from the last 4 weeks for calibration
         const fourWeeksAgo = new Date();
@@ -5781,6 +5807,25 @@ export default function WorkoutPage() {
                     setSyncStatus={setSync}
                   />
 
+                  {/* Motion capture (experimental): only for the current
+                      exercise, only when it has a machine calibration. */}
+                  {motionCaptureEnabled &&
+                    isCurrent &&
+                    motionCalibrations.some((c) => c.exerciseId === block.exerciseId) && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setMotionSheetBlock({ blockId: block.id, exerciseId: block.exerciseId })
+                        }
+                        className="w-full py-2 px-3 rounded-lg border border-surface-700 text-xs text-surface-400 hover:text-surface-200 hover:border-surface-500 transition-colors"
+                        data-testid="motion-record-button"
+                      >
+                        {getPendingCapture()?.exerciseId === block.exerciseId
+                          ? '● Motion capture waiting for review'
+                          : '◉ Record motion'}
+                      </button>
+                    )}
+
                   {/* Rest timer renders as a fixed bottom bar at page level (P0-5) */}
 
                   {/* AMRAP Suggestion Banner - positioned below sets for better visibility when keyboard is up */}
@@ -6389,6 +6434,21 @@ export default function WorkoutPage() {
         initialWeightKg={plateCalculatorWeight ?? currentBlock?.targetWeightKg}
         exerciseId={currentExercise?.id}
       />
+
+      {/* Motion capture sheet (experimental, flag-gated). Closing mid-review
+          keeps the capture in memory; the card button offers to resume. */}
+      {motionSheetBlock && session && (
+        <MotionCaptureSheet
+          isOpen
+          onClose={() => setMotionSheetBlock(null)}
+          userId={session.userId}
+          rawRetentionEnabled={motionRawRetention}
+          calibrations={motionCalibrations}
+          exerciseNames={Object.fromEntries(blocks.map((b) => [b.exerciseId, b.exercise.name]))}
+          exerciseId={motionSheetBlock.exerciseId}
+          blockId={motionSheetBlock.blockId}
+        />
+      )}
 
       {/* Page-level Swap Modal for injury-related swaps */}
       {showPageLevelSwapModal && swapTargetBlockId && (() => {

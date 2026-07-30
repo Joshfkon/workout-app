@@ -23,6 +23,7 @@ import { deleteAccount } from '@/lib/actions/account';
 import { updateTrainingPhase, type TrainingPhase } from '@/lib/actions/phase';
 import { GymEquipmentSettings } from '@/components/settings/GymEquipmentSettings';
 import { EnhancedAthleteModeCard } from '@/components/settings/EnhancedAthleteModeCard';
+import { MotionCaptureLabCard } from '@/components/settings/MotionCaptureLabCard';
 import { ImportExportSettings } from '@/components/settings/ImportExportSettings';
 import { MusclePrioritySettings } from '@/components/settings/MusclePrioritySettings';
 import { ExerciseVarietySettings } from '@/components/settings/ExerciseVarietySettings';
@@ -631,6 +632,9 @@ export default function SettingsPage() {
       {/* Enhanced Athlete Mode — physiological profile fact; persists on
           toggle (not on Save) and prompts if a mesocycle is in progress */}
       <EnhancedAthleteModeCard />
+
+      {/* Motion Capture (experimental) — off by default, persists on toggle */}
+      <MotionCaptureLabCard />
 
       {/* Save button for Profile tab */}
       <div className="flex justify-end">
