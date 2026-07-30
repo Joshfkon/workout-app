@@ -6,11 +6,11 @@ import { useUserStore } from '@/stores';
 import {
   assessVolumeStatus,
   resolvePrimaryMuscleCredits,
-  SECONDARY_MUSCLE_CREDIT,
   type MuscleVolumeData,
 } from '@/services/volumeTracker';
+import { perSetCredits } from '@/services/shared/volumeCredit';
 import type { WeeklyMuscleVolumeRow } from '@/types/database-queries';
-import { STANDARD_MUSCLE_GROUPS, resolveMuscleToStandard, type StandardMuscleGroup } from '@/types/schema';
+import { STANDARD_MUSCLE_GROUPS, type StandardMuscleGroup } from '@/types/schema';
 import {
   computeReachableMuscles,
   isMuscleWarnable,
@@ -134,24 +134,15 @@ export function useWeeklyVolume(options: UseWeeklyVolumeOptions = {}) {
             const primaryMuscle = exercise.primary_muscle;
             if (!primaryMuscle) return;
 
-            const primaryCredits = resolvePrimaryMuscleCredits(primaryMuscle);
-            const primarySet = new Set(primaryCredits.map((c) => c.muscle));
-            primaryCredits.forEach(({ muscle, weight }) => {
-              directByMuscle.set(muscle, (directByMuscle.get(muscle) ?? 0) + workingSets.length * weight);
-            });
-
-            (exercise.secondary_muscles || []).forEach((secondary: string) => {
-              const standards = resolveMuscleToStandard(secondary);
-              if (standards.length === 0) return;
-              const creditPerMuscle = SECONDARY_MUSCLE_CREDIT / standards.length;
-              standards.forEach((standardMuscle) => {
-                if (primarySet.has(standardMuscle)) return;
-                indirectByMuscle.set(
-                  standardMuscle,
-                  (indirectByMuscle.get(standardMuscle) ?? 0) + workingSets.length * creditPerMuscle
-                );
-              });
-            });
+            // Canonical per-set credit math (services/shared/volumeCredit) —
+            // this hook only multiplies by the working-set count.
+            for (const { muscle, credit, isDirect } of perSetCredits(
+              primaryMuscle,
+              exercise.secondary_muscles || []
+            )) {
+              const map = isDirect ? directByMuscle : indirectByMuscle;
+              map.set(muscle, (map.get(muscle) ?? 0) + workingSets.length * credit);
+            }
           });
 
           // Convert to MuscleVolumeData format with all standard muscles —

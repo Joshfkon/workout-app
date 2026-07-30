@@ -152,9 +152,12 @@ function useWeeklyStats(
           ex.sets.map((set) => set.reportedRir),
           ex.primaryMuscle ?? undefined
         );
+        // Real exercise identity: entries merged by id must share tags, or the
+        // per-exercise group cap (and the drill-down panel) would conflate
+        // distinct exercises that happen to share a primary muscle.
         accumulateExerciseVolume(
           acc,
-          { id: ex.primaryMuscle || 'x', name: ex.primaryMuscle || 'x', primary_muscle: ex.primaryMuscle, secondary_muscles: ex.secondaryMuscles },
+          { id: ex.id, name: ex.name, primary_muscle: ex.primaryMuscle, secondary_muscles: ex.secondaryMuscles },
           ex.sets.length,
           hist.effectiveSets,
           hist.unratedSets

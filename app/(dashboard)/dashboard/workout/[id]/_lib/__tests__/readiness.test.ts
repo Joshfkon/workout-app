@@ -101,7 +101,7 @@ describe('buildReadinessRows (coarse rows)', () => {
 
     // …and the fine child carries only its own.
     const child = glutes.children.find((c) => c.muscle === 'glute_med');
-    expect(child!.exercises).toEqual([{ id: 'glute_med', name: 'glute_med ex', performedSets: 4, sets: 4, effective: 4, direct: 4, indirect: 0, directEffective: 4, indirectEffective: 0 }]);
+    expect(child!.exercises).toEqual([{ id: 'glute_med', name: 'glute_med ex', performedSets: 4, sets: 4, effective: 4, direct: 4, indirect: 0, directEffective: 4, indirectEffective: 0, unrated: 0 }]);
 
     // An untrained group has nothing to drill into.
     expect(rowFor(rows, 'chest').exercises).toEqual([]);

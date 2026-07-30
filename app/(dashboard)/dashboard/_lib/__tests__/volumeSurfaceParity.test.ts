@@ -174,8 +174,10 @@ describe('cross-surface parity (one fixture, four surfaces)', () => {
   it('child sets roll up to the parent exactly once (no double-count)', () => {
     // Mixed coarse + fine tagging in the same week: coarse 'calves'/'traps'
     // credit stays on the coarse standard bucket; fine tags credit the fine
-    // member. The parent row is the sum of its standard children — a set can
-    // never appear both as fine-child credit AND again as coarse credit.
+    // member. The parent row derives from per-exercise credits with the
+    // per-group cap (services/shared/volumeCredit) — an exercise whose
+    // primary head + same-group secondary sum past 1.0/set credits the group
+    // its performed sets, never more. Child (head) counters keep the overlap.
     const mixed = [
       block('coarse-calf', 'calves', [], 5, 'Old Coarse Calf Raise'),
       block('standing', 'gastrocnemius', ['soleus'], 4, 'Standing Calf Raise'),
@@ -190,10 +192,12 @@ describe('cross-surface parity (one fixture, four surfaces)', () => {
 
     const calves = rows.find((x) => x.muscle === 'calves')!;
     const calvesChildren = new Map(calves.children.map((c) => [c.muscle, c]));
-    // gastroc 4 + 0.5×2 = 5, soleus 2 + 0.5×4 = 4, coarse bucket 5 → parent 14.
+    // Heads overlap by design: gastroc 4 + 0.5×2 = 5, soleus 2 + 0.5×4 = 4.
     expect(calvesChildren.get('gastrocnemius')!.sets).toBe(5);
     expect(calvesChildren.get('soleus')!.sets).toBe(4);
-    expect(calves.sets).toBe(14);
+    // Group: coarse bucket 5 + standing capped 4 + seated capped 2 = 11 —
+    // exactly the 11 performed sets, not the 14 the head overlap would sum to.
+    expect(calves.sets).toBe(11);
 
     const traps = rows.find((x) => x.muscle === 'traps')!;
     const trapsChildren = new Map(traps.children.map((c) => [c.muscle, c]));

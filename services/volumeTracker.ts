@@ -21,76 +21,24 @@ import type {
 import {
   STANDARD_MUSCLE_GROUPS,
   DEFAULT_VOLUME_LANDMARKS,
-  isLegacyMuscle,
-  normalizeMuscleToken,
   resolveMuscleToStandard,
 } from '@/types/schema';
 import { rirFromFeedback, sumEffectiveVolume } from '@/services/effectiveVolume';
+import { resolvePrimaryMuscleCredits, SECONDARY_MUSCLE_CREDIT } from '@/services/shared/volumeCredit';
 
 // ============================================
 // CONSTANTS / HELPERS
 // ============================================
 
-/** Fractional set credit given to a secondary (indirect) muscle per working set. */
-export const SECONDARY_MUSCLE_CREDIT = 0.5;
-
-/**
- * How a LEGACY coarse primary muscle distributes its direct-set credit across
- * standard muscle groups. A legacy tag can't tell us which head the exercise
- * emphasizes (a flat and an incline press are both just 'chest'), so credit is
- * split across the plausible heads instead of the old winner-takes-all
- * behavior (which sent ALL 'chest' volume to chest_upper, ALL 'shoulders'
- * volume to front_delts, and ALL 'back' volume to lats — leaving the sibling
- * muscles falsely reported as "not worked").
- *
- * 'glutes' and 'abs' intentionally do NOT split: crediting glute_med/obliques
- * from every glute/ab exercise would over-credit muscles that usually need
- * direct work, and their MEV defaults already assume indirect fill. 'traps'
- * and 'calves' follow the same rule — a coarse tag stays on the coarse
- * standard muscle and never leaks into upper_traps/mid_lower_traps or
- * gastrocnemius/soleus (only fine-grained tagging feeds those).
- */
-const LEGACY_PRIMARY_VOLUME_WEIGHTS: Record<string, Partial<Record<StandardMuscleGroup, number>>> = {
-  chest: { chest_upper: 0.5, chest_lower: 0.5 },
-  back: { lats: 0.5, upper_back: 0.5 },
-  shoulders: { front_delts: 1 / 3, lateral_delts: 1 / 3, rear_delts: 1 / 3 },
-  glutes: { glutes: 1 },
-  abs: { abs: 1 },
-  traps: { traps: 1 },
-  calves: { calves: 1 },
-};
-
-/** One standard muscle's share of an exercise's primary (direct) credit. */
-export interface PrimaryMuscleCredit {
-  muscle: StandardMuscleGroup;
-  /** Fraction of each working set credited to this muscle (weights sum to 1). */
-  weight: number;
-}
-
-/**
- * Resolve an exercise's primary muscle (any format: detailed, standard, or
- * legacy) into weighted standard-muscle credits. Non-legacy tokens resolve to
- * a single muscle at full weight; legacy coarse tokens split per
- * LEGACY_PRIMARY_VOLUME_WEIGHTS. Returns [] for unrecognized tokens.
- */
-export function resolvePrimaryMuscleCredits(muscle: string): PrimaryMuscleCredit[] {
-  const token = normalizeMuscleToken(muscle);
-
-  if (isLegacyMuscle(token)) {
-    const weights = LEGACY_PRIMARY_VOLUME_WEIGHTS[token];
-    if (weights) {
-      return (Object.entries(weights) as Array<[StandardMuscleGroup, number]>).map(
-        ([m, weight]) => ({ muscle: m, weight })
-      );
-    }
-    // Legacy tokens that map 1:1 ('biceps', 'quads', ...)
-    const standards = resolveMuscleToStandard(token);
-    return standards.length > 0 ? [{ muscle: standards[0], weight: 1 }] : [];
-  }
-
-  const standards = resolveMuscleToStandard(token);
-  return standards.length > 0 ? [{ muscle: standards[0], weight: 1 }] : [];
-}
+// The set-credit math (secondary credit constant, legacy primary splits, the
+// per-set credit resolvers and the group cap) lives in the CANONICAL module
+// services/shared/volumeCredit — re-exported here so this file's many
+// importers keep their import path. No credit constant may be defined here.
+export {
+  resolvePrimaryMuscleCredits,
+  SECONDARY_MUSCLE_CREDIT,
+  type PrimaryMuscleCredit,
+} from '@/services/shared/volumeCredit';
 
 // ============================================
 // TYPES
