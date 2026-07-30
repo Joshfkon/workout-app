@@ -23,14 +23,15 @@
  *  2. Same-real-dose value: a preset stated in CAPPED currency that makes a
  *     capped-projecting generator (Change 3) prescribe the SAME real working
  *     sets the old preset produced: P_same = ρ × P_old.
- *  3. MEV floor: the smallest integer preset whose WORST goal output (cut,
- *     ×0.7 with rounding) still lands at/above the group's band MEV — a
- *     preset that prescribes below the minimum effective dose is broken, not
- *     conservative.
- *  4. Proposed value = max(round(P_same), MEV floor). Where the floor binds,
- *     the proposal INCREASES the real dose relative to pre-cap behavior —
- *     flagged, because those are exactly the presets that were prescribing
- *     below MEV all along (the cap only made it visible).
+ *  3. GOAL-AWARE floor (corrected 2026-07-30): growth-goal outputs
+ *     (bulk / maintenance / recomp) must clear the group's band MEV; CUT
+ *     outputs must clear MAINTENANCE VOLUME (MV) — the retention minimum,
+ *     which sits below MEV. MV is not authored anywhere in the zone config;
+ *     PROPOSED_MAINTENANCE_VOLUME below is a flagged authoring proposal, not
+ *     an adopted landmark.
+ *  4. Proposed value = max(round(P_same), floor). Where the floor binds, the
+ *     proposal INCREASES the real dose relative to pre-cap behavior —
+ *     flagged so a dose change is always a visible, deliberate correction.
  */
 
 import { generateFullProgram, recommendVolume } from './mesocycleBuilder';
@@ -120,20 +121,82 @@ export function measureCapRatios(
   return out;
 }
 
-/**
- * The smallest integer base preset whose output at `goal` (recommendVolume's
- * rounding included) is still ≥ mev. Cut (×0.7) is always the binding goal.
- */
 function goalMultiplier(goal: Goal): number {
   if (goal === 'cut') return 0.7;
   if (goal === 'bulk') return 1.1;
   return 1;
 }
 
-export function mevFloorPreset(mev: number): number {
+// ─── MAINTENANCE VOLUME (MV) — PROVISIONAL AUTHORING PROPOSAL ───────────────
+//
+// The zone config authors MEV/MAV/MRV only; NO maintenance-volume landmark
+// exists anywhere in the app (verified 2026-07-30). That is the real gap the
+// original "cut preset below MEV" finding pointed at: MEV is the minimum for
+// GROWTH; a cut targets RETENTION, whose minimum (MV) sits meaningfully
+// below MEV — so a ×0.7 cut output under MEV is not per-se a defect. The
+// corrected floor rule is therefore:
+//     bulk / maintenance / recomp outputs ≥ group MEV
+//     cut outputs                        ≥ group MV
+//
+// The values below are a PROPOSAL requiring an explicit authoring decision —
+// they are NOT silently derived as one uniform fraction of MEV:
+//  - Where Renaissance Periodization publishes per-muscle MV alongside MEV
+//    (Israetel et al., RP hypertrophy guides), the RP MV:MEV ratio is applied
+//    to OUR authored (total-inclusive) group MEV: pecs 8/10 → chest ×0.8,
+//    back 8/10 → ×0.8, quads 6/8 → ×0.75, hamstrings 4/6 → ×0.67,
+//    side delts 6/8 → shoulders ×0.75, biceps 5/8 → ×0.62,
+//    triceps 4/6 → ×0.67, calves 6/8 → ×0.75.
+//  - glutes / abs / traps: RP lists MV ≈ 0 for lifters doing compound work.
+//    Our counter is total-inclusive and already credits that compound work,
+//    but a literal 0 would let a cut prescribe zero — these use a DECLARED
+//    0.5 × MEV placeholder instead (flagged, not evidence-derived).
+//  - forearms / adductors: no published MV — same declared 0.5 × MEV
+//    placeholder.
+// Maintenance-dose literature (Bickel 2011: 1/9–1/3 of building volume
+// maintained size in younger adults; Iversen 2021: ~4 weekly sets as a
+// minimum effective dose) suggests these values are conservative (high) —
+// safe as floors.
+export const PROPOSED_MAINTENANCE_VOLUME: Record<CoarseMuscle, number> = {
+  chest: 6, //      8 × 0.8
+  back: 10, //     12 × 0.8
+  shoulders: 9, // 12 × 0.75
+  biceps: 6, //    10 × 0.62
+  triceps: 5, //    8 × 0.67
+  quads: 6, //      8 × 0.75
+  hamstrings: 5, // 8 × 0.67
+  glutes: 3, //     6 × 0.5 (placeholder)
+  calves: 6, //     8 × 0.75
+  abs: 3, //        6 × 0.5 (placeholder)
+  traps: 3, //      6 × 0.5 (placeholder)
+  forearms: 2, //   4 × 0.5 (placeholder)
+  adductors: 2, //  4 × 0.5 (placeholder)
+};
+
+/** The volume floor a preset's output must clear at a given goal:
+ *  MV on a cut (retention), MEV everywhere else (growth). */
+export function goalVolumeFloor(
+  goal: Goal,
+  group: CoarseMuscle,
+  recoveryProfile: RecoveryProfile = 'standard'
+): number {
+  if (goal === 'cut') return PROPOSED_MAINTENANCE_VOLUME[group];
+  return getEffectiveBand(group, { recoveryProfile }).mev;
+}
+
+/** Smallest integer base preset whose ×0.7 cut output still clears `mv`. */
+export function cutFloorPreset(mv: number): number {
   let p = 1;
-  while (Math.round(p * 0.7) < mev) p++;
+  while (Math.round(p * 0.7) < mv) p++;
   return p;
+}
+
+/**
+ * The base-preset floor under the goal-aware rule: maintenance/recomp output
+ * IS the base (so base ≥ MEV), bulk (×1.1) is implied by that, and the cut
+ * output must clear MV.
+ */
+export function presetFloor(group: CoarseMuscle): number {
+  return Math.max(getEffectiveBand(group).mev, cutFloorPreset(PROPOSED_MAINTENANCE_VOLUME[group]));
 }
 
 export interface PresetRecalibrationRow {
@@ -151,12 +214,13 @@ export interface PresetRecalibrationRow {
   newTrackedOutput: Record<Goal, number>;
   /** Capped-currency preset preserving the pre-cap REAL set dose (one decimal). */
   sameRealDosePreset: number;
-  /** Smallest integer preset whose cut output still clears the band MEV. */
-  mevFloor: number;
-  /** max(round(sameRealDose), mevFloor) — the value proposed for review. */
+  /** Goal-aware base floor: max(MEV for maintenance output, cut-output ≥ MV). */
+  floor: number;
+  /** max(round(sameRealDose), floor) — the value proposed for review. */
   proposedPreset: number;
-  /** true where the MEV floor raised the proposal ABOVE the same-real-dose
-   *  value — i.e. the old preset was prescribing below MEV in real terms. */
+  /** true where the floor raised the proposal ABOVE the same-real-dose value —
+   *  i.e. the old preset was prescribing below the applicable floor in real
+   *  terms (under the corrected rule: MEV for growth goals, MV for cut). */
   floorBinds: boolean;
 }
 
@@ -172,7 +236,6 @@ export function derivePresetRecalibration(
 ): PresetRecalibrationRow[] {
   const rows: PresetRecalibrationRow[] = [];
   for (const group of COARSE_MUSCLES) {
-    const band = getEffectiveBand(group);
     const ratio = ratios[group].ratio;
     for (const experience of EXPERIENCES) {
       const oldPreset = recommendVolume(experience, 'maintenance', group);
@@ -183,7 +246,7 @@ export function derivePresetRecalibration(
         newTrackedOutput[goal] = round1(oldOutput[goal] * ratio);
       }
       const sameRealDosePreset = round1(oldPreset * ratio);
-      const floor = mevFloorPreset(band.mev);
+      const floor = presetFloor(group);
       const proposedPreset = Math.max(Math.round(sameRealDosePreset), floor);
       rows.push({
         group,
@@ -193,7 +256,7 @@ export function derivePresetRecalibration(
         capRatio: Math.round(ratio * 1000) / 1000,
         newTrackedOutput,
         sameRealDosePreset,
-        mevFloor: floor,
+        floor,
         proposedPreset,
         floorBinds: floor > Math.round(sameRealDosePreset),
       });
@@ -203,28 +266,29 @@ export function derivePresetRecalibration(
 }
 
 /**
- * THE hard assertion (Change-2 requirement): no preset may prescribe below
- * the group's band MEV for ANY goal setting. Returns human-readable
- * violations; empty = compliant.
+ * THE hard assertion (Change-2 requirement, corrected 2026-07-30): a preset's
+ * output must clear the GOAL-APPROPRIATE floor — MEV for growth goals
+ * (bulk / maintenance / recomp), MV for cut (retention). Returns
+ * human-readable violations; empty = compliant.
  *
- * Applied to the PROPOSED values now (they must ship compliant); when the
- * proposal is applied to recommendVolume, point this at the live outputs and
- * it becomes the permanent regression gate — see
- * currentPresetMevViolations() for why it cannot be pointed at the live
- * table yet.
+ * Applied to both the PROPOSED and the LIVE values (the live table is
+ * compliant under the corrected rule — the earlier "seven novice-cut
+ * violations" were an artifact of holding cut outputs to the growth floor).
  */
-export function presetMevViolations(
+export function presetFloorViolations(
   presetFor: (experience: Experience, goal: Goal, group: CoarseMuscle) => number,
   recoveryProfile: RecoveryProfile = 'standard'
 ): string[] {
   const violations: string[] = [];
   for (const group of COARSE_MUSCLES) {
-    const mev = getEffectiveBand(group, { recoveryProfile }).mev;
     for (const experience of EXPERIENCES) {
       for (const goal of GOALS) {
+        const floor = goalVolumeFloor(goal, group, recoveryProfile);
         const out = presetFor(experience, goal, group);
-        if (out < mev) {
-          violations.push(`${group}/${experience}/${goal}: ${out} < MEV ${mev}`);
+        if (out < floor) {
+          violations.push(
+            `${group}/${experience}/${goal}: ${out} < ${goal === 'cut' ? 'MV' : 'MEV'} ${floor}`
+          );
         }
       }
     }
@@ -245,14 +309,14 @@ export function proposedOutput(
 }
 
 /**
- * The LIVE table's violations of the MEV rule, in its own (pre-cap) currency.
- * Pinned in the test so the current state is explicit: several novice cut
- * outputs sit below MEV even before the cap — the recalibration must fix
- * these, which is why the hard assertion can only gate the proposal until
- * the new values are applied.
+ * The LIVE table's violations of the goal-aware floor rule, in its own
+ * (pre-cap) currency. EMPTY under the corrected rule (pinned): every current
+ * cut output clears the proposed MV, and every growth-goal output clears
+ * MEV — the previously reported "seven novice-cut MEV violations" dissolve
+ * once cut presets are held to the retention floor they actually target.
  */
-export function currentPresetMevViolations(): string[] {
-  return presetMevViolations((experience, goal, group) =>
+export function currentPresetFloorViolations(): string[] {
+  return presetFloorViolations((experience, goal, group) =>
     recommendVolume(experience, goal, group)
   );
 }

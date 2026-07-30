@@ -1,24 +1,28 @@
 /**
  * Preset re-derivation gates (Change 2 — report only, values NOT applied).
  *
- *  - THE hard assertion: the PROPOSED presets never prescribe below the
- *    group's band MEV for any (experience, goal, profile). When the proposal
- *    is applied to recommendVolume, repoint presetMevViolations at the live
- *    outputs and this becomes the permanent regression gate.
- *  - The LIVE table's violations are PINNED (not asserted away): several
- *    novice cut outputs sit below MEV even in the pre-cap currency — the
- *    recalibration must close these; a new violation appearing fails CI.
- *  - Measurement sanity: cap ratios are 1 for groups the cap can't bind and
- *    strictly < 1 for the known cap-binding groups under seed-convention tags.
+ * CORRECTED FLOOR RULE (2026-07-30 review): MEV is the minimum for GROWTH;
+ * a cut targets RETENTION, whose minimum (maintenance volume, MV) sits below
+ * MEV. No MV landmark is authored anywhere in the zone config —
+ * PROPOSED_MAINTENANCE_VOLUME is a flagged authoring proposal. The hard
+ * assertion is therefore goal-aware:
+ *   bulk / maintenance / recomp outputs ≥ band MEV
+ *   cut outputs                        ≥ proposed MV
+ *
+ * Under this rule the LIVE preset table is COMPLIANT (pinned empty below) —
+ * the previously pinned "seven novice-cut MEV violations" were an artifact
+ * of holding cut outputs to the growth floor.
  */
 
 import {
-  currentPresetMevViolations,
+  currentPresetFloorViolations,
+  cutFloorPreset,
   derivePresetRecalibration,
   measureCapRatios,
-  mevFloorPreset,
-  presetMevViolations,
+  presetFloor,
+  presetFloorViolations,
   proposedOutput,
+  PROPOSED_MAINTENANCE_VOLUME,
   EXPERIENCES,
   type Experience,
 } from '../presetRecalibration';
@@ -32,13 +36,13 @@ const proposedFor = (experience: Experience, goal: Goal, group: CoarseMuscle): n
   return proposedOutput(row.proposedPreset, goal, group);
 };
 
-describe('hard assertion: proposed presets never prescribe below MEV', () => {
-  it('no (group, experience, goal) proposal output sits below the band MEV — standard profile', () => {
-    expect(presetMevViolations(proposedFor, 'standard')).toEqual([]);
+describe('hard assertion (goal-aware): growth outputs ≥ MEV, cut outputs ≥ MV', () => {
+  it('the PROPOSED presets are compliant — standard profile', () => {
+    expect(presetFloorViolations(proposedFor, 'standard')).toEqual([]);
   });
 
-  it('… and enhanced profile (MEVs never scale, outputs only rise)', () => {
-    expect(presetMevViolations(proposedFor, 'enhanced')).toEqual([]);
+  it('… and enhanced profile (floors never scale, outputs only rise)', () => {
+    expect(presetFloorViolations(proposedFor, 'enhanced')).toEqual([]);
   });
 
   it('every proposal stays inside the band (never above MRV after the clamp)', () => {
@@ -51,21 +55,35 @@ describe('hard assertion: proposed presets never prescribe below MEV', () => {
   });
 });
 
-describe('live table state (pinned, not fixed here — Change 2 is report-only)', () => {
-  it('current presets violate the MEV rule for these exact cases (novice cut), pre-cap currency', () => {
-    // These are PRE-EXISTING: cut ×0.7 lands below MEV before any cap effect.
-    // The recalibration proposal closes them; shrink-only list.
-    expect(currentPresetMevViolations().sort()).toEqual(
-      [
-        'chest/novice/cut: 7 < MEV 8',
-        'back/novice/cut: 10 < MEV 12',
-        'shoulders/novice/cut: 10 < MEV 12',
-        'biceps/novice/cut: 8 < MEV 10',
-        'quads/novice/cut: 7 < MEV 8',
-        'calves/novice/cut: 7 < MEV 8',
-        'traps/novice/cut: 4 < MEV 6',
-      ].sort()
-    );
+describe('live table state under the corrected rule', () => {
+  it('the CURRENT presets are compliant — the old seven-violation list was a wrong-floor artifact', () => {
+    expect(currentPresetFloorViolations()).toEqual([]);
+  });
+});
+
+describe('MV proposal sanity (authoring decision pending — values are provisional)', () => {
+  it('every proposed MV sits strictly below its group MEV and above zero', () => {
+    for (const g of COARSE_MUSCLES) {
+      expect(PROPOSED_MAINTENANCE_VOLUME[g]).toBeGreaterThan(0);
+      expect(PROPOSED_MAINTENANCE_VOLUME[g]).toBeLessThan(getEffectiveBand(g).mev);
+    }
+  });
+
+  it('cutFloorPreset is exact: its cut output clears MV, one less does not', () => {
+    for (const g of COARSE_MUSCLES) {
+      const mv = PROPOSED_MAINTENANCE_VOLUME[g];
+      const p = cutFloorPreset(mv);
+      expect(Math.round(p * 0.7)).toBeGreaterThanOrEqual(mv);
+      expect(Math.round((p - 1) * 0.7)).toBeLessThan(mv);
+    }
+  });
+
+  it('the base floor is the max of the maintenance-MEV and cut-MV constraints', () => {
+    for (const g of COARSE_MUSCLES) {
+      expect(presetFloor(g)).toBe(
+        Math.max(getEffectiveBand(g).mev, cutFloorPreset(PROPOSED_MAINTENANCE_VOLUME[g]))
+      );
+    }
   });
 });
 
@@ -77,24 +95,30 @@ describe('measurement sanity', () => {
   });
 
   it('the known cap-binding groups measure ratio < 1 under seed-convention tags', () => {
-    // Triceps isolations (lat_med primary + long secondary) and calf raises
-    // (gastroc↔soleus pairs) bind in every generated template that includes
-    // them; the ratio must reflect it.
     expect(seedRatios.triceps.ratio).toBeLessThan(1);
     expect(seedRatios.calves.ratio).toBeLessThan(1);
   });
 
-  it('ratios are proper fractions and floors are consistent', () => {
+  it('ratios are proper fractions', () => {
     for (const g of COARSE_MUSCLES) {
       expect(seedRatios[g].ratio).toBeGreaterThan(0);
       expect(seedRatios[g].ratio).toBeLessThanOrEqual(1);
-      const mev = getEffectiveBand(g).mev;
-      expect(Math.round(mevFloorPreset(mev) * 0.7)).toBeGreaterThanOrEqual(mev);
-      expect(Math.round((mevFloorPreset(mev) - 1) * 0.7)).toBeLessThan(mev);
     }
   });
 
   it('the derivation covers every group × experience', () => {
     expect(rows).toHaveLength(COARSE_MUSCLES.length * EXPERIENCES.length);
+  });
+
+  it('the corrected floors remove the intermediate triceps/calves real-dose increase', () => {
+    // The v1 (wrong-floor) proposal raised intermediate triceps 10 → 11 and
+    // calves 9.3 → 11 purely to satisfy a growth floor on cut outputs. Under
+    // the goal-aware rule those proposals equal the same-real-dose values.
+    const tri = rows.find((r) => r.group === 'triceps' && r.experience === 'intermediate')!;
+    const cal = rows.find((r) => r.group === 'calves' && r.experience === 'intermediate')!;
+    expect(tri.proposedPreset).toBe(Math.round(tri.sameRealDosePreset));
+    expect(tri.floorBinds).toBe(false);
+    expect(cal.proposedPreset).toBe(Math.round(cal.sameRealDosePreset));
+    expect(cal.floorBinds).toBe(false);
   });
 });
