@@ -2977,21 +2977,26 @@ export const ExerciseCard = memo(function ExerciseCard({
                               onWarmupComplete(restTime);
                             }
                           }}
-                          className={`p-1.5 rounded-lg transition-colors ${
+                          aria-label={
                             isWarmupCompleted
-                              ? 'bg-amber-500 text-white'
-                              : 'bg-surface-700 hover:bg-surface-600 text-surface-400'
-                          }`}
+                              ? `Mark warmup set ${warmup.setNumber} incomplete`
+                              : `Complete warmup set ${warmup.setNumber}`
+                          }
+                          className="p-1.5 rounded-lg transition-colors hover:bg-surface-800/50"
                         >
-                          {isWarmupCompleted ? (
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                            </svg>
-                          ) : (
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                            </svg>
-                          )}
+                          <span
+                            className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                              isWarmupCompleted
+                                ? 'bg-amber-500 border-amber-500'
+                                : 'border-surface-600'
+                            }`}
+                          >
+                            {isWarmupCompleted && (
+                              <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                              </svg>
+                            )}
+                          </span>
                         </button>
                       </td>
                     </tr>
