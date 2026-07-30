@@ -140,7 +140,7 @@ export function buildProgressionHealthSessions(
   blocks: SnapshotSourceBlock[],
   modalityByExercise?: Record<string, string | undefined>
 ): Record<string, ProgressionHealthSession[]> {
-  const byExercise: Record<string, ProgressionHealthSession[]> = {};
+  const byExercise: Record<string, Array<ProgressionHealthSession & { boundary: boolean }>> = {};
 
   for (const block of blocks || []) {
     const session = block.workout_sessions;
@@ -156,6 +156,9 @@ export function buildProgressionHealthSessions(
 
     (byExercise[block.exercise_id] ??= []).push({
       date: session.completed_at,
+      // User-marked "different equipment" — this session starts a new
+      // calibration segment.
+      boundary: !!block.equipment_changed,
       sets: workingSets.map((s) => ({
         weightKg: s.weight_kg,
         reps: s.reps,
@@ -166,11 +169,27 @@ export function buildProgressionHealthSessions(
     });
   }
 
+  const result: Record<string, ProgressionHealthSession[]> = {};
   for (const exerciseId of Object.keys(byExercise)) {
-    byExercise[exerciseId] = byExercise[exerciseId]
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-      .slice(-MAX_SNAPSHOTS_PER_EXERCISE);
+    const sorted = byExercise[exerciseId].sort(
+      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+    );
+    // Honor explicit equipment boundaries the same way the plateau/pace
+    // analyzers do (knownDiscontinuities): the detectors read consecutive
+    // runs, and a run spanning two machines / loading scales is fiction —
+    // keep only the LATEST equipment segment (the boundary session starts it).
+    let segmentStart = 0;
+    for (let i = sorted.length - 1; i >= 0; i--) {
+      if (sorted[i].boundary) {
+        segmentStart = i;
+        break;
+      }
+    }
+    result[exerciseId] = sorted
+      .slice(segmentStart)
+      .slice(-MAX_SNAPSHOTS_PER_EXERCISE)
+      .map(({ date, sets }) => ({ date, sets }));
   }
 
-  return byExercise;
+  return result;
 }

@@ -116,11 +116,14 @@ function atLoadTotal(session: ProgressionHealthSession, opts: IncrementOpts): nu
 /**
  * Stall detector — spec 5(a). `sessions` oldest-first; returns the flag for
  * the most-recent consecutive run, or null. Prefers the sharper
- * 'target_stall' claim when both hold.
+ * 'target_stall' claim when both hold — but only for exercises that
+ * actually progress on rep totals (`repTotal: true`): an e1RM-mode exercise
+ * whose totals happen to creep must not be described as having a creeping
+ * "rep-total target" it never had (Codex review).
  */
 export function detectProgressionStall(
   sessions: ProgressionHealthSession[],
-  opts: IncrementOpts = {}
+  opts: IncrementOpts & { repTotal?: boolean } = {}
 ): ProgressionStallFlag | null {
   const valid = sessions.filter((s) => topLoad(s) > 0);
   if (valid.length < 2) return null;
@@ -141,7 +144,7 @@ export function detectProgressionStall(
   // minimal target) yet only trivially raised (growth <= trivial). Meeting
   // the target every session while it creeps +1 is a jam wearing a
   // progression costume.
-  if (sameLoadRun >= 2) {
+  if (opts.repTotal && sameLoadRun >= 2) {
     const totals = valid
       .slice(valid.length - sameLoadRun)
       .map((s) => atLoadTotal(s, opts));
@@ -168,14 +171,17 @@ export function detectProgressionStall(
 
 /**
  * Load-appropriateness detector — spec 5(b). Fires when EVERY one of the
- * most recent UNDERLOAD_CONSECUTIVE_SESSIONS sessions contains a working
- * set with reps above `repMax` at RIR >= UNDERLOAD_MIN_RIR. Missing RIR
+ * most recent UNDERLOAD_CONSECUTIVE_SESSIONS sessions contains a set AT THE
+ * SESSION'S TOP WORKING LOAD (grid tolerance) with reps above `repMax` at
+ * RIR >= UNDERLOAD_MIN_RIR. Lighter ramp/back-off/drop sets are excluded —
+ * a deliberately light set running high reps says nothing about the working
+ * load the flag would tell the user to increase (Codex review). Missing RIR
  * never counts as reserve (no effort signal, no claim).
  */
 export function detectLoadUnderprescribed(
   sessions: ProgressionHealthSession[],
   repMax: number,
-  opts: { minRir?: number; consecutiveSessions?: number } = {}
+  opts: IncrementOpts & { minRir?: number; consecutiveSessions?: number } = {}
 ): LoadIncreaseFlag | null {
   const minRir = opts.minRir ?? UNDERLOAD_MIN_RIR;
   const needed = opts.consecutiveSessions ?? UNDERLOAD_CONSECUTIVE_SESSIONS;
@@ -187,8 +193,14 @@ export function detectLoadUnderprescribed(
   let worstReps = 0;
   let run = 0;
   for (let i = valid.length - 1; i >= 0; i--) {
+    const top = topLoad(valid[i]);
+    const tol = loadToleranceKg(top, opts);
     const over = valid[i].sets.filter(
-      (s) => s.reps > repMax && s.rir !== undefined && s.rir >= minRir && s.weightKg > 0
+      (s) =>
+        s.weightKg >= top - tol &&
+        s.reps > repMax &&
+        s.rir !== undefined &&
+        s.rir >= minRir
     );
     if (over.length === 0) break;
     run++;

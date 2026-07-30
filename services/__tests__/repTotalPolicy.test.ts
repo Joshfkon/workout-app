@@ -605,6 +605,38 @@ describe('stale-total remainder + floor-not-budget (Step 2, 2026-07-29 live defe
     expect(overPace.reps).toBeGreaterThanOrEqual(plan.perSetRepTargets[2]);
   });
 
+  it('an automatic load reduction re-prices the session target onto the returned load (Codex review)', () => {
+    // Bumped plan; set 1 collapses (6 @ 0 RIR) → reduce_load steps the load
+    // down. The target must follow the RETURNED load — serving the plan's
+    // total beside a prescription at a lighter load is the same
+    // stale-total defect as a lifter-chosen deviation.
+    const plan = recommendRepTotalSessionStart({
+      prevSessionSets: [
+        { weightKg: 60, reps: 18, rir: 2 },
+        { weightKg: 60, reps: 17, rir: 2 },
+      ],
+      targetRepRange: [12, 20],
+      targetRir: 2,
+      minIncrementKg: 2.5,
+      plannedSets: 2,
+    })!;
+    expect(plan.bumped).toBe(true);
+    const next = recommendRepTotalNextSet({
+      sessionPlan: plan,
+      observedSets: [{ weightKg: plan.weightKg, reps: 6, rir: 0 }],
+      targetRepRange: [12, 20],
+      targetRir: 2,
+      minIncrementKg: 2.5,
+    });
+    expect(next.rationale).toBe('reduce_load');
+    expect(next.weightKg).toBeLessThan(plan.weightKg);
+    // Re-priced onto the reduced load: more total reps at less weight —
+    // never the bumped plan's total.
+    expect(next.sessionRepTotalTarget).not.toBe(plan.sessionRepTotalTarget);
+    expect(next.sessionRepTotalTarget).toBeGreaterThan(plan.sessionRepTotalTarget);
+    expect(next.remainingToTarget).toBe(next.sessionRepTotalTarget - 6);
+  });
+
   it('an ask raised off the plan slot by evidence drops the positional claim', () => {
     const plan = heldPlan();
     const next = recommendRepTotalNextSet({

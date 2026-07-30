@@ -71,10 +71,24 @@ describe('detectProgressionStall (5a)', () => {
       session('2026-07-15', 62.5 * LB, [11, 11, 10]),
       session('2026-07-22', 62.5 * LB, [11, 11, 11]),
     ];
-    const flag = detectProgressionStall(sessions, { minIncrementKg: 2.27 });
+    const flag = detectProgressionStall(sessions, { minIncrementKg: 2.27, repTotal: true });
     expect(flag).not.toBeNull();
     expect(flag!.kind).toBe('target_stall');
     expect(flag!.sessions).toBe(4);
+  });
+
+  it('the target-stall claim is gated to rep_total exercises — e1RM mode gets the generic load stall', () => {
+    // Same creeping-totals shape, but the exercise does not progress on rep
+    // totals: describing a "rep-total target" it never had would be false.
+    const sessions = [
+      session('2026-07-01', 62.5 * LB, [10, 10, 10]),
+      session('2026-07-08', 62.5 * LB, [11, 10, 10]),
+      session('2026-07-15', 62.5 * LB, [11, 11, 10]),
+      session('2026-07-22', 62.5 * LB, [11, 11, 11]),
+    ];
+    const flag = detectProgressionStall(sessions, { minIncrementKg: 2.27 });
+    expect(flag).not.toBeNull();
+    expect(flag!.kind).toBe('load_stall');
   });
 
   it('decisive total growth at a held load is a load stall, not a target stall', () => {
@@ -86,7 +100,7 @@ describe('detectProgressionStall (5a)', () => {
       session('2026-07-15', 62.5 * LB, [13, 13, 12]),
       session('2026-07-22', 62.5 * LB, [14, 14, 14]),
     ];
-    const flag = detectProgressionStall(sessions, { minIncrementKg: 2.27 });
+    const flag = detectProgressionStall(sessions, { minIncrementKg: 2.27, repTotal: true });
     expect(flag).not.toBeNull();
     expect(flag!.kind).toBe('load_stall');
   });
@@ -134,6 +148,30 @@ describe('detectLoadUnderprescribed (5b)', () => {
       session('2026-07-29', 62.5 * LB, [14, 12], null),
     ];
     expect(detectLoadUnderprescribed(sessions, 12)).toBeNull();
+  });
+
+  it('high-rep sets at a deliberately lighter load are not evidence against the working load', () => {
+    // Each session: top-load work squarely in range, plus a light back-off
+    // set running past the ceiling. The flag would tell the user to raise a
+    // load that is already appropriate — only top-load-group sets count.
+    const sessions: ProgressionHealthSession[] = [
+      {
+        date: '2026-07-22',
+        sets: [
+          { weightKg: 100, reps: 10, rir: 2 },
+          { weightKg: 100, reps: 9, rir: 2 },
+          { weightKg: 60, reps: 18, rir: 3 }, // back-off burnout
+        ],
+      },
+      {
+        date: '2026-07-29',
+        sets: [
+          { weightKg: 100, reps: 10, rir: 2 },
+          { weightKg: 60, reps: 17, rir: 3 },
+        ],
+      },
+    ];
+    expect(detectLoadUnderprescribed(sessions, 12, { minIncrementKg: 2.5 })).toBeNull();
   });
 
   it('a break in the run resets it: only the most recent consecutive sessions count', () => {

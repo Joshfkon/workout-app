@@ -690,12 +690,16 @@ export function recommendRepTotalNextSet(input: RepTotalNextSetInput): RepTotalN
       ? sessionPlan.perSetRefReps?.[slot]
       : undefined;
 
-  // Spec §5: a deviating load invalidates the plan total for EVERY consumer —
-  // no branch may emit remainder arithmetic against it. The effective session
-  // target is the plan's per-set targets re-priced onto the actual load.
-  const effectiveSessionTarget = deviated
-    ? sessionPlan.perSetRepTargets.reduce((sum, t) => sum + repriceOntoLoad(t, currentLoadKg), 0)
-    : sessionPlan.sessionRepTotalTarget;
+  // Spec §5: a load off the plan's invalidates the plan total for EVERY
+  // consumer — no branch may emit remainder arithmetic against it. Judged on
+  // the RETURNED load, not the last-logged one, so an automatic reduce_load
+  // step re-prices the target exactly like a lifter-chosen deviation does
+  // (Codex review: the reduce branch used to ship the original total beside
+  // a prescription at the reduced load).
+  const effectiveSessionTarget =
+    Math.abs(weightKg - sessionPlan.weightKg) > deviationToleranceKg
+      ? sessionPlan.perSetRepTargets.reduce((sum, t) => sum + repriceOntoLoad(t, weightKg), 0)
+      : sessionPlan.sessionRepTotalTarget;
 
   // Beat-last-session accounting — against last session's ACTUAL total,
   // never the plan total, and only when the totals are comparable (same

@@ -829,48 +829,6 @@ export const ExerciseCard = memo(function ExerciseCard({
     });
   }, [performanceSnapshots, equipmentBoundaries, exercise.id, experience, userGoal]);
 
-  // Progression-health detectors (services/progressionHealth, Step 5): the
-  // stall flag and the load-appropriateness flag surface a jammed
-  // progression IN-APP instead of letting the engine keep reporting a
-  // constraint. Today's completed sets count as the most recent session so
-  // an in-progress session can complete the under-load evidence.
-  const healthSessionsWithToday: ProgressionHealthSession[] = useMemo(() => {
-    const history = progressionHealthSessions ?? [];
-    if (completedSets.length === 0) return history;
-    return [
-      ...history,
-      {
-        // Detectors read order, not dates — the appended entry is only ever
-        // "the most recent session".
-        date: 'in-progress',
-        sets: completedSets.map((s) => ({
-          weightKg: s.weightKg,
-          reps: s.reps,
-          rir: resolveLastRir(s, effectiveTargetRir),
-        })),
-      },
-    ];
-  }, [progressionHealthSessions, completedSets, effectiveTargetRir]);
-
-  const progressionStall = useMemo(
-    () =>
-      isDeloadSession
-        ? null
-        : detectProgressionStall(healthSessionsWithToday, {
-            minIncrementKg: exercise.minWeightIncrementKg,
-            availableIncrementsKg: exercise.availableIncrementsKg ?? undefined,
-          }),
-    [healthSessionsWithToday, isDeloadSession, exercise.minWeightIncrementKg, exercise.availableIncrementsKg]
-  );
-
-  const loadIncreaseFlag = useMemo(
-    () =>
-      isDeloadSession
-        ? null
-        : detectLoadUnderprescribed(healthSessionsWithToday, block.targetRepRange[1]),
-    [healthSessionsWithToday, isDeloadSession, block.targetRepRange]
-  );
-
   // One-tap "Try X-Y reps" action: first rep range embedded in the suggestions.
   const plateauRepRange: [number, number] | null = useMemo(() => {
     if (!plateau) return null;
@@ -1119,6 +1077,63 @@ export const ExerciseCard = memo(function ExerciseCard({
           })
         : null,
     [repTotalMode, repTotalPlan, completedSets, block.targetRepRange, effectiveTargetRir, exercise.minWeightIncrementKg, exercise.availableIncrementsKg]
+  );
+
+  // Progression-health detectors (services/progressionHealth, Step 5): the
+  // stall flag and the load-appropriateness flag surface a jammed
+  // progression IN-APP instead of letting the engine keep reporting a
+  // constraint. Today's completed sets count as the most recent session so
+  // an in-progress session can complete the under-load evidence. Only
+  // PERSISTED effort signals are mapped (feedback RIR, then RPE) — the
+  // resolveLastRir target-RIR fallback would let an unrated set pass for
+  // evidence of reserve, which the under-load detector forbids.
+  const healthSessionsWithToday: ProgressionHealthSession[] = useMemo(() => {
+    const history = progressionHealthSessions ?? [];
+    if (completedSets.length === 0) return history;
+    return [
+      ...history,
+      {
+        // Detectors read order, not dates — the appended entry is only ever
+        // "the most recent session".
+        date: 'in-progress',
+        sets: completedSets.map((s) => ({
+          weightKg: s.weightKg,
+          reps: s.reps,
+          rir:
+            s.feedback?.repsInTank != null
+              ? Math.max(0, s.feedback.repsInTank)
+              : s.rpe != null
+                ? Math.max(0, rpeToRir(s.rpe))
+                : undefined,
+        })),
+      },
+    ];
+  }, [progressionHealthSessions, completedSets]);
+
+  const progressionStall = useMemo(
+    () =>
+      isDeloadSession
+        ? null
+        : detectProgressionStall(healthSessionsWithToday, {
+            minIncrementKg: exercise.minWeightIncrementKg,
+            availableIncrementsKg: exercise.availableIncrementsKg ?? undefined,
+            // The "rep-total target creeping" claim only exists for
+            // rep_total exercises; everything else gets the generic
+            // load-stall check alone.
+            repTotal: repTotalMode,
+          }),
+    [healthSessionsWithToday, isDeloadSession, exercise.minWeightIncrementKg, exercise.availableIncrementsKg, repTotalMode]
+  );
+
+  const loadIncreaseFlag = useMemo(
+    () =>
+      isDeloadSession
+        ? null
+        : detectLoadUnderprescribed(healthSessionsWithToday, block.targetRepRange[1], {
+            minIncrementKg: exercise.minWeightIncrementKg,
+            availableIncrementsKg: exercise.availableIncrementsKg ?? undefined,
+          }),
+    [healthSessionsWithToday, isDeloadSession, block.targetRepRange, exercise.minWeightIncrementKg, exercise.availableIncrementsKg]
   );
 
   // Role-aware session-start seed for one slot (services/setRecommender).

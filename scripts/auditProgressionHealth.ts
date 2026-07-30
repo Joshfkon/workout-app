@@ -44,6 +44,7 @@ interface BlockRow {
   id: string;
   exercise_id: string;
   target_rep_range: number[] | null;
+  equipment_changed: boolean | null;
   workout_sessions: {
     id: string;
     completed_at: string | null;
@@ -58,6 +59,7 @@ interface BlockRow {
     exercise_type: string | null;
     min_weight_increment_kg: number | null;
     available_increments_kg: number[] | null;
+    progression_model: string | null;
   } | null;
 }
 
@@ -82,10 +84,10 @@ async function main() {
     let q = supabase
       .from('exercise_blocks')
       .select(
-        `id, exercise_id, target_rep_range,
+        `id, exercise_id, target_rep_range, equipment_changed,
          workout_sessions!inner ( id, completed_at, state, is_deload ),
          set_logs ( weight_kg, reps, rpe, is_warmup, set_type ),
-         exercises ( id, name, default_rep_range, exercise_type, min_weight_increment_kg, available_increments_kg )`
+         exercises ( id, name, default_rep_range, exercise_type, min_weight_increment_kg, available_increments_kg, progression_model )`
       )
       .eq('workout_sessions.user_id', userId)
       .eq('workout_sessions.state', 'completed')
@@ -127,7 +129,7 @@ async function main() {
         Date.parse(b.workout_sessions?.completed_at ?? '')
     );
 
-    const sessions: ProgressionHealthSession[] = [];
+    const sessions: Array<ProgressionHealthSession & { boundary: boolean }> = [];
     for (const b of list) {
       const completedAt = b.workout_sessions?.completed_at;
       if (!completedAt) continue;
@@ -137,6 +139,7 @@ async function main() {
       if (working.length === 0) continue;
       sessions.push({
         date: completedAt,
+        boundary: !!b.equipment_changed,
         sets: working.map((s) => ({
           weightKg: s.weight_kg,
           reps: s.reps,
@@ -144,13 +147,28 @@ async function main() {
         })),
       });
     }
-    const recent = sessions.slice(-sessionWindow);
+    // Honor explicit equipment boundaries: consecutive runs must not span
+    // two machines / loading scales — keep only the latest segment (the
+    // boundary session starts it), mirroring the in-app builder.
+    let segmentStart = 0;
+    for (let i = sessions.length - 1; i >= 0; i--) {
+      if (sessions[i].boundary) {
+        segmentStart = i;
+        break;
+      }
+    }
+    const recent = sessions.slice(segmentStart).slice(-sessionWindow);
     if (recent.length < 2) return;
     judged++;
 
     const stall = detectProgressionStall(recent, {
       minIncrementKg: ex.min_weight_increment_kg ?? undefined,
       availableIncrementsKg: ex.available_increments_kg,
+      // The target-stall claim only exists for rep_total exercises. Only
+      // the explicit column is read here — a NULL (auto-classified) model
+      // falls back to the generic load-stall check, which still flags the
+      // jam, just without the rep-total-specific wording.
+      repTotal: ex.progression_model === 'rep_total',
     });
     if (stall) {
       stalls.push({
@@ -166,7 +184,10 @@ async function main() {
       | [number, number]
       | null;
     if (range && range.length >= 2) {
-      const under = detectLoadUnderprescribed(recent, range[1]);
+      const under = detectLoadUnderprescribed(recent, range[1], {
+        minIncrementKg: ex.min_weight_increment_kg ?? undefined,
+        availableIncrementsKg: ex.available_increments_kg,
+      });
       if (under) {
         underloads.push({
           name: ex.name,
