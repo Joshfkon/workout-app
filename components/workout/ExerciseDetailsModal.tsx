@@ -361,6 +361,10 @@ export function ExerciseDetailsModal({
                     isLoading={historyQuery.isLoading}
                     unit={unit}
                     repTotalMode={repTotalMode}
+                    isDuration={
+                      getExerciseProp(exercise, 'exerciseType', 'exercise_type') ===
+                      'duration_based'
+                    }
                   />
                 )}
                 {activeTab === 'charts' && (

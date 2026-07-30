@@ -36,7 +36,6 @@
   "lib/training/startMesocycleSession.ts": 3,
   "lib/training/transferCandidates.ts": 1,
   "lib/training/weeklyRollover.ts": 1,
-  "lib/utils.ts": 2,
   "lib/validation.ts": 2,
   "services/bodyweightService.ts": 12,
   "services/deloadEngine.ts": 2,
