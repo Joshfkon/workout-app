@@ -2025,6 +2025,16 @@ export const ExerciseCard = memo(function ExerciseCard({
           explanation.push(
             `Set-position matching: last session's set ${setNo} was ${prevDesc}${pm.prevRir != null ? ` at ${pm.prevRir} RIR` : ''}, but today's sets demonstrate less capacity than that progression asks for. The target is capped at what you've actually shown this session — no progression is claimed.`
           );
+        } else if (source === 'range_floor') {
+          // Range-floor rule (fatigue-aware prescription, Part 1): the match
+          // pointed below the rep-range floor, so the LOAD stepped down to
+          // keep the target reps inside the range. The claim is a load
+          // reduction for stimulus — never a rep target below the floor,
+          // and never a progression phrase.
+          reason = `reducing the load to stay in the ${block.targetRepRange[0]}–${block.targetRepRange[1]} range`;
+          explanation.push(
+            `Set-position matching pointed at set ${setNo} from last session (${prevDesc}${pm.prevRir != null ? ` at ${pm.prevRir} RIR` : ''}), but under today's accumulated fatigue the predicted reps at that load fall below the ${block.targetRepRange[0]}-rep floor. The load steps down so the target stays inside the range — equivalent stimulus at an achievable load, not a max attempt.`
+          );
         } else {
           reason =
             pm.progression === 'add_rep'
@@ -2049,6 +2059,14 @@ export const ExerciseCard = memo(function ExerciseCard({
         reason = 'holding — no meaningful change available at this increment';
         explanation.push(
           'The prescribed adjustment is smaller than half of the smallest loadable increment for this exercise, so the load holds. Record finer add-on increments for this equipment to unlock smaller steps.'
+        );
+      } else if (rec.rangeFloorLoadDrop) {
+        // Range-floor rule (fatigue-aware prescription, Part 1): predicted
+        // reps at the held load fell below the range floor, so the load —
+        // not the rep target — absorbed the fatigue.
+        reason = `reducing the load to stay in the ${block.targetRepRange[0]}–${block.targetRepRange[1]} range`;
+        explanation.push(
+          `At the held load the predicted reps fall below the ${block.targetRepRange[0]}-rep floor of the target range — accumulated fatigue this session has that load running heavy. The load steps down so the target reps stay inside the range: same stimulus at an achievable load, not a max attempt.`
         );
       } else if (rec.rationale === 'increase_load') {
         // Like-for-like framing only (INV-4): the number compares this set to

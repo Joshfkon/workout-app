@@ -66,8 +66,18 @@
  *       keeps over-performance from shrinking later asks; the session
  *       target IS the per-set-target sum, with the overshoot-scaled
  *       (capped) increment distributed into the targets.
+ *  v9 = range-floor rule (fatigue-aware prescription, Part 1): a
+ *       within-session prescription whose predicted reps fall below the
+ *       range floor re-solves as a LOAD reduction (down the increment grid,
+ *       bounded by MAX_REDUCE_PCT) until predicted reps — same
+ *       fatigue-adjusted curve, ceilinged by the session-capacity cap —
+ *       land inside the range (rangeFloorLoadDrop flag, 'range_floor'
+ *       provenance). Detected fatigue now discounts the load axis; reps are
+ *       never truncated below the floor while the load holds. Sub-floor
+ *       counts survive only when no achievable load within the reduction
+ *       cap reaches the floor.
  */
-export const SUGGESTION_ENGINE_VERSION = 8;
+export const SUGGESTION_ENGINE_VERSION = 9;
 
 // ============================================================
 // SET ROLES (Phase 2)

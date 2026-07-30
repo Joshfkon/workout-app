@@ -23,6 +23,7 @@ import {
   recommendSet,
   recommendSeedForSlot,
 } from '../setRecommender';
+import { impliedE1RMFloor } from '../shared/e1rm';
 import {
   POSITION_MATCH_SET_COUNT_TOLERANCE,
   POSITION_MATCH_LOAD_TOLERANCE,
@@ -78,10 +79,16 @@ describe('MISS A — set 2 must follow last session\'s set position, not hold th
 describe('MISS B — set 4 must prescribe from the session as performed, not the static anchor', () => {
   // After 24 intervening reps including a true-failure set (195×6 @0), the old
   // engine re-derived set 4 from the session-start anchor — the SAME 182.5×8
-  // it produced for set 2 before any of that happened. Last session's set
-  // position 4 was 182.5×7 @0 — taken past target effort, so it is held
-  // verbatim: 182.5×7, never an overshoot to 8. (Live: 182.5×7 @1.)
-  it('prescribes 182.5×7 for set 4 after sets 1–3 of the Jul 27 session', () => {
+  // it produced for set 2 before any of that happened. The positional match
+  // (182.5×7 @0, held because it was taken past target effort) still anchors
+  // the target — it must never overshoot to ×8 AT THAT LOAD. Since the
+  // range-floor rule (fatigue-aware prescription, Part 1) the sub-floor ×7
+  // additionally re-solves as a LOAD reduction: fatigue discounts the load
+  // axis, and the reps land back inside the 8–12 range at an equivalent
+  // implied capacity (170×8 @2 → 226.7, vs the matched 182.5×7 @0 → 219 and
+  // the live-performed 182.5×7 @1 → 226.6 — the same demonstrated capacity,
+  // reformulated inside the range).
+  it('prescribes a reduced load inside the 8–12 range for set 4 (never ×7 at a held load)', () => {
     const rec = recommendSet({
       lastWeightKg: JUL_27_SESSION[2].weightKg,
       lastReps: JUL_27_SESSION[2].reps,
@@ -92,9 +99,20 @@ describe('MISS B — set 4 must prescribe from the session as performed, not the
       ...fixtureCtx,
       positionContext: positionContext(3),
     });
-    expect(rec.weightKg).toBe(182.5);
-    expect(rec.reps).toBe(7);
+    // The match still anchors provenance…
     expect(rec.positionMatch?.progression).toBe('hold');
+    expect(rec.positionMatch?.prevWeightKg).toBe(182.5);
+    expect(rec.positionMatch?.prevReps).toBe(7);
+    // …but the prescription discounts the LOAD, keeping reps in range.
+    expect(rec.weightKg).toBe(170);
+    expect(rec.reps).toBe(8);
+    expect(rec.rangeFloorLoadDrop).toBe(true);
+    expect(rec.provenance?.source).toBe('range_floor');
+    expect(rec.outsideRange).toBeUndefined();
+    // Never a demand above the session's demonstrated capacity: the resolved
+    // ask implies no more than the just-completed 195×6 @0 (226.45 + slack).
+    const implied = impliedE1RMFloor(rec.weightKg, rec.reps, rec.rir)!;
+    expect(implied).toBeLessThanOrEqual(impliedE1RMFloor(195, 6, 0)! * 1.01);
   });
 });
 
@@ -376,7 +394,9 @@ describe('recommendSet — safety guards on the position-matched path', () => {
 
   it('still allows a position match that genuinely reduces the load after a miss (fixture set 4)', () => {
     // The MISS B shape must survive the tightened guard: 195×6 @0 is a clear
-    // miss, and the positional 182.5×7 REDUCES the load — allowed.
+    // miss, and the positional 182.5×7 REDUCES the load — allowed (the match
+    // engages instead of grounding out). The range-floor rule then re-solves
+    // the sub-floor ×7 as a further load reduction into the 8–12 range.
     const rec = recommendSet({
       lastWeightKg: JUL_27_SESSION[2].weightKg,
       lastReps: JUL_27_SESSION[2].reps,
@@ -386,7 +406,9 @@ describe('recommendSet — safety guards on the position-matched path', () => {
       positionContext: positionContext(3),
     });
     expect(rec.positionMatch?.progression).toBe('hold');
-    expect(rec.weightKg).toBe(182.5);
+    expect(rec.weightKg).toBeLessThan(JUL_27_SESSION[2].weightKg);
+    expect(rec.reps).toBeGreaterThanOrEqual(ISO_INCLINE_TARGET_REP_RANGE[0]);
+    expect(rec.reps).toBeLessThanOrEqual(ISO_INCLINE_TARGET_REP_RANGE[1]);
   });
 
   it('falls through when the last set proved objective under-load and the match holds or drops', () => {
