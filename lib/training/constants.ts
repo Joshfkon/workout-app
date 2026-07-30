@@ -472,22 +472,22 @@ export const EXERCISE_DATABASE: Exercise[] = [
   // Chest
   { name: 'Barbell Bench Press', primaryMuscle: 'chest', secondaryMuscles: ['triceps_lat_med', 'front_delts'], pattern: 'horizontal_push', equipment: 'barbell', difficulty: 'intermediate', fatigueRating: 2 },
   { name: 'Dumbbell Bench Press', primaryMuscle: 'chest', secondaryMuscles: ['triceps_lat_med', 'front_delts'], pattern: 'horizontal_push', equipment: 'dumbbell', difficulty: 'beginner', fatigueRating: 2 },
-  { name: 'Incline Barbell Press', primaryMuscle: 'chest', secondaryMuscles: ['triceps_lat_med', 'front_delts'], pattern: 'horizontal_push', equipment: 'barbell', difficulty: 'intermediate', fatigueRating: 2 },
-  { name: 'Incline Dumbbell Press', primaryMuscle: 'chest', secondaryMuscles: ['triceps_lat_med', 'front_delts'], pattern: 'horizontal_push', equipment: 'dumbbell', difficulty: 'beginner', fatigueRating: 2 },
-  { name: 'Machine Chest Press', primaryMuscle: 'chest', secondaryMuscles: ['triceps_lat_med'], pattern: 'horizontal_push', equipment: 'machine', difficulty: 'beginner', fatigueRating: 1 },
-  { name: 'Cable Fly', primaryMuscle: 'chest', secondaryMuscles: [], pattern: 'isolation', equipment: 'cable', difficulty: 'beginner', fatigueRating: 1 },
-  { name: 'Dip', primaryMuscle: 'chest', secondaryMuscles: ['triceps_lat_med', 'front_delts'], pattern: 'horizontal_push', equipment: 'bodyweight', difficulty: 'intermediate', fatigueRating: 2 },
+  { name: 'Incline Barbell Press', primaryMuscle: 'chest_upper', secondaryMuscles: ['chest_lower', 'front_delts', 'triceps_lat_med'], pattern: 'horizontal_push', equipment: 'barbell', difficulty: 'intermediate', fatigueRating: 2 },
+  { name: 'Incline Dumbbell Press', primaryMuscle: 'chest_upper', secondaryMuscles: ['chest_lower', 'front_delts', 'triceps_lat_med'], pattern: 'horizontal_push', equipment: 'dumbbell', difficulty: 'beginner', fatigueRating: 2 },
+  { name: 'Machine Chest Press', primaryMuscle: 'chest', secondaryMuscles: ['front_delts', 'triceps_lat_med'], pattern: 'horizontal_push', equipment: 'machine', difficulty: 'beginner', fatigueRating: 1 },
+  { name: 'Cable Fly', primaryMuscle: 'chest', secondaryMuscles: ['front_delts'], pattern: 'isolation', equipment: 'cable', difficulty: 'beginner', fatigueRating: 1 },
+  { name: 'Dip', primaryMuscle: 'chest_lower', secondaryMuscles: ['chest_upper', 'front_delts', 'triceps_lat_med'], pattern: 'horizontal_push', equipment: 'bodyweight', difficulty: 'intermediate', fatigueRating: 2 },
   { name: 'Push-Up', primaryMuscle: 'chest', secondaryMuscles: ['triceps_lat_med', 'front_delts'], pattern: 'horizontal_push', equipment: 'bodyweight', difficulty: 'beginner', fatigueRating: 1 },
   
   // Back
-  { name: 'Barbell Row', primaryMuscle: 'back', secondaryMuscles: ['biceps', 'rear_delts'], pattern: 'horizontal_pull', equipment: 'barbell', difficulty: 'intermediate', fatigueRating: 2 },
-  { name: 'Dumbbell Row', primaryMuscle: 'back', secondaryMuscles: ['biceps'], pattern: 'horizontal_pull', equipment: 'dumbbell', difficulty: 'beginner', fatigueRating: 2 },
-  { name: 'Cable Row', primaryMuscle: 'back', secondaryMuscles: ['biceps'], pattern: 'horizontal_pull', equipment: 'cable', difficulty: 'beginner', fatigueRating: 1 },
-  { name: 'Lat Pulldown', primaryMuscle: 'back', secondaryMuscles: ['biceps'], pattern: 'vertical_pull', equipment: 'cable', difficulty: 'beginner', fatigueRating: 1 },
-  { name: 'Pull-Up', primaryMuscle: 'back', secondaryMuscles: ['biceps'], pattern: 'vertical_pull', equipment: 'bodyweight', difficulty: 'intermediate', fatigueRating: 2 },
-  { name: 'Chin-Up', primaryMuscle: 'back', secondaryMuscles: ['biceps'], pattern: 'vertical_pull', equipment: 'bodyweight', difficulty: 'intermediate', fatigueRating: 2 },
-  { name: 'T-Bar Row', primaryMuscle: 'back', secondaryMuscles: ['biceps'], pattern: 'horizontal_pull', equipment: 'barbell', difficulty: 'intermediate', fatigueRating: 2 },
-  { name: 'Conventional Deadlift', primaryMuscle: 'glutes', secondaryMuscles: ['hamstrings', 'erectors', 'traps', 'forearms'], pattern: 'hip_hinge', equipment: 'barbell', difficulty: 'advanced', fatigueRating: 3 },
+  { name: 'Barbell Row', primaryMuscle: 'back', secondaryMuscles: ['biceps', 'rear_delts', 'forearms'], pattern: 'horizontal_pull', equipment: 'barbell', difficulty: 'intermediate', fatigueRating: 2 },
+  { name: 'Dumbbell Row', primaryMuscle: 'back', secondaryMuscles: ['biceps', 'rear_delts', 'forearms'], pattern: 'horizontal_pull', equipment: 'dumbbell', difficulty: 'beginner', fatigueRating: 2 },
+  { name: 'Cable Row', primaryMuscle: 'back', secondaryMuscles: ['biceps', 'rear_delts', 'forearms'], pattern: 'horizontal_pull', equipment: 'cable', difficulty: 'beginner', fatigueRating: 1 },
+  { name: 'Lat Pulldown', primaryMuscle: 'lats', secondaryMuscles: ['biceps', 'upper_back', 'rear_delts'], pattern: 'vertical_pull', equipment: 'cable', difficulty: 'beginner', fatigueRating: 1 },
+  { name: 'Pull-Up', primaryMuscle: 'lats', secondaryMuscles: ['biceps', 'upper_back', 'rear_delts', 'forearms'], pattern: 'vertical_pull', equipment: 'bodyweight', difficulty: 'intermediate', fatigueRating: 2 },
+  { name: 'Chin-Up', primaryMuscle: 'lats', secondaryMuscles: ['biceps', 'upper_back'], pattern: 'vertical_pull', equipment: 'bodyweight', difficulty: 'intermediate', fatigueRating: 2 },
+  { name: 'T-Bar Row', primaryMuscle: 'back', secondaryMuscles: ['biceps', 'rear_delts', 'forearms'], pattern: 'horizontal_pull', equipment: 'barbell', difficulty: 'intermediate', fatigueRating: 2 },
+  { name: 'Conventional Deadlift', primaryMuscle: 'glutes', secondaryMuscles: ['hamstrings', 'erectors', 'traps', 'forearms', 'quads'], pattern: 'hip_hinge', equipment: 'barbell', difficulty: 'advanced', fatigueRating: 3 },
   
   // Shoulders
   { name: 'Standing Overhead Press', primaryMuscle: 'front_delts', secondaryMuscles: ['triceps_lat_med', 'chest_upper'], pattern: 'vertical_push', equipment: 'barbell', difficulty: 'intermediate', fatigueRating: 2 },
@@ -501,53 +501,57 @@ export const EXERCISE_DATABASE: Exercise[] = [
   { name: 'Front Raise', primaryMuscle: 'front_delts', secondaryMuscles: [], pattern: 'isolation', equipment: 'dumbbell', difficulty: 'beginner', fatigueRating: 1 },
   
   // Quads
-  { name: 'Barbell Back Squat', primaryMuscle: 'quads', secondaryMuscles: ['glutes', 'hamstrings'], pattern: 'squat', equipment: 'barbell', difficulty: 'intermediate', fatigueRating: 3 },
-  { name: 'Front Squat', primaryMuscle: 'quads', secondaryMuscles: ['glutes'], pattern: 'squat', equipment: 'barbell', difficulty: 'advanced', fatigueRating: 3 },
-  { name: 'Leg Press', primaryMuscle: 'quads', secondaryMuscles: ['glutes'], pattern: 'squat', equipment: 'machine', difficulty: 'beginner', fatigueRating: 2 },
-  { name: 'Hack Squat', primaryMuscle: 'quads', secondaryMuscles: ['glutes'], pattern: 'squat', equipment: 'machine', difficulty: 'beginner', fatigueRating: 2 },
-  { name: 'Bulgarian Split Squat', primaryMuscle: 'quads', secondaryMuscles: ['glutes'], pattern: 'lunge', equipment: 'dumbbell', difficulty: 'intermediate', fatigueRating: 2 },
-  { name: 'Walking Lunge', primaryMuscle: 'quads', secondaryMuscles: ['glutes'], pattern: 'lunge', equipment: 'dumbbell', difficulty: 'beginner', fatigueRating: 2 },
-  { name: 'Goblet Squat', primaryMuscle: 'quads', secondaryMuscles: ['glutes'], pattern: 'squat', equipment: 'dumbbell', difficulty: 'beginner', fatigueRating: 2 },
+  { name: 'Barbell Back Squat', primaryMuscle: 'quads', secondaryMuscles: ['glutes', 'adductors', 'erectors'], pattern: 'squat', equipment: 'barbell', difficulty: 'intermediate', fatigueRating: 3 },
+  { name: 'Front Squat', primaryMuscle: 'quads', secondaryMuscles: ['glutes', 'adductors', 'erectors'], pattern: 'squat', equipment: 'barbell', difficulty: 'advanced', fatigueRating: 3 },
+  { name: 'Leg Press', primaryMuscle: 'quads', secondaryMuscles: ['glutes', 'adductors'], pattern: 'squat', equipment: 'machine', difficulty: 'beginner', fatigueRating: 2 },
+  { name: 'Hack Squat', primaryMuscle: 'quads', secondaryMuscles: ['glutes', 'adductors'], pattern: 'squat', equipment: 'machine', difficulty: 'beginner', fatigueRating: 2 },
+  { name: 'Bulgarian Split Squat', primaryMuscle: 'quads', secondaryMuscles: ['glutes', 'glute_med', 'adductors'], pattern: 'lunge', equipment: 'dumbbell', difficulty: 'intermediate', fatigueRating: 2 },
+  { name: 'Walking Lunge', primaryMuscle: 'quads', secondaryMuscles: ['glutes', 'glute_med', 'adductors'], pattern: 'lunge', equipment: 'dumbbell', difficulty: 'beginner', fatigueRating: 2 },
+  { name: 'Goblet Squat', primaryMuscle: 'quads', secondaryMuscles: ['glutes', 'adductors'], pattern: 'squat', equipment: 'dumbbell', difficulty: 'beginner', fatigueRating: 2 },
   { name: 'Leg Extension', primaryMuscle: 'quads', secondaryMuscles: [], pattern: 'isolation', equipment: 'machine', difficulty: 'beginner', fatigueRating: 1 },
   
   // Hamstrings
-  { name: 'Romanian Deadlift', primaryMuscle: 'hamstrings', secondaryMuscles: ['glutes', 'back'], pattern: 'hip_hinge', equipment: 'barbell', difficulty: 'intermediate', fatigueRating: 2 },
+  { name: 'Romanian Deadlift', primaryMuscle: 'hamstrings', secondaryMuscles: ['glutes', 'erectors', 'forearms', 'traps'], pattern: 'hip_hinge', equipment: 'barbell', difficulty: 'intermediate', fatigueRating: 2 },
   { name: 'Dumbbell RDL', primaryMuscle: 'hamstrings', secondaryMuscles: ['glutes'], pattern: 'hip_hinge', equipment: 'dumbbell', difficulty: 'beginner', fatigueRating: 2 },
   { name: 'Lying Leg Curl', primaryMuscle: 'hamstrings', secondaryMuscles: [], pattern: 'isolation', equipment: 'machine', difficulty: 'beginner', fatigueRating: 1 },
   { name: 'Seated Leg Curl', primaryMuscle: 'hamstrings', secondaryMuscles: [], pattern: 'isolation', equipment: 'machine', difficulty: 'beginner', fatigueRating: 1 },
-  { name: 'Good Morning', primaryMuscle: 'hamstrings', secondaryMuscles: ['back', 'glutes'], pattern: 'hip_hinge', equipment: 'barbell', difficulty: 'advanced', fatigueRating: 2 },
+  { name: 'Good Morning', primaryMuscle: 'hamstrings', secondaryMuscles: ['glutes', 'erectors'], pattern: 'hip_hinge', equipment: 'barbell', difficulty: 'advanced', fatigueRating: 2 },
   
   // Glutes
   { name: 'Hip Thrust', primaryMuscle: 'glutes', secondaryMuscles: ['hamstrings'], pattern: 'hip_hinge', equipment: 'barbell', difficulty: 'beginner', fatigueRating: 2 },
-  { name: 'Cable Pull-Through', primaryMuscle: 'glutes', secondaryMuscles: ['hamstrings'], pattern: 'hip_hinge', equipment: 'cable', difficulty: 'beginner', fatigueRating: 1 },
+  { name: 'Cable Pull-Through', primaryMuscle: 'glutes', secondaryMuscles: ['hamstrings', 'erectors'], pattern: 'hip_hinge', equipment: 'cable', difficulty: 'beginner', fatigueRating: 1 },
   { name: 'Glute Bridge', primaryMuscle: 'glutes', secondaryMuscles: ['hamstrings'], pattern: 'hip_hinge', equipment: 'bodyweight', difficulty: 'beginner', fatigueRating: 1 },
-  { name: 'Kettlebell Swing', primaryMuscle: 'glutes', secondaryMuscles: ['hamstrings', 'back'], pattern: 'hip_hinge', equipment: 'kettlebell', difficulty: 'intermediate', fatigueRating: 2 },
+  { name: 'Kettlebell Swing', primaryMuscle: 'glutes', secondaryMuscles: ['hamstrings', 'erectors'], pattern: 'hip_hinge', equipment: 'kettlebell', difficulty: 'intermediate', fatigueRating: 2 },
   
   // Biceps
   { name: 'Barbell Curl', primaryMuscle: 'biceps', secondaryMuscles: [], pattern: 'isolation', equipment: 'barbell', difficulty: 'beginner', fatigueRating: 1 },
   { name: 'Dumbbell Curl', primaryMuscle: 'biceps', secondaryMuscles: [], pattern: 'isolation', equipment: 'dumbbell', difficulty: 'beginner', fatigueRating: 1 },
-  { name: 'Hammer Curl', primaryMuscle: 'biceps', secondaryMuscles: [], pattern: 'isolation', equipment: 'dumbbell', difficulty: 'beginner', fatigueRating: 1 },
+  { name: 'Hammer Curl', primaryMuscle: 'biceps', secondaryMuscles: ['forearms'], pattern: 'isolation', equipment: 'dumbbell', difficulty: 'beginner', fatigueRating: 1 },
   { name: 'Preacher Curl', primaryMuscle: 'biceps', secondaryMuscles: [], pattern: 'isolation', equipment: 'barbell', difficulty: 'beginner', fatigueRating: 1 },
   { name: 'Cable Curl', primaryMuscle: 'biceps', secondaryMuscles: [], pattern: 'isolation', equipment: 'cable', difficulty: 'beginner', fatigueRating: 1 },
   { name: 'Incline Dumbbell Curl', primaryMuscle: 'biceps', secondaryMuscles: [], pattern: 'isolation', equipment: 'dumbbell', difficulty: 'beginner', fatigueRating: 1 },
   
   // Triceps
-  { name: 'Close-Grip Bench Press', primaryMuscle: 'triceps_lat_med', secondaryMuscles: ['chest'], pattern: 'horizontal_push', equipment: 'barbell', difficulty: 'intermediate', fatigueRating: 2 },
+  { name: 'Close-Grip Bench Press', primaryMuscle: 'triceps_lat_med', secondaryMuscles: ['chest', 'front_delts'], pattern: 'horizontal_push', equipment: 'barbell', difficulty: 'intermediate', fatigueRating: 2 },
   { name: 'Tricep Pushdown', primaryMuscle: 'triceps_lat_med', secondaryMuscles: ['triceps_long'], pattern: 'isolation', equipment: 'cable', difficulty: 'beginner', fatigueRating: 1 },
   { name: 'Overhead Tricep Extension', primaryMuscle: 'triceps_long', secondaryMuscles: ['triceps_lat_med'], pattern: 'isolation', equipment: 'cable', difficulty: 'beginner', fatigueRating: 1 },
   { name: 'Skull Crusher', primaryMuscle: 'triceps_long', secondaryMuscles: ['triceps_lat_med'], pattern: 'isolation', equipment: 'barbell', difficulty: 'intermediate', fatigueRating: 1 },
   { name: 'Dumbbell Tricep Kickback', primaryMuscle: 'triceps_lat_med', secondaryMuscles: [], pattern: 'isolation', equipment: 'dumbbell', difficulty: 'beginner', fatigueRating: 1 },
   
   // Calves
-  { name: 'Standing Calf Raise', primaryMuscle: 'calves', secondaryMuscles: [], pattern: 'isolation', equipment: 'machine', difficulty: 'beginner', fatigueRating: 1 },
-  { name: 'Seated Calf Raise', primaryMuscle: 'calves', secondaryMuscles: [], pattern: 'isolation', equipment: 'machine', difficulty: 'beginner', fatigueRating: 1 },
-  { name: 'Leg Press Calf Raise', primaryMuscle: 'calves', secondaryMuscles: [], pattern: 'isolation', equipment: 'machine', difficulty: 'beginner', fatigueRating: 1 },
+  { name: 'Standing Calf Raise', primaryMuscle: 'gastrocnemius', secondaryMuscles: ['soleus'], pattern: 'isolation', equipment: 'machine', difficulty: 'beginner', fatigueRating: 1 },
+  { name: 'Seated Calf Raise', primaryMuscle: 'soleus', secondaryMuscles: ['gastrocnemius'], pattern: 'isolation', equipment: 'machine', difficulty: 'beginner', fatigueRating: 1 },
+  { name: 'Leg Press Calf Raise', primaryMuscle: 'gastrocnemius', secondaryMuscles: ['soleus'], pattern: 'isolation', equipment: 'machine', difficulty: 'beginner', fatigueRating: 1 },
   
+  // Traps (added 2026-07-30: the pool previously had NO exercise able to feed
+  // upper_traps, so generated programs could never satisfy its authored zone)
+  { name: 'Barbell Shrug', primaryMuscle: 'upper_traps', secondaryMuscles: [], pattern: 'isolation', equipment: 'barbell', difficulty: 'beginner', fatigueRating: 1 },
+
   // Abs
   { name: 'Cable Crunch', primaryMuscle: 'abs', secondaryMuscles: [], pattern: 'isolation', equipment: 'cable', difficulty: 'beginner', fatigueRating: 1 },
-  { name: 'Hanging Leg Raise', primaryMuscle: 'abs', secondaryMuscles: [], pattern: 'isolation', equipment: 'bodyweight', difficulty: 'intermediate', fatigueRating: 1 },
+  { name: 'Hanging Leg Raise', primaryMuscle: 'abs', secondaryMuscles: ['obliques'], pattern: 'isolation', equipment: 'bodyweight', difficulty: 'intermediate', fatigueRating: 1 },
   { name: 'Ab Wheel Rollout', primaryMuscle: 'abs', secondaryMuscles: [], pattern: 'isolation', equipment: 'bodyweight', difficulty: 'intermediate', fatigueRating: 1 },
-  { name: 'Plank', primaryMuscle: 'abs', secondaryMuscles: [], pattern: 'isolation', equipment: 'bodyweight', difficulty: 'beginner', fatigueRating: 1 },
+  { name: 'Plank', primaryMuscle: 'abs', secondaryMuscles: ['obliques'], pattern: 'isolation', equipment: 'bodyweight', difficulty: 'beginner', fatigueRating: 1 },
 ];
 
 // ============================================================
