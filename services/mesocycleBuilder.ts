@@ -856,43 +856,20 @@ export function recommendVolume(
   // CLAMPED to the band MRV below — a generated target can never exceed the
   // ceiling the tracking card renders (this retired the live pre-existing
   // glutes advanced×bulk 18 > 16 violation).
-  //
-  // CAPPED-CURRENCY CONVERSION (v3, APPLIED 2026-07-30 — the reviewed
-  // Change-2 recalibration, docs/PRESET_RECALIBRATION_PROPOSAL.md): tracking
-  // applies the per-group set-credit cap, and creditWeek now projects in the
-  // same capped currency (CAPPED_CREDIT_PROJECTION_DEFAULT — ON; the pair
-  // ships together). Presets for the cap-affected groups were rescaled by
-  // the measured cap ratio ρ so the generator prescribes the SAME real
-  // working sets as pre-cap (P′ = ρ × P_old cancels the projection change):
-  //
-  //   triceps 11/15/20 → 8/10/13   (ρ 0.667; novice floored at MEV 8 — its
-  //                                 capped-currency maintenance output sat
-  //                                 below the growth floor)
-  //   calves  10/14/18 → 8/9/12    (ρ 0.667; novice floored at MEV 8)
-  //   glutes  15/19/23 → 14/18/22  (ρ 0.934)
-  //   forearms/adductors: explicit 12s (previously the generic `|| 12`
-  //                                 fallback — no behavior change)
-  //   all others: ρ = 1, unchanged.
-  //
-  // Goal-aware floor rule (presetRecalibration.presetFloorViolations, the
-  // permanent gate): growth-goal outputs ≥ band MEV; cut outputs ≥ MV
-  // (maintenance volume — retention floor, below MEV).
   const baseVolumes: Record<string, Record<Experience, number>> = {
     chest: { novice: 10, intermediate: 14, advanced: 18 },
     back: { novice: 14, intermediate: 18, advanced: 23 },
     shoulders: { novice: 14, intermediate: 19, advanced: 24 },
     biceps: { novice: 12, intermediate: 17, advanced: 22 },
-    triceps: { novice: 8, intermediate: 10, advanced: 13 },
+    triceps: { novice: 11, intermediate: 15, advanced: 20 },
     quads: { novice: 10, intermediate: 14, advanced: 18 },
     hamstrings: { novice: 12, intermediate: 16, advanced: 19 },
-    glutes: { novice: 14, intermediate: 18, advanced: 22 },
-    calves: { novice: 8, intermediate: 9, advanced: 12 },
+    glutes: { novice: 15, intermediate: 19, advanced: 23 },
+    calves: { novice: 10, intermediate: 14, advanced: 18 },
     abs: { novice: 8, intermediate: 12, advanced: 16 },
     // Total-inclusive like the rest: generated inflow (rows/hinges/carries)
     // measures 2.5–5, so a small direct share (shrugs) closes the gap to MEV 6.
     traps: { novice: 6, intermediate: 8, advanced: 10 },
-    forearms: { novice: 12, intermediate: 12, advanced: 12 },
-    adductors: { novice: 12, intermediate: 12, advanced: 12 },
   };
 
   let volume = baseVolumes[muscleGroup]?.[experience] || 12;
@@ -1455,32 +1432,29 @@ interface WeekCredit {
 type AllocatableExercise = { exercise: ExerciseEntry; sets: number };
 type AllocatableSession = { exercises: AllocatableExercise[] };
 
-// ─── CAPPED CREDIT PROJECTION (Change 3 — DEFAULT ON since v3 presets) ──────
+// ─── CAPPED CREDIT PROJECTION (Change 3 — GATED, DEFAULT OFF) ───────────────
 //
 // Tracking applies the per-group set-credit cap (services/shared/volumeCredit)
-// but this projection historically did not, so the generator believed a
+// but this projection historically did not, so the generator believes a
 // cap-binding exercise (triceps pushdown, calf raise: 1.5 within-group
-// credit/set) delivered 1.5× what tracking reports.
+// credit/set) delivers 1.5× what tracking will report. Routing the projection
+// through the cap makes the generator prescribe MORE REAL SETS to hit the
+// same credited target (≈1/ρ, up to +50% for triceps/calves) — a TRAINING
+// PRESCRIPTION change, not bookkeeping, so it must never ship as a silent
+// side effect:
 //
-// SHIPPED AS A PAIR with the v3 capped-currency presets (recommendVolume,
-// 2026-07-30): P′ = ρ × P_old presets + capped projection cancel exactly, so
-// the pair reproduces the pre-cap REAL doses within integer rounding (pinned
-// by cappedCreditProjection.test.ts). The two halves are NOT independently
-// safe:
-//  - v3 presets + projection OFF UNDER-doses the cap-affected groups by ~ρ
-//    (triceps/calves ≈ −33% real sets) — an INVALID configuration, not a
-//    safe default. The env switch below is a kill-switch for emergencies
-//    only; if it must be used, revert the v3 presets in the same deploy.
-//  - old presets + projection ON over-doses by ~1/ρ (the configuration the
-//    original rollout doc measured and forbade).
-//
-// Default ON; NEXT_PUBLIC_CAPPED_CREDIT_PROJECTION=0 disables (see above).
-// The mesocycle RAMP (cappedProjectionRampFraction, rampFraction blends
-// 0 = legacy uncapped → 1 = fully capped) exists to phase in a real dose
-// change; the paired v3 deploy has none, so it is deliberately UNUSED — kept
-// for a future enablement that does change doses.
+//  - Default OFF (CAPPED_CREDIT_PROJECTION_DEFAULT / env
+//    NEXT_PUBLIC_CAPPED_CREDIT_PROJECTION=1). Callers may override per call.
+//  - DO NOT enable against the un-recalibrated presets: the preset values
+//    are being re-derived into capped currency first (see
+//    docs/PRESET_RECALIBRATION_PROPOSAL.md finding 4) — enabling early
+//    over-allocates the cap-binding groups by ~1/ρ.
+//  - A RAMP is available so the real-set increase phases in across a
+//    mesocycle instead of stepping in one week: rampFraction 0 = legacy
+//    uncapped projection, 1 = fully capped; per-exercise scale blends
+//    linearly (see cappedProjectionRampFraction).
 export const CAPPED_CREDIT_PROJECTION_DEFAULT =
-  process.env.NEXT_PUBLIC_CAPPED_CREDIT_PROJECTION !== '0';
+  process.env.NEXT_PUBLIC_CAPPED_CREDIT_PROJECTION === '1';
 
 export interface CreditProjectionOptions {
   /** Project group credit CAPPED (the tracking currency). Default: the flag. */
