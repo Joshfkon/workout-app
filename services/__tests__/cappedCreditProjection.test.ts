@@ -56,24 +56,66 @@ function realSetsByGroup(days: number, goal: Goal, projection?: CreditProjection
   return out;
 }
 
-describe('flag default', () => {
-  it('the flag is OFF by default (env not set in CI)', () => {
-    expect(CAPPED_CREDIT_PROJECTION_DEFAULT).toBe(false);
+describe('flag default (ON since the paired v3-preset deploy)', () => {
+  it('the flag is ON by default — v3 presets + uncapped projection is an invalid config', () => {
+    expect(CAPPED_CREDIT_PROJECTION_DEFAULT).toBe(true);
   });
 
-  it('no option behaves exactly like an explicit capped:false, every template', () => {
+  it('no option behaves exactly like an explicit capped:true, every template', () => {
     for (const days of [3, 4, 6]) {
       const def = realSetsByGroup(days, 'bulk');
-      const off = realSetsByGroup(days, 'bulk', { capped: false });
-      expect(Array.from(def.entries()).sort()).toEqual(Array.from(off.entries()).sort());
+      const on = realSetsByGroup(days, 'bulk', { capped: true });
+      expect(Array.from(def.entries()).sort()).toEqual(Array.from(on.entries()).sort());
     }
   });
 
-  it('rampFraction 0 with capped:true is also identical to OFF (ramp start point)', () => {
+  it('rampFraction 0 with capped:true is identical to capped:false (ramp start point)', () => {
     for (const days of [4]) {
       const off = realSetsByGroup(days, 'bulk', { capped: false });
       const rampStart = realSetsByGroup(days, 'bulk', { capped: true, rampFraction: 0 });
       expect(Array.from(rampStart.entries()).sort()).toEqual(Array.from(off.entries()).sort());
+    }
+  });
+});
+
+describe('combined configuration reproduces the PRE-CAP real doses (the pairing gate)', () => {
+  // REAL primary-attributed working sets per group, generated at the PREVIOUS
+  // HEAD (pre-cap presets + uncapped projection) — the doses users were
+  // actually prescribed before this deploy. The v3 presets and the capped
+  // projection cancel by construction (P′ = ρ × P_old); this pin is what
+  // stops anyone shipping one half without the other: breaking the pairing
+  // shifts the cap-affected groups by ~±33% and blows the tolerance.
+  const PRE_CAP_BASELINE: Record<string, Record<string, number>> = {
+    'bulk-3d': { quads: 10, chest: 15, shoulders: 9, triceps: 11, abs: 3, hamstrings: 9, glutes: 11, back: 14, biceps: 6, calves: 3, traps: 6 },
+    'bulk-4d': { back: 16, chest: 15, shoulders: 9, biceps: 11, triceps: 6, quads: 14, hamstrings: 16, glutes: 9, calves: 6, abs: 6, traps: 3 },
+    'bulk-6d': { chest: 15, triceps: 11, back: 16, shoulders: 9, biceps: 11, traps: 5, quads: 14, hamstrings: 16, glutes: 9, calves: 6, abs: 6 },
+    'cut-3d': { quads: 8, chest: 10, shoulders: 7, triceps: 7, abs: 4, hamstrings: 6, glutes: 7, back: 10, biceps: 7, calves: 3, traps: 6 },
+    'cut-4d': { back: 12, chest: 10, shoulders: 9, biceps: 6, triceps: 7, quads: 8, hamstrings: 6, glutes: 9, calves: 7, abs: 6, traps: 3 },
+    'cut-6d': { chest: 10, triceps: 7, back: 12, shoulders: 9, biceps: 6, traps: 5, quads: 8, hamstrings: 6, glutes: 9, calves: 7, abs: 6 },
+  };
+
+  it.each([['bulk', 3], ['bulk', 4], ['bulk', 6], ['cut', 3], ['cut', 4], ['cut', 6]] as [Goal, number][])(
+    '%s %sd: every group within ±2 real sets of pre-cap, net within ±3',
+    (goal, days) => {
+      // Defaults = v3 presets + capped projection (the shipped pairing).
+      const now = realSetsByGroup(days, goal);
+      const base = PRE_CAP_BASELINE[`${goal}-${days}d`];
+      let net = 0;
+      for (const [group, baseSets] of Object.entries(base)) {
+        const delta = (now.get(group as CoarseMuscle) ?? 0) - baseSets;
+        net += delta;
+        // ±2: per-template variance around the pooled cap ratio plus one
+        // trim-interaction step (observed extremes: triceps bulk-3d −2 from
+        // ρ×15 = 10.005 rounding to 10; abs cut +2 from freed trim budget).
+        expect(Math.abs(delta)).toBeLessThanOrEqual(2);
+      }
+      expect(Math.abs(net)).toBeLessThanOrEqual(3);
+    }
+  );
+
+  it('the flagship numbers hold exactly: triceps cut stays at the pre-cap 7 on every template', () => {
+    for (const days of [3, 4, 6]) {
+      expect(realSetsByGroup(days, 'cut').get('triceps')).toBe(7);
     }
   });
 });
@@ -90,7 +132,7 @@ describe('capped projection (flag ON)', () => {
     // group loses more than a single trim's worth of neighbor adjustment.
     for (const goal of ['bulk', 'cut'] as const) {
       for (const days of [3, 4, 6]) {
-        const off = realSetsByGroup(days, goal);
+        const off = realSetsByGroup(days, goal, { capped: false });
         const on = realSetsByGroup(days, goal, { capped: true });
         const groups = new Set([...Array.from(off.keys()), ...Array.from(on.keys())]);
         let netDelta = 0;
@@ -109,7 +151,7 @@ describe('capped projection (flag ON)', () => {
     let calvesGained = false;
     for (const goal of ['bulk', 'cut'] as const) {
       for (const days of [3, 4, 6]) {
-        const off = realSetsByGroup(days, goal);
+        const off = realSetsByGroup(days, goal, { capped: false });
         const on = realSetsByGroup(days, goal, { capped: true });
         if ((on.get('triceps') ?? 0) > (off.get('triceps') ?? 0)) tricepsGained = true;
         if ((on.get('calves') ?? 0) > (off.get('calves') ?? 0)) calvesGained = true;
@@ -121,7 +163,7 @@ describe('capped projection (flag ON)', () => {
 
   it('the ramp is monotone: real sets at fraction 0.5 sit between OFF and fully capped', () => {
     for (const group of ['triceps', 'calves'] as const) {
-      const off = realSetsByGroup(4, 'bulk');
+      const off = realSetsByGroup(4, 'bulk', { capped: false });
       const half = realSetsByGroup(4, 'bulk', { capped: true, rampFraction: 0.5 });
       const full = realSetsByGroup(4, 'bulk', { capped: true, rampFraction: 1 });
       expect(half.get(group) ?? 0).toBeGreaterThanOrEqual((off.get(group) ?? 0) - 1e-9);

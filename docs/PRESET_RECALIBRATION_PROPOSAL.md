@@ -1,8 +1,27 @@
-# Preset re-derivation proposal v2 (group-cap follow-up, Change 2) — FOR REVIEW
+# Preset re-derivation v2 (group-cap follow-up, Change 2) — **APPLIED (v3, 2026-07-30)**
 
-**Nothing is applied.** `recommendVolume` still returns the old values.
-Derivation code: `services/presetRecalibration.ts`; gates:
-`services/__tests__/presetRecalibration.test.ts`.
+**Status: APPLIED.** After sign-off, the v2 proposed values below became
+`recommendVolume`'s live table, shipped in the SAME deploy as flipping
+`CAPPED_CREDIT_PROJECTION_DEFAULT` to ON — the pair cancels to the pre-cap
+real doses (pinned by the pairing gate in `cappedCreditProjection.test.ts`;
+per-group |Δ| ≤ 2 real sets, triceps cut exactly 7 on every template).
+Shipping either half alone is an INVALID configuration: v3 presets +
+uncapped projection under-dose triceps/calves ~33%; old presets + capped
+projection over-dose ~1/ρ. The mesocycle ramp is deliberately UNUSED — it
+softens a real dose change and this deploy has none.
+
+**Placeholder-MV gate (sign-off condition): PASSED — all five placeholder
+MVs (glutes/abs/traps/forearms/adductors) are INERT.** For each,
+cutFloor(MV) < the group MEV so the base floor is always the MEV
+constraint; no proposal was raised by a placeholder; every applied cut
+output clears its placeholder with margin ≥ 1 (tightest: traps novice,
+4 vs 3). Real MV authoring for those five is deferred; a pinned test fires
+if any placeholder ever starts binding.
+
+Derivation code: `services/presetRecalibration.ts` (now derives from the
+FROZEN `PRE_CAP_PRESETS` so it documents the applied conversion); gates:
+`services/__tests__/presetRecalibration.test.ts`, including the acceptance
+gate `recommendVolume === proposedPreset` for every group × experience.
 
 **v2 (2026-07-30): goal-aware floors.** v1 held every goal's output to the
 band MEV. That was the wrong constraint for cut presets: MEV is the minimum

@@ -27,6 +27,7 @@ import {
   type Experience,
 } from '../presetRecalibration';
 import { COARSE_MUSCLES, getEffectiveBand, type CoarseMuscle } from '../volumeBands';
+import { recommendVolume } from '../mesocycleBuilder';
 import type { Goal } from '@/types/schema';
 
 const seedRatios = measureCapRatios(['bulk', 'cut'], 'seed-convention');
@@ -56,8 +57,54 @@ describe('hard assertion (goal-aware): growth outputs ≥ MEV, cut outputs ≥ M
 });
 
 describe('live table state under the corrected rule', () => {
-  it('the CURRENT presets are compliant — the old seven-violation list was a wrong-floor artifact', () => {
+  it('the CURRENT presets are compliant — the permanent gate now that v3 is applied', () => {
     expect(currentPresetFloorViolations()).toEqual([]);
+  });
+});
+
+describe('v3 application acceptance gate', () => {
+  it('recommendVolume returns exactly the reviewed proposal for every group × experience', () => {
+    for (const row of rows) {
+      expect(recommendVolume(row.experience, 'maintenance', row.group)).toBe(row.proposedPreset);
+    }
+  });
+});
+
+describe('placeholder MVs are INERT (gate result, pinned — real authoring deferred)', () => {
+  // The glutes/abs/traps/forearms/adductors MVs are declared 0.5×MEV
+  // placeholders, acceptable ONLY while they bind nothing. If any assertion
+  // here ever fires, a made-up number has started steering a training
+  // decision: stop and author a real MV first.
+  const PLACEHOLDER_GROUPS = ['glutes', 'abs', 'traps', 'forearms', 'adductors'] as const;
+
+  it('the base floor is always the MEV constraint, never the placeholder cut floor', () => {
+    for (const g of PLACEHOLDER_GROUPS) {
+      expect(cutFloorPreset(PROPOSED_MAINTENANCE_VOLUME[g])).toBeLessThanOrEqual(
+        getEffectiveBand(g).mev
+      );
+      expect(presetFloor(g)).toBe(getEffectiveBand(g).mev);
+    }
+  });
+
+  it('no proposal was raised by a placeholder floor', () => {
+    for (const row of rows.filter((r) => (PLACEHOLDER_GROUPS as readonly string[]).includes(r.group))) {
+      expect(row.proposedPreset).toBeGreaterThanOrEqual(Math.round(row.sameRealDosePreset));
+      if (row.floorBinds) {
+        // A bind on a placeholder group could only come from MEV (growth
+        // floor), never MV — presetFloor equals MEV for these groups.
+        expect(row.floor).toBe(getEffectiveBand(row.group).mev);
+      }
+    }
+  });
+
+  it('every applied cut output clears its placeholder MV with margin', () => {
+    for (const g of PLACEHOLDER_GROUPS) {
+      for (const experience of EXPERIENCES) {
+        expect(recommendVolume(experience, 'cut', g)).toBeGreaterThanOrEqual(
+          PROPOSED_MAINTENANCE_VOLUME[g] + 1
+        );
+      }
+    }
   });
 });
 

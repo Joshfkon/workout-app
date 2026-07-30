@@ -32,6 +32,14 @@
  *  4. Proposed value = max(round(P_same), floor). Where the floor binds, the
  *     proposal INCREASES the real dose relative to pre-cap behavior —
  *     flagged so a dose change is always a visible, deliberate correction.
+ *
+ * STATUS: APPLIED (v3, 2026-07-30) together with the capped credit
+ * projection (CAPPED_CREDIT_PROJECTION_DEFAULT — the pair cancels to the
+ * pre-cap real doses and must ship together; see the flag's docstring).
+ * recommendVolume now returns the proposed values; the derivation below runs
+ * against the FROZEN pre-cap table (PRE_CAP_PRESETS) so it keeps documenting
+ * the applied conversion instead of re-deriving from its own output, and
+ * presetFloorViolations(recommendVolume) is the permanent live gate.
  */
 
 import { generateFullProgram, recommendVolume } from './mesocycleBuilder';
@@ -51,6 +59,28 @@ export const GOALS: readonly Goal[] = ['bulk', 'maintenance', 'cut', 'recomp'];
 
 /** Which muscle tags the measurement resolves each generated exercise with. */
 export type TagSource = 'template' | 'seed-convention';
+
+/**
+ * The PRE-CAP preset table (recommendVolume's base values before the v3
+ * capped-currency conversion), FROZEN so the derivation keeps documenting
+ * the applied change instead of re-deriving from its own output.
+ * forearms/adductors carry the generic `|| 12` fallback they had.
+ */
+export const PRE_CAP_PRESETS: Record<CoarseMuscle, Record<Experience, number>> = {
+  chest: { novice: 10, intermediate: 14, advanced: 18 },
+  back: { novice: 14, intermediate: 18, advanced: 23 },
+  shoulders: { novice: 14, intermediate: 19, advanced: 24 },
+  biceps: { novice: 12, intermediate: 17, advanced: 22 },
+  triceps: { novice: 11, intermediate: 15, advanced: 20 },
+  quads: { novice: 10, intermediate: 14, advanced: 18 },
+  hamstrings: { novice: 12, intermediate: 16, advanced: 19 },
+  glutes: { novice: 15, intermediate: 19, advanced: 23 },
+  calves: { novice: 10, intermediate: 14, advanced: 18 },
+  abs: { novice: 8, intermediate: 12, advanced: 16 },
+  traps: { novice: 6, intermediate: 8, advanced: 10 },
+  forearms: { novice: 12, intermediate: 12, advanced: 12 },
+  adductors: { novice: 12, intermediate: 12, advanced: 12 },
+};
 
 const REFERENCE_DAYS = [3, 4, 6] as const;
 
@@ -156,6 +186,13 @@ function goalMultiplier(goal: Goal): number {
 // maintained size in younger adults; Iversen 2021: ~4 weekly sets as a
 // minimum effective dose) suggests these values are conservative (high) —
 // safe as floors.
+// GATE RESULT (2026-07-30, pinned in the test): the five placeholder MVs are
+// INERT — for each, cutFloorPreset(MV) < the group MEV, so the base floor is
+// always the MEV constraint; no proposal was raised by a placeholder, and
+// every applied cut output clears its placeholder MV with margin (tightest:
+// traps novice, 4 vs 3). Real MV authoring for these five is therefore
+// DEFERRED — if a future change ever makes one bind, the pinned test fires
+// and forces real sourcing first.
 export const PROPOSED_MAINTENANCE_VOLUME: Record<CoarseMuscle, number> = {
   chest: 6, //      8 × 0.8
   back: 10, //     12 × 0.8
@@ -238,11 +275,13 @@ export function derivePresetRecalibration(
   for (const group of COARSE_MUSCLES) {
     const ratio = ratios[group].ratio;
     for (const experience of EXPERIENCES) {
-      const oldPreset = recommendVolume(experience, 'maintenance', group);
+      // FROZEN pre-cap values (not recommendVolume — that now returns the
+      // applied v3 table; deriving from it would be circular).
+      const oldPreset = PRE_CAP_PRESETS[group][experience];
       const oldOutput = {} as Record<Goal, number>;
       const newTrackedOutput = {} as Record<Goal, number>;
       for (const goal of GOALS) {
-        oldOutput[goal] = recommendVolume(experience, goal, group);
+        oldOutput[goal] = proposedOutput(oldPreset, goal, group);
         newTrackedOutput[goal] = round1(oldOutput[goal] * ratio);
       }
       const sameRealDosePreset = round1(oldPreset * ratio);

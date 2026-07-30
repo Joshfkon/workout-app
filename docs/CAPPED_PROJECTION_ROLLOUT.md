@@ -10,21 +10,28 @@ calf raise — 1.5 within-group credit/set) delivers 1.5× per set, so its
 trim pass trims less and REAL prescribed sets rise toward the credited
 targets.
 
-## Gate
+## Gate — UPDATED 2026-07-30: default ON, shipped paired with the v3 presets
 
-- Flag: `CAPPED_CREDIT_PROJECTION_DEFAULT`, driven by
-  `NEXT_PUBLIC_CAPPED_CREDIT_PROJECTION=1`. **Default OFF**; unset env
-  behaves byte-identically to the legacy uncapped projection (tested).
+- Flag: `CAPPED_CREDIT_PROJECTION_DEFAULT`. **Default ON** since the v3
+  capped-currency presets applied (same deploy, per review — Change 2 alone
+  with an uncapped projection would have CUT triceps/calves real doses
+  ~33%, a configuration that appears in no reviewed table).
+  `NEXT_PUBLIC_CAPPED_CREDIT_PROJECTION=0` is an emergency kill-switch
+  ONLY: OFF + v3 presets is an invalid configuration, not a safe default —
+  if it must be pulled, revert the v3 presets in the same deploy.
+- Pairing gate: `cappedCreditProjection.test.ts` pins that the shipped
+  default reproduces the PRE-CAP real doses within integer rounding
+  (per-group |Δ| ≤ 2, net |Δ| ≤ 3 per template; triceps cut exactly 7
+  everywhere). Shipping one half without the other blows this pin.
 - Per-call override: `generateFullProgram(..., projection)` /
   `applyIndirectAwareAllocation(sessions, targets, projection)` with
   `{ capped: boolean, rampFraction?: number }`.
-- **Dependency: do not enable against the un-recalibrated presets.** The
-  preset table is being re-derived into capped currency
-  (docs/PRESET_RECALIBRATION_PROPOSAL.md); enabling this flag first would
-  over-allocate cap-binding groups by ~1/ρ. Enable together with (or after)
-  applying the reviewed presets.
 
-## Ramp (available before the flag goes on, as required)
+## Ramp (kept, deliberately UNUSED in the paired deploy)
+
+The ramp softens a real dose change; the paired v3 deploy has none, so no
+ramp is applied. Kept for a future enablement that does change doses.
+
 
 `rampFraction` blends the projection linearly: 0 = legacy uncapped
 (byte-identical to OFF, tested), 1 = fully capped. Schedule helper:
