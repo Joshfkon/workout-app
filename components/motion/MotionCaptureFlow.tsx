@@ -29,6 +29,11 @@ import {
   saveRawBufferIfAllowed,
 } from '@/lib/motion/motionPersistence';
 import {
+  clearPendingCapture,
+  getPendingCapture,
+  setPendingCapture,
+} from '@/lib/motion/pendingCapture';
+import {
   LiveCaptureGate,
   dot,
   processMotionSamples,
@@ -49,6 +54,14 @@ interface MotionCaptureFlowProps {
   calibrations: MachineCalibration[];
   /** Exercise names for labeling (id → name). */
   exerciseNames: Record<string, string>;
+  /**
+   * In-workout mode: restrict calibrations to this exercise (auto-selecting
+   * a sole match) so the sheet launched from an exercise card is one tap
+   * from ARM.
+   */
+  lockedExerciseId?: string;
+  /** Prefer this block's most recent set when defaulting the attach picker. */
+  defaultAttachBlockId?: string;
 }
 
 type Stage = 'setup' | 'armed' | 'review';
@@ -64,6 +77,8 @@ export function MotionCaptureFlow({
   rawRetentionEnabled,
   calibrations,
   exerciseNames,
+  lockedExerciseId,
+  defaultAttachBlockId,
 }: MotionCaptureFlowProps) {
   const [stage, setStage] = useState<Stage>('setup');
   const [error, setError] = useState<string | null>(null);
@@ -87,19 +102,51 @@ export function MotionCaptureFlow({
   const exerciseBlocks = useWorkoutStore((state) => state.exerciseBlocks);
   const setLogs = useWorkoutStore((state) => state.setLogs);
 
-  const calibration = calibrations.find((c) => c.id === calibrationId) ?? null;
+  // In-workout mode locks the calibration choices to the launching exercise.
+  const usableCalibrations = useMemo(
+    () =>
+      lockedExerciseId
+        ? calibrations.filter((c) => c.exerciseId === lockedExerciseId)
+        : calibrations,
+    [calibrations, lockedExerciseId]
+  );
 
-  // Sets loggable against: this session's sets for the calibrated exercise.
+  const calibration = usableCalibrations.find((c) => c.id === calibrationId) ?? null;
+
+  // One usable calibration → select it so the sheet is one tap from ARM.
+  useEffect(() => {
+    if (calibrationId === '' && usableCalibrations.length === 1) {
+      setCalibrationId(usableCalibrations[0].id);
+    }
+  }, [calibrationId, usableCalibrations]);
+
+  // Sets loggable against: this session's sets for the calibrated exercise,
+  // newest first (the set the user just logged), with the launching block's
+  // sets preferred over other blocks of the same exercise.
   const attachableSets = useMemo(() => {
     if (!calibration) return [];
     return exerciseBlocks
       .filter((b) => b.exerciseId === calibration.exerciseId)
-      .flatMap((b) => setLogs[b.id] ?? [])
-      .map((s) => ({
+      .flatMap((b) => (setLogs[b.id] ?? []).map((s) => ({ set: s, blockId: b.id })))
+      .sort((a, b) => {
+        const aPreferred = a.blockId === defaultAttachBlockId ? 1 : 0;
+        const bPreferred = b.blockId === defaultAttachBlockId ? 1 : 0;
+        if (aPreferred !== bPreferred) return bPreferred - aPreferred;
+        return (b.set.loggedAt ?? '').localeCompare(a.set.loggedAt ?? '');
+      })
+      .map(({ set: s }) => ({
         value: s.id,
         label: `Set ${s.setNumber} — ${formatWeight(s.weightKg, units)} × ${s.reps}`,
       }));
-  }, [calibration, exerciseBlocks, setLogs, units]);
+  }, [calibration, exerciseBlocks, setLogs, units, defaultAttachBlockId]);
+
+  // Default the attach picker to the most recent set once reviewing (the
+  // user can still change it; saving stays an explicit action).
+  useEffect(() => {
+    if (stage === 'review' && saveState === 'idle' && attachSetId === '' && attachableSets.length > 0) {
+      setAttachSetId(attachableSets[0].value);
+    }
+  }, [stage, saveState, attachSetId, attachableSets]);
 
   const isMountedRef = useRef(true);
 
@@ -117,6 +164,24 @@ export function MotionCaptureFlow({
       isMountedRef.current = false;
       teardownSensors();
     };
+  }, []);
+
+  // Restore a finished-but-unsaved capture (e.g. the user hopped to the
+  // workout tab to log the set before saving). Mount-only by design.
+  useEffect(() => {
+    const p = getPendingCapture();
+    if (!p) return;
+    if (lockedExerciseId && p.exerciseId !== lockedExerciseId) return;
+    if (!calibrations.some((c) => c.id === p.calibrationId)) return;
+    setCalibrationId(p.calibrationId);
+    setSide(p.side);
+    startedAtIsoRef.current = p.startedAtIso;
+    setFinished({ samples: p.samples, startedAtIso: p.startedAtIso, result: p.result });
+    setAttachSetId('');
+    setSaveState('idle');
+    setRawNote(null);
+    setStage('review');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const arm = async () => {
@@ -167,6 +232,16 @@ export function MotionCaptureFlow({
       gravityRefBottom: calibration.gravityRefStart,
       mountRadiusMm: calibration.mountRadius_mm,
     });
+    // Held in module memory so navigating away before Save doesn't destroy
+    // the capture (review still never auto-commits).
+    setPendingCapture({
+      calibrationId: calibration.id,
+      exerciseId: calibration.exerciseId,
+      side,
+      startedAtIso: startedAtIsoRef.current,
+      samples,
+      result,
+    });
     setFinished({ samples, startedAtIso: startedAtIsoRef.current, result });
     setAttachSetId('');
     setSaveState('idle');
@@ -176,6 +251,7 @@ export function MotionCaptureFlow({
 
   const discard = () => {
     teardownSensors();
+    clearPendingCapture();
     setFinished(null);
     setStage('setup');
   };
@@ -227,6 +303,7 @@ export function MotionCaptureFlow({
       } else if (rawRetentionEnabled && saveResult === 'queued') {
         setRawNote('Raw buffer skipped — metrics are queued offline; raw is online-only.');
       }
+      clearPendingCapture();
       if (!isMountedRef.current) return;
       setSaveState(saveResult);
     } catch (err) {
@@ -252,7 +329,7 @@ export function MotionCaptureFlow({
       <button
         type="button"
         onClick={finishRecording}
-        className="fixed inset-0 z-50 bg-black flex flex-col items-center justify-center gap-6"
+        className="fixed inset-0 z-[60] bg-black flex flex-col items-center justify-center gap-6"
         data-testid="motion-armed-overlay"
         aria-label="Stop recording"
       >
@@ -417,15 +494,17 @@ export function MotionCaptureFlow({
         <CardTitle>Record a set</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        {calibrations.length === 0 ? (
+        {usableCalibrations.length === 0 ? (
           <p className="text-sm text-surface-400">
-            No machine calibrations yet — create one below before recording.
+            {lockedExerciseId
+              ? 'No calibration for this exercise yet — create one on the Motion Capture page first.'
+              : 'No machine calibrations yet — create one below before recording.'}
           </p>
         ) : (
           <>
             <Select
               label="Machine calibration"
-              options={calibrations.map((c) => ({
+              options={usableCalibrations.map((c) => ({
                 value: c.id,
                 label: `${c.label} — ${exerciseNames[c.exerciseId] ?? 'Unknown exercise'}${
                   c.derivedRomDegrees != null ? ` (${Math.round(c.derivedRomDegrees)}° ROM)` : ''
