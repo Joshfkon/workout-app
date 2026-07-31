@@ -62,11 +62,59 @@ export const ONSET_OMEGA_RADPS = 0.25;
 /** Auto-terminate a recording after this long below the rest threshold. */
 export const AUTO_STOP_QUIET_MS = 5000;
 
-/** Calibration sanity: bottom/top gravity refs must differ by at least this. */
+/** Calibration sanity: derived ROM must be at least this. */
 export const MIN_CALIBRATION_ROM_DEG = 10;
 
 /** And a gravity reference must have a plausible magnitude to be quasi-static. */
 export const CALIBRATION_GRAVITY_TOL_MPS2 = 1.5;
+
+// --- Sweep calibration (scatter-matrix axis estimation) -------------------
+
+/** |gyro| below this is ignored when building the axis scatter matrix —
+ *  near-rest samples are bias+noise, not machine motion. */
+export const SCATTER_MOTION_OMEGA_RADPS = 0.15;
+
+/**
+ * Axis-quality gate: λ1/(λ2+λ3) of the gyro scatter matrix. A clean
+ * single-DOF machine sweep concentrates essentially all rotation energy on
+ * one axis (ratios in the hundreds); genuine multi-axis wobble pulls the
+ * ratio down fast. Tunable; below this the sweep is rejected as not planar.
+ */
+export const AXIS_QUALITY_MIN = 20;
+
+/** A mount rest (phone sitting still on the machine) must last this long —
+ *  distinguishes "set down on the mount" from momentary in-hand pauses. */
+export const SWEEP_MOUNT_REST_MS = 800;
+
+/** Minimum movement strokes (2 full reps) for a usable sweep. */
+export const MIN_SWEEP_STROKES = 4;
+
+/** Stroke ROMs deviating from the median by more than this reject the sweep. */
+export const SWEEP_STROKE_SPREAD_MAX_DEG = 15;
+
+// --- Gravity-reference capture (strict quasi-static validation) ----------
+// A gravity VECTOR may only be read off the accelerometer when the device is
+// provably still. These bounds are deliberately much tighter than the
+// generic quasi-static tolerance used for gating: a dynamic sample silently
+// accepted as "gravity" corrupts every angle derived from it.
+
+/** | |a| − g | must stay within this for a gravity-reference window. */
+export const GRAVITY_REF_ACCEL_TOL_MPS2 = 0.3;
+
+/** |rotationRate| must stay below this (5 °/s) for a gravity-reference window.
+ *  (Literal conversion — DEG_TO_RAD is declared later in this module.) */
+export const GRAVITY_REF_OMEGA_MAX_RADPS = 5 * (Math.PI / 180);
+
+/** Both bounds must hold contiguously for at least this long (measured dt). */
+export const GRAVITY_REF_MIN_WINDOW_MS = 200;
+
+/**
+ * Gravity lower-bound invariant: the 3-D angle between two endpoint gravity
+ * unit vectors can never EXCEED the true rotation between those endpoints,
+ * so integratedGyroAngle < gravityAngle − tolerance proves the gyro path
+ * under-reads (wrong axis, wrong units, dropped samples). Hard error.
+ */
+export const GRAVITY_LOWER_BOUND_TOL_DEG = 2;
 
 /** Below this mean sample rate the pipeline flags the capture as degraded. */
 export const LOW_SAMPLE_RATE_HZ = 40;

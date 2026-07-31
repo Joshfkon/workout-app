@@ -62,6 +62,25 @@ export function rotateAbout(v: Vec3, n: Vec3, angleRad: number): Vec3 {
   };
 }
 
+/** Normalized mean direction of a set of unit vectors (null when empty/degenerate). */
+export function meanUnit(vs: Vec3[]): Vec3 | null {
+  if (vs.length === 0) return null;
+  let x = 0;
+  let y = 0;
+  let z = 0;
+  for (const v of vs) {
+    x += v.x;
+    y += v.y;
+    z += v.z;
+  }
+  return normalize({ x, y, z });
+}
+
+/** Full 3-D angle between two unit vectors, radians. */
+export function angleBetweenUnit(a: Vec3, b: Vec3): number {
+  return Math.acos(Math.max(-1, Math.min(1, dot(a, b))));
+}
+
 /**
  * Signed angle (radians, in (-π, π]) that rotates `from` into `to` about
  * unit axis `n`, using only the components perpendicular to `n`.

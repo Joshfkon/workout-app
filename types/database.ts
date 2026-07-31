@@ -66,6 +66,7 @@ export interface Database {
           gravity_ref_start: Json;
           gravity_ref_end: Json;
           derived_pivot_axis: Json;
+          axis_quality: number | null;
           derived_rom_degrees: number | null;
           schema_version: number;
           created_at: string;
@@ -81,6 +82,7 @@ export interface Database {
           gravity_ref_start: Json;
           gravity_ref_end: Json;
           derived_pivot_axis: Json;
+          axis_quality?: number | null;
           derived_rom_degrees?: number | null;
           schema_version?: number;
           created_at?: string;
