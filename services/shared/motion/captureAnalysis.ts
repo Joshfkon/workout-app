@@ -104,8 +104,10 @@ function median(xs: number[]): number {
   return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
 }
 
-/** Mean-centered covariance eigen-decomposition of a set of Vec3s. */
-function pca(vs: Vec3[]): { axis: Vec3; share: number; ratio: number } | null {
+/** Mean-centered covariance eigen-decomposition of a set of Vec3s.
+ *  Exported for consumers that need PCA over a SUBSET of a capture (e.g.
+ *  calibration eligibility over rep spans only). */
+export function pcaOfVectors(vs: Vec3[]): { axis: Vec3; share: number; ratio: number } | null {
   const n = vs.length;
   if (n < 10) return null;
   let mx = 0;
@@ -201,7 +203,7 @@ export function analyzeCapture(
 
   // --- 2+3. Motion mask → PCA axis ---------------------------------------
   const masked = filtered.filter((g) => Math.hypot(g.x, g.y, g.z) > maskOmega);
-  const principal = pca(masked) ?? pca(filtered);
+  const principal = pcaOfVectors(masked) ?? pcaOfVectors(filtered);
   if (!principal) return empty({ x: 1, y: 0, z: 0 });
   let axis = principal.axis;
 

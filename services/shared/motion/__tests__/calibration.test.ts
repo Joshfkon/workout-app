@@ -92,7 +92,44 @@ describe('deriveCalibrationFromAnalysis', () => {
     });
     const result = derive(signal.samples);
     expect(result.eligible).toBe(false);
-    expect(result.reason).toMatch(/single-DOF|variance/i);
+    expect(result.reason).toMatch(/axis quality/i);
+  });
+
+  it('enforces the calibration axis-quality contract, not the display-confidence 0.8', () => {
+    // Moderate wobble: PC1 share sits ABOVE the 0.8 display threshold (no
+    // low-confidence label) but axis quality λ1/(λ2+λ3) is below the
+    // calibration contract's AXIS_QUALITY_MIN — saving must still refuse.
+    const signal = generateSweepSignal(Array(3).fill(slowRep), {
+      ...sweepOpts,
+      crossAxisWobble: { amplitudeRadps: 0.45, freqHz: 1.7 },
+    });
+    const analysis = analyzeCapture(signal.samples);
+    expect(analysis.pc1VarianceShare).toBeGreaterThan(0.8); // not display-flagged
+    expect(analysis.lowConfidence).toBe(false);
+    const result = deriveCalibrationFromAnalysis(analysis, signal.samples);
+    expect(result.eligible).toBe(false);
+    expect(result.reason).toMatch(/axis quality/i);
+  });
+
+  it('refuses endpoint gravity refs that were never validated as still', () => {
+    // Mounted lead-in gives a qualifying stillness window, but the reps are
+    // touch-and-go: no strict rest at the tops, so the persisted gravity
+    // references cannot be read — saving must refuse with the pause hint,
+    // never average turnaround dynamics into a "gravity" vector.
+    const touchAndGo: SyntheticRepSpec = {
+      romDeg: 72,
+      concentricMs: 1500,
+      pauseTopMs: 60,
+      eccentricMs: 1500,
+      restAfterMs: 60,
+    };
+    const signal = generateSweepSignal(
+      [touchAndGo, touchAndGo, { ...touchAndGo, restAfterMs: 1500 }],
+      sweepOpts
+    );
+    const result = derive(signal.samples);
+    expect(result.eligible).toBe(false);
+    expect(result.reason).toMatch(/held still|pause/i);
   });
 
   it('requires at least 2 reps', () => {

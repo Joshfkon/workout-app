@@ -426,6 +426,42 @@ export function MotionCaptureFlow({
 
           {saveState === 'idle' || saveState === 'saving' ? (
             <>
+              {/* Save persists the CALIBRATED pipeline's metrics, which apply
+                  stricter integrity checks than the display analysis above —
+                  disclose exactly what will be stored so the explicit Save
+                  never commits data the user was not shown. */}
+              {calibration && persistResult && (
+                <div
+                  className={`p-3 rounded-lg ${
+                    persistResult.reps.filter((r) => !r.rejected).length !== analysis.reps.length
+                      ? 'bg-warning-500/10 border border-warning-500/20'
+                      : 'bg-surface-700/50'
+                  }`}
+                  data-testid="motion-persist-summary"
+                >
+                  <p className="text-xs text-surface-300">
+                    Save stores the calibrated pipeline&apos;s metrics:{' '}
+                    <span className="font-medium">
+                      {persistResult.reps.filter((r) => !r.rejected).length} rep
+                      {persistResult.reps.filter((r) => !r.rejected).length === 1 ? '' : 's'}
+                    </span>
+                    {persistResult.reps.some((r) => r.rejected) &&
+                      ` (${persistResult.reps.filter((r) => r.rejected).length} rejected: ${persistResult.reps
+                        .filter((r) => r.rejected)
+                        .map((r) => r.rejectReason)
+                        .filter((v, i, a) => a.indexOf(v) === i)
+                        .join('; ')})`}
+                    .
+                  </p>
+                  {persistResult.reps.filter((r) => !r.rejected).length !== analysis.reps.length && (
+                    <p className="mt-1 text-xs text-warning-400">
+                      This differs from the {analysis.reps.length} rep
+                      {analysis.reps.length === 1 ? '' : 's'} displayed above — the calibrated
+                      pipeline applies stricter gravity-integrity checks before persisting.
+                    </p>
+                  )}
+                </div>
+              )}
               {calibration ? (
                 attachableSets.length > 0 ? (
                   <Select

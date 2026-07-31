@@ -22,13 +22,14 @@
  */
 
 import type { ImuSample, Vec3 } from '@/types/motion';
-import { meanUnit, normalize } from './vec3';
+import { dot, meanUnit, norm, scale } from './vec3';
 import type { CaptureAnalysis } from './captureAnalysis';
-import { LOW_CONFIDENCE_PC1_SHARE } from './captureAnalysis';
-import { MIN_CALIBRATION_ROM_DEG } from './constants';
+import { CAPTURE_MASK_OMEGA_RADPS, pcaOfVectors } from './captureAnalysis';
+import { findGravityRef } from './gravityRef';
+import { AXIS_QUALITY_MIN, MIN_CALIBRATION_ROM_DEG } from './constants';
 
-/** ± window for endpoint gravity reference estimation, ms. */
-const ENDPOINT_WINDOW_MS = 120;
+/** ± search window around a rep endpoint for a validated gravity rest, ms. */
+const ENDPOINT_SEARCH_MS = 500;
 
 export interface CalibrationEligibility {
   eligible: boolean;
@@ -50,36 +51,55 @@ function median(xs: number[]): number {
   return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
 }
 
-/** Mean gravity direction over ±window around a sample index. */
-function gravityDirAt(samples: ImuSample[], centerIdx: number): Vec3 | null {
+/**
+ * STRICTLY validated gravity direction near a rep endpoint: the persisted
+ * calibration contract expects endpoint gravity vectors read from genuine
+ * rests, so this requires a findGravityRef window (≥200 ms of contiguous
+ * |a|≈g stillness) within ±500 ms of the endpoint — turnaround dynamics
+ * blindly averaged into a "gravity" vector would corrupt the calibrated
+ * pipeline's angle resets and integrity checks downstream.
+ */
+function validatedGravityAt(samples: ImuSample[], centerIdx: number): Vec3 | null {
   const t = samples[centerIdx]?.tMs;
   if (t === undefined) return null;
-  const units: Vec3[] = [];
-  for (let i = centerIdx; i >= 0 && t - samples[i].tMs <= ENDPOINT_WINDOW_MS; i--) {
-    const u = normalize(samples[i].accel);
-    if (u) units.push(u);
-  }
-  for (let i = centerIdx + 1; i < samples.length && samples[i].tMs - t <= ENDPOINT_WINDOW_MS; i++) {
-    const u = normalize(samples[i].accel);
-    if (u) units.push(u);
-  }
-  return meanUnit(units);
+  let lo = centerIdx;
+  while (lo > 0 && t - samples[lo - 1].tMs <= ENDPOINT_SEARCH_MS) lo--;
+  let hi = centerIdx;
+  while (hi < samples.length - 1 && samples[hi + 1].tMs - t <= ENDPOINT_SEARCH_MS) hi++;
+  return findGravityRef(samples, lo, hi)?.unit ?? null;
 }
 
 export function deriveCalibrationFromAnalysis(
   analysis: CaptureAnalysis,
   samples: ImuSample[]
 ): CalibrationEligibility {
+  // The SAVED calibration's axis and quality come from PCA over the REP
+  // SPANS ONLY: that is the machine's motion by construction. Whole-capture
+  // stats (what the display reports per spec) include in-hand handling,
+  // which is irrelevant to — and would unfairly condemn — the mounted
+  // sweep's planarity. share s = λ1/Σλ ⇒ λ1/(λ2+λ3) = s/(1−s), matching
+  // the stored axis_quality semantics.
+  const repSpanGyro: Vec3[] = [];
+  for (const h of analysis.halfReps) {
+    for (let i = h.startIdx; i <= h.endIdx; i++) {
+      const g = samples[i].gyro;
+      if (norm(g) > CAPTURE_MASK_OMEGA_RADPS) repSpanGyro.push(g);
+    }
+  }
+  const repPca = pcaOfVectors(repSpanGyro);
+  // Sign-align the rep-span axis with the analysis axis (concentric +).
+  const pivotAxis =
+    repPca && analysis.reps.length > 0
+      ? dot(repPca.axis, analysis.axis) >= 0
+        ? repPca.axis
+        : scale(repPca.axis, -1)
+      : null;
+
   const base: CalibrationEligibility = {
     eligible: false,
     reason: null,
-    pivotAxis: analysis.reps.length > 0 ? analysis.axis : null,
-    // share s = λ1/Σλ ⇒ λ1/(λ2+λ3) = s/(1−s), matching the stored
-    // axis_quality semantics from the scatter-based derivation.
-    axisQuality:
-      analysis.reps.length > 0
-        ? analysis.pc1VarianceShare / Math.max(1 - analysis.pc1VarianceShare, 1e-6)
-        : null,
+    pivotAxis,
+    axisQuality: repPca ? repPca.share / Math.max(1 - repPca.share, 1e-6) : null,
     romDegrees: null,
     gravityRefBottom: null,
     gravityRefTop: null,
@@ -106,13 +126,18 @@ export function deriveCalibrationFromAnalysis(
     };
   }
 
-  if (analysis.lowConfidence) {
+  // The SAVE gate uses the calibration contract's axis-quality threshold
+  // (λ1/(λ2+λ3) ≥ AXIS_QUALITY_MIN ⇔ PC1 share ≳ 95%), NOT the looser 0.8
+  // display-confidence threshold — a share of 0.85 is fine to look at but
+  // materially multi-axis for a machine's stored pivot axis.
+  if (base.axisQuality !== null && base.axisQuality < AXIS_QUALITY_MIN) {
     return {
       ...base,
       reason:
-        `Motion is not single-DOF enough for a machine calibration (PC1 variance share ` +
-        `${(analysis.pc1VarianceShare * 100).toFixed(0)}%, need ≥ ${LOW_CONFIDENCE_PC1_SHARE * 100}%). ` +
-        'The mount may be loose or on a member that moves in more than one plane.',
+        `Motion isn't single-axis enough for a machine calibration (axis quality ` +
+        `${base.axisQuality.toFixed(1)}, need ≥ ${AXIS_QUALITY_MIN}; PC1 variance share ` +
+        `${(analysis.pc1VarianceShare * 100).toFixed(0)}%). The mount may be loose or on ` +
+        'a member that moves in more than one plane.',
     };
   }
 
@@ -128,19 +153,26 @@ export function deriveCalibrationFromAnalysis(
   }
 
   // Endpoint gravity references: concentric start = bottom, end = top,
-  // averaged across reps.
+  // averaged across reps — each endpoint contributes only when a strictly
+  // validated rest window exists around it.
   const bottoms: Vec3[] = [];
   const tops: Vec3[] = [];
   for (const rep of analysis.reps) {
-    const b = gravityDirAt(samples, rep.concentric.startIdx);
-    const t = gravityDirAt(samples, rep.concentric.endIdx);
+    const b = validatedGravityAt(samples, rep.concentric.startIdx);
+    const t = validatedGravityAt(samples, rep.concentric.endIdx);
     if (b) bottoms.push(b);
     if (t) tops.push(t);
   }
   const gravityRefBottom = meanUnit(bottoms);
   const gravityRefTop = meanUnit(tops);
   if (!gravityRefBottom || !gravityRefTop) {
-    return { ...base, romDegrees, reason: 'Could not read gravity at the rep endpoints.' };
+    return {
+      ...base,
+      romDegrees,
+      reason:
+        'The rep endpoints were never held still enough to read gravity — pause about half a ' +
+        'second at the top and the bottom of each sweep rep, then redo the sweep.',
+    };
   }
 
   return {
