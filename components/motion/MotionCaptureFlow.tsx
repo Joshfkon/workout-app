@@ -17,6 +17,7 @@ import { Button, Card, CardContent, CardHeader, CardTitle, Select } from '@/comp
 import { createUntypedClient } from '@/lib/supabase/client';
 import { useUserStore, useWorkoutStore } from '@/stores';
 import { formatWeight } from '@/lib/utils';
+import { getSetDuration, getSetReps } from '@/services/shared/setModality';
 import {
   requestMotionPermission,
   startMotionRecorder,
@@ -106,6 +107,7 @@ export function MotionCaptureFlow({
   const activeSession = useWorkoutStore((state) => state.activeSession);
   const exerciseBlocks = useWorkoutStore((state) => state.exerciseBlocks);
   const setLogs = useWorkoutStore((state) => state.setLogs);
+  const sessionExercises = useWorkoutStore((state) => state.exercises);
 
   // In-workout mode locks the calibration choices to the launching exercise.
   const usableCalibrations = useMemo(
@@ -139,11 +141,18 @@ export function MotionCaptureFlow({
         if (aPreferred !== bPreferred) return bPreferred - aPreferred;
         return (b.set.loggedAt ?? '').localeCompare(a.set.loggedAt ?? '');
       })
-      .map(({ set: s }) => ({
-        value: s.id,
-        label: `Set ${s.setNumber} — ${formatWeight(s.weightKg, units)} × ${s.reps}`,
-      }));
-  }, [calibration, exerciseBlocks, setLogs, units, defaultAttachBlockId]);
+      .map(({ set: s }) => {
+        // Modality-aware label: duration exercises store seconds in the reps
+        // field (motion targets machines, but never render seconds as reps).
+        const exercise = sessionExercises[calibration.exerciseId];
+        const duration = getSetDuration(s, exercise);
+        const amount = duration !== null ? `${duration}s` : `× ${getSetReps(s, exercise)}`;
+        return {
+          value: s.id,
+          label: `Set ${s.setNumber} — ${formatWeight(s.weightKg, units)} ${amount}`,
+        };
+      });
+  }, [calibration, exerciseBlocks, setLogs, units, defaultAttachBlockId, sessionExercises]);
 
   // Default the attach picker to the most recent set once reviewing (the
   // user can still change it; saving stays an explicit action).

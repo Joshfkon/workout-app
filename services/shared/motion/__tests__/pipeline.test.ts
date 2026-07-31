@@ -213,6 +213,10 @@ describe('processMotionSamples', () => {
       expect(rep.rejected).toBe(true);
       expect(rep.rejectReason).toMatch(/still moving/);
     }
+    // And the ZUPT drift snap must not have consumed those unverified
+    // directions either — θ never snaps to a gravity vector the strict
+    // validator refused.
+    expect(result.zuptCount).toBe(0);
   });
 
   it('returns an empty flagged result for a uselessly short sample buffer', () => {

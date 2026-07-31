@@ -189,14 +189,22 @@ export function processMotionSamples(
   // --- Gravity angle series, referenced to the capture's own start -------
   // Referencing to the capture start (not the calibration bottom directly)
   // makes the integrity comparison immune to the user racking a few degrees
-  // away from where they calibrated.
+  // away from where they calibrated. The start reference itself must pass
+  // the STRICT stillness validation — a capture that begins mid-motion gets
+  // no gravity anchor (and therefore no ZUPT snaps) rather than a wrong one.
   const gravAngleAbs: (number | null)[] = samples.map((s) =>
     isQuasiStatic(s.accel) ? armAngleFromGravity(s.accel, pivotAxis, gravityRefBottom) : null
   );
-  const startWindow = gravAngleAbs
-    .slice(0, biasWindowEnd + 1)
-    .filter((a): a is number => a !== null);
-  const gravStart = startWindow.length >= 3 ? mean(startWindow) : null;
+  const startRef = findGravityRef(samples, 0, biasWindowEnd);
+  let gravStart: number | null = null;
+  if (startRef) {
+    const startWindow: number[] = [];
+    for (let j = startRef.startIdx; j <= startRef.endIdx; j++) {
+      const a = gravAngleAbs[j];
+      if (a !== null) startWindow.push(a);
+    }
+    gravStart = startWindow.length >= 3 ? mean(startWindow) : null;
+  }
   const gravAngle = (i: number): number | null => {
     const a = gravAngleAbs[i];
     return a === null || gravStart === null ? null : a - gravStart;
@@ -230,16 +238,22 @@ export function processMotionSamples(
 
     if (nextRun < restRunBounds.length && i === restRunBounds[nextRun].endIdx) {
       const { startIdx, endIdx } = restRunBounds[nextRun];
-      const gravSamples: number[] = [];
-      for (let j = startIdx; j <= endIdx; j++) {
-        const a = gravAngle(j);
-        if (a !== null) gravSamples.push(a);
-      }
-      const gravityThetaRad = gravSamples.length >= 3 ? mean(gravSamples) : null;
       // Strict quasi-static validation (≥200 ms contiguous stillness) — a
       // rest run that doesn't pass yields NO gravity reference rather than a
-      // silently dynamic one.
+      // silently dynamic one, and (below) NO ZUPT drift snap: snapping θ to
+      // an unverified accelerometer direction would corrupt the very angle
+      // the integrity check trusts.
       const gravityRef = findGravityRef(samples, startIdx, endIdx);
+      let gravityThetaRad: number | null = null;
+      if (gravityRef) {
+        // Projected gravity angle from the STRICT window's samples only.
+        const gravSamples: number[] = [];
+        for (let j = gravityRef.startIdx; j <= gravityRef.endIdx; j++) {
+          const a = gravAngle(j);
+          if (a !== null) gravSamples.push(a);
+        }
+        gravityThetaRad = gravSamples.length >= 3 ? mean(gravSamples) : null;
+      }
       const thetaPreResetRad = theta[i];
 
       if (zuptEnabled) {

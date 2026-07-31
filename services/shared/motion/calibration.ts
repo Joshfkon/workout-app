@@ -134,10 +134,13 @@ export function deriveSweepCalibration(
   }
   const t = samples.map((s) => s.tMs);
 
-  // --- 1. Trim to the mounted span ---------------------------------------
-  // Long quasi-static rests can only happen with the phone sitting on the
-  // mount; in-hand handling never holds that still. First → last long rest
-  // bounds the analysis; handling outside is discarded.
+  // --- 1. Candidate mounted spans ----------------------------------------
+  // Long quasi-static rests normally mean "phone sitting on the mount" —
+  // but a user can also hold the retrieved phone still while finding the
+  // STOP button, and treating THAT pause as a mount rest would pull the
+  // fast multi-axis retrieval motion into the ω²-weighted scatter. So long
+  // rests only nominate candidate spans; the mounted span is CHOSEN as the
+  // rest pair whose interior motion is the most single-axis (step 2).
   const still = samples.map((s) => norm(s.gyro) < REST_OMEGA_RADPS * 1.5 && isQuasiStatic(s.accel));
   const longRests: Array<{ startIdx: number; endIdx: number }> = [];
   let runStart = -1;
@@ -155,37 +158,79 @@ export function deriveSweepCalibration(
         'for a moment after mounting the phone and again before picking it up.'
     );
   }
-  const spanStart = longRests[0].startIdx;
-  const spanEnd = longRests[longRests.length - 1].endIdx;
 
-  // --- 2. Axis from the gyro scatter matrix ------------------------------
-  const scatter: Sym3 = [
-    [0, 0, 0],
-    [0, 0, 0],
-    [0, 0, 0],
-  ];
-  let motionCount = 0;
-  for (let i = spanStart; i <= spanEnd; i++) {
+  // --- 2. Axis from the gyro scatter matrix, over the best span ----------
+  // Prefix sums make every candidate span's scatter O(1); long-rest counts
+  // are single digits, so the pair enumeration is trivial.
+  const nSamples = samples.length;
+  const pc = new Array<number>(nSamples + 1).fill(0); // motion-sample count
+  const ps = ['xx', 'xy', 'xz', 'yy', 'yz', 'zz'].map(() =>
+    new Array<number>(nSamples + 1).fill(0)
+  );
+  for (let i = 0; i < nSamples; i++) {
     const g = samples[i].gyro;
-    if (norm(g) < motionOmega) continue;
-    motionCount++;
-    scatter[0][0] += g.x * g.x;
-    scatter[0][1] += g.x * g.y;
-    scatter[0][2] += g.x * g.z;
-    scatter[1][1] += g.y * g.y;
-    scatter[1][2] += g.y * g.z;
-    scatter[2][2] += g.z * g.z;
+    const moving = norm(g) >= motionOmega ? 1 : 0;
+    pc[i + 1] = pc[i] + moving;
+    ps[0][i + 1] = ps[0][i] + (moving ? g.x * g.x : 0);
+    ps[1][i + 1] = ps[1][i] + (moving ? g.x * g.y : 0);
+    ps[2][i + 1] = ps[2][i] + (moving ? g.x * g.z : 0);
+    ps[3][i + 1] = ps[3][i] + (moving ? g.y * g.y : 0);
+    ps[4][i + 1] = ps[4][i] + (moving ? g.y * g.z : 0);
+    ps[5][i + 1] = ps[5][i] + (moving ? g.z * g.z : 0);
   }
-  scatter[1][0] = scatter[0][1];
-  scatter[2][0] = scatter[0][2];
-  scatter[2][1] = scatter[1][2];
+  const scatterFor = (a: number, b: number): Sym3 => {
+    const v = ps.map((p) => p[b + 1] - p[a]);
+    return [
+      [v[0], v[1], v[2]],
+      [v[1], v[3], v[4]],
+      [v[2], v[4], v[5]],
+    ];
+  };
 
-  if (motionCount < 50) {
+  interface SpanCandidate {
+    spanStart: number;
+    spanEnd: number;
+    firstRest: { startIdx: number; endIdx: number };
+    motionCount: number;
+    quality: number;
+    principal: Vec3;
+  }
+  const candidates: SpanCandidate[] = [];
+  for (let a = 0; a < longRests.length - 1; a++) {
+    for (let b = a + 1; b < longRests.length; b++) {
+      const spanStart = longRests[a].startIdx;
+      const spanEnd = longRests[b].endIdx;
+      const count = pc[spanEnd + 1] - pc[spanStart];
+      if (count < 50) continue;
+      const eig = eigenSymmetric3(scatterFor(spanStart, spanEnd));
+      candidates.push({
+        spanStart,
+        spanEnd,
+        firstRest: longRests[a],
+        motionCount: count,
+        quality: eig.values[0] / Math.max(eig.values[1] + eig.values[2], 1e-12),
+        principal: eig.vectors[0],
+      });
+    }
+  }
+  if (candidates.length === 0) {
     return invalid('Not enough movement between the still periods — do 3 slow full-range reps.');
   }
 
-  const eig = eigenSymmetric3(scatter);
-  const axisQuality = eig.values[0] / Math.max(eig.values[1] + eig.values[2], 1e-12);
+  // Best planarity wins — but compared on a CAPPED quality: far above the
+  // gate, λ2+λ3 is numerical noise and the raw ratio meaninglessly favors
+  // small sub-spans. Anything ≥10× the gate counts as equally planar, and
+  // among near-ties (within 20%) the span with the most motion wins, so
+  // mid-sweep pauses don't shrink coverage.
+  const qualityCap = qualityMin * 10;
+  const capped = (c: SpanCandidate) => Math.min(c.quality, qualityCap);
+  const bestCapped = Math.max(...candidates.map(capped));
+  const chosen = candidates
+    .filter((c) => capped(c) >= 0.8 * bestCapped)
+    .reduce((a, b) => (b.motionCount > a.motionCount ? b : a));
+  const { spanStart, spanEnd, firstRest } = chosen;
+
+  const axisQuality = chosen.quality;
   if (axisQuality < qualityMin) {
     return {
       ...invalid(
@@ -196,7 +241,7 @@ export function deriveSweepCalibration(
       axisQuality,
     };
   }
-  let axis = normalize(eig.vectors[0]);
+  let axis = normalize(chosen.principal);
   if (!axis) return invalid('Degenerate axis estimate.');
 
   // --- 3+4. Integrate the projection with ZUPT; collect rest windows -----
@@ -207,9 +252,9 @@ export function deriveSweepCalibration(
     rejectedStillWindows = 0;
     const omega = samples.map((s) => dot(s.gyro, n));
     let bias =
-      longRests[0].endIdx > longRests[0].startIdx
-        ? omega.slice(longRests[0].startIdx, longRests[0].endIdx + 1).reduce((a, b) => a + b, 0) /
-          (longRests[0].endIdx - longRests[0].startIdx + 1)
+      firstRest.endIdx > firstRest.startIdx
+        ? omega.slice(firstRest.startIdx, firstRest.endIdx + 1).reduce((a, b) => a + b, 0) /
+          (firstRest.endIdx - firstRest.startIdx + 1)
         : 0;
 
     // Rest detection within the span (shorter than mount rests: any ≥250 ms

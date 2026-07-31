@@ -51,6 +51,24 @@ describe('deriveSweepCalibration', () => {
     expect(result.axisQuality!).toBeGreaterThan(AXIS_QUALITY_MIN * 2);
   });
 
+  it('is not fooled by an in-hand still hold while finding the STOP button', () => {
+    // The user retrieves the phone and holds it steady for ~1 s before
+    // tapping STOP. That hold is a "long rest" — but treating it as a mount
+    // rest would pull the fast multi-axis retrieval motion into the scatter.
+    // Span selection must pick the true mounted span instead.
+    const signal = generateSweepSignal(Array(3).fill(slowRep), {
+      ...sweepOpts,
+      inHandHoldMs: 1000,
+    });
+    const result = deriveSweepCalibration(signal.samples);
+
+    expect(result.valid).toBe(true);
+    const axisErrDeg = angleBetweenUnit(result.pivotAxis!, SKEWED_AXIS) * RAD_TO_DEG;
+    expect(axisErrDeg).toBeLessThan(2);
+    expect(Math.abs(result.romDegrees! - 72)).toBeLessThan(1);
+    expect(result.axisQuality!).toBeGreaterThan(AXIS_QUALITY_MIN);
+  });
+
   it('rejects multi-axis wobble with a low axis quality', () => {
     const signal = generateSweepSignal(Array(3).fill(slowRep), {
       ...sweepOpts,

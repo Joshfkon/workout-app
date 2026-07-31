@@ -186,7 +186,16 @@ export function generateFromProfile(
  */
 export function generateSweepSignal(
   reps: SyntheticRepSpec[],
-  opts: SyntheticOptions = {}
+  opts: SyntheticOptions & {
+    /**
+     * In-hand STILL HOLD (ms) appended after the retrieval handling — the
+     * user holding the phone steady while finding the STOP button. Gravity
+     * magnitude is exact (it can even pass the strict stillness validator)
+     * but its direction is arbitrary: treating this hold as a mount rest
+     * would pull the retrieval motion into the axis estimate.
+     */
+    inHandHoldMs?: number;
+  } = {}
 ): SyntheticSignal {
   const rateHz = opts.sampleRateHz ?? 100;
   const dtMs = 1000 / rateHz;
@@ -221,5 +230,24 @@ export function generateSweepSignal(
   const postStart = preMs + (mounted.samples[mounted.samples.length - 1]?.tMs ?? 0) + dtMs;
   const post = handling(postStart, 1200);
 
-  return { ...mounted, samples: [...pre, ...mountedShifted, ...post] };
+  // Optional in-hand still hold after retrieval: phone steady in the hand,
+  // gravity at full magnitude but pointing wherever the hand holds it.
+  const hold: ImuSample[] = [];
+  if (opts.inHandHoldMs && opts.inHandHoldMs > 0) {
+    const gInHand = rotateAbout(
+      rotateAbout(mounted.gBottom, { x: 0, y: 0, z: 1 }, 0.9),
+      { x: 0, y: 1, z: 0 },
+      0.6
+    );
+    const holdStart = postStart + 1200 + dtMs;
+    for (let tMs = 0; tMs < opts.inHandHoldMs; tMs += dtMs) {
+      hold.push({
+        tMs: holdStart + tMs,
+        gyro: { x: 0.004 * Math.sin(tMs / 90), y: -0.003, z: 0.002 },
+        accel: gInHand,
+      });
+    }
+  }
+
+  return { ...mounted, samples: [...pre, ...mountedShifted, ...post, ...hold] };
 }
