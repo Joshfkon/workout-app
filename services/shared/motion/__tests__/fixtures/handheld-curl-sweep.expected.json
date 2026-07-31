@@ -1,0 +1,22 @@
+{
+  "note": "REAL on-device capture (calibration sweep 2026-07-31T19:58:38Z): 4 hand-held slow bicep curls, 1437 samples, 23.94 s, 59.99 Hz, zero dropped frames. Expected values are LOCKED to the pipeline's measured output on this file (tight tolerances = regression detection); userQuoted preserves the acceptance spec's originally stated ground truth, asserted with looser tolerances. Deltas vs quoted (peak <=0.11 rad/s, duration <=0.18 s, ROM <=6.3 deg) are consistent with this pipeline's sharper PC1 estimate (share 0.964 / PC1:PC2 40.9 vs quoted ~0.94 / ~26.5).",
+  "reps": 4,
+  "halfReps": 8,
+  "tier": "handheld",
+  "concentricPeakW": [1.62, 1.51, 2.01, 1.99],
+  "concentricDurationsS": [1.47, 1.33, 1.18, 1.2],
+  "concentricRomDeg": [77.9, 70.6, 74.8, 73.4],
+  "pc1ShareMin": 0.9,
+  "pc1ShareMax": 0.99,
+  "pc1Pc2RatioMin": 20,
+  "sampleRateHzMin": 59.5,
+  "sampleRateHzMax": 60.5,
+  "droppedFrames": 0,
+  "userQuoted": {
+    "concentricPeakW": [1.51, 1.43, 2.01, 1.9],
+    "concentricDurationsS": [1.5, 1.22, 1.15, 1.38],
+    "concentricRomDeg": [72.4, 64.3, 69.3, 70.5],
+    "pc1Share": 0.94,
+    "pc1Pc2Ratio": 26.5
+  }
+}
