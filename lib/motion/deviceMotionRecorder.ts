@@ -10,7 +10,13 @@
 
 import type { ImuSample } from '@/types/motion';
 
-const DEG_TO_RAD = Math.PI / 180;
+/**
+ * Per the W3C DeviceMotionEvent spec, `rotationRate` is reported in
+ * DEGREES per second. The pure signal layer works exclusively in rad/s, and
+ * this named constant at the single ingest boundary is the ONLY place the
+ * conversion happens — nothing downstream may convert again.
+ */
+const ROTATION_RATE_DEG_PER_S_TO_RAD_PER_S = Math.PI / 180;
 
 export type MotionPermission = 'granted' | 'denied' | 'unsupported';
 
@@ -36,10 +42,32 @@ export async function requestMotionPermission(): Promise<MotionPermission> {
   return 'granted';
 }
 
+/** Tap-to-sensor staleness above this is worth flagging to the user. */
+export const TAP_LATENCY_WARN_MS = 150;
+
 export interface MotionRecorderHandle {
   /** Stop listening and return everything captured so far. */
   stop(): ImuSample[];
   sampleCount(): number;
+  /** performance.now() of the most recent sample (null before the first). */
+  lastSampleTMs(): number | null;
+}
+
+/**
+ * How stale the sensor stream is at a user tap: ms between the last
+ * received devicemotion sample and now. Logged so real-device staleness is
+ * observable, not guessed at.
+ */
+export function tapLatencyMs(recorder: MotionRecorderHandle): number | null {
+  const last = recorder.lastSampleTMs();
+  if (last === null) return null;
+  const latency = performance.now() - last;
+  // eslint-disable-next-line no-console -- deliberate debug telemetry: the whole point is a persistent log of real-device sensor staleness
+  console.info(`[motion] tap→sensor latency: ${latency.toFixed(0)} ms`);
+  if (latency > TAP_LATENCY_WARN_MS) {
+    console.warn(`[motion] stale sensor data at tap: ${latency.toFixed(0)} ms since last devicemotion sample`);
+  }
+  return latency;
 }
 
 /**
@@ -59,7 +87,11 @@ export function startMotionRecorder(onSample?: (s: ImuSample) => void): MotionRe
     const sample: ImuSample = {
       tMs: performance.now(),
       // rotationRate: alpha is about z, beta about x, gamma about y.
-      gyro: { x: rr.beta * DEG_TO_RAD, y: rr.gamma * DEG_TO_RAD, z: rr.alpha * DEG_TO_RAD },
+      gyro: {
+        x: rr.beta * ROTATION_RATE_DEG_PER_S_TO_RAD_PER_S,
+        y: rr.gamma * ROTATION_RATE_DEG_PER_S_TO_RAD_PER_S,
+        z: rr.alpha * ROTATION_RATE_DEG_PER_S_TO_RAD_PER_S,
+      },
       accel: { x: acc.x, y: acc.y, z: acc.z },
     };
     samples.push(sample);
@@ -77,16 +109,7 @@ export function startMotionRecorder(onSample?: (s: ImuSample) => void): MotionRe
       return samples;
     },
     sampleCount: () => samples.length,
+    lastSampleTMs: () => (samples.length > 0 ? samples[samples.length - 1].tMs : null),
   };
 }
 
-/**
- * Collect samples for a fixed window (calibration holds / transit sweeps).
- * Resolves with everything captured during the window.
- */
-export function recordForDuration(durationMs: number): Promise<ImuSample[]> {
-  return new Promise((resolve) => {
-    const recorder = startMotionRecorder();
-    window.setTimeout(() => resolve(recorder.stop()), durationMs);
-  });
-}

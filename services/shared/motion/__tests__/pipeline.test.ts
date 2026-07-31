@@ -106,7 +106,9 @@ describe('processMotionSamples', () => {
     // at least the later reps must disagree with gravity beyond the limit.
     const rejected = withoutZupt.reps.filter((r) => r.rejected);
     expect(rejected.length).toBeGreaterThan(0);
-    expect(rejected.some((r) => /gyro and gravity disagree/.test(r.rejectReason ?? ''))).toBe(true);
+    expect(
+      rejected.some((r) => /forward-prediction|under-read/.test(r.rejectReason ?? ''))
+    ).toBe(true);
   });
 
   it('rejects a rep containing an accelerometer clipping spike, keeps the rest', () => {
@@ -126,7 +128,7 @@ describe('processMotionSamples', () => {
     expect(result.reps[2].rejected).toBe(false);
   });
 
-  it('integrity check rejects reps when the gyro silently disagrees with gravity', () => {
+  it('forward-prediction rejects reps when the gyro silently over-reads', () => {
     // A 15% gyro scale error on a 40° rep = 6° endpoint disagreement — the
     // exact "silently wrong data" failure the check exists to catch.
     const signal = generateReps(Array(3).fill(cleanRep), { gyroScale: 1.15 });
@@ -135,9 +137,22 @@ describe('processMotionSamples', () => {
     expect(result.reps.length).toBeGreaterThan(0);
     for (const rep of result.reps) {
       expect(rep.rejected).toBe(true);
-      expect(rep.rejectReason).toMatch(/gyro and gravity disagree/);
+      expect(rep.rejectReason).toMatch(/forward-prediction/);
       expect(rep.gyroAngle_vs_gravityAngle_errorDeg!).toBeGreaterThan(INTEGRITY_MAX_ERROR_DEG);
     }
+  });
+
+  it('the gravity lower-bound invariant hard-rejects an under-reading gyro', () => {
+    // Under-integration (wrong axis / wrong units / dropped samples): the
+    // integrated angle lands BELOW what gravity alone proves — definitive
+    // evidence, surfaced as a hard per-rep error.
+    const signal = generateReps(Array(3).fill(cleanRep), { gyroScale: 0.7 });
+    const result = processMotionSamples(inputFrom(signal));
+
+    expect(result.reps.length).toBeGreaterThan(0);
+    const underRead = result.reps.filter((r) => /under-read.*definitively wrong/.test(r.rejectReason ?? ''));
+    expect(underRead.length).toBeGreaterThan(0);
+    for (const rep of result.reps) expect(rep.rejected).toBe(true);
   });
 
   it('returns no reps (flagged) for an all-quiet capture', () => {
@@ -147,13 +162,13 @@ describe('processMotionSamples', () => {
     expect(result.qualityFlags).toContain('no-reps-detected');
   });
 
-  it('verifies integrity via the sample-window fallback on touch-and-go reps', () => {
-    // Only ~150 ms at the bottom between reps — too short to register as a
-    // rest interval (>250 ms), so the endpoint check must fall back to
-    // individual resting quasi-static samples around the turnaround.
-    const touchAndGo: SyntheticRepSpec = { ...cleanRep, restAfterMs: 150 };
+  it('verifies integrity via the strict-window fallback on brief (220 ms) turnarounds', () => {
+    // 220 ms at the bottom between reps: too short to register as a rest
+    // interval (>250 ms) but long enough for a validated gravity-reference
+    // window (>=200 ms), so the fallback path must carry the check.
+    const brief: SyntheticRepSpec = { ...cleanRep, restAfterMs: 220 };
     const signal = generateReps(
-      [touchAndGo, touchAndGo, { ...cleanRep, restAfterMs: 2000 }],
+      [brief, brief, { ...cleanRep, restAfterMs: 2000 }],
       { gyroNoise: 0.005 }
     );
     const result = processMotionSamples(inputFrom(signal));
@@ -164,6 +179,44 @@ describe('processMotionSamples', () => {
       expect(rep.gyroAngle_vs_gravityAngle_errorDeg).not.toBeNull();
       expect(rep.gyroAngle_vs_gravityAngle_errorDeg!).toBeLessThan(INTEGRITY_MAX_ERROR_DEG);
     }
+  });
+
+  it('rejects reps whose endpoints never hold still for the 200 ms gravity window', () => {
+    // Brisk touch-and-go: ~60 ms turnarounds with fast strokes leave well
+    // under 200 ms below the 5 °/s stillness bound at each endpoint, so no
+    // gravity reference may be issued — the reps must be rejected with the
+    // stillness hint, never verified against a dynamic sample.
+    const touchAndGo: SyntheticRepSpec = {
+      romDeg: 40,
+      concentricMs: 800,
+      pauseTopMs: 60,
+      eccentricMs: 800,
+      restAfterMs: 60,
+    };
+    const signal = generateReps([touchAndGo, touchAndGo], { gyroNoise: 0.005 });
+    const result = processMotionSamples(inputFrom(signal));
+
+    const rejected = result.reps.filter((r) => r.rejected);
+    expect(rejected.length).toBeGreaterThan(0);
+    expect(rejected.some((r) => /still moving/.test(r.rejectReason ?? ''))).toBe(true);
+  });
+
+  it('never accepts a dynamic sample as a gravity reference (accel off at rests)', () => {
+    // Rest windows exist and pass loose gating, but |a| sits ~0.5 m/s² off
+    // gravity — outside the strict ±0.3 m/s² bound. Every endpoint gravity
+    // reference must be refused and the reps rejected with the hint.
+    const signal = generateReps(Array(3).fill(cleanRep), { restAccelScale: 1.05 });
+    const result = processMotionSamples(inputFrom(signal));
+
+    expect(result.reps.length).toBeGreaterThan(0);
+    for (const rep of result.reps) {
+      expect(rep.rejected).toBe(true);
+      expect(rep.rejectReason).toMatch(/still moving/);
+    }
+    // And the ZUPT drift snap must not have consumed those unverified
+    // directions either — θ never snaps to a gravity vector the strict
+    // validator refused.
+    expect(result.zuptCount).toBe(0);
   });
 
   it('returns an empty flagged result for a uselessly short sample buffer', () => {

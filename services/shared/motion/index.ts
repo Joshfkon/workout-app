@@ -10,12 +10,18 @@
 export * from './constants';
 export * from './vec3';
 export {
-  deriveCalibration,
-  CALIBRATION_ROM_AGREEMENT_DEG,
-  type CalibrationDerivation,
-  type TransitSample,
+  deriveSweepCalibration,
+  type SweepCalibrationDerivation,
+  type SweepCalibrationOptions,
 } from './calibration';
+export { eigenSymmetric3, type Eigen3Result, type Sym3 } from './eigen3';
 export { armAngleFromGravity, isQuasiStatic } from './gravity';
+export {
+  findGravityRef,
+  isGravityRefSample,
+  GRAVITY_REF_FAIL_HINT,
+  type GravityRef,
+} from './gravityRef';
 export { segmentPhases, type MovementPhase, type SegmentationOptions } from './segmentation';
 export {
   processMotionSamples,
