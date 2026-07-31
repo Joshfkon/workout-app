@@ -400,13 +400,42 @@ function segmentHalfReps(
       if (cur < exit && next > cur + VALLEY_RISE) break;
       e++;
     }
-    h.startIdx = s;
-    h.endIdx = e;
+    h.startIdx = trimShelf(w, tMs, s, e, h.dir, +1);
+    h.endIdx = trimShelf(w, tMs, e, h.startIdx, h.dir, -1);
   }
 
   // Guard against degenerate overlaps after expansion (adjacent half-reps
   // sharing a boundary sample are fine; containment is not expected).
   return merged.filter((h) => h.endIdx > h.startIdx);
+}
+
+/** |w| below this is indistinguishable from gyro bias/tremor at rest. */
+const SHELF_FLOOR_RADPS = 0.03;
+/** A sub-floor tail lingering longer than this is a rest shelf, not a ramp. */
+const SHELF_MAX_TAIL_MS = 150;
+
+/**
+ * Trim a flat near-zero shelf off a half-rep boundary. Real captures show
+ * long stretches of w ≈ +0.01 (gyro bias) at rest that never cross zero, so
+ * the zero-crossing walk would absorb them and stretch durations by half a
+ * second. The discriminator is DWELL TIME, not amplitude: a genuine stroke
+ * ramp passes through the sub-floor band in a few samples; a rest shelf
+ * lingers. Tails under the floor for longer than SHELF_MAX_TAIL_MS are cut
+ * to their inner edge; brief dips are kept (they are the ramp).
+ */
+function trimShelf(
+  w: number[],
+  tMs: number[],
+  boundary: number,
+  limit: number,
+  dir: 1 | -1,
+  inward: 1 | -1
+): number {
+  let i = boundary;
+  while (i !== limit && Math.abs(w[i]) < SHELF_FLOOR_RADPS) i += inward;
+  if (i === boundary) return boundary;
+  const dwellMs = Math.abs(tMs[i] - tMs[boundary]);
+  return dwellMs > SHELF_MAX_TAIL_MS ? i : boundary;
 }
 
 /** 3-D angle between mean gravity directions around two sample indices. */

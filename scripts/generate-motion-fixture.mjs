@@ -4,15 +4,10 @@
  * acceptance test:
  *   services/shared/motion/__tests__/fixtures/handheld-curl-sweep.csv
  *
- * STAND-IN NOTICE: the acceptance spec references a real calibration-sweep
- * CSV recorded on-device (1437 samples, 23.94 s, 59.99 Hz, 4 slow curls,
- * hand-held). That file only ever existed as a phone download and is not in
- * the repo, so this script synthesizes a physically-consistent capture
- * matching the documented ground truth (rep count, per-rep concentric
- * peaks/durations/ROMs, PC1 stats, hand-held stillness window). To run the
- * test against the REAL capture, overwrite the CSV with it and update
- * handheld-curl-sweep.expected.json to the real ground truth — the test
- * reads both files and nothing else.
+ * NOTE: the checked-in fixture is now the REAL on-device capture (added
+ * 2026-07-31) — running this script would OVERWRITE it with a synthetic
+ * stand-in. Kept only for generating synthetic variants when experimenting;
+ * do not regenerate the acceptance fixture with it.
  *
  * Deterministic (seeded LCG). Same CSV schema the app exports (lib/motion/csv.ts).
  */
@@ -193,7 +188,7 @@ for (let i = 0; i < N_SAMPLES; i++) {
 const header =
   't_ms,gyro_x_radps,gyro_y_radps,gyro_z_radps,accel_x_mps2,accel_y_mps2,accel_z_mps2';
 fs.mkdirSync(OUT_DIR, { recursive: true });
-fs.writeFileSync(path.join(OUT_DIR, 'handheld-curl-sweep.csv'), [header, ...rows].join('\n'));
+fs.writeFileSync(path.join(OUT_DIR, 'handheld-curl-sweep.synthetic.csv'), [header, ...rows].join('\n'));
 
 const expected = {
   note:
@@ -213,7 +208,7 @@ const expected = {
   droppedFrames: 0,
 };
 fs.writeFileSync(
-  path.join(OUT_DIR, 'handheld-curl-sweep.expected.json'),
+  path.join(OUT_DIR, 'handheld-curl-sweep.synthetic.expected.json'),
   JSON.stringify(expected, null, 2) + '\n'
 );
 
