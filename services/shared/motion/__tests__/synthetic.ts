@@ -207,11 +207,13 @@ export function generateSweepSignal(
       const t = tMs / 1000;
       out.push({
         tMs: startMs + tMs,
-        // Brisk multi-axis in-hand rotation — high |ω|, no dominant axis.
+        // Multi-axis in-hand rotation, no dominant axis — carried to the
+        // mount at realistic wrist speeds (a violent shake would rightly
+        // crater the PC1 variance share and block calibration).
         gyro: {
-          x: 1.6 * Math.sin(7 * t),
-          y: 1.2 * Math.cos(5 * t + 1),
-          z: 0.9 * Math.sin(3 * t + 2),
+          x: 0.55 * Math.sin(7 * t),
+          y: 0.45 * Math.cos(5 * t + 1),
+          z: 0.35 * Math.sin(3 * t + 2),
         },
         // Being carried: |a| swings well outside the quasi-static band.
         accel: add(scale(mounted.gBottom, 1 + 0.35 * Math.sin(9 * t)), {

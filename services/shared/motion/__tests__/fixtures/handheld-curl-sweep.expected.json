@@ -1,0 +1,30 @@
+{
+  "note": "SYNTHETIC stand-in for the real on-device sweep (see scripts/generate-motion-fixture.mjs). Replace the CSV with the real capture and update these numbers to re-run against real data.",
+  "reps": 4,
+  "halfReps": 8,
+  "tier": "handheld",
+  "concentricPeakW": [
+    1.51,
+    1.43,
+    2.01,
+    1.9
+  ],
+  "concentricDurationsS": [
+    1.5,
+    1.22,
+    1.15,
+    1.38
+  ],
+  "concentricRomDeg": [
+    72.4,
+    64.3,
+    69.3,
+    70.5
+  ],
+  "pc1ShareMin": 0.85,
+  "pc1ShareMax": 0.98,
+  "pc1Pc2RatioMin": 10,
+  "sampleRateHzMin": 59.5,
+  "sampleRateHzMax": 60.5,
+  "droppedFrames": 0
+}

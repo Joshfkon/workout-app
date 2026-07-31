@@ -1,118 +1,47 @@
 /**
- * Sweep-based machine calibration.
+ * Machine-calibration derivation on top of the tiered, calibration-free
+ * capture analysis (captureAnalysis.ts + stillness.ts).
  *
- * The user taps START with the phone in hand, sets it on the mount,
- * performs ~3 slow full-ROM reps (unloaded or light), retrieves the phone,
- * and taps STOP. Two taps total, both with the phone in hand — no taps at
- * ROM endpoints (the phone is unreachable and unreadable there).
+ * The old flow was pass/fail: any sweep without a near-perfect still period
+ * was rejected outright, which blocked everything downstream. Now EVERY
+ * sweep proceeds through analysis — reps, velocities, and the chart always
+ * come out — and this module only decides whether the sweep additionally
+ * qualifies to be SAVED as a machine calibration (which needs a trustworthy
+ * pivot axis and gravity references):
  *
- * Why not two static gravity holds (the previous approach): recovering a
- * rotation axis from two gravity vectors is ILL-POSED — the set of
- * rotations mapping g_start to g_end is a one-parameter family, so the
- * axis component parallel to gravity is unrecoverable. Any axis picked from
- * that family under-projects the gyro by cos(misalignment); a field test
- * measured 47.4° integrated vs 72.0° actual. The pivot axis must come from
- * the gyro itself:
+ *   - tier 'mounted' or 'handheld' → gravity refs come from rep endpoints;
+ *     eligible when the motion is single-DOF enough and ≥2 reps exist.
+ *   - tier 'none' → absolute ROM is suppressed and no calibration can be
+ *     saved; when still-ish windows existed but were too noisy the message
+ *     says the phone appears HAND-HELD — telling the user to "hold still
+ *     longer" does not fix that case.
  *
- *   1. TRIM to the mounted span: everything between the first and last long
- *      quasi-static rest (phone sitting on the mount). In-hand handling
- *      before/after — fast, multi-axis, exactly what would poison a
- *      rate-weighted estimate — is discarded.
- *   2. AXIS: scatter matrix M = Σ ω ωᵀ over moving samples in the span; the
- *      principal eigenvector (Jacobi, eigen3.ts) is the pivot axis. The
- *      eigenvalue ratio λ1/(λ2+λ3) is the axis-quality metric — a genuine
- *      single-DOF machine is overwhelmingly planar; wobble drops the ratio
- *      and rejects the sweep.
- *   3. SIGN: flipped so the first stroke (concentric — a press starts at
- *      the bottom) integrates positive.
- *   4. ANGLE: project ω onto the axis, integrate over measured dt, ZUPT at
- *      each quasi-static rest (bias re-zero + drift snap to the
- *      gravity-projected angle). Stroke ROMs are endpoint-to-endpoint.
- *   5. GRAVITY AS CHECK, not estimator: per stroke, (a) the 3-D angle
- *      between endpoint gravity unit vectors is a strict lower bound on the
- *      true rotation — an integrated angle below it is definitive proof the
- *      gyro path is wrong (hard error); (b) forward-prediction — rotating
- *      the start gravity about the axis by the integrated angle must land
- *      on the end gravity within tolerance.
+ * Gravity is never averaged over the whole capture: during cyclic motion
+ * that lands tens of degrees off with a shrunken magnitude. Endpoint
+ * windows or nothing.
  */
 
 import type { ImuSample, Vec3 } from '@/types/motion';
-import {
-  angleBetweenUnit,
-  dot,
-  meanUnit,
-  norm,
-  normalize,
-  rotateAbout,
-  scale,
-  signedAngleAbout,
-} from './vec3';
-import { eigenSymmetric3, type Sym3 } from './eigen3';
-import { findGravityRef, GRAVITY_REF_FAIL_HINT } from './gravityRef';
-import { isQuasiStatic } from './gravity';
-import {
-  AXIS_QUALITY_MIN,
-  GRAVITY_LOWER_BOUND_TOL_DEG,
-  INTEGRITY_MAX_ERROR_DEG,
-  MIN_CALIBRATION_ROM_DEG,
-  MIN_PHASE_DEG,
-  MIN_SWEEP_STROKES,
-  RAD_TO_DEG,
-  REST_MIN_MS,
-  REST_OMEGA_RADPS,
-  SCATTER_MOTION_OMEGA_RADPS,
-  SWEEP_MOUNT_REST_MS,
-  SWEEP_STROKE_SPREAD_MAX_DEG,
-} from './constants';
+import { meanUnit, normalize } from './vec3';
+import type { CaptureAnalysis } from './captureAnalysis';
+import { LOW_CONFIDENCE_PC1_SHARE } from './captureAnalysis';
+import { MIN_CALIBRATION_ROM_DEG } from './constants';
 
-export interface SweepCalibrationOptions {
-  axisQualityMin?: number;
-  scatterMotionOmegaRadps?: number;
-  mountRestMs?: number;
-}
+/** ± window for endpoint gravity reference estimation, ms. */
+const ENDPOINT_WINDOW_MS = 120;
 
-export interface SweepCalibrationDerivation {
-  valid: boolean;
+export interface CalibrationEligibility {
+  eligible: boolean;
+  /** User-facing explanation when not eligible. */
   reason: string | null;
-  /** Unit pivot axis, phone frame; concentric (first-stroke) direction positive. */
+  /** Unit pivot axis (concentric positive); present whenever motion existed. */
   pivotAxis: Vec3 | null;
-  /** λ1/(λ2+λ3) of the motion scatter — planarity of the sweep. */
+  /** λ1/(λ2+λ3) equivalent, derived from the PC1 variance share. */
   axisQuality: number | null;
-  /** Median endpoint-to-endpoint stroke ROM, degrees. */
+  /** Median concentric ROM, degrees; null when tier is 'none' (suppressed). */
   romDegrees: number | null;
-  strokeCount: number;
-  strokeRomsDeg: number[];
-  /** Mean endpoint gravity UNIT vectors (bottom / top of the ROM). */
   gravityRefBottom: Vec3 | null;
   gravityRefTop: Vec3 | null;
-  /** Worst per-stroke forward-prediction residual, degrees. */
-  maxGravityResidualDeg: number | null;
-}
-
-interface RestWindow {
-  startIdx: number;
-  endIdx: number;
-  /** Mean unit gravity over the window (windows are quasi-static by construction). */
-  gravityUnit: Vec3;
-  /** Integrated angle entering the window (pre-ZUPT-snap), rad. */
-  thetaPre: number;
-  /** Integrated angle leaving the window (post-snap), rad. */
-  thetaPost: number;
-}
-
-function invalid(reason: string): SweepCalibrationDerivation {
-  return {
-    valid: false,
-    reason,
-    pivotAxis: null,
-    axisQuality: null,
-    romDegrees: null,
-    strokeCount: 0,
-    strokeRomsDeg: [],
-    gravityRefBottom: null,
-    gravityRefTop: null,
-    maxGravityResidualDeg: null,
-  };
 }
 
 function median(xs: number[]): number {
@@ -121,312 +50,104 @@ function median(xs: number[]): number {
   return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
 }
 
-export function deriveSweepCalibration(
-  samples: ImuSample[],
-  opts: SweepCalibrationOptions = {}
-): SweepCalibrationDerivation {
-  const qualityMin = opts.axisQualityMin ?? AXIS_QUALITY_MIN;
-  const motionOmega = opts.scatterMotionOmegaRadps ?? SCATTER_MOTION_OMEGA_RADPS;
-  const mountRestMs = opts.mountRestMs ?? SWEEP_MOUNT_REST_MS;
+/** Mean gravity direction over ±window around a sample index. */
+function gravityDirAt(samples: ImuSample[], centerIdx: number): Vec3 | null {
+  const t = samples[centerIdx]?.tMs;
+  if (t === undefined) return null;
+  const units: Vec3[] = [];
+  for (let i = centerIdx; i >= 0 && t - samples[i].tMs <= ENDPOINT_WINDOW_MS; i--) {
+    const u = normalize(samples[i].accel);
+    if (u) units.push(u);
+  }
+  for (let i = centerIdx + 1; i < samples.length && samples[i].tMs - t <= ENDPOINT_WINDOW_MS; i++) {
+    const u = normalize(samples[i].accel);
+    if (u) units.push(u);
+  }
+  return meanUnit(units);
+}
 
-  if (samples.length < 100) {
-    return invalid('Too few sensor readings — is motion access working?');
-  }
-  const t = samples.map((s) => s.tMs);
-
-  // --- 1. Candidate mounted spans ----------------------------------------
-  // Long quasi-static rests normally mean "phone sitting on the mount" —
-  // but a user can also hold the retrieved phone still while finding the
-  // STOP button, and treating THAT pause as a mount rest would pull the
-  // fast multi-axis retrieval motion into the ω²-weighted scatter. So long
-  // rests only nominate candidate spans; the mounted span is CHOSEN as the
-  // rest pair whose interior motion is the most single-axis (step 2).
-  const still = samples.map((s) => norm(s.gyro) < REST_OMEGA_RADPS * 1.5 && isQuasiStatic(s.accel));
-  const longRests: Array<{ startIdx: number; endIdx: number }> = [];
-  let runStart = -1;
-  for (let i = 0; i <= samples.length; i++) {
-    const r = i < samples.length && still[i];
-    if (r && runStart === -1) runStart = i;
-    if (!r && runStart !== -1) {
-      if (t[i - 1] - t[runStart] >= mountRestMs) longRests.push({ startIdx: runStart, endIdx: i - 1 });
-      runStart = -1;
-    }
-  }
-  if (longRests.length < 2) {
-    return invalid(
-      'Could not find still periods on the mount. Let the arm sit completely still ' +
-        'for a moment after mounting the phone and again before picking it up.'
-    );
-  }
-
-  // --- 2. Axis from the gyro scatter matrix, over the best span ----------
-  // Prefix sums make every candidate span's scatter O(1); long-rest counts
-  // are single digits, so the pair enumeration is trivial.
-  const nSamples = samples.length;
-  const pc = new Array<number>(nSamples + 1).fill(0); // motion-sample count
-  const ps = ['xx', 'xy', 'xz', 'yy', 'yz', 'zz'].map(() =>
-    new Array<number>(nSamples + 1).fill(0)
-  );
-  for (let i = 0; i < nSamples; i++) {
-    const g = samples[i].gyro;
-    const moving = norm(g) >= motionOmega ? 1 : 0;
-    pc[i + 1] = pc[i] + moving;
-    ps[0][i + 1] = ps[0][i] + (moving ? g.x * g.x : 0);
-    ps[1][i + 1] = ps[1][i] + (moving ? g.x * g.y : 0);
-    ps[2][i + 1] = ps[2][i] + (moving ? g.x * g.z : 0);
-    ps[3][i + 1] = ps[3][i] + (moving ? g.y * g.y : 0);
-    ps[4][i + 1] = ps[4][i] + (moving ? g.y * g.z : 0);
-    ps[5][i + 1] = ps[5][i] + (moving ? g.z * g.z : 0);
-  }
-  const scatterFor = (a: number, b: number): Sym3 => {
-    const v = ps.map((p) => p[b + 1] - p[a]);
-    return [
-      [v[0], v[1], v[2]],
-      [v[1], v[3], v[4]],
-      [v[2], v[4], v[5]],
-    ];
+export function deriveCalibrationFromAnalysis(
+  analysis: CaptureAnalysis,
+  samples: ImuSample[]
+): CalibrationEligibility {
+  const base: CalibrationEligibility = {
+    eligible: false,
+    reason: null,
+    pivotAxis: analysis.reps.length > 0 ? analysis.axis : null,
+    // share s = λ1/Σλ ⇒ λ1/(λ2+λ3) = s/(1−s), matching the stored
+    // axis_quality semantics from the scatter-based derivation.
+    axisQuality:
+      analysis.reps.length > 0
+        ? analysis.pc1VarianceShare / Math.max(1 - analysis.pc1VarianceShare, 1e-6)
+        : null,
+    romDegrees: null,
+    gravityRefBottom: null,
+    gravityRefTop: null,
   };
 
-  interface SpanCandidate {
-    spanStart: number;
-    spanEnd: number;
-    firstRest: { startIdx: number; endIdx: number };
-    motionCount: number;
-    quality: number;
-    principal: Vec3;
-  }
-  const candidates: SpanCandidate[] = [];
-  for (let a = 0; a < longRests.length - 1; a++) {
-    for (let b = a + 1; b < longRests.length; b++) {
-      const spanStart = longRests[a].startIdx;
-      const spanEnd = longRests[b].endIdx;
-      const count = pc[spanEnd + 1] - pc[spanStart];
-      if (count < 50) continue;
-      const eig = eigenSymmetric3(scatterFor(spanStart, spanEnd));
-      candidates.push({
-        spanStart,
-        spanEnd,
-        firstRest: longRests[a],
-        motionCount: count,
-        quality: eig.values[0] / Math.max(eig.values[1] + eig.values[2], 1e-12),
-        principal: eig.vectors[0],
-      });
-    }
-  }
-  if (candidates.length === 0) {
-    return invalid('Not enough movement between the still periods — do 3 slow full-range reps.');
-  }
-
-  // Best planarity wins — but compared on a CAPPED quality: far above the
-  // gate, λ2+λ3 is numerical noise and the raw ratio meaninglessly favors
-  // small sub-spans. Anything ≥10× the gate counts as equally planar, and
-  // among near-ties (within 20%) the span with the most motion wins, so
-  // mid-sweep pauses don't shrink coverage.
-  const qualityCap = qualityMin * 10;
-  const capped = (c: SpanCandidate) => Math.min(c.quality, qualityCap);
-  const bestCapped = Math.max(...candidates.map(capped));
-  const chosen = candidates
-    .filter((c) => capped(c) >= 0.8 * bestCapped)
-    .reduce((a, b) => (b.motionCount > a.motionCount ? b : a));
-  const { spanStart, spanEnd, firstRest } = chosen;
-
-  const axisQuality = chosen.quality;
-  if (axisQuality < qualityMin) {
+  if (analysis.reps.length < 2) {
     return {
-      ...invalid(
-        `Motion wasn't planar enough (axis quality ${axisQuality.toFixed(1)}, ` +
-          `need ≥ ${qualityMin}). The mount may be loose or on a member that ` +
-          'moves in more than one plane — secure it to the rotating arm and redo the sweep.'
-      ),
-      axisQuality,
+      ...base,
+      reason:
+        'Fewer than 2 full reps detected — sweep the machine through at least 2 slow full-range reps.',
     };
   }
-  let axis = normalize(chosen.principal);
-  if (!axis) return invalid('Degenerate axis estimate.');
 
-  // --- 3+4. Integrate the projection with ZUPT; collect rest windows -----
-  // Runs twice at most: if the first stroke integrates negative the axis is
-  // flipped (concentric must be positive) and the pass repeats.
-  let rejectedStillWindows = 0;
-  const analyze = (n: Vec3) => {
-    rejectedStillWindows = 0;
-    const omega = samples.map((s) => dot(s.gyro, n));
-    let bias =
-      firstRest.endIdx > firstRest.startIdx
-        ? omega.slice(firstRest.startIdx, firstRest.endIdx + 1).reduce((a, b) => a + b, 0) /
-          (firstRest.endIdx - firstRest.startIdx + 1)
-        : 0;
-
-    // Rest detection within the span (shorter than mount rests: any ≥250 ms
-    // quasi-static endpoint counts, e.g. brief pauses at the top).
-    const resting = (i: number) =>
-      Math.abs(omega[i] - bias) < REST_OMEGA_RADPS && isQuasiStatic(samples[i].accel);
-
-    const theta = new Array<number>(samples.length).fill(0);
-    const windows: RestWindow[] = [];
-    // Gravity reference for the projected drift snap: the first mount rest.
-    let gravityRef: Vec3 | null = null;
-    let rs = -1;
-
-    // Close a rest run ending at sample `re`, applying the ZUPT (bias
-    // re-zero + drift snap) to theta[re] BEFORE the next sample integrates
-    // from it — otherwise the snap would never propagate.
-    const closeRun = (re: number) => {
-      const runStartIdx = rs;
-      rs = -1;
-      if (runStartIdx === -1 || t[re] - t[runStartIdx] < REST_MIN_MS) return;
-      // STRICT gravity-reference validation: ≥200 ms contiguous stillness
-      // (|a| within 0.3 m/s² of g, |ω| < 5 °/s). A rest that doesn't pass is
-      // counted and skipped — never silently accepted as a gravity vector.
-      const ref = findGravityRef(samples, runStartIdx, re);
-      if (!ref) {
-        rejectedStillWindows++;
-        return;
-      }
-      const gravityUnit = ref.unit;
-      const thetaPre = theta[re];
-      bias =
-        omega.slice(runStartIdx, re + 1).reduce((a, b) => a + b, 0) / (re - runStartIdx + 1);
-      let thetaPost = thetaPre;
-      if (!gravityRef) {
-        gravityRef = gravityUnit;
-        thetaPost = 0;
-      } else {
-        const projected = signedAngleAbout(n, gravityUnit, gravityRef);
-        if (projected !== null) thetaPost = projected;
-      }
-      theta[re] = thetaPost;
-      windows.push({ startIdx: runStartIdx, endIdx: re, gravityUnit, thetaPre, thetaPost });
-    };
-
-    if (resting(spanStart)) rs = spanStart;
-    for (let i = spanStart + 1; i <= spanEnd; i++) {
-      if (rs !== -1 && !resting(i)) closeRun(i - 1);
-      const dt = (t[i] - t[i - 1]) / 1000;
-      theta[i] = theta[i - 1] + (omega[i] - bias) * dt;
-      if (rs === -1 && resting(i)) rs = i;
-    }
-    closeRun(spanEnd);
-    return windows;
-  };
-
-  let windows = analyze(axis);
-  if (windows.length >= 2 && windows[1].thetaPre - windows[0].thetaPost < 0) {
-    axis = scale(axis, -1);
-    windows = analyze(axis);
-  }
-
-  // --- Strokes: endpoint-to-endpoint deltas ------------------------------
-  interface Stroke {
-    from: RestWindow;
-    to: RestWindow;
-    /** Pure gyro integral between the endpoints, rad (signed). */
-    dThetaGyro: number;
-  }
-  const strokes: Stroke[] = [];
-  for (let k = 1; k < windows.length; k++) {
-    const from = windows[k - 1];
-    const to = windows[k];
-    const dThetaGyro = to.thetaPre - from.thetaPost;
-    if (Math.abs(dThetaGyro) * RAD_TO_DEG < MIN_PHASE_DEG) continue; // settling jitter
-    strokes.push({ from, to, dThetaGyro });
-  }
-  if (strokes.length < MIN_SWEEP_STROKES) {
+  if (analysis.tier === 'none') {
     return {
-      ...invalid(
-        `Only ${strokes.length} full stroke${strokes.length === 1 ? '' : 's'} detected — ` +
-          'do at least 2 slow full-range reps with a brief pause at each end.' +
-          (rejectedStillWindows > 0
-            ? ` (${rejectedStillWindows} endpoint${rejectedStillWindows === 1 ? '' : 's'} discarded: ` +
-              `${GRAVITY_REF_FAIL_HINT}.)`
-            : '')
-      ),
-      pivotAxis: axis,
-      axisQuality,
+      ...base,
+      reason: analysis.stillness.nearMissHandheld
+        ? 'The phone appears to be hand-held (still-ish periods exist, but the direction is not ' +
+          'steady enough for a machine reference). Reps and velocity were measured; to save a ' +
+          'machine calibration, mount the phone on the machine and let it rest there briefly.'
+        : 'No still period found anywhere in the recording, so there is no gravity reference. ' +
+          'Reps and velocity were measured; to save a machine calibration, let the mounted ' +
+          'phone rest still at some point.',
     };
   }
 
-  // --- 5. Gravity checks --------------------------------------------------
-  let maxResidualDeg = 0;
-  for (const s of strokes) {
-    const gyroDeg = Math.abs(s.dThetaGyro) * RAD_TO_DEG;
-    const gravityDeg = angleBetweenUnit(s.from.gravityUnit, s.to.gravityUnit) * RAD_TO_DEG;
-    // Strict lower bound: gravity can only under-report rotation (its
-    // component along the axis is invisible), never over-report it.
-    if (gyroDeg < gravityDeg - GRAVITY_LOWER_BOUND_TOL_DEG) {
-      return {
-        ...invalid(
-          `Integrated gyro angle (${gyroDeg.toFixed(1)}°) is BELOW the gravity lower ` +
-            `bound (${gravityDeg.toFixed(1)}°) — the gyro path is definitively wrong. ` +
-            'Redo the sweep; if this repeats, the mount is moving relative to the arm.'
-        ),
-        pivotAxis: axis,
-        axisQuality,
-      };
-    }
-    // Forward-prediction: rotating the start gravity about the axis by the
-    // integrated angle must land on the measured end gravity. (World-fixed
-    // vectors counter-rotate in the phone frame, hence −dθ.)
-    const predicted = rotateAbout(s.from.gravityUnit, axis, -s.dThetaGyro);
-    const residualDeg = angleBetweenUnit(predicted, s.to.gravityUnit) * RAD_TO_DEG;
-    maxResidualDeg = Math.max(maxResidualDeg, residualDeg);
-    if (residualDeg > INTEGRITY_MAX_ERROR_DEG) {
-      return {
-        ...invalid(
-          `Gravity forward-prediction misses by ${residualDeg.toFixed(1)}° on a stroke ` +
-            `(limit ${INTEGRITY_MAX_ERROR_DEG}°) — axis or integration is off. Redo the sweep.`
-        ),
-        pivotAxis: axis,
-        axisQuality,
-      };
-    }
+  if (analysis.lowConfidence) {
+    return {
+      ...base,
+      reason:
+        `Motion is not single-DOF enough for a machine calibration (PC1 variance share ` +
+        `${(analysis.pc1VarianceShare * 100).toFixed(0)}%, need ≥ ${LOW_CONFIDENCE_PC1_SHARE * 100}%). ` +
+        'The mount may be loose or on a member that moves in more than one plane.',
+    };
   }
 
-  // --- ROM + endpoint gravity references ----------------------------------
-  const strokeRomsDeg = strokes.map((s) => Math.abs(s.dThetaGyro) * RAD_TO_DEG);
-  const romDegrees = median(strokeRomsDeg);
+  const romDegrees = median(analysis.reps.map((r) => r.romConcentricDeg));
   if (romDegrees < MIN_CALIBRATION_ROM_DEG) {
     return {
-      ...invalid(
+      ...base,
+      romDegrees,
+      reason:
         `Median stroke is only ${romDegrees.toFixed(1)}° — too small to calibrate ` +
-          `(minimum ${MIN_CALIBRATION_ROM_DEG}°). Sweep the full range of motion.`
-      ),
-      pivotAxis: axis,
-      axisQuality,
-    };
-  }
-  const spread = Math.max(...strokeRomsDeg) - Math.min(...strokeRomsDeg);
-  if (spread > SWEEP_STROKE_SPREAD_MAX_DEG) {
-    return {
-      ...invalid(
-        `Stroke lengths are inconsistent (${strokeRomsDeg
-          .map((r) => r.toFixed(0))
-          .join('°, ')}°) — use the same full range on every rep and redo the sweep.`
-      ),
-      pivotAxis: axis,
-      axisQuality,
+        `(minimum ${MIN_CALIBRATION_ROM_DEG}°). Sweep the full range of motion.`,
     };
   }
 
-  // Classify endpoints by angle: below/above the midpoint of the range.
-  const thetas = windows.map((w) => w.thetaPost);
-  const mid = (Math.min(...thetas) + Math.max(...thetas)) / 2;
-  const gravityRefBottom = meanUnit(windows.filter((w) => w.thetaPost <= mid).map((w) => w.gravityUnit));
-  const gravityRefTop = meanUnit(windows.filter((w) => w.thetaPost > mid).map((w) => w.gravityUnit));
+  // Endpoint gravity references: concentric start = bottom, end = top,
+  // averaged across reps.
+  const bottoms: Vec3[] = [];
+  const tops: Vec3[] = [];
+  for (const rep of analysis.reps) {
+    const b = gravityDirAt(samples, rep.concentric.startIdx);
+    const t = gravityDirAt(samples, rep.concentric.endIdx);
+    if (b) bottoms.push(b);
+    if (t) tops.push(t);
+  }
+  const gravityRefBottom = meanUnit(bottoms);
+  const gravityRefTop = meanUnit(tops);
   if (!gravityRefBottom || !gravityRefTop) {
-    return { ...invalid('Could not identify both ROM endpoints.'), pivotAxis: axis, axisQuality };
+    return { ...base, romDegrees, reason: 'Could not read gravity at the rep endpoints.' };
   }
 
   return {
-    valid: true,
-    reason: null,
-    pivotAxis: axis,
-    axisQuality,
+    ...base,
+    eligible: true,
     romDegrees,
-    strokeCount: strokes.length,
-    strokeRomsDeg,
     gravityRefBottom,
     gravityRefTop,
-    maxGravityResidualDeg: maxResidualDeg,
   };
 }

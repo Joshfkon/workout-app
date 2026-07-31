@@ -128,7 +128,8 @@ export default function MotionPage() {
           </span>
         </h1>
         <p className="text-sm text-surface-400 mt-1">
-          Single-DOF machine telemetry — display-only, never feeds your progression.
+          Single-DOF movement telemetry — display-only, never feeds your progression. Quick
+          captures need no calibration.
         </p>
       </div>
 

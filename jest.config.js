@@ -147,6 +147,24 @@ const customJestConfig = {
       branches: 70,
       statements: 85,
     },
+    'services/shared/motion/captureAnalysis.ts': {
+      lines: 85,
+      functions: 80,
+      branches: 70,
+      statements: 85,
+    },
+    'services/shared/motion/butterworth.ts': {
+      lines: 85,
+      functions: 80,
+      branches: 70,
+      statements: 85,
+    },
+    'services/shared/motion/stillness.ts': {
+      lines: 80,
+      functions: 80,
+      branches: 65,
+      statements: 80,
+    },
     'services/shared/motion/calibration.ts': {
       lines: 85,
       functions: 80,

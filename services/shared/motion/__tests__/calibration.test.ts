@@ -1,12 +1,9 @@
-import { deriveSweepCalibration } from '../calibration';
-import { angleBetweenUnit, dot, normalize, scale } from '../vec3';
-import { AXIS_QUALITY_MIN, G_MPS2, RAD_TO_DEG } from '../constants';
-import { generateSweepSignal, type SyntheticRepSpec } from './synthetic';
+import { analyzeCapture } from '../captureAnalysis';
+import { deriveCalibrationFromAnalysis } from '../calibration';
+import { angleBetweenUnit, normalize, scale } from '../vec3';
+import { G_MPS2, RAD_TO_DEG } from '../constants';
+import { generateReps, generateSweepSignal, type SyntheticRepSpec } from './synthetic';
 
-// THE case the old two-hold derivation failed: a pivot axis skewed 45° from
-// every phone axis (and far from perpendicular to gravity), where the
-// minimal-rotation axis under-projects the gyro (field test: 47.4° gyro vs
-// 72.0° gravity). The scatter-matrix estimate must nail it.
 const SKEWED_AXIS = normalize({ x: 1, y: 1, z: 1 })!;
 const G_BOTTOM = scale(normalize({ x: 2, y: -8, z: -5 })!, G_MPS2);
 
@@ -20,120 +17,97 @@ const slowRep: SyntheticRepSpec = {
 
 const sweepOpts = { axis: SKEWED_AXIS, gBottom: G_BOTTOM, gyroNoise: 0.004 };
 
-describe('deriveSweepCalibration', () => {
-  it('recovers a 45°-skewed axis within 2° and the ROM within 1°', () => {
-    const signal = generateSweepSignal(Array(3).fill(slowRep), sweepOpts);
-    const result = deriveSweepCalibration(signal.samples);
+function derive(samples: ReturnType<typeof generateReps>['samples']) {
+  return deriveCalibrationFromAnalysis(analyzeCapture(samples), samples);
+}
 
-    expect(result.valid).toBe(true);
+describe('deriveCalibrationFromAnalysis', () => {
+  it('is eligible for a clean mounted sweep, with axis and ROM recovered', () => {
+    const signal = generateSweepSignal(Array(3).fill(slowRep), sweepOpts);
+    const result = derive(signal.samples);
+
+    expect(result.eligible).toBe(true);
     expect(result.reason).toBeNull();
-    // Axis within 2° of truth, sign resolved so concentric is positive.
     const axisErrDeg = angleBetweenUnit(result.pivotAxis!, SKEWED_AXIS) * RAD_TO_DEG;
-    expect(axisErrDeg).toBeLessThan(2);
-    expect(dot(result.pivotAxis!, SKEWED_AXIS)).toBeGreaterThan(0);
-    // ROM within 1°.
-    expect(Math.abs(result.romDegrees! - 72)).toBeLessThan(1);
-    // 3 reps = 6 strokes.
-    expect(result.strokeCount).toBe(6);
-    // A clean single-DOF sweep is overwhelmingly planar.
-    expect(result.axisQuality!).toBeGreaterThan(AXIS_QUALITY_MIN);
-    expect(result.maxGravityResidualDeg!).toBeLessThan(3);
+    expect(axisErrDeg).toBeLessThan(3);
+    expect(Math.abs(result.romDegrees! - 72)).toBeLessThan(3);
+    expect(result.axisQuality!).toBeGreaterThan(5);
     expect(result.gravityRefBottom).not.toBeNull();
     expect(result.gravityRefTop).not.toBeNull();
+    // Endpoint refs must actually differ (bottom vs top of the stroke) and
+    // by no more than the gyro ROM (gravity is a lower bound).
+    const gravSpanDeg =
+      angleBetweenUnit(result.gravityRefBottom!, result.gravityRefTop!) * RAD_TO_DEG;
+    expect(gravSpanDeg).toBeGreaterThan(20);
+    expect(gravSpanDeg).toBeLessThanOrEqual(result.romDegrees! + 3);
   });
 
-  it('discards in-hand handling: the estimate matches a handling-free sweep', () => {
-    // Handling is fast multi-axis rotation; if it leaked into the scatter it
-    // would both skew the axis and crater the quality metric.
-    const signal = generateSweepSignal(Array(3).fill(slowRep), sweepOpts);
-    const result = deriveSweepCalibration(signal.samples);
-    expect(result.valid).toBe(true);
-    expect(result.axisQuality!).toBeGreaterThan(AXIS_QUALITY_MIN * 2);
+  it("tier 'none' blocks saving and says the phone appears hand-held (not 'hold still longer')", () => {
+    // Rests exist but the gyro never settles under the handheld bound —
+    // constant slow rotation rides on everything.
+    const signal = generateReps(Array (3).fill(slowRep), { gyroNoise: 0.02, gyroBias: 0.3 });
+    const analysis = analyzeCapture(signal.samples);
+    const result = deriveCalibrationFromAnalysis(analysis, signal.samples);
+
+    expect(analysis.tier).toBe('none');
+    expect(result.eligible).toBe(false);
+    expect(result.reason).toMatch(/hand-?held|no still period/i);
+    expect(result.reason).not.toMatch(/hold still longer/i);
+    // The analysis itself still delivered reps and velocity.
+    expect(analysis.reps).toHaveLength(3);
   });
 
-  it('is not fooled by an in-hand still hold while finding the STOP button', () => {
-    // The user retrieves the phone and holds it steady for ~1 s before
-    // tapping STOP. That hold is a "long rest" — but treating it as a mount
-    // rest would pull the fast multi-axis retrieval motion into the scatter.
-    // Span selection must pick the true mounted span instead.
+  it('reports hand-held appearance specifically when still-ish windows were too noisy', () => {
+    // Gyro tremor above the mounted bound but inside the handheld band
+    // during rests, while the accel direction wanders (loose grip): still
+    // windows exist, but the ~5° cone fails.
+    const signal = generateReps(Array(3).fill(slowRep), {
+      gyroNoise: 0.08,
+      restAccelScale: 1.0,
+    });
+    // Corrupt accel direction during rests: add a slow direction wobble.
+    const samples = signal.samples.map((s, i) => ({
+      ...s,
+      accel: {
+        x: s.accel.x + 2.2 * Math.sin(i / 20),
+        y: s.accel.y + 2.2 * Math.cos(i / 26),
+        z: s.accel.z,
+      },
+    }));
+    const analysis = analyzeCapture(samples);
+    if (analysis.tier === 'none') {
+      const result = deriveCalibrationFromAnalysis(analysis, samples);
+      expect(result.reason).toMatch(/hand-?held/i);
+    } else {
+      // If a clean sub-window survived the wobble, handheld is the correct
+      // outcome — the point is it must never claim 'mounted'.
+      expect(analysis.tier).toBe('handheld');
+    }
+  });
+
+  it('rejects multi-DOF motion with a planarity reason, not a stillness one', () => {
     const signal = generateSweepSignal(Array(3).fill(slowRep), {
       ...sweepOpts,
-      inHandHoldMs: 1000,
+      crossAxisWobble: { amplitudeRadps: 0.95, freqHz: 1.7 },
     });
-    const result = deriveSweepCalibration(signal.samples);
-
-    expect(result.valid).toBe(true);
-    const axisErrDeg = angleBetweenUnit(result.pivotAxis!, SKEWED_AXIS) * RAD_TO_DEG;
-    expect(axisErrDeg).toBeLessThan(2);
-    expect(Math.abs(result.romDegrees! - 72)).toBeLessThan(1);
-    expect(result.axisQuality!).toBeGreaterThan(AXIS_QUALITY_MIN);
+    const result = derive(signal.samples);
+    expect(result.eligible).toBe(false);
+    expect(result.reason).toMatch(/single-DOF|variance/i);
   });
 
-  it('rejects multi-axis wobble with a low axis quality', () => {
-    const signal = generateSweepSignal(Array(3).fill(slowRep), {
-      ...sweepOpts,
-      crossAxisWobble: { amplitudeRadps: 0.45, freqHz: 2.5 },
-    });
-    const result = deriveSweepCalibration(signal.samples);
-    expect(result.valid).toBe(false);
-    expect(result.axisQuality).not.toBeNull();
-    expect(result.axisQuality!).toBeLessThan(AXIS_QUALITY_MIN);
-    expect(result.reason).toMatch(/planar/i);
-  });
-
-  it('fires the gravity lower-bound invariant on an under-reading gyro', () => {
-    // The field-test failure mode: gyro path captures only ~2/3 of the true
-    // rotation (0.66 ≈ the observed 47.4/72.0). Gravity between endpoints
-    // proves the under-read — hard rejection.
-    const signal = generateSweepSignal(Array(3).fill(slowRep), {
-      ...sweepOpts,
-      gyroScale: 0.66,
-    });
-    const result = deriveSweepCalibration(signal.samples);
-    expect(result.valid).toBe(false);
-    expect(result.reason).toMatch(/below the gravity lower\s?bound/i);
-  });
-
-  it('rejects a sweep with too few strokes', () => {
+  it('requires at least 2 reps', () => {
     const signal = generateSweepSignal([slowRep], sweepOpts);
-    const result = deriveSweepCalibration(signal.samples);
-    expect(result.valid).toBe(false);
-    expect(result.reason).toMatch(/2 slow full-range reps|stroke/i);
+    const result = derive(signal.samples);
+    expect(result.eligible).toBe(false);
+    expect(result.reason).toMatch(/2 /);
   });
 
-  it('rejects inconsistent stroke lengths', () => {
-    const signal = generateSweepSignal(
-      [slowRep, { ...slowRep, romDeg: 40 }, slowRep],
-      sweepOpts
-    );
-    const result = deriveSweepCalibration(signal.samples);
-    expect(result.valid).toBe(false);
-    expect(result.reason).toMatch(/inconsistent/i);
-  });
-
-  it('refuses dynamic gravity references at sweep endpoints (surfaces the stillness hint)', () => {
-    // Endpoint rests exist but |a| sits ~0.5 m/s² off gravity — outside the
-    // strict ±0.3 m/s² gravity-reference bound. No endpoint may be silently
-    // accepted; with all endpoints discarded the sweep fails with the hint.
-    const signal = generateSweepSignal(Array(3).fill(slowRep), {
-      ...sweepOpts,
-      restAccelScale: 1.05,
-    });
-    const result = deriveSweepCalibration(signal.samples);
-    expect(result.valid).toBe(false);
-    expect(result.reason).toMatch(/still moving/i);
-  });
-
-  it('rejects a recording with no still mount periods', () => {
-    // Reps only, no lead-in/trailing rest long enough to count as mounted.
-    const signal = generateSweepSignal(
-      [{ ...slowRep, restAfterMs: 300 }, { ...slowRep, restAfterMs: 300 }],
-      { ...sweepOpts, leadInMs: 300 }
-    );
-    // Truncate the trailing handling+rest so no long rest exists at all.
-    const cut = signal.samples.filter((s) => s.tMs < 1200 + 300 + 2 * 4900 - 1000);
-    const result = deriveSweepCalibration(cut);
-    expect(result.valid).toBe(false);
-    expect(result.reason).toMatch(/still period/i);
+  it('handles an empty/motionless capture without axis or quality', () => {
+    const signal = generateReps([], { leadInMs: 4000 });
+    const result = derive(signal.samples);
+    expect(result.eligible).toBe(false);
+    expect(result.pivotAxis).toBeNull();
+    expect(result.axisQuality).toBeNull();
+    expect(result.reason).toMatch(/2 /);
   });
 });

@@ -5807,11 +5807,11 @@ export default function WorkoutPage() {
                     setSyncStatus={setSync}
                   />
 
-                  {/* Motion capture (experimental): only for the current
-                      exercise, only when it has a machine calibration. */}
+                  {/* Motion capture (experimental): current exercise only.
+                      A calibration is optional — quick captures analyze and
+                      display without one. */}
                   {motionCaptureEnabled &&
-                    isCurrent &&
-                    motionCalibrations.some((c) => c.exerciseId === block.exerciseId) && (
+                    isCurrent && (
                       <button
                         type="button"
                         onClick={() =>
