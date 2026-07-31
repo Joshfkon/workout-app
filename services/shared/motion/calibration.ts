@@ -48,6 +48,7 @@ import {
   signedAngleAbout,
 } from './vec3';
 import { eigenSymmetric3, type Sym3 } from './eigen3';
+import { findGravityRef, GRAVITY_REF_FAIL_HINT } from './gravityRef';
 import { isQuasiStatic } from './gravity';
 import {
   AXIS_QUALITY_MIN,
@@ -201,7 +202,9 @@ export function deriveSweepCalibration(
   // --- 3+4. Integrate the projection with ZUPT; collect rest windows -----
   // Runs twice at most: if the first stroke integrates negative the axis is
   // flipped (concentric must be positive) and the pass repeats.
+  let rejectedStillWindows = 0;
   const analyze = (n: Vec3) => {
+    rejectedStillWindows = 0;
     const omega = samples.map((s) => dot(s.gyro, n));
     let bias =
       longRests[0].endIdx > longRests[0].startIdx
@@ -227,13 +230,15 @@ export function deriveSweepCalibration(
       const runStartIdx = rs;
       rs = -1;
       if (runStartIdx === -1 || t[re] - t[runStartIdx] < REST_MIN_MS) return;
-      const units: Vec3[] = [];
-      for (let j = runStartIdx; j <= re; j++) {
-        const u = normalize(samples[j].accel);
-        if (u) units.push(u);
+      // STRICT gravity-reference validation: ≥200 ms contiguous stillness
+      // (|a| within 0.3 m/s² of g, |ω| < 5 °/s). A rest that doesn't pass is
+      // counted and skipped — never silently accepted as a gravity vector.
+      const ref = findGravityRef(samples, runStartIdx, re);
+      if (!ref) {
+        rejectedStillWindows++;
+        return;
       }
-      const gravityUnit = meanUnit(units);
-      if (!gravityUnit) return;
+      const gravityUnit = ref.unit;
       const thetaPre = theta[re];
       bias =
         omega.slice(runStartIdx, re + 1).reduce((a, b) => a + b, 0) / (re - runStartIdx + 1);
@@ -285,7 +290,11 @@ export function deriveSweepCalibration(
     return {
       ...invalid(
         `Only ${strokes.length} full stroke${strokes.length === 1 ? '' : 's'} detected — ` +
-          'do at least 2 slow full-range reps with a brief pause at each end.'
+          'do at least 2 slow full-range reps with a brief pause at each end.' +
+          (rejectedStillWindows > 0
+            ? ` (${rejectedStillWindows} endpoint${rejectedStillWindows === 1 ? '' : 's'} discarded: ` +
+              `${GRAVITY_REF_FAIL_HINT}.)`
+            : '')
       ),
       pivotAxis: axis,
       axisQuality,

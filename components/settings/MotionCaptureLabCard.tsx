@@ -105,8 +105,10 @@ export function MotionCaptureLabCard() {
               <div>
                 <p className="text-sm text-surface-300 mt-3">Keep raw sample buffers</p>
                 <p className="mt-1 text-xs text-surface-500">
-                  Off: only derived per-rep metrics are stored. On: raw IMU streams are also kept
-                  (max {RAW_BUFFER_SESSION_CAP} per workout) — for offline analysis; bloats storage.
+                  On by default while this feature is experimental — bad captures can&apos;t be
+                  debugged from derived metrics alone. Raw IMU streams are kept (max{' '}
+                  {RAW_BUFFER_SESSION_CAP} per workout). Turn off to store derived per-rep metrics
+                  only.
                 </p>
               </div>
               <Toggle

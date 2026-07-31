@@ -162,13 +162,13 @@ describe('processMotionSamples', () => {
     expect(result.qualityFlags).toContain('no-reps-detected');
   });
 
-  it('verifies integrity via the sample-window fallback on touch-and-go reps', () => {
-    // Only ~150 ms at the bottom between reps — too short to register as a
-    // rest interval (>250 ms), so the endpoint check must fall back to
-    // individual resting quasi-static samples around the turnaround.
-    const touchAndGo: SyntheticRepSpec = { ...cleanRep, restAfterMs: 150 };
+  it('verifies integrity via the strict-window fallback on brief (220 ms) turnarounds', () => {
+    // 220 ms at the bottom between reps: too short to register as a rest
+    // interval (>250 ms) but long enough for a validated gravity-reference
+    // window (>=200 ms), so the fallback path must carry the check.
+    const brief: SyntheticRepSpec = { ...cleanRep, restAfterMs: 220 };
     const signal = generateReps(
-      [touchAndGo, touchAndGo, { ...cleanRep, restAfterMs: 2000 }],
+      [brief, brief, { ...cleanRep, restAfterMs: 2000 }],
       { gyroNoise: 0.005 }
     );
     const result = processMotionSamples(inputFrom(signal));
@@ -178,6 +178,40 @@ describe('processMotionSamples', () => {
       expect(rep.rejected).toBe(false);
       expect(rep.gyroAngle_vs_gravityAngle_errorDeg).not.toBeNull();
       expect(rep.gyroAngle_vs_gravityAngle_errorDeg!).toBeLessThan(INTEGRITY_MAX_ERROR_DEG);
+    }
+  });
+
+  it('rejects reps whose endpoints never hold still for the 200 ms gravity window', () => {
+    // Brisk touch-and-go: ~60 ms turnarounds with fast strokes leave well
+    // under 200 ms below the 5 °/s stillness bound at each endpoint, so no
+    // gravity reference may be issued — the reps must be rejected with the
+    // stillness hint, never verified against a dynamic sample.
+    const touchAndGo: SyntheticRepSpec = {
+      romDeg: 40,
+      concentricMs: 800,
+      pauseTopMs: 60,
+      eccentricMs: 800,
+      restAfterMs: 60,
+    };
+    const signal = generateReps([touchAndGo, touchAndGo], { gyroNoise: 0.005 });
+    const result = processMotionSamples(inputFrom(signal));
+
+    const rejected = result.reps.filter((r) => r.rejected);
+    expect(rejected.length).toBeGreaterThan(0);
+    expect(rejected.some((r) => /still moving/.test(r.rejectReason ?? ''))).toBe(true);
+  });
+
+  it('never accepts a dynamic sample as a gravity reference (accel off at rests)', () => {
+    // Rest windows exist and pass loose gating, but |a| sits ~0.5 m/s² off
+    // gravity — outside the strict ±0.3 m/s² bound. Every endpoint gravity
+    // reference must be refused and the reps rejected with the hint.
+    const signal = generateReps(Array(3).fill(cleanRep), { restAccelScale: 1.05 });
+    const result = processMotionSamples(inputFrom(signal));
+
+    expect(result.reps.length).toBeGreaterThan(0);
+    for (const rep of result.reps) {
+      expect(rep.rejected).toBe(true);
+      expect(rep.rejectReason).toMatch(/still moving/);
     }
   });
 

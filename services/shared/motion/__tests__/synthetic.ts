@@ -47,6 +47,12 @@ export interface SyntheticOptions {
    * must reject the sweep before any gravity check runs.
    */
   crossAxisWobble?: { amplitudeRadps: number; freqHz: number };
+  /**
+   * Scale the accel magnitude during rest segments (|ω| ≈ 0) — e.g. 1.05
+   * puts |a| ≈ 0.5 m/s² off gravity: still enough for loose gating, but a
+   * dynamic sample under the STRICT gravity-reference bounds (±0.3 m/s²).
+   */
+  restAccelScale?: number;
   seed?: number;
 }
 
@@ -154,6 +160,9 @@ export function generateFromProfile(
       z: noise() * noiseAmp,
     });
     let accel = rotateAbout(gBottom, axis, -theta);
+    if (opts.restAccelScale && Math.abs(omega) < 0.01) {
+      accel = scale(accel, opts.restAccelScale);
+    }
     const spike = opts.accelSpikes?.find((s) => Math.abs(s.tMs - tMs) < dtMs / 2);
     if (spike) accel = { ...accel, x: spike.valueMps2 };
 

@@ -20,6 +20,8 @@ import { formatWeight } from '@/lib/utils';
 import {
   requestMotionPermission,
   startMotionRecorder,
+  tapLatencyMs,
+  TAP_LATENCY_WARN_MS,
   type MotionRecorderHandle,
 } from '@/lib/motion/deviceMotionRecorder';
 import { acquireScreenWakeLock, type WakeLockHandle } from '@/lib/motion/wakeLock';
@@ -89,6 +91,9 @@ export function MotionCaptureFlow({
   const [attachSetId, setAttachSetId] = useState('');
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'synced' | 'queued'>('idle');
   const [rawNote, setRawNote] = useState<string | null>(null);
+  // Tap-to-sensor staleness when the recording was stopped by a tap (null
+  // for auto-stop, which consumes no tap).
+  const [stopTapLatencyMs, setStopTapLatencyMs] = useState<number | null>(null);
 
   const recorderRef = useRef<MotionRecorderHandle | null>(null);
   const wakeLockRef = useRef<WakeLockHandle | null>(null);
@@ -213,16 +218,17 @@ export function MotionCaptureFlow({
         recordingLiveRef.current = true;
         setRecordingLive(true);
       }
-      if (state === 'done') finishRecording();
+      if (state === 'done') finishRecording(false);
     });
     recordingLiveRef.current = false;
     setRecordingLive(false);
     setStage('armed');
   };
 
-  const finishRecording = () => {
+  const finishRecording = (fromTap: boolean) => {
     const recorder = recorderRef.current;
     if (!recorder || !calibration) return;
+    setStopTapLatencyMs(fromTap ? tapLatencyMs(recorder) : null);
     const samples = recorder.stop();
     teardownSensors();
 
@@ -328,7 +334,7 @@ export function MotionCaptureFlow({
     return (
       <button
         type="button"
-        onClick={finishRecording}
+        onClick={() => finishRecording(true)}
         className="fixed inset-0 z-[60] bg-black flex flex-col items-center justify-center gap-6"
         data-testid="motion-armed-overlay"
         aria-label="Stop recording"
@@ -369,6 +375,18 @@ export function MotionCaptureFlow({
               <p className="text-xs font-medium text-warning-400 mb-1">Quality flags</p>
               <p className="text-xs text-warning-400/90">{result.qualityFlags.join(', ')}</p>
             </div>
+          )}
+
+          {stopTapLatencyMs !== null && (
+            <p className="text-xs text-surface-500" data-testid="motion-stop-latency">
+              Sensor latency at stop tap: {Math.round(stopTapLatencyMs)} ms
+              {stopTapLatencyMs > TAP_LATENCY_WARN_MS && (
+                <span className="text-warning-400">
+                  {' '}
+                  — stale (&gt;{TAP_LATENCY_WARN_MS} ms; sensor delivery is lagging taps)
+                </span>
+              )}
+            </p>
           )}
 
           {/* Per-rep metrics; rejected reps are marked loudly, not hidden. */}

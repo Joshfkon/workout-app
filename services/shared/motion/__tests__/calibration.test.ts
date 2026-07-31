@@ -93,6 +93,19 @@ describe('deriveSweepCalibration', () => {
     expect(result.reason).toMatch(/inconsistent/i);
   });
 
+  it('refuses dynamic gravity references at sweep endpoints (surfaces the stillness hint)', () => {
+    // Endpoint rests exist but |a| sits ~0.5 m/s² off gravity — outside the
+    // strict ±0.3 m/s² gravity-reference bound. No endpoint may be silently
+    // accepted; with all endpoints discarded the sweep fails with the hint.
+    const signal = generateSweepSignal(Array(3).fill(slowRep), {
+      ...sweepOpts,
+      restAccelScale: 1.05,
+    });
+    const result = deriveSweepCalibration(signal.samples);
+    expect(result.valid).toBe(false);
+    expect(result.reason).toMatch(/still moving/i);
+  });
+
   it('rejects a recording with no still mount periods', () => {
     // Reps only, no lead-in/trailing rest long enough to count as mounted.
     const signal = generateSweepSignal(

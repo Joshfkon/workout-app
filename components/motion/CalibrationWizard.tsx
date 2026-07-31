@@ -23,13 +23,17 @@ import { createUntypedClient } from '@/lib/supabase/client';
 import {
   requestMotionPermission,
   startMotionRecorder,
+  tapLatencyMs,
+  TAP_LATENCY_WARN_MS,
   type MotionRecorderHandle,
 } from '@/lib/motion/deviceMotionRecorder';
+import { downloadTextFile, samplesToCsv } from '@/lib/motion/csv';
 import { insertCalibration } from '@/lib/motion/calibrations';
 import { deriveSweepCalibration, type SweepCalibrationDerivation } from '@/services/shared/motion';
 import {
   CALIBRATION_SCHEMA_VERSION,
   MOUNT_ORIENTATIONS,
+  type ImuSample,
   type MachineCalibration,
   type MountOrientation,
   type Vec3,
@@ -98,8 +102,11 @@ export function CalibrationWizard({ userId, exercises, onSaved, onClose }: Calib
   const [orientation, setOrientation] = useState<MountOrientation>('top-edge');
 
   const [derivation, setDerivation] = useState<SweepCalibrationDerivation | null>(null);
+  // Tap-to-sensor staleness measured at the STOP tap (debug visibility).
+  const [stopLatencyMs, setStopLatencyMs] = useState<number | null>(null);
 
   const recorderRef = useRef<MotionRecorderHandle | null>(null);
+  const sweepSamplesRef = useRef<ImuSample[]>([]);
   const isMountedRef = useRef(true);
 
   useEffect(() => {
@@ -141,10 +148,18 @@ export function CalibrationWizard({ userId, exercises, onSaved, onClose }: Calib
     recorderRef.current = null;
     setSweeping(false);
     if (!recorder) return;
+    setStopLatencyMs(tapLatencyMs(recorder));
     const samples = recorder.stop();
+    sweepSamplesRef.current = samples;
     const result = deriveSweepCalibration(samples);
     setDerivation(result);
     setStep('review');
+  };
+
+  const downloadSweepCsv = () => {
+    if (sweepSamplesRef.current.length === 0) return;
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    downloadTextFile(`calibration-sweep-${stamp}.csv`, samplesToCsv(sweepSamplesRef.current));
   };
 
   const restart = () => {
@@ -281,6 +296,28 @@ export function CalibrationWizard({ userId, exercises, onSaved, onClose }: Calib
 
         {step === 'review' && derivation && (
           <div className="space-y-3" data-testid="calibration-review">
+            {/* Debug strip: sensor staleness at the STOP tap + raw export —
+                a rejection message alone can't explain a bad sweep. */}
+            <div className="flex items-center justify-between gap-2 text-xs text-surface-500">
+              <span data-testid="calibration-stop-latency">
+                Sensor latency at Stop:{' '}
+                {stopLatencyMs === null ? 'n/a' : `${Math.round(stopLatencyMs)} ms`}
+                {stopLatencyMs !== null && stopLatencyMs > TAP_LATENCY_WARN_MS && (
+                  <span className="text-warning-400">
+                    {' '}
+                    — stale (&gt;{TAP_LATENCY_WARN_MS} ms; sensor delivery is lagging taps)
+                  </span>
+                )}
+              </span>
+              <button
+                type="button"
+                onClick={downloadSweepCsv}
+                className="text-primary-400 hover:text-primary-300 whitespace-nowrap"
+                data-testid="calibration-download-csv"
+              >
+                Download raw sweep (CSV)
+              </button>
+            </div>
             {derivation.valid ? (
               <>
                 <div className="p-3 rounded-lg bg-surface-900/60 space-y-2">

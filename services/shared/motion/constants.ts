@@ -92,6 +92,22 @@ export const MIN_SWEEP_STROKES = 4;
 /** Stroke ROMs deviating from the median by more than this reject the sweep. */
 export const SWEEP_STROKE_SPREAD_MAX_DEG = 15;
 
+// --- Gravity-reference capture (strict quasi-static validation) ----------
+// A gravity VECTOR may only be read off the accelerometer when the device is
+// provably still. These bounds are deliberately much tighter than the
+// generic quasi-static tolerance used for gating: a dynamic sample silently
+// accepted as "gravity" corrupts every angle derived from it.
+
+/** | |a| − g | must stay within this for a gravity-reference window. */
+export const GRAVITY_REF_ACCEL_TOL_MPS2 = 0.3;
+
+/** |rotationRate| must stay below this (5 °/s) for a gravity-reference window.
+ *  (Literal conversion — DEG_TO_RAD is declared later in this module.) */
+export const GRAVITY_REF_OMEGA_MAX_RADPS = 5 * (Math.PI / 180);
+
+/** Both bounds must hold contiguously for at least this long (measured dt). */
+export const GRAVITY_REF_MIN_WINDOW_MS = 200;
+
 /**
  * Gravity lower-bound invariant: the 3-D angle between two endpoint gravity
  * unit vectors can never EXCEED the true rotation between those endpoints,

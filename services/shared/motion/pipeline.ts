@@ -30,8 +30,9 @@
  */
 
 import type { ImuSample, RepMetric, Vec3 } from '@/types/motion';
-import { angleBetweenUnit, dot, meanUnit, normalize, rotateAbout } from './vec3';
+import { angleBetweenUnit, dot, rotateAbout } from './vec3';
 import { armAngleFromGravity, isQuasiStatic } from './gravity';
+import { findGravityRef } from './gravityRef';
 import { segmentPhases, type MovementPhase, type SegmentationOptions } from './segmentation';
 import {
   CLIP_ACCEL_MPS2,
@@ -94,7 +95,9 @@ interface RestRun {
 
 const REJECT = {
   clip: 'accelerometer clipped (>155 m/s² sample) — peak unknown, data untrustworthy',
-  noEndpoint: 'no quasi-static endpoint — gyro/gravity integrity check impossible',
+  noEndpoint:
+    'no verified still endpoint (arm was still moving — hold briefly at the endpoint); ' +
+    'gyro/gravity integrity check impossible',
 } as const;
 
 function emptyResult(qualityFlags: string[]): MotionPipelineResult {
@@ -228,16 +231,15 @@ export function processMotionSamples(
     if (nextRun < restRunBounds.length && i === restRunBounds[nextRun].endIdx) {
       const { startIdx, endIdx } = restRunBounds[nextRun];
       const gravSamples: number[] = [];
-      const gravUnits: Vec3[] = [];
       for (let j = startIdx; j <= endIdx; j++) {
         const a = gravAngle(j);
         if (a !== null) gravSamples.push(a);
-        if (isQuasiStatic(samples[j].accel)) {
-          const u = normalize(samples[j].accel);
-          if (u) gravUnits.push(u);
-        }
       }
       const gravityThetaRad = gravSamples.length >= 3 ? mean(gravSamples) : null;
+      // Strict quasi-static validation (≥200 ms contiguous stillness) — a
+      // rest run that doesn't pass yields NO gravity reference rather than a
+      // silently dynamic one.
+      const gravityRef = findGravityRef(samples, startIdx, endIdx);
       const thetaPreResetRad = theta[i];
 
       if (zuptEnabled) {
@@ -255,7 +257,7 @@ export function processMotionSamples(
         thetaPreResetRad,
         thetaAfterRad: theta[i],
         gravityThetaRad,
-        gravityUnitMean: gravUnits.length >= 3 ? meanUnit(gravUnits) : null,
+        gravityUnitMean: gravityRef?.unit ?? null,
       });
       nextRun++;
     }
@@ -402,26 +404,33 @@ function buildRepMetric(args: {
       ? { thetaPre: r.thetaPreResetRad, thetaAfter: r.thetaAfterRad, gravityUnit: r.gravityUnitMean }
       : null;
 
-  // Fallback for touch-and-go endpoints (no ≥250 ms rest run): individual
-  // resting + quasi-static samples around the endpoint. Rest-run end indices
-  // are excluded because theta may already be ZUPT-reset there.
+  // Fallback for touch-and-go endpoints (no ≥250 ms rest run): the strict
+  // gravity-reference validator over the endpoint's time range — the same
+  // ≥200 ms contiguous-stillness bar as everywhere else, so a dynamic
+  // endpoint yields NO window (and rejects the rep) instead of a corrupt
+  // one. θ is read at the window start, skipping ZUPT-reset indices.
   const resetIdxs = new Set(restRuns.map((r) => r.endIdx));
   const pseudoWindow = (fromT: number, toT: number): EndpointWindow | null => {
-    const units: Vec3[] = [];
-    let thetaAt: number | null = null;
+    let lo = t.length;
+    let hi = -1;
     for (let i = 0; i < t.length; i++) {
       if (t[i] < fromT) continue;
       if (t[i] > toT) break;
-      if (!restMask[i] || resetIdxs.has(i)) continue;
-      if (!isQuasiStatic(samples[i].accel)) continue;
-      const u = normalize(samples[i].accel);
-      if (!u) continue;
-      units.push(u);
-      if (thetaAt === null) thetaAt = theta[i];
+      if (i < lo) lo = i;
+      hi = i;
     }
-    const gravityUnit = units.length >= 3 ? meanUnit(units) : null;
-    return gravityUnit && thetaAt !== null
-      ? { thetaPre: thetaAt, thetaAfter: thetaAt, gravityUnit }
+    if (hi < lo) return null;
+    const ref = findGravityRef(samples, lo, hi);
+    if (!ref) return null;
+    let thetaAt: number | null = null;
+    for (let i = ref.startIdx; i <= ref.endIdx; i++) {
+      if (!resetIdxs.has(i)) {
+        thetaAt = theta[i];
+        break;
+      }
+    }
+    return thetaAt !== null
+      ? { thetaPre: thetaAt, thetaAfter: thetaAt, gravityUnit: ref.unit }
       : null;
   };
 

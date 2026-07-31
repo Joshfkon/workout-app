@@ -42,8 +42,10 @@ const BANNED_IMPORT = new RegExp(
 );
 
 /** The pure signal layer must additionally be DOM/sensor-free. Matches API
- *  usage (`window.` / `navigator[`), not prose like "bias window". */
-const BANNED_DOM = /\b(window|document|navigator|localStorage|sessionStorage)\s*[.[]|\bDeviceMotionEvent\b/;
+ *  usage (`window.foo` / `navigator[`), not prose like "bias window." —
+ *  hence the no-whitespace property access after the dot. */
+const BANNED_DOM =
+  /\b(window|document|navigator|localStorage|sessionStorage)(\.[A-Za-z_$]|\s*\[)|\bDeviceMotionEvent\b/;
 
 function walk(dir: string, out: string[] = []): string[] {
   if (!fs.existsSync(dir)) return out;

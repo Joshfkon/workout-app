@@ -42,10 +42,32 @@ export async function requestMotionPermission(): Promise<MotionPermission> {
   return 'granted';
 }
 
+/** Tap-to-sensor staleness above this is worth flagging to the user. */
+export const TAP_LATENCY_WARN_MS = 150;
+
 export interface MotionRecorderHandle {
   /** Stop listening and return everything captured so far. */
   stop(): ImuSample[];
   sampleCount(): number;
+  /** performance.now() of the most recent sample (null before the first). */
+  lastSampleTMs(): number | null;
+}
+
+/**
+ * How stale the sensor stream is at a user tap: ms between the last
+ * received devicemotion sample and now. Logged so real-device staleness is
+ * observable, not guessed at.
+ */
+export function tapLatencyMs(recorder: MotionRecorderHandle): number | null {
+  const last = recorder.lastSampleTMs();
+  if (last === null) return null;
+  const latency = performance.now() - last;
+  // eslint-disable-next-line no-console -- deliberate debug telemetry: the whole point is a persistent log of real-device sensor staleness
+  console.info(`[motion] tap→sensor latency: ${latency.toFixed(0)} ms`);
+  if (latency > TAP_LATENCY_WARN_MS) {
+    console.warn(`[motion] stale sensor data at tap: ${latency.toFixed(0)} ms since last devicemotion sample`);
+  }
+  return latency;
 }
 
 /**
@@ -87,6 +109,7 @@ export function startMotionRecorder(onSample?: (s: ImuSample) => void): MotionRe
       return samples;
     },
     sampleCount: () => samples.length,
+    lastSampleTMs: () => (samples.length > 0 ? samples[samples.length - 1].tMs : null),
   };
 }
 
