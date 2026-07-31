@@ -32,9 +32,17 @@ export const MOUNT_ORIENTATIONS: MountOrientation[] = [
 
 /**
  * A user-performed calibration of one physical machine + seat + mount
- * position. Changing seat height or where the phone is mounted invalidates
- * the calibration (the gravity references and radius no longer describe the
- * rig) — the UI warns about this on save.
+ * position, produced by the SWEEP flow (START in hand → mount → ~3 slow
+ * full-ROM reps → retrieve → STOP). Changing seat height or where the phone
+ * is mounted invalidates the calibration — the UI warns about this on save.
+ *
+ * schemaVersion history:
+ *  1 — two-static-hold derivation. Mathematically ill-posed (the axis
+ *      component parallel to gravity is unrecoverable from two gravity
+ *      vectors); all v1 rows were wiped by migration.
+ *  2 — sweep derivation: axis from the gyro scatter matrix, gravity used
+ *      only as a check. Adds axisQuality; gravity refs become endpoint
+ *      UNIT vectors.
  */
 export interface MachineCalibration {
   id: string;
@@ -46,22 +54,30 @@ export interface MachineCalibration {
   /** Pivot axis to phone IMU, user-measured, millimetres. */
   mountRadius_mm: number;
   mountOrientation: MountOrientation;
-  /** Gravity vector (m/s²) held at the BOTTOM of the ROM during calibration. */
+  /** Mean gravity UNIT vector at the BOTTOM ROM endpoint (sweep rests). */
   gravityRefStart: Vec3;
-  /** Gravity vector (m/s²) held at the TOP of the ROM during calibration. */
+  /** Mean gravity UNIT vector at the TOP ROM endpoint (sweep rests). */
   gravityRefEnd: Vec3;
   /**
-   * Unit pivot axis in the phone frame, derived at calibration time from the
-   * transit-gyro integral (see services/shared/motion/calibration.ts) and
-   * canonicalized so bottom→top rotation is positive. Stored because the
-   * gravity refs alone cannot reconstruct it (axis-tilt ambiguity).
+   * Unit pivot axis in the phone frame — the principal eigenvector of the
+   * sweep's gyro scatter matrix (services/shared/motion/calibration.ts),
+   * sign-resolved so the concentric direction is positive.
    */
   derivedPivotAxis: Vec3;
-  /** ROM between the two refs about the derived axis, degrees (display). */
+  /**
+   * Axis-quality metric λ1/(λ2+λ3) from the sweep's scatter eigenvalues —
+   * how single-axis the recorded motion actually was. Sweeps below
+   * AXIS_QUALITY_MIN are rejected before a calibration is ever created.
+   */
+  axisQuality: number;
+  /** Median endpoint-to-endpoint stroke ROM from the sweep, degrees. */
   derivedRomDegrees: number | null;
   createdAt: string;
   schemaVersion: number;
 }
+
+/** Current MachineCalibration schema version (see history above). */
+export const CALIBRATION_SCHEMA_VERSION = 2;
 
 export type CaptureSide = 'left' | 'right';
 

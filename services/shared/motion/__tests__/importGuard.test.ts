@@ -70,6 +70,27 @@ it('no motion-feature module imports e1RM, the prescription engine, or the volum
   expect(offenders).toEqual([]);
 });
 
+/**
+ * The phone is held to the machine by a neodymium magnet, which saturates
+ * the magnetometer — any magnetometer-fused orientation source is unusable.
+ * The feature must consume devicemotion ONLY (accelerationIncludingGravity
+ * + rotationRate); orientation/compass APIs are banned outright.
+ */
+const BANNED_SENSOR_APIS =
+  /deviceorientation|webkitCompassHeading|Magnetometer|OrientationSensor|compassHeading/i;
+
+it('no motion-feature module touches magnetometer-fused orientation APIs', () => {
+  const offenders: string[] = [];
+  for (const dir of FEATURE_DIRS) {
+    for (const file of walk(path.join(ROOT, dir))) {
+      if (file === __filename) continue; // this guard names the banned APIs
+      const src = fs.readFileSync(file, 'utf8');
+      if (BANNED_SENSOR_APIS.test(src)) offenders.push(path.relative(ROOT, file));
+    }
+  }
+  expect(offenders).toEqual([]);
+});
+
 it('the pure signal layer (services/shared/motion) is DOM- and sensor-free', () => {
   const offenders: string[] = [];
   for (const file of walk(path.join(ROOT, 'services/shared/motion'))) {

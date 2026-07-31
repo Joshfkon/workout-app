@@ -10,7 +10,13 @@
 
 import type { ImuSample } from '@/types/motion';
 
-const DEG_TO_RAD = Math.PI / 180;
+/**
+ * Per the W3C DeviceMotionEvent spec, `rotationRate` is reported in
+ * DEGREES per second. The pure signal layer works exclusively in rad/s, and
+ * this named constant at the single ingest boundary is the ONLY place the
+ * conversion happens — nothing downstream may convert again.
+ */
+const ROTATION_RATE_DEG_PER_S_TO_RAD_PER_S = Math.PI / 180;
 
 export type MotionPermission = 'granted' | 'denied' | 'unsupported';
 
@@ -59,7 +65,11 @@ export function startMotionRecorder(onSample?: (s: ImuSample) => void): MotionRe
     const sample: ImuSample = {
       tMs: performance.now(),
       // rotationRate: alpha is about z, beta about x, gamma about y.
-      gyro: { x: rr.beta * DEG_TO_RAD, y: rr.gamma * DEG_TO_RAD, z: rr.alpha * DEG_TO_RAD },
+      gyro: {
+        x: rr.beta * ROTATION_RATE_DEG_PER_S_TO_RAD_PER_S,
+        y: rr.gamma * ROTATION_RATE_DEG_PER_S_TO_RAD_PER_S,
+        z: rr.alpha * ROTATION_RATE_DEG_PER_S_TO_RAD_PER_S,
+      },
       accel: { x: acc.x, y: acc.y, z: acc.z },
     };
     samples.push(sample);
@@ -80,13 +90,3 @@ export function startMotionRecorder(onSample?: (s: ImuSample) => void): MotionRe
   };
 }
 
-/**
- * Collect samples for a fixed window (calibration holds / transit sweeps).
- * Resolves with everything captured during the window.
- */
-export function recordForDuration(durationMs: number): Promise<ImuSample[]> {
-  return new Promise((resolve) => {
-    const recorder = startMotionRecorder();
-    window.setTimeout(() => resolve(recorder.stop()), durationMs);
-  });
-}

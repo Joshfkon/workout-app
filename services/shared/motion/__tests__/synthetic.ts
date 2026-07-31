@@ -11,7 +11,7 @@
  */
 
 import type { ImuSample, Vec3 } from '@/types/motion';
-import { add, normalize, rotateAbout, scale } from '../vec3';
+import { add, cross, normalize, rotateAbout, scale } from '../vec3';
 import { DEG_TO_RAD, G_MPS2 } from '../constants';
 
 export interface SyntheticRepSpec {
@@ -40,6 +40,13 @@ export interface SyntheticOptions {
   gyroScale?: number;
   /** Accel spikes injected verbatim on the x axis at given times. */
   accelSpikes?: Array<{ tMs: number; valueMps2: number }>;
+  /**
+   * Cross-axis wobble during movement: extra rotation rate about an axis
+   * perpendicular to the pivot. Deliberately NOT reflected in the synthetic
+   * gravity — it exists to degrade the scatter-matrix axis quality, which
+   * must reject the sweep before any gravity check runs.
+   */
+  crossAxisWobble?: { amplitudeRadps: number; freqHz: number };
   seed?: number;
 }
 
@@ -133,7 +140,14 @@ export function generateFromProfile(
       acc += seg.durMs;
     }
 
-    const gyroTrue = scale(axis, omega * gyroScale + biasFn(tMs));
+    let gyroTrue = scale(axis, omega * gyroScale + biasFn(tMs));
+    if (opts.crossAxisWobble && Math.abs(omega) > 0.05) {
+      const wobbleAxis = normalize(cross(axis, gBottom))!;
+      const w =
+        opts.crossAxisWobble.amplitudeRadps *
+        Math.sin(2 * Math.PI * opts.crossAxisWobble.freqHz * (tMs / 1000));
+      gyroTrue = add(gyroTrue, scale(wobbleAxis, w));
+    }
     const gyro = add(gyroTrue, {
       x: noise() * noiseAmp,
       y: noise() * noiseAmp,
@@ -152,4 +166,51 @@ export function generateFromProfile(
     gBottom,
     gTop: (romDeg: number) => rotateAbout(gBottom, axis, -romDeg * DEG_TO_RAD),
   };
+}
+
+/**
+ * A full calibration sweep as the wizard records it: in-hand handling
+ * (fast, multi-axis, non-quasi-static — tap START, carry to the mount),
+ * a long mount rest, the reps, a long rest, then handling again (retrieve,
+ * tap STOP). The handling segments are exactly the motion that must NOT
+ * poison the axis estimate.
+ */
+export function generateSweepSignal(
+  reps: SyntheticRepSpec[],
+  opts: SyntheticOptions = {}
+): SyntheticSignal {
+  const rateHz = opts.sampleRateHz ?? 100;
+  const dtMs = 1000 / rateHz;
+  const mounted = generateReps(reps, { ...opts, leadInMs: opts.leadInMs ?? 1500 });
+
+  const handling = (startMs: number, durMs: number): ImuSample[] => {
+    const out: ImuSample[] = [];
+    for (let tMs = 0; tMs < durMs; tMs += dtMs) {
+      const t = tMs / 1000;
+      out.push({
+        tMs: startMs + tMs,
+        // Brisk multi-axis in-hand rotation — high |ω|, no dominant axis.
+        gyro: {
+          x: 1.6 * Math.sin(7 * t),
+          y: 1.2 * Math.cos(5 * t + 1),
+          z: 0.9 * Math.sin(3 * t + 2),
+        },
+        // Being carried: |a| swings well outside the quasi-static band.
+        accel: add(scale(mounted.gBottom, 1 + 0.35 * Math.sin(9 * t)), {
+          x: 2.5 * Math.sin(11 * t),
+          y: 1.5 * Math.cos(13 * t),
+          z: 0,
+        }),
+      });
+    }
+    return out;
+  };
+
+  const preMs = 1200;
+  const pre = handling(0, preMs);
+  const mountedShifted = mounted.samples.map((s) => ({ ...s, tMs: s.tMs + preMs }));
+  const postStart = preMs + (mounted.samples[mounted.samples.length - 1]?.tMs ?? 0) + dtMs;
+  const post = handling(postStart, 1200);
+
+  return { ...mounted, samples: [...pre, ...mountedShifted, ...post] };
 }

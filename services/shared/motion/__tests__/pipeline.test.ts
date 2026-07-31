@@ -106,7 +106,9 @@ describe('processMotionSamples', () => {
     // at least the later reps must disagree with gravity beyond the limit.
     const rejected = withoutZupt.reps.filter((r) => r.rejected);
     expect(rejected.length).toBeGreaterThan(0);
-    expect(rejected.some((r) => /gyro and gravity disagree/.test(r.rejectReason ?? ''))).toBe(true);
+    expect(
+      rejected.some((r) => /forward-prediction|under-read/.test(r.rejectReason ?? ''))
+    ).toBe(true);
   });
 
   it('rejects a rep containing an accelerometer clipping spike, keeps the rest', () => {
@@ -126,7 +128,7 @@ describe('processMotionSamples', () => {
     expect(result.reps[2].rejected).toBe(false);
   });
 
-  it('integrity check rejects reps when the gyro silently disagrees with gravity', () => {
+  it('forward-prediction rejects reps when the gyro silently over-reads', () => {
     // A 15% gyro scale error on a 40° rep = 6° endpoint disagreement — the
     // exact "silently wrong data" failure the check exists to catch.
     const signal = generateReps(Array(3).fill(cleanRep), { gyroScale: 1.15 });
@@ -135,9 +137,22 @@ describe('processMotionSamples', () => {
     expect(result.reps.length).toBeGreaterThan(0);
     for (const rep of result.reps) {
       expect(rep.rejected).toBe(true);
-      expect(rep.rejectReason).toMatch(/gyro and gravity disagree/);
+      expect(rep.rejectReason).toMatch(/forward-prediction/);
       expect(rep.gyroAngle_vs_gravityAngle_errorDeg!).toBeGreaterThan(INTEGRITY_MAX_ERROR_DEG);
     }
+  });
+
+  it('the gravity lower-bound invariant hard-rejects an under-reading gyro', () => {
+    // Under-integration (wrong axis / wrong units / dropped samples): the
+    // integrated angle lands BELOW what gravity alone proves — definitive
+    // evidence, surfaced as a hard per-rep error.
+    const signal = generateReps(Array(3).fill(cleanRep), { gyroScale: 0.7 });
+    const result = processMotionSamples(inputFrom(signal));
+
+    expect(result.reps.length).toBeGreaterThan(0);
+    const underRead = result.reps.filter((r) => /under-read.*definitively wrong/.test(r.rejectReason ?? ''));
+    expect(underRead.length).toBeGreaterThan(0);
+    for (const rep of result.reps) expect(rep.rejected).toBe(true);
   });
 
   it('returns no reps (flagged) for an all-quiet capture', () => {
