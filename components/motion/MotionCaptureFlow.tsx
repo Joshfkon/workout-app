@@ -40,6 +40,7 @@ import {
   getPendingCapture,
   setPendingCapture,
 } from '@/lib/motion/pendingCapture';
+import { observationsViewedThisSession } from '@/lib/motion/observationsViewed';
 import {
   LiveCaptureGate,
   analyzeCapture,
@@ -333,6 +334,11 @@ export function MotionCaptureFlow({
             turnaroundPeakAccel_radps2: r.turnaroundPeakAccelRadps2,
           })),
         },
+        // Label-contamination flag for the future RIR fit — the manual path
+        // must record it too, or manually saved captures all read as clean.
+        priorObservationsViewedThisSession: activeSession
+          ? observationsViewedThisSession(activeSession.id)
+          : false,
         provenance: MOTION_PROVENANCE,
         schemaVersion: MOTION_SCHEMA_VERSION,
       };

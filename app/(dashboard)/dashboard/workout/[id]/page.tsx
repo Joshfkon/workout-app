@@ -789,6 +789,15 @@ export default function WorkoutPage() {
     [motionCalibrations, session, motionRawRetention]
   );
 
+  // Discard whatever the gate collected (and any held fallback samples)
+  // and re-arm. Used by the warmup paths: a capturing gate can't re-arm on
+  // its own, so warmup motion left uncollected would otherwise fuse into
+  // the next working set's capture.
+  const discardMotionCapture = useCallback(() => {
+    motionAuto.stopAndCollect();
+    heldAutoSamplesRef.current = null;
+  }, [motionAuto]);
+
   // "Log set" ends the capture (or picks up one stopped via the manual
   // fallback chip). Deferred a tick so the analysis never adds latency to
   // the set-log tap. Captures under 3 reps are discarded silently —
@@ -2593,8 +2602,14 @@ export default function WorkoutPage() {
 
       // Motion capture (experimental): the "Log set" tap ends any running
       // auto capture and attaches it to this set (silently dropped when it
-      // has fewer than 3 detected reps).
-      collectMotionForSet(setId, currentBlock.exerciseId);
+      // has fewer than 3 detected reps). A logged WARMUP set instead
+      // discards the capture outright — warmup motion must never attach to
+      // anything or bleed into the next working set.
+      if (setType === 'warmup') {
+        discardMotionCapture();
+      } else {
+        collectMotionForSet(setId, currentBlock.exerciseId);
+      }
 
       // Dropset logic: check if we need to show dropset prompt instead of rest timer
       const dropsetsConfigured = (currentBlock.dropsetsPerSet ?? 0) > 0;
@@ -5828,6 +5843,9 @@ export default function WorkoutPage() {
                     sets={blockSets}
                     onSetComplete={handleSetComplete}
                     onWarmupComplete={(restSeconds) => {
+                      // Warmup motion must not fuse into the next working
+                      // set's capture: discard anything captured and re-arm.
+                      discardMotionCapture();
                       setRestTimerDuration(restSeconds);
                       setRestAdjustmentNote(null); // warmup rest is never effort-modulated
                       setShowRestTimer(true);
