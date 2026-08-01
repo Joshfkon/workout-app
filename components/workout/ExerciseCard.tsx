@@ -306,6 +306,12 @@ interface ExerciseCardProps {
   // Per-set write status (P0-2): drives the saved/saving/queued glyph on
   // completed set lines. Sets absent from the map (loaded from DB) are saved.
   setSyncStatus?: Record<string, SetSyncStatus>;
+  /**
+   * Optional extra node rendered under each COMPLETED set's history row
+   * (e.g. the motion-capture Observations block). Never rendered on the
+   * active set card. Must be referentially stable (the card is memoized).
+   */
+  completedSetExtra?: (set: SetLog) => React.ReactNode;
   // Reports the active set's live suggestion (the SuggestionBanner values,
   // e.g. "60 kg × 7") so the page's sticky rest bar shows the same target
   // instead of the block's stale planned weight. Called with null when no
@@ -420,6 +426,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   adjustedRir,
   readinessModulation,
   setSyncStatus,
+  completedSetExtra,
   performanceSnapshots,
   progressionHealthSessions,
   equipmentBoundaries,
@@ -3291,6 +3298,9 @@ export const ExerciseCard = memo(function ExerciseCard({
                   onCancel={() => setJointPickerSetId(null)}
                 />
               )}
+
+              {/* Per-set extra (e.g. motion Observations) under the history row */}
+              {completedSetExtra?.(set)}
 
               {/* Add Dropset affordance after the final completed set */}
               {isActive && isLastCompletedSet && !dropsetMode && !isDropsetSet && !pendingDropset &&

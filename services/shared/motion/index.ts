@@ -9,12 +9,52 @@
 
 export * from './constants';
 export * from './vec3';
-export {
-  deriveSweepCalibration,
-  type SweepCalibrationDerivation,
-  type SweepCalibrationOptions,
-} from './calibration';
+export { deriveCalibrationFromAnalysis, type CalibrationEligibility } from './calibration';
 export { eigenSymmetric3, type Eigen3Result, type Sym3 } from './eigen3';
+export { designButterworthLP4, filtfilt, lowpassZeroPhase, type Biquad } from './butterworth';
+export {
+  classifyStillness,
+  HANDHELD_CONE_MAX_DEG,
+  HANDHELD_GYRO_MAX_RADPS,
+  HANDHELD_MIN_MS,
+  MOUNTED_GYRO_MAX_RADPS,
+  MOUNTED_MIN_MS,
+  type StillnessResult,
+  type StillnessTier,
+} from './stillness';
+export {
+  analyzeCapture,
+  savitzkyGolayDerivative,
+  CAPTURE_ENTER_OMEGA_RADPS,
+  CAPTURE_EXIT_OMEGA_RADPS,
+  CAPTURE_FILTER_CUTOFF_HZ,
+  CAPTURE_MASK_OMEGA_RADPS,
+  GRAVITY_ROM_OK_MIN_DEG,
+  GRAVITY_ROM_SUPPRESS_BELOW_DEG,
+  LOW_CONFIDENCE_PC1_SHARE,
+  type CaptureAnalysis,
+  type CaptureAnalysisOptions,
+  type CaptureRep,
+  type GravityRomStatus,
+  type HalfRep,
+} from './captureAnalysis';
+export {
+  AutoCaptureGate,
+  AUTO_GATE_DEFAULTS,
+  MIN_AUTO_CAPTURE_REPS,
+  shouldKeepAutoCapture,
+  trimCaptureTail,
+  type AutoGateOptions,
+  type AutoGateState,
+} from './autoGate';
+export {
+  buildObservations,
+  MIN_REPS_FOR_REFERENCE,
+  NOTHING_NOTABLE_LINE,
+  OBSERVATIONS_CONTEXT_LINE,
+  THIN_REFERENCE_LINE,
+  type SetObservations,
+} from './observations';
 export { armAngleFromGravity, isQuasiStatic } from './gravity';
 export {
   findGravityRef,

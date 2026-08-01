@@ -7,14 +7,14 @@
  *   START → set the phone on the mount → 3 slow full-ROM reps (unloaded or
  *   light) → retrieve the phone → STOP.
  *
- * No taps at ROM endpoints: the phone is unreachable and unreadable there
- * (the old two-hold flow required exactly that, and both captures tended to
- * land at the same arm position). Derivation is sweep-based
- * (services/shared/motion/calibration.ts): pivot axis from the gyro scatter
- * matrix — NOT from gravity, which cannot determine it — with gravity used
- * as a per-stroke integrity check. The review step shows the derived ROM,
- * the axis-quality metric, and the axis direction so the user can
- * sanity-check against reality before saving.
+ * No taps at ROM endpoints: the phone is unreachable and unreadable there.
+ * Every sweep proceeds to a full analysis review (tier, PC1 share, chart,
+ * reps/velocity — services/shared/motion/captureAnalysis.ts); the tiered
+ * stillness classification only decides whether the sweep can additionally
+ * be SAVED as a machine calibration (services/shared/motion/calibration.ts).
+ * When it can't, the message says why — including "phone appears hand-held"
+ * when still windows exist but are too unsteady, since holding still longer
+ * doesn't fix that.
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -27,9 +27,15 @@ import {
   TAP_LATENCY_WARN_MS,
   type MotionRecorderHandle,
 } from '@/lib/motion/deviceMotionRecorder';
-import { downloadTextFile, samplesToCsv } from '@/lib/motion/csv';
+import { captureToCsv, downloadTextFile } from '@/lib/motion/csv';
 import { insertCalibration } from '@/lib/motion/calibrations';
-import { deriveSweepCalibration, type SweepCalibrationDerivation } from '@/services/shared/motion';
+import {
+  analyzeCapture,
+  deriveCalibrationFromAnalysis,
+  type CalibrationEligibility,
+  type CaptureAnalysis,
+} from '@/services/shared/motion';
+import { CaptureAnalysisView } from './CaptureAnalysisView';
 import {
   CALIBRATION_SCHEMA_VERSION,
   MOUNT_ORIENTATIONS,
@@ -101,7 +107,8 @@ export function CalibrationWizard({ userId, exercises, onSaved, onClose }: Calib
   const [radiusMm, setRadiusMm] = useState('');
   const [orientation, setOrientation] = useState<MountOrientation>('top-edge');
 
-  const [derivation, setDerivation] = useState<SweepCalibrationDerivation | null>(null);
+  const [analysis, setAnalysis] = useState<CaptureAnalysis | null>(null);
+  const [eligibility, setEligibility] = useState<CalibrationEligibility | null>(null);
   // Tap-to-sensor staleness measured at the STOP tap (debug visibility).
   const [stopLatencyMs, setStopLatencyMs] = useState<number | null>(null);
 
@@ -151,28 +158,35 @@ export function CalibrationWizard({ userId, exercises, onSaved, onClose }: Calib
     setStopLatencyMs(tapLatencyMs(recorder));
     const samples = recorder.stop();
     sweepSamplesRef.current = samples;
-    const result = deriveSweepCalibration(samples);
-    setDerivation(result);
+    // Every sweep proceeds to review: reps/velocity/chart always show, the
+    // stillness tier only decides whether a calibration can be SAVED.
+    const a = analyzeCapture(samples);
+    setAnalysis(a);
+    setEligibility(deriveCalibrationFromAnalysis(a, samples));
     setStep('review');
   };
 
   const downloadSweepCsv = () => {
     if (sweepSamplesRef.current.length === 0) return;
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-    downloadTextFile(`calibration-sweep-${stamp}.csv`, samplesToCsv(sweepSamplesRef.current));
+    downloadTextFile(
+      `calibration-sweep-${stamp}.csv`,
+      captureToCsv(sweepSamplesRef.current, analysis)
+    );
   };
 
   const restart = () => {
     recorderRef.current?.stop();
     recorderRef.current = null;
     setSweeping(false);
-    setDerivation(null);
+    setAnalysis(null);
+    setEligibility(null);
     setError(null);
     setStep('sweep');
   };
 
   const save = async () => {
-    if (!derivation?.valid) return;
+    if (!eligibility?.eligible) return;
     setBusy(true);
     setError(null);
     try {
@@ -183,11 +197,11 @@ export function CalibrationWizard({ userId, exercises, onSaved, onClose }: Calib
         seatSetting: seatSetting.trim(),
         mountRadius_mm: Number(radiusMm),
         mountOrientation: orientation,
-        gravityRefStart: derivation.gravityRefBottom!,
-        gravityRefEnd: derivation.gravityRefTop!,
-        derivedPivotAxis: derivation.pivotAxis!,
-        axisQuality: derivation.axisQuality!,
-        derivedRomDegrees: derivation.romDegrees,
+        gravityRefStart: eligibility.gravityRefBottom!,
+        gravityRefEnd: eligibility.gravityRefTop!,
+        derivedPivotAxis: eligibility.pivotAxis!,
+        axisQuality: eligibility.axisQuality!,
+        derivedRomDegrees: eligibility.romDegrees,
         schemaVersion: CALIBRATION_SCHEMA_VERSION,
       });
       onSaved(saved);
@@ -294,8 +308,12 @@ export function CalibrationWizard({ userId, exercises, onSaved, onClose }: Calib
           </div>
         )}
 
-        {step === 'review' && derivation && (
+        {step === 'review' && analysis && eligibility && (
           <div className="space-y-3" data-testid="calibration-review">
+            {/* The sweep ALWAYS shows its analysis — reps, velocity, chart,
+                tier — whether or not it qualifies as a calibration. */}
+            <CaptureAnalysisView analysis={analysis} />
+
             {/* Debug strip: sensor staleness at the STOP tap + raw export —
                 a rejection message alone can't explain a bad sweep. */}
             <div className="flex items-center justify-between gap-2 text-xs text-surface-500">
@@ -318,34 +336,28 @@ export function CalibrationWizard({ userId, exercises, onSaved, onClose }: Calib
                 Download raw sweep (CSV)
               </button>
             </div>
-            {derivation.valid ? (
+
+            {eligibility.eligible ? (
               <>
                 <div className="p-3 rounded-lg bg-surface-900/60 space-y-2">
                   <div className="flex items-baseline gap-4">
                     <div>
-                      <p className="text-xs text-surface-500">Range of motion</p>
+                      <p className="text-xs text-surface-500">Calibration ROM</p>
                       <p className="text-xl font-semibold text-primary-400">
-                        {derivation.romDegrees!.toFixed(1)}°
+                        {eligibility.romDegrees!.toFixed(1)}°
                       </p>
                     </div>
                     <div>
                       <p className="text-xs text-surface-500">Axis quality</p>
                       <p className="text-xl font-semibold text-surface-100">
-                        {derivation.axisQuality! >= 1000 ? '999+' : derivation.axisQuality!.toFixed(0)}
+                        {eligibility.axisQuality! >= 1000 ? '999+' : eligibility.axisQuality!.toFixed(0)}
                       </p>
                     </div>
-                    <div>
-                      <p className="text-xs text-surface-500">Strokes</p>
-                      <p className="text-xl font-semibold text-surface-100">{derivation.strokeCount}</p>
-                    </div>
                   </div>
-                  <AxisIndicator axis={derivation.pivotAxis!} />
+                  <AxisIndicator axis={eligibility.pivotAxis!} />
                   <p className="text-xs text-surface-400">
-                    Sanity-check the ROM against the machine&apos;s real stroke ({derivation.strokeRomsDeg
-                      .map((r) => r.toFixed(0))
-                      .join('°, ')}
-                    ° per stroke). If it looks wrong, redo the sweep — don&apos;t save a bad
-                    calibration.
+                    Sanity-check the ROM against the machine&apos;s real stroke. If it looks wrong,
+                    redo the sweep — don&apos;t save a bad calibration.
                   </p>
                 </div>
                 <div className="p-3 rounded-lg bg-warning-500/10 border border-warning-500/20">
@@ -365,9 +377,9 @@ export function CalibrationWizard({ userId, exercises, onSaved, onClose }: Calib
               </>
             ) : (
               <>
-                <div className="p-3 rounded-lg bg-danger-500/10 border border-danger-500/20">
-                  <p className="text-sm text-danger-400">
-                    {derivation.reason ?? 'The sweep was unusable.'}
+                <div className="p-3 rounded-lg bg-warning-500/10 border border-warning-500/20">
+                  <p className="text-sm text-warning-400" data-testid="calibration-ineligible-reason">
+                    Can&apos;t save as a machine calibration: {eligibility.reason}
                   </p>
                 </div>
                 <Button variant="secondary" onClick={restart} className="w-full">
