@@ -524,6 +524,12 @@ export const ExerciseCard = memo(function ExerciseCard({
     currentX: number;
     isSwiping: boolean;
   }>({ setId: null, startX: 0, currentX: 0, isSwiping: false });
+  // Set armed for deletion: the row stays slid open revealing a Delete button
+  // that must be tapped to confirm. Swiping alone never deletes.
+  const [confirmDeleteSetId, setConfirmDeleteSetId] = useState<string | null>(null);
+  // Suppress the click some browsers fire on the row right after a swipe ends,
+  // which would otherwise instantly dismiss the just-revealed Delete button.
+  const justSwipedRef = useRef(false);
 
   // Shared, de-duped candidate pool for BOTH swap tabs. The page feeds
   // availableExercises as blocks.map(b => b.exercise).concat(fullLibrary), so an
@@ -1528,6 +1534,10 @@ export const ExerciseCard = memo(function ExerciseCard({
 
   // Swipe to delete handlers
   const handleTouchStart = (setId: string, e: React.TouchEvent) => {
+    // A new touch means any pending after-swipe click has already fired (or never will)
+    justSwipedRef.current = false;
+    // Touching a different row dismisses any armed Delete button
+    setConfirmDeleteSetId(prev => (prev !== null && prev !== setId ? null : prev));
     setSwipeState({
       setId,
       startX: e.touches[0].clientX,
@@ -1556,11 +1566,14 @@ export const ExerciseCard = memo(function ExerciseCard({
     }
     
     const swipeDistance = swipeState.startX - swipeState.currentX;
-    const threshold = 100; // pixels to trigger delete
-    
+    const threshold = 100; // pixels to reveal the Delete button
+
+    justSwipedRef.current = true;
     if (swipeDistance > threshold) {
       if (isCompleted && onSetDelete) {
-        onSetDelete(setId);
+        // Don't delete on swipe alone — arm the row so the revealed Delete
+        // button must be tapped to confirm.
+        setConfirmDeleteSetId(setId);
       } else if (!isCompleted) {
         // Remove pending set by reducing target sets (never below the DB's
         // target_sets >= 1 check constraint)
@@ -1568,18 +1581,31 @@ export const ExerciseCard = memo(function ExerciseCard({
           onTargetSetsChange(Number(block.targetSets) - 1);
         }
       }
+    } else {
+      // Swiping back under the threshold dismisses an armed Delete button
+      setConfirmDeleteSetId(prev => (prev === setId ? null : prev));
     }
-    
+
     setSwipeState({ setId: null, startX: 0, currentX: 0, isSwiping: false });
   };
 
+  const DELETE_REVEAL_PX = 88; // width of the revealed Delete button
+
   const getSwipeTransform = (setId: string) => {
-    if (swipeState.setId !== setId || !swipeState.isSwiping) return {};
-    const diff = Math.min(120, Math.max(0, swipeState.startX - swipeState.currentX));
-    return {
-      transform: `translateX(-${diff}px)`,
-      transition: 'none',
-    };
+    if (swipeState.setId === setId && swipeState.isSwiping) {
+      const diff = Math.min(120, Math.max(0, swipeState.startX - swipeState.currentX));
+      return {
+        transform: `translateX(-${diff}px)`,
+        transition: 'none',
+      };
+    }
+    if (confirmDeleteSetId === setId) {
+      return {
+        transform: `translateX(-${DELETE_REVEAL_PX}px)`,
+        transition: 'transform 0.15s ease-out',
+      };
+    }
+    return { transform: 'translateX(0)', transition: 'transform 0.15s ease-out' };
   };
 
   const updatePendingInput = (index: number, field: 'weight' | 'reps' | 'rpe', value: string) => {
@@ -3225,13 +3251,48 @@ export const ExerciseCard = memo(function ExerciseCard({
             : displayWeight(set.weightKg, true);
           const rirValue = set.feedback?.repsInTank ?? rpeToRir(set.rpe);
 
+          const isDeleteRevealed =
+            confirmDeleteSetId === set.id ||
+            (swipeState.setId === set.id && swipeState.isSwiping);
+
           return (
             <React.Fragment key={set.id}>
+              <div className="relative overflow-hidden rounded-lg">
+                {isDeleteRevealed && onSetDelete && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setConfirmDeleteSetId(null);
+                      onSetDelete(set.id);
+                    }}
+                    aria-label={`Confirm delete set ${set.setNumber}`}
+                    data-testid={`confirm-delete-set-${set.setNumber}`}
+                    className="absolute inset-y-0 right-0 flex w-[88px] items-center justify-center rounded-r-lg bg-danger-500 text-sm font-semibold text-white"
+                  >
+                    Delete
+                  </button>
+                )}
               <div
                 className={`flex items-center gap-2 px-1 py-2 ${
-                  isDropsetSet ? 'bg-purple-500/5 rounded-lg' : ''
+                  isDeleteRevealed
+                    ? 'bg-surface-900'
+                    : isDropsetSet
+                    ? 'bg-purple-500/5 rounded-lg'
+                    : ''
                 } ${onSetEdit ? 'cursor-pointer hover:bg-surface-800/30 rounded-lg' : ''}`}
-                onClick={() => onSetEdit && startEditing(set)}
+                onClick={() => {
+                  // Ignore the synthetic click some browsers fire after a swipe
+                  if (justSwipedRef.current) {
+                    justSwipedRef.current = false;
+                    return;
+                  }
+                  // Tapping the slid-open row dismisses the Delete button
+                  if (confirmDeleteSetId === set.id) {
+                    setConfirmDeleteSetId(null);
+                    return;
+                  }
+                  if (onSetEdit) startEditing(set);
+                }}
                 onTouchStart={(e) => handleTouchStart(set.id, e)}
                 onTouchMove={handleTouchMove}
                 onTouchEnd={() => handleTouchEnd(set.id, true)}
@@ -3286,6 +3347,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                     <IconBone size={15} />
                   </button>
                 )}
+              </div>
               </div>
 
               {/* Inline joint pain picker for this completed set (two taps) */}
