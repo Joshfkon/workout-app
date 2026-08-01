@@ -203,6 +203,34 @@ export async function removeQueuedSet(id: string): Promise<boolean> {
   return true;
 }
 
+/**
+ * Drop every queued write that belongs to a removed exercise block: its
+ * queued set inserts, motion captures referencing those sets, and the
+ * block's own target-sets patch. Without this, deleting a block leaves the
+ * queue holding writes against a row that no longer exists — each flush then
+ * burns rejection attempts (FK/RLS) and the target-sets rejection surfaces a
+ * misleading "could not update sets" reconcile toast. Returns removed count.
+ */
+export async function purgeQueuedForBlock(blockId: string): Promise<number> {
+  const d = getDriver();
+  const all = await d.getAll();
+  const doomed = all.filter(
+    (e) =>
+      e.row.exercise_block_id === blockId ||
+      (e.table === 'exercise_blocks' && (e.matchId === blockId || e.row.id === blockId))
+  );
+  const doomedSetIds = new Set(
+    doomed.filter((e) => e.table === 'set_logs').map((e) => e.id)
+  );
+  for (const e of all) {
+    if (e.table === 'motion_captures' && doomedSetIds.has(e.row.set_id as string)) {
+      doomed.push(e);
+    }
+  }
+  for (const e of doomed) await d.delete(e.id);
+  return doomed.length;
+}
+
 // ---------------------------------------------------------------------------
 // Flush
 // ---------------------------------------------------------------------------

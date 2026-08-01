@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery, useQueryClient, useIsRestoring } from '@tanstack/react-query';
 import { useParams, useRouter } from 'next/navigation';
-import { Card, CardHeader, CardTitle, CardContent, Button, LoadingAnimation } from '@/components/ui';
+import { Card, CardHeader, CardTitle, CardContent, Button, ConfirmModal, LoadingAnimation } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 import type { WorkoutTemplate, WorkoutTemplateExercise, WorkoutFolder } from '@/types/templates';
@@ -45,6 +45,12 @@ export default function TemplateDetailPage() {
 
   // Edit exercise states
   const [editingExercise, setEditingExercise] = useState<WorkoutTemplateExercise | null>(null);
+
+  // Remove-exercise confirmation. Uses ConfirmModal, NOT native confirm():
+  // the native dialog can be silently suppressed in the Capacitor webview,
+  // which made the Remove button appear to do nothing.
+  const [removeConfirmExercise, setRemoveConfirmExercise] =
+    useState<{ id: string; name: string } | null>(null);
 
   // Keyboard-aware insets for the two input-bearing modals
   const { inset: addExerciseKbInset, scrollContainerRef: addExerciseModalRef } =
@@ -240,17 +246,21 @@ export default function TemplateDetailPage() {
     }
   }
 
-  // Remove exercise
+  // Remove exercise (confirmation handled by the ConfirmModal below — native
+  // confirm() is unreliable in the mobile webview). `.select('id')` surfaces
+  // an RLS-refused delete, which reports no error but removes 0 rows.
   async function handleRemoveExercise(exerciseId: string) {
-    if (!confirm('Remove this exercise from the template?')) return;
-
     try {
-      const { error } = await supabase
+      const { data: deletedRows, error } = await supabase
         .from('workout_template_exercises')
         .delete()
-        .eq('id', exerciseId);
+        .eq('id', exerciseId)
+        .select('id');
 
       if (error) throw error;
+      if (!deletedRows || deletedRows.length === 0) {
+        throw new Error('delete affected 0 rows');
+      }
       await loadTemplate();
     } catch (err) {
       console.error('Error removing exercise:', err);
@@ -611,10 +621,12 @@ export default function TemplateDetailPage() {
                           >
                             Edit
                           </Button>
-                          <Button 
-                            variant="danger" 
-                            size="sm" 
-                            onClick={() => handleRemoveExercise(exercise.id)}
+                          <Button
+                            variant="danger"
+                            size="sm"
+                            onClick={() =>
+                              setRemoveConfirmExercise({ id: exercise.id, name: exercise.exercise_name })
+                            }
                           >
                             Remove
                           </Button>
@@ -795,6 +807,27 @@ export default function TemplateDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Remove Exercise Confirmation Modal */}
+      <ConfirmModal
+        isOpen={removeConfirmExercise !== null}
+        onClose={() => setRemoveConfirmExercise(null)}
+        onConfirm={() => {
+          if (removeConfirmExercise) {
+            void handleRemoveExercise(removeConfirmExercise.id);
+            setRemoveConfirmExercise(null);
+          }
+        }}
+        title="Remove Exercise"
+        message={
+          removeConfirmExercise
+            ? `Remove "${removeConfirmExercise.name}" from this template?`
+            : ''
+        }
+        confirmText="Remove"
+        cancelText="Keep"
+        variant="danger"
+      />
     </div>
   );
 }

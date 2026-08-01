@@ -13,6 +13,7 @@ import {
   outboxCount,
   updateQueuedSet,
   removeQueuedSet,
+  purgeQueuedForBlock,
   flushSetOutbox,
   isNetworkError,
   isMissingColumnError,
@@ -441,6 +442,30 @@ describe('setOutbox', () => {
       expect(await outboxCount()).toBe(2);
       expect(await outboxCount('set_logs')).toBe(1);
       expect(await outboxCount('workout_sessions')).toBe(1);
+    });
+  });
+
+  describe('purgeQueuedForBlock (remove-exercise cleanup)', () => {
+    it('drops the removed block\'s queued sets, their motion captures, and its target-sets patch — nothing else', async () => {
+      // Removed block b1: a queued set, that set's motion capture, and a target-sets patch.
+      await enqueueSetInsert('set-1', { id: 'set-1', exercise_block_id: 'b1', reps: 10 });
+      await enqueueRowUpsert('cap-1', 'motion_captures', { id: 'cap-1', set_id: 'set-1' });
+      await enqueueRowUpdate('block-target-sets:b1', 'exercise_blocks', 'b1', { target_sets: 4 });
+      // Unrelated block b2 and a session finish stay queued.
+      await enqueueSetInsert('set-2', { id: 'set-2', exercise_block_id: 'b2', reps: 8 });
+      await enqueueRowUpdate('finish:s1', 'workout_sessions', 's1', { state: 'completed' });
+
+      const removed = await purgeQueuedForBlock('b1');
+
+      expect(removed).toBe(3);
+      const remaining = (await listOutbox()).map((e) => e.id).sort();
+      expect(remaining).toEqual(['finish:s1', 'set-2']);
+    });
+
+    it('is a no-op when nothing queued belongs to the block', async () => {
+      await enqueueSetInsert('set-2', { id: 'set-2', exercise_block_id: 'b2', reps: 8 });
+      expect(await purgeQueuedForBlock('b1')).toBe(0);
+      expect(await outboxCount()).toBe(1);
     });
   });
 

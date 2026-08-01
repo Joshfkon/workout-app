@@ -15,6 +15,7 @@ import {
   isNetworkError,
   listOutbox,
   outboxCount,
+  purgeQueuedForBlock,
   removeQueuedSet,
   updateQueuedSet,
   withoutOptionalSetLogColumns,
@@ -3797,6 +3798,13 @@ export default function WorkoutPage() {
     const exerciseName = blockToDelete?.exercise.name || 'Exercise';
 
     try {
+      // Purge the block's queued offline writes first (unsynced sets, their
+      // motion captures, a pending target-sets patch): once the row is gone,
+      // flushing them can only produce FK/RLS rejections — and the rejected
+      // target-sets patch would surface a misleading reconcile toast.
+      await purgeQueuedForBlock(blockId);
+      refreshOutboxCount();
+
       const supabase = createUntypedClient();
 
       // First delete any set logs for this block
@@ -3811,16 +3819,27 @@ export default function WorkoutPage() {
         // Don't fail the operation - cascade delete will handle it
       }
 
-      // Then delete the exercise block
-      const { error: blockError } = await supabase
+      // Then delete the exercise block. `.select('id')` returns the deleted
+      // rows: an RLS-refused delete reports no error but touches 0 rows, and
+      // treating that as success would show a removal that reappears on the
+      // next reload.
+      const { data: deletedRows, error: blockError } = await supabase
         .from('exercise_blocks')
         .delete()
-        .eq('id', blockId);
+        .eq('id', blockId)
+        .select('id');
 
       if (blockError) {
         console.error('Failed to delete exercise block:', blockError);
         showError(`Failed to remove ${exerciseName}: ${blockError.message}`);
         setError(`Failed to delete exercise: ${blockError.message}`);
+        return;
+      }
+
+      if (!deletedRows || deletedRows.length === 0) {
+        console.error('Exercise block delete affected 0 rows (RLS or already gone):', blockId);
+        showError(`Could not remove ${exerciseName} — please try again`);
+        setError('Failed to delete exercise: no rows deleted');
         return;
       }
 

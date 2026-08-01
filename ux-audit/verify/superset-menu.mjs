@@ -84,6 +84,12 @@ function route(r) {
       if (body.includes('superset_group_id')) supersetPatches.push(body);
       return json(r, []);
     }
+    if (method === 'DELETE') {
+      // The delete asks for the removed rows back (return=representation) to
+      // detect an RLS-refused 0-row delete — echo the matched id like PostgREST.
+      const idMatch = url.match(/[?&]id=eq\.([^&]+)/);
+      return json(r, idMatch ? [{ id: decodeURIComponent(idMatch[1]) }] : []);
+    }
     return json(r, blocksRows);
   }
   if (url.includes('/rest/v1/set_logs')) return json(r, method === 'GET' ? setRows : []);
