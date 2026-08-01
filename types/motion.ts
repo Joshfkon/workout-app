@@ -159,6 +159,13 @@ export interface MotionCapture {
    * analysis can filter.
    */
   analysisMetrics?: CaptureAnalysisMetrics | null;
+  /**
+   * True if the user expanded any Observations block earlier in the same
+   * workout before this capture was saved. Read by nothing — a future
+   * label-contamination filter for the RIR fit (metrics seen before RIR
+   * entry can anchor the label).
+   */
+  priorObservationsViewedThisSession?: boolean;
   /** Literal source tag so future pipelines can migrate old records. */
   provenance: MotionProvenance;
   schemaVersion: number;

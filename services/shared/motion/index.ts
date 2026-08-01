@@ -39,6 +39,15 @@ export {
   type HalfRep,
 } from './captureAnalysis';
 export {
+  AutoCaptureGate,
+  AUTO_GATE_DEFAULTS,
+  MIN_AUTO_CAPTURE_REPS,
+  shouldKeepAutoCapture,
+  trimCaptureTail,
+  type AutoGateOptions,
+  type AutoGateState,
+} from './autoGate';
+export {
   buildObservations,
   MIN_REPS_FOR_REFERENCE,
   NOTHING_NOTABLE_LINE,

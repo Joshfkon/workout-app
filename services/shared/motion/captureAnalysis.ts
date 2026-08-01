@@ -443,12 +443,20 @@ function segmentHalfReps(
 
   // Merge consecutive same-direction excursions (a mid-stroke slowdown that
   // dips under the exit threshold is still the same half-rep; only an
-  // opposite-direction excursion ends it).
+  // opposite-direction excursion ends it) — but only across BRIEF gaps. A
+  // sticking point is a sub-second grind; a second-plus of quiet between
+  // same-sign excursions means two separate movements (e.g. the last
+  // eccentric and a later same-sign fidget), which must never fuse into one
+  // giant half-rep.
+  const MERGE_MAX_GAP_MS = 750;
   const merged: RawHalfRep[] = [];
   for (const e of excursions) {
     const last = merged[merged.length - 1];
-    if (last && last.dir === e.dir) last.endIdx = e.endIdx;
-    else merged.push({ ...e });
+    if (last && last.dir === e.dir && tMs[e.startIdx] - tMs[last.endIdx] <= MERGE_MAX_GAP_MS) {
+      last.endIdx = e.endIdx;
+    } else {
+      merged.push({ ...e });
+    }
   }
 
   // Expand each to its enclosing ZERO CROSSINGS (the true rep boundaries —

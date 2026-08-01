@@ -112,6 +112,7 @@ export interface Database {
           reps: Json;
           quality_flags: string[];
           analysis_metrics: Json | null;
+          prior_observations_viewed_this_session: boolean;
           provenance: string;
           schema_version: number;
           created_at: string;
@@ -131,6 +132,7 @@ export interface Database {
           reps: Json;
           quality_flags?: string[];
           analysis_metrics?: Json | null;
+          prior_observations_viewed_this_session?: boolean;
           provenance?: string;
           schema_version?: number;
           created_at?: string;

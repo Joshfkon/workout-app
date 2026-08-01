@@ -171,6 +171,12 @@ const customJestConfig = {
       branches: 75,
       statements: 90,
     },
+    'services/shared/motion/autoGate.ts': {
+      lines: 85,
+      functions: 80,
+      branches: 70,
+      statements: 85,
+    },
     'services/shared/motion/calibration.ts': {
       lines: 85,
       functions: 80,

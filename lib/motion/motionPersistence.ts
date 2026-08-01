@@ -48,6 +48,7 @@ export function toMotionCaptureRow(
     reps: capture.reps,
     quality_flags: capture.qualityFlags,
     analysis_metrics: capture.analysisMetrics ?? null,
+    prior_observations_viewed_this_session: capture.priorObservationsViewedThisSession ?? false,
     provenance: capture.provenance,
     schema_version: capture.schemaVersion,
   };
