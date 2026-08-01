@@ -109,6 +109,32 @@ export const MOTION_PROVENANCE = 'phone-imu-v1' as const;
 export type MotionProvenance = typeof MOTION_PROVENANCE;
 
 /**
+ * Per-rep metrics from the calibration-free analysis pipeline, persisted
+ * with the capture as the feature set for a future velocity-loss → RIR
+ * fit. DESCRIPTIVE data only: nothing reads these yet, and nothing here
+ * judges a rep.
+ */
+export interface CaptureAnalysisRepMetrics {
+  /** 0-based rep index. */
+  index: number;
+  romDeg: number;
+  meanConcentricW_radps: number;
+  peakConcentricW_radps: number;
+  /** Null on the first rep (its bottom is the pre-set rest). */
+  bottomDwellMs: number | null;
+  /** Null on the first rep. */
+  turnaroundPeakAccel_radps2: number | null;
+}
+
+/** Capture-level analysis metadata persisted for later quality filtering. */
+export interface CaptureAnalysisMetrics {
+  pc1VarianceShare: number;
+  /** Acute PC1-to-gravity angle, degrees; null when no gravity reference. */
+  pc1GravityAngleDeg: number | null;
+  reps: CaptureAnalysisRepMetrics[];
+}
+
+/**
  * One recorded set's motion telemetry. References the set by id; the set
  * schema is untouched. Raw sample buffers are NOT part of this record —
  * raw retention is a separate opt-in with a per-session cap.
@@ -126,6 +152,20 @@ export interface MotionCapture {
   clipDetected: boolean;
   reps: RepMetric[];
   qualityFlags: string[];
+  /**
+   * Calibration-free analysis metrics (motion_captures.analysis_metrics).
+   * Stored even though nothing reads them yet — the feature set for a
+   * future velocity-loss → RIR fit, with capture-quality metadata so later
+   * analysis can filter.
+   */
+  analysisMetrics?: CaptureAnalysisMetrics | null;
+  /**
+   * True if the user expanded any Observations block earlier in the same
+   * workout before this capture was saved. Read by nothing — a future
+   * label-contamination filter for the RIR fit (metrics seen before RIR
+   * entry can anchor the label).
+   */
+  priorObservationsViewedThisSession?: boolean;
   /** Literal source tag so future pipelines can migrate old records. */
   provenance: MotionProvenance;
   schemaVersion: number;

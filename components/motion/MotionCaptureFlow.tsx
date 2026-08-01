@@ -28,7 +28,7 @@ import {
   TAP_LATENCY_WARN_MS,
   type MotionRecorderHandle,
 } from '@/lib/motion/deviceMotionRecorder';
-import { downloadTextFile, samplesToCsv } from '@/lib/motion/csv';
+import { captureToCsv, downloadTextFile } from '@/lib/motion/csv';
 import { acquireScreenWakeLock, type WakeLockHandle } from '@/lib/motion/wakeLock';
 import {
   RAW_BUFFER_SESSION_CAP,
@@ -40,6 +40,7 @@ import {
   getPendingCapture,
   setPendingCapture,
 } from '@/lib/motion/pendingCapture';
+import { observationsViewedThisSession } from '@/lib/motion/observationsViewed';
 import {
   LiveCaptureGate,
   analyzeCapture,
@@ -298,11 +299,11 @@ export function MotionCaptureFlow({
   const downloadCsv = () => {
     if (!finished) return;
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-    downloadTextFile(`motion-capture-${stamp}.csv`, samplesToCsv(finished.samples));
+    downloadTextFile(`motion-capture-${stamp}.csv`, captureToCsv(finished.samples, analysis));
   };
 
   const save = async () => {
-    if (!finished || !calibration || !attachSetId || !persistResult) return;
+    if (!finished || !calibration || !attachSetId || !persistResult || !analysis) return;
     setSaveState('saving');
     setError(null);
     try {
@@ -319,6 +320,25 @@ export function MotionCaptureFlow({
         clipDetected: persistResult.clipDetected,
         reps: persistResult.reps,
         qualityFlags: persistResult.qualityFlags,
+        // Descriptive analysis metrics — the feature set for a future
+        // velocity-loss → RIR fit; read by nothing today.
+        analysisMetrics: {
+          pc1VarianceShare: analysis.pc1VarianceShare,
+          pc1GravityAngleDeg: analysis.pc1GravityAngleDeg,
+          reps: analysis.reps.map((r) => ({
+            index: r.index,
+            romDeg: r.romConcentricDeg,
+            meanConcentricW_radps: r.meanWConcentric,
+            peakConcentricW_radps: r.peakW,
+            bottomDwellMs: r.bottomDwellMs,
+            turnaroundPeakAccel_radps2: r.turnaroundPeakAccelRadps2,
+          })),
+        },
+        // Label-contamination flag for the future RIR fit — the manual path
+        // must record it too, or manually saved captures all read as clean.
+        priorObservationsViewedThisSession: activeSession
+          ? observationsViewedThisSession(activeSession.id)
+          : false,
         provenance: MOTION_PROVENANCE,
         schemaVersion: MOTION_SCHEMA_VERSION,
       };

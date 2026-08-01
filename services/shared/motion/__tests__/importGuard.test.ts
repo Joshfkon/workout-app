@@ -103,6 +103,26 @@ it('the pure signal layer (services/shared/motion) is DOM- and sensor-free', () 
   expect(offenders).toEqual([]);
 });
 
+/**
+ * Write-isolation: motion is a read-only side channel. No code path in the
+ * feature may target the tables that back logged sets, volume aggregates,
+ * or prescription inputs — its persistence surface is exactly the motion
+ * tables (plus reading users flags / the exercise catalog).
+ */
+const BANNED_TABLES =
+  /['"`](set_logs|exercise_blocks|workout_sessions|session_muscle_feedback|exercise_performance_snapshots|user_volume_profiles|mesocycles|user_profiles)['"`]/;
+
+it('no motion-feature module references set-log / volume / prescription tables', () => {
+  const offenders: string[] = [];
+  for (const dir of FEATURE_DIRS) {
+    for (const file of walk(path.join(ROOT, dir))) {
+      const src = fs.readFileSync(file, 'utf8');
+      if (BANNED_TABLES.test(src)) offenders.push(path.relative(ROOT, file));
+    }
+  }
+  expect(offenders).toEqual([]);
+});
+
 it('the feature directories actually exist (guard cannot rot into a no-op)', () => {
   expect(fs.existsSync(path.join(ROOT, 'services/shared/motion'))).toBe(true);
 });
