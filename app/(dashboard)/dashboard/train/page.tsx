@@ -129,6 +129,8 @@ interface RecentSessionRow {
   id: string;
   completed_at: string;
   started_at: string | null;
+  /** Active duration snapshot (pauses excluded); null for legacy sessions. */
+  duration_seconds: number | null;
   exercise_blocks:
     | {
         exercise_id: string;
@@ -146,6 +148,25 @@ interface RecentSessionRow {
 }
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/**
+ * Active workout minutes: the duration_seconds snapshot (pauses excluded)
+ * when present, else the completed_at − started_at wall-clock span for legacy
+ * sessions without one. Null when neither yields a positive duration.
+ */
+function activeDurationMin(row: {
+  started_at: string | null;
+  completed_at: string;
+  duration_seconds: number | null;
+}): number | null {
+  if (row.duration_seconds != null && row.duration_seconds > 0) {
+    return row.duration_seconds / 60;
+  }
+  if (!row.started_at) return null;
+  const min =
+    (new Date(row.completed_at).getTime() - new Date(row.started_at).getTime()) / 60000;
+  return min > 0 ? min : null;
+}
 
 /** "4h 35m" / "45m" from a minute total. */
 function formatHoursMinutes(totalMinutes: number): string {
@@ -290,7 +311,7 @@ export default function TrainPage() {
           supabase
             .from('workout_sessions')
             .select(
-              'id, completed_at, started_at, exercise_blocks(exercise_id, order, suggestion_reason, exercises(name, primary_muscle), set_logs(is_warmup, weight_kg, reps))'
+              'id, completed_at, started_at, duration_seconds, exercise_blocks(exercise_id, order, suggestion_reason, exercises(name, primary_muscle), set_logs(is_warmup, weight_kg, reps))'
             )
             .eq('user_id', user.id)
             .eq('state', 'completed')
@@ -298,7 +319,7 @@ export default function TrainPage() {
             .limit(5),
           supabase
             .from('workout_sessions')
-            .select('started_at, completed_at')
+            .select('started_at, completed_at, duration_seconds')
             .eq('user_id', user.id)
             .eq('state', 'completed')
             .gte('completed_at', weekStart),
@@ -331,9 +352,8 @@ export default function TrainPage() {
               0
             );
             const completedAt = new Date(row.completed_at);
-            const durationMin = row.started_at
-              ? Math.round((completedAt.getTime() - new Date(row.started_at).getTime()) / 60000)
-              : null;
+            const rawDurationMin = activeDurationMin(row);
+            const durationMin = rawDurationMin != null ? Math.round(rawDurationMin) : null;
             // The clone list for "Repeat previous workout": exercise ids +
             // working sets (weights feed E1RM re-estimation, not the targets).
             const exercises: RepeatableExercise[] = [...blocks]
@@ -363,18 +383,14 @@ export default function TrainPage() {
         const weekRows = (weekSessionsRes.data ?? []) as {
           started_at: string | null;
           completed_at: string;
+          duration_seconds: number | null;
         }[];
         setSessionsThisWeek(weekRows.length);
-        // Sum only sessions with a sane started_at → completed_at span, same
-        // as the recent-workouts duration (missing start or non-positive span
-        // is dropped rather than skewing the totals).
+        // Sessions without a usable duration still count as sessions but are
+        // dropped from the time math rather than skewing the totals.
         const durationsMin = weekRows
-          .map((row) =>
-            row.started_at
-              ? (new Date(row.completed_at).getTime() - new Date(row.started_at).getTime()) / 60000
-              : null
-          )
-          .filter((min): min is number => min !== null && min > 0);
+          .map(activeDurationMin)
+          .filter((min): min is number => min !== null);
         const totalMin = durationsMin.reduce((sum, min) => sum + min, 0);
         setWeekTime({
           totalMin,
