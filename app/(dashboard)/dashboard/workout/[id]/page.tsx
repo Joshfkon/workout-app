@@ -84,9 +84,11 @@ import { listCalibrations } from '@/lib/motion/calibrations';
 import { getPendingCapture } from '@/lib/motion/pendingCapture';
 import { observationsViewedThisSession } from '@/lib/motion/observationsViewed';
 import { saveMotionCapture, saveRawBufferIfAllowed } from '@/lib/motion/motionPersistence';
+import { motionLog } from '@/lib/motion/debugLog';
 import { useMotionAutoCapture } from '@/components/motion/useMotionAutoCapture';
 import { SetObservationsRow } from '@/components/motion/SetObservationsRow';
 import {
+  MIN_AUTO_CAPTURE_REPS,
   processMotionSamples,
   shouldKeepAutoCapture,
   trimCaptureTail,
@@ -734,7 +736,12 @@ export default function WorkoutPage() {
     async (setId: string, exerciseId: string, samples: ImuSample[], analysis: CaptureAnalysis) => {
       try {
         const calibration = motionCalibrations.find((c) => c.exerciseId === exerciseId);
-        if (!calibration || !session) return;
+        if (!calibration || !session) {
+          motionLog(
+            'capture kept in memory only (no machine calibration for this exercise — the persisted schema requires one)'
+          );
+          return;
+        }
         const persistResult = processMotionSamples({
           samples,
           pivotAxis: calibration.derivedPivotAxis,
@@ -771,7 +778,8 @@ export default function WorkoutPage() {
           schemaVersion: MOTION_SCHEMA_VERSION,
         };
         const supabase = createUntypedClient();
-        await saveMotionCapture(supabase, capture, session.userId);
+        const saveStatus = await saveMotionCapture(supabase, capture, session.userId);
+        motionLog(`capture persisted (${saveStatus})`);
         if (motionRawRetention) {
           await saveRawBufferIfAllowed(supabase, {
             captureId: capture.id,
@@ -806,10 +814,25 @@ export default function WorkoutPage() {
     (setId: string, exerciseId: string) => {
       const samples = heldAutoSamplesRef.current ?? motionAuto.stopAndCollect();
       heldAutoSamplesRef.current = null;
-      if (!samples || samples.length < 60) return;
+      if (!samples) {
+        motionLog('log-set: nothing to attach — no capture was running when the set was logged');
+        return;
+      }
+      if (samples.length < 60) {
+        motionLog(`log-set: capture too short to analyze (${samples.length} samples < 60)`);
+        return;
+      }
       setTimeout(() => {
         const { samples: trimmed, analysis } = trimCaptureTail(samples);
-        if (!shouldKeepAutoCapture(analysis)) return;
+        if (!shouldKeepAutoCapture(analysis)) {
+          motionLog(
+            `log-set: capture discarded — ${analysis.reps.length} rep(s) detected (< ${MIN_AUTO_CAPTURE_REPS})`
+          );
+          return;
+        }
+        motionLog(
+          `log-set: capture attached to the set (${analysis.reps.length} reps, ${trimmed.length} samples) — Observations render under its history row once RIR is saved`
+        );
         setMotionAutoCaptures((prev) => ({ ...prev, [setId]: analysis }));
         void persistAutoCapture(setId, exerciseId, trimmed, analysis);
       }, 0);
@@ -846,8 +869,14 @@ export default function WorkoutPage() {
       // BEFORE the next working set restarted at e.g. 30s instead of the
       // block's rest).
       setRestTimerDuration(null);
+      // Motion capture: rest over means the next set is imminent. A phone
+      // already mounted on the machine gets no card taps between sets, so
+      // this is the re-arm path that needs no touch at all.
+      motionAuto.rearm();
     },
-  }), [restTimerDuration, currentBlock?.targetRestSeconds]);
+    // motionAuto.rearm (not motionAuto): the hook's return object changes
+    // identity on every status change and would reinitialize the timer.
+  }), [restTimerDuration, currentBlock?.targetRestSeconds, motionAuto.rearm]);
 
   // Rest timer hook
   const restTimer = useRestTimer(restTimerOptions);
@@ -5971,8 +6000,28 @@ export default function WorkoutPage() {
 
                   {/* Motion capture (experimental): auto-capture status for
                       the current exercise. Captures start themselves on
-                      motion and end on "Log set"; the chips cover the two
-                      cases needing a tap (iOS permission, manual stop). */}
+                      motion and end on "Log set". Every gate state has a
+                      visible chip — a field test where the gate silently
+                      disarmed produced a set with no capture and no clue
+                      why, so state is never invisible again. */}
+                  {motionCaptureEnabled && isCurrent && motionAuto.status === 'armed' && (
+                    <div
+                      className="w-full py-2 px-3 rounded-lg border border-surface-700 text-xs text-surface-400 text-center"
+                      data-testid="motion-armed-chip"
+                    >
+                      ◉ Motion capture armed — starts itself when the machine moves
+                    </div>
+                  )}
+                  {motionCaptureEnabled && isCurrent && motionAuto.status === 'disarmed' && (
+                    <button
+                      type="button"
+                      onClick={motionAuto.rearm}
+                      className="w-full py-2 px-3 rounded-lg border border-warning-500/40 text-xs text-warning-400 hover:border-warning-400 transition-colors"
+                      data-testid="motion-rearm-button"
+                    >
+                      ◉ Motion capture idle (no motion for 3 min) — tap to re-arm
+                    </button>
+                  )}
                   {motionCaptureEnabled && isCurrent && motionAuto.status === 'needs-permission' && (
                     <button
                       type="button"

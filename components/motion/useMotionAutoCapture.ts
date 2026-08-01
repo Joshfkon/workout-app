@@ -25,6 +25,7 @@ import {
   type MotionRecorderHandle,
 } from '@/lib/motion/deviceMotionRecorder';
 import { acquireScreenWakeLock, type WakeLockHandle } from '@/lib/motion/wakeLock';
+import { motionLog } from '@/lib/motion/debugLog';
 import { AutoCaptureGate, type AutoGateState } from '@/services/shared/motion';
 
 export type AutoCaptureStatus = 'off' | 'needs-permission' | AutoGateState;
@@ -78,13 +79,20 @@ export function useMotionAutoCapture(enabled: boolean): MotionAutoCapture {
     recorderRef.current = startMotionRecorder((s) => {
       const state = gate.feed(s);
       if (state !== statusRef.current) {
+        if (state === 'capturing') {
+          motionLog('capture started (sustained motion above the enter threshold)');
+        }
         if (state === 'disarmed') {
           // Stop burning battery; a rearm() revives everything.
+          motionLog(
+            'auto-disarmed: 3 min without motion — recorder stopped; card tap or rest-timer end re-arms'
+          );
           teardown();
         }
         setStatusBoth(state);
       }
     });
+    motionLog('armed — IMU streaming into the rolling pre-start buffer');
     setStatusBoth('armed');
   }, [teardown]);
 
@@ -95,8 +103,11 @@ export function useMotionAutoCapture(enabled: boolean): MotionAutoCapture {
       return;
     }
     if (permissionGateExists() && !permissionGrantedThisPageLoad) {
+      motionLog('waiting for the enable tap (iOS motion permission requires a gesture)');
       setStatusBoth('needs-permission');
-      return;
+      // teardown still returned: a recorder started later by
+      // enableFromGesture() must not outlive the page.
+      return teardown;
     }
     startArm();
     return teardown;
@@ -105,7 +116,10 @@ export function useMotionAutoCapture(enabled: boolean): MotionAutoCapture {
 
   const enableFromGesture = useCallback(async () => {
     const permission = await requestMotionPermission();
-    if (permission !== 'granted') return;
+    if (permission !== 'granted') {
+      motionLog(`motion permission not granted (${permission}) — auto capture stays off`);
+      return;
+    }
     permissionGrantedThisPageLoad = true;
     startArm();
   }, [startArm]);
@@ -121,8 +135,14 @@ export function useMotionAutoCapture(enabled: boolean): MotionAutoCapture {
 
   const stopAndCollect = useCallback((): ImuSample[] | null => {
     const gate = gateRef.current;
-    if (!gate || gate.current() !== 'capturing') return null;
+    if (!gate || gate.current() !== 'capturing') {
+      motionLog(
+        `stop requested but no capture was running (gate: ${gate ? gate.current() : 'torn down'})`
+      );
+      return null;
+    }
     const samples = gate.collect();
+    motionLog(`capture stopped: ${samples.length} samples collected`);
     // Immediately re-arm for the next set.
     startArm();
     return samples;

@@ -8,7 +8,11 @@
  *              500 ms before the crossing using the buffer, so the ramp of
  *              rep 1 is never lost.
  *   DISARMED : no qualifying motion for 3 minutes — stop burning battery.
- *              Re-armed on any interaction with the exercise card.
+ *              The clock runs from the LAST above-threshold sample (or from
+ *              arming, when none has occurred), so handling the phone —
+ *              mounting it, carrying it — keeps the gate alive; only a
+ *              genuinely still phone disarms. Re-armed on any interaction
+ *              with the exercise card.
  *
  * Stopping is external ("Log set" tap, or the manual fallback control).
  * Pure and framework-free: the browser layer feeds samples and reads
@@ -30,7 +34,7 @@ export interface AutoGateOptions {
   backfillMs?: number;
   /** Rolling pre-start buffer length. */
   bufferMs?: number;
-  /** Disarm after this long armed with no capture start. */
+  /** Disarm after this long with no above-threshold motion. */
   disarmAfterMs?: number;
 }
 
@@ -49,7 +53,14 @@ export class AutoCaptureGate {
   private capture: ImuSample[] = [];
   /** Timestamp the current above-threshold run began (null = below). */
   private runStartTMs: number | null = null;
-  private armedAtTMs: number | null = null;
+  /**
+   * Disarm-clock reference: the last above-threshold sample, initialized to
+   * the first sample after arming. Measuring quiet from the last qualifying
+   * MOTION (not from arm time) is what lets a phone that was just mounted
+   * survive a plate-loading pause — a fixed from-arm clock disarmed mid-rest
+   * in the field and silently missed the whole set.
+   */
+  private lastActivityTMs: number | null = null;
 
   constructor(opts: AutoGateOptions = {}) {
     this.opts = { ...AUTO_GATE_DEFAULTS, ...opts };
@@ -63,12 +74,13 @@ export class AutoCaptureGate {
     }
 
     // armed: rolling buffer + start detection.
-    if (this.armedAtTMs === null) this.armedAtTMs = sample.tMs;
+    if (this.lastActivityTMs === null) this.lastActivityTMs = sample.tMs;
     this.buffer.push(sample);
     const cutoff = sample.tMs - this.opts.bufferMs;
     while (this.buffer.length > 0 && this.buffer[0].tMs < cutoff) this.buffer.shift();
 
     if (norm(sample.gyro) >= this.opts.enterOmegaRadps) {
+      this.lastActivityTMs = sample.tMs;
       if (this.runStartTMs === null) this.runStartTMs = sample.tMs;
       if (sample.tMs - this.runStartTMs >= this.opts.sustainMs) {
         // START: backfill from before the crossing so rep 1's ramp is kept.
@@ -80,8 +92,7 @@ export class AutoCaptureGate {
       }
     } else {
       this.runStartTMs = null;
-      // Disarm only while quiet — an in-progress qualifying run never disarms.
-      if (sample.tMs - this.armedAtTMs >= this.opts.disarmAfterMs) {
+      if (sample.tMs - this.lastActivityTMs >= this.opts.disarmAfterMs) {
         this.buffer = [];
         this.state = 'disarmed';
       }
@@ -100,7 +111,7 @@ export class AutoCaptureGate {
   rearm(): void {
     if (this.state === 'capturing') return;
     this.state = 'armed';
-    this.armedAtTMs = null;
+    this.lastActivityTMs = null;
     this.runStartTMs = null;
   }
 

@@ -9,7 +9,7 @@
   "app/(dashboard)/dashboard/workout/[id]/_lib/sessionMapping.ts": 1,
   "app/(dashboard)/dashboard/workout/[id]/_lib/sessionWrites.ts": 4,
   "app/(dashboard)/dashboard/workout/[id]/_lib/suggestions.ts": 6,
-  "app/(dashboard)/dashboard/workout/[id]/page.tsx": 14,
+  "app/(dashboard)/dashboard/workout/[id]/page.tsx": 16,
   "app/(onboarding)/onboarding/calibrate/page.tsx": 1,
   "components/motion/CaptureAnalysisView.tsx": 5,
   "components/motion/MotionCaptureFlow.tsx": 14,

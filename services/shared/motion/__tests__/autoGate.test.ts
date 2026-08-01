@@ -63,6 +63,34 @@ describe('AutoCaptureGate', () => {
     expect(gate.current()).toBe('capturing');
   });
 
+  it('measures the disarm clock from the LAST qualifying motion, not from arming', () => {
+    // Field failure this guards: enable → mount phone → load plates → rest.
+    // A from-arm clock disarmed 3 min after enabling even though the phone
+    // had just been handled, and the working set was silently never
+    // captured. Brief above-threshold bursts (handling; < 200 ms sustain so
+    // no capture starts) must keep resetting the quiet clock.
+    const gate = new AutoCaptureGate();
+    let t = 0;
+    for (let burst = 0; burst < 3; burst++) {
+      t = feedRun(gate, t, 2.5 * 60 * 1000, 0.05); // 2.5 min quiet
+      expect(gate.current()).toBe('armed');
+      t = feedRun(gate, t, 100, 0.8); // brief handling burst, not sustained
+      expect(gate.current()).toBe('armed');
+    }
+    // 7.5+ minutes since arming, still armed — and still able to start.
+    t = feedRun(gate, t, 1000, 0.05);
+    feedRun(gate, t, 250, 0.8);
+    expect(gate.current()).toBe('capturing');
+  });
+
+  it('disarms 3 quiet minutes after the last qualifying motion', () => {
+    const gate = new AutoCaptureGate();
+    let t = feedRun(gate, 0, 60 * 1000, 0.05);
+    t = feedRun(gate, t, 100, 0.8); // handling burst resets the clock
+    feedRun(gate, t, 3 * 60 * 1000 + 2000, 0.05);
+    expect(gate.current()).toBe('disarmed');
+  });
+
   it('sub-threshold fidgeting does not start a capture but does not block a later start', () => {
     const gate = new AutoCaptureGate();
     let t = feedRun(gate, 0, 5000, 0.3); // below 0.5 the whole time
