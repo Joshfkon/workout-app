@@ -47,6 +47,7 @@ export function toMotionCaptureRow(
     clip_detected: capture.clipDetected,
     reps: capture.reps,
     quality_flags: capture.qualityFlags,
+    analysis_metrics: capture.analysisMetrics ?? null,
     provenance: capture.provenance,
     schema_version: capture.schemaVersion,
   };

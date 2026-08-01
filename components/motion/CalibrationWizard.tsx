@@ -27,7 +27,7 @@ import {
   TAP_LATENCY_WARN_MS,
   type MotionRecorderHandle,
 } from '@/lib/motion/deviceMotionRecorder';
-import { downloadTextFile, samplesToCsv } from '@/lib/motion/csv';
+import { captureToCsv, downloadTextFile } from '@/lib/motion/csv';
 import { insertCalibration } from '@/lib/motion/calibrations';
 import {
   analyzeCapture,
@@ -169,7 +169,10 @@ export function CalibrationWizard({ userId, exercises, onSaved, onClose }: Calib
   const downloadSweepCsv = () => {
     if (sweepSamplesRef.current.length === 0) return;
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-    downloadTextFile(`calibration-sweep-${stamp}.csv`, samplesToCsv(sweepSamplesRef.current));
+    downloadTextFile(
+      `calibration-sweep-${stamp}.csv`,
+      captureToCsv(sweepSamplesRef.current, analysis)
+    );
   };
 
   const restart = () => {

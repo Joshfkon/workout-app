@@ -107,6 +107,29 @@ describe('analyzeCapture on the hand-held curl fixture', () => {
     expect(analysis.reps[0].romGravityDeg).not.toBeNull();
   });
 
+  it('suppresses the gravity-ROM column: PC1 is ~25° from gravity on this capture', () => {
+    // Accelerometer-derived angle only resolves rotation PERPENDICULAR to
+    // gravity. On this capture PC1 ≈ [-0.33, 0.065, -0.94] vs gravity
+    // ≈ [0.007, -0.207, -0.978] — about 25° apart, inside the <30°
+    // suppression band where the cross-check means nothing.
+    expect(analysis.pc1GravityAngleDeg).not.toBeNull();
+    expect(analysis.pc1GravityAngleDeg!).toBeGreaterThan(15);
+    expect(analysis.pc1GravityAngleDeg!).toBeLessThan(30);
+    expect(analysis.gravityRomStatus).toBe('suppressed');
+  });
+
+  it('computes bottom dwell and turnaround acceleration per rep (first rep has neither)', () => {
+    expect(analysis.reps[0].bottomDwellMs).toBeNull();
+    expect(analysis.reps[0].turnaroundPeakAccelRadps2).toBeNull();
+    for (const rep of analysis.reps.slice(1)) {
+      expect(rep.bottomDwellMs).not.toBeNull();
+      expect(rep.bottomDwellMs!).toBeGreaterThan(0);
+      expect(rep.turnaroundPeakAccelRadps2).not.toBeNull();
+      expect(rep.turnaroundPeakAccelRadps2!).toBeGreaterThan(0);
+      expect(Number.isFinite(rep.turnaroundPeakAccelRadps2!)).toBe(true);
+    }
+  });
+
   it('reports sane stream stats', () => {
     expect(analysis.sampleRateHz).toBeGreaterThan(truth.sampleRateHzMin);
     expect(analysis.sampleRateHz).toBeLessThan(truth.sampleRateHzMax);

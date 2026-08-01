@@ -111,6 +111,7 @@ export interface Database {
           clip_detected: boolean;
           reps: Json;
           quality_flags: string[];
+          analysis_metrics: Json | null;
           provenance: string;
           schema_version: number;
           created_at: string;
@@ -129,6 +130,7 @@ export interface Database {
           clip_detected?: boolean;
           reps: Json;
           quality_flags?: string[];
+          analysis_metrics?: Json | null;
           provenance?: string;
           schema_version?: number;
           created_at?: string;

@@ -165,6 +165,12 @@ const customJestConfig = {
       branches: 65,
       statements: 80,
     },
+    'services/shared/motion/observations.ts': {
+      lines: 90,
+      functions: 85,
+      branches: 75,
+      statements: 90,
+    },
     'services/shared/motion/calibration.ts': {
       lines: 85,
       functions: 80,

@@ -74,7 +74,31 @@ export interface CaptureRep {
   romConcentricDeg: number;
   romEccentricDeg: number;
   romGravityDeg: number | null;
+  /**
+   * Contiguous time |w| stayed under the exit threshold at the bottom
+   * turnaround INTO this rep, ms. Null for the first rep (its bottom is the
+   * pre-set rest, not a turnaround).
+   */
+  bottomDwellMs: number | null;
+  /**
+   * Peak |dw/dt| within ±150 ms of the eccentric→concentric zero crossing
+   * into this rep, rad/s² (Savitzky-Golay differentiated — raw finite
+   * differences off a 60 Hz gyro are too noisy). Null for the first rep.
+   */
+  turnaroundPeakAccelRadps2: number | null;
 }
+
+/**
+ * Validity of the gravity-ROM cross-check. The accelerometer only resolves
+ * rotation PERPENDICULAR to gravity — rotation about a gravity-parallel
+ * axis is invisible to it — so the column's meaning degrades as PC1
+ * approaches vertical.
+ */
+export type GravityRomStatus = 'ok' | 'low-confidence' | 'suppressed' | 'unavailable';
+
+/** PC1-to-gravity angle bounds for the gravity-ROM column (degrees). */
+export const GRAVITY_ROM_OK_MIN_DEG = 45;
+export const GRAVITY_ROM_SUPPRESS_BELOW_DEG = 30;
 
 export interface CaptureAnalysis {
   sampleRateHz: number;
@@ -87,6 +111,14 @@ export interface CaptureAnalysis {
   pc1VarianceShare: number;
   pc1Pc2Ratio: number;
   lowConfidence: boolean;
+  /**
+   * Acute angle between PC1 and the capture's gravity reference, degrees
+   * (sign-independent — the axis orientation is a convention). Null when no
+   * gravity reference exists (tier 'none').
+   */
+  pc1GravityAngleDeg: number | null;
+  /** Display validity of the gravity-ROM column, derived from the angle. */
+  gravityRomStatus: GravityRomStatus;
   /** True when tier === 'none': absolute ROM is suppressed in display. */
   romSuppressed: boolean;
   /** Per-sample series for the chart (filtered, projected). */
@@ -174,6 +206,8 @@ export function analyzeCapture(
     pc1VarianceShare: 0,
     pc1Pc2Ratio: 0,
     lowConfidence: true,
+    pc1GravityAngleDeg: null,
+    gravityRomStatus: 'unavailable',
     romSuppressed: stillness.tier === 'none',
     tMs,
     w: new Array<number>(n).fill(0),
@@ -251,12 +285,19 @@ export function analyzeCapture(
   });
 
   // --- 6. Pair half-reps into reps ---------------------------------------
+  // Bottom-turnaround metrics need dw/dt: Savitzky-Golay differentiate the
+  // already-low-passed w (window 9, order 2) — NOT raw finite differences,
+  // and NOT second derivatives (jerk off a 60 Hz gyro is noise).
+  const dwdt = savitzkyGolayDerivative(w, tMs);
+
   const reps: CaptureRep[] = [];
   let unpaired = 0;
+  let prevEcc: HalfRep | null = null;
   for (let i = 0; i < finished.length; i++) {
     const conc = finished[i];
     if (conc.dir !== 1) {
       unpaired++;
+      prevEcc = conc.dir === -1 ? conc : prevEcc;
       continue;
     }
     const ecc = finished[i + 1];
@@ -265,6 +306,17 @@ export function analyzeCapture(
       continue;
     }
     i++;
+
+    // Bottom turnaround INTO this rep: only exists when an eccentric
+    // preceded it (the first rep starts from rest, not a turnaround).
+    let bottomDwellMs: number | null = null;
+    let turnaroundPeakAccelRadps2: number | null = null;
+    if (prevEcc) {
+      bottomDwellMs = dwellAround(w, tMs, conc.startIdx, exit);
+      turnaroundPeakAccelRadps2 = peakAbsAround(dwdt, tMs, conc.startIdx, TURNAROUND_WINDOW_MS);
+    }
+    prevEcc = ecc;
+
     reps.push({
       index: reps.length,
       concentric: conc,
@@ -276,7 +328,26 @@ export function analyzeCapture(
       romConcentricDeg: conc.romDeg,
       romEccentricDeg: ecc.romDeg,
       romGravityDeg: conc.romGravityDeg,
+      bottomDwellMs,
+      turnaroundPeakAccelRadps2,
     });
+  }
+
+  // --- Gravity-ROM validity: PC1 vs gravity angle ------------------------
+  // The accelerometer resolves only rotation perpendicular to gravity, so
+  // the cross-check's meaning collapses as PC1 approaches vertical. Acute
+  // angle (|dot|): the axis sign is a convention, not physics.
+  let pc1GravityAngleDeg: number | null = null;
+  let gravityRomStatus: GravityRomStatus = 'unavailable';
+  if (stillness.gravityUnit) {
+    pc1GravityAngleDeg =
+      Math.acos(Math.min(1, Math.abs(dot(axis, stillness.gravityUnit)))) * RAD_TO_DEG;
+    gravityRomStatus =
+      pc1GravityAngleDeg >= GRAVITY_ROM_OK_MIN_DEG
+        ? 'ok'
+        : pc1GravityAngleDeg >= GRAVITY_ROM_SUPPRESS_BELOW_DEG
+          ? 'low-confidence'
+          : 'suppressed';
   }
 
   return {
@@ -289,6 +360,8 @@ export function analyzeCapture(
     pc1VarianceShare: principal.share,
     pc1Pc2Ratio: principal.ratio,
     lowConfidence: principal.share < LOW_CONFIDENCE_PC1_SHARE,
+    pc1GravityAngleDeg,
+    gravityRomStatus,
     romSuppressed: stillness.tier === 'none',
     tMs,
     w,
@@ -409,6 +482,69 @@ function segmentHalfReps(
   // Guard against degenerate overlaps after expansion (adjacent half-reps
   // sharing a boundary sample are fine; containment is not expected).
   return merged.filter((h) => h.endIdx > h.startIdx);
+}
+
+/** ± window around the eccentric→concentric crossing for turnaround accel. */
+const TURNAROUND_WINDOW_MS = 150;
+
+/**
+ * Savitzky-Golay first derivative (window 9, polynomial order 2) of a
+ * uniformly-ish sampled series. For quadratic fits the derivative estimate
+ * at the window center is Σ j·y[i+j] / (Σ j² · dt), j = −4..4 — a linear
+ * smoother far better conditioned than raw finite differences on 60 Hz
+ * data. Edges fall back to one-sided differences.
+ */
+export function savitzkyGolayDerivative(y: number[], tMs: number[]): number[] {
+  const n = y.length;
+  const out = new Array<number>(n).fill(0);
+  if (n < 2) return out;
+  const dts: number[] = [];
+  for (let i = 1; i < n; i++) dts.push(tMs[i] - tMs[i - 1]);
+  const dtS = median(dts) / 1000;
+  if (dtS <= 0) return out;
+
+  const HALF = 4; // window 9
+  const denom = 60 * dtS; // Σ j² for j=−4..4 is 60
+  for (let i = 0; i < n; i++) {
+    if (i < HALF || i >= n - HALF) {
+      const j0 = Math.max(0, i - 1);
+      const j1 = Math.min(n - 1, i + 1);
+      const dt = (tMs[j1] - tMs[j0]) / 1000;
+      out[i] = dt > 0 ? (y[j1] - y[j0]) / dt : 0;
+      continue;
+    }
+    let acc = 0;
+    for (let j = -HALF; j <= HALF; j++) acc += j * y[i + j];
+    out[i] = acc / denom;
+  }
+  return out;
+}
+
+/** Contiguous ms |w| stays below `threshold` around sample `centerIdx`. */
+function dwellAround(w: number[], tMs: number[], centerIdx: number, threshold: number): number {
+  let lo = centerIdx;
+  while (lo > 0 && Math.abs(w[lo - 1]) < threshold) lo--;
+  let hi = centerIdx;
+  while (hi < w.length - 1 && Math.abs(w[hi + 1]) < threshold) hi++;
+  return Math.max(0, tMs[hi] - tMs[lo]);
+}
+
+/** Max |series| within ±windowMs of sample `centerIdx`. */
+function peakAbsAround(
+  series: number[],
+  tMs: number[],
+  centerIdx: number,
+  windowMs: number
+): number {
+  const t = tMs[centerIdx];
+  let peak = 0;
+  for (let i = centerIdx; i >= 0 && t - tMs[i] <= windowMs; i--) {
+    peak = Math.max(peak, Math.abs(series[i]));
+  }
+  for (let i = centerIdx + 1; i < series.length && tMs[i] - t <= windowMs; i++) {
+    peak = Math.max(peak, Math.abs(series[i]));
+  }
+  return peak;
 }
 
 /** |w| below this is indistinguishable from gyro bias/tremor at rest. */
