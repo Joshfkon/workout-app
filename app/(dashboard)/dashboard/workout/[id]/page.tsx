@@ -722,6 +722,9 @@ export default function WorkoutPage() {
 
   // ---- Motion capture: automatic in-workout capture (experimental) ------
   const motionAuto = useMotionAutoCapture(motionCaptureEnabled);
+  // Stable across status changes (unlike the motionAuto object itself) —
+  // safe to list as a dependency of memos that must not reinitialize.
+  const motionRearm = motionAuto.rearm;
 
   // Re-arm whenever the active exercise changes (interaction with a card).
   useEffect(() => {
@@ -872,11 +875,11 @@ export default function WorkoutPage() {
       // Motion capture: rest over means the next set is imminent. A phone
       // already mounted on the machine gets no card taps between sets, so
       // this is the re-arm path that needs no touch at all.
-      motionAuto.rearm();
+      motionRearm();
     },
-    // motionAuto.rearm (not motionAuto): the hook's return object changes
+    // motionRearm (not motionAuto): the hook's return object changes
     // identity on every status change and would reinitialize the timer.
-  }), [restTimerDuration, currentBlock?.targetRestSeconds, motionAuto.rearm]);
+  }), [restTimerDuration, currentBlock?.targetRestSeconds, motionRearm]);
 
   // Rest timer hook
   const restTimer = useRestTimer(restTimerOptions);

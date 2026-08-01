@@ -43,7 +43,7 @@ export function CaptureAnalysisView({ analysis }: { analysis: CaptureAnalysis })
   return (
     <div className="space-y-3" data-testid="motion-analysis-view">
       {/* Header strip */}
-      <div className="grid grid-cols-4 gap-2 text-center" data-testid="motion-analysis-header">
+      <div className="grid grid-cols-5 gap-2 text-center" data-testid="motion-analysis-header">
         <div className="p-2 rounded-lg bg-surface-900/60">
           <p className="text-[10px] uppercase tracking-wide text-surface-500">Sample rate</p>
           <p className="text-sm font-semibold text-surface-200">{analysis.sampleRateHz.toFixed(1)} Hz</p>
@@ -62,6 +62,15 @@ export function CaptureAnalysisView({ analysis }: { analysis: CaptureAnalysis })
           <p className="text-[10px] uppercase tracking-wide text-surface-500">PC1 share</p>
           <p className={`text-sm font-semibold ${analysis.lowConfidence ? 'text-warning-400' : 'text-surface-200'}`}>
             {(analysis.pc1VarianceShare * 100).toFixed(0)}%
+          </p>
+        </div>
+        {/* Set-relative segmentation thresholds actually used (enter/exit,
+            rad/s) — surfaced so threshold behavior is debuggable from the
+            UI when a capture's rep count looks off. */}
+        <div className="p-2 rounded-lg bg-surface-900/60" data-testid="motion-analysis-thresholds">
+          <p className="text-[10px] uppercase tracking-wide text-surface-500">Thresholds</p>
+          <p className="text-sm font-semibold text-surface-200">
+            {analysis.enterOmegaRadps.toFixed(2)}/{analysis.exitOmegaRadps.toFixed(2)}
           </p>
         </div>
       </div>

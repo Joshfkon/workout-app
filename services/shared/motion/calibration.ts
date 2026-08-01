@@ -31,6 +31,23 @@ import { AXIS_QUALITY_MIN, MIN_CALIBRATION_ROM_DEG } from './constants';
 /** ± search window around a rep endpoint for a validated gravity rest, ms. */
 const ENDPOINT_SEARCH_MS = 500;
 
+/**
+ * Machine-likeness gate: set-relative segmentation thresholds detect
+ * in-hand handling lobes as phases too (they are genuine motion, and the
+ * analysis deliberately describes them), but the CALIBRATION layer needs
+ * the machine's motion only. The discriminator is INTEGRATED ROM relative
+ * to the capture's largest phase: sweep strokes are full-range by
+ * instruction (~tens of degrees), handling lobes integrate to a few. Axis
+ * alignment can't do this job — a stroke on a loosely-mounted wobbling
+ * machine scores like handling, and that case must still reach the
+ * axis-quality refusal (the actionable message), not "fewer than 2 reps".
+ * The comparison is PER DIRECTION: a constant rotation riding on the
+ * capture (tier-'none' captures) inflates one direction's integrals and
+ * deflates the other's, so a shared maximum would condemn every phase of
+ * the deflated direction.
+ */
+const MACHINE_ROM_FRACTION_OF_MAX = 0.4;
+
 export interface CalibrationEligibility {
   eligible: boolean;
   /** User-facing explanation when not eligible. */
@@ -73,14 +90,26 @@ export function deriveCalibrationFromAnalysis(
   analysis: CaptureAnalysis,
   samples: ImuSample[]
 ): CalibrationEligibility {
-  // The SAVED calibration's axis and quality come from PCA over the REP
-  // SPANS ONLY: that is the machine's motion by construction. Whole-capture
-  // stats (what the display reports per spec) include in-hand handling,
-  // which is irrelevant to — and would unfairly condemn — the mounted
-  // sweep's planarity. share s = λ1/Σλ ⇒ λ1/(λ2+λ3) = s/(1−s), matching
-  // the stored axis_quality semantics.
-  const repSpanGyro: Vec3[] = [];
+  // Machine-like phases only (see MACHINE_ROM_FRACTION_OF_MAX).
+  const maxRomByDir = { 1: 0, [-1]: 0 } as Record<1 | -1, number>;
   for (const h of analysis.halfReps) {
+    maxRomByDir[h.dir] = Math.max(maxRomByDir[h.dir], h.romDeg);
+  }
+  const machineHalves = new Set(
+    analysis.halfReps.filter((h) => h.romDeg >= MACHINE_ROM_FRACTION_OF_MAX * maxRomByDir[h.dir])
+  );
+  const machineReps = analysis.reps.filter(
+    (r) => machineHalves.has(r.concentric) && machineHalves.has(r.eccentric)
+  );
+
+  // The SAVED calibration's axis and quality come from PCA over the
+  // MACHINE-LIKE REP SPANS ONLY: that is the machine's motion by
+  // construction. Whole-capture stats (what the display reports per spec)
+  // include in-hand handling, which is irrelevant to — and would unfairly
+  // condemn — the mounted sweep's planarity. share s = λ1/Σλ ⇒
+  // λ1/(λ2+λ3) = s/(1−s), matching the stored axis_quality semantics.
+  const repSpanGyro: Vec3[] = [];
+  for (const h of Array.from(machineHalves)) {
     for (let i = h.startIdx; i <= h.endIdx; i++) {
       const g = samples[i].gyro;
       if (norm(g) > CAPTURE_MASK_OMEGA_RADPS) repSpanGyro.push(g);
@@ -89,7 +118,7 @@ export function deriveCalibrationFromAnalysis(
   const repPca = pcaOfVectors(repSpanGyro);
   // Sign-align the rep-span axis with the analysis axis (concentric +).
   const pivotAxis =
-    repPca && analysis.reps.length > 0
+    repPca && machineReps.length > 0
       ? dot(repPca.axis, analysis.axis) >= 0
         ? repPca.axis
         : scale(repPca.axis, -1)
@@ -105,7 +134,7 @@ export function deriveCalibrationFromAnalysis(
     gravityRefTop: null,
   };
 
-  if (analysis.reps.length < 2) {
+  if (machineReps.length < 2) {
     return {
       ...base,
       reason:
@@ -141,7 +170,7 @@ export function deriveCalibrationFromAnalysis(
     };
   }
 
-  const romDegrees = median(analysis.reps.map((r) => r.romConcentricDeg));
+  const romDegrees = median(machineReps.map((r) => r.romConcentricDeg));
   if (romDegrees < MIN_CALIBRATION_ROM_DEG) {
     return {
       ...base,
@@ -157,7 +186,7 @@ export function deriveCalibrationFromAnalysis(
   // validated rest window exists around it.
   const bottoms: Vec3[] = [];
   const tops: Vec3[] = [];
-  for (const rep of analysis.reps) {
+  for (const rep of machineReps) {
     const b = validatedGravityAt(samples, rep.concentric.startIdx);
     const t = validatedGravityAt(samples, rep.concentric.endIdx);
     if (b) bottoms.push(b);

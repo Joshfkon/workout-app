@@ -150,6 +150,91 @@ describe('analyzeCapture on the hand-held curl fixture', () => {
   });
 });
 
+describe('set-relative thresholds and PC1 sign convention', () => {
+  const negate = (src: ImuSample[]): ImuSample[] =>
+    src.map((s) => ({ ...s, gyro: { x: -s.gyro.x, y: -s.gyro.y, z: -s.gyro.z } }));
+  const scaleGyro = (src: ImuSample[], k: number): ImuSample[] =>
+    src.map((s) => ({ ...s, gyro: { x: s.gyro.x * k, y: s.gyro.y * k, z: s.gyro.z * k } }));
+
+  it('surfaces the resolved thresholds, ≈30%/10% of the set scale on the fixture', () => {
+    const a = analyzeCapture(samples);
+    expect(a.enterOmegaRadps).toBeGreaterThan(0.25);
+    expect(a.enterOmegaRadps).toBeLessThan(0.65);
+    expect(a.exitOmegaRadps).toBeCloseTo(a.enterOmegaRadps / 3, 5);
+  });
+
+  it('detects the same 4 reps on a low-amplitude (×0.3) copy of the fixture', () => {
+    // Peaks land at ~0.5-0.6 rad/s — the regime of the field capture where
+    // fixed enter 0.5 / exit 0.15 detected almost nothing and orphaned 5
+    // phases. Set-relative thresholds must find the same set.
+    const a = analyzeCapture(scaleGyro(samples, 0.3));
+    expect(a.reps).toHaveLength(truth.reps);
+    expect(a.unpairedHalfReps).toBeLessThanOrEqual(1);
+    expect(a.enterOmegaRadps).toBeLessThan(0.25);
+    expect(a.enterOmegaRadps).toBeGreaterThanOrEqual(0.08);
+    expect(a.exitOmegaRadps).toBeGreaterThanOrEqual(0.03);
+  });
+
+  it('analyzes a negated fixture identically (deterministic PC1 orientation)', () => {
+    for (const src of [samples, scaleGyro(samples, 0.3)]) {
+      const a = analyzeCapture(src);
+      const b = analyzeCapture(negate(src));
+      expect(b.reps).toHaveLength(a.reps.length);
+      expect(b.halfReps.map((h) => h.dir)).toEqual(a.halfReps.map((h) => h.dir));
+      b.reps.forEach((rep, i) => {
+        expect(rep.peakW).toBeCloseTo(a.reps[i].peakW, 6);
+        expect(rep.concentricMs).toBeCloseTo(a.reps[i].concentricMs, 6);
+        expect(rep.romConcentricDeg).toBeCloseTo(a.reps[i].romConcentricDeg, 6);
+      });
+    }
+  });
+
+  it('analyzes a negated synthetic capture identically', () => {
+    const spec: SyntheticRepSpec = {
+      romDeg: 60,
+      concentricMs: 1200,
+      pauseTopMs: 400,
+      eccentricMs: 1500,
+      restAfterMs: 1200,
+    };
+    const signal = generateReps(Array(4).fill(spec), { gyroNoise: 0.01 });
+    const a = analyzeCapture(signal.samples);
+    const b = analyzeCapture(negate(signal.samples));
+    expect(a.reps).toHaveLength(4);
+    expect(b.reps).toHaveLength(4);
+    expect(b.halfReps.map((h) => h.dir)).toEqual(a.halfReps.map((h) => h.dir));
+    b.reps.forEach((rep, i) => {
+      expect(rep.concentricMs).toBeCloseTo(a.reps[i].concentricMs, 6);
+      expect(rep.romConcentricDeg).toBeCloseTo(a.reps[i].romConcentricDeg, 6);
+    });
+  });
+
+  it('produces zero reps from pure sensor noise (thresholds are floored)', () => {
+    // Deterministic LCG noise, gyro std ~0.05 rad/s per axis, no movement.
+    // The set-relative fractions must never chase noise below the absolute
+    // floors (enter 0.08 / exit 0.03).
+    let seed = 0x2f6e2b1 >>> 0;
+    const rand = (): number => {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      return seed / 2 ** 32 - 0.5;
+    };
+    // Sum of 3 uniforms ≈ gaussian; std = 0.5 → ×0.1 gives ~0.05 rad/s.
+    const g = (): number => (rand() + rand() + rand()) * 0.1;
+    const noise: ImuSample[] = [];
+    for (let i = 0; i < 1200; i++) {
+      noise.push({
+        tMs: i * (1000 / 60),
+        gyro: { x: g(), y: g(), z: g() },
+        accel: { x: 0.2 * rand(), y: 0.2 * rand(), z: -9.81 + 0.2 * rand() },
+      });
+    }
+    const a = analyzeCapture(noise);
+    expect(a.reps).toHaveLength(0);
+    expect(a.enterOmegaRadps).toBeGreaterThanOrEqual(0.08);
+    expect(a.exitOmegaRadps).toBeGreaterThanOrEqual(0.03);
+  });
+});
+
 describe('analyzeCapture edge behavior', () => {
   const cleanRep: SyntheticRepSpec = {
     romDeg: 60,

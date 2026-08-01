@@ -12,11 +12,22 @@
  *   3. PCA over masked gyro samples → PC1 is the rotation axis. PC1's
  *      variance share is reported; below 0.8 the capture is labeled
  *      low-confidence (motion isn't single-DOF).
- *   4. Project gyro onto PC1 → signed angular velocity w(t).
- *   5. Half-reps from sign changes of w with amplitude hysteresis
- *      (enter |w| > 0.5, exit |w| < 0.15). NO fixed refractory window —
- *      that would bake in a tempo assumption and break fast sets.
- *   6. Pair half-reps (positive then negative) into reps.
+ *   4. Project gyro onto PC1 → signed angular velocity w(t). PC1's sign is
+ *      arbitrary (an eigenvector direction is undefined), so a
+ *      deterministic convention is applied: PC1 is oriented so the integral
+ *      of w over the FIRST detected movement phase is positive. Without
+ *      this the concentric/eccentric labeling flips between captures.
+ *   5. Half-reps from sign changes of w with amplitude hysteresis. The
+ *      thresholds are SET-RELATIVE (two-pass): a low-floor first pass
+ *      estimates the capture's velocity scale, then enter/exit are set to
+ *      30%/10% of the median candidate peak (floored so noise can never
+ *      segment). Fixed absolute thresholds tuned on a ~2 rad/s capture
+ *      detected almost nothing on a slow machine peaking at ~0.6 rad/s.
+ *      NO fixed refractory window — that would bake in a tempo assumption
+ *      and break fast sets.
+ *   6. Pair ADJACENT OPPOSITE-SIGN half-reps into reps, order-agnostic: a
+ *      set may open with an eccentric (any machine whose arm starts
+ *      loaded), and must not orphan every phase.
  *
  * ROM comes from integrating w over the half-rep between its enclosing
  * zero crossings — NOT between motion-mask boundaries, which clip the
@@ -35,8 +46,28 @@ import { DROPPED_DT_FACTOR, RAD_TO_DEG } from './constants';
 
 export const CAPTURE_FILTER_CUTOFF_HZ = 3;
 export const CAPTURE_MASK_OMEGA_RADPS = 0.4;
+/**
+ * Legacy fixed hysteresis thresholds. Used only when the caller pins
+ * thresholds explicitly via options (threshold-robustness tests, the auto
+ * gate's live start detection). analyzeCapture itself resolves SET-RELATIVE
+ * thresholds — see resolveSetRelativeThresholds.
+ */
 export const CAPTURE_ENTER_OMEGA_RADPS = 0.5;
 export const CAPTURE_EXIT_OMEGA_RADPS = 0.15;
+/**
+ * Set-relative threshold resolution (two-pass). Pass 1 detects candidate
+ * phases with a low absolute floor purely to estimate the capture's
+ * velocity scale; enter/exit are then fractions of the median candidate
+ * peak, floored so pure sensor noise can never produce reps. This is what
+ * lets a slow machine peaking at ~0.6 rad/s — or a grinding final rep in
+ * velocity collapse — segment at all.
+ */
+export const CAPTURE_SCALE_PASS_ENTER_RADPS = 0.15;
+export const CAPTURE_SCALE_PASS_EXIT_RADPS = 0.05;
+export const CAPTURE_ENTER_FRACTION_OF_PEAK = 0.3;
+export const CAPTURE_EXIT_FRACTION_OF_PEAK = 0.1;
+export const CAPTURE_ENTER_FLOOR_RADPS = 0.08;
+export const CAPTURE_EXIT_FLOOR_RADPS = 0.03;
 export const LOW_CONFIDENCE_PC1_SHARE = 0.8;
 /** ± window for the endpoint gravity direction estimate. */
 const ENDPOINT_GRAVITY_WINDOW_MS = 120;
@@ -76,14 +107,16 @@ export interface CaptureRep {
   romGravityDeg: number | null;
   /**
    * Contiguous time |w| stayed under the exit threshold at the bottom
-   * turnaround INTO this rep, ms. Null for the first rep (its bottom is the
-   * pre-set rest, not a turnaround).
+   * turnaround into this rep's concentric, ms. Null when no eccentric phase
+   * immediately precedes the concentric (the opening concentric of a
+   * concentric-first set starts from rest, not a turnaround).
    */
   bottomDwellMs: number | null;
   /**
    * Peak |dw/dt| within ±150 ms of the eccentric→concentric zero crossing
-   * into this rep, rad/s² (Savitzky-Golay differentiated — raw finite
-   * differences off a 60 Hz gyro are too noisy). Null for the first rep.
+   * into this rep's concentric, rad/s² (Savitzky-Golay differentiated — raw
+   * finite differences off a 60 Hz gyro are too noisy). Null under the same
+   * condition as bottomDwellMs.
    */
   turnaroundPeakAccelRadps2: number | null;
 }
@@ -106,8 +139,14 @@ export interface CaptureAnalysis {
   durationMs: number;
   stillness: StillnessResult;
   tier: StillnessTier;
-  /** PC1 of the masked gyro scatter; first half-rep direction is positive. */
+  /** PC1 of the masked gyro scatter; oriented so the integral of w over the
+   *  first detected movement phase is positive (deterministic convention —
+   *  the raw eigenvector sign is arbitrary). */
   axis: Vec3;
+  /** Resolved hysteresis thresholds actually used for segmentation (set-
+   *  relative unless the caller pinned them), surfaced for debuggability. */
+  enterOmegaRadps: number;
+  exitOmegaRadps: number;
   pc1VarianceShare: number;
   pc1Pc2Ratio: number;
   lowConfidence: boolean;
@@ -189,8 +228,9 @@ export function analyzeCapture(
 ): CaptureAnalysis {
   const cutoffHz = opts.cutoffHz ?? CAPTURE_FILTER_CUTOFF_HZ;
   const maskOmega = opts.maskOmegaRadps ?? CAPTURE_MASK_OMEGA_RADPS;
-  const enter = opts.enterOmegaRadps ?? CAPTURE_ENTER_OMEGA_RADPS;
-  const exit = opts.exitOmegaRadps ?? CAPTURE_EXIT_OMEGA_RADPS;
+  // Explicit thresholds pin segmentation (threshold-robustness tests); the
+  // normal path resolves set-relative thresholds after projection below.
+  const pinnedThresholds = opts.enterOmegaRadps != null || opts.exitOmegaRadps != null;
 
   const n = samples.length;
   const tMs = samples.map((s) => s.tMs);
@@ -203,6 +243,8 @@ export function analyzeCapture(
     stillness,
     tier: stillness.tier,
     axis,
+    enterOmegaRadps: opts.enterOmegaRadps ?? CAPTURE_ENTER_FLOOR_RADPS,
+    exitOmegaRadps: opts.exitOmegaRadps ?? CAPTURE_EXIT_FLOOR_RADPS,
     pc1VarianceShare: 0,
     pc1Pc2Ratio: 0,
     lowConfidence: true,
@@ -245,17 +287,32 @@ export function analyzeCapture(
   let w = filtered.map((g) => dot(g, axis));
 
   // --- 5. Half-reps: hysteresis excursions, zero-crossing boundaries -----
+  const { enter, exit } = pinnedThresholds
+    ? {
+        enter: opts.enterOmegaRadps ?? CAPTURE_ENTER_OMEGA_RADPS,
+        exit: opts.exitOmegaRadps ?? CAPTURE_EXIT_OMEGA_RADPS,
+      }
+    : resolveSetRelativeThresholds(w, tMs);
   const halfReps = segmentHalfReps(w, tMs, enter, exit);
 
-  // Sign convention: concentric must be positive. Anchoring on the first
-  // excursion is fragile (a pre-set hand wiggle can qualify and flip the
-  // whole capture), so choose the orientation that pairs MORE reps, with
-  // ties broken by the physical prior that the pause inside a rep (top,
-  // concentric→eccentric) is shorter than the rest between reps.
-  if (halfReps.length > 0 && !orientationIsCanonical(halfReps, tMs)) {
-    axis = { x: -axis.x, y: -axis.y, z: -axis.z };
-    w = w.map((v) => -v);
-    for (const h of halfReps) h.dir = (h.dir * -1) as 1 | -1;
+  // Deterministic sign convention: a raw eigenvector's direction is
+  // arbitrary, so without a convention the concentric/eccentric labeling
+  // (and the chart's phase shading) flips between captures of the same
+  // movement. Orient PC1 so the integral of w over the FIRST detected
+  // movement phase is positive. Which physical direction that is doesn't
+  // matter — determinism does: a capture and its negation must analyze
+  // identically.
+  if (halfReps.length > 0) {
+    const first = halfReps[0];
+    let integral = 0;
+    for (let i = first.startIdx + 1; i <= first.endIdx; i++) {
+      integral += ((w[i] + w[i - 1]) / 2) * (tMs[i] - tMs[i - 1]);
+    }
+    if (integral < 0) {
+      axis = { x: -axis.x, y: -axis.y, z: -axis.z };
+      w = w.map((v) => -v);
+      for (const h of halfReps) h.dir = (h.dir * -1) as 1 | -1;
+    }
   }
 
   // --- Metrics + gravity cross-check -------------------------------------
@@ -290,32 +347,36 @@ export function analyzeCapture(
   // and NOT second derivatives (jerk off a 60 Hz gyro is noise).
   const dwdt = savitzkyGolayDerivative(w, tMs);
 
+  // Order-agnostic pairing: adjacent OPPOSITE-SIGN phases form a rep,
+  // regardless of which sign comes first. A set that opens with an
+  // eccentric (any machine whose arm starts loaded) is legitimate — a
+  // pairer that demanded positive-then-negative orphaned nearly every
+  // phase of such captures.
   const reps: CaptureRep[] = [];
   let unpaired = 0;
-  let prevEcc: HalfRep | null = null;
   for (let i = 0; i < finished.length; i++) {
-    const conc = finished[i];
-    if (conc.dir !== 1) {
-      unpaired++;
-      prevEcc = conc.dir === -1 ? conc : prevEcc;
-      continue;
-    }
-    const ecc = finished[i + 1];
-    if (!ecc || ecc.dir !== -1) {
+    const a = finished[i];
+    const b = finished[i + 1];
+    if (!b || b.dir === a.dir) {
       unpaired++;
       continue;
     }
+    const concIdx = a.dir === 1 ? i : i + 1;
+    const conc = finished[concIdx];
+    const ecc = a.dir === 1 ? b : a;
     i++;
 
-    // Bottom turnaround INTO this rep: only exists when an eccentric
-    // preceded it (the first rep starts from rest, not a turnaround).
+    // Bottom turnaround into this rep's concentric: exists whenever an
+    // eccentric phase immediately precedes it — the previous rep's
+    // eccentric in a concentric-first set, or this rep's own eccentric in
+    // an eccentric-first set. An opening concentric starts from rest, not
+    // a turnaround.
     let bottomDwellMs: number | null = null;
     let turnaroundPeakAccelRadps2: number | null = null;
-    if (prevEcc) {
+    if (concIdx > 0 && finished[concIdx - 1].dir === -1) {
       bottomDwellMs = dwellAround(w, tMs, conc.startIdx, exit);
       turnaroundPeakAccelRadps2 = peakAbsAround(dwdt, tMs, conc.startIdx, TURNAROUND_WINDOW_MS);
     }
-    prevEcc = ecc;
 
     reps.push({
       index: reps.length,
@@ -357,6 +418,8 @@ export function analyzeCapture(
     stillness,
     tier: stillness.tier,
     axis,
+    enterOmegaRadps: enter,
+    exitOmegaRadps: exit,
     pc1VarianceShare: principal.share,
     pc1Pc2Ratio: principal.ratio,
     lowConfidence: principal.share < LOW_CONFIDENCE_PC1_SHARE,
@@ -377,39 +440,33 @@ interface RawHalfRep {
   endIdx: number;
 }
 
-/** Pairing stats for one orientation: rep count + median within-pair gap. */
-function pairingStats(
-  halfReps: RawHalfRep[],
-  tMs: number[],
-  sign: 1 | -1
-): { reps: number; medianGapMs: number } {
-  const gaps: number[] = [];
-  let reps = 0;
-  for (let i = 0; i < halfReps.length; i++) {
-    if (halfReps[i].dir !== sign) continue;
-    const next = halfReps[i + 1];
-    if (!next || next.dir === sign) continue;
-    reps++;
-    gaps.push(Math.max(0, tMs[next.startIdx] - tMs[halfReps[i].endIdx]));
-    i++;
-  }
-  gaps.sort((a, b) => a - b);
-  const medianGapMs =
-    gaps.length === 0
-      ? Number.POSITIVE_INFINITY
-      : gaps.length % 2
-        ? gaps[(gaps.length - 1) / 2]
-        : (gaps[gaps.length / 2 - 1] + gaps[gaps.length / 2]) / 2;
-  return { reps, medianGapMs };
-}
-
-/** True when the current dirs already put the concentric positive. */
-function orientationIsCanonical(halfReps: RawHalfRep[], tMs: number[]): boolean {
-  const asIs = pairingStats(halfReps, tMs, 1);
-  const flipped = pairingStats(halfReps, tMs, -1);
-  if (asIs.reps !== flipped.reps) return asIs.reps > flipped.reps;
-  if (asIs.medianGapMs !== flipped.medianGapMs) return asIs.medianGapMs <= flipped.medianGapMs;
-  return halfReps[0].dir === 1;
+/**
+ * Two-pass set-relative threshold resolution. Pass 1 segments with a low
+ * absolute floor purely to estimate the capture's velocity scale: the
+ * median peak |w| across the first 3 candidate phases. Enter/exit are then
+ * 30%/10% of that scale, floored at values pure sensor noise (post 3 Hz
+ * low-pass) cannot reach. Exported for tests.
+ */
+export function resolveSetRelativeThresholds(
+  w: number[],
+  tMs: number[]
+): { enter: number; exit: number } {
+  const candidates = segmentHalfReps(
+    w,
+    tMs,
+    CAPTURE_SCALE_PASS_ENTER_RADPS,
+    CAPTURE_SCALE_PASS_EXIT_RADPS
+  );
+  const peaks = candidates.slice(0, 3).map((h) => {
+    let p = 0;
+    for (let i = h.startIdx; i <= h.endIdx; i++) p = Math.max(p, Math.abs(w[i]));
+    return p;
+  });
+  const scale = median(peaks);
+  return {
+    enter: Math.max(CAPTURE_ENTER_FLOOR_RADPS, CAPTURE_ENTER_FRACTION_OF_PEAK * scale),
+    exit: Math.max(CAPTURE_EXIT_FLOOR_RADPS, CAPTURE_EXIT_FRACTION_OF_PEAK * scale),
+  };
 }
 
 /**
