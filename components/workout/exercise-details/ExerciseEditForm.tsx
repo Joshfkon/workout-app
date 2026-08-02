@@ -53,19 +53,6 @@ const CATALOG_FIELD_LABELS: Array<[keyof EditData, string]> = [
   ['youtubeVideoInput', 'Curated video'],
 ];
 
-/**
- * Secondary tokens the picker can still offer alongside `primary`. A primary
- * is never also a secondary, and a whole-group primary ('calves') subsumes its
- * heads — the form hides those rows, so keeping the tokens would double-credit
- * a muscle the user has no checkbox to clear.
- */
-function pruneSecondaries(primary: string, secondaries: string[]): string[] {
-  const subsumed = new Set<string>([primary]);
-  const group = MUSCLE_GROUP_OPTIONS.find((g) => g.value === primary);
-  if (group) group.subMuscles.forEach((s) => subsumed.add(s.value));
-  return secondaries.filter((m) => !subsumed.has(m));
-}
-
 /** Labels of the catalog fields that differ between the two snapshots. */
 function diffCatalogFields(before: EditData | null, after: EditData): string[] {
   if (!before) return CATALOG_FIELD_LABELS.map(([, label]) => label);
@@ -157,10 +144,7 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
       equipmentRequired: Array.isArray(equipmentRequired) ? equipmentRequired : [],
       movementPattern,
       primaryMuscle,
-      secondaryMuscles: pruneSecondaries(
-        primaryMuscle,
-        Array.isArray(secondaryMuscles) ? secondaryMuscles : []
-      ),
+      secondaryMuscles: Array.isArray(secondaryMuscles) ? secondaryMuscles : [],
       hypertrophyTier,
       defaultRepRangeMin: Array.isArray(defaultRepRange) && defaultRepRange.length > 0 ? defaultRepRange[0] : undefined,
       defaultRepRangeMax: Array.isArray(defaultRepRange) && defaultRepRange.length > 1 ? defaultRepRange[1] : undefined,
@@ -349,19 +333,6 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
     );
   };
 
-  /** Switching the primary drops the secondaries it now subsumes. */
-  const selectPrimary = (token: string) => {
-    setEditData((prev) =>
-      prev
-        ? {
-            ...prev,
-            primaryMuscle: token,
-            secondaryMuscles: pruneSecondaries(token, prev.secondaryMuscles),
-          }
-        : prev
-    );
-  };
-
   // Show the current primary muscle even if it's a token the option list
   // doesn't enumerate (e.g. an older detailed tag), so the select never
   // silently snaps to a different muscle.
@@ -544,7 +515,7 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
         <label className="block text-xs font-medium text-surface-400 mb-1">Primary Muscle</label>
         <select
           value={editData.primaryMuscle}
-          onChange={(e) => selectPrimary(e.target.value)}
+          onChange={(e) => setEditData({ ...editData, primaryMuscle: e.target.value })}
           className="w-full px-3 py-2 bg-surface-900 border border-surface-600 rounded-lg text-surface-100 text-sm"
         >
           {/* Keep a legacy/unknown current value visible (e.g. an existing
@@ -584,24 +555,39 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
         <label className="block text-xs font-medium text-surface-400 mb-1">Secondary Muscles</label>
         <div className="space-y-2 max-h-56 overflow-y-auto p-2 bg-surface-800/50 rounded-lg">
           {MUSCLE_GROUP_OPTIONS.map((group) => {
-            // A whole-group primary ('Calves (all)') already credits every head
-            // underneath it, so the entire block drops out. Dropping only the
-            // group's own checkbox would leave its heads indented under the
-            // PREVIOUS group's label — that's how Gastrocnemius/Soleus ended up
-            // reading as sub-muscles of Adductors.
-            if (group.value === editData.primaryMuscle) return null;
+            const isPrimaryGroup = group.value === editData.primaryMuscle;
             const subMuscles = group.subMuscles.filter((s) => s.value !== editData.primaryMuscle);
+            // Nothing left to offer once the group itself is the primary and it
+            // has no other head (Quads, Adductors, …).
+            if (isPrimaryGroup && subMuscles.length === 0) return null;
             return (
               <div key={group.value} data-muscle-group={group.value}>
-                <label className="flex items-center gap-2 p-1 rounded hover:bg-surface-700/50 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={editData.secondaryMuscles.includes(group.value)}
-                    onChange={(e) => toggleSecondary(group.value, e.target.checked)}
-                    className="w-4 h-4 text-primary-500 bg-surface-700 border-surface-600 rounded focus:ring-primary-500"
-                  />
-                  <span className="text-xs font-medium text-surface-200">{group.label}</span>
-                </label>
+                {isPrimaryGroup ? (
+                  // A whole-group primary ('Calves (all)') credits ONLY itself —
+                  // it never leaks into its heads (see
+                  // LEGACY_PRIMARY_VOLUME_WEIGHTS in services/shared/volumeCredit),
+                  // so Gastrocnemius/Soleus stay selectable as secondaries. The
+                  // group keeps a static label in place of its checkbox: hiding
+                  // the row outright left the heads indented under the PREVIOUS
+                  // group's label, which is how Gastrocnemius/Soleus ended up
+                  // reading as sub-muscles of Adductors.
+                  <div className="flex items-center gap-2 p-1 pl-6">
+                    <span className="text-xs font-medium text-surface-200">{group.label}</span>
+                    <span className="text-[10px] uppercase tracking-wide text-surface-500">
+                      Primary
+                    </span>
+                  </div>
+                ) : (
+                  <label className="flex items-center gap-2 p-1 rounded hover:bg-surface-700/50 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={editData.secondaryMuscles.includes(group.value)}
+                      onChange={(e) => toggleSecondary(group.value, e.target.checked)}
+                      className="w-4 h-4 text-primary-500 bg-surface-700 border-surface-600 rounded focus:ring-primary-500"
+                    />
+                    <span className="text-xs font-medium text-surface-200">{group.label}</span>
+                  </label>
+                )}
                 {subMuscles.length > 0 && (
                   <div className="ml-6 flex flex-wrap gap-x-4 gap-y-1 mt-0.5">
                     {subMuscles.map((s) => (

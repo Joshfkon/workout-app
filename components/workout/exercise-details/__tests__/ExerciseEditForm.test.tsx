@@ -87,7 +87,10 @@ async function toggleQuadsAndSave(user: ReturnType<typeof userEvent.setup>) {
  * Regression: sub-muscle checkboxes must stay under their own group. Hiding
  * only the primary's own checkbox left its heads indented beneath the
  * PREVIOUS group's label — with primary "Calves (all)", Gastrocnemius and
- * Soleus rendered as if they were sub-muscles of Adductors.
+ * Soleus rendered as if they were sub-muscles of Adductors. The heads stay
+ * SELECTABLE either way: a coarse primary credits only itself and never its
+ * heads (LEGACY_PRIMARY_VOLUME_WEIGHTS), so dropping them would silently
+ * delete real volume credit.
  */
 describe('ExerciseEditForm secondary-muscle taxonomy', () => {
   const withPrimary = (primaryMuscle: string, secondaryMuscles: string[] = []) =>
@@ -116,35 +119,54 @@ describe('ExerciseEditForm secondary-muscle taxonomy', () => {
     expect(screen.queryByRole('checkbox', { name: 'Gastrocnemius' })).not.toBeInTheDocument();
   });
 
-  it('drops the whole group when a whole-group primary already credits its heads', async () => {
+  it('keeps the heads of a whole-group primary selectable, under their own label', async () => {
     render(<ExerciseEditForm exercise={withPrimary('calves')} onCancel={() => {}} />);
 
-    expect(await screen.findByRole('checkbox', { name: 'Adductors' })).toBeInTheDocument();
+    // 'calves' as a primary credits only itself — it never leaks into
+    // gastrocnemius/soleus — so both heads must remain taggable.
+    expect(await screen.findByRole('checkbox', { name: 'Gastrocnemius' })).toBeInTheDocument();
+    expect(groupOf('Gastrocnemius')).toBe('calves');
+    expect(groupOf('Soleus')).toBe('calves');
+    // The group itself is the primary, so it is labelled, not offered again.
     expect(screen.queryByRole('checkbox', { name: 'Calves' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('checkbox', { name: 'Gastrocnemius' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('checkbox', { name: 'Soleus' })).not.toBeInTheDocument();
+    expect(
+      screen.getByText('Calves').closest('[data-muscle-group]')?.getAttribute('data-muscle-group')
+    ).toBe('calves');
   });
 
-  it('does not save a head the primary subsumed and the user cannot see', async () => {
+  it('preserves an existing fine-muscle secondary under a coarse primary across a save', async () => {
     jest.useFakeTimers();
     const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
     try {
+      // Mirrors the seeded Single Leg Hip Thrust: coarse 'glutes' primary with
+      // a legitimate 'glute_med' secondary. Editing an unrelated field must not
+      // strip that head's volume credit.
       render(
         <ExerciseEditForm
-          exercise={withPrimary('calves', ['soleus', 'hamstrings'])}
+          exercise={withPrimary('glutes', ['glute_med', 'hamstrings'])}
           onCancel={() => {}}
         />
       );
 
-      await user.click(await screen.findByRole('checkbox', { name: 'Quads' }));
+      expect(await screen.findByRole('checkbox', { name: 'Glute Med' })).toBeChecked();
+
+      await user.click(screen.getByRole('checkbox', { name: 'Quads' }));
       await user.click(screen.getByRole('button', { name: /^save$/i }));
 
       await screen.findByText(/updated successfully/i);
       const update = mockState.updateCalls.find((c) => c.table === 'exercises');
-      expect(update!.payload.secondary_muscles).toEqual(['hamstrings', 'quads']);
+      expect(update!.payload.secondary_muscles).toEqual(['glute_med', 'hamstrings', 'quads']);
     } finally {
       jest.useRealTimers();
     }
+  });
+
+  it('omits a group with no heads left once it is the primary', async () => {
+    render(<ExerciseEditForm exercise={withPrimary('quads')} onCancel={() => {}} />);
+
+    expect(await screen.findByRole('checkbox', { name: 'Hamstrings' })).toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: 'Quads' })).not.toBeInTheDocument();
+    expect(document.querySelector('[data-muscle-group="quads"]')).toBeNull();
   });
 });
 
