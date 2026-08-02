@@ -7,34 +7,124 @@ import {
   assessVolumeStatus,
   type MuscleVolumeData,
 } from '@/services/volumeTracker';
-import { perSetCredits } from '@/services/shared/volumeCredit';
-import { STANDARD_MUSCLE_GROUPS, type StandardMuscleGroup } from '@/types/schema';
+import { STANDARD_MUSCLE_GROUPS, type VolumeLandmarks } from '@/types/schema';
 import {
+  buildVolumeRows,
+  coarseMevTiles,
   computeReachableMuscles,
+  computeWeeklyMuscleVolume,
   isMuscleWarnable,
+  round1Sets,
+  roundWholeSets,
+  setsByStandardMuscle,
+  weeklyVolumeWindowStartISO,
+  type CoarseMevTiles,
+  type VolumeRow,
   type WeeklyVolumeBlockRow,
 } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
-import { getLocalDateString } from '@/lib/utils';
+import { localDay, parseLocalDay } from '@/lib/date/localDay';
 
 interface UseWeeklyVolumeOptions {
-  weekStart?: string; // YYYY-MM-DD, defaults to current week
+  /** `YYYY-MM-DD` window start; defaults to the shared rolling-7-day window. */
+  weekStart?: string;
 }
 
+/** Everything the hook derives from one fetch of the week's blocks. */
+export interface WeeklyVolumeDerived {
+  /**
+   * PER-HEAD volume (26 standard muscles), uncapped — a set may credit two
+   * heads of the same group, which is correct for per-head programming
+   * decisions. Do NOT sum this for a week total: use `tiles.totalSets`.
+   */
+  volumeData: MuscleVolumeData[];
+  /** The shared coarse row model (same one the volume page renders). */
+  rows: VolumeRow[];
+  /** Glance-tile totals off `rows` — the canonical "sets this week". */
+  tiles: CoarseMevTiles;
+}
+
+const EMPTY_TILES: CoarseMevTiles = {
+  totalSets: 0,
+  totalEffectiveSets: 0,
+  totalTarget: 0,
+  lowCount: 0,
+};
+
+/**
+ * Blocks -> the shared volume model. Pure, so the parity between this hook's
+ * numbers and the home glance tile's is testable without a DB.
+ *
+ * ONE accumulation pass (computeWeeklyMuscleVolume) feeds BOTH views: the
+ * capped coarse rows the week total comes from, and the uncapped per-head
+ * rollup the recovery/suggestion surfaces read. Before this, the hook ran its
+ * own second pass and summed the 26 standard rows for its total — uncapped and
+ * rounded per muscle, which reported ~15% more sets than the home tile for the
+ * same week.
+ */
+export function deriveWeeklyVolume(
+  blocks: WeeklyVolumeBlockRow[],
+  getVolumeLandmarks: (muscle: string) => VolumeLandmarks
+): WeeklyVolumeDerived {
+  const stats = computeWeeklyMuscleVolume(blocks);
+  const reachable = computeReachableMuscles(blocks);
+  const rows = buildVolumeRows(stats, reachable);
+  const byStandard = setsByStandardMuscle(stats);
+
+  // Fine members the user's own exercise tagging can't feed are dropped (same
+  // reachability gate as buildVolumeRows) so a coarse-only logger never sees an
+  // un-clearable below-MEV row.
+  const volumeData: MuscleVolumeData[] = STANDARD_MUSCLE_GROUPS.filter((muscle) =>
+    isMuscleWarnable(muscle, reachable)
+  ).map((muscle) => {
+    const rollup = byStandard.get(muscle);
+    // Round ONCE, off the full-precision total. Direct is rounded for display
+    // and indirect is taken as the remainder, so direct + indirect === total
+    // always holds (rounding the two apart is what inflated every row).
+    const totalSets = roundWholeSets(rollup?.sets ?? 0);
+    const directSets = Math.min(totalSets, roundWholeSets(rollup?.directSets ?? 0));
+    const landmarks = getVolumeLandmarks(muscle);
+    return {
+      muscleGroup: muscle,
+      totalSets,
+      directSets,
+      indirectSets: totalSets - directSets,
+      effectiveVolumeSets: round1Sets(rollup?.effectiveSets ?? 0),
+      landmarks,
+      status: assessVolumeStatus(totalSets, landmarks),
+      percentOfMrv:
+        landmarks.mrv > 0 ? Math.round((totalSets / landmarks.mrv) * 100) : 0,
+    };
+  });
+
+  // `buildVolumeRows` always emits all 13 coarse rows, so with no logged
+  // volume its tiles would read "0 sets, 13 below MEV". Report the empty tiles
+  // instead — same "no volume yet" semantics the home glance tile uses.
+  return { volumeData, rows, tiles: stats.length > 0 ? coarseMevTiles(rows) : EMPTY_TILES };
+}
+
+/**
+ * The week's training volume, derived from `set_logs` through the SHARED
+ * pipeline (`app/(dashboard)/dashboard/_lib/weeklyVolume`) that the home glance
+ * tile, volume page, readiness sheet and atrophy warning all render from — so
+ * no surface can report a different number of sets for the same week.
+ */
 export function useWeeklyVolume(options: UseWeeklyVolumeOptions = {}) {
-  const [volumeData, setVolumeData] = useState<MuscleVolumeData[]>([]);
+  const [blocks, setBlocks] = useState<WeeklyVolumeBlockRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const { user, getVolumeLandmarks } = useUserStore();
+  const { getVolumeLandmarks } = useUserStore();
 
-  // Calculate week start (rolling 7 days including today)
-  const weekStart = useMemo(() => {
-    if (options.weekStart) return options.weekStart;
-    const now = new Date();
-    const sevenDaysAgo = new Date(now);
-    sevenDaysAgo.setDate(now.getDate() - 6);
-    return getLocalDateString(sevenDaysAgo);
-  }, [options.weekStart]);
+  // The window lower bound is the SHARED local-day-anchored one: a bare
+  // `YYYY-MM-DD` string compared against a timestamptz would be read as UTC
+  // midnight and pull in part of an extra day in negative-offset timezones.
+  const windowStartIso = useMemo(
+    () =>
+      options.weekStart
+        ? parseLocalDay(options.weekStart).toISOString()
+        : weeklyVolumeWindowStartISO(),
+    [options.weekStart]
+  );
 
   const fetchVolume = useCallback(async () => {
     setIsLoading(true);
@@ -49,160 +139,67 @@ export function useWeeklyVolume(options: UseWeeklyVolumeOptions = {}) {
       // freeze stale-convention (pre-group-cap) numbers over live derivation.
       // The table itself is dropped (20260730000001) so the trap cannot be
       // re-armed by a future writer.
-      {
-        // Calculate end of week
-        const weekEnd = new Date();
-        weekEnd.setHours(23, 59, 59, 999);
-        const weekEndStr = weekEnd.toISOString();
-
-        // Fetch exercise blocks and sets for current week
-        const { data: blocks } = await supabase
-          .from('exercise_blocks')
-          .select(`
+      //
+      // Same select as the dashboard's weekly-volume query, `feedback`
+      // included: without it there is no RIR to weight with and the effective
+      // volume silently degrades to the raw count. Rows are scoped to the
+      // signed-in user by RLS on workout_sessions.
+      const { data, error: queryError } = await supabase
+        .from('exercise_blocks')
+        .select(`
+          id,
+          exercises (
             id,
-            exercise_id,
-            exercises!inner (
-              id,
-              name,
-              primary_muscle,
-              secondary_muscles
-            ),
-            workout_sessions!inner (
-              id,
-              completed_at,
-              user_id,
-              state
-            ),
-            set_logs (
-              id,
-              is_warmup,
-              weight_kg,
-              reps,
-              rpe
-            )
-          `)
-          .gte('workout_sessions.completed_at', weekStart)
-          .lte('workout_sessions.completed_at', weekEndStr)
-          .eq('workout_sessions.state', 'completed');
+            name,
+            primary_muscle,
+            secondary_muscles
+          ),
+          set_logs (
+            id,
+            is_warmup,
+            feedback
+          ),
+          workout_sessions!inner (
+            id,
+            completed_at,
+            user_id,
+            state
+          )
+        `)
+        .eq('workout_sessions.state', 'completed')
+        .gte('workout_sessions.completed_at', windowStartIso);
 
-        if (blocks && blocks.length > 0) {
-          // Calculate volume from blocks: weighted direct credit for the
-          // primary muscle(s) plus partial credit for secondary muscles
-          // (previously secondaries were fetched but never counted, so e.g.
-          // rows contributed nothing to biceps/rear delts).
-          const directByMuscle = new Map<StandardMuscleGroup, number>();
-          const indirectByMuscle = new Map<StandardMuscleGroup, number>();
-
-          blocks.forEach((block: any) => {
-            const exercise = block.exercises;
-            if (!exercise) return;
-
-            const allSets = block.set_logs || [];
-            const workingSets = allSets.filter((s: any) => !s.is_warmup);
-
-            if (workingSets.length === 0) return;
-
-            const primaryMuscle = exercise.primary_muscle;
-            if (!primaryMuscle) return;
-
-            // Canonical per-set credit math (services/shared/volumeCredit) —
-            // this hook only multiplies by the working-set count.
-            for (const { muscle, credit, isDirect } of perSetCredits(
-              primaryMuscle,
-              exercise.secondary_muscles || []
-            )) {
-              const map = isDirect ? directByMuscle : indirectByMuscle;
-              map.set(muscle, (map.get(muscle) ?? 0) + workingSets.length * credit);
-            }
-          });
-
-          // Convert to MuscleVolumeData format with all standard muscles —
-          // EXCEPT fine members (glute_med, erectors, upper_traps, soleus, …)
-          // the user's own exercise tagging can't feed: a coarse-only
-          // 'traps'/'calves' logger must never see an un-clearable fine-muscle
-          // below-MEV row here. Same reachability gate as buildVolumeRows.
-          const reachable = computeReachableMuscles(blocks as WeeklyVolumeBlockRow[]);
-          const calculatedData: MuscleVolumeData[] = STANDARD_MUSCLE_GROUPS.filter((muscle) =>
-            isMuscleWarnable(muscle, reachable)
-          ).map((muscle) => {
-            const directSets = Math.round(directByMuscle.get(muscle) ?? 0);
-            const indirectSets = Math.round(indirectByMuscle.get(muscle) ?? 0);
-            const totalSets = directSets + indirectSets;
-            const landmarks = getVolumeLandmarks(muscle);
-            return {
-              muscleGroup: muscle,
-              totalSets,
-              directSets,
-              indirectSets,
-              landmarks,
-              status: assessVolumeStatus(totalSets, landmarks),
-              percentOfMrv: Math.round((totalSets / landmarks.mrv) * 100),
-            };
-          });
-
-          setVolumeData(calculatedData);
-        } else {
-          // No data found - return empty defaults. With no logged blocks,
-          // NOTHING is reachable, so every fine member is dropped (an empty
-          // reachable set gates them all).
-          const defaultData: MuscleVolumeData[] = STANDARD_MUSCLE_GROUPS.filter((muscle) =>
-            isMuscleWarnable(muscle, new Set<StandardMuscleGroup>())
-          ).map((muscle) => {
-            const landmarks = getVolumeLandmarks(muscle);
-            return {
-              muscleGroup: muscle,
-              totalSets: 0,
-              directSets: 0,
-              indirectSets: 0,
-              landmarks,
-              status: 'below_mev' as const,
-              percentOfMrv: 0,
-            };
-          });
-          setVolumeData(defaultData);
-        }
-      }
+      if (queryError) throw queryError;
+      setBlocks((data ?? []) as WeeklyVolumeBlockRow[]);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch volume');
+      setBlocks([]);
     } finally {
       setIsLoading(false);
     }
-  }, [weekStart, getVolumeLandmarks]);
+  }, [windowStartIso]);
 
   useEffect(() => {
     fetchVolume();
   }, [fetchVolume]);
 
-  // Summary stats
-  const summary = useMemo(() => {
-    const totalSets = volumeData.reduce((sum, d) => sum + d.totalSets, 0);
-    const musclesBelowMev = volumeData.filter((d) => d.status === 'below_mev').map((d) => d.muscleGroup);
-    const musclesOptimal = volumeData.filter((d) => d.status === 'optimal').map((d) => d.muscleGroup);
-    const musclesOverMrv = volumeData.filter((d) => d.status === 'exceeding_mrv').map((d) => d.muscleGroup);
-    const avgPercentMrv = volumeData.length > 0
-      ? Math.round(volumeData.reduce((sum, d) => sum + d.percentOfMrv, 0) / volumeData.length)
-      : 0;
-
-    // Full data for muscles below MEV (for atrophy risk alerts)
-    const musclesBelowMevData = volumeData.filter((d) => d.status === 'below_mev');
-
-    return {
-      totalSets,
-      musclesBelowMev,
-      musclesBelowMevData,
-      musclesOptimal,
-      musclesOverMrv,
-      avgPercentMrv,
-    };
-  }, [volumeData]);
+  const { volumeData, rows, tiles } = useMemo(
+    () => deriveWeeklyVolume(blocks, getVolumeLandmarks),
+    [blocks, getVolumeLandmarks]
+  );
 
   return {
+    /** Per-head (26 standard muscles), uncapped — never sum for a week total. */
     volumeData,
+    /** Shared coarse row model. */
+    rows,
+    /** Canonical week totals: totalSets / totalEffectiveSets / totalTarget / lowCount. */
+    tiles,
     isLoading,
     error,
-    weekStart,
-    summary,
+    /** Window start as a localDay string (`YYYY-MM-DD`). */
+    weekStart: localDay(new Date(windowStartIso)),
+    windowStartIso,
     refetch: fetchVolume,
   };
 }
-
