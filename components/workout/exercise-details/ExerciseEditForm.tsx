@@ -53,6 +53,19 @@ const CATALOG_FIELD_LABELS: Array<[keyof EditData, string]> = [
   ['youtubeVideoInput', 'Curated video'],
 ];
 
+/**
+ * Secondary tokens the picker can still offer alongside `primary`. A primary
+ * is never also a secondary, and a whole-group primary ('calves') subsumes its
+ * heads — the form hides those rows, so keeping the tokens would double-credit
+ * a muscle the user has no checkbox to clear.
+ */
+function pruneSecondaries(primary: string, secondaries: string[]): string[] {
+  const subsumed = new Set<string>([primary]);
+  const group = MUSCLE_GROUP_OPTIONS.find((g) => g.value === primary);
+  if (group) group.subMuscles.forEach((s) => subsumed.add(s.value));
+  return secondaries.filter((m) => !subsumed.has(m));
+}
+
 /** Labels of the catalog fields that differ between the two snapshots. */
 function diffCatalogFields(before: EditData | null, after: EditData): string[] {
   if (!before) return CATALOG_FIELD_LABELS.map(([, label]) => label);
@@ -144,7 +157,10 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
       equipmentRequired: Array.isArray(equipmentRequired) ? equipmentRequired : [],
       movementPattern,
       primaryMuscle,
-      secondaryMuscles: Array.isArray(secondaryMuscles) ? secondaryMuscles : [],
+      secondaryMuscles: pruneSecondaries(
+        primaryMuscle,
+        Array.isArray(secondaryMuscles) ? secondaryMuscles : []
+      ),
       hypertrophyTier,
       defaultRepRangeMin: Array.isArray(defaultRepRange) && defaultRepRange.length > 0 ? defaultRepRange[0] : undefined,
       defaultRepRangeMax: Array.isArray(defaultRepRange) && defaultRepRange.length > 1 ? defaultRepRange[1] : undefined,
@@ -333,6 +349,19 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
     );
   };
 
+  /** Switching the primary drops the secondaries it now subsumes. */
+  const selectPrimary = (token: string) => {
+    setEditData((prev) =>
+      prev
+        ? {
+            ...prev,
+            primaryMuscle: token,
+            secondaryMuscles: pruneSecondaries(token, prev.secondaryMuscles),
+          }
+        : prev
+    );
+  };
+
   // Show the current primary muscle even if it's a token the option list
   // doesn't enumerate (e.g. an older detailed tag), so the select never
   // silently snaps to a different muscle.
@@ -515,7 +544,7 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
         <label className="block text-xs font-medium text-surface-400 mb-1">Primary Muscle</label>
         <select
           value={editData.primaryMuscle}
-          onChange={(e) => setEditData({ ...editData, primaryMuscle: e.target.value })}
+          onChange={(e) => selectPrimary(e.target.value)}
           className="w-full px-3 py-2 bg-surface-900 border border-surface-600 rounded-lg text-surface-100 text-sm"
         >
           {/* Keep a legacy/unknown current value visible (e.g. an existing
@@ -554,9 +583,16 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
       <div>
         <label className="block text-xs font-medium text-surface-400 mb-1">Secondary Muscles</label>
         <div className="space-y-2 max-h-56 overflow-y-auto p-2 bg-surface-800/50 rounded-lg">
-          {MUSCLE_GROUP_OPTIONS.map((group) => (
-            <div key={group.value}>
-              {group.value !== editData.primaryMuscle && (
+          {MUSCLE_GROUP_OPTIONS.map((group) => {
+            // A whole-group primary ('Calves (all)') already credits every head
+            // underneath it, so the entire block drops out. Dropping only the
+            // group's own checkbox would leave its heads indented under the
+            // PREVIOUS group's label — that's how Gastrocnemius/Soleus ended up
+            // reading as sub-muscles of Adductors.
+            if (group.value === editData.primaryMuscle) return null;
+            const subMuscles = group.subMuscles.filter((s) => s.value !== editData.primaryMuscle);
+            return (
+              <div key={group.value} data-muscle-group={group.value}>
                 <label className="flex items-center gap-2 p-1 rounded hover:bg-surface-700/50 cursor-pointer">
                   <input
                     type="checkbox"
@@ -566,12 +602,9 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
                   />
                   <span className="text-xs font-medium text-surface-200">{group.label}</span>
                 </label>
-              )}
-              {group.subMuscles.length > 0 && (
-                <div className="ml-6 flex flex-wrap gap-x-4 gap-y-1 mt-0.5">
-                  {group.subMuscles
-                    .filter((s) => s.value !== editData.primaryMuscle)
-                    .map((s) => (
+                {subMuscles.length > 0 && (
+                  <div className="ml-6 flex flex-wrap gap-x-4 gap-y-1 mt-0.5">
+                    {subMuscles.map((s) => (
                       <label key={s.value} className="flex items-center gap-1.5 cursor-pointer">
                         <input
                           type="checkbox"
@@ -582,10 +615,11 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
                         <span className="text-xs text-surface-400">{s.label}</span>
                       </label>
                     ))}
-                </div>
-              )}
-            </div>
-          ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
 

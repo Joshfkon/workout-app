@@ -83,6 +83,71 @@ async function toggleQuadsAndSave(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole('button', { name: /^save$/i }));
 }
 
+/**
+ * Regression: sub-muscle checkboxes must stay under their own group. Hiding
+ * only the primary's own checkbox left its heads indented beneath the
+ * PREVIOUS group's label — with primary "Calves (all)", Gastrocnemius and
+ * Soleus rendered as if they were sub-muscles of Adductors.
+ */
+describe('ExerciseEditForm secondary-muscle taxonomy', () => {
+  const withPrimary = (primaryMuscle: string, secondaryMuscles: string[] = []) =>
+    ({ ...exercise, primaryMuscle, secondaryMuscles }) as unknown as Exercise;
+
+  /** The data-muscle-group block a checkbox actually lives in. */
+  const groupOf = (name: string) =>
+    screen.getByRole('checkbox', { name }).closest('[data-muscle-group]')
+      ?.getAttribute('data-muscle-group');
+
+  beforeEach(() => {
+    mockState.isCustom = true;
+    mockState.updateResult = { data: [{ id: 'ex-1' }], error: null };
+    mockState.updateCalls = [];
+    mockState.rpcCalls = [];
+  });
+
+  it('nests each head under its own group, not the group rendered above it', async () => {
+    render(<ExerciseEditForm exercise={withPrimary('gastrocnemius')} onCancel={() => {}} />);
+
+    expect(await screen.findByRole('checkbox', { name: 'Soleus' })).toBeInTheDocument();
+    expect(groupOf('Soleus')).toBe('calves');
+    expect(groupOf('Glute Med')).toBe('glutes');
+    expect(groupOf('Obliques')).toBe('abs');
+    // The primary head itself is not offered again as a secondary.
+    expect(screen.queryByRole('checkbox', { name: 'Gastrocnemius' })).not.toBeInTheDocument();
+  });
+
+  it('drops the whole group when a whole-group primary already credits its heads', async () => {
+    render(<ExerciseEditForm exercise={withPrimary('calves')} onCancel={() => {}} />);
+
+    expect(await screen.findByRole('checkbox', { name: 'Adductors' })).toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: 'Calves' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: 'Gastrocnemius' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: 'Soleus' })).not.toBeInTheDocument();
+  });
+
+  it('does not save a head the primary subsumed and the user cannot see', async () => {
+    jest.useFakeTimers();
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    try {
+      render(
+        <ExerciseEditForm
+          exercise={withPrimary('calves', ['soleus', 'hamstrings'])}
+          onCancel={() => {}}
+        />
+      );
+
+      await user.click(await screen.findByRole('checkbox', { name: 'Quads' }));
+      await user.click(screen.getByRole('button', { name: /^save$/i }));
+
+      await screen.findByText(/updated successfully/i);
+      const update = mockState.updateCalls.find((c) => c.table === 'exercises');
+      expect(update!.payload.secondary_muscles).toEqual(['hamstrings', 'quads']);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+});
+
 describe('ExerciseEditForm save reporting', () => {
   beforeEach(() => {
     mockState.updateCalls = [];
