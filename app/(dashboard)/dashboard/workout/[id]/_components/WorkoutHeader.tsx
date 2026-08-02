@@ -7,7 +7,7 @@
  * - top row: workout name + "exercise {n} of {total}", a tappable timer
  *   pill, a compact Finish button, and an overflow menu holding the
  *   secondary actions (Add exercise, collapse-all, injuries, readiness,
- *   plates, Cancel).
+ *   plates, deload, save-as-template, Cancel).
  * - progress row: full-width per-exercise progress that can never collide
  *   with the timer/count text (own row). ≤8 exercises render as individual
  *   segments; >8 collapse to a single continuous fill bar (completed/total),
@@ -32,6 +32,7 @@ import {
   IconPlayerPause,
   IconPlayerPlay,
   IconPlus,
+  IconTemplate,
   IconX,
 } from '@tabler/icons-react';
 
@@ -78,6 +79,8 @@ export interface WorkoutHeaderProps {
   onToggleDeload: () => void;
   onCancelWorkout: () => void;
   onAddExercise: () => void;
+  /** Save this session's exercises as a reusable workout template. */
+  onSaveAsTemplate: () => void;
   onFinishWorkout: () => void;
   /**
    * Minimize the workout (P0-3): navigate back to the Train tab WITHOUT
@@ -119,6 +122,7 @@ export function WorkoutHeader({
   onToggleDeload,
   onCancelWorkout,
   onAddExercise,
+  onSaveAsTemplate,
   onFinishWorkout,
   onMinimize,
 }: WorkoutHeaderProps) {
@@ -298,6 +302,15 @@ export function WorkoutHeader({
                       className={isDeload ? 'text-primary-400' : 'text-surface-400'}
                     />
                     {isDeload ? 'Deload session ✓' : 'Mark as deload'}
+                  </button>
+                  <button
+                    onClick={() => { onSaveAsTemplate(); onCloseToolsMenu(); }}
+                    className={menuItemClass}
+                    role="menuitem"
+                    data-testid="save-as-template-trigger"
+                  >
+                    <IconTemplate size={16} className="text-surface-400" />
+                    Save as template
                   </button>
                   <div className="my-1 border-t border-surface-700" />
                   <button
