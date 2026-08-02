@@ -139,6 +139,8 @@ import { useWorkoutStore } from '@/stores/workoutStore';
 import { WorkoutHeader, type ExerciseSegmentStatus } from './_components/WorkoutHeader';
 import { WorkoutVolumeStrip } from './_components/WorkoutVolumeStrip';
 import { AddExercisePicker } from './_components/AddExercisePicker';
+import { SaveAsTemplateModal } from './_components/SaveAsTemplateModal';
+import { buildTemplateExercises } from '@/services/templateFromSession';
 import {
   buildExerciseHistories,
   fetchExerciseHistory,
@@ -616,6 +618,9 @@ export default function WorkoutPage() {
   const [showToolsMenu, setShowToolsMenu] = useState(false);
   const [showPlateCalculator, setShowPlateCalculator] = useState(false);
   const [plateCalculatorWeight, setPlateCalculatorWeight] = useState<number | undefined>(undefined);
+  // "Save as template" (header ⋮): captures this session's exercises as a
+  // reusable workout_template. Purely additive — no session state changes.
+  const [showSaveTemplateModal, setShowSaveTemplateModal] = useState(false);
   const [temporaryInjuries, setTemporaryInjuries] = useState<{ area: string; severity: 1 | 2 | 3 }[]>([]);
   const [userGoal, setUserGoal] = useState<'bulk' | 'cut' | 'recomp' | 'maintain' | undefined>(undefined);
   const [selectedInjuryArea, setSelectedInjuryArea] = useState<string>('');
@@ -5407,6 +5412,7 @@ export default function WorkoutPage() {
         onToggleDeload={handleToggleDeloadSession}
         onCancelWorkout={() => setShowCancelModal(true)}
         onAddExercise={handleOpenAddExercise}
+        onSaveAsTemplate={() => setShowSaveTemplateModal(true)}
         onFinishWorkout={handleWorkoutComplete}
         onMinimize={() => router.push('/dashboard/log')}
       />
@@ -6906,6 +6912,20 @@ export default function WorkoutPage() {
           </div>
         </div>
       )}
+
+      {/* Save as template (header ⋮): rows are derived only while the sheet is
+          open, from the non-skipped blocks in workout order — logged working
+          sets win over the prescription, so a half-done session still saves
+          what you actually did. */}
+      <SaveAsTemplateModal
+        isOpen={showSaveTemplateModal}
+        onClose={() => setShowSaveTemplateModal(false)}
+        defaultName={workoutLabel}
+        exercises={
+          showSaveTemplateModal ? buildTemplateExercises(activeBlocks, completedSets) : []
+        }
+        onSaved={({ name }) => showSuccess(`Saved "${name}" to your templates`)}
+      />
 
       {/* Toast Container for notifications */}
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />

@@ -6,6 +6,8 @@ import { useParams, useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent, Button, LoadingAnimation } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
+import { convertWeightForDisplay, inputWeightToKg } from '@/lib/utils';
+import { useUserPreferences } from '@/hooks/useUserPreferences';
 import type { WorkoutTemplate, WorkoutTemplateExercise, WorkoutFolder } from '@/types/templates';
 
 const templateDetailKey = (id: string) => ['templateDetail', id] as const;
@@ -43,8 +45,14 @@ export default function TemplateDetailPage() {
   const [searchResults, setSearchResults] = useState<Exercise[]>([]);
   const [isSearching, setIsSearching] = useState(false);
 
-  // Edit exercise states
+  // Edit exercise states. `default_weight` is stored in kg (app-wide
+  // invariant); the input holds the user's display unit as free text so
+  // typing doesn't fight a round-tripped conversion.
   const [editingExercise, setEditingExercise] = useState<WorkoutTemplateExercise | null>(null);
+  const [editingWeightInput, setEditingWeightInput] = useState('');
+
+  const { preferences } = useUserPreferences();
+  const units = preferences.units;
 
   // Keyboard-aware insets for the two input-bearing modals
   const { inset: addExerciseKbInset, scrollContainerRef: addExerciseModalRef } =
@@ -214,9 +222,25 @@ export default function TemplateDetailPage() {
     }
   }
 
+  // Open the edit sheet, seeding the weight field in the user's display unit.
+  function openExerciseEditor(exercise: WorkoutTemplateExercise) {
+    setEditingExercise(exercise);
+    setEditingWeightInput(
+      exercise.default_weight != null
+        ? String(convertWeightForDisplay(exercise.default_weight, units, 1))
+        : ''
+    );
+  }
+
   // Update exercise
   async function handleUpdateExercise() {
     if (!editingExercise) return;
+
+    // The input is in the display unit; storage is always kg.
+    const typedWeight = parseFloat(editingWeightInput);
+    const weightKg = Number.isFinite(typedWeight)
+      ? Math.round(inputWeightToKg(typedWeight, units) * 100) / 100
+      : null;
 
     try {
       const { error } = await supabase
@@ -224,7 +248,7 @@ export default function TemplateDetailPage() {
         .update({
           default_sets: editingExercise.default_sets,
           default_reps: editingExercise.default_reps,
-          default_weight: editingExercise.default_weight,
+          default_weight: weightKg,
           default_rest_seconds: editingExercise.default_rest_seconds,
           notes: editingExercise.notes,
         })
@@ -570,7 +594,7 @@ export default function TemplateDetailPage() {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          setEditingExercise(exercise);
+                          openExerciseEditor(exercise);
                         }}
                         className="p-2 text-surface-400 hover:text-surface-200 hover:bg-surface-700 rounded-lg"
                       >
@@ -592,9 +616,13 @@ export default function TemplateDetailPage() {
                           </div>
                           <div>
                             <p className="text-2xl font-bold text-surface-100">
-                              {exercise.default_weight ? `${exercise.default_weight}` : '—'}
+                              {exercise.default_weight
+                                ? convertWeightForDisplay(exercise.default_weight, units, 1)
+                                : '—'}
                             </p>
-                            <p className="text-xs text-surface-500 uppercase">lbs</p>
+                            <p className="text-xs text-surface-500 uppercase">
+                              {units === 'lb' ? 'lbs' : 'kg'}
+                            </p>
                           </div>
                         </div>
                         
@@ -606,7 +634,7 @@ export default function TemplateDetailPage() {
                           <Button 
                             variant="ghost" 
                             size="sm" 
-                            onClick={() => setEditingExercise(exercise)}
+                            onClick={() => openExerciseEditor(exercise)}
                             className="flex-1"
                           >
                             Edit
@@ -738,16 +766,13 @@ export default function TemplateDetailPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-surface-300 mb-1">
-                    Default Weight (lbs)
+                    Default Weight ({units === 'lb' ? 'lbs' : 'kg'})
                   </label>
                   <input
                     type="number"
                     step="0.5"
-                    value={editingExercise.default_weight || ''}
-                    onChange={(e) => setEditingExercise({
-                      ...editingExercise,
-                      default_weight: e.target.value ? parseFloat(e.target.value) : null,
-                    })}
+                    value={editingWeightInput}
+                    onChange={(e) => setEditingWeightInput(e.target.value)}
                     placeholder="Optional"
                     className="w-full px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100"
                   />
