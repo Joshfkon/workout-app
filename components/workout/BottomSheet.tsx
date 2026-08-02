@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react';
 import { IconX } from '@tabler/icons-react';
 import { useKeyboardInset } from '@/hooks/useKeyboardInset';
+import { useRegisterOverlay } from '@/hooks/useOverlayRegistry';
 
 interface BottomSheetProps {
   isOpen: boolean;
@@ -23,6 +24,9 @@ interface BottomSheetProps {
 export function BottomSheet({ isOpen, onClose, title, children }: BottomSheetProps) {
   const { inset: keyboardInset, scrollContainerRef } =
     useKeyboardInset<HTMLDivElement>(isOpen);
+  // Tell app chrome (the resume-workout pill) to stand down while we're up —
+  // it's fixed at the layout root and would otherwise paint over our fields.
+  useRegisterOverlay(isOpen);
 
   if (!isOpen) return null;
 
