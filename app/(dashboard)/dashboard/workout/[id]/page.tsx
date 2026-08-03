@@ -174,6 +174,7 @@ import { computeMuscleRecovery, recoveryConfigFor } from '@/services/muscleRecov
 import { useRecoveryHistory } from '@/hooks/useMuscleReadiness';
 import { useWorkoutMuscleVolume } from '@/hooks/useWorkoutMuscleVolume';
 import { useRecoveryMultipliers } from '@/hooks/useRecoveryMultipliers';
+import { usePlannedFrequency } from '@/hooks/usePlannedFrequency';
 import { isStaleEmptyAdhocSession, discardStaleSession } from '../_lib/adhocSession';
 import { computeSupersetAdvance } from './_lib/supersetFlow';
 import {
@@ -322,6 +323,10 @@ export default function WorkoutPage() {
   const [recoveryNow] = useState(() => new Date());
   const { sessions: recoveryHistorySessions } = useRecoveryHistory(recoveryNow, true);
   const { multipliers: recoveryMultipliers, applySorenessAdjustment } = useRecoveryMultipliers();
+  // PLANNED per-muscle weekly frequency from the active mesocycle — the
+  // session-capacity denominator for the recovery dose model. Never derived
+  // from observed training history (see services/plannedFrequency).
+  const { plannedSessionsPerWeekByMuscle } = usePlannedFrequency();
 
   // Toast notifications for errors
   const { toasts, dismissToast, showError, showSuccess, addToast } = useToasts();
@@ -2130,7 +2135,10 @@ export default function WorkoutPage() {
         recoveryMultipliers,
         undefined,
         undefined,
-        { experienceForCapacity: userProfile?.experience }
+        {
+          experienceForCapacity: userProfile?.experience,
+          plannedSessionsPerWeekByMuscle,
+        }
       );
       const statusAtAsk = computeMuscleRecovery(
         recoveryHistorySessions,
@@ -2148,6 +2156,8 @@ export default function WorkoutPage() {
       recoveryMultipliers,
       recoveryHistorySessions,
       applySorenessAdjustment,
+      userProfile?.experience,
+      plannedSessionsPerWeekByMuscle,
     ]
   );
 

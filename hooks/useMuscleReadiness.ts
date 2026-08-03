@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { useUserStore } from '@/stores';
+import { usePlannedFrequency } from '@/hooks/usePlannedFrequency';
 import { useAuthUser } from '@/hooks/useAuthUser';
 import { rpeToRir, type StandardMuscleGroup } from '@/types/schema';
 import type { SetLog } from '@/types/schema';
@@ -334,6 +335,12 @@ export function useMuscleReadiness({
   // silently fall back to 'intermediate' — supply it wherever the store has it
   // so the fallback stays visible in dose diagnostics rather than routine.
   const experienceForCapacity = storeUser?.experience;
+  // PLANNED per-muscle weekly frequency from the active mesocycle — the
+  // denominator for the recovery dose model's session capacity. Absent (no
+  // active plan) it falls back to DEFAULT_PLANNED_SESSIONS_PER_WEEK, reported
+  // in dose diagnostics. Never derived from observed training history.
+  const { plannedSessionsPerWeekByMuscle } = usePlannedFrequency();
+
   const { entries: sleepEntries } = useSleepLog();
   const recoveryConfig = useMemo(
     () =>
@@ -342,9 +349,17 @@ export function useMuscleReadiness({
         multipliers,
         computeSleepWindowMultiplier(sleepEntries, now),
         wearableRecovery.scale,
-        { experienceForCapacity: experienceForCapacity }
+        { experienceForCapacity, plannedSessionsPerWeekByMuscle }
       ),
-    [enhancedAthleteMode, multipliers, sleepEntries, now, wearableRecovery.scale, experienceForCapacity]
+    [
+      enhancedAthleteMode,
+      multipliers,
+      sleepEntries,
+      now,
+      wearableRecovery.scale,
+      experienceForCapacity,
+      plannedSessionsPerWeekByMuscle,
+    ]
   );
 
   const rows = useMemo(

@@ -27,6 +27,7 @@ import {
 import { ENHANCED_RECOVERY_MULTIPLIER } from '@/services/shared/fatigueConstants';
 import { composeGlobalRecoveryScale } from '@/services/wearableRecovery';
 import { SECONDARY_MUSCLE_CREDIT } from '@/services/volumeTracker';
+import { recordFrequencySource } from '@/services/plannedFrequency';
 
 // ---------------------------------------------------------------------------
 // Tunable heuristic constants — edit here to re-tune the whole model.
@@ -303,6 +304,10 @@ export function sessionCapacityFor(
     plannedSessionsPerWeek = DEFAULT_PLANNED_SESSIONS_PER_WEEK;
     plannedFrequencySource = 'fallback';
   }
+  // Observability: lets production answer "what share of recovery windows run
+  // on the fallback?" — the question that decides whether the fallback is a
+  // deliberate policy or an unnoticed gap.
+  recordFrequencySource(plannedFrequencySource);
 
   // Precondition: sessionCapacity > 0. capacityMrv is > 0 for every row in the
   // landmark table and frequency is >= 1, so the guard is belt-and-braces

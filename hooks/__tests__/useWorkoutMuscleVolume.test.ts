@@ -25,6 +25,16 @@ jest.mock('@/hooks/useWearableRecovery', () => ({
 jest.mock('@/hooks/useSleepLog', () => ({
   useSleepLog: () => ({ entries: [] }),
 }));
+// Planned per-muscle frequency is read from the active mesocycle via React
+// Query; an empty map keeps the dose model on DEFAULT_PLANNED_SESSIONS_PER_WEEK,
+// matching the neutral defaults the other mocks above establish.
+jest.mock('@/hooks/usePlannedFrequency', () => ({
+  usePlannedFrequency: () => ({
+    plannedSessionsPerWeekByMuscle: {},
+    isLoading: false,
+    hasPlan: false,
+  }),
+}));
 jest.mock('@/stores', () => ({
   useUserStore: (selector: (s: { user: null }) => unknown) => selector({ user: null }),
 }));

@@ -66,6 +66,30 @@ normalized change, so a steep value here is expected rather than a defect.
 
 Gentlest case: `soleus` @ advanced, 1×/wk → 0.89h
 
+## Planned-frequency source (live)
+
+Planned per-muscle frequency is read from the ACTIVE MESOCYCLE:
+`mesocycles.program_data` -> `getWeekSessionsFromProgramData(currentWeek)` ->
+`plannedSessionsPerWeekByMuscle`, which counts how many PLANNED sessions in
+the current week touch each muscle (once per session, primary or secondary).
+
+Resolution order and what it means:
+
+| Source | When | Meaning |
+|---|---|---|
+| `perMuscle` | active mesocycle covers this muscle | plan-derived, best |
+| `program` | a program-wide frequency was supplied | plan-derived, no per-muscle detail |
+| `fallback` | no active plan, or the muscle is not in it | DEFAULT_PLANNED_SESSIONS_PER_WEEK = 2 |
+
+Fallback is expected and legitimate for freestyle/template-only users, who
+have no plan to read. `getFrequencySourceMetrics()` reports the live split so
+the fallback share is observable rather than assumed.
+
+Frequency is deliberately NEVER derived from trailing observed sessions:
+observed frequency rises as the week fills, which would re-interpret an
+already-completed session as a lighter dose and retroactively shrink its
+recovery window.
+
 ## Clamp saturation
 
 Measured by `services/__tests__/recoveryWindowBounds.test.ts` from the
