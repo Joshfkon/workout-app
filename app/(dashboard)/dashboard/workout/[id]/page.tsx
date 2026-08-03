@@ -5475,7 +5475,7 @@ export default function WorkoutPage() {
               <li>• <strong>Use rest timer</strong> - Optimal rest helps maximize your gains</li>
               <li>• <strong>Track form</strong> - Rate your form to ensure quality reps</li>
             </ul>
-            <p className="text-xs text-primary-300 mt-2">
+            <p className="text-xs text-primary-700 dark:text-primary-300 mt-2">
               We&apos;ll learn your patterns and personalize recommendations as you train!
             </p>
           </div>
