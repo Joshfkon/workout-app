@@ -333,6 +333,16 @@ export default function MesocyclePage() {
       // Calculate recovery factors
       const recoveryFactors = calculateRecoveryFactors(extendedProfile);
 
+      // generateFullMesocycleWithFatigue picks the split from days/week
+      // (recommendSplit), so switching to an interval cadence that moves
+      // days/week can regenerate onto a different split — 6-day PPL at every
+      // 3 days becomes 2 sessions/week, which is Full Body. split_type has to
+      // follow the program that was actually generated: the calendar surfaces
+      // derive the day name and their fallback muscles from split_type while
+      // Start builds from program_data, so leaving it stale would advertise
+      // "Push" and launch Full Body.
+      const newSplitType = newProgram?.split || mesocycle.split_type;
+
       // If the schedule changed, regenerate future planned sessions onto the
       // new training dates: delete future `planned` rows and re-insert on the
       // new dates, skipping today's-and-past dates already locked by a
@@ -402,6 +412,7 @@ export default function MesocyclePage() {
         .update({
           session_duration_minutes: newDuration,
           days_per_week: newDaysPerWeek,
+          split_type: newSplitType,
           schedule_mode: newSchedule.mode,
           training_interval_days: newSchedule.mode === 'interval' ? newSchedule.intervalDays : null,
           preferred_workout_days: normalizedPreferredDays,
@@ -423,6 +434,7 @@ export default function MesocyclePage() {
             ...m,
             session_duration_minutes: newDuration,
             days_per_week: newDaysPerWeek,
+            split_type: newSplitType,
             schedule_mode: newSchedule.mode,
             training_interval_days:
               newSchedule.mode === 'interval' ? newSchedule.intervalDays : null,
@@ -434,7 +446,7 @@ export default function MesocyclePage() {
 
       // Refresh today's workout so the schedule reflects the new training days
       if (mesocycleId === mesocycles.find(m => m.state === 'active')?.id) {
-        setTodayWorkout(getWorkoutForDate(mesocycle.split_type, new Date(), newSchedule));
+        setTodayWorkout(getWorkoutForDate(newSplitType, new Date(), newSchedule));
 
         // program_data was just rewritten, and Start will build from the
         // regenerated program — re-resolve the slot session so the card's
@@ -442,7 +454,7 @@ export default function MesocyclePage() {
         // program instead of the one loaded on mount.
         const slotSession = await resolveProgramSlotSession(
           supabase,
-          { ...mesocycle, days_per_week: newDaysPerWeek },
+          { ...mesocycle, days_per_week: newDaysPerWeek, split_type: newSplitType },
           newProgram,
           completedSessions
         );

@@ -12,6 +12,7 @@ import {
   scheduledDatesBetween,
   sessionsPerWeek,
 } from '@/lib/training/trainingSchedule';
+import { recommendSplit } from '@/services/mesocycleBuilder';
 import type { WorkoutDay } from '@/types/schema';
 
 /** Local-midnight date, matching the app's local-date convention. */
@@ -208,6 +209,30 @@ describe('intervalDaysPerWeek', () => {
 
   it('never falls below the mesocycle builder floor', () => {
     expect(intervalDaysPerWeek(14)).toBe(2);
+  });
+});
+
+describe('interval cadence changes the recommended split', () => {
+  // Why the /mesocycle schedule editor must persist newProgram.split into
+  // split_type: an interval cadence sets days/week, and the program generator
+  // picks the split from days/week. If split_type were left alone, the
+  // calendar surfaces (which read split_type) would advertise a different
+  // workout than the one Start builds from program_data.
+  it('drops a 6-day PPL block onto a different split at every 3 days', () => {
+    expect(recommendSplit(6, 'bulk', 'intermediate').split).toBe('PPL');
+
+    const cadenceDaysPerWeek = intervalDaysPerWeek(3);
+    expect(cadenceDaysPerWeek).toBe(2);
+    expect(recommendSplit(cadenceDaysPerWeek, 'bulk', 'intermediate').split).not.toBe('PPL');
+  });
+
+  it('is stable when the cadence lands on the same days/week', () => {
+    // Every other day rounds to 4/week, which is what a 4-day block already
+    // had — the split (and so split_type) must not move.
+    expect(intervalDaysPerWeek(2)).toBe(4);
+    expect(recommendSplit(4, 'bulk', 'intermediate').split).toBe(
+      recommendSplit(intervalDaysPerWeek(2), 'bulk', 'intermediate').split
+    );
   });
 });
 
