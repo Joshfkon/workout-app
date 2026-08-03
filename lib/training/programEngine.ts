@@ -5,6 +5,7 @@
 
 import { createUntypedClient } from '@/lib/supabase/client';
 import { getLocalDateString } from '@/lib/utils';
+import { describeSupabaseError } from '@/lib/errors';
 import { e1rmValueFromRpe } from '@/services/shared/e1rm';
 import type {
   UserProfile,
@@ -952,7 +953,9 @@ export class ProgramEngine {
       .single();
     
     if (error || !data) {
-      throw new Error('Failed to create mesocycle');
+      // Keep what the database said — a PostgrestError is a plain object, so
+      // a bare rethrow elsewhere would reduce it to a generic message.
+      throw new Error(describeSupabaseError(error, 'Failed to create mesocycle'));
     }
     
     return { mesocycleId: data.id, program };
