@@ -24,6 +24,26 @@ function selectedDayLabels(): string[] {
   );
 }
 
+const PRESET_LABELS = [
+  'Spread out',
+  'Weekdays only',
+  'Weekends only',
+  'Weekends + weekdays',
+  'Back to back',
+];
+
+/** Preset chips currently rendered, in order. */
+function presetLabels(): string[] {
+  return PRESET_LABELS.filter((label) => screen.queryByRole('button', { name: label }) !== null);
+}
+
+/** Preset chips showing themselves as applied. */
+function activePresetLabels(): string[] {
+  return presetLabels().filter(
+    (label) => screen.getByRole('button', { name: label }).getAttribute('aria-pressed') === 'true'
+  );
+}
+
 describe('WorkoutDaySelector', () => {
   it('renders every day identically — no weekend is singled out', () => {
     render(<Harness />);
@@ -72,6 +92,72 @@ describe('WorkoutDaySelector', () => {
     render(<Harness daysPerWeek={6} initial={[]} />);
     expect(screen.queryByRole('button', { name: 'Weekdays only' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Spread out' })).toBeInTheDocument();
+  });
+
+  // Reported: "hitting any other button auto selects weekdays only", and
+  // "hitting weekdays only while it's selected does nothing". Both came from
+  // preset chips that lit up for selections they had not produced.
+  describe('preset chips report only what they actually applied', () => {
+    it.each([2, 3, 4, 5, 6])(
+      'lights at most one chip at %i days/week, whichever was pressed',
+      async (daysPerWeek) => {
+        const user = userEvent.setup();
+        render(<Harness daysPerWeek={daysPerWeek} initial={[]} />);
+
+        for (const label of presetLabels()) {
+          await user.click(screen.getByRole('button', { name: label }));
+          expect(activePresetLabels()).toEqual([label]);
+        }
+      }
+    );
+
+    it('does not claim "weekdays only" for a different all-weekday preset', async () => {
+      const user = userEvent.setup();
+      render(<Harness daysPerWeek={4} initial={[]} />);
+
+      // Spread out at 4 days is Mon/Tue/Thu/Fri — every day a weekday, but
+      // not the weekdays-only selection.
+      await user.click(screen.getByRole('button', { name: 'Spread out' }));
+
+      expect(selectedDayLabels()).toEqual(['Monday', 'Tuesday', 'Thursday', 'Friday']);
+      expect(screen.getByRole('button', { name: 'Weekdays only' })).toHaveAttribute(
+        'aria-pressed',
+        'false'
+      );
+    });
+
+    it('never offers two chips that produce the same days', () => {
+      for (const daysPerWeek of [1, 2, 3, 4, 5, 6, 7]) {
+        const { unmount } = render(<Harness daysPerWeek={daysPerWeek} initial={[]} />);
+        const labels = presetLabels();
+        expect(labels.length).toBeGreaterThan(0);
+        expect(new Set(labels).size).toBe(labels.length);
+        unmount();
+      }
+    });
+
+    it('re-applies a preset after the user hand-edits the days', async () => {
+      const user = userEvent.setup();
+      render(<Harness daysPerWeek={4} initial={[]} />);
+
+      await user.click(screen.getByRole('button', { name: 'Weekdays only' }));
+      const weekdaysOnly = selectedDayLabels();
+      expect(screen.getByRole('button', { name: 'Weekdays only' })).toHaveAttribute(
+        'aria-pressed',
+        'true'
+      );
+
+      // Hand-edit away from the preset: the chip must stop claiming it applies.
+      await user.click(screen.getByRole('button', { name: 'Sunday' }));
+      expect(screen.getByRole('button', { name: 'Weekdays only' })).toHaveAttribute(
+        'aria-pressed',
+        'false'
+      );
+
+      // Pressing it again restores exactly the preset.
+      await user.click(screen.getByRole('button', { name: 'Weekdays only' }));
+      expect(selectedDayLabels()).toEqual(weekdaysOnly);
+    });
   });
 
   it('marks the active preset', async () => {

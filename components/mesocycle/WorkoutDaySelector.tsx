@@ -21,7 +21,9 @@ interface WorkoutDaySelectorProps {
 interface DayPreset {
   id: string;
   label: string;
-  /** Null when the preset can't cover daysPerWeek (e.g. 6 days on weekends). */
+  /** What pressing it does, for users who can't tell the shapes apart. */
+  hint: string;
+  /** Null when the preset can't cover daysPerWeek (e.g. 6 days on weekdays). */
   days: WorkoutDay[] | null;
 }
 
@@ -61,6 +63,26 @@ function spreadDays(count: number): WorkoutDay[] {
   return sortDays(pattern.map((i) => DAYS_OF_WEEK[i]));
 }
 
+/**
+ * Spreads that always include Saturday and Sunday, for people whose week is
+ * built around the weekend rather than around Monday-to-Friday.
+ */
+const WEEKEND_PATTERNS: Record<number, number[]> = {
+  1: [5],
+  2: [5, 6],
+  3: [2, 5, 6],
+  4: [1, 3, 5, 6],
+  5: [0, 2, 4, 5, 6],
+  6: [0, 1, 2, 4, 5, 6],
+  7: [0, 1, 2, 3, 4, 5, 6],
+};
+
+function weekendDays(count: number): WorkoutDay[] {
+  const safeCount = Math.max(1, Math.min(DAY_COUNT, count));
+  const pattern = WEEKEND_PATTERNS[safeCount] || WEEKEND_PATTERNS[4];
+  return sortDays(pattern.map((i) => DAYS_OF_WEEK[i]));
+}
+
 function consecutiveDays(count: number, startIndex = 0): WorkoutDay[] {
   const safeCount = Math.max(1, Math.min(DAY_COUNT, count));
   return sortDays(
@@ -82,23 +104,54 @@ function shiftDays(days: WorkoutDay[], direction: 1 | -1): WorkoutDay[] {
   );
 }
 
-function buildPresets(daysPerWeek: number): DayPreset[] {
-  const weekendFirst = [...WEEKEND_DAYS, ...WEEKDAYS];
-
-  return [
-    { id: 'spread', label: 'Spread out', days: spreadDays(daysPerWeek) },
+/**
+ * The presets offered for a given day count, with duplicates removed.
+ *
+ * Named week shapes genuinely collide once you pick N of 7 days — "Weekdays
+ * only" and 4 consecutive days from Monday are the same four days. Two chips
+ * for one selection is what made the old picker look like it was overriding
+ * the user's choice, so a preset that produces a set an earlier preset already
+ * covers is dropped rather than shown twice. At most one chip is ever active.
+ */
+function buildPresets(daysPerWeek: number): (DayPreset & { days: WorkoutDay[] })[] {
+  const candidates: DayPreset[] = [
+    {
+      id: 'spread',
+      label: 'Spread out',
+      hint: 'Maximise rest between sessions',
+      days: spreadDays(daysPerWeek),
+    },
     {
       id: 'weekdays',
       label: 'Weekdays only',
+      hint: 'Keep Saturday and Sunday free',
       days: daysPerWeek <= WEEKDAYS.length ? sortDays(WEEKDAYS.slice(0, daysPerWeek)) : null,
     },
     {
       id: 'weekends',
-      label: daysPerWeek <= WEEKEND_DAYS.length ? 'Weekends only' : 'Weekends first',
-      days: sortDays(weekendFirst.slice(0, Math.min(daysPerWeek, DAY_COUNT))),
+      label: daysPerWeek <= WEEKEND_DAYS.length ? 'Weekends only' : 'Weekends + weekdays',
+      hint: 'Always train Saturday and Sunday',
+      days: weekendDays(daysPerWeek),
     },
-    { id: 'consecutive', label: 'Consecutive', days: consecutiveDays(daysPerWeek) },
+    {
+      id: 'consecutive',
+      label: 'Back to back',
+      hint: 'Train on consecutive days, then rest',
+      days: consecutiveDays(daysPerWeek),
+    },
   ];
+
+  const seen: WorkoutDay[][] = [];
+  const presets: (DayPreset & { days: WorkoutDay[] })[] = [];
+
+  for (const candidate of candidates) {
+    if (!candidate.days) continue;
+    if (seen.some((days) => sameDays(days, candidate.days!))) continue;
+    seen.push(candidate.days);
+    presets.push(candidate as DayPreset & { days: WorkoutDay[] });
+  }
+
+  return presets;
 }
 
 /**
@@ -148,10 +201,7 @@ export function WorkoutDaySelector({
     return day.slice(0, 3);
   };
 
-  const presets = buildPresets(daysPerWeek).filter((preset): preset is DayPreset & { days: WorkoutDay[] } =>
-    preset.days !== null
-  );
-
+  const presets = buildPresets(daysPerWeek);
   const canShift = selectedDays.length > 0;
 
   return (
@@ -167,6 +217,7 @@ export function WorkoutDaySelector({
                 type="button"
                 onClick={() => onChange(preset.days)}
                 aria-pressed={isActive}
+                title={preset.hint}
                 className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${
                   isActive
                     ? 'bg-primary-500 text-white'
