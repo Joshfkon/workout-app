@@ -501,7 +501,7 @@ export default function NewMesocyclePage() {
         <InlineHint id="first-mesocycle-intro">
           <div>
             <p className="font-medium mb-1">Creating your first training program!</p>
-            <p className="text-sm text-primary-200">
+            <p className="text-sm text-primary-800 dark:text-primary-200">
               A mesocycle is a 4-8 week training block designed to progressively build your strength and muscle.
               We&apos;ll help you set up the perfect plan based on your goals and schedule.
             </p>
