@@ -25,6 +25,21 @@ describe('parseTemplateRepRange', () => {
   it('clamps absurd rep counts into the column bounds', () => {
     expect(parseTemplateRepRange('500-900')).toEqual([100, 100]);
   });
+
+  describe('duration exercises (seconds in the reps field)', () => {
+    it('keeps holds longer than the rep ceiling', () => {
+      expect(parseTemplateRepRange('180-300s', 'seconds')).toEqual([180, 300]);
+      expect(parseTemplateRepRange('45s', 'seconds')).toEqual([45, 45]);
+    });
+
+    it('clamps at the 600s logging limit', () => {
+      expect(parseTemplateRepRange('900s', 'seconds')).toEqual([600, 600]);
+    });
+
+    it('falls back to 30-60s rather than 8-12', () => {
+      expect(parseTemplateRepRange('', 'seconds')).toEqual([30, 60]);
+    });
+  });
 });
 
 describe('buildTemplateExerciseBlocks', () => {
@@ -91,6 +106,28 @@ describe('buildTemplateExerciseBlocks', () => {
     expect(blocks[1]).toMatchObject({ target_sets: 1, target_rest_seconds: 0 });
   });
 
+  it('carries a duration hold across as seconds, not clamped reps', () => {
+    const blocks = buildTemplateExerciseBlocks('s', 'Carries', [
+      {
+        exercise_id: 'plank',
+        exercise_type: 'duration_based',
+        default_sets: 3,
+        default_reps: '180-300s',
+        default_rest_seconds: 90,
+      },
+    ]);
+
+    expect(blocks[0]).toMatchObject({ target_rep_range: [180, 300] });
+  });
+
+  it('reads the seconds suffix when the row predates exercise_type', () => {
+    const blocks = buildTemplateExerciseBlocks('s', 'Carries', [
+      { exercise_id: 'carry', default_sets: 3, default_reps: '120-240s', default_rest_seconds: 90 },
+    ]);
+
+    expect(blocks[0]).toMatchObject({ target_rep_range: [120, 240] });
+  });
+
   it('leaves warmups to the workout page', () => {
     expect(buildTemplateExerciseBlocks('s', 'T', rows)[0]).toMatchObject({
       warmup_protocol: { sets: [] },
@@ -104,6 +141,8 @@ interface FakeOptions {
   template?: { id: string; name: string; times_performed: number | null } | null;
   templateExercises?: TemplateExerciseRow[];
   liveExerciseIds?: string[];
+  /** exercise_type per exercise id, as the catalog reports it. */
+  exerciseTypes?: Record<string, string>;
   blocksError?: { code: string } | null;
 }
 
@@ -115,6 +154,7 @@ function fakeSupabase(options: FakeOptions = {}) {
       { exercise_id: 'ex-1', default_sets: 3, default_reps: '8-12', default_rest_seconds: 90 },
     ],
     liveExerciseIds,
+    exerciseTypes = {},
     blocksError = null,
   } = options;
 
@@ -153,7 +193,10 @@ function fakeSupabase(options: FakeOptions = {}) {
           select: () => ({
             in: (_col: string, ids: string[]) =>
               Promise.resolve({
-                data: (liveExerciseIds ?? ids).map((id) => ({ id })),
+                data: (liveExerciseIds ?? ids).map((id) => ({
+                  id,
+                  exercise_type: exerciseTypes[id] ?? 'rep_based',
+                })),
                 error: null,
               }),
           }),
@@ -224,6 +267,21 @@ describe('startWorkoutFromTemplate', () => {
       /no exercises yet/i
     );
     expect(calls.insertedSessions).toHaveLength(0);
+  });
+
+  it('prefers the exercise catalog modality over the template row copy', async () => {
+    const { client, calls } = fakeSupabase({
+      // Saved before exercise_type was written to templates, so the row says
+      // nothing — the catalog knows it's a hold.
+      templateExercises: [
+        { exercise_id: 'plank', default_sets: 3, default_reps: '240', default_rest_seconds: 90 },
+      ],
+      exerciseTypes: { plank: 'duration_based' },
+    });
+
+    await startWorkoutFromTemplate(client, 'user-1', 'tpl-1');
+
+    expect(calls.insertedBlocks[0]).toMatchObject({ target_rep_range: [240, 240] });
   });
 
   it('skips template rows whose exercise no longer exists', async () => {

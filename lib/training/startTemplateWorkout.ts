@@ -21,6 +21,8 @@ import { insertWorkoutSessions } from '@/lib/training/sessionOrigin';
 export interface TemplateExerciseRow {
   exercise_id: string;
   exercise_name?: string | null;
+  /** 'duration_based' means default_reps holds SECONDS (setModality). */
+  exercise_type?: string | null;
   default_sets?: number | null;
   default_reps?: string | null;
   /** kg — app-wide storage invariant. */
@@ -36,32 +38,65 @@ const REST_MIN = 0;
 const REST_MAX = 600;
 const REPS_MIN = 1;
 const REPS_MAX = 100;
+/**
+ * Duration exercises keep SECONDS in the reps field, bounded by
+ * set_logs.reps <= 600 (20260723000001_widen_set_logs_reps_for_duration) — a
+ * 5-minute carry is a legitimate target, 500 reps is not.
+ */
+const DURATION_MAX_SECONDS = 600;
 /** target_weight_kg is DECIMAL(6,2). */
 const WEIGHT_MAX_KG = 9999.99;
 
 const DEFAULT_REP_RANGE: [number, number] = [8, 12];
+/** Matches the seeded holds' default ranges (Wall Sit 30-60s, Plank 20-45s). */
+const DEFAULT_DURATION_RANGE: [number, number] = [30, 60];
 const DEFAULT_SETS = 3;
 const DEFAULT_REST_SECONDS = 90;
+
+/** "45s", "180-300s", "30 sec" — a seconds range written by hand or by
+ *  templateFromSession's `s` suffix, on a row with no exercise_type. */
+const SECONDS_SUFFIX_RE = /\d\s*(s|sec|secs|seconds)\s*$/i;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
 /**
- * Parse a template's free-text reps field into an exercise_blocks rep range.
+ * Whether a template row's reps field holds seconds rather than reps. The
+ * exercise's own modality wins; the `s` suffix rescues rows saved before
+ * exercise_type was written (the template detail page still doesn't set it).
+ */
+export function isDurationTemplateRow(exercise: TemplateExerciseRow): boolean {
+  if (exercise.exercise_type === 'duration_based') return true;
+  if (exercise.exercise_type === 'rep_based') return false;
+  return SECONDS_SUFFIX_RE.test(exercise.default_reps ?? '');
+}
+
+/**
+ * Parse a template's free-text reps field into an exercise_blocks target range.
  *
  * Templates store reps as typed text ("8-12", "10", "12+", "AMRAP"), so read
  * the numbers out of it rather than trusting a format: two or more numbers give
- * a range, one gives a fixed target, none falls back to 8-12.
+ * a range, one gives a fixed target, none falls back to the default.
+ *
+ * `unit` matters because duration exercises overload this field with seconds
+ * ("180-300s" is a 3-5 minute carry, not 180 reps) — clamping those to the rep
+ * ceiling would silently rewrite the prescription.
  */
-export function parseTemplateRepRange(reps: string | null | undefined): [number, number] {
+export function parseTemplateRepRange(
+  reps: string | null | undefined,
+  unit: 'reps' | 'seconds' = 'reps'
+): [number, number] {
+  const max = unit === 'seconds' ? DURATION_MAX_SECONDS : REPS_MAX;
+  const fallback = unit === 'seconds' ? DEFAULT_DURATION_RANGE : DEFAULT_REP_RANGE;
+
   const numbers = (reps ?? '')
     .match(/\d+/g)
     ?.map((n) => parseInt(n, 10))
     .filter((n) => Number.isFinite(n) && n > 0)
-    .map((n) => clamp(n, REPS_MIN, REPS_MAX));
+    .map((n) => clamp(n, REPS_MIN, max));
 
-  if (!numbers || numbers.length === 0) return [...DEFAULT_REP_RANGE];
+  if (!numbers || numbers.length === 0) return [...fallback];
   if (numbers.length === 1) return [numbers[0], numbers[0]];
 
   const [a, b] = numbers;
@@ -92,7 +127,10 @@ export function buildTemplateExerciseBlocks(
       exercise_id: exercise.exercise_id,
       order: index + 1,
       target_sets: clamp(Number.isFinite(sets) ? sets : DEFAULT_SETS, SETS_MIN, SETS_MAX),
-      target_rep_range: parseTemplateRepRange(exercise.default_reps),
+      target_rep_range: parseTemplateRepRange(
+        exercise.default_reps,
+        isDurationTemplateRow(exercise) ? 'seconds' : 'reps'
+      ),
       target_rir: 2,
       // 0 means "suggest it live" — same contract as every other ad-hoc start.
       target_weight_kg:
@@ -126,7 +164,7 @@ export async function startWorkoutFromTemplate(
     supabase.from('workout_templates').select('id, name, times_performed').eq('id', templateId).single(),
     supabase
       .from('workout_template_exercises')
-      .select('exercise_id, exercise_name, default_sets, default_reps, default_weight, default_rest_seconds, notes')
+      .select('exercise_id, exercise_name, exercise_type, default_sets, default_reps, default_weight, default_rest_seconds, notes')
       .eq('template_id', templateId)
       .order('sort_order', { ascending: true }),
   ]);
@@ -147,14 +185,23 @@ export async function startWorkoutFromTemplate(
   // workout_template_exercises has no foreign key to exercises, so a template
   // can outlive a deleted custom exercise. Drop those rather than failing the
   // whole start on an opaque FK violation (exercise_blocks.exercise_id is
-  // ON DELETE RESTRICT).
+  // ON DELETE RESTRICT). The same lookup carries each exercise's real modality,
+  // which beats the template row's copy (rows added from the template editor
+  // never set exercise_type).
   const { data: liveExercises } = await supabase
     .from('exercises')
-    .select('id')
+    .select('id, exercise_type')
     .in('id', templateExercises.map((e) => e.exercise_id));
-  const liveIds = new Set(((liveExercises ?? []) as { id: string }[]).map((row) => row.id));
+  const liveTypes = new Map(
+    ((liveExercises ?? []) as { id: string; exercise_type?: string | null }[]).map((row) => [
+      row.id,
+      row.exercise_type ?? null,
+    ])
+  );
   const exercises = liveExercises
-    ? templateExercises.filter((e) => liveIds.has(e.exercise_id))
+    ? templateExercises
+        .filter((e) => liveTypes.has(e.exercise_id))
+        .map((e) => ({ ...e, exercise_type: liveTypes.get(e.exercise_id) ?? e.exercise_type }))
     : templateExercises;
   if (exercises.length === 0) {
     throw new Error("This template's exercises no longer exist — edit the template to replace them.");
