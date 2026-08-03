@@ -20,23 +20,19 @@ import type {
   MuscleRecoveryStatus,
   WeeklyMuscleVolumeStatus,
 } from '@/types/schema';
-import { MUSCLE_GROUPS, isStandardMuscle, toLegacyMuscleGroup } from '@/types/schema';
-import { STANDARD_TO_COARSE } from '@/services/volumeBands';
-import { MUSCLE_FIBER_PROFILE } from './repRangeEngine';
+import { MUSCLE_GROUPS } from '@/types/schema';
+import { fiberTypeForMuscle } from './repRangeEngine';
 import { toStandardMuscleForVolume } from '@/lib/migrations/muscle-groups';
 
 /**
- * Fiber type for ANY muscle token: the fiber table is keyed by coarse legacy
- * group ('triceps', 'shoulders'), so standard fine muscles resolve through
- * STANDARD_TO_COARSE (triceps_lat_med → triceps, front_delts → shoulders)
- * and legacy tokens pass through; anything unresolvable reads 'mixed'.
+ * Fiber type for ANY muscle token. Delegates to the SHARED resolver in
+ * repRangeEngine so rep prescription and recovery decay can never disagree
+ * about a muscle's fiber profile — this used to be a local coarse-only lookup,
+ * which meant a per-standard override (gastrocnemius 'mixed') was invisible
+ * here even though it was visible to the rep-range path.
  */
 function lookupFiberType(muscle: string): string {
-  const token = muscle?.toLowerCase?.() ?? '';
-  const coarse = isStandardMuscle(token)
-    ? STANDARD_TO_COARSE[token]
-    : toLegacyMuscleGroup(token) ?? token;
-  return (MUSCLE_FIBER_PROFILE as Record<string, string>)[coarse] ?? 'mixed';
+  return fiberTypeForMuscle(muscle);
 }
 
 // ============================================================

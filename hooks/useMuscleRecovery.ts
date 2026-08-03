@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useUserStore } from '@/stores';
+import { usePlannedFrequency } from '@/hooks/usePlannedFrequency';
 import {
   STANDARD_MUSCLE_GROUPS,
   STANDARD_MUSCLE_DISPLAY_NAMES,
@@ -127,6 +128,17 @@ export function useMuscleRecovery(): UseMuscleRecoveryResult {
 
   const { user: storeUser } = useUserStore();
   const enhancedAthleteMode = storeUser?.enhancedAthleteMode === true;
+  // The user's real experience level drives the Bug 6 session-capacity
+  // normalizer (direct MRV / planned frequency). Left undefined it would
+  // silently fall back to 'intermediate' — supply it wherever the store has it
+  // so the fallback stays visible in dose diagnostics rather than routine.
+  const experienceForCapacity = storeUser?.experience;
+  // PLANNED per-muscle weekly frequency from the active mesocycle — the
+  // denominator for the recovery dose model's session capacity. Absent (no
+  // active plan) it falls back to DEFAULT_PLANNED_SESSIONS_PER_WEEK, reported
+  // in dose diagnostics. Never derived from observed training history.
+  const { plannedSessionsPerWeekByMuscle } = usePlannedFrequency();
+
   const { multipliers } = useRecoveryMultipliers();
   // Recent sleep scales every window (trailing-2-night avg <6h stretches
   // recovery ×1.15; ≥8h good quality shrinks it ×0.95), and the wearable
@@ -140,9 +152,18 @@ export function useMuscleRecovery(): UseMuscleRecoveryResult {
         enhancedAthleteMode,
         multipliers,
         computeSleepWindowMultiplier(sleepEntries, now),
-        wearableRecovery.scale
+        wearableRecovery.scale,
+        { experienceForCapacity, plannedSessionsPerWeekByMuscle }
       ),
-    [enhancedAthleteMode, multipliers, sleepEntries, now, wearableRecovery.scale]
+    [
+      enhancedAthleteMode,
+      multipliers,
+      sleepEntries,
+      now,
+      wearableRecovery.scale,
+      experienceForCapacity,
+      plannedSessionsPerWeekByMuscle,
+    ]
   );
 
   const recoveryStatus = useMemo(

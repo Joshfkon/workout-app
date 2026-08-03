@@ -49,6 +49,7 @@ import {
   exerciseKey,
   type WeeklyAdjustmentPlan,
 } from '@/lib/training/weeklyRollover';
+import { readLandmarkVersion } from '@/lib/migrations/volume-landmarks';
 import { sessionIndexFromCompleted } from '@/lib/training/mesocycleProgress';
 import { insertWorkoutSessions } from '@/lib/training/sessionOrigin';
 import { quickWeightEstimate, type TransferCandidate } from '@/services/weightEstimationEngine';
@@ -515,7 +516,7 @@ export async function startMesocycleWorkoutSession(
 
   const { data: userData } = await supabase
     .from('users')
-    .select('height_cm, weight_kg, body_fat_percent, experience, volume_landmarks, enhanced_athlete_mode')
+    .select('height_cm, weight_kg, body_fat_percent, experience, volume_landmarks, enhanced_athlete_mode, preferences')
     .eq('id', user.id)
     .single();
 
@@ -665,7 +666,10 @@ export async function startMesocycleWorkoutSession(
         landmarksByMuscle: resolveVolumeLandmarks(
           userExperience,
           (userData?.volume_landmarks as Record<string, unknown> | null) ?? null,
-          enhancedAthleteMode
+          enhancedAthleteMode,
+          readLandmarkVersion(
+            (userData?.preferences as Record<string, unknown> | null) ?? null
+          )
         ),
         weekInMeso: mesocycle.current_week,
         isDeloadWeek: mesocycle.current_week === mesocycle.deload_week,

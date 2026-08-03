@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useWorkoutStore } from '@/stores/workoutStore';
+import { useIsOverlayOpen } from '@/hooks/useOverlayRegistry';
 import { Button } from '@/components/ui';
 import { deriveWorkoutLabel, formatDistanceToNow, formatDuration } from '@/lib/utils';
 
@@ -56,6 +57,12 @@ export function ResumeWorkoutBanner() {
   const exercises = useWorkoutStore((state) => state.exercises);
   const setLogs = useWorkoutStore((state) => state.setLogs);
   const endSession = useWorkoutStore((state) => state.endSession);
+
+  // A modal/sheet is open somewhere (e.g. "Log body data"). The pill is fixed
+  // at the layout root and paints after page content, so at equal z-index it
+  // lands on top of the sheet's own controls — it covered the weight field
+  // outright. Yield the screen while an overlay owns it.
+  const overlayOpen = useIsOverlayOpen();
 
   useEffect(() => {
     setMounted(true);
@@ -127,6 +134,13 @@ export function ResumeWorkoutBanner() {
         )
       : 'Workout in progress';
 
+  // While a modal/sheet owns the screen, render only the in-flow spacer: no
+  // pill over its fields, and no stale-session prompt hijacking a sheet the
+  // user just opened. Keeping the spacer avoids a layout jump on close.
+  if (overlayOpen) {
+    return <div className="h-24" aria-hidden="true" />;
+  }
+
   // Stale + empty: prompt Resume-or-discard instead of the passive pill so a
   // forgotten session can't quietly resurface with an hours-long timer.
   if (staleEmpty && !stalePromptDismissed) {
@@ -166,8 +180,11 @@ export function ResumeWorkoutBanner() {
       <div className="h-24" aria-hidden="true" />
 
       {/* Resume pill (P0-3, per audit mockup 03): compact, above the bottom
-          nav, with live set progress and rest countdown. */}
-      <div className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] left-0 right-0 z-50 px-4 lg:left-64 lg:bottom-4">
+          nav, with live set progress and rest countdown.
+          z-40 (not z-50) so the one-off inline modals that don't go through
+          Modal/BottomSheet still paint above it; it sits above the bottom
+          nav by position, not by stacking. */}
+      <div className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] left-0 right-0 z-40 px-4 lg:left-64 lg:bottom-4">
         <div className="max-w-md mx-auto">
           <div
             className="bg-surface-900/95 backdrop-blur border-[1.5px] border-primary-500 rounded-full shadow-2xl shadow-black/50 pl-4 pr-2 py-2 cursor-pointer"

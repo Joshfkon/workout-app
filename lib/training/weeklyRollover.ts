@@ -51,6 +51,7 @@ import {
   STANDARD_TO_COARSE,
   type CoarseMuscle,
 } from '@/services/volumeBands';
+import { migrateStoredLandmarks } from '@/lib/migrations/volume-landmarks';
 import type {
   Experience,
   PumpRating0to3,
@@ -206,17 +207,30 @@ export function computeWeeklySetsByMuscle(
  * then run through the central Enhanced Athlete Mode scaling. Stored custom
  * landmarks are always natural-athlete values — scaling happens here, at
  * derivation time, so toggling the mode never mutates stored numbers.
+ *
+ * Stored payloads older than LANDMARK_VERSION are migrated FIELD BY FIELD on
+ * read (lib/migrations/volume-landmarks): a scalar still equal to its old
+ * default moves to the new default, a customized scalar is preserved, and
+ * customizing one field never pins its siblings. Pass `landmarkVersion` from
+ * users.preferences so an already-migrated payload skips the pass entirely.
  */
 export function resolveVolumeLandmarks(
   experience: Experience,
   customLandmarks?: Record<string, unknown> | null,
-  enhancedAthleteMode?: boolean
+  enhancedAthleteMode?: boolean,
+  landmarkVersion?: number | null
 ): Record<StandardMuscleGroup, VolumeLandmarks> {
   const defaults = DEFAULT_VOLUME_LANDMARKS[experience];
 
+  const { landmarks: migratedCustom } = migrateStoredLandmarks(
+    customLandmarks,
+    experience,
+    landmarkVersion
+  );
+
   const merged: Record<StandardMuscleGroup, VolumeLandmarks> = { ...defaults };
-  if (customLandmarks && typeof customLandmarks === 'object') {
-    for (const [muscle, value] of Object.entries(customLandmarks)) {
+  if (migratedCustom && typeof migratedCustom === 'object') {
+    for (const [muscle, value] of Object.entries(migratedCustom)) {
       if (!isStandardMuscle(muscle) || value === null || typeof value !== 'object') continue;
       const v = value as Partial<VolumeLandmarks>;
       if (typeof v.mev === 'number' && typeof v.mav === 'number' && typeof v.mrv === 'number') {

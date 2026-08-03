@@ -139,6 +139,8 @@ import { useWorkoutStore } from '@/stores/workoutStore';
 import { WorkoutHeader, type ExerciseSegmentStatus } from './_components/WorkoutHeader';
 import { WorkoutVolumeStrip } from './_components/WorkoutVolumeStrip';
 import { AddExercisePicker } from './_components/AddExercisePicker';
+import { SaveAsTemplateModal } from './_components/SaveAsTemplateModal';
+import { buildTemplateExercises } from '@/services/templateFromSession';
 import {
   buildExerciseHistories,
   fetchExerciseHistory,
@@ -172,6 +174,7 @@ import { computeMuscleRecovery, recoveryConfigFor } from '@/services/muscleRecov
 import { useRecoveryHistory } from '@/hooks/useMuscleReadiness';
 import { useWorkoutMuscleVolume } from '@/hooks/useWorkoutMuscleVolume';
 import { useRecoveryMultipliers } from '@/hooks/useRecoveryMultipliers';
+import { usePlannedFrequency } from '@/hooks/usePlannedFrequency';
 import { isStaleEmptyAdhocSession, discardStaleSession } from '../_lib/adhocSession';
 import { computeSupersetAdvance } from './_lib/supersetFlow';
 import {
@@ -320,6 +323,10 @@ export default function WorkoutPage() {
   const [recoveryNow] = useState(() => new Date());
   const { sessions: recoveryHistorySessions } = useRecoveryHistory(recoveryNow, true);
   const { multipliers: recoveryMultipliers, applySorenessAdjustment } = useRecoveryMultipliers();
+  // PLANNED per-muscle weekly frequency from the active mesocycle — the
+  // session-capacity denominator for the recovery dose model. Never derived
+  // from observed training history (see services/plannedFrequency).
+  const { plannedSessionsPerWeekByMuscle } = usePlannedFrequency();
 
   // Toast notifications for errors
   const { toasts, dismissToast, showError, showSuccess, addToast } = useToasts();
@@ -616,6 +623,9 @@ export default function WorkoutPage() {
   const [showToolsMenu, setShowToolsMenu] = useState(false);
   const [showPlateCalculator, setShowPlateCalculator] = useState(false);
   const [plateCalculatorWeight, setPlateCalculatorWeight] = useState<number | undefined>(undefined);
+  // "Save as template" (header ⋮): captures this session's exercises as a
+  // reusable workout_template. Purely additive — no session state changes.
+  const [showSaveTemplateModal, setShowSaveTemplateModal] = useState(false);
   const [temporaryInjuries, setTemporaryInjuries] = useState<{ area: string; severity: 1 | 2 | 3 }[]>([]);
   const [userGoal, setUserGoal] = useState<'bulk' | 'cut' | 'recomp' | 'maintain' | undefined>(undefined);
   const [selectedInjuryArea, setSelectedInjuryArea] = useState<string>('');
@@ -2117,9 +2127,19 @@ export default function WorkoutPage() {
       }
 
       // Learning step: disagreement between the report and the model's status
-      // at ask time nudges the per-muscle recovery multiplier (±0.05, 0.7–1.5).
+      // at ask time nudges the per-muscle recovery multiplier
+      // (±RECOVERY_MULTIPLIER_STEP, bounded by RECOVERY_MULTIPLIER_BOUNDS).
       const report = rating === 0 ? 'none' : rating === 3 ? 'still_sore' : 'recovered';
-      const config = recoveryConfigFor(enhancedAthleteModeActive, recoveryMultipliers);
+      const config = recoveryConfigFor(
+        enhancedAthleteModeActive,
+        recoveryMultipliers,
+        undefined,
+        undefined,
+        {
+          experienceForCapacity: userProfile?.experience,
+          plannedSessionsPerWeekByMuscle,
+        }
+      );
       const statusAtAsk = computeMuscleRecovery(
         recoveryHistorySessions,
         muscle,
@@ -2136,6 +2156,8 @@ export default function WorkoutPage() {
       recoveryMultipliers,
       recoveryHistorySessions,
       applySorenessAdjustment,
+      userProfile?.experience,
+      plannedSessionsPerWeekByMuscle,
     ]
   );
 
@@ -5407,6 +5429,7 @@ export default function WorkoutPage() {
         onToggleDeload={handleToggleDeloadSession}
         onCancelWorkout={() => setShowCancelModal(true)}
         onAddExercise={handleOpenAddExercise}
+        onSaveAsTemplate={() => setShowSaveTemplateModal(true)}
         onFinishWorkout={handleWorkoutComplete}
         onMinimize={() => router.push('/dashboard/log')}
       />
@@ -6906,6 +6929,20 @@ export default function WorkoutPage() {
           </div>
         </div>
       )}
+
+      {/* Save as template (header ⋮): rows are derived only while the sheet is
+          open, from the non-skipped blocks in workout order — logged working
+          sets win over the prescription, so a half-done session still saves
+          what you actually did. */}
+      <SaveAsTemplateModal
+        isOpen={showSaveTemplateModal}
+        onClose={() => setShowSaveTemplateModal(false)}
+        defaultName={workoutLabel}
+        exercises={
+          showSaveTemplateModal ? buildTemplateExercises(activeBlocks, completedSets) : []
+        }
+        onSaved={({ name }) => showSuccess(`Saved "${name}" to your templates`)}
+      />
 
       {/* Toast Container for notifications */}
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />

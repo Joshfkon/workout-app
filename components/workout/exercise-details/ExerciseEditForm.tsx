@@ -554,24 +554,43 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
       <div>
         <label className="block text-xs font-medium text-surface-400 mb-1">Secondary Muscles</label>
         <div className="space-y-2 max-h-56 overflow-y-auto p-2 bg-surface-800/50 rounded-lg">
-          {MUSCLE_GROUP_OPTIONS.map((group) => (
-            <div key={group.value}>
-              {group.value !== editData.primaryMuscle && (
-                <label className="flex items-center gap-2 p-1 rounded hover:bg-surface-700/50 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={editData.secondaryMuscles.includes(group.value)}
-                    onChange={(e) => toggleSecondary(group.value, e.target.checked)}
-                    className="w-4 h-4 text-primary-500 bg-surface-700 border-surface-600 rounded focus:ring-primary-500"
-                  />
-                  <span className="text-xs font-medium text-surface-200">{group.label}</span>
-                </label>
-              )}
-              {group.subMuscles.length > 0 && (
-                <div className="ml-6 flex flex-wrap gap-x-4 gap-y-1 mt-0.5">
-                  {group.subMuscles
-                    .filter((s) => s.value !== editData.primaryMuscle)
-                    .map((s) => (
+          {MUSCLE_GROUP_OPTIONS.map((group) => {
+            const isPrimaryGroup = group.value === editData.primaryMuscle;
+            const subMuscles = group.subMuscles.filter((s) => s.value !== editData.primaryMuscle);
+            // Nothing left to offer once the group itself is the primary and it
+            // has no other head (Quads, Adductors, …).
+            if (isPrimaryGroup && subMuscles.length === 0) return null;
+            return (
+              <div key={group.value} data-muscle-group={group.value}>
+                {isPrimaryGroup ? (
+                  // A whole-group primary ('Calves (all)') credits ONLY itself —
+                  // it never leaks into its heads (see
+                  // LEGACY_PRIMARY_VOLUME_WEIGHTS in services/shared/volumeCredit),
+                  // so Gastrocnemius/Soleus stay selectable as secondaries. The
+                  // group keeps a static label in place of its checkbox: hiding
+                  // the row outright left the heads indented under the PREVIOUS
+                  // group's label, which is how Gastrocnemius/Soleus ended up
+                  // reading as sub-muscles of Adductors.
+                  <div className="flex items-center gap-2 p-1 pl-6">
+                    <span className="text-xs font-medium text-surface-200">{group.label}</span>
+                    <span className="text-[10px] uppercase tracking-wide text-surface-500">
+                      Primary
+                    </span>
+                  </div>
+                ) : (
+                  <label className="flex items-center gap-2 p-1 rounded hover:bg-surface-700/50 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={editData.secondaryMuscles.includes(group.value)}
+                      onChange={(e) => toggleSecondary(group.value, e.target.checked)}
+                      className="w-4 h-4 text-primary-500 bg-surface-700 border-surface-600 rounded focus:ring-primary-500"
+                    />
+                    <span className="text-xs font-medium text-surface-200">{group.label}</span>
+                  </label>
+                )}
+                {subMuscles.length > 0 && (
+                  <div className="ml-6 flex flex-wrap gap-x-4 gap-y-1 mt-0.5">
+                    {subMuscles.map((s) => (
                       <label key={s.value} className="flex items-center gap-1.5 cursor-pointer">
                         <input
                           type="checkbox"
@@ -582,10 +601,11 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
                         <span className="text-xs text-surface-400">{s.label}</span>
                       </label>
                     ))}
-                </div>
-              )}
-            </div>
-          ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
 

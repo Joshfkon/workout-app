@@ -6,8 +6,10 @@ import {
   READINESS_AMBER_THRESHOLD,
   READINESS_READY_THRESHOLD,
   selectGoodTargets,
+  READY_SOON_HOURS,
   type ReadinessRow,
 } from '../readiness';
+import { computeMuscleRecovery } from '@/services/muscleRecovery';
 import type { MuscleRecoveryResult, RecoverySession } from '@/services/muscleRecovery';
 import type { StandardMuscleGroup } from '@/types/schema';
 import { COARSE_MUSCLES, type MuscleVolumeStats } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
@@ -213,14 +215,32 @@ describe('selectGoodTargets', () => {
     expect(targets.every((t) => t.muscle !== 'quads')).toBe(true);
   });
 
+  /**
+   * The recovery window for a 5-set/RIR-2 triceps session, read from the model
+   * rather than assumed. These tests are about TIERING (ready / soon / empty
+   * state), so they position the session relative to the real window; hard-
+   * coding it pinned the retired step function's flat 36h and broke the moment
+   * the dose adjustment became continuous.
+   */
+  function tricepsWindowHours(): number {
+    const probe = computeMuscleRecovery(
+      [session(hoursBefore(NOW, 1), 'triceps', 5, 2)],
+      'triceps',
+      NOW
+    );
+    return probe.windowHours!;
+  }
+
   it('never presents a Recovering muscle as a ready-now target', () => {
     // The bug fixture: the most-behind muscle (triceps, 0 sets → gap 6) is
     // Recovering (~18h out), while every other muscle is Fresh but at/above MEV
     // (a "Fresh, mid-zone" muscle has gap 0, so it isn't eligible either).
     const triceps = { ...stat('triceps', 12), sets: 0, exercises: [{ id: 'triceps', name: 'triceps ex', performedSets: 0, sets: 0, effective: 0, direct: 0, indirect: 0, directEffective: 0, indirectEffective: 0 }] };
     const stats = [triceps, ...ALL_AT_MEV.filter((s) => s.muscle !== 'triceps')];
-    // Trained 30h ago (window 36h) → Recovering, ~6h until Fresh (> soon window).
-    const history = [session(hoursBefore(NOW, 30), 'triceps', 5, 2)];
+    // Positioned so triceps is Recovering and still comfortably OUTSIDE the
+    // 'soon' window (READY_SOON_HOURS), which is what this fixture needs.
+    const hoursOut = READY_SOON_HOURS + 3;
+    const history = [session(hoursBefore(NOW, tricepsWindowHours() - hoursOut), 'triceps', 5, 2)];
     // Empty reachable → no fine children surface; the coarse triceps row is the
     // sole lagging candidate, keeping the fixture focused on the reported bug.
     const noChildren = new Set<StandardMuscleGroup>();
@@ -233,14 +253,16 @@ describe('selectGoodTargets', () => {
     // honest empty state naming triceps as the soonest-ready lagging muscle.
     expect(targets).toHaveLength(0);
     expect(nextUp?.muscle).toBe('triceps');
-    expect(Math.round(nextUp!.hoursUntilReady)).toBe(6);
+    expect(nextUp!.hoursUntilReady).toBeCloseTo(READY_SOON_HOURS + 3, 6);
+    expect(nextUp!.hoursUntilReady).toBeGreaterThan(READY_SOON_HOURS);
   });
 
   it('offers a lagging, nearly-ready muscle as a muted "ready soon" pick, not ready-now', () => {
     const triceps = { ...stat('triceps', 12), sets: 0, exercises: [{ id: 'triceps', name: 'triceps ex', performedSets: 0, sets: 0, effective: 0, direct: 0, indirect: 0, directEffective: 0, indirectEffective: 0 }] };
     const stats = [triceps, ...ALL_AT_MEV.filter((s) => s.muscle !== 'triceps')];
-    // Trained 34h ago (window 36h) → Recovering, ~2h until Fresh (within soon window).
-    const history = [session(hoursBefore(NOW, 34), 'triceps', 5, 2)];
+    // Positioned INSIDE the 'soon' window: Recovering, but nearly Fresh.
+    const hoursOut = READY_SOON_HOURS - 1;
+    const history = [session(hoursBefore(NOW, tricepsWindowHours() - hoursOut), 'triceps', 5, 2)];
     const noChildren = new Set<StandardMuscleGroup>();
 
     const { targets, nextUp } = selectGoodTargets(buildReadinessRows(stats, history, NOW, noChildren), 3);
@@ -248,7 +270,8 @@ describe('selectGoodTargets', () => {
     const tri = targets.find((t) => t.muscle === 'triceps');
     expect(tri).toBeDefined();
     expect(tri!.tier).toBe('soon');
-    expect(Math.round(tri!.readyInHours)).toBe(2);
+    expect(tri!.readyInHours).toBeCloseTo(READY_SOON_HOURS - 1, 6);
+    expect(tri!.readyInHours).toBeLessThanOrEqual(READY_SOON_HOURS);
     // Present as a target → no empty-state fallback needed.
     expect(nextUp).toBeNull();
   });

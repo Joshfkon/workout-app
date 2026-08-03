@@ -17,7 +17,8 @@
  *      empty workout (add exercises as you go), AI-suggested workout
  *      (shared SuggestedWorkoutSheet), repeat a previous workout (clones a
  *      recent session's exercise list, not its logged weights).
- *   5. Week stats: sets this week · completed/planned sessions · volume
+ *   5. Week stats: sets this week · completed/planned sessions · hours
+ *      trained + average workout time over the same rolling 7 days · volume
  *      status line (links to /dashboard/volume).
  *   6. Recovery: overall % + ready count, per-muscle bars for recovering
  *      muscles with time remaining, expandable past the first three.
@@ -128,6 +129,8 @@ interface RecentSessionRow {
   id: string;
   completed_at: string;
   started_at: string | null;
+  /** Active duration snapshot (pauses excluded); null for legacy sessions. */
+  duration_seconds: number | null;
   exercise_blocks:
     | {
         exercise_id: string;
@@ -145,6 +148,35 @@ interface RecentSessionRow {
 }
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/**
+ * Active workout minutes: the duration_seconds snapshot (pauses excluded)
+ * when present, else the completed_at − started_at wall-clock span for legacy
+ * sessions without one. Null when neither yields a positive duration.
+ */
+function activeDurationMin(row: {
+  started_at: string | null;
+  completed_at: string;
+  duration_seconds: number | null;
+}): number | null {
+  if (row.duration_seconds != null && row.duration_seconds > 0) {
+    return row.duration_seconds / 60;
+  }
+  if (!row.started_at) return null;
+  const min =
+    (new Date(row.completed_at).getTime() - new Date(row.started_at).getTime()) / 60000;
+  return min > 0 ? min : null;
+}
+
+/** "4h 35m" / "45m" from a minute total. */
+function formatHoursMinutes(totalMinutes: number): string {
+  const rounded = Math.round(totalMinutes);
+  const hours = Math.floor(rounded / 60);
+  const minutes = rounded % 60;
+  if (hours === 0) return `${minutes}m`;
+  if (minutes === 0) return `${hours}h`;
+  return `${hours}h ${minutes}m`;
+}
 
 /**
  * "Pull · Back, Biceps" — the split-day name parsed from the blocks'
@@ -224,6 +256,12 @@ export default function TrainPage() {
   const [activeMeso, setActiveMeso] = useState<ActiveMesocycleRow | null>(null);
   const [recentWorkouts, setRecentWorkouts] = useState<RecentWorkout[]>([]);
   const [sessionsThisWeek, setSessionsThisWeek] = useState(0);
+  // Time trained over the same rolling 7 days; avgMin is null until at least
+  // one session in the window has a usable started_at → completed_at span.
+  const [weekTime, setWeekTime] = useState<{ totalMin: number; avgMin: number | null }>({
+    totalMin: 0,
+    avgMin: null,
+  });
   const [mesoCompletedCount, setMesoCompletedCount] = useState<number | null>(null);
   const [lastCycleDone, setLastCycleDone] = useState<Date | null>(null);
   const [isStarting, setIsStarting] = useState(false);
@@ -253,7 +291,7 @@ export default function TrainPage() {
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
         const weekStart = getLocalDateString(sevenDaysAgo);
 
-        const [inProgressRes, mesoRes, recentRes, weekCountRes] = await Promise.all([
+        const [inProgressRes, mesoRes, recentRes, weekSessionsRes] = await Promise.all([
           supabase
             .from('workout_sessions')
             .select('id, mesocycle_id, started_at, exercise_blocks(id, set_logs(id, is_warmup))')
@@ -273,7 +311,7 @@ export default function TrainPage() {
           supabase
             .from('workout_sessions')
             .select(
-              'id, completed_at, started_at, exercise_blocks(exercise_id, order, suggestion_reason, exercises(name, primary_muscle), set_logs(is_warmup, weight_kg, reps))'
+              'id, completed_at, started_at, duration_seconds, exercise_blocks(exercise_id, order, suggestion_reason, exercises(name, primary_muscle), set_logs(is_warmup, weight_kg, reps))'
             )
             .eq('user_id', user.id)
             .eq('state', 'completed')
@@ -281,7 +319,7 @@ export default function TrainPage() {
             .limit(5),
           supabase
             .from('workout_sessions')
-            .select('id', { count: 'exact', head: true })
+            .select('started_at, completed_at, duration_seconds')
             .eq('user_id', user.id)
             .eq('state', 'completed')
             .gte('completed_at', weekStart),
@@ -314,9 +352,8 @@ export default function TrainPage() {
               0
             );
             const completedAt = new Date(row.completed_at);
-            const durationMin = row.started_at
-              ? Math.round((completedAt.getTime() - new Date(row.started_at).getTime()) / 60000)
-              : null;
+            const rawDurationMin = activeDurationMin(row);
+            const durationMin = rawDurationMin != null ? Math.round(rawDurationMin) : null;
             // The clone list for "Repeat previous workout": exercise ids +
             // working sets (weights feed E1RM re-estimation, not the targets).
             const exercises: RepeatableExercise[] = [...blocks]
@@ -343,7 +380,22 @@ export default function TrainPage() {
           })
         );
 
-        setSessionsThisWeek(weekCountRes.count ?? 0);
+        const weekRows = (weekSessionsRes.data ?? []) as {
+          started_at: string | null;
+          completed_at: string;
+          duration_seconds: number | null;
+        }[];
+        setSessionsThisWeek(weekRows.length);
+        // Sessions without a usable duration still count as sessions but are
+        // dropped from the time math rather than skewing the totals.
+        const durationsMin = weekRows
+          .map(activeDurationMin)
+          .filter((min): min is number => min !== null);
+        const totalMin = durationsMin.reduce((sum, min) => sum + min, 0);
+        setWeekTime({
+          totalMin,
+          avgMin: durationsMin.length > 0 ? totalMin / durationsMin.length : null,
+        });
 
         // Completed-session count drives the next session index (the
         // self-extending scheme the start path uses) and "last done" — one
@@ -841,6 +893,18 @@ export default function TrainPage() {
               sessions
             </span>
           </span>
+          {weekTime.avgMin !== null && (
+            <span className="block text-[13px] text-surface-400 mt-0.5">
+              <span className="font-medium text-surface-200">
+                {formatHoursMinutes(weekTime.totalMin)}
+              </span>{' '}
+              trained ·{' '}
+              <span className="font-medium text-surface-200">
+                {Math.round(weekTime.avgMin)} min
+              </span>{' '}
+              avg workout
+            </span>
+          )}
           <span className={`block text-[13px] mt-0.5 ${volumeStatusLine.className}`}>
             {volumeStatusLine.text}
           </span>
