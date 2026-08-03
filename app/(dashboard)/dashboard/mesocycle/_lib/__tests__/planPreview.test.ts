@@ -207,6 +207,82 @@ describe('buildPlanPreview', () => {
     expect(weeks[0].focus).toBe('Hypertrophy');
   });
 
+  it('renders one slot per training day, wrapping repeats like the start path', () => {
+    // A 5-day block over a 3-session split (buildSessionTemplates slices the
+    // split's templates to daysPerWeek — Arnold/PPL/Full Body store 3), which
+    // getSessionFromProgramData wraps with `dayIndex % sessions.length`: days
+    // 4 and 5 really do re-run sessions 1 and 2.
+    const threeSession = {
+      mesocycleWeeks: [
+        {
+          weekNumber: 1,
+          focus: 'Accumulation',
+          intensityModifier: 1,
+          volumeModifier: 1,
+          rpeTarget: { min: 7, max: 9 },
+          isDeload: false,
+          sessions: [
+            session('Chest & Back', 'Accumulation', [exercise('Bench Press', 'chest', 4)]),
+            session('Shoulders & Arms', 'Accumulation', [exercise('Overhead Press', 'shoulders', 3)]),
+            session('Legs', 'Accumulation', [exercise('Squat', 'quads', 5)]),
+          ],
+        },
+      ],
+    } as unknown as FullProgramRecommendation;
+
+    const [week1] = buildPlanPreview({
+      ...baseInput,
+      programData: threeSession,
+      totalWeeks: 1,
+      daysPerWeek: 5,
+      preferredWorkoutDays: ['Monday', 'Tuesday', 'Wednesday', 'Friday', 'Saturday'],
+      completedSessions: 3,
+    });
+
+    expect(week1.sessions.map((s) => s.session.dayName)).toEqual([
+      'Chest & Back',
+      'Shoulders & Arms',
+      'Legs',
+      'Chest & Back',
+      'Shoulders & Arms',
+    ]);
+    expect(week1.sessions.map((s) => s.weekdayLabel)).toEqual(['Mon', 'Tue', 'Wed', 'Fri', 'Sat']);
+    // Weekly volume counts the repeats — 2× chest and shoulders, 1× legs.
+    expect(week1.totalSets).toBe(19);
+    expect(week1.setsByMuscle).toEqual([
+      { muscle: 'chest', sets: 8 },
+      { muscle: 'shoulders', sets: 6 },
+      { muscle: 'quads', sets: 5 },
+    ]);
+    // The 4th training day is reachable and correctly flagged next up.
+    expect(nextPlanSession([week1])?.key).toBe('w1-s3');
+  });
+
+  it("honours a stored current_week that ran ahead of the completed count", () => {
+    // Legacy mesocycles advanced under the old date-based scheme: the
+    // completion flow clamps current_week upward and Start reads it, so the
+    // preview must follow the stored week, not the count-derived one.
+    const weeks = buildPlanPreview({
+      ...baseInput,
+      totalWeeks: 3,
+      daysPerWeek: 2,
+      currentWeek: 3,
+      completedSessions: 1,
+    });
+
+    expect(weeks.map((w) => w.status)).toEqual(['done', 'done', 'current']);
+    expect(currentPlanWeek(weeks)?.weekNumber).toBe(3);
+    // Slot inside the week still comes from the completed count.
+    expect(nextPlanSession(weeks)?.key).toBe('w3-s1');
+  });
+
+  it('ignores a stored current_week that lags the completed count', () => {
+    const weeks = buildPlanPreview({ ...baseInput, currentWeek: 1, completedSessions: 3 });
+
+    expect(currentPlanWeek(weeks)?.weekNumber).toBe(2);
+    expect(nextPlanSession(weeks)?.key).toBe('w2-s1');
+  });
+
   it('returns no weeks when the mesocycle has no program data', () => {
     expect(buildPlanPreview({ ...baseInput, programData: null })).toEqual([]);
     expect(nextPlanSession([])).toBeNull();

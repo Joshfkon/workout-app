@@ -7,16 +7,23 @@
  * signed up for?" without having to press Start.
  *
  * The preview must describe the SAME sessions the start path would build, so
- * it reuses the same primitives:
+ * it reuses the same primitives and the same indexing rules:
  *   - `getWeekSessionsFromProgramData` (mesocycleWeeks, legacy `sessions`
  *     fallback, week index capped to the stored weeks — exactly how
  *     `getSessionFromProgramData` behaves when a meso outlives its stored
  *     weeks),
  *   - `applyExerciseOverrides` (the user's swaps),
- *   - slot arithmetic on TOTAL completed sessions (`slot = (week - 1) *
- *     daysPerWeek + index`), the same rule as `sessionIndexFromCompleted`, so
- *     the "next up" marker lands on the session Start would actually launch
- *     even after skipped days.
+ *   - ONE SLOT PER TRAINING DAY, wrapping into the stored sessions with
+ *     `slot % sessions.length`. A week can hold fewer session templates than
+ *     the user trains days (buildSessionTemplates slices the split's templates
+ *     to daysPerWeek — a 5-day Arnold plan stores 3), and Start wraps the day
+ *     index over them. Rendering the stored sessions one-for-one would hide
+ *     the repeated days and undercount the week's volume.
+ *   - the week/session the user is actually up to: `current_week` (which Start
+ *     reads, and which the completion flow clamps upward so mesocycles
+ *     advanced under the old date-based scheme never jump backwards) paired
+ *     with `sessionIndexFromCompleted`, so "next up" lands on the session
+ *     Start would launch even after skipped days.
  *
  * Two things the preview deliberately does NOT model, because they are only
  * resolved at start time against the database: per-exercise weight targets
@@ -35,6 +42,10 @@ import {
   type ExtractedSession,
 } from '@/services/mesocycleHelpers';
 import { getTrainingDays } from '@/lib/training/startMesocycleSession';
+import {
+  computeCurrentWeekFromSessions,
+  sessionIndexFromCompleted,
+} from '@/lib/training/mesocycleProgress';
 import type { FullProgramRecommendation, MuscleGroup, WorkoutDay } from '@/types/schema';
 
 const WEEKDAY_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -46,7 +57,7 @@ export type PlanSessionStatus = 'done' | 'next' | 'upcoming';
 export type PlanWeekStatus = 'done' | 'current' | 'upcoming';
 
 export interface PlanSessionPreview {
-  /** 0-based position of this session inside its week. */
+  /** 0-based training-day slot inside its week (0 = first training day). */
   index: number;
   /** Stable key for React lists / expand-collapse state. */
   key: string;
@@ -90,10 +101,18 @@ export interface PlanPreviewInput {
   preferredWorkoutDays?: WorkoutDay[] | null;
   exerciseOverrides?: ExerciseOverride[] | null;
   /**
-   * TOTAL completed sessions for the mesocycle. Drives the done/next markers
-   * the same way the start path picks its slot.
+   * TOTAL completed sessions for the mesocycle. Picks the slot within the
+   * current week, the same way the start path does.
    */
   completedSessions: number;
+  /**
+   * The mesocycle's stored `current_week`. Start reads the week's exercises
+   * from this column, and the completion flow only ever raises it
+   * (Math.max(storedWeek, …)), so a block advanced under the old date-based
+   * scheme sits at a LATER week than the completed count implies. Omit it and
+   * the preview would mark an earlier week current than the one Start serves.
+   */
+  currentWeek?: number | null;
 }
 
 /** Planned working sets of a session (falls back to the stored total). */
@@ -140,6 +159,22 @@ export function buildPlanPreview(input: PlanPreviewInput): PlanWeekPreview[] {
   const overrides = (exerciseOverrides ?? []) as ExerciseOverride[];
   const dayLabels = trainingDayLabels(daysPerWeek, preferredWorkoutDays);
 
+  // Where the user actually is: the stored current_week wins whenever it is
+  // ahead of the count-derived week (the completion flow clamps it upward and
+  // Start reads it), and the slot inside that week comes from the completed
+  // count — exactly the pair startMesocycleSession feeds
+  // getSessionFromProgramData.
+  const derivedWeek = computeCurrentWeekFromSessions(
+    completedSessions,
+    daysPerWeek,
+    totalWeeks
+  ).week;
+  const effectiveWeek = Math.min(
+    totalWeeks,
+    Math.max(1, Math.floor(input.currentWeek || 0), derivedWeek)
+  );
+  const nextSessionIndex = sessionIndexFromCompleted(completedSessions, daysPerWeek);
+
   const weeks: PlanWeekPreview[] = [];
 
   for (let weekNumber = 1; weekNumber <= totalWeeks; weekNumber++) {
@@ -147,17 +182,22 @@ export function buildPlanPreview(input: PlanPreviewInput): PlanWeekPreview[] {
     if (rawSessions.length === 0) continue;
 
     const modifiers = getWeeklyProgressionModifiers(programData, weekNumber);
-    const weekStartSlot = (weekNumber - 1) * daysPerWeek;
-    const weekEndSlot = weekNumber * daysPerWeek;
 
-    const sessions: PlanSessionPreview[] = rawSessions.map((raw, index) => {
+    // One entry per TRAINING DAY, wrapping into the stored sessions the way
+    // getSessionFromProgramData does — a 5-day week over 3 stored sessions
+    // really does run sessions 1 and 2 twice.
+    const sessions: PlanSessionPreview[] = Array.from({ length: daysPerWeek }, (_, index) => {
+      const raw = rawSessions[index % rawSessions.length];
       const session: ExtractedSession = {
         ...raw,
         exercises: applyExerciseOverrides(raw.exercises, overrides),
       };
-      const slot = weekStartSlot + index;
       const status: PlanSessionStatus =
-        slot < completedSessions ? 'done' : slot === completedSessions ? 'next' : 'upcoming';
+        weekNumber < effectiveWeek || (weekNumber === effectiveWeek && index < nextSessionIndex)
+          ? 'done'
+          : weekNumber === effectiveWeek && index === nextSessionIndex
+            ? 'next'
+            : 'upcoming';
 
       return {
         index,
@@ -191,9 +231,9 @@ export function buildPlanPreview(input: PlanPreviewInput): PlanWeekPreview[] {
       intensityModifier: modifiers.intensityModifier,
       volumeModifier: modifiers.volumeModifier,
       status:
-        completedSessions >= weekEndSlot
+        weekNumber < effectiveWeek
           ? 'done'
-          : completedSessions >= weekStartSlot
+          : weekNumber === effectiveWeek
             ? 'current'
             : 'upcoming',
       sessions,

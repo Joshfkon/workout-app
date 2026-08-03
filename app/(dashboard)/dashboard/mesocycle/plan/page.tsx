@@ -264,6 +264,8 @@ function PlanContent() {
       preferredWorkoutDays: mesocycle.preferred_workout_days,
       exerciseOverrides: mesocycle.exercise_overrides ?? [],
       completedSessions: data?.completedSessions ?? 0,
+      // Start reads the week from this column, so the preview must too.
+      currentWeek: mesocycle.current_week,
     });
   }, [mesocycle, data?.completedSessions]);
 
