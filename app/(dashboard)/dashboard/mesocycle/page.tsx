@@ -3,12 +3,18 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardHeader, CardTitle, CardContent, Badge, Button, Slider, Input } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { generateFullMesocycleWithFatigue } from '@/services/sessionBuilderWithFatigue';
 import { calculateRecoveryFactors } from '@/services/mesocycleBuilder';
 import { analyzeRegionalComposition } from '@/services/regionalAnalysis';
-import { getSessionFromProgramData, type ExerciseOverride, type ExtractedSession } from '@/services/mesocycleHelpers';
+import {
+  getSessionFromProgramData,
+  applyExerciseOverrides,
+  type ExerciseOverride,
+  type ExtractedSession,
+} from '@/services/mesocycleHelpers';
 import {
   startMesocycleWorkoutSession,
   getWorkoutForDay,
@@ -17,9 +23,10 @@ import {
   programSessionHasUsableExercises,
   type TodayWorkout,
 } from '@/lib/training/startMesocycleSession';
-import { WorkoutDaySelector } from '@/components/mesocycle';
+import { WorkoutDaySelector, SessionExerciseList } from '@/components/mesocycle';
 import { getLocalDateString, muscleDisplayName } from '@/lib/utils';
 import { sessionIndexFromCompleted } from '@/lib/training/mesocycleProgress';
+import { MESOCYCLE_PLAN_QUERY_PREFIX } from '@/hooks/useMesocyclePlan';
 import { insertWorkoutSessions } from '@/lib/training/sessionOrigin';
 import type { MuscleGroup, WorkoutDay, ExtendedUserProfile, DexaRegionalData, Goal as SchemaGoal, Experience, Rating, Equipment, DexaScan, FullProgramRecommendation } from '@/types/schema';
 
@@ -139,6 +146,7 @@ function RenameButton({ onClick, className }: { onClick: () => void; className?:
 
 export default function MesocyclePage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [mesocycles, setMesocycles] = useState<Mesocycle[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isStartingWorkout, setIsStartingWorkout] = useState(false);
@@ -148,6 +156,8 @@ export default function MesocyclePage() {
   const [estimatedSessionTime, setEstimatedSessionTime] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  /** Today's card: read-only exercise list, so Start isn't the only way in. */
+  const [showTodayExercises, setShowTodayExercises] = useState(false);
 
   // Edit session duration state
   const [isEditingDuration, setIsEditingDuration] = useState(false);
@@ -384,6 +394,10 @@ export default function MesocyclePage() {
 
       if (updateError) throw updateError;
 
+      // program_data changed: drop the plan-preview cache so /mesocycle/plan
+      // can't keep advertising the program the start path no longer serves.
+      queryClient.invalidateQueries({ queryKey: [MESOCYCLE_PLAN_QUERY_PREFIX] });
+
       // Update local state
       setMesocycles(mesocycles.map(m =>
         m.id === mesocycleId
@@ -464,6 +478,7 @@ export default function MesocyclePage() {
       
       // Update local state
       setMesocycles(mesocycles.filter(m => m.id !== id));
+      queryClient.invalidateQueries({ queryKey: [MESOCYCLE_PLAN_QUERY_PREFIX] });
       setConfirmDeleteId(null);
     } catch (error) {
       console.error('Failed to delete mesocycle:', error);
@@ -536,6 +551,12 @@ export default function MesocyclePage() {
   const cardMuscles: MuscleGroup[] = programSession
     ? Array.from(new Set(programSession.exercises.map(ex => ex.primaryMuscle)))
     : todayWorkout?.muscles ?? [];
+
+  // The exercise list the preview shows — the program slot's exercises with
+  // the user's swaps applied, i.e. exactly what Start would build blocks from.
+  const todayExercises = programSession
+    ? applyExerciseOverrides(programSession.exercises, activeMesocycle?.exercise_overrides ?? [])
+    : [];
 
   // Start today's workout from the mesocycle (shared start path)
   const handleStartWorkout = async () => {
@@ -705,6 +726,52 @@ export default function MesocyclePage() {
                     Start Workout
                   </Button>
                 </div>
+
+                {/* Read-only preview of the session Start will launch, plus a
+                    way into the whole block — pressing Start must never be the
+                    only way to find out what was planned. */}
+                <div className="mt-4 pt-4 border-t border-surface-800/70">
+                  <div className="flex items-center justify-between gap-3">
+                    <button
+                      onClick={() => setShowTodayExercises(v => !v)}
+                      aria-expanded={showTodayExercises}
+                      className="flex items-center gap-1 text-sm font-medium text-primary-400 hover:text-primary-300 transition-colors"
+                    >
+                      {showTodayExercises ? 'Hide exercises' : 'Preview exercises'}
+                      <svg
+                        className={`w-4 h-4 transition-transform ${showTodayExercises ? 'rotate-180' : ''}`}
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    <Link
+                      href="/dashboard/mesocycle/plan"
+                      className="text-sm font-medium text-surface-400 hover:text-surface-200 transition-colors"
+                    >
+                      View full plan →
+                    </Link>
+                  </div>
+
+                  {showTodayExercises && (
+                    <div className="mt-3">
+                      {todayExercises.length > 0 ? (
+                        <>
+                          <SessionExerciseList exercises={todayExercises} showNotes />
+                          <p className="text-xs text-surface-500 mt-2">
+                            Weights are suggested from your history when you start.
+                          </p>
+                        </>
+                      ) : (
+                        <p className="text-sm text-surface-400">
+                          Exercises for this session are chosen when you start it.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
               </CardContent>
             </Card>
           ) : (
@@ -715,11 +782,14 @@ export default function MesocyclePage() {
                 <p className="text-surface-400 mt-1">
                   No workout scheduled for today. Recovery is part of the process!
                 </p>
-                <Link href="/dashboard/workout/new">
-                  <Button variant="secondary" className="mt-4">
-                    Start Ad-hoc Workout
-                  </Button>
-                </Link>
+                <div className="flex flex-wrap items-center justify-center gap-2 mt-4">
+                  <Link href="/dashboard/workout/new">
+                    <Button variant="secondary">Start Ad-hoc Workout</Button>
+                  </Link>
+                  <Link href="/dashboard/mesocycle/plan">
+                    <Button variant="outline">View Full Plan</Button>
+                  </Link>
+                </div>
               </CardContent>
             </Card>
           )}
@@ -875,7 +945,15 @@ export default function MesocyclePage() {
 
               {/* Week Schedule */}
               <div className="mt-6 pt-6 border-t border-surface-800">
-                <h4 className="text-sm font-medium text-surface-300 mb-3">This Week&apos;s Schedule</h4>
+                <div className="flex items-center justify-between gap-3 mb-3">
+                  <h4 className="text-sm font-medium text-surface-300">This Week&apos;s Schedule</h4>
+                  <Link
+                    href="/dashboard/mesocycle/plan"
+                    className="text-sm font-medium text-primary-400 hover:text-primary-300 transition-colors"
+                  >
+                    View full plan →
+                  </Link>
+                </div>
                 <div className="flex gap-2 overflow-x-auto pb-2">
                   {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, index) => {
                     const dayNum = index + 1;
@@ -1090,6 +1168,12 @@ export default function MesocyclePage() {
                   </div>
                   )}
                   <div className="flex items-center gap-2">
+                    <Link
+                      href={`/dashboard/mesocycle/plan?id=${meso.id}`}
+                      className="text-sm font-medium text-primary-400 hover:text-primary-300 transition-colors"
+                    >
+                      View
+                    </Link>
                     <Badge variant={meso.state === 'completed' ? 'default' : 'warning'}>
                       {meso.state}
                     </Badge>
