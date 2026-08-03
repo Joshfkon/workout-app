@@ -410,7 +410,7 @@ function reportF(): string {
   L.push('ORDER BY (below_new_min + above_new_max) DESC;');
   L.push('```', '');
   L.push('## Database vocabulary migration', '');
-  L.push('`20260802000001_recovery_multiplier_full_muscle_vocabulary.sql` extends the');
+  L.push('`20260802000002_recovery_multiplier_full_muscle_vocabulary.sql` extends the');
   L.push('`muscle_group` CHECK from 20 keys to all 26. The six missing keys');
   L.push('(`upper_traps`, `mid_lower_traps`, `gastrocnemius`, `soleus`, `triceps_long`,');
   L.push('`triceps_lat_med`) could not be persisted at all, so soreness learning was');
