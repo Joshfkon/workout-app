@@ -31,6 +31,18 @@ per scalar field.
 | `{8, 15, 30}` | `{8, 15, 30}` | MRV customized → preserved |
 | `{8, 15, 20}` | `{8, 15, 22}` | 20 is the *intermediate* v1 default → recognized as untouched (experience changed) |
 
+A field migrates only when BOTH hold: (1) that muscle+field's default actually
+changed between v1 and v2 at the user's experience level, and (2) the stored
+value still equals a v1 default for the same muscle+field.
+
+Condition (1) is not optional. Without it, cross-tier matching reaches every
+field in the table: an advanced user who deliberately set `calves.mrv` to 22 —
+the *intermediate* v1 default, on a field whose default never moved — would have
+it rewritten to 26 and then persisted with version 2 stamped. With the gate,
+exactly two cells are eligible (`triceps_lat_med.mrv` at intermediate and
+advanced) and every other stored scalar is left as the user left it. An
+exhaustive test asserts no unchanged cell is ever rewritten, at any level.
+
 Rare accepted ambiguity: a hand-entered value equal to another experience
 level's old default for the same muscle+field is indistinguishable from an
 untouched default and migrates. With a two-cell delta the blast radius is
@@ -58,7 +70,7 @@ ORDER BY (below_new_min + above_new_max) DESC;
 
 ## Database vocabulary migration
 
-`20260802000001_recovery_multiplier_full_muscle_vocabulary.sql` extends the
+`20260802000002_recovery_multiplier_full_muscle_vocabulary.sql` extends the
 `muscle_group` CHECK from 20 keys to all 26. The six missing keys
 (`upper_traps`, `mid_lower_traps`, `gastrocnemius`, `soleus`, `triceps_long`,
 `triceps_lat_med`) could not be persisted at all, so soreness learning was

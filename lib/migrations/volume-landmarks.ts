@@ -15,18 +15,28 @@
  * else is the user's and is preserved verbatim. Customizing MEV must not pin a
  * row's MRV to a stale value.
  *
- * EXPERIENCE AMBIGUITY (documented, accepted)
- * -------------------------------------------
- * Historical experience level was never versioned alongside the landmarks, and
- * a user can change experience after saving. So a stored scalar is compared
- * against the SAME muscle and SAME field across ALL prior experience-level
- * defaults, not just the user's current level. Unrelated muscles and unrelated
- * fields are never cross-compared.
+ * TWO CONDITIONS, BOTH REQUIRED
+ * -----------------------------
+ * A stored scalar migrates only when:
+ *   1. that muscle+field's DEFAULT actually changed between v1 and v2 at the
+ *      user's experience level, AND
+ *   2. the stored value still equals a v1 default for the same muscle+field.
  *
- * Rare, accepted ambiguity: a hand-entered value that happens to equal another
- * experience level's old default for the same muscle+field is indistinguishable
- * from an untouched default and will migrate. Given the v1 -> v2 delta is two
- * cells of one muscle (triceps_lat_med MRV), the blast radius is negligible.
+ * Condition 2 spans all three experience levels, because historical experience
+ * was never versioned alongside the landmarks and a user can change level after
+ * saving. Unrelated muscles and unrelated fields are never cross-compared.
+ *
+ * Condition 1 is what keeps condition 2 safe, and it is not optional. Without
+ * it, cross-tier matching reaches every field in the table: an advanced user
+ * who deliberately set `calves.mrv` to 22 — the INTERMEDIATE v1 default — would
+ * have it rewritten to 26 and then persisted with version 2 stamped, silently
+ * destroying a legitimate custom value on a field whose default never moved.
+ * With the gate, only cells the release actually changed are eligible.
+ *
+ * Residual ambiguity, now confined: within a CHANGED cell, a hand-entered value
+ * that happens to equal another level's old default is still indistinguishable
+ * from an untouched default and will migrate. For v1 -> v2 that is exactly
+ * `triceps_lat_med.mrv` at intermediate and advanced — two cells of one muscle.
  */
 
 import {
@@ -167,10 +177,44 @@ function priorDefaultsFor(muscle: StandardMuscleGroup, field: LandmarkField): nu
 }
 
 /**
+ * Whether this muscle+field's DEFAULT actually moved between v1 and v2 at the
+ * given experience level.
+ *
+ * This gate is what makes the migration safe. Without it, cross-tier matching
+ * reaches every field in the table, and any stored value that happens to equal
+ * another tier's old default is rewritten to the current tier's default — even
+ * on fields whose default never changed. Concretely: an advanced user who
+ * deliberately set `calves.mrv` to 22 (which is the INTERMEDIATE v1 default)
+ * would have it silently rewritten to 26, then persisted and stamped v2 on the
+ * next settings save. That is permanent corruption of a legitimate custom
+ * value, on a field this migration has no business touching.
+ *
+ * With the gate, only cells whose default genuinely moved are eligible — for
+ * v1 -> v2 that is `triceps_lat_med.mrv` at intermediate and advanced, and
+ * nothing else. Every other stored scalar is left exactly as the user left it.
+ */
+function defaultChangedForField(
+  muscle: StandardMuscleGroup,
+  field: LandmarkField,
+  experience: Experience
+): boolean {
+  return (
+    LANDMARKS_V1[experience][muscle][field] !==
+    DEFAULT_VOLUME_LANDMARKS[experience][muscle][field]
+  );
+}
+
+/**
  * Migrate ONE stored triple for one muscle, field by field.
  *
- * `experience` is the level the new defaults are read from. Old-default
- * detection deliberately spans every level (see the module header).
+ * A field is migrated only when BOTH hold:
+ *   1. its default actually changed at `experience` (see above), and
+ *   2. the stored value still equals a v1 default for this muscle+field.
+ *
+ * Condition 2 spans every experience level, because historical experience was
+ * never versioned alongside the landmarks, so a user who changed level is still
+ * recognized as holding an untouched default. Condition 1 confines that
+ * cross-tier matching to the handful of cells the release actually changed.
  */
 export function migrateLandmarkRow(
   muscle: StandardMuscleGroup,
@@ -182,6 +226,9 @@ export function migrateLandmarkRow(
   for (const field of LANDMARK_FIELDS) {
     const value = stored[field];
     if (typeof value !== 'number' || !Number.isFinite(value)) continue;
+    // Nothing to migrate on a field whose default did not move — touching it
+    // could only ever overwrite the user's value with a different tier's number.
+    if (!defaultChangedForField(muscle, field, experience)) continue;
     const priors = priorDefaultsFor(muscle, field);
     // Untouched iff it matches a v1 default for this muscle+field at ANY level.
     if (priors.includes(value)) {

@@ -139,13 +139,81 @@ describe('users who changed experience level', () => {
   });
 
   it('cross-level matching never crosses MUSCLES or FIELDS', () => {
-    // advanced.calves.mrv is 26; novice.quads.mrv is also 18-ish territory —
-    // a value must match THIS muscle and THIS field to count as untouched.
-    // 22 is the intermediate calves MRV, so it migrates; 21 matches nothing.
-    const migrateable = migrateLandmarkRow('calves', { mev: 10, mav: 18, mrv: 22 }, 'advanced');
-    expect(migrateable.mrv).toBe(26);
-    const custom = migrateLandmarkRow('calves', { mev: 10, mav: 18, mrv: 21 }, 'advanced');
-    expect(custom.mrv).toBe(21);
+    // A value must match THIS muscle and THIS field to count as untouched —
+    // and the field's default must have actually moved (see the suite below).
+    const stored = { mev: 8, mav: 15, mrv: 20 }; // 20 = intermediate v1 mrv
+    expect(migrateLandmarkRow('triceps_lat_med', stored, 'advanced').mrv).toBe(22);
+    // 21 is no level's default for this muscle+field -> custom, preserved.
+    expect(
+      migrateLandmarkRow('triceps_lat_med', { ...stored, mrv: 21 }, 'advanced').mrv
+    ).toBe(21);
+  });
+});
+
+describe('UNCHANGED fields are never touched (regression: cross-tier corruption)', () => {
+  // The bug this guards: without gating on "did this field's default actually
+  // change?", cross-tier matching reached every field in the table, so any
+  // stored value equal to another tier's old default was rewritten to the
+  // current tier's default — then persisted and stamped v2 on the next save.
+  it("an advanced user's deliberate calves.mrv of 22 survives (it is the INTERMEDIATE default)", () => {
+    expect(LANDMARKS_V1.intermediate.calves.mrv).toBe(22);
+    expect(DEFAULT_VOLUME_LANDMARKS.advanced.calves.mrv).toBe(26);
+    // calves.mrv default did NOT change in v1 -> v2, so nothing may touch it.
+    const { landmarks, migrated } = migrateStoredLandmarks(
+      { calves: { mev: 10, mav: 18, mrv: 22 } },
+      'advanced',
+      1
+    );
+    expect(row(landmarks.calves).mrv).toBe(22);
+    expect(migrated).toBe(false);
+  });
+
+  it('no field of any UNCHANGED cell is rewritten, at any experience level', () => {
+    // Exhaustive: for every muscle/field/level whose default did not move,
+    // feed every other level's v1 default as a stored value and require it
+    // to come back untouched.
+    const violations: string[] = [];
+    for (const experience of EXPERIENCES) {
+      for (const muscle of STANDARD_MUSCLE_GROUPS) {
+        for (const field of ['mev', 'mav', 'mrv'] as const) {
+          const changed =
+            LANDMARKS_V1[experience][muscle][field] !==
+            DEFAULT_VOLUME_LANDMARKS[experience][muscle][field];
+          if (changed) continue;
+          for (const other of EXPERIENCES) {
+            const candidate = LANDMARKS_V1[other][muscle][field];
+            const stored = { ...LANDMARKS_V1[experience][muscle], [field]: candidate };
+            const result = migrateLandmarkRow(muscle, stored, experience);
+            if (result[field] !== candidate) {
+              violations.push(
+                `${experience}.${muscle}.${field}: ${candidate} -> ${result[field]}`
+              );
+            }
+          }
+        }
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+
+  it('only triceps_lat_med.mrv is eligible to migrate at all', () => {
+    const eligible: string[] = [];
+    for (const experience of EXPERIENCES) {
+      for (const muscle of STANDARD_MUSCLE_GROUPS) {
+        for (const field of ['mev', 'mav', 'mrv'] as const) {
+          if (
+            LANDMARKS_V1[experience][muscle][field] !==
+            DEFAULT_VOLUME_LANDMARKS[experience][muscle][field]
+          ) {
+            eligible.push(`${experience}.${muscle}.${field}`);
+          }
+        }
+      }
+    }
+    expect(eligible.sort()).toEqual([
+      'advanced.triceps_lat_med.mrv',
+      'intermediate.triceps_lat_med.mrv',
+    ]);
   });
 });
 

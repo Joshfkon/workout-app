@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
+import { invalidatePlannedFrequency } from '@/hooks/usePlannedFrequency';
 import { Card, CardHeader, CardTitle, CardContent, Button, Input, Select, Slider, Badge, Toggle } from '@/components/ui';
 import { FirstTimeHint, InlineHint } from '@/components/ui/FirstTimeHint';
 import { ContextCard } from '@/components/onboarding/ContextCard';
@@ -28,6 +30,7 @@ import { fetchUnavailableEquipment } from '@/lib/actions/equipment';
 
 export default function NewMesocyclePage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { preferences, isLoading: prefsLoading } = useUserPreferences();
   const { canAccess, isLoading: subLoading } = useSubscription();
   const showBeginnerTips = useEducationStore((state) => state.showBeginnerTips);
@@ -415,6 +418,11 @@ export default function NewMesocyclePage() {
         .single();
 
       if (insertError || !mesocycle) throw insertError || new Error('Failed to create mesocycle');
+
+      // A brand-new plan changes every muscle's planned weekly frequency, which
+      // is the denominator for recovery session capacity. Drop the cached plan
+      // so readiness and soreness learning don't normalize against the old one.
+      invalidatePlannedFrequency(queryClient);
 
       router.push('/dashboard/mesocycle');
     } catch (err) {

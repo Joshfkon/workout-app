@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, type QueryClient } from '@tanstack/react-query';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { useUserStore } from '@/stores';
 import { useAuthUser } from '@/hooks/useAuthUser';
@@ -28,7 +28,21 @@ import type { FullProgramRecommendation, StandardMuscleGroup } from '@/types/sch
  * 'fallback'` in dose diagnostics and counted in the frequency-source metrics.
  */
 
-const QUERY_KEY_PREFIX = 'planned-frequency';
+export const PLANNED_FREQUENCY_QUERY_KEY_PREFIX = 'planned-frequency';
+const QUERY_KEY_PREFIX = PLANNED_FREQUENCY_QUERY_KEY_PREFIX;
+
+/**
+ * Drop the cached plan so the next read re-derives frequency. Call this from
+ * any CLIENT-side path that generates, replaces or advances a mesocycle.
+ *
+ * This is belt-and-braces, not the only defence: the weekly rollover advances
+ * `current_week` inside startMesocycleSession, a server-side path with no
+ * queryClient to invalidate from, so the short staleTime below is what actually
+ * bounds staleness in the general case.
+ */
+export function invalidatePlannedFrequency(queryClient: QueryClient): void {
+  void queryClient.invalidateQueries({ queryKey: [PLANNED_FREQUENCY_QUERY_KEY_PREFIX] });
+}
 
 const EMPTY: Partial<Record<StandardMuscleGroup, number>> = {};
 
@@ -47,9 +61,15 @@ export function usePlannedFrequency(): {
   const query = useQuery<{ programData: FullProgramRecommendation | null; currentWeek: number }>({
     queryKey: [QUERY_KEY_PREFIX, userId],
     enabled: !!userId,
-    // The plan changes only when a mesocycle is generated or rolls a week, so
-    // this can stay warm; it is a denominator, not live data.
-    staleTime: 10 * 60_000,
+    // Deliberately SHORT. The obvious reading is that a plan changes rarely so
+    // the cache can stay warm — but the two events that change it (generating a
+    // mesocycle, and the weekly rollover advancing current_week) are exactly
+    // the moments the frequency is wrong, and the rollover happens server-side
+    // in startMesocycleSession where no client invalidation can reach it. A
+    // long staleTime would leave readiness and soreness learning normalizing
+    // against the previous week's session capacity. One small row, refetched at
+    // most once a minute, is the cheaper trade.
+    staleTime: 60_000,
     queryFn: async () => {
       const supabase = createUntypedClient();
       const { data, error } = await supabase
