@@ -206,7 +206,9 @@ const validMesocycle: Mesocycle = {
   daysPerWeek: 4,
   splitType: 'Upper/Lower',
   fatigueScore: 45,
+  scheduleMode: 'fixed_days',
   preferredWorkoutDays: ['Monday', 'Tuesday', 'Thursday', 'Friday'],
+  trainingIntervalDays: null,
   sessionDurationMinutes: 60,
   createdAt: '2024-01-01T00:00:00Z',
   startedAt: '2024-01-01T00:00:00Z',
@@ -224,6 +226,16 @@ const mesoWithNullDays: Mesocycle = {
   preferredWorkoutDays: null,
 };
 expectAssignable<Mesocycle>(mesoWithNullDays);
+
+// An interval schedule trains every N days instead of on fixed weekdays
+const mesoOnIntervalSchedule: Mesocycle = {
+  ...validMesocycle,
+  scheduleMode: 'interval',
+  trainingIntervalDays: 2,
+};
+expectAssignable<Mesocycle>(mesoOnIntervalSchedule);
+
+expectNotAssignable<Mesocycle['scheduleMode']>('every_other_day');
 
 // ============================================================================
 // WorkoutSession Interface Tests

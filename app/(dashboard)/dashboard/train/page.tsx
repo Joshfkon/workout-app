@@ -48,7 +48,7 @@ import { resolveAuthState } from '@/lib/supabase/authState';
 import { getLocalDateString } from '@/lib/utils';
 import {
   startMesocycleWorkoutSession,
-  getWorkoutForDay,
+  getWorkoutForDate,
   type TodayWorkout,
 } from '@/lib/training/startMesocycleSession';
 import {
@@ -57,6 +57,7 @@ import {
   type ExerciseOverride,
 } from '@/services/mesocycleHelpers';
 import { sessionIndexFromCompleted } from '@/lib/training/mesocycleProgress';
+import { buildTrainingSchedule, type ScheduleMode } from '@/lib/training/trainingSchedule';
 import {
   createRepeatSession,
   type RepeatableExercise,
@@ -105,6 +106,10 @@ interface ActiveMesocycleRow {
   split_type: string;
   days_per_week: number;
   preferred_workout_days: WorkoutDay[] | null;
+  /** Schedule shape: fixed weekdays, or every-N-days from start_date. */
+  schedule_mode?: ScheduleMode | null;
+  training_interval_days?: number | null;
+  start_date?: string | null;
   program_data: unknown;
   exercise_overrides?: ExerciseOverride[];
 }
@@ -302,7 +307,7 @@ export default function TrainPage() {
           supabase
             .from('mesocycles')
             .select(
-              'id, name, current_week, total_weeks, deload_week, split_type, days_per_week, preferred_workout_days, program_data, exercise_overrides, generated_with_enhanced_mode'
+              'id, name, current_week, total_weeks, deload_week, split_type, days_per_week, preferred_workout_days, schedule_mode, training_interval_days, start_date, program_data, exercise_overrides, generated_with_enhanced_mode'
             )
             .eq('user_id', user.id)
             .eq('state', 'active')
@@ -429,28 +434,34 @@ export default function TrainPage() {
     nextWorkoutInfo: { workout: TodayWorkout; offsetDays: number; dayLabel: string } | null;
   } => {
     if (!activeMeso) return { todayWorkout: null, nextWorkoutInfo: null };
-    const todayDow = new Date().getDay() || 7;
-    const workoutFor = (dow: number) =>
-      getWorkoutForDay(
-        activeMeso.split_type,
-        dow,
-        activeMeso.days_per_week,
-        activeMeso.preferred_workout_days
-      );
-    const todays = workoutFor(todayDow);
+    const schedule = buildTrainingSchedule(activeMeso);
+    const dateAt = (offset: number) => {
+      const date = new Date();
+      date.setHours(0, 0, 0, 0);
+      date.setDate(date.getDate() + offset);
+      return date;
+    };
+
+    const todays = getWorkoutForDate(activeMeso.split_type, dateAt(0), schedule);
     if (todays) return { todayWorkout: todays, nextWorkoutInfo: null };
-    for (let offset = 1; offset <= 7; offset++) {
-      const workout = workoutFor(((todayDow - 1 + offset) % 7) + 1);
+
+    // Interval schedules can skip more than a week's worth of weekdays, so
+    // scan far enough ahead to cover the longest supported cadence.
+    for (let offset = 1; offset <= 14; offset++) {
+      const date = dateAt(offset);
+      const workout = getWorkoutForDate(activeMeso.split_type, date, schedule);
       if (workout) {
-        const date = new Date();
-        date.setDate(date.getDate() + offset);
         return {
           todayWorkout: null,
           nextWorkoutInfo: {
             workout,
             offsetDays: offset,
             dayLabel:
-              offset === 1 ? 'Tomorrow' : date.toLocaleDateString('en-US', { weekday: 'long' }),
+              offset === 1
+                ? 'Tomorrow'
+                : offset <= 7
+                  ? date.toLocaleDateString('en-US', { weekday: 'long' })
+                  : date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' }),
           },
         };
       }

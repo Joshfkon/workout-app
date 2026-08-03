@@ -25,6 +25,14 @@ import { computeLiftTrends, LIFT_TREND_WINDOW_DAYS, type LiftTrendsSummary } fro
 import type { BodyCompGlance } from '@/lib/actions/dashboard';
 import { computeWeightRate } from './_lib/weightRate';
 import { computeWeekSessions } from './_lib/weekSessions';
+// Direct from the pure schedule module — importing the re-export on
+// startMesocycleSession would drag its session-building deps into this bundle.
+import {
+  buildTrainingSchedule,
+  getWorkoutForDate,
+  type ScheduleMode,
+  type TrainingSchedule,
+} from '@/lib/training/trainingSchedule';
 import { useMuscleRecovery } from '@/hooks/useMuscleRecovery';
 import { useSleepLog } from '@/hooks/useSleepLog';
 import { calculateReadinessScore } from '@/services/fatigueEngine';
@@ -144,6 +152,9 @@ interface ActiveMesocycle {
   splitType?: string;
   daysPerWeek?: number;
   preferredWorkoutDays?: WorkoutDay[] | null;
+  /** Schedule shape: fixed weekdays, or every-N-days from startDate. */
+  scheduleMode?: ScheduleMode | null;
+  trainingIntervalDays?: number | null;
   /** Sessions completed vs expected inside the current mesocycle week. */
   weekSessionsDone?: number;
   weekSessionsTotal?: number;
@@ -153,6 +164,17 @@ interface ScheduledWorkout {
   dayName: string;
   muscles: string[];
   dayNumber: number;
+}
+
+/** Resolve the calendar for a dashboard mesocycle summary (camelCase fields). */
+function scheduleFor(mesocycle: ActiveMesocycle): TrainingSchedule {
+  return buildTrainingSchedule({
+    days_per_week: mesocycle.daysPerWeek || 4,
+    preferred_workout_days: mesocycle.preferredWorkoutDays,
+    schedule_mode: mesocycle.scheduleMode,
+    training_interval_days: mesocycle.trainingIntervalDays,
+    start_date: mesocycle.startDate,
+  });
 }
 
 // TodaysWorkout now lives in components/dashboard/home/TodayHeroCard.tsx
@@ -223,69 +245,6 @@ interface DashboardClientProps {
   initialData?: DashboardInitialData;
 }
 
-const WEEKDAY_NAMES: WorkoutDay[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-
-function dayNameToNumber(dayName: WorkoutDay): number {
-  return WEEKDAY_NAMES.indexOf(dayName) + 1;
-}
-
-function getTrainingDays(daysPerWeek: number, preferredWorkoutDays?: WorkoutDay[] | null): number[] {
-  if (preferredWorkoutDays && preferredWorkoutDays.length > 0) {
-    return preferredWorkoutDays.map(dayNameToNumber).sort((a, b) => a - b);
-  }
-
-  const trainingDayMaps: Record<number, number[]> = {
-    2: [1, 4],
-    3: [1, 3, 5],
-    4: [1, 2, 4, 5],
-    5: [1, 2, 3, 5, 6],
-    6: [1, 2, 3, 4, 5, 6],
-  };
-
-  return trainingDayMaps[daysPerWeek] || trainingDayMaps[4];
-}
-
-// Helper to calculate workout schedule based on split type
-function getWorkoutForDay(
-  splitType: string,
-  dayOfWeek: number,
-  daysPerWeek: number,
-  preferredWorkoutDays?: WorkoutDay[] | null
-): ScheduledWorkout | null {
-  const splits: Record<string, { dayName: string; muscles: string[] }[]> = {
-    'Full Body': [
-      { dayName: 'Full Body A', muscles: ['chest', 'back', 'quads', 'shoulders', 'triceps'] },
-      { dayName: 'Full Body B', muscles: ['back', 'hamstrings', 'glutes', 'biceps', 'calves'] },
-      { dayName: 'Full Body C', muscles: ['chest', 'quads', 'shoulders', 'biceps', 'abs'] },
-    ],
-    'Upper/Lower': [
-      { dayName: 'Upper A', muscles: ['chest', 'back', 'shoulders', 'biceps', 'triceps'] },
-      { dayName: 'Lower A', muscles: ['quads', 'hamstrings', 'glutes', 'calves', 'abs'] },
-      { dayName: 'Upper B', muscles: ['back', 'chest', 'shoulders', 'triceps', 'biceps'] },
-      { dayName: 'Lower B', muscles: ['hamstrings', 'quads', 'glutes', 'calves', 'abs'] },
-    ],
-    'PPL': [
-      { dayName: 'Push', muscles: ['chest', 'shoulders', 'triceps'] },
-      { dayName: 'Pull', muscles: ['back', 'biceps', 'shoulders'] },
-      { dayName: 'Legs', muscles: ['quads', 'hamstrings', 'glutes', 'calves', 'abs'] },
-    ],
-    'Arnold': [
-      { dayName: 'Chest & Back', muscles: ['chest', 'back'] },
-      { dayName: 'Shoulders & Arms', muscles: ['shoulders', 'biceps', 'triceps'] },
-      { dayName: 'Legs', muscles: ['quads', 'hamstrings', 'glutes', 'calves', 'abs'] },
-    ],
-  };
-
-  const schedule = splits[splitType] || splits['Upper/Lower'];
-  const trainingDays = getTrainingDays(daysPerWeek, preferredWorkoutDays);
-  const dayIndex = trainingDays.indexOf(dayOfWeek);
-
-  if (dayIndex === -1) return null;
-
-  const workoutIndex = dayIndex % schedule.length;
-  return { ...schedule[workoutIndex], dayNumber: dayIndex + 1 };
-}
-
 type QuickLogModal = 'weight' | 'water' | 'food' | 'cardio' | 'checkin' | 'sleep' | 'bp';
 
 export function DashboardClient({ initialData }: DashboardClientProps) {
@@ -300,13 +259,10 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
     // the split-day name ("Chest & Back") as its title and the muscle list
     // for the recovery note, not just as the block-less fallback.
     if (!initialData?.mesocycle) return null;
-    const today = new Date();
-    const dayOfWeek = today.getDay() === 0 ? 7 : today.getDay();
-    return getWorkoutForDay(
+    return getWorkoutForDate(
       initialData.mesocycle.splitType || 'Upper/Lower',
-      dayOfWeek,
-      initialData.mesocycle.daysPerWeek || 4,
-      initialData.mesocycle.preferredWorkoutDays
+      new Date(),
+      scheduleFor(initialData.mesocycle)
     );
   });
   const [nutritionTotals, setNutritionTotals] = useState<NutritionTotals>(initialData?.nutritionTotals ?? { calories: 0, protein: 0, carbs: 0, fat: 0 });
@@ -679,13 +635,10 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
           setWeightUnit(data.weightUnit);
           setMuscleVolume(data.muscleVolume);
           if (!todaysWorkout && data.activeMesocycle) {
-            const today = new Date();
-            const dayOfWeek = today.getDay() === 0 ? 7 : today.getDay();
-            setScheduledWorkout(getWorkoutForDay(
+            setScheduledWorkout(getWorkoutForDate(
               data.activeMesocycle.splitType || 'Upper/Lower',
-              dayOfWeek,
-              data.activeMesocycle.daysPerWeek || 4,
-              data.activeMesocycle.preferredWorkoutDays
+              new Date(),
+              scheduleFor(data.activeMesocycle)
             ));
           }
           // Show content immediately with cached data
@@ -834,7 +787,6 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
 
         const today = new Date();
         const todayStr = getLocalDateString(today);
-        const dayOfWeek = today.getDay() === 0 ? 7 : today.getDay();
         const ninetyDaysAgo = new Date(today);
         ninetyDaysAgo.setDate(today.getDate() - 90);
         // Shared local-day-anchored window (matches the server + volume page).
@@ -858,7 +810,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
 
           // Mesocycles with sessions
           supabase.from('mesocycles')
-            .select(`id, name, start_date, total_weeks, split_type, days_per_week, preferred_workout_days, state, is_active,
+            .select(`id, name, start_date, total_weeks, split_type, days_per_week, preferred_workout_days, schedule_mode, training_interval_days, state, is_active,
               workout_sessions (id, planned_date, state, completed_at)`)
             .eq('user_id', user.id)
             .order('created_at', { ascending: false }),
@@ -1006,6 +958,8 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
             splitType: mesocycle.split_type,
             daysPerWeek: mesocycle.days_per_week,
             preferredWorkoutDays: mesocycle.preferred_workout_days || null,
+            scheduleMode: mesocycle.schedule_mode || null,
+            trainingIntervalDays: mesocycle.training_interval_days ?? null,
             weekSessionsDone: weekSessions?.done,
             weekSessionsTotal: weekSessions?.total,
           });
@@ -1044,21 +998,19 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
             // hero uses the split-day name as its title and the muscle list
             // for the recovery note.
             setScheduledWorkout(
-              getWorkoutForDay(
+              getWorkoutForDate(
                 mesocycle.split_type || 'Upper/Lower',
-                dayOfWeek,
-                mesocycle.days_per_week || 4,
-                mesocycle.preferred_workout_days
+                new Date(),
+                buildTrainingSchedule(mesocycle)
               )
             );
           } else {
             // No session today — clear any stale workout from the previous day (rollover refetch)
             setTodaysWorkout(null);
-            const scheduled = getWorkoutForDay(
+            const scheduled = getWorkoutForDate(
               mesocycle.split_type || 'Upper/Lower',
-              dayOfWeek,
-              mesocycle.days_per_week || 4,
-              mesocycle.preferred_workout_days
+              new Date(),
+              buildTrainingSchedule(mesocycle)
             );
             setScheduledWorkout(scheduled);
           }
@@ -1188,6 +1140,8 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
             splitType: mesocycle.split_type,
             daysPerWeek: mesocycle.days_per_week,
             preferredWorkoutDays: mesocycle.preferred_workout_days || null,
+            scheduleMode: mesocycle.schedule_mode || null,
+            trainingIntervalDays: mesocycle.training_interval_days ?? null,
           };
         }
         try {

@@ -33,13 +33,14 @@ import { getLocalUserId } from '@/lib/supabase/authState';
 import { getLocalDateString } from '@/lib/utils';
 import { bootMark } from '@/lib/perf/bootTrace';
 import {
-  getWorkoutForDay,
+  getWorkoutForDate,
   programSessionHasUsableExercises,
 } from '@/lib/training/startMesocycleSession';
 import { sessionIndexFromCompleted } from '@/lib/training/mesocycleProgress';
 import { getSessionFromProgramData, type ExerciseOverride } from '@/services/mesocycleHelpers';
 import { fetchEatingWindow } from '@/lib/nutrition/eatingWindow';
 import type { EatingWindow } from '@/services/intakePacing';
+import { buildTrainingSchedule, type ScheduleMode } from '@/lib/training/trainingSchedule';
 import type { FullProgramRecommendation, WorkoutDay } from '@/types/schema';
 
 export interface LogInProgressSummary {
@@ -62,6 +63,10 @@ export interface LogActiveMesocycleRow {
   split_type: string;
   days_per_week: number;
   preferred_workout_days: WorkoutDay[] | null;
+  /** Schedule shape: fixed weekdays, or every-N-days from start_date. */
+  schedule_mode?: ScheduleMode | null;
+  training_interval_days?: number | null;
+  start_date?: string | null;
   program_data: unknown;
   exercise_overrides?: ExerciseOverride[];
 }
@@ -140,7 +145,7 @@ async function fetchLogHomeData(): Promise<LogHomeData | null> {
       .limit(1),
     supabase
       .from('mesocycles')
-      .select('id, name, current_week, total_weeks, deload_week, split_type, days_per_week, preferred_workout_days, program_data, exercise_overrides, generated_with_enhanced_mode')
+      .select('id, name, current_week, total_weeks, deload_week, split_type, days_per_week, preferred_workout_days, schedule_mode, training_interval_days, start_date, program_data, exercise_overrides, generated_with_enhanced_mode')
       .eq('user_id', userId)
       .eq('state', 'active')
       .order('created_at', { ascending: false })
@@ -342,13 +347,7 @@ export function useLogHeroInfoQuery(meso: LogActiveMesocycleRow | null) {
 
       // Fallback mirrors the start path's legacy behavior: 2 exercises per
       // scheduled muscle when program_data has no usable session.
-      const dayOfWeek = new Date().getDay() || 7;
-      const tw = getWorkoutForDay(
-        meso.split_type,
-        dayOfWeek,
-        meso.days_per_week,
-        meso.preferred_workout_days
-      );
+      const tw = getWorkoutForDate(meso.split_type, new Date(), buildTrainingSchedule(meso));
       const exerciseCount =
         programSession?.exercises.length || (tw ? tw.muscles.length * 2 : 0);
       const estMinutes =
