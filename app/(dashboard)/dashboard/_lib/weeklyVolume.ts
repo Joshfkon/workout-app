@@ -64,7 +64,7 @@ export const ALL_MUSCLE_GROUPS: readonly StandardMuscleGroup[] = STANDARD_MUSCLE
 // FINE-GRAINED MUSCLE REACHABILITY (warning gating)
 // ============================================
 //
-// Of the 26 standard muscles, nine have NO coarse legacy tag that can
+// Some standard muscles have NO coarse legacy tag that can
 // credit them: the runtime resolver is standard-first, so a set tagged with a
 // coarse token ('glutes','abs','traps','calves','triceps') or a legacy coarse
 // token ('back') resolves to [glutes] / [abs] / [traps] / [calves] /
@@ -122,7 +122,7 @@ export function computeReachableMuscles(blocks: WeeklyVolumeBlockRow[]): Set<Sta
 
 /**
  * Whether an untrained standard muscle should surface a below-MEV warning.
- * Coarse-reachable muscles (17 of 20) always can. The three fine muscles only
+ * Muscles outside FINE_MUSCLE_PARENTS always can. The fine muscles only
  * warn when the user's exercise tagging can actually feed them; when
  * `reachable` is omitted we preserve the pre-reachability behaviour (warn on
  * all) so callers that don't have the raw blocks are unchanged.

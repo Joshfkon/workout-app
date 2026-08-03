@@ -127,6 +127,11 @@ export function useMuscleRecovery(): UseMuscleRecoveryResult {
 
   const { user: storeUser } = useUserStore();
   const enhancedAthleteMode = storeUser?.enhancedAthleteMode === true;
+  // The user's real experience level drives the Bug 6 session-capacity
+  // normalizer (direct MRV / planned frequency). Left undefined it would
+  // silently fall back to 'intermediate' — supply it wherever the store has it
+  // so the fallback stays visible in dose diagnostics rather than routine.
+  const experienceForCapacity = storeUser?.experience;
   const { multipliers } = useRecoveryMultipliers();
   // Recent sleep scales every window (trailing-2-night avg <6h stretches
   // recovery ×1.15; ≥8h good quality shrinks it ×0.95), and the wearable
@@ -140,9 +145,10 @@ export function useMuscleRecovery(): UseMuscleRecoveryResult {
         enhancedAthleteMode,
         multipliers,
         computeSleepWindowMultiplier(sleepEntries, now),
-        wearableRecovery.scale
+        wearableRecovery.scale,
+        { experienceForCapacity: experienceForCapacity }
       ),
-    [enhancedAthleteMode, multipliers, sleepEntries, now, wearableRecovery.scale]
+    [enhancedAthleteMode, multipliers, sleepEntries, now, wearableRecovery.scale, experienceForCapacity]
   );
 
   const recoveryStatus = useMemo(

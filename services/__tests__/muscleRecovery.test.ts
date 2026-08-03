@@ -1,4 +1,5 @@
 import {
+  computeDoseAdjustmentHours,
   computeMuscleRecovery,
   computeSleepWindowMultiplier,
   recoveryConfigFor,
@@ -13,6 +14,30 @@ import {
   type SorenessReport,
 } from '@/services/muscleRecovery';
 import { ENHANCED_RECOVERY_MULTIPLIER } from '@/services/shared/fatigueConstants';
+import type { StandardMuscleGroup } from '@/types/schema';
+
+/**
+ * Expected window for a muscle after a session of `sets` sets of which
+ * `hardSets` were at/below the hard-RIR threshold.
+ *
+ * These tests used to restate the retired step function's discrete outputs
+ * (base, base-12, base+24). The dose adjustment is now CONTINUOUS, so the
+ * expectation is DERIVED from the same model the code uses and each test keeps
+ * asserting what it always meant: that the window composes as
+ * (base + dose) x globalScale x learned. Behavioural claims (light < base <
+ * heavy, quads > biceps, learning flips a verdict) are asserted directly.
+ */
+function expectedWindow(
+  muscle: StandardMuscleGroup,
+  sets: number,
+  hardSets: number,
+  config = RECOVERY_CONFIG,
+  learned = 1
+): number {
+  const base = config.windowHoursByMuscle[muscle] ?? config.defaultWindowHours;
+  const { adjustmentHours } = computeDoseAdjustmentHours(muscle, sets, hardSets, config);
+  return (base + adjustmentHours) * config.windowScale * config.sleepWindowMultiplier * learned;
+}
 
 // A fixed clock injected into every call — no ambient Date reads anywhere.
 const NOW = new Date('2026-07-11T12:00:00.000Z');
@@ -58,12 +83,14 @@ describe('computeMuscleRecovery', () => {
   });
 
   it('trained 80h ago, light session → Fresh', () => {
-    // 3 sets, nothing below 2 RIR → low dose → biceps base 36 - 12 = 24h window.
+    // 3 sets, nothing below 2 RIR → light dose → biceps base 36 shortened.
     const history = [session(hoursAgo(80), 'biceps', 3, 3)];
     const result = computeMuscleRecovery(history, 'biceps', NOW);
 
     expect(result.status).toBe('fresh');
-    expect(result.windowHours).toBe(24);
+    expect(result.windowHours).toBeCloseTo(expectedWindow('biceps', 3, 0), 6);
+    // The claim that matters: a light session shortens the base window.
+    expect(result.windowHours!).toBeLessThan(36);
     expect(result.hoursUntilReady).toBe(0);
     expect(result.hoursSinceLast).toBeCloseTo(80, 5);
   });
@@ -77,7 +104,7 @@ describe('computeMuscleRecovery', () => {
 
     expect(result.status).toBe('recovering');
     expect(result.dose).toBeCloseTo(1.5, 5);
-    expect(result.windowHours).toBe(48);
+    expect(result.windowHours).toBeCloseTo(expectedWindow('glutes', 1.5, 0), 6);
 
     // The secondary muscle carries exactly half the primary's dose.
     const hams = computeMuscleRecovery(history, 'hamstrings', NOW);
@@ -113,29 +140,36 @@ describe('computeMuscleRecovery', () => {
     ];
     const result = computeMuscleRecovery(history, 'quads', NOW);
 
-    // Should key off the recent light session: 2 sets, no hard → quads base
-    // 60 - 12 = 48h window.
-    expect(result.windowHours).toBe(48);
+    // Should key off the recent LIGHT session, not the old heavy one.
+    expect(result.windowHours).toBeCloseTo(expectedWindow('quads', 2, 0), 6);
+    const heavyWindow = expectedWindow('quads', 10, 10);
+    expect(result.windowHours!).toBeLessThan(heavyWindow);
     expect(result.hoursSinceLast).toBeCloseTo(20, 5);
     expect(result.lastTrainedAt).toEqual(hoursAgo(20));
   });
 
-  it('counts ≥2 hard sets (0–1 RIR) as high dose even below the set-count threshold', () => {
-    // Only 4 sets (below the 8-set high-dose threshold) but all maxed → high dose.
+  it('hard sets lengthen the window even when total set count is modest', () => {
+    // 4 sets, all maxed out. Under the retired step function this tripped a
+    // flat +24h at exactly 2 hard sets; now the hard-dose term contributes
+    // continuously, but the direction is the same.
     const history = [session(hoursAgo(30), 'lateral_delts', 4, 0)];
     const result = computeMuscleRecovery(history, 'lateral_delts', NOW);
 
-    expect(result.windowHours).toBe(RECOVERY_CONFIG.defaultWindowHours + RECOVERY_CONFIG.highDoseExtraHours);
-    expect(result.status).toBe('fatigued'); // 30 < 0.6×72 (43.2)
+    expect(result.windowHours).toBeCloseTo(expectedWindow('lateral_delts', 4, 4), 6);
+    // Same volume, none of it hard → strictly shorter.
+    const easy = computeMuscleRecovery([session(hoursAgo(30), 'lateral_delts', 4, 3)], 'lateral_delts', NOW);
+    expect(result.windowHours!).toBeGreaterThan(easy.windowHours!);
+    expect(result.status).toBe('fatigued');
   });
 
   it('unrated sets are not treated as hard and do not block the light-session discount', () => {
     const history = [session(hoursAgo(40), 'triceps', 3, null)];
     const result = computeMuscleRecovery(history, 'triceps', NOW);
 
-    // 3 sets, no rated-hard sets → light → triceps base 36 - 12 = 24h window;
-    // 40 ≥ 24 → Fresh.
-    expect(result.windowHours).toBe(24);
+    // 3 sets, no rated-hard sets → treated as light, same as RIR-3 sets.
+    expect(result.windowHours).toBeCloseTo(expectedWindow('triceps', 3, 0), 6);
+    const rated = computeMuscleRecovery([session(hoursAgo(40), 'triceps', 3, 3)], 'triceps', NOW);
+    expect(result.windowHours).toBeCloseTo(rated.windowHours!, 6);
     expect(result.status).toBe('fresh');
   });
 
@@ -149,9 +183,12 @@ describe('computeMuscleRecovery', () => {
     };
     const result = computeMuscleRecovery([multi], 'quads', NOW);
 
-    // 8 total sets → high dose → quads base 60 + 24 = 84h window.
+    // 8 total sets accumulated across two exercises → one 8-set dose.
     expect(result.dose).toBeCloseTo(8, 5);
-    expect(result.windowHours).toBe(84);
+    expect(result.windowHours).toBeCloseTo(expectedWindow('quads', 8, 0), 6);
+    // Accumulation is the point: 8 sets must outweigh 4.
+    const half = computeMuscleRecovery([session(hoursAgo(24), 'quads', 4, 2)], 'quads', NOW);
+    expect(result.windowHours!).toBeGreaterThan(half.windowHours!);
   });
 
   it('respects a per-muscle window override from config', () => {
@@ -162,9 +199,12 @@ describe('computeMuscleRecovery', () => {
     const history = [session(hoursAgo(50), 'quads', 5, 2)];
     const result = computeMuscleRecovery(history, 'quads', NOW, config);
 
-    // Override base 72, moderate dose (no adjustment) → 72h; 50 < 72 → not Fresh.
-    expect(result.windowHours).toBe(72);
-    expect(result.status).toBe('recovering'); // 50 ≥ 0.6×72 (43.2)
+    // The override replaces the BASE; the dose adjustment still applies on top.
+    expect(result.windowHours).toBeCloseTo(expectedWindow('quads', 5, 0, config), 6);
+    expect(result.windowHours!).toBeGreaterThan(
+      expectedWindow('quads', 5, 0, RECOVERY_CONFIG)
+    );
+    expect(result.status).toBe('recovering');
   });
 
   it('large muscle groups get a longer default window than small ones', () => {
@@ -180,9 +220,12 @@ describe('computeMuscleRecovery', () => {
       NOW
     );
 
-    expect(quads.windowHours).toBe(60);
-    expect(biceps.windowHours).toBe(36);
-    expect(delts.windowHours).toBe(RECOVERY_CONFIG.defaultWindowHours);
+    expect(quads.windowHours).toBeCloseTo(expectedWindow('quads', 5, 0), 6);
+    expect(biceps.windowHours).toBeCloseTo(expectedWindow('biceps', 5, 0), 6);
+    expect(delts.windowHours).toBeCloseTo(expectedWindow('lateral_delts', 5, 0), 6);
+    // The ordering the per-muscle table exists to produce.
+    expect(quads.windowHours!).toBeGreaterThan(delts.windowHours!);
+    expect(delts.windowHours!).toBeGreaterThan(biceps.windowHours!);
 
     // Same session age, different verdicts: 50h is inside the quads window but
     // past the biceps one.
@@ -197,9 +240,13 @@ describe('computeMuscleRecovery', () => {
     const natural = computeMuscleRecovery(history, 'quads', NOW);
     const scaled = computeMuscleRecovery(history, 'quads', NOW, enhanced);
 
-    // 60 / 1.225 ≈ 48.98h — the enhanced athlete is Fresh at 52h while the
-    // natural athlete is still Recovering.
-    expect(scaled.windowHours).toBeCloseTo(60 / ENHANCED_RECOVERY_MULTIPLIER, 5);
+    // The enhanced athlete's whole window (base AND dose) divides by the
+    // shared multiplier, so they are Fresh at 52h while the natural athlete
+    // is still Recovering.
+    expect(scaled.windowHours).toBeCloseTo(
+      natural.windowHours! / ENHANCED_RECOVERY_MULTIPLIER,
+      6
+    );
     expect(natural.status).toBe('recovering');
     expect(scaled.status).toBe('fresh');
   });
@@ -208,8 +255,14 @@ describe('computeMuscleRecovery', () => {
     const enhanced = recoveryConfigFor(true);
     const history = [session(hoursAgo(10), 'chest_upper', 10, 0)]; // high dose → 48+24
 
+    const natural = computeMuscleRecovery(history, 'chest_upper', NOW);
     const result = computeMuscleRecovery(history, 'chest_upper', NOW, enhanced);
-    expect(result.windowHours).toBeCloseTo(72 / ENHANCED_RECOVERY_MULTIPLIER, 5);
+    // The scalar multiplies (base + dose), not the base alone — so a
+    // high-dose session scales by exactly the same factor as a light one.
+    expect(result.windowHours).toBeCloseTo(
+      natural.windowHours! / ENHANCED_RECOVERY_MULTIPLIER,
+      6
+    );
   });
 
   it('recoveryConfigFor(false) is the unscaled default config', () => {
@@ -231,8 +284,11 @@ describe('per-muscle learned recovery multiplier', () => {
       config
     );
 
-    expect(quads.windowHours).toBeCloseTo(60 * 1.2, 5); // 72h
-    expect(hams.windowHours).toBe(60); // untouched
+    expect(quads.windowHours).toBeCloseTo(expectedWindow('quads', 5, 0, RECOVERY_CONFIG, 1.2), 6);
+    // Hamstrings untouched by the quads multiplier.
+    expect(hams.windowHours).toBeCloseTo(expectedWindow('hamstrings', 5, 0), 6);
+    const unlearned = computeMuscleRecovery([session(at, 'quads', 5, 2)], 'quads', NOW);
+    expect(quads.windowHours).toBeCloseTo(unlearned.windowHours! * 1.2, 6);
   });
 
   it('composes with the enhanced-athlete windowScale', () => {
@@ -243,7 +299,15 @@ describe('per-muscle learned recovery multiplier', () => {
       NOW,
       config
     );
-    expect(result.windowHours).toBeCloseTo((60 * 1.2) / ENHANCED_RECOVERY_MULTIPLIER, 5);
+    const natural = computeMuscleRecovery(
+      [session(hoursAgo(50), 'quads', 5, 2)],
+      'quads',
+      NOW
+    );
+    expect(result.windowHours).toBeCloseTo(
+      (natural.windowHours! * 1.2) / ENHANCED_RECOVERY_MULTIPLIER,
+      6
+    );
   });
 
   it('an out-of-range persisted multiplier is clamped before it can distort the window', () => {
@@ -254,14 +318,25 @@ describe('per-muscle learned recovery multiplier', () => {
       NOW,
       config
     );
-    expect(result.windowHours).toBeCloseTo(60 * RECOVERY_MULTIPLIER_BOUNDS.max, 5);
+    const unclamped = computeMuscleRecovery(
+      [session(hoursAgo(50), 'quads', 5, 2)],
+      'quads',
+      NOW
+    );
+    expect(result.windowHours).toBeCloseTo(
+      unclamped.windowHours! * RECOVERY_MULTIPLIER_BOUNDS.max,
+      6
+    );
   });
 
   it('a "still sore" report can flip the same-hours verdict after learning', () => {
-    // 66h after a moderate quads session: with multiplier 1 (60h window) the
-    // model says Fresh; after the window learns +10% (66h window) it says
-    // Recovering — the learning loop actually changes behavior.
-    const history = [session(hoursAgo(66), 'quads', 5, 2)];
+    // Sit just PAST the unlearned window, then let the muscle learn a longer
+    // one: the same elapsed hours must flip Fresh -> Recovering. The offset is
+    // derived from the model so the test cannot rot against a retuned dose
+    // curve — the behavioural claim is what is pinned.
+    const unlearnedWindow = expectedWindow('quads', 5, 0);
+    const elapsed = unlearnedWindow + 1;
+    const history = [session(hoursAgo(elapsed), 'quads', 5, 2)];
     const before = computeMuscleRecovery(history, 'quads', NOW);
     const after = computeMuscleRecovery(
       history,
@@ -308,7 +383,7 @@ describe('adjustRecoveryMultiplier', () => {
     expect(clampRecoveryMultiplier(-3)).toBe(RECOVERY_MULTIPLIER_BOUNDS.min);
   });
 
-  it('stays within [0.7, 1.5] over ANY input sequence (property test)', () => {
+  it('stays within RECOVERY_MULTIPLIER_BOUNDS over ANY input sequence (property test)', () => {
     // Deterministic LCG so the sequence is reproducible without Math.random.
     let seed = 0x2f6e2b1;
     const nextRandom = () => {

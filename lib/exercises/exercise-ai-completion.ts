@@ -6,7 +6,7 @@
  *
  * Uses the two-tier muscle group system:
  * - DetailedMuscleGroup (33 muscles) for precise AI exercise targeting
- * - StandardMuscleGroup (20 muscles) for volume tracking (converted automatically)
+ * - StandardMuscleGroup for volume tracking (converted automatically)
  */
 
 import type { MovementPattern, DetailedMuscleGroup, StandardMuscleGroup } from '@/types/schema';

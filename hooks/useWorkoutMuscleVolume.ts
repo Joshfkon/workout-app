@@ -237,6 +237,11 @@ export function useWorkoutMuscleVolume({
   // Same config resolution as the readiness sheet: athlete profile, learned
   // per-muscle multipliers, sleep and wearable modifiers.
   const enhancedAthleteMode = useUserStore((s) => s.user?.enhancedAthleteMode === true);
+  // The user's real experience level drives the Bug 6 session-capacity
+  // normalizer (direct MRV / planned frequency). Left undefined it would
+  // silently fall back to 'intermediate' — supply it wherever the store has it
+  // so the fallback stays visible in dose diagnostics rather than routine.
+  const experienceForCapacity = useUserStore((s) => s.user?.experience);
   const recoveryProfile = enhancedAthleteMode ? ('enhanced' as const) : ('standard' as const);
   const { multipliers } = useRecoveryMultipliers();
   const { state: wearableRecovery } = useWearableRecovery();
@@ -247,9 +252,10 @@ export function useWorkoutMuscleVolume({
         enhancedAthleteMode,
         multipliers,
         computeSleepWindowMultiplier(sleepEntries, now),
-        wearableRecovery.scale
+        wearableRecovery.scale,
+        { experienceForCapacity: experienceForCapacity }
       ),
-    [enhancedAthleteMode, multipliers, sleepEntries, now, wearableRecovery.scale]
+    [enhancedAthleteMode, multipliers, sleepEntries, now, wearableRecovery.scale, experienceForCapacity]
   );
 
   // Session-only coarse set counts (credited), the readiness tiebreaker.

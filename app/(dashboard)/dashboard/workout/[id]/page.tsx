@@ -2122,9 +2122,16 @@ export default function WorkoutPage() {
       }
 
       // Learning step: disagreement between the report and the model's status
-      // at ask time nudges the per-muscle recovery multiplier (±0.05, 0.7–1.5).
+      // at ask time nudges the per-muscle recovery multiplier
+      // (±RECOVERY_MULTIPLIER_STEP, bounded by RECOVERY_MULTIPLIER_BOUNDS).
       const report = rating === 0 ? 'none' : rating === 3 ? 'still_sore' : 'recovered';
-      const config = recoveryConfigFor(enhancedAthleteModeActive, recoveryMultipliers);
+      const config = recoveryConfigFor(
+        enhancedAthleteModeActive,
+        recoveryMultipliers,
+        undefined,
+        undefined,
+        { experienceForCapacity: userProfile?.experience }
+      );
       const statusAtAsk = computeMuscleRecovery(
         recoveryHistorySessions,
         muscle,

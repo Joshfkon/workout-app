@@ -8,6 +8,7 @@ import type {
   Goal,
   Experience,
   MuscleGroup,
+  StandardMuscleGroup,
   MovementPattern,
   PeriodizationModel,
   ExercisePosition,
@@ -16,6 +17,7 @@ import type {
   RepRangeConfig,
   RepRangeFactors,
 } from '@/types/schema';
+import { isStandardMuscle, toLegacyMuscleGroup } from '@/types/schema';
 
 // ============================================================
 // MUSCLE FIBER TYPE DATA
@@ -25,6 +27,11 @@ import type {
  * Muscle fiber type dominance affects optimal rep ranges:
  * - Fast-twitch dominant muscles respond better to lower reps (heavier loads)
  * - Slow-twitch dominant muscles benefit from higher reps (time under tension)
+ *
+ * Keyed by the COARSE legacy group. Fine muscles whose composition differs
+ * from their coarse parent are handled by STANDARD_MUSCLE_FIBER_OVERRIDES
+ * below — read fiber type through `fiberTypeForMuscle`, never from this table
+ * directly, or a fine key silently inherits the coarse label.
  */
 export const MUSCLE_FIBER_PROFILE: Record<MuscleGroup, FiberType> = {
   chest: 'mixed',
@@ -41,6 +48,56 @@ export const MUSCLE_FIBER_PROFILE: Record<MuscleGroup, FiberType> = {
   forearms: 'slow',        // Grip endurance, need higher reps
   traps: 'mixed',          // Upper back/neck
 };
+
+/**
+ * Per-STANDARD-muscle fiber overrides, for fine muscles whose composition
+ * differs materially from their coarse parent's label.
+ *
+ * The coarse 'calves' label is 'slow', which is accurate for soleus (~80%+
+ * type I) but not for gastrocnemius, which is substantially more mixed. The
+ * two heads are programmed separately in this app (straight-knee vs
+ * bent-knee), so they should not share one label.
+ *
+ * soleus is pinned explicitly even though it would inherit 'slow' from
+ * 'calves' — the pairing is the point, and an implicit inherit would make the
+ * next person wonder whether it was considered.
+ */
+export const STANDARD_MUSCLE_FIBER_OVERRIDES: Partial<Record<StandardMuscleGroup, FiberType>> = {
+  gastrocnemius: 'mixed',
+  soleus: 'slow',
+};
+
+/** Fallback for tokens that resolve to nothing recognizable. */
+export const DEFAULT_FIBER_TYPE: FiberType = 'mixed';
+
+/**
+ * THE fiber-type read. Accepts a legacy coarse group, a standard muscle
+ * (coarse or fine), or any raw token, and resolves:
+ *   1. a fine per-standard override (gastrocnemius, soleus);
+ *   2. the standard muscle's coarse parent via toLegacyMuscleGroup;
+ *   3. the legacy table directly;
+ *   4. DEFAULT_FIBER_TYPE.
+ *
+ * KNOWN ARCHITECTURAL ISSUE (flagged, not fixed here): this single categorical
+ * label drives BOTH rep prescription (calculateRepRange / getDUPRepRange) and
+ * recovery decay (fatigueBudgetEngine.calculateRecoveryRate). Those are
+ * different physiological claims and should not share one enum. Splitting them
+ * belongs with the unified-recovery work tracked separately.
+ */
+export function fiberTypeForMuscle(muscle: MuscleGroup | StandardMuscleGroup | string): FiberType {
+  const token = typeof muscle === 'string' ? muscle.toLowerCase().trim() : '';
+  if (!token) return DEFAULT_FIBER_TYPE;
+
+  if (isStandardMuscle(token)) {
+    const override = STANDARD_MUSCLE_FIBER_OVERRIDES[token as StandardMuscleGroup];
+    if (override) return override;
+  }
+
+  const legacy = toLegacyMuscleGroup(token);
+  if (legacy) return MUSCLE_FIBER_PROFILE[legacy];
+
+  return (MUSCLE_FIBER_PROFILE as Record<string, FiberType>)[token] ?? DEFAULT_FIBER_TYPE;
+}
 
 // ============================================================
 // BASE REP RANGES BY GOAL
@@ -74,7 +131,7 @@ const BASE_REP_RANGES: Record<Goal, { compound: [number, number]; isolation: [nu
  */
 export function calculateRepRange(factors: RepRangeFactors): RepRangeConfig {
   const isCompound = factors.exercisePattern !== 'isolation';
-  const fiberType = MUSCLE_FIBER_PROFILE[factors.muscleGroup];
+  const fiberType = fiberTypeForMuscle(factors.muscleGroup);
   
   // Start with base range for goal
   const baseRange = isCompound 
@@ -251,9 +308,9 @@ const DUP_BASE_RANGES: Record<DUPDayType, { compound: [number, number]; isolatio
 export function getDUPRepRange(
   dayType: DUPDayType,
   isCompound: boolean,
-  muscleGroup: MuscleGroup
+  muscleGroup: MuscleGroup | StandardMuscleGroup
 ): { min: number; max: number } {
-  const fiberType = MUSCLE_FIBER_PROFILE[muscleGroup];
+  const fiberType = fiberTypeForMuscle(muscleGroup);
   let range = isCompound ? DUP_BASE_RANGES[dayType].compound : DUP_BASE_RANGES[dayType].isolation;
   
   // Fiber type adjustment

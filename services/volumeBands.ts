@@ -26,8 +26,18 @@ export interface VolumeBand {
 }
 
 /**
- * Research-based coarse MEV–MRV bands (Israetel / Schoenfeld), expressed in
- * TOTAL-INCLUSIVE credited-set terms — the counter credits secondary work at
+ * Research-based coarse MEV–MRV bands (Israetel / Schoenfeld) — this is
+ * `referenceInclusiveMRV`, the EXPERIENCE-INDEPENDENT, TOTAL-INCLUSIVE side of
+ * the volume contract. Its counterpart is `referenceDirectMRV`
+ * (DEFAULT_VOLUME_LANDMARKS in types/schema), which is experience-specific and
+ * stated in DIRECT sets. The two diverge for TWO independent reasons —
+ * experience scaling AND the direct-vs-credited convention — so a gap between
+ * them is not a unit-conversion bug and must not be "fixed" by forcing
+ * agreement. Use the inclusive band for group displays, credited-volume
+ * warnings, weekly group budgets and coarse comparisons; use the direct table
+ * for experience-specific direct-set logic and component bounds.
+ *
+ * Bands are expressed in TOTAL-INCLUSIVE credited-set terms — the counter credits secondary work at
  * 0.5/set, and every band below is a threshold on that total. This is the
  * SINGLE shared denominator: a bar is gray/amber below MEV, green across the
  * MEV–MRV zone, red only past MRV — so hitting MEV is never punished with a
@@ -142,9 +152,10 @@ export const FINE_CHILD_MUSCLES = new Set<StandardMuscleGroup>([
 ]);
 
 /**
- * MEV per standard muscle (24 muscles) — the threshold for the 'low' status
- * on the warning surfaces AND the per-child direct-work floor in the
- * generator's indirect-aware allocator.
+ * MEV per standard muscle — the threshold for the 'low' status on the warning
+ * surfaces AND the per-child direct-work floor in the generator's
+ * indirect-aware allocator. One entry per STANDARD_MUSCLE_GROUPS member
+ * (the Record type enforces totality; don't restate a count that goes stale).
  *
  * TOTAL-INCLUSIVE (Phase 5b, adopted): the counter credits secondary work at
  * 0.5/set, so thresholds are stated against that total. front_delts 2 and
@@ -185,6 +196,19 @@ export interface BandContext {
 /**
  * ─── ENHANCED MRV SCALING (asymmetric, per-muscle-tiered) ──────────────────
  *
+ * ENHANCED VOLUME TOLERANCE IS NOT ENHANCED RECOVERY RATE. This table answers
+ * "how much more weekly volume can this muscle tolerate?"; the separate
+ * ENHANCED_RECOVERY_MULTIPLIER in services/shared/fatigueConstants answers
+ * "how much faster does fatigue dissipate between sessions?". They are
+ * different physiological claims about different quantities and MUST NOT be
+ * collapsed into one shared constant, however numerically similar they look.
+ * Note that this table is per-group and tiered (1.35 / 1.25 / 1.15) while the
+ * recovery factor is a single scalar — there is deliberately no universal
+ * enhanced-volume factor here, because every group carries an authored
+ * multiplier and a catch-all default would be dead code that invites someone
+ * to start defaulting new groups instead of deciding a tier for them.
+ * enhancedConceptSeparation.test.ts pins the independence behaviourally.
+ *
  * Rationale (definition-site record): enhanced recovery scales LOCAL muscular
  * recovery most, systemic/axial fatigue much less, and connective-tissue
  * adaptation not at all — so tolerance bumps concentrate in small,
@@ -221,7 +245,12 @@ export interface BandContext {
  *           chest_upper 16→20, chest_lower 12→15, lats 20→23,
  *           upper_back 16→18.5, erectors 12→14, glute_med 10→12.5,
  *           obliques 10→12.5, upper_traps 12→15, mid_lower_traps 10→12.5,
- *           gastrocnemius 16→21.5, soleus 12→17 (via max(mev+2, table))
+ *           gastrocnemius 16→21.5, soleus via max(mev+2, table)
+ *   (The fine values above are illustrative of the SHAPE of the scaling, not a
+ *   second source of truth — getEffectiveBand computes them. The soleus entry
+ *   previously carried a hand-computed "12→17" that the code never produced;
+ *   enhancedConceptSeparation.test.ts now asserts the scaled fine values
+ *   against the implementation instead of restating them here.)
  *   FLAGGED as aggressive-looking but intentional: shoulders/biceps 35 —
  *   these are CREDITED (indirect-inclusive) ceilings; typical indirect
  *   inflow of 6–16 means the direct-work exploration bound is ~20–29.
