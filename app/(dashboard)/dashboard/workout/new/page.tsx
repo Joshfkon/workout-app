@@ -56,6 +56,12 @@ type Goal = 'bulk' | 'cut' | 'maintain';
 // How many exercises to show per muscle group before collapsing behind "Show more"
 const TOP_EXERCISES_SHOWN = 10;
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isUuid(value: string | null): value is string {
+  return value != null && UUID_RE.test(value);
+}
+
 /**
  * Get rest period based on exercise type and user's goal
  */
@@ -152,9 +158,20 @@ function getExerciseRangeForTime(durationMinutes: number): string {
 function NewWorkoutContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const templateName = searchParams.get('template');
+  const templateParam = searchParams.get('template');
+  // `template` is a DISPLAY NAME here (starter templates deep-link
+  // ?template=Push&muscles=…). Saved templates are started from the templates
+  // pages, which build the session from the template's own exercises — but old
+  // links/bookmarks may still carry a template UUID, which would otherwise
+  // render as "<uuid> Workout". Send those to the template instead.
+  const staleTemplateId = isUuid(templateParam) ? templateParam : null;
+  const templateName = staleTemplateId ? null : templateParam;
   const templateMuscles = searchParams.get('muscles');
   const aiMode = searchParams.get('ai') === 'true';
+
+  useEffect(() => {
+    if (staleTemplateId) router.replace(`/dashboard/templates/${staleTemplateId}`);
+  }, [staleTemplateId, router]);
   
   const [step, setStep] = useState(templateMuscles ? 2 : 1); // Skip to step 2 if template
   const [selectedMuscles, setSelectedMuscles] = useState<string[]>(
@@ -1335,6 +1352,16 @@ function NewWorkoutContent() {
   const totalFilteredExercises = Object.values(exercisesByMuscle).reduce(
     (sum, exs) => sum + exs.length, 0
   );
+
+  // Redirecting an old ?template=<uuid> link to its template — don't flash the
+  // muscle picker (titled with a raw uuid) on the way there.
+  if (staleTemplateId) {
+    return (
+      <div className="min-h-[50vh] flex items-center justify-center">
+        <LoadingAnimation />
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">

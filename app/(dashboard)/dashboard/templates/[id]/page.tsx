@@ -8,6 +8,7 @@ import { createUntypedClient } from '@/lib/supabase/client';
 import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 import { convertWeightForDisplay, inputWeightToKg } from '@/lib/utils';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
+import { startWorkoutFromTemplate } from '@/lib/training/startTemplateWorkout';
 import type { WorkoutTemplate, WorkoutTemplateExercise, WorkoutFolder } from '@/types/templates';
 
 const templateDetailKey = (id: string) => ['templateDetail', id] as const;
@@ -31,6 +32,7 @@ export default function TemplateDetailPage() {
   const [folders, setFolders] = useState<WorkoutFolder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [isStarting, setIsStarting] = useState(false);
 
   // Edit states
   const [isEditing, setIsEditing] = useState(false);
@@ -264,6 +266,28 @@ export default function TemplateDetailPage() {
     }
   }
 
+  // Start a real workout from this template: creates a session carrying the
+  // template's exercises + prescription, then opens it.
+  async function handleStartWorkout() {
+    if (!template || isStarting) return;
+    setIsStarting(true);
+    setError('');
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('You must be logged in to start a workout');
+
+      const { sessionId } = await startWorkoutFromTemplate(supabase, user.id, template.id);
+      // The list's "last performed" label is now stale.
+      queryClient.invalidateQueries({ queryKey: ['templates'] });
+      router.push(`/dashboard/workout/${sessionId}?fromCreate=true`);
+    } catch (err) {
+      console.error('Error starting workout from template:', err);
+      setError(err instanceof Error ? err.message : 'Failed to start workout');
+      setIsStarting(false);
+    }
+  }
+
   // Remove exercise
   async function handleRemoveExercise(exerciseId: string) {
     if (!confirm('Remove this exercise from the template?')) return;
@@ -455,11 +479,17 @@ export default function TemplateDetailPage() {
               <Button variant="ghost" onClick={() => setIsEditing(true)}>
                 Edit
               </Button>
-              <Link href={`/dashboard/workout/new?template=${template.id}`}>
-                <Button variant="primary">
-                  Start Workout
-                </Button>
-              </Link>
+              <Button
+                variant="primary"
+                onClick={handleStartWorkout}
+                disabled={isStarting || exercises.length === 0}
+              >
+                {isStarting
+                  ? 'Starting...'
+                  : exercises.length === 0
+                    ? 'Add exercises first'
+                    : 'Start Workout'}
+              </Button>
             </>
           )}
         </div>

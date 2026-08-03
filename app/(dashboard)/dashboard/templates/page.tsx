@@ -2,9 +2,11 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient, useIsRestoring } from '@tanstack/react-query';
+import { useRouter } from 'next/navigation';
 import { Card, CardContent, Button, LoadingAnimation } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { getLocalUserId } from '@/lib/supabase/authState';
+import { startWorkoutFromTemplate } from '@/lib/training/startTemplateWorkout';
 import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 import type { WorkoutFolder, WorkoutTemplate, WorkoutTemplateExercise } from '@/types/templates';
 
@@ -53,6 +55,9 @@ export default function TemplatesPage() {
   const [openFolderMenu, setOpenFolderMenu] = useState<string | null>(null);
   const [openTemplateMenu, setOpenTemplateMenu] = useState<string | null>(null);
 
+  // Template whose "Start Workout" tap is in flight (null = none)
+  const [startingTemplateId, setStartingTemplateId] = useState<string | null>(null);
+
   // Keyboard-aware insets for the two input-bearing modals
   const { inset: folderKbInset, scrollContainerRef: folderModalRef } =
     useKeyboardInset<HTMLDivElement>(showCreateFolder || !!editingFolder);
@@ -62,6 +67,7 @@ export default function TemplatesPage() {
   const supabase = createUntypedClient();
   const queryClient = useQueryClient();
   const isRestoring = useIsRestoring();
+  const router = useRouter();
 
   // Folders + templates cached so returning to this list renders instantly
   // instead of re-blocking on the min-h-screen spinner. Moderate staleTime:
@@ -261,6 +267,29 @@ export default function TemplatesPage() {
     setOpenTemplateMenu(null);
   }
 
+  // Start a workout from a saved template: creates a session carrying the
+  // template's exercises + prescription, then opens it.
+  async function handleStartWorkout(templateId: string) {
+    if (startingTemplateId) return;
+    setStartingTemplateId(templateId);
+    setError('');
+
+    try {
+      const userId = await getLocalUserId(supabase);
+      if (!userId) throw new Error('You must be logged in to start a workout');
+
+      const { sessionId } = await startWorkoutFromTemplate(supabase, userId, templateId);
+      setOpenTemplateMenu(null);
+      // "Last performed" just changed.
+      queryClient.invalidateQueries({ queryKey: TEMPLATES_LIST_KEY });
+      router.push(`/dashboard/workout/${sessionId}?fromCreate=true`);
+    } catch (err) {
+      console.error('Error starting workout from template:', err);
+      setError(err instanceof Error ? err.message : 'Failed to start workout');
+      setStartingTemplateId(null);
+    }
+  }
+
   // Format exercise list
   function formatExerciseList(exercises: WorkoutTemplateExercise[]) {
     if (exercises.length === 0) return 'No exercises';
@@ -413,6 +442,8 @@ export default function TemplatesPage() {
                     formatExerciseList={formatExerciseList}
                     formatDate={formatDate}
                     onDelete={() => handleDeleteTemplate(template.id)}
+                    onStartWorkout={() => handleStartWorkout(template.id)}
+                    isStarting={startingTemplateId === template.id}
                     menuOpen={openTemplateMenu === template.id}
                     onMenuToggle={() => setOpenTemplateMenu(openTemplateMenu === template.id ? null : template.id)}
                   />
@@ -439,6 +470,8 @@ export default function TemplatesPage() {
                   formatExerciseList={formatExerciseList}
                   formatDate={formatDate}
                   onDelete={() => handleDeleteTemplate(template.id)}
+                  onStartWorkout={() => handleStartWorkout(template.id)}
+                  isStarting={startingTemplateId === template.id}
                   menuOpen={openTemplateMenu === template.id}
                   onMenuToggle={() => setOpenTemplateMenu(openTemplateMenu === template.id ? null : template.id)}
                 />
@@ -631,6 +664,8 @@ function TemplateCard({
   formatExerciseList,
   formatDate,
   onDelete,
+  onStartWorkout,
+  isStarting,
   menuOpen,
   onMenuToggle,
 }: {
@@ -638,6 +673,8 @@ function TemplateCard({
   formatExerciseList: (exercises: WorkoutTemplateExercise[]) => string;
   formatDate: (date: string | null) => string;
   onDelete: () => void;
+  onStartWorkout: () => void;
+  isStarting: boolean;
   menuOpen: boolean;
   onMenuToggle: () => void;
 }) {
@@ -669,12 +706,17 @@ function TemplateCard({
                 >
                   Edit Template
                 </Link>
-                <Link
-                  href={`/dashboard/workout/new?template=${template.id}`}
-                  className="block px-4 py-2 text-sm text-surface-200 hover:bg-surface-700"
+                <button
+                  onClick={onStartWorkout}
+                  disabled={isStarting || template.exercises.length === 0}
+                  className="w-full px-4 py-2 text-left text-sm text-surface-200 hover:bg-surface-700 disabled:opacity-50 disabled:hover:bg-transparent"
                 >
-                  Start Workout
-                </Link>
+                  {isStarting
+                    ? 'Starting...'
+                    : template.exercises.length === 0
+                      ? 'Add exercises first'
+                      : 'Start Workout'}
+                </button>
                 <button
                   onClick={onDelete}
                   className="w-full px-4 py-2 text-left text-sm text-danger-400 hover:bg-surface-700 last:rounded-b-lg"
