@@ -12,7 +12,12 @@ import type {
 import {
   DEFAULT_USER_PREFERENCES,
   DEFAULT_VOLUME_LANDMARKS,
+  isStandardMuscle,
 } from '@/types/schema';
+import {
+  migrateStoredLandmarks,
+  readLandmarkVersion,
+} from '@/lib/migrations/volume-landmarks';
 
 interface UserState {
   // User data
@@ -96,8 +101,23 @@ export const useUserStore = create<UserState>()(
           return defaultLandmarks[muscle] || defaultFallback;
         }
         const userExperienceLandmarks = DEFAULT_VOLUME_LANDMARKS[user.experience] as Record<string, VolumeLandmarks>;
+        const stored = user.volumeLandmarks[muscle as StandardMuscleGroup];
+        // Scalar-field landmark migration on read: a stored value still equal
+        // to its v1 default moves to the new default; a customized value is
+        // preserved. Skipped once preferences carry the current
+        // landmarkVersion. See lib/migrations/volume-landmarks.
+        const migrated =
+          stored && isStandardMuscle(muscle)
+            ? migrateStoredLandmarks(
+                { [muscle]: stored },
+                user.experience,
+                readLandmarkVersion(
+                  user.preferences as unknown as Record<string, unknown>
+                )
+              ).landmarks[muscle]
+            : stored;
         const base =
-          user.volumeLandmarks[muscle as StandardMuscleGroup] ||
+          (migrated as VolumeLandmarks | undefined) ||
           userExperienceLandmarks[muscle] ||
           defaultFallback;
         // Enhanced Athlete Mode scales landmarks through the SINGLE profile

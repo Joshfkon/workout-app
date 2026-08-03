@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRecoveryHistory, rirFromSetLog } from '@/hooks/useMuscleReadiness';
 import { useUserStore } from '@/stores';
+import { usePlannedFrequency } from '@/hooks/usePlannedFrequency';
 import { useRecoveryMultipliers } from '@/hooks/useRecoveryMultipliers';
 import { useWearableRecovery } from '@/hooks/useWearableRecovery';
 import { useSleepLog } from '@/hooks/useSleepLog';
@@ -237,6 +238,17 @@ export function useWorkoutMuscleVolume({
   // Same config resolution as the readiness sheet: athlete profile, learned
   // per-muscle multipliers, sleep and wearable modifiers.
   const enhancedAthleteMode = useUserStore((s) => s.user?.enhancedAthleteMode === true);
+  // The user's real experience level drives the Bug 6 session-capacity
+  // normalizer (direct MRV / planned frequency). Left undefined it would
+  // silently fall back to 'intermediate' — supply it wherever the store has it
+  // so the fallback stays visible in dose diagnostics rather than routine.
+  const experienceForCapacity = useUserStore((s) => s.user?.experience);
+  // PLANNED per-muscle weekly frequency from the active mesocycle — the
+  // denominator for the recovery dose model's session capacity. Absent (no
+  // active plan) it falls back to DEFAULT_PLANNED_SESSIONS_PER_WEEK, reported
+  // in dose diagnostics. Never derived from observed training history.
+  const { plannedSessionsPerWeekByMuscle } = usePlannedFrequency();
+
   const recoveryProfile = enhancedAthleteMode ? ('enhanced' as const) : ('standard' as const);
   const { multipliers } = useRecoveryMultipliers();
   const { state: wearableRecovery } = useWearableRecovery();
@@ -247,9 +259,18 @@ export function useWorkoutMuscleVolume({
         enhancedAthleteMode,
         multipliers,
         computeSleepWindowMultiplier(sleepEntries, now),
-        wearableRecovery.scale
+        wearableRecovery.scale,
+        { experienceForCapacity, plannedSessionsPerWeekByMuscle }
       ),
-    [enhancedAthleteMode, multipliers, sleepEntries, now, wearableRecovery.scale]
+    [
+      enhancedAthleteMode,
+      multipliers,
+      sleepEntries,
+      now,
+      wearableRecovery.scale,
+      experienceForCapacity,
+      plannedSessionsPerWeekByMuscle,
+    ]
   );
 
   // Session-only coarse set counts (credited), the readiness tiebreaker.

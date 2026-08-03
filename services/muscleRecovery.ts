@@ -16,10 +16,18 @@
  *    so the heuristic can be re-tuned in one place.
  */
 
-import { resolveMuscleToStandard, type StandardMuscleGroup, type SleepQuality } from '@/types/schema';
+import {
+  capacityOwnerFor,
+  resolveMuscleToStandard,
+  DEFAULT_VOLUME_LANDMARKS,
+  type Experience,
+  type StandardMuscleGroup,
+  type SleepQuality,
+} from '@/types/schema';
 import { ENHANCED_RECOVERY_MULTIPLIER } from '@/services/shared/fatigueConstants';
 import { composeGlobalRecoveryScale } from '@/services/wearableRecovery';
 import { SECONDARY_MUSCLE_CREDIT } from '@/services/volumeTracker';
+import { recordFrequencySource } from '@/services/plannedFrequency';
 
 // ---------------------------------------------------------------------------
 // Tunable heuristic constants — edit here to re-tune the whole model.
@@ -37,20 +45,27 @@ export interface RecoveryConfig {
    * user their quads are never Fresh.
    */
   windowHoursByMuscle: Partial<Record<StandardMuscleGroup, number>>;
-  /** A last session at/above this effective set dose adds recovery time. */
-  highDoseSetThreshold: number;
-  /** …or at/above this many effective hard sets (see hardRirThreshold). */
-  highDoseHardSetThreshold: number;
   /** A set with RIR at/below this counts as "hard"/"maxed out". */
   hardRirThreshold: number;
-  /** Hours ADDED to the window for a high-dose last session. */
-  highDoseExtraHours: number;
-  /** A last session at/below this effective dose with no hard sets is "light". */
-  lowDoseSetThreshold: number;
-  /** Hours SUBTRACTED from the window for a light last session. */
-  lowDoseReducedHours: number;
   /** Secondary-muscle involvement contributes this fraction of a set's dose. */
   secondaryDoseFactor: number;
+  /**
+   * Experience level used to look up the capacity MRV that normalizes session
+   * dose (see `sessionCapacityFor`). Live callers should pass the user's real
+   * level; `EXPERIENCE_FALLBACK` is used when unavailable and is reported in
+   * dose diagnostics so a silently-defaulted level is visible.
+   */
+  experienceForCapacity?: Experience;
+  /**
+   * PLANNED sessions per week per muscle, from the active program. Never
+   * derive this from observed trailing-7-day sessions: observed frequency
+   * rises as the week fills, which would re-interpret the SAME completed
+   * session as a progressively lighter dose. Falls back to
+   * DEFAULT_PLANNED_SESSIONS_PER_WEEK, reported in diagnostics.
+   */
+  plannedSessionsPerWeekByMuscle?: Partial<Record<StandardMuscleGroup, number>>;
+  /** Program-wide planned frequency, used when no per-muscle value exists. */
+  plannedSessionsPerWeek?: number;
   /**
    * Fraction of the window that separates Recovering from Fatigued. Past the
    * full window → Fresh; past this fraction → Recovering; under it → Fatigued.
@@ -92,21 +107,61 @@ export interface RecoveryConfig {
   sleepLookbackDays: number;
 }
 
-/** Hard bounds for the learned per-muscle recovery multiplier. */
-export const RECOVERY_MULTIPLIER_BOUNDS = { min: 0.7, max: 1.5 } as const;
+/**
+ * Hard bounds for the learned per-muscle recovery multiplier.
+ *
+ * Narrowed from 0.70–1.50. Stacked multiplicatively with the base window, the
+ * dose adjustment and the global scalars, the old range produced degenerate
+ * tails at both ends. Migration is CLAMP-ON-READ: `clampRecoveryMultiplier`
+ * already runs both when loading rows and inside `windowForSession`, so a
+ * persisted 1.50 is simply interpreted as 1.35 and the next learning step
+ * writes an in-range value back. The database CHECK still permits 0.7–1.5 on
+ * purpose — older clients may still write the old range.
+ */
+export const RECOVERY_MULTIPLIER_BOUNDS = { min: 0.85, max: 1.35 } as const;
 
 /** Step applied per corrective soreness answer. */
 export const RECOVERY_MULTIPLIER_STEP = 0.05;
+
+/**
+ * Final product guardrails on a resolved recovery window. These are a PRODUCT
+ * floor and ceiling — "never tell a user a muscle needs less than a day or
+ * more than five" — NOT evidence that the upstream model is calibrated. A
+ * rising clamp rate is a signal to investigate the model, not to widen these.
+ */
+export const RECOVERY_WINDOW_BOUNDS_HOURS = { min: 24, max: 120 } as const;
+
+/**
+ * Planned per-muscle training frequency used to normalize session dose when
+ * the active program does not supply one.
+ */
+export const DEFAULT_PLANNED_SESSIONS_PER_WEEK = 2;
+
+/** Experience level assumed when a caller cannot supply the user's real one. */
+export const EXPERIENCE_FALLBACK: Experience = 'intermediate';
 
 export const RECOVERY_CONFIG: RecoveryConfig = {
   defaultWindowHours: 48,
   windowHoursByMuscle: {
     // Large groups — more tissue, slower to clear fatigue.
     quads: 60,
-    hamstrings: 60,
+    // Hamstrings sit above the other large groups: high-force eccentric and
+    // long-length work can leave strength impairments running 72–96h,
+    // especially after unfamiliar or damaging sessions. This is a
+    // CONSERVATIVE HEURISTIC BASE, not a measured universal duration — the
+    // dose model below pulls it down after a light session and up after a
+    // hard one. It also narrows the standing disagreement with
+    // fatigueBudgetEngine, which already penalizes hamstring recovery through
+    // its fast-twitch branch.
+    hamstrings: 72,
     glutes: 60,
     lats: 60,
     upper_back: 60,
+    // NOTE (deferred, deliberately unchanged): a single local window cannot
+    // represent what loads the erectors — local muscular fatigue, axial
+    // loading, connective-tissue fatigue and whole-body fatigue all land here.
+    // Changing this number requires first deciding which of those the model is
+    // meant to represent; see the unified-recovery work tracked separately.
     erectors: 60,
     // Small/fast recoverers.
     biceps: 36,
@@ -118,12 +173,7 @@ export const RECOVERY_CONFIG: RecoveryConfig = {
     gastrocnemius: 36,
     soleus: 36,
   },
-  highDoseSetThreshold: 8,
-  highDoseHardSetThreshold: 2,
   hardRirThreshold: 1,
-  highDoseExtraHours: 24,
-  lowDoseSetThreshold: 3,
-  lowDoseReducedHours: 12,
   // The ONE secondary-credit coefficient (services/volumeTracker) — recovery
   // dose and volume counting must agree on what a secondary set is worth.
   secondaryDoseFactor: SECONDARY_MUSCLE_CREDIT,
@@ -138,6 +188,194 @@ export const RECOVERY_CONFIG: RecoveryConfig = {
   sleepLookbackDays: 2,
 };
 
+// ---------------------------------------------------------------------------
+// Continuous dose adjustment
+// ---------------------------------------------------------------------------
+
+/**
+ * The dose model replaces a step function that added a flat +24h whenever
+ * effective sets hit 8 OR two sets landed at RIR <= 1. That was discontinuous
+ * (7.9 sets and 8.0 sets differed by a full day) and fired on many ordinary
+ * productive sessions.
+ *
+ * The replacement is continuous, bounded, and independently nondecreasing in
+ * both inputs. Every breakpoint below is a HEURISTIC POLICY CHOICE, not a
+ * measured physiological constant.
+ */
+
+/** Normalized total dose at/below which the set term contributes nothing. */
+export const SET_LOAD_LOW = 0.15;
+/** Normalized total dose at/above which the set term saturates. */
+export const SET_LOAD_HIGH = 0.85;
+/** Normalized hard dose at/below which the hard term contributes nothing. */
+export const HARD_LOAD_LOW = 0.0;
+/** Normalized hard dose at/above which the hard term saturates. */
+export const HARD_LOAD_HIGH = 0.35;
+/** Share of the load score driven by total volume. */
+export const SET_WEIGHT = 0.6;
+/** Share of the load score driven by proximity-to-failure volume. */
+export const HARD_WEIGHT = 0.4;
+/** Hours subtracted at zero load (a genuinely light session recovers faster). */
+export const MIN_DOSE_ADJUSTMENT_HOURS = -12;
+/** Hours added at saturated load. */
+export const MAX_DOSE_ADJUSTMENT_HOURS = 24;
+
+/** Hermite smoothstep, clamped outside [edge0, edge1]. */
+export function smoothstep(edge0: number, edge1: number, x: number): number {
+  if (edge1 <= edge0) return x >= edge1 ? 1 : 0;
+  const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)));
+  return t * t * (3 - 2 * t);
+}
+
+/** Linear interpolation. */
+export function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
+
+/** Everything the dose model saw and decided, for diagnostics and reports. */
+export interface DoseDiagnostics {
+  muscle: StandardMuscleGroup;
+  /** The row whose MRV normalized the dose (parent for bounded components). */
+  capacityMuscle: StandardMuscleGroup;
+  experience: Experience;
+  experienceSource: 'config' | 'fallback';
+  plannedSessionsPerWeek: number;
+  plannedFrequencySource: 'perMuscle' | 'program' | 'fallback';
+  capacityMrv: number;
+  sessionCapacity: number;
+  effectiveSets: number;
+  effectiveHardSets: number;
+  totalDoseRatio: number;
+  hardDoseRatio: number;
+  adjustmentHours: number;
+}
+
+/**
+ * Session capacity: the muscle's DIRECT-SET MRV at the user's experience level,
+ * divided by planned weekly frequency.
+ *
+ * ACKNOWLEDGED UNIT MISMATCH — `effectiveSets` includes secondary credit at
+ * SECONDARY_MUSCLE_CREDIT/set, while `capacityMrv` comes from the direct-set
+ * landmark system (`referenceDirectMRV`). The ratio is therefore a HEURISTIC
+ * NORMALIZER that puts dose on a per-muscle scale — it is not a like-for-like
+ * physiological quantity, and the two numbers are not in the same currency.
+ * The inclusive coarse band is deliberately NOT used instead: it is
+ * experience-independent, and this model needs experience sensitivity.
+ *
+ * Bounded component rows (gastrocnemius, soleus, triceps heads, trap regions)
+ * normalize against their PARENT's MRV via `capacityOwnerFor` — their own
+ * landmark triples are non-additive compatibility subtargets and must never
+ * serve as a capacity denominator.
+ */
+export function sessionCapacityFor(
+  muscle: StandardMuscleGroup,
+  config: RecoveryConfig
+): {
+  capacityMuscle: StandardMuscleGroup;
+  experience: Experience;
+  experienceSource: 'config' | 'fallback';
+  plannedSessionsPerWeek: number;
+  plannedFrequencySource: 'perMuscle' | 'program' | 'fallback';
+  capacityMrv: number;
+  sessionCapacity: number;
+} {
+  const experience = config.experienceForCapacity ?? EXPERIENCE_FALLBACK;
+  const experienceSource: 'config' | 'fallback' = config.experienceForCapacity
+    ? 'config'
+    : 'fallback';
+
+  const capacityMuscle = capacityOwnerFor(muscle);
+  const capacityMrv = DEFAULT_VOLUME_LANDMARKS[experience][capacityMuscle].mrv;
+
+  const perMuscle = config.plannedSessionsPerWeekByMuscle?.[muscle];
+  let plannedSessionsPerWeek: number;
+  let plannedFrequencySource: 'perMuscle' | 'program' | 'fallback';
+  if (typeof perMuscle === 'number' && Number.isFinite(perMuscle) && perMuscle >= 1) {
+    plannedSessionsPerWeek = perMuscle;
+    plannedFrequencySource = 'perMuscle';
+  } else if (
+    typeof config.plannedSessionsPerWeek === 'number' &&
+    Number.isFinite(config.plannedSessionsPerWeek) &&
+    config.plannedSessionsPerWeek >= 1
+  ) {
+    plannedSessionsPerWeek = config.plannedSessionsPerWeek;
+    plannedFrequencySource = 'program';
+  } else {
+    plannedSessionsPerWeek = DEFAULT_PLANNED_SESSIONS_PER_WEEK;
+    plannedFrequencySource = 'fallback';
+  }
+  // Observability: lets production answer "what share of recovery windows run
+  // on the fallback?" — the question that decides whether the fallback is a
+  // deliberate policy or an unnoticed gap.
+  recordFrequencySource(plannedFrequencySource);
+
+  // Precondition: sessionCapacity > 0. capacityMrv is > 0 for every row in the
+  // landmark table and frequency is >= 1, so the guard is belt-and-braces
+  // against a future zero-MRV row rather than a reachable state today.
+  const sessionCapacity = Math.max(
+    Number.EPSILON,
+    capacityMrv / Math.max(plannedSessionsPerWeek, 1)
+  );
+
+  return {
+    capacityMuscle,
+    experience,
+    experienceSource,
+    plannedSessionsPerWeek,
+    plannedFrequencySource,
+    capacityMrv,
+    sessionCapacity,
+  };
+}
+
+/**
+ * Continuous, bounded dose adjustment in hours, nondecreasing in BOTH inputs.
+ *
+ * Feedback note: higher planned frequency shrinks session capacity, so the
+ * same session reads as a larger relative dose and earns a longer window.
+ * That is directionally negative feedback, but stability is NOT established —
+ * see the frequency-sensitivity report before leaning on it.
+ */
+export function computeDoseAdjustmentHours(
+  muscle: StandardMuscleGroup,
+  effectiveSets: number,
+  effectiveHardSets: number,
+  config: RecoveryConfig
+): DoseDiagnostics {
+  if (!(effectiveSets >= 0)) {
+    throw new Error(`[recovery] effectiveSets must be >= 0, got ${effectiveSets}`);
+  }
+  if (!(effectiveHardSets >= 0) || effectiveHardSets > effectiveSets + 1e-9) {
+    throw new Error(
+      `[recovery] require 0 <= effectiveHardSets <= effectiveSets, got ` +
+        `${effectiveHardSets} / ${effectiveSets}`
+    );
+  }
+
+  const capacity = sessionCapacityFor(muscle, config);
+  const totalDoseRatio = effectiveSets / capacity.sessionCapacity;
+  const hardDoseRatio = effectiveHardSets / capacity.sessionCapacity;
+
+  const setLoad = smoothstep(SET_LOAD_LOW, SET_LOAD_HIGH, totalDoseRatio);
+  const hardLoad = smoothstep(HARD_LOAD_LOW, HARD_LOAD_HIGH, hardDoseRatio);
+  const loadScore = SET_WEIGHT * setLoad + HARD_WEIGHT * hardLoad;
+  const adjustmentHours = lerp(
+    MIN_DOSE_ADJUSTMENT_HOURS,
+    MAX_DOSE_ADJUSTMENT_HOURS,
+    loadScore
+  );
+
+  return {
+    muscle,
+    ...capacity,
+    effectiveSets,
+    effectiveHardSets,
+    totalDoseRatio,
+    hardDoseRatio,
+    adjustmentHours,
+  };
+}
+
 /**
  * The config for a given athlete profile. Enhanced athletes dissipate muscular
  * fatigue faster, so every recovery window shrinks by the shared multiplier
@@ -150,11 +388,21 @@ export const RECOVERY_CONFIG: RecoveryConfig = {
  * effect is clamped by composeGlobalRecoveryScale (×1.25 cap). Per-muscle
  * learned multipliers stay independent with their own bounds.
  */
+export interface RecoveryCapacityContext {
+  /** The user's real experience level. Omit only when genuinely unavailable. */
+  experienceForCapacity?: Experience;
+  /** PLANNED per-muscle weekly frequency from the active program. */
+  plannedSessionsPerWeekByMuscle?: Partial<Record<StandardMuscleGroup, number>>;
+  /** PLANNED program-wide weekly frequency, used when no per-muscle value. */
+  plannedSessionsPerWeek?: number;
+}
+
 export function recoveryConfigFor(
   enhancedAthleteMode: boolean,
   recoveryMultiplierByMuscle?: Partial<Record<StandardMuscleGroup, number>>,
   sleepWindowMultiplier?: number,
-  wearableRecoveryScale?: number
+  wearableRecoveryScale?: number,
+  capacity?: RecoveryCapacityContext
 ): RecoveryConfig {
   const baseScale = enhancedAthleteMode ? 1 / ENHANCED_RECOVERY_MULTIPLIER : 1;
   const windowScale = composeGlobalRecoveryScale(baseScale, wearableRecoveryScale ?? 1);
@@ -167,6 +415,18 @@ export function recoveryConfigFor(
   }
   if (sleepWindowMultiplier !== undefined && sleepWindowMultiplier !== config.sleepWindowMultiplier) {
     config = { ...config, sleepWindowMultiplier };
+  }
+  if (capacity?.experienceForCapacity) {
+    config = { ...config, experienceForCapacity: capacity.experienceForCapacity };
+  }
+  if (capacity?.plannedSessionsPerWeekByMuscle) {
+    config = {
+      ...config,
+      plannedSessionsPerWeekByMuscle: capacity.plannedSessionsPerWeekByMuscle,
+    };
+  }
+  if (capacity?.plannedSessionsPerWeek !== undefined) {
+    config = { ...config, plannedSessionsPerWeek: capacity.plannedSessionsPerWeek };
   }
   return config;
 }
@@ -316,6 +576,13 @@ export interface MuscleRecoveryResult {
   windowHours: number | null;
   /** Effective set dose of the most recent session that hit this muscle. */
   dose: number;
+  /**
+   * Full derivation of `windowHours` — base window, dose diagnostics, every
+   * modifier, the pre-clamp value and which guardrail bit. Null when the
+   * muscle was never worked in the supplied history. Read this (never
+   * recompute) when reporting or debugging a window.
+   */
+  breakdown: WindowBreakdown | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -380,41 +647,91 @@ function sessionInvolvement(
   return { performedAt: session.performedAt, dose, hardSets };
 }
 
-/** Resolve the recovery window (hours) for a muscle given its last dose. */
-function windowForSession(
+/** Full derivation of one muscle's recovery window, pre- and post-clamp. */
+export interface WindowBreakdown {
+  muscle: StandardMuscleGroup;
+  /** Per-muscle base window before any modifier. */
+  baseWindowHours: number;
+  /** Continuous dose adjustment (hours) and everything that produced it. */
+  dose: DoseDiagnostics;
+  /** Athlete-profile scalar (enhanced shrinks windows), incl. wearable. */
+  windowScale: number;
+  /** Sleep scalar. */
+  sleepWindowMultiplier: number;
+  /** Composed + capped global scalar actually applied. */
+  globalScale: number;
+  /** Learned per-muscle multiplier after clamping to the new bounds. */
+  learnedMultiplier: number;
+  /** Window BEFORE the 24–120h product guardrail. */
+  preClampHours: number;
+  /** Window after the guardrail — what the user sees. */
+  windowHours: number;
+  /** Which guardrail bit, if any. */
+  clamp: 'none' | 'lower' | 'upper';
+}
+
+/**
+ * Resolve the recovery window (hours) for a muscle given its last dose,
+ * returning the full derivation so a clamp is never silent.
+ */
+export function windowBreakdownForSession(
   muscle: StandardMuscleGroup,
   involvement: SessionInvolvement,
   config: RecoveryConfig
-): number {
-  const base = config.windowHoursByMuscle[muscle] ?? config.defaultWindowHours;
+): WindowBreakdown {
+  const baseWindowHours = config.windowHoursByMuscle[muscle] ?? config.defaultWindowHours;
 
-  const isHighDose =
-    involvement.dose >= config.highDoseSetThreshold ||
-    involvement.hardSets >= config.highDoseHardSetThreshold;
-  const isLowDose =
-    involvement.dose <= config.lowDoseSetThreshold && involvement.hardSets === 0;
-
-  const window = isHighDose
-    ? base + config.highDoseExtraHours
-    : isLowDose
-      ? Math.max(0, base - config.lowDoseReducedHours)
-      : base;
+  const dose = computeDoseAdjustmentHours(
+    muscle,
+    involvement.dose,
+    involvement.hardSets,
+    config
+  );
 
   // Learned per-muscle multiplier (soreness feedback), clamped defensively so
-  // an out-of-range persisted value can never distort the window.
-  const learned = clampRecoveryMultiplier(
+  // an out-of-range persisted value can never distort the window. This is
+  // ALSO the migration path for the narrowed 0.85–1.35 bounds.
+  const learnedMultiplier = clampRecoveryMultiplier(
     config.recoveryMultiplierByMuscle[muscle] ?? 1
   );
 
   // Global scalars compose multiplicatively — athlete profile × wearable
   // (already folded into windowScale) × sleep — with the combined global
   // effect clamped (×1.25 cap) so stacked bad signals whisper, never shout.
+  // The learned multiplier stays OUTSIDE that cap on purpose: environmental
+  // modifiers must not consume the whole range and suppress personalization.
   const globalScale = composeGlobalRecoveryScale(
     config.windowScale,
     config.sleepWindowMultiplier
   );
 
-  return window * globalScale * learned;
+  const preClampHours =
+    (baseWindowHours + dose.adjustmentHours) * globalScale * learnedMultiplier;
+
+  const windowHours = Math.min(
+    RECOVERY_WINDOW_BOUNDS_HOURS.max,
+    Math.max(RECOVERY_WINDOW_BOUNDS_HOURS.min, preClampHours)
+  );
+
+  const clamp: 'none' | 'lower' | 'upper' =
+    preClampHours < RECOVERY_WINDOW_BOUNDS_HOURS.min
+      ? 'lower'
+      : preClampHours > RECOVERY_WINDOW_BOUNDS_HOURS.max
+        ? 'upper'
+        : 'none';
+
+  return {
+    muscle,
+    baseWindowHours,
+    dose,
+    windowScale: config.windowScale,
+    sleepWindowMultiplier: config.sleepWindowMultiplier,
+    globalScale,
+    learnedMultiplier,
+    preClampHours,
+    windowHours,
+    clamp,
+  };
 }
 
 /**
@@ -448,10 +765,13 @@ export function computeMuscleRecovery(
       hoursUntilReady: 0,
       windowHours: null,
       dose: 0,
+      breakdown: null,
     };
   }
 
-  const windowHours = windowForSession(muscle, last, config);
+  const breakdown = windowBreakdownForSession(muscle, last, config);
+  const windowHours = breakdown.windowHours;
+  if (breakdown.clamp !== 'none') recordRecoveryClamp(breakdown);
   const hoursSinceLast = (now.getTime() - last.performedAt.getTime()) / MS_PER_HOUR;
   const estimatedReadyAt = new Date(last.performedAt.getTime() + windowHours * MS_PER_HOUR);
   const hoursUntilReady = Math.max(0, windowHours - hoursSinceLast);
@@ -473,5 +793,91 @@ export function computeMuscleRecovery(
     hoursUntilReady,
     windowHours,
     dose: last.dose,
+    breakdown,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Clamp observability
+// ---------------------------------------------------------------------------
+
+/**
+ * Every clamp event seen since the last reset, with the FULL derivation
+ * attached — muscle, pre-clamp value, final value, base window, dose
+ * adjustment, enhanced/sleep/wearable scalars, learned multiplier and clamp
+ * direction. A guardrail that fires silently is indistinguishable from a model
+ * that is working, which is exactly the failure mode this exists to prevent.
+ *
+ * Bounded so a long-lived client session cannot grow it without limit.
+ */
+const MAX_RETAINED_CLAMP_EVENTS = 200;
+const recoveryClampEvents: WindowBreakdown[] = [];
+
+function recordRecoveryClamp(breakdown: WindowBreakdown): void {
+  recoveryClampEvents.push(breakdown);
+  if (recoveryClampEvents.length > MAX_RETAINED_CLAMP_EVENTS) recoveryClampEvents.shift();
+}
+
+/** Observed clamp events (most recent last). */
+export function getRecoveryClampEvents(): readonly WindowBreakdown[] {
+  return recoveryClampEvents;
+}
+
+/** Clear retained clamp events (tests, and any per-session reset). */
+export function resetRecoveryClampEvents(): void {
+  recoveryClampEvents.length = 0;
+}
+
+export interface ClampMetrics {
+  total: number;
+  lower: number;
+  upper: number;
+  lowerRate: number;
+  upperRate: number;
+  byMuscle: Record<string, { lower: number; upper: number }>;
+  byProfile: { natural: { lower: number; upper: number }; enhanced: { lower: number; upper: number } };
+}
+
+/**
+ * Summarize clamp behaviour over a set of breakdowns. `total` is the number of
+ * evaluated cases, so the rates are meaningful; pass every case, not just the
+ * clamped ones.
+ *
+ * Enhanced is inferred from windowScale < 1 (the athlete-profile scalar is the
+ * only thing that pushes it below 1).
+ */
+export function summarizeClamps(breakdowns: readonly WindowBreakdown[]): ClampMetrics {
+  const byMuscle: Record<string, { lower: number; upper: number }> = {};
+  const byProfile = {
+    natural: { lower: 0, upper: 0 },
+    enhanced: { lower: 0, upper: 0 },
+  };
+  let lower = 0;
+  let upper = 0;
+
+  for (const b of breakdowns) {
+    if (b.clamp === 'none') continue;
+    const bucket = (byMuscle[b.muscle] ??= { lower: 0, upper: 0 });
+    const profile = b.windowScale < 1 ? byProfile.enhanced : byProfile.natural;
+    if (b.clamp === 'lower') {
+      lower++;
+      bucket.lower++;
+      profile.lower++;
+    } else {
+      upper++;
+      bucket.upper++;
+      profile.upper++;
+    }
+  }
+
+  const total = breakdowns.length;
+  return {
+    total,
+    lower,
+    upper,
+    lowerRate: total > 0 ? lower / total : 0,
+    upperRate: total > 0 ? upper / total : 0,
+    byMuscle,
+    byProfile,
   };
 }

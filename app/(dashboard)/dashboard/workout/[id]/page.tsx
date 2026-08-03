@@ -174,6 +174,7 @@ import { computeMuscleRecovery, recoveryConfigFor } from '@/services/muscleRecov
 import { useRecoveryHistory } from '@/hooks/useMuscleReadiness';
 import { useWorkoutMuscleVolume } from '@/hooks/useWorkoutMuscleVolume';
 import { useRecoveryMultipliers } from '@/hooks/useRecoveryMultipliers';
+import { usePlannedFrequency } from '@/hooks/usePlannedFrequency';
 import { isStaleEmptyAdhocSession, discardStaleSession } from '../_lib/adhocSession';
 import { computeSupersetAdvance } from './_lib/supersetFlow';
 import {
@@ -322,6 +323,10 @@ export default function WorkoutPage() {
   const [recoveryNow] = useState(() => new Date());
   const { sessions: recoveryHistorySessions } = useRecoveryHistory(recoveryNow, true);
   const { multipliers: recoveryMultipliers, applySorenessAdjustment } = useRecoveryMultipliers();
+  // PLANNED per-muscle weekly frequency from the active mesocycle — the
+  // session-capacity denominator for the recovery dose model. Never derived
+  // from observed training history (see services/plannedFrequency).
+  const { plannedSessionsPerWeekByMuscle } = usePlannedFrequency();
 
   // Toast notifications for errors
   const { toasts, dismissToast, showError, showSuccess, addToast } = useToasts();
@@ -2122,9 +2127,19 @@ export default function WorkoutPage() {
       }
 
       // Learning step: disagreement between the report and the model's status
-      // at ask time nudges the per-muscle recovery multiplier (±0.05, 0.7–1.5).
+      // at ask time nudges the per-muscle recovery multiplier
+      // (±RECOVERY_MULTIPLIER_STEP, bounded by RECOVERY_MULTIPLIER_BOUNDS).
       const report = rating === 0 ? 'none' : rating === 3 ? 'still_sore' : 'recovered';
-      const config = recoveryConfigFor(enhancedAthleteModeActive, recoveryMultipliers);
+      const config = recoveryConfigFor(
+        enhancedAthleteModeActive,
+        recoveryMultipliers,
+        undefined,
+        undefined,
+        {
+          experienceForCapacity: userProfile?.experience,
+          plannedSessionsPerWeekByMuscle,
+        }
+      );
       const statusAtAsk = computeMuscleRecovery(
         recoveryHistorySessions,
         muscle,
@@ -2141,6 +2156,8 @@ export default function WorkoutPage() {
       recoveryMultipliers,
       recoveryHistorySessions,
       applySorenessAdjustment,
+      userProfile?.experience,
+      plannedSessionsPerWeekByMuscle,
     ]
   );
 

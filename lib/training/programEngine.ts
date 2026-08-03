@@ -38,13 +38,13 @@ import type {
 } from '@/types/training';
 import type { MuscleGroup } from '@/types/schema';
 import { muscleMatchesGroup } from '@/types/schema';
+import { fiberTypeForMuscle } from '@/services/repRangeEngine';
 import {
   computeSleepDebtSignal,
   SLEEP_DEBT_WINDOW_DAYS,
 } from '@/services/deloadEngine';
 import {
   EXERCISE_DATABASE,
-  MUSCLE_FIBER_PROFILE,
   STRENGTH_STANDARDS,
   BASE_SFR,
   SYSTEMIC_FATIGUE_BY_PATTERN,
@@ -507,7 +507,10 @@ export class ProgramEngine {
   ): RepRangeConfig {
     const profile = this.getUserProfile();
     const isCompound = pattern !== 'isolation';
-    const fiberType = MUSCLE_FIBER_PROFILE[muscleGroup] || 'mixed';
+    // Shared resolver (services/repRangeEngine) — NOT the local duplicate in
+    // lib/training/constants, which is coarse-keyed and cannot see the
+    // per-standard fiber overrides (gastrocnemius 'mixed').
+    const fiberType = fiberTypeForMuscle(muscleGroup);
     
     // Base ranges by goal
     const baseRanges: Record<Goal, { compound: number[]; isolation: number[] }> = {
