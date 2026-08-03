@@ -13,6 +13,8 @@ import { useSubscription } from '@/hooks/useSubscription';
 import { useEducationStore } from '@/hooks/useEducationPreferences';
 import { UpgradePrompt } from '@/components/subscription';
 import { formatWeight, getLocalDateString, muscleDisplayName } from '@/lib/utils';
+import { describeSupabaseError } from '@/lib/errors';
+import { describeMesocycleInsertFailure } from '../_lib/mesocycleErrors';
 import type { Goal, Experience, DexaScan, Equipment, MuscleGroup, Rating, ExtendedUserProfile, FullProgramRecommendation, DexaRegionalData, WorkoutDay } from '@/types/schema';
 import { TrainingScheduleSelector, MesocycleLengthGuidance } from '@/components/mesocycle';
 import {
@@ -389,12 +391,20 @@ export default function NewMesocyclePage() {
       
       if (!user) throw new Error('You must be logged in');
 
-      // Deactivate any existing active mesocycles
-      await supabase
+      // Deactivate any existing active mesocycles. Surface a failure here
+      // rather than pressing on — silently leaving the old block active would
+      // give the user two active mesocycles.
+      const { error: deactivateError } = await supabase
         .from('mesocycles')
         .update({ state: 'completed', is_active: false })
         .eq('user_id', user.id)
         .eq('state', 'active');
+
+      if (deactivateError) {
+        throw new Error(
+          `Couldn't close your current mesocycle: ${describeSupabaseError(deactivateError)}`
+        );
+      }
 
       // Calculate recovery factors for program data
       const userProfile: ExtendedUserProfile = {
@@ -463,7 +473,9 @@ export default function NewMesocyclePage() {
         .select()
         .single();
 
-      if (insertError || !mesocycle) throw insertError || new Error('Failed to create mesocycle');
+      if (insertError || !mesocycle) {
+        throw new Error(describeMesocycleInsertFailure(insertError));
+      }
 
       // A brand-new plan changes every muscle's planned weekly frequency, which
       // is the denominator for recovery session capacity. Drop the cached plan
@@ -472,7 +484,10 @@ export default function NewMesocyclePage() {
 
       router.push('/dashboard/mesocycle');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create mesocycle');
+      // Supabase errors are plain objects, not Error instances — describe them
+      // explicitly so the user (and we) see what the database actually said.
+      console.error('Mesocycle creation failed', err);
+      setError(describeSupabaseError(err, 'Failed to create mesocycle'));
       setIsLoading(false);
     }
   };
