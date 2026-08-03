@@ -12,9 +12,9 @@ const TIMER_STORAGE_KEY = 'workout_rest_timer';
 
 /**
  * A persisted session with zero logged sets older than this is treated as
- * abandoned. Rather than silently resuming it (whose timer would read hours
- * long), we prompt "Resume or discard?" so a stale, empty session can't linger
- * behind a fresh workout.
+ * abandoned. It stays in the passive pill — never a blocking prompt — but the
+ * pill drops its "live" styling so an hours-old empty session doesn't read as
+ * a workout currently in progress.
  */
 export const STALE_EMPTY_SESSION_MS = 4 * 60 * 60 * 1000; // 4 hours
 
@@ -48,9 +48,6 @@ export function ResumeWorkoutBanner() {
   const [mounted, setMounted] = useState(false);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [restRemaining, setRestRemaining] = useState<number | null>(null);
-  // Once the user answers the stale-empty prompt (or resumes past it), don't
-  // re-nag them for the same session while it stays mounted.
-  const [stalePromptDismissed, setStalePromptDismissed] = useState(false);
 
   const activeSession = useWorkoutStore((state) => state.activeSession);
   const exerciseBlocks = useWorkoutStore((state) => state.exerciseBlocks);
@@ -103,8 +100,9 @@ export function ResumeWorkoutBanner() {
     : null;
 
   // A persisted session with no sets that's been open for hours is almost
-  // certainly abandoned (e.g. left hanging on the add-exercise bug). Ask
-  // instead of silently keeping it alive behind the next workout.
+  // certainly abandoned (e.g. left hanging on the add-exercise bug). It still
+  // only ever shows as the passive pill — we just mute the "live" affordances
+  // (pulsing dot, elapsed-time framing) so it doesn't claim to be in progress.
   const staleEmpty = isStaleEmptySession(completedSetsCount, startedAt, Date.now());
 
   const handleResume = () => {
@@ -141,39 +139,6 @@ export function ResumeWorkoutBanner() {
     return <div className="h-24" aria-hidden="true" />;
   }
 
-  // Stale + empty: prompt Resume-or-discard instead of the passive pill so a
-  // forgotten session can't quietly resurface with an hours-long timer.
-  if (staleEmpty && !stalePromptDismissed) {
-    return (
-      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-        <div className="bg-surface-900 rounded-xl p-6 max-w-sm w-full shadow-xl border border-surface-700">
-          <h3 className="text-lg font-semibold text-surface-100 mb-2">
-            Resume workout?
-          </h3>
-          <p className="text-surface-400 text-sm mb-4">
-            You started a workout{timeAgo ? ` ${timeAgo}` : ' a while ago'} but
-            never logged a set. Resume it, or discard it and start fresh?
-          </p>
-          <div className="flex gap-3">
-            <Button
-              onClick={() => { endSession(); setStalePromptDismissed(true); }}
-              variant="secondary"
-              className="flex-1"
-            >
-              Discard
-            </Button>
-            <Button
-              onClick={() => { setStalePromptDismissed(true); handleResume(); }}
-              className="flex-1"
-            >
-              Resume
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <>
       {/* In-flow spacer so page content can scroll clear of the fixed banner */}
@@ -193,17 +158,33 @@ export function ResumeWorkoutBanner() {
             aria-label="Resume workout"
           >
             <div className="flex items-center gap-3">
-              <div className="w-2.5 h-2.5 flex-shrink-0 rounded-full bg-success-400 animate-pulse" />
+              <div
+                className={
+                  staleEmpty
+                    ? 'w-2.5 h-2.5 flex-shrink-0 rounded-full bg-surface-500'
+                    : 'w-2.5 h-2.5 flex-shrink-0 rounded-full bg-success-400 animate-pulse'
+                }
+              />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-surface-100 truncate">
                   {workoutLabel}
                 </p>
                 <p className="text-[11px] text-surface-400 truncate tabular-nums">
-                  {restRemaining !== null && `rest ${formatDuration(restRemaining)} · `}
-                  {targetSetsTotal > 0
-                    ? `${completedSetsCount}/${targetSetsTotal} sets`
-                    : `${completedSetsCount} set${completedSetsCount !== 1 ? 's' : ''}`}
-                  {timeAgo && ` · started ${timeAgo}`}
+                  {/* Stale + empty: nothing was ever logged, so a rest countdown
+                      or set tally would be noise. Say what it actually is. */}
+                  {staleEmpty ? (
+                    <>
+                      Not started{timeAgo ? ` · opened ${timeAgo}` : ''}
+                    </>
+                  ) : (
+                    <>
+                      {restRemaining !== null && `rest ${formatDuration(restRemaining)} · `}
+                      {targetSetsTotal > 0
+                        ? `${completedSetsCount}/${targetSetsTotal} sets`
+                        : `${completedSetsCount} set${completedSetsCount !== 1 ? 's' : ''}`}
+                      {timeAgo && ` · started ${timeAgo}`}
+                    </>
+                  )}
                 </p>
               </div>
               <button
