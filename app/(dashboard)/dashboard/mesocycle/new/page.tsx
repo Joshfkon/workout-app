@@ -14,7 +14,13 @@ import { useEducationStore } from '@/hooks/useEducationPreferences';
 import { UpgradePrompt } from '@/components/subscription';
 import { formatWeight, getLocalDateString, muscleDisplayName } from '@/lib/utils';
 import type { Goal, Experience, DexaScan, Equipment, MuscleGroup, Rating, ExtendedUserProfile, FullProgramRecommendation, DexaRegionalData, WorkoutDay } from '@/types/schema';
-import { WorkoutDaySelector, MesocycleLengthGuidance } from '@/components/mesocycle';
+import { TrainingScheduleSelector, MesocycleLengthGuidance } from '@/components/mesocycle';
+import {
+  buildTrainingSchedule,
+  describeTrainingSchedule,
+  intervalDaysPerWeek,
+  type ScheduleMode,
+} from '@/lib/training/trainingSchedule';
 import {
   generateMesocycleRecommendation,
   generateWorkoutTemplates,
@@ -75,6 +81,42 @@ export default function NewMesocyclePage() {
   const [preferredWorkoutDays, setPreferredWorkoutDays] = useState<WorkoutDay[]>([
     'Monday', 'Tuesday', 'Thursday', 'Friday'
   ]);
+
+  // Schedule shape. 'interval' trains every N days from the start date — an
+  // "every other day" cadence, which no fixed set of weekdays can express.
+  const [scheduleMode, setScheduleMode] = useState<ScheduleMode>('fixed_days');
+  const [trainingIntervalDays, setTrainingIntervalDays] = useState(2);
+
+  // The block starts today, so that is what an interval schedule counts from.
+  const scheduleAnchorDate = getLocalDateString();
+
+  // True cadence of an interval schedule: every other day is 3.5/week, not 4.
+  const intervalSessionsPerWeek = (7 / trainingIntervalDays).toFixed(1).replace(/\.0$/, '');
+
+  // Interval cadences aren't whole sessions per week (every other day is 3.5),
+  // but the program/progression math plans in whole sessions — keep
+  // daysPerWeek pinned to the nearest whole number so every downstream
+  // calculation (volume, split choice, time budget) stays consistent.
+  const handleScheduleModeChange = (mode: ScheduleMode) => {
+    setScheduleMode(mode);
+    if (mode === 'interval') setDaysPerWeek(intervalDaysPerWeek(trainingIntervalDays));
+  };
+
+  const handleTrainingIntervalChange = (intervalDays: number) => {
+    setTrainingIntervalDays(intervalDays);
+    setDaysPerWeek(intervalDaysPerWeek(intervalDays));
+  };
+
+  const scheduleSummary = describeTrainingSchedule(
+    buildTrainingSchedule({
+      days_per_week: daysPerWeek,
+      preferred_workout_days: preferredWorkoutDays,
+      schedule_mode: scheduleMode,
+      training_interval_days: trainingIntervalDays,
+      start_date: scheduleAnchorDate,
+    }),
+    { short: true }
+  );
 
   // Get default workout days based on frequency
   const getDefaultWorkoutDays = (days: number): WorkoutDay[] => {
@@ -398,8 +440,12 @@ export default function NewMesocyclePage() {
           state: 'active',
           fatigue_score: 0,
           is_active: true,
-          start_date: getLocalDateString(),
-          // Preferred workout days (user-selected)
+          start_date: scheduleAnchorDate,
+          // Schedule shape: fixed weekdays, or every-N-days from start_date.
+          schedule_mode: scheduleMode,
+          training_interval_days: scheduleMode === 'interval' ? trainingIntervalDays : null,
+          // Preferred workout days (user-selected; unused in interval mode but
+          // kept so switching back to fixed days restores the choice)
           preferred_workout_days: preferredWorkoutDays,
           // Session duration for time-based workout planning
           session_duration_minutes: sessionDurationMinutes,
@@ -501,7 +547,7 @@ export default function NewMesocyclePage() {
         <InlineHint id="first-mesocycle-intro">
           <div>
             <p className="font-medium mb-1">Creating your first training program!</p>
-            <p className="text-sm text-primary-200">
+            <p className="text-sm text-primary-800 dark:text-primary-200">
               A mesocycle is a 4-8 week training block designed to progressively build your strength and muscle.
               We&apos;ll help you set up the perfect plan based on your goals and schedule.
             </p>
@@ -617,35 +663,50 @@ export default function NewMesocyclePage() {
               <p className="text-sm text-surface-400">We&apos;ll recommend the best split for your schedule</p>
             </div>
 
-            <Slider
-              label="Training Days per Week"
-              min={2}
-              max={6}
-              value={daysPerWeek}
-              onChange={(e) => setDaysPerWeek(parseInt(e.target.value))}
-              valueFormatter={(v) => `${v} days`}
-              marks={[
-                { value: 2, label: '2' },
-                { value: 3, label: '3' },
-                { value: 4, label: '4' },
-                { value: 5, label: '5' },
-                { value: 6, label: '6' },
-              ]}
-            />
+            {scheduleMode === 'fixed_days' ? (
+              <Slider
+                label="Training Days per Week"
+                min={2}
+                max={6}
+                value={daysPerWeek}
+                onChange={(e) => setDaysPerWeek(parseInt(e.target.value))}
+                valueFormatter={(v) => `${v} days`}
+                marks={[
+                  { value: 2, label: '2' },
+                  { value: 3, label: '3' },
+                  { value: 4, label: '4' },
+                  { value: 5, label: '5' },
+                  { value: 6, label: '6' },
+                ]}
+              />
+            ) : (
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-surface-200">Training Days per Week</span>
+                <span className="text-sm text-primary-400 font-medium">
+                  ~{intervalSessionsPerWeek} days
+                </span>
+              </div>
+            )}
 
-            {/* Preferred workout days selector */}
+            {/* Schedule shape: fixed weekdays, or an every-N-days cadence */}
             <div className="space-y-2">
               <label className="block text-sm font-medium text-surface-200">
-                Which days do you want to train?
+                When do you want to train?
               </label>
               <p className="text-xs text-surface-500">
-                Pick {daysPerWeek} days that work best for your schedule
+                {scheduleMode === 'fixed_days'
+                  ? `Pick ${daysPerWeek} days that work best for your schedule`
+                  : 'Your training days roll through the week instead of repeating'}
               </p>
-              <WorkoutDaySelector
+              <TrainingScheduleSelector
                 daysPerWeek={daysPerWeek}
+                mode={scheduleMode}
+                onModeChange={handleScheduleModeChange}
                 selectedDays={preferredWorkoutDays}
-                onChange={setPreferredWorkoutDays}
-                showPresets={true}
+                onDaysChange={setPreferredWorkoutDays}
+                intervalDays={trainingIntervalDays}
+                onIntervalChange={handleTrainingIntervalChange}
+                anchorDate={scheduleAnchorDate}
               />
             </div>
 
@@ -956,7 +1017,11 @@ export default function NewMesocyclePage() {
               </div>
               <div className="flex justify-between py-2 border-b border-surface-800">
                 <span className="text-surface-400">Frequency</span>
-                <span className="text-surface-200 font-medium">{daysPerWeek} days/week</span>
+                <span className="text-surface-200 font-medium">
+                  {scheduleMode === 'interval'
+                    ? `~${intervalSessionsPerWeek} days/week`
+                    : `${daysPerWeek} days/week`}
+                </span>
               </div>
               <div className="flex justify-between py-2 border-b border-surface-800">
                 <span className="text-surface-400">Session Length</span>
@@ -973,10 +1038,7 @@ export default function NewMesocyclePage() {
               <div className="flex justify-between py-2">
                 <span className="text-surface-400">Workout Days</span>
                 <span className="text-surface-200 font-medium text-right">
-                  {preferredWorkoutDays
-                    .sort((a, b) => ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].indexOf(a) - ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].indexOf(b))
-                    .map(d => d.slice(0, 3))
-                    .join(', ')}
+                  {scheduleSummary}
                 </span>
               </div>
             </div>

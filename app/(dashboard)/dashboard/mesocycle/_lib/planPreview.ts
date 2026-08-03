@@ -41,7 +41,11 @@ import {
   type ExerciseOverride,
   type ExtractedSession,
 } from '@/services/mesocycleHelpers';
-import { getTrainingDays } from '@/lib/training/startMesocycleSession';
+import {
+  getTrainingDays,
+  parseLocalDate,
+  type TrainingSchedule,
+} from '@/lib/training/trainingSchedule';
 import {
   computeCurrentWeekFromSessions,
   sessionIndexFromCompleted,
@@ -63,7 +67,12 @@ export interface PlanSessionPreview {
   key: string;
   /** Normalized session (exercise overrides already applied). */
   session: ExtractedSession;
-  /** "Mon" … from the mesocycle's preferred days; null past the planned days. */
+  /**
+   * When this session lands: "Mon" for a fixed-weekday schedule, the calendar
+   * date ("Aug 10") for an every-N-days one — an interval cadence shifts
+   * weekday every week, so a weekday label would be a lie. Null when neither
+   * is derivable.
+   */
   weekdayLabel: string | null;
   status: PlanSessionStatus;
   /** Planned working sets across the session's exercises. */
@@ -113,6 +122,12 @@ export interface PlanPreviewInput {
    * the preview would mark an earlier week current than the one Start serves.
    */
   currentWeek?: number | null;
+  /**
+   * The block's normalized schedule (buildTrainingSchedule). Only affects how
+   * slots are LABELLED: a fixed-day block names the weekday, an every-N-days
+   * block names the date its ordinal falls on. Omit for fixed weekdays.
+   */
+  schedule?: TrainingSchedule | null;
 }
 
 /** Planned working sets of a session (falls back to the stored total). */
@@ -136,6 +151,25 @@ export function trainingDayLabels(
 }
 
 /**
+ * Label for slot `ordinal` (counted from the block's first session) under an
+ * every-N-days schedule: the calendar date that ordinal falls on, since the
+ * cadence walks through the week rather than pinning to weekdays. Null when
+ * the schedule is missing its interval or anchor.
+ */
+export function intervalSlotLabel(
+  schedule: TrainingSchedule,
+  ordinal: number
+): string | null {
+  if (!schedule.intervalDays || !schedule.anchorDate) return null;
+  const anchor = parseLocalDate(schedule.anchorDate);
+  if (!anchor) return null;
+
+  const date = new Date(anchor);
+  date.setDate(date.getDate() + ordinal * schedule.intervalDays);
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+/**
  * Build the read-only week-by-week plan.
  *
  * Returns one entry per programmed week (`totalWeeks`), even when
@@ -151,6 +185,7 @@ export function buildPlanPreview(input: PlanPreviewInput): PlanWeekPreview[] {
     preferredWorkoutDays,
     exerciseOverrides,
     deloadWeek,
+    schedule,
   } = input;
 
   const totalWeeks = Math.max(1, Math.floor(input.totalWeeks || 1));
@@ -199,11 +234,19 @@ export function buildPlanPreview(input: PlanPreviewInput): PlanWeekPreview[] {
             ? 'next'
             : 'upcoming';
 
+      // Interval blocks count slots continuously from the anchor, so the
+      // label comes from the ordinal's date, not the weekday.
+      const ordinal = (weekNumber - 1) * daysPerWeek + index;
+      const label =
+        schedule?.mode === 'interval'
+          ? intervalSlotLabel(schedule, ordinal)
+          : dayLabels[index] || null;
+
       return {
         index,
         key: `w${weekNumber}-s${index}`,
         session,
-        weekdayLabel: dayLabels[index] || null,
+        weekdayLabel: label,
         status,
         totalSets: sessionSetCount(session),
         estimatedMinutes: Math.round(session.estimatedMinutes || 0),

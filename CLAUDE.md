@@ -222,6 +222,39 @@ Based on Jeff Nippard's methodology, exercises are rated:
 - **Peaking**: Very low reps, highest intensity
 - **Deload**: Reduced volume and intensity for recovery
 
+### Training Schedules
+
+A mesocycle's calendar has two shapes, both resolved by
+`lib/training/trainingSchedule.ts` (pure — no DB, no I/O):
+
+- **`fixed_days`** — `preferred_workout_days` repeats every week. No weekday is
+  privileged: weekend-only and weekend-inclusive schedules are first-class in
+  the picker (`WorkoutDaySelector`), which also offers a shift control to
+  rotate any preset onto the user's actual week.
+- **`interval`** — train every `training_interval_days` days counting from
+  `mesocycles.start_date`. "Every other day" is 3.5 sessions/week and lands on
+  different weekdays each week, so it *cannot* be written as a set of weekdays;
+  this mode exists for exactly that reason. The split rotates continuously
+  rather than re-pinning to weekdays.
+
+Rules:
+1. **Always go through `buildTrainingSchedule(row)` + `getWorkoutForDate(splitType, date, schedule)`.**
+   Never re-derive a schedule from `days_per_week`/`preferred_workout_days`
+   directly, and never key scheduling off a bare day-of-week number — that form
+   silently cannot represent interval schedules. `getWorkoutForDay` remains only
+   as a fixed-day convenience wrapper.
+2. Any query whose result feeds a schedule must select `schedule_mode`,
+   `training_interval_days` and `start_date` alongside `preferred_workout_days`.
+3. `days_per_week` stays a whole number in interval mode
+   (`intervalDaysPerWeek()` rounds 7/N) because the program, volume and
+   progression math plan in whole sessions per week. The interval drives the
+   calendar; `days_per_week` drives the plan.
+4. Import from `@/lib/training/trainingSchedule`, not the re-export on
+   `startMesocycleSession`, unless you also need the session-start path — the
+   re-export drags its dependencies into the bundle.
+5. Schedule previews should show **dates**, not a Mon–Sun grid; a rolling
+   cadence has no fixed weekday to render.
+
 ## Development Commands
 
 ```bash
@@ -351,6 +384,7 @@ await user.click(screen.getByRole('button'));
 | `services/fatigueEngine.ts` | Readiness and fatigue tracking |
 | `services/volumeTracker.ts` | Weekly volume calculations per muscle |
 | `services/mesocycleBuilder.ts` | Mesocycle program generation |
+| `lib/training/trainingSchedule.ts` | Which calendar dates a mesocycle trains on (see Training Schedules) |
 | `services/injuryAwareSwapper.ts` | Exercise swapping considering injuries |
 | `types/schema.ts` | All domain types and enums |
 | `lib/utils.ts` | Weight conversion, date formatting utilities |

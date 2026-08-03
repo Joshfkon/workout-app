@@ -48,8 +48,9 @@ import { bootMark, bootTraceDump } from '@/lib/perf/bootTrace';
 import { getLocalDateString } from '@/lib/utils';
 import {
   startMesocycleWorkoutSession,
-  getWorkoutForDay,
+  getWorkoutForDate,
 } from '@/lib/training/startMesocycleSession';
+import { buildTrainingSchedule } from '@/lib/training/trainingSchedule';
 import { getOrCreateTodaySession } from '../workout/_lib/adhocSession';
 import { cancelWorkoutSession } from '../workout/[id]/_lib/cancelWorkout';
 import { useWorkoutStore } from '@/stores/workoutStore';
@@ -135,13 +136,7 @@ export default function LogPage() {
   // so computed at render rather than cached).
   const todayWorkout = useMemo(() => {
     if (!activeMeso) return null;
-    const dayOfWeek = new Date().getDay() || 7;
-    return getWorkoutForDay(
-      activeMeso.split_type,
-      dayOfWeek,
-      activeMeso.days_per_week,
-      activeMeso.preferred_workout_days
-    );
+    return getWorkoutForDate(activeMeso.split_type, new Date(), buildTrainingSchedule(activeMeso));
   }, [activeMeso]);
 
   // Hero meta (exercise count / est. duration / last done): a dependent query
@@ -192,22 +187,24 @@ export default function LogPage() {
   // Next scheduled training day (for the rest-day hero subtitle).
   const nextWorkoutInfo = useMemo(() => {
     if (!activeMeso || todayWorkout) return null;
-    const todayDow = new Date().getDay() || 7;
-    for (let offset = 1; offset <= 7; offset++) {
-      const dow = ((todayDow - 1 + offset) % 7) + 1;
-      const workout = getWorkoutForDay(
-        activeMeso.split_type,
-        dow,
-        activeMeso.days_per_week,
-        activeMeso.preferred_workout_days
-      );
+    const schedule = buildTrainingSchedule(activeMeso);
+    // 14 days, not 7: an every-N-days cadence can leave a gap longer than a
+    // week between sessions that share a weekday.
+    for (let offset = 1; offset <= 14; offset++) {
+      const date = new Date();
+      date.setHours(0, 0, 0, 0);
+      date.setDate(date.getDate() + offset);
+      const workout = getWorkoutForDate(activeMeso.split_type, date, schedule);
       if (workout) {
-        const date = new Date();
-        date.setDate(date.getDate() + offset);
         return {
           workout,
           dayLabel:
-            offset === 1 ? 'tomorrow' : date.toLocaleDateString('en-US', { weekday: 'short' }),
+            offset === 1
+              ? 'tomorrow'
+              : date.toLocaleDateString(
+                  'en-US',
+                  offset <= 7 ? { weekday: 'short' } : { weekday: 'short', month: 'short', day: 'numeric' }
+                ),
         };
       }
     }

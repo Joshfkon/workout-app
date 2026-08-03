@@ -25,6 +25,10 @@ import {
 } from '@tabler/icons-react';
 import { SessionExerciseList } from '@/components/mesocycle';
 import { useMesocyclePlan } from '@/hooks/useMesocyclePlan';
+import {
+  buildTrainingSchedule,
+  describeTrainingSchedule,
+} from '@/lib/training/trainingSchedule';
 import { muscleDisplayName } from '@/lib/utils';
 import {
   buildPlanPreview,
@@ -254,6 +258,12 @@ function PlanContent() {
 
   const mesocycle = data?.mesocycle ?? null;
 
+  // Fixed weekdays vs every-N-days — the preview labels slots accordingly.
+  const schedule = useMemo(
+    () => (mesocycle ? buildTrainingSchedule(mesocycle) : null),
+    [mesocycle]
+  );
+
   const weeks = useMemo(() => {
     if (!mesocycle) return [];
     return buildPlanPreview({
@@ -266,8 +276,9 @@ function PlanContent() {
       completedSessions: data?.completedSessions ?? 0,
       // Start reads the week from this column, so the preview must too.
       currentWeek: mesocycle.current_week,
+      schedule,
     });
-  }, [mesocycle, data?.completedSessions]);
+  }, [mesocycle, schedule, data?.completedSessions]);
 
   const activeWeekNumber =
     selectedWeek ?? currentPlanWeek(weeks)?.weekNumber ?? weeks[0]?.weekNumber ?? 1;
@@ -343,7 +354,10 @@ function PlanContent() {
         <p className="text-[13px] text-surface-400 mt-1">
           {[
             mesocycle.split_type,
-            `${mesocycle.days_per_week}×/week`,
+            // An interval block isn't N×/week — say the cadence it really runs.
+            schedule?.mode === 'interval'
+              ? describeTrainingSchedule(schedule, { short: true })
+              : `${mesocycle.days_per_week}×/week`,
             `${mesocycle.total_weeks} weeks`,
             mesocycle.session_duration_minutes
               ? `${mesocycle.session_duration_minutes} min target`

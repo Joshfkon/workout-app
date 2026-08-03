@@ -22,6 +22,7 @@ import { createUntypedClient } from '@/lib/supabase/client';
 import { getLocalUserId } from '@/lib/supabase/authState';
 import { countCompletedSessions } from '@/lib/training/startMesocycleSession';
 import type { ExerciseOverride } from '@/services/mesocycleHelpers';
+import type { ScheduleMode } from '@/lib/training/trainingSchedule';
 import type { WorkoutDay } from '@/types/schema';
 
 export const MESOCYCLE_PLAN_QUERY_PREFIX = 'mesocyclePlan';
@@ -39,6 +40,10 @@ export interface MesocyclePlanRow {
   session_duration_minutes: number | null;
   start_date: string | null;
   preferred_workout_days: WorkoutDay[] | null;
+  /** 'fixed_days' (weekdays) or 'interval' (every N days). Null on legacy rows. */
+  schedule_mode: ScheduleMode | null;
+  /** Interval schedules only: train every N days from start_date. */
+  training_interval_days: number | null;
   program_data: unknown;
   exercise_overrides?: ExerciseOverride[] | null;
 }
@@ -51,7 +56,8 @@ export interface MesocyclePlanData {
 
 const PLAN_COLUMNS =
   'id, name, state, split_type, total_weeks, current_week, days_per_week, deload_week, ' +
-  'session_duration_minutes, start_date, preferred_workout_days, program_data, exercise_overrides';
+  'session_duration_minutes, start_date, preferred_workout_days, schedule_mode, ' +
+  'training_interval_days, program_data, exercise_overrides';
 
 async function fetchMesocyclePlan(mesocycleId: string | null): Promise<MesocyclePlanData> {
   const supabase = createUntypedClient();

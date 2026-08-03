@@ -5,6 +5,7 @@ import {
   sessionSetCount,
   trainingDayLabels,
 } from '../planPreview';
+import { buildTrainingSchedule } from '@/lib/training/trainingSchedule';
 import type { FullProgramRecommendation } from '@/types/schema';
 
 /** Minimal exercise entry in the fatigue (mesocycleWeeks) program format. */
@@ -256,6 +257,39 @@ describe('buildPlanPreview', () => {
     ]);
     // The 4th training day is reachable and correctly flagged next up.
     expect(nextPlanSession([week1])?.key).toBe('w1-s3');
+  });
+
+  it('dates the slots of an every-N-days block instead of naming weekdays', () => {
+    // An interval cadence walks through the week (every other day is 3.5
+    // sessions/week), so "Mon"/"Thu" would be wrong from week 2 onwards.
+    const weeks = buildPlanPreview({
+      ...baseInput,
+      schedule: buildTrainingSchedule({
+        days_per_week: 2,
+        schedule_mode: 'interval',
+        training_interval_days: 3,
+        start_date: '2026-08-03',
+      }),
+    });
+
+    // Slots run continuously from the anchor: Aug 3, 6, 9, 12, …
+    expect(weeks[0].sessions.map((s) => s.weekdayLabel)).toEqual(['Aug 3', 'Aug 6']);
+    expect(weeks[1].sessions.map((s) => s.weekdayLabel)).toEqual(['Aug 9', 'Aug 12']);
+  });
+
+  it('keeps weekday labels for a fixed-day schedule', () => {
+    const weeks = buildPlanPreview({
+      ...baseInput,
+      preferredWorkoutDays: ['Tuesday', 'Saturday'],
+      schedule: buildTrainingSchedule({
+        days_per_week: 2,
+        preferred_workout_days: ['Tuesday', 'Saturday'],
+        schedule_mode: 'fixed_days',
+        start_date: '2026-08-03',
+      }),
+    });
+
+    expect(weeks[1].sessions.map((s) => s.weekdayLabel)).toEqual(['Tue', 'Sat']);
   });
 
   it("honours a stored current_week that ran ahead of the completed count", () => {
