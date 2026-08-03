@@ -8,10 +8,12 @@
  *   2. Unfinished-workout banner when a session is in_progress today
  *      (Resume opens it, X discards via the workout page's cancel path).
  *   3. Mesocycle hero: "ARNOLD · WK 1 OF 5 · TODAY|REST DAY" eyebrow with a
- *      Plan link, the day name, and recovery-aware meta. Training days get a
- *      full-width Start CTA; rest days get "Train anyway" + "Preview
- *      tomorrow" (a read-only sheet of the next session's exercises from
- *      program_data). No active mesocycle prompts to plan one.
+ *      Plan link, the day name, and recovery-aware meta. Training days get
+ *      Start + "Preview"; rest days get "Train anyway" + "Preview
+ *      tomorrow". Both open the same read-only sheet of the session's
+ *      exercises from program_data (starting a workout is never the only way
+ *      to see what's in it), which links on to /dashboard/mesocycle/plan for
+ *      the whole block. No active mesocycle prompts to plan one.
  *   4. Start options — ALWAYS visible, with or without a plan, so the user
  *      can start training from here no matter what state the app is in:
  *      empty workout (add exercises as you go), AI-suggested workout
@@ -75,6 +77,7 @@ import {
   formatRelativeDay,
 } from '../log/_components/LogPageSections';
 import { BottomSheet } from '@/components/workout/BottomSheet';
+import { SessionExerciseList } from '@/components/mesocycle';
 import { CardioTracker } from '@/components/dashboard/CardioTracker';
 import { SuggestedWorkoutSheet } from '@/components/workout/SuggestedWorkoutSheet';
 import { Modal } from '@/components/ui/Modal';
@@ -490,6 +493,10 @@ export default function TrainPage() {
     };
   }, [activeMeso, mesoCompletedCount]);
 
+  // What the preview sheet describes: today's split day on a training day,
+  // otherwise the next scheduled one (both map to the same program slot).
+  const previewWorkout = todayWorkout ?? nextWorkoutInfo?.workout ?? null;
+
   // Rest-day recovery note: of the next workout's target muscles, which will
   // be recovered by the time that session comes around?
   const restDayRecoveryNote = useMemo(() => {
@@ -774,13 +781,18 @@ export default function TrainPage() {
               <button
                 onClick={handleStartWorkout}
                 disabled={isStarting}
-                className={`flex-1 ${GRADIENT_CTA_CLASS}`}
+                className={`flex-[2] ${GRADIENT_CTA_CLASS}`}
               >
                 {isStarting
                   ? 'Starting...'
                   : inProgress
                     ? 'Continue workout'
                     : 'Start workout'}
+              </button>
+              {/* Read-only look at today's session — starting a workout must
+                  never be the only way to find out what's in it. */}
+              <button onClick={() => setShowPreview(true)} className={`flex-1 ${OUTLINE_CTA_CLASS}`}>
+                Preview
               </button>
             </div>
           </>
@@ -1090,19 +1102,27 @@ export default function TrainPage() {
         )}
       </div>
 
-      {/* Preview sheet: the next session's exercises from program_data */}
+      {/* Preview sheet: the session Start would build, from program_data —
+          today's on a training day, the next one on a rest day. */}
       <BottomSheet
         isOpen={showPreview}
         onClose={() => setShowPreview(false)}
-        title={nextWorkoutInfo ? `Next: ${nextWorkoutInfo.workout.dayName}` : 'Next workout'}
+        title={
+          previewWorkout
+            ? `${todayWorkout ? 'Today' : 'Next'}: ${previewWorkout.dayName}`
+            : 'Next workout'
+        }
       >
         <div className="space-y-3">
-          {nextWorkoutInfo && (
+          {previewWorkout && (
             <p className="text-[13px] text-surface-400">
               {[
-                nextWorkoutInfo.dayLabel,
+                todayWorkout ? 'Today' : nextWorkoutInfo?.dayLabel,
                 nextProgramSession
                   ? `${nextProgramSession.exercises.length} exercises`
+                  : null,
+                nextProgramSession
+                  ? `${nextProgramSession.exercises.reduce((n, ex) => n + ex.sets, 0)} sets`
                   : null,
                 (nextProgramSession?.estimatedMinutes ?? 0) > 0
                   ? `est. ${Math.round(nextProgramSession!.estimatedMinutes)} min`
@@ -1114,32 +1134,21 @@ export default function TrainPage() {
           )}
 
           {nextProgramSession && nextProgramSession.exercises.length > 0 ? (
-            <div className="rounded-xl border border-surface-800 bg-surface-950/40 overflow-hidden">
-              {nextProgramSession.exercises.map((exercise, i) => (
-                <div
-                  key={`${exercise.exerciseName}-${i}`}
-                  className="px-3 py-2.5 border-b border-surface-800/50 last:border-b-0"
-                >
-                  <span className="block text-[13px] text-surface-200 truncate">
-                    {exercise.exerciseName}
-                  </span>
-                  <span className="block text-[11px] text-surface-500 mt-0.5">
-                    {exercise.sets} {exercise.sets === 1 ? 'set' : 'sets'} ·{' '}
-                    {exercise.repRange.min}–{exercise.repRange.max} reps · {exercise.targetRir} RIR
-                  </span>
-                </div>
-              ))}
-            </div>
+            <SessionExerciseList exercises={nextProgramSession.exercises} />
           ) : (
             <div className="rounded-xl border border-surface-800 bg-surface-950/40 p-3">
               <p className="text-[13px] text-surface-400">
                 Exercises are planned when you start. Target muscles:{' '}
                 <span className="text-surface-200">
-                  {nextWorkoutInfo?.workout.muscles.map(capitalize).join(', ') ?? '—'}
+                  {previewWorkout?.muscles.map(capitalize).join(', ') ?? '—'}
                 </span>
               </p>
             </div>
           )}
+
+          <p className="text-[11px] text-surface-500">
+            Weights are suggested from your history once you start.
+          </p>
 
           <div className="space-y-2">
             <button
@@ -1150,8 +1159,15 @@ export default function TrainPage() {
               disabled={isStarting}
               className={`w-full ${GRADIENT_CTA_CLASS}`}
             >
-              {isStarting ? 'Starting...' : 'Train anyway today'}
+              {isStarting ? 'Starting...' : todayWorkout ? 'Start workout' : 'Train anyway today'}
             </button>
+            <Link
+              href="/dashboard/mesocycle/plan"
+              onClick={() => setShowPreview(false)}
+              className="block w-full py-2 rounded-lg text-center text-[13px] font-medium text-primary-400 hover:text-primary-300 transition-colors"
+            >
+              See the whole plan
+            </Link>
             <button
               onClick={() => setShowPreview(false)}
               className="w-full py-2 rounded-lg text-[13px] text-surface-400 hover:text-surface-200 transition-colors"
