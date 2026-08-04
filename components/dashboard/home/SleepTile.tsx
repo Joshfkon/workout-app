@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import { IconMoon } from '@tabler/icons-react';
 import { getLocalDateString } from '@/lib/utils';
+import { formatSleepHours } from '@/lib/sleep/formatSleep';
 import { SLEEP_QUALITY_DOT_CLASS, SLEEP_QUALITY_LABELS } from '@/components/dashboard/SleepQuickLog';
 import type { SleepLogEntry } from '@/types/schema';
 import { MetricTile } from './MetricTile';
@@ -17,10 +18,8 @@ export interface SleepGlance {
   sevenDayAvgHours: number | null;
 }
 
-/** "7.5h" / "8h" — no trailing .0. */
-function formatHours(hours: number): string {
-  return `${Number.isInteger(hours) ? hours : hours.toFixed(1)}h`;
-}
+/** "7.5h" / "8h" — no trailing .0. Shared with the workout page's history card. */
+const formatHours = formatSleepHours;
 
 /** Tiny trend line of the trailing week's hours (same shape as the Weight tile's). */
 function SleepSparkline({ values }: { values: number[] }) {
