@@ -39,9 +39,9 @@ const REST_MAX = 600;
 const REPS_MIN = 1;
 const REPS_MAX = 100;
 /**
- * Duration exercises keep SECONDS in the reps field, bounded by
- * set_logs.reps <= 600 (20260723000001_widen_set_logs_reps_for_duration) — a
- * 5-minute carry is a legitimate target, 500 reps is not.
+ * Duration exercises keep SECONDS in the reps field, bounded by the set_logs
+ * reps column's <= 600 check (20260723000001_widen_set_logs_reps_for_duration)
+ * — a 5-minute carry is a legitimate target, 500 reps is not.
  */
 const DURATION_MAX_SECONDS = 600;
 /** target_weight_kg is DECIMAL(6,2). */
