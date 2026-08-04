@@ -74,7 +74,7 @@ const ExerciseDetailsModal = dynamic(() => import('@/components/workout').then(m
 const PlateCalculatorModal = dynamic(() => import('@/components/workout').then(m => m.PlateCalculatorModal), { ssr: false });
 // Motion capture sheet (experimental, flag-gated) — loaded on demand.
 const MotionCaptureSheet = dynamic(() => import('@/components/motion/MotionCaptureSheet').then(m => m.MotionCaptureSheet), { ssr: false });
-import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaRegionalData, TemporaryInjury, PreWorkoutCheckIn, SetFeedback, Rating, BodyweightData, ExerciseType, StandardMuscleGroup, ExercisePerformanceSnapshot, RepsInTank, SorenessRating, SetDiscomfort, JointPainJoint } from '@/types/schema';
+import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaRegionalData, TemporaryInjury, PreWorkoutCheckIn, SetFeedback, Rating, BodyweightData, ExerciseType, StandardMuscleGroup, ExercisePerformanceSnapshot, RepsInTank, SorenessRating, SetDiscomfort, JointPainJoint, SleepLogEntry } from '@/types/schema';
 import type { SessionMuscleFeedbackEntry, SessionSummarySubmitData } from '@/components/workout/SessionSummary';
 import { MuscleGroupFeedbackModal, type MuscleFeedbackRatings } from '@/components/workout/MuscleGroupFeedbackModal';
 import type { MuscleSorenessRatings } from '@/components/workout/ReadinessCheckIn';
@@ -175,6 +175,8 @@ import { useRecoveryHistory } from '@/hooks/useMuscleReadiness';
 import { useWorkoutMuscleVolume } from '@/hooks/useWorkoutMuscleVolume';
 import { useRecoveryMultipliers } from '@/hooks/useRecoveryMultipliers';
 import { usePlannedFrequency } from '@/hooks/usePlannedFrequency';
+import { useSleepForDays } from '@/hooks/useSleepForDays';
+import { sleepDayForSession } from '@/services/sessionContext';
 import { isStaleEmptyAdhocSession, discardStaleSession } from '../_lib/adhocSession';
 import { computeSupersetAdvance } from './_lib/supersetFlow';
 import {
@@ -482,6 +484,30 @@ export default function WorkoutPage() {
   const [readinessBannerDismissed, setReadinessBannerDismissed] = useState(false);
   const [readinessOverridden, setReadinessOverridden] = useState(false);
   const [exerciseHistories, setExerciseHistories] = useState<Record<string, ExerciseHistoryData>>({});
+  // Sleep behind each exercise's "Last Workout" block: the night that preceded
+  // that session (services/sessionContext picks it), fetched by exact local day
+  // because a last session can be months old — no trailing window covers it.
+  const lastSessionSleepDays = useMemo(
+    () =>
+      Object.values(exerciseHistories)
+        .map((h) => sleepDayForSession(h.lastWorkoutStartedAt || h.lastWorkoutDate))
+        .filter((day): day is string => !!day),
+    [exerciseHistories]
+  );
+  const sleepByLastSessionDay = useSleepForDays(lastSessionSleepDays);
+  const sleepByExerciseId = useMemo(() => {
+    const byExercise: Record<string, SleepLogEntry | null> = {};
+    for (const [exerciseId, history] of Object.entries(exerciseHistories)) {
+      const day = sleepDayForSession(history.lastWorkoutStartedAt || history.lastWorkoutDate);
+      byExercise[exerciseId] = day ? sleepByLastSessionDay[day] ?? null : null;
+    }
+    return byExercise;
+  }, [exerciseHistories, sleepByLastSessionDay]);
+  // Does this user log sleep at all? Only then is a missing night worth saying
+  // out loud on the card. Inferred from the nights we just looked up rather
+  // than a second query — a user who logs sleep will have logged at least one
+  // of the nights before today's exercises' last sessions.
+  const sleepLoggingActive = Object.keys(sleepByLastSessionDay).length > 0;
   // Cross-exercise strength summary for cold-start transfer estimation
   // (a never-trained exercise seeds from a related exercise's logged e1RM).
   const [transferCandidates, setTransferCandidates] = useState<TransferCandidate[]>([]);
@@ -1252,6 +1278,7 @@ export default function WorkoutPage() {
                     workout_sessions!inner (
                       id,
                       completed_at,
+                      started_at,
                       state,
                       user_id,
                       is_deload
@@ -5391,12 +5418,12 @@ export default function WorkoutPage() {
       {/* Auto-adjust message */}
       {autoAdjustMessage && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 max-w-md w-full mx-4">
-          <div className="bg-primary-500/20 backdrop-blur-sm border border-primary-500/30 rounded-xl px-4 py-3 shadow-lg flex items-center gap-3">
-            <span className="text-primary-400 text-lg">🔄</span>
-            <p className="text-sm text-primary-200 flex-1">{autoAdjustMessage}</p>
-            <button 
+          <div className="bg-primary-50 dark:bg-primary-500/20 backdrop-blur-sm border border-primary-200 dark:border-primary-500/30 rounded-xl px-4 py-3 shadow-lg flex items-center gap-3">
+            <span className="text-primary-600 dark:text-primary-400 text-lg">🔄</span>
+            <p className="text-sm text-primary-800 dark:text-primary-200 flex-1">{autoAdjustMessage}</p>
+            <button
               onClick={() => setAutoAdjustMessage(null)}
-              className="text-primary-400 hover:text-primary-200"
+              className="text-primary-600 hover:text-primary-800 dark:text-primary-400 dark:hover:text-primary-200"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -5469,13 +5496,13 @@ export default function WorkoutPage() {
         <InlineHint id="first-workout-intro">
           <div>
             <p className="font-medium mb-2">Welcome to your first workout!</p>
-            <ul className="space-y-1 text-sm text-primary-200">
+            <ul className="space-y-1 text-sm text-primary-800 dark:text-primary-200">
               <li>• <strong>Log each set</strong> - Enter weight and reps after completing a set</li>
               <li>• <strong>Rate difficulty</strong> - RIR (Reps In Reserve) tells us how hard the set was</li>
               <li>• <strong>Use rest timer</strong> - Optimal rest helps maximize your gains</li>
               <li>• <strong>Track form</strong> - Rate your form to ensure quality reps</li>
             </ul>
-            <p className="text-xs text-primary-300 mt-2">
+            <p className="text-xs text-primary-700 dark:text-primary-300 mt-2">
               We&apos;ll learn your patterns and personalize recommendations as you train!
             </p>
           </div>
@@ -5933,6 +5960,8 @@ export default function WorkoutPage() {
                     coldStartSuggestion={coldStartSuggestion}
                     userBodyweightKg={todayCheckInData?.bodyweightKg || undefined}
                     exerciseHistory={exerciseHistories[block.exerciseId]}
+                    lastWorkoutSleep={sleepByExerciseId[block.exerciseId] ?? null}
+                    sleepLoggingActive={sleepLoggingActive}
                     previousSets={exerciseHistories[block.exerciseId]?.lastWorkoutSets ?? []}
                     onExerciseNameClick={() => setSelectedExerciseForDetails(block.exercise)}
                     adjustedRir={

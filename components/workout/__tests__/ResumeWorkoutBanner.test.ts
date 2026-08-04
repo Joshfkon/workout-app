@@ -1,6 +1,6 @@
 /**
- * Tests for the stale-empty-session predicate that drives the
- * ResumeWorkoutBanner's "Resume or discard?" prompt.
+ * Tests for the stale-empty-session predicate. It no longer gates a blocking
+ * prompt — it only mutes the resume pill's "live" styling and copy.
  */
 
 import { isStaleEmptySession, STALE_EMPTY_SESSION_MS } from '../ResumeWorkoutBanner';

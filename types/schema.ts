@@ -506,6 +506,9 @@ export const DAYS_OF_WEEK: WorkoutDay[] = ['Monday', 'Tuesday', 'Wednesday', 'Th
 /** Weekdays only */
 export const WEEKDAYS: WorkoutDay[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 
+/** Weekend days */
+export const WEEKEND_DAYS: WorkoutDay[] = ['Saturday', 'Sunday'];
+
 /**
  * Training mesocycle (typically 4-8 weeks) with progressive overload structure
  */
@@ -534,10 +537,25 @@ export interface Mesocycle {
   fatigueScore: number;
 
   /**
+   * How the calendar is derived. 'fixed_days' repeats the same weekdays every
+   * week; 'interval' trains every `trainingIntervalDays` days from the start
+   * date (an "every other day" cadence, which no set of weekdays can express).
+   * Null/absent on pre-feature rows and treated as 'fixed_days'.
+   */
+  scheduleMode: 'fixed_days' | 'interval' | null;
+
+  /**
    * User's preferred workout days (e.g., ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'] for weekdays only)
-   * If null, uses default schedule patterns based on daysPerWeek
+   * If null, uses default schedule patterns based on daysPerWeek.
+   * Ignored while scheduleMode is 'interval'.
    */
   preferredWorkoutDays: WorkoutDay[] | null;
+
+  /**
+   * Interval schedules only: train every N days, anchored to the start date.
+   * 2 = every other day. Null for fixed-day schedules.
+   */
+  trainingIntervalDays: number | null;
 
   /** Target workout duration in minutes (15-120), used for exercise planning */
   sessionDurationMinutes: number | null;

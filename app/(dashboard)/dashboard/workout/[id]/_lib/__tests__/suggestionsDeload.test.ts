@@ -56,7 +56,9 @@ describe('buildExerciseHistories — deload exclusion', () => {
     const histories = buildExerciseHistories(blocks);
 
     // Last-session reference is the normal 100kg × 8, not the deload's 60kg.
-    expect(histories[SQUAT].lastWorkoutSets).toEqual([{ weightKg: 100, reps: 8, rpe: 8 }]);
+    expect(histories[SQUAT].lastWorkoutSets).toEqual([
+      expect.objectContaining({ weightKg: 100, reps: 8, rpe: 8 }),
+    ]);
     expect(histories[SQUAT].lastWorkoutDate).toBe('2026-01-03');
     // Only the normal session counts toward the session tally / e1RM.
     expect(histories[SQUAT].totalSessions).toBe(1);

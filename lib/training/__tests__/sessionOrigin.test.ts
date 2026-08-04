@@ -10,7 +10,7 @@ interface InsertCall {
  * (retry) succeeds. Records every insert's rows so we can assert which columns
  * were stripped on the retry.
  */
-function fakeSupabase(firstError: { code?: string } | null) {
+function fakeSupabase(firstError: { code?: string; message?: string } | null) {
   const inserts: InsertCall[] = [];
   let attempt = 0;
   const client = {
@@ -67,6 +67,33 @@ describe('insertWorkoutSessions — migration-gated column stripping', () => {
     expect(inserts[1].rows[0]).toMatchObject({ user_id: 'u1', planned_date: '2026-07-11' });
     expect(inserts[1].rows[0]).not.toHaveProperty('origin');
     expect(inserts[1].rows[0]).not.toHaveProperty('location_id');
+  });
+
+  it('downgrades an origin the check constraint rejects (pre-widening database)', async () => {
+    const { client, inserts } = fakeSupabase({
+      code: '23514',
+      message: 'new row violates check constraint "workout_sessions_origin_check"',
+    });
+    const { data, error } = await insertWorkoutSessions(client, [
+      { ...ROW, origin: 'template' as const },
+    ]);
+
+    expect(error).toBeNull();
+    expect(data).toEqual([{ id: 'sess-1' }]);
+    expect(inserts).toHaveLength(2);
+    // Retried as the closest legacy bucket, keeping the rest of the row.
+    expect(inserts[1].rows[0]).toMatchObject({ origin: 'empty', location_id: 'gymA' });
+  });
+
+  it('does not retry a check violation from an unrelated constraint', async () => {
+    const { client, inserts } = fakeSupabase({
+      code: '23514',
+      message: 'new row violates check constraint "workout_sessions_completion_percent_check"',
+    });
+    const { error } = await insertWorkoutSessions(client, [ROW]);
+
+    expect((error as { code?: string }).code).toBe('23514');
+    expect(inserts).toHaveLength(1);
   });
 
   it('does not retry on an unrelated error (RLS, network, …)', async () => {

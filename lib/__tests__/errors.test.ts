@@ -16,6 +16,9 @@ import {
   isRetryable,
   withRetry,
   tryCatch,
+  asSupabaseError,
+  describeSupabaseError,
+  isMissingColumnError,
 } from '../errors';
 
 // ============================================
@@ -312,5 +315,92 @@ describe('tryCatch', () => {
     if (!result.success) {
       expect(result.error).toBeInstanceOf(AppError);
     }
+  });
+});
+
+// ============================================
+// SUPABASE / POSTGREST ERROR TESTS
+// ============================================
+
+/** Shape PostgREST returns when an insert names a column the schema lacks. */
+const MISSING_COLUMN_ON_INSERT = {
+  message: "Could not find the 'schedule_mode' column of 'mesocycles' in the schema cache",
+  code: 'PGRST204',
+  details: null,
+  hint: null,
+};
+
+/** Shape Postgres returns when a select names a column that doesn't exist. */
+const MISSING_COLUMN_ON_SELECT = {
+  message: 'column mesocycles.training_interval_days does not exist',
+  code: '42703',
+  details: null,
+  hint: null,
+};
+
+describe('asSupabaseError', () => {
+  it('reads a PostgrestError-shaped plain object', () => {
+    expect(asSupabaseError(MISSING_COLUMN_ON_INSERT)).toEqual({
+      message: MISSING_COLUMN_ON_INSERT.message,
+      code: 'PGRST204',
+    });
+  });
+
+  it('ignores values that carry none of the expected fields', () => {
+    expect(asSupabaseError(null)).toBeNull();
+    expect(asSupabaseError('boom')).toBeNull();
+    expect(asSupabaseError({ status: 500 })).toBeNull();
+  });
+});
+
+describe('describeSupabaseError', () => {
+  it('keeps the database message instead of the fallback', () => {
+    const description = describeSupabaseError(MISSING_COLUMN_ON_INSERT, 'Failed to create mesocycle');
+
+    expect(description).toContain("Could not find the 'schedule_mode' column");
+    expect(description).toContain('PGRST204');
+    expect(description).not.toContain('Failed to create mesocycle');
+  });
+
+  it('includes details and hint when present', () => {
+    const description = describeSupabaseError({
+      message: 'new row violates check constraint',
+      details: 'Failing row contains (7, 8).',
+      hint: 'deload_week must be <= total_weeks',
+      code: '23514',
+    });
+
+    expect(description).toContain('Failing row contains (7, 8).');
+    expect(description).toContain('Hint: deload_week must be <= total_weeks');
+    expect(description).toContain('[23514]');
+  });
+
+  it('falls back to Error messages and the default string', () => {
+    expect(describeSupabaseError(new Error('You must be logged in'))).toBe('You must be logged in');
+    expect(describeSupabaseError(undefined, 'Failed to create mesocycle')).toBe('Failed to create mesocycle');
+  });
+});
+
+describe('isMissingColumnError', () => {
+  it('detects a schema-cache miss on insert', () => {
+    expect(isMissingColumnError(MISSING_COLUMN_ON_INSERT, ['schedule_mode', 'training_interval_days'])).toBe(true);
+  });
+
+  it('detects an undefined column on select', () => {
+    expect(isMissingColumnError(MISSING_COLUMN_ON_SELECT, ['schedule_mode', 'training_interval_days'])).toBe(true);
+  });
+
+  it('does not match a missing column the caller did not name', () => {
+    expect(isMissingColumnError(MISSING_COLUMN_ON_INSERT, ['program_data'])).toBe(false);
+  });
+
+  it('does not match unrelated database errors', () => {
+    const constraintViolation = {
+      message: 'new row for relation "mesocycles" violates check constraint "valid_deload_week"',
+      code: '23514',
+    };
+
+    expect(isMissingColumnError(constraintViolation, ['schedule_mode'])).toBe(false);
+    expect(isMissingColumnError(new Error('network down'))).toBe(false);
   });
 });

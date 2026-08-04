@@ -273,6 +273,10 @@ export interface Database {
           days_per_week: number;
           split_type: string;
           fatigue_score: number;
+          start_date: string | null;
+          schedule_mode: 'fixed_days' | 'interval';
+          preferred_workout_days: string[] | null;
+          training_interval_days: number | null;
           session_duration_minutes: number | null;
           deload_recommended_at: string | null;
           deload_reasons: Json | null;
@@ -292,6 +296,10 @@ export interface Database {
           days_per_week?: number;
           split_type?: string;
           fatigue_score?: number;
+          start_date?: string | null;
+          schedule_mode?: 'fixed_days' | 'interval';
+          preferred_workout_days?: string[] | null;
+          training_interval_days?: number | null;
           session_duration_minutes?: number | null;
           deload_recommended_at?: string | null;
           deload_reasons?: Json | null;
@@ -311,6 +319,10 @@ export interface Database {
           days_per_week?: number;
           split_type?: string;
           fatigue_score?: number;
+          start_date?: string | null;
+          schedule_mode?: 'fixed_days' | 'interval';
+          preferred_workout_days?: string[] | null;
+          training_interval_days?: number | null;
           session_duration_minutes?: number | null;
           deload_recommended_at?: string | null;
           deload_reasons?: Json | null;
