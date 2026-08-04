@@ -485,6 +485,108 @@ describe('ExerciseCard', () => {
       expect(screen.getByText('1,020 kg')).toBeInTheDocument();
     });
 
+    describe('Session context on the Last Workout block (time of day + sleep)', () => {
+      // Local wall-clock timestamps: the card renders in the viewer's timezone,
+      // so build them locally rather than pinning a UTC string.
+      const localISO = (h: number, min: number) =>
+        new Date(2024, 0, 10, h, min).toISOString();
+
+      const historyWithTimes = {
+        lastWorkoutDate: '2024-01-10',
+        lastWorkoutStartedAt: localISO(18, 42),
+        lastWorkoutSets: [
+          { weightKg: 60, reps: 9, rpe: 8, loggedAt: localISO(18, 42) },
+          { weightKg: 60, reps: 8, rpe: 8, loggedAt: localISO(18, 51) },
+        ],
+        estimatedE1RM: 80,
+        personalRecord: null,
+        totalSessions: 5,
+      };
+
+      const expand = async (user: ReturnType<typeof userEvent.setup>) =>
+        user.click(screen.getByText(/last session 60 kg × 9, × 8 @ 2 RIR/));
+
+      it('shows the time of day next to the date, and each set"s own log time', async () => {
+        const user = userEvent.setup();
+        render(<ExerciseCard {...defaultProps} exerciseHistory={historyWithTimes} />);
+        await expand(user);
+
+        expect(screen.getByTestId('last-workout-when')).toHaveTextContent('Jan 10 · 6:42 PM');
+        // Per-set stamps stay per-set: the second set was 9 minutes later.
+        expect(screen.getByTitle('Logged 6:51 PM')).toBeInTheDocument();
+      });
+
+      it('shows the sleep logged for the night before that session', async () => {
+        const user = userEvent.setup();
+        render(
+          <ExerciseCard
+            {...defaultProps}
+            exerciseHistory={historyWithTimes}
+            lastWorkoutSleep={{ hours: 7.5, quality: 'good' }}
+            sleepLoggingActive
+          />
+        );
+        await expand(user);
+
+        expect(screen.getByTestId('last-workout-sleep')).toHaveTextContent(
+          'Slept 7.5h · good quality'
+        );
+      });
+
+      it('names the gap when a sleep-logging user missed that night', async () => {
+        const user = userEvent.setup();
+        render(
+          <ExerciseCard
+            {...defaultProps}
+            exerciseHistory={historyWithTimes}
+            lastWorkoutSleep={null}
+            sleepLoggingActive
+          />
+        );
+        await expand(user);
+
+        expect(screen.getByTestId('last-workout-sleep')).toHaveTextContent('Sleep not logged');
+      });
+
+      it('stays silent about sleep for users who do not log it', async () => {
+        const user = userEvent.setup();
+        render(
+          <ExerciseCard
+            {...defaultProps}
+            exerciseHistory={historyWithTimes}
+            lastWorkoutSleep={null}
+            sleepLoggingActive={false}
+          />
+        );
+        await expand(user);
+
+        expect(screen.queryByTestId('last-workout-sleep')).not.toBeInTheDocument();
+      });
+
+      it('shows the date alone when the session carries no timestamp', async () => {
+        const user = userEvent.setup();
+        render(
+          <ExerciseCard
+            {...defaultProps}
+            exerciseHistory={{
+              lastWorkoutDate: localISO(12, 0),
+              lastWorkoutSets: [
+                { weightKg: 60, reps: 9, rpe: 8 },
+                { weightKg: 60, reps: 8, rpe: 8 },
+              ],
+              estimatedE1RM: 80,
+              personalRecord: null,
+              totalSessions: 5,
+            }}
+          />
+        );
+        await expand(user);
+
+        expect(screen.getByTestId('last-workout-when')).toHaveTextContent('Jan 10');
+        expect(screen.getByTestId('last-workout-when').textContent).not.toContain('·');
+      });
+    });
+
     it('shows current session volume plus the projection for remaining programmed sets', () => {
       // 2 of 3 programmed sets logged: 100×10 + 100×9 = 1,900 kg so far, and
       // the third set's prefill projects the finish-all-sets total above that.

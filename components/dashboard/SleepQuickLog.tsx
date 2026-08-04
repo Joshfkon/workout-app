@@ -7,6 +7,7 @@ import { getLocalDateString } from '@/lib/utils';
 import { useSleepLog, SLEEP_LOG_QUERY_KEY_PREFIX } from '@/hooks/useSleepLog';
 import { isNativePlatform, getPlatform } from '@/lib/integrations/capacitor-stub';
 import { SLEEP_QUALITIES, type SleepQuality } from '@/types/schema';
+import { SLEEP_QUALITY_LABELS } from '@/lib/sleep/formatSleep';
 
 /** One-time "Auto-fill from Apple Health" offer — dismissed forever once acted on. */
 const HEALTH_OFFER_DISMISSED_KEY = 'hypertrack:healthkit-sleep-offer-dismissed';
@@ -40,11 +41,10 @@ const MAX_HOURS = 16;
 const STEP = 0.5;
 const FALLBACK_HOURS = 8;
 
-export const SLEEP_QUALITY_LABELS: Record<SleepQuality, string> = {
-  poor: 'Poor',
-  ok: 'OK',
-  good: 'Good',
-};
+// Canonical home is lib/sleep/formatSleep (imported by surfaces that must not
+// pull a dashboard component into their bundle); re-exported here so existing
+// callers keep working.
+export { SLEEP_QUALITY_LABELS };
 
 /** Chip dot colors shared with the Sleep card's quality dot. */
 export const SLEEP_QUALITY_DOT_CLASS: Record<SleepQuality, string> = {

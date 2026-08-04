@@ -69,7 +69,21 @@ export interface HistorySetBodyweight {
 
 export interface ExerciseHistoryData {
   lastWorkoutDate: string;
-  lastWorkoutSets: { weightKg: number; reps: number; rpe?: number; bw?: HistorySetBodyweight }[];
+  /**
+   * When this exercise was worked in that session (ISO): the first working
+   * set's `logged_at`, falling back to the session's start/completion. Drives
+   * the "Last Workout" time-of-day line and picks the sleep night that
+   * preceded the session (services/sessionContext).
+   */
+  lastWorkoutStartedAt?: string | null;
+  lastWorkoutSets: {
+    weightKg: number;
+    reps: number;
+    rpe?: number;
+    /** ISO stamp of when the set was logged, when recorded. */
+    loggedAt?: string | null;
+    bw?: HistorySetBodyweight;
+  }[];
   /**
    * Working sets from the session BEFORE last (same shape/filtering as
    * lastWorkoutSets). Feeds the regression path (Fix 4): two consecutive

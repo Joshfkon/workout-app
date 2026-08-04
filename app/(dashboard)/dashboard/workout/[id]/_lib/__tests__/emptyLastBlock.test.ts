@@ -75,8 +75,8 @@ describe('empty most-recent block (skipped / unlogged exercise in a completed se
     const history = buildExerciseHistories(blocks)['wrist-curl'];
     expect(history.lastWorkoutDate).toBe(OLDER);
     expect(history.lastWorkoutSets).toEqual([
-      { weightKg: 9, reps: 30, rpe: 8 },
-      { weightKg: 15.9, reps: 15, rpe: 8 },
+      expect.objectContaining({ weightKg: 9, reps: 30, rpe: 8 }),
+      expect.objectContaining({ weightKg: 15.9, reps: 15, rpe: 8 }),
     ]);
     // Both sets (30 reps, 15 reps @ RPE 8) exceed the canonical estimator's
     // 15-effective-rep domain: this history has real sets but NO valid e1RM
@@ -93,7 +93,9 @@ describe('empty most-recent block (skipped / unlogged exercise in a completed se
 
     const history = buildExerciseHistories(blocks)['wrist-curl'];
     expect(history.lastWorkoutDate).toBe(OLDER);
-    expect(history.lastWorkoutSets).toEqual([{ weightKg: 15.9, reps: 15, rpe: 8 }]);
+    expect(history.lastWorkoutSets).toEqual([
+      expect.objectContaining({ weightKg: 15.9, reps: 15, rpe: 8 }),
+    ]);
   });
 
   it('does not count set-less sessions toward totalSessions (matches the detail sheet)', () => {
@@ -115,7 +117,9 @@ describe('empty most-recent block (skipped / unlogged exercise in a completed se
 
     const history = buildExerciseHistories(blocks)['wrist-curl'];
     expect(history.lastWorkoutDate).toBe(NEWER);
-    expect(history.priorWorkoutSets).toEqual([{ weightKg: 15, reps: 15, rpe: 8 }]);
+    expect(history.priorWorkoutSets).toEqual([
+      expect.objectContaining({ weightKg: 15, reps: 15, rpe: 8 }),
+    ]);
   });
 
   it('an all-empty history degrades to cold start (totalSessions 0, no anchor)', () => {
@@ -139,7 +143,9 @@ describe('empty most-recent block (skipped / unlogged exercise in a completed se
 
     const history = buildExerciseHistories(blocks)['wrist-curl'];
     expect(history.lastWorkoutDate).toBe(NEWER);
-    expect(history.lastWorkoutSets).toEqual([{ weightKg: 16, reps: 14, rpe: 8 }]);
+    expect(history.lastWorkoutSets).toEqual([
+      expect.objectContaining({ weightKg: 16, reps: 14, rpe: 8 }),
+    ]);
     expect(history.totalSessions).toBe(2);
   });
 });

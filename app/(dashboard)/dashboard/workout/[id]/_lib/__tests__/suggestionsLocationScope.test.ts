@@ -52,9 +52,13 @@ describe('buildExerciseHistories — location-scoped calibration', () => {
     const atB = buildExerciseHistories(blocks, { currentLocationId: 'B', scopeForExercise });
 
     // A's track only sees the 100kg set; B's only the 140kg set.
-    expect(atA[CALF].lastWorkoutSets).toEqual([{ weightKg: 100, reps: 12, rpe: 8 }]);
+    expect(atA[CALF].lastWorkoutSets).toEqual([
+      expect.objectContaining({ weightKg: 100, reps: 12, rpe: 8 }),
+    ]);
     expect(atA[CALF].estimatedFromOtherLocation).toBe(false);
-    expect(atB[CALF].lastWorkoutSets).toEqual([{ weightKg: 140, reps: 12, rpe: 8 }]);
+    expect(atB[CALF].lastWorkoutSets).toEqual([
+      expect.objectContaining({ weightKg: 140, reps: 12, rpe: 8 }),
+    ]);
     // The two tracks produce different e1RMs.
     expect(atA[CALF].estimatedE1RM).toBeLessThan(atB[CALF].estimatedE1RM);
   });
@@ -95,7 +99,9 @@ describe('buildExerciseHistories — location-scoped calibration', () => {
     ];
     const atA = buildExerciseHistories(blocks, { currentLocationId: 'A', scopeForExercise });
     // The null-location 110kg set is attributed to A and is the most recent.
-    expect(atA[CALF].lastWorkoutSets).toEqual([{ weightKg: 110, reps: 12, rpe: 8 }]);
+    expect(atA[CALF].lastWorkoutSets).toEqual([
+      expect.objectContaining({ weightKg: 110, reps: 12, rpe: 8 }),
+    ]);
     expect(atA[CALF].estimatedFromOtherLocation).toBe(false);
   });
 

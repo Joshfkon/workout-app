@@ -59,6 +59,34 @@ export async function fetchRecentSleep(
 }
 
 /**
+ * Fetch the entries for a specific set of local days, keyed by day.
+ *
+ * Unlike `fetchRecentSleep` this is not a trailing window: the days come from
+ * past sessions (a "last workout" can be months old), so they're queried by
+ * exact match. Days absent from the result simply weren't logged.
+ */
+export async function fetchSleepForDays(
+  supabase: SupabaseClient,
+  userId: string,
+  localDays: string[]
+): Promise<Record<string, SleepLogEntry>> {
+  const days = Array.from(new Set(localDays.filter(Boolean)));
+  if (days.length === 0) return {};
+  const { data, error } = await supabase
+    .from('sleep_log')
+    .select('local_day, hours, quality, source')
+    .eq('user_id', userId)
+    .in('local_day', days);
+  if (error) throw new Error(error.message);
+  const byDay: Record<string, SleepLogEntry> = {};
+  for (const row of (data ?? []) as SleepLogRow[]) {
+    const entry = rowToEntry(row);
+    byDay[entry.localDay] = entry;
+  }
+  return byDay;
+}
+
+/**
  * The user's most recent entry regardless of age — the stepper's default
  * ("default = last entry") so re-logging a typical night is one tap.
  */

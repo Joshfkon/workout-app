@@ -26,6 +26,7 @@ import {
   type AnchorCandidate,
 } from '@/services/suggestionEngine/e1rmAnchor';
 import { HISTORY_SESSIONS_PER_EXERCISE } from '@/services/suggestionEngine/constants';
+import { resolveExerciseStartedAt } from '@/services/sessionContext';
 import {
   resolveLegacyLocationAttribution,
   scopeHistorySets,
@@ -110,6 +111,8 @@ export interface HistoryBlockRow {
   workout_sessions: {
     id: string;
     completed_at: string | null;
+    /** When the session began — fallback time-of-day when sets carry no stamp. */
+    started_at?: string | null;
     state: string;
     user_id: string;
     /** Deload sessions are excluded from suggestions (see computeHistoryFromBlocks). */
@@ -244,6 +247,7 @@ function computeHistoryFromBlocks(
   if (historyBlocks.length === 0) {
     return {
       lastWorkoutDate: '',
+      lastWorkoutStartedAt: null,
       lastWorkoutSets: [],
       priorWorkoutSets: [],
       estimatedE1RM: 0,
@@ -279,6 +283,9 @@ function computeHistoryFromBlocks(
         weightKg: s.weight_kg,
         reps: s.reps,
         rpe: s.rpe,
+        // Stamped client-side when the set was logged — dates the set within
+        // the session (see services/sessionContext).
+        loggedAt: s.logged_at,
         // Bodyweight composition for display ("BW+25 × 14" instead of the
         // blended effective load). Migration-backfilled rows flagged
         // _needsReview keep the effective-load display.
@@ -301,6 +308,16 @@ function computeHistoryFromBlocks(
   const lastBlock = historyBlocks.find((b) => workingSetsOf(b).length > 0);
   const lastSession = lastBlock?.workout_sessions ?? null;
   const lastSets = lastBlock ? workingSetsOf(lastBlock) : [];
+
+  // When this exercise was actually worked last time: the first working set's
+  // stamp, not the session's completion — in a 90-minute session those are very
+  // different times, and the card is per-exercise. Feeds the "Last Workout"
+  // time-of-day line and the sleep-night lookup (services/sessionContext).
+  const lastWorkoutStartedAt = resolveExerciseStartedAt(
+    lastSets.map((s) => s.loggedAt),
+    lastSession?.started_at,
+    lastSession?.completed_at
+  );
 
   // Session BEFORE last (first block from a different session WITH working
   // sets), for the regression path: two consecutive below-floor sessions
@@ -398,6 +415,7 @@ function computeHistoryFromBlocks(
 
   return {
     lastWorkoutDate: lastSession?.completed_at || '',
+    lastWorkoutStartedAt,
     lastWorkoutSets: lastSets,
     priorWorkoutSets: priorSets,
     // Anchor (Phase 2): best qualifying set among the newest
@@ -551,6 +569,7 @@ export async function fetchExerciseHistory(
       workout_sessions!inner (
         id,
         completed_at,
+        started_at,
         state,
         user_id,
         is_deload

@@ -74,7 +74,7 @@ const ExerciseDetailsModal = dynamic(() => import('@/components/workout').then(m
 const PlateCalculatorModal = dynamic(() => import('@/components/workout').then(m => m.PlateCalculatorModal), { ssr: false });
 // Motion capture sheet (experimental, flag-gated) — loaded on demand.
 const MotionCaptureSheet = dynamic(() => import('@/components/motion/MotionCaptureSheet').then(m => m.MotionCaptureSheet), { ssr: false });
-import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaRegionalData, TemporaryInjury, PreWorkoutCheckIn, SetFeedback, Rating, BodyweightData, ExerciseType, StandardMuscleGroup, ExercisePerformanceSnapshot, RepsInTank, SorenessRating, SetDiscomfort, JointPainJoint } from '@/types/schema';
+import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaRegionalData, TemporaryInjury, PreWorkoutCheckIn, SetFeedback, Rating, BodyweightData, ExerciseType, StandardMuscleGroup, ExercisePerformanceSnapshot, RepsInTank, SorenessRating, SetDiscomfort, JointPainJoint, SleepLogEntry } from '@/types/schema';
 import type { SessionMuscleFeedbackEntry, SessionSummarySubmitData } from '@/components/workout/SessionSummary';
 import { MuscleGroupFeedbackModal, type MuscleFeedbackRatings } from '@/components/workout/MuscleGroupFeedbackModal';
 import type { MuscleSorenessRatings } from '@/components/workout/ReadinessCheckIn';
@@ -175,6 +175,8 @@ import { useRecoveryHistory } from '@/hooks/useMuscleReadiness';
 import { useWorkoutMuscleVolume } from '@/hooks/useWorkoutMuscleVolume';
 import { useRecoveryMultipliers } from '@/hooks/useRecoveryMultipliers';
 import { usePlannedFrequency } from '@/hooks/usePlannedFrequency';
+import { useSleepForDays } from '@/hooks/useSleepForDays';
+import { sleepDayForSession } from '@/services/sessionContext';
 import { isStaleEmptyAdhocSession, discardStaleSession } from '../_lib/adhocSession';
 import { computeSupersetAdvance } from './_lib/supersetFlow';
 import {
@@ -482,6 +484,30 @@ export default function WorkoutPage() {
   const [readinessBannerDismissed, setReadinessBannerDismissed] = useState(false);
   const [readinessOverridden, setReadinessOverridden] = useState(false);
   const [exerciseHistories, setExerciseHistories] = useState<Record<string, ExerciseHistoryData>>({});
+  // Sleep behind each exercise's "Last Workout" block: the night that preceded
+  // that session (services/sessionContext picks it), fetched by exact local day
+  // because a last session can be months old — no trailing window covers it.
+  const lastSessionSleepDays = useMemo(
+    () =>
+      Object.values(exerciseHistories)
+        .map((h) => sleepDayForSession(h.lastWorkoutStartedAt || h.lastWorkoutDate))
+        .filter((day): day is string => !!day),
+    [exerciseHistories]
+  );
+  const sleepByLastSessionDay = useSleepForDays(lastSessionSleepDays);
+  const sleepByExerciseId = useMemo(() => {
+    const byExercise: Record<string, SleepLogEntry | null> = {};
+    for (const [exerciseId, history] of Object.entries(exerciseHistories)) {
+      const day = sleepDayForSession(history.lastWorkoutStartedAt || history.lastWorkoutDate);
+      byExercise[exerciseId] = day ? sleepByLastSessionDay[day] ?? null : null;
+    }
+    return byExercise;
+  }, [exerciseHistories, sleepByLastSessionDay]);
+  // Does this user log sleep at all? Only then is a missing night worth saying
+  // out loud on the card. Inferred from the nights we just looked up rather
+  // than a second query — a user who logs sleep will have logged at least one
+  // of the nights before today's exercises' last sessions.
+  const sleepLoggingActive = Object.keys(sleepByLastSessionDay).length > 0;
   // Cross-exercise strength summary for cold-start transfer estimation
   // (a never-trained exercise seeds from a related exercise's logged e1RM).
   const [transferCandidates, setTransferCandidates] = useState<TransferCandidate[]>([]);
@@ -1252,6 +1278,7 @@ export default function WorkoutPage() {
                     workout_sessions!inner (
                       id,
                       completed_at,
+                      started_at,
                       state,
                       user_id,
                       is_deload
@@ -5933,6 +5960,8 @@ export default function WorkoutPage() {
                     coldStartSuggestion={coldStartSuggestion}
                     userBodyweightKg={todayCheckInData?.bodyweightKg || undefined}
                     exerciseHistory={exerciseHistories[block.exerciseId]}
+                    lastWorkoutSleep={sleepByExerciseId[block.exerciseId] ?? null}
+                    sleepLoggingActive={sleepLoggingActive}
                     previousSets={exerciseHistories[block.exerciseId]?.lastWorkoutSets ?? []}
                     onExerciseNameClick={() => setSelectedExerciseForDetails(block.exercise)}
                     adjustedRir={
