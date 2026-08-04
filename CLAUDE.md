@@ -411,6 +411,11 @@ NEXT_PUBLIC_APP_URL=  # Production URL for Capacitor
 # Wearables (optional)
 FITBIT_CLIENT_ID=
 FITBIT_CLIENT_SECRET=
+
+# Bot protection (optional) — Cloudflare Turnstile CAPTCHA on auth pages.
+# Widget renders only when set; the secret key lives in the Supabase
+# dashboard (Auth > Settings > Enable CAPTCHA), never in this app.
+NEXT_PUBLIC_TURNSTILE_SITE_KEY=
 ```
 
 ## Important Warnings
