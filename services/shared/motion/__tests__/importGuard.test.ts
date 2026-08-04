@@ -42,8 +42,10 @@ const BANNED_IMPORT = new RegExp(
 );
 
 /** The pure signal layer must additionally be DOM/sensor-free. Matches API
- *  usage (`window.` / `navigator[`), not prose like "bias window". */
-const BANNED_DOM = /\b(window|document|navigator|localStorage|sessionStorage)\s*[.[]|\bDeviceMotionEvent\b/;
+ *  usage (`window.foo` / `navigator[`), not prose like "bias window." —
+ *  hence the no-whitespace property access after the dot. */
+const BANNED_DOM =
+  /\b(window|document|navigator|localStorage|sessionStorage)(\.[A-Za-z_$]|\s*\[)|\bDeviceMotionEvent\b/;
 
 function walk(dir: string, out: string[] = []): string[] {
   if (!fs.existsSync(dir)) return out;
@@ -70,12 +72,53 @@ it('no motion-feature module imports e1RM, the prescription engine, or the volum
   expect(offenders).toEqual([]);
 });
 
+/**
+ * The phone is held to the machine by a neodymium magnet, which saturates
+ * the magnetometer — any magnetometer-fused orientation source is unusable.
+ * The feature must consume devicemotion ONLY (accelerationIncludingGravity
+ * + rotationRate); orientation/compass APIs are banned outright.
+ */
+const BANNED_SENSOR_APIS =
+  /deviceorientation|webkitCompassHeading|Magnetometer|OrientationSensor|compassHeading/i;
+
+it('no motion-feature module touches magnetometer-fused orientation APIs', () => {
+  const offenders: string[] = [];
+  for (const dir of FEATURE_DIRS) {
+    for (const file of walk(path.join(ROOT, dir))) {
+      if (file === __filename) continue; // this guard names the banned APIs
+      const src = fs.readFileSync(file, 'utf8');
+      if (BANNED_SENSOR_APIS.test(src)) offenders.push(path.relative(ROOT, file));
+    }
+  }
+  expect(offenders).toEqual([]);
+});
+
 it('the pure signal layer (services/shared/motion) is DOM- and sensor-free', () => {
   const offenders: string[] = [];
   for (const file of walk(path.join(ROOT, 'services/shared/motion'))) {
     if (/__tests__/.test(file)) continue; // tests may reference whatever they need
     const src = fs.readFileSync(file, 'utf8');
     if (BANNED_DOM.test(src)) offenders.push(path.relative(ROOT, file));
+  }
+  expect(offenders).toEqual([]);
+});
+
+/**
+ * Write-isolation: motion is a read-only side channel. No code path in the
+ * feature may target the tables that back logged sets, volume aggregates,
+ * or prescription inputs — its persistence surface is exactly the motion
+ * tables (plus reading users flags / the exercise catalog).
+ */
+const BANNED_TABLES =
+  /['"`](set_logs|exercise_blocks|workout_sessions|session_muscle_feedback|exercise_performance_snapshots|user_volume_profiles|mesocycles|user_profiles)['"`]/;
+
+it('no motion-feature module references set-log / volume / prescription tables', () => {
+  const offenders: string[] = [];
+  for (const dir of FEATURE_DIRS) {
+    for (const file of walk(path.join(ROOT, dir))) {
+      const src = fs.readFileSync(file, 'utf8');
+      if (BANNED_TABLES.test(src)) offenders.push(path.relative(ROOT, file));
+    }
   }
   expect(offenders).toEqual([]);
 });

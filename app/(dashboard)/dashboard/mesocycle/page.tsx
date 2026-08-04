@@ -3,34 +3,51 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardHeader, CardTitle, CardContent, Badge, Button, Slider, Input } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { generateFullMesocycleWithFatigue } from '@/services/sessionBuilderWithFatigue';
 import { calculateRecoveryFactors } from '@/services/mesocycleBuilder';
 import { analyzeRegionalComposition } from '@/services/regionalAnalysis';
-import { getSessionFromProgramData, type ExerciseOverride, type ExtractedSession } from '@/services/mesocycleHelpers';
+import {
+  getSessionFromProgramData,
+  applyExerciseOverrides,
+  type ExerciseOverride,
+  type ExtractedSession,
+} from '@/services/mesocycleHelpers';
 import {
   startMesocycleWorkoutSession,
-  getWorkoutForDay,
+  getWorkoutForDate,
   getTrainingDays,
   countCompletedSessions,
   programSessionHasUsableExercises,
   type TodayWorkout,
 } from '@/lib/training/startMesocycleSession';
-import { WorkoutDaySelector } from '@/components/mesocycle';
+import {
+  buildTrainingSchedule,
+  describeTrainingSchedule,
+  intervalDaysPerWeek,
+  numberToDayName,
+  parseLocalDate,
+  scheduledDatesBetween,
+  sessionsPerWeek,
+  type ScheduleMode,
+  type TrainingSchedule,
+} from '@/lib/training/trainingSchedule';
+import { TrainingScheduleSelector, SessionExerciseList } from '@/components/mesocycle';
 import { getLocalDateString, muscleDisplayName } from '@/lib/utils';
 import { sessionIndexFromCompleted } from '@/lib/training/mesocycleProgress';
+import { MESOCYCLE_PLAN_QUERY_PREFIX } from '@/hooks/useMesocyclePlan';
 import { insertWorkoutSessions } from '@/lib/training/sessionOrigin';
 import type { MuscleGroup, WorkoutDay, ExtendedUserProfile, DexaRegionalData, Goal as SchemaGoal, Experience, Rating, Equipment, DexaScan, FullProgramRecommendation } from '@/types/schema';
 
-const WEEKDAY_NAMES: WorkoutDay[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-
-function numberToDayName(dayNumber: number): WorkoutDay {
-  return WEEKDAY_NAMES[dayNumber - 1] || 'Monday';
-}
-
 function getDefaultPreferredDays(daysPerWeek: number): WorkoutDay[] {
   return getTrainingDays(daysPerWeek).map(numberToDayName);
+}
+
+/** Interval cadences aren't whole numbers — every other day is 3.5/week. */
+function formatDaysPerWeek(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
 function areSameWorkoutDays(a: WorkoutDay[], b: WorkoutDay[]): boolean {
@@ -52,6 +69,10 @@ interface Mesocycle {
   created_at: string;
   start_date: string;
   preferred_workout_days: WorkoutDay[] | null;
+  /** 'fixed_days' (weekdays) or 'interval' (every N days). Null on legacy rows. */
+  schedule_mode?: ScheduleMode | null;
+  /** Interval schedules only: train every N days from start_date. */
+  training_interval_days?: number | null;
   session_duration_minutes: number | null;
   program_data: unknown;
   exercise_overrides?: ExerciseOverride[];
@@ -139,6 +160,7 @@ function RenameButton({ onClick, className }: { onClick: () => void; className?:
 
 export default function MesocyclePage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [mesocycles, setMesocycles] = useState<Mesocycle[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isStartingWorkout, setIsStartingWorkout] = useState(false);
@@ -148,11 +170,15 @@ export default function MesocyclePage() {
   const [estimatedSessionTime, setEstimatedSessionTime] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  /** Today's card: read-only exercise list, so Start isn't the only way in. */
+  const [showTodayExercises, setShowTodayExercises] = useState(false);
 
   // Edit session duration state
   const [isEditingDuration, setIsEditingDuration] = useState(false);
   const [editDuration, setEditDuration] = useState(60);
   const [editPreferredDays, setEditPreferredDays] = useState<WorkoutDay[]>([]);
+  const [editScheduleMode, setEditScheduleMode] = useState<ScheduleMode>('fixed_days');
+  const [editIntervalDays, setEditIntervalDays] = useState(2);
   const [isRegenerating, setIsRegenerating] = useState(false);
 
   // Rename mesocycle state
@@ -190,11 +216,11 @@ export default function MesocyclePage() {
     }
   };
 
-  // Regenerate mesocycle program with new session duration and/or preferred training days
+  // Regenerate mesocycle program with new session duration and/or schedule
   const handleUpdateSessionDuration = async (
     mesocycleId: string,
     newDuration: number,
-    newPreferredDays: WorkoutDay[]
+    newScheduleInput: { mode: ScheduleMode; preferredDays: WorkoutDay[]; intervalDays: number }
   ) => {
     setIsRegenerating(true);
     try {
@@ -241,19 +267,39 @@ export default function MesocyclePage() {
       const mesocycle = mesocycles.find(m => m.id === mesocycleId);
       if (!mesocycle) throw new Error('Mesocycle not found');
 
+      // An interval cadence sets its own sessions/week (the nearest whole
+      // number to 7 / interval); a fixed-day schedule keeps the block's.
+      const newDaysPerWeek =
+        newScheduleInput.mode === 'interval'
+          ? intervalDaysPerWeek(newScheduleInput.intervalDays)
+          : mesocycle.days_per_week;
+
       // Normalize the requested preferred days (fall back to the default
       // spread if the count no longer matches days/week), then detect whether
-      // the training days actually changed — we only rewrite planned sessions
-      // when they did.
-      const normalizedPreferredDays = newPreferredDays.length === mesocycle.days_per_week
-        ? newPreferredDays
-        : getDefaultPreferredDays(mesocycle.days_per_week);
+      // the schedule actually changed — we only rewrite planned sessions
+      // when it did.
+      const normalizedPreferredDays = newScheduleInput.preferredDays.length === newDaysPerWeek
+        ? newScheduleInput.preferredDays
+        : getDefaultPreferredDays(newDaysPerWeek);
 
-      const currentPreferredDays = mesocycle.preferred_workout_days?.length
-        ? mesocycle.preferred_workout_days
-        : getDefaultPreferredDays(mesocycle.days_per_week);
+      const currentSchedule = buildTrainingSchedule(mesocycle);
+      const newSchedule = buildTrainingSchedule({
+        days_per_week: newDaysPerWeek,
+        preferred_workout_days: normalizedPreferredDays,
+        schedule_mode: newScheduleInput.mode,
+        training_interval_days: newScheduleInput.intervalDays,
+        start_date: mesocycle.start_date,
+      });
 
-      const daysChanged = !areSameWorkoutDays(normalizedPreferredDays, currentPreferredDays);
+      const scheduleChanged =
+        currentSchedule.mode !== newSchedule.mode ||
+        currentSchedule.intervalDays !== newSchedule.intervalDays ||
+        !areSameWorkoutDays(
+          normalizedPreferredDays,
+          currentSchedule.preferredWorkoutDays?.length
+            ? currentSchedule.preferredWorkoutDays
+            : getDefaultPreferredDays(mesocycle.days_per_week)
+        );
 
       // Keep the plan's generation-time mode on a duration/day edit — the
       // enhanced toggle has its own explicit mid-meso flow.
@@ -287,7 +333,7 @@ export default function MesocyclePage() {
 
       // Regenerate the program with new session duration
       const newProgram = generateFullMesocycleWithFatigue(
-        mesocycle.days_per_week,
+        newDaysPerWeek,
         extendedProfile,
         newDuration,
         laggingAreas,
@@ -297,12 +343,22 @@ export default function MesocyclePage() {
       // Calculate recovery factors
       const recoveryFactors = calculateRecoveryFactors(extendedProfile);
 
-      // If the training days changed, regenerate future planned sessions onto
-      // the new weekdays: delete future `planned` rows and re-insert on the new
-      // training days, skipping today's-and-past dates already locked by a
+      // generateFullMesocycleWithFatigue picks the split from days/week
+      // (recommendSplit), so switching to an interval cadence that moves
+      // days/week can regenerate onto a different split — 6-day PPL at every
+      // 3 days becomes 2 sessions/week, which is Full Body. split_type has to
+      // follow the program that was actually generated: the calendar surfaces
+      // derive the day name and their fallback muscles from split_type while
+      // Start builds from program_data, so leaving it stale would advertise
+      // "Push" and launch Full Body.
+      const newSplitType = newProgram?.split || mesocycle.split_type;
+
+      // If the schedule changed, regenerate future planned sessions onto the
+      // new training dates: delete future `planned` rows and re-insert on the
+      // new dates, skipping today's-and-past dates already locked by a
       // non-planned (in-progress/completed) session. Completed/in-progress
       // sessions are never touched.
-      if (daysChanged) {
+      if (scheduleChanged) {
         type WorkoutSessionRow = { id: string; planned_date: string; state: string };
         const { data: existingSessions } = await supabase
           .from('workout_sessions')
@@ -327,25 +383,18 @@ export default function MesocyclePage() {
               .map(session => session.planned_date)
           );
 
-          const trainingDays = new Set(
-            getTrainingDays(mesocycle.days_per_week, normalizedPreferredDays)
-          );
-
           // Parse start_date (a YYYY-MM-DD string) as a LOCAL date — `new
           // Date('2026-07-04')` parses as UTC midnight, which in negative-offset
           // timezones shifts the window back a day and drops the block's final
           // training day. Local parsing keeps the schedule window correct
           // (per the app-wide local-timezone date convention).
-          const [startYear, startMonth, startDay] = mesocycle.start_date.split('-').map(Number);
-          const startDate = new Date(startYear, startMonth - 1, startDay);
-          const endDate = new Date(startYear, startMonth - 1, startDay);
+          const startDate = parseLocalDate(mesocycle.start_date);
+          if (!startDate) throw new Error('Mesocycle has no usable start date');
+          const endDate = new Date(startDate);
           endDate.setDate(endDate.getDate() + (mesocycle.total_weeks * 7) - 1);
 
           const newSessions = [];
-          for (let date = new Date(startDate); date <= endDate; date.setDate(date.getDate() + 1)) {
-            const dayNumber = date.getDay() === 0 ? 7 : date.getDay();
-            if (!trainingDays.has(dayNumber)) continue;
-
+          for (const date of scheduledDatesBetween(newSchedule, startDate, endDate)) {
             const plannedDate = getLocalDateString(date);
             if (plannedDate < today) continue;
             if (lockedDates.has(plannedDate)) continue;
@@ -372,6 +421,10 @@ export default function MesocyclePage() {
         .from('mesocycles')
         .update({
           session_duration_minutes: newDuration,
+          days_per_week: newDaysPerWeek,
+          split_type: newSplitType,
+          schedule_mode: newSchedule.mode,
+          training_interval_days: newSchedule.mode === 'interval' ? newSchedule.intervalDays : null,
           preferred_workout_days: normalizedPreferredDays,
           program_data: newProgram,
           fatigue_budget_config: newProgram?.fatigueBudget || null,
@@ -384,12 +437,21 @@ export default function MesocyclePage() {
 
       if (updateError) throw updateError;
 
+      // program_data changed: drop the plan-preview cache so /mesocycle/plan
+      // can't keep advertising the program the start path no longer serves.
+      queryClient.invalidateQueries({ queryKey: [MESOCYCLE_PLAN_QUERY_PREFIX] });
+
       // Update local state
       setMesocycles(mesocycles.map(m =>
         m.id === mesocycleId
           ? {
             ...m,
             session_duration_minutes: newDuration,
+            days_per_week: newDaysPerWeek,
+            split_type: newSplitType,
+            schedule_mode: newSchedule.mode,
+            training_interval_days:
+              newSchedule.mode === 'interval' ? newSchedule.intervalDays : null,
             preferred_workout_days: normalizedPreferredDays,
             program_data: newProgram,
           }
@@ -398,16 +460,7 @@ export default function MesocyclePage() {
 
       // Refresh today's workout so the schedule reflects the new training days
       if (mesocycleId === mesocycles.find(m => m.state === 'active')?.id) {
-        const today = new Date();
-        const dayOfWeek = today.getDay() || 7;
-        setTodayWorkout(
-          getWorkoutForDay(
-            mesocycle.split_type,
-            dayOfWeek,
-            mesocycle.days_per_week,
-            normalizedPreferredDays
-          )
-        );
+        setTodayWorkout(getWorkoutForDate(newSplitType, new Date(), newSchedule));
 
         // program_data was just rewritten, and Start will build from the
         // regenerated program — re-resolve the slot session so the card's
@@ -415,7 +468,7 @@ export default function MesocyclePage() {
         // program instead of the one loaded on mount.
         const slotSession = await resolveProgramSlotSession(
           supabase,
-          mesocycle,
+          { ...mesocycle, days_per_week: newDaysPerWeek, split_type: newSplitType },
           newProgram,
           completedSessions
         );
@@ -464,6 +517,7 @@ export default function MesocyclePage() {
       
       // Update local state
       setMesocycles(mesocycles.filter(m => m.id !== id));
+      queryClient.invalidateQueries({ queryKey: [MESOCYCLE_PLAN_QUERY_PREFIX] });
       setConfirmDeleteId(null);
     } catch (error) {
       console.error('Failed to delete mesocycle:', error);
@@ -486,13 +540,10 @@ export default function MesocyclePage() {
         // Calculate today's workout for active mesocycle
         const active = data.find((m: Mesocycle) => m.state === 'active');
         if (active) {
-          const today = new Date();
-          const dayOfWeek = today.getDay() || 7; // Convert Sunday(0) to 7
-          const workout = getWorkoutForDay(
+          const workout = getWorkoutForDate(
             active.split_type,
-            dayOfWeek,
-            active.days_per_week,
-            active.preferred_workout_days
+            new Date(),
+            buildTrainingSchedule(active)
           );
           setTodayWorkout(workout);
 
@@ -526,6 +577,13 @@ export default function MesocyclePage() {
   const activeMesocycle = mesocycles.find(m => m.state === 'active');
   const pastMesocycles = mesocycles.filter(m => m.state !== 'active');
 
+  // Resolved calendar for the active block — fixed weekdays or every-N-days.
+  // Never null so the JSX below (already guarded on activeMesocycle) can use
+  // it without re-narrowing; the placeholder is inert when there is no block.
+  const activeSchedule: TrainingSchedule = activeMesocycle
+    ? buildTrainingSchedule(activeMesocycle)
+    : buildTrainingSchedule({ days_per_week: 4 });
+
   // The card must advertise the workout Start actually launches: the program
   // slot at completedSessions % days_per_week, which diverges from the
   // calendar weekday after skipped days. programSession is null (→ calendar
@@ -536,6 +594,12 @@ export default function MesocyclePage() {
   const cardMuscles: MuscleGroup[] = programSession
     ? Array.from(new Set(programSession.exercises.map(ex => ex.primaryMuscle)))
     : todayWorkout?.muscles ?? [];
+
+  // The exercise list the preview shows — the program slot's exercises with
+  // the user's swaps applied, i.e. exactly what Start would build blocks from.
+  const todayExercises = programSession
+    ? applyExerciseOverrides(programSession.exercises, activeMesocycle?.exercise_overrides ?? [])
+    : [];
 
   // Start today's workout from the mesocycle (shared start path)
   const handleStartWorkout = async () => {
@@ -705,6 +769,52 @@ export default function MesocyclePage() {
                     Start Workout
                   </Button>
                 </div>
+
+                {/* Read-only preview of the session Start will launch, plus a
+                    way into the whole block — pressing Start must never be the
+                    only way to find out what was planned. */}
+                <div className="mt-4 pt-4 border-t border-surface-800/70">
+                  <div className="flex items-center justify-between gap-3">
+                    <button
+                      onClick={() => setShowTodayExercises(v => !v)}
+                      aria-expanded={showTodayExercises}
+                      className="flex items-center gap-1 text-sm font-medium text-primary-400 hover:text-primary-300 transition-colors"
+                    >
+                      {showTodayExercises ? 'Hide exercises' : 'Preview exercises'}
+                      <svg
+                        className={`w-4 h-4 transition-transform ${showTodayExercises ? 'rotate-180' : ''}`}
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    <Link
+                      href="/dashboard/mesocycle/plan"
+                      className="text-sm font-medium text-surface-400 hover:text-surface-200 transition-colors"
+                    >
+                      View full plan →
+                    </Link>
+                  </div>
+
+                  {showTodayExercises && (
+                    <div className="mt-3">
+                      {todayExercises.length > 0 ? (
+                        <>
+                          <SessionExerciseList exercises={todayExercises} showNotes />
+                          <p className="text-xs text-surface-500 mt-2">
+                            Weights are suggested from your history when you start.
+                          </p>
+                        </>
+                      ) : (
+                        <p className="text-sm text-surface-400">
+                          Exercises for this session are chosen when you start it.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
               </CardContent>
             </Card>
           ) : (
@@ -715,11 +825,14 @@ export default function MesocyclePage() {
                 <p className="text-surface-400 mt-1">
                   No workout scheduled for today. Recovery is part of the process!
                 </p>
-                <Link href="/dashboard/workout/new">
-                  <Button variant="secondary" className="mt-4">
-                    Start Ad-hoc Workout
-                  </Button>
-                </Link>
+                <div className="flex flex-wrap items-center justify-center gap-2 mt-4">
+                  <Link href="/dashboard/workout/new">
+                    <Button variant="secondary">Start Ad-hoc Workout</Button>
+                  </Link>
+                  <Link href="/dashboard/mesocycle/plan">
+                    <Button variant="outline">View Full Plan</Button>
+                  </Link>
+                </div>
               </CardContent>
             </Card>
           )}
@@ -757,7 +870,9 @@ export default function MesocyclePage() {
                   <p className="text-sm text-surface-500">Current Week</p>
                 </div>
                 <div className="text-center p-4 bg-surface-800/50 rounded-lg">
-                  <p className="text-2xl font-bold text-surface-100">{activeMesocycle.days_per_week}</p>
+                  <p className="text-2xl font-bold text-surface-100">
+                    {formatDaysPerWeek(sessionsPerWeek(activeSchedule))}
+                  </p>
                   <p className="text-sm text-surface-500">Days/Week</p>
                 </div>
                 <div
@@ -769,9 +884,11 @@ export default function MesocyclePage() {
                         ? activeMesocycle.preferred_workout_days
                         : getDefaultPreferredDays(activeMesocycle.days_per_week)
                     );
+                    setEditScheduleMode(activeSchedule.mode);
+                    setEditIntervalDays(activeSchedule.intervalDays ?? 2);
                     setIsEditingDuration(true);
                   }}
-                  title="Click to edit session duration and training days"
+                  title="Click to edit session duration and training schedule"
                 >
                   <p className="text-2xl font-bold text-surface-100">{activeMesocycle.session_duration_minutes || 60}</p>
                   <p className="text-sm text-surface-500">Min/Session</p>
@@ -808,7 +925,7 @@ export default function MesocyclePage() {
                 <div className="mt-6 p-4 bg-surface-800/50 rounded-lg border border-primary-500/30">
                   <h4 className="text-sm font-medium text-surface-300 mb-4">Edit Schedule</h4>
                   <p className="text-xs text-surface-400 mb-4">
-                    Changing your time or preferred days will regenerate your workout program and move future planned sessions to fit the updated schedule.
+                    Changing your time or training schedule will regenerate your workout program and move future planned sessions to fit the updated schedule.
                   </p>
                   <div className="mb-4">
                     <div className="flex justify-between text-sm text-surface-400 mb-2">
@@ -829,16 +946,22 @@ export default function MesocyclePage() {
                   </div>
                   <div className="mb-4">
                     <label className="block text-sm font-medium text-surface-200 mb-2">
-                      Preferred workout days
+                      When do you train?
                     </label>
                     <p className="text-xs text-surface-500 mb-2">
-                      Pick {activeMesocycle.days_per_week} days that match your new schedule.
+                      {editScheduleMode === 'fixed_days'
+                        ? `Pick ${activeMesocycle.days_per_week} days that match your new schedule.`
+                        : 'Sessions roll through the week from this block’s start date.'}
                     </p>
-                    <WorkoutDaySelector
+                    <TrainingScheduleSelector
                       daysPerWeek={activeMesocycle.days_per_week}
+                      mode={editScheduleMode}
+                      onModeChange={setEditScheduleMode}
                       selectedDays={editPreferredDays}
-                      onChange={setEditPreferredDays}
-                      showPresets
+                      onDaysChange={setEditPreferredDays}
+                      intervalDays={editIntervalDays}
+                      onIntervalChange={setEditIntervalDays}
+                      anchorDate={activeMesocycle.start_date}
                     />
                   </div>
                   <div className="flex gap-2">
@@ -852,12 +975,23 @@ export default function MesocyclePage() {
                     </Button>
                     <Button
                       size="sm"
-                      onClick={() => handleUpdateSessionDuration(activeMesocycle.id, editDuration, editPreferredDays)}
+                      onClick={() =>
+                        handleUpdateSessionDuration(activeMesocycle.id, editDuration, {
+                          mode: editScheduleMode,
+                          preferredDays: editPreferredDays,
+                          intervalDays: editIntervalDays,
+                        })
+                      }
                       disabled={
                         isRegenerating
-                        || editPreferredDays.length !== activeMesocycle.days_per_week
+                        || (
+                          editScheduleMode === 'fixed_days'
+                          && editPreferredDays.length !== activeMesocycle.days_per_week
+                        )
                         || (
                           editDuration === (activeMesocycle.session_duration_minutes || 60)
+                          && editScheduleMode === activeSchedule.mode
+                          && editIntervalDays === (activeSchedule.intervalDays ?? 2)
                           && areSameWorkoutDays(
                             editPreferredDays,
                             activeMesocycle.preferred_workout_days?.length
@@ -873,23 +1007,38 @@ export default function MesocyclePage() {
                 </div>
               )}
 
-              {/* Week Schedule */}
+              {/* Upcoming schedule — dated, not Mon-to-Sun, so a rolling
+                  every-N-days cadence renders as truthfully as fixed days. */}
               <div className="mt-6 pt-6 border-t border-surface-800">
-                <h4 className="text-sm font-medium text-surface-300 mb-3">This Week&apos;s Schedule</h4>
+                <div className="flex items-baseline justify-between mb-3 gap-2">
+                  <h4 className="text-sm font-medium text-surface-300">Next 7 Days</h4>
+                  <div className="flex items-baseline gap-3 min-w-0">
+                    <span className="text-xs text-surface-500 truncate">
+                      {describeTrainingSchedule(activeSchedule, { short: true })}
+                    </span>
+                    <Link
+                      href="/dashboard/mesocycle/plan"
+                      className="text-sm font-medium text-primary-400 hover:text-primary-300 transition-colors whitespace-nowrap"
+                    >
+                      View full plan →
+                    </Link>
+                  </div>
+                </div>
                 <div className="flex gap-2 overflow-x-auto pb-2">
-                  {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, index) => {
-                    const dayNum = index + 1;
-                    const workout = getWorkoutForDay(
+                  {Array.from({ length: 7 }, (_, offset) => {
+                    const date = new Date();
+                    date.setHours(0, 0, 0, 0);
+                    date.setDate(date.getDate() + offset);
+                    const workout = getWorkoutForDate(
                       activeMesocycle.split_type,
-                      dayNum,
-                      activeMesocycle.days_per_week,
-                      activeMesocycle.preferred_workout_days
+                      date,
+                      activeSchedule
                     );
-                    const isToday = (new Date().getDay() || 7) === dayNum;
+                    const isToday = offset === 0;
 
                     return (
                       <div
-                        key={day}
+                        key={getLocalDateString(date)}
                         className={`shrink-0 p-3 rounded-lg text-center min-w-[80px] ${
                           isToday
                             ? 'bg-primary-500/20 border border-primary-500/40'
@@ -899,7 +1048,9 @@ export default function MesocyclePage() {
                         }`}
                       >
                         <p className={`text-xs font-medium ${isToday ? 'text-primary-400' : 'text-surface-500'}`}>
-                          {day}
+                          {isToday
+                            ? 'Today'
+                            : date.toLocaleDateString('en-US', { weekday: 'short' })}
                         </p>
                         {workout ? (
                           <p className="text-xs text-surface-300 mt-1 truncate" title={workout.dayName}>
@@ -1090,6 +1241,12 @@ export default function MesocyclePage() {
                   </div>
                   )}
                   <div className="flex items-center gap-2">
+                    <Link
+                      href={`/dashboard/mesocycle/plan?id=${meso.id}`}
+                      className="text-sm font-medium text-primary-400 hover:text-primary-300 transition-colors"
+                    >
+                      View
+                    </Link>
                     <Badge variant={meso.state === 'completed' ? 'default' : 'warning'}>
                       {meso.state}
                     </Badge>

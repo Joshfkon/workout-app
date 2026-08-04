@@ -268,6 +268,101 @@ export function isRetryable(error: unknown): boolean {
 }
 
 // ============================================
+// SUPABASE / POSTGREST ERRORS
+// ============================================
+
+/**
+ * A PostgrestError is a plain object, not an Error instance, so
+ * `err instanceof Error ? err.message : 'Something failed'` silently
+ * discards everything the database told us. These helpers read it directly.
+ */
+export interface SupabaseErrorShape {
+  message?: string | null;
+  code?: string | null;
+  details?: string | null;
+  hint?: string | null;
+}
+
+const SUPABASE_ERROR_KEYS = ['message', 'code', 'details', 'hint'] as const;
+
+/**
+ * Narrow an unknown value to a Supabase/PostgREST error shape.
+ * Returns null when the value carries none of the expected string fields.
+ */
+export function asSupabaseError(error: unknown): SupabaseErrorShape | null {
+  if (!error || typeof error !== 'object') return null;
+
+  const candidate = error as Record<string, unknown>;
+  const present = SUPABASE_ERROR_KEYS.filter(
+    (key) => typeof candidate[key] === 'string' && (candidate[key] as string).length > 0
+  );
+  if (present.length === 0) return null;
+
+  const result: SupabaseErrorShape = {};
+  for (const key of present) {
+    result[key] = candidate[key] as string;
+  }
+  return result;
+}
+
+/**
+ * Build a single-line, user-visible description of any error, keeping the
+ * database's own message/details/hint/code instead of a generic fallback.
+ */
+export function describeSupabaseError(
+  error: unknown,
+  fallback = 'An unexpected error occurred. Please try again.'
+): string {
+  const supabaseError = asSupabaseError(error);
+
+  if (supabaseError) {
+    const { message, details, hint, code } = supabaseError;
+    let description = message || fallback;
+    if (details && details !== message) description += ` — ${details}`;
+    if (hint) description += ` Hint: ${hint}`;
+    if (code) description += ` [${code}]`;
+    return description;
+  }
+
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === 'string' && error.length > 0) return error;
+
+  return fallback;
+}
+
+/** PostgREST's schema-cache miss (write) and Postgres' undefined_column (read). */
+const MISSING_COLUMN_CODES = ['PGRST204', '42703'];
+const MISSING_COLUMN_PATTERNS = [
+  /could not find the '[^']+' column/i,
+  /column [^ ]+ does not exist/i,
+];
+
+/**
+ * True when an error means "this column isn't in the database" — usually a
+ * migration that hasn't been applied to the environment yet.
+ *
+ * Pass `columns` to require that the error names one of them, so an unrelated
+ * schema problem isn't mistaken for the one being handled.
+ */
+export function isMissingColumnError(error: unknown, columns?: string[]): boolean {
+  const supabaseError = asSupabaseError(error);
+  if (!supabaseError) return false;
+
+  const message = supabaseError.message ?? '';
+  const code = supabaseError.code ?? '';
+
+  const isMissingColumn =
+    MISSING_COLUMN_CODES.includes(code) ||
+    MISSING_COLUMN_PATTERNS.some((pattern) => pattern.test(message));
+  if (!isMissingColumn) return false;
+
+  if (!columns || columns.length === 0) return true;
+
+  const haystack = `${message} ${supabaseError.details ?? ''}`.toLowerCase();
+  return columns.some((column) => haystack.includes(column.toLowerCase()));
+}
+
+// ============================================
 // RETRY LOGIC
 // ============================================
 

@@ -5,6 +5,7 @@
 
 import { createUntypedClient } from '@/lib/supabase/client';
 import { getLocalDateString } from '@/lib/utils';
+import { describeSupabaseError } from '@/lib/errors';
 import { e1rmValueFromRpe } from '@/services/shared/e1rm';
 import type {
   UserProfile,
@@ -38,13 +39,13 @@ import type {
 } from '@/types/training';
 import type { MuscleGroup } from '@/types/schema';
 import { muscleMatchesGroup } from '@/types/schema';
+import { fiberTypeForMuscle } from '@/services/repRangeEngine';
 import {
   computeSleepDebtSignal,
   SLEEP_DEBT_WINDOW_DAYS,
 } from '@/services/deloadEngine';
 import {
   EXERCISE_DATABASE,
-  MUSCLE_FIBER_PROFILE,
   STRENGTH_STANDARDS,
   BASE_SFR,
   SYSTEMIC_FATIGUE_BY_PATTERN,
@@ -507,7 +508,10 @@ export class ProgramEngine {
   ): RepRangeConfig {
     const profile = this.getUserProfile();
     const isCompound = pattern !== 'isolation';
-    const fiberType = MUSCLE_FIBER_PROFILE[muscleGroup] || 'mixed';
+    // Shared resolver (services/repRangeEngine) — NOT the local duplicate in
+    // lib/training/constants, which is coarse-keyed and cannot see the
+    // per-standard fiber overrides (gastrocnemius 'mixed').
+    const fiberType = fiberTypeForMuscle(muscleGroup);
     
     // Base ranges by goal
     const baseRanges: Record<Goal, { compound: number[]; isolation: number[] }> = {
@@ -949,7 +953,9 @@ export class ProgramEngine {
       .single();
     
     if (error || !data) {
-      throw new Error('Failed to create mesocycle');
+      // Keep what the database said — a PostgrestError is a plain object, so
+      // a bare rethrow elsewhere would reduce it to a generic message.
+      throw new Error(describeSupabaseError(error, 'Failed to create mesocycle'));
     }
     
     return { mesocycleId: data.id, program };

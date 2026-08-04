@@ -6,7 +6,7 @@
  *
  * Uses the two-tier muscle group system:
  * - Exercises store DetailedMuscleGroup (33 muscles) for precise targeting
- * - Volume tracking uses StandardMuscleGroup (20 muscles) for user-facing metrics
+ * - Volume tracking uses StandardMuscleGroup for user-facing metrics
  */
 
 import type {
@@ -96,14 +96,14 @@ export interface CalculateVolumeInput {
  * Counts working sets (non-warmup) from completed exercise blocks
  *
  * Handles three muscle formats:
- * - DetailedMuscleGroup (33 muscles) - new format from AI completion
- * - StandardMuscleGroup (20 muscles) - volume tracking format
- * - Legacy MuscleGroup (13 muscles) - old format for backwards compatibility
+ * - DetailedMuscleGroup - new format from AI completion
+ * - StandardMuscleGroup - volume tracking format
+ * - Legacy MuscleGroup - old format for backwards compatibility
  */
 export function calculateWeeklyVolume(input: CalculateVolumeInput): Map<StandardMuscleGroup, MuscleVolumeData> {
   const { exerciseBlocks, userLandmarks } = input;
 
-  // Initialize volume map for all STANDARD muscle groups (20)
+  // Initialize volume map for every STANDARD muscle group
   const volumeMap = new Map<StandardMuscleGroup, MuscleVolumeData>();
 
   // Default landmarks for muscle groups not explicitly defined

@@ -56,19 +56,29 @@ interface TodayHeroCardProps {
 }
 
 /**
- * Quiet "More options" link under the hero CTA → the Train tab, the permanent
- * home for every workout start (empty / AI-suggested / repeat). Rendered
+ * Quiet links under the hero CTA. "More options" → the Train tab, the
+ * permanent home for every workout start (empty / AI-suggested / repeat);
+ * "See the plan" → the read-only mesocycle preview, so the hero's Start CTA
+ * is never the only way to find out what today's session contains. Rendered
  * OUTSIDE the card because the workout hero states wrap the whole card in a
- * Link (nested anchors are invalid HTML). Deliberately not a button — the
- * hero keeps its single Start CTA.
+ * Link (nested anchors are invalid HTML). Deliberately not buttons — the hero
+ * keeps its single Start CTA.
  */
-function MoreOptionsLink() {
+function MoreOptionsLink({ showPlanLink = false }: { showPlanLink?: boolean }) {
   return (
-    <div className="mt-1.5 text-center">
-      <Link
-        href="/dashboard/train"
-        className="text-xs text-surface-500 hover:text-surface-300 transition-colors"
-      >
+    <div className="mt-1.5 flex items-center justify-center gap-3 text-xs text-surface-500">
+      {showPlanLink && (
+        <>
+          <Link
+            href="/dashboard/mesocycle/plan"
+            className="hover:text-surface-300 transition-colors"
+          >
+            See the plan
+          </Link>
+          <span aria-hidden="true">·</span>
+        </>
+      )}
+      <Link href="/dashboard/train" className="hover:text-surface-300 transition-colors">
         More options
       </Link>
     </div>
@@ -169,7 +179,7 @@ export function TodayHeroCard({
             </HeroShell>
           </div>
         </Link>
-        <MoreOptionsLink />
+        <MoreOptionsLink showPlanLink={hasPlan} />
       </div>
     );
   }
@@ -195,7 +205,7 @@ export function TodayHeroCard({
             </HeroShell>
           </div>
         </Link>
-        <MoreOptionsLink />
+        <MoreOptionsLink showPlanLink={hasPlan} />
       </div>
     );
   }

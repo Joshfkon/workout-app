@@ -1,33 +1,45 @@
 'use client';
 
 /**
- * Machine calibration wizard (motion capture, experimental).
+ * Machine calibration wizard (motion capture, experimental) — SWEEP flow.
  *
- * Flow: details → hold at BOTTOM of ROM (capture gravity) → move to TOP,
- * recording the transit gyro on the way → hold at TOP (capture gravity) →
- * review the derived ROM/axis → save.
+ * Exactly two taps, both with the phone in hand:
+ *   START → set the phone on the mount → 3 slow full-ROM reps (unloaded or
+ *   light) → retrieve the phone → STOP.
  *
- * The pivot axis is derived from the transit-gyro integral and cross-checked
- * against the gravity references (services/shared/motion/calibration.ts) —
- * never assumed from the mount orientation, which is stored as descriptive
- * metadata only. The derived ROM is shown so the user can sanity-check it
- * against the machine's real stroke before saving.
+ * No taps at ROM endpoints: the phone is unreachable and unreadable there.
+ * Every sweep proceeds to a full analysis review (tier, PC1 share, chart,
+ * reps/velocity — services/shared/motion/captureAnalysis.ts); the tiered
+ * stillness classification only decides whether the sweep can additionally
+ * be SAVED as a machine calibration (services/shared/motion/calibration.ts).
+ * When it can't, the message says why — including "phone appears hand-held"
+ * when still windows exist but are too unsteady, since holding still longer
+ * doesn't fix that.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button, Card, CardContent, CardHeader, CardTitle, Input, Select } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
 import {
-  recordForDuration,
   requestMotionPermission,
   startMotionRecorder,
+  tapLatencyMs,
+  TAP_LATENCY_WARN_MS,
   type MotionRecorderHandle,
 } from '@/lib/motion/deviceMotionRecorder';
+import { captureToCsv, downloadTextFile } from '@/lib/motion/csv';
 import { insertCalibration } from '@/lib/motion/calibrations';
-import { deriveCalibration, type CalibrationDerivation, type TransitSample } from '@/services/shared/motion';
 import {
-  MOTION_SCHEMA_VERSION,
+  analyzeCapture,
+  deriveCalibrationFromAnalysis,
+  type CalibrationEligibility,
+  type CaptureAnalysis,
+} from '@/services/shared/motion';
+import { CaptureAnalysisView } from './CaptureAnalysisView';
+import {
+  CALIBRATION_SCHEMA_VERSION,
   MOUNT_ORIENTATIONS,
+  type ImuSample,
   type MachineCalibration,
   type MountOrientation,
   type Vec3,
@@ -45,24 +57,48 @@ interface CalibrationWizardProps {
   onClose: () => void;
 }
 
-type WizardStep = 'details' | 'bottom' | 'top' | 'review';
+type WizardStep = 'details' | 'sweep' | 'review';
 
-const HOLD_CAPTURE_MS = 1500;
-
-/** Mean vector of a still-hold accel capture. */
-function meanAccel(samples: Array<{ accel: Vec3 }>): Vec3 {
-  const n = Math.max(1, samples.length);
-  return {
-    x: samples.reduce((a, s) => a + s.accel.x, 0) / n,
-    y: samples.reduce((a, s) => a + s.accel.y, 0) / n,
-    z: samples.reduce((a, s) => a + s.accel.z, 0) / n,
-  };
+/** Small 2.5-D indicator of the derived axis in the phone frame: arrow =
+ *  screen-plane component, label = out-of-screen share. */
+function AxisIndicator({ axis }: { axis: Vec3 }) {
+  const planar = Math.hypot(axis.x, axis.y);
+  const scaleFactor = planar > 1e-6 ? 34 / Math.max(planar, 0.35) : 0;
+  // Screen coords: phone +x → right, phone +y → up (SVG y is flipped).
+  const dx = axis.x * scaleFactor;
+  const dy = -axis.y * scaleFactor;
+  const zPct = Math.round(Math.abs(axis.z) * 100);
+  return (
+    <div className="flex items-center gap-3">
+      <svg width="88" height="88" viewBox="0 0 88 88" aria-hidden="true">
+        <rect x="24" y="8" width="40" height="72" rx="8" fill="none" strokeWidth="1.5" className="stroke-surface-600" />
+        <circle cx="44" cy="44" r="3" className="fill-surface-500" />
+        {planar > 0.05 && (
+          <>
+            <line x1="44" y1="44" x2={44 + dx} y2={44 + dy} strokeWidth="2.5" strokeLinecap="round" className="stroke-primary-400" />
+            <circle cx={44 + dx} cy={44 + dy} r="3.5" className="fill-primary-400" />
+          </>
+        )}
+      </svg>
+      <div className="text-xs text-surface-400 space-y-0.5">
+        <p>Rotation axis relative to the phone:</p>
+        <p>
+          in-screen {Math.round(planar * 100)}% · {axis.z >= 0 ? 'out of' : 'into'} screen {zPct}%
+        </p>
+        <p className="text-surface-500">
+          For a side-mounted phone on a rotating arm this should point mostly {`"through"`} the
+          phone, perpendicular to the arm&apos;s swing plane.
+        </p>
+      </div>
+    </div>
+  );
 }
 
 export function CalibrationWizard({ userId, exercises, onSaved, onClose }: CalibrationWizardProps) {
   const [step, setStep] = useState<WizardStep>('details');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [sweeping, setSweeping] = useState(false);
 
   // Details
   const [exerciseId, setExerciseId] = useState('');
@@ -71,30 +107,23 @@ export function CalibrationWizard({ userId, exercises, onSaved, onClose }: Calib
   const [radiusMm, setRadiusMm] = useState('');
   const [orientation, setOrientation] = useState<MountOrientation>('top-edge');
 
-  // Captured signals
-  const [gravityBottom, setGravityBottom] = useState<Vec3 | null>(null);
-  const [gravityTop, setGravityTop] = useState<Vec3 | null>(null);
-  const transitRef = useRef<TransitSample[]>([]);
-  const transitRecorderRef = useRef<MotionRecorderHandle | null>(null);
-  const lastTransitTRef = useRef<number | null>(null);
+  const [analysis, setAnalysis] = useState<CaptureAnalysis | null>(null);
+  const [eligibility, setEligibility] = useState<CalibrationEligibility | null>(null);
+  // Tap-to-sensor staleness measured at the STOP tap (debug visibility).
+  const [stopLatencyMs, setStopLatencyMs] = useState<number | null>(null);
+
+  const recorderRef = useRef<MotionRecorderHandle | null>(null);
+  const sweepSamplesRef = useRef<ImuSample[]>([]);
   const isMountedRef = useRef(true);
 
-  // The transit recorder runs between the bottom and top captures; if the
-  // user navigates away mid-wizard it must not keep a devicemotion listener
-  // (and this component's closure) alive.
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
-      transitRecorderRef.current?.stop();
-      transitRecorderRef.current = null;
+      recorderRef.current?.stop();
+      recorderRef.current = null;
     };
   }, []);
-
-  const derivation: CalibrationDerivation | null = useMemo(() => {
-    if (!gravityBottom || !gravityTop) return null;
-    return deriveCalibration(gravityBottom, gravityTop, transitRef.current);
-  }, [gravityBottom, gravityTop]);
 
   const exerciseOptions = exercises.map((e) => ({ value: e.id, label: e.name }));
 
@@ -104,75 +133,60 @@ export function CalibrationWizard({ userId, exercises, onSaved, onClose }: Calib
     Number(radiusMm) > 0 &&
     Number(radiusMm) < 2000;
 
-  const captureBottom = async () => {
+  const startSweep = async () => {
     setError(null);
-    setBusy(true);
-    try {
-      // iOS requires the permission request inside this tap's handler.
-      const permission = await requestMotionPermission();
-      if (permission !== 'granted') {
-        setError(
-          permission === 'unsupported'
-            ? 'This device does not expose motion sensors to the browser.'
-            : 'Motion permission denied — allow motion access to calibrate.'
-        );
-        return;
-      }
-      const samples = await recordForDuration(HOLD_CAPTURE_MS);
-      // Unmounted during the hold: starting the transit recorder now would
-      // leak a devicemotion listener with nothing left to stop it.
-      if (!isMountedRef.current) return;
-      if (samples.length < 10) {
-        setError('Too few sensor readings — try again.');
-        return;
-      }
-      setGravityBottom(meanAccel(samples));
-      // From here until the top capture, record the transit gyro: it is what
-      // pins down the pivot axis (gravity refs alone cannot).
-      transitRef.current = [];
-      lastTransitTRef.current = null;
-      transitRecorderRef.current = startMotionRecorder((s) => {
-        const last = lastTransitTRef.current;
-        lastTransitTRef.current = s.tMs;
-        if (last !== null) transitRef.current.push({ gyro: s.gyro, dtMs: s.tMs - last });
-      });
-      setStep('top');
-    } finally {
-      setBusy(false);
+    // iOS requires the permission request inside this tap's handler.
+    const permission = await requestMotionPermission();
+    if (!isMountedRef.current) return;
+    if (permission !== 'granted') {
+      setError(
+        permission === 'unsupported'
+          ? 'This device does not expose motion sensors to the browser.'
+          : 'Motion permission denied — allow motion access to calibrate.'
+      );
+      return;
     }
+    recorderRef.current = startMotionRecorder();
+    setSweeping(true);
   };
 
-  const captureTop = async () => {
-    setError(null);
-    setBusy(true);
-    try {
-      const samples = await recordForDuration(HOLD_CAPTURE_MS);
-      transitRecorderRef.current?.stop();
-      transitRecorderRef.current = null;
-      if (!isMountedRef.current) return;
-      if (samples.length < 10) {
-        setError('Too few sensor readings — try again.');
-        return;
-      }
-      setGravityTop(meanAccel(samples));
-      setStep('review');
-    } finally {
-      setBusy(false);
-    }
+  const stopSweep = () => {
+    const recorder = recorderRef.current;
+    recorderRef.current = null;
+    setSweeping(false);
+    if (!recorder) return;
+    setStopLatencyMs(tapLatencyMs(recorder));
+    const samples = recorder.stop();
+    sweepSamplesRef.current = samples;
+    // Every sweep proceeds to review: reps/velocity/chart always show, the
+    // stillness tier only decides whether a calibration can be SAVED.
+    const a = analyzeCapture(samples);
+    setAnalysis(a);
+    setEligibility(deriveCalibrationFromAnalysis(a, samples));
+    setStep('review');
+  };
+
+  const downloadSweepCsv = () => {
+    if (sweepSamplesRef.current.length === 0) return;
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    downloadTextFile(
+      `calibration-sweep-${stamp}.csv`,
+      captureToCsv(sweepSamplesRef.current, analysis)
+    );
   };
 
   const restart = () => {
-    transitRecorderRef.current?.stop();
-    transitRecorderRef.current = null;
-    transitRef.current = [];
-    setGravityBottom(null);
-    setGravityTop(null);
+    recorderRef.current?.stop();
+    recorderRef.current = null;
+    setSweeping(false);
+    setAnalysis(null);
+    setEligibility(null);
     setError(null);
-    setStep('bottom');
+    setStep('sweep');
   };
 
   const save = async () => {
-    if (!derivation?.valid || !gravityBottom || !gravityTop) return;
+    if (!eligibility?.eligible) return;
     setBusy(true);
     setError(null);
     try {
@@ -183,11 +197,12 @@ export function CalibrationWizard({ userId, exercises, onSaved, onClose }: Calib
         seatSetting: seatSetting.trim(),
         mountRadius_mm: Number(radiusMm),
         mountOrientation: orientation,
-        gravityRefStart: gravityBottom,
-        gravityRefEnd: gravityTop,
-        derivedPivotAxis: derivation.pivotAxis!,
-        derivedRomDegrees: derivation.romDegrees,
-        schemaVersion: MOTION_SCHEMA_VERSION,
+        gravityRefStart: eligibility.gravityRefBottom!,
+        gravityRefEnd: eligibility.gravityRefTop!,
+        derivedPivotAxis: eligibility.pivotAxis!,
+        axisQuality: eligibility.axisQuality!,
+        derivedRomDegrees: eligibility.romDegrees,
+        schemaVersion: CALIBRATION_SCHEMA_VERSION,
       });
       onSaved(saved);
     } catch (err) {
@@ -247,7 +262,7 @@ export function CalibrationWizard({ userId, exercises, onSaved, onClose }: Calib
                 Cancel
               </Button>
               <Button
-                onClick={() => setStep('bottom')}
+                onClick={() => setStep('sweep')}
                 disabled={!detailsValid}
                 className="flex-1"
                 data-testid="calibration-details-next"
@@ -258,59 +273,91 @@ export function CalibrationWizard({ userId, exercises, onSaved, onClose }: Calib
           </div>
         )}
 
-        {step === 'bottom' && (
+        {step === 'sweep' && (
           <div className="space-y-3">
-            <p className="text-sm text-surface-300">
-              Mount the phone on the machine arm. Move the arm to the{' '}
-              <span className="font-medium text-surface-100">BOTTOM of the range of motion</span> and
-              hold it completely still, then tap capture. Keep holding still for ~2 seconds.
-            </p>
-            <Button onClick={captureBottom} isLoading={busy} className="w-full" size="lg" data-testid="calibration-capture-bottom">
-              Capture bottom position
-            </Button>
-            <Button variant="secondary" onClick={onClose} className="w-full">
-              Cancel
-            </Button>
-          </div>
-        )}
-
-        {step === 'top' && (
-          <div className="space-y-3">
-            <p className="text-sm text-surface-300">
-              Bottom captured. Now move the arm{' '}
-              <span className="font-medium text-surface-100">smoothly to the TOP of the range of
-              motion</span> (the movement itself is being measured), hold it completely still, then
-              tap capture.
-            </p>
-            <Button onClick={captureTop} isLoading={busy} className="w-full" size="lg" data-testid="calibration-capture-top">
-              Capture top position
-            </Button>
-            <Button variant="secondary" onClick={restart} className="w-full">
-              Start over
-            </Button>
-          </div>
-        )}
-
-        {step === 'review' && (
-          <div className="space-y-3" data-testid="calibration-review">
-            {derivation?.valid ? (
+            {!sweeping ? (
               <>
-                <div className="p-3 rounded-lg bg-surface-900/60 space-y-1">
-                  <p className="text-sm text-surface-300">
-                    Derived range of motion:{' '}
-                    <span className="text-lg font-semibold text-primary-400">
-                      {derivation.romDegrees!.toFixed(1)}°
-                    </span>
-                  </p>
-                  {derivation.romFromGyroDegrees !== null && (
-                    <p className="text-xs text-surface-500">
-                      Gyro transit measured {derivation.romFromGyroDegrees.toFixed(1)}° — the two
-                      agree, which means the mount held steady.
-                    </p>
-                  )}
+                <ol className="text-sm text-surface-300 space-y-1.5 list-decimal list-inside">
+                  <li>
+                    Tap <span className="font-medium text-surface-100">Start</span> (phone in hand).
+                  </li>
+                  <li>Set the phone on the machine mount and let it sit still for a moment.</li>
+                  <li>
+                    Do <span className="font-medium text-surface-100">3 slow, full-range reps</span>{' '}
+                    — unloaded or light — pausing briefly at each end of the stroke.
+                  </li>
+                  <li>Let the arm rest, take the phone back, and tap Stop.</li>
+                </ol>
+                <Button onClick={startSweep} className="w-full" size="lg" data-testid="calibration-start-sweep">
+                  Start
+                </Button>
+                <Button variant="secondary" onClick={onClose} className="w-full">
+                  Cancel
+                </Button>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-surface-300">
+                  Recording… mount the phone, do 3 slow full-range reps, retrieve it, then stop.
+                </p>
+                <Button onClick={stopSweep} className="w-full" size="lg" data-testid="calibration-stop-sweep">
+                  Stop
+                </Button>
+              </>
+            )}
+          </div>
+        )}
+
+        {step === 'review' && analysis && eligibility && (
+          <div className="space-y-3" data-testid="calibration-review">
+            {/* The sweep ALWAYS shows its analysis — reps, velocity, chart,
+                tier — whether or not it qualifies as a calibration. */}
+            <CaptureAnalysisView analysis={analysis} />
+
+            {/* Debug strip: sensor staleness at the STOP tap + raw export —
+                a rejection message alone can't explain a bad sweep. */}
+            <div className="flex items-center justify-between gap-2 text-xs text-surface-500">
+              <span data-testid="calibration-stop-latency">
+                Sensor latency at Stop:{' '}
+                {stopLatencyMs === null ? 'n/a' : `${Math.round(stopLatencyMs)} ms`}
+                {stopLatencyMs !== null && stopLatencyMs > TAP_LATENCY_WARN_MS && (
+                  <span className="text-warning-400">
+                    {' '}
+                    — stale (&gt;{TAP_LATENCY_WARN_MS} ms; sensor delivery is lagging taps)
+                  </span>
+                )}
+              </span>
+              <button
+                type="button"
+                onClick={downloadSweepCsv}
+                className="text-primary-400 hover:text-primary-300 whitespace-nowrap"
+                data-testid="calibration-download-csv"
+              >
+                Download raw sweep (CSV)
+              </button>
+            </div>
+
+            {eligibility.eligible ? (
+              <>
+                <div className="p-3 rounded-lg bg-surface-900/60 space-y-2">
+                  <div className="flex items-baseline gap-4">
+                    <div>
+                      <p className="text-xs text-surface-500">Calibration ROM</p>
+                      <p className="text-xl font-semibold text-primary-400">
+                        {eligibility.romDegrees!.toFixed(1)}°
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-surface-500">Axis quality</p>
+                      <p className="text-xl font-semibold text-surface-100">
+                        {eligibility.axisQuality! >= 1000 ? '999+' : eligibility.axisQuality!.toFixed(0)}
+                      </p>
+                    </div>
+                  </div>
+                  <AxisIndicator axis={eligibility.pivotAxis!} />
                   <p className="text-xs text-surface-400">
-                    Sanity-check this number against the machine&apos;s real stroke. If it looks
-                    wrong, start over — don&apos;t save a bad calibration.
+                    Sanity-check the ROM against the machine&apos;s real stroke. If it looks wrong,
+                    redo the sweep — don&apos;t save a bad calibration.
                   </p>
                 </div>
                 <div className="p-3 rounded-lg bg-warning-500/10 border border-warning-500/20">
@@ -321,7 +368,7 @@ export function CalibrationWizard({ userId, exercises, onSaved, onClose }: Calib
                 </div>
                 <div className="flex gap-2">
                   <Button variant="secondary" onClick={restart} className="flex-1">
-                    Redo captures
+                    Redo sweep
                   </Button>
                   <Button onClick={save} isLoading={busy} className="flex-1" data-testid="calibration-save">
                     Save calibration
@@ -330,13 +377,13 @@ export function CalibrationWizard({ userId, exercises, onSaved, onClose }: Calib
               </>
             ) : (
               <>
-                <div className="p-3 rounded-lg bg-danger-500/10 border border-danger-500/20">
-                  <p className="text-sm text-danger-400">
-                    {derivation?.reason ?? 'Calibration captures are unusable.'}
+                <div className="p-3 rounded-lg bg-warning-500/10 border border-warning-500/20">
+                  <p className="text-sm text-warning-400" data-testid="calibration-ineligible-reason">
+                    Can&apos;t save as a machine calibration: {eligibility.reason}
                   </p>
                 </div>
                 <Button variant="secondary" onClick={restart} className="w-full">
-                  Start over
+                  Redo sweep
                 </Button>
               </>
             )}

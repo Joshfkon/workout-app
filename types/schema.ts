@@ -506,6 +506,9 @@ export const DAYS_OF_WEEK: WorkoutDay[] = ['Monday', 'Tuesday', 'Wednesday', 'Th
 /** Weekdays only */
 export const WEEKDAYS: WorkoutDay[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 
+/** Weekend days */
+export const WEEKEND_DAYS: WorkoutDay[] = ['Saturday', 'Sunday'];
+
 /**
  * Training mesocycle (typically 4-8 weeks) with progressive overload structure
  */
@@ -534,10 +537,25 @@ export interface Mesocycle {
   fatigueScore: number;
 
   /**
+   * How the calendar is derived. 'fixed_days' repeats the same weekdays every
+   * week; 'interval' trains every `trainingIntervalDays` days from the start
+   * date (an "every other day" cadence, which no set of weekdays can express).
+   * Null/absent on pre-feature rows and treated as 'fixed_days'.
+   */
+  scheduleMode: 'fixed_days' | 'interval' | null;
+
+  /**
    * User's preferred workout days (e.g., ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'] for weekdays only)
-   * If null, uses default schedule patterns based on daysPerWeek
+   * If null, uses default schedule patterns based on daysPerWeek.
+   * Ignored while scheduleMode is 'interval'.
    */
   preferredWorkoutDays: WorkoutDay[] | null;
+
+  /**
+   * Interval schedules only: train every N days, anchored to the start date.
+   * 2 = every other day. Null for fixed-day schedules.
+   */
+  trainingIntervalDays: number | null;
 
   /** Target workout duration in minutes (15-120), used for exercise planning */
   sessionDurationMinutes: number | null;
@@ -1212,8 +1230,18 @@ export interface SwapSuggestion {
 // ============ DEFAULT VALUES ============
 
 /**
- * Default volume landmarks by muscle group for different experience levels
- * Uses the Standard 20 muscle groups for granular volume tracking
+ * Default volume landmarks by muscle group for different experience levels.
+ * One row per STANDARD_MUSCLE_GROUPS entry (the registry is the count — do not
+ * restate it here; stale taxonomy counts are what this comment used to carry).
+ *
+ * SEMANTICS — this is the DIRECT-SET, experience-specific landmark table
+ * (`referenceDirectMRV`). It is NOT interchangeable with the coarse
+ * total-inclusive bands in services/volumeBands (`referenceInclusiveMRV`),
+ * which are experience-independent and stated against credited sets
+ * (secondary work at 0.5/set). The two tables diverge for TWO independent
+ * reasons — experience scaling AND the direct-vs-credited convention — so a
+ * gap between them is not a unit-conversion error and must never be "fixed"
+ * by forcing them to agree. See services/volumeBands for the inclusive side.
  *
  * Notes on values:
  * - Front delts get significant indirect work from pressing, so direct MEV is low
@@ -1234,6 +1262,14 @@ export interface SwapSuggestion {
  *   raises) and takes the bulk of the coarse calves band.
  * - Soleus needs bent-knee (seated) work for direct sets but picks up half
  *   credit from every straight-knee raise, so its band sits lower.
+ *
+ * BOUNDED COMPONENT ROWS (see MUSCLE_VOLUME_AUTHORITY): the rows whose
+ * authority is 'boundedComponent' — gastrocnemius/soleus, triceps_long/
+ * triceps_lat_med, upper_traps/mid_lower_traps — are bounded compatibility
+ * SUBTARGETS used for local stimulus and progression behaviour. They are NOT
+ * additive partitions of physiological capacity and must never be summed with
+ * the parent group landmark. Their MRV may not exceed the parent's MRV at the
+ * same experience level (asserted in muscleTaxonomy.test.ts).
  */
 export const DEFAULT_VOLUME_LANDMARKS: Record<Experience, Record<StandardMuscleGroup, VolumeLandmarks>> = {
   novice: {
@@ -1278,7 +1314,11 @@ export const DEFAULT_VOLUME_LANDMARKS: Record<Experience, Record<StandardMuscleG
     biceps: { mev: 6, mav: 12, mrv: 18 },
     triceps: { mev: 6, mav: 12, mrv: 18 },
     triceps_long: { mev: 4, mav: 10, mrv: 18 },
-    triceps_lat_med: { mev: 6, mav: 12, mrv: 20 },
+    // MRV 20 -> 18: bounded-component compatibility constraint. A component
+    // may not claim more recoverable capacity than its parent ('triceps' 18
+    // at this level). This is NOT a claim that physiological MRV partitions
+    // by muscle mass — see MUSCLE_VOLUME_AUTHORITY.
+    triceps_lat_med: { mev: 6, mav: 12, mrv: 18 },
     forearms: { mev: 3, mav: 8, mrv: 14 },
     quads: { mev: 8, mav: 14, mrv: 22 },
     hamstrings: { mev: 6, mav: 12, mrv: 18 },
@@ -1306,7 +1346,9 @@ export const DEFAULT_VOLUME_LANDMARKS: Record<Experience, Record<StandardMuscleG
     biceps: { mev: 8, mav: 16, mrv: 22 },
     triceps: { mev: 8, mav: 16, mrv: 22 },
     triceps_long: { mev: 6, mav: 13, mrv: 20 },
-    triceps_lat_med: { mev: 8, mav: 15, mrv: 24 },
+    // MRV 24 -> 22: bounded-component compatibility constraint (parent
+    // 'triceps' MRV is 22 at this level). See the intermediate row.
+    triceps_lat_med: { mev: 8, mav: 15, mrv: 22 },
     forearms: { mev: 4, mav: 10, mrv: 16 },
     quads: { mev: 10, mav: 18, mrv: 26 },
     hamstrings: { mev: 8, mav: 14, mrv: 22 },
@@ -1592,7 +1634,14 @@ export interface RepRangeFactors {
   goal: Goal;
   experience: Experience;
   exercisePattern: MovementPattern | 'isolation' | 'carry';
-  muscleGroup: MuscleGroup;
+  /**
+   * Coarse legacy group OR a standard muscle. Widened so fine keys
+   * (gastrocnemius, soleus, triceps_long, …) can reach
+   * repRangeEngine.fiberTypeForMuscle — with only the legacy type here, a fine
+   * muscle could never be prescribed against its own fiber profile and the
+   * per-standard overrides would be unreachable dead data.
+   */
+  muscleGroup: MuscleGroup | StandardMuscleGroup;
   positionInWorkout: ExercisePosition;
   weekInMesocycle: number;
   totalMesocycleWeeks: number;
@@ -1791,8 +1840,10 @@ export interface DeloadTriggers {
 // ============ TWO-TIER MUSCLE GROUP SYSTEM ============
 
 /**
- * Standard Muscle Groups (24) - UI Display & Volume Tracking
- * These are what users see in the interface and what volume landmarks are defined against.
+ * Standard Muscle Groups - UI Display & Volume Tracking
+ * These are what users see in the interface and what volume landmarks are
+ * defined against. This array IS the count — read STANDARD_MUSCLE_GROUPS.length
+ * rather than restating a number that goes stale the next time a head is split.
  *
  * Six of these are FINE members of a coarse group that is ITSELF a standard
  * muscle ('traps', 'calves', 'triceps'): upper_traps / mid_lower_traps,
@@ -1834,6 +1885,182 @@ export const STANDARD_MUSCLE_GROUPS = [
 ] as const;
 
 export type StandardMuscleGroup = (typeof STANDARD_MUSCLE_GROUPS)[number];
+
+// ============ MUSCLE VOLUME AUTHORITY REGISTRY ============
+
+/**
+ * How a standard muscle relates ANATOMICALLY to its parent row.
+ *
+ *  - completePartition: the listed components collectively represent the
+ *    parent for volume-authority purposes (calves = gastrocnemius + soleus;
+ *    triceps = long head + lateral/medial).
+ *  - partialRollup: the component overlaps the parent, but the listed
+ *    children are NOT a complete partition. Traps: the detailed taxonomy has
+ *    upper_traps and lower_traps but no mid-trap key, and rhomboid work maps
+ *    to 'upper_back' (the BACK group), so trapezius stimulus provably leaks
+ *    outside the traps group (e.g. seed 'Face Pull' carries upper_back and
+ *    mid_lower_traps as siblings).
+ *  - independent: separate anatomical / programming targets that merely share
+ *    a coarse display parent. 'glutes' IS gluteus maximus (glute_max ->
+ *    glutes, glute_med -> glute_med) and 'abs' IS rectus abdominis
+ *    (abs_rectus -> abs, abs_obliques -> obliques).
+ */
+export type AnatomicalRelationship =
+  | 'completePartition'
+  | 'partialRollup'
+  | 'independent';
+
+/**
+ * How this row's CREDITED SETS behave at runtime — deliberately separate from
+ * the anatomical relationship, because they disagree.
+ *
+ *  - disjoint: the row receives credit that no sibling row also receives.
+ *    resolveMuscleToStandard is standard-first, so a set tagged 'calves'
+ *    credits ONLY the 'calves' row and never leaks into gastrocnemius/soleus.
+ *  - overlapping: the row can receive credit that a sibling also receives.
+ *  - independent: the row is not part of a parent/component pair at all.
+ *
+ * WARNING TO FUTURE ENGINEERS: `completePartition` describes ANATOMY ONLY.
+ * It does NOT license summing credited rows. calves / triceps are complete
+ * anatomical partitions whose standard rows are DISJOINT credited buckets:
+ * the coarse row already counts capped per-exercise group credit, so adding a
+ * component's credited sets on top would double-count. Read
+ * `creditAggregation`, never `anatomicalRelationship`, before aggregating.
+ */
+export type CreditAggregation = 'disjoint' | 'overlapping' | 'independent';
+
+/**
+ * Who owns this row's volume capacity.
+ *
+ *  - independent: the row owns its own MEV/MAV/MRV outright.
+ *  - groupCapacity: the row is the capacity owner for a parent/component
+ *    family (its MRV bounds its components').
+ *  - boundedComponent: a bounded compatibility SUBTARGET. It keeps its own
+ *    landmark values — they still drive local stimulus floors, local status
+ *    and per-muscle progression — but they are non-additive: they may never
+ *    be summed with the parent as extra group capacity, and the row's MRV may
+ *    never exceed the parent's MRV at the same experience level.
+ *
+ * Component landmarks are bounded compatibility subtargets used for local
+ * stimulus and progression behavior. They are not additive partitions of
+ * physiological capacity and must not be summed with the parent group
+ * landmark.
+ *
+ * FUTURE REPLACEMENT: shared-capacity enforcement genuinely belongs at the
+ * coarse group row (services/volumeBands.getEffectiveBand plus the
+ * weeklyRollover group budget). The exercise-to-muscle stimulus matrix
+ * tracked separately is what should eventually replace this bounded-subtarget
+ * compatibility layer entirely.
+ */
+export type VolumeAuthority = 'independent' | 'groupCapacity' | 'boundedComponent';
+
+export interface MuscleVolumeAuthority {
+  anatomicalRelationship: AnatomicalRelationship;
+  creditAggregation: CreditAggregation;
+  volumeAuthority: VolumeAuthority;
+  /** Set only on boundedComponent rows: the groupCapacity row that bounds it. */
+  parent?: StandardMuscleGroup;
+}
+
+/**
+ * TOTAL registry: one entry per StandardMuscleGroup. Completeness, parent
+ * validity and the component-MRV <= parent-MRV bound are all asserted in
+ * types/__tests__/muscleTaxonomy.test.ts.
+ */
+export const MUSCLE_VOLUME_AUTHORITY: Record<StandardMuscleGroup, MuscleVolumeAuthority> = {
+  // ── Rows with no parent/component family ────────────────────────────────
+  chest_upper: { anatomicalRelationship: 'independent', creditAggregation: 'independent', volumeAuthority: 'independent' },
+  chest_lower: { anatomicalRelationship: 'independent', creditAggregation: 'independent', volumeAuthority: 'independent' },
+  front_delts: { anatomicalRelationship: 'independent', creditAggregation: 'independent', volumeAuthority: 'independent' },
+  lateral_delts: { anatomicalRelationship: 'independent', creditAggregation: 'independent', volumeAuthority: 'independent' },
+  rear_delts: { anatomicalRelationship: 'independent', creditAggregation: 'independent', volumeAuthority: 'independent' },
+  lats: { anatomicalRelationship: 'independent', creditAggregation: 'independent', volumeAuthority: 'independent' },
+  upper_back: { anatomicalRelationship: 'independent', creditAggregation: 'independent', volumeAuthority: 'independent' },
+  biceps: { anatomicalRelationship: 'independent', creditAggregation: 'independent', volumeAuthority: 'independent' },
+  forearms: { anatomicalRelationship: 'independent', creditAggregation: 'independent', volumeAuthority: 'independent' },
+  quads: { anatomicalRelationship: 'independent', creditAggregation: 'independent', volumeAuthority: 'independent' },
+  hamstrings: { anatomicalRelationship: 'independent', creditAggregation: 'independent', volumeAuthority: 'independent' },
+  adductors: { anatomicalRelationship: 'independent', creditAggregation: 'independent', volumeAuthority: 'independent' },
+  erectors: { anatomicalRelationship: 'independent', creditAggregation: 'independent', volumeAuthority: 'independent' },
+
+  // 'glutes' IS gluteus maximus and 'abs' IS rectus abdominis — glute_med and
+  // obliques are separate targets that merely share a coarse display parent,
+  // NOT components. They keep full independent authority.
+  glutes: { anatomicalRelationship: 'independent', creditAggregation: 'independent', volumeAuthority: 'independent' },
+  glute_med: { anatomicalRelationship: 'independent', creditAggregation: 'independent', volumeAuthority: 'independent' },
+  abs: { anatomicalRelationship: 'independent', creditAggregation: 'independent', volumeAuthority: 'independent' },
+  obliques: { anatomicalRelationship: 'independent', creditAggregation: 'independent', volumeAuthority: 'independent' },
+
+  // ── calves family: complete anatomical partition, DISJOINT credit ───────
+  calves: { anatomicalRelationship: 'completePartition', creditAggregation: 'disjoint', volumeAuthority: 'groupCapacity' },
+  gastrocnemius: { anatomicalRelationship: 'completePartition', creditAggregation: 'disjoint', volumeAuthority: 'boundedComponent', parent: 'calves' },
+  soleus: { anatomicalRelationship: 'completePartition', creditAggregation: 'disjoint', volumeAuthority: 'boundedComponent', parent: 'calves' },
+
+  // ── triceps family: complete anatomical partition, DISJOINT credit ──────
+  // triceps_lat_med combines the lateral AND medial heads (DETAILED_TO_
+  // STANDARD_MAP sends triceps_lateral and triceps_medial to the same row).
+  triceps: { anatomicalRelationship: 'completePartition', creditAggregation: 'disjoint', volumeAuthority: 'groupCapacity' },
+  triceps_long: { anatomicalRelationship: 'completePartition', creditAggregation: 'disjoint', volumeAuthority: 'boundedComponent', parent: 'triceps' },
+  triceps_lat_med: { anatomicalRelationship: 'completePartition', creditAggregation: 'disjoint', volumeAuthority: 'boundedComponent', parent: 'triceps' },
+
+  // ── traps family: PARTIAL rollup (no mid-trap key; rhomboid work maps to
+  //    upper_back, i.e. the BACK group), DISJOINT credit ────────────────────
+  traps: { anatomicalRelationship: 'partialRollup', creditAggregation: 'disjoint', volumeAuthority: 'groupCapacity' },
+  upper_traps: { anatomicalRelationship: 'partialRollup', creditAggregation: 'disjoint', volumeAuthority: 'boundedComponent', parent: 'traps' },
+  mid_lower_traps: { anatomicalRelationship: 'partialRollup', creditAggregation: 'disjoint', volumeAuthority: 'boundedComponent', parent: 'traps' },
+};
+
+/** Authority entry for a standard muscle. */
+export function getVolumeAuthority(muscle: StandardMuscleGroup): MuscleVolumeAuthority {
+  return MUSCLE_VOLUME_AUTHORITY[muscle];
+}
+
+/** True when this row is a bounded compatibility subtarget of a parent row. */
+export function isBoundedComponent(muscle: StandardMuscleGroup): boolean {
+  return MUSCLE_VOLUME_AUTHORITY[muscle].volumeAuthority === 'boundedComponent';
+}
+
+/**
+ * The row that owns aggregate capacity for `muscle`: the parent for a bounded
+ * component, otherwise the muscle itself. Used by the Bug 6 session-capacity
+ * normalizer so a deprecated component MRV is never the denominator.
+ */
+export function capacityOwnerFor(muscle: StandardMuscleGroup): StandardMuscleGroup {
+  return MUSCLE_VOLUME_AUTHORITY[muscle].parent ?? muscle;
+}
+
+/** The bounded components of a groupCapacity row (empty for every other row). */
+export function boundedComponentsOf(muscle: StandardMuscleGroup): StandardMuscleGroup[] {
+  return STANDARD_MUSCLE_GROUPS.filter(
+    (m) => MUSCLE_VOLUME_AUTHORITY[m].parent === muscle
+  );
+}
+
+/**
+ * Guard for aggregation call sites: throws in dev/test when a set of muscles
+ * about to be summed contains BOTH a groupCapacity row and one of its own
+ * bounded components. Silent in production (a thrown error must never break a
+ * user's dashboard over a reporting bug) — the dev throw plus the taxonomy
+ * tests are the enforcement.
+ */
+export function assertNoMixedCapacityAggregation(
+  muscles: readonly StandardMuscleGroup[],
+  context: string
+): void {
+  const present = new Set(muscles);
+  const offenders: string[] = [];
+  for (const muscle of Array.from(present)) {
+    const parent = MUSCLE_VOLUME_AUTHORITY[muscle].parent;
+    if (parent && present.has(parent)) offenders.push(`${parent}+${muscle}`);
+  }
+  if (offenders.length === 0) return;
+  const message =
+    `[volume] ${context}: refusing to aggregate a group-capacity row with its own ` +
+    `bounded component(s) — ${offenders.join(', ')}. Bounded component landmarks are ` +
+    `non-additive subtargets, not extra group capacity.`;
+  if (process.env.NODE_ENV !== 'production') throw new Error(message);
+  console.error(message);
+}
 
 /**
  * Detailed Muscle Groups (33) - AI Exercise Metadata & Programming Logic
@@ -1892,7 +2119,8 @@ export const DETAILED_MUSCLE_GROUPS = [
 export type DetailedMuscleGroup = (typeof DETAILED_MUSCLE_GROUPS)[number];
 
 /**
- * Mapping from Detailed (33) to Standard (20) muscle groups
+ * Mapping from every DetailedMuscleGroup to its StandardMuscleGroup.
+ * Totality is enforced by the Record type — no count needed here.
  */
 export const DETAILED_TO_STANDARD_MAP: Record<DetailedMuscleGroup, StandardMuscleGroup> = {
   // Chest

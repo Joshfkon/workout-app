@@ -22,6 +22,15 @@ import { muscleMatchesGroup, type MuscleGroup } from '@/types/schema';
 // Affects rep range recommendations
 // ============================================================
 
+/**
+ * @deprecated Duplicate of services/repRangeEngine.MUSCLE_FIBER_PROFILE, kept
+ * only for the `lib/training` barrel's public surface. It is COARSE-KEYED and
+ * therefore blind to the per-standard fiber overrides
+ * (STANDARD_MUSCLE_FIBER_OVERRIDES — gastrocnemius 'mixed'), so reading it
+ * directly reintroduces the bug where a fine muscle silently inherits its
+ * coarse parent's label. Every live consumer now calls
+ * `repRangeEngine.fiberTypeForMuscle`; do not add new readers here.
+ */
 export const MUSCLE_FIBER_PROFILE: Record<MuscleGroup, FiberType> = {
   chest: 'mixed',
   back: 'mixed',

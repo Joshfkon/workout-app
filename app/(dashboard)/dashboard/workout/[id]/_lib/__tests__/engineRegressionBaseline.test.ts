@@ -95,9 +95,9 @@ describe('engine regression baseline — staple exercise, recent history', () =>
     expect(history.totalSessions).toBe(4);
     expect(history.lastWorkoutDate).toBe('2026-07-17T10:00:00Z');
     expect(history.lastWorkoutSets).toEqual([
-      { weightKg: 100, reps: 10, rpe: 8.5 },
-      { weightKg: 100, reps: 9, rpe: 9 },
-      { weightKg: 100, reps: 8, rpe: 9.5 },
+      expect.objectContaining({ weightKg: 100, reps: 10, rpe: 8.5 }),
+      expect.objectContaining({ weightKg: 100, reps: 9, rpe: 9 }),
+      expect.objectContaining({ weightKg: 100, reps: 8, rpe: 9.5 }),
     ]);
     // Phase 2 aggregation: best qualifying set among the newest sessions —
     // no decay. The winner is the Jul 14 97.5 × 11 @ RPE 8 set (2 RIR → 13

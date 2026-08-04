@@ -7,6 +7,7 @@ import { localDay, rollingWindowStart } from '@/lib/date/localDay';
 import { analyzeBodyCompTrend, computeFFMI } from '@/services/bodyCompEngine';
 import { getBodyCompLayout } from '@/services/compositionSpace';
 import { type WorkoutDay } from '@/types/schema';
+import { type ScheduleMode } from '@/lib/training/trainingSchedule';
 import {
   computeWeeklyMuscleVolume,
   computeReachableMuscles,
@@ -33,6 +34,9 @@ export interface DashboardMesocycle {
   splitType: string;
   daysPerWeek: number;
   preferredWorkoutDays?: WorkoutDay[] | null;
+  /** Schedule shape: fixed weekdays, or every-N-days from startDate. */
+  scheduleMode?: ScheduleMode | null;
+  trainingIntervalDays?: number | null;
   /** Sessions completed vs expected inside the current mesocycle week. */
   weekSessionsDone?: number;
   weekSessionsTotal?: number;
@@ -88,7 +92,7 @@ export async function fetchMesocycleData(userId: string): Promise<{
 
   const { data: mesocycles } = await supabase
     .from('mesocycles')
-    .select(`id, name, start_date, total_weeks, split_type, days_per_week, preferred_workout_days, state, is_active,
+    .select(`id, name, start_date, total_weeks, split_type, days_per_week, preferred_workout_days, schedule_mode, training_interval_days, state, is_active,
       workout_sessions (id, planned_date, state, completed_at)`)
     .eq('user_id', userId)
     .order('created_at', { ascending: false });
@@ -126,6 +130,8 @@ export async function fetchMesocycleData(userId: string): Promise<{
     splitType: mesocycle.split_type,
     daysPerWeek: mesocycle.days_per_week,
     preferredWorkoutDays: mesocycle.preferred_workout_days || null,
+    scheduleMode: mesocycle.schedule_mode || null,
+    trainingIntervalDays: mesocycle.training_interval_days ?? null,
     weekSessionsDone: weekSessions?.done,
     weekSessionsTotal: weekSessions?.total,
   };

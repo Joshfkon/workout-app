@@ -307,13 +307,17 @@ export const InlineHint = memo(function InlineHint({
     <div
       className={cn(
         'flex items-start gap-2 p-3 rounded-lg',
-        'bg-primary-900/30 border border-primary-800 text-primary-100',
+        // primary-* is a fixed ramp (it does not flip with the theme like
+        // surface-*), so both themes are spelled out: a light tint with dark
+        // text on light, the original dark-blue wash on dark.
+        'bg-primary-50 border border-primary-200 text-primary-900',
+        'dark:bg-primary-900/30 dark:border-primary-800 dark:text-primary-100',
         'animate-fade-in',
         className
       )}
     >
       <svg
-        className="w-5 h-5 text-primary-400 flex-shrink-0 mt-0.5"
+        className="w-5 h-5 text-primary-600 dark:text-primary-400 flex-shrink-0 mt-0.5"
         fill="none"
         viewBox="0 0 24 24"
         stroke="currentColor"
@@ -328,7 +332,7 @@ export const InlineHint = memo(function InlineHint({
       <div className="flex-1 text-sm">{children}</div>
       <button
         onClick={dismiss}
-        className="flex-shrink-0 p-1 hover:bg-primary-800 rounded transition-colors"
+        className="flex-shrink-0 p-1 hover:bg-primary-100 dark:hover:bg-primary-800 rounded transition-colors"
         aria-label="Dismiss"
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">

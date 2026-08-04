@@ -32,9 +32,17 @@ export const MOUNT_ORIENTATIONS: MountOrientation[] = [
 
 /**
  * A user-performed calibration of one physical machine + seat + mount
- * position. Changing seat height or where the phone is mounted invalidates
- * the calibration (the gravity references and radius no longer describe the
- * rig) — the UI warns about this on save.
+ * position, produced by the SWEEP flow (START in hand → mount → ~3 slow
+ * full-ROM reps → retrieve → STOP). Changing seat height or where the phone
+ * is mounted invalidates the calibration — the UI warns about this on save.
+ *
+ * schemaVersion history:
+ *  1 — two-static-hold derivation. Mathematically ill-posed (the axis
+ *      component parallel to gravity is unrecoverable from two gravity
+ *      vectors); all v1 rows were wiped by migration.
+ *  2 — sweep derivation: axis from the gyro scatter matrix, gravity used
+ *      only as a check. Adds axisQuality; gravity refs become endpoint
+ *      UNIT vectors.
  */
 export interface MachineCalibration {
   id: string;
@@ -46,22 +54,30 @@ export interface MachineCalibration {
   /** Pivot axis to phone IMU, user-measured, millimetres. */
   mountRadius_mm: number;
   mountOrientation: MountOrientation;
-  /** Gravity vector (m/s²) held at the BOTTOM of the ROM during calibration. */
+  /** Mean gravity UNIT vector at the BOTTOM ROM endpoint (sweep rests). */
   gravityRefStart: Vec3;
-  /** Gravity vector (m/s²) held at the TOP of the ROM during calibration. */
+  /** Mean gravity UNIT vector at the TOP ROM endpoint (sweep rests). */
   gravityRefEnd: Vec3;
   /**
-   * Unit pivot axis in the phone frame, derived at calibration time from the
-   * transit-gyro integral (see services/shared/motion/calibration.ts) and
-   * canonicalized so bottom→top rotation is positive. Stored because the
-   * gravity refs alone cannot reconstruct it (axis-tilt ambiguity).
+   * Unit pivot axis in the phone frame — the principal eigenvector of the
+   * sweep's gyro scatter matrix (services/shared/motion/calibration.ts),
+   * sign-resolved so the concentric direction is positive.
    */
   derivedPivotAxis: Vec3;
-  /** ROM between the two refs about the derived axis, degrees (display). */
+  /**
+   * Axis-quality metric λ1/(λ2+λ3) from the sweep's scatter eigenvalues —
+   * how single-axis the recorded motion actually was. Sweeps below
+   * AXIS_QUALITY_MIN are rejected before a calibration is ever created.
+   */
+  axisQuality: number;
+  /** Median endpoint-to-endpoint stroke ROM from the sweep, degrees. */
   derivedRomDegrees: number | null;
   createdAt: string;
   schemaVersion: number;
 }
+
+/** Current MachineCalibration schema version (see history above). */
+export const CALIBRATION_SCHEMA_VERSION = 2;
 
 export type CaptureSide = 'left' | 'right';
 
@@ -93,6 +109,32 @@ export const MOTION_PROVENANCE = 'phone-imu-v1' as const;
 export type MotionProvenance = typeof MOTION_PROVENANCE;
 
 /**
+ * Per-rep metrics from the calibration-free analysis pipeline, persisted
+ * with the capture as the feature set for a future velocity-loss → RIR
+ * fit. DESCRIPTIVE data only: nothing reads these yet, and nothing here
+ * judges a rep.
+ */
+export interface CaptureAnalysisRepMetrics {
+  /** 0-based rep index. */
+  index: number;
+  romDeg: number;
+  meanConcentricW_radps: number;
+  peakConcentricW_radps: number;
+  /** Null on the first rep (its bottom is the pre-set rest). */
+  bottomDwellMs: number | null;
+  /** Null on the first rep. */
+  turnaroundPeakAccel_radps2: number | null;
+}
+
+/** Capture-level analysis metadata persisted for later quality filtering. */
+export interface CaptureAnalysisMetrics {
+  pc1VarianceShare: number;
+  /** Acute PC1-to-gravity angle, degrees; null when no gravity reference. */
+  pc1GravityAngleDeg: number | null;
+  reps: CaptureAnalysisRepMetrics[];
+}
+
+/**
  * One recorded set's motion telemetry. References the set by id; the set
  * schema is untouched. Raw sample buffers are NOT part of this record —
  * raw retention is a separate opt-in with a per-session cap.
@@ -110,6 +152,20 @@ export interface MotionCapture {
   clipDetected: boolean;
   reps: RepMetric[];
   qualityFlags: string[];
+  /**
+   * Calibration-free analysis metrics (motion_captures.analysis_metrics).
+   * Stored even though nothing reads them yet — the feature set for a
+   * future velocity-loss → RIR fit, with capture-quality metadata so later
+   * analysis can filter.
+   */
+  analysisMetrics?: CaptureAnalysisMetrics | null;
+  /**
+   * True if the user expanded any Observations block earlier in the same
+   * workout before this capture was saved. Read by nothing — a future
+   * label-contamination filter for the RIR fit (metrics seen before RIR
+   * entry can anchor the label).
+   */
+  priorObservationsViewedThisSession?: boolean;
   /** Literal source tag so future pipelines can migrate old records. */
   provenance: MotionProvenance;
   schemaVersion: number;

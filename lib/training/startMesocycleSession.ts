@@ -49,7 +49,14 @@ import {
   exerciseKey,
   type WeeklyAdjustmentPlan,
 } from '@/lib/training/weeklyRollover';
+import { readLandmarkVersion } from '@/lib/migrations/volume-landmarks';
 import { sessionIndexFromCompleted } from '@/lib/training/mesocycleProgress';
+import {
+  getTrainingDays,
+  getWorkoutForDate,
+  getWorkoutForDay,
+  type TodayWorkout,
+} from '@/lib/training/trainingSchedule';
 import { insertWorkoutSessions } from '@/lib/training/sessionOrigin';
 import { quickWeightEstimate, type TransferCandidate } from '@/services/weightEstimationEngine';
 import { fetchTransferCandidates } from '@/lib/training/transferCandidates';
@@ -66,7 +73,6 @@ import type {
   FullProgramRecommendation,
   MuscleGroup,
   WarmupSet,
-  WorkoutDay,
 } from '@/types/schema';
 
 // ============================================================
@@ -75,11 +81,7 @@ import type {
 
 export type Goal = 'bulk' | 'cut' | 'maintain';
 
-export interface TodayWorkout {
-  dayName: string;
-  muscles: MuscleGroup[];
-  dayNumber: number;
-}
+export type { TodayWorkout };
 
 /** The mesocycle fields the start path needs (subset of the pages' row shape). */
 export interface StartableMesocycle {
@@ -134,88 +136,16 @@ interface ExerciseBlockInsert {
 
 // ============================================================
 // Scheduling helpers (shared by both pages)
+//
+// The calendar lives in lib/training/trainingSchedule (pure, dependency-free)
+// so fixed-weekday and every-N-days schedules resolve identically everywhere
+// — and so surfaces that only need "what's scheduled today" (the dashboard)
+// don't pull this module's session-building dependencies into their bundle.
+// Re-exported here because both workout-start pages import them alongside
+// startMesocycleWorkoutSession.
 // ============================================================
 
-const WEEKDAY_NAMES: WorkoutDay[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-
-/** Convert day name to day number (Monday=1, Sunday=7). */
-function dayNameToNumber(dayName: WorkoutDay): number {
-  return WEEKDAY_NAMES.indexOf(dayName) + 1;
-}
-
-/** Training days of the week (Monday=1..Sunday=7) for a mesocycle. */
-export function getTrainingDays(daysPerWeek: number, preferredWorkoutDays?: WorkoutDay[] | null): number[] {
-  if (preferredWorkoutDays && preferredWorkoutDays.length > 0) {
-    return preferredWorkoutDays.map(dayNameToNumber).sort((a, b) => a - b);
-  }
-
-  const trainingDayMaps: Record<number, number[]> = {
-    2: [1, 4],
-    3: [1, 3, 5],
-    4: [1, 2, 4, 5],
-    5: [1, 2, 3, 5, 6],
-    6: [1, 2, 3, 4, 5, 6],
-  };
-
-  return trainingDayMaps[daysPerWeek] || trainingDayMaps[4];
-}
-
-/** Get workout schedule for a given weekday based on split type and preferred days. */
-export function getWorkoutForDay(
-  splitType: string,
-  dayOfWeek: number,
-  daysPerWeek: number,
-  preferredWorkoutDays?: WorkoutDay[] | null
-): TodayWorkout | null {
-  const splits: Record<string, { dayName: string; muscles: MuscleGroup[] }[]> = {
-    'Full Body': [
-      { dayName: 'Full Body A', muscles: ['chest', 'back', 'quads', 'shoulders', 'triceps'] },
-      { dayName: 'Full Body B', muscles: ['back', 'hamstrings', 'glutes', 'biceps', 'calves'] },
-      { dayName: 'Full Body C', muscles: ['chest', 'quads', 'shoulders', 'biceps', 'abs'] },
-    ],
-    'Upper/Lower': [
-      { dayName: 'Upper A', muscles: ['chest', 'back', 'shoulders', 'biceps', 'triceps'] },
-      { dayName: 'Lower A', muscles: ['quads', 'hamstrings', 'glutes', 'calves', 'abs'] },
-      { dayName: 'Upper B', muscles: ['back', 'chest', 'shoulders', 'triceps', 'biceps'] },
-      { dayName: 'Lower B', muscles: ['hamstrings', 'quads', 'glutes', 'calves', 'abs'] },
-    ],
-    'PPL': [
-      { dayName: 'Push', muscles: ['chest', 'shoulders', 'triceps'] },
-      { dayName: 'Pull', muscles: ['back', 'biceps', 'shoulders'] },
-      { dayName: 'Legs', muscles: ['quads', 'hamstrings', 'glutes', 'calves', 'abs'] },
-      { dayName: 'Push 2', muscles: ['chest', 'shoulders', 'triceps'] },
-      { dayName: 'Pull 2', muscles: ['back', 'biceps', 'shoulders'] },
-      { dayName: 'Legs 2', muscles: ['quads', 'hamstrings', 'glutes', 'calves', 'abs'] },
-    ],
-    'Arnold': [
-      { dayName: 'Chest & Back', muscles: ['chest', 'back'] },
-      { dayName: 'Shoulders & Arms', muscles: ['shoulders', 'biceps', 'triceps'] },
-      { dayName: 'Legs', muscles: ['quads', 'hamstrings', 'glutes', 'calves', 'abs'] },
-    ],
-    'Bro Split': [
-      { dayName: 'Chest', muscles: ['chest'] },
-      { dayName: 'Back', muscles: ['back'] },
-      { dayName: 'Shoulders', muscles: ['shoulders'] },
-      { dayName: 'Arms', muscles: ['biceps', 'triceps'] },
-      { dayName: 'Legs', muscles: ['quads', 'hamstrings', 'glutes', 'calves'] },
-    ],
-  };
-
-  const schedule = splits[splitType] || splits['Upper/Lower'];
-
-  const trainingDays = getTrainingDays(daysPerWeek, preferredWorkoutDays);
-  const dayIndex = trainingDays.indexOf(dayOfWeek);
-
-  if (dayIndex === -1) {
-    return null; // Rest day
-  }
-
-  const workoutIndex = dayIndex % schedule.length;
-  return {
-    ...schedule[workoutIndex],
-    dayNumber: dayIndex + 1,
-  };
-}
+export { getTrainingDays, getWorkoutForDate, getWorkoutForDay };
 
 /**
  * Get rest period based on exercise type and user's goal
@@ -515,7 +445,7 @@ export async function startMesocycleWorkoutSession(
 
   const { data: userData } = await supabase
     .from('users')
-    .select('height_cm, weight_kg, body_fat_percent, experience, volume_landmarks, enhanced_athlete_mode')
+    .select('height_cm, weight_kg, body_fat_percent, experience, volume_landmarks, enhanced_athlete_mode, preferences')
     .eq('id', user.id)
     .single();
 
@@ -665,7 +595,10 @@ export async function startMesocycleWorkoutSession(
         landmarksByMuscle: resolveVolumeLandmarks(
           userExperience,
           (userData?.volume_landmarks as Record<string, unknown> | null) ?? null,
-          enhancedAthleteMode
+          enhancedAthleteMode,
+          readLandmarkVersion(
+            (userData?.preferences as Record<string, unknown> | null) ?? null
+          )
         ),
         weekInMeso: mesocycle.current_week,
         isDeloadWeek: mesocycle.current_week === mesocycle.deload_week,

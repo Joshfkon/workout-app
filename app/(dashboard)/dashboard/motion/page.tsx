@@ -31,6 +31,7 @@ export default function MotionPage() {
   const [exercises, setExercises] = useState<ExerciseOption[]>([]);
   const [showWizard, setShowWizard] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [rawStorage, setRawStorage] = useState<{ buffers: number; samples: number } | null>(null);
 
   const load = useCallback(async () => {
     const supabase = createUntypedClient();
@@ -38,15 +39,23 @@ export default function MotionPage() {
     if (!user) return;
     setUserId(user.id);
 
-    const [{ data: userRow }, calibrationRows, { data: exerciseRows }] = await Promise.all([
-      supabase
-        .from('users')
-        .select('motion_capture_enabled, motion_capture_raw_retention')
-        .eq('id', user.id)
-        .single(),
-      listCalibrations(supabase, user.id).catch(() => [] as MachineCalibration[]),
-      supabase.from('exercises').select('id, name, equipment_required').order('name'),
-    ]);
+    const [{ data: userRow }, calibrationRows, { data: exerciseRows }, { data: rawRows }] =
+      await Promise.all([
+        supabase
+          .from('users')
+          .select('motion_capture_enabled, motion_capture_raw_retention')
+          .eq('id', user.id)
+          .single(),
+        listCalibrations(supabase, user.id).catch(() => [] as MachineCalibration[]),
+        supabase.from('exercises').select('id, name, equipment_required').order('name'),
+        supabase.from('motion_capture_raw_buffers').select('sample_count').eq('user_id', user.id),
+      ]);
+
+    const rawList = (rawRows ?? []) as Array<{ sample_count: number }>;
+    setRawStorage({
+      buffers: rawList.length,
+      samples: rawList.reduce((a, r) => a + (r.sample_count || 0), 0),
+    });
 
     setEnabled(userRow?.motion_capture_enabled === true);
     setRawRetention(userRow?.motion_capture_raw_retention === true);
@@ -119,7 +128,8 @@ export default function MotionPage() {
           </span>
         </h1>
         <p className="text-sm text-surface-400 mt-1">
-          Single-DOF machine telemetry — display-only, never feeds your progression.
+          Single-DOF movement telemetry — display-only, never feeds your progression. Quick
+          captures need no calibration.
         </p>
       </div>
 
@@ -179,6 +189,29 @@ export default function MotionPage() {
               New calibration
             </Button>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Debug-data readout: raw retention is default-on while experimental,
+          so the storage cost stays visible instead of accumulating silently. */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Raw IMU storage</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {rawStorage === null ? (
+            <p className="text-sm text-surface-400">Unavailable.</p>
+          ) : (
+            <p className="text-sm text-surface-300" data-testid="motion-raw-storage">
+              {rawStorage.buffers} buffer{rawStorage.buffers === 1 ? '' : 's'} ·{' '}
+              {rawStorage.samples.toLocaleString()} samples · ~
+              {(rawStorage.samples * 75 / 1_000_000).toFixed(1)} MB
+            </p>
+          )}
+          <p className="mt-1 text-xs text-surface-500">
+            Raw buffers are kept for debugging ({'≤'}3 per workout) while raw retention is on —
+            toggle it in Settings → Motion Capture.
+          </p>
         </CardContent>
       </Card>
     </div>

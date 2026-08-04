@@ -4,6 +4,7 @@ import { useEffect, useRef, memo, useCallback, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
 import { useKeyboardInset } from '@/hooks/useKeyboardInset';
+import { useRegisterOverlay } from '@/hooks/useOverlayRegistry';
 
 export interface ModalProps {
   isOpen: boolean;
@@ -28,6 +29,9 @@ export const Modal = memo(function Modal({
   const contentRef = useRef<HTMLDivElement>(null);
   const { inset: keyboardInset, scrollContainerRef } =
     useKeyboardInset<HTMLDivElement>(isOpen);
+  // Tell app chrome (the resume-workout pill) to stand down while we're up —
+  // it's fixed at the layout root and would otherwise paint over our fields.
+  useRegisterOverlay(isOpen);
 
   // Close on escape key and prevent body scroll
   useEffect(() => {

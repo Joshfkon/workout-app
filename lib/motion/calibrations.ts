@@ -16,6 +16,7 @@ interface CalibrationRow {
   gravity_ref_start: Vec3;
   gravity_ref_end: Vec3;
   derived_pivot_axis: Vec3;
+  axis_quality: number;
   derived_rom_degrees: number | null;
   schema_version: number;
   created_at: string;
@@ -32,6 +33,7 @@ function fromRow(row: CalibrationRow): MachineCalibration {
     gravityRefStart: row.gravity_ref_start,
     gravityRefEnd: row.gravity_ref_end,
     derivedPivotAxis: row.derived_pivot_axis,
+    axisQuality: Number(row.axis_quality),
     derivedRomDegrees: row.derived_rom_degrees === null ? null : Number(row.derived_rom_degrees),
     createdAt: row.created_at,
     schemaVersion: row.schema_version,
@@ -68,6 +70,7 @@ export async function insertCalibration(
       gravity_ref_start: calibration.gravityRefStart,
       gravity_ref_end: calibration.gravityRefEnd,
       derived_pivot_axis: calibration.derivedPivotAxis,
+      axis_quality: calibration.axisQuality,
       derived_rom_degrees: calibration.derivedRomDegrees,
       schema_version: calibration.schemaVersion,
     })

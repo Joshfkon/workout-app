@@ -8,7 +8,18 @@ import { Card, CardHeader, CardTitle, CardContent, Button, Input, Select, Slider
 import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 
 const SETTINGS_KEY = ['settings', 'user'] as const;
-import { STANDARD_MUSCLE_GROUPS, STANDARD_MUSCLE_DISPLAY_NAMES, DEFAULT_VOLUME_LANDMARKS, MUSCLE_GROUPS } from '@/types/schema';
+import { STANDARD_MUSCLE_GROUPS, STANDARD_MUSCLE_DISPLAY_NAMES, DEFAULT_VOLUME_LANDMARKS, MUSCLE_VOLUME_AUTHORITY, MUSCLE_GROUPS } from '@/types/schema';
+import {
+  migrateStoredLandmarks,
+  readLandmarkVersion,
+  LANDMARK_VERSION,
+  LANDMARK_VERSION_PREFERENCE_KEY,
+} from '@/lib/migrations/volume-landmarks';
+import {
+  boundedComponentHint,
+  parentMrvFor,
+  validateLandmarkRow,
+} from '@/lib/training/landmarkValidation';
 import type { Goal, Experience, WeightUnit, Equipment, StandardMuscleGroup, MuscleGroup, Rating } from '@/types/schema';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { convertWeight, muscleDisplayName } from '@/lib/utils';
@@ -255,11 +266,20 @@ export default function SettingsPage() {
             setShowAiCoachNotes((prefs.showAiCoachNotes as boolean) ?? false);
           }
           if (data.volume_landmarks && Object.keys(data.volume_landmarks).length > 0) {
-            // Merge with defaults to ensure all muscle groups have values
+            // Merge with defaults to ensure all muscle groups have values.
+            // Stored rows first go through the scalar-field landmark migration:
+            // a value still equal to its old default advances, a customized
+            // value is preserved, and customizing one field never pins its
+            // siblings. The new version is persisted on the next save.
             const exp = (data.experience || 'intermediate') as Experience;
+            const { landmarks: migrated } = migrateStoredLandmarks(
+              data.volume_landmarks as Record<string, unknown>,
+              exp,
+              readLandmarkVersion(prefs)
+            );
             setVolumeLandmarks({
               ...DEFAULT_VOLUME_LANDMARKS[exp],
-              ...(data.volume_landmarks as any),
+              ...(migrated as any),
             });
           }
           // Extended profile fields
@@ -337,6 +357,13 @@ export default function SettingsPage() {
             skipPreWorkoutCheckIn,
             trackWaistInCheckin,
             showAiCoachNotes,
+            // Landmark migration completes HERE, on a save the user was
+            // already making. `volumeLandmarks` in state has already been
+            // through the read-time scalar migration, so stamping the version
+            // persists exactly what the app is already using — no customized
+            // field is overwritten just to record a version, and we never
+            // write solely to stamp it.
+            [LANDMARK_VERSION_PREFERENCE_KEY]: LANDMARK_VERSION,
           },
           volume_landmarks: volumeLandmarks,
           // Extended profile fields
@@ -1709,44 +1736,56 @@ function VolumeLandmarksCard({ experience, volumeLandmarks, setVolumeLandmarks }
           {STANDARD_MUSCLE_GROUPS.map((muscle) => {
             const defaultLandmark = DEFAULT_VOLUME_LANDMARKS[experience][muscle] || { mev: 6, mav: 12, mrv: 20 };
             const landmarks = volumeLandmarks[muscle] || defaultLandmark;
+            const parent = MUSCLE_VOLUME_AUTHORITY[muscle].parent;
+            // Bounded components stay EDITABLE — their values still drive
+            // local status and progression, so making them read-only would
+            // hide behaviourally-active numbers. They are validated instead:
+            // a component may not claim more capacity than its parent.
+            const parentMrv = parentMrvFor(
+              muscle,
+              volumeLandmarks,
+              DEFAULT_VOLUME_LANDMARKS[experience]
+            );
+            const violation = validateLandmarkRow(landmarks, parentMrv);
+            const hint = boundedComponentHint(muscle, parentMrv);
+            const commit = (next: { mev: number; mav: number; mrv: number }) =>
+              setVolumeLandmarks({ ...volumeLandmarks, [muscle]: next });
             return (
-              <div key={muscle} className="flex items-center gap-4">
-                <span className="w-24 text-sm text-surface-300">{STANDARD_MUSCLE_DISPLAY_NAMES[muscle]}</span>
-                <div className="flex-1 grid grid-cols-3 gap-2">
-                  <Input
-                    type="number"
-                    value={landmarks.mev ?? 6}
-                    onChange={(e) =>
-                      setVolumeLandmarks({
-                        ...volumeLandmarks,
-                        [muscle]: { ...landmarks, mev: parseInt(e.target.value) || 0 },
-                      })
-                    }
-                    className="text-center"
-                  />
-                  <Input
-                    type="number"
-                    value={landmarks.mav ?? 12}
-                    onChange={(e) =>
-                      setVolumeLandmarks({
-                        ...volumeLandmarks,
-                        [muscle]: { ...landmarks, mav: parseInt(e.target.value) || 0 },
-                      })
-                    }
-                    className="text-center"
-                  />
-                  <Input
-                    type="number"
-                    value={landmarks.mrv ?? 20}
-                    onChange={(e) =>
-                      setVolumeLandmarks({
-                        ...volumeLandmarks,
-                        [muscle]: { ...landmarks, mrv: parseInt(e.target.value) || 0 },
-                      })
-                    }
-                    className="text-center"
-                  />
+              <div key={muscle} className="space-y-1">
+                <div className="flex items-center gap-4">
+                  <span className="w-24 text-sm text-surface-300">
+                    {STANDARD_MUSCLE_DISPLAY_NAMES[muscle]}
+                    {parent && (
+                      <span className="block text-[10px] leading-tight text-surface-500">
+                        subtarget
+                      </span>
+                    )}
+                  </span>
+                  <div className="flex-1 grid grid-cols-3 gap-2">
+                    <Input
+                      type="number"
+                      value={landmarks.mev ?? 6}
+                      onChange={(e) => commit({ ...landmarks, mev: parseInt(e.target.value) || 0 })}
+                      className="text-center"
+                    />
+                    <Input
+                      type="number"
+                      value={landmarks.mav ?? 12}
+                      onChange={(e) => commit({ ...landmarks, mav: parseInt(e.target.value) || 0 })}
+                      className="text-center"
+                    />
+                    <Input
+                      type="number"
+                      value={landmarks.mrv ?? 20}
+                      onChange={(e) => commit({ ...landmarks, mrv: parseInt(e.target.value) || 0 })}
+                      className="text-center"
+                    />
+                  </div>
                 </div>
+                {hint && <p className="pl-28 text-xs text-surface-500">{hint}</p>}
+                {violation && (
+                  <p className="pl-28 text-xs text-warning-400">{violation}</p>
+                )}
               </div>
             );
           })}

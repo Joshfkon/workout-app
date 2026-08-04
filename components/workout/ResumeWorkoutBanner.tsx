@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useWorkoutStore } from '@/stores/workoutStore';
+import { useIsOverlayOpen } from '@/hooks/useOverlayRegistry';
 import { Button } from '@/components/ui';
 import { deriveWorkoutLabel, formatDistanceToNow, formatDuration } from '@/lib/utils';
 
@@ -11,9 +12,9 @@ const TIMER_STORAGE_KEY = 'workout_rest_timer';
 
 /**
  * A persisted session with zero logged sets older than this is treated as
- * abandoned. Rather than silently resuming it (whose timer would read hours
- * long), we prompt "Resume or discard?" so a stale, empty session can't linger
- * behind a fresh workout.
+ * abandoned. It stays in the passive pill — never a blocking prompt — but the
+ * pill drops its "live" styling so an hours-old empty session doesn't read as
+ * a workout currently in progress.
  */
 export const STALE_EMPTY_SESSION_MS = 4 * 60 * 60 * 1000; // 4 hours
 
@@ -47,15 +48,18 @@ export function ResumeWorkoutBanner() {
   const [mounted, setMounted] = useState(false);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [restRemaining, setRestRemaining] = useState<number | null>(null);
-  // Once the user answers the stale-empty prompt (or resumes past it), don't
-  // re-nag them for the same session while it stays mounted.
-  const [stalePromptDismissed, setStalePromptDismissed] = useState(false);
 
   const activeSession = useWorkoutStore((state) => state.activeSession);
   const exerciseBlocks = useWorkoutStore((state) => state.exerciseBlocks);
   const exercises = useWorkoutStore((state) => state.exercises);
   const setLogs = useWorkoutStore((state) => state.setLogs);
   const endSession = useWorkoutStore((state) => state.endSession);
+
+  // A modal/sheet is open somewhere (e.g. "Log body data"). The pill is fixed
+  // at the layout root and paints after page content, so at equal z-index it
+  // lands on top of the sheet's own controls — it covered the weight field
+  // outright. Yield the screen while an overlay owns it.
+  const overlayOpen = useIsOverlayOpen();
 
   useEffect(() => {
     setMounted(true);
@@ -96,8 +100,9 @@ export function ResumeWorkoutBanner() {
     : null;
 
   // A persisted session with no sets that's been open for hours is almost
-  // certainly abandoned (e.g. left hanging on the add-exercise bug). Ask
-  // instead of silently keeping it alive behind the next workout.
+  // certainly abandoned (e.g. left hanging on the add-exercise bug). It still
+  // only ever shows as the passive pill — we just mute the "live" affordances
+  // (pulsing dot, elapsed-time framing) so it doesn't claim to be in progress.
   const staleEmpty = isStaleEmptySession(completedSetsCount, startedAt, Date.now());
 
   const handleResume = () => {
@@ -127,37 +132,11 @@ export function ResumeWorkoutBanner() {
         )
       : 'Workout in progress';
 
-  // Stale + empty: prompt Resume-or-discard instead of the passive pill so a
-  // forgotten session can't quietly resurface with an hours-long timer.
-  if (staleEmpty && !stalePromptDismissed) {
-    return (
-      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-        <div className="bg-surface-900 rounded-xl p-6 max-w-sm w-full shadow-xl border border-surface-700">
-          <h3 className="text-lg font-semibold text-surface-100 mb-2">
-            Resume workout?
-          </h3>
-          <p className="text-surface-400 text-sm mb-4">
-            You started a workout{timeAgo ? ` ${timeAgo}` : ' a while ago'} but
-            never logged a set. Resume it, or discard it and start fresh?
-          </p>
-          <div className="flex gap-3">
-            <Button
-              onClick={() => { endSession(); setStalePromptDismissed(true); }}
-              variant="secondary"
-              className="flex-1"
-            >
-              Discard
-            </Button>
-            <Button
-              onClick={() => { setStalePromptDismissed(true); handleResume(); }}
-              className="flex-1"
-            >
-              Resume
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
+  // While a modal/sheet owns the screen, render only the in-flow spacer: no
+  // pill over its fields, and no stale-session prompt hijacking a sheet the
+  // user just opened. Keeping the spacer avoids a layout jump on close.
+  if (overlayOpen) {
+    return <div className="h-24" aria-hidden="true" />;
   }
 
   return (
@@ -166,8 +145,11 @@ export function ResumeWorkoutBanner() {
       <div className="h-24" aria-hidden="true" />
 
       {/* Resume pill (P0-3, per audit mockup 03): compact, above the bottom
-          nav, with live set progress and rest countdown. */}
-      <div className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] left-0 right-0 z-50 px-4 lg:left-64 lg:bottom-4">
+          nav, with live set progress and rest countdown.
+          z-40 (not z-50) so the one-off inline modals that don't go through
+          Modal/BottomSheet still paint above it; it sits above the bottom
+          nav by position, not by stacking. */}
+      <div className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] left-0 right-0 z-40 px-4 lg:left-64 lg:bottom-4">
         <div className="max-w-md mx-auto">
           <div
             className="bg-surface-900/95 backdrop-blur border-[1.5px] border-primary-500 rounded-full shadow-2xl shadow-black/50 pl-4 pr-2 py-2 cursor-pointer"
@@ -176,17 +158,33 @@ export function ResumeWorkoutBanner() {
             aria-label="Resume workout"
           >
             <div className="flex items-center gap-3">
-              <div className="w-2.5 h-2.5 flex-shrink-0 rounded-full bg-success-400 animate-pulse" />
+              <div
+                className={
+                  staleEmpty
+                    ? 'w-2.5 h-2.5 flex-shrink-0 rounded-full bg-surface-500'
+                    : 'w-2.5 h-2.5 flex-shrink-0 rounded-full bg-success-400 animate-pulse'
+                }
+              />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-surface-100 truncate">
                   {workoutLabel}
                 </p>
                 <p className="text-[11px] text-surface-400 truncate tabular-nums">
-                  {restRemaining !== null && `rest ${formatDuration(restRemaining)} · `}
-                  {targetSetsTotal > 0
-                    ? `${completedSetsCount}/${targetSetsTotal} sets`
-                    : `${completedSetsCount} set${completedSetsCount !== 1 ? 's' : ''}`}
-                  {timeAgo && ` · started ${timeAgo}`}
+                  {/* Stale + empty: nothing was ever logged, so a rest countdown
+                      or set tally would be noise. Say what it actually is. */}
+                  {staleEmpty ? (
+                    <>
+                      Not started{timeAgo ? ` · opened ${timeAgo}` : ''}
+                    </>
+                  ) : (
+                    <>
+                      {restRemaining !== null && `rest ${formatDuration(restRemaining)} · `}
+                      {targetSetsTotal > 0
+                        ? `${completedSetsCount}/${targetSetsTotal} sets`
+                        : `${completedSetsCount} set${completedSetsCount !== 1 ? 's' : ''}`}
+                      {timeAgo && ` · started ${timeAgo}`}
+                    </>
+                  )}
                 </p>
               </div>
               <button

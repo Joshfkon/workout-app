@@ -4,7 +4,7 @@
  * Uses the two-tier muscle group system:
  * - User input: Legacy MuscleGroup (13 muscles) for simplicity
  * - AI output: DetailedMuscleGroup (33 muscles) for precision
- * - Volume tracking: StandardMuscleGroup (20 muscles) for display
+ * - Volume tracking: StandardMuscleGroup for display
  */
 
 import type {

@@ -43,6 +43,7 @@ function renderHeader(overrides: Partial<WorkoutHeaderProps> = {}) {
     onToggleDeload: jest.fn(),
     onCancelWorkout: jest.fn(),
     onAddExercise: jest.fn(),
+    onSaveAsTemplate: jest.fn(),
     onFinishWorkout: jest.fn(),
     onMinimize: jest.fn(),
     ...overrides,
@@ -149,5 +150,31 @@ describe('WorkoutHeader timer pill', () => {
     expect(props.onFinishWorkout).not.toHaveBeenCalled();
     expect(props.onCancelWorkout).not.toHaveBeenCalled();
     expect(props.onMinimize).not.toHaveBeenCalled();
+  });
+});
+
+describe('WorkoutHeader save-as-template action', () => {
+  it('is offered in the overflow menu', () => {
+    renderHeader({ showToolsMenu: true });
+    const menu = screen.getByRole('menu');
+    expect(within(menu).getByTestId('save-as-template-trigger')).toHaveTextContent(
+      'Save as template'
+    );
+  });
+
+  it('is not reachable while the menu is closed', () => {
+    renderHeader({ showToolsMenu: false });
+    expect(screen.queryByTestId('save-as-template-trigger')).not.toBeInTheDocument();
+  });
+
+  it('fires the save handler and closes the menu, touching nothing else', async () => {
+    const user = userEvent.setup();
+    const { props } = renderHeader({ showToolsMenu: true });
+    await user.click(screen.getByTestId('save-as-template-trigger'));
+    expect(props.onSaveAsTemplate).toHaveBeenCalledTimes(1);
+    expect(props.onCloseToolsMenu).toHaveBeenCalledTimes(1);
+    // Saving a template must never end or cancel the session.
+    expect(props.onFinishWorkout).not.toHaveBeenCalled();
+    expect(props.onCancelWorkout).not.toHaveBeenCalled();
   });
 });

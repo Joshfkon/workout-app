@@ -1,152 +1,185 @@
 /**
- * Calibration derivation: determine which gyro direction the machine arm
- * actually rotates about — determined during calibration, never assumed —
- * plus the total ROM angle, shown to the user to sanity-check against
- * reality.
+ * Machine-calibration derivation on top of the tiered, calibration-free
+ * capture analysis (captureAnalysis.ts + stillness.ts).
  *
- * Inputs come from the calibration wizard:
- *   - gravity references captured while holding still at the BOTTOM and TOP
- *     of the ROM, and
- *   - the gyro recorded while the user moved the arm between the two holds
- *     (`transitSamples`).
+ * The old flow was pass/fail: any sweep without a near-perfect still period
+ * was rejected outright, which blocked everything downstream. Now EVERY
+ * sweep proceeds through analysis — reps, velocities, and the chart always
+ * come out — and this module only decides whether the sweep additionally
+ * qualifies to be SAVED as a machine calibration (which needs a trustworthy
+ * pivot axis and gravity references):
  *
- * The pivot axis comes from the transit-gyro integral: for a single-DOF
- * machine the rotation axis is fixed, so ∫gyro·dt = axis·θ_total. Two static
- * gravity holds alone CANNOT pin the axis down — any axis on the bisector
- * plane of the two gravity vectors is consistent with them, and the
- * minimal-angle (cross-product) choice is biased whenever the true axis
- * isn't horizontal. The cross-product fallback exists only for transit-less
- * inputs and carries that documented bias.
+ *   - tier 'mounted' or 'handheld' → gravity refs come from rep endpoints;
+ *     eligible when the motion is single-DOF enough and ≥2 reps exist.
+ *   - tier 'none' → absolute ROM is suppressed and no calibration can be
+ *     saved; when still-ish windows existed but were too noisy the message
+ *     says the phone appears HAND-HELD — telling the user to "hold still
+ *     longer" does not fix that case.
  *
- * The gravity refs then serve two jobs:
- *   1. independent ROM: project both refs onto the plane ⊥ the axis — with
- *      the true axis this is exact, and it's what the user sanity-checks;
- *   2. cross-check: gravity ROM and gyro ROM must agree, else the phone
- *      slipped or the mount is loose → calibration invalid.
- *
- * Sign convention (load-bearing, verified by the synthetic-signal tests):
- * the axis is canonicalized so that bottom→top rotation is POSITIVE. With
- * that, a press rep's concentric integrates to a positive angle, and
- * dot(gyro, pivotAxis) integrates to the same signed angle that
- * `armAngleFromGravity` reports.
+ * Gravity is never averaged over the whole capture: during cyclic motion
+ * that lands tens of degrees off with a shrunken magnitude. Endpoint
+ * windows or nothing.
  */
 
-import type { Vec3 } from '@/types/motion';
-import { add, cross, norm, normalize, scale, signedAngleAbout } from './vec3';
-import {
-  CALIBRATION_GRAVITY_TOL_MPS2,
-  G_MPS2,
-  MIN_CALIBRATION_ROM_DEG,
-  RAD_TO_DEG,
-} from './constants';
+import type { ImuSample, Vec3 } from '@/types/motion';
+import { dot, meanUnit, norm, scale } from './vec3';
+import type { CaptureAnalysis } from './captureAnalysis';
+import { CAPTURE_MASK_OMEGA_RADPS, pcaOfVectors } from './captureAnalysis';
+import { findGravityRef } from './gravityRef';
+import { AXIS_QUALITY_MIN, MIN_CALIBRATION_ROM_DEG } from './constants';
 
-/** One gyro sample recorded while moving between the two calibration holds. */
-export interface TransitSample {
-  /** rad/s, phone frame. */
-  gyro: Vec3;
-  /** Measured time since the previous sample, ms. */
-  dtMs: number;
-}
+/** ± search window around a rep endpoint for a validated gravity rest, ms. */
+const ENDPOINT_SEARCH_MS = 500;
 
-/** Gyro-vs-gravity ROM disagreement beyond this invalidates the calibration. */
-export const CALIBRATION_ROM_AGREEMENT_DEG = 8;
-
-export interface CalibrationDerivation {
-  valid: boolean;
+export interface CalibrationEligibility {
+  eligible: boolean;
+  /** User-facing explanation when not eligible. */
   reason: string | null;
-  /** Unit pivot axis in the phone frame; bottom→top rotation is positive. */
+  /** Unit pivot axis (concentric positive); present whenever motion existed. */
   pivotAxis: Vec3 | null;
-  /** ROM derived from the gravity references about the axis, degrees. */
+  /** λ1/(λ2+λ3) equivalent, derived from the PC1 variance share. */
+  axisQuality: number | null;
+  /** Median concentric ROM, degrees; null when tier is 'none' (suppressed). */
   romDegrees: number | null;
-  /** ROM from the transit-gyro integral, degrees (null on the fallback path). */
-  romFromGyroDegrees: number | null;
+  gravityRefBottom: Vec3 | null;
+  gravityRefTop: Vec3 | null;
 }
 
-export function deriveCalibration(
-  gravityRefStart: Vec3,
-  gravityRefEnd: Vec3,
-  transitSamples?: TransitSample[]
-): CalibrationDerivation {
-  const invalid = (reason: string): CalibrationDerivation => ({
-    valid: false,
-    reason,
-    pivotAxis: null,
+function median(xs: number[]): number {
+  const s = [...xs].sort((a, b) => a - b);
+  const mid = Math.floor(s.length / 2);
+  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+}
+
+/**
+ * STRICTLY validated gravity direction near a rep endpoint: the persisted
+ * calibration contract expects endpoint gravity vectors read from genuine
+ * rests, so this requires a findGravityRef window (≥200 ms of contiguous
+ * |a|≈g stillness) within ±500 ms of the endpoint — turnaround dynamics
+ * blindly averaged into a "gravity" vector would corrupt the calibrated
+ * pipeline's angle resets and integrity checks downstream.
+ */
+function validatedGravityAt(samples: ImuSample[], centerIdx: number): Vec3 | null {
+  const t = samples[centerIdx]?.tMs;
+  if (t === undefined) return null;
+  let lo = centerIdx;
+  while (lo > 0 && t - samples[lo - 1].tMs <= ENDPOINT_SEARCH_MS) lo--;
+  let hi = centerIdx;
+  while (hi < samples.length - 1 && samples[hi + 1].tMs - t <= ENDPOINT_SEARCH_MS) hi++;
+  return findGravityRef(samples, lo, hi)?.unit ?? null;
+}
+
+export function deriveCalibrationFromAnalysis(
+  analysis: CaptureAnalysis,
+  samples: ImuSample[]
+): CalibrationEligibility {
+  // The SAVED calibration's axis and quality come from PCA over the REP
+  // SPANS ONLY: that is the machine's motion by construction. Whole-capture
+  // stats (what the display reports per spec) include in-hand handling,
+  // which is irrelevant to — and would unfairly condemn — the mounted
+  // sweep's planarity. share s = λ1/Σλ ⇒ λ1/(λ2+λ3) = s/(1−s), matching
+  // the stored axis_quality semantics.
+  const repSpanGyro: Vec3[] = [];
+  for (const h of analysis.halfReps) {
+    for (let i = h.startIdx; i <= h.endIdx; i++) {
+      const g = samples[i].gyro;
+      if (norm(g) > CAPTURE_MASK_OMEGA_RADPS) repSpanGyro.push(g);
+    }
+  }
+  const repPca = pcaOfVectors(repSpanGyro);
+  // Sign-align the rep-span axis with the analysis axis (concentric +).
+  const pivotAxis =
+    repPca && analysis.reps.length > 0
+      ? dot(repPca.axis, analysis.axis) >= 0
+        ? repPca.axis
+        : scale(repPca.axis, -1)
+      : null;
+
+  const base: CalibrationEligibility = {
+    eligible: false,
+    reason: null,
+    pivotAxis,
+    axisQuality: repPca ? repPca.share / Math.max(1 - repPca.share, 1e-6) : null,
     romDegrees: null,
-    romFromGyroDegrees: null,
-  });
+    gravityRefBottom: null,
+    gravityRefTop: null,
+  };
 
-  for (const [label, g] of [
-    ['bottom', gravityRefStart],
-    ['top', gravityRefEnd],
-  ] as const) {
-    const mag = norm(g);
-    if (Math.abs(mag - G_MPS2) > CALIBRATION_GRAVITY_TOL_MPS2) {
-      return invalid(
-        `${label} reference doesn't look like a still gravity reading ` +
-          `(|a| = ${mag.toFixed(1)} m/s², expected ≈ ${G_MPS2.toFixed(1)}). ` +
-          'Hold the arm completely still and recapture.'
-      );
-    }
+  if (analysis.reps.length < 2) {
+    return {
+      ...base,
+      reason:
+        'Fewer than 2 full reps detected — sweep the machine through at least 2 slow full-range reps.',
+    };
   }
 
-  // --- Axis ---------------------------------------------------------------
-  let axis: Vec3 | null = null;
-  let romFromGyroDegrees: number | null = null;
-
-  if (transitSamples && transitSamples.length > 0) {
-    let net: Vec3 = { x: 0, y: 0, z: 0 };
-    for (const s of transitSamples) net = add(net, scale(s.gyro, s.dtMs / 1000));
-    const netMag = norm(net); // radians rotated about the (fixed) axis
-    romFromGyroDegrees = netMag * RAD_TO_DEG;
-    if (romFromGyroDegrees < MIN_CALIBRATION_ROM_DEG) {
-      return invalid(
-        `The gyro only saw ${romFromGyroDegrees.toFixed(1)}° of rotation between the ` +
-          'two holds — move the arm through its full stroke between captures.'
-      );
-    }
-    axis = normalize(net);
-  } else {
-    // Fallback: minimal-rotation axis from the gravity refs alone. Exact only
-    // when the true pivot axis is horizontal; tilted axes bias this estimate,
-    // which is why the wizard always records the transit.
-    axis = normalize(cross(gravityRefStart, gravityRefEnd));
-  }
-  if (!axis) {
-    return invalid(
-      'Could not derive a rotation axis — the phone did not rotate between ' +
-        'captures. Check the mount and recapture both positions.'
-    );
+  if (analysis.tier === 'none') {
+    return {
+      ...base,
+      reason: analysis.stillness.nearMissHandheld
+        ? 'The phone appears to be hand-held (still-ish periods exist, but the direction is not ' +
+          'steady enough for a machine reference). Reps and velocity were measured; to save a ' +
+          'machine calibration, mount the phone on the machine and let it rest there briefly.'
+        : 'No still period found anywhere in the recording, so there is no gravity reference. ' +
+          'Reps and velocity were measured; to save a machine calibration, let the mounted ' +
+          'phone rest still at some point.',
+    };
   }
 
-  // --- ROM from gravity, about the derived axis ---------------------------
-  const romRad = signedAngleAbout(axis, gravityRefEnd, gravityRefStart);
-  if (romRad === null) {
-    return invalid(
-      'Gravity is parallel to the rotation axis — arm angle cannot be read ' +
-        'from gravity on this mount. Re-mount the phone and recalibrate.'
-    );
+  // The SAVE gate uses the calibration contract's axis-quality threshold
+  // (λ1/(λ2+λ3) ≥ AXIS_QUALITY_MIN ⇔ PC1 share ≳ 95%), NOT the looser 0.8
+  // display-confidence threshold — a share of 0.85 is fine to look at but
+  // materially multi-axis for a machine's stored pivot axis.
+  if (base.axisQuality !== null && base.axisQuality < AXIS_QUALITY_MIN) {
+    return {
+      ...base,
+      reason:
+        `Motion isn't single-axis enough for a machine calibration (axis quality ` +
+        `${base.axisQuality.toFixed(1)}, need ≥ ${AXIS_QUALITY_MIN}; PC1 variance share ` +
+        `${(analysis.pc1VarianceShare * 100).toFixed(0)}%). The mount may be loose or on ` +
+        'a member that moves in more than one plane.',
+    };
   }
-  const romDegrees = Math.abs(romRad) * RAD_TO_DEG;
+
+  const romDegrees = median(analysis.reps.map((r) => r.romConcentricDeg));
   if (romDegrees < MIN_CALIBRATION_ROM_DEG) {
-    return invalid(
-      `Derived ROM is only ${romDegrees.toFixed(1)}° — too small to calibrate ` +
-        `reliably (minimum ${MIN_CALIBRATION_ROM_DEG}°). Make sure you capture at ` +
-        'the true bottom and top of the stroke.'
-    );
+    return {
+      ...base,
+      romDegrees,
+      reason:
+        `Median stroke is only ${romDegrees.toFixed(1)}° — too small to calibrate ` +
+        `(minimum ${MIN_CALIBRATION_ROM_DEG}°). Sweep the full range of motion.`,
+    };
   }
 
-  // --- Gyro/gravity cross-check (transit path only) -----------------------
-  if (romFromGyroDegrees !== null && Math.abs(romFromGyroDegrees - romDegrees) > CALIBRATION_ROM_AGREEMENT_DEG) {
-    return invalid(
-      `Gyro and gravity disagree on the ROM (${romFromGyroDegrees.toFixed(1)}° vs ` +
-        `${romDegrees.toFixed(1)}°). The phone probably shifted on the mount — ` +
-        'secure it and recalibrate.'
-    );
+  // Endpoint gravity references: concentric start = bottom, end = top,
+  // averaged across reps — each endpoint contributes only when a strictly
+  // validated rest window exists around it.
+  const bottoms: Vec3[] = [];
+  const tops: Vec3[] = [];
+  for (const rep of analysis.reps) {
+    const b = validatedGravityAt(samples, rep.concentric.startIdx);
+    const t = validatedGravityAt(samples, rep.concentric.endIdx);
+    if (b) bottoms.push(b);
+    if (t) tops.push(t);
+  }
+  const gravityRefBottom = meanUnit(bottoms);
+  const gravityRefTop = meanUnit(tops);
+  if (!gravityRefBottom || !gravityRefTop) {
+    return {
+      ...base,
+      romDegrees,
+      reason:
+        'The rep endpoints were never held still enough to read gravity — pause about half a ' +
+        'second at the top and the bottom of each sweep rep, then redo the sweep.',
+    };
   }
 
-  // Canonicalize the sign: consumers measure angles via signedAngleAbout(axis,
-  // g, gStart), so flip the axis if bottom→top came out negative.
-  const pivotAxis = romRad > 0 ? axis : scale(axis, -1);
-
-  return { valid: true, reason: null, pivotAxis, romDegrees, romFromGyroDegrees };
+  return {
+    ...base,
+    eligible: true,
+    romDegrees,
+    gravityRefBottom,
+    gravityRefTop,
+  };
 }

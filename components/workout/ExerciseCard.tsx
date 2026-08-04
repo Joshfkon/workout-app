@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo, memo, useRef, useCallback } from 'react';
 import { Card, Button, ConfirmModal } from '@/components/ui';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/Accordion';
-import type { Exercise, ExerciseBlock, SetLog, WeightUnit, SetQuality, SetFeedback, BodyweightData, ExercisePerformanceSnapshot, StandardMuscleGroup, SorenessRating, SetDiscomfort, RepsInTank } from '@/types/schema';
+import type { Exercise, ExerciseBlock, SetLog, WeightUnit, SetQuality, SetFeedback, BodyweightData, ExercisePerformanceSnapshot, StandardMuscleGroup, SorenessRating, SetDiscomfort, RepsInTank, SleepQuality } from '@/types/schema';
 import { rpeToRir, rirToRpe } from '@/types/schema';
 import { formatSetHistoryLine } from '@/lib/formatSetHistory';
 import { SorenessChipRow, JointPainPicker } from './FeedbackChips';
@@ -28,6 +28,8 @@ import {
 } from '@/services/progressionHealth';
 import { getExerciseProgression, type ExerciseProgressionInsight } from '@/services/progressionInsights';
 import { generateWarmupProtocol } from '@/services/progressionEngine';
+import { formatSessionTimeOfDay } from '@/services/sessionContext';
+import { formatSleepHours, SLEEP_QUALITY_LABELS } from '@/lib/sleep/formatSleep';
 import { useUserStore } from '@/stores';
 import type { AdjustedRIRResult } from '@/services/rpeCalibration';
 import type { ReadinessModulation } from '@/services/fatigueEngine';
@@ -67,10 +69,18 @@ function exercisePrimaryMuscle(ex: { primaryMuscle?: string; primary_muscle?: st
 
 interface ExerciseHistory {
   lastWorkoutDate: string;
+  /**
+   * When this exercise was worked in that session (ISO) — the first working
+   * set's stamp, not the session's completion. Renders as the time of day on
+   * the Last Workout block; absent on legacy/queued rows with no stamp.
+   */
+  lastWorkoutStartedAt?: string | null;
   lastWorkoutSets: {
     weightKg: number;
     reps: number;
     rpe?: number;
+    /** ISO stamp of when this set was logged, when recorded. */
+    loggedAt?: string | null;
     /** Bodyweight composition, when recorded — drives the "BW+25" display. */
     bw?: { modification: 'none' | 'weighted' | 'assisted'; addedWeightKg?: number; assistanceWeightKg?: number };
   }[];
@@ -253,6 +263,18 @@ interface ExerciseCardProps {
   recommendedWeight?: number;  // AI-suggested weight in kg
   previousSets?: { weightKg: number; reps: number; rpe?: number }[];  // Previous workout's sets for this exercise
   exerciseHistory?: ExerciseHistory;  // Historical data for this exercise
+  /**
+   * Sleep logged for the night BEFORE the last session (services/sessionContext
+   * picks the night). Null when that night wasn't logged; undefined when sleep
+   * lookup didn't run.
+   */
+  lastWorkoutSleep?: { hours: number; quality: SleepQuality } | null;
+  /**
+   * Whether the user logs sleep at all. Only then is a missing night worth
+   * saying out loud ("sleep not logged") — a user who never touches the sleep
+   * log shouldn't get a nag line on every exercise.
+   */
+  sleepLoggingActive?: boolean;
   warmupSets?: WarmupSetData[];  // Warmup protocol for this exercise (legacy path)
   warmupDecision?: WarmupDecisionData;  // Per-dimension warmup decision (supersedes warmupSets)
   workingWeight?: number;  // Working weight in kg for warmup calculations
@@ -306,6 +328,12 @@ interface ExerciseCardProps {
   // Per-set write status (P0-2): drives the saved/saving/queued glyph on
   // completed set lines. Sets absent from the map (loaded from DB) are saved.
   setSyncStatus?: Record<string, SetSyncStatus>;
+  /**
+   * Optional extra node rendered under each COMPLETED set's history row
+   * (e.g. the motion-capture Observations block). Never rendered on the
+   * active set card. Must be referentially stable (the card is memoized).
+   */
+  completedSetExtra?: (set: SetLog) => React.ReactNode;
   // Reports the active set's live suggestion (the SuggestionBanner values,
   // e.g. "60 kg × 7") so the page's sticky rest bar shows the same target
   // instead of the block's stale planned weight. Called with null when no
@@ -401,6 +429,8 @@ export const ExerciseCard = memo(function ExerciseCard({
   recommendedWeight,
   previousSets = [],
   exerciseHistory,
+  lastWorkoutSleep,
+  sleepLoggingActive = false,
   warmupSets = [],
   workingWeight = 0,
   showSwapOnMount = false,
@@ -420,6 +450,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   adjustedRir,
   readinessModulation,
   setSyncStatus,
+  completedSetExtra,
   performanceSnapshots,
   progressionHealthSessions,
   equipmentBoundaries,
@@ -913,6 +944,13 @@ export const ExerciseCard = memo(function ExerciseCard({
     const vol = sumDisplayVolume(lastSets, unit, null); // guarded: isDurationBased returns above
     return vol > 0 ? vol : null;
   }, [isDurationBased, exerciseHistory, unit]);
+
+  // Time of day the last session's work on THIS exercise happened. Null on
+  // legacy rows with no per-set stamp and no session start time.
+  const lastWorkoutTimeOfDay = useMemo(
+    () => formatSessionTimeOfDay(exerciseHistory?.lastWorkoutStartedAt),
+    [exerciseHistory?.lastWorkoutStartedAt]
+  );
 
   // This session's tonnage: `current` sums the logged working sets; `projected`
   // adds an estimate for each remaining programmed set — the pending input's
@@ -2778,11 +2816,19 @@ export const ExerciseCard = memo(function ExerciseCard({
                     <span className="text-xs font-medium text-surface-400 uppercase tracking-wider">
                       Last Workout
                     </span>
-                    <span className="text-xs text-surface-500">
-                      {new Date(exerciseHistory.lastWorkoutDate).toLocaleDateString('en-US', {
+                    <span className="text-xs text-surface-500" data-testid="last-workout-when">
+                      {new Date(
+                        // Same instant the time of day comes from, so the day
+                        // and the clock can never disagree across a midnight
+                        // boundary; falls back to the session's completion.
+                        exerciseHistory.lastWorkoutStartedAt || exerciseHistory.lastWorkoutDate
+                      ).toLocaleDateString('en-US', {
                         month: 'short',
                         day: 'numeric',
                       })}
+                      {lastWorkoutTimeOfDay && (
+                        <> · {lastWorkoutTimeOfDay}</>
+                      )}
                     </span>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -2791,9 +2837,19 @@ export const ExerciseCard = memo(function ExerciseCard({
                         key={idx}
                         className="px-2 py-1 bg-surface-700 rounded text-xs text-surface-300"
                         title={
-                          set.bw && set.bw.modification !== 'none'
-                            ? `Effective load ${displayWeight(set.weightKg, true)} ${weightLabel}`
-                            : undefined
+                          [
+                            set.bw && set.bw.modification !== 'none'
+                              ? `Effective load ${displayWeight(set.weightKg, true)} ${weightLabel}`
+                              : null,
+                            // Per-set clock time: sets in one session can be
+                            // 20 minutes apart, and that context belongs to the
+                            // individual set, not just the session.
+                            formatSessionTimeOfDay(set.loggedAt)
+                              ? `Logged ${formatSessionTimeOfDay(set.loggedAt)}`
+                              : null,
+                          ]
+                            .filter(Boolean)
+                            .join(' · ') || undefined
                         }
                       >
                         {historySetWeightLabel(set)} × {set.reps}{isDurationBased ? 's' : ''}
@@ -2809,6 +2865,24 @@ export const ExerciseCard = memo(function ExerciseCard({
                       </span>
                     </p>
                   )}
+                  {/* Sleep the night before that session — the other half of
+                      the context behind those numbers. Silent for users who
+                      don't log sleep (see sleepLoggingActive). */}
+                  {lastWorkoutSleep ? (
+                    <p className="mt-1 text-xs text-surface-400" data-testid="last-workout-sleep">
+                      Slept{' '}
+                      <span className="text-surface-200">
+                        {formatSleepHours(lastWorkoutSleep.hours)}
+                      </span>
+                      <span className="text-surface-500">
+                        {' '}· {SLEEP_QUALITY_LABELS[lastWorkoutSleep.quality].toLowerCase()} quality
+                      </span>
+                    </p>
+                  ) : sleepLoggingActive ? (
+                    <p className="mt-1 text-xs text-surface-500" data-testid="last-workout-sleep">
+                      Sleep not logged that night
+                    </p>
+                  ) : null}
                 </div>
               )}
             </div>
@@ -3291,6 +3365,9 @@ export const ExerciseCard = memo(function ExerciseCard({
                   onCancel={() => setJointPickerSetId(null)}
                 />
               )}
+
+              {/* Per-set extra (e.g. motion Observations) under the history row */}
+              {completedSetExtra?.(set)}
 
               {/* Add Dropset affordance after the final completed set */}
               {isActive && isLastCompletedSet && !dropsetMode && !isDropsetSet && !pendingDropset &&

@@ -8,16 +8,19 @@
  *   2. Unfinished-workout banner when a session is in_progress today
  *      (Resume opens it, X discards via the workout page's cancel path).
  *   3. Mesocycle hero: "ARNOLD · WK 1 OF 5 · TODAY|REST DAY" eyebrow with a
- *      Plan link, the day name, and recovery-aware meta. Training days get a
- *      full-width Start CTA; rest days get "Train anyway" + "Preview
- *      tomorrow" (a read-only sheet of the next session's exercises from
- *      program_data). No active mesocycle prompts to plan one.
+ *      Plan link, the day name, and recovery-aware meta. Training days get
+ *      Start + "Preview"; rest days get "Train anyway" + "Preview
+ *      tomorrow". Both open the same read-only sheet of the session's
+ *      exercises from program_data (starting a workout is never the only way
+ *      to see what's in it), which links on to /dashboard/mesocycle/plan for
+ *      the whole block. No active mesocycle prompts to plan one.
  *   4. Start options — ALWAYS visible, with or without a plan, so the user
  *      can start training from here no matter what state the app is in:
  *      empty workout (add exercises as you go), AI-suggested workout
  *      (shared SuggestedWorkoutSheet), repeat a previous workout (clones a
  *      recent session's exercise list, not its logged weights).
- *   5. Week stats: sets this week · completed/planned sessions · volume
+ *   5. Week stats: sets this week · completed/planned sessions · hours
+ *      trained + average workout time over the same rolling 7 days · volume
  *      status line (links to /dashboard/volume).
  *   6. Recovery: overall % + ready count, per-muscle bars for recovering
  *      muscles with time remaining, expandable past the first three.
@@ -47,7 +50,7 @@ import { resolveAuthState } from '@/lib/supabase/authState';
 import { getLocalDateString } from '@/lib/utils';
 import {
   startMesocycleWorkoutSession,
-  getWorkoutForDay,
+  getWorkoutForDate,
   type TodayWorkout,
 } from '@/lib/training/startMesocycleSession';
 import {
@@ -56,6 +59,7 @@ import {
   type ExerciseOverride,
 } from '@/services/mesocycleHelpers';
 import { sessionIndexFromCompleted } from '@/lib/training/mesocycleProgress';
+import { buildTrainingSchedule, type ScheduleMode } from '@/lib/training/trainingSchedule';
 import {
   createRepeatSession,
   type RepeatableExercise,
@@ -73,6 +77,7 @@ import {
   formatRelativeDay,
 } from '../log/_components/LogPageSections';
 import { BottomSheet } from '@/components/workout/BottomSheet';
+import { SessionExerciseList } from '@/components/mesocycle';
 import { CardioTracker } from '@/components/dashboard/CardioTracker';
 import { SuggestedWorkoutSheet } from '@/components/workout/SuggestedWorkoutSheet';
 import { Modal } from '@/components/ui/Modal';
@@ -104,6 +109,10 @@ interface ActiveMesocycleRow {
   split_type: string;
   days_per_week: number;
   preferred_workout_days: WorkoutDay[] | null;
+  /** Schedule shape: fixed weekdays, or every-N-days from start_date. */
+  schedule_mode?: ScheduleMode | null;
+  training_interval_days?: number | null;
+  start_date?: string | null;
   program_data: unknown;
   exercise_overrides?: ExerciseOverride[];
 }
@@ -128,6 +137,8 @@ interface RecentSessionRow {
   id: string;
   completed_at: string;
   started_at: string | null;
+  /** Active duration snapshot (pauses excluded); null for legacy sessions. */
+  duration_seconds: number | null;
   exercise_blocks:
     | {
         exercise_id: string;
@@ -145,6 +156,35 @@ interface RecentSessionRow {
 }
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/**
+ * Active workout minutes: the duration_seconds snapshot (pauses excluded)
+ * when present, else the completed_at − started_at wall-clock span for legacy
+ * sessions without one. Null when neither yields a positive duration.
+ */
+function activeDurationMin(row: {
+  started_at: string | null;
+  completed_at: string;
+  duration_seconds: number | null;
+}): number | null {
+  if (row.duration_seconds != null && row.duration_seconds > 0) {
+    return row.duration_seconds / 60;
+  }
+  if (!row.started_at) return null;
+  const min =
+    (new Date(row.completed_at).getTime() - new Date(row.started_at).getTime()) / 60000;
+  return min > 0 ? min : null;
+}
+
+/** "4h 35m" / "45m" from a minute total. */
+function formatHoursMinutes(totalMinutes: number): string {
+  const rounded = Math.round(totalMinutes);
+  const hours = Math.floor(rounded / 60);
+  const minutes = rounded % 60;
+  if (hours === 0) return `${minutes}m`;
+  if (minutes === 0) return `${hours}h`;
+  return `${hours}h ${minutes}m`;
+}
 
 /**
  * "Pull · Back, Biceps" — the split-day name parsed from the blocks'
@@ -224,6 +264,12 @@ export default function TrainPage() {
   const [activeMeso, setActiveMeso] = useState<ActiveMesocycleRow | null>(null);
   const [recentWorkouts, setRecentWorkouts] = useState<RecentWorkout[]>([]);
   const [sessionsThisWeek, setSessionsThisWeek] = useState(0);
+  // Time trained over the same rolling 7 days; avgMin is null until at least
+  // one session in the window has a usable started_at → completed_at span.
+  const [weekTime, setWeekTime] = useState<{ totalMin: number; avgMin: number | null }>({
+    totalMin: 0,
+    avgMin: null,
+  });
   const [mesoCompletedCount, setMesoCompletedCount] = useState<number | null>(null);
   const [lastCycleDone, setLastCycleDone] = useState<Date | null>(null);
   const [isStarting, setIsStarting] = useState(false);
@@ -253,7 +299,7 @@ export default function TrainPage() {
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
         const weekStart = getLocalDateString(sevenDaysAgo);
 
-        const [inProgressRes, mesoRes, recentRes, weekCountRes] = await Promise.all([
+        const [inProgressRes, mesoRes, recentRes, weekSessionsRes] = await Promise.all([
           supabase
             .from('workout_sessions')
             .select('id, mesocycle_id, started_at, exercise_blocks(id, set_logs(id, is_warmup))')
@@ -264,7 +310,7 @@ export default function TrainPage() {
           supabase
             .from('mesocycles')
             .select(
-              'id, name, current_week, total_weeks, deload_week, split_type, days_per_week, preferred_workout_days, program_data, exercise_overrides, generated_with_enhanced_mode'
+              'id, name, current_week, total_weeks, deload_week, split_type, days_per_week, preferred_workout_days, schedule_mode, training_interval_days, start_date, program_data, exercise_overrides, generated_with_enhanced_mode'
             )
             .eq('user_id', user.id)
             .eq('state', 'active')
@@ -273,7 +319,7 @@ export default function TrainPage() {
           supabase
             .from('workout_sessions')
             .select(
-              'id, completed_at, started_at, exercise_blocks(exercise_id, order, suggestion_reason, exercises(name, primary_muscle), set_logs(is_warmup, weight_kg, reps))'
+              'id, completed_at, started_at, duration_seconds, exercise_blocks(exercise_id, order, suggestion_reason, exercises(name, primary_muscle), set_logs(is_warmup, weight_kg, reps))'
             )
             .eq('user_id', user.id)
             .eq('state', 'completed')
@@ -281,7 +327,7 @@ export default function TrainPage() {
             .limit(5),
           supabase
             .from('workout_sessions')
-            .select('id', { count: 'exact', head: true })
+            .select('started_at, completed_at, duration_seconds')
             .eq('user_id', user.id)
             .eq('state', 'completed')
             .gte('completed_at', weekStart),
@@ -314,9 +360,8 @@ export default function TrainPage() {
               0
             );
             const completedAt = new Date(row.completed_at);
-            const durationMin = row.started_at
-              ? Math.round((completedAt.getTime() - new Date(row.started_at).getTime()) / 60000)
-              : null;
+            const rawDurationMin = activeDurationMin(row);
+            const durationMin = rawDurationMin != null ? Math.round(rawDurationMin) : null;
             // The clone list for "Repeat previous workout": exercise ids +
             // working sets (weights feed E1RM re-estimation, not the targets).
             const exercises: RepeatableExercise[] = [...blocks]
@@ -343,7 +388,22 @@ export default function TrainPage() {
           })
         );
 
-        setSessionsThisWeek(weekCountRes.count ?? 0);
+        const weekRows = (weekSessionsRes.data ?? []) as {
+          started_at: string | null;
+          completed_at: string;
+          duration_seconds: number | null;
+        }[];
+        setSessionsThisWeek(weekRows.length);
+        // Sessions without a usable duration still count as sessions but are
+        // dropped from the time math rather than skewing the totals.
+        const durationsMin = weekRows
+          .map(activeDurationMin)
+          .filter((min): min is number => min !== null);
+        const totalMin = durationsMin.reduce((sum, min) => sum + min, 0);
+        setWeekTime({
+          totalMin,
+          avgMin: durationsMin.length > 0 ? totalMin / durationsMin.length : null,
+        });
 
         // Completed-session count drives the next session index (the
         // self-extending scheme the start path uses) and "last done" — one
@@ -377,28 +437,34 @@ export default function TrainPage() {
     nextWorkoutInfo: { workout: TodayWorkout; offsetDays: number; dayLabel: string } | null;
   } => {
     if (!activeMeso) return { todayWorkout: null, nextWorkoutInfo: null };
-    const todayDow = new Date().getDay() || 7;
-    const workoutFor = (dow: number) =>
-      getWorkoutForDay(
-        activeMeso.split_type,
-        dow,
-        activeMeso.days_per_week,
-        activeMeso.preferred_workout_days
-      );
-    const todays = workoutFor(todayDow);
+    const schedule = buildTrainingSchedule(activeMeso);
+    const dateAt = (offset: number) => {
+      const date = new Date();
+      date.setHours(0, 0, 0, 0);
+      date.setDate(date.getDate() + offset);
+      return date;
+    };
+
+    const todays = getWorkoutForDate(activeMeso.split_type, dateAt(0), schedule);
     if (todays) return { todayWorkout: todays, nextWorkoutInfo: null };
-    for (let offset = 1; offset <= 7; offset++) {
-      const workout = workoutFor(((todayDow - 1 + offset) % 7) + 1);
+
+    // Interval schedules can skip more than a week's worth of weekdays, so
+    // scan far enough ahead to cover the longest supported cadence.
+    for (let offset = 1; offset <= 14; offset++) {
+      const date = dateAt(offset);
+      const workout = getWorkoutForDate(activeMeso.split_type, date, schedule);
       if (workout) {
-        const date = new Date();
-        date.setDate(date.getDate() + offset);
         return {
           todayWorkout: null,
           nextWorkoutInfo: {
             workout,
             offsetDays: offset,
             dayLabel:
-              offset === 1 ? 'Tomorrow' : date.toLocaleDateString('en-US', { weekday: 'long' }),
+              offset === 1
+                ? 'Tomorrow'
+                : offset <= 7
+                  ? date.toLocaleDateString('en-US', { weekday: 'long' })
+                  : date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' }),
           },
         };
       }
@@ -426,6 +492,10 @@ export default function TrainPage() {
       ),
     };
   }, [activeMeso, mesoCompletedCount]);
+
+  // What the preview sheet describes: today's split day on a training day,
+  // otherwise the next scheduled one (both map to the same program slot).
+  const previewWorkout = todayWorkout ?? nextWorkoutInfo?.workout ?? null;
 
   // Rest-day recovery note: of the next workout's target muscles, which will
   // be recovered by the time that session comes around?
@@ -711,13 +781,18 @@ export default function TrainPage() {
               <button
                 onClick={handleStartWorkout}
                 disabled={isStarting}
-                className={`flex-1 ${GRADIENT_CTA_CLASS}`}
+                className={`flex-[2] ${GRADIENT_CTA_CLASS}`}
               >
                 {isStarting
                   ? 'Starting...'
                   : inProgress
                     ? 'Continue workout'
                     : 'Start workout'}
+              </button>
+              {/* Read-only look at today's session — starting a workout must
+                  never be the only way to find out what's in it. */}
+              <button onClick={() => setShowPreview(true)} className={`flex-1 ${OUTLINE_CTA_CLASS}`}>
+                Preview
               </button>
             </div>
           </>
@@ -841,6 +916,18 @@ export default function TrainPage() {
               sessions
             </span>
           </span>
+          {weekTime.avgMin !== null && (
+            <span className="block text-[13px] text-surface-400 mt-0.5">
+              <span className="font-medium text-surface-200">
+                {formatHoursMinutes(weekTime.totalMin)}
+              </span>{' '}
+              trained ·{' '}
+              <span className="font-medium text-surface-200">
+                {Math.round(weekTime.avgMin)} min
+              </span>{' '}
+              avg workout
+            </span>
+          )}
           <span className={`block text-[13px] mt-0.5 ${volumeStatusLine.className}`}>
             {volumeStatusLine.text}
           </span>
@@ -1015,19 +1102,27 @@ export default function TrainPage() {
         )}
       </div>
 
-      {/* Preview sheet: the next session's exercises from program_data */}
+      {/* Preview sheet: the session Start would build, from program_data —
+          today's on a training day, the next one on a rest day. */}
       <BottomSheet
         isOpen={showPreview}
         onClose={() => setShowPreview(false)}
-        title={nextWorkoutInfo ? `Next: ${nextWorkoutInfo.workout.dayName}` : 'Next workout'}
+        title={
+          previewWorkout
+            ? `${todayWorkout ? 'Today' : 'Next'}: ${previewWorkout.dayName}`
+            : 'Next workout'
+        }
       >
         <div className="space-y-3">
-          {nextWorkoutInfo && (
+          {previewWorkout && (
             <p className="text-[13px] text-surface-400">
               {[
-                nextWorkoutInfo.dayLabel,
+                todayWorkout ? 'Today' : nextWorkoutInfo?.dayLabel,
                 nextProgramSession
                   ? `${nextProgramSession.exercises.length} exercises`
+                  : null,
+                nextProgramSession
+                  ? `${nextProgramSession.exercises.reduce((n, ex) => n + ex.sets, 0)} sets`
                   : null,
                 (nextProgramSession?.estimatedMinutes ?? 0) > 0
                   ? `est. ${Math.round(nextProgramSession!.estimatedMinutes)} min`
@@ -1039,32 +1134,21 @@ export default function TrainPage() {
           )}
 
           {nextProgramSession && nextProgramSession.exercises.length > 0 ? (
-            <div className="rounded-xl border border-surface-800 bg-surface-950/40 overflow-hidden">
-              {nextProgramSession.exercises.map((exercise, i) => (
-                <div
-                  key={`${exercise.exerciseName}-${i}`}
-                  className="px-3 py-2.5 border-b border-surface-800/50 last:border-b-0"
-                >
-                  <span className="block text-[13px] text-surface-200 truncate">
-                    {exercise.exerciseName}
-                  </span>
-                  <span className="block text-[11px] text-surface-500 mt-0.5">
-                    {exercise.sets} {exercise.sets === 1 ? 'set' : 'sets'} ·{' '}
-                    {exercise.repRange.min}–{exercise.repRange.max} reps · {exercise.targetRir} RIR
-                  </span>
-                </div>
-              ))}
-            </div>
+            <SessionExerciseList exercises={nextProgramSession.exercises} />
           ) : (
             <div className="rounded-xl border border-surface-800 bg-surface-950/40 p-3">
               <p className="text-[13px] text-surface-400">
                 Exercises are planned when you start. Target muscles:{' '}
                 <span className="text-surface-200">
-                  {nextWorkoutInfo?.workout.muscles.map(capitalize).join(', ') ?? '—'}
+                  {previewWorkout?.muscles.map(capitalize).join(', ') ?? '—'}
                 </span>
               </p>
             </div>
           )}
+
+          <p className="text-[11px] text-surface-500">
+            Weights are suggested from your history once you start.
+          </p>
 
           <div className="space-y-2">
             <button
@@ -1075,8 +1159,15 @@ export default function TrainPage() {
               disabled={isStarting}
               className={`w-full ${GRADIENT_CTA_CLASS}`}
             >
-              {isStarting ? 'Starting...' : 'Train anyway today'}
+              {isStarting ? 'Starting...' : todayWorkout ? 'Start workout' : 'Train anyway today'}
             </button>
+            <Link
+              href="/dashboard/mesocycle/plan"
+              onClick={() => setShowPreview(false)}
+              className="block w-full py-2 rounded-lg text-center text-[13px] font-medium text-primary-400 hover:text-primary-300 transition-colors"
+            >
+              See the whole plan
+            </Link>
             <button
               onClick={() => setShowPreview(false)}
               className="w-full py-2 rounded-lg text-[13px] text-surface-400 hover:text-surface-200 transition-colors"
