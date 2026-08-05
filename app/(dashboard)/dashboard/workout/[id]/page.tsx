@@ -532,10 +532,22 @@ export default function WorkoutPage() {
   
   // Drag reorder state for exercises
   const [draggedBlockIndex, setDraggedBlockIndex] = useState<number | null>(null);
+  // Identity of the block under the finger. The floating preview renders from
+  // this, never from blocks[draggedBlockIndex] — an index re-resolves to a
+  // different exercise the instant the list reorders, which made the preview
+  // flash the displaced exercise on drop.
+  const [draggedBlockId, setDraggedBlockId] = useState<string | null>(null);
   const [dragOverBlockIndex, setDragOverBlockIndex] = useState<number | null>(null);
   const [isDraggingBlock, setIsDraggingBlock] = useState(false);
+  // Mirrors isDraggingBlock for the document listeners, and doubles as the
+  // drop latch (written synchronously on drag start / drop).
+  const isDraggingBlockRef = useRef(isDraggingBlock);
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const preCollapseStateRef = useRef<{ allCollapsed: boolean; collapsedBlocks: Set<string> } | null>(null);
+  // Latest blocks, for drag handlers that must not take `blocks` as a dep
+  // (their identity is captured by the grip's latest-ref wrappers).
+  const blocksRef = useRef<ExerciseBlockWithExercise[]>(blocks);
+  blocksRef.current = blocks;
 
   // Focus mode: keep only the current exercise expanded so you see just the
   // sets you're working on. Re-focuses when you advance to the next exercise;
@@ -3530,7 +3542,11 @@ export default function WorkoutPage() {
       }
 
       setDraggedBlockIndex(index);
+      setDraggedBlockId(blocksRef.current[index]?.id ?? null);
       setIsDraggingBlock(true);
+      // Arm the drop latch synchronously — a release can land before the
+      // ref-sync effect has run.
+      isDraggingBlockRef.current = true;
       // Collapse all exercises for iPhone-style drag mode
       setAllCollapsed(true);
 
@@ -3596,7 +3612,6 @@ export default function WorkoutPage() {
   }, [isDraggingBlock, draggedBlockIndex, draggedBlockRect, dragTouchOffset, calculateDragTargetIndex, dragOverBlockIndex]);
 
   // Use refs to access latest values in document event listeners
-  const isDraggingBlockRef = useRef(isDraggingBlock);
   const draggedBlockIndexRef = useRef(draggedBlockIndex);
   const draggedBlockRectRef = useRef(draggedBlockRect);
   const dragOverBlockIndexRef = useRef(dragOverBlockIndex);
@@ -3609,9 +3624,64 @@ export default function WorkoutPage() {
     dragOverBlockIndexRef.current = dragOverBlockIndex;
   }, [isDraggingBlock, draggedBlockIndex, draggedBlockRect, dragOverBlockIndex]);
 
-  const handleBlockDragEnd = useCallback(async () => {
+  // Serializes the order saves below. Drops are no longer blocked on the write,
+  // so a second reorder can be requested while the first is still in flight;
+  // interleaving the two would let the older write land last and leave the DB
+  // holding an order the user never saw. Saves run one at a time, and a save
+  // that a newer one has already superseded is skipped — every write covers
+  // every block, so only the newest order matters.
+  const orderSaveChainRef = useRef<Promise<void>>(Promise.resolve());
+  const orderSaveSeqRef = useRef(0);
+
+  // Persist the new block order. exercise_blocks."order" (the column the loader
+  // sorts by) is UNIQUE per session, so write in two passes — park every block
+  // on a temporary offset first, then write the final 1..n values — to avoid
+  // transient unique-constraint collisions mid-update. Each pass fans out in
+  // parallel: within a pass the targets are already collision-free, so the cost
+  // is two round-trip waves rather than 2n sequential ones.
+  const persistBlockOrder = useCallback((ordered: ExerciseBlockWithExercise[]) => {
+    const seq = ++orderSaveSeqRef.current;
+    const ids = ordered.map((b) => b.id);
+
+    orderSaveChainRef.current = orderSaveChainRef.current.then(async () => {
+      if (seq !== orderSaveSeqRef.current) return; // superseded while queued
+      try {
+        const supabase = createUntypedClient();
+        const writePass = async (offset: number) => {
+          const results = await Promise.all(
+            ids.map((id, i) =>
+              supabase.from('exercise_blocks').update({ order: i + offset }).eq('id', id)
+            )
+          );
+          const failed = results.find((r) => r.error);
+          if (failed?.error) throw failed.error;
+        };
+        await writePass(1001);
+        await writePass(1);
+      } catch (err) {
+        console.error('Error saving reorder:', err);
+      }
+    });
+
+    return orderSaveChainRef.current;
+  }, []);
+
+  const handleBlockDragEnd = useCallback(() => {
+    // A single touch/mouse release reaches this twice — once from the document
+    // listener, once from the handle's own onTouchEnd/onMouseUp — and both see
+    // the same pre-batch state, so without this latch the drop would be applied
+    // (and persisted) twice.
+    if (!isDraggingBlockRef.current) return;
+    isDraggingBlockRef.current = false;
+
     const finalTargetIndex = dragOverBlockIndex ?? draggedBlockIndex;
 
+    // Reorder and tear the drag down in the SAME commit. Persistence used to be
+    // awaited here, which left the floating preview on screen for the length of
+    // the round trips while the list underneath had already reordered — the
+    // preview then re-read blocks[draggedBlockIndex] and rendered the displaced
+    // exercise. The write is now fire-and-forget; the local order is the truth
+    // the user sees, and a failure only means the next load re-sorts.
     if (draggedBlockIndex !== null && finalTargetIndex !== null && draggedBlockIndex !== finalTargetIndex) {
       const spliced = [...blocks];
       const [removed] = spliced.splice(draggedBlockIndex, 1);
@@ -3630,32 +3700,11 @@ export default function WorkoutPage() {
         setCurrentBlockIndex(currentBlockIndex + 1);
       }
 
-      // Persist the new order. exercise_blocks."order" (the column the loader
-      // sorts by) is UNIQUE per session, so write in two passes — park every
-      // block on a temporary offset first, then write the final 1..n values —
-      // to avoid transient unique-constraint collisions mid-update.
-      try {
-        const supabase = createUntypedClient();
-        for (let i = 0; i < newBlocks.length; i++) {
-          const { error: parkError } = await supabase
-            .from('exercise_blocks')
-            .update({ order: i + 1001 })
-            .eq('id', newBlocks[i].id);
-          if (parkError) throw parkError;
-        }
-        for (let i = 0; i < newBlocks.length; i++) {
-          const { error: orderError } = await supabase
-            .from('exercise_blocks')
-            .update({ order: i + 1 })
-            .eq('id', newBlocks[i].id);
-          if (orderError) throw orderError;
-        }
-      } catch (err) {
-        console.error('Error saving reorder:', err);
-      }
+      void persistBlockOrder(newBlocks);
     }
 
     setDraggedBlockIndex(null);
+    setDraggedBlockId(null);
     setDragOverBlockIndex(null);
     setIsDraggingBlock(false);
     setDragPosition(null);
@@ -3667,7 +3716,7 @@ export default function WorkoutPage() {
       setCollapsedBlocks(preCollapseStateRef.current.collapsedBlocks);
       preCollapseStateRef.current = null;
     }
-  }, [draggedBlockIndex, dragOverBlockIndex, blocks, currentBlockIndex]);
+  }, [draggedBlockIndex, dragOverBlockIndex, blocks, currentBlockIndex, persistBlockOrder]);
 
   // Identity-stable wrappers around the drag handlers and the ⋮ menu builder,
   // for the grip/menu that now live inside the memoized ExerciseCard header.
@@ -5205,6 +5254,12 @@ export default function WorkoutPage() {
   const totalCompletedSets = completedSets.filter(s => !s.isWarmup && s.setType !== 'warmup').length;
   const overallProgress = totalPlannedSets > 0 ? (totalCompletedSets / totalPlannedSets) * 100 : 0;
 
+  // The block under the finger during a reorder, looked up by id so the
+  // floating preview can never re-target itself when the list reorders.
+  const draggedBlock = draggedBlockId
+    ? blocks.find((b) => b.id === draggedBlockId) ?? null
+    : null;
+
   // Duration estimate copy. Before the first set the honest number is the whole
   // planned session; once the timer runs it's elapsed + what's left, and the
   // hint says whether the model has been corrected by today's actual pace.
@@ -5681,7 +5736,7 @@ export default function WorkoutPage() {
           const isComplete = blockSets.length >= block.targetSets;
           const isCurrent = index === currentBlockIndex;
           const isRowCollapsed = allCollapsed || collapsedBlocks.has(block.id);
-          const isBeingDragged = draggedBlockIndex === index;
+          const isBeingDragged = draggedBlockId === block.id;
 
           // "3/8"-style position badge: position among non-skipped exercises /
           // their total, so it stays correct after reordering AND after
@@ -6209,7 +6264,7 @@ export default function WorkoutPage() {
             </p>
             {upNextEntries.map(({ block, index }) => {
               const isSkipped = skippedBlockIds.has(block.id);
-              const isBeingDragged = draggedBlockIndex === index;
+              const isBeingDragged = draggedBlockId === block.id;
               const translateY = getDragTranslateY(index, isBeingDragged);
               const muscleLabel = formatMuscleName(block.exercise.primaryMuscle);
 
@@ -6295,8 +6350,10 @@ export default function WorkoutPage() {
         )}
       </div>
 
-      {/* Floating drag preview */}
-      {isDraggingBlock && draggedBlockIndex !== null && dragPosition && (
+      {/* Floating drag preview — resolved by block id, not by index, so it
+          always shows the exercise under the finger even if the underlying
+          list reorders while it's on screen. */}
+      {isDraggingBlock && draggedBlock && dragPosition && (
         <div
           className="fixed pointer-events-none z-50 transition-transform duration-75"
           style={{
@@ -6316,20 +6373,20 @@ export default function WorkoutPage() {
               {/* Position badge — same "3/8" format as the list rows */}
               <div className="rounded-md px-1.5 py-1 text-[11px] font-bold leading-none bg-primary-500 text-white flex-shrink-0">
                 {(() => {
-                  const draggedId = blocks[draggedBlockIndex]?.id;
-                  const pos = activeBlocks.findIndex((b) => b.id === draggedId);
+                  const pos = activeBlocks.findIndex((b) => b.id === draggedBlock.id);
+                  const fallback = blocks.findIndex((b) => b.id === draggedBlock.id);
                   return pos >= 0
                     ? `${pos + 1}/${activeBlocks.length}`
-                    : `${draggedBlockIndex + 1}/${blocks.length}`;
+                    : `${fallback + 1}/${blocks.length}`;
                 })()}
               </div>
               {/* Exercise name */}
               <div className="flex-1">
                 <p className="font-medium text-surface-100">
-                  {blocks[draggedBlockIndex]?.exercise?.name}
+                  {draggedBlock.exercise?.name}
                 </p>
                 <p className="text-xs text-surface-500">
-                  {getSetsForBlock(blocks[draggedBlockIndex]?.id).length}/{blocks[draggedBlockIndex]?.targetSets} sets
+                  {getSetsForBlock(draggedBlock.id).length}/{draggedBlock.targetSets} sets
                 </p>
               </div>
             </div>
