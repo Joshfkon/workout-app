@@ -136,6 +136,12 @@ import { getFailureSafetyTier } from '@/services/exerciseSafety';
 import { SanityCheckToast } from '@/components/workout/SanityCheckToast';
 import { CalibrationResultCard } from '@/components/workout/CalibrationResultCard';
 import { useWorkoutStore } from '@/stores/workoutStore';
+import {
+  estimateWorkoutDuration,
+  formatDurationDelta,
+  formatDurationEstimate,
+} from '@/services/workoutDurationEstimator';
+import { estimatePendingAdditionSeconds, toDurationBlocks } from './_lib/durationEstimate';
 import { WorkoutHeader, type ExerciseSegmentStatus } from './_components/WorkoutHeader';
 import { WorkoutVolumeStrip } from './_components/WorkoutVolumeStrip';
 import { AddExercisePicker } from './_components/AddExercisePicker';
@@ -2222,6 +2228,42 @@ export default function WorkoutPage() {
     () => blocks.filter((b) => !skippedBlockIds.has(b.id)),
     [blocks, skippedBlockIds]
   );
+  // ---- Session duration estimate -------------------------------------------
+  // "How much longer is this?" — one estimate feeding the header pill, the
+  // finish card, and the add-exercise picker's "+N min". Declared before the
+  // early returns so the memo obeys the rules of hooks.
+  const durationBlocks = useMemo(
+    () => toDurationBlocks(blocks, completedSets, skippedBlockIds),
+    [blocks, completedSets, skippedBlockIds]
+  );
+  // Elapsed feeds pace calibration, so the estimate re-derives each tick. It's
+  // a handful of arithmetic over the block list — the page already re-renders
+  // every second for the timer.
+  const durationEstimate = useMemo(
+    () =>
+      estimateWorkoutDuration(durationBlocks, {
+        elapsedSeconds: timerStartedAt ? workoutTimer.elapsedSeconds : 0,
+      }),
+    [durationBlocks, timerStartedAt, workoutTimer.elapsedSeconds]
+  );
+
+  // What the add-exercise picker shows while the user browses: the session
+  // duration it would have once the pending selection lands, and the cost of
+  // that selection on its own.
+  const pickerSessionDuration = useMemo(() => {
+    const addedSeconds = estimatePendingAdditionSeconds(durationBlocks, selectedExercisesToAdd);
+    const baseSeconds =
+      durationEstimate.remainingSets > 0 || durationEstimate.totalSets > 0
+        ? durationEstimate.projectedTotalSeconds
+        : 0;
+    const totalSeconds = baseSeconds + addedSeconds;
+    if (totalSeconds <= 0) return null;
+    return {
+      totalLabel: formatDurationEstimate(totalSeconds),
+      deltaLabel: addedSeconds > 0 ? formatDurationDelta(addedSeconds) : null,
+    };
+  }, [durationBlocks, durationEstimate, selectedExercisesToAdd]);
+
   // Rolling-7-day credited sets (history + this session) vs the MEV–MRV band,
   // for the coarse muscles this workout trains. Shares the readiness sheet's
   // cached history query and volume model, so the strip and the sheet agree.
@@ -5166,6 +5208,7 @@ export default function WorkoutPage() {
             selectedExercisesToAdd={selectedExercisesToAdd}
             onToggleExerciseSelection={toggleExerciseSelection}
             isAddingExercise={isAddingExercise}
+            sessionDuration={pickerSessionDuration}
             onClose={handleCloseAddExerciseModal}
             onAddSelected={handleAddSelectedExercises}
           />
@@ -5216,6 +5259,17 @@ export default function WorkoutPage() {
   const draggedBlock = draggedBlockId
     ? blocks.find((b) => b.id === draggedBlockId) ?? null
     : null;
+
+  // Duration estimate copy. Before the first set the honest number is the whole
+  // planned session; once the timer runs it's elapsed + what's left, and the
+  // hint says whether the model has been corrected by today's actual pace.
+  const durationTotalLabel = formatDurationEstimate(durationEstimate.projectedTotalSeconds);
+  const durationHint =
+    durationEstimate.totalSets === 0
+      ? 'Add exercises to see how long this will take'
+      : `Estimated ${durationTotalLabel} total · ${durationEstimate.totalSets} sets across ` +
+        `${durationEstimate.exerciseCount} exercise${durationEstimate.exerciseCount === 1 ? '' : 's'}` +
+        (durationEstimate.isCalibrated ? ' · adjusted to your pace today' : '');
 
   // Header: workout label + per-exercise progress segments (skipped excluded)
   // Derived from activeBlocks (skipped excluded) so it matches the resume
@@ -5494,6 +5548,12 @@ export default function WorkoutPage() {
         exerciseNumber={currentExerciseNumber}
         exerciseTotal={activeBlocks.length}
         segments={headerSegments}
+        remainingDurationLabel={
+          durationEstimate.remainingSets > 0
+            ? formatDurationEstimate(durationEstimate.remainingSeconds)
+            : null
+        }
+        remainingDurationHint={durationHint}
         startedAt={session?.startedAt ?? null}
         timerStarted={timerStartedAt !== null}
         workoutTimer={workoutTimer}
@@ -6336,11 +6396,19 @@ export default function WorkoutPage() {
 
       {/* Finish workout button at bottom */}
       <Card className="text-center py-6 mt-8">
-        <p className="text-surface-400 mb-4">
-          {overallProgress >= 100 
-            ? '🎉 All exercises complete!' 
+        <p className={durationEstimate.remainingSets > 0 ? 'text-surface-400' : 'text-surface-400 mb-4'}>
+          {overallProgress >= 100
+            ? '🎉 All exercises complete!'
             : `${Math.round(overallProgress)}% complete`}
         </p>
+        {/* The plain-language version of the header pill: what's left, and what
+            the whole session comes to. Hidden once there's nothing left to do. */}
+        {durationEstimate.remainingSets > 0 && (
+          <p className="text-xs text-surface-500 mt-1 mb-4" data-testid="workout-duration-summary">
+            About {formatDurationEstimate(durationEstimate.remainingSeconds)} left ·{' '}
+            {durationTotalLabel} total for {durationEstimate.totalSets} sets
+          </p>
+        )}
         <div className="flex justify-center gap-3">
           <Button variant="ghost" onClick={handleOpenAddExercise}>
             + Add Exercise
@@ -6437,6 +6505,7 @@ export default function WorkoutPage() {
           selectedExercisesToAdd={selectedExercisesToAdd}
           onToggleExerciseSelection={toggleExerciseSelection}
           isAddingExercise={isAddingExercise}
+          sessionDuration={pickerSessionDuration}
           onClose={handleCloseAddExerciseModal}
           onAddSelected={handleAddSelectedExercises}
           onCreateCustom={() => { setCustomSwapBlockId(null); setShowCustomExercise(true); }}
