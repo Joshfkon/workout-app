@@ -150,6 +150,28 @@ describe('toDurationBlocks', () => {
     expect(mapped.warmupSetsRemaining).toBe(1);
   });
 
+  it('reports logged warmups so pace calibration can account for them', () => {
+    const blocks = [
+      makeBlock({
+        id: 'b1',
+        warmupProtocol: [
+          { setNumber: 1, percentOfWorking: 50, targetReps: 8, purpose: 'activation', restSeconds: 30 },
+          { setNumber: 2, percentOfWorking: 75, targetReps: 5, purpose: 'groove', restSeconds: 30 },
+        ],
+      }),
+    ];
+    const sets = [
+      makeSet({ exerciseBlockId: 'b1', isWarmup: true }),
+      makeSet({ exerciseBlockId: 'b1', setType: 'warmup' }),
+      makeSet({ exerciseBlockId: 'b1' }),
+    ];
+
+    const [mapped] = toDurationBlocks(blocks, sets, new Set());
+    // The timer has been running since the first of those warmups.
+    expect(mapped.warmupSetsCompleted).toBe(2);
+    expect(mapped.warmupSetsRemaining).toBe(0);
+  });
+
   it('marks skipped blocks so they drop out of the estimate', () => {
     const blocks = [makeBlock({ id: 'b1' }), makeBlock({ id: 'b2' })];
     const mapped = toDurationBlocks(blocks, [], new Set(['b2']));

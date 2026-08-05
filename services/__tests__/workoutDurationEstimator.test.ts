@@ -105,8 +105,45 @@ describe('estimateWorkoutDuration', () => {
       block({ id: 'b', targetSets: 4, completedSets: 1 }),
     ]);
     expect(estimate).toMatchObject({ totalSets: 7, completedSets: 4, remainingSets: 3 });
-    // 3 remaining sets on one active exercise: 3 x 45 + 2 x 120.
-    expect(estimate.remainingSeconds).toBe(3 * 45 + 2 * 120);
+    // 3 remaining sets, each with a rest in FRONT of it — the user is resting
+    // right now, having just logged set 1 of exercise b.
+    expect(estimate.remainingSeconds).toBe(3 * (120 + 45));
+  });
+
+  it('counts the rest the user is currently taking mid-exercise', () => {
+    // Just logged set 1 of 4. What is left is rest→set ×3, not set→rest×2→set.
+    const midSet = estimateWorkoutDuration([
+      block({ id: 'a', targetSets: 4, completedSets: 1, restSeconds: 180 }),
+    ]);
+    expect(midSet.remainingSeconds).toBe(3 * (180 + 45));
+
+    // Total stays put as sets land — only the split between done and left moves.
+    const fresh = estimateWorkoutDuration([
+      block({ id: 'a', targetSets: 4, restSeconds: 180 }),
+    ]);
+    expect(midSet.totalSeconds).toBe(fresh.totalSeconds);
+  });
+
+  it('counts the transition ahead when the current exercise just finished', () => {
+    const estimate = estimateWorkoutDuration([
+      block({ id: 'a', targetSets: 3, completedSets: 3 }),
+      block({ id: 'b', targetSets: 3, completedSets: 0 }),
+    ]);
+    // Walking to the next station is still ahead of the user.
+    expect(estimate.remainingSeconds).toBe(
+      DURATION_MODEL.transitionSeconds + (3 * 45 + 2 * 120)
+    );
+  });
+
+  it('keeps done + left equal to the whole session', () => {
+    const blocks = [
+      block({ id: 'a', targetSets: 3, completedSets: 2, warmupSetsCompleted: 2 }),
+      block({ id: 'b', targetSets: 4, completedSets: 0, warmupSetsRemaining: 3 }),
+    ];
+    const estimate = estimateWorkoutDuration(blocks);
+    const completedModel = estimate.totalSeconds - estimate.remainingSeconds;
+    expect(completedModel).toBeGreaterThan(0);
+    expect(estimate.remainingSeconds + completedModel).toBe(estimate.totalSeconds);
   });
 
   it('treats over-logged sets as complete rather than negative remaining', () => {
@@ -135,6 +172,58 @@ describe('estimateWorkoutDuration', () => {
     expect(slow.isCalibrated).toBe(true);
     expect(slow.paceFactor).toBeCloseTo(2, 5);
     expect(slow.remainingSeconds).toBe(modelled.remainingSeconds * 2);
+  });
+
+  it('reads a user who is exactly on model as on pace', () => {
+    // 4 sets logged, 120s rest: elapsed since the first set's log is
+    // 3 x (rest + work) = 495s. That is the model, so no correction.
+    const estimate = estimateWorkoutDuration(
+      [block({ id: 'a', targetSets: 8, completedSets: 4, restSeconds: 120 })],
+      { elapsedSeconds: 3 * (120 + 45) }
+    );
+    expect(estimate.paceFactor).toBe(1);
+    expect(estimate.isCalibrated).toBe(false);
+  });
+
+  it('does not read logged warmup time as slowness', () => {
+    // Timer anchors on the first logged set — a WARMUP here. Elapsed therefore
+    // covers 2 more warmups then 3 working sets, all exactly on model.
+    const blocks = [
+      block({
+        id: 'a',
+        targetSets: 6,
+        completedSets: 3,
+        restSeconds: 120,
+        warmupSetsCompleted: 3,
+        warmupRestSeconds: 45,
+      }),
+    ];
+    const warmupSpan = 2 * (DURATION_MODEL.warmupWorkSeconds + 45) + 45; // 2 warmups + rest into set 1
+    const workingSpan = 3 * 45 + 2 * 120;
+    const estimate = estimateWorkoutDuration(blocks, {
+      elapsedSeconds: warmupSpan + workingSpan,
+    });
+    expect(estimate.paceFactor).toBe(1);
+  });
+
+  it('still detects real slowness in a session that logged warmups', () => {
+    const blocks = [
+      block({
+        id: 'a',
+        targetSets: 6,
+        completedSets: 3,
+        restSeconds: 120,
+        warmupSetsCompleted: 3,
+        warmupRestSeconds: 45,
+      }),
+    ];
+    // Model span from the anchor: 2 warmups + the rest into set 1, then the
+    // three working sets.
+    const onModelSpan = 2 * (DURATION_MODEL.warmupWorkSeconds + 45) + 45 + (3 * 45 + 2 * 120);
+    expect(estimateWorkoutDuration(blocks, { elapsedSeconds: onModelSpan }).paceFactor).toBe(1);
+
+    const dawdling = estimateWorkoutDuration(blocks, { elapsedSeconds: onModelSpan * 1.5 });
+    expect(dawdling.paceFactor).toBeCloseTo(1.5, 5);
   });
 
   it('clamps pace calibration so one long break cannot double the session', () => {

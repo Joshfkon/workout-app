@@ -59,6 +59,11 @@ export function toDurationBlocks(
       mechanic: block.exercise.mechanic === 'isolation' ? 'isolation' : 'compound',
       exerciseType: block.exercise.exerciseType ?? null,
       warmupSetsRemaining,
+      // Warmups the user actually logged. The workout timer anchors to the
+      // first logged set of any kind, so these belong in the pace baseline —
+      // otherwise warmup time reads as the user being slow and inflates the
+      // whole remaining estimate.
+      warmupSetsCompleted: warmupsDone,
       warmupRestSeconds: protocol[0]?.restSeconds ?? null,
       supersetGroupId: block.supersetGroupId,
       skipped: skippedBlockIds.has(block.id),
