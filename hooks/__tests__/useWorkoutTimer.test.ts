@@ -706,4 +706,49 @@ describe('useWorkoutTimer', () => {
       expect(result.current.elapsedSeconds).toBe(before + 5);
     });
   });
+  describe('pausedAtMs (rest-measurement freeze point)', () => {
+    it('is null while the timer is running', () => {
+      const { result } = mountTimer(mockSessionId);
+      expect(result.current.pausedAtMs).toBeNull();
+    });
+
+    it('reports the instant the clock froze once paused', () => {
+      const { result } = mountTimer(mockSessionId);
+      const before = Date.now();
+
+      act(() => {
+        result.current.pause();
+      });
+
+      expect(result.current.isPaused).toBe(true);
+      expect(result.current.pausedAtMs).toBeGreaterThanOrEqual(before);
+      expect(result.current.pausedAtMs).toBeLessThanOrEqual(Date.now());
+    });
+
+    it('holds that instant steady for the life of the pause', () => {
+      const { result } = mountTimer(mockSessionId);
+      act(() => {
+        result.current.pause();
+      });
+      const frozenAt = result.current.pausedAtMs;
+
+      act(() => {
+        jest.advanceTimersByTime(600000);
+      });
+
+      // Spans measured against this must not grow while paused.
+      expect(result.current.pausedAtMs).toBe(frozenAt);
+    });
+
+    it('clears on resume', () => {
+      const { result } = mountTimer(mockSessionId);
+      act(() => {
+        result.current.pause();
+      });
+      act(() => {
+        result.current.resume();
+      });
+      expect(result.current.pausedAtMs).toBeNull();
+    });
+  });
 });

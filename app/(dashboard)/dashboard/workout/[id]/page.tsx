@@ -2249,9 +2249,24 @@ export default function WorkoutPage() {
       elapsedSeconds,
       // Time already served in the current rest, so the readout counts down
       // through a rest instead of climbing and snapping back on the next set.
-      secondsSinceLastSet: secondsSinceLastSet(completedSets, elapsedSeconds),
+      // Read off the wall clock (frozen at pausedAtMs while paused) rather than
+      // elapsed — the window opens at the last logged set, so pauses taken
+      // earlier in the session are outside it and can't eat the credit.
+      secondsSinceLastSet: secondsSinceLastSet(
+        completedSets,
+        Date.now(),
+        workoutTimer.pausedAtMs
+      ),
     });
-  }, [durationBlocks, completedSets, timerStartedAt, workoutTimer.elapsedSeconds]);
+    // Re-derives on each timer tick; while paused the tick stops and
+    // pausedAtMs pins the rest measurement, so the estimate holds steady.
+  }, [
+    durationBlocks,
+    completedSets,
+    timerStartedAt,
+    workoutTimer.elapsedSeconds,
+    workoutTimer.pausedAtMs,
+  ]);
 
   // What the add-exercise picker shows while the user browses: the session
   // duration it would have once the pending selection lands, and the cost of

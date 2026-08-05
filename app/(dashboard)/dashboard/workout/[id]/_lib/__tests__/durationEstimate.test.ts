@@ -211,11 +211,13 @@ describe('estimateSessionDuration', () => {
 });
 
 describe('secondsSinceLastSet', () => {
-  const at = (offsetSeconds: number) =>
-    new Date(Date.parse('2026-08-05T10:00:00.000Z') + offsetSeconds * 1000).toISOString();
+  const START = Date.parse('2026-08-05T10:00:00.000Z');
+  /** Wall-clock stamp `offsetSeconds` into the session. */
+  const at = (offsetSeconds: number) => new Date(START + offsetSeconds * 1000).toISOString();
+  const nowAt = (offsetSeconds: number) => START + offsetSeconds * 1000;
 
   it('is zero when nothing has been logged', () => {
-    expect(secondsSinceLastSet([], 0)).toBe(0);
+    expect(secondsSinceLastSet([], nowAt(300))).toBe(0);
   });
 
   it('measures from the most recent set, not the first', () => {
@@ -223,38 +225,37 @@ describe('secondsSinceLastSet', () => {
       makeSet({ exerciseBlockId: 'b1', loggedAt: at(0) }),
       makeSet({ exerciseBlockId: 'b1', loggedAt: at(165) }),
     ];
-    // Timer reads 200s; the last set landed at the 165s mark.
-    expect(secondsSinceLastSet(sets, 200)).toBe(35);
+    expect(secondsSinceLastSet(sets, nowAt(200))).toBe(35);
   });
 
   it('is zero at the instant a set is logged', () => {
-    const sets = [
-      makeSet({ exerciseBlockId: 'b1', loggedAt: at(0) }),
-      makeSet({ exerciseBlockId: 'b1', loggedAt: at(165) }),
-    ];
-    expect(secondsSinceLastSet(sets, 165)).toBe(0);
+    const sets = [makeSet({ exerciseBlockId: 'b1', loggedAt: at(165) })];
+    expect(secondsSinceLastSet(sets, nowAt(165))).toBe(0);
   });
 
-  it('stops accruing while the timer is paused', () => {
-    const sets = [
-      makeSet({ exerciseBlockId: 'b1', loggedAt: at(0) }),
-      makeSet({ exerciseBlockId: 'b1', loggedAt: at(165) }),
-    ];
-    // Wall clock has moved on, but a paused timer has not — the gap credit
-    // must follow the timer, or a paused session comes back claiming its rest
-    // is long over.
-    const whilePaused = secondsSinceLastSet(sets, 180);
-    expect(whilePaused).toBe(15);
-    expect(secondsSinceLastSet(sets, 180)).toBe(whilePaused);
+  it('freezes at the moment the timer was paused', () => {
+    const sets = [makeSet({ exerciseBlockId: 'b1', loggedAt: at(165) })];
+    // Paused 15s into the rest; wall clock has since run on to 600s.
+    expect(secondsSinceLastSet(sets, nowAt(600), nowAt(180))).toBe(15);
+    // Still frozen however long the pause lasts.
+    expect(secondsSinceLastSet(sets, nowAt(5000), nowAt(180))).toBe(15);
   });
 
-  it('never returns a negative gap when pauses precede the last set', () => {
+  it('credits a rest in full after a long pause EARLIER in the session', () => {
+    // The regression this signature exists for: a 10-minute pause between
+    // set 1 and set 2 used to swallow the whole rest after set 2, because the
+    // gap was derived from a pause-excluding elapsed reading. The window opens
+    // at the last set, so an earlier pause is simply outside it.
     const sets = [
       makeSet({ exerciseBlockId: 'b1', loggedAt: at(0) }),
-      makeSet({ exerciseBlockId: 'b1', loggedAt: at(600) }),
+      makeSet({ exerciseBlockId: 'b1', loggedAt: at(645) }), // after a 10 min pause
     ];
-    // Timer excludes a long pause, so it reads behind the wall-clock offset.
-    expect(secondsSinceLastSet(sets, 120)).toBe(0);
+    expect(secondsSinceLastSet(sets, nowAt(645 + 120))).toBe(120);
+  });
+
+  it('never returns a negative gap from clock skew', () => {
+    const sets = [makeSet({ exerciseBlockId: 'b1', loggedAt: at(600) })];
+    expect(secondsSinceLastSet(sets, nowAt(120))).toBe(0);
   });
 
   it('ignores sets with no usable timestamp', () => {
@@ -264,7 +265,7 @@ describe('secondsSinceLastSet', () => {
       makeSet({ exerciseBlockId: 'b1', loggedAt: 'not-a-date' }),
       makeSet({ exerciseBlockId: 'b1', loggedAt: at(100) }),
     ];
-    expect(secondsSinceLastSet(sets, 150)).toBe(50);
+    expect(secondsSinceLastSet(sets, nowAt(150))).toBe(50);
   });
 });
 

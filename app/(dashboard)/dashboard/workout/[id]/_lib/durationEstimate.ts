@@ -72,31 +72,39 @@ export function toDurationBlocks(
 }
 
 /**
- * How long the user has been in the gap after their most recent set, measured
- * on the WORKOUT TIMER's clock rather than wall time.
+ * How long the user has been in the gap after their most recent set.
  *
- * Both stamps are read from set data, but the span is expressed as a
- * difference of timer readings: `elapsedSeconds` already excludes paused time,
- * so a session paused mid-rest stops accruing rest credit instead of coming
- * back to a bogus "your rest is over". A pause taken BEFORE the last set makes
- * the wall-clock offset larger than the timer's, which clamps to 0 here —
- * under-crediting the gap, which leaves the estimate slightly high rather than
- * confidently low.
+ * Measured as a window that OPENS at the last logged set, which is what makes
+ * pauses tractable: a pause taken earlier in the session — before that set —
+ * falls outside the window and cannot distort it at all. Only a pause inside
+ * the window matters, and `pausedAtMs` closes the window at the instant the
+ * workout clock froze, so a session paused mid-rest stops accruing credit
+ * exactly as the timer stops accruing elapsed.
+ *
+ * (The earlier version compared a wall-clock span against the pause-excluding
+ * `elapsedSeconds`, which made every second of earlier pause eat into this
+ * gap: after a 10-minute pause, a normal 2-minute rest was credited nothing.)
+ *
+ * A pause both started AND ended within the current gap is still counted as
+ * time served — the estimator caps the credit at the gap's prescribed length,
+ * so the overshoot is bounded by that rest.
  */
-export function secondsSinceLastSet(completedSets: SetLog[], elapsedSeconds: number): number {
-  let firstMs = Infinity;
+export function secondsSinceLastSet(
+  completedSets: SetLog[],
+  nowMs: number,
+  pausedAtMs: number | null = null
+): number {
   let lastMs = -Infinity;
   for (const set of completedSets) {
     if (!set.loggedAt) continue;
     const ms = new Date(set.loggedAt).getTime();
     if (Number.isNaN(ms)) continue;
-    if (ms < firstMs) firstMs = ms;
     if (ms > lastMs) lastMs = ms;
   }
-  if (!Number.isFinite(firstMs) || !Number.isFinite(lastMs)) return 0;
+  if (!Number.isFinite(lastMs)) return 0;
 
-  const elapsedAtLastSet = (lastMs - firstMs) / 1000;
-  return Math.max(0, elapsedSeconds - elapsedAtLastSet);
+  const windowEndsMs = pausedAtMs ?? nowMs;
+  return Math.max(0, (windowEndsMs - lastMs) / 1000);
 }
 
 export interface SessionDurationInput {
@@ -105,6 +113,10 @@ export interface SessionDurationInput {
   skippedBlockIds: Set<string>;
   /** Workout timer reading; omit before the first set lands. */
   elapsedSeconds?: number;
+  /** Wall clock, for measuring the rest currently under way. */
+  nowMs?: number;
+  /** `workoutTimer.pausedAtMs` — freezes that measurement during a pause. */
+  pausedAtMs?: number | null;
 }
 
 export function estimateSessionDuration({
@@ -112,10 +124,13 @@ export function estimateSessionDuration({
   completedSets,
   skippedBlockIds,
   elapsedSeconds,
+  nowMs,
+  pausedAtMs = null,
 }: SessionDurationInput): WorkoutDurationEstimate {
   return estimateWorkoutDuration(toDurationBlocks(blocks, completedSets, skippedBlockIds), {
     elapsedSeconds,
-    secondsSinceLastSet: secondsSinceLastSet(completedSets, elapsedSeconds ?? 0),
+    secondsSinceLastSet:
+      nowMs === undefined ? 0 : secondsSinceLastSet(completedSets, nowMs, pausedAtMs),
   });
 }
 
