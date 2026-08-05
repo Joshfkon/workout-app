@@ -28,6 +28,7 @@ import {
 } from '@/services/progressionHealth';
 import { getExerciseProgression, type ExerciseProgressionInsight } from '@/services/progressionInsights';
 import { generateWarmupProtocol } from '@/services/progressionEngine';
+import { resolveWarmupLoad, type WarmupLoadMode } from '@/services/warmupEngine';
 import { formatSessionTimeOfDay } from '@/services/sessionContext';
 import { formatSleepHours, SLEEP_QUALITY_LABELS } from '@/lib/sleep/formatSleep';
 import { useUserStore } from '@/stores';
@@ -762,7 +763,10 @@ export const ExerciseCard = memo(function ExerciseCard({
     return Number.isFinite(typed) && typed > 0 ? inputWeightToKg(typed, unit) : 0;
   }, [isBodyweightExercise, pendingInputs, unit]);
 
-  const warmupWorkingWeightKg = workingWeight > 0 ? workingWeight : typedFirstSetWeightKg;
+  // Externally loaded basis. Bodyweight exercises rebase this onto BW ±
+  // modification below (warmupWorkingWeightKg) — for them the page's
+  // target_weight_kg is an estimator number that isn't the load they lift.
+  const externalWarmupWorkingWeightKg = workingWeight > 0 ? workingWeight : typedFirstSetWeightKg;
 
   // A protocol the page generated with workingWeight 0 collapsed to the
   // single <20 kg "light activation" set — rebuild it from the typed weight
@@ -812,12 +816,6 @@ export const ExerciseCard = memo(function ExerciseCard({
     });
   }, [warmupDecision, warmupSets, workingWeight, typedFirstSetWeightKg, exercise, listIndex]);
 
-  // Auto-collapse warmup sets when all are completed
-  useEffect(() => {
-    if (effectiveWarmupSets.length > 0 && completedWarmups.size === effectiveWarmupSets.length) {
-      setIsWarmupExpanded(false);
-    }
-  }, [completedWarmups.size, effectiveWarmupSets.length]);
 
   // Weight mode state for bodyweight exercises (header-level selection)
   const [weightMode, setWeightMode] = useState<'bodyweight' | 'weighted' | 'assisted'>(
@@ -870,20 +868,208 @@ export const ExerciseCard = memo(function ExerciseCard({
     return null;
   }, [plateau]);
 
+  // What last session's TOP set on this bodyweight exercise actually was, in
+  // the dimension the lifter controls. Two sources, in order:
+  //   1. the recorded composition (bodyweight_data) — exact;
+  //   2. failing that, the effective load minus today's bodyweight — derived,
+  //      and flagged as such. Legacy rows (logged before compositions were
+  //      stored, or migration rows flagged _needsReview) carry only a blended
+  //      effective load, and "216 lbs" on a bodyweight movement is a number
+  //      the lifter cannot act on: it hides whether they added 0 or 40.
+  const lastSessionBodyweight = useMemo(() => {
+    if (!isBodyweightExercise) return null;
+    // The TOP set is the heaviest EFFECTIVE load, not set 1: lastWorkoutSets
+    // is ordered by set_number (suggestions.ts workingSetsOf), so on an
+    // ascending session (BW+10, BW+15, BW+20) set 1 is the lightest and
+    // seeding from it would under-prescribe both the working load and the
+    // warmup basis. Ties keep the earlier set.
+    const top = (exerciseHistory?.lastWorkoutSets ?? []).reduce<
+      NonNullable<typeof exerciseHistory>['lastWorkoutSets'][number] | null
+    >((best, s) => (best === null || s.weightKg > best.weightKg ? s : best), null);
+    if (!top) return null;
+    if (top.bw) {
+      return {
+        modification: top.bw.modification,
+        addedKg: top.bw.addedWeightKg ?? 0,
+        assistanceKg: top.bw.assistanceWeightKg ?? 0,
+        derived: false,
+      };
+    }
+    if (!userBodyweightKg || userBodyweightKg <= 0 || !(top.weightKg > 0)) return null;
+    const diff = top.weightKg - userBodyweightKg;
+    // Within a plate of bodyweight → read as plain bodyweight, not a 1.2 kg
+    // "added" figure invented by day-to-day bodyweight drift.
+    if (Math.abs(diff) < 2.5) {
+      return { modification: 'none' as const, addedKg: 0, assistanceKg: 0, derived: true };
+    }
+    return diff > 0
+      ? { modification: 'weighted' as const, addedKg: diff, assistanceKg: 0, derived: true }
+      : { modification: 'assisted' as const, addedKg: 0, assistanceKg: -diff, derived: true };
+  }, [isBodyweightExercise, exerciseHistory, userBodyweightKg]);
+
+  // Open a bodyweight exercise in the mode it was last trained in. Without
+  // this the card always opened on "Bodyweight" and prescribed BW+0 even when
+  // the last session was BW+40 — the added load was invisible AND unseeded.
+  // Only an explicitly recorded composition may flip the control (a derived
+  // one is an inference, not a record); the user's own choice always wins.
+  const weightModeTouchedRef = useRef(false);
+  useEffect(() => {
+    if (weightModeTouchedRef.current) return;
+    if (!isBodyweightExercise || isPureBodyweight || !userBodyweightKg) return;
+    if (completedSets.length > 0) return;
+    const mod = lastSessionBodyweight?.derived === false ? lastSessionBodyweight.modification : null;
+    if (mod === 'weighted' && canAddWeight) setWeightMode('weighted');
+    else if (mod === 'assisted' && canUseAssistance) setWeightMode('assisted');
+  }, [
+    isBodyweightExercise,
+    isPureBodyweight,
+    userBodyweightKg,
+    completedSets.length,
+    lastSessionBodyweight,
+    canAddWeight,
+    canUseAssistance,
+  ]);
+
   // Seed the bodyweight load input from the most recent set logged in the
-  // same mode (added load for weighted, assistance for assisted).
+  // same mode (added load for weighted, assistance for assisted), falling back
+  // to last SESSION's load in that mode — otherwise the first set of every
+  // session is prescribed at BW+0 regardless of what was carried last time.
   useEffect(() => {
     if (!isBodyweightExercise) return;
     const lastBw = [...completedSets].reverse().find((s) => s.bodyweightData)?.bodyweightData;
+    const prev = lastSessionBodyweight;
     if (weightMode === 'weighted') {
-      const kg = lastBw?.modification === 'weighted' ? lastBw.addedWeightKg ?? 0 : 0;
+      const kg =
+        lastBw?.modification === 'weighted'
+          ? lastBw.addedWeightKg ?? 0
+          : !lastBw && prev?.modification === 'weighted'
+            ? prev.addedKg
+            : 0;
       setBwLoadInput(kg > 0 ? String(convertWeightForDisplay(kg, unit)) : '');
     } else if (weightMode === 'assisted') {
-      const kg = lastBw?.modification === 'assisted' ? lastBw.assistanceWeightKg ?? 0 : 0;
+      const kg =
+        lastBw?.modification === 'assisted'
+          ? lastBw.assistanceWeightKg ?? 0
+          : !lastBw && prev?.modification === 'assisted'
+            ? prev.assistanceKg
+            : 0;
       setBwLoadInput(kg > 0 ? String(convertWeightForDisplay(kg, unit)) : '');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [weightMode, isBodyweightExercise, completedSets.length, unit]);
+  }, [weightMode, isBodyweightExercise, completedSets.length, unit, lastSessionBodyweight]);
+
+  // The load this exercise's warmup ramps toward, in kg.
+  //   • external exercises: the page's working weight (or the typed first set);
+  //   • bodyweight exercises: BW ± the modification actually in play — the
+  //     lifter's own weight is the load, and target_weight_kg (an estimator
+  //     number) is not it.
+  const bwWarmupAddedKg = useMemo(() => {
+    if (!isBodyweightExercise || weightMode === 'bodyweight') return 0;
+    const typed = parseFloat(bwLoadInput);
+    if (Number.isFinite(typed) && typed > 0) return inputWeightToKg(typed, unit);
+    return 0;
+  }, [isBodyweightExercise, weightMode, bwLoadInput, unit]);
+
+  const warmupLoadMode: WarmupLoadMode = !isBodyweightExercise
+    ? 'external'
+    : weightMode === 'weighted'
+      ? 'weighted'
+      : weightMode === 'assisted'
+        ? 'assisted'
+        : 'bodyweight';
+
+  const warmupWorkingWeightKg = useMemo(() => {
+    if (!isBodyweightExercise || !userBodyweightKg || userBodyweightKg <= 0) {
+      return externalWarmupWorkingWeightKg;
+    }
+    if (warmupLoadMode === 'weighted') return userBodyweightKg + bwWarmupAddedKg;
+    if (warmupLoadMode === 'assisted') return Math.max(0, userBodyweightKg - bwWarmupAddedKg);
+    return userBodyweightKg;
+  }, [
+    isBodyweightExercise,
+    userBodyweightKg,
+    externalWarmupWorkingWeightKg,
+    warmupLoadMode,
+    bwWarmupAddedKg,
+  ]);
+
+  // Each warmup step resolved into something the lifter can actually set up
+  // (services/warmupEngine.resolveWarmupLoad). On a bodyweight movement a
+  // percentage of the EFFECTIVE load is not loadable — "60% of 98 kg" asks a
+  // 98 kg lifter to weigh 59 kg — so the percentage is resolved onto the
+  // dimension they control (added plate / assistance) and floors at plain
+  // bodyweight. Steps that all floor to bodyweight collapse into one row
+  // (counted in the note below, never silently dropped).
+  const warmupRows = useMemo(() => {
+    const isBw =
+      warmupLoadMode !== 'external' && !!userBodyweightKg && userBodyweightKg > 0;
+    const rows = effectiveWarmupSets.map((warmup) => {
+      const custom = customWarmupWeights.get(warmup.setNumber);
+      const hasCustom = custom !== undefined;
+      const resolved = resolveWarmupLoad({
+        percentOfWorking: warmup.percentOfWorking,
+        workingLoadKg: warmupWorkingWeightKg,
+        mode: warmupLoadMode,
+        userBodyweightKg,
+      });
+      const dimensionKg = hasCustom ? custom : roundToPlateIncrement(resolved.dimensionKg, unit);
+      const value = parseFloat(convertWeight(dimensionKg, 'kg', unit).toFixed(1));
+
+      let label: string;
+      if (!isBw) {
+        label = value === 0 ? (isBodyweightExercise ? 'BW' : 'Empty') : String(value);
+      } else if (value <= 0) {
+        label = 'BW';
+      } else {
+        label = warmupLoadMode === 'assisted' ? `BW −${value}` : `BW +${value}`;
+      }
+
+      return {
+        warmup,
+        label,
+        // The inline editor edits the dimension the row is prescribed in:
+        // added/assistance load on bodyweight movements, absolute load
+        // otherwise. Bodyweight-only rows have nothing to type.
+        editable: !isBw || warmupLoadMode !== 'bodyweight',
+        editSeed: String(value),
+        // What that row actually loads the body with — the tooltip's number.
+        effectiveKg: !isBw
+          ? dimensionKg
+          : warmupLoadMode === 'assisted'
+            ? Math.max(0, (userBodyweightKg ?? 0) - dimensionKg)
+            : (userBodyweightKg ?? 0) + dimensionKg,
+        floored: isBw && resolved.clamped && !hasCustom,
+        isBw,
+      };
+    });
+
+    // Collapse the run of below-bodyweight steps into a single bodyweight row.
+    const kept: typeof rows = [];
+    let collapsed = 0;
+    for (const row of rows) {
+      if (row.floored && kept.some((k) => k.floored)) {
+        collapsed++;
+        continue;
+      }
+      kept.push(row);
+    }
+    return { rows: kept, collapsed, anyFloored: kept.some((r) => r.floored) };
+  }, [
+    effectiveWarmupSets,
+    customWarmupWeights,
+    warmupWorkingWeightKg,
+    warmupLoadMode,
+    userBodyweightKg,
+    isBodyweightExercise,
+    unit,
+  ]);
+
+  // Auto-collapse warmup sets when all are completed
+  useEffect(() => {
+    if (warmupRows.rows.length > 0 && completedWarmups.size === warmupRows.rows.length) {
+      setIsWarmupExpanded(false);
+    }
+  }, [completedWarmups.size, warmupRows.rows.length]);
 
   // Determine suggested weight. On a cold start, the page's transfer-aware
   // estimate supersedes the block's stored target — the stored number may be a
@@ -910,7 +1096,20 @@ export const ExerciseCard = memo(function ExerciseCard({
   const historySetWeightLabel = useCallback(
     (set: { weightKg: number; bw?: { modification: string; addedWeightKg?: number; assistanceWeightKg?: number } }): string => {
       const bw = set.bw;
-      if (!bw) return String(displayWeight(set.weightKg, true));
+      if (!bw) {
+        // No recorded composition. On a bodyweight exercise the effective load
+        // alone ("216") can't be acted on — the lifter cannot tell what they
+        // hung off the belt. Derive it from today's bodyweight and mark it
+        // approximate with "~"; their bodyweight then is not knowable here.
+        if (isBodyweightExercise && userBodyweightKg && userBodyweightKg > 0 && set.weightKg > 0) {
+          const diff = set.weightKg - userBodyweightKg;
+          if (Math.abs(diff) < 2.5) return '~BW';
+          return diff > 0
+            ? `~BW+${displayWeight(diff, true)}`
+            : `~BW−${displayWeight(-diff, true)}`;
+        }
+        return String(displayWeight(set.weightKg, true));
+      }
       if (bw.modification === 'weighted' && (bw.addedWeightKg ?? 0) > 0) {
         return `BW+${displayWeight(bw.addedWeightKg!, true)}`;
       }
@@ -919,7 +1118,7 @@ export const ExerciseCard = memo(function ExerciseCard({
       }
       return 'BW';
     },
-    [displayWeight]
+    [displayWeight, isBodyweightExercise, userBodyweightKg]
   );
 
   // Seed string for a pending weight input. When the seed comes verbatim from
@@ -2445,16 +2644,21 @@ export const ExerciseCard = memo(function ExerciseCard({
     const lastSets = exerciseHistory?.lastWorkoutSets ?? [];
     if (lastSets.length === 0) return null;
     const line = formatSetHistoryLine(
-      lastSets.map((s) => ({
-        weightLabel: s.bw
-          ? `${historySetWeightLabel(s)}${s.bw.modification === 'none' ? '' : ` ${weightLabel}`}`
-          : `${displayWeight(s.weightKg, true)} ${weightLabel}`,
-        reps: s.reps,
-        // Single RPE→RIR conversion app-wide: the bucketed rpeToRir the
-        // engine reads sets with (raw Math.round(10 − rpe) disagreed at RPE
-        // 7.5: header said 3 where the engine graded 2).
-        rir: s.rpe != null ? Math.max(0, rpeToRir(s.rpe)) : null,
-      })),
+      lastSets.map((s) => {
+        // "BW" carries no unit; "BW+25" does. Covers both the recorded
+        // composition and the bodyweight-derived fallback ("~BW+25").
+        const label = historySetWeightLabel(s);
+        const isBwLabel = label.startsWith('BW') || label.startsWith('~BW');
+        const hasLoad = /[+−]/.test(label);
+        return {
+          weightLabel: isBwLabel ? `${label}${hasLoad ? ` ${weightLabel}` : ''}` : `${label} ${weightLabel}`,
+          reps: s.reps,
+          // Single RPE→RIR conversion app-wide: the bucketed rpeToRir the
+          // engine reads sets with (raw Math.round(10 − rpe) disagreed at RPE
+          // 7.5: header said 3 where the engine graded 2).
+          rir: s.rpe != null ? Math.max(0, rpeToRir(s.rpe)) : null,
+        };
+      }),
       { secondsSuffix: isDurationBased }
     );
     if (!line) return null;
@@ -2782,7 +2986,11 @@ export const ExerciseCard = memo(function ExerciseCard({
                 { value: 'assisted', label: 'Assisted', disabled: !canUseAssistance },
               ]}
               value={weightMode}
-              onChange={(value) => setWeightMode(value as 'bodyweight' | 'weighted' | 'assisted')}
+              onChange={(value) => {
+                // The lifter's own choice outranks the last-session default.
+                weightModeTouchedRef.current = true;
+                setWeightMode(value as 'bodyweight' | 'weighted' | 'assisted');
+              }}
             />
           </div>
         )}
@@ -2840,6 +3048,11 @@ export const ExerciseCard = memo(function ExerciseCard({
                           [
                             set.bw && set.bw.modification !== 'none'
                               ? `Effective load ${displayWeight(set.weightKg, true)} ${weightLabel}`
+                              : null,
+                            // Derived breakdown (no composition was stored):
+                            // name the arithmetic so the "~" is explainable.
+                            !set.bw && isBodyweightExercise && userBodyweightKg
+                              ? `Effective load ${displayWeight(set.weightKg, true)} ${weightLabel}; composition not recorded — estimated against today's bodyweight (${displayWeight(userBodyweightKg, true)} ${weightLabel})`
                               : null,
                             // Per-set clock time: sets in one session can be
                             // 20 minutes apart, and that context belongs to the
@@ -2903,7 +3116,7 @@ export const ExerciseCard = memo(function ExerciseCard({
       )}
 
       {/* Warmup sets - keep in separate table for now (legacy) */}
-      {isActive && effectiveWarmupSets.length > 0 && warmupWorkingWeightKg > 0 && (
+      {isActive && warmupRows.rows.length > 0 && warmupWorkingWeightKg > 0 && (
         <div className="border-b border-surface-800">
           {/* Collapsible header */}
           <button
@@ -2913,12 +3126,12 @@ export const ExerciseCard = memo(function ExerciseCard({
             <div className="flex items-center gap-2">
               <div
                 className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
-                  completedWarmups.size === effectiveWarmupSets.length
+                  completedWarmups.size === warmupRows.rows.length
                     ? 'bg-success-500/20 text-success-400'
                     : 'bg-amber-500/20 text-amber-400'
                 }`}
               >
-                {completedWarmups.size === effectiveWarmupSets.length ? '✓' : completedWarmups.size}
+                {completedWarmups.size === warmupRows.rows.length ? '✓' : completedWarmups.size}
               </div>
               <span className="text-sm font-medium text-surface-200">
                 {warmupDecision?.kind === 'targeted_ramp'
@@ -2928,7 +3141,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                     : 'Warmup Protocol'}
               </span>
               <span className="text-xs text-surface-500">
-                ({completedWarmups.size}/{effectiveWarmupSets.length})
+                ({completedWarmups.size}/{warmupRows.rows.length})
               </span>
             </div>
             <svg
@@ -2968,26 +3181,13 @@ export const ExerciseCard = memo(function ExerciseCard({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-surface-800">
-                {effectiveWarmupSets.map((warmup) => {
-                  const calculatedWeightKg = warmupWorkingWeightKg * (warmup.percentOfWorking / 100);
+                {warmupRows.rows.map((row) => {
+                  const warmup = row.warmup;
                   const hasCustomWeight = customWarmupWeights.has(warmup.setNumber);
-                  const warmupWeightKg = hasCustomWeight 
-                    ? customWarmupWeights.get(warmup.setNumber)! 
-                    : calculatedWeightKg;
-                  const warmupWeightForDisplayKg = hasCustomWeight
-                    ? warmupWeightKg
-                    : roundToPlateIncrement(warmupWeightKg, unit);
-                  const warmupWeightForDisplay = parseFloat(
-                    convertWeight(warmupWeightForDisplayKg, 'kg', unit).toFixed(1)
-                  );
-                  // For bodyweight exercises with no added weight, show "BW"
-                  // For weighted/assisted bodyweight exercises, show the actual warmup weight
-                  const displayWarmupWeight = warmupWeightForDisplayKg === 0
-                    ? (isBodyweightExercise ? 'BW' : 'Empty')
-                    : warmupWeightForDisplay;
+                  const displayWarmupWeight = row.label;
                   const isWarmupCompleted = completedWarmups.has(warmup.setNumber);
                   const isEditingThis = editingWarmupId === warmup.setNumber;
-                  
+
                   return (
                     <tr
                       key={`warmup-${warmup.setNumber}`}
@@ -3026,17 +3226,31 @@ export const ExerciseCard = memo(function ExerciseCard({
                             autoFocus
                             className="w-full px-1 py-0.5 text-center font-mono text-sm bg-surface-900 border border-amber-500 rounded text-surface-100"
                           />
-                        ) : (
+                        ) : row.editable ? (
                           <button
                             onClick={() => {
                               setEditingWarmupId(warmup.setNumber);
-                              setWarmupWeightInput(warmupWeightForDisplay.toString());
+                              setWarmupWeightInput(row.editSeed);
                             }}
+                            title={
+                              row.isBw
+                                ? `${displayWeight(row.effectiveKg, true)} ${weightLabel} total — tap to change the ${
+                                    warmupLoadMode === 'assisted' ? 'assistance' : 'added weight'
+                                  }`
+                                : undefined
+                            }
                             className="font-mono text-surface-300 hover:text-amber-400 transition-colors"
                           >
                             {displayWarmupWeight}
                             {hasCustomWeight && <span className="text-amber-400 text-xs ml-1">*</span>}
                           </button>
+                        ) : (
+                          <span
+                            className="font-mono text-surface-300"
+                            title={`${displayWeight(row.effectiveKg, true)} ${weightLabel} total`}
+                          >
+                            {displayWarmupWeight}
+                          </span>
                         )}
                       </td>
                       <td className="px-1 py-2 text-center font-mono text-surface-300">
@@ -3094,11 +3308,29 @@ export const ExerciseCard = memo(function ExerciseCard({
                     </tr>
                   );
                 })}
-                {completedWarmups.size < effectiveWarmupSets.length && (
+                {warmupRows.anyFloored && (
+                  <tr className="bg-surface-800/30">
+                    <td colSpan={6} className="px-3 py-1.5">
+                      <p
+                        className="text-[11px] text-surface-500 leading-snug"
+                        data-testid="warmup-bodyweight-floor-note"
+                      >
+                        Your bodyweight is the lightest this movement goes
+                        {warmupRows.collapsed > 0
+                          ? `, so ${warmupRows.collapsed + 1} lighter ramp steps collapse into one bodyweight set`
+                          : ''}
+                        {warmupLoadMode === 'weighted'
+                          ? ' — ramp with reps and tempo, then add the belt for your working sets.'
+                          : ' — ramp with reps and tempo.'}
+                      </p>
+                    </td>
+                  </tr>
+                )}
+                {completedWarmups.size < warmupRows.rows.length && (
                   <tr className="bg-surface-800/30">
                     <td colSpan={6} className="px-3 py-1.5 text-center">
                       <button
-                        onClick={() => setCompletedWarmups(new Set(effectiveWarmupSets.map(w => w.setNumber)))}
+                        onClick={() => setCompletedWarmups(new Set(warmupRows.rows.map(r => r.warmup.setNumber)))}
                         className="text-xs text-surface-500 hover:text-surface-400 transition-colors"
                       >
                         Skip warmup (already warm)

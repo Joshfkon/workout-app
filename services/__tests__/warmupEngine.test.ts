@@ -15,6 +15,7 @@ import {
   canonicalizeMovementPattern,
   deriveRomDemands,
   warmthDecay,
+  resolveWarmupLoad,
   WARMTH_HALF_LIFE_MINUTES,
   type WarmupExerciseMeta,
   type WarmupReadinessInput,
@@ -500,5 +501,121 @@ describe('working sets already logged on the target exercise (review fix)', () =
       })
     );
     expect(result.kind).not.toBe('none');
+  });
+});
+
+// ============================================
+// resolveWarmupLoad — percent → loadable number
+// ============================================
+
+describe('resolveWarmupLoad', () => {
+  describe('externally loaded exercises', () => {
+    it('is the plain percentage of the working load', () => {
+      const r = resolveWarmupLoad({
+        percentOfWorking: 60,
+        workingLoadKg: 100,
+        mode: 'external',
+      });
+      expect(r.dimension).toBe('external');
+      expect(r.dimensionKg).toBeCloseTo(60);
+      expect(r.effectiveKg).toBeCloseTo(60);
+      expect(r.clamped).toBe(false);
+    });
+
+    it('falls back to the external reading when bodyweight is unknown', () => {
+      // Without a bodyweight the effective load cannot be decomposed — better
+      // the old number than an invented composition.
+      const r = resolveWarmupLoad({
+        percentOfWorking: 60,
+        workingLoadKg: 100,
+        mode: 'weighted',
+      });
+      expect(r.dimension).toBe('external');
+      expect(r.dimensionKg).toBeCloseTo(60);
+    });
+  });
+
+  describe('weighted bodyweight (belt/vest)', () => {
+    it('resolves the percentage onto the ADDED weight, not the effective load', () => {
+      // 98 kg lifter + 20 kg belt = 118 kg working. 85% = 100.3 kg effective,
+      // which is 2.3 kg on the belt — NOT "100 kg" on a chin-up bar.
+      const r = resolveWarmupLoad({
+        percentOfWorking: 85,
+        workingLoadKg: 118,
+        mode: 'weighted',
+        userBodyweightKg: 98,
+      });
+      expect(r.dimension).toBe('added');
+      expect(r.dimensionKg).toBeCloseTo(2.3, 1);
+      expect(r.effectiveKg).toBeCloseTo(100.3, 1);
+      expect(r.clamped).toBe(false);
+    });
+
+    it('floors at bodyweight when the percentage lands below it', () => {
+      // The reported defect: a 60% ramp on a 98 kg bodyweight movement
+      // rendered "51 kg" — a load that lifter cannot produce.
+      const r = resolveWarmupLoad({
+        percentOfWorking: 60,
+        workingLoadKg: 98,
+        mode: 'weighted',
+        userBodyweightKg: 98,
+      });
+      expect(r.dimension).toBe('none');
+      expect(r.dimensionKg).toBe(0);
+      expect(r.effectiveKg).toBe(98);
+      expect(r.clamped).toBe(true);
+    });
+
+    it('does not flag the top set itself as clamped', () => {
+      const r = resolveWarmupLoad({
+        percentOfWorking: 100,
+        workingLoadKg: 98,
+        mode: 'weighted',
+        userBodyweightKg: 98,
+      });
+      expect(r.clamped).toBe(false);
+    });
+  });
+
+  describe('assisted bodyweight', () => {
+    it('a lighter ramp means MORE assistance', () => {
+      // 98 kg lifter, 18 kg assistance = 80 kg working. 60% = 48 kg effective,
+      // i.e. 50 kg of assistance.
+      const r = resolveWarmupLoad({
+        percentOfWorking: 60,
+        workingLoadKg: 80,
+        mode: 'assisted',
+        userBodyweightKg: 98,
+      });
+      expect(r.dimension).toBe('assistance');
+      expect(r.dimensionKg).toBeCloseTo(50);
+      expect(r.effectiveKg).toBeCloseTo(48);
+    });
+
+    it('caps assistance below full unloading and says so', () => {
+      const r = resolveWarmupLoad({
+        percentOfWorking: 0,
+        workingLoadKg: 80,
+        mode: 'assisted',
+        userBodyweightKg: 100,
+      });
+      expect(r.dimensionKg).toBeCloseTo(90); // 90% of bodyweight
+      expect(r.clamped).toBe(true);
+    });
+  });
+
+  describe('pure bodyweight', () => {
+    it('has no lighter option — every ramp step is bodyweight', () => {
+      const r = resolveWarmupLoad({
+        percentOfWorking: 50,
+        workingLoadKg: 98,
+        mode: 'bodyweight',
+        userBodyweightKg: 98,
+      });
+      expect(r.dimension).toBe('none');
+      expect(r.dimensionKg).toBe(0);
+      expect(r.effectiveKg).toBe(98);
+      expect(r.clamped).toBe(true);
+    });
   });
 });

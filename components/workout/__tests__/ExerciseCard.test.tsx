@@ -1971,3 +1971,148 @@ describe('warmup decision with unknown working weight (Codex review fix)', () =>
     expect(screen.getByText(/\(0\/3\)/)).toBeInTheDocument();
   });
 });
+
+describe('bodyweight warmup loads (added weight, not effective load)', () => {
+  // Reported defect: a 98 kg lifter on a bodyweight Back Extension saw a ramp
+  // set of "51 kg" — 60% of the effective load, a weight nobody can set up —
+  // and no way to see what they had added last session.
+  const bwProps = {
+    exercise: createMockExercise({
+      id: 'back-ext',
+      name: 'Back Extension',
+      primaryMuscle: 'glutes',
+      equipmentRequired: ['bodyweight'],
+      minWeightIncrementKg: 2.5,
+    }),
+    block: createMockBlock({ exerciseId: 'back-ext', targetWeightKg: 85 }),
+    sets: [],
+    unit: 'kg' as const,
+    isActive: true,
+    userBodyweightKg: 98,
+    workingWeight: 85,
+    onSetComplete: jest.fn().mockResolvedValue('id'),
+    onWarmupComplete: jest.fn(),
+  };
+
+  const rampDecision = {
+    kind: 'targeted_ramp' as const,
+    reason: 'Muscle is warm, but first hip hinging of the session — one targeted ramp set, full ROM.',
+    sets: [
+      {
+        setNumber: 1,
+        percentOfWorking: 60,
+        targetReps: 10,
+        purpose: 'Groove hip hinging',
+        restSeconds: 45,
+      },
+    ],
+  };
+
+  const historyWithAddedWeight = (bw?: { modification: 'none' | 'weighted' | 'assisted'; addedWeightKg?: number }) => ({
+    lastWorkoutDate: '2026-08-02',
+    lastWorkoutSets: [{ weightKg: 118, reps: 13, rpe: 7.5, ...(bw ? { bw } : {}) }],
+    estimatedE1RM: 0,
+    personalRecord: null,
+    totalSessions: 10,
+  });
+
+  it('prescribes the ramp as bodyweight when the percentage falls below bodyweight', async () => {
+    const user = userEvent.setup();
+    render(<ExerciseCard {...bwProps} warmupDecision={rampDecision} />);
+
+    await user.click(screen.getByText('Ramp Set'));
+    const rampRow = screen.getByText('W1').closest('tr')!;
+
+    // The old behaviour printed 60% of the page's target weight (51 kg).
+    expect(rampRow).toHaveTextContent('BW');
+    expect(rampRow).not.toHaveTextContent('51');
+    expect(screen.getByTestId('warmup-bodyweight-floor-note')).toHaveTextContent(
+      /bodyweight is the lightest this movement goes/i
+    );
+  });
+
+  it('ramps the ADDED weight when the working set carries added weight', async () => {
+    const user = userEvent.setup();
+    render(
+      <ExerciseCard
+        {...bwProps}
+        warmupDecision={rampDecision}
+        exerciseHistory={historyWithAddedWeight({ modification: 'weighted', addedWeightKg: 20 })}
+      />
+    );
+
+    // Last session was BW+20 → the card opens in Weighted mode with 20 seeded,
+    // so the working set is 118 kg and 60% of that is 70.8 kg — below the
+    // lifter's 98 kg, so the ramp is bodyweight, with the belt for the top set.
+    await user.click(screen.getByText('Ramp Set'));
+    expect(screen.getByText('W1').closest('tr')).toHaveTextContent('BW');
+
+    // A 95% step, by contrast, IS loadable: BW + 14 kg.
+    const heavyRamp = {
+      ...rampDecision,
+      sets: [{ ...rampDecision.sets[0], percentOfWorking: 95 }],
+    };
+    render(
+      <ExerciseCard
+        {...bwProps}
+        warmupDecision={heavyRamp}
+        exerciseHistory={historyWithAddedWeight({ modification: 'weighted', addedWeightKg: 20 })}
+      />
+    );
+    expect(screen.getAllByText(/BW \+\d/).length).toBeGreaterThan(0);
+  });
+
+  it('seeds the added weight from last session instead of prescribing BW+0', () => {
+    render(
+      <ExerciseCard
+        {...bwProps}
+        exerciseHistory={historyWithAddedWeight({ modification: 'weighted', addedWeightKg: 20 })}
+      />
+    );
+    // Mode control follows last session, and the banner carries the load.
+    expect(screen.getByRole('button', { name: 'Weighted' })).toHaveAttribute('data-selected', 'true');
+    expect(screen.getByText(/BW \+20 kg/)).toBeInTheDocument();
+  });
+
+  it('derives the composition for legacy sets that stored only the effective load', () => {
+    render(<ExerciseCard {...bwProps} exerciseHistory={historyWithAddedWeight()} />);
+    // 118 kg effective − 98 kg bodyweight ≈ BW+20, marked approximate because
+    // the bodyweight of that day was never recorded.
+    expect(screen.getByText(/last session ~BW\+20 kg × 13/)).toBeInTheDocument();
+  });
+
+  it('seeds from the heaviest set of an ascending session, not set 1', () => {
+    // lastWorkoutSets is ordered by set_number, so an ascending session puts
+    // the LIGHTEST set at index 0. Seeding from it would prescribe BW+10 for
+    // a session whose top sets were BW+20.
+    render(
+      <ExerciseCard
+        {...bwProps}
+        exerciseHistory={{
+          lastWorkoutDate: '2026-08-02',
+          lastWorkoutSets: [
+            { weightKg: 108, reps: 12, rpe: 7, bw: { modification: 'weighted' as const, addedWeightKg: 10 } },
+            { weightKg: 113, reps: 10, rpe: 8, bw: { modification: 'weighted' as const, addedWeightKg: 15 } },
+            { weightKg: 118, reps: 8, rpe: 9, bw: { modification: 'weighted' as const, addedWeightKg: 20 } },
+          ],
+          estimatedE1RM: 0,
+          personalRecord: null,
+          totalSessions: 10,
+        }}
+      />
+    );
+    expect(screen.getByText(/BW \+20 kg/)).toBeInTheDocument();
+  });
+
+  it('a manual mode change outranks the last-session default', async () => {
+    const user = userEvent.setup();
+    render(
+      <ExerciseCard
+        {...bwProps}
+        exerciseHistory={historyWithAddedWeight({ modification: 'weighted', addedWeightKg: 20 })}
+      />
+    );
+    await user.click(screen.getByRole('button', { name: 'Bodyweight' }));
+    expect(screen.getByRole('button', { name: 'Bodyweight' })).toHaveAttribute('data-selected', 'true');
+  });
+});
