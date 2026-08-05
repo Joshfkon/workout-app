@@ -239,20 +239,24 @@ function NewWorkoutContent() {
 
   // Recovery and volume tracking for muscle selection guidance
   const { recoveryStatus, isLoading: isLoadingRecovery } = useMuscleRecovery();
-  const { volumeData, isLoading: isLoadingVolume } = useWeeklyVolume();
+  const { rows: volumeRows, isLoading: isLoadingVolume } = useWeeklyVolume();
 
-  // Aggregate recovery and volume data for UI muscle groups (legacy 13)
-  // Since UI groups map to multiple standard groups, we take the worst-case for recovery
-  // and sum the volume data
+  // Aggregate recovery and volume data for UI muscle groups (legacy 13).
+  // Recovery is per standard muscle, so it takes the worst case across the
+  // group. Volume comes from the SHARED coarse row for the group — never a sum
+  // of its per-head counters, which double-counts within-group credit (a
+  // pushdown crediting both triceps heads would read 6 sets for 4 performed).
   const muscleIndicators = useMemo(() => {
     const indicators = new Map<MuscleGroup, {
       recoveryPercent: number;
       isReady: boolean;
       statusText: string;
       totalSets: number;
-      targetSets: number; // MAV midpoint
+      targetSets: number; // the group's MEV floor
       volumeStatus: 'below_mev' | 'effective' | 'optimal' | 'approaching_mrv' | 'exceeding_mrv';
     }>();
+
+    const rowByMuscle = new Map(volumeRows.map((row) => [row.muscle, row]));
 
     MUSCLE_GROUPS.forEach((muscle) => {
       const standardMuscles = legacyToStandardMuscles(muscle);
@@ -275,34 +279,17 @@ function NewWorkoutContent() {
         }
       });
 
-      // Get volume data - sum across all mapped standard muscles
-      let totalSets = 0;
-      let targetSets = 0;
-      let worstVolumeStatus: MuscleVolumeData['status'] = 'below_mev';
-      const statusPriority: Record<MuscleVolumeData['status'], number> = {
-        'exceeding_mrv': 0,
-        'approaching_mrv': 1,
-        'optimal': 2,
-        'effective': 3,
-        'below_mev': 4,
-      };
-      let currentPriority = 4;
-
-      standardMuscles.forEach((sm) => {
-        const vol = volumeData.find((v) => v.muscleGroup === sm);
-        if (vol) {
-          totalSets += vol.totalSets;
-          // Use midpoint of MEV-MAV as target for display
-          targetSets += Math.round((vol.landmarks.mev + vol.landmarks.mav) / 2);
-
-          // Track worst volume status
-          const priority = statusPriority[vol.status];
-          if (priority < currentPriority) {
-            currentPriority = priority;
-            worstVolumeStatus = vol.status;
-          }
-        }
-      });
+      // Volume: the group's own capped row against its own research band —
+      // the same number the home tile, Train page and volume page show.
+      const row = rowByMuscle.get(muscle);
+      const totalSets = row?.sets ?? 0;
+      const targetSets = row?.band.mev ?? 0;
+      const volumeStatus: MuscleVolumeData['status'] =
+        !row || row.zone === 'below_mev'
+          ? 'below_mev'
+          : row.zone === 'over_mrv'
+            ? 'exceeding_mrv'
+            : 'optimal';
 
       indicators.set(muscle, {
         recoveryPercent: worstRecoveryPercent,
@@ -310,12 +297,12 @@ function NewWorkoutContent() {
         statusText,
         totalSets,
         targetSets,
-        volumeStatus: worstVolumeStatus,
+        volumeStatus,
       });
     });
 
     return indicators;
-  }, [recoveryStatus, volumeData]);
+  }, [recoveryStatus, volumeRows]);
 
   // Suggest exercises based on recent history, goals, AND time available
   // COMPREHENSIVE VERSION: Addresses all 8 identified issues

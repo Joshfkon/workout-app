@@ -250,7 +250,10 @@ const TOOL_PILLS = [
 export default function TrainPage() {
   const router = useRouter();
   const supabase = createUntypedClient();
-  const { summary, isLoading: volumeLoading } = useWeeklyVolume();
+  // Week totals come from the shared coarse row model (`tiles`) — the same
+  // numbers the home glance tile and the volume page show. Summing the 26
+  // per-head rows instead double-counts within-group credit.
+  const { tiles: volumeTiles, isLoading: volumeLoading } = useWeeklyVolume();
   const {
     recoveryStatus,
     recoveringMuscles,
@@ -703,12 +706,12 @@ export default function TrainPage() {
 
   const volumeStatusLine = volumeLoading
     ? { text: 'Loading...', className: 'text-surface-500' }
-    : summary.totalSets === 0
+    : volumeTiles.totalSets === 0
       ? { text: 'No sets logged yet this week', className: 'text-surface-500' }
-      : summary.musclesBelowMev.length > 0
+      : volumeTiles.lowCount > 0
         ? {
-            text: `${summary.musclesBelowMev.length} muscle ${
-              summary.musclesBelowMev.length === 1 ? 'group' : 'groups'
+            text: `${volumeTiles.lowCount} muscle ${
+              volumeTiles.lowCount === 1 ? 'group' : 'groups'
             } below minimum`,
             className: 'text-warning-400',
           }
@@ -904,7 +907,7 @@ export default function TrainPage() {
         <span className="flex-1 min-w-0">
           <span className="block text-[15px] text-surface-400">
             <span className="font-semibold text-surface-100">
-              {volumeLoading ? '—' : summary.totalSets} sets
+              {volumeLoading ? '—' : volumeTiles.totalSets} sets
             </span>{' '}
             this week ·{' '}
             <span className="font-semibold text-surface-100">

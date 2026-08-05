@@ -24,9 +24,8 @@ export function DashboardLayoutClient({ children }: DashboardLayoutClientProps) 
   // Weekly volume coverage for the Train tab indicator: lit when every
   // muscle group has hit at least MEV this week. Fetched once here so the
   // sidebar and bottom nav share a single query.
-  const { summary, isLoading: volumeLoading } = useWeeklyVolume();
-  const volumeGoalsMet =
-    !volumeLoading && summary.totalSets > 0 && summary.musclesBelowMev.length === 0;
+  const { tiles, isLoading: volumeLoading } = useWeeklyVolume();
+  const volumeGoalsMet = !volumeLoading && tiles.totalSets > 0 && tiles.lowCount === 0;
 
   // Apple Health: anchored pull on entry + every app foreground (iOS native
   // only; no-op everywhere else).

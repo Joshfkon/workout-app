@@ -173,6 +173,13 @@ function roundWhole(value: number): number {
   return Math.round(value + ROUNDING_EPSILON);
 }
 
+// Exported under explicit names for consumers OUTSIDE this module that emit
+// credited-set values (hooks/useWeeklyVolume). Rounding a credited count
+// anywhere must go through these: rounding components separately and adding
+// them (the pre-fix useWeeklyVolume rounded direct and indirect apart, on 26
+// rows) biases every total upward.
+export { round1 as round1Sets, roundWhole as roundWholeSets };
+
 /**
  * Round a list of non-negative raw values to one decimal so that the rounded
  * values sum EXACTLY to round1(Σ raw) — largest-remainder allocation in
@@ -917,7 +924,7 @@ export interface BuildVolumeRowsOptions {
 }
 
 /** Per-standard-muscle rollup carried into the row model (full precision). */
-interface StandardMuscleRollup {
+export interface StandardMuscleRollup {
   sets: number;
   effectiveSets: number;
   unratedSets: number;
@@ -939,8 +946,18 @@ const emptyRollup = (): StandardMuscleRollup => ({
   exercises: [],
 });
 
-/** Accumulate credited sets + contributing exercises per standard muscle. */
-function setsByStandardMuscle(
+/**
+ * Accumulate credited sets + contributing exercises per standard muscle.
+ *
+ * This is the PER-HEAD view: sub-muscle counters are independent and may
+ * legitimately overlap (one incline-press set feeds chest_upper 1.0 AND
+ * chest_lower 0.5), which is correct for per-head programming decisions. It is
+ * therefore NOT summable into a group total — the group rollup applies the
+ * within-group credit cap in buildVolumeRows. Exported so per-head consumers
+ * (hooks/useWeeklyVolume) read the SAME accumulation the rows are built from
+ * instead of running a second pass.
+ */
+export function setsByStandardMuscle(
   stats: MuscleVolumeStats[]
 ): Map<StandardMuscleGroup, StandardMuscleRollup> {
   const out = new Map<StandardMuscleGroup, StandardMuscleRollup>();
