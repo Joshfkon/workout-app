@@ -3582,29 +3582,46 @@ export default function WorkoutPage() {
     dragOverBlockIndexRef.current = dragOverBlockIndex;
   }, [isDraggingBlock, draggedBlockIndex, draggedBlockRect, dragOverBlockIndex]);
 
+  // Serializes the order saves below. Drops are no longer blocked on the write,
+  // so a second reorder can be requested while the first is still in flight;
+  // interleaving the two would let the older write land last and leave the DB
+  // holding an order the user never saw. Saves run one at a time, and a save
+  // that a newer one has already superseded is skipped — every write covers
+  // every block, so only the newest order matters.
+  const orderSaveChainRef = useRef<Promise<void>>(Promise.resolve());
+  const orderSaveSeqRef = useRef(0);
+
   // Persist the new block order. exercise_blocks."order" (the column the loader
   // sorts by) is UNIQUE per session, so write in two passes — park every block
   // on a temporary offset first, then write the final 1..n values — to avoid
   // transient unique-constraint collisions mid-update. Each pass fans out in
   // parallel: within a pass the targets are already collision-free, so the cost
   // is two round-trip waves rather than 2n sequential ones.
-  const persistBlockOrder = useCallback(async (ordered: ExerciseBlockWithExercise[]) => {
-    try {
-      const supabase = createUntypedClient();
-      const writePass = async (offset: number) => {
-        const results = await Promise.all(
-          ordered.map((b, i) =>
-            supabase.from('exercise_blocks').update({ order: i + offset }).eq('id', b.id)
-          )
-        );
-        const failed = results.find((r) => r.error);
-        if (failed?.error) throw failed.error;
-      };
-      await writePass(1001);
-      await writePass(1);
-    } catch (err) {
-      console.error('Error saving reorder:', err);
-    }
+  const persistBlockOrder = useCallback((ordered: ExerciseBlockWithExercise[]) => {
+    const seq = ++orderSaveSeqRef.current;
+    const ids = ordered.map((b) => b.id);
+
+    orderSaveChainRef.current = orderSaveChainRef.current.then(async () => {
+      if (seq !== orderSaveSeqRef.current) return; // superseded while queued
+      try {
+        const supabase = createUntypedClient();
+        const writePass = async (offset: number) => {
+          const results = await Promise.all(
+            ids.map((id, i) =>
+              supabase.from('exercise_blocks').update({ order: i + offset }).eq('id', id)
+            )
+          );
+          const failed = results.find((r) => r.error);
+          if (failed?.error) throw failed.error;
+        };
+        await writePass(1001);
+        await writePass(1);
+      } catch (err) {
+        console.error('Error saving reorder:', err);
+      }
+    });
+
+    return orderSaveChainRef.current;
   }, []);
 
   const handleBlockDragEnd = useCallback(() => {
