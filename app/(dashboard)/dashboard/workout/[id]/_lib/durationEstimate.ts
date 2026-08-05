@@ -71,6 +71,34 @@ export function toDurationBlocks(
   });
 }
 
+/**
+ * How long the user has been in the gap after their most recent set, measured
+ * on the WORKOUT TIMER's clock rather than wall time.
+ *
+ * Both stamps are read from set data, but the span is expressed as a
+ * difference of timer readings: `elapsedSeconds` already excludes paused time,
+ * so a session paused mid-rest stops accruing rest credit instead of coming
+ * back to a bogus "your rest is over". A pause taken BEFORE the last set makes
+ * the wall-clock offset larger than the timer's, which clamps to 0 here —
+ * under-crediting the gap, which leaves the estimate slightly high rather than
+ * confidently low.
+ */
+export function secondsSinceLastSet(completedSets: SetLog[], elapsedSeconds: number): number {
+  let firstMs = Infinity;
+  let lastMs = -Infinity;
+  for (const set of completedSets) {
+    if (!set.loggedAt) continue;
+    const ms = new Date(set.loggedAt).getTime();
+    if (Number.isNaN(ms)) continue;
+    if (ms < firstMs) firstMs = ms;
+    if (ms > lastMs) lastMs = ms;
+  }
+  if (!Number.isFinite(firstMs) || !Number.isFinite(lastMs)) return 0;
+
+  const elapsedAtLastSet = (lastMs - firstMs) / 1000;
+  return Math.max(0, elapsedSeconds - elapsedAtLastSet);
+}
+
 export interface SessionDurationInput {
   blocks: ExerciseBlockWithExercise[];
   completedSets: SetLog[];
@@ -87,6 +115,7 @@ export function estimateSessionDuration({
 }: SessionDurationInput): WorkoutDurationEstimate {
   return estimateWorkoutDuration(toDurationBlocks(blocks, completedSets, skippedBlockIds), {
     elapsedSeconds,
+    secondsSinceLastSet: secondsSinceLastSet(completedSets, elapsedSeconds ?? 0),
   });
 }
 

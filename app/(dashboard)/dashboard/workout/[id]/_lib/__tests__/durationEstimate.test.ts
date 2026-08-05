@@ -3,6 +3,7 @@ import {
   ADDED_BLOCK_DEFAULTS,
   estimatePendingAdditionSeconds,
   estimateSessionDuration,
+  secondsSinceLastSet,
   toDurationBlocks,
 } from '../durationEstimate';
 import type { ExerciseBlockWithExercise } from '../types';
@@ -206,6 +207,64 @@ describe('estimateSessionDuration', () => {
     });
     expect(estimate.exerciseCount).toBe(1);
     expect(estimate.totalSets).toBe(3);
+  });
+});
+
+describe('secondsSinceLastSet', () => {
+  const at = (offsetSeconds: number) =>
+    new Date(Date.parse('2026-08-05T10:00:00.000Z') + offsetSeconds * 1000).toISOString();
+
+  it('is zero when nothing has been logged', () => {
+    expect(secondsSinceLastSet([], 0)).toBe(0);
+  });
+
+  it('measures from the most recent set, not the first', () => {
+    const sets = [
+      makeSet({ exerciseBlockId: 'b1', loggedAt: at(0) }),
+      makeSet({ exerciseBlockId: 'b1', loggedAt: at(165) }),
+    ];
+    // Timer reads 200s; the last set landed at the 165s mark.
+    expect(secondsSinceLastSet(sets, 200)).toBe(35);
+  });
+
+  it('is zero at the instant a set is logged', () => {
+    const sets = [
+      makeSet({ exerciseBlockId: 'b1', loggedAt: at(0) }),
+      makeSet({ exerciseBlockId: 'b1', loggedAt: at(165) }),
+    ];
+    expect(secondsSinceLastSet(sets, 165)).toBe(0);
+  });
+
+  it('stops accruing while the timer is paused', () => {
+    const sets = [
+      makeSet({ exerciseBlockId: 'b1', loggedAt: at(0) }),
+      makeSet({ exerciseBlockId: 'b1', loggedAt: at(165) }),
+    ];
+    // Wall clock has moved on, but a paused timer has not — the gap credit
+    // must follow the timer, or a paused session comes back claiming its rest
+    // is long over.
+    const whilePaused = secondsSinceLastSet(sets, 180);
+    expect(whilePaused).toBe(15);
+    expect(secondsSinceLastSet(sets, 180)).toBe(whilePaused);
+  });
+
+  it('never returns a negative gap when pauses precede the last set', () => {
+    const sets = [
+      makeSet({ exerciseBlockId: 'b1', loggedAt: at(0) }),
+      makeSet({ exerciseBlockId: 'b1', loggedAt: at(600) }),
+    ];
+    // Timer excludes a long pause, so it reads behind the wall-clock offset.
+    expect(secondsSinceLastSet(sets, 120)).toBe(0);
+  });
+
+  it('ignores sets with no usable timestamp', () => {
+    const sets = [
+      makeSet({ exerciseBlockId: 'b1', loggedAt: at(0) }),
+      makeSet({ exerciseBlockId: 'b1', loggedAt: '' }),
+      makeSet({ exerciseBlockId: 'b1', loggedAt: 'not-a-date' }),
+      makeSet({ exerciseBlockId: 'b1', loggedAt: at(100) }),
+    ];
+    expect(secondsSinceLastSet(sets, 150)).toBe(50);
   });
 });
 

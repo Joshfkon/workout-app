@@ -226,6 +226,107 @@ describe('estimateWorkoutDuration', () => {
     expect(dawdling.paceFactor).toBeCloseTo(1.5, 5);
   });
 
+  it('counts down through a rest instead of climbing', () => {
+    const blocks = [block({ id: 'a', targetSets: 8, completedSets: 4, restSeconds: 120 })];
+    // On-model user who has just logged set 4: elapsed = 3 x (rest + work).
+    const atLog = estimateWorkoutDuration(blocks, {
+      elapsedSeconds: 3 * (120 + 45),
+      secondsSinceLastSet: 0,
+    });
+    // Same user 60s into their 120s rest — a minute of the gap is now served.
+    const midRest = estimateWorkoutDuration(blocks, {
+      elapsedSeconds: 3 * (120 + 45) + 60,
+      secondsSinceLastSet: 60,
+    });
+
+    expect(midRest.remainingSeconds).toBe(atLog.remainingSeconds - 60);
+    // Resting on schedule is not slowness.
+    expect(midRest.paceFactor).toBe(1);
+  });
+
+  it('holds an on-model resting user at exactly one throughout the rest', () => {
+    const blocks = [block({ id: 'a', targetSets: 8, completedSets: 4, restSeconds: 120 })];
+    for (const served of [0, 30, 60, 90, 120]) {
+      const estimate = estimateWorkoutDuration(blocks, {
+        elapsedSeconds: 3 * (120 + 45) + served,
+        secondsSinceLastSet: served,
+      });
+      expect(estimate.paceFactor).toBe(1);
+      // 4 sets left, the last rest fully served at 120.
+      expect(estimate.remainingSeconds).toBe(4 * 45 + 4 * 120 - served);
+    }
+  });
+
+  it('reads overstaying a rest as genuine slowness', () => {
+    const blocks = [block({ id: 'a', targetSets: 8, completedSets: 4, restSeconds: 120 })];
+    // Five minutes into a two-minute rest: credit caps at the prescription.
+    const estimate = estimateWorkoutDuration(blocks, {
+      elapsedSeconds: 3 * (120 + 45) + 300,
+      secondsSinceLastSet: 300,
+    });
+    expect(estimate.paceFactor).toBeGreaterThan(1);
+    // Remaining never gets credited past the gap's real length.
+    expect(estimate.remainingSeconds).toBeGreaterThanOrEqual(4 * 45 + 3 * 120);
+  });
+
+  it('credits the transition when the current exercise is finished', () => {
+    const blocks = [
+      block({ id: 'a', targetSets: 3, completedSets: 3 }),
+      block({ id: 'b', targetSets: 3, completedSets: 0 }),
+    ];
+    const atLog = estimateWorkoutDuration(blocks, { secondsSinceLastSet: 0 });
+    const walking = estimateWorkoutDuration(blocks, { secondsSinceLastSet: 30 });
+    expect(walking.remainingSeconds).toBe(atLog.remainingSeconds - 30);
+  });
+
+  it('has no gap to credit once every set is logged', () => {
+    const estimate = estimateWorkoutDuration(
+      [block({ id: 'a', targetSets: 3, completedSets: 3 })],
+      { secondsSinceLastSet: 600 }
+    );
+    expect(estimate.remainingSeconds).toBe(0);
+  });
+
+  it('credits only a changeover between superset partners', () => {
+    const blocks = [
+      block({ id: 'a', targetSets: 3, completedSets: 2, supersetGroupId: 'g1' }),
+      block({ id: 'b', targetSets: 3, completedSets: 1, supersetGroupId: 'g1' }),
+    ];
+    // Partner b is up next, reached by a changeover — not a full rest.
+    const atLog = estimateWorkoutDuration(blocks, { secondsSinceLastSet: 0 });
+    const later = estimateWorkoutDuration(blocks, { secondsSinceLastSet: 600 });
+    expect(atLog.remainingSeconds - later.remainingSeconds).toBe(
+      DURATION_MODEL.supersetChangeoverSeconds
+    );
+  });
+
+  it('credits the group rest once a superset round is complete', () => {
+    const blocks = [
+      block({ id: 'a', targetSets: 3, completedSets: 2, supersetGroupId: 'g1', restSeconds: 90 }),
+      block({ id: 'b', targetSets: 3, completedSets: 2, supersetGroupId: 'g1', restSeconds: 150 }),
+    ];
+    // Both members are level, so the round just closed. supersetFlow rests on
+    // the group's LAST member, so the gap being served is b's 150s — not a's.
+    const atLog = estimateWorkoutDuration(blocks, { secondsSinceLastSet: 0 });
+    const later = estimateWorkoutDuration(blocks, { secondsSinceLastSet: 600 });
+    expect(atLog.remainingSeconds - later.remainingSeconds).toBe(150);
+  });
+
+  it('treats a trailing superset member that got ahead as a changeover', () => {
+    // Not reachable through the normal L→H round-robin, but a reorder or a
+    // manually logged set can produce it: the member behind is up next, and
+    // reaching them is a changeover rather than a full rest.
+    const blocks = [
+      block({ id: 'a', targetSets: 3, completedSets: 1, supersetGroupId: 'g1' }),
+      block({ id: 'b', targetSets: 3, completedSets: 2, supersetGroupId: 'g1', restSeconds: 150 }),
+    ];
+    const atLog = estimateWorkoutDuration(blocks, { secondsSinceLastSet: 0 });
+    const later = estimateWorkoutDuration(blocks, { secondsSinceLastSet: 600 });
+    expect(atLog.remainingSeconds - later.remainingSeconds).toBe(
+      DURATION_MODEL.supersetChangeoverSeconds
+    );
+  });
+
   it('clamps pace calibration so one long break cannot double the session', () => {
     const estimate = estimateWorkoutDuration(
       [block({ id: 'a', targetSets: 8, completedSets: 4 })],
