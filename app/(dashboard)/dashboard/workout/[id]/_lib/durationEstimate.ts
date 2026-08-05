@@ -71,12 +71,52 @@ export function toDurationBlocks(
   });
 }
 
+/**
+ * How long the user has been in the gap after their most recent set.
+ *
+ * Measured as a window that OPENS at the last logged set, which is what makes
+ * pauses tractable: a pause taken earlier in the session — before that set —
+ * falls outside the window and cannot distort it at all. Only a pause inside
+ * the window matters, and `pausedAtMs` closes the window at the instant the
+ * workout clock froze, so a session paused mid-rest stops accruing credit
+ * exactly as the timer stops accruing elapsed.
+ *
+ * (The earlier version compared a wall-clock span against the pause-excluding
+ * `elapsedSeconds`, which made every second of earlier pause eat into this
+ * gap: after a 10-minute pause, a normal 2-minute rest was credited nothing.)
+ *
+ * A pause both started AND ended within the current gap is still counted as
+ * time served — the estimator caps the credit at the gap's prescribed length,
+ * so the overshoot is bounded by that rest.
+ */
+export function secondsSinceLastSet(
+  completedSets: SetLog[],
+  nowMs: number,
+  pausedAtMs: number | null = null
+): number {
+  let lastMs = -Infinity;
+  for (const set of completedSets) {
+    if (!set.loggedAt) continue;
+    const ms = new Date(set.loggedAt).getTime();
+    if (Number.isNaN(ms)) continue;
+    if (ms > lastMs) lastMs = ms;
+  }
+  if (!Number.isFinite(lastMs)) return 0;
+
+  const windowEndsMs = pausedAtMs ?? nowMs;
+  return Math.max(0, (windowEndsMs - lastMs) / 1000);
+}
+
 export interface SessionDurationInput {
   blocks: ExerciseBlockWithExercise[];
   completedSets: SetLog[];
   skippedBlockIds: Set<string>;
   /** Workout timer reading; omit before the first set lands. */
   elapsedSeconds?: number;
+  /** Wall clock, for measuring the rest currently under way. */
+  nowMs?: number;
+  /** `workoutTimer.pausedAtMs` — freezes that measurement during a pause. */
+  pausedAtMs?: number | null;
 }
 
 export function estimateSessionDuration({
@@ -84,9 +124,13 @@ export function estimateSessionDuration({
   completedSets,
   skippedBlockIds,
   elapsedSeconds,
+  nowMs,
+  pausedAtMs = null,
 }: SessionDurationInput): WorkoutDurationEstimate {
   return estimateWorkoutDuration(toDurationBlocks(blocks, completedSets, skippedBlockIds), {
     elapsedSeconds,
+    secondsSinceLastSet:
+      nowMs === undefined ? 0 : secondsSinceLastSet(completedSets, nowMs, pausedAtMs),
   });
 }
 

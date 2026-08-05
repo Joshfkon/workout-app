@@ -118,6 +118,19 @@ export interface EstimateOptions {
    * after set 1 — the model's completed-work figure is offset to match.
    */
   elapsedSeconds?: number;
+  /**
+   * Seconds since the last set was logged — i.e. how long the user has already
+   * been in the rest (or the walk to the next station) that sits between them
+   * and their next set.
+   *
+   * Without it both halves of the estimate drift high through every rest: the
+   * full gap stays charged to remaining time even as it is being served, AND
+   * pace calibration reads the ticking clock as slowness because the model's
+   * completed figure is frozen at the last logged set. Crediting the served
+   * portion to both keeps an on-model user at exactly 1.0 while they rest —
+   * and still flags them slow once they overstay the prescription.
+   */
+  secondsSinceLastSet?: number;
 }
 
 /** Seconds of actual work for one set of this exercise. */
@@ -251,6 +264,52 @@ function segmentSeconds(
 }
 
 /**
+ * Length of the gap the user is standing in right now — the rest before their
+ * next set, or the transition to the next exercise when the current one is
+ * done. Zero before the workout starts and once everything is logged.
+ *
+ * "Where the user is" is taken to be the last unit holding logged sets, and
+ * within a superset the member with the most logged sets (the one done most
+ * recently). A user who jumps back to an earlier exercise is mis-placed by
+ * this, which costs at most one gap's worth of credit.
+ */
+function currentGapSeconds(units: DurationBlockInput[][]): number {
+  let currentUnitIndex = -1;
+  for (let i = 0; i < units.length; i++) {
+    if (units[i].some((block) => completedWorkingSets(block) > 0)) currentUnitIndex = i;
+  }
+  if (currentUnitIndex === -1) return 0;
+
+  const unit = units[currentUnitIndex];
+  const current = unit.reduce((latest, block) =>
+    completedWorkingSets(block) > completedWorkingSets(latest) ? block : latest
+  );
+
+  if (remainingWorkingSets(current) > 0) {
+    // Inside a superset the next set is the partner's, reached by a changeover
+    // rather than a rest (the group rests only after its last member).
+    const partnerUp = unit.some(
+      (block) =>
+        block !== current &&
+        remainingWorkingSets(block) > 0 &&
+        completedWorkingSets(block) < completedWorkingSets(current)
+    );
+    // Round complete: the group rests on its LAST member's prescription — the
+    // same one `unitSeconds` charges, and the one supersetFlow actually runs.
+    // For a lone exercise the last member IS the current block.
+    return partnerUp
+      ? DURATION_MODEL.supersetChangeoverSeconds
+      : restSecondsFor(unit[unit.length - 1]);
+  }
+
+  // Current exercise finished: what's ahead is the walk to the next one.
+  const moreAhead = units
+    .slice(currentUnitIndex + 1)
+    .some((next) => next.some((block) => remainingWorkingSets(block) > 0));
+  return moreAhead ? DURATION_MODEL.transitionSeconds : 0;
+}
+
+/**
  * Work time of the first thing the user logged — the workout timer's anchor.
  * It's a warmup set when the exercise's warmups were logged, otherwise the
  * first working set. Subtracted from the completed-work model so the model and
@@ -299,16 +358,31 @@ export function estimateWorkoutDuration(
   const baseTotalSeconds = segmentSeconds(units, allWorkingSets, allWarmups);
   const completedSeconds = segmentSeconds(units, completedWorkingSets, completedWarmups);
 
-  // Remaining is the WHOLE session minus what's been done — never a fresh count
-  // of the unlogged sets. Recounting silently drops the gap the user is sitting
-  // in right now: mid-exercise every remaining set has a rest in front of it
-  // (not n-1 of them), and an exercise just finished owes the transition to the
-  // next one. Subtraction gets both for free.
-  const baseRemainingSeconds = Math.max(0, baseTotalSeconds - completedSeconds);
+  // The gap in front of the user is charged to remaining time, so the part of
+  // it already served has to come back off — otherwise the readout climbs
+  // through every rest and snaps back on the next logged set.
+  const servedGapSeconds = Math.min(
+    Math.max(0, options.secondsSinceLastSet ?? 0),
+    currentGapSeconds(units)
+  );
+  // Everything the session has consumed so far: logged work plus the portion
+  // of the current gap already spent. Capped at the gap's prescribed length,
+  // so overstaying a rest still registers as slowness rather than being
+  // absorbed as "progress".
+  const consumedSeconds = completedSeconds + servedGapSeconds;
 
-  // Modelled cost of everything logged so far. The timer anchors to the first
+  // Remaining is the WHOLE session minus what's been consumed — never a fresh
+  // count of the unlogged sets. Recounting silently drops the gap the user is
+  // sitting in: mid-exercise every remaining set has a rest in front of it (not
+  // n-1 of them), and an exercise just finished owes the transition to the next
+  // one. Subtraction gets both for free.
+  const baseRemainingSeconds = Math.max(0, baseTotalSeconds - consumedSeconds);
+
+  // Modelled cost of everything consumed so far. The timer anchors to the first
   // logged set's completion, so drop that set's work to compare like with like.
-  const completedModelSeconds = Math.max(0, completedSeconds - anchorWorkSeconds(active));
+  // Counting the served gap here too is what keeps a resting on-model user at
+  // 1.0 instead of looking slower every second they stand still.
+  const completedModelSeconds = Math.max(0, consumedSeconds - anchorWorkSeconds(active));
 
   const elapsedSeconds = Math.max(0, options.elapsedSeconds ?? 0);
   const paceFactor = computePaceFactor(completedModelSeconds, elapsedSeconds, completedSets);
