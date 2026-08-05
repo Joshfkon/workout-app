@@ -73,6 +73,12 @@ export interface DurationBlockInput {
   exerciseType?: 'rep_based' | 'duration_based' | null;
   /** Warmup sets still to be performed for this exercise. */
   warmupSetsRemaining?: number;
+  /**
+   * Warmup sets already logged. The workout timer anchors to the first logged
+   * set of ANY kind, so warmups the user actually performed have to be in the
+   * completed-work baseline or pace calibration reads them as slowness.
+   */
+  warmupSetsCompleted?: number;
   /** Rest between those warmup sets (warmups rest less than working sets). */
   warmupRestSeconds?: number | null;
   /** Members of the same group are supersetted (see supersetFlow). */
@@ -136,15 +142,25 @@ const allWorkingSets: SetCounter = (b) => Math.max(0, b.targetSets);
 const completedWorkingSets: SetCounter = (b) =>
   Math.min(Math.max(0, b.completedSets ?? 0), Math.max(0, b.targetSets));
 
-/** Warmup cost still owed for a block: each warmup set is work + a short rest. */
-function warmupSeconds(block: DurationBlockInput): number {
-  const sets = Math.max(0, block.warmupSetsRemaining ?? 0);
-  if (sets === 0) return 0;
+/** Which of a block's warmup sets count toward the segment being measured. */
+type WarmupCounter = (block: DurationBlockInput) => number;
+
+const remainingWarmups: WarmupCounter = (b) => Math.max(0, b.warmupSetsRemaining ?? 0);
+const completedWarmups: WarmupCounter = (b) => Math.max(0, b.warmupSetsCompleted ?? 0);
+/** Every warmup the session involves — those done plus those still owed. */
+const allWarmups: WarmupCounter = (b) => remainingWarmups(b) + completedWarmups(b);
+
+/**
+ * Warmup cost for `count` sets: each is work plus a short rest. The rest after
+ * the LAST warmup is kept — that's the gap before the first working set.
+ */
+function warmupSeconds(block: DurationBlockInput, count: number): number {
+  if (count <= 0) return 0;
   const rest =
     typeof block.warmupRestSeconds === 'number' && block.warmupRestSeconds > 0
       ? block.warmupRestSeconds
       : DURATION_MODEL.defaultWarmupRestSeconds;
-  return sets * (DURATION_MODEL.warmupWorkSeconds + rest);
+  return count * (DURATION_MODEL.warmupWorkSeconds + rest);
 }
 
 /**
@@ -215,22 +231,37 @@ function unitSeconds(unit: DurationBlockInput[], countSets: SetCounter): number 
 function segmentSeconds(
   units: DurationBlockInput[][],
   countSets: SetCounter,
-  includeWarmups: boolean
+  countWarmups: WarmupCounter
 ): number {
   let seconds = 0;
   let activeUnits = 0;
 
   for (const unit of units) {
     const unitTotal = unitSeconds(unit, countSets);
-    const warmup = includeWarmups
-      ? unit.reduce((sum, block) => sum + (countSets(block) > 0 ? warmupSeconds(block) : 0), 0)
-      : 0;
+    const warmup = unit.reduce(
+      (sum, block) => sum + warmupSeconds(block, countWarmups(block)),
+      0
+    );
     if (unitTotal === 0 && warmup === 0) continue;
     seconds += unitTotal + warmup;
     activeUnits += 1;
   }
 
   return seconds + Math.max(0, activeUnits - 1) * DURATION_MODEL.transitionSeconds;
+}
+
+/**
+ * Work time of the first thing the user logged — the workout timer's anchor.
+ * It's a warmup set when the exercise's warmups were logged, otherwise the
+ * first working set. Subtracted from the completed-work model so the model and
+ * the timer measure the same span.
+ */
+function anchorWorkSeconds(active: DurationBlockInput[]): number {
+  for (const block of active) {
+    if (completedWarmups(block) > 0) return DURATION_MODEL.warmupWorkSeconds;
+    if (completedWorkingSets(block) > 0) return workSecondsPerSet(block);
+  }
+  return 0;
 }
 
 /**
@@ -265,16 +296,19 @@ export function estimateWorkoutDuration(
   const completedSets = active.reduce((sum, b) => sum + completedWorkingSets(b), 0);
   const remainingSets = active.reduce((sum, b) => sum + remainingWorkingSets(b), 0);
 
-  const baseTotalSeconds = segmentSeconds(units, allWorkingSets, true);
-  const baseRemainingSeconds = segmentSeconds(units, remainingWorkingSets, true);
+  const baseTotalSeconds = segmentSeconds(units, allWorkingSets, allWarmups);
+  const completedSeconds = segmentSeconds(units, completedWorkingSets, completedWarmups);
 
-  // Modelled cost of the work already done. The timer anchors to the first
-  // logged set's completion, so drop one set's work to compare like with like.
-  const completedModelSeconds = Math.max(
-    0,
-    segmentSeconds(units, completedWorkingSets, false) -
-      (completedSets > 0 ? workSecondsPerSet(active[0]) : 0)
-  );
+  // Remaining is the WHOLE session minus what's been done — never a fresh count
+  // of the unlogged sets. Recounting silently drops the gap the user is sitting
+  // in right now: mid-exercise every remaining set has a rest in front of it
+  // (not n-1 of them), and an exercise just finished owes the transition to the
+  // next one. Subtraction gets both for free.
+  const baseRemainingSeconds = Math.max(0, baseTotalSeconds - completedSeconds);
+
+  // Modelled cost of everything logged so far. The timer anchors to the first
+  // logged set's completion, so drop that set's work to compare like with like.
+  const completedModelSeconds = Math.max(0, completedSeconds - anchorWorkSeconds(active));
 
   const elapsedSeconds = Math.max(0, options.elapsedSeconds ?? 0);
   const paceFactor = computePaceFactor(completedModelSeconds, elapsedSeconds, completedSets);
