@@ -2081,6 +2081,29 @@ describe('bodyweight warmup loads (added weight, not effective load)', () => {
     expect(screen.getByText(/last session ~BW\+20 kg × 13/)).toBeInTheDocument();
   });
 
+  it('seeds from the heaviest set of an ascending session, not set 1', () => {
+    // lastWorkoutSets is ordered by set_number, so an ascending session puts
+    // the LIGHTEST set at index 0. Seeding from it would prescribe BW+10 for
+    // a session whose top sets were BW+20.
+    render(
+      <ExerciseCard
+        {...bwProps}
+        exerciseHistory={{
+          lastWorkoutDate: '2026-08-02',
+          lastWorkoutSets: [
+            { weightKg: 108, reps: 12, rpe: 7, bw: { modification: 'weighted' as const, addedWeightKg: 10 } },
+            { weightKg: 113, reps: 10, rpe: 8, bw: { modification: 'weighted' as const, addedWeightKg: 15 } },
+            { weightKg: 118, reps: 8, rpe: 9, bw: { modification: 'weighted' as const, addedWeightKg: 20 } },
+          ],
+          estimatedE1RM: 0,
+          personalRecord: null,
+          totalSessions: 10,
+        }}
+      />
+    );
+    expect(screen.getByText(/BW \+20 kg/)).toBeInTheDocument();
+  });
+
   it('a manual mode change outranks the last-session default', async () => {
     const user = userEvent.setup();
     render(

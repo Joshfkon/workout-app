@@ -878,7 +878,14 @@ export const ExerciseCard = memo(function ExerciseCard({
   //      the lifter cannot act on: it hides whether they added 0 or 40.
   const lastSessionBodyweight = useMemo(() => {
     if (!isBodyweightExercise) return null;
-    const top = exerciseHistory?.lastWorkoutSets?.[0];
+    // The TOP set is the heaviest EFFECTIVE load, not set 1: lastWorkoutSets
+    // is ordered by set_number (suggestions.ts workingSetsOf), so on an
+    // ascending session (BW+10, BW+15, BW+20) set 1 is the lightest and
+    // seeding from it would under-prescribe both the working load and the
+    // warmup basis. Ties keep the earlier set.
+    const top = (exerciseHistory?.lastWorkoutSets ?? []).reduce<
+      NonNullable<typeof exerciseHistory>['lastWorkoutSets'][number] | null
+    >((best, s) => (best === null || s.weightKg > best.weightKg ? s : best), null);
     if (!top) return null;
     if (top.bw) {
       return {
