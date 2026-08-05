@@ -795,6 +795,125 @@ function decision(
   return { kind, reason, sets, dimensions, engineVersion: WARMUP_ENGINE_VERSION };
 }
 
+// ============================================
+// WARMUP LOAD RESOLUTION (percent → loadable number)
+// ============================================
+
+/**
+ * How the lifter loads this exercise. Bodyweight movements are loaded in a
+ * DIFFERENT dimension than the effective load the engine reasons about:
+ * the lifter can only change the added plate / the assistance, never their
+ * own bodyweight.
+ */
+export type WarmupLoadMode = 'external' | 'bodyweight' | 'weighted' | 'assisted';
+
+export interface ResolveWarmupLoadInput {
+  /** The warmup set's percentage of the top working set. */
+  percentOfWorking: number;
+  /** Top working set's EFFECTIVE load in kg (bodyweight modes: BW ± modification). */
+  workingLoadKg: number;
+  mode: WarmupLoadMode;
+  /** Required for every bodyweight mode; the lifter's current bodyweight in kg. */
+  userBodyweightKg?: number;
+  /**
+   * Ceiling on assistance as a fraction of bodyweight — no machine/band
+   * unloads a lifter to zero, and a warmup that did would train nothing.
+   */
+  maxAssistanceFraction?: number;
+}
+
+export interface ResolvedWarmupLoad {
+  /**
+   * What the lifter actually sets up, in kg, in the dimension they control:
+   * plate weight for 'external'/'added', assistance for 'assistance', and 0
+   * for 'none' (bodyweight alone).
+   */
+  dimensionKg: number;
+  /** Which dimension `dimensionKg` lives in — decides how the row is labelled. */
+  dimension: 'external' | 'added' | 'assistance' | 'none';
+  /** Effective load this prescription actually produces, kg. */
+  effectiveKg: number;
+  /**
+   * True when the requested percentage is not loadable and bodyweight itself
+   * is the floor (or the assistance ceiling bound). The card must say so —
+   * a ramp row silently showing an impossible number is the defect this
+   * resolution exists to fix.
+   */
+  clamped: boolean;
+}
+
+/** Assistance can't exceed this share of bodyweight (see maxAssistanceFraction). */
+const MAX_ASSISTANCE_FRACTION = 0.9;
+
+/**
+ * Turn a warmup set's `percentOfWorking` into a prescription the lifter can
+ * actually set up.
+ *
+ * For externally loaded exercises this is the historical behaviour: the
+ * percentage times the working load. For BODYWEIGHT exercises it is not —
+ * "60% of 98 kg" on a back extension asks a 98 kg lifter to weigh 59 kg.
+ * Bodyweight is a floor the percentage cannot go under, so the percentage is
+ * resolved onto the dimension the lifter controls (added plate, or
+ * assistance) and clamps at that floor with `clamped: true`.
+ *
+ * Pure — rounding to the gym's plate/stack increment is the caller's job
+ * (it is unit-aware and display-only).
+ */
+export function resolveWarmupLoad(input: ResolveWarmupLoadInput): ResolvedWarmupLoad {
+  const {
+    percentOfWorking,
+    workingLoadKg,
+    mode,
+    userBodyweightKg,
+    maxAssistanceFraction = MAX_ASSISTANCE_FRACTION,
+  } = input;
+
+  const pct = Number.isFinite(percentOfWorking) ? Math.max(0, percentOfWorking) / 100 : 0;
+  const targetKg = Math.max(0, workingLoadKg) * pct;
+
+  // No bodyweight known → we cannot decompose the effective load, so fall
+  // back to the external reading rather than inventing a breakdown.
+  if (mode === 'external' || !userBodyweightKg || userBodyweightKg <= 0) {
+    return {
+      dimensionKg: targetKg,
+      dimension: 'external',
+      effectiveKg: targetKg,
+      clamped: false,
+    };
+  }
+
+  const bw = userBodyweightKg;
+
+  if (mode === 'weighted') {
+    const added = targetKg - bw;
+    if (added <= 0) {
+      // Everything below bodyweight collapses onto bodyweight itself.
+      return { dimensionKg: 0, dimension: 'none', effectiveKg: bw, clamped: pct < 1 };
+    }
+    return { dimensionKg: added, dimension: 'added', effectiveKg: bw + added, clamped: false };
+  }
+
+  if (mode === 'assisted') {
+    // A lighter ramp on an assisted movement means MORE assistance.
+    const maxAssist = bw * maxAssistanceFraction;
+    const wanted = bw - targetKg;
+    const assistance = Math.min(Math.max(0, wanted), maxAssist);
+    if (assistance <= 0) {
+      return { dimensionKg: 0, dimension: 'none', effectiveKg: bw, clamped: false };
+    }
+    return {
+      dimensionKg: assistance,
+      dimension: 'assistance',
+      effectiveKg: bw - assistance,
+      clamped: assistance < wanted,
+    };
+  }
+
+  // Pure bodyweight: there is no lighter option, so every ramp step is
+  // bodyweight — the ramp lives in reps and tempo, not load.
+  return { dimensionKg: 0, dimension: 'none', effectiveKg: bw, clamped: pct < 1 };
+}
+
 /** Adapt WarmupExerciseMeta to the Exercise shape generateWarmupProtocol expects. */
 function toEngineExercise(ex: WarmupExerciseMeta) {
   return {
