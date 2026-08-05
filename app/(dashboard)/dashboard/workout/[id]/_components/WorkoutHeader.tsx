@@ -53,6 +53,14 @@ export interface WorkoutHeaderProps {
   exerciseTotal: number;
   /** One entry per non-skipped exercise, in workout order. */
   segments: ExerciseSegmentStatus[];
+  /**
+   * Estimated time left in the session ("1h 05m"), or null when there is
+   * nothing left to do. Sits beside the exercise count because "how much
+   * longer?" is the same question as "where am I?".
+   */
+  remainingDurationLabel?: string | null;
+  /** Tooltip/aria detail for that estimate (total, and whether it's calibrated). */
+  remainingDurationHint?: string;
   /** session.startedAt — elapsed time renders only when the session has started */
   startedAt: string | null;
   /**
@@ -105,6 +113,8 @@ export function WorkoutHeader({
   exerciseNumber,
   exerciseTotal,
   segments,
+  remainingDurationLabel,
+  remainingDurationHint,
   startedAt,
   timerStarted,
   workoutTimer,
@@ -156,6 +166,17 @@ export function WorkoutHeader({
           <p className="text-sm font-medium text-surface-100 truncate">{workoutName}</p>
           <p className="text-[11px] text-surface-500 truncate">
             exercise {exerciseNumber} of {exerciseTotal}
+            {remainingDurationLabel && (
+              <>
+                <span aria-hidden="true"> · </span>
+                <span
+                  data-testid="workout-duration-remaining"
+                  title={remainingDurationHint}
+                >
+                  ~{remainingDurationLabel} left
+                </span>
+              </>
+            )}
           </p>
         </div>
 

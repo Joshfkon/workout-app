@@ -178,3 +178,31 @@ describe('WorkoutHeader save-as-template action', () => {
     expect(props.onCancelWorkout).not.toHaveBeenCalled();
   });
 });
+
+describe('WorkoutHeader duration estimate', () => {
+  it('shows time remaining alongside the exercise count', () => {
+    renderHeader({ remainingDurationLabel: '1h 05m' });
+    expect(screen.getByTestId('workout-duration-remaining')).toHaveTextContent('~1h 05m left');
+  });
+
+  it('exposes the fuller estimate as a tooltip', () => {
+    renderHeader({
+      remainingDurationLabel: '35 min',
+      remainingDurationHint: 'Estimated 1h 10m total · 18 sets across 5 exercises',
+    });
+    expect(screen.getByTestId('workout-duration-remaining')).toHaveAttribute(
+      'title',
+      'Estimated 1h 10m total · 18 sets across 5 exercises'
+    );
+  });
+
+  it('says nothing when there is no time left to report', () => {
+    renderHeader({ remainingDurationLabel: null });
+    expect(screen.queryByTestId('workout-duration-remaining')).not.toBeInTheDocument();
+  });
+
+  it('leaves the exercise count intact', () => {
+    renderHeader({ exerciseNumber: 3, exerciseTotal: 6, remainingDurationLabel: '20 min' });
+    expect(screen.getByText(/exercise 3 of 6/)).toBeInTheDocument();
+  });
+});

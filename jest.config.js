@@ -57,6 +57,12 @@ const customJestConfig = {
       branches: 50,
       statements: 70,
     },
+    'services/workoutDurationEstimator.ts': {
+      lines: 70,
+      functions: 60,
+      branches: 50,
+      statements: 70,
+    },
     'services/exerciseFilter.ts': {
       lines: 70,
       functions: 60,
