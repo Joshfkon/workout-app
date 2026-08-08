@@ -167,6 +167,11 @@ export const WeightGraph = memo(function WeightGraph({ weightHistory, preferredU
     };
   }, [chartData]);
 
+  // Current weight: the newest weigh-in in the visible window. Measured, not
+  // estimated — it leads the card so the chart answers "what am I now?" as
+  // well as "which way am I going?".
+  const latest = chartData.length > 0 ? chartData[chartData.length - 1] : null;
+
   // Calculate stats for reference line
   const stats = useMemo(() => {
     if (chartData.length === 0) return null;
@@ -202,23 +207,33 @@ export const WeightGraph = memo(function WeightGraph({ weightHistory, preferredU
   return (
     <div className={className}>
       {/* Timeframe selector */}
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2 text-xs text-surface-500">
-          <span>Trend</span>
-          {trend && (
-            <span
-              className={
-                trend.isNegative
-                  ? 'text-success-400'
-                  : trend.isPositive
-                  ? 'text-warning-400'
-                  : 'text-surface-400'
-              }
-            >
-              {trend.perWeek > 0 ? '+' : ''}
-              {trend.perWeek.toFixed(1)} {preferredUnit}/wk
-            </span>
+      <div className="flex items-start justify-between mb-3">
+        <div data-testid="weight-graph-current">
+          {latest && (
+            <div className="flex items-baseline gap-1">
+              <span className="text-2xl font-semibold text-surface-100 tabular-nums">
+                {latest.weight.toFixed(1)}
+              </span>
+              <span className="text-xs text-surface-400">{preferredUnit}</span>
+            </div>
           )}
+          <div className="flex items-center gap-2 text-xs text-surface-500">
+            {latest && <span>Latest · {formatChartTickDate(latest.date)}</span>}
+            {trend && (
+              <span
+                className={
+                  trend.isNegative
+                    ? 'text-success-400'
+                    : trend.isPositive
+                    ? 'text-warning-400'
+                    : 'text-surface-400'
+                }
+              >
+                {trend.perWeek > 0 ? '+' : ''}
+                {trend.perWeek.toFixed(1)} {preferredUnit}/wk
+              </span>
+            )}
+          </div>
         </div>
         <div className="flex gap-1 bg-surface-800 rounded-lg p-0.5">
           {(['7d', '14d', '30d', '90d'] as Timeframe[]).map((tf) => (

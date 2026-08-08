@@ -97,6 +97,57 @@ describe('BodyHubTrends', () => {
     expect(screen.getByRole('button', { name: 'Lean mass' })).toBeInTheDocument();
   });
 
+  it('leads with the current estimated value and the drift since the last scan', async () => {
+    const user = userEvent.setup();
+    renderTrends();
+
+    expect(screen.getByTestId('body-comp-current')).toHaveTextContent('20.0%');
+
+    await user.click(screen.getByRole('button', { name: 'Lean mass' }));
+
+    // Lean mass in kg: 65 now vs the 64 of the Jun 1 scan.
+    const readout = screen.getByTestId('body-comp-current');
+    expect(readout).toHaveTextContent('65.0 kg');
+    expect(readout).toHaveTextContent('current estimate · Jun 15');
+    expect(readout).toHaveTextContent('+1.0 kg since Jun 1 scan');
+  });
+
+  it('converts the current value to the display unit', async () => {
+    const user = userEvent.setup();
+    renderTrends({ units: 'lb' });
+
+    await user.click(screen.getByRole('button', { name: 'Lean mass' }));
+    // 65 kg → 143.3 lb, same rounding the plotted series uses.
+    expect(screen.getByTestId('body-comp-current')).toHaveTextContent('143.3 lb');
+  });
+
+  it('calls the current value measured when the newest point is a scan', () => {
+    renderTrends({
+      trend: [
+        trendPoint({ date: '2026-06-01', kind: 'dexa' }),
+        trendPoint({ date: '2026-06-15', kind: 'dexa', leanMassKg: 65 }),
+      ],
+    });
+
+    const readout = screen.getByTestId('body-comp-current');
+    expect(readout).toHaveTextContent('measured · Jun 15');
+    // No drift line — the newest point IS the newest scan.
+    expect(readout).not.toHaveTextContent('since');
+  });
+
+  it('shows the current FFMI from the same computeFFMI as the gauge', async () => {
+    const user = userEvent.setup();
+    renderTrends();
+
+    await user.click(screen.getByRole('button', { name: 'FFMI' }));
+
+    const last = twoPointTrend[twoPointTrend.length - 1];
+    const expected = computeFFMI(last.leanMassKg, last.boneMassKg, 180);
+    expect(screen.getByTestId('body-comp-current')).toHaveTextContent(
+      expected.ffmi.toFixed(1)
+    );
+  });
+
   it('labels the normalized FFMI readout from the trend last point (shared computeFFMI)', async () => {
     const user = userEvent.setup();
     renderTrends();

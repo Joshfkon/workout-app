@@ -19,6 +19,13 @@
  * FFMI here is the RAW value (FFM / height m²), same function as the gauge
  * (bodyCompEngine.computeFFMI); the height-normalized variant is shown as a
  * clearly-labeled secondary readout, never silently substituted.
+ *
+ * Both charts lead with the CURRENT value as a headline number — the last
+ * point of the anchored series for composition (the same point
+ * bodyCompEngine.selectCanonicalFfmi resolves to, so the headline can never
+ * disagree with the gauge/tiles) and the newest weigh-in for weight. A trend
+ * line answers "which way am I going?"; without the number the user still has
+ * to hover a point to answer "where am I now?".
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -32,6 +39,7 @@ import {
   CartesianGrid,
   Tooltip,
   ReferenceLine,
+  ReferenceDot,
 } from 'recharts';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui';
 import { WeightGraph, type PhaseBandSpan } from '@/components/analytics/WeightGraph';
@@ -99,6 +107,113 @@ function toTs(date: string): number {
   return new Date(`${date}T00:00:00`).getTime();
 }
 
+function formatPointDate(date: string): string {
+  return new Date(`${date}T00:00:00`).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
+/**
+ * The plotted value of a trend point for the active metric. Shared by the
+ * chart series and the current-value headline so the number above the chart
+ * is by construction the last point of the line — not a second derivation.
+ */
+function metricValue(
+  point: AnchoredTrendPoint,
+  metric: CompMetric,
+  units: 'lb' | 'kg',
+  heightCm: number | null
+): number | null {
+  switch (metric) {
+    case 'bodyFat':
+      return point.bodyFatPercent;
+    case 'leanMass':
+      return units === 'lb'
+        ? Math.round(kgToLbs(point.leanMassKg) * 10) / 10
+        : point.leanMassKg;
+    case 'ffmi':
+      // Same function as the Analytics gauge — single source of truth.
+      return heightCm
+        ? computeFFMI(point.leanMassKg, point.boneMassKg, heightCm).ffmi
+        : null;
+    case 'map':
+      // The map renders its own component; no time-series rows needed.
+      return null;
+  }
+}
+
+interface CurrentValue {
+  value: number;
+  /** YYYY-MM-DD of the point this value comes from. */
+  date: string;
+  /** True when the newest point is a scan day, i.e. measured not estimated. */
+  isMeasured: boolean;
+  /** Drift of the estimate since the newest scan; null when it IS that scan. */
+  sinceScan: { delta: number; date: string } | null;
+}
+
+/**
+ * Where the user is NOW: the last point of the anchored series (the same
+ * point bodyCompEngine.selectCanonicalFfmi resolves to, so this headline can
+ * never disagree with the gauge or the Home tiles). It is an estimate unless
+ * the newest point happens to be a scan day, so it is labeled as such — and
+ * paired with the drift since the newest scan, the honest measure of how far
+ * the estimate has run unverified.
+ */
+function deriveCurrentValue(
+  trend: AnchoredTrendPoint[],
+  metric: CompMetric,
+  units: 'lb' | 'kg',
+  heightCm: number | null
+): CurrentValue | null {
+  if (metric === 'map' || trend.length === 0) return null;
+
+  const last = trend[trend.length - 1];
+  const value = metricValue(last, metric, units, heightCm);
+  if (value == null) return null;
+
+  const lastScan = [...trend].reverse().find((p) => p.kind === 'dexa');
+  const scanValue = lastScan ? metricValue(lastScan, metric, units, heightCm) : null;
+  const sinceScan =
+    lastScan && scanValue != null && lastScan.date !== last.date
+      ? { delta: value - scanValue, date: lastScan.date }
+      : null;
+
+  return { value, date: last.date, isMeasured: last.kind === 'dexa', sinceScan };
+}
+
+/** Headline current value above the composition chart. */
+function CurrentValueReadout({
+  current,
+  format,
+}: {
+  current: CurrentValue;
+  format: (value: number) => string;
+}) {
+  return (
+    <div
+      className="flex items-baseline flex-wrap gap-x-2 gap-y-0.5 mb-3"
+      data-testid="body-comp-current"
+    >
+      <span className="text-2xl font-semibold text-surface-100 tabular-nums">
+        {format(current.value)}
+      </span>
+      <span className="text-xs text-surface-400">
+        {current.isMeasured ? 'measured' : 'current estimate'} ·{' '}
+        {formatPointDate(current.date)}
+      </span>
+      {current.sinceScan && (
+        <span className="text-xs text-surface-500">
+          {current.sinceScan.delta >= 0 ? '+' : '−'}
+          {format(Math.abs(current.sinceScan.delta))} since{' '}
+          {formatPointDate(current.sinceScan.date)} scan
+        </span>
+      )}
+    </div>
+  );
+}
+
 export function BodyHubTrends({
   units,
   heightCm,
@@ -154,24 +269,8 @@ export function BodyHubTrends({
   }, [initialMetric, metricOptions]);
 
   const { rows, gapCount } = useMemo(() => {
-    const valueOf = (point: AnchoredTrendPoint): number | null => {
-      switch (activeMetric) {
-        case 'bodyFat':
-          return point.bodyFatPercent;
-        case 'leanMass':
-          return units === 'lb'
-            ? Math.round(kgToLbs(point.leanMassKg) * 10) / 10
-            : point.leanMassKg;
-        case 'ffmi':
-          // Same function as the Analytics gauge — single source of truth.
-          return heightCm
-            ? computeFFMI(point.leanMassKg, point.boneMassKg, heightCm).ffmi
-            : null;
-        case 'map':
-          // The map renders its own component; no time-series rows needed.
-          return null;
-      }
-    };
+    const valueOf = (point: AnchoredTrendPoint): number | null =>
+      metricValue(point, activeMetric, units, heightCm);
 
     const dataRows: ChartRow[] = trend.map((point) => {
       const value = valueOf(point);
@@ -202,6 +301,11 @@ export function BodyHubTrends({
     };
   }, [trend, activeMetric, units, heightCm]);
 
+  const current = useMemo(
+    () => deriveCurrentValue(trend, activeMetric, units, heightCm),
+    [trend, activeMetric, units, heightCm]
+  );
+
   // Latest FFMI for the labeled normalized readout under the chart.
   const latestFfmi = useMemo(() => {
     if (!heightCm || trend.length === 0) return null;
@@ -210,6 +314,8 @@ export function BodyHubTrends({
   }, [trend, heightCm]);
 
   const unitSuffix = activeMetric === 'bodyFat' ? '%' : activeMetric === 'leanMass' ? ` ${units}` : '';
+
+  const formatValue = (value: number) => `${value.toFixed(1)}${unitSuffix}`;
 
   const formatTick = (ts: number) =>
     new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -270,6 +376,9 @@ export function BodyHubTrends({
             />
           ) : (
             <>
+              {current && (
+                <CurrentValueReadout current={current} format={formatValue} />
+              )}
               <div className="h-56">
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={rows}>
@@ -382,6 +491,20 @@ export function BodyHubTrends({
                         )
                       }
                     />
+                    {/* The current estimate, marked on the line so the
+                        headline number has a visible position. Scan-day
+                        endpoints already carry the DEXA marker above. */}
+                    {current && !current.isMeasured && (
+                      <ReferenceDot
+                        x={toTs(current.date)}
+                        y={current.value}
+                        r={4}
+                        fill="#818cf8"
+                        stroke="#1f2937"
+                        strokeWidth={2}
+                        isFront
+                      />
+                    )}
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>
