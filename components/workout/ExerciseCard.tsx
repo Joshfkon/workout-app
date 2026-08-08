@@ -2976,6 +2976,16 @@ export const ExerciseCard = memo(function ExerciseCard({
           </p>
         )}
 
+        {/* No bodyweight on record: BW ± load can't be resolved into an
+            effective load, so the mode control stays hidden — say why rather
+            than silently dropping weighted/assisted logging. */}
+        {isBodyweightExercise && !isPureBodyweight && !userBodyweightKg && isActive && (
+          <p className="mt-2 text-[11px] text-surface-500" data-testid="bw-mode-needs-weigh-in">
+            Log your bodyweight (Body tab, or the pre-workout check-in) to log
+            weighted or assisted sets.
+          </p>
+        )}
+
         {/* Weight mode segmented control for bodyweight exercises */}
         {isBodyweightExercise && !isPureBodyweight && userBodyweightKg && (
           <div className="mt-2">
