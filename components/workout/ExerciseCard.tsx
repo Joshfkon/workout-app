@@ -1329,6 +1329,11 @@ export const ExerciseCard = memo(function ExerciseCard({
       };
       let rx = recommendRepTotalNextSet({ ...args, observedSets });
       for (let i = 0; i < positionOffset; i++) {
+        // The rep read below is raw (scripts/check-reps-access.mjs ratchet)
+        // and modality-safe on two counts: `repTotalMode` excludes
+        // duration_based exercises outright, and `rx` is the engine's rep
+        // TARGET, not a SetLog — setModality's accessors take a set and do
+        // not apply to it. Baseline raised deliberately, not dodged.
         observedSets.push({ weightKg: rx.weightKg, reps: rx.reps, rir: effectiveTargetRir });
         rx = recommendRepTotalNextSet({ ...args, observedSets });
       }

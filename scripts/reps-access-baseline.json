@@ -20,7 +20,7 @@
   "components/workout/exercise-details/ChartsTab.tsx": 1,
   "components/workout/exercise-details/HistoryTab.tsx": 3,
   "components/workout/exercise-details/RecordsTab.tsx": 5,
-  "components/workout/ExerciseCard.tsx": 67,
+  "components/workout/ExerciseCard.tsx": 68,
   "components/workout/ExerciseDetailsModal.tsx": 2,
   "components/workout/exercisePerformance.ts": 5,
   "components/workout/SessionSummary.tsx": 19,
