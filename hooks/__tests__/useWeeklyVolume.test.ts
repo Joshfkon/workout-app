@@ -149,7 +149,7 @@ describe('useWeeklyVolume — rounding', () => {
 });
 
 describe('useWeeklyVolume — empty week', () => {
-  it('reports zeros rather than "13 groups below MEV" when nothing is logged', () => {
+  it('reports zeros rather than "14 groups below MEV" when nothing is logged', () => {
     const { tiles, volumeData } = deriveWeeklyVolume([], landmarks);
     expect(tiles).toEqual({
       totalSets: 0,

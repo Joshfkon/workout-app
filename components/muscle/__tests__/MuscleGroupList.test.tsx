@@ -38,7 +38,7 @@ const ROWS: FixtureRow[] = [
   {
     muscle: 'back',
     displayName: 'Back',
-    children: [{ muscle: 'lats' }, { muscle: 'erectors', pinned: true }],
+    children: [{ muscle: 'lats' }, { muscle: 'upper_back', pinned: true }],
   },
 ];
 
@@ -82,8 +82,8 @@ describe('MuscleGroupList', () => {
     render(<Harness />);
     // Collapsed shoulders: no members visible.
     expect(screen.queryByTestId('row-lateral_delts')).not.toBeInTheDocument();
-    // Collapsed back: the pinned (lagging) erectors child is still visible.
-    expect(screen.getByTestId('row-erectors')).toBeInTheDocument();
+    // Collapsed back: the pinned (lagging) upper_back child is still visible.
+    expect(screen.getByTestId('row-upper_back')).toBeInTheDocument();
     expect(screen.queryByTestId('row-lats')).not.toBeInTheDocument();
   });
 
@@ -120,20 +120,20 @@ describe('MuscleGroupList', () => {
   it('an explicit collapse hides pinned children too, and persists; re-expanding restores the pin default after a reset', async () => {
     const user = userEvent.setup();
     const first = render(<Harness />);
-    // Untouched back: pinned erectors visible by default.
-    expect(screen.getByTestId('row-erectors')).toBeInTheDocument();
+    // Untouched back: pinned upper_back visible by default.
+    expect(screen.getByTestId('row-upper_back')).toBeInTheDocument();
 
     // Expand, then explicitly collapse — everything hides, pin included.
     await user.click(screen.getByTestId('row-toggle-back'));
     expect(screen.getByTestId('row-lats')).toBeInTheDocument();
     await user.click(screen.getByTestId('row-toggle-back'));
-    expect(screen.queryByTestId('row-erectors')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('row-upper_back')).not.toBeInTheDocument();
     expect(screen.queryByTestId('row-lats')).not.toBeInTheDocument();
     first.unmount();
 
     // The full collapse survives a restart.
     render(<Harness />);
-    expect(screen.queryByTestId('row-erectors')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('row-upper_back')).not.toBeInTheDocument();
   });
 
   it('renderRowDetail makes a childless row expandable and reveals the detail behind the chevron', async () => {
@@ -171,6 +171,30 @@ describe('MuscleGroupList', () => {
     expect(screen.getByTestId('row-lateral_delts')).toBeInTheDocument();
   });
 
+  it('renders the row detail OUTSIDE the indented children block, never nested under the last child', async () => {
+    // Regression: the group-scope contributing-sets panel used to render inside
+    // the children block, after the last child — so Back's whole-group panel
+    // appeared indented beneath the Upper Back row and read as Upper Back's
+    // own breakdown (lat pulldowns at full credit, rear-delt secondary credit).
+    const user = userEvent.setup();
+    render(<Harness renderRowDetail={() => <span data-testid="detail-any">detail</span>} />);
+
+    await user.click(screen.getByTestId('row-toggle-back'));
+
+    const detail = screen.getByTestId('detail-any');
+    // It belongs to the row…
+    expect(screen.getByTestId('row-back')).toContainElement(detail);
+    // …and to none of the child row containers.
+    for (const child of ['lats', 'upper_back']) {
+      expect(screen.getByTestId(`row-${child}`)).not.toContainElement(detail);
+    }
+    // Structurally: the detail is not inside the indent wrapper that holds the
+    // children, so it can't inherit their visual nesting.
+    const firstChild = screen.getByTestId('row-lats');
+    expect(firstChild.parentElement).not.toBeNull();
+    expect(firstChild.parentElement!.contains(detail)).toBe(false);
+  });
+
   it('autoExpand defaults a divergent parent open; an explicit collapse overrides and persists', async () => {
     const user = userEvent.setup();
     const rows: FixtureRow[] = [{ ...ROWS[0], autoExpand: true }];
@@ -196,7 +220,7 @@ describe('withVisibleChildren', () => {
     const visible = withVisibleChildren(ROWS, expanded, (c) => c.pinned === true);
     expect(visible.find((r) => r.muscle === 'shoulders')!.children).toHaveLength(3);
     expect(visible.find((r) => r.muscle === 'back')!.children.map((c) => c.muscle)).toEqual([
-      'erectors',
+      'upper_back',
     ]);
     expect(visible.find((r) => r.muscle === 'biceps')!.children).toHaveLength(0);
   });

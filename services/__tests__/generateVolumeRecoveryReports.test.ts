@@ -525,7 +525,7 @@ const REPORTS: Array<[string, () => string]> = [
 describe('volume/recovery reports', () => {
   const rendered = REPORTS.map(([name, build]) => [name, build()] as const);
 
-  it('every report renders and covers all 26 muscles or 13 groups as applicable', () => {
+  it('every report renders and covers every standard muscle or coarse group as applicable', () => {
     const byName = new Map(rendered);
     for (const muscle of STANDARD_MUSCLE_GROUPS) {
       expect(byName.get('report-a-detailed-muscles.md')).toContain(`\`${muscle}\``);

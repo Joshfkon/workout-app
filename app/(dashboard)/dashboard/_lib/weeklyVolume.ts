@@ -74,6 +74,10 @@ export const ALL_MUSCLE_GROUPS: readonly StandardMuscleGroup[] = STANDARD_MUSCLE
 // muscles are therefore only reachable when the user logs an exercise tagged
 // at fine grain for them.
 //
+// 'erectors' is a coarse GROUP since its promotion, but it stays on this list:
+// the group holds exactly one standard muscle and no coarse token reaches it
+// either, so its WARNING gating is unchanged. Only its ROW moved.
+//
 // Their coarse "parent" region (below) is where that work physiologically
 // lands. When a user's data is entirely coarse (e.g. only 'glutes'/'back'/'abs'
 // work), a fine child gets zero credit and its MEV warning can NEVER clear —
@@ -83,6 +87,12 @@ export const ALL_MUSCLE_GROUPS: readonly StandardMuscleGroup[] = STANDARD_MUSCLE
 // parent and no standalone warning is rendered (ticket policy: never warn on a
 // muscle no logged-exercise tagging could satisfy).
 export const FINE_MUSCLE_PARENTS: Partial<Record<StandardMuscleGroup, StandardMuscleGroup[]>> = {
+  // Still listed after the erector promotion: this map is about TAG
+  // REACHABILITY, not display grouping. A legacy 'back' tag still resolves to
+  // [lats, upper_back] and still cannot credit erectors, so the MEV summary
+  // must keep gating the erector warning for users whose library is entirely
+  // coarse. (The volume/readiness ROW is no longer gated — 'erectors' is a
+  // coarse row now, and coarse rows always render, like adductors.)
   erectors: ['lats', 'upper_back'], // legacy 'back'
   glute_med: ['glutes'], // legacy 'glutes'
   obliques: ['abs'], // legacy 'abs'
@@ -900,6 +910,24 @@ export interface VolumeRow {
   /** Whether the user's exercises can feed this muscle (children only gate). */
   reachable: boolean;
   /**
+   * Whether a below-MEV reading on this row may raise a WARNING (the atrophy
+   * alert, the glance tile's "N below MEV"). The row still RENDERS and still
+   * colours by its true zone either way — this gates nagging, not display.
+   *
+   * A coarse row is warnable when at least one of its standard members is
+   * (isMuscleWarnable): non-fine members always are, fine members only when
+   * the user's own exercise tagging can actually feed them. That matters for
+   * exactly one group — 'erectors', whose single member is a fine muscle no
+   * coarse token can credit. A user logging only legacy 'back'-tagged work
+   * does erector work the tagging cannot express, so warning them would be the
+   * permanent un-clearable nag the fine-muscle policy exists to prevent. Every
+   * other group holds a non-fine member and is therefore always warnable —
+   * an untrained 'adductors' warns exactly as it did before.
+   *
+   * Always true on child rows (they gate on `reachable` instead).
+   */
+  warnable: boolean;
+  /**
    * Coarse rows only: whether the row can be expanded — it has at least one
    * fine child the user's own exercise tagging can feed. This is what gates
    * the chevron on every surface; a group whose library can't feed any fine
@@ -1114,6 +1142,7 @@ export function buildVolumeRows(
         belowMev: childBelowMev,
         laggingChildren: false,
         reachable: childReachable,
+        warnable: true,
         expandable: false,
         exercises: emitExerciseList(data.exercises),
         children: [],
@@ -1179,6 +1208,7 @@ export function buildVolumeRows(
       // collapse must not turn a lagging-subdivision parent green.
       laggingChildren: childRows.some((c) => c.reachable && c.belowMev),
       reachable: true,
+      warnable: children.some((c) => isMuscleWarnable(c, reachable)),
       expandable,
       exercises: emitExerciseList(cappedExercises),
       children: childRows.sort((a, b) => Number(b.belowMev) - Number(a.belowMev) || b.sets - a.sets),
@@ -1213,7 +1243,9 @@ export function coarseMevTiles(rows: VolumeRow[]): CoarseMevTiles {
     totalSets += row.sets;
     totalEffectiveSets += row.effectiveSets;
     totalTarget += row.band.mev;
-    if (row.zone === 'below_mev') lowCount++;
+    // Same warnability gate as belowMevVolumeData, so the tile's "N below MEV"
+    // can't count a group the warning list deliberately omits.
+    if (row.zone === 'below_mev' && row.warnable) lowCount++;
   }
   // Rows carry one-decimal values; re-round the sums to shed float dust.
   return { totalSets: round1(totalSets), totalEffectiveSets: round1(totalEffectiveSets), totalTarget, lowCount };
@@ -1247,7 +1279,11 @@ export function belowMevVolumeData(rows: VolumeRow[]): MuscleVolumeData[] {
     });
 
   for (const row of rows) {
-    if (row.zone === 'below_mev') push(row.muscle, row.sets, row.band, row.exercises);
+    // `warnable` keeps a group no logged-exercise tagging could satisfy out of
+    // the warning (see VolumeRow.warnable) — today only an unreachable
+    // 'erectors'. Every other group is always warnable, so this is a no-op for
+    // them.
+    if (row.zone === 'below_mev' && row.warnable) push(row.muscle, row.sets, row.band, row.exercises);
     for (const child of row.children) {
       // Unreachable children can be present when the user expanded the parent
       // (context rows) — never warn on those; the warning stays satisfiable.

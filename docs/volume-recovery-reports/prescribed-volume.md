@@ -39,7 +39,7 @@ These are different quantities and are deliberately not blended into one
 | Group | Novice | Intermediate | Advanced | Changed? |
 |---|---|---|---|---|
 | `chest` | 10 | 14 | 18 | no |
-| `back` | 14 | 18 | 23 | no |
+| `back` | 12 | 16 | 20 | no |
 | `shoulders` | 14 | 19 | 24 | no |
 | `biceps` | 12 | 17 | 22 | no |
 | `triceps` | 11 | 15 | 20 | no |
@@ -51,13 +51,14 @@ These are different quantities and are deliberately not blended into one
 | `traps` | 6 | 8 | 10 | no |
 | `forearms` | 12 | 12 | 12 | no |
 | `adductors` | 12 | 12 | 12 | no |
+| `erectors` | 5 | 8 | 10 | no |
 
 ## 3. Generator allocation target / floor
 
 | Group | Allocation ceiling (band MRV) | Changed? |
 |---|---|---|
 | `chest` | 22 | no |
-| `back` | 28 | no |
+| `back` | 25 | no |
 | `shoulders` | 26 | no |
 | `biceps` | 26 | no |
 | `triceps` | 24 | no |
@@ -69,6 +70,7 @@ These are different quantities and are deliberately not blended into one
 | `traps` | 20 | no |
 | `forearms` | 14 | no |
 | `adductors` | 12 | no |
+| `erectors` | 12 | no |
 
 **No category changed by more than 25%.** The only landmark change is
 `triceps_lat_med` MRV (−10.0% intermediate, −8.3% advanced), which is an MRV,

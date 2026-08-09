@@ -357,13 +357,17 @@ export function MuscleReadinessContent({
               // something to expand to.
               renderRowDetail={(row) =>
                 row.exercises.length > 0 ? (
-                  // The scope label keeps this group-wide panel (rendered below
-                  // the last fine child) from reading as that child's breakdown.
+                  // Group-scope panel: MuscleGroupList renders it at ROW level
+                  // (outside the child indent), and the scope label names the
+                  // group, so it can't read as a sub-muscle's breakdown.
+                  // groupScope adds the footnote for why the group total is
+                  // below the sum of the sub-muscle rows.
                   <ContributingSets
                     exercises={row.exercises}
                     muscle={row.muscle}
                     testIdPrefix="readiness-sources"
                     scopeLabel={row.children.length > 0 ? `${row.displayName} · whole group` : row.displayName}
+                    groupScope={row.children.length > 0}
                   />
                 ) : null
               }

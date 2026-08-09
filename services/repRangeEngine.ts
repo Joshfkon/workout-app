@@ -47,6 +47,7 @@ export const MUSCLE_FIBER_PROFILE: Record<MuscleGroup, FiberType> = {
   adductors: 'mixed',      // Inner thigh muscles
   forearms: 'slow',        // Grip endurance, need higher reps
   traps: 'mixed',          // Upper back/neck
+  erectors: 'slow',        // Postural, endurance-oriented (same basis as abs)
 };
 
 /**

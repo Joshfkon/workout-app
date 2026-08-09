@@ -178,6 +178,74 @@ describe('recovery aggregation + divergence auto-expand (shoulders fixture)', ()
   });
 });
 
+describe('erectors readiness is independent of back', () => {
+  // A hinge session: primary glutes, secondary erectors — the shape that used
+  // to drive back's "Fatigued" reading while lats and upper back were fresh.
+  const hinge = (at: Date): RecoverySession => ({
+    performedAt: at,
+    exercises: [
+      {
+        primaryMuscle: 'glutes',
+        secondaryMuscles: ['erectors'],
+        sets: Array.from({ length: 6 }, () => ({ repsInTank: 0 })),
+      },
+    ],
+  });
+
+  it('erector fatigue drives the Erectors row and leaves Back fresh', () => {
+    const rows = buildReadinessRows([], [hinge(NOW)], NOW);
+
+    expect(rowFor(rows, 'erectors').recovery.status).toBe('fatigued');
+    // Back's worst-of-children now spans lats + upper_back only, so the hinge
+    // cannot reach it. Before the promotion this row read Fatigued.
+    expect(rowFor(rows, 'back').recovery.status).toBe('fresh');
+  });
+
+  it('back fatigue does not make Erectors look fatigued', () => {
+    const pulling: RecoverySession = {
+      performedAt: NOW,
+      exercises: [
+        {
+          primaryMuscle: 'lats',
+          secondaryMuscles: ['upper_back'],
+          sets: Array.from({ length: 6 }, () => ({ repsInTank: 0 })),
+        },
+      ],
+    };
+    const rows = buildReadinessRows([], [pulling], NOW);
+
+    expect(rowFor(rows, 'back').recovery.status).toBe('fatigued');
+    expect(rowFor(rows, 'erectors').recovery.status).toBe('fresh');
+  });
+
+  it('computes its own recovery clock rather than inheriting a back child\'s', () => {
+    // Erectors trained 30h ago, lats 6h ago: two genuinely different clocks.
+    const history = [
+      { ...hinge(hoursBefore(NOW, 30)) },
+      session(hoursBefore(NOW, 6), 'lats', 6, 0),
+    ];
+    const rows = buildReadinessRows([], history, NOW);
+
+    const erectors = rowFor(rows, 'erectors');
+    const back = rowFor(rows, 'back');
+    // Independent clocks: the more recent lat session leaves back with strictly
+    // more time to go than the older hinge leaves the erectors.
+    expect(back.recovery.hoursUntilReady).toBeGreaterThan(
+      erectors.recovery.hoursUntilReady
+    );
+    // And the erector row is a standalone coarse row, carrying no children.
+    expect(erectors.children).toHaveLength(0);
+  });
+
+  it('is a top-level readiness row, never a child of back', () => {
+    const rows = buildReadinessRows([], [], NOW);
+    expect(rows.some((r) => r.muscle === 'erectors')).toBe(true);
+    expect(
+      rowFor(rows, 'back').children.map((c) => c.muscle)
+    ).not.toContain('erectors');
+  });
+});
+
 /** Every coarse group at/above MEV → no coarse group lags on volume. */
 const ALL_AT_MEV = [
   stat('chest_upper', 12), stat('lats', 14), stat('front_delts', 12),

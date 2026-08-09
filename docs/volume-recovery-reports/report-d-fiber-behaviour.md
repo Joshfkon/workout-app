@@ -38,4 +38,4 @@
 | `soleus` | slow |
 | `abs` | slow |
 | `obliques` | slow |
-| `erectors` | mixed |
+| `erectors` | slow |

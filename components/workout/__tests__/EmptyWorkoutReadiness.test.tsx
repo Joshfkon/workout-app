@@ -127,13 +127,13 @@ describe('EmptyWorkoutReadiness', () => {
         .map((el) => (el.getAttribute('data-testid') || '').replace('readiness-row-', ''))
         .filter((id) => !id.startsWith('toggle-'));
 
-    // 6 coarse rows visible, the rest behind "+N more" (13 coarse groups total).
+    // 6 coarse rows visible, the rest behind "+N more" (14 coarse groups total).
     await waitFor(() => expect(rowIds().length).toBe(6));
-    expect(screen.getByTestId('readiness-show-more')).toHaveTextContent('+7 more');
+    expect(screen.getByTestId('readiness-show-more')).toHaveTextContent('+8 more');
 
     // Expanding reveals the full list inline.
     await userEvent.click(screen.getByTestId('readiness-show-more'));
-    await waitFor(() => expect(rowIds().length).toBe(13));
+    await waitFor(() => expect(rowIds().length).toBe(14));
 
     // Fatigued quads (trained 30h ago) is present at the bottom, not vanished.
     const order = rowIds();

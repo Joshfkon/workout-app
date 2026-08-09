@@ -849,6 +849,17 @@ export function recommendVolume(
   //                                   {6,24} in the same pass)
   //   hamstrings 8/12/14 → 12/16/19  (observed 3.5–7; band → {8,20})
   //   back      12/16/20 → 14/18/23  (observed 3.5–7 hinge spillover)
+  //             ↳ REVERTED to 12/16/20 by the erector promotion: every hinge
+  //               in the library tags erectors and NO other back-group muscle,
+  //               so once erectors became its own group the spillover this
+  //               conversion was measuring no longer lands on back. Reverted in
+  //               the same pass as its band ({12,28} → {10,25}) — presets and
+  //               bands convert together, and they revert together.
+  //   erectors   —      → 5/8/10     (new group; band {4,12}. Sits mid-band
+  //               like every other group's preset. Deliberately NOT in the
+  //               planned `muscles` list below: hinges already supply 4–8
+  //               credited erector sets indirectly, so adding a direct slot
+  //               would be a new prescription, not a regrouping.)
   //   chest / quads / calves / abs: unchanged (little cross-group inflow).
   //
   // INVARIANT (bandPresetInvariant.test.ts): band MEV ≤ preset ≤ band MRV
@@ -858,7 +869,7 @@ export function recommendVolume(
   // glutes advanced×bulk 18 > 16 violation).
   const baseVolumes: Record<string, Record<Experience, number>> = {
     chest: { novice: 10, intermediate: 14, advanced: 18 },
-    back: { novice: 14, intermediate: 18, advanced: 23 },
+    back: { novice: 12, intermediate: 16, advanced: 20 },
     shoulders: { novice: 14, intermediate: 19, advanced: 24 },
     biceps: { novice: 12, intermediate: 17, advanced: 22 },
     triceps: { novice: 11, intermediate: 15, advanced: 20 },
@@ -870,6 +881,7 @@ export function recommendVolume(
     // Total-inclusive like the rest: generated inflow (rows/hinges/carries)
     // measures 2.5–5, so a small direct share (shrugs) closes the gap to MEV 6.
     traps: { novice: 6, intermediate: 8, advanced: 10 },
+    erectors: { novice: 5, intermediate: 8, advanced: 10 },
   };
 
   let volume = baseVolumes[muscleGroup]?.[experience] || 12;
@@ -939,28 +951,30 @@ export function calculateVolumeDistribution(
       chest: Math.min(daysPerWeek, 3), back: Math.min(daysPerWeek, 3), shoulders: Math.min(daysPerWeek, 3),
       biceps: Math.min(daysPerWeek, 2), triceps: Math.min(daysPerWeek, 2), quads: Math.min(daysPerWeek, 3),
       hamstrings: Math.min(daysPerWeek, 2), glutes: Math.min(daysPerWeek, 2), calves: Math.min(daysPerWeek, 2), abs: Math.min(daysPerWeek, 2),
-      adductors: Math.min(daysPerWeek, 2), forearms: Math.min(daysPerWeek, 2), traps: Math.min(daysPerWeek, 2)
+      adductors: Math.min(daysPerWeek, 2), forearms: Math.min(daysPerWeek, 2), traps: Math.min(daysPerWeek, 2),
+      erectors: Math.min(daysPerWeek, 2)
     },
     'Upper/Lower': {
       chest: 2, back: 2, shoulders: 2, biceps: 2, triceps: 2,
       quads: 2, hamstrings: 2, glutes: 2, calves: 2, abs: 2,
-      adductors: 2, forearms: 2, traps: 2
+      adductors: 2, forearms: 2, traps: 2, erectors: 2
     },
     'PPL': {
       chest: daysPerWeek >= 6 ? 2 : 1, back: daysPerWeek >= 6 ? 2 : 1, shoulders: daysPerWeek >= 6 ? 2 : 1,
       biceps: daysPerWeek >= 6 ? 2 : 1, triceps: daysPerWeek >= 6 ? 2 : 1, quads: daysPerWeek >= 6 ? 2 : 1,
       hamstrings: daysPerWeek >= 6 ? 2 : 1, glutes: daysPerWeek >= 6 ? 2 : 1, calves: daysPerWeek >= 6 ? 2 : 1, abs: daysPerWeek >= 6 ? 2 : 1,
-      adductors: daysPerWeek >= 6 ? 2 : 1, forearms: daysPerWeek >= 6 ? 2 : 1, traps: daysPerWeek >= 6 ? 2 : 1
+      adductors: daysPerWeek >= 6 ? 2 : 1, forearms: daysPerWeek >= 6 ? 2 : 1, traps: daysPerWeek >= 6 ? 2 : 1,
+      erectors: daysPerWeek >= 6 ? 2 : 1
     },
     'Arnold': {
       chest: 2, back: 2, shoulders: 2, biceps: 2, triceps: 2,
       quads: 2, hamstrings: 2, glutes: 2, calves: 2, abs: 2,
-      adductors: 2, forearms: 2, traps: 2
+      adductors: 2, forearms: 2, traps: 2, erectors: 2
     },
     'Bro Split': {
       chest: 1, back: 1, shoulders: 1, biceps: 1, triceps: 1,
       quads: 1, hamstrings: 1, glutes: 1, calves: 1, abs: 1,
-      adductors: 1, forearms: 1, traps: 1
+      adductors: 1, forearms: 1, traps: 1, erectors: 1
     }
   };
 

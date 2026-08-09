@@ -426,11 +426,19 @@ describe('mesocycleBuilder', () => {
     });
 
     it('provides appropriate volume for different muscle groups', () => {
-      // Larger muscles typically get more volume
+      // Larger muscles get more volume — but ONLY comparable against a group
+      // with no cross-group inflow. The presets are TOTAL-INCLUSIVE, so a small
+      // muscle fed heavily by compounds carries a number inflated by credit it
+      // never gets directly: biceps' 17 includes 6–8 sets of pull inflow, and
+      // shoulders' 19 includes ~4 of press inflow, so both already sit at or
+      // above back's despite being far smaller. (Back's own inflow term went to
+      // zero when erectors were promoted out of the group, which is what makes
+      // this visible against biceps too rather than only against shoulders.)
+      // Compare against adductors, which nothing else feeds.
       const backVolume = recommendVolume('intermediate', 'bulk', 'back');
-      const bicepsVolume = recommendVolume('intermediate', 'bulk', 'biceps');
+      const adductorsVolume = recommendVolume('intermediate', 'bulk', 'adductors');
 
-      expect(backVolume).toBeGreaterThan(bicepsVolume);
+      expect(backVolume).toBeGreaterThan(adductorsVolume);
     });
   });
 
@@ -734,6 +742,7 @@ describe('mesocycleBuilder', () => {
       adductors: { sets: 4, frequency: 1 },
       forearms: { sets: 4, frequency: 1 },
       traps: { sets: 6, frequency: 2 },
+      erectors: { sets: 6, frequency: 2 },
     };
 
     it('builds a session with exercises', () => {
