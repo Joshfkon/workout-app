@@ -1296,6 +1296,25 @@ describe('ExerciseCard', () => {
         })
       );
     });
+
+    it('offers Weighted/Assisted off a stale weigh-in, not just today\'s', () => {
+      // The page falls back to the most recent weigh-in; the card only ever
+      // sees a number, so any non-null bodyweight must keep the control up.
+      render(<ExerciseCard {...bodyweightProps} userBodyweightKg={72.4} />);
+
+      expect(screen.getByRole('button', { name: 'Weighted' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Assisted' })).toBeInTheDocument();
+      expect(screen.queryByTestId('bw-mode-needs-weigh-in')).not.toBeInTheDocument();
+    });
+
+    it('explains the missing control when no bodyweight is on record', () => {
+      render(<ExerciseCard {...bodyweightProps} userBodyweightKg={undefined} />);
+
+      expect(screen.queryByRole('button', { name: 'Weighted' })).not.toBeInTheDocument();
+      expect(screen.getByTestId('bw-mode-needs-weigh-in')).toHaveTextContent(
+        /Log your bodyweight/
+      );
+    });
   });
 
   describe('Feedback sheet (absorbs SetFeedbackCard)', () => {

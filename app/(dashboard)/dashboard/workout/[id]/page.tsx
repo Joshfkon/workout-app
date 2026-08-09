@@ -698,7 +698,11 @@ export default function WorkoutPage() {
     libidoRating?: Rating | null;
     bodyweightKg?: number | null;
   } | null>(null);
-  
+
+  // Most recent weigh-in (today's if there is one, otherwise the last one on
+  // record). Used for bodyweight-exercise load math — see currentBodyweightKg.
+  const [latestBodyweightKg, setLatestBodyweightKg] = useState<number | null>(null);
+
   // State for showing swap modal for a specific exercise due to injury
   const [showSwapForInjury, setShowSwapForInjury] = useState<string | null>(null);
   const [showPageLevelSwapModal, setShowPageLevelSwapModal] = useState(false);
@@ -2014,15 +2018,32 @@ export default function WorkoutPage() {
           .maybeSingle();
         
         // Convert weight to kg if needed
-        let bodyweightKg: number | null = null;
-        if (weightEntry?.weight) {
-          if (weightEntry.unit === 'lb') {
-            bodyweightKg = weightEntry.weight * 0.453592;
-          } else {
-            bodyweightKg = weightEntry.weight;
-          }
+        const toKg = (entry: { weight: number; unit?: string | null } | null | undefined) => {
+          if (!entry?.weight) return null;
+          return entry.unit === 'lb' ? entry.weight * 0.453592 : entry.weight;
+        };
+        const bodyweightKg = toKg(weightEntry);
+
+        // Bodyweight for load math (weighted/assisted modes, effective load)
+        // must not depend on the lifter having weighed in *today* — most
+        // people don't weigh in before every session. Fall back to the most
+        // recent weigh-in so the Weighted/Assisted control stays available.
+        // Only today's entry pre-fills the check-in form below, so a stale
+        // weight is never written back as today's weigh-in.
+        if (bodyweightKg) {
+          setLatestBodyweightKg(bodyweightKg);
+        } else {
+          const { data: lastWeightEntry } = await supabase
+            .from('weight_log')
+            .select('weight, unit')
+            .eq('user_id', user.id)
+            .lte('logged_at', today)
+            .order('logged_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          setLatestBodyweightKg(toKg(lastWeightEntry));
         }
-        
+
         // Set check-in data for pre-filling
         if (dailyCheckIn || weightEntry) {
           setTodayCheckInData({
@@ -2435,6 +2456,17 @@ export default function WorkoutPage() {
       if (startSession) setPhase('workout'); // Continue anyway
     }
   };
+
+  // Bodyweight used for bodyweight-exercise load math (Bodyweight/Weighted/
+  // Assisted modes and effective load). Freshest source wins: a weight typed
+  // into this session's pre-workout check-in, then today's weigh-in, then the
+  // most recent one on record. Without this the control disappeared entirely
+  // whenever the lifter hadn't weighed in today.
+  const currentBodyweightKg =
+    session?.preWorkoutCheckIn?.bodyweightKg ||
+    todayCheckInData?.bodyweightKg ||
+    latestBodyweightKg ||
+    undefined;
 
   // Readiness easing for this session (Phase 1.3): computed from the
   // check-in's readiness score, threaded into ExerciseCard (RIR chips +
@@ -6094,7 +6126,7 @@ export default function WorkoutPage() {
                     unit={preferences.units}
                     recommendedWeight={aiRecommendedWeightKg}
                     coldStartSuggestion={coldStartSuggestion}
-                    userBodyweightKg={todayCheckInData?.bodyweightKg || undefined}
+                    userBodyweightKg={currentBodyweightKg}
                     exerciseHistory={exerciseHistories[block.exerciseId]}
                     lastWorkoutSleep={sleepByExerciseId[block.exerciseId] ?? null}
                     sleepLoggingActive={sleepLoggingActive}
