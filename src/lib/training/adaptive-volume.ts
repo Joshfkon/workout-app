@@ -377,6 +377,7 @@ export const BASELINE_VOLUME_RECOMMENDATIONS: Record<MuscleGroup, {
   traps:      { mev: 0,  mrv: 16, optimal: 6 },
   forearms:   { mev: 0,  mrv: 12, optimal: 4 },
   adductors:  { mev: 0,  mrv: 12, optimal: 4 },
+  erectors:   { mev: 4,  mrv: 12, optimal: 8 },
 };
 
 /**

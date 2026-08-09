@@ -22,6 +22,7 @@ const MUSCLE_GROUPS = [
   'glutes',
   'calves',
   'abs',
+  'erectors',
 ];
 
 export default function DiscoverPage() {

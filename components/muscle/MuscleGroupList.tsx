@@ -174,10 +174,13 @@ export interface MuscleGroupListProps<R extends MuscleListRow> {
   pinChild?: (child: R['children'][number], row: R) => boolean;
   /**
    * Extra per-row content revealed by the SAME expansion gesture as the fine
-   * children (rendered after them, inside the indented block). A row for which
-   * this returns non-null is expandable even with zero children — that's how a
-   * single-muscle group (Biceps, Quads, …) gets a chevron and something to
-   * show behind it (e.g. the readiness sheet's contributing-sets breakdown).
+   * children, rendered after them but at ROW level — deliberately OUTSIDE the
+   * indented children block, because this content is scoped to the whole group
+   * and indenting it under the last child misrepresents whose data it is.
+   * A row for which this returns non-null is expandable even with zero
+   * children — that's how a single-muscle group (Biceps, Quads, Erectors, …)
+   * gets a chevron and something to show behind it (e.g. the readiness sheet's
+   * contributing-sets breakdown).
    */
   renderRowDetail?: (row: R) => ReactNode;
   /** testid prefix: rows get `${prefix}-${muscle}` (children too, by child muscle id). */
@@ -254,14 +257,27 @@ export function MuscleGroupList<R extends MuscleListRow>({
               </div>
             )}
 
-            {(visibleChildren.length > 0 || (expanded && detail !== null)) && (
+            {visibleChildren.length > 0 && (
               <div className={childrenClassName ?? 'mt-2 space-y-2 pl-4 ml-5 border-l border-surface-800/80'}>
                 {visibleChildren.map((child) => (
                   <div key={child.muscle} data-testid={`${testIdPrefix}-${child.muscle}`}>
                     {renderChild(child, row)}
                   </div>
                 ))}
-                {expanded && detail}
+              </div>
+            )}
+
+            {/* Row detail (e.g. the GROUP-scope contributing-sets panel) renders
+                OUTSIDE the indented children block, at row level. It used to sit
+                inside it, after the last child — which made a whole-group panel
+                render indented beneath, and read as, that child's breakdown
+                (Back's panel appearing under Upper Back, showing lat pulldowns
+                at full credit and rear-delt secondary credit). The panel was
+                always bound to the row, never to the child; only its placement
+                said otherwise. Keep this outside the indent. */}
+            {expanded && detail !== null && (
+              <div className="mt-2" data-testid={`${testIdPrefix}-detail-${row.muscle}`}>
+                {detail}
               </div>
             )}
           </div>

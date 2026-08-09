@@ -57,6 +57,7 @@ function createVolumePerMuscle(): Record<MuscleGroup, { sets: number; frequency:
     adductors: { sets: 4, frequency: 1 },
     forearms: { sets: 4, frequency: 1 },
     traps: { sets: 6, frequency: 2 },
+    erectors: { sets: 6, frequency: 2 },
   };
 }
 

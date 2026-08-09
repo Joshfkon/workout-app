@@ -96,8 +96,8 @@ export function deriveWeeklyVolume(
     };
   });
 
-  // `buildVolumeRows` always emits all 13 coarse rows, so with no logged
-  // volume its tiles would read "0 sets, 13 below MEV". Report the empty tiles
+  // `buildVolumeRows` always emits all 14 coarse rows, so with no logged
+  // volume its tiles would read "0 sets, 14 below MEV". Report the empty tiles
   // instead — same "no volume yet" semantics the home glance tile uses.
   return { volumeData, rows, tiles: stats.length > 0 ? coarseMevTiles(rows) : EMPTY_TILES };
 }

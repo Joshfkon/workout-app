@@ -2177,6 +2177,10 @@ export const DETAILED_TO_STANDARD_MAP: Record<DetailedMuscleGroup, StandardMuscl
  */
 export const LEGACY_TO_STANDARD_MAP: Record<string, StandardMuscleGroup[]> = {
   'chest': ['chest_upper', 'chest_lower'],
+  // 'back' has never covered erectors here (the standard-first resolver means
+  // a legacy 'back' tag credits only lats + upper_back). Since the erector
+  // promotion that also matches the DISPLAY taxonomy — 'erectors' is its own
+  // coarse group, so this map and services/volumeBands.COARSE_CHILDREN agree.
   'back': ['lats', 'upper_back'],
   'shoulders': ['front_delts', 'lateral_delts', 'rear_delts'],
   'biceps': ['biceps'],
@@ -2194,6 +2198,11 @@ export const LEGACY_TO_STANDARD_MAP: Record<string, StandardMuscleGroup[]> = {
   'adductors': ['adductors'],
   'forearms': ['forearms'],
   'traps': ['traps', 'upper_traps', 'mid_lower_traps'],
+  // Top-level group since the erector promotion. Identity expansion (one
+  // standard muscle), which is what gives it a legacy parent at last — filters,
+  // pickers and toLegacyMuscleGroup now resolve erector work to 'erectors'
+  // instead of to nothing.
+  'erectors': ['erectors'],
 };
 
 /**
@@ -2213,6 +2222,7 @@ export const LEGACY_TO_DETAILED_MAP: Record<string, DetailedMuscleGroup> = {
   'adductors': 'adductors',
   'forearms': 'forearm_flexors',
   'traps': 'upper_traps',
+  'erectors': 'erectors',
 };
 
 // ============ MUSCLE GROUP UTILITY FUNCTIONS ============
@@ -2384,7 +2394,8 @@ export function toLegacyMuscleGroup(muscle: string): MuscleGroup | null {
   for (const [legacy, stds] of Object.entries(LEGACY_TO_STANDARD_MAP)) {
     if (stds.includes(standards[0])) return legacy as MuscleGroup;
   }
-  // Standard muscles with no legacy parent (e.g. 'erectors', 'obliques')
+  // Standard muscles with no legacy parent (e.g. 'obliques'). 'erectors' HAS
+  // one since its promotion — it is its own top-level group.
   return null;
 }
 
@@ -2477,6 +2488,10 @@ export const MUSCLE_GROUPS = [
   'adductors',
   'forearms',
   'traps',
+  // Promoted out of 'back': erector volume comes from hinges and squats, not
+  // pulling. Kept in step with services/volumeBands.COARSE_MUSCLES — the two
+  // lists are the same 14 groups (asserted in types/__tests__/muscleTaxonomy).
+  'erectors',
 ] as const;
 
 /**

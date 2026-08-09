@@ -220,13 +220,13 @@ describe('MuscleReadinessSheet', () => {
     // Cap: exactly 6 coarse rows visible before expanding, with a "+N more".
     await waitFor(() => expect(screen.getByTestId('readiness-show-more')).toBeInTheDocument());
     expect(container.querySelectorAll('[data-testid^="readiness-row-"]').length).toBe(6);
-    // 13 coarse groups total → 7 hidden behind the expander.
-    expect(screen.getByTestId('readiness-show-more')).toHaveTextContent('+7 more');
+    // 14 coarse groups total → 8 hidden behind the expander.
+    expect(screen.getByTestId('readiness-show-more')).toHaveTextContent('+8 more');
 
     // Expanding reveals the full list inline.
     await userEvent.click(screen.getByTestId('readiness-show-more'));
     const order = muscleRows(container);
-    expect(order.length).toBe(13);
+    expect(order.length).toBe(14);
 
     // Yesterday's glutes did NOT vanish — present, Fatigued, and last in the sort.
     expect(screen.getByTestId('readiness-badge-glutes')).toHaveTextContent('Fatigued');

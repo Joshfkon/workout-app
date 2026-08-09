@@ -38,6 +38,7 @@ const MUSCLE_GROUPS = [
   'glutes',
   'calves',
   'abs',
+  'erectors',
 ];
 
 const LEADERBOARD_TABS: Array<{

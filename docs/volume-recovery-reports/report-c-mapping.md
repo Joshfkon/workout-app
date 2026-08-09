@@ -20,14 +20,14 @@ MRV is deliberately NOT manufactured by summing children.
 
 ## `back`
 
-- Mapped detailed rows: `lats`, `upper_back`, `erectors`
+- Mapped detailed rows: `lats`, `upper_back`
 - Group-capacity row: — (no parent/component family)
 - Bounded components: —
 - Credit semantics: primary credit resolves standard-first (a coarse tag credits ONLY the coarse row); secondary credit at SECONDARY_MUSCLE_CREDIT. Rows are **credit-disjoint**.
 - Anatomical relationship: independent
 - Aggregation: complete
 - referenceDirectMRV (group level): **unavailable** (no same-name detailed parent)
-- referenceInclusiveMRV: `RESEARCH_VOLUME_BANDS.back` = 28
+- referenceInclusiveMRV: `RESEARCH_VOLUME_BANDS.back` = 25
 - Governing reference — display/warnings/group budget/generator clamp: **inclusive**; direct-set logic, component bounds, Bug 6 capacity: **direct**.
 
 ## `shoulders`
@@ -161,4 +161,16 @@ MRV is deliberately NOT manufactured by summing children.
 - Aggregation: complete
 - referenceDirectMRV (group level): available — `adductors` detailed row
 - referenceInclusiveMRV: `RESEARCH_VOLUME_BANDS.adductors` = 12
+- Governing reference — display/warnings/group budget/generator clamp: **inclusive**; direct-set logic, component bounds, Bug 6 capacity: **direct**.
+
+## `erectors`
+
+- Mapped detailed rows: `erectors`
+- Group-capacity row: — (no parent/component family)
+- Bounded components: —
+- Credit semantics: primary credit resolves standard-first (a coarse tag credits ONLY the coarse row); secondary credit at SECONDARY_MUSCLE_CREDIT. Rows are **credit-disjoint**.
+- Anatomical relationship: independent
+- Aggregation: complete
+- referenceDirectMRV (group level): available — `erectors` detailed row
+- referenceInclusiveMRV: `RESEARCH_VOLUME_BANDS.erectors` = 12
 - Governing reference — display/warnings/group budget/generator clamp: **inclusive**; direct-set logic, component bounds, Bug 6 capacity: **direct**.

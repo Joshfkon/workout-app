@@ -49,7 +49,7 @@ import { SuggestionBanner } from './SuggestionBanner';
 import { BottomSheet } from './BottomSheet';
 import { useKeyboardInset } from '@/hooks/useKeyboardInset';
 
-const MUSCLE_GROUPS = ['chest', 'back', 'shoulders', 'traps', 'biceps', 'triceps', 'quads', 'hamstrings', 'glutes', 'adductors', 'calves', 'abs'];
+const MUSCLE_GROUPS = ['chest', 'back', 'shoulders', 'traps', 'biceps', 'triceps', 'quads', 'hamstrings', 'glutes', 'adductors', 'calves', 'abs', 'erectors'];
 
 // Compact RIR chips for the inline set editor — same buckets as RIRSelector.
 // A stored RIR of 3 (logged as RPE 7) lights up the "2-3" chip.

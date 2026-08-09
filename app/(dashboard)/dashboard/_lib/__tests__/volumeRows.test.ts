@@ -49,39 +49,78 @@ describe('buildVolumeRows — coarse rows + fine children', () => {
     expect(chest.zone).toBe('in_zone'); // 12 within 8–22
   });
 
-  it('always emits exactly the 13 coarse rows', () => {
+  it('always emits exactly the 14 coarse rows', () => {
     const rows = buildVolumeRows([stat('biceps', 5)]);
     expect(rows).toHaveLength(COARSE_MUSCLES.length);
   });
 
   it('carries an unreachable fine child only as an expand-only context row', () => {
-    // Coarse back trained via lats; erectors untrained (0) and unreachable.
+    // Back trained via lats only; upper_back untrained (0) and unreachable.
     const blocks = [block('pd', 'lats', [], 10, 'Lat Pulldown')];
     const stats = computeWeeklyMuscleVolume(blocks);
     const reachable = computeReachableMuscles(blocks);
     const back = buildVolumeRows(stats, reachable).find((r) => r.muscle === 'back')!;
     // The back row is expandable (lats is reachable), so it carries ALL its
-    // fine children — but unreachable erectors are flagged reachable:false:
-    // context rows the shared list only shows on an explicit expand, and the
+    // fine children — but unreachable upper_back is flagged reachable:false:
+    // a context row the shared list only shows on an explicit expand, and the
     // warning/target selectors skip (its target rolls up into the parent).
     expect(back.expandable).toBe(true);
-    const erectors = back.children.find((c) => c.muscle === 'erectors');
-    expect(erectors).toBeDefined();
-    expect(erectors!.reachable).toBe(false);
+    const upperBack = back.children.find((c) => c.muscle === 'upper_back');
+    expect(upperBack).toBeDefined();
+    expect(upperBack!.reachable).toBe(false);
   });
 
   it('surfaces a reachable, lagging fine child under its parent', () => {
-    // Directly trains erectors (reachable) but only 1 set < MEV(4).
+    // Directly trains upper_back (reachable) but only 1 set < MEV(4).
     const blocks = [
-      block('be', 'erectors', [], 1, 'Machine Back Extension'),
+      block('fp', 'upper_back', [], 1, 'Face Pull'),
       block('pd', 'lats', [], 8, 'Lat Pulldown'),
     ];
     const stats = computeWeeklyMuscleVolume(blocks);
     const reachable = computeReachableMuscles(blocks);
     const back = buildVolumeRows(stats, reachable).find((r) => r.muscle === 'back')!;
-    const erectors = back.children.find((c) => c.muscle === 'erectors');
-    expect(erectors).toBeDefined();
-    expect(erectors!.belowMev).toBe(true);
+    const upperBack = back.children.find((c) => c.muscle === 'upper_back');
+    expect(upperBack).toBeDefined();
+    expect(upperBack!.belowMev).toBe(true);
+  });
+
+  it('erectors is a TOP-LEVEL row, not a child of back', () => {
+    // A hinge: primary glutes, secondary erectors + hamstrings. Its erector
+    // credit must land on the standalone Erectors row and NOT inflate Back.
+    const blocks = [block('dl', 'glutes', ['hamstrings', 'erectors'], 8, 'Deadlift')];
+    const stats = computeWeeklyMuscleVolume(blocks);
+    const reachable = computeReachableMuscles(blocks);
+    const rows = buildVolumeRows(stats, reachable);
+
+    const back = rows.find((r) => r.muscle === 'back')!;
+    expect(back.children.map((c) => c.muscle)).toEqual(
+      expect.not.arrayContaining(['erectors'])
+    );
+    expect(back.sets).toBe(0);
+
+    const erectors = rows.find((r) => r.muscle === 'erectors')!;
+    expect(erectors.isChild).toBe(false);
+    expect(erectors.parent).toBeNull();
+    expect(erectors.children).toHaveLength(0);
+    // 8 sets at the 0.5 secondary credit — the regroup moves credit, it does
+    // not change the crediting math.
+    expect(erectors.sets).toBe(4);
+    // Promoted with its existing per-muscle zone.
+    expect(erectors.band).toEqual({ mev: 4, mrv: 12 });
+  });
+
+  it('keeps the Back row on its own zone, with no erector credit', () => {
+    const blocks = [
+      block('pd', 'lats', [], 8, 'Lat Pulldown'),
+      block('dl', 'glutes', ['erectors'], 10, 'Deadlift'),
+    ];
+    const rows = buildVolumeRows(
+      computeWeeklyMuscleVolume(blocks),
+      computeReachableMuscles(blocks)
+    );
+    const back = rows.find((r) => r.muscle === 'back')!;
+    expect(back.sets).toBe(8); // lats only — the deadlift contributes nothing
+    expect(back.band).toEqual({ mev: 10, mrv: 25 });
   });
 
   it('carries an in-zone fine child (flagged not-lagging) — visibility is the list component\'s job', () => {
@@ -176,5 +215,79 @@ describe('parent color is gated on child states (rowColorToken)', () => {
     expect(calves.zone).toBe('in_zone');
     expect(calves.laggingChildren).toBe(false);
     expect(rowColorToken(calves)).toBe('success');
+  });
+});
+
+describe('group total vs Σ(sub-muscle rows) — the documented dedup rule', () => {
+  // The rule (buildVolumeRows, GROUP SET-CREDIT CAP): per exercise, a group's
+  // credit is capped at 1.0 per PERFORMED set, so one set worked across two
+  // heads of the same group counts ONCE for the group. Sub-muscle rows keep
+  // their uncapped per-head credit, which is what per-head programming needs.
+  // The two numbers are therefore not required to agree, and the UI says so
+  // (ContributingSets' group-scope footnote).
+
+  it('reconciles exactly when no exercise spans two heads of the group', () => {
+    const blocks = [
+      block('pd', 'lats', [], 8, 'Lat Pulldown'),
+      block('fp', 'upper_back', [], 6, 'Face Pull'),
+    ];
+    const back = buildVolumeRows(
+      computeWeeklyMuscleVolume(blocks),
+      computeReachableMuscles(blocks)
+    ).find((r) => r.muscle === 'back')!;
+
+    const childSum = back.children.reduce((s, c) => s + c.sets, 0);
+    expect(back.sets).toBe(14);
+    expect(childSum).toBe(14);
+  });
+
+  it('group total is LOWER than Σ(children) by exactly the within-group overlap', () => {
+    // A row tagged primary lats + secondary upper_back: each head is credited
+    // independently (8 + 4 = 12) but the group is capped at the 8 performed
+    // sets. Gap = 4 = the secondary head's 0.5 credit on 8 sets.
+    const blocks = [block('row', 'lats', ['upper_back'], 8, 'Barbell Row')];
+    const back = buildVolumeRows(
+      computeWeeklyMuscleVolume(blocks),
+      computeReachableMuscles(blocks)
+    ).find((r) => r.muscle === 'back')!;
+
+    const childSum = back.children.reduce((s, c) => s + c.sets, 0);
+    expect(childSum).toBe(12);
+    expect(back.sets).toBe(8); // capped at performed sets, not 12
+    expect(childSum - back.sets).toBe(4);
+  });
+
+  it('erector credit no longer participates in the back reconciliation at all', () => {
+    // Pre-promotion this deadlift put 5 credited sets on back's erector child,
+    // widening the gap between the group header and its sub-muscle rows.
+    const blocks = [
+      block('row', 'lats', ['upper_back'], 8, 'Barbell Row'),
+      block('dl', 'glutes', ['erectors'], 10, 'Deadlift'),
+    ];
+    const rows = buildVolumeRows(
+      computeWeeklyMuscleVolume(blocks),
+      computeReachableMuscles(blocks)
+    );
+    const back = rows.find((r) => r.muscle === 'back')!;
+    const erectors = rows.find((r) => r.muscle === 'erectors')!;
+
+    expect(back.children.reduce((s, c) => s + c.sets, 0) - back.sets).toBe(4);
+    expect(erectors.sets).toBe(5);
+    // Erectors is its own group: nothing overlaps it, so it reconciles trivially.
+    expect(erectors.children).toHaveLength(0);
+  });
+
+  it('the cap never lets a group total exceed the sets actually performed', () => {
+    const blocks = [
+      block('row', 'lats', ['upper_back'], 8, 'Barbell Row'),
+      block('pd', 'lats', ['upper_back'], 6, 'Lat Pulldown'),
+    ];
+    const back = buildVolumeRows(
+      computeWeeklyMuscleVolume(blocks),
+      computeReachableMuscles(blocks)
+    ).find((r) => r.muscle === 'back')!;
+
+    expect(back.sets).toBe(14); // 8 + 6 performed, not 21 credited
+    expect(back.sets).toBeLessThan(back.children.reduce((s, c) => s + c.sets, 0));
   });
 });

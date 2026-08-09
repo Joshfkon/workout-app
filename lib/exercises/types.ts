@@ -372,7 +372,7 @@ const fine = (value: StandardMuscleGroup): { value: StandardMuscleGroup; label: 
  *  (components/workout/exercise-details/editFormOptions.ts). */
 export const GROUPED_MUSCLE_OPTIONS: GroupedMuscleOption[] = [
   { value: 'chest', label: 'Chest', subMuscles: [fine('chest_upper'), fine('chest_lower')] },
-  { value: 'back', label: 'Back', subMuscles: [fine('lats'), fine('upper_back'), fine('erectors')] },
+  { value: 'back', label: 'Back', subMuscles: [fine('lats'), fine('upper_back')] },
   { value: 'shoulders', label: 'Shoulders', subMuscles: [fine('front_delts'), fine('lateral_delts'), fine('rear_delts')] },
   { value: 'biceps', label: 'Biceps', subMuscles: [] },
   { value: 'triceps', label: 'Triceps', subMuscles: [fine('triceps_long'), fine('triceps_lat_med')] },
@@ -384,6 +384,8 @@ export const GROUPED_MUSCLE_OPTIONS: GroupedMuscleOption[] = [
   { value: 'adductors', label: 'Adductors', subMuscles: [] },
   { value: 'calves', label: 'Calves', subMuscles: [fine('gastrocnemius'), fine('soleus')] },
   { value: 'abs', label: 'Abs', subMuscles: [fine('obliques')] },
+  // Top-level group, not a back subdivision — hinge/squat work is what loads it.
+  { value: 'erectors', label: 'Erectors', subMuscles: [] },
 ];
 
 /**

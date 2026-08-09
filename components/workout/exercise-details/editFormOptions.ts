@@ -55,7 +55,7 @@ const sub = (value: StandardMuscleGroup): SubMuscleOption => ({
  */
 export const MUSCLE_GROUP_OPTIONS: MuscleGroupOption[] = [
   { value: 'chest', label: 'Chest', subMuscles: [sub('chest_upper'), sub('chest_lower')] },
-  { value: 'back', label: 'Back', subMuscles: [sub('lats'), sub('upper_back'), sub('erectors')] },
+  { value: 'back', label: 'Back', subMuscles: [sub('lats'), sub('upper_back')] },
   { value: 'shoulders', label: 'Shoulders', subMuscles: [sub('front_delts'), sub('lateral_delts'), sub('rear_delts')] },
   { value: 'biceps', label: 'Biceps', subMuscles: [] },
   { value: 'triceps', label: 'Triceps', subMuscles: [sub('triceps_long'), sub('triceps_lat_med')] },
@@ -67,6 +67,8 @@ export const MUSCLE_GROUP_OPTIONS: MuscleGroupOption[] = [
   { value: 'adductors', label: 'Adductors', subMuscles: [] },
   { value: 'calves', label: 'Calves', subMuscles: [sub('gastrocnemius'), sub('soleus')] },
   { value: 'abs', label: 'Abs', subMuscles: [sub('obliques')] },
+  // Top-level group, not a back subdivision — hinge/squat work is what loads it.
+  { value: 'erectors', label: 'Erectors', subMuscles: [] },
 ];
 
 /** All valid muscle tokens (coarse + fine) that the selectors can produce. */

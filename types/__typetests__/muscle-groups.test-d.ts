@@ -282,6 +282,11 @@ expectAssignable<MuscleGroup>('back');
 expectAssignable<MuscleGroup>('shoulders');
 expectAssignable<MuscleGroup>('biceps');
 expectAssignable<MuscleGroup>('triceps');
+// 'erectors' is a top-level group in BOTH vocabularies since the promotion:
+// a legacy MuscleGroup (pickers, filters, generator presets) and a
+// StandardMuscleGroup (credit, recovery), like 'biceps' or 'adductors'.
+expectAssignable<MuscleGroup>('erectors');
+expectAssignable<StandardMuscleGroup>('erectors');
 
 // Invalid MuscleGroup values
 expectNotAssignable<MuscleGroup>('arms'); // Use 'biceps' or 'triceps' instead
