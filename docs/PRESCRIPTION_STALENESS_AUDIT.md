@@ -14,7 +14,8 @@ Reported case: Abdominal Crunch Machine, rep_total mode.
 Rest timer reacted (`+30s — last set ran hotter than target`); the
 prescription did not.
 
-**Status: reproduced, root cause identified, no code changed.**
+**Status: reproduced, root cause identified, fixed. Phases 1–3 complete.**
+The audit below is preserved as written (Phase 1); §9 records what shipped.
 
 ---
 
@@ -362,3 +363,98 @@ brief and the shipped spec disagree.
 as a test (set 3 rx ≠ set 1 rx after a short set 2); a test that
 `prescribeRestSeconds` and `recommendRepTotalNextSet` classify the same set
 identically at the same threshold; and the manual log-a-set check.
+
+---
+
+## 9. Phase 2/3 — what shipped
+
+### The fix: a live capacity anchor
+
+`services/suggestionEngine/repTotalPolicy.ts`. The INV-2 capacity ceiling
+kept its original max-over-all-sets form — it still gates the **load** lever
+— and a second, tighter **live** ceiling was layered on top of the **rep**
+ask:
+
+```
+bestCeiling  = max over today's sets   →  gates the LOAD (unchanged)
+repsAtBestCeiling                      →  the value the load lever is judged on
+liveCeiling  = the MOST RECENT set     →  caps the REP ask (new)
+```
+
+Rationale: within-session capacity is non-increasing, so the latest
+observation estimates what the *next* set can do, while the max estimates
+what the lifter could do at the session's *start*. With one set logged the
+two anchors are identical — this only diverges once a later set comes in
+under an earlier one, i.e. exactly the defect and nothing else.
+
+The reported case now returns **180 lb × 6 @ 2 RIR** for set 3 (set 2's 7
+reps with 1 left = 8 in the tank → 6 at the 2-RIR target), carrying
+`sessionDeclineTrimmed`.
+
+**Load behavior is deliberately unchanged.** The first attempt let the live
+trim reach the load lever, which turned one weak set into an 11% mid-session
+deload (caught by an existing test). Gating the load step on
+`repsAtBestCeiling` restores the brief's ordering exactly: **reps absorb
+fatigue at a held load; the load only moves when today's *best* set can't
+hold the range.**
+
+### Threshold parity: one set, one verdict
+
+New module `services/suggestionEngine/effortGrade.ts`. The rest timer, the
+rep_total policy and `recommendSet` each re-implemented the effort
+comparison with three different clamps; all three now grade through
+`gradeEffort`, which names `hotterThanTarget` (≤ −1, the timer's threshold)
+and `pastDeadband` (≤ −DEADBAND_RIR, the load lever's). Consumers still
+*act* at different thresholds by design, but they read them off one object,
+so a set can no longer be described two ways. `gradeEffort` returns `null`
+for an unrated set rather than defaulting to on-target.
+
+### Silent failures closed
+
+- **S1** — a null plan now renders *"rep-total — no comparable history yet,
+  echoing your last set"* instead of an unbacked echo dressed as a
+  prescription.
+- **S2/S3** — a trimmed ask carries `sessionDeclineTrimmed` and the banner
+  says *"trimmed — your last set came in under"*. A silently *shrinking*
+  ask would be the same class of bug in the other direction.
+- **S4** — the rep_total banner now renders `effortVsTarget`, so the
+  prescription and the rest bar acknowledge the same hot set.
+- **S6** — `recommendNext` honors `positionOffset` on the rep_total path via
+  `repTotalNextSetAt(offset)`, projecting intervening slots as met exactly
+  (the same assumption the e1RM path makes). Pending rows no longer show one
+  number repeated.
+
+S5 and S7 are **not** fixed — S5 (`resolveLastRir`'s target-RIR fallback) is
+load-bearing for existing call sites and needs its own change; S7 is a
+latent risk, not a live bug. Both remain listed above.
+
+### Not touched
+
+No volume-accounting or double-counting code was modified, per the brief.
+`applyVolumeConstraint` / `volumeShortfall` are untouched — but note the
+consequence flagged in §8: trimmed rep asks lower projected tonnage, so the
+existing shortfall banner will surface more often on declining sessions.
+That is the honest signal firing, not a regression.
+
+### Verification
+
+- `services/__tests__/repTotalIntraSessionReaction.test.ts` (24 tests) — the
+  §0 scenario across three rep ranges, plus over-correction guards (a steady
+  session must not trim; a strong set must still raise the ask), the
+  held-load assertion, counter/ask decoupling, and timer↔prescription parity
+  across six effort cases.
+- `components/workout/__tests__/ExerciseCardRepTotalReaction.test.tsx` (3
+  tests) — the manual check, automated: one mounted `ExerciseCard`,
+  `rerender` with one more set, assert the on-screen prescription changes.
+  This is the "log a set, no navigating away and back" case, and it also
+  fails if a future memo re-freezes the component's view of the session.
+- Both suites were confirmed to **fail** with the live trim disabled (4 and
+  2 tests respectively), so neither is vacuous.
+- One pre-existing test changed: `repTotalPolicy.test.ts` "follows the plan
+  slot when today matches it" → "trims the plan slot to the LIVE ceiling
+  when the session is declining". Its fixture's set 2 (11 reps) was *below*
+  the 12-rep range floor, so "today matches it" was never true; the old
+  expectation of 12 encoded the raise-only behavior. Load assertion
+  unchanged at 61.23 kg.
+- Full suite: **4721 passing / 262 suites**. `tsc --noEmit` clean, `npm run
+  lint` clean for touched files, `npm run build` succeeds.

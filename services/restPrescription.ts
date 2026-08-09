@@ -34,12 +34,12 @@
  */
 
 import {
-  DEADBAND_RIR,
   DEFAULT_REST_SECONDS,
   REST_EXTEND_FAILURE_S,
   REST_EXTEND_HARD_S,
   REST_MAX_S,
 } from './suggestionEngine/constants';
+import { gradeEffort } from './suggestionEngine/effortGrade';
 
 export interface RestPrescriptionInput {
   /** The block's stored rest (target_rest_seconds). Invalid/0 → loud default. */
@@ -82,13 +82,16 @@ export function prescribeRestSeconds(input: RestPrescriptionInput): RestPrescrip
     notes.push('no stored rest — using 3:00');
   }
 
+  // Graded through the SHARED reading (services/suggestionEngine/effortGrade)
+  // — the same object the suggestion engines grade against, so the rest bar
+  // and the prescription banner can never describe one set two ways.
   let adjustmentSeconds = 0;
-  if (input.lastSetRir !== undefined && Number.isFinite(input.lastSetRir)) {
-    const dev = Math.max(0, input.lastSetRir) - Math.max(0, input.targetRir);
-    if (dev <= -DEADBAND_RIR) {
+  const effort = gradeEffort(input.lastSetRir, input.targetRir);
+  if (effort) {
+    if (effort.pastDeadband) {
       adjustmentSeconds = REST_EXTEND_FAILURE_S;
       notes.push(`+${REST_EXTEND_FAILURE_S}s — last set at/near failure`);
-    } else if (dev <= -1) {
+    } else if (effort.hotterThanTarget) {
       adjustmentSeconds = REST_EXTEND_HARD_S;
       notes.push(`+${REST_EXTEND_HARD_S}s — last set ran hotter than target`);
     }
