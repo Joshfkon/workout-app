@@ -233,8 +233,44 @@ function applySorenessOverride(
 }
 
 /**
+ * Is `candidate` a LESS recovered reading of the group than `incumbent`?
+ *
+ * Least-recovered wins, in this order:
+ *  1. status rank — fatigued beats recovering beats fresh;
+ *  2. hours until Fresh — further from ready is worse;
+ *  3. HAS DATA — a member the user has never trained says nothing about the
+ *     group, so it must never displace a member they have. Untrained members
+ *     report `fresh` with `hoursUntilReady: 0` and `lastTrainedAt: null`, so
+ *     without this they tie every trained-and-Fresh sibling and the FIRST
+ *     child listed won — handing the group a null `lastTrainedAt`, which the
+ *     badge renders as "No recent data". That is how Triceps (coarse member
+ *     'triceps', never tagged by a head-tagging user) reported no recent data
+ *     while both its heads read Fresh off 21 counted sets;
+ *  4. most recently trained — among equally-recovered trained members, the
+ *     latest session is both the least-recovered reading and the honest answer
+ *     to "when was this group last trained?".
+ */
+function isLessRecovered(
+  candidate: MuscleRecoveryResult,
+  incumbent: MuscleRecoveryResult
+): boolean {
+  const rank = RECOVERY_RANK[candidate.status] - RECOVERY_RANK[incumbent.status];
+  if (rank !== 0) return rank > 0;
+  if (candidate.hoursUntilReady !== incumbent.hoursUntilReady) {
+    return candidate.hoursUntilReady > incumbent.hoursUntilReady;
+  }
+  const candidateTrained = candidate.lastTrainedAt !== null;
+  const incumbentTrained = incumbent.lastTrainedAt !== null;
+  if (candidateTrained !== incumbentTrained) return candidateTrained;
+  if (!candidateTrained || !incumbentTrained) return false;
+  return candidate.lastTrainedAt!.getTime() > incumbent.lastTrainedAt!.getTime();
+}
+
+/**
  * Recovery for a coarse group (exported so the weekly-volume strip can pair
  * the SAME worst-of-children recovery with its rows as the readiness sheet).
+ * A group reads "no recent data" only when EVERY member is untrained — see
+ * isLessRecovered.
  */
 export function coarseRecovery(
   coarse: CoarseMuscle,
@@ -249,13 +285,7 @@ export function coarseRecovery(
       computeMuscleRecovery(history, child, now, config),
       sorenessOverrides?.has(child) ?? false
     );
-    if (
-      !worst ||
-      RECOVERY_RANK[rec.status] > RECOVERY_RANK[worst.status] ||
-      (RECOVERY_RANK[rec.status] === RECOVERY_RANK[worst.status] && rec.hoursUntilReady > worst.hoursUntilReady)
-    ) {
-      worst = rec;
-    }
+    if (!worst || isLessRecovered(rec, worst)) worst = rec;
   }
   return worst ?? computeMuscleRecovery(history, COARSE_CHILDREN[coarse][0], now, config);
 }

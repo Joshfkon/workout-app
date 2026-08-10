@@ -178,6 +178,66 @@ describe('recovery aggregation + divergence auto-expand (shoulders fixture)', ()
   });
 });
 
+describe('a trained member always outranks a never-trained one', () => {
+  // Regression: a group whose members are ALL Fresh tied on status rank AND on
+  // hoursUntilReady (0), so the first member listed won — and for the groups
+  // that carry a coarse standard member first ('triceps', 'traps', 'calves',
+  // 'glutes', 'abs'), a user who tags at head level never feeds that member.
+  // The group inherited its null lastTrainedAt and rendered "No recent data"
+  // while every head below it read Fresh off real counted sets.
+  const HEADS = new Set<StandardMuscleGroup>(['triceps_long', 'triceps_lat_med']);
+
+  it('a head-tagging user gets a trained Triceps row, not "no recent data"', () => {
+    // 5 days ago: well past the 36h triceps window → every head reads Fresh.
+    const trainedAt = hoursBefore(NOW, 120);
+    const history: RecoverySession[] = [
+      session(trainedAt, 'triceps_lat_med', 10, 2),
+      session(trainedAt, 'triceps_long', 5, 2),
+    ];
+    const rows = buildReadinessRows([], history, NOW, HEADS);
+    const triceps = rowFor(rows, 'triceps');
+
+    const childStatus = (m: string) =>
+      triceps.children.find((c) => c.muscle === m)!.recovery.status;
+    expect(childStatus('triceps_lat_med')).toBe('fresh');
+    expect(childStatus('triceps_long')).toBe('fresh');
+
+    // The badge reads "No recent data" off a null lastTrainedAt — the group
+    // was trained, so it must carry the real timestamp.
+    expect(triceps.recovery.status).toBe('fresh');
+    expect(triceps.recovery.lastTrainedAt).toEqual(trainedAt);
+  });
+
+  it('reports the MOST RECENT session among equally-recovered members', () => {
+    const older = hoursBefore(NOW, 168);
+    const newer = hoursBefore(NOW, 120);
+    const history: RecoverySession[] = [
+      session(older, 'triceps_long', 5, 2),
+      session(newer, 'triceps_lat_med', 10, 2),
+    ];
+    const triceps = rowFor(buildReadinessRows([], history, NOW, HEADS), 'triceps');
+    expect(triceps.recovery.lastTrainedAt).toEqual(newer);
+  });
+
+  it('still reports no data when NO member has been trained', () => {
+    const triceps = rowFor(buildReadinessRows([], [], NOW, HEADS), 'triceps');
+    expect(triceps.recovery.lastTrainedAt).toBeNull();
+    expect(triceps.recovery.status).toBe('fresh');
+  });
+
+  it('a fatigued member still wins over a fresher, more recently trained one', () => {
+    // Ordering guard: "has data" must break ties only AFTER status rank, never
+    // before it — a recently-trained Fresh head must not displace a Fatigued one.
+    const history: RecoverySession[] = [
+      session(NOW, 'triceps_long', 8, 0), // just maxed → Fatigued
+      session(hoursBefore(NOW, 120), 'triceps_lat_med', 4, 2), // Fresh
+    ];
+    const triceps = rowFor(buildReadinessRows([], history, NOW, HEADS), 'triceps');
+    expect(triceps.recovery.status).toBe('fatigued');
+    expect(triceps.recovery.lastTrainedAt).toEqual(NOW);
+  });
+});
+
 describe('erectors readiness is independent of back', () => {
   // A hinge session: primary glutes, secondary erectors — the shape that used
   // to drive back's "Fatigued" reading while lats and upper back were fresh.

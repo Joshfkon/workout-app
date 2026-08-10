@@ -82,13 +82,17 @@ export function ContributingSets({
       <ul className="space-y-0.5">
         {exercises.map((ex) => (
           <li key={ex.id} className="flex items-baseline justify-between gap-2 text-xs">
-            <span className="text-surface-300 truncate">
-              {ex.name}
+            {/* Only the NAME truncates. The badge is a fixed-width chip: with
+                `truncate` on the shared parent it was the tail of the line and
+                clipped to "SECOND…" whenever the name was long, turning the
+                one word that explains the halved credit into noise. */}
+            <span className="flex items-baseline gap-1.5 min-w-0">
+              <span className="text-surface-300 truncate">{ex.name}</span>
               {/* Indirect-only credit (no primary-tag share): this exercise is
                   here purely via a secondary-muscle tag — say so inline. */}
               {ex.direct === 0 && (
                 <span
-                  className="ml-1.5 rounded bg-surface-700/60 px-1 py-px text-[9px] uppercase tracking-wide text-surface-400"
+                  className="flex-shrink-0 rounded bg-surface-700/60 px-1 py-px text-[9px] uppercase tracking-wide text-surface-400"
                   data-testid={`${testIdPrefix}-secondary-${ex.id}`}
                 >
                   secondary
