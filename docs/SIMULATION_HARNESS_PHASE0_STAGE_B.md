@@ -293,4 +293,4 @@ attached when it is fixed.
 3. ~~`logSet` / `editSet` / `deleteSet` extraction from `page.tsx`.~~ **DONE** — `lib/training/logSet.ts`; the page is 128 lines lighter and calls the same functions the driver will. `logSet` takes a caller-supplied `setId`, closing finding H9.
 4. ~~`loadSession` + `createMesocycle` extraction.~~ **DONE** — `lib/training/createMesocycle.ts` and `workout/[id]/_lib/loadSession.ts`.
 5. ~~**`getPrescription` extraction from `ExerciseCard.tsx` — its own PR**, guarded by `_lib/__tests__/engineRegressionBaseline.test.ts`.~~ **DONE** — `services/prescription/sessionPrescription.ts`, guarded by the regression baseline plus a 33-case equivalence suite against the pre-extraction assembly.
-6. `SessionDriver` assembled from the above.
+6. ~~`SessionDriver` assembled from the above.~~ **DONE** — `simulation/sessionDriver.ts` + `simulation/fakeSupabase.ts`. **Phase 1 complete.**
