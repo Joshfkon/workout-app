@@ -2,7 +2,9 @@
 
 **Status:** AUDIT ONLY. No production code was changed by this report.
 **Scope of Stage A:** 0.1 Clock audit · 0.3 Entry-point audit · 0.5 State-isolation audit.
-**Stage B (0.2 determinism, 0.4 mutation-boundary, 0.6 idempotency) is NOT in this report** — it awaits approval of Stage A.
+**Stage B (0.2 determinism, 0.4 mutation-boundary, 0.6 idempotency) is in a companion
+report: [SIMULATION_HARNESS_PHASE0_STAGE_B.md](./SIMULATION_HARNESS_PHASE0_STAGE_B.md)**,
+which also records the decisions taken on the three open questions in §5 below.
 
 Repo snapshot: branch `claude/hypertracker-simulation-phase-0-8smabx`, 666 non-test
 `.ts`/`.tsx` files under `app/ components/ hooks/ lib/ services/ stores/ types/`.
