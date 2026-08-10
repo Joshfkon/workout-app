@@ -305,6 +305,20 @@ npm run cap:livereload:android # Run Android with live reload
    const today = getLocalDateString();
    ```
 
+   **"Now" comes from `lib/clock`, not `new Date()`.** Any read of the current
+   time that can influence behaviour — prescription, fatigue/recovery,
+   progression, trends, staleness windows — or that is persisted as a record
+   timestamp must go through `now()` / `today()` from `@/lib/clock`, or through
+   a helper whose default already does (`getLocalDateString`, and everything in
+   `lib/date/localDay`). Purely visual reads (animations, the rest-timer
+   readout, relative-time labels) may keep using `new Date()`.
+
+   The point is that a simulated user can be moved through months of training
+   time (`setClock` + `test-utils/clock.ControllableClock`) and every date
+   bucket moves with it. `lib/clock.ts` documents what a "day" means; note that
+   advancing a day is a CALENDAR-day move, not +24h — those differ by an hour
+   twice a year and an evening session would drift onto the wrong local day.
+
 3. **Services are pure functions**: No database calls in `/services`. Pass data as input:
    ```typescript
    // GOOD: Pure function

@@ -288,7 +288,7 @@ attached when it is fixed.
 
 **Phase 0 is complete.** Recommended Phase 1 sequencing, smallest-risk first:
 
-1. `lib/clock.ts` + route the `localDay`/`getLocalDateString` defaults through it — additive, zero signature churn, zero behavior change.
+1. ~~`lib/clock.ts` + route the `localDay`/`getLocalDateString` defaults through it — additive, zero signature churn, zero behavior change.~~ **DONE** — `lib/clock.ts`, `test-utils/clock.ts`, 7 defaults routed, 37 tests, full suite green.
 2. Additive `now`/`today`/`supabase` parameters on the training data layer (Stage A §4B).
 3. `logSet` / `editSet` / `deleteSet` extraction from `page.tsx`.
 4. `loadSession` + `createMesocycle` extraction.
