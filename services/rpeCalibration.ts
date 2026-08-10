@@ -13,6 +13,7 @@ import {
   ENHANCED_RECOVERY_MULTIPLIER,
   AMRAP_DECAY_CONSTANTS,
 } from '@/services/shared/fatigueConstants';
+import { now as clockNow } from '@/lib/clock';
 
 // ============================================
 // CONSTANTS
@@ -505,7 +506,7 @@ export class RPECalibrationEngine {
     if (!calibration) return true;
 
     const daysSinceCalibration = Math.floor(
-      (Date.now() - calibration.lastCalibrated.getTime()) / (24 * 60 * 60 * 1000)
+      (clockNow().getTime() - calibration.lastCalibrated.getTime()) / (24 * 60 * 60 * 1000)
     );
 
     return daysSinceCalibration >= dayThreshold || calibration.confidenceLevel === 'low';
@@ -567,7 +568,7 @@ export class RPECalibrationEngine {
       }
 
       const daysSince = Math.floor(
-        (Date.now() - calibration.lastCalibrated.getTime()) / (24 * 60 * 60 * 1000)
+        (clockNow().getTime() - calibration.lastCalibrated.getTime()) / (24 * 60 * 60 * 1000)
       );
 
       if (daysSince > 28) {
@@ -805,6 +806,6 @@ export function createCalibrationSetLog(
     reportedRIR,
     wasAMRAP,
     restTimeSeconds,
-    timestamp: new Date(),
+    timestamp: clockNow(),
   };
 }

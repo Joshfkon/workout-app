@@ -29,6 +29,8 @@ import {
 import { SEED_EXERCISE_TAGS } from '@/services/generated/seedExerciseTags';
 import { validateExercisePrimary } from '@/services/muscleAttributionAudit';
 
+import { now as clockNow } from '@/lib/clock';
+
 // ============================================
 // TYPES
 // ============================================
@@ -182,7 +184,7 @@ export function clearExerciseCache(): void {
  */
 export async function getExercises(includeCustom: boolean = true): Promise<Exercise[]> {
   // Return cache if fresh
-  if (exerciseCache && Date.now() - cacheTimestamp < CACHE_TTL) {
+  if (exerciseCache && clockNow().getTime() - cacheTimestamp < CACHE_TTL) {
     return includeCustom 
       ? exerciseCache 
       : exerciseCache.filter(e => !e.isCustom);
@@ -198,7 +200,7 @@ export async function getExercises(includeCustom: boolean = true): Promise<Exerc
 
     const exercises = data.map(mapDbExercise);
     exerciseCache = exercises;
-    cacheTimestamp = Date.now();
+    cacheTimestamp = clockNow().getTime();
 
     return includeCustom
       ? exercises
@@ -812,7 +814,7 @@ export { FALLBACK_EXERCISES };
  * Prefer getExercises() when async is possible
  */
 export function getExercisesSync(): Exercise[] {
-  if (exerciseCache && Date.now() - cacheTimestamp < CACHE_TTL) {
+  if (exerciseCache && clockNow().getTime() - cacheTimestamp < CACHE_TTL) {
     return exerciseCache;
   }
   return FALLBACK_EXERCISES;

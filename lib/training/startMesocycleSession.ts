@@ -74,6 +74,7 @@ import type {
   MuscleGroup,
   WarmupSet,
 } from '@/types/schema';
+import { now as clockNow } from '@/lib/clock';
 
 // ============================================================
 // Types
@@ -501,7 +502,7 @@ export async function startMesocycleWorkoutSession(
     // succeed and both callers insert blocks, duplicating every exercise.
     const { data: claimedRows, error: claimError } = await supabase
       .from('workout_sessions')
-      .update({ state: 'in_progress', started_at: new Date().toISOString() })
+      .update({ state: 'in_progress', started_at: clockNow().toISOString() })
       .eq('id', claimedShellId)
       .eq('state', 'planned')
       .eq('mesocycle_id', mesocycle.id)
@@ -521,7 +522,7 @@ export async function startMesocycleWorkoutSession(
         mesocycle_id: mesocycle.id,
         planned_date: today,
         state: 'in_progress',
-        started_at: new Date().toISOString(),
+        started_at: clockNow().toISOString(),
         completion_percent: 0,
         origin: 'scheduled' as const,
       },

@@ -328,6 +328,14 @@ npm run cap:livereload:android # Run Android with live reload
    export async function calculateSetQuality(userId: string) { /* db call */ }
    ```
 
+   `@/lib/clock` is the one sanctioned exception, and only as a **default**:
+   `now: Date = clockNow()` keeps the function pure for any caller that passes
+   a time, while a zero-argument call follows simulated time. Prefer a required
+   `now` parameter for anything genuinely time-dependent —
+   `computeMuscleRecovery(history, muscle, now, config)` and `deloadEngine` are
+   the model. Never read the clock in the middle of a calculation when it could
+   have been a parameter.
+
 4. **Type imports from schema.ts**: Use the canonical types:
    ```typescript
    import type { SetLog, Exercise, ProgressionTargets } from '@/types/schema';

@@ -11,6 +11,7 @@ import type {
   DetailedExerciseWithFatigue,
   DetailedExercise,
 } from '@/types/schema';
+import { now as clockNow } from '@/lib/clock';
 
 /**
  * Normalized exercise data extracted from program_data
@@ -387,7 +388,7 @@ export function addExerciseOverride(
       originalExerciseName,
       replacementExerciseId,
       replacementExerciseName,
-      createdAt: new Date().toISOString(),
+      createdAt: clockNow().toISOString(),
     },
   ];
 }

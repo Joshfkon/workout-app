@@ -38,6 +38,7 @@ import { runPostSessionMesoUpdates } from './postSessionMeso';
 import { upsertSessionMuscleFeedback } from './muscleFeedbackWrites';
 import type { SessionMuscleFeedbackEntry } from '@/components/workout/SessionSummary';
 import type { WorkoutSession } from '@/types/schema';
+import { now as clockNow } from '@/lib/clock';
 
 type UntypedSupabase = ReturnType<typeof import('@/lib/supabase/client').createUntypedClient>;
 
@@ -128,7 +129,7 @@ export interface FinishFlowDeps {
 function completionPatch(data: FinishSummaryData): Record<string, unknown> {
   const patch: Record<string, unknown> = {
     state: 'completed',
-    completed_at: new Date().toISOString(),
+    completed_at: clockNow().toISOString(),
     session_rpe: data.sessionRpe,
     session_notes: data.notes,
     completion_percent: 100,

@@ -12,6 +12,8 @@ import { analyzeRegionalComposition, getAverageRegionalLeanMass } from './region
 import { normalizeExerciseName, findExerciseMatch, isSameExercise } from './exerciseCanonical';
 import { deriveProgressionScope } from './progressionScope';
 import { canonicalizePatternToken } from './warmupEngine';
+import { now as clockNow } from '@/lib/clock';
+
 import {
   rpeToRIR,
   calculateWorkingWeight,
@@ -935,7 +937,7 @@ export class WeightEstimationEngine {
     if (this.estimatedMaxes.has(cacheKey)) {
       const cached = this.estimatedMaxes.get(cacheKey)!;
       if (cached.lastUpdated &&
-          (Date.now() - cached.lastUpdated.getTime()) < 28 * 24 * 60 * 60 * 1000) {
+          (clockNow().getTime() - cached.lastUpdated.getTime()) < 28 * 24 * 60 * 60 * 1000) {
         return cached;
       }
     }
@@ -945,7 +947,7 @@ export class WeightEstimationEngine {
     if (originalKey !== cacheKey && this.estimatedMaxes.has(originalKey)) {
       const cached = this.estimatedMaxes.get(originalKey)!;
       if (cached.lastUpdated &&
-          (Date.now() - cached.lastUpdated.getTime()) < 28 * 24 * 60 * 60 * 1000) {
+          (clockNow().getTime() - cached.lastUpdated.getTime()) < 28 * 24 * 60 * 60 * 1000) {
         return cached;
       }
     }
@@ -1014,7 +1016,7 @@ export class WeightEstimationEngine {
     history.sort((a, b) => b.date.getTime() - a.date.getTime());
 
     const recentHistory = history.filter(h =>
-      (Date.now() - h.date.getTime()) < 28 * 24 * 60 * 60 * 1000
+      (clockNow().getTime() - h.date.getTime()) < 28 * 24 * 60 * 60 * 1000
     );
 
     if (recentHistory.length === 0) {
@@ -1077,7 +1079,7 @@ export class WeightEstimationEngine {
     const topN = sorted.slice(0, Math.min(3, sorted.length));
 
     // Weight by recency (newer = higher weight)
-    const now = Date.now();
+    const now = clockNow().getTime();
     const weighted = topN.map(est => {
       const ageMs = now - est.date.getTime();
       const ageDays = ageMs / (24 * 60 * 60 * 1000);
@@ -1656,7 +1658,7 @@ export class WeightEstimationEngine {
         estimated1RM: Math.round(newEstimate * 10) / 10,
         confidence: 'high',
         source: 'direct_history',
-        lastUpdated: new Date()
+        lastUpdated: clockNow()
       });
       this.lowerSessionCounts.set(key, 0);
       return;
@@ -1674,7 +1676,7 @@ export class WeightEstimationEngine {
         estimated1RM: Math.round(newEstimate * 10) / 10,
         confidence: 'high',
         source: 'direct_history',
-        lastUpdated: new Date()
+        lastUpdated: clockNow()
       });
     } else if (isSignificantlyLower) {
       // Require 3 consecutive significantly lower sessions before downgrading
@@ -1689,7 +1691,7 @@ export class WeightEstimationEngine {
           estimated1RM: Math.round(newEstimate * 10) / 10,
           confidence: 'high',
           source: 'direct_history',
-          lastUpdated: new Date()
+          lastUpdated: clockNow()
         });
         this.lowerSessionCounts.set(key, 0);
       }
@@ -1816,7 +1818,7 @@ export function quickWeightEstimate(
       estimated1RM: knownE1RM,
       confidence: 'high',
       source: 'direct_history',
-      lastUpdated: new Date()
+      lastUpdated: clockNow()
     });
   }
 
@@ -1884,7 +1886,7 @@ export function quickWeightEstimateWithCalibration(
       estimated1RM: knownE1RM,
       confidence: 'high',
       source: 'direct_history',
-      lastUpdated: new Date()
+      lastUpdated: clockNow()
     });
   }
 

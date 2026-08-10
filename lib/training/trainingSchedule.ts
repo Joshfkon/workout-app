@@ -15,10 +15,15 @@
 // cannot drift apart across the dashboard / log / train / mesocycle pages.
 //
 // Pure module: no DB access, no I/O. Callers pass the mesocycle row fields.
+// The one import beyond types is `lib/clock` (itself dependency-free), used
+// ONLY as the default for nextTrainingDate's `from` — so "what's next from
+// now?" follows simulated time. Every function still takes its dates
+// explicitly; nothing here reads a clock when the caller supplies one.
 // ============================================================
 
 import type { MuscleGroup, WorkoutDay } from '@/types/schema';
 import { DAYS_OF_WEEK } from '@/types/schema';
+import { now as clockNow } from '@/lib/clock';
 
 export type ScheduleMode = 'fixed_days' | 'interval';
 
@@ -209,7 +214,7 @@ export function isTrainingDate(schedule: TrainingSchedule, date: Date): boolean 
  */
 export function nextTrainingDate(
   schedule: TrainingSchedule,
-  from: Date = new Date(),
+  from: Date = clockNow(),
   options: { includeFrom?: boolean; maxLookaheadDays?: number } = {}
 ): { date: Date; offsetDays: number } | null {
   const { includeFrom = false, maxLookaheadDays = MAX_LOOKAHEAD_DAYS } = options;

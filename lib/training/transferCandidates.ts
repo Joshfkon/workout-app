@@ -21,6 +21,7 @@ import {
   type TransferCandidate,
   type TransferSourceRow,
 } from '@/services/weightEstimationEngine';
+import { now as clockNow } from '@/lib/clock';
 
 /** How far back transfer strength is trusted. Older strength is stale. */
 const TRANSFER_LOOKBACK_DAYS = 180;
@@ -57,7 +58,7 @@ export async function fetchTransferCandidates(
 ): Promise<TransferCandidate[]> {
   try {
     const supabase = client ?? createUntypedClient();
-    const cutoff = new Date(Date.now() - TRANSFER_LOOKBACK_DAYS * 24 * 60 * 60 * 1000).toISOString();
+    const cutoff = new Date(clockNow().getTime() - TRANSFER_LOOKBACK_DAYS * 24 * 60 * 60 * 1000).toISOString();
 
     const { data, error } = await supabase
       .from('set_logs')

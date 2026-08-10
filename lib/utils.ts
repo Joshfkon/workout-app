@@ -105,7 +105,9 @@ export function showDateTick(index: number, total: number, step: number): boolea
  */
 export function formatDistanceToNow(date: string | Date): string {
   const d = typeof date === 'string' ? new Date(date) : date;
-  const now = new Date();
+  // "Now" is the application clock, so a simulated run's relative labels read
+  // against simulated time rather than the wall clock. Production is unchanged.
+  const now = clockNow();
   const diffMs = now.getTime() - d.getTime();
   const diffSecs = Math.floor(diffMs / 1000);
   const diffMins = Math.floor(diffSecs / 60);

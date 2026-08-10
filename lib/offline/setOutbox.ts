@@ -19,6 +19,8 @@
  * construction, so retries after a lost ack are safe there too.
  */
 
+import { now as clockNow } from '@/lib/clock';
+
 export type OutboxTable =
   | 'set_logs'
   | 'workout_sessions'
@@ -145,7 +147,7 @@ export function __setDriverForTests(d: OutboxDriver | null): void {
 // ---------------------------------------------------------------------------
 
 export async function enqueueSetInsert(id: string, row: Record<string, unknown>): Promise<void> {
-  await getDriver().put({ id, table: 'set_logs', row, enqueuedAt: Date.now(), attempts: 0 });
+  await getDriver().put({ id, table: 'set_logs', row, enqueuedAt: clockNow().getTime(), attempts: 0 });
 }
 
 /** Queue an upsert row for any supported table (idempotent per UPSERT_OPTIONS). */
@@ -154,7 +156,7 @@ export async function enqueueRowUpsert(
   table: OutboxTable,
   row: Record<string, unknown>
 ): Promise<void> {
-  await getDriver().put({ id: entryId, table, op: 'insert', row, enqueuedAt: Date.now(), attempts: 0 });
+  await getDriver().put({ id: entryId, table, op: 'insert', row, enqueuedAt: clockNow().getTime(), attempts: 0 });
 }
 
 /** Queue a patch to a single row (matched on its primary key). Idempotent. */
@@ -170,7 +172,7 @@ export async function enqueueRowUpdate(
     op: 'update',
     matchId,
     row: patch,
-    enqueuedAt: Date.now(),
+    enqueuedAt: clockNow().getTime(),
     attempts: 0,
   });
 }

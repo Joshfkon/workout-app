@@ -15,6 +15,8 @@
 
 import { getFailureSafetyTier } from './exerciseSafety';
 
+import { now as clockNow } from '@/lib/clock';
+
 // ============================================
 // TYPES
 // ============================================
@@ -214,7 +216,7 @@ export class PerformanceTracker {
         signal: 'consistent_overperformance',
         reason: `Hit top of rep range ${sessionsRequired} sessions in a row with 3+ RIR`,
         dataWeeks,
-        createdAt: new Date(),
+        createdAt: clockNow(),
         priority: 'medium',
       });
       return;
@@ -240,7 +242,7 @@ export class PerformanceTracker {
         signal: 'consistent_underperformance',
         reason: 'Consistently missing rep targets or hitting failure',
         dataWeeks,
-        createdAt: new Date(),
+        createdAt: clockNow(),
         priority: 'high',
       });
     }
@@ -256,7 +258,7 @@ export class PerformanceTracker {
     if (sets.length < 12) return; // Need ~4 weeks of data
 
     // Get weight trend over last 8 weeks
-    const eightWeeksAgo = new Date();
+    const eightWeeksAgo = clockNow();
     eightWeeksAgo.setDate(eightWeeksAgo.getDate() - 56);
 
     const recentSets = sets.filter(s => s.timestamp > eightWeeksAgo);
@@ -272,7 +274,7 @@ export class PerformanceTracker {
 
     if (variance < 0.05 && avgRIR >= 2) {
       const weeksStagnant = Math.floor(
-        (Date.now() - recentSets[0].timestamp.getTime()) / (7 * 24 * 60 * 60 * 1000)
+        (clockNow().getTime() - recentSets[0].timestamp.getTime()) / (7 * 24 * 60 * 60 * 1000)
       );
 
       // Don't override existing overperformance/underperformance signals
@@ -285,7 +287,7 @@ export class PerformanceTracker {
         signal: 'stagnation_detected',
         reason: `No progression in ${weeksStagnant} weeks despite reporting ${avgRIR.toFixed(1)} avg RIR. Either push harder or there's a recovery issue.`,
         dataWeeks: Math.min(weeksStagnant, 8),
-        createdAt: new Date(),
+        createdAt: clockNow(),
         priority: weeksStagnant >= 6 ? 'high' : 'medium',
         metadata: {
           weeksStagnant,
@@ -565,7 +567,7 @@ export function createPerformanceSetLog(
     actualReps: reps,
     reportedRIR,
     wasAMRAP,
-    timestamp: new Date(),
+    timestamp: clockNow(),
     isDeload,
   };
 }

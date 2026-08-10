@@ -60,6 +60,7 @@ import type {
   VolumeLandmarks,
   WorkloadRating,
 } from '@/types/schema';
+import { now as clockNow } from '@/lib/clock';
 
 // ============================================================
 // Types
@@ -471,7 +472,7 @@ export async function loadWeeklyMuscleSignals(
   supabase: SupabaseClient,
   userId: string,
   mesocycleId: string,
-  now: Date = new Date()
+  now: Date = clockNow()
 ): Promise<WeeklyMuscleSignals> {
   const feedbackByMuscle = new Map<StandardMuscleGroup, MuscleWeekFeedback[]>();
   const trendByMuscle = new Map<StandardMuscleGroup, PerformanceTrend>();

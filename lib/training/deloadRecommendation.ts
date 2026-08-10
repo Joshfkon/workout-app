@@ -34,6 +34,7 @@ import {
   type ExerciseDeloadInfo,
 } from '@/services/deloadEngine';
 import type { FullProgramRecommendation, MesocycleWeek } from '@/types/schema';
+import { now as clockNow } from '@/lib/clock';
 
 // ============================================================
 // Types
@@ -185,7 +186,7 @@ export async function recordDeloadRecommendationIfTriggered(
   const { error: updateError } = await supabase
     .from('mesocycles')
     .update({
-      deload_recommended_at: new Date().toISOString(),
+      deload_recommended_at: clockNow().toISOString(),
       deload_reasons: triggers.reasons,
     })
     .eq('id', mesocycleId)

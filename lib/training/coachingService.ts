@@ -18,6 +18,7 @@ import type {
 } from '@/types/training';
 import { BENCHMARK_LIFTS } from './constants';
 import { calculateBodyComposition, estimate1RM } from './programEngine';
+import { now as clockNow } from '@/lib/clock';
 
 // ============================================================
 // COACHING SERVICE CLASS
@@ -315,7 +316,7 @@ export class CoachingService {
       .update({
         status: 'completed',
         strength_profile: strengthProfile,
-        completed_at: new Date().toISOString()
+        completed_at: clockNow().toISOString()
       })
       .eq('user_id', this.userId)
       .neq('status', 'completed');

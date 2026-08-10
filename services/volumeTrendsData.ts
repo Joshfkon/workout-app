@@ -14,6 +14,8 @@
 
 import type { OutboxEntry } from '@/lib/offline/setOutbox';
 
+import { now as clockNow } from '@/lib/clock';
+
 // ---------------------------------------------------------------------------
 // Raw row shapes (snake_case, as returned by the nested Supabase select)
 // ---------------------------------------------------------------------------
@@ -62,7 +64,7 @@ const RANGE_DAYS: Record<Exclude<AnalyticsTimeRange, 'all'>, number> = {
  * morning when checked in the evening, and its UTC-day variant drops evening
  * workouts logged after UTC midnight.
  */
-export function rangeStartLocalDay(range: AnalyticsTimeRange, now: Date = new Date()): Date | null {
+export function rangeStartLocalDay(range: AnalyticsTimeRange, now: Date = clockNow()): Date | null {
   if (range === 'all') return null;
   const start = new Date(now);
   start.setHours(0, 0, 0, 0);

@@ -6,6 +6,7 @@ import {
   type SessionOrigin,
 } from '@/lib/training/sessionOrigin';
 import { pickDefaultLocation } from '@/services/locationProfiles';
+import { now as clockNow } from '@/lib/clock';
 
 type UntypedSupabase = ReturnType<typeof createUntypedClient>;
 
@@ -102,7 +103,7 @@ export async function getOrCreateTodaySession(
     if (existing.state === 'planned') {
       await supabase
         .from('workout_sessions')
-        .update({ state: 'in_progress', started_at: new Date().toISOString() })
+        .update({ state: 'in_progress', started_at: clockNow().toISOString() })
         .eq('id', existing.id);
     }
     if (!hasLoggedSets) {
@@ -129,7 +130,7 @@ export async function getOrCreateTodaySession(
       user_id: userId,
       planned_date: today,
       state: 'in_progress',
-      started_at: new Date().toISOString(),
+      started_at: clockNow().toISOString(),
       completion_percent: 0,
       origin,
       // The gym this workout happens at (drives location-scoped calibration).
@@ -161,7 +162,7 @@ export function isStaleEmptyAdhocSession(
   input: { state: string; mesocycleId: string | null; startedAt: string | null },
   blockCount: number,
   setCount: number,
-  now: number = Date.now()
+  now: number = clockNow().getTime()
 ): boolean {
   if (input.state !== 'in_progress') return false;
   if (input.mesocycleId) return false;
@@ -191,7 +192,7 @@ export async function discardStaleSession(
 ): Promise<'archived' | 'deleted' | 'failed'> {
   const { error } = await supabase
     .from('workout_sessions')
-    .update({ state: 'auto_discarded', auto_discarded_at: new Date().toISOString() })
+    .update({ state: 'auto_discarded', auto_discarded_at: clockNow().toISOString() })
     .eq('id', sessionId);
   if (!error) return 'archived';
 

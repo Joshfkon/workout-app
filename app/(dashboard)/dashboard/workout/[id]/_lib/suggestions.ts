@@ -42,6 +42,7 @@ import type {
   UserContext,
   UserProfileForWeights,
 } from './types';
+import { now as clockNow } from '@/lib/clock';
 
 /**
  * THE anchor-pool eligibility predicate — single source of truth, shared by
@@ -642,7 +643,7 @@ export function generateCoachMessage(
   else workoutType = muscles.map(m => m.charAt(0).toUpperCase() + m.slice(1)).join(' & ');
 
   // Generate greeting based on time of day and goal
-  const hour = new Date().getHours();
+  const hour = clockNow().getHours();
   let timeGreeting = 'Hey';
   if (hour < 12) timeGreeting = 'Good morning';
   else if (hour < 17) timeGreeting = 'Good afternoon';
