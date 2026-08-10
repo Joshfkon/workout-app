@@ -17,6 +17,7 @@
  */
 
 import {
+  boundedComponentsOf,
   capacityOwnerFor,
   resolveMuscleToStandard,
   DEFAULT_VOLUME_LANDMARKS,
@@ -163,6 +164,19 @@ export const RECOVERY_CONFIG: RecoveryConfig = {
     // Changing this number requires first deciding which of those the model is
     // meant to represent; see the unified-recovery work tracked separately.
     erectors: 60,
+    // Traps sit with the other large upper-body groups, not on the 48h
+    // default they used to fall through to. They are loaded the same way the
+    // 60h groups are — heavy axial and pulling work (deadlift, RDL, rows,
+    // carries) plus direct shrugging — and the app's own landmarks put the
+    // group at the same capacity as upper_back (MRV 16 at intermediate). The
+    // old default meant one pull session told a user their upper back needed
+    // 60h and their traps 48h off the SAME sets. Components inherit the
+    // group's window: `traps` is a partialRollup, so an upper-trap-only
+    // window would have to claim the heads clear fatigue faster than the
+    // group, which nothing here supports.
+    traps: 60,
+    upper_traps: 60,
+    mid_lower_traps: 60,
     // Small/fast recoverers.
     biceps: 36,
     triceps: 36,
@@ -604,6 +618,26 @@ interface SessionInvolvement {
  * How much a single exercise involves `muscle`: 1 if primary, the secondary
  * factor if only secondary, 0 if uninvolved. A legacy coarse tag ("chest",
  * "shoulders") resolves to every standard muscle it covers.
+ *
+ * FAMILY FLOW (groupCapacity row ↔ its bounded components — traps/upper_traps/
+ * mid_lower_traps, calves/gastrocnemius/soleus, triceps/triceps_long/
+ * triceps_lat_med). `resolveMuscleToStandard` is standard-first ON PURPOSE, so
+ * a coarse 'traps' tag credits ONLY the `traps` row and a 'upper_traps' tag
+ * only that head. That is right for VOLUME (see volumeCredit — a coarse tag
+ * must not smear across heads it cannot name), but it is wrong for RECOVERY:
+ * fatigue does not partition by which token the exercise happened to be tagged
+ * with. With ~27 coarse 'traps' tags in the library against 5 'upper_traps'
+ * ones, a heavy deadlift day left BOTH trap heads reading "never trained →
+ * Fresh" while the user's traps were plainly sore.
+ *
+ * So involvement flows along the parent/child edge, never between siblings:
+ *  - a component-tagged set (shrug → upper_traps) is unambiguous work on the
+ *    GROUP, so the parent row takes it at full strength;
+ *  - a group-tagged set (deadlift → traps) cannot say WHICH component it hit,
+ *    so each component takes it at one further `secondaryDoseFactor` discount.
+ * Siblings stay independent — credit aggregation across this family is
+ * disjoint (MUSCLE_VOLUME_AUTHORITY), so shrugs must never fatigue the
+ * mid/lower traps.
  */
 function involvementFactor(
   exercise: RecoveryExercise,
@@ -613,12 +647,30 @@ function involvementFactor(
   const primaryStandards = exercise.primaryMuscle
     ? resolveMuscleToStandard(exercise.primaryMuscle)
     : [];
-  if (primaryStandards.includes(muscle)) return 1;
-
   const secondaryStandards = exercise.secondaryMuscles.flatMap((m) =>
     resolveMuscleToStandard(m)
   );
+
+  // Direct tag on this exact row.
+  if (primaryStandards.includes(muscle)) return 1;
+
+  // Child → parent: work on any component is work on the group.
+  const components = boundedComponentsOf(muscle);
+  if (components.some((c) => primaryStandards.includes(c))) return 1;
+
   if (secondaryStandards.includes(muscle)) return config.secondaryDoseFactor;
+  if (components.some((c) => secondaryStandards.includes(c))) {
+    return config.secondaryDoseFactor;
+  }
+
+  // Parent → child: the group tag names no component, so it lands indirectly.
+  const parent = capacityOwnerFor(muscle);
+  if (parent !== muscle) {
+    if (primaryStandards.includes(parent)) return config.secondaryDoseFactor;
+    if (secondaryStandards.includes(parent)) {
+      return config.secondaryDoseFactor * config.secondaryDoseFactor;
+    }
+  }
 
   return 0;
 }
