@@ -558,9 +558,16 @@ export async function fetchExerciseHistory(
   userId: string,
   scope?: { progressionScope: ProgressionScope; currentLocationId: string | null },
   /** Exercise modality — duration exercises get no e1RM anchor (seconds ≠ reps). */
-  exerciseType?: ExerciseType
+  exerciseType?: ExerciseType,
+  /**
+   * Supabase client to read through. Optional so the existing UI call site is
+   * unchanged; pass one to run against a client the caller already owns — this
+   * is the only way a headless/simulated run can reach this query, since the
+   * default builds the module-singleton browser client.
+   */
+  client?: ReturnType<typeof createUntypedClient>
 ): Promise<ExerciseHistoryData | null> {
-  const supabase = createUntypedClient();
+  const supabase = client ?? createUntypedClient();
 
   const { data: historyBlocks, error } = await supabase
     .from('exercise_blocks')

@@ -289,7 +289,7 @@ attached when it is fixed.
 **Phase 0 is complete.** Recommended Phase 1 sequencing, smallest-risk first:
 
 1. ~~`lib/clock.ts` + route the `localDay`/`getLocalDateString` defaults through it — additive, zero signature churn, zero behavior change.~~ **DONE** — `lib/clock.ts`, `test-utils/clock.ts`, 7 defaults routed, 37 tests, full suite green.
-2. ~~Additive `now`/`today`/`supabase` parameters on the training data layer (Stage A §4B).~~ **Clock half DONE** — 27 modules routed through the seam, guarded by a static test. `page.tsx` / `ExerciseCard.tsx` are deliberately excluded (their clock reads move with the step-3/5 extractions). The `supabase` half — `ProgramEngine` and `fetchExerciseHistory` — is still outstanding.
+2. ~~Additive `now`/`today`/`supabase` parameters on the training data layer (Stage A §4B).~~ **DONE.** Clock half: 27 modules routed through the seam, guarded by a static test. Client half: `ProgramEngine`, all six `workoutIntegration` exports, and `fetchExerciseHistory` take an optional client, threaded from `recordDeloadRecommendationIfTriggered` so the whole finish-flow path runs on one caller-supplied database. `page.tsx` / `ExerciseCard.tsx` are deliberately excluded — their clock reads move with the step-3/5 extractions.
 3. `logSet` / `editSet` / `deleteSet` extraction from `page.tsx`.
 4. `loadSession` + `createMesocycle` extraction.
 5. **`getPrescription` extraction from `ExerciseCard.tsx` — its own PR**, guarded by `_lib/__tests__/engineRegressionBaseline.test.ts`.

@@ -124,9 +124,16 @@ function getFFMIBracket(ffmi: number): FFMIBracket {
 // PROGRAM ENGINE CLASS
 // ============================================================
 
+/**
+ * The Supabase client shape the engine reads through. Untyped by construction
+ * (see lib/supabase/client.createUntypedClient) — named here so callers that
+ * thread a client in don't have to spell out the ReturnType.
+ */
+export type EngineClient = ReturnType<typeof createUntypedClient>;
+
 export class ProgramEngine {
   private userId: string;
-  private supabase: ReturnType<typeof createUntypedClient>;
+  private supabase: EngineClient;
   
   // Cached data
   private userProfile: UserProfile | null = null;
@@ -134,15 +141,26 @@ export class ProgramEngine {
   private calibrations: Map<string, StrengthCalibrationRow> = new Map();
   private exerciseHistory: Map<string, ExerciseHistoryRow[]> = new Map();
   
-  constructor(userId: string) {
+  /**
+   * `supabase` is optional so every existing caller is unchanged; pass one to
+   * run the engine against a client the caller already owns.
+   *
+   * This is the ONE reason the parameter exists: without it the engine builds
+   * the module-singleton browser client itself, which pins it to whatever
+   * database that singleton was constructed with and makes the engine
+   * unreachable from a headless/simulated run. Threading the caller's client
+   * through also means a request that already has one doesn't silently open a
+   * second path to the database.
+   */
+  constructor(userId: string, supabase?: EngineClient) {
     this.userId = userId;
-    this.supabase = createUntypedClient();
+    this.supabase = supabase ?? createUntypedClient();
   }
-  
+
   // ---- Static Factory ----
-  
-  static async create(userId: string): Promise<ProgramEngine> {
-    const engine = new ProgramEngine(userId);
+
+  static async create(userId: string, supabase?: EngineClient): Promise<ProgramEngine> {
+    const engine = new ProgramEngine(userId, supabase);
     await engine.loadUserData();
     return engine;
   }
