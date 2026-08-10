@@ -290,7 +290,7 @@ attached when it is fixed.
 
 1. ~~`lib/clock.ts` + route the `localDay`/`getLocalDateString` defaults through it — additive, zero signature churn, zero behavior change.~~ **DONE** — `lib/clock.ts`, `test-utils/clock.ts`, 7 defaults routed, 37 tests, full suite green.
 2. ~~Additive `now`/`today`/`supabase` parameters on the training data layer (Stage A §4B).~~ **DONE.** Clock half: 27 modules routed through the seam, guarded by a static test. Client half: `ProgramEngine`, all six `workoutIntegration` exports, and `fetchExerciseHistory` take an optional client, threaded from `recordDeloadRecommendationIfTriggered` so the whole finish-flow path runs on one caller-supplied database. `page.tsx` / `ExerciseCard.tsx` are deliberately excluded — their clock reads move with the step-3/5 extractions.
-3. `logSet` / `editSet` / `deleteSet` extraction from `page.tsx`.
+3. ~~`logSet` / `editSet` / `deleteSet` extraction from `page.tsx`.~~ **DONE** — `lib/training/logSet.ts`; the page is 128 lines lighter and calls the same functions the driver will. `logSet` takes a caller-supplied `setId`, closing finding H9.
 4. `loadSession` + `createMesocycle` extraction.
 5. **`getPrescription` extraction from `ExerciseCard.tsx` — its own PR**, guarded by `_lib/__tests__/engineRegressionBaseline.test.ts`.
 6. `SessionDriver` assembled from the above.

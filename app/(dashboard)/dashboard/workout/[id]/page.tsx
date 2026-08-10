@@ -9,15 +9,12 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Card, Button, Badge, Input, LoadingAnimation, SkeletonExercise, ConfirmModal, ToastContainer, useToasts } from '@/components/ui';
 import {
   enqueueRowUpdate,
-  enqueueSetInsert,
   flushSetOutbox,
-  isMissingColumnError,
   isNetworkError,
   listOutbox,
   outboxCount,
   removeQueuedSet,
   updateQueuedSet,
-  withoutOptionalSetLogColumns,
 } from '@/lib/offline/setOutbox';
 // setLogTiming: TEMPORARY latency instrumentation (docs/SET_LOGGING_LATENCY_DIAGNOSIS.md)
 import { beginSetTiming, markSetPhase, schedulePaintMark, endSetTiming } from '@/lib/debug/setLogTiming';
@@ -105,8 +102,14 @@ import { MUSCLE_GROUPS, muscleMatchesGroup, rirToRpe, rpeToRir, STANDARD_MUSCLE_
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { quickWeightEstimate, quickWeightEstimateWithCalibration, type WorkingWeightRecommendation, type TransferCandidate } from '@/services/weightEstimationEngine';
 import { fetchTransferCandidates } from '@/lib/training/transferCandidates';
-import { inferSetRole, sessionTopSetWeightKg } from '@/services/suggestionEngine/setRoles';
-import { SUGGESTION_ENGINE_VERSION } from '@/services/suggestionEngine/constants';
+import {
+  logSet,
+  persistSetEdit,
+  persistSetDelete,
+  buildSetEditPatch,
+  renumberBlockSets,
+} from '@/lib/training/logSet';
+import { now as clockNow } from '@/lib/clock';
 import { addExerciseOverride, getSessionFromProgramData, applyExerciseOverrides, type ExerciseOverride } from '@/services/mesocycleHelpers';
 import { computeStapleExerciseIds } from '@/services/exerciseStaples';
 import { convertWeightForDisplay, deriveWorkoutLabel, formatMuscleName, formatWeight, getLocalDateString, inputWeightToKg } from '@/lib/utils';
@@ -2537,7 +2540,7 @@ export default function WorkoutPage() {
       qualityReason = formLabel;
     }
 
-    const loggedAt = new Date().toISOString();
+    const loggedAt = clockNow().toISOString();
     const setType = data.setType || 'normal';
 
     // Effort-modulated rest for the timer this set starts
@@ -2569,100 +2572,80 @@ export default function WorkoutPage() {
     // the network.
     try {
       const supabase = createUntypedClient();
-      const online = typeof navigator === 'undefined' || navigator.onLine;
 
-      // Prefer the DB's max set_number (avoids races/stale state); fall back
-      // to local numbering when offline.
-      let nextSetNumber = currentSetNumber;
-      if (online) {
-        markSetPhase('probe_sent'); // setLogTiming
-        try {
-          const { data: maxSetResult } = await supabase
-            .from('set_logs')
-            .select('set_number')
-            .eq('exercise_block_id', currentBlock.id)
-            .eq('is_warmup', false)
-            .order('set_number', { ascending: false })
-            .limit(1)
-            .single();
-          if (maxSetResult?.set_number != null) {
-            // Floor at the local number: a set still queued in the offline
-            // outbox isn't in the DB max yet, and reusing its number would
-            // create duplicate set_numbers in the block. DB max still wins
-            // when it's ahead (another tab/device logged sets).
-            nextSetNumber = Math.max(currentSetNumber, maxSetResult.set_number + 1);
-          }
-        } catch {
-          // Numbering probe failed (flaky network) — local numbering is fine.
-        }
-        markSetPhase('probe_done'); // setLogTiming
-      }
-
-      // Infer the set role (working | ramp) from this set's load vs the block's
-      // top working set so far, so ramp/feeder sets aren't graded or counted as
-      // junk volume. Provisional at log time (a heavier later set can't retro-
-      // relabel an earlier row live); the set_roles migration recomputes roles
-      // authoritatively once a session's sets are all known.
+      // Offline-first persistence (P0-2). The whole write path — numbering
+      // probe, quality/role classification, row build, insert-or-enqueue and
+      // rollback — lives in lib/training/logSet so the headless driver runs
+      // the same code. Everything below this call is UI choreography.
+      //
+      // The set id is generated HERE and handed in, so it is the operation's
+      // idempotency key: a retry re-sends the same id and the outbox's
+      // ignoreDuplicates upsert makes it a no-op instead of a second set.
+      const setId = crypto.randomUUID();
       const blockWorkingSets = completedSets
         .filter((s) => s.exerciseBlockId === currentBlock.id && !s.isWarmup)
         .map((s) => ({ weightKg: s.weightKg }));
-      const blockTopKg = sessionTopSetWeightKg([...blockWorkingSets, { weightKg: data.weightKg }]);
-      const setRole = data.weightKg > 0 ? inferSetRole(data.weightKg, blockTopKg) : 'working';
 
-      const setId = crypto.randomUUID();
-      const row = {
-        id: setId,
-        exercise_block_id: currentBlock.id,
-        set_number: nextSetNumber,
-        weight_kg: data.weightKg,
-        reps: data.reps,
-        set_type: setType,
-        set_role: setRole,
-        suggestion_engine_version: SUGGESTION_ENGINE_VERSION,
-        // Stamp the session's location so this set feeds the right location's
-        // calibration track for local-scope exercises (null = legacy/unknown).
-        location_id: sessionLocationId,
-        parent_set_id: data.parentSetId || null,
-        rpe: data.rpe,
-        is_warmup: false,
-        quality: quality,
-        quality_reason: qualityReason,
-        note: data.note || null,
-        logged_at: loggedAt,
-        feedback: data.feedback ? JSON.stringify(data.feedback) : null,
-        bodyweight_data: data.bodyweightData ? JSON.stringify(data.bodyweightData) : null,
-      };
+      let nextSetNumber = currentSetNumber;
+      const result = await logSet(
+        {
+          supabase,
+          onPhase: markSetPhase,
+          applyOptimistic: (set) => {
+            nextSetNumber = set.setNumber;
+            setCompletedSets((prevSets) => [...prevSets, set]);
+            setCurrentSetNumber(set.setNumber + 1);
+            logSetToStore(currentBlock.id, set);
+            // setLogTiming: local commit + first frame after it (approximates paint)
+            schedulePaintMark();
+          },
+          rollbackOptimistic: (set) => {
+            setCompletedSets((prevSets) => prevSets.filter((s) => s.id !== set.id));
+            setCurrentSetNumber(set.setNumber);
+            deleteSetFromStore(currentBlock.id, set.id);
+          },
+          onSyncState: (id, state) =>
+            setSetSync((prev) => {
+              if (state === 'saving') return { ...prev, [id]: 'saving' };
+              return { ...prev, [id]: state };
+            }),
+        },
+        {
+          setId,
+          exerciseBlockId: currentBlock.id,
+          localNextSetNumber: currentSetNumber,
+          weightKg: data.weightKg,
+          reps: data.reps,
+          rpe: data.rpe,
+          loggedAt,
+          setType,
+          blockWorkingSets,
+          // Stamp the session's location so this set feeds the right location's
+          // calibration track for local-scope exercises (null = legacy/unknown).
+          locationId: sessionLocationId,
+          parentSetId: data.parentSetId || null,
+          note: data.note || null,
+          feedback: data.feedback,
+          bodyweightData: data.bodyweightData,
+        }
+      );
 
-      const newSet: SetLog = {
-        id: setId,
-        exerciseBlockId: currentBlock.id,
-        setNumber: nextSetNumber,
-        weightKg: data.weightKg,
-        reps: data.reps,
-        rpe: data.rpe,
-        restSeconds: null,
-        isWarmup: false,
-        setType: setType,
-        setRole: setRole,
-        suggestionEngineVersion: SUGGESTION_ENGINE_VERSION,
-        parentSetId: data.parentSetId || null,
-        quality: quality,
-        qualityReason: qualityReason,
-        note: data.note || null,
-        loggedAt: loggedAt,
-        feedback: data.feedback,
-        bodyweightData: data.bodyweightData,
-      };
+      if (result.status === 'rejected') {
+        // Optimistic state was already unwound by rollbackOptimistic.
+        console.error('Failed to save set:', result.error);
+        setSetSync((prev) => { const next = { ...prev }; delete next[setId]; return next; });
+        setError(`Failed to save set: ${result.error.message}`);
+        showError('Failed to save set - please try again');
+        endSetTiming(); // setLogTiming
+        return null;
+      }
 
-      // Optimistic local state first — the UI (and Zustand-persist recovery)
-      // must not depend on the write landing.
-      setCompletedSets(prevSets => [...prevSets, newSet]);
-      setCurrentSetNumber(nextSetNumber + 1);
-      logSetToStore(currentBlock.id, newSet);
-      setSetSync(prev => ({ ...prev, [setId]: 'saving' }));
-      // setLogTiming: local commit + first frame after it (approximates paint)
-      markSetPhase('t1_local_commit');
-      schedulePaintMark();
+      const newSet = result.set;
+      if (result.status === 'queued') refreshOutboxCount();
+      // Whether the set row exists in the DB yet — decides if the joint pain
+      // event below may carry the set_log_id FK or must omit it (queued sets
+      // haven't been inserted, so referencing them would violate the FK).
+      const setRowPersisted = result.status === 'saved';
 
       // Logging a set past a pending soreness ask dismisses it for the
       // session (records null; the muscle is never re-asked). Zero extra taps.
@@ -2675,59 +2658,6 @@ export default function WorkoutPage() {
           !muscleSorenessAsked[blockMuscle]
         ) {
           recordSorenessAsked(blockMuscle, null);
-        }
-      }
-
-      // Whether the set row exists in the DB yet — decides if the joint pain
-      // event below may carry the set_log_id FK or must omit it (queued sets
-      // haven't been inserted, so referencing them would violate the FK).
-      let setRowPersisted = false;
-
-      if (!online) {
-        await enqueueSetInsert(setId, row);
-        markSetPhase('t2_outbox_enqueued'); // setLogTiming
-        setSetSync(prev => ({ ...prev, [setId]: 'queued' }));
-        refreshOutboxCount();
-      } else {
-        let insertError: { message: string; code?: string } | null = null;
-        markSetPhase('t3_insert_sent'); // setLogTiming
-        try {
-          const result = await supabase.from('set_logs').insert(row);
-          insertError = result.error;
-          // Schema-cache column miss (a set_roles-style migration not yet applied
-          // to this database): drop the optional columns and retry once so a
-          // migration lag can't block set logging mid-workout.
-          if (insertError && isMissingColumnError(insertError)) {
-            const retry = await supabase
-              .from('set_logs')
-              .insert(withoutOptionalSetLogColumns(row));
-            insertError = retry.error;
-          }
-        } catch (e) {
-          insertError = { message: e instanceof Error ? e.message : String(e) };
-        }
-        markSetPhase('t4_insert_done'); // setLogTiming
-
-        if (insertError && isNetworkError(insertError)) {
-          // Connectivity died mid-write: queue it, keep the optimistic state.
-          await enqueueSetInsert(setId, row);
-          markSetPhase('t2_outbox_enqueued'); // setLogTiming
-          setSetSync(prev => ({ ...prev, [setId]: 'queued' }));
-          refreshOutboxCount();
-        } else if (insertError) {
-          // Real server rejection: roll the optimistic set back.
-          console.error('Failed to save set:', insertError);
-          setCompletedSets(prevSets => prevSets.filter(s => s.id !== setId));
-          setCurrentSetNumber(nextSetNumber);
-          deleteSetFromStore(currentBlock.id, setId);
-          setSetSync(prev => { const next = { ...prev }; delete next[setId]; return next; });
-          setError(`Failed to save set: ${insertError.message}`);
-          showError('Failed to save set - please try again');
-          endSetTiming(); // setLogTiming
-          return null;
-        } else {
-          setRowPersisted = true;
-          setSetSync(prev => ({ ...prev, [setId]: 'saved' }));
         }
       }
 
@@ -3069,29 +2999,12 @@ export default function WorkoutPage() {
   );
 
   const handleSetEdit = async (setId: string, data: { weightKg: number; reps: number; rpe: number; repsInTank?: RepsInTank; bodyweightData?: BodyweightData }) => {
-    const quality = data.rpe >= 7.5 && data.rpe <= 9.5 ? 'stimulative' : data.rpe <= 5 ? 'junk' : 'effective' as const;
-
-    // Use provided bodyweightData if available, otherwise preserve existing
     const existingSet = completedSets.find(s => s.id === setId);
-    const updatedBodyweightData = data.bodyweightData || existingSet?.bodyweightData;
-
-    // Keep feedback's RIR consistent with the edited effort — the completed-set
-    // display prefers feedback.repsInTank over the RPE-derived value.
-    // An explicit repsInTank (RIR chip in the inline editor) is stored exactly;
-    // otherwise resync from RPE only when the new RPE disagrees with the
-    // existing RIR: that round trip is lossy (RIR 2 → RPE 7.5 → round(2.5) = 3),
-    // so an unconditional rewrite would mutate RIR on weight/reps-only edits.
-    const updatedFeedback: SetFeedback | undefined =
-      data.repsInTank !== undefined
-        ? existingSet?.feedback && existingSet.feedback.repsInTank !== data.repsInTank
-          ? { ...existingSet.feedback, repsInTank: data.repsInTank }
-          : undefined
-        : existingSet?.feedback && rirToRpe(existingSet.feedback.repsInTank) !== data.rpe
-          ? {
-              ...existingSet.feedback,
-              repsInTank: Math.max(0, Math.min(4, Math.round(10 - data.rpe))) as RepsInTank,
-            }
-          : undefined;
+    // Quality recompute + the lossy RIR/RPE resync rule live in the domain
+    // module (lib/training/logSet) so an edit made by the headless driver
+    // produces exactly the same row as one made in the UI.
+    const { patch, quality, feedback: updatedFeedback, bodyweightData: updatedBodyweightData } =
+      buildSetEditPatch(existingSet, data);
 
     // Update local state using functional update to avoid stale closure
     setCompletedSets(prevSets => prevSets.map(set =>
@@ -3120,32 +3033,11 @@ export default function WorkoutPage() {
       });
     }
 
-    // Update in database (or in the outbox if the set hasn't synced yet, P0-2)
     try {
-      const supabase = createUntypedClient();
-      const updateData: any = {
-        weight_kg: data.weightKg,
-        reps: data.reps,
-        rpe: data.rpe,
-        quality,
-      };
-
-      // Update bodyweight_data if provided or if it exists
-      if (updatedBodyweightData) {
-        updateData.bodyweight_data = updatedBodyweightData;
-      }
-
-      if (updatedFeedback) {
-        updateData.feedback = JSON.stringify(updatedFeedback);
-      }
-
-      if (await updateQueuedSet(setId, updateData)) {
-        setError(null);
-        return;
-      }
-
-      const { error: updateError } = await supabase.from('set_logs').update(updateData).eq('id', setId);
-
+      const { error: updateError } = await persistSetEdit(
+        { supabase: createUntypedClient() },
+        { setId, patch }
+      );
       if (updateError) {
         console.error('Failed to update set:', updateError);
         setError(`Failed to update set: ${updateError.message}`);
@@ -3153,16 +3045,6 @@ export default function WorkoutPage() {
         // For now, just show error; user can refresh if needed
       } else {
         setError(null);
-        // P1-3 detection A: stamp edited_at (best-effort, dormant until the
-        // set_logs.edited_at migration is applied). Separate update so a
-        // missing column can't break in-session editing.
-        await supabase
-          .from('set_logs')
-          .update({ edited_at: new Date().toISOString() })
-          .eq('id', setId)
-          .then(({ error: stampErr }: { error: unknown }) => {
-            if (stampErr) console.debug('edited_at stamp skipped (migration not applied?)');
-          });
       }
     } catch (err) {
       console.error('Failed to update set:', err);
@@ -3178,19 +3060,13 @@ export default function WorkoutPage() {
     setCompletedSets(prevSets => {
       const setInPrev = prevSets.find(s => s.id === setId);
       if (!setInPrev) return prevSets;
-
-      // Filter out the deleted set and renumber remaining sets in the same block
-      const filteredSets = prevSets.filter(set => set.id !== setId);
-      const blockId = setInPrev.exerciseBlockId;
-
-      // Renumber sets in the same block (immutably)
-      let blockSetNumber = 1;
-      return filteredSets.map(set => {
-        if (set.exerciseBlockId === blockId && !set.isWarmup && set.setType !== 'warmup') {
-          return { ...set, setNumber: blockSetNumber++ };
-        }
-        return set;
-      });
+      // NOTE: renumbering is LOCAL ONLY — no set_number UPDATE is issued, so
+      // the DB keeps its gaps. Pre-existing divergence, preserved verbatim in
+      // renumberBlockSets; see its doc comment.
+      return renumberBlockSets(
+        prevSets.filter(set => set.id !== setId),
+        setInPrev.exerciseBlockId
+      );
     });
 
     // Sync to store for resume functionality
@@ -3199,16 +3075,12 @@ export default function WorkoutPage() {
     }
     setSetSync(prev => { const next = { ...prev }; delete next[setId]; return next; });
 
-    // Delete from database — unless the set never left the outbox (P0-2).
     try {
-      if (await removeQueuedSet(setId)) {
-        refreshOutboxCount();
-        setError(null);
-        return;
-      }
-      const supabase = createUntypedClient();
-      const { error: deleteError } = await supabase.from('set_logs').delete().eq('id', setId);
-
+      const { queued, error: deleteError } = await persistSetDelete(
+        { supabase: createUntypedClient() },
+        setId
+      );
+      if (queued) refreshOutboxCount();
       if (deleteError) {
         console.error('Failed to delete set:', deleteError);
         setError(`Failed to delete set: ${deleteError.message}`);
