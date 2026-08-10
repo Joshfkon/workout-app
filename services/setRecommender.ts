@@ -61,6 +61,7 @@ import {
   E1RM_HIGH_CONFIDENCE_MAX_EFFECTIVE_REPS,
 } from './shared/e1rm';
 import { inferRolesForSession, type SetRole } from './suggestionEngine/setRoles';
+import { gradeEffort } from './suggestionEngine/effortGrade';
 import {
   smallestIncrement,
   smallestKnownIncrement,
@@ -910,13 +911,17 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
   const safeRir = Math.max(0, lastRir);
   // Capacity anchor: freshest/strongest estimate avoids double-counting fatigue (§6).
   const e1rm = Math.max(input.sessionBestE1RMKg ?? 0, epleyE1RM(lastWeightKg, lastReps, safeRir));
-  const dev = safeRir - targetRir; // + = easier than target, - = harder
+  // Graded through the SHARED reading (services/suggestionEngine/effortGrade),
+  // the same one the rest timer and the rep_total policy use — one set, one
+  // verdict, everywhere it is described. `safeRir` is already floored at 0,
+  // so the grade's own clamp is a no-op here.
+  const effort = gradeEffort(safeRir, targetRir);
+  const dev = effort?.dev ?? 0; // + = easier than target, - = harder
   const mid = Math.round((repMin + repMax) / 2);
   // Classify the last set's effort from the SAME `dev` the math below uses, so
   // the banner can never claim "matched" for a set that was actually easier or
   // harder than target within the deadband.
-  const effortVsTarget: SetRecommendation['effortVsTarget'] =
-    dev >= EFFORT_MATCH_TOLERANCE ? 'easier' : dev <= -EFFORT_MATCH_TOLERANCE ? 'harder' : 'on_target';
+  const effortVsTarget: SetRecommendation['effortVsTarget'] = effort?.vsTarget ?? 'on_target';
 
   // ---- Phase 0 hard invariants — applied to EVERY prescription returned ----
   //

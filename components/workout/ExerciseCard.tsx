@@ -685,9 +685,10 @@ export const ExerciseCard = memo(function ExerciseCard({
   // positional target instead of a copy of the next set's.
   const recommendNext = (last: { weightKg: number; reps: number; rpe?: number; feedback?: SetFeedback }, positionOffset = 0) => {
     // rep_total path: re-derived per set from today's observed sets
-    // (repTotalNextSet, memoized below) — rep-space invariants, no e1RM math.
+    // (repTotalNextSetAt, defined below) — rep-space invariants, no e1RM
+    // math. The offset is honored so each pending slot gets its own target.
     if (repTotalMode) {
-      const next = repTotalNextSet;
+      const next = repTotalNextSetAt(positionOffset);
       return {
         weightKg: next?.weightKg ?? last.weightKg,
         reps:
@@ -699,6 +700,13 @@ export const ExerciseCard = memo(function ExerciseCard({
           | 'maintain',
         effortVsTarget: next?.effortVsTarget ?? ('on_target' as const),
       };
+      // NOTE (audit S1): a null `next` means there is no session plan and the
+      // values above are just the last set echoed back — NOT a derived
+      // prescription. This shape stays structurally assignable to
+      // SetRecommendation on purpose (an extra field here breaks the union
+      // narrowing every e1RM-branch caller depends on), so the disclosure
+      // lives in the banner, which tests `repTotalPlan` directly and says
+      // "no comparable history yet, echoing your last set".
     }
     return recommendSet({
       lastWeightKg: last.weightKg,
@@ -1297,24 +1305,44 @@ export const ExerciseCard = memo(function ExerciseCard({
   // recommendSet): recomputed from the sets actually logged this session, so
   // a set that contradicts the session-start plan moves the next prescription
   // instead of the plan being re-served verbatim.
-  const repTotalNextSet = useMemo(
-    () =>
-      repTotalMode && repTotalPlan
-        ? recommendRepTotalNextSet({
-            sessionPlan: repTotalPlan,
-            observedSets: completedSets.map((s) => ({
-              weightKg: s.weightKg,
-              reps: s.reps,
-              rir: resolveLastRir(s, effectiveTargetRir),
-            })),
-            targetRepRange: block.targetRepRange,
-            targetRir: effectiveTargetRir,
-            minIncrementKg: exercise.minWeightIncrementKg,
-            availableIncrementsKg: exercise.availableIncrementsKg ?? undefined,
-          })
-        : null,
+  //
+  // `positionOffset` = which pending slot to price (0 = the next set). Later
+  // slots are projected by assuming each intervening prescription is met
+  // EXACTLY — the same assumption the e1RM path makes when it advances
+  // `setsCompletedThisExercise` for a later slot. Before this, the rep_total
+  // branch ignored the offset entirely and painted one number across every
+  // pending row (audit S6).
+  const repTotalNextSetAt = useCallback(
+    (positionOffset: number) => {
+      if (!repTotalMode || !repTotalPlan) return null;
+      const observedSets = completedSets.map((s) => ({
+        weightKg: s.weightKg,
+        reps: s.reps,
+        rir: resolveLastRir(s, effectiveTargetRir),
+      }));
+      const args = {
+        sessionPlan: repTotalPlan,
+        targetRepRange: block.targetRepRange,
+        targetRir: effectiveTargetRir,
+        minIncrementKg: exercise.minWeightIncrementKg,
+        availableIncrementsKg: exercise.availableIncrementsKg ?? undefined,
+      };
+      let rx = recommendRepTotalNextSet({ ...args, observedSets });
+      for (let i = 0; i < positionOffset; i++) {
+        // The rep read below is raw (scripts/check-reps-access.mjs ratchet)
+        // and modality-safe on two counts: `repTotalMode` excludes
+        // duration_based exercises outright, and `rx` is the engine's rep
+        // TARGET, not a SetLog — setModality's accessors take a set and do
+        // not apply to it. Baseline raised deliberately, not dodged.
+        observedSets.push({ weightKg: rx.weightKg, reps: rx.reps, rir: effectiveTargetRir });
+        rx = recommendRepTotalNextSet({ ...args, observedSets });
+      }
+      return rx;
+    },
     [repTotalMode, repTotalPlan, completedSets, block.targetRepRange, effectiveTargetRir, exercise.minWeightIncrementKg, exercise.availableIncrementsKg]
   );
+
+  const repTotalNextSet = useMemo(() => repTotalNextSetAt(0), [repTotalNextSetAt]);
 
   // Progression-health detectors (services/progressionHealth, Step 5): the
   // stall flag and the load-appropriateness flag surface a jammed
@@ -2204,6 +2232,25 @@ export const ExerciseCard = memo(function ExerciseCard({
               'Capped: the plan asked for more reps than your best set today demonstrates at this load and effort. A rep target is never allowed to exceed what you’ve actually shown this session.'
             );
           }
+          if (next.sessionDeclineTrimmed) {
+            reason += ' · trimmed — your last set came in under';
+            explanation.push(
+              `Your last set demonstrated less at this load and effort than an earlier set did, so the target follows the most recent set rather than the plan: ${reps} reps at ${displayWeight(next.weightKg, true)} ${weightLabel}. Capacity only falls as a session goes on — re-asking what a fresher set managed is asking you to beat yourself while more tired.`
+            );
+          }
+          // The engine grades every set's effort; the rep_total banner used
+          // to compute this and throw it away, leaving the REST BAR as the
+          // only surface that acknowledged a hot set. Same reading, same
+          // words, both places (services/suggestionEngine/effortGrade).
+          if (next.effortVsTarget === 'harder') {
+            explanation.push(
+              `That last set ran hotter than the ${effectiveTargetRir} RIR target — the same reading that extended your rest.`
+            );
+          } else if (next.effortVsTarget === 'easier') {
+            explanation.push(
+              `That last set came in easier than the ${effectiveTargetRir} RIR target — there were reps left over.`
+            );
+          }
           if (next.outsideRange === 'below') {
             reason += ` · target ${reps} — below the ${block.targetRepRange[0]}–${block.targetRepRange[1]} range`;
             explanation.push(
@@ -2216,7 +2263,15 @@ export const ExerciseCard = memo(function ExerciseCard({
             );
           }
         } else {
-          reason = `rep-total — hold the weight and accumulate reps (${soFar} so far)`;
+          // Audit S1 — no session plan (no comparable history for this
+          // exercise). The numbers above are the last set echoed back, NOT a
+          // derived prescription. Say so: this used to render as an ordinary
+          // confident suggestion, which is exactly the silent fallback that
+          // makes a broken input look like a working engine.
+          reason = `rep-total — no comparable history yet, echoing your last set (${soFar} reps so far)`;
+          explanation.push(
+            `There's no previous session at a matching load to build a plan from, so there is no derived target yet — the ${reps}-rep suggestion is simply your last set repeated, not a calculated one. Today's sets become the baseline that next session's targets are built from.`
+          );
           explanation.push(
             'Rep-total progression: the load stays fixed for the whole session; progress is the session rep total.'
           );
