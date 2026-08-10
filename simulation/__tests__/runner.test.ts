@@ -11,76 +11,27 @@
  * constraints, and session start is still seeded (Phase 1 scope note). Both are
  * recorded limitations, not silent ones.
  */
-import { createFakeSupabase, type FakeSupabase } from '../fakeSupabase';
+import type { FakeSupabase } from '../fakeSupabase';
+import { createSimulationWorld, createMemoryOutbox, SIM_SESSION_ID, SIM_USER_ID } from '../fixtures';
 import { runSimulation, hardFailures, guardrailWarnings, normalizeTrace } from '../runner';
 import { formatFinding, APPROVED_REPETITION_REASONS, checkSet3Contract } from '../assertions';
 import { PERSONA_NAMES, type PersonaName } from '../personas';
 import { resetClock } from '@/lib/clock';
-import { __setDriverForTests, type OutboxEntry } from '@/lib/offline/setOutbox';
+import { __setDriverForTests } from '@/lib/offline/setOutbox';
 
 jest.mock('@/lib/actions/workout-calories', () => ({
   calculateAndSaveWorkoutCalories: jest.fn().mockResolvedValue(undefined),
 }));
 
-function memoryOutbox() {
-  const map = new Map<string, OutboxEntry>();
-  return {
-    put: async (e: OutboxEntry) => { map.set(e.id, { ...e }); },
-    getAll: async () => Array.from(map.values()),
-    delete: async (id: string) => { map.delete(id); },
-    get: async (id: string) => map.get(id),
-  };
-}
-
-const USER = 'user-1';
-const SESSION = 'sess-1';
-
-function world(): FakeSupabase {
-  const fake = createFakeSupabase({ userId: USER });
-  fake.db.seed('users', [
-    { id: USER, weight_kg: 80, height_cm: 178, experience: 'intermediate', goal: 'bulk', preferences: {} },
-  ]);
-  fake.db.seed('exercises', [
-    {
-      id: 'ex-bench', name: 'Barbell Bench Press', primary_muscle: 'chest',
-      secondary_muscles: ['triceps'], equipment_required: ['barbell'],
-      is_bodyweight: false, exercise_type: 'rep_based', min_weight_increment_kg: 2.5, deleted_at: null,
-    },
-    {
-      id: 'ex-row', name: 'Barbell Row', primary_muscle: 'lats',
-      secondary_muscles: ['biceps'], equipment_required: ['barbell'],
-      is_bodyweight: false, exercise_type: 'rep_based', min_weight_increment_kg: 2.5, deleted_at: null,
-    },
-  ]);
-  fake.db.seed('workout_sessions', [
-    {
-      id: SESSION, user_id: USER, mesocycle_id: null, state: 'in_progress',
-      planned_date: '2026-04-06', started_at: '2026-04-06T09:00:00.000Z',
-      completed_at: null, completion_percent: 0, location_id: null, is_deload: false,
-    },
-  ]);
-  fake.db.seed('exercise_blocks', [
-    {
-      id: 'blk-1', workout_session_id: SESSION, exercise_id: 'ex-bench', order: 1,
-      target_sets: 3, target_rep_range: [8, 12], target_rir: 2, target_weight_kg: 70,
-      target_rest_seconds: 180, warmup_protocol: { sets: [] }, skipped_at: null,
-    },
-    {
-      id: 'blk-2', workout_session_id: SESSION, exercise_id: 'ex-row', order: 2,
-      target_sets: 3, target_rep_range: [8, 12], target_rir: 2, target_weight_kg: 60,
-      target_rest_seconds: 180, warmup_protocol: { sets: [] }, skipped_at: null,
-    },
-  ]);
-  return fake;
-}
+const world = (): FakeSupabase => createSimulationWorld();
 
 const run = (persona: PersonaName, seed: string | number, sessions = 12) =>
   runSimulation({
-    persona, seed, fake: world(), userId: USER, sessionId: SESSION,
+    persona, seed, fake: world(), userId: SIM_USER_ID, sessionId: SIM_SESSION_ID,
     startAt: '2026-04-06T09:00:00', sessions,
   });
 
-beforeEach(() => __setDriverForTests(memoryOutbox()));
+beforeEach(() => __setDriverForTests(createMemoryOutbox() as never));
 afterEach(() => {
   resetClock();
   __setDriverForTests(null);

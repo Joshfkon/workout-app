@@ -25,7 +25,8 @@
     "cap:run:android": "npx cap run android",
     "cap:livereload:ios": "npx cap run ios --livereload --external",
     "cap:livereload:android": "npx cap run android --livereload --external",
-    "generate:exercise-tags": "node scripts/generate-seed-exercise-tags.js"
+    "generate:exercise-tags": "node scripts/generate-seed-exercise-tags.js",
+    "simulate": "node scripts/simulate.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",
