@@ -109,6 +109,7 @@ import {
   buildSetEditPatch,
   renumberBlockSets,
 } from '@/lib/training/logSet';
+import { loadWorkoutSession, resolveResumePosition } from './_lib/loadSession';
 import { now as clockNow } from '@/lib/clock';
 import { addExerciseOverride, getSessionFromProgramData, applyExerciseOverrides, type ExerciseOverride } from '@/services/mesocycleHelpers';
 import { computeStapleExerciseIds } from '@/services/exerciseStaples';
@@ -164,10 +165,6 @@ import {
 } from './_lib/suggestions';
 import { deriveProgressionScope, type ProgressionScope } from '@/services/progressionScope';
 import {
-  mapLoadedBlockRow,
-  mapSetLogRow,
-  mapWorkoutSessionRow,
-  type LoadedBlockRow,
 } from './_lib/sessionMapping';
 import {
   fetchRecentMuscleSessions,
@@ -1130,43 +1127,26 @@ export default function WorkoutPage() {
       try {
         const supabase = createUntypedClient();
 
-        // Fetch session and exercise blocks in parallel (both only need sessionId from URL)
-        const [sessionResult, blocksResult] = await Promise.all([
-          supabase
-            .from('workout_sessions')
-            .select('*')
-            .eq('id', sessionId)
-            .single(),
-          supabase
-            .from('exercise_blocks')
-            .select(`
-              *,
-              exercises (*)
-            `)
-            .eq('workout_session_id', sessionId)
-            .order('order')
-        ]);
+        // Reads + row->domain mapping live in ./_lib/loadSession so the
+        // headless driver reads a session back exactly the way the UI does
+        // (same rows, same ordering, same mapping). What stays here is the
+        // routing/auto-discard choreography and the React state it drives.
+        const loaded = await loadWorkoutSession(supabase, sessionId);
+        if (!loaded) throw new Error('Workout session not found');
 
-        const { data: sessionData, error: sessionError } = sessionResult;
-        const { data: blocksData, error: blocksError } = blocksResult;
-
-        if (sessionError || !sessionData) {
-          throw new Error('Workout session not found');
-        }
-        if (blocksError) throw blocksError;
-
-        // Transform data (row → domain mapping lives in ./_lib/sessionMapping)
-        const transformedSession: WorkoutSession = mapWorkoutSessionRow(sessionData);
+        const {
+          session: transformedSession,
+          blocks: transformedBlocks,
+          sets: transformedSets,
+          skippedBlockIds: skippedIds,
+          locationId: loadedLocationId,
+          raw: sessionData,
+        } = loaded;
 
         // The location this session was started at — stamped on new sets and
         // used to scope local-scope exercise history for calibration. `null`
         // for legacy sessions / databases without the location column.
-        const loadedLocationId = (sessionData.location_id as string | null) ?? null;
         setSessionLocationId(loadedLocationId);
-
-        const transformedBlocks: ExerciseBlockWithExercise[] = (blocksData || [])
-          .filter((block: LoadedBlockRow) => block.exercises) // Filter out blocks without exercises
-          .map(mapLoadedBlockRow);
 
         // An already-archived session (deep link / back-button revisit after
         // auto-discard) behaves like a deleted one: nothing to resume.
@@ -1179,8 +1159,7 @@ export default function WorkoutPage() {
         // Stale-session auto-discard (P0-1): an abandoned empty ad-hoc shell
         // (0 blocks, 0 sets, in_progress, >4h old) is discarded instead of
         // resuming into a phantom "Continue workout". Predicate is the pure
-        // isStaleEmptyAdhocSession (unit-tested); 0 blocks already implies 0
-        // sets, but both are passed explicitly to make the guard unmistakable.
+        // isStaleEmptyAdhocSession (unit-tested).
         // Archived, not deleted (soft delete) once the session_auto_discard
         // migration is applied; hard-delete fallback until then.
         if (
@@ -1190,8 +1169,8 @@ export default function WorkoutPage() {
               mesocycleId: transformedSession.mesocycleId,
               startedAt: transformedSession.startedAt,
             },
-            (blocksData || []).length,
-            0 // no blocks -> no sets; querying sets separately would be redundant
+            loaded.blockRowCount,
+            transformedSets.length
           )
         ) {
           await discardStaleSession(supabase, sessionId);
@@ -1202,53 +1181,21 @@ export default function WorkoutPage() {
 
         setSession(transformedSession);
         setBlocks(transformedBlocks);
-
         // Restore per-block skip state (exercise_blocks.skipped_at)
-        const skippedIds = new Set<string>(
-          ((blocksData || []) as Array<{ id: string; skipped_at?: string | null }>)
-            .filter((block) => Boolean(block.skipped_at))
-            .map((block) => block.id)
-        );
         setSkippedBlockIds(skippedIds);
 
-
-        // Fetch existing sets for this workout (important for viewing completed workouts or resuming)
-        const blockIds = transformedBlocks.map((b: ExerciseBlockWithExercise) => b.id);
-        if (blockIds.length > 0) {
-          const { data: existingSets } = await supabase
-            .from('set_logs')
-            .select('*')
-            .in('exercise_block_id', blockIds)
-            .order('set_number');
-          
-          if (existingSets && existingSets.length > 0) {
-            const transformedSets: SetLog[] = existingSets.map(mapSetLogRow);
-            setCompletedSets(transformedSets);
-            
-            // Set current set number based on existing sets for the first incomplete block
-            const firstIncompleteBlock = transformedBlocks.find((block: ExerciseBlockWithExercise) => {
-              if (skippedIds.has(block.id)) return false;
-              const blockSets = transformedSets.filter(s => s.exerciseBlockId === block.id && !s.isWarmup && s.setType !== 'warmup');
-              return blockSets.length < block.targetSets;
-            });
-            
-            if (firstIncompleteBlock) {
-              const blockIdx = transformedBlocks.findIndex((b: ExerciseBlockWithExercise) => b.id === firstIncompleteBlock.id);
-              const existingBlockSets = transformedSets.filter(s => s.exerciseBlockId === firstIncompleteBlock.id && !s.isWarmup && s.setType !== 'warmup');
-              setCurrentBlockIndex(blockIdx);
-              setCurrentSetNumber(existingBlockSets.length + 1);
-            }
-          } else if (skippedIds.size > 0) {
-            // No sets yet: make sure the starting exercise isn't a skipped block
-            const firstActiveIdx = transformedBlocks.findIndex(
-              (b: ExerciseBlockWithExercise) => !skippedIds.has(b.id)
-            );
-            if (firstActiveIdx > 0) {
-              setCurrentBlockIndex(firstActiveIdx);
-            }
-          }
+        if (transformedSets.length > 0) {
+          setCompletedSets(transformedSets);
         }
-        
+
+        // Where a resumed session picks up (pure; skipped blocks are never the
+        // target, and with no sets logged the first NON-skipped block wins).
+        if (transformedBlocks.length > 0) {
+          const resume = resolveResumePosition(transformedBlocks, transformedSets, skippedIds);
+          setCurrentBlockIndex(resume.blockIndex);
+          setCurrentSetNumber(resume.setNumber);
+        }
+
         // Fetch user profile, DEXA, calibrated lifts, mesocycle, and completed count in parallel
         // Also fetch exercise history for all exercises (moved here from later in the function)
         const exerciseIds = transformedBlocks.map((b: ExerciseBlockWithExercise) => b.exerciseId);
@@ -1470,7 +1417,7 @@ export default function WorkoutPage() {
           // derived, honoring any per-exercise override) so local-scope
           // exercises read location-scoped history for calibration.
           const scopeByExercise = new Map<string, ProgressionScope>();
-          for (const row of (blocksData || []) as LoadedBlockRow[]) {
+          for (const row of loaded.rawBlocks) {
             const ex = row.exercises as
               | {
                   id: string;
