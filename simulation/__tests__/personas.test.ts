@@ -155,6 +155,28 @@ describe('body model', () => {
     });
     expect(outcome.repsAchieved).toBe(10);
     expect(outcome.actualRIR).toBeGreaterThan(0);
+  });
+
+  it('reports RIR on the 0-4 chip the app records, even with much more in the tank', () => {
+    // Ground truth stays exact for the simulator; what the ENGINE sees is
+    // capped at what a user could actually enter. Feeding it an RIR of 11
+    // would have the engine reading a value no real input can produce.
+    const outcome = honestAttempt({
+      prescribed: prescribed({ weightKg: 50, reps: 5 }),
+      state: stateAt(150),
+      rng: new Rng('deep-tank'),
+    });
+    expect(outcome.actualRIR).toBeGreaterThan(4);
+    expect(outcome.reportedRIR).toBe(4);
+  });
+
+  it('reports RIR honestly when it is inside the chip range', () => {
+    const outcome = honestAttempt({
+      prescribed: prescribed({ weightKg: 90, reps: 5 }),
+      state: stateAt(100),
+      rng: new Rng('shallow-tank'),
+    });
+    expect(outcome.actualRIR).toBeLessThanOrEqual(4);
     expect(outcome.reportedRIR).toBe(outcome.actualRIR);
   });
 

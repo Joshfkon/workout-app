@@ -198,7 +198,10 @@ export function honestAttempt(ctx: SetContext, opts: { repNoise?: number } = {})
   return {
     repsAchieved,
     actualRIR,
-    reportedRIR: actualRIR,
+    // Clamped to the 0–4 chip the app actually records. An honest lifter with
+    // 9 in the tank can only TELL the app "4+", and feeding an out-of-range
+    // value would have the engine reading an RIR no real user could enter.
+    reportedRIR: clampReportedRir(actualRIR),
     disposition: 'completed',
   };
 }

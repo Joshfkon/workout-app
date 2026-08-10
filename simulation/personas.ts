@@ -221,13 +221,17 @@ export function plateauer(): Persona {
 // ---------------------------------------------------------------------------
 
 /**
- * Consistently falls short of the rep target, at genuine max effort — NOT
- * sandbagging. Reported RIR is honest and low.
+ * Fast-twitch, rep-poor. Strong for a single, but cannot grind out the reps a
+ * standard strength curve predicts from that single — so a load chosen for an
+ * 8–12 range leaves them short at genuine failure, every time.
  *
- * This is the persona aimed squarely at the Set-3 contract: a set that misses
- * the target at or below the target RIR must not be answered with the same
- * unattained (load, reps) again.
+ * REP_ENDURANCE compresses the curve: at 70% of 1RM a textbook lifter has ~13
+ * reps and this one has ~7. That is a claim about a BODY, not about what the
+ * app should prescribe, and it is what makes this persona a Set-3 probe rather
+ * than just a weak lifter — the misses are honest, at zero RIR, and repeatable.
  */
+const REP_ENDURANCE = 0.55;
+
 export function shortSetSpecialist(): Persona {
   return {
     name: 'short-set-specialist',
@@ -237,7 +241,8 @@ export function shortSetSpecialist(): Persona {
     performSet(ctx: SetContext): PerformanceOutcome {
       const { prescribed, state, rng } = ctx;
       const capacity = fatiguedE1RM(state, prescribed.exerciseId);
-      const ceiling = repsToFailure(capacity, prescribed.weightKg) + rng.normal(0, 0.5);
+      const ceiling =
+        repsToFailure(capacity, prescribed.weightKg) * REP_ENDURANCE + rng.normal(0, 0.5);
 
       // Takes every set to genuine failure and lands short of the ask.
       const maxReps = Math.max(0, Math.round(ceiling));
