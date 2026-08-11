@@ -36,6 +36,7 @@ npm run simulate -- --scenario=SET3_MISS              # deterministic scenarios
 
 | Result | Count | Verdict |
 |---|---|---|
+| Documented contracts verified | **4 of 5 hold** | Set-3 fails; gap-handling, staleness and phase-isolation all hold |
 | INVARIANT violations | **0** | State integrity is sound across 139,536 logged sets |
 | Crashes (production code threw) | **0** | No exception on any path exercised |
 | CONTRACT violations | **32** | All one defect — [Finding 001](#3-finding-001--the-contract-violation) |
@@ -285,8 +286,18 @@ the in-memory client.
 | L2 | **Session start is seeded, not driven** | `startMesocycleWorkoutSession` has a wide query surface (program_data resolution, transfer candidates, warmup generation) the fake doesn't cover. Its own logic is untested by the harness. | Extend the fake, or use local Supabase |
 | L3 | Two exercises, one fixed rep range | No supersets, dropsets, bodyweight, duration exercises, or rep_total exercises in a full run | Widen fixtures |
 | L4 | No deload / mesocycle progression across a run | Sessions are seeded from a template; week advance and deload aren't exercised end to end | Follows from L2 |
-| L5 | Phase-isolation and training-gap contracts not implemented | Spec §3.2 lists them; I built the Set-3, empty-period and sanity contracts | Next phase |
+| ~~L5~~ | ~~Phase-isolation and training-gap contracts not implemented~~ | **CLOSED** — both implemented as deterministic scenarios (`simulation/__tests__/contracts.test.ts`, 14 tests). **Both contracts HOLD.** | — |
 | L6 | Single-process isolation only | Module-level singletons (Supabase client, Zustand, outbox) prevent in-process parallel runs | Shard by worker — already sufficient |
+
+**L5 is closed.** Both remaining §3.2 contracts are implemented and both pass:
+the e1RM anchor correctly excludes a pre-layoff peak older than
+`ANCHOR_MAX_AGE_DAYS` (90) while always keeping the newest session,
+`plateauDetector` correctly stops alerting on an exercise gone stale past six
+weeks, and phase-scoped trends do not consume out-of-phase records. That last
+one turned out to be **defence in depth** — `assessProgress` filters weigh-ins
+to the phase *and* `rateOverTrailing` independently floors its window at
+`phaseStart`. Removing either alone changes nothing; only with both gone does a
+breach appear, and then it is dramatic (a −1.0 lb/wk cut reads as −23.3 lb/wk).
 
 **L1 and L2 are the same investment** (D5) and together are the biggest gap. My
 recommendation is to do it, but not urgently — the in-memory suite is fast enough
