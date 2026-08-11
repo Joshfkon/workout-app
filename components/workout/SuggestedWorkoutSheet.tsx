@@ -616,7 +616,9 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
               minWeightIncrementKg: 2.5,
               formCues: [],
               commonMistakes: [],
-              equipmentRequired: [],
+              // Real tags, not []: the protocol generator needs them to know
+              // this is a barbell lift and floor the ramp at the empty bar.
+              equipmentRequired: exercise.equipment_required ?? [],
               setupNote: '',
               movementPattern: isCompound ? 'compound' : 'isolation',
             },

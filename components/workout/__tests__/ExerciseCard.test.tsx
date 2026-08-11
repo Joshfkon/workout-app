@@ -10,6 +10,7 @@ import React from 'react';
 import { render, screen, act, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ExerciseCard } from '../ExerciseCard';
+import { generateWarmupProtocol } from '@/services/progressionEngine';
 import type {
   Exercise,
   ExerciseBlock,
@@ -96,9 +97,19 @@ jest.mock('@/lib/utils', () => ({
         )
       )
   ),
-  roundToPlateIncrement: jest.fn((w) => Math.round(w / 2.5) * 2.5),
+  // Mirrors the real helper: lb users load 2.5 lb jumps, kg users 2.5 kg.
+  roundToPlateIncrement: jest.fn((w, unit) =>
+    unit === 'lb'
+      ? (Math.round((w * 2.20462) / 2.5) * 2.5) / 2.20462
+      : Math.round(w / 2.5) * 2.5
+  ),
   roundToIncrement: jest.fn((w, inc) => (inc > 0 ? Math.round(w / inc) * inc : w)),
   clamp: jest.fn((v, min, max) => Math.max(min, Math.min(max, v))),
+  getBarbellWeight: jest.fn((type: string, unit: 'kg' | 'lb') => {
+    const kg = { olympic: 20, womens: 15, ez_curl: 10, trap: 25 }[type] ?? 20;
+    const lb = { olympic: 45, womens: 35, ez_curl: 25, trap: 55 }[type] ?? 45;
+    return unit === 'lb' ? lb : kg;
+  }),
   formatDuration: jest.fn((s) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`),
   generateId: jest.fn(() => 'generated-id-' + Math.random().toString(36).substr(2, 9)),
 }));
@@ -2133,5 +2144,144 @@ describe('bodyweight warmup loads (added weight, not effective load)', () => {
     );
     await user.click(screen.getByRole('button', { name: 'Bodyweight' }));
     expect(screen.getByRole('button', { name: 'Bodyweight' })).toHaveAttribute('data-selected', 'true');
+  });
+});
+
+describe('barbell warmup loads (the empty bar is the floor)', () => {
+  // Reported defect: a barbell lift ramping toward a 155 lb top set printed a
+  // "Bar warmup" row at 42.5 lb — less than the 45 lb bar the set is performed
+  // with. Percentages of the top set can land under the bar; the bar is the
+  // lightest setup that exists, exactly like bodyweight on a chin-up.
+  const barProps = {
+    exercise: createMockExercise({
+      id: 'close-grip-bench',
+      name: 'Close Grip Bench Press',
+      equipmentRequired: ['barbell', 'bench'],
+      minWeightIncrementKg: 2.5,
+    }),
+    block: createMockBlock({ exerciseId: 'close-grip-bench', targetWeightKg: 70.31 }),
+    sets: [],
+    unit: 'lb' as const,
+    isActive: true,
+    workingWeight: 70.31, // 155 lb
+    onSetComplete: jest.fn().mockResolvedValue('id'),
+    onWarmupComplete: jest.fn(),
+  };
+
+  const numbersIn = (row: HTMLElement) =>
+    (row.textContent?.match(/\d+(\.\d+)?/g) ?? []).map(Number);
+
+  it('prescribes the bar itself for the bar-only set, not a rounded percentage', async () => {
+    const user = userEvent.setup();
+    render(
+      <ExerciseCard
+        {...barProps}
+        warmupDecision={{
+          kind: 'full_protocol' as const,
+          reason: 'Cold start — full ramp protocol.',
+          // 20 kg / 70.31 kg rounds to 28%, and 28% of 155 lb is 43.4 lb.
+          sets: [
+            {
+              setNumber: 1,
+              percentOfWorking: 28,
+              targetReps: 10,
+              purpose: 'Bar warmup',
+              restSeconds: 30,
+              isBarOnly: true,
+            },
+          ],
+        }}
+      />
+    );
+
+    await user.click(screen.getByText('Warmup Protocol'));
+    const barRow = screen.getByText('W1').closest('tr')!;
+    expect(barRow).toHaveTextContent('45');
+    expect(numbersIn(barRow)).not.toContain(42.5);
+  });
+
+  it('floors a sub-bar ramp step at the bar and says why', async () => {
+    const user = userEvent.setup();
+    render(
+      <ExerciseCard
+        {...barProps}
+        warmupDecision={{
+          kind: 'targeted_ramp' as const,
+          reason: 'Muscle is warm, but the top set is heavy — load ramp only.',
+          // 25% of 155 lb = 39 lb: lighter than the bar it must be lifted on.
+          sets: [
+            {
+              setNumber: 1,
+              percentOfWorking: 25,
+              targetReps: 10,
+              purpose: 'Groove horizontal pressing',
+              restSeconds: 45,
+            },
+          ],
+        }}
+      />
+    );
+
+    await user.click(screen.getByText('Ramp Set'));
+    const rampRow = screen.getByText('W1').closest('tr')!;
+    expect(rampRow).toHaveTextContent('45');
+    expect(screen.getByTestId('warmup-bar-floor-note')).toHaveTextContent(
+      /empty bar \(45 lbs\) is the lightest this lift goes/i
+    );
+  });
+
+  it('renders a first-exercise protocol as one bar set plus loadable steps', async () => {
+    const user = userEvent.setup();
+    const sets = generateWarmupProtocol({
+      workingWeight: 70.31,
+      exercise: barProps.exercise,
+      isFirstExercise: true,
+    });
+    render(
+      <ExerciseCard
+        {...barProps}
+        warmupDecision={{
+          kind: 'full_protocol' as const,
+          reason: 'Cold start — full ramp protocol.',
+          sets,
+        }}
+      />
+    );
+
+    await user.click(screen.getByText('Warmup Protocol'));
+    // The generic 0% opener and the bar-only set are the same setup on a
+    // barbell, so they merge into one row — numbered without a gap.
+    const rowText = Array.from(document.querySelectorAll('tbody tr')).map((r) => r.textContent);
+    expect(rowText[0]).toMatch(/^W145.*Bar warmup$/);
+    expect(rowText[1]).toMatch(/^W262\.5/);
+    expect(rowText[2]).toMatch(/^W392\.5/);
+    expect(rowText[3]).toMatch(/^W4125/);
+  });
+
+  it('leaves loadable ramp steps alone', async () => {
+    const user = userEvent.setup();
+    render(
+      <ExerciseCard
+        {...barProps}
+        warmupDecision={{
+          kind: 'targeted_ramp' as const,
+          reason: 'Load ramp only.',
+          sets: [
+            {
+              setNumber: 1,
+              percentOfWorking: 60,
+              targetReps: 5,
+              purpose: 'Neuro prep',
+              restSeconds: 60,
+            },
+          ],
+        }}
+      />
+    );
+
+    await user.click(screen.getByText('Ramp Set'));
+    // 60% of 155 lb = 93 lb, rounded to the nearest 2.5 lb.
+    expect(screen.getByText('W1').closest('tr')).toHaveTextContent('92.5');
+    expect(screen.queryByTestId('warmup-bar-floor-note')).not.toBeInTheDocument();
   });
 });

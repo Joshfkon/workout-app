@@ -522,6 +522,45 @@ describe('resolveWarmupLoad', () => {
       expect(r.clamped).toBe(false);
     });
 
+    it('floors at the empty bar when the percentage lands under it', () => {
+      // The reported defect: a barbell lift ramping toward a 70.3 kg (155 lb)
+      // top set prescribed a "bar warmup" at 28% — 19.7 kg, i.e. less than the
+      // 20 kg bar it is supposed to be performed with.
+      const r = resolveWarmupLoad({
+        percentOfWorking: 28,
+        workingLoadKg: 70.31,
+        mode: 'external',
+        minLoadableKg: 20,
+      });
+      expect(r.dimensionKg).toBe(20);
+      expect(r.effectiveKg).toBe(20);
+      expect(r.clamped).toBe(true);
+    });
+
+    it('leaves loadable percentages alone', () => {
+      const r = resolveWarmupLoad({
+        percentOfWorking: 60,
+        workingLoadKg: 70.31,
+        mode: 'external',
+        minLoadableKg: 20,
+      });
+      expect(r.dimensionKg).toBeCloseTo(42.19);
+      expect(r.clamped).toBe(false);
+    });
+
+    it('has no floor when the exercise is not barbell-loaded', () => {
+      // A dumbbell/cable/stack goes down to its smallest increment — clamping
+      // those to 20 kg would invent a floor that does not exist.
+      const r = resolveWarmupLoad({
+        percentOfWorking: 30,
+        workingLoadKg: 40,
+        mode: 'external',
+        minLoadableKg: 0,
+      });
+      expect(r.dimensionKg).toBeCloseTo(12);
+      expect(r.clamped).toBe(false);
+    });
+
     it('falls back to the external reading when bodyweight is unknown', () => {
       // Without a bodyweight the effective load cannot be decomposed — better
       // the old number than an invented composition.

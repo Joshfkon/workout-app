@@ -8,7 +8,7 @@ import { rpeToRir, rirToRpe } from '@/types/schema';
 import { formatSetHistoryLine } from '@/lib/formatSetHistory';
 import { SorenessChipRow, JointPainPicker } from './FeedbackChips';
 import { filterExercises, dedupeExercisesById } from '@/services/exerciseFilter';
-import { convertWeight, formatMuscleName, formatWeightValue, convertWeightForDisplay, inputWeightToKg, roundToPlateIncrement, sumDisplayVolume } from '@/lib/utils';
+import { convertWeight, formatMuscleName, formatWeightValue, convertWeightForDisplay, inputWeightToKg, roundToPlateIncrement, sumDisplayVolume, getBarbellWeight } from '@/lib/utils';
 import { recommendSet, recommendSessionStart, estimateRepsForWeight, predictAmrapReps, recommendSeedForSlot, resolveLastRir, prescribe, type SeedRecommendation } from '@/services/setRecommender';
 import { framePositionalDelta } from '@/services/suggestionEngine/deltaFraming';
 import { inferSetRole, type SetRole } from '@/services/suggestionEngine/setRoles';
@@ -29,6 +29,7 @@ import {
 import { getExerciseProgression, type ExerciseProgressionInsight } from '@/services/progressionInsights';
 import { generateWarmupProtocol } from '@/services/progressionEngine';
 import { resolveWarmupLoad, type WarmupLoadMode } from '@/services/warmupEngine';
+import { inferBarbellKind } from '@/services/equipmentClass';
 import { formatSessionTimeOfDay } from '@/services/sessionContext';
 import { formatSleepHours, SLEEP_QUALITY_LABELS } from '@/lib/sleep/formatSleep';
 import { useUserStore } from '@/stores';
@@ -112,6 +113,12 @@ interface WarmupSetData {
   restSeconds?: number;  // Rest time after this warmup set
   /** Why this set exists (targeted ramp sets name their unpaid dimension) */
   reason?: string;
+  /**
+   * Bar-only set on a barbell lift: prescribed as the empty bar itself, never
+   * as `percentOfWorking` — rounding that percentage to a whole number lands
+   * either side of the bar.
+   */
+  isBarOnly?: boolean;
 }
 
 /**
@@ -1001,25 +1008,49 @@ export const ExerciseCard = memo(function ExerciseCard({
     bwWarmupAddedKg,
   ]);
 
+  // The empty bar this exercise is loaded on, kg (0 when it isn't a barbell
+  // lift). Same kind of floor as bodyweight on a chin-up: percentages of the
+  // top set can land under it, and a ramp step under the bar is a weight that
+  // cannot be set up, not a light one. Read in the user's own unit — a lb gym
+  // racks a 45 lb bar, not 20 kg — so the prescribed number is the one
+  // printed on their bar.
+  const barFloorKg = useMemo(() => {
+    if (isBodyweightExercise) return 0;
+    const kind = inferBarbellKind({
+      name: exercise.name,
+      equipmentRequired: exercise.equipmentRequired,
+      isBodyweight: false,
+    });
+    return kind ? convertWeight(getBarbellWeight(kind, unit), unit, 'kg') : 0;
+  }, [isBodyweightExercise, exercise.name, exercise.equipmentRequired, unit]);
+
   // Each warmup step resolved into something the lifter can actually set up
   // (services/warmupEngine.resolveWarmupLoad). On a bodyweight movement a
   // percentage of the EFFECTIVE load is not loadable — "60% of 98 kg" asks a
   // 98 kg lifter to weigh 59 kg — so the percentage is resolved onto the
   // dimension they control (added plate / assistance) and floors at plain
-  // bodyweight. Steps that all floor to bodyweight collapse into one row
-  // (counted in the note below, never silently dropped).
+  // bodyweight; on a barbell it floors at the empty bar. Steps that all floor
+  // to the same weight collapse into one row (counted in the note below,
+  // never silently dropped).
   const warmupRows = useMemo(() => {
     const isBw =
       warmupLoadMode !== 'external' && !!userBodyweightKg && userBodyweightKg > 0;
     const rows = effectiveWarmupSets.map((warmup) => {
       const custom = customWarmupWeights.get(warmup.setNumber);
       const hasCustom = custom !== undefined;
-      const resolved = resolveWarmupLoad({
-        percentOfWorking: warmup.percentOfWorking,
-        workingLoadKg: warmupWorkingWeightKg,
-        mode: warmupLoadMode,
-        userBodyweightKg,
-      });
+      // A bar-only set is prescribed as the bar itself, never as its rounded
+      // percentage of the top set — that rounding is what put a sub-bar
+      // number under a "Bar warmup" label.
+      const resolved =
+        warmup.isBarOnly && !isBw && barFloorKg > 0
+          ? { dimensionKg: barFloorKg, effectiveKg: barFloorKg, clamped: true as const }
+          : resolveWarmupLoad({
+              percentOfWorking: warmup.percentOfWorking,
+              workingLoadKg: warmupWorkingWeightKg,
+              mode: warmupLoadMode,
+              userBodyweightKg,
+              minLoadableKg: isBw ? 0 : barFloorKg,
+            });
       const dimensionKg = hasCustom ? custom : roundToPlateIncrement(resolved.dimensionKg, unit);
       const value = parseFloat(convertWeight(dimensionKg, 'kg', unit).toFixed(1));
 
@@ -1046,22 +1077,44 @@ export const ExerciseCard = memo(function ExerciseCard({
           : warmupLoadMode === 'assisted'
             ? Math.max(0, (userBodyweightKg ?? 0) - dimensionKg)
             : (userBodyweightKg ?? 0) + dimensionKg,
-        floored: isBw && resolved.clamped && !hasCustom,
+        floored: resolved.clamped && !hasCustom,
         isBw,
       };
     });
 
-    // Collapse the run of below-bodyweight steps into a single bodyweight row.
+    // Collapse the run of steps sitting on the floor (bodyweight, or the empty
+    // bar) into a single row — they all prescribe the same setup.
     const kept: typeof rows = [];
     let collapsed = 0;
     for (const row of rows) {
-      if (row.floored && kept.some((k) => k.floored)) {
+      const floorRow = kept.find((k) => k.floored);
+      if (row.floored && floorRow) {
         collapsed++;
+        // "Bar warmup" names the surviving set better than the generic
+        // opener it merged into — a barbell lift's general warmup IS the bar.
+        if (row.warmup.isBarOnly && !floorRow.warmup.isBarOnly) {
+          floorRow.warmup = { ...floorRow.warmup, purpose: row.warmup.purpose };
+        }
         continue;
       }
       kept.push(row);
     }
-    return { rows: kept, collapsed, anyFloored: kept.some((r) => r.floored) };
+    return {
+      // Numbered as displayed (W1, W2, …) so a collapsed step doesn't leave a
+      // gap in the ladder. The set's own number stays its identity for
+      // completion state and custom weights.
+      rows: kept.map((row, i) => ({ ...row, displayNumber: i + 1 })),
+      collapsed,
+      // The note explains why a step isn't as light as the percentage asked
+      // for. A bar-only set is already labelled "Bar warmup", so on its own it
+      // needs no explanation — only a step that was pushed UP to the bar (or
+      // dropped into it) does.
+      anyFloored:
+        collapsed > 0 || kept.some((r) => r.floored && (isBw || !r.warmup.isBarOnly)),
+      // Which floor the note should explain. Bodyweight wins when both apply
+      // (a weighted-dip ramp is about the belt, not a bar).
+      floorKind: isBw ? ('bodyweight' as const) : ('bar' as const),
+    };
   }, [
     effectiveWarmupSets,
     customWarmupWeights,
@@ -1069,6 +1122,7 @@ export const ExerciseCard = memo(function ExerciseCard({
     warmupLoadMode,
     userBodyweightKg,
     isBodyweightExercise,
+    barFloorKg,
     unit,
   ]);
 
@@ -3259,7 +3313,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                       className={`${isWarmupCompleted ? 'bg-amber-500/5' : 'bg-amber-500/10'}`}
                     >
                       <td className="px-1.5 py-2 text-amber-400 font-medium text-xs">
-                        W{warmup.setNumber}
+                        W{row.displayNumber}
                       </td>
                       <td className="px-1 py-2 text-center">
                         {isEditingThis ? (
@@ -3350,8 +3404,8 @@ export const ExerciseCard = memo(function ExerciseCard({
                           }}
                           aria-label={
                             isWarmupCompleted
-                              ? `Mark warmup set ${warmup.setNumber} incomplete`
-                              : `Complete warmup set ${warmup.setNumber}`
+                              ? `Mark warmup set ${row.displayNumber} incomplete`
+                              : `Complete warmup set ${row.displayNumber}`
                           }
                           className="p-1.5 rounded-lg transition-colors hover:bg-surface-800/50"
                         >
@@ -3376,18 +3430,32 @@ export const ExerciseCard = memo(function ExerciseCard({
                 {warmupRows.anyFloored && (
                   <tr className="bg-surface-800/30">
                     <td colSpan={6} className="px-3 py-1.5">
-                      <p
-                        className="text-[11px] text-surface-500 leading-snug"
-                        data-testid="warmup-bodyweight-floor-note"
-                      >
-                        Your bodyweight is the lightest this movement goes
-                        {warmupRows.collapsed > 0
-                          ? `, so ${warmupRows.collapsed + 1} lighter ramp steps collapse into one bodyweight set`
-                          : ''}
-                        {warmupLoadMode === 'weighted'
-                          ? ' — ramp with reps and tempo, then add the belt for your working sets.'
-                          : ' — ramp with reps and tempo.'}
-                      </p>
+                      {warmupRows.floorKind === 'bar' ? (
+                        <p
+                          className="text-[11px] text-surface-500 leading-snug"
+                          data-testid="warmup-bar-floor-note"
+                        >
+                          The empty bar ({displayWeight(barFloorKg, true)} {weightLabel}) is the
+                          lightest this lift goes
+                          {warmupRows.collapsed > 0
+                            ? `, so ${warmupRows.collapsed + 1} lighter ramp steps collapse into one bar set`
+                            : ''}
+                          {' '}— ramp with reps and tempo, then add plates.
+                        </p>
+                      ) : (
+                        <p
+                          className="text-[11px] text-surface-500 leading-snug"
+                          data-testid="warmup-bodyweight-floor-note"
+                        >
+                          Your bodyweight is the lightest this movement goes
+                          {warmupRows.collapsed > 0
+                            ? `, so ${warmupRows.collapsed + 1} lighter ramp steps collapse into one bodyweight set`
+                            : ''}
+                          {warmupLoadMode === 'weighted'
+                            ? ' — ramp with reps and tempo, then add the belt for your working sets.'
+                            : ' — ramp with reps and tempo.'}
+                        </p>
+                      )}
                     </td>
                   </tr>
                 )}

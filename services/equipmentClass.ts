@@ -298,6 +298,73 @@ export function isMachineClassAmbiguous(input: EquipmentClassInput): boolean {
 }
 
 // ============================================================
+// Load floor (the lightest weight an implement can be set up with)
+// ============================================================
+
+/** Bar variants whose empty weight differs enough to change a prescription. */
+export type BarbellKind = 'olympic' | 'womens' | 'ez_curl' | 'trap';
+
+/**
+ * Empty-bar weights in kg. Mirrors BARBELL_WEIGHTS in lib/utils (kept here so
+ * pure services don't have to reach into the display layer for a constant).
+ */
+export const BAR_WEIGHTS_KG: Record<BarbellKind, number> = {
+  olympic: 20,
+  womens: 15,
+  ez_curl: 10,
+  trap: 25,
+};
+
+const EZ_BAR = ['ez bar', 'ez curl', 'curl bar'];
+const TRAP_BAR = ['trap bar', 'hex bar'];
+/**
+ * Bar-anchored but NOT loaded like a bar: only one end of the bar is in the
+ * lifter's hands, so the load at the handle is roughly half the bar and the
+ * empty-bar floor does not apply. Better no floor than a wrong one.
+ */
+const NO_BAR_FLOOR = ['landmine'];
+
+function signalBlob(input: EquipmentClassInput): string {
+  return ` ${[(input.name ?? '').toLowerCase(), ...readTags(input)].join(' ')} `;
+}
+
+/**
+ * Which bar an exercise is loaded on, or null when it isn't a barbell lift
+ * (or is a bar variant with no meaningful empty-bar floor — see NO_BAR_FLOOR).
+ */
+export function inferBarbellKind(input: EquipmentClassInput): BarbellKind | null {
+  if (deriveEquipmentClass(input) !== 'barbell') return null;
+  const blob = signalBlob(input);
+  if (anyPhrase(blob, NO_BAR_FLOOR)) return null;
+  if (anyPhrase(blob, EZ_BAR)) return 'ez_curl';
+  if (anyPhrase(blob, TRAP_BAR)) return 'trap';
+  return 'olympic';
+}
+
+/**
+ * The lightest load this exercise can actually be set up with, in kg.
+ *
+ * For a barbell lift that is the EMPTY BAR: there is no such thing as a 40 lb
+ * bench press, so any prescription (warmup ramps especially) that lands below
+ * the bar is not a light option — it is an unloadable number, exactly like
+ * prescribing a chin-up below the lifter's bodyweight. Everything else returns
+ * 0: dumbbells, cables, stacks and plate-loaded machines all go down to their
+ * smallest increment, and a Smith bar's counterbalanced weight varies too much
+ * per machine to assert one here.
+ *
+ * `barbellKindOverride` lets a caller state the bar in use (the user's gym has
+ * a women's bar on the rack) instead of inferring it from the name/tags.
+ */
+export function minLoadableWeightKg(
+  input: EquipmentClassInput,
+  barbellKindOverride?: BarbellKind | null
+): number {
+  if (barbellKindOverride) return BAR_WEIGHTS_KG[barbellKindOverride];
+  const kind = inferBarbellKind(input);
+  return kind ? BAR_WEIGHTS_KG[kind] : 0;
+}
+
+// ============================================================
 // Matching (the picker's equipment axis)
 // ============================================================
 

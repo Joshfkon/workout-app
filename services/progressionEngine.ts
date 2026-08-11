@@ -22,6 +22,7 @@ import {
 } from '@/types/schema';
 import { roundToIncrement } from '@/lib/utils';
 import { estimate1RM } from './shared/strengthCalculations';
+import { inferBarbellKind, BAR_WEIGHTS_KG } from './equipmentClass';
 
 // ============================================
 // TYPE ADAPTERS
@@ -313,46 +314,56 @@ function getWarmupRestSeconds(percentOfWorking: number): number {
 }
 
 /**
- * Get the barbell weight in kg based on barbell type
+ * The empty-bar floor for this exercise, in kg — 0 when it isn't loaded on a
+ * bar. `barbellType` states the bar in use; otherwise it is inferred from the
+ * exercise's equipment tags / name (services/equipmentClass), which also
+ * covers EZ and trap bars and keeps this in step with the rest of the app's
+ * equipment reasoning.
  */
-function getBarbellWeightKg(barbellType: 'olympic' | 'womens' | 'ez_curl' | 'trap' = 'olympic'): number {
-  switch (barbellType) {
-    case 'olympic': return 20;
-    case 'womens': return 15;
-    case 'ez_curl': return 10;
-    case 'trap': return 25;
-    default: return 20;
-  }
-}
-
-/**
- * Check if an exercise uses a barbell based on equipment
- */
-function isBarbellExercise(exercise: Exercise): boolean {
-  return exercise.equipmentRequired?.some(
-    (eq) => eq.toLowerCase() === 'barbell' || eq.toLowerCase() === 'olympic barbell'
-  ) ?? false;
+function getBarFloorKg(
+  exercise: Exercise,
+  barbellType?: 'olympic' | 'womens' | 'ez_curl' | 'trap'
+): number {
+  const inferredKind = inferBarbellKind({
+    name: exercise.name,
+    equipmentRequired: exercise.equipmentRequired,
+  });
+  // An explicit barbellType only names WHICH bar; it never turns a dumbbell
+  // exercise into a barbell one (it defaults to 'olympic' at most call sites).
+  if (!inferredKind) return 0;
+  return BAR_WEIGHTS_KG[barbellType ?? inferredKind];
 }
 
 /**
  * Generate a warmup protocol based on working weight
  */
 export function generateWarmupProtocol(input: GenerateWarmupInput): WarmupSet[] {
-  const { workingWeight, exercise, isFirstExercise, barbellType = 'olympic' } = input;
+  const { workingWeight, exercise, isFirstExercise, barbellType } = input;
 
-  const isBarbell = isBarbellExercise(exercise);
-  const barbellWeightKg = getBarbellWeightKg(barbellType);
+  const barbellWeightKg = getBarFloorKg(exercise, barbellType);
+  const isBarbell = barbellWeightKg > 0;
 
-  // No warmup needed for very light weights
+  // No warmup needed for very light weights. On a bar there is no lighter
+  // option than the bar itself, so that single set IS the empty bar.
   if (workingWeight < 20) {
     return [
-      {
-        setNumber: 1,
-        percentOfWorking: 50,
-        targetReps: 10,
-        purpose: 'Light activation',
-        restSeconds: 30,
-      },
+      isBarbell
+        ? ({
+            setNumber: 1,
+            percentOfWorking:
+              workingWeight > 0 ? Math.round((barbellWeightKg / workingWeight) * 100) : 100,
+            targetReps: 10,
+            purpose: 'Bar warmup',
+            restSeconds: 30,
+            isBarOnly: true,
+          } as WarmupSet)
+        : {
+            setNumber: 1,
+            percentOfWorking: 50,
+            targetReps: 10,
+            purpose: 'Light activation',
+            restSeconds: 30,
+          },
     ];
   }
 
@@ -387,7 +398,10 @@ export function generateWarmupProtocol(input: GenerateWarmupInput): WarmupSet[] 
   // For barbell exercises with sufficient working weight, add a bar-only warmup set
   // This helps practice the movement pattern before adding plates
   if (isBarbell && workingWeight > barbellWeightKg * 1.5) {
-    // Calculate what percentage of working weight the empty bar represents
+    // The percentage is a display approximation of the empty bar — `isBarOnly`
+    // is what renderers must key off, since rounding the percentage to a whole
+    // number moves it either side of the bar (a 20 kg bar under a 70.3 kg top
+    // set is 28.4%, and 28% of 70.3 kg is 19.7 kg — a bar that doesn't exist).
     const barPercentOfWorking = Math.round((barbellWeightKg / workingWeight) * 100);
 
     protocol.push({
@@ -407,11 +421,15 @@ export function generateWarmupProtocol(input: GenerateWarmupInput): WarmupSet[] 
     ? [40, 60, 80]
     : [50, 75];
 
-  // Filter out percentages that would be less than or equal to bar weight for barbell exercises
+  // Drop ramp steps a barbell cannot be loaded to. The empty bar is the floor,
+  // and plates come in pairs, so anything under bar + one increment is either
+  // impossible or indistinguishable from the bar — the bar-only set above
+  // already covers that rung.
+  const smallestPlatePairKg = exercise.minWeightIncrementKg > 0 ? exercise.minWeightIncrementKg : 2.5;
   const filteredPercents = isBarbell
     ? warmupPercents.filter((percent) => {
         const warmupWeight = workingWeight * (percent / 100);
-        return warmupWeight > barbellWeightKg;
+        return warmupWeight >= barbellWeightKg + smallestPlatePairKg;
       })
     : warmupPercents;
 

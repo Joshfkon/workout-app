@@ -347,9 +347,15 @@ describe('generateWarmupProtocol', () => {
   const exercise = createMockExercise();
 
   it('generates minimal warmup for very light weights', () => {
+    // Non-barbell: 50% of a light load is a real, loadable option. (The
+    // barbell case floors at the bar instead — see the bar-floor tests below.)
     const input: GenerateWarmupInput = {
       workingWeight: 15,
-      exercise,
+      exercise: createMockExercise({
+        id: 'db-lateral-raise',
+        name: 'Dumbbell Lateral Raise',
+        equipmentRequired: ['dumbbell'],
+      }),
       isFirstExercise: false,
     };
 
@@ -408,6 +414,83 @@ describe('generateWarmupProtocol', () => {
     for (let i = 1; i < protocol.length; i++) {
       expect(protocol[i].percentOfWorking).toBeGreaterThan(protocol[i - 1].percentOfWorking);
     }
+  });
+
+  it('never prescribes a barbell ramp step below the empty bar', () => {
+    // The reported defect: percentage steps of a light-ish barbell top set
+    // land under the bar (30% of 60 kg = 18 kg on a 20 kg bar).
+    for (const workingWeight of [45, 50, 60, 70.31, 100, 140]) {
+      const protocol = generateWarmupProtocol({
+        workingWeight,
+        exercise,
+        isFirstExercise: false,
+      });
+      for (const set of protocol) {
+        if (set.isBarOnly) continue; // prescribed as the bar itself
+        expect(set.percentOfWorking * workingWeight / 100).toBeGreaterThanOrEqual(20);
+      }
+    }
+  });
+
+  it('drops ramp steps that land within a plate pair of the bar', () => {
+    // 40% of 55 kg is 22 kg — a bar with 1 kg on it, which no rack has and
+    // which the bar-only set already covers.
+    const protocol = generateWarmupProtocol({
+      workingWeight: 55,
+      exercise,
+      isFirstExercise: false,
+    });
+    for (const set of protocol) {
+      if (set.isBarOnly) continue;
+      expect(set.percentOfWorking * 55 / 100).toBeGreaterThanOrEqual(22.5);
+    }
+  });
+
+  it('uses the EZ bar as the floor for an EZ-bar lift', () => {
+    const ezCurl = createMockExercise({
+      id: 'ez-curl',
+      name: 'EZ Bar Curl',
+      primaryMuscle: 'biceps',
+      mechanic: 'isolation',
+      equipmentRequired: ['ez bar'],
+    });
+    const protocol = generateWarmupProtocol({
+      workingWeight: 30,
+      exercise: ezCurl,
+      isFirstExercise: false,
+    });
+    for (const set of protocol) {
+      if (set.isBarOnly) continue;
+      expect(set.percentOfWorking * 30 / 100).toBeGreaterThanOrEqual(10);
+    }
+    // A 30 kg top set on a 10 kg bar is worth an empty-bar set.
+    expect(protocol.some((s) => s.isBarOnly)).toBe(true);
+  });
+
+  it('prescribes the bar itself when a barbell top set is very light', () => {
+    const protocol = generateWarmupProtocol({
+      workingWeight: 18,
+      exercise,
+      isFirstExercise: false,
+    });
+    expect(protocol).toHaveLength(1);
+    expect(protocol[0].isBarOnly).toBe(true);
+  });
+
+  it('leaves non-barbell equipment unfloored', () => {
+    const dumbbell = createMockExercise({
+      id: 'db-press',
+      name: 'Dumbbell Bench Press',
+      equipmentRequired: ['dumbbell'],
+    });
+    const protocol = generateWarmupProtocol({
+      workingWeight: 30,
+      exercise: dumbbell,
+      isFirstExercise: false,
+    });
+    // 50%/75% of 30 kg — both below a bar, both perfectly loadable here.
+    expect(protocol.some((s) => (s.percentOfWorking * 30) / 100 < 20)).toBe(true);
+    expect(protocol.some((s) => s.isBarOnly)).toBe(false);
   });
 
   it('decreases reps as weight increases', () => {

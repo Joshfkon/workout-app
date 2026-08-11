@@ -816,6 +816,14 @@ export interface ResolveWarmupLoadInput {
   /** Required for every bodyweight mode; the lifter's current bodyweight in kg. */
   userBodyweightKg?: number;
   /**
+   * Lightest load the implement can be set up with (services/equipmentClass
+   * `minLoadableWeightKg`) — the empty bar on a barbell lift, 0 elsewhere.
+   * A percentage landing under it is not a light option, it is an unloadable
+   * number, so it clamps up to the floor exactly as bodyweight modes clamp up
+   * to bodyweight.
+   */
+  minLoadableKg?: number;
+  /**
    * Ceiling on assistance as a fraction of bodyweight — no machine/band
    * unloads a lifter to zero, and a warmup that did would train nothing.
    */
@@ -849,8 +857,10 @@ const MAX_ASSISTANCE_FRACTION = 0.9;
  * Turn a warmup set's `percentOfWorking` into a prescription the lifter can
  * actually set up.
  *
- * For externally loaded exercises this is the historical behaviour: the
- * percentage times the working load. For BODYWEIGHT exercises it is not —
+ * For externally loaded exercises this is the percentage times the working
+ * load, floored at `minLoadableKg` — on a barbell lift the empty bar is the
+ * lightest setup that exists, so a ramp step under it is unloadable rather
+ * than light. For BODYWEIGHT exercises it is not —
  * "60% of 98 kg" on a back extension asks a 98 kg lifter to weigh 59 kg.
  * Bodyweight is a floor the percentage cannot go under, so the percentage is
  * resolved onto the dimension the lifter controls (added plate, or
@@ -866,6 +876,7 @@ export function resolveWarmupLoad(input: ResolveWarmupLoadInput): ResolvedWarmup
     mode,
     userBodyweightKg,
     maxAssistanceFraction = MAX_ASSISTANCE_FRACTION,
+    minLoadableKg = 0,
   } = input;
 
   const pct = Number.isFinite(percentOfWorking) ? Math.max(0, percentOfWorking) / 100 : 0;
@@ -874,6 +885,18 @@ export function resolveWarmupLoad(input: ResolveWarmupLoadInput): ResolvedWarmup
   // No bodyweight known → we cannot decompose the effective load, so fall
   // back to the external reading rather than inventing a breakdown.
   if (mode === 'external' || !userBodyweightKg || userBodyweightKg <= 0) {
+    // The implement's own weight is a floor the percentage cannot go under:
+    // "40% of a 155 lb bench" is 62 lb, but a 45 lb bar with no plates on it
+    // is 45 lb, and there is nothing between 0 and 45.
+    const floorKg = Math.max(0, minLoadableKg);
+    if (floorKg > 0 && targetKg < floorKg) {
+      return {
+        dimensionKg: floorKg,
+        dimension: 'external',
+        effectiveKg: floorKg,
+        clamped: true,
+      };
+    }
     return {
       dimensionKg: targetKg,
       dimension: 'external',
