@@ -64,7 +64,10 @@ function memoryDriver() {
  * tell "the flush wrote it" from "the flush gave up on it", and gating that
  * would only add ceremony to every test. `sessionState` controls what it sees.
  */
-function makeGatedSupabase(sessionState: string | null = 'completed') {
+function makeGatedSupabase(
+  sessionState: string | null = 'completed',
+  sessionMesocycleId: string | null = 'meso-1'
+) {
   const pending: Array<{
     table: string;
     op: 'upsert' | 'update';
@@ -85,7 +88,10 @@ function makeGatedSupabase(sessionState: string | null = 'completed') {
       select: () => ({
         eq: () => ({
           maybeSingle: async () => ({
-            data: state.value === null ? null : { state: state.value },
+            data:
+              state.value === null
+                ? null
+                : { state: state.value, mesocycle_id: sessionMesocycleId },
             error: null,
           }),
         }),
@@ -455,7 +461,8 @@ describe('confirmClaimOptimistic', () => {
   });
 
   it('queues the mesocycle link and runs meso updates once synced', async () => {
-    const { client, pending } = makeGatedSupabase();
+    // The row reports the claimed mesocycle, i.e. the claim write landed.
+    const { client, pending } = makeGatedSupabase('completed', 'meso-9');
     const runMesoUpdates = jest.fn().mockResolvedValue(undefined);
 
     await confirmClaimOptimistic({
@@ -772,5 +779,76 @@ describe('post-finish settlement survives the flush race', () => {
 
     expect(runMesoUpdates).not.toHaveBeenCalled();
     expect((await listPostFinishWork()).map((w) => w.sessionId)).toEqual(['s1']);
+  });
+});
+
+/**
+ * Two ways the claim path could have reintroduced the very dependency this
+ * change removes. Both were raised by Codex review on the B3 PR.
+ */
+describe('claim settlement is durable and verified', () => {
+  beforeEach(() => {
+    __setDriverForTests(memoryDriver());
+    __setPostFinishStoreForTests(createMemoryStore<PostFinishWork>());
+    jest.spyOn(console, 'info').mockImplementation(() => {});
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    __setDriverForTests(null);
+    __setPostFinishStoreForTests(null);
+    jest.restoreAllMocks();
+  });
+
+  it('records the claimed mesocycle BEFORE any background work starts', async () => {
+    // If the item were only patched after the flush, an app kill (or a claim
+    // that sits queued offline for days) would leave it saying
+    // `mesocycleId: null` — and the later drain would settle it having
+    // skipped the mesocycle updates for good.
+    const { client } = makeGatedSupabase('completed', 'meso-9');
+
+    await confirmClaimOptimistic({
+      supabase: client,
+      sessionId: 's1',
+      session: makeSession(),
+      mesocycleId: 'meso-9',
+      sessionRpe: 7,
+      runMesoUpdates: jest.fn(),
+    });
+
+    // Nothing has been released, so no network work has happened yet.
+    expect(await getPostFinishWork('s1')).toMatchObject({
+      sessionId: 's1',
+      mesocycleId: 'meso-9',
+      sessionRpe: 7,
+    });
+  });
+
+  it('skips the mesocycle updates when the session is not actually linked', async () => {
+    // The flush's give-up path can drop the claim after five rejections, so
+    // "no queued claim" does not mean "claimed". Running the mesocycle
+    // updates anyway would write fatigue and deload state against a
+    // mesocycle this session does not belong to.
+    const { client, pending } = makeGatedSupabase('completed', null);
+    const runMesoUpdates = jest.fn().mockResolvedValue(undefined);
+
+    await confirmClaimOptimistic({
+      supabase: client,
+      sessionId: 's1',
+      session: makeSession(),
+      mesocycleId: 'meso-9',
+      sessionRpe: 7,
+      runMesoUpdates,
+    });
+    await settle();
+    while (pending.length > 0) {
+      pending.shift()!.resolve();
+      await settle();
+    }
+
+    expect(runMesoUpdates).not.toHaveBeenCalled();
+    // Still settled: the session-scoped work is done and the item cleared,
+    // because the claim is gone from the queue and will never land.
+    expect(await listPostFinishWork()).toEqual([]);
   });
 });
