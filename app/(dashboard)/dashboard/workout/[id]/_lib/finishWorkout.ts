@@ -15,12 +15,23 @@
  *      failures stay queued and are retried by the existing outbox flushers
  *      (dashboard layout mount + 'online' events + workout-page poll).
  *   4. Post-processing that requires the completion to be visible in the DB
- *      (mesocycle week advance / deload check, calorie estimate) runs only
- *      after the flush confirms the completion landed. If the app dies
- *      before that, the completion itself is still safe in the outbox, and
- *      the meso updates self-heal: they recount completed sessions on every
- *      subsequent finish (advance-only writes), so a missed run is caught up
- *      by the next one.
+ *      (mesocycle week advance / deload check, calorie estimate) is recorded
+ *      as a DURABLE work item (lib/offline/postFinishQueue) and settled by
+ *      whichever flush path drains the completion — see `settlePostFinish`.
+ *
+ * WHY THE WORK ITEM IS DURABLE (B3). Step 4 used to be gated on whether THIS
+ * call's `flushSetOutbox` result listed the finish entry. That is a fact about
+ * which flush carried the write, not about whether the write landed: another
+ * flush path can drain the completion first, and overlapping calls share one
+ * in-flight promise whose result describes a different queue snapshot. Either
+ * way the completion reached the database while its caller concluded
+ * `completionSynced = false` — and because nothing else was looking for the
+ * work, it was skipped permanently. The invariant now is:
+ *
+ *     finish durably persisted → post-session work eventually runs
+ *
+ * regardless of which caller wins the race, and even if the original caller is
+ * gone. At-least-once, over an idempotent body (see `runPostFinishWork`).
  *
  * Timing instrumentation: every stage is marked with performance.now() and
  * one `[finish-timing]` breakdown is logged per finish so tap-to-response
@@ -31,9 +42,18 @@ import {
   enqueueRowUpdate,
   enqueueRowUpsert,
   flushSetOutbox,
+  hasQueuedEntry,
   type FlushResult,
   type OutboxSupabase,
 } from '@/lib/offline/setOutbox';
+import {
+  enqueuePostFinishWork,
+  getPostFinishWork,
+  listPostFinishWork,
+  patchPostFinishWork,
+  removePostFinishWork,
+  type PostFinishWork,
+} from '@/lib/offline/postFinishQueue';
 import { runPostSessionMesoUpdates } from './postSessionMeso';
 import { upsertSessionMuscleFeedback } from './muscleFeedbackWrites';
 import type { SessionMuscleFeedbackEntry } from '@/components/workout/SessionSummary';
@@ -175,7 +195,8 @@ export async function submitFinishOptimistic(
   timer.mark('tap');
 
   // 1. Durability first: persist the completion locally (IndexedDB, a few
-  //    ms). After this a crash/kill cannot lose the finished workout.
+  //    ms). After this a crash/kill cannot lose the finished workout — nor,
+  //    thanks to the work item, the processing that has to follow it.
   let queued = true;
   try {
     await enqueueRowUpdate(
@@ -191,6 +212,7 @@ export async function submitFinishOptimistic(
         row
       );
     }
+    await enqueuePostFinishWork(workItemFor(sessionId, session, data.sessionRpe));
   } catch (err) {
     // Outbox unavailable (broken IndexedDB) — fall back to direct writes in
     // the background task below. The UI still responds immediately.
@@ -209,29 +231,61 @@ export async function submitFinishOptimistic(
   //    user.
   void (async () => {
     try {
-      let completionSynced: boolean;
       if (queued) {
-        const result = await flushIncluding(supabase, sessionFinishEntryId(sessionId));
-        completionSynced = result.flushedIds.includes(sessionFinishEntryId(sessionId));
+        await flushIncluding(supabase, sessionFinishEntryId(sessionId));
+        // NOT gated on what that flush reported: `settlePostFinish` asks
+        // whether the entry has left the queue and the row is completed.
+        const outcome = await settlePostFinish(supabase, sessionId, {
+          runMesoUpdates: deps.runMesoUpdates,
+          onCompletionSynced: deps.onCompletionSynced,
+        });
+        timer.mark(outcome === 'ran' ? 'synced' : `sync-${outcome}`);
       } else {
-        completionSynced = await directFinishWrites(supabase, sessionId, session, data);
-      }
-      timer.mark(completionSynced ? 'synced' : 'sync-pending(queued for retry)');
-
-      if (completionSynced) {
-        try {
-          deps.onCompletionSynced?.();
-        } catch (err) {
-          console.error('onCompletionSynced hook failed:', err);
+        // Outbox unusable (broken IndexedDB): no durable work item is
+        // possible, so this caller does the work inline. The pre-existing
+        // degraded path — if the tab dies here, the finish is lost anyway.
+        const wrote = await directFinishWrites(supabase, sessionId, session, data);
+        timer.mark(wrote ? 'synced' : 'sync-failed');
+        if (wrote) {
+          fireCompletionSynced(deps.onCompletionSynced);
+          await runPostFinishWork(
+            supabase,
+            { ...workItemFor(sessionId, session, data.sessionRpe), id: '', enqueuedAt: 0 },
+            deps.runMesoUpdates
+          );
         }
-        await runFinishPostProcessing(deps, data.sessionRpe, timer);
       }
     } catch (err) {
-      // Queued entries survive for the next flush; nothing is lost.
+      // Queued entries and the work item survive for the next flush/drain;
+      // nothing is lost.
       console.error('Background finish sync failed (will retry from outbox):', err);
     }
     timer.report();
   })();
+}
+
+/** The durable work item for a session, from the data the finish already has. */
+function workItemFor(
+  sessionId: string,
+  session: WorkoutSession,
+  sessionRpe: number | null
+): Omit<PostFinishWork, 'id' | 'enqueuedAt'> {
+  return {
+    sessionId,
+    userId: session.userId,
+    mesocycleId: session.mesocycleId ?? null,
+    sessionRpe,
+    checkIn: session.preWorkoutCheckIn ?? null,
+    plannedDate: session.plannedDate || null,
+  };
+}
+
+function fireCompletionSynced(hook: (() => void) | undefined): void {
+  try {
+    hook?.();
+  } catch (err) {
+    console.error('onCompletionSynced hook failed:', err);
+  }
 }
 
 /**
@@ -284,36 +338,178 @@ async function directFinishWrites(
   return true;
 }
 
+// ---------------------------------------------------------------------------
+// Post-finish settlement (B3)
+// ---------------------------------------------------------------------------
+
+/** Why a settle attempt ended. Only `ran` means the work was performed. */
+export type PostFinishOutcome =
+  /** The work ran and the item was cleared. */
+  | 'ran'
+  /** The completion has not landed yet (or we couldn't tell) — try again. */
+  | 'pending'
+  /** The write left the queue without completing; the item was dropped. */
+  | 'abandoned'
+  /** Nothing owed for this session. */
+  | 'none';
+
+/** Give-up bound, mirroring the outbox's own 5-attempt policy. */
+const MAX_POST_FINISH_ATTEMPTS = 5;
+
+export interface SettleOptions {
+  /** Test seam: overrides the mesocycle post-processing runner. */
+  runMesoUpdates?: typeof runPostSessionMesoUpdates;
+  /** Fired once, immediately before the work runs. Best-effort. */
+  onCompletionSynced?: () => void;
+}
+
+/**
+ * Run the post-processing a session owes, if and only if its finish has
+ * actually landed.
+ *
+ * THE POINT OF THIS FUNCTION is that it never asks "did my flush carry the
+ * write". It asks the two questions that are actually decidable:
+ *
+ *   1. Is the finish (or claim) entry still in the outbox? Then the write has
+ *      not landed — wait.
+ *   2. It is gone. Did it leave because it succeeded, or because the flush
+ *      gave up on it after five server rejections? Only the row itself can
+ *      say, so read it.
+ *
+ * The item is cleared only AFTER the work completes, so a crash mid-work
+ * leaves it for the next drain. That makes execution at-least-once by design —
+ * safe because every operation in `runPostFinishWork` recomputes and
+ * overwrites from persisted state rather than accumulating.
+ */
+export async function settlePostFinish(
+  supabase: UntypedSupabase,
+  sessionId: string,
+  opts: SettleOptions = {}
+): Promise<PostFinishOutcome> {
+  const work = await getPostFinishWork(sessionId);
+  if (!work) return 'none';
+
+  // A claim writes to the same row; both must have landed before the meso
+  // updates can count this session against its mesocycle.
+  if (await hasQueuedEntry(sessionFinishEntryId(sessionId))) return 'pending';
+  if (await hasQueuedEntry(sessionClaimEntryId(sessionId))) return 'pending';
+
+  const completed = await sessionIsCompleted(supabase, sessionId);
+  if (completed === null) return 'pending'; // couldn't tell — next drain retries
+  if (!completed) {
+    console.error(
+      `[finish] session ${sessionId} left the outbox without completing — ` +
+        'dropping its post-processing.'
+    );
+    await removePostFinishWork(sessionId);
+    return 'abandoned';
+  }
+
+  const attempts = (work.attempts ?? 0) + 1;
+  if (attempts > MAX_POST_FINISH_ATTEMPTS) {
+    console.error(
+      `[finish] post-processing for session ${sessionId} failed ` +
+        `${MAX_POST_FINISH_ATTEMPTS} times — dropping it.`
+    );
+    await removePostFinishWork(sessionId);
+    return 'abandoned';
+  }
+  await patchPostFinishWork(sessionId, { attempts });
+
+  fireCompletionSynced(opts.onCompletionSynced);
+  await runPostFinishWork(supabase, work, opts.runMesoUpdates);
+  await removePostFinishWork(sessionId);
+  return 'ran';
+}
+
+/**
+ * Settle every session that still owes post-processing.
+ *
+ * Called from the same places that already flush the outbox, so the work is
+ * driven by whoever is around rather than by whoever finished the workout.
+ * Normally a no-op: with nothing pending it reads one empty object store and
+ * touches the network zero times.
+ */
+export async function drainPostFinishWork(
+  supabase: UntypedSupabase,
+  opts: SettleOptions = {}
+): Promise<PostFinishOutcome[]> {
+  const pending = await listPostFinishWork();
+  const outcomes: PostFinishOutcome[] = [];
+  for (const work of pending) {
+    try {
+      outcomes.push(await settlePostFinish(supabase, work.sessionId, opts));
+    } catch (err) {
+      // One poisoned item must not stop the rest; the attempt counter above
+      // bounds how long it can keep failing.
+      console.error(`Post-finish drain failed for session ${work.sessionId}:`, err);
+      outcomes.push('pending');
+    }
+  }
+  return outcomes;
+}
+
+/**
+ * Is the completion actually in the database?
+ *
+ * `null` means the question could not be answered (offline, query error) —
+ * distinct from `false`, which means the row is there and not completed (or is
+ * gone entirely). Only `false` justifies dropping the work item.
+ */
+async function sessionIsCompleted(
+  supabase: UntypedSupabase,
+  sessionId: string
+): Promise<boolean | null> {
+  try {
+    const { data, error } = await supabase
+      .from('workout_sessions')
+      .select('state')
+      .eq('id', sessionId)
+      .maybeSingle();
+    if (error) return null;
+    return (data as { state?: string } | null)?.state === 'completed';
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Work that must only run once the completion is visible in the DB (it
  * recounts completed sessions / reads the completed row).
+ *
+ * EVERY STEP HERE IS IDEMPOTENT, which is what makes at-least-once execution
+ * the right guarantee:
+ *  - `current_week` is an advance-only `.lt()` write off a recount;
+ *  - the weekly fatigue log is a find-then-update/insert of derived values on
+ *    (user, mesocycle, week);
+ *  - the deload check re-derives from stored rows;
+ *  - the calorie estimate recomputes and overwrites for the session.
+ * Running twice converges on the same rows.
  */
-async function runFinishPostProcessing(
-  deps: FinishFlowDeps,
-  sessionRpe: number,
-  timer: FinishTimer
+async function runPostFinishWork(
+  supabase: UntypedSupabase,
+  work: PostFinishWork,
+  runMesoUpdatesOverride?: typeof runPostSessionMesoUpdates
 ): Promise<void> {
-  const { supabase, sessionId, session } = deps;
-
   // Deload trigger check + week advance from the completed-session count.
-  if (session.mesocycleId) {
-    const runMeso = deps.runMesoUpdates ?? runPostSessionMesoUpdates;
+  if (work.mesocycleId) {
+    const runMeso = runMesoUpdatesOverride ?? runPostSessionMesoUpdates;
     await runMeso(supabase, {
-      mesocycleId: session.mesocycleId,
-      userId: session.userId,
-      sessionRpe,
-      checkIn: session.preWorkoutCheckIn ?? null,
+      mesocycleId: work.mesocycleId,
+      userId: work.userId,
+      sessionRpe: work.sessionRpe,
+      checkIn: work.checkIn,
     });
-    timer.mark('meso-updates');
   }
 
-  // Workout calorie estimate (several sequential DB round-trips) — the
-  // result is dashboard garnish, so it stays fire-and-forget.
-  if (session.plannedDate) {
-    const plannedDate = session.plannedDate;
-    import('@/lib/actions/workout-calories')
+  // Workout calorie estimate (several sequential DB round-trips). Awaited now
+  // rather than fire-and-forget: the work item is only cleared afterwards, so
+  // awaiting is what extends the at-least-once guarantee to cover it.
+  if (work.plannedDate) {
+    const plannedDate = work.plannedDate;
+    await import('@/lib/actions/workout-calories')
       .then(({ calculateAndSaveWorkoutCalories }) =>
-        calculateAndSaveWorkoutCalories(sessionId, plannedDate)
+        calculateAndSaveWorkoutCalories(work.sessionId, plannedDate)
       )
       .catch((err) => console.error('Workout calorie calculation failed:', err));
   }
@@ -358,36 +554,52 @@ export async function confirmClaimOptimistic(deps: ClaimFlowDeps): Promise<void>
 
   void (async () => {
     try {
-      let claimSynced: boolean;
-      let completionSynced = true;
       if (queued) {
-        const result = await flushIncluding(supabase, sessionClaimEntryId(sessionId));
-        claimSynced = result.flushedIds.includes(sessionClaimEntryId(sessionId));
-        // If the finish entry was still queued, it must have gone through in
-        // the same flush for the session to count as completed.
-        completionSynced = !result.failedIds.includes(sessionFinishEntryId(sessionId));
+        await flushIncluding(supabase, sessionClaimEntryId(sessionId));
+        // Teach the durable work item which mesocycle this session now
+        // belongs to. If the finish already settled (ad-hoc session: it ran
+        // with no mesocycle, so the meso updates were skipped) there is no
+        // item left to patch — write a fresh one so the claim's own
+        // processing is just as recoverable as the finish's was.
+        const patched = await patchPostFinishWork(sessionId, {
+          mesocycleId,
+          sessionRpe: deps.sessionRpe,
+          attempts: 0,
+        });
+        if (!patched) {
+          await enqueuePostFinishWork({
+            sessionId,
+            userId: session.userId,
+            mesocycleId,
+            sessionRpe: deps.sessionRpe,
+            checkIn: session.preWorkoutCheckIn ?? null,
+            plannedDate: session.plannedDate || null,
+          });
+        }
+        // Settles only when BOTH the finish and the claim have left the
+        // queue — `settlePostFinish` checks each.
+        await settlePostFinish(supabase, sessionId, { runMesoUpdates: deps.runMesoUpdates });
       } else {
         const { error } = await supabase
           .from('workout_sessions')
           .update({ mesocycle_id: mesocycleId })
           .eq('id', sessionId);
-        claimSynced = !error;
-        if (error) console.error('Failed to count workout toward mesocycle:', error);
-      }
-
-      if (claimSynced && completionSynced) {
-        const runMeso = deps.runMesoUpdates ?? runPostSessionMesoUpdates;
-        await runMeso(supabase, {
-          mesocycleId,
-          userId: session.userId,
-          sessionRpe: deps.sessionRpe,
-          checkIn: session.preWorkoutCheckIn ?? null,
-        });
+        if (error) {
+          console.error('Failed to count workout toward mesocycle:', error);
+        } else {
+          const runMeso = deps.runMesoUpdates ?? runPostSessionMesoUpdates;
+          await runMeso(supabase, {
+            mesocycleId,
+            userId: session.userId,
+            sessionRpe: deps.sessionRpe,
+            checkIn: session.preWorkoutCheckIn ?? null,
+          });
+        }
       }
     } catch (err) {
       // Non-fatal: the workout is already saved; the claim entry (if queued)
-      // is retried by the next outbox flush, and the meso updates self-heal
-      // on the next completed session.
+      // is retried by the next outbox flush, and the work item is settled by
+      // the next drain.
       console.error('Background claim sync failed:', err);
     }
   })();

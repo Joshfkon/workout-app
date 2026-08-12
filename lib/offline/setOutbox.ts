@@ -78,16 +78,26 @@ interface OutboxDriver {
 // ---------------------------------------------------------------------------
 
 const DB_NAME = 'hypertrack-offline';
-const DB_VERSION = 1;
+/**
+ * v2 adds the `post-finish` store (see lib/offline/postFinishQueue.ts). The
+ * upgrade is additive — `set-outbox` and anything queued in it survive — so a
+ * client that has been offline across the upgrade still flushes its backlog.
+ */
+const DB_VERSION = 2;
 const STORE = 'set-outbox';
+export const POST_FINISH_STORE = 'post-finish';
 
-function openDb(): Promise<IDBDatabase> {
+const STORES = [STORE, POST_FINISH_STORE];
+
+export function openOfflineDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = () => {
       const db = req.result;
-      if (!db.objectStoreNames.contains(STORE)) {
-        db.createObjectStore(STORE, { keyPath: 'id' });
+      for (const name of STORES) {
+        if (!db.objectStoreNames.contains(name)) {
+          db.createObjectStore(name, { keyPath: 'id' });
+        }
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -95,12 +105,16 @@ function openDb(): Promise<IDBDatabase> {
   });
 }
 
-function idbRequest<T>(makeReq: (store: IDBObjectStore) => IDBRequest<T>, mode: IDBTransactionMode): Promise<T> {
-  return openDb().then(
+function idbRequest<T>(
+  storeName: string,
+  makeReq: (store: IDBObjectStore) => IDBRequest<T>,
+  mode: IDBTransactionMode
+): Promise<T> {
+  return openOfflineDb().then(
     (db) =>
       new Promise<T>((resolve, reject) => {
-        const tx = db.transaction(STORE, mode);
-        const req = makeReq(tx.objectStore(STORE));
+        const tx = db.transaction(storeName, mode);
+        const req = makeReq(tx.objectStore(storeName));
         req.onsuccess = () => resolve(req.result);
         req.onerror = () => reject(req.error);
         tx.oncomplete = () => db.close();
@@ -109,30 +123,44 @@ function idbRequest<T>(makeReq: (store: IDBObjectStore) => IDBRequest<T>, mode: 
   );
 }
 
-const idbDriver: OutboxDriver = {
-  put: (entry) => idbRequest((s) => s.put(entry), 'readwrite').then(() => undefined),
-  getAll: () => idbRequest((s) => s.getAll(), 'readonly') as Promise<OutboxEntry[]>,
-  delete: (id) => idbRequest((s) => s.delete(id), 'readwrite').then(() => undefined),
-  get: (id) => idbRequest((s) => s.get(id), 'readonly') as Promise<OutboxEntry | undefined>,
-};
+/** Minimal keyed-record store, the shape every offline queue here needs. */
+export interface OfflineStore<T extends { id: string }> {
+  put(record: T): Promise<void>;
+  getAll(): Promise<T[]>;
+  delete(id: string): Promise<void>;
+  get(id: string): Promise<T | undefined>;
+}
+
+export function createIdbStore<T extends { id: string }>(storeName: string): OfflineStore<T> {
+  return {
+    put: (record) => idbRequest(storeName, (s) => s.put(record), 'readwrite').then(() => undefined),
+    getAll: () => idbRequest(storeName, (s) => s.getAll(), 'readonly') as Promise<T[]>,
+    delete: (id) => idbRequest(storeName, (s) => s.delete(id), 'readwrite').then(() => undefined),
+    get: (id) => idbRequest(storeName, (s) => s.get(id), 'readonly') as Promise<T | undefined>,
+  };
+}
 
 /** In-memory fallback (SSR / tests / no-IDB webviews). */
-function createMemoryDriver(): OutboxDriver {
-  const map = new Map<string, OutboxEntry>();
+export function createMemoryStore<T extends { id: string }>(): OfflineStore<T> {
+  const map = new Map<string, T>();
   return {
-    put: async (entry) => { map.set(entry.id, { ...entry }); },
+    put: async (record) => { map.set(record.id, { ...record }); },
     getAll: async () => Array.from(map.values()),
     delete: async (id) => { map.delete(id); },
     get: async (id) => map.get(id),
   };
 }
 
-let driver: OutboxDriver | null = null;
-function getDriver(): OutboxDriver {
-  if (!driver) {
-    driver =
-      typeof indexedDB !== 'undefined' ? idbDriver : createMemoryDriver();
-  }
+/** The idb store when IndexedDB exists, otherwise a page-lifetime map. */
+export function resolveOfflineStore<T extends { id: string }>(storeName: string): OfflineStore<T> {
+  return typeof indexedDB !== 'undefined' ? createIdbStore<T>(storeName) : createMemoryStore<T>();
+}
+
+type OutboxDriverImpl = OutboxDriver;
+
+let driver: OutboxDriverImpl | null = null;
+function getDriver(): OutboxDriverImpl {
+  if (!driver) driver = resolveOfflineStore<OutboxEntry>(STORE);
   return driver;
 }
 
@@ -180,6 +208,21 @@ export async function enqueueRowUpdate(
 export async function listOutbox(): Promise<OutboxEntry[]> {
   const all = await getDriver().getAll();
   return all.sort((a, b) => a.enqueuedAt - b.enqueuedAt);
+}
+
+/**
+ * Is this entry still waiting to be written?
+ *
+ * The honest question to ask about a queued write, and the one callers should
+ * gate on instead of "did MY flush report it". A `FlushResult` describes the
+ * queue snapshot the flush that produced it happened to see — and because
+ * overlapping flushes share one in-flight promise, that may not be the
+ * snapshot containing your entry. An entry that is ABSENT here has left the
+ * queue: `doFlush` deletes only after a successful write (or after the
+ * 5-attempt give-up, which callers must rule out separately).
+ */
+export async function hasQueuedEntry(entryId: string): Promise<boolean> {
+  return (await getDriver().get(entryId)) !== undefined;
 }
 
 export async function outboxCount(table?: OutboxTable): Promise<number> {
