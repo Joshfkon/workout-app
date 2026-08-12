@@ -32,6 +32,13 @@ jobs:
       - name: Check coverage thresholds
         run: npm run test:coverage -- --ci
 
+      # Fast simulation suite: all deterministic regression scenarios plus
+      # 1 simulated month x 5 seeds per persona, against real engine code.
+      # The full ~6-month x 50-seed sweep is run on demand / nightly:
+      #   npm run simulate -- --full
+      - name: Run simulation suite (fast)
+        run: npm run simulate
+
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
         if: always()

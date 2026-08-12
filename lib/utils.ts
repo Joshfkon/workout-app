@@ -7,6 +7,7 @@ import {
   type RepsInTank,
 } from '@/types/schema';
 import { e1rmValue } from '@/services/shared/e1rm';
+import { now as clockNow } from '@/lib/clock';
 
 /**
  * Utility for merging class names conditionally.
@@ -20,8 +21,15 @@ export function cn(...inputs: ClassValue[]) {
 /**
  * Get today's date in YYYY-MM-DD format using LOCAL timezone (not UTC)
  * This fixes the issue where toISOString() returns tomorrow's date in the evening
+ *
+ * The zero-argument form reads `lib/clock` rather than `new Date()`, so a
+ * simulation can move "today" without changing any caller. Production behaviour
+ * is unchanged — the default clock is the system clock. See `lib/clock.ts` for
+ * what a "day" means here; `localDay()` in `lib/date/localDay` is the identical
+ * function, re-exported there so callers can depend on the bucketing module
+ * alone.
  */
-export function getLocalDateString(date: Date = new Date()): string {
+export function getLocalDateString(date: Date = clockNow()): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
@@ -97,7 +105,9 @@ export function showDateTick(index: number, total: number, step: number): boolea
  */
 export function formatDistanceToNow(date: string | Date): string {
   const d = typeof date === 'string' ? new Date(date) : date;
-  const now = new Date();
+  // "Now" is the application clock, so a simulated run's relative labels read
+  // against simulated time rather than the wall clock. Production is unchanged.
+  const now = clockNow();
   const diffMs = now.getTime() - d.getTime();
   const diffSecs = Math.floor(diffMs / 1000);
   const diffMins = Math.floor(diffSecs / 60);
@@ -839,7 +849,11 @@ export function calculateStreaks(dates: (Date | string)[]): StreakResult {
 
   // Calculate current streak (must end today or yesterday)
   const today = getLocalDateString();
-  const yesterday = getLocalDateString(new Date(Date.now() - 24 * 60 * 60 * 1000));
+  // Clock-routed, but the arithmetic is deliberately left as-is: -24h is not
+  // the same as "the previous calendar day" on a DST boundary, and correcting
+  // it (addLocalDays(today, -1)) would be a behaviour change, which this
+  // clock-injection pass explicitly does not make. Tracked separately.
+  const yesterday = getLocalDateString(new Date(clockNow().getTime() - 24 * 60 * 60 * 1000));
 
   // Check if there's a workout today or yesterday to start counting
   const lastWorkoutDate = sortedDates[sortedDates.length - 1];

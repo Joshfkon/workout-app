@@ -21,6 +21,7 @@ import {
 } from '@/services/deloadEngine';
 import { upsertWeeklyFatigueLog } from './sessionWrites';
 import type { DiscomfortSeverity, Rating } from '@/types/schema';
+import { now as clockNow } from '@/lib/clock';
 
 type UntypedSupabase = ReturnType<typeof import('@/lib/supabase/client').createUntypedClient>;
 
@@ -86,7 +87,7 @@ export async function runPostSessionMesoUpdates(
     // Best-effort — a missing table or query error must not block the finish.
     let jointPain = false;
     try {
-      const now = new Date();
+      const now = clockNow();
       const cutoff = new Date(
         now.getTime() - JOINT_PAIN_WINDOW_DAYS * 24 * 60 * 60 * 1000
       ).toISOString();

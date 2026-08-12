@@ -9,13 +9,20 @@ import { formatSetHistoryLine } from '@/lib/formatSetHistory';
 import { SorenessChipRow, JointPainPicker } from './FeedbackChips';
 import { filterExercises, dedupeExercisesById } from '@/services/exerciseFilter';
 import { convertWeight, formatMuscleName, formatWeightValue, convertWeightForDisplay, inputWeightToKg, roundToPlateIncrement, sumDisplayVolume } from '@/lib/utils';
-import { recommendSet, recommendSessionStart, estimateRepsForWeight, predictAmrapReps, recommendSeedForSlot, resolveLastRir, prescribe, type SeedRecommendation } from '@/services/setRecommender';
+import { recommendSessionStart, estimateRepsForWeight, predictAmrapReps, recommendSeedForSlot, resolveLastRir, prescribe, type SeedRecommendation } from '@/services/setRecommender';
+import {
+  nextSetPrescription,
+  sessionBestE1RM as sessionBestE1RMKg,
+  lastSessionE1RM as lastSessionE1RMKg,
+  coldStartE1RM as coldStartE1RMKg,
+  toPrevSessionSets,
+  repTotalNextSetAt as repTotalNextTargetAt,
+} from '@/services/prescription/sessionPrescription';
 import { framePositionalDelta } from '@/services/suggestionEngine/deltaFraming';
 import { inferSetRole, type SetRole } from '@/services/suggestionEngine/setRoles';
 import {
   resolveProgressionModel,
   recommendRepTotalSessionStart,
-  recommendRepTotalNextSet,
 } from '@/services/suggestionEngine/repTotalPolicy';
 import { RAMP_LOAD_FRACTION, WORKING_WEIGHT_CLAMP_FRACTION } from '@/services/suggestionEngine/constants';
 import { findSimilarExercises, calculateSimilarityScore } from '@/services/exerciseSwapper';
@@ -626,19 +633,10 @@ export const ExerciseCard = memo(function ExerciseCard({
   // Within-session next-set recommendation (services/setRecommender.ts).
   // Anchor on the freshest/strongest E1RM this exercise so late-set predictions
   // aren't double-fatigued.
-  const sessionBestE1RM = useMemo(() => {
-    // Duration sets carry seconds in `reps` — Epley on them fabricates an e1RM.
-    if (exercise.exerciseType === 'duration_based') return undefined;
-    let best = 0;
-    for (const s of completedSets) {
-      if (s.weightKg > 0 && s.reps > 0) {
-        const rir = resolveLastRir(s, effectiveTargetRir);
-        const e = s.weightKg * (1 + (s.reps + rir) / 30);
-        if (e > best) best = e;
-      }
-    }
-    return best > 0 ? best : undefined;
-  }, [completedSets, effectiveTargetRir, exercise.exerciseType]);
+  const sessionBestE1RM = useMemo(
+    () => sessionBestE1RMKg(completedSets, effectiveTargetRir, exercise.exerciseType),
+    [completedSets, effectiveTargetRir, exercise.exerciseType]
+  );
 
   // Prescription e1RM ladder (unified prescribe() contract, services/setRecommender):
   //   1. session-best — a set logged THIS session (sessionBestE1RM above);
@@ -651,25 +649,21 @@ export const ExerciseCard = memo(function ExerciseCard({
   // era, other implement, different formula), so it never answers a weight
   // edit — that inconsistency is what saturated the rep estimate into the
   // constant "× 20". With no rung available, weight edits leave reps untouched.
-  const lastSessionE1RM = useMemo(() => {
-    if (exercise.exerciseType === 'duration_based') return undefined;
-    let best = 0;
-    for (const s of previousSets) {
-      if (s.weightKg > 0 && s.reps > 0) {
-        const rir = s.rpe != null ? Math.max(0, rpeToRir(s.rpe)) : effectiveTargetRir;
-        const e = s.weightKg * (1 + (s.reps + rir) / 30);
-        if (e > best) best = e;
-      }
-    }
-    return best > 0 ? best : undefined;
-  }, [previousSets, effectiveTargetRir, exercise.exerciseType]);
+  const lastSessionE1RM = useMemo(
+    () => lastSessionE1RMKg(previousSets, effectiveTargetRir, exercise.exerciseType),
+    [previousSets, effectiveTargetRir, exercise.exerciseType]
+  );
 
-  const coldStartE1RM = useMemo(() => {
-    if (exercise.exerciseType === 'duration_based') return undefined;
-    if (!coldStartSuggestion || !(coldStartSuggestion.weightKg > 0)) return undefined;
-    const mid = Math.round((block.targetRepRange[0] + block.targetRepRange[1]) / 2);
-    return coldStartSuggestion.weightKg * (1 + (mid + effectiveTargetRir) / 30);
-  }, [coldStartSuggestion, block.targetRepRange, effectiveTargetRir, exercise.exerciseType]);
+  const coldStartE1RM = useMemo(
+    () =>
+      coldStartE1RMKg(
+        coldStartSuggestion?.weightKg,
+        block.targetRepRange,
+        effectiveTargetRir,
+        exercise.exerciseType
+      ),
+    [coldStartSuggestion, block.targetRepRange, effectiveTargetRir, exercise.exerciseType]
+  );
 
   // Grade the next set against the effort ACTUALLY logged on `last` — read from
   // the persisted set record (feedback.repsInTank first, then rpe), never the
@@ -683,61 +677,27 @@ export const ExerciseCard = memo(function ExerciseCard({
   // next set (0 = next). Position matching (Phase A) targets each slot from
   // the SAME set position last session, so later pending slots get their own
   // positional target instead of a copy of the next set's.
-  const recommendNext = (last: { weightKg: number; reps: number; rpe?: number; feedback?: SetFeedback }, positionOffset = 0) => {
-    // rep_total path: re-derived per set from today's observed sets
-    // (repTotalNextSetAt, defined below) — rep-space invariants, no e1RM
-    // math. The offset is honored so each pending slot gets its own target.
-    if (repTotalMode) {
-      const next = repTotalNextSetAt(positionOffset);
-      return {
-        weightKg: next?.weightKg ?? last.weightKg,
-        reps:
-          next?.reps ??
-          Math.min(Math.max(last.reps, block.targetRepRange[0]), block.targetRepRange[1]),
-        rir: effectiveTargetRir,
-        rationale: (next?.rationale === 'reduce_load' ? 'reduce_load' : 'maintain') as
-          | 'reduce_load'
-          | 'maintain',
-        effortVsTarget: next?.effortVsTarget ?? ('on_target' as const),
-      };
-      // NOTE (audit S1): a null `next` means there is no session plan and the
-      // values above are just the last set echoed back — NOT a derived
-      // prescription. This shape stays structurally assignable to
-      // SetRecommendation on purpose (an extra field here breaks the union
-      // narrowing every e1RM-branch caller depends on), so the disclosure
-      // lives in the banner, which tests `repTotalPlan` directly and says
-      // "no comparable history yet, echoing your last set".
-    }
-    return recommendSet({
-      lastWeightKg: last.weightKg,
-      lastReps: last.reps,
-      lastRir: resolveLastRir(last, effectiveTargetRir),
-      setsCompletedThisExercise: completedSets.length + positionOffset,
-      sessionBestE1RMKg: sessionBestE1RM,
+  const recommendNext = (
+    last: { weightKg: number; reps: number; rpe?: number; feedback?: SetFeedback },
+    positionOffset = 0
+  ) =>
+    nextSetPrescription({
+      last,
+      positionOffset,
       targetRepRange: block.targetRepRange,
       targetRir: effectiveTargetRir,
-      minIncrementKg: exercise.minWeightIncrementKg,
-      availableIncrementsKg: exercise.availableIncrementsKg ?? undefined,
-      coldStart: isColdStartExercise,
-      exerciseType: exercise.exerciseType,
-      isBodyweight: exercise.isBodyweight,
-      // Phase 0 (INV-2): today's completed sets with their logged effort —
-      // the ceiling no prescription may imply more capacity than.
-      sessionObservedSets: completedSets.map((s) => ({
-        weightKg: s.weightKg,
-        reps: s.reps,
-        rir: resolveLastRir(s, effectiveTargetRir),
-      })),
-      // Phase A — set-position matching: when last session is comparable, the
-      // next set's target is what the SAME position did last time, not a
-      // re-derivation from the session-start anchor.
-      positionContext: {
-        prevSessionSets: prevSessionSetsForGating,
-        todaySets: completedSets.map((s) => ({ weightKg: s.weightKg, reps: s.reps })),
-        plannedSetCount: block.targetSets,
+      completedSets,
+      previousSets,
+      plannedSetCount: block.targetSets,
+      exercise: {
+        exerciseType: exercise.exerciseType,
+        isBodyweight: exercise.isBodyweight,
+        minWeightIncrementKg: exercise.minWeightIncrementKg,
+        availableIncrementsKg: exercise.availableIncrementsKg,
       },
+      coldStart: isColdStartExercise,
+      repTotal: repTotalMode ? { plan: repTotalPlan } : undefined,
     });
-  };
 
   // RPE→RIR adapter for the recommender's AMRAP prediction.
   const amrapReps = (last: { reps: number; rpe?: number }) =>
@@ -1197,14 +1157,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   // (services/setRecommender.earnedSessionBump; ramp/back-off sets excluded
   // by role inference).
   const prevSessionSetsForGating = useMemo(
-    () =>
-      previousSets
-        .filter((s) => s.weightKg > 0 && s.reps > 0)
-        .map((s) => ({
-          weightKg: s.weightKg,
-          reps: s.reps,
-          rir: s.rpe != null ? Math.max(0, rpeToRir(s.rpe)) : undefined,
-        })),
+    () => toPrevSessionSets(previousSets),
     [previousSets]
   );
 
@@ -1313,32 +1266,18 @@ export const ExerciseCard = memo(function ExerciseCard({
   // branch ignored the offset entirely and painted one number across every
   // pending row (audit S6).
   const repTotalNextSetAt = useCallback(
-    (positionOffset: number) => {
-      if (!repTotalMode || !repTotalPlan) return null;
-      const observedSets = completedSets.map((s) => ({
-        weightKg: s.weightKg,
-        reps: s.reps,
-        rir: resolveLastRir(s, effectiveTargetRir),
-      }));
-      const args = {
-        sessionPlan: repTotalPlan,
-        targetRepRange: block.targetRepRange,
-        targetRir: effectiveTargetRir,
-        minIncrementKg: exercise.minWeightIncrementKg,
-        availableIncrementsKg: exercise.availableIncrementsKg ?? undefined,
-      };
-      let rx = recommendRepTotalNextSet({ ...args, observedSets });
-      for (let i = 0; i < positionOffset; i++) {
-        // The rep read below is raw (scripts/check-reps-access.mjs ratchet)
-        // and modality-safe on two counts: `repTotalMode` excludes
-        // duration_based exercises outright, and `rx` is the engine's rep
-        // TARGET, not a SetLog — setModality's accessors take a set and do
-        // not apply to it. Baseline raised deliberately, not dodged.
-        observedSets.push({ weightKg: rx.weightKg, reps: rx.reps, rir: effectiveTargetRir });
-        rx = recommendRepTotalNextSet({ ...args, observedSets });
-      }
-      return rx;
-    },
+    (positionOffset: number) =>
+      repTotalMode && repTotalPlan
+        ? repTotalNextTargetAt(repTotalPlan, positionOffset, {
+            completedSets,
+            targetRepRange: block.targetRepRange,
+            targetRir: effectiveTargetRir,
+            exercise: {
+              minWeightIncrementKg: exercise.minWeightIncrementKg,
+              availableIncrementsKg: exercise.availableIncrementsKg,
+            },
+          })
+        : null,
     [repTotalMode, repTotalPlan, completedSets, block.targetRepRange, effectiveTargetRir, exercise.minWeightIncrementKg, exercise.availableIncrementsKg]
   );
 

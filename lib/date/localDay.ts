@@ -24,7 +24,16 @@
  * is the device timezone (correct). In a server action it is the server's
  * timezone — see docs/ note in fix-date-handling/CARDS.md about the residual
  * server-vs-device day-boundary caveat for server-seeded initial data.
+ *
+ * "NOW" COMES FROM `lib/clock`. Every helper below still takes an explicit
+ * `date`; only the DEFAULT reads the clock, via `clockNow()` instead of
+ * `new Date()`. In production that is the system clock and the output is
+ * byte-identical to before. A simulation installs a controllable clock
+ * (`setClock`) and every zero-argument call here moves with simulated time —
+ * which is what lets a six-month simulated run bucket its days and weeks the
+ * way the real app would have.
  */
+import { now as clockNow } from '@/lib/clock';
 
 /**
  * Day the training week starts on, as a JS `Date.getDay()` value
@@ -46,7 +55,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * `lib/utils.getLocalDateString`; re-exported here so callers can depend on the
  * localDay module alone for all bucketing.
  */
-export function localDay(date: Date = new Date()): string {
+export function localDay(date: Date = clockNow()): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
@@ -54,7 +63,7 @@ export function localDay(date: Date = new Date()): string {
 }
 
 /** Midnight (00:00:00.000) at the start of `date`'s local calendar day. */
-export function startOfLocalDay(date: Date = new Date()): Date {
+export function startOfLocalDay(date: Date = clockNow()): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
@@ -63,7 +72,7 @@ export function startOfLocalDay(date: Date = new Date()): Date {
  * {@link WEEK_STARTS_ON}. e.g. with Monday start, any moment Mon–Sun maps back
  * to that week's Monday 00:00 local.
  */
-export function localWeekStart(date: Date = new Date()): Date {
+export function localWeekStart(date: Date = clockNow()): Date {
   const start = startOfLocalDay(date);
   // Days elapsed since the most recent week-start day (0..6).
   const offset = (start.getDay() - WEEK_STARTS_ON + 7) % 7;
@@ -77,7 +86,7 @@ export function localWeekStart(date: Date = new Date()): Date {
  * the same key regardless of time of day — use it to group entries into weeks,
  * compare "is this the current week", and key caches without any UTC drift.
  */
-export function localWeekKey(date: Date = new Date()): string {
+export function localWeekKey(date: Date = clockNow()): string {
   return localDay(localWeekStart(date));
 }
 
@@ -93,14 +102,14 @@ export function localWeekKey(date: Date = new Date()): string {
  * the query's lower bound no longer depends on the minute you happened to open
  * the app.
  */
-export function rollingWindowStart(days = 7, date: Date = new Date()): Date {
+export function rollingWindowStart(days = 7, date: Date = clockNow()): Date {
   const start = startOfLocalDay(date);
   start.setDate(start.getDate() - (days - 1));
   return start;
 }
 
 /** {@link rollingWindowStart} serialized as an ISO string for DB range filters. */
-export function rollingWindowStartISO(days = 7, date: Date = new Date()): string {
+export function rollingWindowStartISO(days = 7, date: Date = clockNow()): string {
   return rollingWindowStart(days, date).toISOString();
 }
 

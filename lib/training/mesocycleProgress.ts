@@ -7,6 +7,7 @@
 // ============================================================
 
 import { getLocalDateString } from '@/lib/utils';
+import { now as clockNow } from '@/lib/clock';
 
 /**
  * Parse a YYYY-MM-DD date string as a LOCAL date (midnight local time).
@@ -39,7 +40,7 @@ export interface CurrentWeekResult {
 export function computeCurrentWeek(
   startDate: string,
   totalWeeks: number,
-  today: Date = new Date()
+  today: Date = clockNow()
 ): CurrentWeekResult {
   const safeTotalWeeks = Math.max(1, Math.floor(totalWeeks || 1));
 

@@ -15,6 +15,8 @@ import type {
 import { e1rmValueFromRpe } from './shared/e1rm';
 import { computeTrend, type TrendOptions } from './shared/trend';
 
+import { now as clockNow } from '@/lib/clock';
+
 /**
  * Some parts of the app (coaching PhaseType, workout page check-in) use
  * 'maintain' where the schema Goal uses 'maintenance'; accept both.
@@ -580,7 +582,7 @@ export function createPlateauAlert(
     id: '', // Will be assigned by database
     userId,
     exerciseId,
-    detectedAt: new Date().toISOString(),
+    detectedAt: clockNow().toISOString(),
     weeksSinceProgress: result.weeksSinceProgress,
     suggestedActions: result.suggestions,
     dismissed: false,

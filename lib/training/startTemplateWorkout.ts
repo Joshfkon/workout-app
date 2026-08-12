@@ -16,6 +16,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getLocalDateString } from '@/lib/utils';
 import { insertWorkoutSessions } from '@/lib/training/sessionOrigin';
+import { now as clockNow } from '@/lib/clock';
 
 /** The subset of a workout_template_exercises row a session needs. */
 export interface TemplateExerciseRow {
@@ -237,7 +238,7 @@ export async function startWorkoutFromTemplate(
   const { error: usageError } = await supabase
     .from('workout_templates')
     .update({
-      last_performed_at: new Date().toISOString(),
+      last_performed_at: clockNow().toISOString(),
       times_performed: (template.times_performed ?? 0) + 1,
     })
     .eq('id', template.id);

@@ -36,6 +36,7 @@ import { generateFullMesocycleWithFatigue } from '@/services/sessionBuilderWithF
 import { calculateRecoveryFactors } from '@/services/mesocycleBuilder';
 import { analyzeRegionalComposition } from '@/services/regionalAnalysis';
 import { setEnhancedStatus, type UserVolumeProfile } from '@/src/lib/training/adaptive-volume';
+import { now as clockNow } from '@/lib/clock';
 
 /** The fields of the active mesocycle the toggle flow needs. */
 export interface ActiveMesocycleRow {
@@ -112,7 +113,7 @@ export async function persistEnhancedAthleteMode(
         global_recovery_multiplier: updated.globalRecoveryMultiplier,
         is_enhanced: updated.isEnhanced,
         training_age: updated.trainingAge,
-        updated_at: new Date().toISOString(),
+        updated_at: clockNow().toISOString(),
       });
     }
   } catch (err) {

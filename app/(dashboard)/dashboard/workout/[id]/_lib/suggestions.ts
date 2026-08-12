@@ -42,6 +42,7 @@ import type {
   UserContext,
   UserProfileForWeights,
 } from './types';
+import { now as clockNow } from '@/lib/clock';
 
 /**
  * THE anchor-pool eligibility predicate — single source of truth, shared by
@@ -557,9 +558,16 @@ export async function fetchExerciseHistory(
   userId: string,
   scope?: { progressionScope: ProgressionScope; currentLocationId: string | null },
   /** Exercise modality — duration exercises get no e1RM anchor (seconds ≠ reps). */
-  exerciseType?: ExerciseType
+  exerciseType?: ExerciseType,
+  /**
+   * Supabase client to read through. Optional so the existing UI call site is
+   * unchanged; pass one to run against a client the caller already owns — this
+   * is the only way a headless/simulated run can reach this query, since the
+   * default builds the module-singleton browser client.
+   */
+  client?: ReturnType<typeof createUntypedClient>
 ): Promise<ExerciseHistoryData | null> {
-  const supabase = createUntypedClient();
+  const supabase = client ?? createUntypedClient();
 
   const { data: historyBlocks, error } = await supabase
     .from('exercise_blocks')
@@ -642,7 +650,7 @@ export function generateCoachMessage(
   else workoutType = muscles.map(m => m.charAt(0).toUpperCase() + m.slice(1)).join(' & ');
 
   // Generate greeting based on time of day and goal
-  const hour = new Date().getHours();
+  const hour = clockNow().getHours();
   let timeGreeting = 'Hey';
   if (hour < 12) timeGreeting = 'Good morning';
   else if (hour < 17) timeGreeting = 'Good afternoon';

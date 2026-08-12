@@ -10,6 +10,7 @@
  */
 
 import { getFailureSafetyTier } from './exerciseSafety';
+import { now as clockNow } from '@/lib/clock';
 
 // ============================================
 // TYPES
@@ -186,7 +187,7 @@ export function checkSessionSanity(
     const context: SanityCheckContext = {
       workingWeight,
       previousSets,
-      currentTimestamp: new Date(),
+      currentTimestamp: clockNow(),
     };
 
     const result = checkSetSanity(set, context);
