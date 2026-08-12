@@ -394,15 +394,29 @@ export async function settlePostFinish(
   if (await hasQueuedEntry(sessionFinishEntryId(sessionId))) return 'pending';
   if (await hasQueuedEntry(sessionClaimEntryId(sessionId))) return 'pending';
 
-  const completed = await sessionIsCompleted(supabase, sessionId);
-  if (completed === null) return 'pending'; // couldn't tell — next drain retries
-  if (!completed) {
+  const row = await readSessionSettlement(supabase, sessionId);
+  if (row === null) return 'pending'; // couldn't tell — next drain retries
+  if (!row.completed) {
     console.error(
       `[finish] session ${sessionId} left the outbox without completing — ` +
         'dropping its post-processing.'
     );
     await removePostFinishWork(sessionId);
     return 'abandoned';
+  }
+
+  // The claim write can ALSO be dropped by the flush's give-up path, leaving
+  // the session completed but never linked. Running the mesocycle updates off
+  // the work item's requested id would then write fatigue and deload state
+  // for a mesocycle this session does not belong to. The row is the authority
+  // on membership, so a mismatch demotes the item to its session-scoped work.
+  let effective = work;
+  if (work.mesocycleId && row.mesocycleId !== work.mesocycleId) {
+    console.error(
+      `[finish] session ${sessionId} is not linked to mesocycle ${work.mesocycleId} ` +
+        `(row has ${row.mesocycleId ?? 'none'}) — skipping the mesocycle updates.`
+    );
+    effective = { ...work, mesocycleId: null };
   }
 
   const attempts = (work.attempts ?? 0) + 1;
@@ -417,7 +431,7 @@ export async function settlePostFinish(
   await patchPostFinishWork(sessionId, { attempts });
 
   fireCompletionSynced(opts.onCompletionSynced);
-  await runPostFinishWork(supabase, work, opts.runMesoUpdates);
+  await runPostFinishWork(supabase, effective, opts.runMesoUpdates);
   await removePostFinishWork(sessionId);
   return 'ran';
 }
@@ -450,24 +464,27 @@ export async function drainPostFinishWork(
 }
 
 /**
- * Is the completion actually in the database?
+ * What the session row itself says: has the completion landed, and which
+ * mesocycle (if any) is it actually linked to?
  *
  * `null` means the question could not be answered (offline, query error) —
- * distinct from `false`, which means the row is there and not completed (or is
- * gone entirely). Only `false` justifies dropping the work item.
+ * distinct from `completed: false`, which means the row is there and not
+ * completed (or is gone entirely). Only the latter justifies dropping the work
+ * item; a read error must never be read as evidence.
  */
-async function sessionIsCompleted(
+async function readSessionSettlement(
   supabase: UntypedSupabase,
   sessionId: string
-): Promise<boolean | null> {
+): Promise<{ completed: boolean; mesocycleId: string | null } | null> {
   try {
     const { data, error } = await supabase
       .from('workout_sessions')
-      .select('state')
+      .select('state, mesocycle_id')
       .eq('id', sessionId)
       .maybeSingle();
     if (error) return null;
-    return (data as { state?: string } | null)?.state === 'completed';
+    const row = data as { state?: string; mesocycle_id?: string | null } | null;
+    return { completed: row?.state === 'completed', mesocycleId: row?.mesocycle_id ?? null };
   } catch {
     return null;
   }
@@ -547,6 +564,32 @@ export async function confirmClaimOptimistic(deps: ClaimFlowDeps): Promise<void>
     await enqueueRowUpdate(sessionClaimEntryId(sessionId), 'workout_sessions', sessionId, {
       mesocycle_id: mesocycleId,
     });
+    // Durable BEFORE any background work starts, and for the same reason the
+    // claim itself is: if the app dies here (or this sits queued offline for
+    // days), the claim still syncs from the outbox later — and the work item
+    // has to already know which mesocycle it belongs to, or the drain settles
+    // it with mesocycleId: null and the mesocycle updates are skipped for
+    // good. Patching after the flush would reintroduce exactly the
+    // caller-must-survive dependency this change exists to remove.
+    //
+    // If the finish already settled (an ad-hoc session ran its processing with
+    // no mesocycle) there is no item left to patch — write a fresh one so the
+    // claim's own processing is just as recoverable as the finish's was.
+    const patched = await patchPostFinishWork(sessionId, {
+      mesocycleId,
+      sessionRpe: deps.sessionRpe,
+      attempts: 0,
+    });
+    if (!patched) {
+      await enqueuePostFinishWork({
+        sessionId,
+        userId: session.userId,
+        mesocycleId,
+        sessionRpe: deps.sessionRpe,
+        checkIn: session.preWorkoutCheckIn ?? null,
+        plannedDate: session.plannedDate || null,
+      });
+    }
   } catch (err) {
     queued = false;
     console.error('Claim outbox enqueue failed, falling back to direct write:', err);
@@ -556,26 +599,6 @@ export async function confirmClaimOptimistic(deps: ClaimFlowDeps): Promise<void>
     try {
       if (queued) {
         await flushIncluding(supabase, sessionClaimEntryId(sessionId));
-        // Teach the durable work item which mesocycle this session now
-        // belongs to. If the finish already settled (ad-hoc session: it ran
-        // with no mesocycle, so the meso updates were skipped) there is no
-        // item left to patch — write a fresh one so the claim's own
-        // processing is just as recoverable as the finish's was.
-        const patched = await patchPostFinishWork(sessionId, {
-          mesocycleId,
-          sessionRpe: deps.sessionRpe,
-          attempts: 0,
-        });
-        if (!patched) {
-          await enqueuePostFinishWork({
-            sessionId,
-            userId: session.userId,
-            mesocycleId,
-            sessionRpe: deps.sessionRpe,
-            checkIn: session.preWorkoutCheckIn ?? null,
-            plannedDate: session.plannedDate || null,
-          });
-        }
         // Settles only when BOTH the finish and the claim have left the
         // queue — `settlePostFinish` checks each.
         await settlePostFinish(supabase, sessionId, { runMesoUpdates: deps.runMesoUpdates });
