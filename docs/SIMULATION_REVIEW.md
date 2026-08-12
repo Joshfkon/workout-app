@@ -44,10 +44,13 @@ npm run simulate -- --scenario=SET3_MISS              # deterministic scenarios
 | Pre-existing bugs found by audit | 7 | [B1–B7](#4-pre-existing-bugs-found-during-the-audit-b1b7) |
 | Dead tables / exports | 3 tables, 5 exports | [§5](#5-dead-code) |
 
-**The zero in the first row is the most important number here.** No set was
-counted twice, no reference dangled, no `set_number` collided, no NaN reached a
-prescription, no delete left a row behind — across 350 runs, seven personas and
-~six simulated months each. The accounting is solid.
+**The zero on the INVARIANT violations row is the most important number here.**
+No set was counted twice, no reference dangled, no `set_number` collided, no NaN
+reached a prescription, no delete left a row behind — across 350 runs, seven
+personas and ~six simulated months each. Accounting is solid across the engine
+paths exercised by the in-memory harness. (What that does *not* cover is in
+[§7](#7-known-limitations-of-the-harness): no DB constraints, no RLS, no
+triggers, and session start is seeded rather than driven.)
 
 **The Phase 0 stop condition was never triggered.** No prescription, volume,
 fatigue, trend or progression *calculation* needed to change to make any of this
@@ -189,13 +192,27 @@ skewing deload decisions.
 
 `runFinishPostProcessing` runs only when *this* call's flush covered the finish
 entry. If another flush path (dashboard mount, `online` listener, page poll)
-drains the outbox first, `completionSynced` is false and **the meso week advance
-and deload check never run for that session**.
+drains the outbox first, `completionSynced` is false and **post-session
+processing is skipped for that session** even though the completion landed.
 
-**Severity: medium.** Silent — the user sees a successful finish. The individual
+Blast radius, checked per sub-operation (corrected 2026-08 — an earlier draft of
+this section said this was "probably costing users week advances today", which
+overstates it):
+
+| Sub-operation | Skipped run self-heals? |
+|---|---|
+| `mesocycles.current_week` advance | **Yes** — recomputed from `countCompletedSessions` on the next finish, advance-only write |
+| deload-trigger check | **Yes** — re-run on the next finish (one session late) |
+| `upsertWeeklyFatigueLog` | **No** — that session's readiness/RPE/joint-pain never land; last-write-wins per week, so it only shows when the skipped session was the week's last |
+| `calculateAndSaveWorkoutCalories` | **No** — per-session, nothing recomputes it |
+| `onCompletionSynced` (React Query invalidation) | **No** — History/analytics keep the pre-workout snapshot until some other refetch |
+
+**Severity: medium.** Silent — the user sees a successful finish. The
 sub-operations are idempotent, so a *double* run is harmless; a *missed* run is
 the hazard.
-**Recommend fixing.** This is probably costing users week advances today.
+**Recommend fixing** — not because week advances are being lost (they are not),
+but because whether post-processing runs at all depends on which caller wins a
+flush race.
 
 ### B4 — `edited_at` stamp is non-atomic
 
@@ -370,7 +387,7 @@ ever added to the approved list.**
 ## 10. Suggested order of work
 
 1. **Decide D1** (Finding 001). Everything else is smaller.
-2. **Fix B3** — silently skipped week advances are likely affecting users now.
+2. **Fix B3** — whether post-session processing runs depends on a flush race.
 3. **Fix B1** — user-visible failure, contained fix.
 4. **Resolve D3** (dead code) — cheap, and removes a trap for the next reader.
 5. **Open the PR.** The harness is independently useful even with the above open.
