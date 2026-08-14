@@ -2,14 +2,14 @@
 
 ## Anchor scenarios (advanced triceps, MRV 22, 2 sessions/wk, capacity 11)
 
-| Effective sets | Hard sets | Dose adjustment |
+| Effective sets | Hard sets | Dose scale (x base window) |
 |---|---|---|
-| 0 | 0 | -12.00h |
-| 2 | 0 | -11.87h |
-| 5 | 2 | 4.33h |
-| 8 | 3 | 20.45h |
-| 11 | 6 | 24.00h |
-| 14 | 9 | 24.00h |
+| 0 | 0 | x0.20 |
+| 2 | 0 | x0.52 |
+| 5 | 2 | x1.01 |
+| 8 | 3 | x1.37 |
+| 11 | 6 | x1.45 |
+| 14 | 9 | x1.45 |
 
 ## Planned-frequency sensitivity (ACTUAL sets fixed at 8 / 3 hard, advanced)
 
@@ -17,32 +17,32 @@ Ratios are deliberately NOT held fixed — frequency would cancel.
 
 | Muscle | 1×/wk | 2×/wk | 3×/wk | 4×/wk | 5×/wk |
 |---|---|---|---|---|---|
-| `chest_upper` | -0.03h | 22.89h | 24.00h | 24.00h | 24.00h |
-| `chest_lower` | 11.64h | 24.00h | 24.00h | 24.00h | 24.00h |
-| `front_delts` | 11.64h | 24.00h | 24.00h | 24.00h | 24.00h |
-| `lateral_delts` | -5.54h | 14.47h | 23.99h | 24.00h | 24.00h |
-| `rear_delts` | -2.34h | 20.45h | 24.00h | 24.00h | 24.00h |
-| `lats` | -5.54h | 14.47h | 23.99h | 24.00h | 24.00h |
-| `upper_back` | -0.03h | 22.89h | 24.00h | 24.00h | 24.00h |
-| `traps` | -0.03h | 22.89h | 24.00h | 24.00h | 24.00h |
-| `upper_traps` | -0.03h | 22.89h | 24.00h | 24.00h | 24.00h |
-| `mid_lower_traps` | -0.03h | 22.89h | 24.00h | 24.00h | 24.00h |
-| `biceps` | -2.34h | 20.45h | 24.00h | 24.00h | 24.00h |
-| `triceps` | -2.34h | 20.45h | 24.00h | 24.00h | 24.00h |
-| `triceps_long` | -2.34h | 20.45h | 24.00h | 24.00h | 24.00h |
-| `triceps_lat_med` | -2.34h | 20.45h | 24.00h | 24.00h | 24.00h |
-| `forearms` | 6.77h | 24.00h | 24.00h | 24.00h | 24.00h |
-| `quads` | -5.54h | 14.47h | 23.99h | 24.00h | 24.00h |
-| `hamstrings` | -2.34h | 20.45h | 24.00h | 24.00h | 24.00h |
-| `glutes` | -4.13h | 17.48h | 24.00h | 24.00h | 24.00h |
-| `glute_med` | 17.48h | 24.00h | 24.00h | 24.00h | 24.00h |
-| `adductors` | 11.64h | 24.00h | 24.00h | 24.00h | 24.00h |
-| `calves` | -5.54h | 14.47h | 23.99h | 24.00h | 24.00h |
-| `gastrocnemius` | -5.54h | 14.47h | 23.99h | 24.00h | 24.00h |
-| `soleus` | -5.54h | 14.47h | 23.99h | 24.00h | 24.00h |
-| `abs` | -2.34h | 20.45h | 24.00h | 24.00h | 24.00h |
-| `obliques` | 17.48h | 24.00h | 24.00h | 24.00h | 24.00h |
-| `erectors` | 11.64h | 24.00h | 24.00h | 24.00h | 24.00h |
+| `chest_upper` | x0.93 | x1.45 | x1.45 | x1.45 | x1.45 |
+| `chest_lower` | x1.17 | x1.45 | x1.45 | x1.45 | x1.45 |
+| `front_delts` | x1.17 | x1.45 | x1.45 | x1.45 | x1.45 |
+| `lateral_delts` | x0.78 | x1.23 | x1.45 | x1.45 | x1.45 |
+| `rear_delts` | x0.87 | x1.37 | x1.45 | x1.45 | x1.45 |
+| `lats` | x0.78 | x1.23 | x1.45 | x1.45 | x1.45 |
+| `upper_back` | x0.93 | x1.45 | x1.45 | x1.45 | x1.45 |
+| `traps` | x0.93 | x1.45 | x1.45 | x1.45 | x1.45 |
+| `upper_traps` | x0.93 | x1.45 | x1.45 | x1.45 | x1.45 |
+| `mid_lower_traps` | x0.93 | x1.45 | x1.45 | x1.45 | x1.45 |
+| `biceps` | x0.87 | x1.37 | x1.45 | x1.45 | x1.45 |
+| `triceps` | x0.87 | x1.37 | x1.45 | x1.45 | x1.45 |
+| `triceps_long` | x0.87 | x1.37 | x1.45 | x1.45 | x1.45 |
+| `triceps_lat_med` | x0.87 | x1.37 | x1.45 | x1.45 | x1.45 |
+| `forearms` | x1.07 | x1.45 | x1.45 | x1.45 | x1.45 |
+| `quads` | x0.78 | x1.23 | x1.45 | x1.45 | x1.45 |
+| `hamstrings` | x0.87 | x1.37 | x1.45 | x1.45 | x1.45 |
+| `glutes` | x0.82 | x1.29 | x1.45 | x1.45 | x1.45 |
+| `glute_med` | x1.29 | x1.45 | x1.45 | x1.45 | x1.45 |
+| `adductors` | x1.17 | x1.45 | x1.45 | x1.45 | x1.45 |
+| `calves` | x0.78 | x1.23 | x1.45 | x1.45 | x1.45 |
+| `gastrocnemius` | x0.78 | x1.23 | x1.45 | x1.45 | x1.45 |
+| `soleus` | x0.78 | x1.23 | x1.45 | x1.45 | x1.45 |
+| `abs` | x0.87 | x1.37 | x1.45 | x1.45 | x1.45 |
+| `obliques` | x1.29 | x1.45 | x1.45 | x1.45 | x1.45 |
+| `erectors` | x1.17 | x1.45 | x1.45 | x1.45 | x1.45 |
 
 ## Steepest change from +0.5 ACTUAL sets
 
@@ -51,20 +51,20 @@ normalized change, so a steep value here is expected rather than a defect.
 
 | Muscle | Experience | Planned freq | Max Δ per +0.5 sets |
 |---|---|---|---|
-| `glute_med` | novice | 5×/wk | 13.39h |
-| `obliques` | novice | 5×/wk | 13.39h |
-| `chest_lower` | novice | 5×/wk | 9.60h |
-| `front_delts` | novice | 5×/wk | 9.60h |
-| `glute_med` | novice | 4×/wk | 9.60h |
-| `adductors` | novice | 5×/wk | 9.60h |
-| `obliques` | novice | 4×/wk | 9.60h |
-| `erectors` | novice | 5×/wk | 9.60h |
-| `glute_med` | intermediate | 5×/wk | 9.60h |
-| `obliques` | intermediate | 5×/wk | 9.60h |
-| `chest_upper` | novice | 5×/wk | 9.32h |
-| `forearms` | novice | 5×/wk | 9.32h |
+| `glute_med` | novice | 5×/wk | 0.54h |
+| `obliques` | novice | 5×/wk | 0.54h |
+| `chest_lower` | novice | 5×/wk | 0.44h |
+| `front_delts` | novice | 5×/wk | 0.44h |
+| `glute_med` | novice | 4×/wk | 0.44h |
+| `adductors` | novice | 5×/wk | 0.44h |
+| `obliques` | novice | 4×/wk | 0.44h |
+| `erectors` | novice | 5×/wk | 0.44h |
+| `glute_med` | intermediate | 5×/wk | 0.44h |
+| `obliques` | intermediate | 5×/wk | 0.44h |
+| `chest_upper` | novice | 5×/wk | 0.37h |
+| `forearms` | novice | 5×/wk | 0.37h |
 
-Gentlest case: `soleus` @ advanced, 1×/wk → 0.89h
+Gentlest case: `soleus` @ advanced, 1×/wk → 0.05h
 
 ## Planned-frequency source (live)
 

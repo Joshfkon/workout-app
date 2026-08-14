@@ -203,7 +203,7 @@ describe('window guardrails', () => {
     expect(e.learnedMultiplier).toBe(1.35);
     expect(e.sleepWindowMultiplier).toBe(1.15);
     expect(e.windowScale).toBe(1.25);
-    expect(e.dose.adjustmentHours).toBeGreaterThan(0);
+    expect(e.dose.doseScale).toBeGreaterThan(1);
     expect(e.dose.capacityMuscle).toBe('hamstrings');
     expect(e.preClampHours).toBeGreaterThan(RECOVERY_WINDOW_BOUNDS_HOURS.max);
     expect(e.windowHours).toBe(RECOVERY_WINDOW_BOUNDS_HOURS.max);

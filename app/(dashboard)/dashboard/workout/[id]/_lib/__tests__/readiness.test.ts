@@ -441,16 +441,33 @@ describe('buildReadinessRows soreness overrides ("still sore" today)', () => {
 });
 
 describe('readinessScore / hoursUntilReadinessThreshold', () => {
-  const rec = (hoursSinceLast: number | null, windowHours: number | null): MuscleRecoveryResult =>
-    ({
+  /** A result carrying one outstanding debt (or none, when never trained). */
+  const rec = (hoursSinceLast: number | null, windowHours: number | null): MuscleRecoveryResult => {
+    const debts =
+      hoursSinceLast === null || windowHours === null || hoursSinceLast >= windowHours
+        ? []
+        : [
+            {
+              performedAt: new Date(NOW.getTime() - hoursSinceLast * 3600 * 1000),
+              windowHours,
+              hoursSince: hoursSinceLast,
+              ratio: hoursSinceLast / windowHours,
+            },
+          ];
+    return {
       status: 'recovering',
+      readinessRatio: debts.length === 0 ? 1 : debts[0].ratio,
+      debts,
       hoursSinceLast,
       estimatedReadyAt: null,
       lastTrainedAt: hoursSinceLast === null ? null : NOW,
       hoursUntilReady: 0,
+      governingTrainedAt: null,
+      hoursSinceGoverning: hoursSinceLast,
       windowHours,
       dose: 4,
-    }) as MuscleRecoveryResult;
+    } as MuscleRecoveryResult;
+  };
 
   it('is 1 for a never-trained muscle', () => {
     expect(readinessScore(rec(null, null))).toBe(1);
@@ -471,6 +488,22 @@ describe('readinessScore / hoursUntilReadinessThreshold', () => {
   it('reports the hours remaining until readiness crosses the threshold', () => {
     // 0.8 × 48h window = 38.4h; 24h elapsed → 14.4h to go.
     expect(hoursUntilReadinessThreshold(rec(24, 48))).toBeCloseTo(14.4);
+  });
+
+  it('waits for the SLOWEST debt, not merely the least-recovered one', () => {
+    // A short-window session sits at the lower ratio, but the long-window
+    // session takes longer to reach the same fraction. Reducing over the
+    // governing window alone would under-report by 4h here.
+    const multi = {
+      ...rec(10, 20),
+      debts: [
+        { performedAt: NOW, windowHours: 20, hoursSince: 10, ratio: 0.5 },
+        { performedAt: NOW, windowHours: 100, hoursSince: 70, ratio: 0.7 },
+      ],
+      readinessRatio: 0.5,
+    } as MuscleRecoveryResult;
+    // 0.8×20 − 10 = 6h; 0.8×100 − 70 = 10h → the 100h debt governs.
+    expect(hoursUntilReadinessThreshold(multi)).toBeCloseTo(10);
   });
 
   it('the thresholds bracket green/amber/red as documented', () => {

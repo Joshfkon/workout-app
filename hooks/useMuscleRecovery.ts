@@ -99,10 +99,10 @@ function toStatus(
   fallbackWindowHours: number
 ): MuscleRecoveryStatus {
   const isReady = result.status === 'fresh';
-  const recoveryPercent =
-    result.lastTrainedAt === null || !result.windowHours || isReady
-      ? 100
-      : Math.min(100, Math.round(((result.hoursSinceLast ?? 0) / result.windowHours) * 100));
+  // `readinessRatio` already reduces over every outstanding debt; deriving the
+  // percentage from hoursSinceLast/windowHours would mix two different
+  // sessions once a light session follows a heavy one.
+  const recoveryPercent = isReady ? 100 : Math.min(100, Math.round(result.readinessRatio * 100));
 
   return {
     muscle,
