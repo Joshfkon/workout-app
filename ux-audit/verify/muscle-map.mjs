@@ -208,6 +208,30 @@ async function workoutSurfacesChecks(page, assert) {
     `readiness sheet: quads region color (${quadsClass.match(/fill-[\w-]+/)?.[0]}) matches its "${badgeText}" badge`
   );
 
+  // Recovery/Volume toggle repaints the same regions with volume zones —
+  // quads have logged sets this week, so the region must switch from the
+  // status gray to a zone color family, then back.
+  await page.getByTestId('readiness-map-mode-volume').click();
+  const quadsVolumeClass = await page
+    .locator('[data-testid="readiness-muscle-map"] path[data-muscle="quads"]')
+    .first()
+    .getAttribute('class');
+  assert(
+    /fill-(success|warning|danger)-500/.test(quadsVolumeClass),
+    `readiness sheet: Volume toggle paints quads by zone (${quadsVolumeClass.match(/fill-[\w-]+/)?.[0]})`
+  );
+  await page.screenshot({ path: `${out}muscle-map-3b-readiness-volume.png` });
+  await page.getByTestId('readiness-map-mode-recovery').click();
+  assert(
+    (
+      await page
+        .locator('[data-testid="readiness-muscle-map"] path[data-muscle="quads"]')
+        .first()
+        .getAttribute('class')
+    ).includes(expectedFill),
+    'readiness sheet: Recovery toggle restores the status paint'
+  );
+
   // Front/back toggle swaps the figure.
   await page.getByTestId('readiness-map-view-back').click();
   assert(

@@ -65,26 +65,33 @@ export function volumeRowsToMapData(rows: VolumeRow[]): MuscleMapData {
 }
 
 /**
- * Readiness sheet: coarse rows paint their children with the row's recovery
- * status (already worst-of-children per buildReadinessRows, i.e. exactly what
- * the row's badge shows); rendered fine children override with their own
- * status. Muscles with no recovery estimate (never trained in the window —
- * the "No recent data" badge) are left off so they render in the neutral
- * base tone.
+ * Readiness sheet: each datum carries BOTH paints so the sheet's
+ * recovery/volume map toggle switches `mode` without rebuilding data —
+ * guaranteeing the two modes are views of the same rows the list shows.
+ *
+ * Recovery: coarse rows paint their children with the row's recovery status
+ * (already worst-of-children per buildReadinessRows, i.e. exactly what the
+ * row's badge shows); rendered fine children override with their own status.
+ * Muscles with no recovery estimate (never trained in the window — the
+ * "No recent data" badge) get no `status` so they render in the neutral base
+ * tone.
+ *
+ * Volume: the row's zone/lagging (and a rendered fine child's own zone),
+ * exactly as volumeRowsToMapData paints the volume page.
  */
 export function readinessRowsToMapData(rows: ReadinessRow[]): MuscleMapData {
   const out: MuscleMapData = {};
   for (const row of rows) {
-    const hasData = row.recovery.lastTrainedAt !== null;
+    const status = row.recovery.lastTrainedAt !== null ? row.recovery.status : undefined;
     for (const std of COARSE_CHILDREN[row.muscle]) {
-      if (hasData) out[std] = { value: row.sets, status: row.recovery.status };
+      out[std] = { value: row.sets, zone: row.zone, lagging: row.laggingChildren, status };
     }
     for (const child of row.children) {
-      if (child.recovery.lastTrainedAt !== null) {
-        out[child.muscle] = { value: child.sets, status: child.recovery.status };
-      } else {
-        delete out[child.muscle];
-      }
+      out[child.muscle] = {
+        value: child.sets,
+        zone: child.zone,
+        status: child.recovery.lastTrainedAt !== null ? child.recovery.status : undefined,
+      };
     }
   }
   return out;

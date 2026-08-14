@@ -281,6 +281,36 @@ describe('MuscleReadinessSheet', () => {
     expect(quadsPanel).toHaveTextContent('8 sets');
   });
 
+  it('toggles the body map between recovery and volume painting, remembered per session', async () => {
+    const { container, unmount } = render(
+      <MuscleReadinessSheet isOpen onClose={jest.fn()} liveBlocks={[]} liveSets={[]} />,
+      { wrapper }
+    );
+    await waitFor(() => expect(screen.getByTestId('readiness-map')).toBeInTheDocument());
+
+    const quadsPath = () =>
+      container.querySelector('[data-testid="readiness-muscle-map"] path[data-muscle="quads"]');
+
+    // Default: recovery paint. Quads were maxed 30h ago → Fatigued gray, even
+    // though their weekly volume is on target.
+    expect(screen.getByTestId('readiness-map-mode-recovery')).toHaveAttribute('aria-pressed', 'true');
+    expect(quadsPath()!.getAttribute('class')).toContain('fill-surface-600');
+
+    // Toggle to volume → quads paint by their weekly-volume zone instead.
+    await userEvent.click(screen.getByTestId('readiness-map-mode-volume'));
+    expect(screen.getByTestId('readiness-map-mode-volume')).toHaveAttribute('aria-pressed', 'true');
+    expect(quadsPath()!.getAttribute('class')).toMatch(/fill-(success|warning|danger)-500/);
+    unmount();
+
+    // Re-open (a fresh lazy mount) → still in volume mode.
+    render(
+      <MuscleReadinessSheet isOpen onClose={jest.fn()} liveBlocks={[]} liveSets={[]} />,
+      { wrapper }
+    );
+    await waitFor(() => expect(screen.getByTestId('readiness-map')).toBeInTheDocument());
+    expect(screen.getByTestId('readiness-map-mode-volume')).toHaveAttribute('aria-pressed', 'true');
+  });
+
   it('remembers the expanded state across re-mounts within the session', async () => {
     const { unmount } = render(
       <MuscleReadinessSheet isOpen onClose={jest.fn()} liveBlocks={[]} liveSets={[]} />,
