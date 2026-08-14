@@ -431,7 +431,17 @@ export async function settlePostFinish(
   await patchPostFinishWork(sessionId, { attempts });
 
   fireCompletionSynced(opts.onCompletionSynced);
-  await runPostFinishWork(supabase, effective, opts.runMesoUpdates);
+  const { ok } = await runPostFinishWork(supabase, effective, opts.runMesoUpdates);
+  if (!ok) {
+    // Something did not land. KEEP the item so a later drain retries it —
+    // clearing it here is what would make the at-least-once guarantee
+    // vacuous. The attempt counter above bounds how long this can repeat.
+    console.error(
+      `[finish] post-processing for session ${sessionId} did not complete ` +
+        `(attempt ${attempts}/${MAX_POST_FINISH_ATTEMPTS}) — keeping the work item.`
+    );
+    return 'pending';
+  }
   await removePostFinishWork(sessionId);
   return 'ran';
 }
@@ -507,29 +517,47 @@ async function runPostFinishWork(
   supabase: UntypedSupabase,
   work: PostFinishWork,
   runMesoUpdatesOverride?: typeof runPostSessionMesoUpdates
-): Promise<void> {
+): Promise<{ ok: boolean }> {
+  // Both steps report rather than throw, and BOTH outcomes matter: the work
+  // item is cleared only on a fully successful run, so a transient failure
+  // here has to be visible or at-least-once degrades to at-most-once — the
+  // item would be dropped after a run that did nothing. Neither step aborts
+  // the other; they are independent, and a partial success still counts as
+  // "try again" because every operation is idempotent.
+  let ok = true;
+
   // Deload trigger check + week advance from the completed-session count.
   if (work.mesocycleId) {
     const runMeso = runMesoUpdatesOverride ?? runPostSessionMesoUpdates;
-    await runMeso(supabase, {
+    const result = await runMeso(supabase, {
       mesocycleId: work.mesocycleId,
       userId: work.userId,
       sessionRpe: work.sessionRpe,
       checkIn: work.checkIn,
     });
+    if (!result?.ok) ok = false;
   }
 
-  // Workout calorie estimate (several sequential DB round-trips). Awaited now
+  // Workout calorie estimate (several sequential DB round-trips). Awaited
   // rather than fire-and-forget: the work item is only cleared afterwards, so
-  // awaiting is what extends the at-least-once guarantee to cover it.
+  // awaiting is what extends the guarantee to cover it.
   if (work.plannedDate) {
     const plannedDate = work.plannedDate;
-    await import('@/lib/actions/workout-calories')
+    const result = await import('@/lib/actions/workout-calories')
       .then(({ calculateAndSaveWorkoutCalories }) =>
         calculateAndSaveWorkoutCalories(work.sessionId, plannedDate)
       )
-      .catch((err) => console.error('Workout calorie calculation failed:', err));
+      .catch((err) => {
+        console.error('Workout calorie calculation failed:', err);
+        return { success: false } as const;
+      });
+    if (!result?.success) {
+      console.error('Workout calorie calculation did not complete for', work.sessionId);
+      ok = false;
+    }
   }
+
+  return { ok };
 }
 
 // ---------------------------------------------------------------------------

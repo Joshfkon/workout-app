@@ -41,7 +41,9 @@ import {
 import type { WorkoutSession } from '@/types/schema';
 
 jest.mock('@/lib/actions/workout-calories', () => ({
-  calculateAndSaveWorkoutCalories: jest.fn().mockResolvedValue(undefined),
+  // The real action reports { success } — the settlement checks it, so the
+  // mock has to speak the same language.
+  calculateAndSaveWorkoutCalories: jest.fn().mockResolvedValue({ success: true }),
 }));
 
 import { calculateAndSaveWorkoutCalories } from '@/lib/actions/workout-calories';
@@ -149,7 +151,7 @@ describe('submitFinishOptimistic', () => {
   it('queues the completion durably and navigates BEFORE any network call settles', async () => {
     const { client, pending } = makeGatedSupabase();
     const navigate = jest.fn();
-    const runMesoUpdates = jest.fn().mockResolvedValue(undefined);
+    const runMesoUpdates = jest.fn().mockResolvedValue({ ok: true });
 
     await submitFinishOptimistic(
       { supabase: client, sessionId: 's1', session: makeSession(), navigate, runMesoUpdates },
@@ -288,7 +290,7 @@ describe('submitFinishOptimistic', () => {
 
   it('runs meso post-processing only AFTER the completion is confirmed synced', async () => {
     const { client, pending } = makeGatedSupabase();
-    const runMesoUpdates = jest.fn().mockResolvedValue(undefined);
+    const runMesoUpdates = jest.fn().mockResolvedValue({ ok: true });
     const session = makeSession({
       mesocycleId: 'meso-1',
       preWorkoutCheckIn: { readinessScore: 80 } as WorkoutSession['preWorkoutCheckIn'],
@@ -398,7 +400,7 @@ describe('submitFinishOptimistic', () => {
 
   it('still runs meso post-processing when onCompletionSynced throws', async () => {
     const { client, pending } = makeGatedSupabase();
-    const runMesoUpdates = jest.fn().mockResolvedValue(undefined);
+    const runMesoUpdates = jest.fn().mockResolvedValue({ ok: true });
     const onCompletionSynced = jest.fn(() => {
       throw new Error('invalidation exploded');
     });
@@ -463,7 +465,7 @@ describe('confirmClaimOptimistic', () => {
   it('queues the mesocycle link and runs meso updates once synced', async () => {
     // The row reports the claimed mesocycle, i.e. the claim write landed.
     const { client, pending } = makeGatedSupabase('completed', 'meso-9');
-    const runMesoUpdates = jest.fn().mockResolvedValue(undefined);
+    const runMesoUpdates = jest.fn().mockResolvedValue({ ok: true });
 
     await confirmClaimOptimistic({
       supabase: client,
@@ -614,7 +616,7 @@ describe('post-finish settlement survives the flush race', () => {
 
   it('Case A — a later flush drains the completion; the work still runs', async () => {
     const { client, pending } = makeGatedSupabase();
-    const runMesoUpdates = jest.fn().mockResolvedValue(undefined);
+    const runMesoUpdates = jest.fn().mockResolvedValue({ ok: true });
 
     await finishWhileOffline(client, pending, runMesoUpdates);
 
@@ -637,7 +639,7 @@ describe('post-finish settlement survives the flush race', () => {
 
   it('Case B — the caller is gone, and a shared in-flight flush attributed the finish to nobody', async () => {
     const { client, pending } = makeGatedSupabase();
-    const runMesoUpdates = jest.fn().mockResolvedValue(undefined);
+    const runMesoUpdates = jest.fn().mockResolvedValue({ ok: true });
 
     // A flush is already in flight when the finish is enqueued, so its
     // snapshot excludes the completion.
@@ -672,7 +674,7 @@ describe('post-finish settlement survives the flush race', () => {
 
   it('Case C — running the work twice converges, and a settled item is not repeated', async () => {
     const { client, pending } = makeGatedSupabase();
-    const runMesoUpdates = jest.fn().mockResolvedValue(undefined);
+    const runMesoUpdates = jest.fn().mockResolvedValue({ ok: true });
 
     await submitFinishOptimistic(
       {
@@ -830,7 +832,7 @@ describe('claim settlement is durable and verified', () => {
     // updates anyway would write fatigue and deload state against a
     // mesocycle this session does not belong to.
     const { client, pending } = makeGatedSupabase('completed', null);
-    const runMesoUpdates = jest.fn().mockResolvedValue(undefined);
+    const runMesoUpdates = jest.fn().mockResolvedValue({ ok: true });
 
     await confirmClaimOptimistic({
       supabase: client,
@@ -850,5 +852,115 @@ describe('claim settlement is durable and verified', () => {
     // Still settled: the session-scoped work is done and the item cleared,
     // because the claim is gone from the queue and will never land.
     expect(await listPostFinishWork()).toEqual([]);
+  });
+});
+
+/**
+ * At-least-once is only a guarantee if a failed run is treated as a failure.
+ *
+ * Both post-processing steps report rather than throw —
+ * `runPostSessionMesoUpdates` catches its own errors, and the calorie action
+ * answers `{ success: false }`. If the settlement ignores that, it clears the
+ * work item after a run that did nothing, and the guarantee silently becomes
+ * at-MOST-once: the attempt counter never fires, and the mesocycle or calorie
+ * data stays missing for good. Raised by Codex review on the B3 PR.
+ */
+describe('a failed post-processing run keeps its work item', () => {
+  beforeEach(() => {
+    __setDriverForTests(memoryDriver());
+    __setPostFinishStoreForTests(createMemoryStore<PostFinishWork>());
+    jest.spyOn(console, 'info').mockImplementation(() => {});
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    __setDriverForTests(null);
+    __setPostFinishStoreForTests(null);
+    jest.restoreAllMocks();
+    (calculateAndSaveWorkoutCalories as jest.Mock).mockResolvedValue({ success: true });
+  });
+
+  const mesoSession = () =>
+    makeSession({
+      mesocycleId: 'meso-1',
+      preWorkoutCheckIn: { readinessScore: 80 } as WorkoutSession['preWorkoutCheckIn'],
+    });
+
+  async function finishWith(
+    client: FinishFlowDeps['supabase'],
+    pending: { resolve: (e?: { message: string } | null) => void }[],
+    runMesoUpdates: jest.Mock
+  ) {
+    await submitFinishOptimistic(
+      {
+        supabase: client,
+        sessionId: 's1',
+        session: mesoSession(),
+        navigate: jest.fn(),
+        runMesoUpdates,
+      },
+      SUMMARY_DATA
+    );
+    await settle();
+    while (pending.length > 0) {
+      pending.shift()!.resolve();
+      await settle();
+    }
+  }
+
+  it('keeps it when the mesocycle updates report failure', async () => {
+    const { client, pending } = makeGatedSupabase();
+    const runMesoUpdates = jest.fn().mockResolvedValue({ ok: false });
+
+    await finishWith(client, pending, runMesoUpdates);
+
+    expect(runMesoUpdates).toHaveBeenCalledTimes(1);
+    expect((await listPostFinishWork()).map((w) => w.sessionId)).toEqual(['s1']);
+
+    // A later drain retries it, and clears it once the work lands.
+    runMesoUpdates.mockResolvedValue({ ok: true });
+    expect(await drainPostFinishWork(client, { runMesoUpdates })).toEqual(['ran']);
+    expect(runMesoUpdates).toHaveBeenCalledTimes(2);
+    expect(await listPostFinishWork()).toEqual([]);
+  });
+
+  it('keeps it when the calorie estimate reports failure', async () => {
+    (calculateAndSaveWorkoutCalories as jest.Mock).mockResolvedValue({
+      success: false,
+      error: 'nope',
+    });
+    const { client, pending } = makeGatedSupabase();
+    const runMesoUpdates = jest.fn().mockResolvedValue({ ok: true });
+
+    await submitFinishOptimistic(
+      {
+        supabase: client,
+        sessionId: 's1',
+        session: makeSession({ mesocycleId: 'meso-1', plannedDate: '2026-08-14' }),
+        navigate: jest.fn(),
+        runMesoUpdates,
+      },
+      SUMMARY_DATA
+    );
+    await settle();
+    while (pending.length > 0) {
+      pending.shift()!.resolve();
+      await settle();
+    }
+
+    expect(calculateAndSaveWorkoutCalories).toHaveBeenCalled();
+    expect((await listPostFinishWork()).map((w) => w.sessionId)).toEqual(['s1']);
+  });
+
+  it('gives up after the attempt bound rather than retrying for ever', async () => {
+    const { client, pending } = makeGatedSupabase();
+    const runMesoUpdates = jest.fn().mockResolvedValue({ ok: false });
+
+    await finishWith(client, pending, runMesoUpdates);
+    // One attempt spent; drain until the bound is reached.
+    for (let i = 0; i < 5; i++) await drainPostFinishWork(client, { runMesoUpdates });
+
+    expect(await listPostFinishWork()).toEqual([]);
+    expect(runMesoUpdates.mock.calls.length).toBeLessThanOrEqual(5);
   });
 });
