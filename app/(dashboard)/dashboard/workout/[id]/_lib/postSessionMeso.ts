@@ -41,12 +41,23 @@ export interface PostSessionMesoInput {
  * the completed-session count, and run the deload-trigger check. Assumes the
  * session is already state='completed' (and linked to the mesocycle) so it is
  * included in the count.
+ *
+ * Returns `{ ok: false }` when a step did not land. Errors are still caught
+ * and logged here — this must never throw into the finish flow — but the
+ * outcome is REPORTED, because the durable work item that drives this
+ * (lib/offline/postFinishQueue) may only be cleared once the work actually
+ * happened. Swallowing a failure silently would make its at-least-once
+ * guarantee vacuous: the item would be dropped after a run that did nothing.
  */
 export async function runPostSessionMesoUpdates(
   supabase: UntypedSupabase,
   input: PostSessionMesoInput
-): Promise<void> {
+): Promise<{ ok: boolean }> {
   const { mesocycleId, userId, sessionRpe, checkIn } = input;
+  // Steps that must have LANDED for this session's processing to count as
+  // done. The joint-pain lookup is deliberately excluded: it is a best-effort
+  // signal with a defined fallback (no pain), not a write that can be lost.
+  let ok = true;
   try {
     const { data: meso } = await supabase
       .from('mesocycles')
@@ -119,6 +130,7 @@ export async function runPostSessionMesoUpdates(
     });
     if (!fatigueResult.ok) {
       console.error('Failed to save weekly fatigue log:', fatigueResult.error);
+      ok = false;
     }
 
     // current_week was historically written only at creation (always 1),
@@ -135,6 +147,7 @@ export async function runPostSessionMesoUpdates(
         .lt('current_week', weekNumber);
       if (weekError) {
         console.error('Failed to advance mesocycle current_week:', weekError);
+        ok = false;
       }
     }
 
@@ -145,5 +158,7 @@ export async function runPostSessionMesoUpdates(
     await recordDeloadRecommendationIfTriggered(supabase, userId, mesocycleId);
   } catch (err) {
     console.error('Post-session deload check failed:', err);
+    ok = false;
   }
+  return { ok };
 }
