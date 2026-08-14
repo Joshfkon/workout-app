@@ -33,8 +33,20 @@ export function DashboardLayoutClient({ children }: DashboardLayoutClientProps) 
 
   // Offline outbox (P0-2): flush queued set writes whenever connectivity
   // returns, from ANY dashboard tab — not just the workout page.
+  // Post-finish work items (B3) are settled from the same trigger: a finish
+  // whose completion was drained by some other flush leaves work behind, and
+  // this is where it gets picked up — including after an app restart.
   useEffect(() => {
-    const flush = () => { void flushSetOutbox(createUntypedClient()); };
+    const flush = () => {
+      const supabase = createUntypedClient();
+      void flushSetOutbox(supabase).then(() =>
+        // Dynamic so the finish flow (and the deload engine behind it) stays
+        // out of the dashboard shell's initial bundle.
+        import('@/app/(dashboard)/dashboard/workout/[id]/_lib/finishWorkout')
+          .then(({ drainPostFinishWork }) => drainPostFinishWork(supabase))
+          .catch((err) => console.error('Post-finish drain failed:', err))
+      );
+    };
     window.addEventListener('online', flush);
     if (navigator.onLine) flush();
     return () => window.removeEventListener('online', flush);
