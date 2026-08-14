@@ -317,6 +317,12 @@ export function SetLoggerRow({
         };
       }
       weightKg = bodyweightData.effectiveLoadKg;
+    } else if (isPlainBodyweight) {
+      // Bodyweight movement with no weigh-in on record: there is no load to
+      // resolve and no field to type one into. Log the set at 0 rather than
+      // handing the persistence path a NaN it silently drops — the card's
+      // "log your bodyweight" hint is what fixes the missing load.
+      weightKg = 0;
     } else {
       weightKg = inputWeightToKg(weightNum, unit);
     }

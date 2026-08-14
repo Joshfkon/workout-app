@@ -35,6 +35,7 @@ import {
 } from '@/services/progressionHealth';
 import { getExerciseProgression, type ExerciseProgressionInsight } from '@/services/progressionInsights';
 import { generateWarmupProtocol } from '@/services/progressionEngine';
+import { resolveIsBodyweight } from '@/services/bodyweightClassification';
 import { resolveWarmupLoad, type WarmupLoadMode } from '@/services/warmupEngine';
 import { formatSessionTimeOfDay } from '@/services/sessionContext';
 import { formatSleepHours, SLEEP_QUALITY_LABELS } from '@/lib/sleep/formatSleep';
@@ -691,7 +692,8 @@ export const ExerciseCard = memo(function ExerciseCard({
       plannedSetCount: block.targetSets,
       exercise: {
         exerciseType: exercise.exerciseType,
-        isBodyweight: exercise.isBodyweight,
+        // Resolved, not the raw flag — see isBodyweightExercise below.
+        isBodyweight: isBodyweightExercise,
         minWeightIncrementKg: exercise.minWeightIncrementKg,
         availableIncrementsKg: exercise.availableIncrementsKg,
       },
@@ -709,7 +711,17 @@ export const ExerciseCard = memo(function ExerciseCard({
   // Check if this is a bodyweight exercise
   // Use type assertion to access bodyweight properties that may exist on the exercise
   const exerciseWithBodyweight = exercise as any;
-  const isBodyweightExercise = exerciseWithBodyweight.isBodyweight || exerciseWithBodyweight.equipment === 'bodyweight' || (exerciseWithBodyweight.equipmentRequired && exerciseWithBodyweight.equipmentRequired.includes('bodyweight'));
+  // Shared classifier (services/bodyweightClassification#resolveIsBodyweight): the
+  // is_bodyweight flag is a positive signal only, with equipment class and —
+  // for timed holds — the absence of any external-load signal as the fallback.
+  // Without that fallback a dead hang asks for a load it doesn't have.
+  const isBodyweightExercise = resolveIsBodyweight({
+    isBodyweight: exerciseWithBodyweight.isBodyweight,
+    equipment: exerciseWithBodyweight.equipment,
+    equipmentRequired: exerciseWithBodyweight.equipmentRequired,
+    name: exercise.name,
+    exerciseType: exercise.exerciseType,
+  });
   // For bodyweight exercises without a specific bodyweightType set, default to allowing both weighted and assisted
   // This handles exercises like pull-ups, dips that can be done weighted or with assistance
   const bodyweightType = exerciseWithBodyweight.bodyweightType;
@@ -1367,7 +1379,7 @@ export const ExerciseCard = memo(function ExerciseCard({
         prevSessionSets: prevSessionSetsForGating,
         priorSessionSets: priorSessionSetsForGating,
         exerciseType: exercise.exerciseType,
-        isBodyweight: exercise.isBodyweight,
+        isBodyweight: isBodyweightExercise,
         // Phase A — position-matched seed: this slot targets what the SAME
         // set position did last session (plus the smallest progression) when
         // the sessions are comparable; anchor path otherwise.
@@ -1376,7 +1388,7 @@ export const ExerciseCard = memo(function ExerciseCard({
       });
       return { seed, prevSet };
     },
-    [previousSets, previousTopSetWeightKg, anchorE1RMKg, block.targetRepRange, block.targetSets, effectiveTargetRir, exercise.minWeightIncrementKg, exercise.availableIncrementsKg, exercise.exerciseType, exercise.isBodyweight, prevSessionSetsForGating, priorSessionSetsForGating]
+    [previousSets, previousTopSetWeightKg, anchorE1RMKg, block.targetRepRange, block.targetSets, effectiveTargetRir, exercise.minWeightIncrementKg, exercise.availableIncrementsKg, exercise.exerciseType, isBodyweightExercise, prevSessionSetsForGating, priorSessionSetsForGating]
   );
 
   // Curve-consistent reps for a session-start seed: ONE ANCHOR PER
