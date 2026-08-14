@@ -255,24 +255,49 @@ export function buildSetEditPatch(
   return { patch, quality, feedback, bodyweightData };
 }
 
+/** A set whose `set_number` must move, and where it must move to. */
+export interface SetNumberChange {
+  id: string;
+  setNumber: number;
+}
+
 /**
- * Renumber a block's working sets to a dense 1..n after a deletion.
+ * Renumber a block's working sets to a dense 1..n after a deletion, and say
+ * which rows actually moved.
  *
- * KNOWN DIVERGENCE (audit finding B1, tracked separately — deliberately NOT
- * fixed here): production applies this to LOCAL state only. No `set_number`
- * UPDATE is issued, so the database keeps its gaps and in-memory numbering
- * disagrees with persisted numbering until the session is reloaded. This
- * function reproduces the existing behaviour exactly; changing it is a
- * behaviour change and belongs in its own fix.
+ * `changes` is ordered by ASCENDING new number, and that ordering is a
+ * correctness requirement rather than tidiness. `set_logs` carries
+ * `UNIQUE (exercise_block_id, set_number)`, so the updates cannot be applied in
+ * arbitrary order — one would land on a slot still occupied by a row that has
+ * not moved yet. Compaction only ever moves numbers DOWN into slots a deletion
+ * vacated, so applying in ascending target order means every target is free by
+ * the time it is written:
+ *
+ *   1,2,3,4  delete 2  →  3→2 (slot 2 freed by the delete),
+ *                         4→3 (slot 3 freed by the previous move)
+ *
+ * Feed `changes` to `persistSetRenumber` in the order given.
  */
-export function renumberBlockSets(sets: SetLog[], blockId: string): SetLog[] {
+export function planBlockRenumber(
+  sets: SetLog[],
+  blockId: string
+): { sets: SetLog[]; changes: SetNumberChange[] } {
   let n = 1;
-  return sets.map((set) => {
+  const changes: SetNumberChange[] = [];
+  const renumbered = sets.map((set) => {
     if (set.exerciseBlockId === blockId && !set.isWarmup && set.setType !== 'warmup') {
-      return { ...set, setNumber: n++ };
+      const setNumber = n++;
+      if (setNumber !== set.setNumber) changes.push({ id: set.id, setNumber });
+      return { ...set, setNumber };
     }
     return set;
   });
+  return { sets: renumbered, changes };
+}
+
+/** The renumbered sets alone — see `planBlockRenumber` for the changes. */
+export function renumberBlockSets(sets: SetLog[], blockId: string): SetLog[] {
+  return planBlockRenumber(sets, blockId).sets;
 }
 
 // ---------------------------------------------------------------------------
@@ -471,4 +496,47 @@ export async function persistSetDelete(
 
   const { error } = await deps.supabase.from('set_logs').delete().eq('id', setId);
   return { queued: false, ...(error ? { error } : {}) };
+}
+
+/**
+ * Persist a block's renumbering (audit finding B1).
+ *
+ * Deleting a set used to renumber LOCAL state only, leaving the database with
+ * its gaps. Two things went wrong downstream, and only the second was loud:
+ *
+ *  - the two numberings simply disagreed — the row the user saw as set 2 was
+ *    stored as set 3 — until the session was reloaded;
+ *  - a set logged OFFLINE afterwards took its number from local state, so it
+ *    could carry a `set_number` the database still had, and the flush hit
+ *    `UNIQUE (exercise_block_id, set_number)`. The outbox's `ignoreDuplicates`
+ *    is keyed on `id` and does not cover that, so the write was refused,
+ *    retried, and finally dropped: a logged set silently lost.
+ *
+ * The fix is to make the two sides agree, not to tolerate the disagreement —
+ * so this writes the new numbers rather than teaching the insert path to route
+ * around them.
+ *
+ * A set still sitting in the outbox is patched IN THE QUEUE: its row has not
+ * reached the database, so an UPDATE would match nothing and the eventual
+ * insert would carry the stale number.
+ *
+ * `changes` must arrive in ascending-new-number order (`planBlockRenumber`
+ * guarantees it) or an update will collide with a row that has not moved yet.
+ */
+export async function persistSetRenumber(
+  deps: { supabase: SetWriteClient },
+  changes: SetNumberChange[]
+): Promise<{ error?: { message: string } }> {
+  for (const change of changes) {
+    if (await updateQueuedSet(change.id, { set_number: change.setNumber })) continue;
+    const { error } = await deps.supabase
+      .from('set_logs')
+      .update({ set_number: change.setNumber })
+      .eq('id', change.id);
+    // Stop at the first failure: the remaining moves assume this one landed,
+    // and pressing on would write numbers that collide. The caller surfaces
+    // the error; a reload re-reads the authoritative numbering.
+    if (error) return { error };
+  }
+  return {};
 }

@@ -107,7 +107,9 @@ import {
   persistSetEdit,
   persistSetDelete,
   buildSetEditPatch,
-  renumberBlockSets,
+  planBlockRenumber,
+  persistSetRenumber,
+  type SetNumberChange,
 } from '@/lib/training/logSet';
 import { loadWorkoutSession, resolveResumePosition } from './_lib/loadSession';
 import { now as clockNow } from '@/lib/clock';
@@ -3003,17 +3005,22 @@ export default function WorkoutPage() {
     // Find the set before deleting to get the blockId for store sync
     const setToDelete = completedSets.find(s => s.id === setId);
 
-    // Remove from local state using functional update to avoid stale closure
+    // Remove from local state using functional update to avoid stale closure.
+    // The renumbering PLAN is captured here too: the same compaction has to be
+    // written to the database (B1), and deriving it from a second read of
+    // `completedSets` would risk disagreeing with what local state actually
+    // became. Computing the plan is pure, so a StrictMode double-invoke of
+    // this updater yields the same answer.
+    let renumberChanges: SetNumberChange[] = [];
     setCompletedSets(prevSets => {
       const setInPrev = prevSets.find(s => s.id === setId);
       if (!setInPrev) return prevSets;
-      // NOTE: renumbering is LOCAL ONLY — no set_number UPDATE is issued, so
-      // the DB keeps its gaps. Pre-existing divergence, preserved verbatim in
-      // renumberBlockSets; see its doc comment.
-      return renumberBlockSets(
+      const plan = planBlockRenumber(
         prevSets.filter(set => set.id !== setId),
         setInPrev.exerciseBlockId
       );
+      renumberChanges = plan.changes;
+      return plan.sets;
     });
 
     // Sync to store for resume functionality
@@ -3023,16 +3030,26 @@ export default function WorkoutPage() {
     setSetSync(prev => { const next = { ...prev }; delete next[setId]; return next; });
 
     try {
-      const { queued, error: deleteError } = await persistSetDelete(
-        { supabase: createUntypedClient() },
-        setId
-      );
+      const supabase = createUntypedClient();
+      const { queued, error: deleteError } = await persistSetDelete({ supabase }, setId);
       if (queued) refreshOutboxCount();
       if (deleteError) {
         console.error('Failed to delete set:', deleteError);
         setError(`Failed to delete set: ${deleteError.message}`);
       } else {
-        setError(null);
+        // Persist the same compaction the local state just applied, so the
+        // two numberings stay identical (B1). Without this the database keeps
+        // its gaps: the row shown as set 2 stays stored as set 3, and a set
+        // logged offline afterwards can carry a set_number the database still
+        // holds — which the UNIQUE (exercise_block_id, set_number) constraint
+        // refuses, dropping the set after the outbox's retries.
+        const { error: renumberError } = await persistSetRenumber({ supabase }, renumberChanges);
+        if (renumberError) {
+          console.error('Failed to renumber sets after delete:', renumberError);
+          setError(`Failed to renumber sets: ${renumberError.message}`);
+        } else {
+          setError(null);
+        }
       }
     } catch (err) {
       console.error('Failed to delete set:', err);
