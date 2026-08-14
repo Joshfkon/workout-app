@@ -145,9 +145,12 @@ describe('recovery flows across a muscle family', () => {
   });
 
   it('the deadlift case: a secondary group tag still reaches both trap heads', () => {
-    // Exactly how supabase/seed.sql tags the Deadlift.
+    // Exactly how supabase/seed.sql tags the Deadlift. The original defect was
+    // that BOTH heads read "never trained → Fresh" the morning after a heavy
+    // pull, so the claim under test is REACH: the parent tag lands on the
+    // components at all.
     const history = [
-      session(hoursAgo(36), [
+      session(hoursAgo(24), [
         {
           primaryMuscle: 'glutes',
           secondaryMuscles: ['hamstrings', 'erectors', 'traps', 'forearms', 'quads'],
@@ -158,9 +161,41 @@ describe('recovery flows across a muscle family', () => {
 
     for (const muscle of ['traps', 'upper_traps', 'mid_lower_traps'] as const) {
       const result = computeMuscleRecovery(history, muscle, NOW, RECOVERY_CONFIG);
-      expect(result.lastTrainedAt).toEqual(hoursAgo(36));
+      expect(result.lastTrainedAt).toEqual(hoursAgo(24));
+      expect(result.dose).toBeGreaterThan(0);
       expect(result.status).not.toBe('fresh');
     }
+  });
+
+  it('KNOWN CONSEQUENCE: components clear a group-tagged session before the group does', () => {
+    // The parent -> child edge applies `secondaryDoseFactor` TWICE for a
+    // secondary group tag (once for being secondary, once for the tag not
+    // naming a head), so each head sees half the group's dose. Under the
+    // additive dose model every window bottomed out near the base and this was
+    // invisible; a multiplicative window makes it explicit — the group can
+    // read Fatigued while its own heads read Fresh.
+    //
+    // Pinned as an OBSERVATION, not an endorsement: resolving it means deciding
+    // whether a group row aggregates its heads' fatigue or carries its own,
+    // which is the disjoint-credit question in MUSCLE_VOLUME_AUTHORITY and is
+    // out of scope for the dose-scale change. If the family model is fixed,
+    // this test should go red.
+    const history = [
+      session(hoursAgo(36), [
+        {
+          primaryMuscle: 'glutes',
+          secondaryMuscles: ['hamstrings', 'erectors', 'traps', 'forearms', 'quads'],
+          sets: sets(4, 0),
+        },
+      ]),
+    ];
+    const group = computeMuscleRecovery(history, 'traps', NOW, RECOVERY_CONFIG);
+    const head = computeMuscleRecovery(history, 'upper_traps', NOW, RECOVERY_CONFIG);
+
+    expect(head.dose).toBeCloseTo(group.dose * RECOVERY_CONFIG.secondaryDoseFactor, 10);
+    expect(head.windowHours!).toBeLessThan(group.windowHours!);
+    expect(group.status).not.toBe('fresh');
+    expect(head.status).toBe('fresh');
   });
 });
 

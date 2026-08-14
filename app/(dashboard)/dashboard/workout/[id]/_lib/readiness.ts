@@ -169,29 +169,35 @@ export const READINESS_READY_THRESHOLD = 0.8;
 export const READINESS_AMBER_THRESHOLD = 0.5;
 
 /**
- * Scalar readiness in [0, 1]: how far through its recovery window a muscle is
- * (`hoursSinceLast / windowHours`, clamped). Derived from the recovery
- * heuristic's own outputs — NOT a parallel model: the window already carries
- * dose, athlete-profile, sleep, wearable and learned-multiplier adjustments.
+ * Scalar readiness in [0, 1]: how far through recovery a muscle is. Read
+ * straight off the heuristic's own `readinessRatio` (the minimum across every
+ * outstanding debt) — NOT a parallel model, and deliberately not recomputed
+ * from `hoursSinceLast / windowHours`: those two describe DIFFERENT sessions
+ * once a light session follows a heavy one, and dividing one by the other
+ * produced a score that could read "ready" while the status said Fatigued.
  * A never-trained muscle is fully ready (1).
  */
 export function readinessScore(rec: MuscleRecoveryResult): number {
-  if (rec.lastTrainedAt === null || rec.windowHours === null || rec.windowHours <= 0) return 1;
-  const ratio = (rec.hoursSinceLast ?? 0) / rec.windowHours;
-  return Math.min(1, Math.max(0, ratio));
+  return Math.min(1, Math.max(0, rec.readinessRatio));
 }
 
 /**
  * Estimated hours until the readiness score crosses `threshold` (0 when
  * already at/above it) — drives the "~{N}h" microcopy.
+ *
+ * Reduced over ALL outstanding debts, not just the worst one: a short-window
+ * session can sit at the lowest ratio while a long-window session takes longer
+ * to reach the same fraction, and the microcopy has to wait for both.
  */
 export function hoursUntilReadinessThreshold(
   rec: MuscleRecoveryResult,
   threshold: number = READINESS_READY_THRESHOLD
 ): number {
   if (readinessScore(rec) >= threshold) return 0;
-  // score < threshold ≤ 1 implies the muscle was trained, so windowHours is set.
-  return Math.max(0, threshold * (rec.windowHours ?? 0) - (rec.hoursSinceLast ?? 0));
+  return rec.debts.reduce(
+    (worst, debt) => Math.max(worst, threshold * debt.windowHours - debt.hoursSince),
+    0
+  );
 }
 
 /**

@@ -18,7 +18,7 @@ import {
 import {
   DEFAULT_PLANNED_SESSIONS_PER_WEEK,
   RECOVERY_CONFIG,
-  computeDoseAdjustmentHours,
+  computeDoseScale,
   sessionCapacityFor,
 } from '@/services/muscleRecovery';
 
@@ -160,15 +160,15 @@ describe('frequency feeds the dose model', () => {
     // Higher planned frequency → smaller session capacity → same work reads heavier.
     expect(withPlan.sessionCapacity).toBeLessThan(withFallback.sessionCapacity);
 
-    const heavier = computeDoseAdjustmentHours('quads', 8, 3, {
+    const heavier = computeDoseScale('quads', 8, 3, {
       ...RECOVERY_CONFIG,
       experienceForCapacity: 'advanced',
       plannedSessionsPerWeekByMuscle: plan,
-    }).adjustmentHours;
-    const lighter = computeDoseAdjustmentHours('quads', 8, 3, {
+    }).doseScale;
+    const lighter = computeDoseScale('quads', 8, 3, {
       ...RECOVERY_CONFIG,
       experienceForCapacity: 'advanced',
-    }).adjustmentHours;
+    }).doseScale;
     expect(heavier).toBeGreaterThan(lighter);
   });
 
@@ -208,12 +208,12 @@ describe('frequency-source metrics', () => {
 
   it('every dose evaluation records its source', () => {
     const plan = plannedSessionsPerWeekByMuscle([day(['quads']), day(['quads'])]);
-    computeDoseAdjustmentHours('quads', 6, 2, {
+    computeDoseScale('quads', 6, 2, {
       ...RECOVERY_CONFIG,
       experienceForCapacity: 'advanced',
       plannedSessionsPerWeekByMuscle: plan,
     });
-    computeDoseAdjustmentHours('biceps', 6, 2, {
+    computeDoseScale('biceps', 6, 2, {
       ...RECOVERY_CONFIG,
       experienceForCapacity: 'advanced',
     });

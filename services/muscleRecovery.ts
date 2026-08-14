@@ -126,11 +126,18 @@ export const RECOVERY_MULTIPLIER_STEP = 0.05;
 
 /**
  * Final product guardrails on a resolved recovery window. These are a PRODUCT
- * floor and ceiling — "never tell a user a muscle needs less than a day or
- * more than five" — NOT evidence that the upstream model is calibrated. A
+ * floor and ceiling — NOT evidence that the upstream model is calibrated. A
  * rising clamp rate is a signal to investigate the model, not to widen these.
+ *
+ * The floor was 24h under the ADDITIVE dose model, where it was harmless: an
+ * offset-based window could not produce a small value from a real session, so
+ * the floor only ever caught degenerate scalar stacking. Under the
+ * multiplicative model (see MIN_DOSE_SCALE) a trivial exposure is SUPPOSED to
+ * resolve in hours, and a 24h floor would have swallowed exactly the fix — it
+ * would still have told a user their lats needed a full day off after two
+ * sets of dead hangs. 8h is the shortest claim the product is willing to make.
  */
-export const RECOVERY_WINDOW_BOUNDS_HOURS = { min: 24, max: 120 } as const;
+export const RECOVERY_WINDOW_BOUNDS_HOURS = { min: 8, max: 120 } as const;
 
 /**
  * Planned per-muscle training frequency used to normalize session dose when
@@ -207,44 +214,62 @@ export const RECOVERY_CONFIG: RecoveryConfig = {
 // ---------------------------------------------------------------------------
 
 /**
- * The dose model replaces a step function that added a flat +24h whenever
- * effective sets hit 8 OR two sets landed at RIR <= 1. That was discontinuous
- * (7.9 sets and 8.0 sets differed by a full day) and fired on many ordinary
- * productive sessions.
+ * Dose SCALES the window; it does not offset it.
  *
- * The replacement is continuous, bounded, and independently nondecreasing in
- * both inputs. Every breakpoint below is a HEURISTIC POLICY CHOICE, not a
- * measured physiological constant.
+ * History, because the shape matters more than the numbers:
+ *  - v1 was a step function: a flat +24h once effective sets hit 8 OR two sets
+ *    landed at RIR <= 1. Discontinuous (7.99 and 8.01 sets differed by a day).
+ *  - v2 replaced it with a continuous ADDITIVE adjustment in [-12h, +24h] on
+ *    top of the per-muscle base. That fixed the discontinuity but kept a
+ *    structural defect: because the adjustment was an offset with a fixed
+ *    floor, ANY nonzero involvement was charged nearly the whole base window.
+ *    Two secondary-credit sets of a grip hold (1.0 effective sets against a
+ *    lats session capacity of 10) scored ZERO load and still bought 48 of the
+ *    60h base — 61% of what a full pull day earned for 15% of the dose. The
+ *    response was also near-flat below ~0.3 normalized dose, so 1 set and 3
+ *    sets were within 3h of each other.
+ *  - v3 (here) makes the window PROPORTIONAL to dose, sublinearly:
+ *
+ *      window = base x clamp((blend / REFERENCE_DOSE_RATIO) ^ DOSE_EXPONENT,
+ *                            MIN_DOSE_SCALE, MAX_DOSE_SCALE)
+ *      blend  = totalDoseRatio + HARD_DOSE_BONUS x hardDoseRatio
+ *
+ *    A trivial dose now yields a trivial window because the curve passes
+ *    through the origin, and the low end is no longer flat. `blend` is linear
+ *    in both inputs (hardDoseRatio <= totalDoseRatio, so no min() is needed),
+ *    which makes independent monotonicity obvious rather than emergent.
+ *
+ * Every constant below is a HEURISTIC POLICY CHOICE, not a measured
+ * physiological constant. They were fitted to keep ORDINARY sessions close to
+ * what v2 produced (a 0.7-ratio session with 40% hard sets moves by under an
+ * hour) while letting genuinely light exposures fall away — see
+ * docs/RECOVERY_DOSE_SCALE_V3.md for the before/after table.
  */
 
-/** Normalized total dose at/below which the set term contributes nothing. */
-export const SET_LOAD_LOW = 0.15;
-/** Normalized total dose at/above which the set term saturates. */
-export const SET_LOAD_HIGH = 0.85;
-/** Normalized hard dose at/below which the hard term contributes nothing. */
-export const HARD_LOAD_LOW = 0.0;
-/** Normalized hard dose at/above which the hard term saturates. */
-export const HARD_LOAD_HIGH = 0.35;
-/** Share of the load score driven by total volume. */
-export const SET_WEIGHT = 0.6;
-/** Share of the load score driven by proximity-to-failure volume. */
-export const HARD_WEIGHT = 0.4;
-/** Hours subtracted at zero load (a genuinely light session recovers faster). */
-export const MIN_DOSE_ADJUSTMENT_HOURS = -12;
-/** Hours added at saturated load. */
-export const MAX_DOSE_ADJUSTMENT_HOURS = 24;
-
-/** Hermite smoothstep, clamped outside [edge0, edge1]. */
-export function smoothstep(edge0: number, edge1: number, x: number): number {
-  if (edge1 <= edge0) return x >= edge1 ? 1 : 0;
-  const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)));
-  return t * t * (3 - 2 * t);
-}
-
-/** Linear interpolation. */
-export function lerp(a: number, b: number, t: number): number {
-  return a + (b - a) * t;
-}
+/**
+ * Normalized dose at which a session earns EXACTLY the muscle's base window —
+ * i.e. half of `MRV / plannedSessionsPerWeek`. Above it the window stretches,
+ * below it the window shrinks.
+ */
+export const REFERENCE_DOSE_RATIO = 0.5;
+/**
+ * Sublinear exponent. < 1 because recovery time grows slower than volume:
+ * doubling the dose is well short of doubling the time to recover.
+ */
+export const DOSE_EXPONENT = 0.65;
+/**
+ * Extra weight a proximity-to-failure set carries over an ordinary one. A set
+ * at/below `hardRirThreshold` counts 1.3 sets toward the dose blend.
+ */
+export const HARD_DOSE_BONUS = 0.3;
+/**
+ * Floor on the scale, so a barely-there exposure still registers as "you
+ * touched this today" rather than nothing. Binds only below ~4% of session
+ * capacity; above that the curve itself governs.
+ */
+export const MIN_DOSE_SCALE = 0.2;
+/** Ceiling on the scale — a maximal session extends the window by ~45%. */
+export const MAX_DOSE_SCALE = 1.45;
 
 /** Everything the dose model saw and decided, for diagnostics and reports. */
 export interface DoseDiagnostics {
@@ -261,7 +286,14 @@ export interface DoseDiagnostics {
   effectiveHardSets: number;
   totalDoseRatio: number;
   hardDoseRatio: number;
-  adjustmentHours: number;
+  /** `totalDoseRatio + HARD_DOSE_BONUS x hardDoseRatio` — the curve's input. */
+  blendedDoseRatio: number;
+  /** Multiplier applied to the base window BEFORE the MIN/MAX scale clamp. */
+  rawDoseScale: number;
+  /** Multiplier actually applied to the base window. */
+  doseScale: number;
+  /** Which scale bound bit, if any. */
+  doseScaleClamp: 'none' | 'lower' | 'upper';
 }
 
 /**
@@ -343,14 +375,14 @@ export function sessionCapacityFor(
 }
 
 /**
- * Continuous, bounded dose adjustment in hours, nondecreasing in BOTH inputs.
+ * Continuous, bounded dose SCALE, nondecreasing in BOTH inputs.
  *
  * Feedback note: higher planned frequency shrinks session capacity, so the
  * same session reads as a larger relative dose and earns a longer window.
  * That is directionally negative feedback, but stability is NOT established —
  * see the frequency-sensitivity report before leaning on it.
  */
-export function computeDoseAdjustmentHours(
+export function computeDoseScale(
   muscle: StandardMuscleGroup,
   effectiveSets: number,
   effectiveHardSets: number,
@@ -370,14 +402,13 @@ export function computeDoseAdjustmentHours(
   const totalDoseRatio = effectiveSets / capacity.sessionCapacity;
   const hardDoseRatio = effectiveHardSets / capacity.sessionCapacity;
 
-  const setLoad = smoothstep(SET_LOAD_LOW, SET_LOAD_HIGH, totalDoseRatio);
-  const hardLoad = smoothstep(HARD_LOAD_LOW, HARD_LOAD_HIGH, hardDoseRatio);
-  const loadScore = SET_WEIGHT * setLoad + HARD_WEIGHT * hardLoad;
-  const adjustmentHours = lerp(
-    MIN_DOSE_ADJUSTMENT_HOURS,
-    MAX_DOSE_ADJUSTMENT_HOURS,
-    loadScore
-  );
+  const blendedDoseRatio = totalDoseRatio + HARD_DOSE_BONUS * hardDoseRatio;
+  // 0 ** positive is 0, so a zero-dose session lands on MIN_DOSE_SCALE rather
+  // than NaN — but sessionInvolvement never emits one, so this is a guard.
+  const rawDoseScale = Math.pow(blendedDoseRatio / REFERENCE_DOSE_RATIO, DOSE_EXPONENT);
+  const doseScale = Math.min(MAX_DOSE_SCALE, Math.max(MIN_DOSE_SCALE, rawDoseScale));
+  const doseScaleClamp: 'none' | 'lower' | 'upper' =
+    rawDoseScale < MIN_DOSE_SCALE ? 'lower' : rawDoseScale > MAX_DOSE_SCALE ? 'upper' : 'none';
 
   return {
     muscle,
@@ -386,7 +417,10 @@ export function computeDoseAdjustmentHours(
     effectiveHardSets,
     totalDoseRatio,
     hardDoseRatio,
-    adjustmentHours,
+    blendedDoseRatio,
+    rawDoseScale,
+    doseScale,
+    doseScaleClamp,
   };
 }
 
@@ -576,19 +610,59 @@ export interface RecoverySession {
   exercises: RecoveryExercise[];
 }
 
+/** One session's unsettled recovery debt, as of `now`. */
+export interface RecoveryDebt {
+  performedAt: Date;
+  /** That session's own resolved recovery window. */
+  windowHours: number;
+  hoursSince: number;
+  /** `hoursSince / windowHours`, clamped to [0, 1]. */
+  ratio: number;
+}
+
 export interface MuscleRecoveryResult {
+  /**
+   * The WORST outstanding verdict across every session that still owes this
+   * muscle recovery — not the verdict of the most recent one. See
+   * `computeMuscleRecovery`.
+   */
   status: RecoveryStatus;
-  /** Hours since the muscle was last worked, or null if never worked. */
+  /**
+   * How far through recovery the muscle is, in [0, 1] — the MINIMUM of each
+   * outstanding debt's `ratio`, and 1 when never trained. `status` is exactly
+   * this value banded by `recoveringThreshold`, so the two can never disagree.
+   */
+  readinessRatio: number;
+  /**
+   * Every session that has NOT finished its window at `now`, worst (lowest
+   * ratio) first. Empty when the muscle is Fresh. Reduce over this — never
+   * over `windowHours` alone — when a surface needs "hours until X", because
+   * the debt that is furthest from done is not always the longest-dated one.
+   */
+  debts: RecoveryDebt[];
+  /** Hours since the muscle was last worked AT ALL, or null if never worked. */
   hoursSinceLast: number | null;
-  /** When the muscle is estimated to be Fresh again, or null if never worked. */
+  /**
+   * When the muscle is estimated to be Fresh again — the LATEST ready-time
+   * across all outstanding debts. Null if never worked.
+   */
   estimatedReadyAt: Date | null;
-  /** When the muscle was last worked, or null if never worked. */
+  /** When the muscle was last worked at all, or null if never worked. */
   lastTrainedAt: Date | null;
   /** Hours until Fresh (0 when already Fresh). */
   hoursUntilReady: number;
-  /** The recovery window (hours) applied to the last session, or null. */
+  /**
+   * When the GOVERNING session was performed — the one whose debt runs
+   * longest, which is what `windowHours` / `dose` / `breakdown` describe. It
+   * is NOT always the most recent session: a heavy pull day can still govern
+   * after a light session touched the same muscle. Null if never worked.
+   */
+  governingTrainedAt: Date | null;
+  /** Hours since the governing session, or null if never worked. */
+  hoursSinceGoverning: number | null;
+  /** The recovery window (hours) applied to the GOVERNING session, or null. */
   windowHours: number | null;
-  /** Effective set dose of the most recent session that hit this muscle. */
+  /** Effective set dose of the GOVERNING session. */
   dose: number;
   /**
    * Full derivation of `windowHours` — base window, dose diagnostics, every
@@ -704,7 +778,7 @@ export interface WindowBreakdown {
   muscle: StandardMuscleGroup;
   /** Per-muscle base window before any modifier. */
   baseWindowHours: number;
-  /** Continuous dose adjustment (hours) and everything that produced it. */
+  /** Continuous dose SCALE and everything that produced it. */
   dose: DoseDiagnostics;
   /** Athlete-profile scalar (enhanced shrinks windows), incl. wearable. */
   windowScale: number;
@@ -733,12 +807,7 @@ export function windowBreakdownForSession(
 ): WindowBreakdown {
   const baseWindowHours = config.windowHoursByMuscle[muscle] ?? config.defaultWindowHours;
 
-  const dose = computeDoseAdjustmentHours(
-    muscle,
-    involvement.dose,
-    involvement.hardSets,
-    config
-  );
+  const dose = computeDoseScale(muscle, involvement.dose, involvement.hardSets, config);
 
   // Learned per-muscle multiplier (soreness feedback), clamped defensively so
   // an out-of-range persisted value can never distort the window. This is
@@ -757,8 +826,10 @@ export function windowBreakdownForSession(
     config.sleepWindowMultiplier
   );
 
+  // Dose MULTIPLIES the base rather than offsetting it, so the window falls
+  // away with the dose instead of bottoming out at (base - 12h).
   const preClampHours =
-    (baseWindowHours + dose.adjustmentHours) * globalScale * learnedMultiplier;
+    baseWindowHours * dose.doseScale * globalScale * learnedMultiplier;
 
   const windowHours = Math.min(
     RECOVERY_WINDOW_BOUNDS_HOURS.max,
@@ -787,9 +858,39 @@ export function windowBreakdownForSession(
 }
 
 /**
+ * Band a readiness ratio (`hoursSince / windowHours`, clamped) into the
+ * tri-state. Monotone in the ratio, which is what makes "worst status across
+ * sessions" and "minimum ratio across sessions" the same reduction.
+ */
+export function statusForRatio(ratio: number, config: RecoveryConfig): RecoveryStatus {
+  if (ratio >= 1) return 'fresh';
+  if (ratio >= config.recoveringThreshold) return 'recovering';
+  return 'fatigued';
+}
+
+/**
  * Compute the recovery status of a single muscle group from a list of sessions.
- * Sessions may be in any order; the most recent one that involves the muscle
- * drives the result.
+ * Sessions may be in any order.
+ *
+ * EVERY session that involves the muscle leaves an INDEPENDENT debt, and the
+ * muscle is as unready as the worst of them. This replaces a last-session-wins
+ * rule that let the most recent session overwrite every earlier one — so two
+ * sets of a grip hold could erase a heavy pull day's window and substitute its
+ * own, which in practice moved lats from "Recovering, Fresh in 8h" to
+ * "Fatigued, Fresh in 42h" off one effective set. A light touch must never be
+ * able to lengthen (or shorten) a debt it did not create.
+ *
+ * Two things are therefore reduced separately:
+ *  - `estimatedReadyAt` is the LATEST ready-time across outstanding debts;
+ *  - `status` is the WORST verdict across them.
+ * These can come from different sessions — "Fatigued (trained 6h ago), Fresh
+ * in 10h (from Monday's heavy day)" is a coherent, and correct, readout. They
+ * can never contradict: `fresh` requires every debt settled, which forces
+ * `hoursUntilReady` to 0.
+ *
+ * `windowHours` / `dose` / `breakdown` describe the GOVERNING session — the
+ * one whose debt runs longest — while `lastTrainedAt` / `hoursSinceLast` stay
+ * literal, so the sheet can still say when the muscle was last touched.
  */
 export function computeMuscleRecovery(
   history: RecoverySession[],
@@ -797,55 +898,86 @@ export function computeMuscleRecovery(
   now: Date,
   config: RecoveryConfig = RECOVERY_CONFIG
 ): MuscleRecoveryResult {
-  // Find the most recent session that actually worked this muscle.
-  let last: SessionInvolvement | null = null;
+  let lastTrainedAt: Date | null = null;
+  let governing: { involvement: SessionInvolvement; breakdown: WindowBreakdown } | null = null;
+  let governingReadyAt = -Infinity;
+  let readinessRatio = 1;
+  const debts: RecoveryDebt[] = [];
+
   for (const session of history) {
     const involvement = sessionInvolvement(session, muscle, config);
     if (!involvement) continue;
-    if (!last || involvement.performedAt.getTime() > last.performedAt.getTime()) {
-      last = involvement;
+
+    const performedAt = involvement.performedAt.getTime();
+    if (lastTrainedAt === null || performedAt > lastTrainedAt.getTime()) {
+      lastTrainedAt = involvement.performedAt;
+    }
+
+    const breakdown = windowBreakdownForSession(muscle, involvement, config);
+    if (breakdown.clamp !== 'none') recordRecoveryClamp(breakdown);
+
+    const hoursSince = (now.getTime() - performedAt) / MS_PER_HOUR;
+    const ratio = Math.min(1, Math.max(0, hoursSince / breakdown.windowHours));
+    if (ratio < readinessRatio) readinessRatio = ratio;
+    if (ratio < 1) {
+      debts.push({
+        performedAt: involvement.performedAt,
+        windowHours: breakdown.windowHours,
+        hoursSince,
+        ratio,
+      });
+    }
+
+    const readyAt = performedAt + breakdown.windowHours * MS_PER_HOUR;
+    // Ties (a re-logged session, an import duplicate) resolve to the more
+    // recent performedAt, so the governing row is deterministic.
+    if (
+      readyAt > governingReadyAt ||
+      (readyAt === governingReadyAt &&
+        governing !== null &&
+        performedAt > governing.involvement.performedAt.getTime())
+    ) {
+      governingReadyAt = readyAt;
+      governing = { involvement, breakdown };
     }
   }
 
-  if (!last) {
+  debts.sort((a, b) => a.ratio - b.ratio || a.performedAt.getTime() - b.performedAt.getTime());
+
+  if (!governing) {
     // Never worked (in the supplied window) → treat as fully Fresh.
     return {
       status: 'fresh',
+      readinessRatio: 1,
+      debts: [],
       hoursSinceLast: null,
       estimatedReadyAt: null,
       lastTrainedAt: null,
       hoursUntilReady: 0,
+      governingTrainedAt: null,
+      hoursSinceGoverning: null,
       windowHours: null,
       dose: 0,
       breakdown: null,
     };
   }
 
-  const breakdown = windowBreakdownForSession(muscle, last, config);
-  const windowHours = breakdown.windowHours;
-  if (breakdown.clamp !== 'none') recordRecoveryClamp(breakdown);
-  const hoursSinceLast = (now.getTime() - last.performedAt.getTime()) / MS_PER_HOUR;
-  const estimatedReadyAt = new Date(last.performedAt.getTime() + windowHours * MS_PER_HOUR);
-  const hoursUntilReady = Math.max(0, windowHours - hoursSinceLast);
-
-  let status: RecoveryStatus;
-  if (hoursSinceLast >= windowHours) {
-    status = 'fresh';
-  } else if (hoursSinceLast >= config.recoveringThreshold * windowHours) {
-    status = 'recovering';
-  } else {
-    status = 'fatigued';
-  }
+  const governingTrainedAt = governing.involvement.performedAt;
+  const hoursSinceGoverning = (now.getTime() - governingTrainedAt.getTime()) / MS_PER_HOUR;
 
   return {
-    status,
-    hoursSinceLast,
-    estimatedReadyAt,
-    lastTrainedAt: last.performedAt,
-    hoursUntilReady,
-    windowHours,
-    dose: last.dose,
-    breakdown,
+    status: statusForRatio(readinessRatio, config),
+    readinessRatio,
+    debts,
+    hoursSinceLast: (now.getTime() - lastTrainedAt!.getTime()) / MS_PER_HOUR,
+    estimatedReadyAt: new Date(governingReadyAt),
+    lastTrainedAt,
+    hoursUntilReady: Math.max(0, (governingReadyAt - now.getTime()) / MS_PER_HOUR),
+    governingTrainedAt,
+    hoursSinceGoverning,
+    windowHours: governing.breakdown.windowHours,
+    dose: governing.involvement.dose,
+    breakdown: governing.breakdown,
   };
 }
 

@@ -1,28 +1,29 @@
 /**
- * Continuous dose adjustment (Bug 6).
+ * Continuous dose SCALE (Bug 6, revised).
  *
- * The replaced step function added a flat +24h at effectiveSets >= 8 OR
- * hardSets >= 2. These tests pin the properties the replacement was chosen
- * for: continuity, independent monotonicity, boundedness, and a capacity
- * denominator that resolves through the PARENT for bounded component rows.
+ * v1 was a step function (+24h at 8 sets or 2 hard sets). v2 replaced it with
+ * a continuous ADDITIVE adjustment in [-12h, +24h]. v3 — pinned here — makes
+ * the window PROPORTIONAL to dose:
+ *
+ *   scale = clamp((totalRatio + HARD_DOSE_BONUS x hardRatio) / REF) ^ EXPONENT
+ *
+ * These tests keep every property v2 was chosen for (continuity, independent
+ * monotonicity, boundedness, parent-resolved capacity denominators) and add
+ * the one v2 lacked: the response passes through the ORIGIN, so a trivial
+ * dose earns a trivial window instead of nearly the whole base.
  */
 
 import {
   DEFAULT_PLANNED_SESSIONS_PER_WEEK,
+  DOSE_EXPONENT,
   EXPERIENCE_FALLBACK,
-  HARD_LOAD_HIGH,
-  HARD_LOAD_LOW,
-  HARD_WEIGHT,
-  MAX_DOSE_ADJUSTMENT_HOURS,
-  MIN_DOSE_ADJUSTMENT_HOURS,
+  HARD_DOSE_BONUS,
+  MAX_DOSE_SCALE,
+  MIN_DOSE_SCALE,
   RECOVERY_CONFIG,
-  SET_LOAD_HIGH,
-  SET_LOAD_LOW,
-  SET_WEIGHT,
-  computeDoseAdjustmentHours,
-  lerp,
+  REFERENCE_DOSE_RATIO,
+  computeDoseScale,
   sessionCapacityFor,
-  smoothstep,
   type RecoveryConfig,
 } from '@/services/muscleRecovery';
 import {
@@ -40,14 +41,12 @@ function configFor(overrides: Partial<RecoveryConfig> = {}): RecoveryConfig {
   return { ...RECOVERY_CONFIG, ...overrides };
 }
 
-/** Adjustment computed straight from normalized ratios, capacity aside. */
-function adjustmentFromRatios(totalRatio: number, hardRatio: number): number {
-  const setLoad = smoothstep(SET_LOAD_LOW, SET_LOAD_HIGH, totalRatio);
-  const hardLoad = smoothstep(HARD_LOAD_LOW, HARD_LOAD_HIGH, hardRatio);
-  return lerp(
-    MIN_DOSE_ADJUSTMENT_HOURS,
-    MAX_DOSE_ADJUSTMENT_HOURS,
-    SET_WEIGHT * setLoad + HARD_WEIGHT * hardLoad
+/** The scale computed straight from normalized ratios, capacity aside. */
+function scaleFromRatios(totalRatio: number, hardRatio: number): number {
+  const blend = totalRatio + HARD_DOSE_BONUS * hardRatio;
+  return Math.min(
+    MAX_DOSE_SCALE,
+    Math.max(MIN_DOSE_SCALE, Math.pow(blend / REFERENCE_DOSE_RATIO, DOSE_EXPONENT))
   );
 }
 
@@ -65,15 +64,59 @@ describe('anchor scenarios — advanced triceps, MRV 22, 2 sessions/wk, capacity
   });
 
   it.each([
-    [0, 0, -12],
-    [2, 0, -11.87],
-    [5, 2, 4.33],
-    [8, 3, 20.45],
-    [11, 6, 24],
-    [14, 9, 24],
-  ])('%i effective sets / %i hard sets -> ~%sh', (sets, hard, expected) => {
-    const { adjustmentHours } = computeDoseAdjustmentHours('triceps', sets, hard, config);
-    expect(adjustmentHours).toBeCloseTo(expected, 1);
+    [0, 0, MIN_DOSE_SCALE],
+    [2, 0, 0.518],
+    [5, 2, 1.012],
+    [8, 3, 1.367],
+    [11, 6, MAX_DOSE_SCALE],
+    [14, 9, MAX_DOSE_SCALE],
+  ])('%i effective sets / %i hard sets -> scale ~%s', (sets, hard, expected) => {
+    const { doseScale } = computeDoseScale('triceps', sets, hard, config);
+    expect(doseScale).toBeCloseTo(expected, 3);
+  });
+
+  it('a session at REFERENCE_DOSE_RATIO earns exactly the base window', () => {
+    const sets = REFERENCE_DOSE_RATIO * 11;
+    const { doseScale } = computeDoseScale('triceps', sets, 0, config);
+    expect(doseScale).toBeCloseTo(1, 10);
+  });
+});
+
+describe('the low-dose defect this model exists to fix', () => {
+  // The report: 2 sets of a grip hold credited to lats as a secondary is 1.0
+  // effective set against a session capacity of 10 — a dose the model itself
+  // scored as no load, which nonetheless bought 80% of the 60h base window.
+  const config = configFor({
+    experienceForCapacity: 'intermediate',
+    plannedSessionsPerWeek: 2,
+  });
+
+  it('a token exposure (10% of session capacity) earns well under half the base', () => {
+    const { doseScale, totalDoseRatio } = computeDoseScale('lats', 1, 0, config);
+    expect(totalDoseRatio).toBeCloseTo(0.1, 10);
+    expect(doseScale).toBeLessThan(0.45);
+    // v2 produced (60 - 12) / 60 = 0.8 here. The regression guard is the gap.
+    expect(doseScale).toBeLessThan(0.8 - 0.3);
+  });
+
+  it('the response is NOT flat at the low end — 1, 3 and 6 sets are clearly apart', () => {
+    const one = computeDoseScale('lats', 1, 0, config).doseScale;
+    const three = computeDoseScale('lats', 3, 0, config).doseScale;
+    const six = computeDoseScale('lats', 6, 0, config).doseScale;
+    // v2 separated 1 set from 3 sets by under 3h on a 60h base (< 0.05 scale).
+    expect(three - one).toBeGreaterThan(0.2);
+    expect(six - three).toBeGreaterThan(0.2);
+  });
+
+  it('scales toward the floor as dose goes to zero, never below it', () => {
+    let previous = Infinity;
+    for (const sets of [1, 0.5, 0.25, 0.1, 0.01, 0]) {
+      const { doseScale } = computeDoseScale('lats', sets, 0, config);
+      expect(doseScale).toBeLessThanOrEqual(previous);
+      expect(doseScale).toBeGreaterThanOrEqual(MIN_DOSE_SCALE);
+      previous = doseScale;
+    }
+    expect(computeDoseScale('lats', 0, 0, config).doseScale).toBe(MIN_DOSE_SCALE);
   });
 });
 
@@ -81,18 +124,18 @@ describe('preconditions', () => {
   const config = configFor({ experienceForCapacity: 'advanced' });
 
   it('rejects hard sets exceeding total sets', () => {
-    expect(() => computeDoseAdjustmentHours('triceps', 4, 5, config)).toThrow(
+    expect(() => computeDoseScale('triceps', 4, 5, config)).toThrow(
       /effectiveHardSets <= effectiveSets/
     );
   });
 
   it('rejects negative inputs', () => {
-    expect(() => computeDoseAdjustmentHours('triceps', -1, 0, config)).toThrow();
-    expect(() => computeDoseAdjustmentHours('triceps', 4, -1, config)).toThrow();
+    expect(() => computeDoseScale('triceps', -1, 0, config)).toThrow();
+    expect(() => computeDoseScale('triceps', 4, -1, config)).toThrow();
   });
 
   it('accepts hardSets exactly equal to effectiveSets', () => {
-    expect(() => computeDoseAdjustmentHours('triceps', 4, 4, config)).not.toThrow();
+    expect(() => computeDoseScale('triceps', 4, 4, config)).not.toThrow();
   });
 
   it('session capacity is always > 0 for every muscle and level', () => {
@@ -113,13 +156,13 @@ describe('preconditions', () => {
 describe('mathematical properties', () => {
   const config = configFor({ experienceForCapacity: 'advanced', plannedSessionsPerWeek: 2 });
 
-  it('is bounded to [MIN, MAX] across an extreme sweep', () => {
+  it('is bounded to [MIN_DOSE_SCALE, MAX_DOSE_SCALE] across an extreme sweep', () => {
     for (const muscle of STANDARD_MUSCLE_GROUPS) {
       for (let sets = 0; sets <= 60; sets += 0.25) {
         for (const hard of [0, sets / 2, sets]) {
-          const { adjustmentHours } = computeDoseAdjustmentHours(muscle, sets, hard, config);
-          expect(adjustmentHours).toBeGreaterThanOrEqual(MIN_DOSE_ADJUSTMENT_HOURS);
-          expect(adjustmentHours).toBeLessThanOrEqual(MAX_DOSE_ADJUSTMENT_HOURS);
+          const { doseScale } = computeDoseScale(muscle, sets, hard, config);
+          expect(doseScale).toBeGreaterThanOrEqual(MIN_DOSE_SCALE);
+          expect(doseScale).toBeLessThanOrEqual(MAX_DOSE_SCALE);
         }
       }
     }
@@ -130,9 +173,9 @@ describe('mathematical properties', () => {
       for (const hard of [0, 1, 3]) {
         let previous = -Infinity;
         for (let sets = hard; sets <= 40; sets += 0.25) {
-          const { adjustmentHours } = computeDoseAdjustmentHours(muscle, sets, hard, config);
-          expect(adjustmentHours).toBeGreaterThanOrEqual(previous - 1e-9);
-          previous = adjustmentHours;
+          const { doseScale } = computeDoseScale(muscle, sets, hard, config);
+          expect(doseScale).toBeGreaterThanOrEqual(previous - 1e-9);
+          previous = doseScale;
         }
       }
     }
@@ -143,53 +186,74 @@ describe('mathematical properties', () => {
       for (const total of [4, 8, 16]) {
         let previous = -Infinity;
         for (let hard = 0; hard <= total; hard += 0.25) {
-          const { adjustmentHours } = computeDoseAdjustmentHours(muscle, total, hard, config);
-          expect(adjustmentHours).toBeGreaterThanOrEqual(previous - 1e-9);
-          previous = adjustmentHours;
+          const { doseScale } = computeDoseScale(muscle, total, hard, config);
+          expect(doseScale).toBeGreaterThanOrEqual(previous - 1e-9);
+          previous = doseScale;
         }
       }
     }
   });
 
-  it('is continuous in NORMALIZED-dose space, within the analytic smoothstep slope', () => {
-    // Deliberately NOT a "0.5 actual sets must move <= 3h" rule: for a
+  it('is continuous in NORMALIZED-dose space, within the analytic curve slope', () => {
+    // Deliberately NOT a "0.5 actual sets must move <= X" rule: for a
     // small-capacity muscle, 0.5 sets is a large normalized change and that
     // rule would fail for reasons that say nothing about continuity.
     //
-    // max |d/dt smoothstep(t)| = 1.5 at the midpoint. Per unit of RATIO the
-    // slope is 1.5 / (high - low), scaled by weight and the output span.
-    const span = MAX_DOSE_ADJUSTMENT_HOURS - MIN_DOSE_ADJUSTMENT_HOURS;
-    const maxSetSlope = (SET_WEIGHT * span * 1.5) / (SET_LOAD_HIGH - SET_LOAD_LOW);
-    const maxHardSlope = (HARD_WEIGHT * span * 1.5) / (HARD_LOAD_HIGH - HARD_LOAD_LOW);
-    const step = 0.05;
+    // d/dx (x/REF)^p = (p/REF)(x/REF)^(p-1), which for p < 1 is steepest at
+    // the SMALLEST x still above the floor. Bound the sweep by that point.
+    const floorAt = REFERENCE_DOSE_RATIO * Math.pow(MIN_DOSE_SCALE, 1 / DOSE_EXPONENT);
+    const step = 0.001;
+    const maxSlope =
+      (DOSE_EXPONENT / REFERENCE_DOSE_RATIO) *
+      Math.pow(floorAt / REFERENCE_DOSE_RATIO, DOSE_EXPONENT - 1);
 
     let worstSet = 0;
-    for (let total = 0; total <= 2; total += step) {
-      const a = adjustmentFromRatios(total, 0);
-      const b = adjustmentFromRatios(total + step, 0);
-      worstSet = Math.max(worstSet, Math.abs(b - a));
+    for (let total = floorAt; total <= 2; total += step) {
+      worstSet = Math.max(
+        worstSet,
+        Math.abs(scaleFromRatios(total + step, 0) - scaleFromRatios(total, 0))
+      );
     }
-    expect(worstSet).toBeLessThanOrEqual(maxSetSlope * step + 1e-9);
+    expect(worstSet).toBeLessThanOrEqual(maxSlope * step + 1e-9);
 
+    // The hard term enters linearly through the blend, so its slope is the set
+    // slope scaled by HARD_DOSE_BONUS.
     let worstHard = 0;
     for (let hard = 0; hard <= 1; hard += step) {
-      const a = adjustmentFromRatios(1, hard);
-      const b = adjustmentFromRatios(1, hard + step);
-      worstHard = Math.max(worstHard, Math.abs(b - a));
+      worstHard = Math.max(
+        worstHard,
+        Math.abs(scaleFromRatios(1, hard + step) - scaleFromRatios(1, hard))
+      );
     }
-    expect(worstHard).toBeLessThanOrEqual(maxHardSlope * step + 1e-9);
+    expect(worstHard).toBeLessThanOrEqual(maxSlope * HARD_DOSE_BONUS * step + 1e-9);
   });
 
   it('has no discontinuity at the OLD step-function thresholds', () => {
-    // The specific defect: 7.99 vs 8.00 sets used to differ by a full day.
-    const below = computeDoseAdjustmentHours('triceps', 7.99, 0, config).adjustmentHours;
-    const above = computeDoseAdjustmentHours('triceps', 8.01, 0, config).adjustmentHours;
-    expect(Math.abs(above - below)).toBeLessThan(0.5);
+    // The v1 defect: 7.99 vs 8.00 sets used to differ by a full day.
+    const below = computeDoseScale('triceps', 7.99, 0, config).doseScale;
+    const above = computeDoseScale('triceps', 8.01, 0, config).doseScale;
+    expect(Math.abs(above - below)).toBeLessThan(0.01);
 
-    const oneHard = computeDoseAdjustmentHours('triceps', 6, 1, config).adjustmentHours;
-    const twoHard = computeDoseAdjustmentHours('triceps', 6, 2, config).adjustmentHours;
-    expect(twoHard - oneHard).toBeLessThan(6);
+    const oneHard = computeDoseScale('triceps', 6, 1, config).doseScale;
+    const twoHard = computeDoseScale('triceps', 6, 2, config).doseScale;
+    expect(twoHard - oneHard).toBeLessThan(0.1);
     expect(twoHard).toBeGreaterThan(oneHard);
+  });
+
+  it('is sublinear — doubling the dose does NOT double the window', () => {
+    for (const muscle of STANDARD_MUSCLE_GROUPS) {
+      const single = computeDoseScale(muscle, 3, 0, config).doseScale;
+      const double = computeDoseScale(muscle, 6, 0, config).doseScale;
+      expect(double).toBeGreaterThan(single);
+      expect(double).toBeLessThan(single * 2);
+    }
+  });
+
+  it('a hard set counts exactly 1 + HARD_DOSE_BONUS ordinary sets', () => {
+    const hard = computeDoseScale('triceps', 4, 4, config);
+    const equivalent = computeDoseScale('triceps', 4 * (1 + HARD_DOSE_BONUS), 0, config);
+    expect(hard.doseScale).toBeCloseTo(equivalent.doseScale, 10);
+    expect(hard.blendedDoseRatio).toBeCloseTo(equivalent.blendedDoseRatio, 10);
   });
 });
 
@@ -275,7 +339,7 @@ describe('diagnostics and fallbacks', () => {
   });
 
   it('returns full diagnostics for every dose evaluation', () => {
-    const d = computeDoseAdjustmentHours(
+    const d = computeDoseScale(
       'gastrocnemius',
       6,
       2,
@@ -291,11 +355,27 @@ describe('diagnostics and fallbacks', () => {
       capacityMrv: 26,
       effectiveSets: 6,
       effectiveHardSets: 2,
+      doseScaleClamp: 'none',
     });
     expect(d.sessionCapacity).toBeCloseTo(26 / 3, 10);
     expect(d.totalDoseRatio).toBeCloseTo(6 / (26 / 3), 10);
     expect(d.hardDoseRatio).toBeCloseTo(2 / (26 / 3), 10);
-    expect(Number.isFinite(d.adjustmentHours)).toBe(true);
+    expect(d.blendedDoseRatio).toBeCloseTo(d.totalDoseRatio + HARD_DOSE_BONUS * d.hardDoseRatio, 10);
+    expect(d.doseScale).toBeCloseTo(d.rawDoseScale, 10);
+    expect(Number.isFinite(d.doseScale)).toBe(true);
+  });
+
+  it('reports which scale bound bit, and keeps the raw value visible', () => {
+    const config = configFor({ experienceForCapacity: 'advanced', plannedSessionsPerWeek: 2 });
+    const floored = computeDoseScale('triceps', 0, 0, config);
+    expect(floored.doseScaleClamp).toBe('lower');
+    expect(floored.rawDoseScale).toBeLessThan(MIN_DOSE_SCALE);
+    expect(floored.doseScale).toBe(MIN_DOSE_SCALE);
+
+    const capped = computeDoseScale('triceps', 40, 40, config);
+    expect(capped.doseScaleClamp).toBe('upper');
+    expect(capped.rawDoseScale).toBeGreaterThan(MAX_DOSE_SCALE);
+    expect(capped.doseScale).toBe(MAX_DOSE_SCALE);
   });
 });
 
@@ -305,18 +385,18 @@ describe('planned-frequency sensitivity (ACTUAL sets held fixed)', () => {
   const FIXED_SETS = 8;
   const FIXED_HARD = 3;
 
-  it('higher planned frequency raises the adjustment for the same real session', () => {
+  it('higher planned frequency raises the scale for the same real session', () => {
     for (const muscle of STANDARD_MUSCLE_GROUPS) {
       let previous = -Infinity;
       for (let freq = 1; freq <= 5; freq++) {
-        const { adjustmentHours } = computeDoseAdjustmentHours(
+        const { doseScale } = computeDoseScale(
           muscle,
           FIXED_SETS,
           FIXED_HARD,
           configFor({ experienceForCapacity: 'intermediate', plannedSessionsPerWeek: freq })
         );
-        expect(adjustmentHours).toBeGreaterThanOrEqual(previous - 1e-9);
-        previous = adjustmentHours;
+        expect(doseScale).toBeGreaterThanOrEqual(previous - 1e-9);
+        previous = doseScale;
       }
     }
   });
@@ -326,13 +406,13 @@ describe('planned-frequency sensitivity (ACTUAL sets held fixed)', () => {
     for (const muscle of ['triceps', 'quads', 'hamstrings', 'calves', 'lateral_delts'] as StandardMuscleGroup[]) {
       const row: Record<string, string | number> = { muscle };
       for (let freq = 1; freq <= 5; freq++) {
-        const d = computeDoseAdjustmentHours(
+        const d = computeDoseScale(
           muscle,
           FIXED_SETS,
           FIXED_HARD,
           configFor({ experienceForCapacity: 'advanced', plannedSessionsPerWeek: freq })
         );
-        row[`f${freq}`] = Number(d.adjustmentHours.toFixed(2));
+        row[`f${freq}`] = Number(d.doseScale.toFixed(3));
       }
       rows.push(row);
     }
@@ -356,11 +436,11 @@ describe('0.5-actual-set slope report (flagged, not failed)', () => {
           });
           let localWorst = 0;
           for (let sets = 0; sets <= 30; sets += 0.5) {
-            const a = computeDoseAdjustmentHours(muscle, sets, 0, config).adjustmentHours;
-            const b = computeDoseAdjustmentHours(muscle, sets + 0.5, 0, config).adjustmentHours;
+            const a = computeDoseScale(muscle, sets, 0, config).doseScale;
+            const b = computeDoseScale(muscle, sets + 0.5, 0, config).doseScale;
             localWorst = Math.max(localWorst, Math.abs(b - a));
           }
-          worst.push({ muscle, experience, freq, delta: Number(localWorst.toFixed(2)) });
+          worst.push({ muscle, experience, freq, delta: Number(localWorst.toFixed(3)) });
         }
       }
     }
@@ -369,8 +449,7 @@ describe('0.5-actual-set slope report (flagged, not failed)', () => {
     // A large per-half-set change for a SMALL-CAPACITY muscle is expected, not
     // a bug: 0.5 sets is a big fraction of its session capacity. Report the
     // steepest cases; assert only that the model stays inside its own bounds.
-    const span = MAX_DOSE_ADJUSTMENT_HOURS - MIN_DOSE_ADJUSTMENT_HOURS;
-    expect(worst[0].delta).toBeLessThanOrEqual(span);
+    expect(worst[0].delta).toBeLessThanOrEqual(MAX_DOSE_SCALE - MIN_DOSE_SCALE);
     // eslint-disable-next-line no-console
     console.log('[0.5-set slope] steepest 5:', JSON.stringify(worst.slice(0, 5)));
   });

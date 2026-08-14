@@ -64,7 +64,7 @@ export const SEED_EXERCISE_TAGS: Record<string, SeedExerciseTags> = {
   "Copenhagen Plank": { primary: "adductors", secondaries: ["obliques","abs"] },
   "Cossack Squat": { primary: "adductors", secondaries: ["quads","glutes"] },
   "Dead Bug": { primary: "abs", secondaries: [] },
-  "Dead Hang": { primary: "forearms", secondaries: ["lats"] },
+  "Dead Hang": { primary: "forearms", secondaries: [] },
   "Deadlift": { primary: "glutes", secondaries: ["hamstrings","erectors","traps","forearms","quads"] },
   "Decline Barbell Press": { primary: "chest_lower", secondaries: ["chest_upper","front_delts","triceps_lat_med"] },
   "Decline Crunch": { primary: "abs", secondaries: [] },
