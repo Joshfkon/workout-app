@@ -785,9 +785,13 @@ export const ExerciseCard = memo(function ExerciseCard({
   }, [warmupDecision, warmupSets, workingWeight, typedFirstSetWeightKg, exercise, listIndex]);
 
 
-  // Weight mode state for bodyweight exercises (header-level selection)
+  // Weight mode state for bodyweight exercises (header-level selection).
+  // Assisted-only movements (assisted pull-up/dip machines, Nordic curls)
+  // open in assisted mode: prescribing plain bodyweight on a machine whose
+  // whole point is assistance is the wrong default for a cold start. History
+  // and the user's own selection still override below.
   const [weightMode, setWeightMode] = useState<'bodyweight' | 'weighted' | 'assisted'>(
-    isPureBodyweight ? 'bodyweight' : 'bodyweight'
+    isBodyweightExercise && bodyweightType === 'assisted_possible' ? 'assisted' : 'bodyweight'
   );
 
   // Added/assistance load input (display units) for weighted/assisted bodyweight
@@ -888,6 +892,9 @@ export const ExerciseCard = memo(function ExerciseCard({
     const mod = lastSessionBodyweight?.derived === false ? lastSessionBodyweight.modification : null;
     if (mod === 'weighted' && canAddWeight) setWeightMode('weighted');
     else if (mod === 'assisted' && canUseAssistance) setWeightMode('assisted');
+    // A recorded unassisted set overrides the assisted-only default above —
+    // the lifter has graduated to plain bodyweight.
+    else if (mod === 'none') setWeightMode('bodyweight');
   }, [
     isBodyweightExercise,
     isPureBodyweight,
