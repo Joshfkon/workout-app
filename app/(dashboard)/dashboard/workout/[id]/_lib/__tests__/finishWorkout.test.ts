@@ -833,6 +833,7 @@ describe('claim settlement is durable and verified', () => {
     // mesocycle this session does not belong to.
     const { client, pending } = makeGatedSupabase('completed', null);
     const runMesoUpdates = jest.fn().mockResolvedValue({ ok: true });
+    const runStandaloneUpdates = jest.fn().mockResolvedValue({ ok: true });
 
     await confirmClaimOptimistic({
       supabase: client,
@@ -841,6 +842,7 @@ describe('claim settlement is durable and verified', () => {
       mesocycleId: 'meso-9',
       sessionRpe: 7,
       runMesoUpdates,
+      runStandaloneUpdates,
     });
     await settle();
     while (pending.length > 0) {
@@ -849,6 +851,15 @@ describe('claim settlement is durable and verified', () => {
     }
 
     expect(runMesoUpdates).not.toHaveBeenCalled();
+    // The demoted item runs the STANDALONE updates instead — an unlinked
+    // session is a standalone session, so its fatigue log still lands (with
+    // mesocycle_id NULL) rather than being skipped entirely.
+    expect(runStandaloneUpdates).toHaveBeenCalledTimes(1);
+    expect(runStandaloneUpdates).toHaveBeenCalledWith(client, {
+      userId: 'u1',
+      sessionRpe: 7,
+      checkIn: null,
+    });
     // Still settled: the session-scoped work is done and the item cleared,
     // because the claim is gone from the queue and will never land.
     expect(await listPostFinishWork()).toEqual([]);

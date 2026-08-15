@@ -55,6 +55,7 @@ import {
   type PostFinishWork,
 } from '@/lib/offline/postFinishQueue';
 import { runPostSessionMesoUpdates } from './postSessionMeso';
+import { runPostSessionStandaloneUpdates } from './postSessionStandalone';
 import { upsertSessionMuscleFeedback } from './muscleFeedbackWrites';
 import type { SessionMuscleFeedbackEntry } from '@/components/workout/SessionSummary';
 import type { WorkoutSession } from '@/types/schema';
@@ -144,6 +145,8 @@ export interface FinishFlowDeps {
   onCompletionSynced?: () => void;
   /** Test seam: overrides the background post-processing runner. */
   runMesoUpdates?: typeof runPostSessionMesoUpdates;
+  /** Test seam: overrides the standalone (no-mesocycle) post-processing runner. */
+  runStandaloneUpdates?: typeof runPostSessionStandaloneUpdates;
 }
 
 function completionPatch(data: FinishSummaryData): Record<string, unknown> {
@@ -237,6 +240,7 @@ export async function submitFinishOptimistic(
         // whether the entry has left the queue and the row is completed.
         const outcome = await settlePostFinish(supabase, sessionId, {
           runMesoUpdates: deps.runMesoUpdates,
+          runStandaloneUpdates: deps.runStandaloneUpdates,
           onCompletionSynced: deps.onCompletionSynced,
         });
         timer.mark(outcome === 'ran' ? 'synced' : `sync-${outcome}`);
@@ -251,7 +255,8 @@ export async function submitFinishOptimistic(
           await runPostFinishWork(
             supabase,
             { ...workItemFor(sessionId, session, data.sessionRpe), id: '', enqueuedAt: 0 },
-            deps.runMesoUpdates
+            deps.runMesoUpdates,
+            deps.runStandaloneUpdates
           );
         }
       }
@@ -359,6 +364,8 @@ const MAX_POST_FINISH_ATTEMPTS = 5;
 export interface SettleOptions {
   /** Test seam: overrides the mesocycle post-processing runner. */
   runMesoUpdates?: typeof runPostSessionMesoUpdates;
+  /** Test seam: overrides the standalone (no-mesocycle) post-processing runner. */
+  runStandaloneUpdates?: typeof runPostSessionStandaloneUpdates;
   /** Fired once, immediately before the work runs. Best-effort. */
   onCompletionSynced?: () => void;
 }
@@ -431,7 +438,12 @@ export async function settlePostFinish(
   await patchPostFinishWork(sessionId, { attempts });
 
   fireCompletionSynced(opts.onCompletionSynced);
-  const { ok } = await runPostFinishWork(supabase, effective, opts.runMesoUpdates);
+  const { ok } = await runPostFinishWork(
+    supabase,
+    effective,
+    opts.runMesoUpdates,
+    opts.runStandaloneUpdates
+  );
   if (!ok) {
     // Something did not land. KEEP the item so a later drain retries it —
     // clearing it here is what would make the at-least-once guarantee
@@ -516,7 +528,8 @@ async function readSessionSettlement(
 async function runPostFinishWork(
   supabase: UntypedSupabase,
   work: PostFinishWork,
-  runMesoUpdatesOverride?: typeof runPostSessionMesoUpdates
+  runMesoUpdatesOverride?: typeof runPostSessionMesoUpdates,
+  runStandaloneUpdatesOverride?: typeof runPostSessionStandaloneUpdates
 ): Promise<{ ok: boolean }> {
   // Both steps report rather than throw, and BOTH outcomes matter: the work
   // item is cleared only on a fully successful run, so a transient failure
@@ -527,10 +540,23 @@ async function runPostFinishWork(
   let ok = true;
 
   // Deload trigger check + week advance from the completed-session count.
+  // Sessions outside a mesocycle get the standalone mirror instead: the same
+  // weekly fatigue log (mesocycle_id NULL, epoch-week key) + deload check
+  // stamped on the user row, so free-form training still accumulates a
+  // multi-week fatigue trend. Same idempotence argument: both runners
+  // recompute derived values and upsert/overwrite.
   if (work.mesocycleId) {
     const runMeso = runMesoUpdatesOverride ?? runPostSessionMesoUpdates;
     const result = await runMeso(supabase, {
       mesocycleId: work.mesocycleId,
+      userId: work.userId,
+      sessionRpe: work.sessionRpe,
+      checkIn: work.checkIn,
+    });
+    if (!result?.ok) ok = false;
+  } else {
+    const runStandalone = runStandaloneUpdatesOverride ?? runPostSessionStandaloneUpdates;
+    const result = await runStandalone(supabase, {
       userId: work.userId,
       sessionRpe: work.sessionRpe,
       checkIn: work.checkIn,
@@ -572,6 +598,8 @@ export interface ClaimFlowDeps {
   sessionRpe: number | null;
   /** Test seam: overrides the background post-processing runner. */
   runMesoUpdates?: typeof runPostSessionMesoUpdates;
+  /** Test seam: overrides the standalone (no-mesocycle) post-processing runner. */
+  runStandaloneUpdates?: typeof runPostSessionStandaloneUpdates;
 }
 
 /**
@@ -629,7 +657,10 @@ export async function confirmClaimOptimistic(deps: ClaimFlowDeps): Promise<void>
         await flushIncluding(supabase, sessionClaimEntryId(sessionId));
         // Settles only when BOTH the finish and the claim have left the
         // queue — `settlePostFinish` checks each.
-        await settlePostFinish(supabase, sessionId, { runMesoUpdates: deps.runMesoUpdates });
+        await settlePostFinish(supabase, sessionId, {
+          runMesoUpdates: deps.runMesoUpdates,
+          runStandaloneUpdates: deps.runStandaloneUpdates,
+        });
       } else {
         const { error } = await supabase
           .from('workout_sessions')

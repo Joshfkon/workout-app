@@ -37,6 +37,39 @@ export interface PostSessionMesoInput {
 }
 
 /**
+ * Deload signal 5 for the weekly fatigue log: severity-weighted joint-pain
+ * events in the trailing window, reduced to the log's boolean flag. Shared by
+ * the mesocycle and standalone post-session paths. Best-effort — any failure
+ * logs and reads as "no pain" rather than blocking the finish flow.
+ */
+export async function lookupJointPainFlag(
+  supabase: UntypedSupabase,
+  userId: string
+): Promise<boolean> {
+  try {
+    const now = clockNow();
+    const cutoff = new Date(
+      now.getTime() - JOINT_PAIN_WINDOW_DAYS * 24 * 60 * 60 * 1000
+    ).toISOString();
+    const { data: painEvents } = await supabase
+      .from('joint_pain_events')
+      .select('severity, created_at')
+      .eq('user_id', userId)
+      .gte('created_at', cutoff);
+    const painScore = computeJointPainSignal(
+      ((painEvents ?? []) as { severity: DiscomfortSeverity; created_at: string }[]).map(
+        (e) => ({ severity: e.severity, occurredAt: new Date(e.created_at) })
+      ),
+      now
+    );
+    return painScore >= JOINT_PAIN_TRIGGER_THRESHOLD;
+  } catch (painErr) {
+    console.error('Joint pain signal lookup failed:', painErr);
+    return false;
+  }
+}
+
+/**
  * Log this week's fatigue signals, advance the mesocycle's current_week from
  * the completed-session count, and run the deload-trigger check. Assumes the
  * session is already state='completed' (and linked to the mesocycle) so it is
@@ -96,27 +129,7 @@ export async function runPostSessionMesoUpdates(
     // Deload signal 5: severity-weighted joint-pain events in the trailing
     // window drive this week's joint_pain flag (ProgramEngine trigger 5).
     // Best-effort — a missing table or query error must not block the finish.
-    let jointPain = false;
-    try {
-      const now = clockNow();
-      const cutoff = new Date(
-        now.getTime() - JOINT_PAIN_WINDOW_DAYS * 24 * 60 * 60 * 1000
-      ).toISOString();
-      const { data: painEvents } = await supabase
-        .from('joint_pain_events')
-        .select('severity, created_at')
-        .eq('user_id', userId)
-        .gte('created_at', cutoff);
-      const painScore = computeJointPainSignal(
-        ((painEvents ?? []) as { severity: DiscomfortSeverity; created_at: string }[]).map(
-          (e) => ({ severity: e.severity, occurredAt: new Date(e.created_at) })
-        ),
-        now
-      );
-      jointPain = painScore >= JOINT_PAIN_TRIGGER_THRESHOLD;
-    } catch (painErr) {
-      console.error('Joint pain signal lookup failed:', painErr);
-    }
+    const jointPain = await lookupJointPainFlag(supabase, userId);
 
     const fatigueResult = await upsertWeeklyFatigueLog(supabase, {
       userId,

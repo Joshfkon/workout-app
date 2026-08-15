@@ -38,10 +38,17 @@ import { useSleepLog } from '@/hooks/useSleepLog';
 import { calculateReadinessScore } from '@/services/fatigueEngine';
 import {
   applyDeloadToUpcomingWeek,
+  deriveDeloadType,
   dismissDeloadRecommendation,
   fetchDeloadRecommendation,
   type DeloadRecommendation,
+  type DeloadType,
 } from '@/lib/training/deloadRecommendation';
+import {
+  acceptStandaloneLightWeek,
+  dismissStandaloneDeloadRecommendation,
+  fetchStandaloneDeloadRecommendation,
+} from '@/lib/training/standaloneDeload';
 import { GlanceHeader, TodayHeroCard, MetricTileGrid, QuickLogRow, PhaseSelector, VolumeRampBanner, WaistPaceCheckCard, intakePaceLabel } from '@/components/dashboard/home';
 import { normalizePacingPhase, type EatingWindow } from '@/services/intakePacing';
 import { fetchEatingWindow } from '@/lib/nutrition/eatingWindow';
@@ -293,14 +300,36 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   // data path doesn't need to change shape.
   const [deloadRecommendation, setDeloadRecommendation] = useState<DeloadRecommendation | null>(null);
   const [isResolvingDeload, setIsResolvingDeload] = useState(false);
+  // Standalone (no-mesocycle) variant: pending recommendation stamped on the
+  // user row, plus the deload type of a just-accepted light week so the card
+  // can swap to one-shot guidance copy ("cut sets roughly in half…").
+  const [standaloneDeload, setStandaloneDeload] = useState<DeloadRecommendation | null>(null);
+  const [plannedLightWeekType, setPlannedLightWeekType] = useState<DeloadType | null>(null);
   const activeMesocycleId = activeMesocycle?.id ?? null;
 
   useEffect(() => {
+    let cancelled = false;
     if (!activeMesocycleId) {
       setDeloadRecommendation(null);
-      return;
+      // No active mesocycle: surface the standalone recommendation instead.
+      if (!userId) {
+        setStandaloneDeload(null);
+        return;
+      }
+      (async () => {
+        try {
+          const supabase = createUntypedClient();
+          const recommendation = await fetchStandaloneDeloadRecommendation(supabase, userId);
+          if (!cancelled) setStandaloneDeload(recommendation);
+        } catch (err) {
+          console.error('Failed to load standalone deload recommendation:', err);
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
     }
-    let cancelled = false;
+    setStandaloneDeload(null);
     (async () => {
       try {
         const supabase = createUntypedClient();
@@ -313,7 +342,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
     return () => {
       cancelled = true;
     };
-  }, [activeMesocycleId]);
+  }, [activeMesocycleId, userId]);
 
   const handleAcceptDeload = async () => {
     if (!activeMesocycleId || isResolvingDeload) return;
@@ -338,6 +367,38 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
       setDeloadRecommendation(null);
     } catch (err) {
       console.error('Failed to dismiss deload recommendation:', err);
+    } finally {
+      setIsResolvingDeload(false);
+    }
+  };
+
+  // Standalone variant: accepting stamps users.standalone_deload_week (which
+  // suppresses re-checks and resets the streak counter) — there is no program
+  // week to transform, so the "application" is the guidance the card swaps to.
+  const handleAcceptLightWeek = async () => {
+    if (!userId || !standaloneDeload || isResolvingDeload) return;
+    setIsResolvingDeload(true);
+    try {
+      const supabase = createUntypedClient();
+      await acceptStandaloneLightWeek(supabase, userId);
+      setPlannedLightWeekType(deriveDeloadType(standaloneDeload.reasons));
+      setStandaloneDeload(null);
+    } catch (err) {
+      console.error('Failed to plan standalone light week:', err);
+    } finally {
+      setIsResolvingDeload(false);
+    }
+  };
+
+  const handleDismissStandaloneDeload = async () => {
+    if (!userId || isResolvingDeload) return;
+    setIsResolvingDeload(true);
+    try {
+      const supabase = createUntypedClient();
+      await dismissStandaloneDeloadRecommendation(supabase, userId);
+      setStandaloneDeload(null);
+    } catch (err) {
+      console.error('Failed to dismiss standalone deload recommendation:', err);
     } finally {
       setIsResolvingDeload(false);
     }
@@ -1298,7 +1359,19 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
     </div>
   ) : null;
 
-  const deloadCard = deloadRecommendation && activeMesocycleId ? (
+  // One-shot guidance shown after the user accepts a standalone light week —
+  // without a program there is no week to transform, so the advice IS the
+  // application. Keyed to the deload type derived from the trigger reasons.
+  const lightWeekGuidance: Record<DeloadType, string> = {
+    volume:
+      'Keep your usual weights but do about half your normal sets, stopping 3–4 reps shy of failure.',
+    intensity:
+      'Drop your loads about 15% and keep sets moderate so joints and tendons can recover.',
+    full:
+      'Go light and easy: about half the sets at noticeably lighter loads, focusing on smooth technique.',
+  };
+
+  const mesoDeloadCard = deloadRecommendation && activeMesocycleId ? (
     <div className="rounded-xl bg-warning-500/10 border border-warning-500/20 p-4">
       <div className="flex items-start gap-3">
         <IconAlertTriangle className="w-5 h-5 text-warning-400 flex-shrink-0 mt-0.5" aria-hidden="true" />
@@ -1327,6 +1400,56 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
       </div>
     </div>
   ) : null;
+
+  // Standalone variant (no active mesocycle): same fatigue signals, framed as
+  // "take a light week" since there is no program week to regenerate.
+  const standaloneDeloadCard =
+    !activeMesocycleId && standaloneDeload && userId ? (
+      <div className="rounded-xl bg-warning-500/10 border border-warning-500/20 p-4">
+        <div className="flex items-start gap-3">
+          <IconAlertTriangle className="w-5 h-5 text-warning-400 flex-shrink-0 mt-0.5" aria-hidden="true" />
+          <div className="flex-1 min-w-0">
+            <p className="text-[15px] font-medium text-surface-100">
+              Fatigue is high — time for a light week
+            </p>
+            {standaloneDeload.reasons.length > 0 && (
+              <ul className="mt-1.5 space-y-0.5">
+                {standaloneDeload.reasons.map((reason) => (
+                  <li key={reason} className="text-xs text-surface-400">
+                    {reason}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="mt-3 flex items-center gap-2">
+              <Button size="sm" onClick={handleAcceptLightWeek} disabled={isResolvingDeload}>
+                Plan a light week
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={handleDismissStandaloneDeload}
+                disabled={isResolvingDeload}
+              >
+                Dismiss
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    ) : null;
+
+  const lightWeekPlannedCard =
+    !activeMesocycleId && !standaloneDeload && plannedLightWeekType ? (
+      <div className="rounded-xl bg-success-500/10 border border-success-500/20 p-4">
+        <p className="text-[15px] font-medium text-surface-100">Light week planned</p>
+        <p className="mt-1 text-xs text-surface-400">
+          {lightWeekGuidance[plannedLightWeekType]} Your fatigue check-ins restart afterward.
+        </p>
+      </div>
+    ) : null;
+
+  const deloadCard = mesoDeloadCard ?? standaloneDeloadCard ?? lightWeekPlannedCard;
 
   // Early-week "ramp" framing for below-MEV muscles (wk 1-2, expected while
   // the week fills in); later weeks escalate to the full atrophy alert.
