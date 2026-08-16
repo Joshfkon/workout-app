@@ -38,6 +38,12 @@ export interface PostSessionStandaloneInput {
     sleepQuality?: Rating | null;
     stressLevel?: Rating | null;
   } | null;
+  /**
+   * Stable per-session timestamp (the work item's enqueue time) forwarded to
+   * the weekly fatigue upsert so a retrying older item can't overwrite a
+   * newer session's row — see WeeklyFatigueWriteInput.loggedAt.
+   */
+  loggedAt?: string;
 }
 
 /**
@@ -67,6 +73,7 @@ export async function runPostSessionStandaloneUpdates(
       stressLevel: checkIn?.stressLevel ?? null,
       sessionAvgRpe: sessionRpe,
       jointPain,
+      loggedAt: input.loggedAt,
     });
     if (!fatigueResult.ok) {
       console.error('Failed to save standalone weekly fatigue log:', fatigueResult.error);

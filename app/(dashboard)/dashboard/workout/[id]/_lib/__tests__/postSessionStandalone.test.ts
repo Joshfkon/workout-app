@@ -27,16 +27,30 @@ type Row = Record<string, unknown>;
  */
 function stubClient(opts: { failFatigueInsert?: boolean; existingLogId?: string } = {}) {
   const inserts: Array<{ table: string; row: Row }> = [];
-  const updates: Array<{ table: string; row: Row }> = [];
+  const updates: Array<{
+    table: string;
+    row: Row;
+    filters: Array<[op: string, column: string, value: unknown]>;
+  }> = [];
   const client = {
     from(table: string) {
-      // Chain-anything builder; typed loosely on purpose.
+      // Filters recorded after an update() are attributed to that update.
+      let activeUpdate: (typeof updates)[number] | null = null;
+      const filter =
+        (op: string) =>
+        // Chain-anything builder; typed loosely on purpose.
+        // eslint-disable-next-line
+        (column: string, value: unknown): any => {
+          activeUpdate?.filters.push([op, column, value]);
+          return builder;
+        };
       // eslint-disable-next-line
       const builder: any = {
         select: () => builder,
-        eq: () => builder,
-        is: () => builder,
-        gte: () => builder,
+        eq: filter('eq'),
+        is: filter('is'),
+        gte: filter('gte'),
+        lte: filter('lte'),
         order: () => builder,
         limit: () => builder,
         maybeSingle: async () => ({
@@ -53,7 +67,8 @@ function stubClient(opts: { failFatigueInsert?: boolean; existingLogId?: string 
             : { error: null };
         },
         update: (row: Row) => {
-          updates.push({ table, row });
+          activeUpdate = { table, row, filters: [] };
+          updates.push(activeUpdate);
           return builder;
         },
         then: (resolve: (value: { data: unknown; error: unknown }) => unknown) =>
@@ -105,6 +120,21 @@ describe('runPostSessionStandaloneUpdates', () => {
 
     expect(inserts.find((i) => i.table === 'weekly_fatigue_logs')).toBeUndefined();
     expect(updates.find((u) => u.table === 'weekly_fatigue_logs')).toBeDefined();
+  });
+
+  it('stamps loggedAt on the row and guards the update so an older retry cannot overwrite', async () => {
+    const loggedAt = '2026-08-15T18:30:00.000Z';
+    const { client, updates } = stubClient({ existingLogId: 'log-1' });
+
+    await expect(
+      runPostSessionStandaloneUpdates(client, { ...INPUT, loggedAt })
+    ).resolves.toEqual({ ok: true });
+
+    const update = updates.find((u) => u.table === 'weekly_fatigue_logs')!;
+    expect(update.row).toMatchObject({ logged_at: loggedAt });
+    // Advance-only: the update matches only rows at/before this session's
+    // timestamp, so a newer session's data survives a stale retry.
+    expect(update.filters).toContainEqual(['lte', 'logged_at', loggedAt]);
   });
 
   it('reports ok:false when the fatigue log write fails', async () => {

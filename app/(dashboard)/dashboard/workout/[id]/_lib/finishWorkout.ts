@@ -215,7 +215,13 @@ export async function submitFinishOptimistic(
         row
       );
     }
-    await enqueuePostFinishWork(workItemFor(sessionId, session, data.sessionRpe));
+    // A non-null showClaimPrompt means a mesocycle-claim candidate is armed:
+    // the prompt opens instead of navigating, and until the user answers it
+    // this session's identity (programmed vs standalone) is undecided — mark
+    // the item so settlement waits for the decision.
+    await enqueuePostFinishWork(
+      workItemFor(sessionId, session, data.sessionRpe, !!deps.showClaimPrompt)
+    );
   } catch (err) {
     // Outbox unavailable (broken IndexedDB) — fall back to direct writes in
     // the background task below. The UI still responds immediately.
@@ -252,12 +258,18 @@ export async function submitFinishOptimistic(
         timer.mark(wrote ? 'synced' : 'sync-failed');
         if (wrote) {
           fireCompletionSynced(deps.onCompletionSynced);
-          await runPostFinishWork(
-            supabase,
-            { ...workItemFor(sessionId, session, data.sessionRpe), id: '', enqueuedAt: 0 },
-            deps.runMesoUpdates,
-            deps.runStandaloneUpdates
-          );
+          // With a claim prompt armed the session's identity is undecided —
+          // don't run the (standalone) post-work now; the confirm handler
+          // runs the mesocycle updates and the decline handler re-enqueues
+          // the standalone work.
+          if (!deps.showClaimPrompt) {
+            await runPostFinishWork(
+              supabase,
+              { ...workItemFor(sessionId, session, data.sessionRpe), id: '', enqueuedAt: 0 },
+              deps.runMesoUpdates,
+              deps.runStandaloneUpdates
+            );
+          }
         }
       }
     } catch (err) {
@@ -273,7 +285,8 @@ export async function submitFinishOptimistic(
 function workItemFor(
   sessionId: string,
   session: WorkoutSession,
-  sessionRpe: number | null
+  sessionRpe: number | null,
+  claimPending = false
 ): Omit<PostFinishWork, 'id' | 'enqueuedAt'> {
   return {
     sessionId,
@@ -282,6 +295,7 @@ function workItemFor(
     sessionRpe,
     checkIn: session.preWorkoutCheckIn ?? null,
     plannedDate: session.plannedDate || null,
+    claimPending,
   };
 }
 
@@ -361,6 +375,15 @@ export type PostFinishOutcome =
 /** Give-up bound, mirroring the outbox's own 5-attempt policy. */
 const MAX_POST_FINISH_ATTEMPTS = 5;
 
+/**
+ * How long a `claimPending` item waits for the claim decision before being
+ * treated as declined. The prompt normally resolves in seconds; the TTL only
+ * exists so a tab killed mid-prompt can't wedge the item forever — after it,
+ * the session settles as what it currently is (the row stays the authority
+ * on mesocycle membership either way).
+ */
+export const CLAIM_DECISION_TTL_MS = 24 * 60 * 60 * 1000;
+
 export interface SettleOptions {
   /** Test seam: overrides the mesocycle post-processing runner. */
   runMesoUpdates?: typeof runPostSessionMesoUpdates;
@@ -401,6 +424,20 @@ export async function settlePostFinish(
   if (await hasQueuedEntry(sessionFinishEntryId(sessionId))) return 'pending';
   if (await hasQueuedEntry(sessionClaimEntryId(sessionId))) return 'pending';
 
+  // A claim decision is still pending: the session's identity (programmed vs
+  // standalone) is undecided, and running the standalone updates now would
+  // double-count the session if the user then claims it. Wait — the confirm/
+  // decline handlers clear the flag and re-settle. Checked BEFORE the attempt
+  // counter so waiting never eats into the retry bound; the TTL keeps a tab
+  // killed mid-prompt from wedging the item forever.
+  if (
+    work.claimPending &&
+    !work.mesocycleId &&
+    clockNow().getTime() - work.enqueuedAt < CLAIM_DECISION_TTL_MS
+  ) {
+    return 'pending';
+  }
+
   const row = await readSessionSettlement(supabase, sessionId);
   if (row === null) return 'pending'; // couldn't tell — next drain retries
   if (!row.completed) {
@@ -416,7 +453,11 @@ export async function settlePostFinish(
   // the session completed but never linked. Running the mesocycle updates off
   // the work item's requested id would then write fatigue and deload state
   // for a mesocycle this session does not belong to. The row is the authority
-  // on membership, so a mismatch demotes the item to its session-scoped work.
+  // on membership — in BOTH directions: a mismatch demotes the item to its
+  // session-scoped (standalone) work, and a row that IS linked while the item
+  // says null (claim landed but the item patch was lost, or a claimPending
+  // item expired after the claim synced) promotes it, so a linked session
+  // never writes standalone fatigue history.
   let effective = work;
   if (work.mesocycleId && row.mesocycleId !== work.mesocycleId) {
     console.error(
@@ -424,6 +465,8 @@ export async function settlePostFinish(
         `(row has ${row.mesocycleId ?? 'none'}) — skipping the mesocycle updates.`
     );
     effective = { ...work, mesocycleId: null };
+  } else if (!work.mesocycleId && row.mesocycleId) {
+    effective = { ...work, mesocycleId: row.mesocycleId };
   }
 
   const attempts = (work.attempts ?? 0) + 1;
@@ -545,6 +588,14 @@ async function runPostFinishWork(
   // stamped on the user row, so free-form training still accumulates a
   // multi-week fatigue trend. Same idempotence argument: both runners
   // recompute derived values and upsert/overwrite.
+  // Stable per-session timestamp for the weekly fatigue upsert's advance-only
+  // guard: the enqueue time survives retries unchanged, so an older item
+  // re-running can never overwrite a newer session's row. The direct-write
+  // fallback has no queue item (enqueuedAt 0) — its one inline run stamps the
+  // current time instead.
+  const loggedAt =
+    work.enqueuedAt > 0 ? new Date(work.enqueuedAt).toISOString() : clockNow().toISOString();
+
   if (work.mesocycleId) {
     const runMeso = runMesoUpdatesOverride ?? runPostSessionMesoUpdates;
     const result = await runMeso(supabase, {
@@ -552,6 +603,7 @@ async function runPostFinishWork(
       userId: work.userId,
       sessionRpe: work.sessionRpe,
       checkIn: work.checkIn,
+      loggedAt,
     });
     if (!result?.ok) ok = false;
   } else {
@@ -560,6 +612,7 @@ async function runPostFinishWork(
       userId: work.userId,
       sessionRpe: work.sessionRpe,
       checkIn: work.checkIn,
+      loggedAt,
     });
     if (!result?.ok) ok = false;
   }
@@ -634,6 +687,7 @@ export async function confirmClaimOptimistic(deps: ClaimFlowDeps): Promise<void>
     const patched = await patchPostFinishWork(sessionId, {
       mesocycleId,
       sessionRpe: deps.sessionRpe,
+      claimPending: false, // decision made — settlement may proceed
       attempts: 0,
     });
     if (!patched) {
@@ -662,6 +716,7 @@ export async function confirmClaimOptimistic(deps: ClaimFlowDeps): Promise<void>
           runStandaloneUpdates: deps.runStandaloneUpdates,
         });
       } else {
+        // Outbox unusable: direct write + inline processing, as at finish.
         const { error } = await supabase
           .from('workout_sessions')
           .update({ mesocycle_id: mesocycleId })
@@ -683,6 +738,60 @@ export async function confirmClaimOptimistic(deps: ClaimFlowDeps): Promise<void>
       // is retried by the next outbox flush, and the work item is settled by
       // the next drain.
       console.error('Background claim sync failed:', err);
+    }
+  })();
+}
+
+export interface DeclineClaimDeps {
+  supabase: UntypedSupabase;
+  sessionId: string;
+  session: WorkoutSession;
+  sessionRpe: number | null;
+  /** Test seam: overrides the background post-processing runner. */
+  runMesoUpdates?: typeof runPostSessionMesoUpdates;
+  /** Test seam: overrides the standalone (no-mesocycle) post-processing runner. */
+  runStandaloneUpdates?: typeof runPostSessionStandaloneUpdates;
+}
+
+/**
+ * "Keep as extra": the user declined counting the session toward the
+ * mesocycle. The finish parked the session's post-processing behind
+ * `claimPending` (see settlePostFinish) so the standalone updates couldn't
+ * double-count a session that was about to be claimed — this releases it and
+ * settles, which runs the standalone fatigue log + deload check.
+ *
+ * Resolves once the decision is durably recorded (a few ms, no network); the
+ * settlement itself runs in the background, and any failure there leaves the
+ * item for the next drain.
+ */
+export async function declineClaimOptimistic(deps: DeclineClaimDeps): Promise<void> {
+  const { supabase, sessionId, session } = deps;
+  try {
+    const patched = await patchPostFinishWork(sessionId, { claimPending: false });
+    if (!patched) {
+      // No item: the finish either never queued (broken IndexedDB — its
+      // inline processing was skipped while the prompt was open) or already
+      // settled (TTL expiry). Write a fresh item so the standalone work is
+      // just as recoverable as a normal finish's.
+      await enqueuePostFinishWork(workItemFor(sessionId, session, deps.sessionRpe));
+    }
+  } catch (err) {
+    // Outbox unusable: nothing durable to release or write. The session
+    // itself is saved; only this week's standalone fatigue log is lost —
+    // the same degradation a broken outbox imposes on a normal finish.
+    console.error('Decline-claim bookkeeping failed:', err);
+    return;
+  }
+
+  void (async () => {
+    try {
+      await settlePostFinish(supabase, sessionId, {
+        runMesoUpdates: deps.runMesoUpdates,
+        runStandaloneUpdates: deps.runStandaloneUpdates,
+      });
+    } catch (err) {
+      // The item survives for the next drain.
+      console.error('Post-decline settlement failed:', err);
     }
   })();
 }

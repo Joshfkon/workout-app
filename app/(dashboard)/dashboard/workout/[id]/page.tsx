@@ -202,7 +202,7 @@ import { cancelWorkoutSession } from './_lib/cancelWorkout';
 import { sessionIndexFromCompleted } from '@/lib/training/mesocycleProgress';
 import { countCompletedSessions } from '@/lib/training/startMesocycleSession';
 import { matchAdhocToPlannedSession } from '@/lib/training/adhocClaim';
-import { submitFinishOptimistic, confirmClaimOptimistic } from './_lib/finishWorkout';
+import { submitFinishOptimistic, confirmClaimOptimistic, declineClaimOptimistic } from './_lib/finishWorkout';
 import type {
   AvailableExercise,
   CalibratedLift,
@@ -4815,7 +4815,19 @@ export default function WorkoutPage() {
     }
   };
 
-  const handleDeclineClaim = () => {
+  const handleDeclineClaim = async () => {
+    // "Keep as extra": release the session's post-processing, which was
+    // parked behind the open claim prompt so a to-be-claimed session couldn't
+    // double-count into the standalone fatigue history. Resolves once the
+    // decision is durably recorded; the settlement runs in the background.
+    if (session) {
+      await declineClaimOptimistic({
+        supabase: createUntypedClient(),
+        sessionId,
+        session,
+        sessionRpe: submittedSessionRpe,
+      });
+    }
     setShowClaimPrompt(false);
     finishToDashboard();
   };
