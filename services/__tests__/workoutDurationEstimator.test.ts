@@ -1,9 +1,13 @@
 import {
   DURATION_MODEL,
+  PLANNED_WARMUP_SETS,
   computePaceFactor,
+  estimatePlannedSessionMinutes,
   estimateWorkoutDuration,
   formatDurationDelta,
   formatDurationEstimate,
+  plannedWarmupSetsFor,
+  toPlannedBlocks,
   type DurationBlockInput,
 } from '../workoutDurationEstimator';
 
@@ -391,5 +395,42 @@ describe('formatDurationDelta', () => {
   it('signs the delta', () => {
     expect(formatDurationDelta(10 * 60)).toBe('+10 min');
     expect(formatDurationDelta(-10 * 60)).toBe('-10 min');
+  });
+});
+
+describe('planned session estimate', () => {
+  it('assumes more warmup sets for a compound than an isolation', () => {
+    expect(plannedWarmupSetsFor('compound')).toBe(PLANNED_WARMUP_SETS.compound);
+    expect(plannedWarmupSetsFor('isolation')).toBe(PLANNED_WARMUP_SETS.isolation);
+    expect(plannedWarmupSetsFor(null)).toBe(PLANNED_WARMUP_SETS.compound);
+    expect(PLANNED_WARMUP_SETS.compound).toBeGreaterThan(PLANNED_WARMUP_SETS.isolation);
+  });
+
+  it('charges a warmup only to the first exercise of each muscle', () => {
+    const blocks = toPlannedBlocks([
+      { sets: 3, muscle: 'chest', mechanic: 'compound' },
+      { sets: 3, muscle: 'chest', mechanic: 'isolation' },
+      { sets: 3, muscle: 'back', mechanic: 'compound' },
+    ]);
+    expect(blocks.map((b) => b.warmupSetsRemaining)).toEqual([
+      PLANNED_WARMUP_SETS.compound,
+      0,
+      PLANNED_WARMUP_SETS.compound,
+    ]);
+  });
+
+  it('skips the warmup when no muscle is known', () => {
+    const [block] = toPlannedBlocks([{ sets: 3 }]);
+    expect(block.warmupSetsRemaining).toBe(0);
+  });
+
+  it('is the shared model total, in whole minutes', () => {
+    const planned = [
+      { sets: 4, restSeconds: 180, mechanic: 'compound' as const, muscle: 'back' },
+      { sets: 3, restSeconds: 90, mechanic: 'isolation' as const, muscle: 'biceps' },
+    ];
+    expect(estimatePlannedSessionMinutes(planned)).toBe(
+      Math.round(estimateWorkoutDuration(toPlannedBlocks(planned)).totalSeconds / 60)
+    );
   });
 });

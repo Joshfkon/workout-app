@@ -56,6 +56,7 @@ import {
   toLegacyMuscleGroup,
 } from '@/types/schema';
 import { calculateFFMI, getNaturalFFMILimit } from './bodyCompEngine';
+import { estimatePlannedSessionMinutes } from './workoutDurationEstimator';
 import { isMuscleExcludedByInjury } from './shared/injuryExclusion';
 
 // Re-export: the shared injury exclusion applied by every workout generator.
@@ -1408,36 +1409,21 @@ export function buildDetailedSession(
     }
   }
   
-  // Calculate time with improved estimation
   const totalSets = exercises.reduce((sum, e) => sum + e.sets, 0);
 
-  // Calculate rest time (already done well)
-  const totalRestMinutes = exercises.reduce((sum, e) =>
-    sum + (e.sets * e.restSeconds / 60), 0);
-
-  // Calculate set execution time based on exercise type
-  // Compound exercises take longer per set than isolation
-  const setExecutionMinutes = exercises.reduce((sum, e) => {
-    const isIsolation = e.exercise.pattern === 'isolation';
-    const timePerSet = isIsolation ? 0.5 : 1.0; // 30 sec vs 1 min per set
-    return sum + (e.sets * timePerSet);
-  }, 0);
-
-  // Equipment transition time (2-3 min per exercise change)
-  const transitionTime = Math.max(0, (exercises.length - 1)) * 2;
-
-  // Warmup time based on exercise types
-  // More warmup needed for heavy compounds
-  const hasHeavyCompounds = exercises.some(e =>
-    e.exercise.pattern === 'squat' ||
-    e.exercise.pattern === 'hip_hinge'
+  // Same duration model as the live workout header and the workout builders
+  // (services/workoutDurationEstimator), so a plan's promised session length
+  // and the session's own readout can't disagree.
+  const estimatedMinutes = estimatePlannedSessionMinutes(
+    exercises.map((e) => ({
+      sets: e.sets,
+      restSeconds: e.restSeconds,
+      mechanic: e.exercise.pattern === 'isolation' ? 'isolation' : 'compound',
+      muscle: e.exercise.primaryMuscle,
+    }))
   );
-  const warmupMinutes = hasHeavyCompounds ? 15 : 10;
 
-  const estimatedMinutes = Math.round(
-    totalRestMinutes + setExecutionMinutes + transitionTime + warmupMinutes
-  );
-  
+
   return {
     day: sessionTemplate.day,
     focus: sessionTemplate.focus,
