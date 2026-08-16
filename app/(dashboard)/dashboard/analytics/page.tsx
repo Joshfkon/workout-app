@@ -1648,41 +1648,50 @@ function AnalyticsPageContent() {
           />
 
           {/* Progress Photos */}
-          {progressPhotos.length > 0 && (
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle>Recent Progress Photos</CardTitle>
-                  <Link href="/dashboard/body-composition">
-                    <Button variant="ghost" size="sm">View All →</Button>
-                  </Link>
-                </div>
-              </CardHeader>
-              <CardContent>
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle>Recent Progress Photos</CardTitle>
+                <Link href="/dashboard/progress-photos">
+                  <Button variant="ghost" size="sm">
+                    {progressPhotos.length > 0 ? 'View All →' : 'Add Photos →'}
+                  </Button>
+                </Link>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {progressPhotos.length > 0 ? (
                 <div className="grid grid-cols-4 gap-2">
                   {progressPhotos.slice(0, 4).map((photo) => {
                     const photoUrl = photoUrls[photo.id];
                     return (
-                      <div key={photo.id} className="aspect-square rounded-lg overflow-hidden bg-surface-800">
-                        {photoUrl ? (
-                          /* eslint-disable-next-line @next/next/no-img-element */
-                          <img
-                            src={photoUrl}
-                            alt={`Progress ${new Date(photo.photoDate).toLocaleDateString()}`}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center">
-                            <div className="w-6 h-6 border-2 border-surface-600 border-t-transparent rounded-full animate-spin" />
-                          </div>
-                        )}
-                      </div>
+                      <Link key={photo.id} href="/dashboard/progress-photos">
+                        <div className="aspect-square rounded-lg overflow-hidden bg-surface-800">
+                          {photoUrl ? (
+                            /* eslint-disable-next-line @next/next/no-img-element */
+                            <img
+                              src={photoUrl}
+                              alt={`Progress ${new Date(photo.photoDate).toLocaleDateString()}`}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center">
+                              <div className="w-6 h-6 border-2 border-surface-600 border-t-transparent rounded-full animate-spin" />
+                            </div>
+                          )}
+                        </div>
+                      </Link>
                     );
                   })}
                 </div>
-              </CardContent>
-            </Card>
-          )}
+              ) : (
+                <p className="text-sm text-surface-500">
+                  No photos yet. Consistent progress photos are one of the best
+                  ways to see change that the scale misses.
+                </p>
+              )}
+            </CardContent>
+          </Card>
 
           {/* The target EDITOR (weight / BF% / FFMI — what the Composition
               Map's goal vector reads). id-anchored so the header "Edit goals"
