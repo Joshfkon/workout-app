@@ -15,8 +15,10 @@
 import {
   submitFinishOptimistic,
   confirmClaimOptimistic,
+  declineClaimOptimistic,
   sessionFinishEntryId,
   sessionClaimEntryId,
+  CLAIM_DECISION_TTL_MS,
   type FinishFlowDeps,
   type FinishSummaryData,
 } from '../finishWorkout';
@@ -36,6 +38,7 @@ import {
   enqueuePostFinishWork,
   getPostFinishWork,
   listPostFinishWork,
+  patchPostFinishWork,
   type PostFinishWork,
 } from '@/lib/offline/postFinishQueue';
 import type { WorkoutSession } from '@/types/schema';
@@ -316,6 +319,7 @@ describe('submitFinishOptimistic', () => {
       userId: 'u1',
       sessionRpe: 8,
       checkIn: session.preWorkoutCheckIn,
+      loggedAt: expect.any(String),
     });
   });
 
@@ -492,6 +496,7 @@ describe('confirmClaimOptimistic', () => {
       userId: 'u1',
       sessionRpe: 7,
       checkIn: null,
+      loggedAt: expect.any(String),
     });
     expect(await outboxCount()).toBe(0);
   });
@@ -565,6 +570,7 @@ describe('post-finish settlement survives the flush race', () => {
     userId: 'u1',
     sessionRpe: 8,
     checkIn: CHECK_IN,
+    loggedAt: expect.any(String),
   };
 
   type Gate = { resolve: (error?: { message: string } | null) => void };
@@ -708,7 +714,15 @@ describe('post-finish settlement survives the flush race', () => {
     });
     expect(await drainPostFinishWork(client, { runMesoUpdates })).toEqual(['ran']);
     expect(runMesoUpdates).toHaveBeenCalledTimes(2);
-    expect(runMesoUpdates.mock.calls[1]).toEqual(runMesoUpdates.mock.calls[0]);
+    // `loggedAt` is stamped from the item's enqueue time: a RETRY of the same
+    // item reuses it verbatim (which is what makes the weekly-fatigue write
+    // order-safe), but this test simulates the crash by RE-CREATING the item,
+    // so only that stamp may differ between the two runs.
+    const [firstClient, firstArgs] = runMesoUpdates.mock.calls[0];
+    const [secondClient, secondArgs] = runMesoUpdates.mock.calls[1];
+    expect(secondClient).toBe(firstClient);
+    expect(secondArgs).toEqual({ ...firstArgs, loggedAt: secondArgs.loggedAt });
+    expect(typeof secondArgs.loggedAt).toBe('string');
     expect(await listPostFinishWork()).toEqual([]);
   });
 
@@ -833,6 +847,7 @@ describe('claim settlement is durable and verified', () => {
     // mesocycle this session does not belong to.
     const { client, pending } = makeGatedSupabase('completed', null);
     const runMesoUpdates = jest.fn().mockResolvedValue({ ok: true });
+    const runStandaloneUpdates = jest.fn().mockResolvedValue({ ok: true });
 
     await confirmClaimOptimistic({
       supabase: client,
@@ -841,6 +856,7 @@ describe('claim settlement is durable and verified', () => {
       mesocycleId: 'meso-9',
       sessionRpe: 7,
       runMesoUpdates,
+      runStandaloneUpdates,
     });
     await settle();
     while (pending.length > 0) {
@@ -849,6 +865,16 @@ describe('claim settlement is durable and verified', () => {
     }
 
     expect(runMesoUpdates).not.toHaveBeenCalled();
+    // The demoted item runs the STANDALONE updates instead — an unlinked
+    // session is a standalone session, so its fatigue log still lands (with
+    // mesocycle_id NULL) rather than being skipped entirely.
+    expect(runStandaloneUpdates).toHaveBeenCalledTimes(1);
+    expect(runStandaloneUpdates).toHaveBeenCalledWith(client, {
+      userId: 'u1',
+      sessionRpe: 7,
+      checkIn: null,
+      loggedAt: expect.any(String),
+    });
     // Still settled: the session-scoped work is done and the item cleared,
     // because the claim is gone from the queue and will never land.
     expect(await listPostFinishWork()).toEqual([]);
@@ -962,5 +988,145 @@ describe('a failed post-processing run keeps its work item', () => {
 
     expect(await listPostFinishWork()).toEqual([]);
     expect(runMesoUpdates.mock.calls.length).toBeLessThanOrEqual(5);
+  });
+});
+
+/**
+ * While the "count it toward your mesocycle?" prompt is open the session's
+ * identity — programmed vs standalone — is undecided, so its post-processing
+ * must wait for the decision. Running the standalone updates early would
+ * write standalone fatigue history for a session the user is about to claim
+ * (Codex P2 on the standalone-deload PR).
+ */
+describe('claim-pending gating', () => {
+  beforeEach(() => {
+    __setDriverForTests(memoryDriver());
+    __setPostFinishStoreForTests(createMemoryStore<PostFinishWork>());
+    jest.spyOn(console, 'info').mockImplementation(() => {});
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    __setDriverForTests(null);
+    __setPostFinishStoreForTests(null);
+    jest.restoreAllMocks();
+  });
+
+  async function release(pending: { resolve: (e?: { message: string } | null) => void }[]) {
+    await settle();
+    while (pending.length > 0) {
+      pending.shift()!.resolve();
+      await settle();
+    }
+  }
+
+  /** Finish with a claim prompt armed; returns the shared runner stubs. */
+  async function finishWithPromptOpen(
+    client: FinishFlowDeps['supabase'],
+    pending: { resolve: (e?: { message: string } | null) => void }[]
+  ) {
+    const runMesoUpdates = jest.fn().mockResolvedValue({ ok: true });
+    const runStandaloneUpdates = jest.fn().mockResolvedValue({ ok: true });
+    const showClaimPrompt = jest.fn();
+    await submitFinishOptimistic(
+      {
+        supabase: client,
+        sessionId: 's1',
+        session: makeSession(),
+        navigate: jest.fn(),
+        showClaimPrompt,
+        runMesoUpdates,
+        runStandaloneUpdates,
+      },
+      SUMMARY_DATA
+    );
+    await release(pending);
+    expect(showClaimPrompt).toHaveBeenCalledTimes(1);
+    return { runMesoUpdates, runStandaloneUpdates };
+  }
+
+  it('parks post-processing while the prompt is open; declining releases the standalone work', async () => {
+    const { client, pending } = makeGatedSupabase('completed', null);
+    const { runMesoUpdates, runStandaloneUpdates } = await finishWithPromptOpen(client, pending);
+
+    // The finish synced but the work item is parked behind the open prompt —
+    // and drains elsewhere wait too, without spending retry attempts.
+    expect(runStandaloneUpdates).not.toHaveBeenCalled();
+    expect(await getPostFinishWork('s1')).toMatchObject({ claimPending: true });
+    expect(await drainPostFinishWork(client, { runMesoUpdates, runStandaloneUpdates })).toEqual([
+      'pending',
+    ]);
+    expect(runStandaloneUpdates).not.toHaveBeenCalled();
+    expect((await getPostFinishWork('s1'))?.attempts ?? 0).toBe(0);
+
+    // "Keep as extra" records the decision and settles as standalone.
+    await declineClaimOptimistic({
+      supabase: client,
+      sessionId: 's1',
+      session: makeSession(),
+      sessionRpe: 8,
+      runMesoUpdates,
+      runStandaloneUpdates,
+    });
+    await release(pending);
+
+    expect(runStandaloneUpdates).toHaveBeenCalledTimes(1);
+    expect(runMesoUpdates).not.toHaveBeenCalled();
+    expect(await listPostFinishWork()).toEqual([]);
+  });
+
+  it('claiming clears the parked flag and runs the mesocycle updates instead', async () => {
+    const { client, pending } = makeGatedSupabase('completed', 'meso-9');
+    const { runMesoUpdates, runStandaloneUpdates } = await finishWithPromptOpen(client, pending);
+
+    await confirmClaimOptimistic({
+      supabase: client,
+      sessionId: 's1',
+      session: makeSession(),
+      mesocycleId: 'meso-9',
+      sessionRpe: 8,
+      runMesoUpdates,
+      runStandaloneUpdates,
+    });
+    await release(pending);
+
+    expect(runMesoUpdates).toHaveBeenCalledTimes(1);
+    expect(runStandaloneUpdates).not.toHaveBeenCalled();
+    expect(await listPostFinishWork()).toEqual([]);
+  });
+
+  it('a decision that never arrives settles as standalone after the TTL', async () => {
+    const { client, pending } = makeGatedSupabase('completed', null);
+    const { runMesoUpdates, runStandaloneUpdates } = await finishWithPromptOpen(client, pending);
+
+    // The tab died with the prompt open: age the item past the TTL.
+    await patchPostFinishWork('s1', {
+      enqueuedAt: Date.now() - CLAIM_DECISION_TTL_MS - 1,
+    });
+
+    expect(await drainPostFinishWork(client, { runMesoUpdates, runStandaloneUpdates })).toEqual([
+      'ran',
+    ]);
+    expect(runStandaloneUpdates).toHaveBeenCalledTimes(1);
+    expect(await listPostFinishWork()).toEqual([]);
+  });
+
+  it('an expired item whose claim DID land settles as the mesocycle session (row authority)', async () => {
+    // Claim write reached the row but the item patch was lost: the row says
+    // linked, the item still says null + claimPending. After the TTL the row
+    // wins — a linked session must never write standalone fatigue history.
+    const { client, pending } = makeGatedSupabase('completed', 'meso-9');
+    const { runMesoUpdates, runStandaloneUpdates } = await finishWithPromptOpen(client, pending);
+
+    await patchPostFinishWork('s1', {
+      enqueuedAt: Date.now() - CLAIM_DECISION_TTL_MS - 1,
+    });
+
+    expect(await drainPostFinishWork(client, { runMesoUpdates, runStandaloneUpdates })).toEqual([
+      'ran',
+    ]);
+    expect(runMesoUpdates).toHaveBeenCalledTimes(1);
+    expect(runMesoUpdates).toHaveBeenCalledWith(client, expect.objectContaining({ mesocycleId: 'meso-9' }));
+    expect(runStandaloneUpdates).not.toHaveBeenCalled();
   });
 });

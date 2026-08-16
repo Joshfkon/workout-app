@@ -58,6 +58,16 @@ export interface PostFinishWork {
   } | null;
   /** Needed by the calorie estimate; null when the session had no planned date. */
   plannedDate: string | null;
+  /**
+   * True while the "count it toward your mesocycle?" prompt is open for this
+   * session. Until the user decides, the session's identity — programmed vs
+   * standalone — is unknown, so settlement waits: running the standalone
+   * updates now would double-count the session if the user then claims it.
+   * Cleared by the claim being confirmed (which also sets mesocycleId) or
+   * declined; a decision that never arrives (tab killed mid-prompt) is
+   * treated as declined after CLAIM_DECISION_TTL_MS.
+   */
+  claimPending?: boolean;
   enqueuedAt: number;
   /**
    * Settle attempts so far. At-least-once must still be BOUNDED — an item the

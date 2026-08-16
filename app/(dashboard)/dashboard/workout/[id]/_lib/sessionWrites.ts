@@ -159,6 +159,15 @@ export interface WeeklyFatigueWriteInput {
   missedReps?: number;
   strengthDecline?: boolean;
   jointPain?: boolean;
+  /**
+   * ISO timestamp of the session this write derives from (the post-finish
+   * work item's enqueue time — STABLE across retries). When provided, the
+   * update is advance-only: a retrying older work item can no longer
+   * overwrite a newer session's data for the same week, so the stored row —
+   * and any deload recommendation derived from it — always reflects the
+   * LATEST session regardless of retry order.
+   */
+  loggedAt?: string;
 }
 
 /**
@@ -203,7 +212,7 @@ export async function upsertWeeklyFatigueLog(
   const strengthDecline = input.strengthDecline ?? false;
   const jointPain = input.jointPain ?? false;
 
-  const row = {
+  const row: Record<string, unknown> = {
     user_id: userId,
     mesocycle_id: mesocycleId,
     week_number: weekNumber,
@@ -218,6 +227,7 @@ export async function upsertWeeklyFatigueLog(
         ? `Auto-logged from workout (avg RPE ${sessionAvgRpe.toFixed(1)})`
         : 'Auto-logged from workout',
   };
+  if (input.loggedAt) row.logged_at = input.loggedAt;
 
   // Find existing row for this (user, mesocycle, week).
   let existingQuery = supabase
@@ -236,10 +246,17 @@ export async function upsertWeeklyFatigueLog(
   }
 
   if (existing?.id) {
-    const { error } = await supabase
+    let updateQuery = supabase
       .from('weekly_fatigue_logs')
       .update(row)
       .eq('id', existing.id);
+    // Advance-only (like the current_week .lt() write): if the stored row
+    // came from a NEWER session, this stale retry matches zero rows and the
+    // newer data stays — which is success, not failure.
+    if (input.loggedAt) {
+      updateQuery = updateQuery.lte('logged_at', input.loggedAt);
+    }
+    const { error } = await updateQuery;
     if (error) return { ok: false, error: error.message };
     return { ok: true };
   }
