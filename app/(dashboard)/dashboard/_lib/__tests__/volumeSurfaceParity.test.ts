@@ -159,14 +159,19 @@ describe('cross-surface parity (one fixture, four surfaces)', () => {
       const childByMuscle = new Map(row.children.map((c) => [c.muscle, c]));
       for (const std of COARSE_CHILDREN[row.muscle]) {
         const datum = rMap[std];
+        expect(datum).toBeDefined();
         const source = childByMuscle.get(std) ?? row;
         if (source.recovery.lastTrainedAt === null) {
-          // "No recent data" badge ⇒ neutral region, never a status color.
-          expect(datum).toBeUndefined();
+          // "No recent data" badge ⇒ no status ⇒ neutral region in recovery
+          // mode, never a status color.
+          expect(datum!.status).toBeUndefined();
         } else {
-          expect(datum).toBeDefined();
           expect(datum!.status).toBe(source.recovery.status);
         }
+        // The same datum also carries the volume paint (the sheet's map
+        // toggle), byte-identical to the readiness bar it mirrors.
+        expect(datum!.zone).toBe(source.zone);
+        expect(datum!.value).toBe(source.sets);
       }
     }
   });
