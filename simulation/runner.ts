@@ -49,6 +49,7 @@ import {
   type SetAttempt,
 } from './assertions';
 import type { FakeSupabase } from './fakeSupabase';
+import { SIM_MESOCYCLE_ID } from './fixtures';
 import type { SetRecommendation } from '@/services/setRecommender';
 
 export interface RunOptions {
@@ -145,7 +146,9 @@ function seedSessionShell(
     {
       id: sessionId,
       user_id: userId,
-      mesocycle_id: null,
+      // Same mesocycle as the bootstrap session — see fixtures: an unlinked
+      // session skips the mesocycle post-processing entirely.
+      mesocycle_id: SIM_MESOCYCLE_ID,
       state: 'in_progress',
       planned_date: day,
       started_at: startedAt,

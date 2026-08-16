@@ -13,7 +13,13 @@
  * them: sessions now complete through the production finish flow.
  */
 import type { FakeSupabase } from '../fakeSupabase';
-import { createSimulationWorld, createMemoryOutbox, SIM_SESSION_ID, SIM_USER_ID } from '../fixtures';
+import {
+  createSimulationWorld,
+  createMemoryOutbox,
+  SIM_MESOCYCLE_ID,
+  SIM_SESSION_ID,
+  SIM_USER_ID,
+} from '../fixtures';
 import { runSimulation, hardFailures, guardrailWarnings, normalizeTrace } from '../runner';
 import { formatFinding, APPROVED_REPETITION_REASONS, checkSet3Contract } from '../assertions';
 import { PERSONA_NAMES, type PersonaName } from '../personas';
@@ -289,5 +295,60 @@ describe('sessions are finished through the production flow', () => {
       sessionId: SIM_SESSION_ID, startAt: '2026-04-06T09:00:00', sessions: 8,
     });
     expect(await listPostFinishWork()).toEqual([]);
+  });
+});
+
+/**
+ * The MESOCYCLE post-processing is reached too.
+ *
+ * Finishing a session is not enough on its own: `runPostSessionMesoUpdates`
+ * short-circuits when the session has no `mesocycle_id`, so with unlinked
+ * sessions the week advance, the weekly fatigue log and the deload-trigger
+ * check stayed unexercised even after the runner started finishing properly
+ * (Codex review on #609 — the first version of that change claimed coverage
+ * it did not have). These assert the OUTPUTS, which is the only way to tell
+ * "the code ran" from "the code was skipped quietly".
+ */
+describe('post-session mesocycle updates are reached', () => {
+  it('writes a weekly fatigue log from the finished sessions', async () => {
+    const fake = world();
+    await runSimulation({
+      persona: 'linear-novice', seed: 3, fake, userId: SIM_USER_ID,
+      sessionId: SIM_SESSION_ID, startAt: '2026-04-06T09:00:00', sessions: 4,
+    });
+
+    // EVERY session must be linked, not just most of them: the fatigue log is
+    // overwritten per (user, meso, week), so a single unlinked session is
+    // invisible in the log rows themselves — but it silently drops out of the
+    // completed-session count that drives the week advance.
+    const sessions = fake.db.rows('workout_sessions') as unknown as {
+      mesocycle_id: string | null;
+    }[];
+    expect(sessions.length).toBeGreaterThan(0);
+    expect(sessions.every((r) => r.mesocycle_id === SIM_MESOCYCLE_ID)).toBe(true);
+
+    const logs = fake.db.rows('weekly_fatigue_logs') as unknown as {
+      mesocycle_id: string;
+      week_number: number;
+      notes: string;
+    }[];
+    expect(logs.length).toBeGreaterThan(0);
+    expect(logs.every((l) => l.mesocycle_id === SIM_MESOCYCLE_ID)).toBe(true);
+    // The RPE in the note comes from the finish card, i.e. from the sets the
+    // persona actually logged — so this also proves the value is derived, not
+    // a constant the fixture happened to supply.
+    expect(logs.some((l) => /avg RPE \d/.test(l.notes))).toBe(true);
+  });
+
+  it('advances the mesocycle week once enough sessions are done', async () => {
+    // days_per_week is 3, so the week rolls over on the 4th completed session.
+    const fake = world();
+    await runSimulation({
+      persona: 'linear-novice', seed: 3, fake, userId: SIM_USER_ID,
+      sessionId: SIM_SESSION_ID, startAt: '2026-04-06T09:00:00', sessions: 7,
+    });
+
+    const meso = (fake.db.rows('mesocycles') as unknown as { current_week: number }[])[0];
+    expect(meso.current_week).toBeGreaterThan(1);
   });
 });
