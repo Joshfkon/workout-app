@@ -35,6 +35,7 @@ import {
   checkEmptyPeriodSurvived,
   checkNumericSanity,
   checkPrescriptionSanity,
+  checkSessionCompleted,
   checkSet3Contract,
   checkSetAccounting,
   checkStateIntegrity,
@@ -428,7 +429,9 @@ export async function runSimulation(options: RunOptions): Promise<RunResult> {
         }
       }
 
-      // Carry this session's sets forward as next session's history.
+      // Carry this session's sets forward as next session's history. MUST
+      // happen before completing: `completeSession` closes the driver's view
+      // of the session, and reading blocks afterwards throws.
       for (let i = 0; i < driver.blocks.length; i++) {
         const logged = driver.setsForBlock(i);
         if (logged.length > 0) {
@@ -437,6 +440,25 @@ export async function runSimulation(options: RunOptions): Promise<RunResult> {
             logged.map((s) => ({ weightKg: s.weightKg, reps: s.reps, rpe: s.rpe }))
           );
         }
+      }
+
+      // Finish through the REAL finish flow — the durable outbox write, the
+      // post-finish settlement, the mesocycle updates. Without this the
+      // seeded sessions stayed `in_progress` for ever and every one of those
+      // paths was outside the harness's reach, which made "the simulation is
+      // green" a claim about less than it appeared to be.
+      const finishedId = currentSessionId;
+      await driver.completeSession({ sessionRpe: sessionRpe(trace, sessionIndex) });
+      if (
+        record(
+          checkSessionCompleted(
+            finishedId,
+            fake.db.rows('workout_sessions') as never,
+            ctx('completeSession')
+          )
+        )
+      ) {
+        return { persona: personaName, seed, findings, trace, sessionsCompleted };
       }
 
       sessionsCompleted++;
@@ -467,6 +489,24 @@ export async function runSimulation(options: RunOptions): Promise<RunResult> {
   }
 
   return { persona: personaName, seed, findings, trace, sessionsCompleted };
+}
+
+/**
+ * The session RPE the lifter reports at the finish card: the mean of the
+ * efforts they already reported on this session's sets.
+ *
+ * DELIBERATELY NOT AN RNG DRAW. Inserting one here would shift every
+ * subsequent value in the stream and silently invalidate every recorded seed
+ * — including the ones the open findings are reproduced from (simulation/rng
+ * documents the rule). This needs no randomness anyway: the persona has
+ * already made its per-set effort decisions, and this is an aggregation of
+ * them, not a new one.
+ */
+function sessionRpe(trace: TraceEvent[], sessionIndex: number): number {
+  const rows = trace.filter((e) => e.sessionIndex === sessionIndex && e.setId !== null);
+  if (rows.length === 0) return 7;
+  const mean = rows.reduce((sum, e) => sum + (10 - e.reportedRIR), 0) / rows.length;
+  return Math.round(mean * 2) / 2;
 }
 
 function runStateChecks(

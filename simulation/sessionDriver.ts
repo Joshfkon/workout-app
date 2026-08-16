@@ -52,7 +52,8 @@ import {
 import {
   logSet,
   persistSetEdit,
-  persistSetDelete,
+  persistSetDeletion,
+  planSetDeletion,
   buildSetEditPatch,
   type LogSetResult,
 } from '@/lib/training/logSet';
@@ -317,8 +318,21 @@ export class SessionDriver {
    * Delete a logged set. HARD delete — `set_logs` has no soft-delete column
    * (audit finding H3), so a persona must not expect one.
    */
+  /**
+   * Delete a logged set — through the SAME operation the workout page uses,
+   * so the harness cannot drift into its own deletion semantics. Deleting a
+   * set compacts its block to a dense 1..n on both sides (see
+   * `planSetDeletion` / `persistSetDeletion`); a driver that only removed the
+   * row would leave the database's numbering different from the app's and
+   * quietly stop testing the path it claims to test.
+   */
   async deleteSet(setId: string): Promise<void> {
-    const { error } = await persistSetDelete({ supabase: this.supabase as never }, setId);
+    const plan = planSetDeletion(this.state().sets, setId);
+    if (!plan) return;
+    const { error } = await persistSetDeletion(
+      { supabase: this.supabase as never },
+      { setId, changes: plan.changes }
+    );
     if (error) throw new Error(`SessionDriver.deleteSet: ${error.message}`);
     await this.refresh();
   }
