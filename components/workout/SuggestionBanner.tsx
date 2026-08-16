@@ -125,16 +125,20 @@ export function SuggestionBanner({
       ) : (
         <IconSparkles size={16} className="text-primary-400 flex-shrink-0 mt-0.5" aria-hidden="true" />
       )}
-      {showWarning ? (
+      {/* Suggestion copy and effort warning stacked in ONE grid cell: the
+          banner's height is the max of both from the first render, so the
+          debounced warning flip — driven by stepper presses — is a pure
+          color/visibility change. A height change here moves the stepper
+          buttons below mid-tap and repeated presses miss them. Only the
+          visible layer is exposed to assistive tech. */}
+      <div className="flex-1 min-w-0 grid">
         <p
-          data-testid="effort-warning"
+          className={`col-start-1 row-start-1 text-[12px] leading-snug text-primary-400 ${
+            showWarning ? 'invisible' : ''
+          }`}
+          aria-hidden={showWarning}
           aria-live="polite"
-          className="flex-1 text-[12px] leading-snug font-medium text-amber-400"
         >
-          {warningMessage}
-        </p>
-      ) : (
-        <p className="flex-1 text-[12px] leading-snug text-primary-400" aria-live="polite">
           <span className="font-medium">
             {weightLabel} × {repsLabel}
             {showRir ? ` @ ${rir} RIR` : ''}
@@ -146,7 +150,19 @@ export function SuggestionBanner({
           ) : null}
           {reason ? <span> — {reason}</span> : null}
         </p>
-      )}
+        {effortCheck != null && (
+          <p
+            data-testid={showWarning ? 'effort-warning' : undefined}
+            aria-hidden={!showWarning}
+            aria-live="polite"
+            className={`col-start-1 row-start-1 text-[12px] leading-snug font-medium text-amber-400 ${
+              showWarning ? '' : 'invisible'
+            }`}
+          >
+            {warningMessage}
+          </p>
+        )}
+      </div>
       <button
         onClick={() => setShowInfo(true)}
         className={`flex-shrink-0 p-0.5 transition-colors ${
