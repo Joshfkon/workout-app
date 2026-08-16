@@ -687,14 +687,22 @@ describe('ExerciseCard', () => {
           '100 kg × 12 ≈ 0 RIR — predicted max for you'
         );
       });
-      expect(screen.queryByText(/100 kg × 9 @ 2 RIR/)).not.toBeInTheDocument();
+      // The suggestion copy stays mounted (it reserves the banner's height so
+      // the flip can't shift the steppers below) but is hidden from AT.
+      expect(screen.getByText(/100 kg × 9 @ 2 RIR/).closest('p')).toHaveAttribute(
+        'aria-hidden',
+        'true'
+      );
 
       // Step back down to 11 → predicted RIR 1 → hysteresis exit, blue restored.
       await user.click(screen.getByRole('button', { name: 'Decrease reps' }));
       await waitFor(() => {
         expect(screen.queryByTestId('effort-warning')).not.toBeInTheDocument();
       });
-      expect(screen.getByText(/100 kg × 9 @ 2 RIR/)).toBeInTheDocument();
+      expect(screen.getByText(/100 kg × 9 @ 2 RIR/).closest('p')).toHaveAttribute(
+        'aria-hidden',
+        'false'
+      );
     });
 
     it('does not warn at predicted RIR 1 (enter threshold is ≤ 0 only)', async () => {
@@ -927,10 +935,16 @@ describe('ExerciseCard', () => {
       await user.type(weightInput, '999');
 
       // The logger reflects the edit, but the banner must NOT echo it —
-      // it keeps showing what the recommender actually suggested.
+      // it keeps showing what the recommender actually suggested. The
+      // entered-weight copy exists only as the banner's invisible height
+      // sizer (layout stability), hidden from AT, with no warning exposed.
       expect(weightInput).toHaveValue(999);
-      expect(screen.getByText(/100 kg × 9 @ 2 RIR/)).toBeInTheDocument();
-      expect(screen.queryByText(/999 kg ×/)).not.toBeInTheDocument();
+      expect(screen.getByText(/100 kg × 9 @ 2 RIR/).closest('p')).toHaveAttribute(
+        'aria-hidden',
+        'false'
+      );
+      expect(screen.queryByTestId('effort-warning')).not.toBeInTheDocument();
+      expect(screen.getByText(/999 kg ×/).closest('p')).toHaveAttribute('aria-hidden', 'true');
     });
 
     it('shows the suggestion banner with a reason', () => {
@@ -1144,6 +1158,38 @@ describe('ExerciseCard', () => {
       const note = screen.getByTestId('weight-edit-recompute-note');
       expect(note).toHaveTextContent('35 lbs ⇒ ~6 reps @ 2 RIR');
       expect(note).toHaveTextContent(/from your 44(\.\d+)? lbs e1RM/);
+    });
+
+    it('note slot stays mounted at all times — toggling it must not move the steppers (layout stability)', async () => {
+      const user = setupUser();
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          sets={[completedSet()]}
+          isActive={true}
+          onSetComplete={jest.fn().mockResolvedValue('id')}
+        />
+      );
+
+      // Before any edit: the slot is already in the layout, just invisible.
+      const note = screen.getByTestId('weight-edit-recompute-note');
+      expect(note).toHaveAttribute('aria-hidden', 'true');
+
+      // Debounced recompute fills the SAME element in.
+      await editWeight(user, /Weight: 100 kg/, '90');
+      flushDebounce();
+      expect(screen.getByTestId('weight-edit-recompute-note')).toHaveAttribute(
+        'aria-hidden',
+        'false'
+      );
+
+      // A stepper press clears the note immediately — it hides, never unmounts,
+      // so the logger row below cannot shift under the user's finger.
+      await user.click(screen.getByRole('button', { name: 'Increase weight' }));
+      expect(screen.getByTestId('weight-edit-recompute-note')).toHaveAttribute(
+        'aria-hidden',
+        'true'
+      );
     });
 
     it('cold start (no e1RM anywhere): weight edits leave reps untouched', async () => {

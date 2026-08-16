@@ -3828,16 +3828,27 @@ export const ExerciseCard = memo(function ExerciseCard({
                 effortCheck={effortCheck}
                 setKey={activeSetNumber}
               />
-              {weightEditNote && (
-                <p
-                  data-testid="weight-edit-recompute-note"
-                  className="px-1 text-[11px] text-primary-300"
-                >
-                  {weightEditNote.weightDisplay} {weightLabel} ⇒ ~{weightEditNote.reps}{' '}
-                  {isDurationBased ? 'seconds' : 'reps'} @ {weightEditNote.rir} RIR (from your{' '}
-                  {displayWeight(weightEditNote.e1rmKg, true)} {weightLabel} e1RM)
-                </p>
-              )}
+              {/* Always mounted at a fixed one-line height: the note is
+                  cleared on every weight/reps keystroke and re-issued by the
+                  400ms debounce, so conditional mounting moved the stepper
+                  buttons mid-tap and repeated presses missed them. Nothing
+                  above the logger row may change height as a result of
+                  pressing it. */}
+              <p
+                data-testid="weight-edit-recompute-note"
+                aria-hidden={!weightEditNote}
+                className={`px-1 text-[11px] leading-4 h-4 truncate text-primary-300 ${
+                  weightEditNote ? '' : 'invisible'
+                }`}
+              >
+                {weightEditNote && (
+                  <>
+                    {weightEditNote.weightDisplay} {weightLabel} ⇒ ~{weightEditNote.reps}{' '}
+                    {isDurationBased ? 'seconds' : 'reps'} @ {weightEditNote.rir} RIR (from your{' '}
+                    {displayWeight(weightEditNote.e1rmKg, true)} {weightLabel} e1RM)
+                  </>
+                )}
+              </p>
               <SetLoggerRow
                 setNumber={activeSetNumber}
                 weight={usesBwLoad ? bwLoadInput : input.weight}
