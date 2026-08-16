@@ -54,6 +54,7 @@ import { toStandardMuscleForVolume } from '@/lib/migrations/muscle-groups';
 import { calculateRecoveryFactors, buildPeriodizationPlan, calculateVolumeDistribution as calculateVolumeDistributionWithLagging, generateWarmup, isMuscleExcludedByInjury, applyIndirectAwareAllocation } from './mesocycleBuilder';
 import { getEffectiveBand, type CoarseMuscle } from './volumeBands';
 import { getExercisesSync, type Exercise as ServiceExercise } from './exerciseService';
+import { estimatePlannedSessionMinutes } from './workoutDurationEstimator';
 
 // NOTE: generateWarmup imported from mesocycleBuilder.ts
 
@@ -617,10 +618,18 @@ export function buildDetailedSessionWithFatigue(
   // Get session fatigue summary
   const fatigueSummary = fatigueManager.getSessionSummary();
 
-  // Calculate time
+  // Same duration model as the live workout header and the workout builders
+  // (services/workoutDurationEstimator), so this plan's promised length and
+  // the session readout can't disagree.
   const totalSets = exercises.reduce((sum, e) => sum + e.sets, 0);
-  const totalRestMinutes = exercises.reduce((sum, e) => sum + (e.sets * e.restSeconds) / 60, 0);
-  const estimatedMinutes = Math.round(totalRestMinutes + totalSets * 0.75 + 10);
+  const estimatedMinutes = estimatePlannedSessionMinutes(
+    exercises.map((e) => ({
+      sets: e.sets,
+      restSeconds: e.restSeconds,
+      mechanic: e.exercise.pattern === 'isolation' ? 'isolation' : 'compound',
+      muscle: e.exercise.primaryMuscle,
+    }))
+  );
 
   return {
     day: sessionTemplate.day,
@@ -808,14 +817,21 @@ export function buildDUPSession(
 
   const fatigueSummary = fatigueManager.getSessionSummary();
   const totalSets = exercises.reduce((sum, e) => sum + e.sets, 0);
-  const totalRestMinutes = exercises.reduce((sum, e) => sum + (e.sets * e.restSeconds) / 60, 0);
 
   return {
     day: sessionTemplate.day,
     focus: `${sessionTemplate.focus} - ${dupDayType.toUpperCase()} Day`,
     exercises,
     totalSets,
-    estimatedMinutes: Math.round(totalRestMinutes + totalSets * 0.75 + 10),
+    // Shared duration model — see the non-DUP builder above.
+    estimatedMinutes: estimatePlannedSessionMinutes(
+      exercises.map((e) => ({
+        sets: e.sets,
+        restSeconds: e.restSeconds,
+        mechanic: e.exercise.pattern === 'isolation' ? 'isolation' : 'compound',
+        muscle: e.exercise.primaryMuscle,
+      }))
+    ),
     warmup: generateWarmup(orderedMuscles[0]),
     fatigueSummary: {
       systemicFatigueGenerated: fatigueSummary.totalSystemicFatigue,

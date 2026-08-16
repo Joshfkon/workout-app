@@ -2245,7 +2245,13 @@ export default function WorkoutPage() {
   // duration it would have once the pending selection lands, and the cost of
   // that selection on its own.
   const pickerSessionDuration = useMemo(() => {
-    const addedSeconds = estimatePendingAdditionSeconds(durationBlocks, selectedExercisesToAdd);
+    // Context lets the estimate include the warmup protocol the add path will
+    // actually generate (first exercise per not-yet-warm muscle) — without it
+    // the promised time undershoots the post-add estimate by the warmup bill.
+    const addedSeconds = estimatePendingAdditionSeconds(durationBlocks, selectedExercisesToAdd, {
+      blocks,
+      completedSets,
+    });
     const baseSeconds =
       durationEstimate.remainingSets > 0 || durationEstimate.totalSets > 0
         ? durationEstimate.projectedTotalSeconds
@@ -2256,7 +2262,7 @@ export default function WorkoutPage() {
       totalLabel: formatDurationEstimate(totalSeconds),
       deltaLabel: addedSeconds > 0 ? formatDurationDelta(addedSeconds) : null,
     };
-  }, [durationBlocks, durationEstimate, selectedExercisesToAdd]);
+  }, [durationBlocks, durationEstimate, selectedExercisesToAdd, blocks, completedSets]);
 
   // Rolling-7-day credited sets (history + this session) vs the MEV–MRV band,
   // for the coarse muscles this workout trains. Shares the readiness sheet's
@@ -4373,15 +4379,20 @@ export default function WorkoutPage() {
     if (selectedExercisesToAdd.length === 0) return;
     
     setIsAddingExercise(true);
-    
+
     // Add exercises one by one, tracking what's been added so warmup logic
     // doesn't treat every exercise in the batch as the first of its muscle
     const addedSoFar: AvailableExercise[] = [];
     for (const exercise of selectedExercisesToAdd) {
       await handleAddExercise(exercise, addedSoFar);
       addedSoFar.push(exercise);
+      // Drop the landed exercise from the pending selection immediately —
+      // leaving it selected until the whole batch finishes double-counts it
+      // (once as a real block, once as pending), so the picker's total climbs
+      // to nearly 2x mid-batch and snaps back when the modal closes.
+      setSelectedExercisesToAdd((prev) => prev.filter((e) => e.id !== exercise.id));
     }
-    
+
     // Clear selections and close modal
     setSelectedExercisesToAdd([]);
     setShowAddExercise(false);
