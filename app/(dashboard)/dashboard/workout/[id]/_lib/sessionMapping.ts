@@ -27,6 +27,7 @@ import type {
   WorkoutSession,
 } from '@/types/schema';
 import type { ExerciseBlockWithExercise } from './types';
+import { resolveIsBodyweight } from '@/services/bodyweightClassification';
 
 /**
  * Exercise plus the extra runtime fields the workout page has always attached
@@ -192,11 +193,19 @@ export function mapLoadedBlockRow(
       resistanceProfile: block.exercises.resistance_profile || 3,
       progressionEase: block.exercises.progression_ease || 3,
     } : undefined,
-    // Bodyweight exercise metadata
-    // Check is_bodyweight column first, then fall back to equipment field, then equipment_required array
-    isBodyweight: block.exercises.is_bodyweight ??
-                 (block.exercises.equipment === 'bodyweight' ||
-                  Boolean(block.exercises.equipment_required && block.exercises.equipment_required.includes('bodyweight'))),
+    // Bodyweight exercise metadata. `is_bodyweight` is a positive signal only:
+    // the column is NOT NULL DEFAULT false, so the old `??` fallback to the
+    // equipment fields never fired and station movements (dead hang, pull-up,
+    // dip) whose flag was never set read as externally loaded. The shared
+    // classifier falls through to the equipment signals — see
+    // services/bodyweightClassification#resolveIsBodyweight.
+    isBodyweight: resolveIsBodyweight({
+      isBodyweight: block.exercises.is_bodyweight,
+      equipment: block.exercises.equipment,
+      equipmentRequired: block.exercises.equipment_required,
+      name: block.exercises.name,
+      exerciseType: block.exercises.exercise_type,
+    }),
     bodyweightType: block.exercises.bodyweight_type ?? undefined,
     assistanceType: block.exercises.assistance_type ?? undefined,
     // Video demonstration fields

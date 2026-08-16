@@ -2135,3 +2135,83 @@ describe('bodyweight warmup loads (added weight, not effective load)', () => {
     expect(screen.getByRole('button', { name: 'Bodyweight' })).toHaveAttribute('data-selected', 'true');
   });
 });
+
+describe('timed holds are bodyweight, not zero-load lifts', () => {
+  // Reported defect: a Dead Hang rendered a weight stepper sitting at 0 and
+  // "Log set" was disabled — the exercise row's is_bodyweight flag was false
+  // (the column is NOT NULL DEFAULT false and was never backfilled for
+  // station movements), so the card asked for an external load the movement
+  // does not have. A hang IS loaded — by the lifter.
+  const deadHangProps = {
+    exercise: createMockExercise({
+      id: 'dead-hang',
+      name: 'Dead Hang',
+      primaryMuscle: 'forearms',
+      secondaryMuscles: ['lats'],
+      mechanic: 'isolation' as const,
+      defaultRepRange: [20, 60] as [number, number],
+      equipmentRequired: ['pull-up bar'],
+      exerciseType: 'duration_based' as const,
+      isBodyweight: false,
+      minWeightIncrementKg: 0,
+    }),
+    block: createMockBlock({
+      exerciseId: 'dead-hang',
+      targetRepRange: [20, 60] as [number, number],
+      targetWeightKg: 0,
+    }),
+    sets: [],
+    unit: 'kg' as const,
+    isActive: true,
+    userBodyweightKg: 80,
+    onSetComplete: jest.fn().mockResolvedValue('id'),
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('renders BW instead of a weight stepper even with the flag unset', () => {
+    render(<ExerciseCard {...deadHangProps} />);
+
+    expect(screen.getByText('BW')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Increase weight' })).not.toBeInTheDocument();
+  });
+
+  it('logs the hold at bodyweight as the effective load', async () => {
+    const user = userEvent.setup();
+    const onSetComplete = jest.fn().mockResolvedValue('id');
+    render(<ExerciseCard {...deadHangProps} onSetComplete={onSetComplete} />);
+
+    const logButton = screen.getByRole('button', { name: /Log set/i });
+    expect(logButton).toBeEnabled();
+    await user.click(logButton);
+
+    expect(onSetComplete).toHaveBeenCalledTimes(1);
+    const logged = onSetComplete.mock.calls[0][0];
+    expect(logged.weightKg).toBe(80);
+    expect(logged.bodyweightData).toMatchObject({
+      userBodyweightKg: 80,
+      modification: 'none',
+      effectiveLoadKg: 80,
+    });
+  });
+
+  it('still asks for a load on a timed hold that names its implement', () => {
+    render(
+      <ExerciseCard
+        {...deadHangProps}
+        exercise={createMockExercise({
+          id: 'pinch-hold',
+          name: 'Plate Pinch Hold',
+          primaryMuscle: 'forearms',
+          equipmentRequired: ['weight plates'],
+          exerciseType: 'duration_based' as const,
+          isBodyweight: false,
+        })}
+      />
+    );
+
+    expect(screen.getByRole('button', { name: 'Increase weight' })).toBeInTheDocument();
+  });
+});
