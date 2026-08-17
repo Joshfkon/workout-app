@@ -16,6 +16,7 @@
  */
 
 import { formatDuration } from '@/lib/utils';
+import { InfoTooltip } from '@/components/ui';
 
 export interface RestTimerProps {
   /** Remaining seconds. */
@@ -77,8 +78,15 @@ export function RestTimer({
         >
           {isFinished ? 'Done' : formatDuration(seconds)}
         </span>
-        <span className="block text-[11px] text-surface-400 mt-0.5 truncate">
-          {isFinished ? 'rest done — next set' : nextLabel ?? 'resting'}
+        <span className="flex items-center text-[11px] text-surface-400 mt-0.5">
+          <span className="truncate">
+            {isFinished ? 'rest done — next set' : nextLabel ?? 'resting'}
+          </span>
+          {/* Why-this-rest rationale — stop propagation so opening the
+              tooltip doesn't also trigger the bar's scroll-to-exercise tap */}
+          <span onClick={(e) => e.stopPropagation()}>
+            <InfoTooltip term="REST_PERIODS" position="top" />
+          </span>
         </span>
         {!isFinished && adjustmentNote && (
           <span

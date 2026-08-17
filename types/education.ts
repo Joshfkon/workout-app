@@ -247,6 +247,12 @@ export const TOOLTIP_CONTENT: Record<string, TooltipContent> = {
     longExplanation: 'Effective sets count toward your weekly volume but aren\'t as powerful as stimulative sets. A mix of both is fine.',
     category: 'set-quality',
   },
+  WARMUP_PROTOCOL: {
+    term: 'Warmup Protocol',
+    shortExplanation: 'A ramp of progressively heavier sets with fewer and fewer reps. It prepares your muscles, joints, and nervous system for the working weight without creating fatigue.',
+    longExplanation: 'Light early sets raise muscle temperature and let you groove the movement pattern; the heavier ramp sets (up to ~85% of working weight) prime your nervous system so the first working set doesn\'t feel like a shock — a well-studied effect called post-activation potentiation. Reps drop as the weight climbs (8 → 5 → 3) so the warmup never steals reps from your working sets. Muscles that are already warm from an earlier exercise get a shortened ramp or skip the warmup entirely.',
+    category: 'set-quality',
+  },
 
   // Training Phases / Periodization
   DELOAD: {
@@ -337,6 +343,12 @@ export const TOOLTIP_CONTENT: Record<string, TooltipContent> = {
   },
 
   // Recovery
+  REST_PERIODS: {
+    term: 'Rest Between Sets',
+    shortExplanation: 'Resting 2-3 minutes between hard sets lets your muscles and nervous system recover enough to hit the next set at full quality.',
+    longExplanation: 'Research shows longer rest (2+ minutes) beats short rest for muscle growth on most lifts, because you keep more reps in your later sets — more high-quality volume from the same workout. HyperTrack starts from the exercise\'s prescribed rest, then adds time when your last set ran harder than its RIR target (a set at or near failure needs more recovery). An easier-than-target set never shortens your rest: the fix for a too-easy set is more weight, not rushed recovery.',
+    category: 'recovery',
+  },
   RECOVERY: {
     term: 'Recovery',
     shortExplanation: 'The process of your body repairing and adapting to training stress. Where gains actually happen.',

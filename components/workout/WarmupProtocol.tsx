@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Card } from '@/components/ui';
+import { Card, InfoTooltip } from '@/components/ui';
 import type { WarmupSet, WeightUnit } from '@/types/schema';
 import { roundToPlateIncrement, formatWeightValue } from '@/lib/utils';
 
@@ -53,10 +53,21 @@ export function WarmupProtocol({
 
   return (
     <Card variant="bordered" padding="none" className="overflow-hidden">
-      {/* Header */}
-      <button
+      {/* Header. A div with role="button" (not a real <button>) because the
+          info tooltip nested inside renders its own button — nested buttons
+          are invalid HTML. */}
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full flex items-center justify-between p-3 hover:bg-surface-800/50 transition-colors"
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setIsExpanded((prev) => !prev);
+          }
+        }}
+        aria-expanded={isExpanded}
+        className="w-full flex items-center justify-between p-3 hover:bg-surface-800/50 transition-colors cursor-pointer"
       >
         <div className="flex items-center gap-2">
           <div
@@ -74,6 +85,14 @@ export function WarmupProtocol({
           <span className="text-xs text-surface-500">
             ({completedSets.size}/{warmupSets.length})
           </span>
+          {/* Why-warmup rationale — stop propagation so opening the tooltip
+              doesn't also collapse/expand the section */}
+          <span
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+          >
+            <InfoTooltip term="WARMUP_PROTOCOL" position="bottom" inline={false} />
+          </span>
         </div>
         <svg
           className={`w-4 h-4 text-surface-400 transition-transform ${
@@ -85,7 +104,7 @@ export function WarmupProtocol({
         >
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
         </svg>
-      </button>
+      </div>
 
       {/* Content */}
       {isExpanded && (
