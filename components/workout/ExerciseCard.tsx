@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, memo, useRef, useCallback } from 'react';
-import { Card, Button, ConfirmModal } from '@/components/ui';
+import { Card, Button, ConfirmModal, InfoTooltip } from '@/components/ui';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/Accordion';
 import type { Exercise, ExerciseBlock, SetLog, WeightUnit, SetQuality, SetFeedback, BodyweightData, ExercisePerformanceSnapshot, StandardMuscleGroup, SorenessRating, SetDiscomfort, RepsInTank, SleepQuality } from '@/types/schema';
 import { rpeToRir, rirToRpe } from '@/types/schema';
@@ -3134,10 +3134,21 @@ export const ExerciseCard = memo(function ExerciseCard({
       {/* Warmup sets - keep in separate table for now (legacy) */}
       {isActive && warmupRows.rows.length > 0 && warmupWorkingWeightKg > 0 && (
         <div className="border-b border-surface-800">
-          {/* Collapsible header */}
-          <button
+          {/* Collapsible header. A div with role="button" (not a real <button>)
+              because the info tooltip nested inside renders its own button —
+              nested buttons are invalid HTML. */}
+          <div
+            role="button"
+            tabIndex={0}
             onClick={() => setIsWarmupExpanded(!isWarmupExpanded)}
-            className="w-full flex items-center justify-between p-3 hover:bg-surface-800/50 transition-colors"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                setIsWarmupExpanded((prev) => !prev);
+              }
+            }}
+            aria-expanded={isWarmupExpanded}
+            className="w-full flex items-center justify-between p-3 hover:bg-surface-800/50 transition-colors cursor-pointer"
           >
             <div className="flex items-center gap-2">
               <div
@@ -3159,6 +3170,14 @@ export const ExerciseCard = memo(function ExerciseCard({
               <span className="text-xs text-surface-500">
                 ({completedWarmups.size}/{warmupRows.rows.length})
               </span>
+              {/* Why-warmup rationale — stop propagation so opening the
+                  tooltip doesn't also collapse/expand the section */}
+              <span
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => e.stopPropagation()}
+              >
+                <InfoTooltip term="WARMUP_PROTOCOL" position="bottom" inline={false} />
+              </span>
             </div>
             <svg
               className={`w-4 h-4 text-surface-400 transition-transform ${
@@ -3170,7 +3189,7 @@ export const ExerciseCard = memo(function ExerciseCard({
             >
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>
-          </button>
+          </div>
 
           {/* Warmup table - only show when expanded */}
           {isWarmupExpanded && (
