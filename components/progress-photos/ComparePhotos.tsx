@@ -2,18 +2,28 @@
 
 /**
  * Progress-photo comparison viewer: side-by-side, wipe slider, and
- * onion-skin overlay modes for any two photos. The overlay mode includes
- * manual alignment (drag + scale) since older photos were shot without the
- * ghost-overlay capture aid and rarely line up perfectly.
+ * onion-skin overlay modes for any two photos.
+ *
+ * Photos taken at different distances/framings rarely line up, so each photo
+ * carries its own alignment (pan + zoom), edited in the Overlay mode by
+ * dragging / pinching / the zoom slider. Alignment is stored as fractions of
+ * the frame, so the SAME alignment applies identically in every mode and in
+ * the exported share card.
  */
 
 import { useMemo, useRef, useState } from 'react';
 import { Modal, Button } from '@/components/ui';
 import { kgToLbs } from '@/lib/utils';
-import { buildShareCard, shareOrDownloadCard } from '@/lib/images/shareCard';
+import {
+  buildShareCard,
+  shareOrDownloadCard,
+  IDENTITY_ALIGN,
+  type PhotoAlign,
+} from '@/lib/images/shareCard';
 import type { ProgressPhoto } from '@/types/schema';
 
 type CompareMode = 'side' | 'wipe' | 'overlay';
+type AlignTarget = 'before' | 'after';
 
 interface ComparePhotosProps {
   isOpen: boolean;
@@ -78,23 +88,63 @@ function resolvePair(
   return { before, after };
 }
 
+function clampAlign(a: PhotoAlign): PhotoAlign {
+  return {
+    scale: Math.min(2.5, Math.max(0.5, a.scale)),
+    dx: Math.min(0.5, Math.max(-0.5, a.dx)),
+    dy: Math.min(0.5, Math.max(-0.5, a.dy)),
+  };
+}
+
+/**
+ * CSS twin of the share-card canvas transform: translate is a fraction of the
+ * frame, scale is about the frame center.
+ */
+function alignTransform(a: PhotoAlign): string {
+  return `translate(${a.dx * 100}%, ${a.dy * 100}%) scale(${a.scale})`;
+}
+
+function AlignedImage({
+  url,
+  alt,
+  align,
+  style,
+}: {
+  url: string;
+  alt: string;
+  align: PhotoAlign;
+  style?: React.CSSProperties;
+}) {
+  return (
+    /* eslint-disable-next-line @next/next/no-img-element */
+    <img
+      src={url}
+      alt={alt}
+      draggable={false}
+      className="absolute inset-0 w-full h-full object-cover"
+      style={{ transform: alignTransform(align), ...style }}
+    />
+  );
+}
+
 function PhotoPane({
   url,
   alt,
+  align,
   caption,
 }: {
   url: string | undefined;
   alt: string;
+  align: PhotoAlign;
   caption: string | null;
 }) {
   return (
     <div className="space-y-1">
-      <div className="aspect-[3/4] rounded-lg overflow-hidden bg-surface-900 ring-1 ring-surface-700">
+      <div className="relative aspect-[3/4] rounded-lg overflow-hidden bg-surface-900 ring-1 ring-surface-700">
         {url ? (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img src={url} alt={alt} className="w-full h-full object-cover" />
+          <AlignedImage url={url} alt={alt} align={align} />
         ) : (
-          <div className="w-full h-full flex items-center justify-center">
+          <div className="absolute inset-0 flex items-center justify-center">
             <div className="w-6 h-6 border-2 border-surface-600 border-t-transparent rounded-full animate-spin" />
           </div>
         )}
@@ -107,32 +157,27 @@ function PhotoPane({
 function WipeView({
   beforeUrl,
   afterUrl,
+  beforeAlign,
+  afterAlign,
 }: {
   beforeUrl: string | undefined;
   afterUrl: string | undefined;
+  beforeAlign: PhotoAlign;
+  afterAlign: PhotoAlign;
 }) {
   const [wipePercent, setWipePercent] = useState(50);
   return (
     <div className="space-y-2">
       <div className="relative aspect-[3/4] max-h-[55vh] mx-auto rounded-lg overflow-hidden bg-surface-900 ring-1 ring-surface-700 select-none">
-        {afterUrl && (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img
-            src={afterUrl}
-            alt="After"
-            className="absolute inset-0 w-full h-full object-cover"
-            draggable={false}
-          />
-        )}
+        {afterUrl && <AlignedImage url={afterUrl} alt="After" align={afterAlign} />}
+        {/* The clip lives on a wrapper so it doesn't move with the transform. */}
         {beforeUrl && (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img
-            src={beforeUrl}
-            alt="Before"
-            className="absolute inset-0 w-full h-full object-cover"
-            draggable={false}
+          <div
+            className="absolute inset-0 overflow-hidden"
             style={{ clipPath: `inset(0 ${100 - wipePercent}% 0 0)` }}
-          />
+          >
+            <AlignedImage url={beforeUrl} alt="Before" align={beforeAlign} />
+          </div>
         )}
         <div
           className="absolute inset-y-0 w-0.5 bg-white/80 shadow pointer-events-none"
@@ -154,69 +199,134 @@ function WipeView({
         className="w-full accent-primary-500"
         aria-label="Reveal before photo"
       />
+      <p className="text-xs text-center text-surface-500">
+        Photos not lined up? Use Overlay to align them — it applies here too.
+      </p>
     </div>
   );
+}
+
+interface GestureState {
+  pointers: Map<number, { x: number; y: number }>;
+  baseAlign: PhotoAlign;
+  startCenter: { x: number; y: number };
+  startDist: number;
 }
 
 function OverlayView({
   beforeUrl,
   afterUrl,
+  beforeAlign,
+  afterAlign,
+  onChangeAlign,
+  onResetAligns,
 }: {
   beforeUrl: string | undefined;
   afterUrl: string | undefined;
+  beforeAlign: PhotoAlign;
+  afterAlign: PhotoAlign;
+  onChangeAlign: (target: AlignTarget, align: PhotoAlign) => void;
+  onResetAligns: () => void;
 }) {
   const [opacity, setOpacity] = useState(50);
-  const [scale, setScale] = useState(100);
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
-  const dragRef = useRef<{ startX: number; startY: number; baseX: number; baseY: number } | null>(
-    null
-  );
+  const [target, setTarget] = useState<AlignTarget>('after');
+  const containerRef = useRef<HTMLDivElement>(null);
+  const gestureRef = useRef<GestureState | null>(null);
+
+  const targetAlign = target === 'before' ? beforeAlign : afterAlign;
+
+  const gestureGeometry = (pointers: Map<number, { x: number; y: number }>) => {
+    const pts = Array.from(pointers.values());
+    const center = {
+      x: pts.reduce((sum, p) => sum + p.x, 0) / pts.length,
+      y: pts.reduce((sum, p) => sum + p.y, 0) / pts.length,
+    };
+    const dist =
+      pts.length >= 2 ? Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y) : 0;
+    return { center, dist };
+  };
+
+  const rebaseline = (pointers: Map<number, { x: number; y: number }>) => {
+    const { center, dist } = gestureGeometry(pointers);
+    gestureRef.current = {
+      pointers,
+      baseAlign: target === 'before' ? beforeAlign : afterAlign,
+      startCenter: center,
+      startDist: dist,
+    };
+  };
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     e.currentTarget.setPointerCapture(e.pointerId);
-    dragRef.current = { startX: e.clientX, startY: e.clientY, baseX: offset.x, baseY: offset.y };
+    const pointers = gestureRef.current?.pointers ?? new Map();
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    rebaseline(pointers);
   };
+
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    const drag = dragRef.current;
-    if (!drag) return;
-    setOffset({ x: drag.baseX + (e.clientX - drag.startX), y: drag.baseY + (e.clientY - drag.startY) });
+    const gesture = gestureRef.current;
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!gesture || !rect || !gesture.pointers.has(e.pointerId)) return;
+    gesture.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const { center, dist } = gestureGeometry(gesture.pointers);
+    // Pan by the drag as a fraction of the frame; pinch scales around it.
+    const next: PhotoAlign = {
+      dx: gesture.baseAlign.dx + (center.x - gesture.startCenter.x) / rect.width,
+      dy: gesture.baseAlign.dy + (center.y - gesture.startCenter.y) / rect.height,
+      scale:
+        gesture.startDist > 0 && dist > 0
+          ? gesture.baseAlign.scale * (dist / gesture.startDist)
+          : gesture.baseAlign.scale,
+    };
+    onChangeAlign(target, clampAlign(next));
   };
-  const handlePointerUp = () => {
-    dragRef.current = null;
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    const pointers = gestureRef.current?.pointers;
+    if (!pointers) return;
+    pointers.delete(e.pointerId);
+    if (pointers.size === 0) gestureRef.current = null;
+    else rebaseline(pointers);
   };
 
   return (
     <div className="space-y-2">
       <div
+        ref={containerRef}
         className="relative aspect-[3/4] max-h-[55vh] mx-auto rounded-lg overflow-hidden bg-surface-900 ring-1 ring-surface-700 select-none touch-none cursor-move"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
       >
-        {beforeUrl && (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img
-            src={beforeUrl}
-            alt="Before"
-            className="absolute inset-0 w-full h-full object-cover"
-            draggable={false}
-          />
-        )}
+        {beforeUrl && <AlignedImage url={beforeUrl} alt="Before" align={beforeAlign} />}
         {afterUrl && (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img
-            src={afterUrl}
+          <AlignedImage
+            url={afterUrl}
             alt="After"
-            className="absolute inset-0 w-full h-full object-cover"
-            draggable={false}
-            style={{
-              opacity: opacity / 100,
-              transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale / 100})`,
-            }}
+            align={afterAlign}
+            style={{ opacity: opacity / 100 }}
           />
         )}
       </div>
+
+      {/* Which photo the drag/pinch/zoom adjusts */}
+      <div className="flex gap-1 rounded-lg bg-surface-800 p-1">
+        {(['before', 'after'] as const).map((value) => (
+          <button
+            key={value}
+            onClick={() => setTarget(value)}
+            className={`flex-1 rounded-md px-3 py-1 text-xs font-medium capitalize transition-colors ${
+              target === value
+                ? 'bg-surface-600 text-surface-100'
+                : 'text-surface-400 hover:text-surface-200'
+            }`}
+          >
+            Adjust {value}
+          </button>
+        ))}
+      </div>
+
       <div className="space-y-1.5">
         <label className="flex items-center gap-2 text-xs text-surface-400">
           <span className="w-14">Opacity</span>
@@ -231,27 +341,24 @@ function OverlayView({
           />
         </label>
         <label className="flex items-center gap-2 text-xs text-surface-400">
-          <span className="w-14">Scale</span>
+          <span className="w-14">Zoom</span>
           <input
             type="range"
-            min={70}
-            max={140}
-            value={scale}
-            onChange={(e) => setScale(Number(e.target.value))}
+            min={50}
+            max={250}
+            value={Math.round(targetAlign.scale * 100)}
+            onChange={(e) =>
+              onChangeAlign(target, clampAlign({ ...targetAlign, scale: Number(e.target.value) / 100 }))
+            }
             className="flex-1 accent-primary-500"
-            aria-label="After photo scale"
+            aria-label={`${target} photo zoom`}
           />
         </label>
         <div className="flex items-center justify-between">
-          <p className="text-xs text-surface-500">Drag the image to line up the two poses.</p>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => {
-              setScale(100);
-              setOffset({ x: 0, y: 0 });
-            }}
-          >
+          <p className="text-xs text-surface-500">
+            Drag to move · pinch or zoom to resize. Applies to every view.
+          </p>
+          <Button variant="secondary" size="sm" onClick={onResetAligns}>
             Reset
           </Button>
         </div>
@@ -307,6 +414,8 @@ export function ComparePhotos({
   const [beforeId, setBeforeId] = useState<string | null>(null);
   const [afterId, setAfterId] = useState<string | null>(null);
   const [mode, setMode] = useState<CompareMode>('side');
+  const [beforeAlign, setBeforeAlign] = useState<PhotoAlign>(IDENTITY_ALIGN);
+  const [afterAlign, setAfterAlign] = useState<PhotoAlign>(IDENTITY_ALIGN);
   const [isSharing, setIsSharing] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
 
@@ -322,6 +431,23 @@ export function ComparePhotos({
   const deltaCaption =
     before && after ? buildDeltaCaption(before, after, units) : null;
 
+  const selectBefore = (id: string) => {
+    setBeforeId(id);
+    setBeforeAlign(IDENTITY_ALIGN);
+  };
+  const selectAfter = (id: string) => {
+    setAfterId(id);
+    setAfterAlign(IDENTITY_ALIGN);
+  };
+  const changeAlign = (target: AlignTarget, align: PhotoAlign) => {
+    if (target === 'before') setBeforeAlign(align);
+    else setAfterAlign(align);
+  };
+  const resetAligns = () => {
+    setBeforeAlign(IDENTITY_ALIGN);
+    setAfterAlign(IDENTITY_ALIGN);
+  };
+
   const handleShare = async () => {
     if (!before || !after || !beforeUrl || !afterUrl) return;
     setIsSharing(true);
@@ -333,6 +459,8 @@ export function ComparePhotos({
         beforeLabel: formatDate(before.photoDate),
         afterLabel: formatDate(after.photoDate),
         caption: deltaCaption ?? 'Progress',
+        beforeAlign,
+        afterAlign,
       });
       if (!blob) throw new Error('Could not build the image');
       await shareOrDownloadCard(blob, 'hypertrack-progress.jpg');
@@ -356,14 +484,14 @@ export function ComparePhotos({
             value={before?.id ?? ''}
             photos={chronological}
             units={units}
-            onChange={setBeforeId}
+            onChange={selectBefore}
           />
           <PhotoSelect
             label="After"
             value={after?.id ?? ''}
             photos={chronological}
             units={units}
-            onChange={setAfterId}
+            onChange={selectAfter}
           />
         </div>
 
@@ -398,17 +526,35 @@ export function ComparePhotos({
             <PhotoPane
               url={beforeUrl}
               alt="Before"
+              align={beforeAlign}
               caption={before ? formatDate(before.photoDate) : null}
             />
             <PhotoPane
               url={afterUrl}
               alt="After"
+              align={afterAlign}
               caption={after ? formatDate(after.photoDate) : null}
             />
           </div>
         )}
-        {mode === 'wipe' && <WipeView beforeUrl={beforeUrl} afterUrl={afterUrl} />}
-        {mode === 'overlay' && <OverlayView beforeUrl={beforeUrl} afterUrl={afterUrl} />}
+        {mode === 'wipe' && (
+          <WipeView
+            beforeUrl={beforeUrl}
+            afterUrl={afterUrl}
+            beforeAlign={beforeAlign}
+            afterAlign={afterAlign}
+          />
+        )}
+        {mode === 'overlay' && (
+          <OverlayView
+            beforeUrl={beforeUrl}
+            afterUrl={afterUrl}
+            beforeAlign={beforeAlign}
+            afterAlign={afterAlign}
+            onChangeAlign={changeAlign}
+            onResetAligns={resetAligns}
+          />
+        )}
 
         {deltaCaption && (
           <p className="text-sm text-center text-surface-300 font-medium">{deltaCaption}</p>

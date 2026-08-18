@@ -11,6 +11,20 @@ const CARD_WIDTH = 1080;
 const CARD_HEIGHT = 1350;
 const CAPTION_BAR_HEIGHT = 120;
 
+/**
+ * Per-photo pan/zoom, matching the compare viewer's CSS transform
+ * `translate(dx*100%, dy*100%) scale(scale)`: dx/dy are fractions of the
+ * frame, scale is about the frame center. Frame-relative units make the same
+ * alignment render identically at any output size.
+ */
+export interface PhotoAlign {
+  scale: number;
+  dx: number;
+  dy: number;
+}
+
+export const IDENTITY_ALIGN: PhotoAlign = { scale: 1, dx: 0, dy: 0 };
+
 export interface ShareCardInput {
   beforeUrl: string;
   afterUrl: string;
@@ -18,6 +32,8 @@ export interface ShareCardInput {
   afterLabel: string;
   /** e.g. "224 days apart · −4.2 kg · −3.1% BF" */
   caption: string;
+  beforeAlign?: PhotoAlign;
+  afterAlign?: PhotoAlign;
 }
 
 async function fetchBitmap(url: string): Promise<ImageBitmap> {
@@ -27,21 +43,32 @@ async function fetchBitmap(url: string): Promise<ImageBitmap> {
   return createImageBitmap(blob);
 }
 
-/** drawImage with object-fit: cover semantics. */
+/**
+ * drawImage with object-fit: cover semantics, plus the viewer's alignment
+ * transform, clipped to the panel.
+ */
 function drawCover(
   ctx: CanvasRenderingContext2D,
   bitmap: ImageBitmap,
   x: number,
   y: number,
   w: number,
-  h: number
+  h: number,
+  align: PhotoAlign = IDENTITY_ALIGN
 ) {
-  const scale = Math.max(w / bitmap.width, h / bitmap.height);
-  const sw = w / scale;
-  const sh = h / scale;
-  const sx = (bitmap.width - sw) / 2;
-  const sy = (bitmap.height - sh) / 2;
-  ctx.drawImage(bitmap, sx, sy, sw, sh, x, y, w, h);
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x, y, w, h);
+  ctx.clip();
+  // Frame center, shifted by the pan (in frame fractions), then zoomed —
+  // the same order as the CSS `translate(...) scale(...)` in the viewer.
+  ctx.translate(x + w / 2 + align.dx * w, y + h / 2 + align.dy * h);
+  ctx.scale(align.scale, align.scale);
+  const coverScale = Math.max(w / bitmap.width, h / bitmap.height);
+  const dw = bitmap.width * coverScale;
+  const dh = bitmap.height * coverScale;
+  ctx.drawImage(bitmap, -dw / 2, -dh / 2, dw, dh);
+  ctx.restore();
 }
 
 function drawChip(ctx: CanvasRenderingContext2D, text: string, x: number, y: number) {
@@ -65,6 +92,8 @@ export async function buildShareCard({
   beforeLabel,
   afterLabel,
   caption,
+  beforeAlign = IDENTITY_ALIGN,
+  afterAlign = IDENTITY_ALIGN,
 }: ShareCardInput): Promise<Blob | null> {
   const [beforeBitmap, afterBitmap] = await Promise.all([
     fetchBitmap(beforeUrl),
@@ -83,8 +112,8 @@ export async function buildShareCard({
 
     const photoHeight = CARD_HEIGHT - CAPTION_BAR_HEIGHT;
     const half = CARD_WIDTH / 2;
-    drawCover(ctx, beforeBitmap, 0, 0, half - 2, photoHeight);
-    drawCover(ctx, afterBitmap, half + 2, 0, half - 2, photoHeight);
+    drawCover(ctx, beforeBitmap, 0, 0, half - 2, photoHeight, beforeAlign);
+    drawCover(ctx, afterBitmap, half + 2, 0, half - 2, photoHeight, afterAlign);
 
     drawChip(ctx, beforeLabel, 20, 20);
     const afterMetrics = (() => {
