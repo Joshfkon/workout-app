@@ -23,6 +23,7 @@ import { downscaleImageToJpeg } from '@/lib/images/downscaleImage';
 import { ComparePhotos } from '@/components/progress-photos/ComparePhotos';
 import { BfEstimatePanel } from '@/components/progress-photos/BfEstimatePanel';
 import { GhostCameraCapture } from '@/components/progress-photos/GhostCameraCapture';
+import { TimelapseModal } from '@/components/progress-photos/TimelapseModal';
 import type { ProgressPhoto } from '@/types/schema';
 
 const AUTH_REQUIRED = { authRequired: true } as const;
@@ -59,6 +60,7 @@ export default function ProgressPhotosPage() {
   const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isCompareOpen, setIsCompareOpen] = useState(false);
+  const [isTimelapseOpen, setIsTimelapseOpen] = useState(false);
   const [viewingPhoto, setViewingPhoto] = useState<ProgressPhoto | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ProgressPhoto | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -200,6 +202,11 @@ export default function ProgressPhotosPage() {
           <h1 className="text-xl font-bold text-surface-100 mt-1">Progress Photos</h1>
         </div>
         <div className="flex gap-2">
+          {photos.length >= 3 && (
+            <Button variant="secondary" onClick={() => setIsTimelapseOpen(true)}>
+              Timelapse
+            </Button>
+          )}
           {photos.length >= 2 && (
             <Button variant="secondary" onClick={() => setIsCompareOpen(true)}>
               Compare
@@ -356,6 +363,15 @@ export default function ProgressPhotosPage() {
         confirmText="Delete"
         variant="danger"
         isLoading={isDeleting}
+      />
+
+      {/* Timelapse */}
+      <TimelapseModal
+        isOpen={isTimelapseOpen}
+        onClose={() => setIsTimelapseOpen(false)}
+        photos={photos}
+        photoUrls={photoUrls}
+        units={units}
       />
 
       {/* Compare viewer */}
