@@ -502,6 +502,35 @@ export const STANDARD_PLATES = {
 } as const;
 
 /**
+ * Selectable "smallest plate pair I own" options (weight per plate, per side).
+ * A pair of the smallest plate sets the total-weight increment: one plate per
+ * side, so increment = 2 × plate (1.25lb plates → 2.5lb jumps).
+ */
+export const SMALLEST_PLATE_OPTIONS = {
+  kg: [0.5, 1.25, 2.5],
+  lb: [1.25, 2.5, 5],
+} as const;
+
+/** Default smallest plate — matches the smallest STANDARD_PLATES entry. */
+export const DEFAULT_SMALLEST_PLATE = {
+  kg: 1.25,
+  lb: 2.5,
+} as const;
+
+/**
+ * Plate set for a gym whose smallest plate pair is `smallestPlate`: the
+ * standard set with anything smaller removed, plus the smallest plate itself
+ * when it sits below the standard range (e.g. 1.25lb micro plates).
+ */
+export function getAvailablePlates(unit: 'kg' | 'lb', smallestPlate?: number): number[] {
+  const standard: number[] = [...STANDARD_PLATES[unit]];
+  if (smallestPlate === undefined || smallestPlate <= 0) return standard;
+  const plates = standard.filter((plate) => plate >= smallestPlate);
+  if (!plates.includes(smallestPlate)) plates.push(smallestPlate);
+  return plates;
+}
+
+/**
  * Common barbell types with their weights
  */
 export const BARBELL_WEIGHTS = {
