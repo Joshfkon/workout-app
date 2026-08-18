@@ -159,9 +159,11 @@ function requestEstimate(
 }
 
 /**
- * Run the candidate chain. Returns the first successful response,
- * 'rate_limited' to abort with the rate message, or null when every
- * candidate failed (each failure is logged with its status).
+ * Run the candidate chain. Returns the first successful response, or —
+ * when every candidate failed — 'rate_limited' if at least one failure was
+ * a rate limit (limits are per-model, so a rate-limited candidate still
+ * falls through to the next), else null. Each failure is logged with its
+ * status.
  */
 async function requestEstimateWithFallback(
   anthropic: Anthropic,
@@ -169,21 +171,24 @@ async function requestEstimateWithFallback(
   mediaType: string,
   contextLines: string[]
 ): Promise<Anthropic.Message | 'rate_limited' | null> {
+  let sawRateLimit = false;
   for (const model of MODEL_CANDIDATES) {
     try {
       return await requestEstimate(anthropic, model, imageBase64, mediaType, contextLines);
     } catch (err) {
-      if (err instanceof Anthropic.RateLimitError) return 'rate_limited';
       // Log the concrete status so a production failure names its cause,
       // then fall through to the next candidate model.
-      if (err instanceof Anthropic.APIError) {
+      if (err instanceof Anthropic.RateLimitError) {
+        sawRateLimit = true;
+        console.error(`BF estimate: model ${model} rate limited`);
+      } else if (err instanceof Anthropic.APIError) {
         console.error(`BF estimate: model ${model} failed with ${err.status}: ${err.message}`);
       } else {
         console.error(`BF estimate: model ${model} failed:`, err);
       }
     }
   }
-  return null;
+  return sawRateLimit ? 'rate_limited' : null;
 }
 
 /** Defensive parse of the tool output; null when unusable. */
