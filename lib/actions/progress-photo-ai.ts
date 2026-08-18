@@ -99,7 +99,7 @@ function buildContextLines(
 /**
  * Best model first; fall back to the Haiku tier the rest of the app already
  * uses in production (label scan) if the org's key can't use the primary
- * model. RateLimitError aborts the chain instead of falling through.
+ * model or its quota is exhausted (rate limits are per-model).
  */
 const MODEL_CANDIDATES = ['claude-opus-5', 'claude-haiku-4-5'] as const;
 type CandidateModel = (typeof MODEL_CANDIDATES)[number];
