@@ -16,9 +16,14 @@ import {
 } from '@/lib/actions/progress-photo-ai';
 import type { ProgressPhoto } from '@/types/schema';
 
-/** Vision doesn't need full resolution — keep the request payload small. */
+/**
+ * Vision doesn't need full resolution — keep the request payload small.
+ * The byte cap must leave headroom for base64 expansion (~4/3) plus the
+ * server-action envelope under Next's default 1MiB body limit:
+ * 600KB binary → ~800KB base64.
+ */
 const AI_IMAGE_MAX_EDGE = 1024;
-const AI_IMAGE_MAX_BYTES = 800 * 1024;
+const AI_IMAGE_MAX_BYTES = 600 * 1024;
 
 interface BfEstimatePanelProps {
   photo: ProgressPhoto;

@@ -71,16 +71,28 @@ export function GhostCameraCapture({ ghostUrl, onCapture, onCancel }: GhostCamer
   const handleCapture = async () => {
     const video = videoRef.current;
     if (!video || !video.videoWidth) return;
+    // The preview shows the frame as a centered 3:4 cover crop; save exactly
+    // that region so the photo matches what was aligned against the ghost.
+    const targetAspect = 3 / 4;
+    let cropWidth = video.videoWidth;
+    let cropHeight = video.videoHeight;
+    if (cropWidth / cropHeight > targetAspect) {
+      cropWidth = cropHeight * targetAspect;
+    } else {
+      cropHeight = cropWidth / targetAspect;
+    }
+    const cropX = (video.videoWidth - cropWidth) / 2;
+    const cropY = (video.videoHeight - cropHeight) / 2;
     const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    canvas.width = Math.round(cropWidth);
+    canvas.height = Math.round(cropHeight);
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     if (mirrored) {
       ctx.translate(canvas.width, 0);
       ctx.scale(-1, 1);
     }
-    ctx.drawImage(video, 0, 0);
+    ctx.drawImage(video, cropX, cropY, cropWidth, cropHeight, 0, 0, canvas.width, canvas.height);
     const blob = await new Promise<Blob | null>((resolve) =>
       canvas.toBlob(resolve, 'image/jpeg', 0.92)
     );

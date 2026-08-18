@@ -50,6 +50,9 @@ export function AddPhotoModal({
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   // Tracks whether the user typed a weight, so the prefill never overwrites it.
   const weightTouchedRef = useRef(false);
+  // Invalidates in-flight compression when the modal closes or a newer file
+  // is chosen, so a stale result can't write itself back into state.
+  const acceptGenerationRef = useRef(0);
 
   // Prefill the weight field from the bodyweight log nearest (at or before)
   // the chosen photo date.
@@ -66,7 +69,13 @@ export function AddPhotoModal({
         .order('logged_at', { ascending: false })
         .limit(1)
         .maybeSingle();
-      if (cancelled || !data || weightTouchedRef.current) return;
+      if (cancelled || weightTouchedRef.current) return;
+      if (!data) {
+        // No log at or before this date — clear any earlier auto-prefill so
+        // the photo can't be saved with a weight measured after its date.
+        setWeightDisplay('');
+        return;
+      }
       const rowUnit: 'kg' | 'lb' = data.unit === 'kg' ? 'kg' : 'lb';
       let display = data.weight as number;
       if (rowUnit !== units) {
@@ -93,12 +102,15 @@ export function AddPhotoModal({
 
   const handleClose = () => {
     if (isSaving) return;
+    acceptGenerationRef.current += 1;
+    setIsCompressing(false);
     setIsCameraOpen(false);
     resetForm();
     onClose();
   };
 
   const acceptFile = async (selected: File) => {
+    const generation = ++acceptGenerationRef.current;
     if (!VALID_IMAGE_TYPES.includes(selected.type)) {
       setError('Please select a JPEG, PNG, or WebP image.');
       return;
@@ -115,20 +127,27 @@ export function AddPhotoModal({
           maxEdge: COMPRESS_MAX_EDGE,
           maxBytes: MAX_FILE_SIZE,
         });
+        // The modal closed or a newer file was chosen while compressing —
+        // discard this result entirely.
+        if (generation !== acceptGenerationRef.current) return;
         if (!compressed) {
           setError("Couldn't compress this image under 10MB. Try a smaller photo.");
           return;
         }
         chosen = compressed;
       } finally {
-        setIsCompressing(false);
+        if (generation === acceptGenerationRef.current) setIsCompressing(false);
       }
     }
 
+    if (generation !== acceptGenerationRef.current) return;
     setError(null);
     setFile(chosen);
     const reader = new FileReader();
-    reader.onload = (event) => setPreviewUrl(event.target?.result as string);
+    reader.onload = (event) => {
+      if (generation !== acceptGenerationRef.current) return;
+      setPreviewUrl(event.target?.result as string);
+    };
     reader.readAsDataURL(chosen);
   };
 

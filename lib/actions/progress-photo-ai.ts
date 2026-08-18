@@ -30,8 +30,11 @@ export interface BfEstimateSuccess {
 
 export type BfEstimateResult = BfEstimateSuccess | { ok: false; error: string };
 
-/** ~1.1MB of base64 ≈ 800KB image — the client downscales well below this. */
-const MAX_IMAGE_BASE64_LENGTH = 1_500_000;
+/**
+ * Defensive upper bound; the client caps the binary at 600KB (~800KB base64)
+ * to stay under Next's 1MiB server-action body limit.
+ */
+const MAX_IMAGE_BASE64_LENGTH = 900_000;
 
 const ALLOWED_MEDIA_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
 type AllowedMediaType = (typeof ALLOWED_MEDIA_TYPES)[number];
