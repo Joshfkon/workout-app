@@ -21,6 +21,7 @@ import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { getLocalDateString, kgToLbs, inputWeightToKg } from '@/lib/utils';
 import { downscaleImageToJpeg } from '@/lib/images/downscaleImage';
 import { ComparePhotos } from '@/components/progress-photos/ComparePhotos';
+import { BfEstimatePanel } from '@/components/progress-photos/BfEstimatePanel';
 import type { ProgressPhoto } from '@/types/schema';
 
 const AUTH_REQUIRED = { authRequired: true } as const;
@@ -40,6 +41,9 @@ function transformRow(photo: any): ProgressPhoto {
     weightKg: photo.weight_kg,
     bodyFatPercent: photo.body_fat_percent,
     notes: photo.notes,
+    bfEstimateLow: photo.bf_estimate_low ?? null,
+    bfEstimateHigh: photo.bf_estimate_high ?? null,
+    bfEstimatedAt: photo.bf_estimated_at ?? null,
     createdAt: photo.created_at,
   };
 }
@@ -324,6 +328,11 @@ export default function ProgressPhotosPage() {
             {viewingPhoto.notes && (
               <p className="text-sm text-surface-400 whitespace-pre-wrap">{viewingPhoto.notes}</p>
             )}
+            <BfEstimatePanel
+              photo={viewingPhoto}
+              signedUrl={photoUrls[viewingPhoto.id]}
+              onEstimated={invalidatePhotos}
+            />
             <ModalFooter>
               <Button variant="danger" onClick={() => setDeleteTarget(viewingPhoto)}>
                 Delete

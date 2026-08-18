@@ -2755,6 +2755,16 @@ export interface ProgressPhoto {
   /** Notes about the photo */
   notes: string | null;
 
+  /**
+   * AI-estimated body fat range (display/trend only — never feeds e1RM,
+   * prescription, or volume engines). Distinct from the user-entered
+   * bodyFatPercent, which stays authoritative.
+   */
+  bfEstimateLow: number | null;
+  bfEstimateHigh: number | null;
+  /** When the AI estimate was generated (ISO timestamp) */
+  bfEstimatedAt: string | null;
+
   createdAt: string;
 }
 
