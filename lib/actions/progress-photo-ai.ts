@@ -68,6 +68,40 @@ function clampPercent(value: unknown): number | null {
   return Math.round(value * 10) / 10;
 }
 
+interface DexaAnchor {
+  scan_date: string;
+  body_fat_percent: number;
+  weight_kg: number;
+}
+
+function buildContextLines(
+  profile: { sex: string | null; height_cm: number | null } | null,
+  photo: { photo_date: string; weight_kg: number | null },
+  dexaScans: DexaAnchor[]
+): string[] {
+  const lines: string[] = [];
+  if (profile?.sex) lines.push(`Sex: ${profile.sex}`);
+  if (profile?.height_cm) lines.push(`Height: ${profile.height_cm} cm`);
+  if (photo.weight_kg) lines.push(`Weight at photo: ${photo.weight_kg} kg`);
+  lines.push(`Photo date: ${photo.photo_date}`);
+  if (dexaScans.length > 0) {
+    lines.push('DEXA scan history for this person (measured, use as calibration anchors):');
+    for (const scan of dexaScans) {
+      lines.push(`  ${scan.scan_date}: ${scan.body_fat_percent}% body fat at ${scan.weight_kg} kg`);
+    }
+  }
+  return lines;
+}
+
+/** Defensive parse of the tool output; null when unusable. */
+function parseEstimateRange(raw: Record<string, unknown>): { low: number; high: number } | null {
+  let low = clampPercent(raw.bodyFatLow);
+  let high = clampPercent(raw.bodyFatHigh);
+  if (low === null || high === null) return null;
+  if (low > high) [low, high] = [high, low];
+  return { low, high };
+}
+
 export async function estimateBodyFatFromPhoto(
   photoId: string,
   imageBase64: string,
@@ -115,23 +149,9 @@ export async function estimateBodyFatFromPhoto(
       .limit(3),
   ]);
 
-  const contextLines: string[] = [];
-  if (profile?.sex) contextLines.push(`Sex: ${profile.sex}`);
-  if (profile?.height_cm) contextLines.push(`Height: ${profile.height_cm} cm`);
-  if (photo.weight_kg) contextLines.push(`Weight at photo: ${photo.weight_kg} kg`);
-  contextLines.push(`Photo date: ${photo.photo_date}`);
-
-  const dexaCalibrated = Boolean(dexaScans && dexaScans.length > 0);
-  if (dexaScans && dexaScans.length > 0) {
-    contextLines.push(
-      'DEXA scan history for this person (measured, use as calibration anchors):'
-    );
-    for (const scan of dexaScans) {
-      contextLines.push(
-        `  ${scan.scan_date}: ${scan.body_fat_percent}% body fat at ${scan.weight_kg} kg`
-      );
-    }
-  }
+  const anchors: DexaAnchor[] = dexaScans ?? [];
+  const dexaCalibrated = anchors.length > 0;
+  const contextLines = buildContextLines(profile, photo, anchors);
 
   try {
     const anthropic = new Anthropic({ apiKey });
@@ -198,12 +218,11 @@ export async function estimateBodyFatFromPhoto(
       };
     }
 
-    let low = clampPercent(raw.bodyFatLow);
-    let high = clampPercent(raw.bodyFatHigh);
-    if (low === null || high === null) {
+    const range = parseEstimateRange(raw);
+    if (!range) {
       return { ok: false, error: "Couldn't produce an estimate — try again" };
     }
-    if (low > high) [low, high] = [high, low];
+    const { low, high } = range;
 
     const estimatedAt = new Date().toISOString();
     const { error: updateError } = await supabase

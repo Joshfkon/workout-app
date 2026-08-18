@@ -22,6 +22,7 @@ import { getLocalDateString, kgToLbs, inputWeightToKg } from '@/lib/utils';
 import { downscaleImageToJpeg } from '@/lib/images/downscaleImage';
 import { ComparePhotos } from '@/components/progress-photos/ComparePhotos';
 import { BfEstimatePanel } from '@/components/progress-photos/BfEstimatePanel';
+import { GhostCameraCapture } from '@/components/progress-photos/GhostCameraCapture';
 import type { ProgressPhoto } from '@/types/schema';
 
 const AUTH_REQUIRED = { authRequired: true } as const;
@@ -374,6 +375,7 @@ export default function ProgressPhotosPage() {
           userId={userId}
           units={units}
           weightUnit={weightUnit}
+          ghostUrl={photos[0] ? photoUrls[photos[0].id] : undefined}
           onAdded={() => {
             setIsAddOpen(false);
             invalidatePhotos();
@@ -390,6 +392,7 @@ function AddPhotoModal({
   userId,
   units,
   weightUnit,
+  ghostUrl,
   onAdded,
 }: {
   isOpen: boolean;
@@ -397,6 +400,8 @@ function AddPhotoModal({
   userId: string;
   units: 'kg' | 'lb';
   weightUnit: string;
+  /** Signed URL of the most recent photo, used as the camera ghost overlay. */
+  ghostUrl?: string;
   onAdded: () => void;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -409,6 +414,7 @@ function AddPhotoModal({
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isCompressing, setIsCompressing] = useState(false);
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
 
   const resetForm = () => {
     setFile(null);
@@ -422,15 +428,12 @@ function AddPhotoModal({
 
   const handleClose = () => {
     if (isSaving) return;
+    setIsCameraOpen(false);
     resetForm();
     onClose();
   };
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selected = e.target.files?.[0];
-    // Allow re-selecting the same file after an error.
-    e.target.value = '';
-    if (!selected) return;
+  const acceptFile = async (selected: File) => {
     if (!VALID_IMAGE_TYPES.includes(selected.type)) {
       setError('Please select a JPEG, PNG, or WebP image.');
       return;
@@ -462,6 +465,19 @@ function AddPhotoModal({
     const reader = new FileReader();
     reader.onload = (event) => setPreviewUrl(event.target?.result as string);
     reader.readAsDataURL(chosen);
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = e.target.files?.[0];
+    // Allow re-selecting the same file after an error.
+    e.target.value = '';
+    if (!selected) return;
+    void acceptFile(selected);
+  };
+
+  const handleCameraCapture = (captured: File) => {
+    setIsCameraOpen(false);
+    void acceptFile(captured);
   };
 
   const handleSave = async () => {
@@ -536,6 +552,14 @@ function AddPhotoModal({
           onChange={handleFileSelect}
           className="hidden"
         />
+        {isCameraOpen && (
+          <GhostCameraCapture
+            ghostUrl={ghostUrl}
+            onCapture={handleCameraCapture}
+            onCancel={() => setIsCameraOpen(false)}
+          />
+        )}
+        {!isCameraOpen && (
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
@@ -573,6 +597,17 @@ function AddPhotoModal({
             </div>
           )}
         </button>
+        )}
+        {!isCameraOpen && !previewUrl && (
+          <Button
+            variant="secondary"
+            className="w-full"
+            onClick={() => setIsCameraOpen(true)}
+            disabled={isCompressing}
+          >
+            Take Photo{ghostUrl ? ' (with pose overlay)' : ''}
+          </Button>
+        )}
 
         <Input
           label="Date"
