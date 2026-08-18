@@ -20,6 +20,7 @@ import { resolveAuthState } from '@/lib/supabase/authState';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { getLocalDateString, kgToLbs, inputWeightToKg } from '@/lib/utils';
 import { downscaleImageToJpeg } from '@/lib/images/downscaleImage';
+import { ComparePhotos } from '@/components/progress-photos/ComparePhotos';
 import type { ProgressPhoto } from '@/types/schema';
 
 const AUTH_REQUIRED = { authRequired: true } as const;
@@ -52,6 +53,7 @@ export default function ProgressPhotosPage() {
 
   const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [isCompareOpen, setIsCompareOpen] = useState(false);
   const [viewingPhoto, setViewingPhoto] = useState<ProgressPhoto | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ProgressPhoto | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -192,7 +194,14 @@ export default function ProgressPhotosPage() {
           </Link>
           <h1 className="text-xl font-bold text-surface-100 mt-1">Progress Photos</h1>
         </div>
-        <Button onClick={() => setIsAddOpen(true)}>Add Photo</Button>
+        <div className="flex gap-2">
+          {photos.length >= 2 && (
+            <Button variant="secondary" onClick={() => setIsCompareOpen(true)}>
+              Compare
+            </Button>
+          )}
+          <Button onClick={() => setIsAddOpen(true)}>Add Photo</Button>
+        </div>
       </div>
 
       {/* Empty state */}
@@ -337,6 +346,15 @@ export default function ProgressPhotosPage() {
         confirmText="Delete"
         variant="danger"
         isLoading={isDeleting}
+      />
+
+      {/* Compare viewer */}
+      <ComparePhotos
+        isOpen={isCompareOpen}
+        onClose={() => setIsCompareOpen(false)}
+        photos={photos}
+        photoUrls={photoUrls}
+        units={units}
       />
 
       {/* Add photo modal */}
