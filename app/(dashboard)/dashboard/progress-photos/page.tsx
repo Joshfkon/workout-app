@@ -19,12 +19,16 @@ import { createUntypedClient } from '@/lib/supabase/client';
 import { resolveAuthState } from '@/lib/supabase/authState';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { getLocalDateString, kgToLbs, inputWeightToKg } from '@/lib/utils';
+import { downscaleImageToJpeg } from '@/lib/images/downscaleImage';
 import type { ProgressPhoto } from '@/types/schema';
 
 const AUTH_REQUIRED = { authRequired: true } as const;
 
 const VALID_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+// Longest edge for auto-compressed oversized photos. Plenty for a full-screen
+// review while shrinking a >10MB screenshot PNG to ~1MB of JPEG.
+const COMPRESS_MAX_EDGE = 2048;
 
 function transformRow(photo: any): ProgressPhoto {
   return {
@@ -377,6 +381,7 @@ function AddPhotoModal({
   const [notes, setNotes] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isCompressing, setIsCompressing] = useState(false);
 
   const resetForm = () => {
     setFile(null);
@@ -394,22 +399,42 @@ function AddPhotoModal({
     onClose();
   };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files?.[0];
+    // Allow re-selecting the same file after an error.
+    e.target.value = '';
     if (!selected) return;
     if (!VALID_IMAGE_TYPES.includes(selected.type)) {
       setError('Please select a JPEG, PNG, or WebP image.');
       return;
     }
+
+    let chosen = selected;
     if (selected.size > MAX_FILE_SIZE) {
-      setError('Image must be less than 10MB.');
-      return;
+      // Screenshots and modern phone photos routinely exceed 10MB (an iPhone
+      // screenshot is a lossless PNG). Compress instead of rejecting.
+      setError(null);
+      setIsCompressing(true);
+      try {
+        const compressed = await downscaleImageToJpeg(selected, {
+          maxEdge: COMPRESS_MAX_EDGE,
+          maxBytes: MAX_FILE_SIZE,
+        });
+        if (!compressed) {
+          setError("Couldn't compress this image under 10MB. Try a smaller photo.");
+          return;
+        }
+        chosen = compressed;
+      } finally {
+        setIsCompressing(false);
+      }
     }
+
     setError(null);
-    setFile(selected);
+    setFile(chosen);
     const reader = new FileReader();
     reader.onload = (event) => setPreviewUrl(event.target?.result as string);
-    reader.readAsDataURL(selected);
+    reader.readAsDataURL(chosen);
   };
 
   const handleSave = async () => {
@@ -487,9 +512,15 @@ function AddPhotoModal({
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
+          disabled={isCompressing}
           className="w-full rounded-lg border-2 border-dashed border-surface-600 hover:border-primary-500 transition-colors overflow-hidden"
         >
-          {previewUrl ? (
+          {isCompressing ? (
+            <div className="py-10 flex flex-col items-center gap-2 text-surface-400">
+              <div className="w-6 h-6 border-2 border-surface-600 border-t-transparent rounded-full animate-spin" />
+              <span className="text-sm">Optimizing photo…</span>
+            </div>
+          ) : previewUrl ? (
             /* eslint-disable-next-line @next/next/no-img-element */
             <img src={previewUrl} alt="Selected progress photo" className="max-h-72 w-full object-contain bg-surface-900" />
           ) : (
@@ -509,7 +540,9 @@ function AddPhotoModal({
                 />
               </svg>
               <span className="text-sm">Tap to choose a photo</span>
-              <span className="text-xs text-surface-500">JPEG, PNG or WebP · max 10MB</span>
+              <span className="text-xs text-surface-500">
+                JPEG, PNG or WebP · large photos are compressed automatically
+              </span>
             </div>
           )}
         </button>
@@ -552,7 +585,7 @@ function AddPhotoModal({
           <Button variant="secondary" onClick={handleClose} disabled={isSaving}>
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={isSaving || !file}>
+          <Button onClick={handleSave} disabled={isSaving || isCompressing || !file}>
             {isSaving ? 'Saving…' : 'Save Photo'}
           </Button>
         </ModalFooter>
