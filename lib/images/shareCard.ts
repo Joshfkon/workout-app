@@ -44,31 +44,52 @@ async function fetchBitmap(url: string): Promise<ImageBitmap> {
 }
 
 /**
- * drawImage with object-fit: cover semantics, plus the viewer's alignment
- * transform, clipped to the panel.
+ * The compare viewer is a 3:4 frame, and the alignment (frame-relative pan +
+ * center zoom) is only meaningful in that aspect. Render the photo through a
+ * 3:4 viewport exactly as the viewer shows it; the card panel then
+ * cover-crops THIS viewport, so the aligned placement survives the panel's
+ * narrower aspect.
  */
-function drawCover(
-  ctx: CanvasRenderingContext2D,
-  bitmap: ImageBitmap,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  align: PhotoAlign = IDENTITY_ALIGN
-) {
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(x, y, w, h);
-  ctx.clip();
+const VIEWPORT_WIDTH = 1080;
+const VIEWPORT_HEIGHT = 1440;
+
+function renderAlignedViewport(bitmap: ImageBitmap, align: PhotoAlign): HTMLCanvasElement | null {
+  const viewport = document.createElement('canvas');
+  viewport.width = VIEWPORT_WIDTH;
+  viewport.height = VIEWPORT_HEIGHT;
+  const ctx = viewport.getContext('2d');
+  if (!ctx) return null;
+  ctx.fillStyle = '#0a0a0a';
+  ctx.fillRect(0, 0, VIEWPORT_WIDTH, VIEWPORT_HEIGHT);
   // Frame center, shifted by the pan (in frame fractions), then zoomed —
   // the same order as the CSS `translate(...) scale(...)` in the viewer.
-  ctx.translate(x + w / 2 + align.dx * w, y + h / 2 + align.dy * h);
+  ctx.translate(
+    VIEWPORT_WIDTH / 2 + align.dx * VIEWPORT_WIDTH,
+    VIEWPORT_HEIGHT / 2 + align.dy * VIEWPORT_HEIGHT
+  );
   ctx.scale(align.scale, align.scale);
-  const coverScale = Math.max(w / bitmap.width, h / bitmap.height);
+  const coverScale = Math.max(VIEWPORT_WIDTH / bitmap.width, VIEWPORT_HEIGHT / bitmap.height);
   const dw = bitmap.width * coverScale;
   const dh = bitmap.height * coverScale;
   ctx.drawImage(bitmap, -dw / 2, -dh / 2, dw, dh);
-  ctx.restore();
+  return viewport;
+}
+
+/** drawImage with object-fit: cover semantics. */
+function drawCover(
+  ctx: CanvasRenderingContext2D,
+  source: HTMLCanvasElement,
+  x: number,
+  y: number,
+  w: number,
+  h: number
+) {
+  const scale = Math.max(w / source.width, h / source.height);
+  const sw = w / scale;
+  const sh = h / scale;
+  const sx = (source.width - sw) / 2;
+  const sy = (source.height - sh) / 2;
+  ctx.drawImage(source, sx, sy, sw, sh, x, y, w, h);
 }
 
 function drawChip(ctx: CanvasRenderingContext2D, text: string, x: number, y: number) {
@@ -112,8 +133,11 @@ export async function buildShareCard({
 
     const photoHeight = CARD_HEIGHT - CAPTION_BAR_HEIGHT;
     const half = CARD_WIDTH / 2;
-    drawCover(ctx, beforeBitmap, 0, 0, half - 2, photoHeight, beforeAlign);
-    drawCover(ctx, afterBitmap, half + 2, 0, half - 2, photoHeight, afterAlign);
+    const beforeView = renderAlignedViewport(beforeBitmap, beforeAlign);
+    const afterView = renderAlignedViewport(afterBitmap, afterAlign);
+    if (!beforeView || !afterView) return null;
+    drawCover(ctx, beforeView, 0, 0, half - 2, photoHeight);
+    drawCover(ctx, afterView, half + 2, 0, half - 2, photoHeight);
 
     drawChip(ctx, beforeLabel, 20, 20);
     const afterMetrics = (() => {
