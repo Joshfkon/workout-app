@@ -96,6 +96,96 @@ function buildContextLines(
   return lines;
 }
 
+/**
+ * Best model first; fall back to the Haiku tier the rest of the app already
+ * uses in production (label scan) if the org's key can't use the primary
+ * model. RateLimitError aborts the chain instead of falling through.
+ */
+const MODEL_CANDIDATES = ['claude-opus-5', 'claude-haiku-4-5'] as const;
+type CandidateModel = (typeof MODEL_CANDIDATES)[number];
+
+/**
+ * One vision request with forced tool use (guarantees schema-shaped output).
+ * Thinking must be off for forced tool_choice: Opus 5 defaults to thinking-on
+ * so it needs an explicit disable; Haiku is off by default and the explicit
+ * param is omitted for compatibility.
+ */
+function requestEstimate(
+  anthropic: Anthropic,
+  model: CandidateModel,
+  imageBase64: string,
+  mediaType: string,
+  contextLines: string[]
+): Promise<Anthropic.Message> {
+  return anthropic.messages.create({
+    model,
+    max_tokens: 500,
+    ...(model === 'claude-opus-5' ? { thinking: { type: 'disabled' as const } } : {}),
+    system:
+      'You estimate body fat percentage from physique photos for a fitness tracking app. ' +
+      'Give a RANGE (typically 3-4 points wide), never a single number — photo-based estimation is imprecise. ' +
+      'Use standard visual markers: ab definition, oblique/serratus visibility, vascularity, lower-back and glute fullness, face leanness. ' +
+      'When DEXA history is provided, anchor your estimate to it: judge whether the person looks leaner or fuller than at their measured scans and adjust from those measured values. ' +
+      'Lighting and pump can shift appearance by a couple of points — reflect that in the range width. ' +
+      'You may say a brief sentence before using a tool.',
+    messages: [
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: mediaType as AllowedMediaType,
+              data: imageBase64,
+            },
+          },
+          {
+            type: 'text',
+            text: `Estimate this person's body fat percentage range.\n\n${contextLines.join('\n')}`,
+          },
+        ],
+      },
+    ],
+    tools: [
+      {
+        name: 'record_bf_estimate',
+        description: 'Record the estimated body fat percentage range',
+        input_schema: ESTIMATE_SCHEMA,
+      },
+    ],
+    tool_choice: { type: 'tool', name: 'record_bf_estimate' },
+  });
+}
+
+/**
+ * Run the candidate chain. Returns the first successful response,
+ * 'rate_limited' to abort with the rate message, or null when every
+ * candidate failed (each failure is logged with its status).
+ */
+async function requestEstimateWithFallback(
+  anthropic: Anthropic,
+  imageBase64: string,
+  mediaType: string,
+  contextLines: string[]
+): Promise<Anthropic.Message | 'rate_limited' | null> {
+  for (const model of MODEL_CANDIDATES) {
+    try {
+      return await requestEstimate(anthropic, model, imageBase64, mediaType, contextLines);
+    } catch (err) {
+      if (err instanceof Anthropic.RateLimitError) return 'rate_limited';
+      // Log the concrete status so a production failure names its cause,
+      // then fall through to the next candidate model.
+      if (err instanceof Anthropic.APIError) {
+        console.error(`BF estimate: model ${model} failed with ${err.status}: ${err.message}`);
+      } else {
+        console.error(`BF estimate: model ${model} failed:`, err);
+      }
+    }
+  }
+  return null;
+}
+
 /** Defensive parse of the tool output; null when unusable. */
 function parseEstimateRange(raw: Record<string, unknown>): { low: number; high: number } | null {
   let low = clampPercent(raw.bodyFatLow);
@@ -156,103 +246,65 @@ export async function estimateBodyFatFromPhoto(
   const dexaCalibrated = anchors.length > 0;
   const contextLines = buildContextLines(profile, photo, anchors);
 
-  try {
-    const anthropic = new Anthropic({ apiKey });
-    // Forced tool use guarantees schema-shaped output. Thinking is disabled
-    // because forced tool_choice requires it; the task is a single visual
-    // judgement, not multi-step reasoning.
-    const response = await anthropic.messages.create({
-      model: 'claude-opus-5',
-      max_tokens: 500,
-      thinking: { type: 'disabled' },
-      system:
-        'You estimate body fat percentage from physique photos for a fitness tracking app. ' +
-        'Give a RANGE (typically 3-4 points wide), never a single number — photo-based estimation is imprecise. ' +
-        'Use standard visual markers: ab definition, oblique/serratus visibility, vascularity, lower-back and glute fullness, face leanness. ' +
-        'When DEXA history is provided, anchor your estimate to it: judge whether the person looks leaner or fuller than at their measured scans and adjust from those measured values. ' +
-        'Lighting and pump can shift appearance by a couple of points — reflect that in the range width. ' +
-        'You may say a brief sentence before using a tool.',
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'image',
-              source: {
-                type: 'base64',
-                media_type: mediaType as AllowedMediaType,
-                data: imageBase64,
-              },
-            },
-            {
-              type: 'text',
-              text: `Estimate this person's body fat percentage range.\n\n${contextLines.join('\n')}`,
-            },
-          ],
-        },
-      ],
-      tools: [
-        {
-          name: 'record_bf_estimate',
-          description: 'Record the estimated body fat percentage range',
-          input_schema: ESTIMATE_SCHEMA,
-        },
-      ],
-      tool_choice: { type: 'tool', name: 'record_bf_estimate' },
-    });
+  const anthropic = new Anthropic({ apiKey });
+  const response = await requestEstimateWithFallback(
+    anthropic,
+    imageBase64,
+    mediaType,
+    contextLines
+  );
+  if (response === 'rate_limited') {
+    return { ok: false, error: 'Too many requests — try again in a minute' };
+  }
+  if (!response) {
+    return { ok: false, error: "The AI service couldn't be reached — try again later" };
+  }
 
-    if (response.stop_reason === 'refusal') {
-      return { ok: false, error: "Couldn't assess this photo — try a clearer physique photo" };
-    }
+  if (response.stop_reason === 'refusal') {
+    return { ok: false, error: "Couldn't assess this photo — try a clearer physique photo" };
+  }
 
-    const toolBlock = response.content.find(
-      (b): b is Anthropic.ToolUseBlock => b.type === 'tool_use'
-    );
-    if (!toolBlock) {
-      return { ok: false, error: "Couldn't produce an estimate — try again" };
-    }
-
-    const raw = toolBlock.input as Record<string, unknown>;
-    if (raw.assessable === false) {
-      return {
-        ok: false,
-        error:
-          "This photo isn't clear enough to assess — use a well-lit photo showing your torso",
-      };
-    }
-
-    const range = parseEstimateRange(raw);
-    if (!range) {
-      return { ok: false, error: "Couldn't produce an estimate — try again" };
-    }
-    const { low, high } = range;
-
-    const estimatedAt = new Date().toISOString();
-    const { error: updateError } = await supabase
-      .from('progress_photos')
-      .update({
-        bf_estimate_low: low,
-        bf_estimate_high: high,
-        bf_estimated_at: estimatedAt,
-      })
-      .eq('id', photoId)
-      .eq('user_id', user.id);
-    if (updateError) {
-      console.error('Failed to store body fat estimate:', updateError);
-      // The estimate is still useful this session even if persistence failed.
-    }
-
-    const rationale =
-      typeof raw.rationale === 'string' && raw.rationale.trim()
-        ? raw.rationale.trim().slice(0, 300)
-        : '';
-
-    return { ok: true, low, high, rationale, dexaCalibrated, estimatedAt };
-  } catch (err) {
-    console.error('estimateBodyFatFromPhoto failed:', err);
-    if (err instanceof Anthropic.RateLimitError) {
-      return { ok: false, error: 'Too many requests — try again in a minute' };
-    }
+  const toolBlock = response.content.find(
+    (b): b is Anthropic.ToolUseBlock => b.type === 'tool_use'
+  );
+  if (!toolBlock) {
     return { ok: false, error: "Couldn't produce an estimate — try again" };
   }
+
+  const raw = toolBlock.input as Record<string, unknown>;
+  if (raw.assessable === false) {
+    return {
+      ok: false,
+      error:
+        "This photo isn't clear enough to assess — use a well-lit photo showing your torso",
+    };
+  }
+
+  const range = parseEstimateRange(raw);
+  if (!range) {
+    return { ok: false, error: "Couldn't produce an estimate — try again" };
+  }
+  const { low, high } = range;
+
+  const estimatedAt = new Date().toISOString();
+  const { error: updateError } = await supabase
+    .from('progress_photos')
+    .update({
+      bf_estimate_low: low,
+      bf_estimate_high: high,
+      bf_estimated_at: estimatedAt,
+    })
+    .eq('id', photoId)
+    .eq('user_id', user.id);
+  if (updateError) {
+    console.error('Failed to store body fat estimate:', updateError);
+    // The estimate is still useful this session even if persistence failed.
+  }
+
+  const rationale =
+    typeof raw.rationale === 'string' && raw.rationale.trim()
+      ? raw.rationale.trim().slice(0, 300)
+      : '';
+
+  return { ok: true, low, high, rationale, dexaCalibrated, estimatedAt };
 }
