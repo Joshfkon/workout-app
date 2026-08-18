@@ -60,7 +60,10 @@ export function DashboardLayoutClient({ children }: DashboardLayoutClientProps) 
   };
 
   return (
-    <div className="min-h-screen bg-surface-950 overflow-x-hidden">
+    // overflow-x-clip, NOT -hidden: hidden makes this div a scroll container,
+    // which kills the sticky header below and makes iOS unpin the fixed
+    // bottom nav mid-scroll. clip clips without creating a scroll container.
+    <div className="min-h-screen bg-surface-950 overflow-x-clip">
       <Sidebar onSignOut={handleSignOut} volumeGoalsMet={volumeGoalsMet} />
 
       {/* Main content */}
@@ -102,7 +105,7 @@ export function DashboardLayoutClient({ children }: DashboardLayoutClientProps) 
         </header>
 
         {/* Page content */}
-        <main className="p-4 pb-[calc(5rem+env(safe-area-inset-bottom))] lg:p-6 lg:pb-6 overflow-x-hidden">{children}</main>
+        <main className="p-4 pb-[calc(5rem+env(safe-area-inset-bottom))] lg:p-6 lg:pb-6 overflow-x-clip">{children}</main>
       </div>
 
       {/* Bottom navigation for mobile */}
