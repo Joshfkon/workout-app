@@ -73,3 +73,98 @@ describe('PlateCalculator equipment modes', () => {
     expect(onChange).toHaveBeenLastCalledWith(0);
   });
 });
+
+describe('PlateCalculator weight increment setting', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  afterAll(() => {
+    localStorage.clear();
+  });
+
+  it('defaults to ±5lb steps from a 2.5lb smallest plate', () => {
+    render(<PlateCalculator unit="lb" />);
+
+    expect(screen.getByRole('button', { name: '±5lb 2.5lb plates' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    expect(screen.getByRole('button', { name: 'Increase target weight by 5' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Decrease target weight by 5' })).toBeInTheDocument();
+  });
+
+  it('selecting 1.25lb plates makes a 202.5lb target exactly loadable', async () => {
+    const user = userEvent.setup();
+    render(<PlateCalculator unit="lb" />);
+
+    const input = screen.getByPlaceholderText('Enter weight in lb');
+    await user.clear(input);
+    await user.type(input, '202.5');
+
+    // Without micro plates the solver can only get within 2.5lb.
+    expect(screen.getByTestId('plate-calc-closest')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '±2.5lb 1.25lb plates' }));
+
+    expect(screen.queryByTestId('plate-calc-closest')).not.toBeInTheDocument();
+    expect(screen.getByText('202.5 lb')).toBeInTheDocument();
+    expect(screen.getByText(/Bar: 45lb \+ Plates: 78.75lb × 2/)).toBeInTheDocument();
+  });
+
+  it('steppers use the selected increment', async () => {
+    const user = userEvent.setup();
+    render(<PlateCalculator unit="lb" />);
+
+    await user.click(screen.getByRole('button', { name: '±2.5lb 1.25lb plates' }));
+
+    const input = screen.getByPlaceholderText('Enter weight in lb');
+    await user.clear(input);
+    await user.type(input, '200');
+    await user.click(screen.getByRole('button', { name: 'Increase target weight by 2.5' }));
+
+    expect(input).toHaveValue('202.5');
+  });
+
+  it('selecting 5lb smallest plates removes 2.5lb plates from the solver', async () => {
+    const user = userEvent.setup();
+    render(<PlateCalculator unit="lb" />);
+
+    const input = screen.getByPlaceholderText('Enter weight in lb');
+    await user.clear(input);
+    await user.type(input, '50');
+
+    // 50lb = bar + a 2.5lb plate per side: exact with the default plate set.
+    expect(screen.queryByTestId('plate-calc-closest')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '±10lb 5lb plates' }));
+
+    expect(screen.getByTestId('plate-calc-closest')).toHaveTextContent('closest is 45lb');
+  });
+
+  it('persists the choice per unit across mounts', async () => {
+    const user = userEvent.setup();
+    const { unmount } = render(<PlateCalculator unit="lb" />);
+
+    await user.click(screen.getByRole('button', { name: '±2.5lb 1.25lb plates' }));
+    unmount();
+
+    render(<PlateCalculator unit="lb" />);
+    expect(screen.getByRole('button', { name: '±2.5lb 1.25lb plates' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    expect(screen.getByRole('button', { name: 'Increase target weight by 2.5' })).toBeInTheDocument();
+  });
+
+  it('offers kg options and defaults to ±2.5kg', () => {
+    render(<PlateCalculator unit="kg" />);
+
+    expect(screen.getByRole('button', { name: '±2.5kg 1.25kg plates' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    expect(screen.getByRole('button', { name: '±1kg 0.5kg plates' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '±5kg 2.5kg plates' })).toBeInTheDocument();
+  });
+});
