@@ -2,15 +2,30 @@
 
 /**
  * Progress-photo comparison viewer: side-by-side, wipe slider, and
- * onion-skin overlay modes for any two photos. The overlay mode includes
- * manual alignment (drag + scale) since older photos were shot without the
- * ghost-overlay capture aid and rarely line up perfectly.
+ * onion-skin overlay modes for any two photos.
+ *
+ * Photos taken at different distances/framings rarely line up, so each photo
+ * carries its own alignment (pan + zoom), edited in the Overlay mode by
+ * dragging / pinching / the zoom slider. Alignment is stored as fractions of
+ * the frame, so the SAME alignment applies identically in every mode and in
+ * the exported share card.
  */
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, Button } from '@/components/ui';
 import { kgToLbs } from '@/lib/utils';
-import { buildShareCard, shareOrDownloadCard } from '@/lib/images/shareCard';
+import {
+  buildShareCard,
+  shareOrDownloadCard,
+  IDENTITY_ALIGN,
+  type PhotoAlign,
+} from '@/lib/images/shareCard';
+import {
+  OverlayView,
+  PhotoPane,
+  WipeView,
+  type AlignTarget,
+} from '@/components/progress-photos/CompareOverlay';
 import type { ProgressPhoto } from '@/types/schema';
 
 type CompareMode = 'side' | 'wipe' | 'overlay';
@@ -63,6 +78,67 @@ function buildDeltaCaption(
   return parts.join(' · ');
 }
 
+/** Reset a photo's alignment whenever the resolved photo id changes. */
+function useResetAlignOnPhotoChange(
+  photoId: string | null,
+  setAlign: (align: PhotoAlign) => void
+) {
+  const prevIdRef = useRef(photoId);
+  useEffect(() => {
+    if (prevIdRef.current !== photoId) {
+      prevIdRef.current = photoId;
+      setAlign(IDENTITY_ALIGN);
+    }
+  }, [photoId, setAlign]);
+}
+
+/**
+ * Selected pair + per-photo alignment. Alignment belongs to a specific photo,
+ * and the resolved photo can change without a picker event (the fallback
+ * resolves to newest/oldest, so adding a photo re-targets `after`) — so
+ * alignment resets track the RESOLVED photo id.
+ */
+function useComparePair(
+  chronological: ProgressPhoto[],
+  initialBeforeId: string | undefined,
+  initialAfterId: string | undefined
+) {
+  const [beforeId, setBeforeId] = useState<string | null>(null);
+  const [afterId, setAfterId] = useState<string | null>(null);
+  const [beforeAlign, setBeforeAlign] = useState<PhotoAlign>(IDENTITY_ALIGN);
+  const [afterAlign, setAfterAlign] = useState<PhotoAlign>(IDENTITY_ALIGN);
+
+  const { before, after } = resolvePair(
+    chronological,
+    beforeId ?? initialBeforeId,
+    afterId ?? initialAfterId
+  );
+  useResetAlignOnPhotoChange(before?.id ?? null, setBeforeAlign);
+  useResetAlignOnPhotoChange(after?.id ?? null, setAfterAlign);
+
+  const changeAlign = (target: AlignTarget, align: PhotoAlign) => {
+    if (target === 'before') setBeforeAlign(align);
+    else setAfterAlign(align);
+  };
+  const resetAligns = () => {
+    setBeforeAlign(IDENTITY_ALIGN);
+    setAfterAlign(IDENTITY_ALIGN);
+  };
+
+  return {
+    before,
+    after,
+    beforeValue: before?.id ?? '',
+    afterValue: after?.id ?? '',
+    setBeforeId,
+    setAfterId,
+    beforeAlign,
+    afterAlign,
+    changeAlign,
+    resetAligns,
+  };
+}
+
 /** Resolve the selected pair, defaulting to oldest vs newest. */
 function resolvePair(
   chronological: ProgressPhoto[],
@@ -76,188 +152,6 @@ function resolvePair(
     chronological[chronological.length - 1] ??
     null;
   return { before, after };
-}
-
-function PhotoPane({
-  url,
-  alt,
-  caption,
-}: {
-  url: string | undefined;
-  alt: string;
-  caption: string | null;
-}) {
-  return (
-    <div className="space-y-1">
-      <div className="aspect-[3/4] rounded-lg overflow-hidden bg-surface-900 ring-1 ring-surface-700">
-        {url ? (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img src={url} alt={alt} className="w-full h-full object-cover" />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <div className="w-6 h-6 border-2 border-surface-600 border-t-transparent rounded-full animate-spin" />
-          </div>
-        )}
-      </div>
-      {caption && <p className="text-xs text-center text-surface-400">{caption}</p>}
-    </div>
-  );
-}
-
-function WipeView({
-  beforeUrl,
-  afterUrl,
-}: {
-  beforeUrl: string | undefined;
-  afterUrl: string | undefined;
-}) {
-  const [wipePercent, setWipePercent] = useState(50);
-  return (
-    <div className="space-y-2">
-      <div className="relative aspect-[3/4] max-h-[55vh] mx-auto rounded-lg overflow-hidden bg-surface-900 ring-1 ring-surface-700 select-none">
-        {afterUrl && (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img
-            src={afterUrl}
-            alt="After"
-            className="absolute inset-0 w-full h-full object-cover"
-            draggable={false}
-          />
-        )}
-        {beforeUrl && (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img
-            src={beforeUrl}
-            alt="Before"
-            className="absolute inset-0 w-full h-full object-cover"
-            draggable={false}
-            style={{ clipPath: `inset(0 ${100 - wipePercent}% 0 0)` }}
-          />
-        )}
-        <div
-          className="absolute inset-y-0 w-0.5 bg-white/80 shadow pointer-events-none"
-          style={{ left: `${wipePercent}%` }}
-        />
-        <span className="absolute top-2 left-2 text-[10px] font-medium uppercase tracking-wide bg-black/60 text-white px-1.5 py-0.5 rounded">
-          Before
-        </span>
-        <span className="absolute top-2 right-2 text-[10px] font-medium uppercase tracking-wide bg-black/60 text-white px-1.5 py-0.5 rounded">
-          After
-        </span>
-      </div>
-      <input
-        type="range"
-        min={0}
-        max={100}
-        value={wipePercent}
-        onChange={(e) => setWipePercent(Number(e.target.value))}
-        className="w-full accent-primary-500"
-        aria-label="Reveal before photo"
-      />
-    </div>
-  );
-}
-
-function OverlayView({
-  beforeUrl,
-  afterUrl,
-}: {
-  beforeUrl: string | undefined;
-  afterUrl: string | undefined;
-}) {
-  const [opacity, setOpacity] = useState(50);
-  const [scale, setScale] = useState(100);
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
-  const dragRef = useRef<{ startX: number; startY: number; baseX: number; baseY: number } | null>(
-    null
-  );
-
-  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    e.currentTarget.setPointerCapture(e.pointerId);
-    dragRef.current = { startX: e.clientX, startY: e.clientY, baseX: offset.x, baseY: offset.y };
-  };
-  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    const drag = dragRef.current;
-    if (!drag) return;
-    setOffset({ x: drag.baseX + (e.clientX - drag.startX), y: drag.baseY + (e.clientY - drag.startY) });
-  };
-  const handlePointerUp = () => {
-    dragRef.current = null;
-  };
-
-  return (
-    <div className="space-y-2">
-      <div
-        className="relative aspect-[3/4] max-h-[55vh] mx-auto rounded-lg overflow-hidden bg-surface-900 ring-1 ring-surface-700 select-none touch-none cursor-move"
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
-      >
-        {beforeUrl && (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img
-            src={beforeUrl}
-            alt="Before"
-            className="absolute inset-0 w-full h-full object-cover"
-            draggable={false}
-          />
-        )}
-        {afterUrl && (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img
-            src={afterUrl}
-            alt="After"
-            className="absolute inset-0 w-full h-full object-cover"
-            draggable={false}
-            style={{
-              opacity: opacity / 100,
-              transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale / 100})`,
-            }}
-          />
-        )}
-      </div>
-      <div className="space-y-1.5">
-        <label className="flex items-center gap-2 text-xs text-surface-400">
-          <span className="w-14">Opacity</span>
-          <input
-            type="range"
-            min={0}
-            max={100}
-            value={opacity}
-            onChange={(e) => setOpacity(Number(e.target.value))}
-            className="flex-1 accent-primary-500"
-            aria-label="After photo opacity"
-          />
-        </label>
-        <label className="flex items-center gap-2 text-xs text-surface-400">
-          <span className="w-14">Scale</span>
-          <input
-            type="range"
-            min={70}
-            max={140}
-            value={scale}
-            onChange={(e) => setScale(Number(e.target.value))}
-            className="flex-1 accent-primary-500"
-            aria-label="After photo scale"
-          />
-        </label>
-        <div className="flex items-center justify-between">
-          <p className="text-xs text-surface-500">Drag the image to line up the two poses.</p>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => {
-              setScale(100);
-              setOffset({ x: 0, y: 0 });
-            }}
-          >
-            Reset
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
 }
 
 function PhotoSelect({
@@ -304,17 +198,22 @@ export function ComparePhotos({
   // photos is newest-first; chronological reads better in the pickers.
   const chronological = useMemo(() => [...photos].reverse(), [photos]);
 
-  const [beforeId, setBeforeId] = useState<string | null>(null);
-  const [afterId, setAfterId] = useState<string | null>(null);
   const [mode, setMode] = useState<CompareMode>('side');
   const [isSharing, setIsSharing] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
 
-  const { before, after } = resolvePair(
-    chronological,
-    beforeId ?? initialBeforeId,
-    afterId ?? initialAfterId
-  );
+  const {
+    before,
+    after,
+    beforeValue,
+    afterValue,
+    setBeforeId,
+    setAfterId,
+    beforeAlign,
+    afterAlign,
+    changeAlign,
+    resetAligns,
+  } = useComparePair(chronological, initialBeforeId, initialAfterId);
 
   const beforeUrl = before ? photoUrls[before.id] : undefined;
   const afterUrl = after ? photoUrls[after.id] : undefined;
@@ -333,6 +232,8 @@ export function ComparePhotos({
         beforeLabel: formatDate(before.photoDate),
         afterLabel: formatDate(after.photoDate),
         caption: deltaCaption ?? 'Progress',
+        beforeAlign,
+        afterAlign,
       });
       if (!blob) throw new Error('Could not build the image');
       await shareOrDownloadCard(blob, 'hypertrack-progress.jpg');
@@ -353,14 +254,14 @@ export function ComparePhotos({
         <div className="grid grid-cols-2 gap-3">
           <PhotoSelect
             label="Before"
-            value={before?.id ?? ''}
+            value={beforeValue}
             photos={chronological}
             units={units}
             onChange={setBeforeId}
           />
           <PhotoSelect
             label="After"
-            value={after?.id ?? ''}
+            value={afterValue}
             photos={chronological}
             units={units}
             onChange={setAfterId}
@@ -398,17 +299,35 @@ export function ComparePhotos({
             <PhotoPane
               url={beforeUrl}
               alt="Before"
+              align={beforeAlign}
               caption={before ? formatDate(before.photoDate) : null}
             />
             <PhotoPane
               url={afterUrl}
               alt="After"
+              align={afterAlign}
               caption={after ? formatDate(after.photoDate) : null}
             />
           </div>
         )}
-        {mode === 'wipe' && <WipeView beforeUrl={beforeUrl} afterUrl={afterUrl} />}
-        {mode === 'overlay' && <OverlayView beforeUrl={beforeUrl} afterUrl={afterUrl} />}
+        {mode === 'wipe' && (
+          <WipeView
+            beforeUrl={beforeUrl}
+            afterUrl={afterUrl}
+            beforeAlign={beforeAlign}
+            afterAlign={afterAlign}
+          />
+        )}
+        {mode === 'overlay' && (
+          <OverlayView
+            beforeUrl={beforeUrl}
+            afterUrl={afterUrl}
+            beforeAlign={beforeAlign}
+            afterAlign={afterAlign}
+            onChangeAlign={changeAlign}
+            onResetAligns={resetAligns}
+          />
+        )}
 
         {deltaCaption && (
           <p className="text-sm text-center text-surface-300 font-medium">{deltaCaption}</p>

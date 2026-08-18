@@ -11,6 +11,20 @@ const CARD_WIDTH = 1080;
 const CARD_HEIGHT = 1350;
 const CAPTION_BAR_HEIGHT = 120;
 
+/**
+ * Per-photo pan/zoom, matching the compare viewer's CSS transform
+ * `translate(dx*100%, dy*100%) scale(scale)`: dx/dy are fractions of the
+ * frame, scale is about the frame center. Frame-relative units make the same
+ * alignment render identically at any output size.
+ */
+export interface PhotoAlign {
+  scale: number;
+  dx: number;
+  dy: number;
+}
+
+export const IDENTITY_ALIGN: PhotoAlign = { scale: 1, dx: 0, dy: 0 };
+
 export interface ShareCardInput {
   beforeUrl: string;
   afterUrl: string;
@@ -18,6 +32,8 @@ export interface ShareCardInput {
   afterLabel: string;
   /** e.g. "224 days apart · −4.2 kg · −3.1% BF" */
   caption: string;
+  beforeAlign?: PhotoAlign;
+  afterAlign?: PhotoAlign;
 }
 
 async function fetchBitmap(url: string): Promise<ImageBitmap> {
@@ -27,21 +43,53 @@ async function fetchBitmap(url: string): Promise<ImageBitmap> {
   return createImageBitmap(blob);
 }
 
+/**
+ * The compare viewer is a 3:4 frame, and the alignment (frame-relative pan +
+ * center zoom) is only meaningful in that aspect. Render the photo through a
+ * 3:4 viewport exactly as the viewer shows it; the card panel then
+ * cover-crops THIS viewport, so the aligned placement survives the panel's
+ * narrower aspect.
+ */
+const VIEWPORT_WIDTH = 1080;
+const VIEWPORT_HEIGHT = 1440;
+
+function renderAlignedViewport(bitmap: ImageBitmap, align: PhotoAlign): HTMLCanvasElement | null {
+  const viewport = document.createElement('canvas');
+  viewport.width = VIEWPORT_WIDTH;
+  viewport.height = VIEWPORT_HEIGHT;
+  const ctx = viewport.getContext('2d');
+  if (!ctx) return null;
+  ctx.fillStyle = '#0a0a0a';
+  ctx.fillRect(0, 0, VIEWPORT_WIDTH, VIEWPORT_HEIGHT);
+  // Frame center, shifted by the pan (in frame fractions), then zoomed —
+  // the same order as the CSS `translate(...) scale(...)` in the viewer.
+  ctx.translate(
+    VIEWPORT_WIDTH / 2 + align.dx * VIEWPORT_WIDTH,
+    VIEWPORT_HEIGHT / 2 + align.dy * VIEWPORT_HEIGHT
+  );
+  ctx.scale(align.scale, align.scale);
+  const coverScale = Math.max(VIEWPORT_WIDTH / bitmap.width, VIEWPORT_HEIGHT / bitmap.height);
+  const dw = bitmap.width * coverScale;
+  const dh = bitmap.height * coverScale;
+  ctx.drawImage(bitmap, -dw / 2, -dh / 2, dw, dh);
+  return viewport;
+}
+
 /** drawImage with object-fit: cover semantics. */
 function drawCover(
   ctx: CanvasRenderingContext2D,
-  bitmap: ImageBitmap,
+  source: HTMLCanvasElement,
   x: number,
   y: number,
   w: number,
   h: number
 ) {
-  const scale = Math.max(w / bitmap.width, h / bitmap.height);
+  const scale = Math.max(w / source.width, h / source.height);
   const sw = w / scale;
   const sh = h / scale;
-  const sx = (bitmap.width - sw) / 2;
-  const sy = (bitmap.height - sh) / 2;
-  ctx.drawImage(bitmap, sx, sy, sw, sh, x, y, w, h);
+  const sx = (source.width - sw) / 2;
+  const sy = (source.height - sh) / 2;
+  ctx.drawImage(source, sx, sy, sw, sh, x, y, w, h);
 }
 
 function drawChip(ctx: CanvasRenderingContext2D, text: string, x: number, y: number) {
@@ -65,6 +113,8 @@ export async function buildShareCard({
   beforeLabel,
   afterLabel,
   caption,
+  beforeAlign = IDENTITY_ALIGN,
+  afterAlign = IDENTITY_ALIGN,
 }: ShareCardInput): Promise<Blob | null> {
   const [beforeBitmap, afterBitmap] = await Promise.all([
     fetchBitmap(beforeUrl),
@@ -83,8 +133,11 @@ export async function buildShareCard({
 
     const photoHeight = CARD_HEIGHT - CAPTION_BAR_HEIGHT;
     const half = CARD_WIDTH / 2;
-    drawCover(ctx, beforeBitmap, 0, 0, half - 2, photoHeight);
-    drawCover(ctx, afterBitmap, half + 2, 0, half - 2, photoHeight);
+    const beforeView = renderAlignedViewport(beforeBitmap, beforeAlign);
+    const afterView = renderAlignedViewport(afterBitmap, afterAlign);
+    if (!beforeView || !afterView) return null;
+    drawCover(ctx, beforeView, 0, 0, half - 2, photoHeight);
+    drawCover(ctx, afterView, half + 2, 0, half - 2, photoHeight);
 
     drawChip(ctx, beforeLabel, 20, 20);
     const afterMetrics = (() => {
