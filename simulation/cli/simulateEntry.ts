@@ -23,7 +23,10 @@ import { resetClock } from '@/lib/clock';
 const KNOWN_OPEN_DEFECTS = ['REGRESSION_SET3_UNATTAINED_TARGET'];
 
 jest.mock('@/lib/actions/workout-calories', () => ({
-  calculateAndSaveWorkoutCalories: jest.fn().mockResolvedValue(undefined),
+  // The real action is a SERVER action and cannot resolve headlessly; it also
+  // reports { success }, which the post-finish settlement checks. A mock
+  // returning undefined reads as a failed run and leaves work items behind.
+  calculateAndSaveWorkoutCalories: jest.fn().mockResolvedValue({ success: true }),
 }));
 
 const MODE = process.env.SIM_MODE ?? 'fast';

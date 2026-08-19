@@ -4,9 +4,10 @@ Everything the work turned up, in one place, ordered by what needs a decision
 from you. Nothing here has been fixed: per the harness constraints, engine
 changes are separate from harness work.
 
-**Branch:** `claude/hypertracker-simulation-phase-0-8smabx`
-**Suite state:** 275 suites / 5,083 tests green · `tsc` clean · lint clean
-**Latest full sweep:** 350 runs · 23,519 simulated sessions · **139,536 logged sets** · 79.8s
+**Status:** the harness has landed (#599). B3 (#601) and B1 (#602) are fixed in
+their own changes; everything else below is still open.
+**Suite state:** 278 suites / 5,124 tests green · `tsc` clean · lint clean
+**Latest full sweep:** 350 runs · 23,519 simulated sessions · **139,536 logged sets** · 104s
 
 ```bash
 npm run simulate                                      # fast suite (runs in CI)
@@ -50,7 +51,8 @@ reached a prescription, no delete left a row behind — across 350 runs, seven
 personas and ~six simulated months each. Accounting is solid across the engine
 paths exercised by the in-memory harness. (What that does *not* cover is in
 [§7](#7-known-limitations-of-the-harness): no DB constraints, no RLS, no
-triggers, and session start is seeded rather than driven.)
+triggers, and session start is seeded rather than driven. Session *finish* is
+covered — sessions complete through the production finish flow.)
 
 **The Phase 0 stop condition was never triggered.** No prescription, volume,
 fatigue, trend or progression *calculation* needed to change to make any of this
@@ -156,7 +158,11 @@ contract: approve `load_lever` only when the grid genuinely has nothing to offer
 ## 4. Pre-existing bugs found during the audit (B1–B7)
 
 None of these were found by the simulation — they came out of reading the code
-during Phase 0. None is fixed.
+during Phase 0.
+
+**B1 and B3 are now FIXED**, each in its own change (#602 and #601). Their
+sections below are kept as the record of what was wrong and why; B2, B4–B7
+remain open.
 
 ### B1 — Set deletion renumbers local state but never the database
 
@@ -302,7 +308,8 @@ the in-memory client.
 | L1 | **The fake client enforces no constraints, RLS or triggers** | The audit found these load-bearing — `UNIQUE(exercise_block_id, set_number)` is what actually prevents concurrent double-logging. B1's real-world symptom can't surface here. | Local Supabase suite (**D5**) |
 | L2 | **Session start is seeded, not driven** | `startMesocycleWorkoutSession` has a wide query surface (program_data resolution, transfer candidates, warmup generation) the fake doesn't cover. Its own logic is untested by the harness. | Extend the fake, or use local Supabase |
 | L3 | Two exercises, one fixed rep range | No supersets, dropsets, bodyweight, duration exercises, or rep_total exercises in a full run | Widen fixtures |
-| L4 | No deload / mesocycle progression across a run | Sessions are seeded from a template; week advance and deload aren't exercised end to end | Follows from L2 |
+| L4 | Mesocycle progression is driven from the FINISH side only | Sessions are seeded from a template, so the *start* side (program-week modifiers, transfer candidates, warmup generation) is not driven — but each one finishes through the real flow against a real mesocycle, so the week advance, fatigue log and deload check do run | Follows from L2 |
+| ~~L7~~ | ~~Sessions never finished; sessions not linked to a mesocycle~~ | **CLOSED** — the loop called neither `completeSession` nor the production delete+renumber, so the finish, post-finish settlement, mesocycle updates and deletion semantics were all outside the harness. Sessions now finish through production AND belong to a seeded mesocycle, so the week advance, weekly fatigue log and deload-trigger check run for real (asserted on their outputs, not their invocation). The full sweep is unchanged by all of it — same 32 violations, same guardrail counts — so recorded seeds stay valid. | — |
 | ~~L5~~ | ~~Phase-isolation and training-gap contracts not implemented~~ | **CLOSED** — both implemented as deterministic scenarios (`simulation/__tests__/contracts.test.ts`, 14 tests). **Both contracts HOLD.** | — |
 | L6 | Single-process isolation only | Module-level singletons (Supabase client, Zustand, outbox) prevent in-process parallel runs | Shard by worker — already sufficient |
 

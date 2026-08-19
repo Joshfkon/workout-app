@@ -18,6 +18,7 @@ import { createFakeSupabase, type FakeSupabase } from './fakeSupabase';
 
 export const SIM_USER_ID = 'sim-user';
 export const SIM_SESSION_ID = 'sim-session-0000';
+export const SIM_MESOCYCLE_ID = 'sim-meso';
 
 export const SIM_EXERCISES = [
   {
@@ -85,11 +86,38 @@ export function createSimulationWorld(options: WorldOptions = {}): FakeSupabase 
   fake.db.seed('user_profiles', [{ user_id: userId, goal: 'bulk', experience: 'intermediate' }]);
   fake.db.seed('exercises', SIM_EXERCISES);
 
+  // A mesocycle for the sessions to BELONG to.
+  //
+  // Not decoration: `runPostSessionMesoUpdates` short-circuits on a session
+  // with no `mesocycle_id`, so with the sessions unlinked the week advance,
+  // the weekly fatigue log and the deload-trigger check never ran even once
+  // the harness started finishing sessions properly (Codex review on #609).
+  // `current_week` and the fatigue log are then real outputs a run can be
+  // asserted against — see `checkMesocycleProgressed`.
+  fake.db.seed('mesocycles', [
+    {
+      id: SIM_MESOCYCLE_ID,
+      user_id: userId,
+      name: 'Simulation mesocycle',
+      split_type: 'upper_lower',
+      goal: 'hypertrophy',
+      status: 'active',
+      total_weeks: 24,
+      days_per_week: 3,
+      current_week: 1,
+      start_date: plannedDate,
+      preferred_workout_days: [1, 3, 5],
+      schedule_mode: 'fixed_days',
+      training_interval_days: null,
+      deleted_at: null,
+    },
+  ]);
+
   fake.db.seed('workout_sessions', [
     {
       id: sessionId,
       user_id: userId,
-      mesocycle_id: null,
+      mesocycle_id: SIM_MESOCYCLE_ID,
       state: 'in_progress',
       planned_date: plannedDate,
       started_at: `${plannedDate}T09:00:00.000Z`,

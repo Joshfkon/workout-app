@@ -8,19 +8,35 @@
  * A NOTE ON WHAT A GREEN RUN MEANS. It means no INVARIANT or CONTRACT was
  * violated on these paths, at these seeds, against the in-memory client. It
  * does NOT mean the engine is correct — the fake enforces no database
- * constraints, and session start is still seeded (Phase 1 scope note). Both are
- * recorded limitations, not silent ones.
+ * constraints, and session START is still seeded (Phase 1 scope note). Both are
+ * recorded limitations, not silent ones. Session FINISH is no longer among
+ * them: sessions now complete through the production finish flow.
  */
 import type { FakeSupabase } from '../fakeSupabase';
-import { createSimulationWorld, createMemoryOutbox, SIM_SESSION_ID, SIM_USER_ID } from '../fixtures';
+import {
+  createSimulationWorld,
+  createMemoryOutbox,
+  SIM_MESOCYCLE_ID,
+  SIM_SESSION_ID,
+  SIM_USER_ID,
+} from '../fixtures';
 import { runSimulation, hardFailures, guardrailWarnings, normalizeTrace } from '../runner';
 import { formatFinding, APPROVED_REPETITION_REASONS, checkSet3Contract } from '../assertions';
 import { PERSONA_NAMES, type PersonaName } from '../personas';
 import { resetClock } from '@/lib/clock';
 import { __setDriverForTests } from '@/lib/offline/setOutbox';
+import {
+  __setPostFinishStoreForTests,
+  listPostFinishWork,
+  type PostFinishWork,
+} from '@/lib/offline/postFinishQueue';
+import { createMemoryStore } from '@/lib/offline/setOutbox';
 
 jest.mock('@/lib/actions/workout-calories', () => ({
-  calculateAndSaveWorkoutCalories: jest.fn().mockResolvedValue(undefined),
+  // The real action is a SERVER action and cannot resolve headlessly; it also
+  // reports { success }, which the post-finish settlement checks. A mock
+  // returning undefined reads as a failed run and leaves work items behind.
+  calculateAndSaveWorkoutCalories: jest.fn().mockResolvedValue({ success: true }),
 }));
 
 const world = (): FakeSupabase => createSimulationWorld();
@@ -31,10 +47,16 @@ const run = (persona: PersonaName, seed: string | number, sessions = 12) =>
     startAt: '2026-04-06T09:00:00', sessions,
   });
 
-beforeEach(() => __setDriverForTests(createMemoryOutbox() as never));
+beforeEach(() => {
+  __setDriverForTests(createMemoryOutbox() as never);
+  // Per-run isolation: the post-finish store is a module singleton, so a run
+  // that left an item behind would otherwise leak into the next one.
+  __setPostFinishStoreForTests(createMemoryStore<PostFinishWork>());
+});
 afterEach(() => {
   resetClock();
   __setDriverForTests(null);
+  __setPostFinishStoreForTests(null);
 });
 
 /**
@@ -235,5 +257,98 @@ describe('the short-set specialist actually reaches the contract', () => {
       (e) => e.repsAchieved < e.prescribedReps && e.reportedRIR <= e.targetRir
     );
     expect(missesAtZeroRir.length).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * The finish flow is REACHED.
+ *
+ * Sessions used to be left `in_progress` for ever: the loop counted them and
+ * moved the clock on without calling `completeSession`, so the finish, the
+ * post-finish settlement and the mesocycle updates were all outside the
+ * harness. A green run said less than it appeared to. These guard against
+ * silently regressing to that — a harness that stops exercising a path stops
+ * being evidence about it.
+ */
+describe('sessions are finished through the production flow', () => {
+  it('every simulated session ends up recorded as completed', async () => {
+    const fake = world();
+    const result = await runSimulation({
+      persona: 'linear-novice', seed: 5, fake, userId: SIM_USER_ID,
+      sessionId: SIM_SESSION_ID, startAt: '2026-04-06T09:00:00', sessions: 6,
+    });
+
+    const rows = fake.db.rows('workout_sessions') as unknown as {
+      state: string;
+      completed_at: string | null;
+    }[];
+    expect(rows.length).toBe(result.sessionsCompleted);
+    expect(rows.every((r) => r.state === 'completed')).toBe(true);
+    expect(rows.every((r) => !!r.completed_at)).toBe(true);
+  });
+
+  it('leaves no post-finish work outstanding', async () => {
+    // Every finish should settle within the run. A backlog here means the
+    // settlement is not completing, which is the B3 failure mode.
+    await runSimulation({
+      persona: 'chaotic-intermediate', seed: 9, fake: world(), userId: SIM_USER_ID,
+      sessionId: SIM_SESSION_ID, startAt: '2026-04-06T09:00:00', sessions: 8,
+    });
+    expect(await listPostFinishWork()).toEqual([]);
+  });
+});
+
+/**
+ * The MESOCYCLE post-processing is reached too.
+ *
+ * Finishing a session is not enough on its own: `runPostSessionMesoUpdates`
+ * short-circuits when the session has no `mesocycle_id`, so with unlinked
+ * sessions the week advance, the weekly fatigue log and the deload-trigger
+ * check stayed unexercised even after the runner started finishing properly
+ * (Codex review on #609 — the first version of that change claimed coverage
+ * it did not have). These assert the OUTPUTS, which is the only way to tell
+ * "the code ran" from "the code was skipped quietly".
+ */
+describe('post-session mesocycle updates are reached', () => {
+  it('writes a weekly fatigue log from the finished sessions', async () => {
+    const fake = world();
+    await runSimulation({
+      persona: 'linear-novice', seed: 3, fake, userId: SIM_USER_ID,
+      sessionId: SIM_SESSION_ID, startAt: '2026-04-06T09:00:00', sessions: 4,
+    });
+
+    // EVERY session must be linked, not just most of them: the fatigue log is
+    // overwritten per (user, meso, week), so a single unlinked session is
+    // invisible in the log rows themselves — but it silently drops out of the
+    // completed-session count that drives the week advance.
+    const sessions = fake.db.rows('workout_sessions') as unknown as {
+      mesocycle_id: string | null;
+    }[];
+    expect(sessions.length).toBeGreaterThan(0);
+    expect(sessions.every((r) => r.mesocycle_id === SIM_MESOCYCLE_ID)).toBe(true);
+
+    const logs = fake.db.rows('weekly_fatigue_logs') as unknown as {
+      mesocycle_id: string;
+      week_number: number;
+      notes: string;
+    }[];
+    expect(logs.length).toBeGreaterThan(0);
+    expect(logs.every((l) => l.mesocycle_id === SIM_MESOCYCLE_ID)).toBe(true);
+    // The RPE in the note comes from the finish card, i.e. from the sets the
+    // persona actually logged — so this also proves the value is derived, not
+    // a constant the fixture happened to supply.
+    expect(logs.some((l) => /avg RPE \d/.test(l.notes))).toBe(true);
+  });
+
+  it('advances the mesocycle week once enough sessions are done', async () => {
+    // days_per_week is 3, so the week rolls over on the 4th completed session.
+    const fake = world();
+    await runSimulation({
+      persona: 'linear-novice', seed: 3, fake, userId: SIM_USER_ID,
+      sessionId: SIM_SESSION_ID, startAt: '2026-04-06T09:00:00', sessions: 7,
+    });
+
+    const meso = (fake.db.rows('mesocycles') as unknown as { current_week: number }[])[0];
+    expect(meso.current_week).toBeGreaterThan(1);
   });
 });

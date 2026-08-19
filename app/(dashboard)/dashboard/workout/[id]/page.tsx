@@ -105,10 +105,9 @@ import { fetchTransferCandidates } from '@/lib/training/transferCandidates';
 import {
   logSet,
   persistSetEdit,
-  persistSetDelete,
   buildSetEditPatch,
-  planBlockRenumber,
-  persistSetRenumber,
+  planSetDeletion,
+  persistSetDeletion,
   type SetNumberChange,
 } from '@/lib/training/logSet';
 import { loadWorkoutSession, resolveResumePosition } from './_lib/loadSession';
@@ -3013,12 +3012,8 @@ export default function WorkoutPage() {
     // this updater yields the same answer.
     let renumberChanges: SetNumberChange[] = [];
     setCompletedSets(prevSets => {
-      const setInPrev = prevSets.find(s => s.id === setId);
-      if (!setInPrev) return prevSets;
-      const plan = planBlockRenumber(
-        prevSets.filter(set => set.id !== setId),
-        setInPrev.exerciseBlockId
-      );
+      const plan = planSetDeletion(prevSets, setId);
+      if (!plan) return prevSets;
       renumberChanges = plan.changes;
       return plan.sets;
     });
@@ -3030,26 +3025,18 @@ export default function WorkoutPage() {
     setSetSync(prev => { const next = { ...prev }; delete next[setId]; return next; });
 
     try {
-      const supabase = createUntypedClient();
-      const { queued, error: deleteError } = await persistSetDelete({ supabase }, setId);
+      // One operation: the row goes, and the compaction local state just
+      // applied is written with it, so the two numberings stay identical (B1).
+      const { queued, error: deleteError } = await persistSetDeletion(
+        { supabase: createUntypedClient() },
+        { setId, changes: renumberChanges }
+      );
       if (queued) refreshOutboxCount();
       if (deleteError) {
         console.error('Failed to delete set:', deleteError);
         setError(`Failed to delete set: ${deleteError.message}`);
       } else {
-        // Persist the same compaction the local state just applied, so the
-        // two numberings stay identical (B1). Without this the database keeps
-        // its gaps: the row shown as set 2 stays stored as set 3, and a set
-        // logged offline afterwards can carry a set_number the database still
-        // holds — which the UNIQUE (exercise_block_id, set_number) constraint
-        // refuses, dropping the set after the outbox's retries.
-        const { error: renumberError } = await persistSetRenumber({ supabase }, renumberChanges);
-        if (renumberError) {
-          console.error('Failed to renumber sets after delete:', renumberError);
-          setError(`Failed to renumber sets: ${renumberError.message}`);
-        } else {
-          setError(null);
-        }
+        setError(null);
       }
     } catch (err) {
       console.error('Failed to delete set:', err);

@@ -300,6 +300,34 @@ export function renumberBlockSets(sets: SetLog[], blockId: string): SetLog[] {
   return planBlockRenumber(sets, blockId).sets;
 }
 
+/** What a deletion does to a session's sets. Null when the set isn't there. */
+export interface SetDeletionPlan {
+  exerciseBlockId: string;
+  /** All sets after removing the target and compacting its block. */
+  sets: SetLog[];
+  /** Rows whose `set_number` must move, in the order they must be written. */
+  changes: SetNumberChange[];
+}
+
+/**
+ * THE deletion rule: a set leaves, and its block compacts to a dense 1..n.
+ *
+ * Pure, and shared by every caller — the workout page and the headless driver
+ * both plan a deletion through this rather than composing "filter, then
+ * renumber" themselves. Two callers each assembling those steps is how the
+ * harness ends up measuring different semantics from the app, which makes its
+ * findings fiction (Codex review on #602 caught exactly that drift).
+ */
+export function planSetDeletion(sets: SetLog[], setId: string): SetDeletionPlan | null {
+  const target = sets.find((s) => s.id === setId);
+  if (!target) return null;
+  const plan = planBlockRenumber(
+    sets.filter((s) => s.id !== setId),
+    target.exerciseBlockId
+  );
+  return { exerciseBlockId: target.exerciseBlockId, ...plan };
+}
+
 // ---------------------------------------------------------------------------
 // Persistence
 // ---------------------------------------------------------------------------
@@ -523,6 +551,29 @@ export async function persistSetDelete(
  * `changes` must arrive in ascending-new-number order (`planBlockRenumber`
  * guarantees it) or an update will collide with a row that has not moved yet.
  */
+/**
+ * Persist a deletion: remove the row, then write the compaction it implies.
+ *
+ * The ordering is the point of having one function for it — the renumbering
+ * moves rows DOWN into the slot the delete just vacated, so it cannot run
+ * first. A caller that composes `persistSetDelete` and `persistSetRenumber`
+ * itself can get that wrong, or skip the second half entirely, which is the
+ * shape B1 had. Both the workout page and the headless driver go through here.
+ *
+ * `changes` comes from `planSetDeletion`. A delete that fails skips the
+ * renumbering: compacting around a row that is still there would collide.
+ */
+export async function persistSetDeletion(
+  deps: { supabase: SetWriteClient },
+  args: { setId: string; changes: SetNumberChange[] }
+): Promise<{ queued: boolean; error?: { message: string } }> {
+  const deleted = await persistSetDelete(deps, args.setId);
+  if (deleted.error) return deleted;
+
+  const { error } = await persistSetRenumber(deps, args.changes);
+  return { queued: deleted.queued, ...(error ? { error } : {}) };
+}
+
 export async function persistSetRenumber(
   deps: { supabase: SetWriteClient },
   changes: SetNumberChange[]
