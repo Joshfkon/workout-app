@@ -38,6 +38,8 @@ function renderHeader(overrides: Partial<WorkoutHeaderProps> = {}) {
     onOpenInjuryModal: jest.fn(),
     onOpenReadinessModal: jest.fn(),
     onOpenMuscleReadiness: jest.fn(),
+    locationName: null,
+    onOpenLocationPicker: jest.fn(),
     onOpenPlateCalculator: jest.fn(),
     isDeload: false,
     onToggleDeload: jest.fn(),
@@ -204,5 +206,52 @@ describe('WorkoutHeader duration estimate', () => {
   it('leaves the exercise count intact', () => {
     renderHeader({ exerciseNumber: 3, exerciseTotal: 6, remainingDurationLabel: '20 min' });
     expect(screen.getByText(/exercise 3 of 6/)).toBeInTheDocument();
+  });
+});
+
+describe('WorkoutHeader location chip', () => {
+  it('names the gym this session is filed under', () => {
+    renderHeader({ locationName: 'Iron Works' });
+    const chip = screen.getByTestId('workout-location-chip');
+    expect(chip).toHaveTextContent('Iron Works');
+    expect(chip).toHaveAttribute('data-location-set', 'true');
+  });
+
+  it('offers to set one when the session has no location', () => {
+    // Without this the user has no way to notice that every machine lift is
+    // sharing one undifferentiated history.
+    renderHeader({ locationName: null });
+    const chip = screen.getByTestId('workout-location-chip');
+    expect(chip).toHaveTextContent('Set location');
+    expect(chip).toHaveAttribute('data-location-set', 'false');
+  });
+
+  it('opens the picker when tapped', async () => {
+    const user = userEvent.setup();
+    const onOpenLocationPicker = jest.fn();
+    renderHeader({ locationName: 'Iron Works', onOpenLocationPicker });
+
+    await user.click(screen.getByTestId('workout-location-chip'));
+
+    expect(onOpenLocationPicker).toHaveBeenCalledTimes(1);
+  });
+
+  it('is reachable from the tools menu at a full-size hit target', async () => {
+    const user = userEvent.setup();
+    const onOpenLocationPicker = jest.fn();
+    const onCloseToolsMenu = jest.fn();
+    renderHeader({
+      locationName: 'Iron Works',
+      showToolsMenu: true,
+      onOpenLocationPicker,
+      onCloseToolsMenu,
+    });
+
+    const item = screen.getByTestId('workout-location-menu-item');
+    expect(item).toHaveTextContent('Location: Iron Works');
+    await user.click(item);
+
+    expect(onOpenLocationPicker).toHaveBeenCalledTimes(1);
+    expect(onCloseToolsMenu).toHaveBeenCalledTimes(1);
   });
 });

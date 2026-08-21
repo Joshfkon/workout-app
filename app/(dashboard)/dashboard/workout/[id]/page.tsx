@@ -21,7 +21,7 @@ import { beginSetTiming, markSetPhase, schedulePaintMark, endSetTiming } from '@
 import type { SetSyncStatus } from '@/components/workout/ExerciseCard';
 import { InlineHint } from '@/components/ui/FirstTimeHint';
 import { RestTimer, PauseOverlay, RowOverflowMenu, type RowMenuItem } from '@/components/workout';
-import { IconGripVertical, IconInfoCircle, IconX } from '@tabler/icons-react';
+import { IconGripVertical, IconInfoCircle, IconMapPin, IconX } from '@tabler/icons-react';
 import { useRestTimer } from '@/hooks/useRestTimer';
 import { useEducationStore } from '@/hooks/useEducationPreferences';
 
@@ -164,8 +164,20 @@ import {
   generateCoachMessage,
   HISTORY_SESSIONS_PER_EXERCISE,
   type ExerciseHistoryQueryRow,
+  type HistoryBlockRow,
+  type HistoryScopeOptions,
 } from './_lib/suggestions';
-import { deriveProgressionScope, type ProgressionScope } from '@/services/progressionScope';
+import {
+  deriveProgressionScope,
+  hasLocationOverride,
+  resolveEffectiveLocation,
+  type ProgressionScope,
+} from '@/services/progressionScope';
+import { updateBlockLocation, updateSessionLocation } from '@/lib/training/sessionLocation';
+import {
+  LocationPickerSheet,
+  type LocationPickerScope,
+} from './_components/LocationPickerSheet';
 import {
 } from './_lib/sessionMapping';
 import {
@@ -308,6 +320,36 @@ function CancelWorkoutModal({
       </div>
     </div>
   );
+}
+
+/**
+ * Assemble the location-scoping config the history read uses, from the
+ * session's location plus any per-exercise overrides.
+ *
+ * Returns undefined when nothing is located at all — the legacy
+ * cross-location read, unchanged. Note the override check: a session with no
+ * location but one pinned exercise still scopes, because that pin is the
+ * user telling us this lift's history is its own track.
+ */
+function buildHistoryScopeOptions(
+  sessionLocationId: string | null,
+  blockLocations: Record<string, string | null>,
+  blocks: Array<{ id: string; exerciseId: string }>,
+  scopeByExercise: Map<string, ProgressionScope>
+): HistoryScopeOptions | undefined {
+  const overrideByExercise = new Map<string, string>();
+  for (const block of blocks) {
+    const override = blockLocations[block.id];
+    if (override) overrideByExercise.set(block.exerciseId, override);
+  }
+
+  if (!sessionLocationId && overrideByExercise.size === 0) return undefined;
+
+  return {
+    currentLocationId: sessionLocationId,
+    scopeForExercise: (id) => scopeByExercise.get(id) ?? 'global',
+    locationForExercise: (id) => overrideByExercise.get(id) ?? null,
+  };
 }
 
 export default function WorkoutPage() {
@@ -609,6 +651,32 @@ export default function WorkoutPage() {
   // Stamped on every set logged here and used to scope local-scope exercise
   // history for calibration. Null = legacy/unknown session.
   const [sessionLocationId, setSessionLocationId] = useState<string | null>(null);
+  // Per-exercise location overrides (exercise_blocks.location_id), keyed by
+  // block id. A block absent from this map, or mapped to null, follows the
+  // session — "which gym" and "which machine" are different questions, and a
+  // gym with two hip adduction machines needs the second one.
+  const [blockLocations, setBlockLocations] = useState<Record<string, string | null>>({});
+  // Which location the picker sheet is currently editing (null = closed).
+  const [locationPickerTarget, setLocationPickerTarget] = useState<
+    { kind: 'session' } | { kind: 'exercise'; blockId: string } | null
+  >(null);
+  // Everything needed to recompute exercise history when a location changes
+  // mid-session. The history ROWS never change (they're all this user's past
+  // sets, fetched once at load); only which of them count as "this machine's
+  // track" does — so a location change re-scopes in memory rather than
+  // re-querying.
+  const historyScopeSourceRef = useRef<{
+    blocks: HistoryBlockRow[];
+    scopeByExercise: Map<string, ProgressionScope>;
+    modalityByExercise: Record<string, ExerciseType | undefined>;
+  } | null>(null);
+  // Exercises added AFTER load fetch their history individually (already
+  // computed, not raw rows), so they aren't in the ref above and can't be
+  // re-scoped from it. Their inputs are kept here so a location change
+  // refetches them instead of dropping their cards' history.
+  const midSessionHistoryRef = useRef<
+    Map<string, { scope: ProgressionScope; exerciseType: ExerciseType | undefined; userId: string }>
+  >(new Map());
   const [showLocationDropdown, setShowLocationDropdown] = useState(false);
   // Blocklist of equipment_types ids the selected location lacks; consumed by
   // the shared fail-closed equipment filter (picker, swaps, injury adjuster).
@@ -1150,6 +1218,17 @@ export default function WorkoutPage() {
         // for legacy sessions / databases without the location column.
         setSessionLocationId(loadedLocationId);
 
+        // Per-exercise overrides, for the exercise on a different machine than
+        // the rest of the session. Absent column (pre-migration) reads as no
+        // overrides, which is the behavior every session had before this.
+        const loadedBlockLocations: Record<string, string | null> = Object.fromEntries(
+          loaded.rawBlocks.map((row) => [
+            (row as { id: string }).id,
+            ((row as { location_id?: string | null }).location_id ?? null) as string | null,
+          ])
+        );
+        setBlockLocations(loadedBlockLocations);
+
         // An already-archived session (deep link / back-button revisit after
         // auto-discard) behaves like a deleted one: nothing to resume.
         if (transformedSession.state === 'auto_discarded') {
@@ -1441,23 +1520,33 @@ export default function WorkoutPage() {
             );
           }
 
+          // Modality per exercise: duration exercises get no e1RM anchor and
+          // a heaviest-load/longest-hold PR instead of an Epley one.
+          const modalityByExercise = Object.fromEntries(
+            transformedBlocks.map((b) => [b.exerciseId, b.exercise.exerciseType])
+          );
+
+          // Retained so a mid-session location change can re-scope these same
+          // rows without another round trip (see applyLocationChange).
+          historyScopeSourceRef.current = {
+            blocks: allHistoryBlocks,
+            scopeByExercise,
+            modalityByExercise,
+          };
+
           // Group by exercise, cap at 10 blocks each, compute E1RM/PR (./_lib/suggestions).
-          // With a known session location, local-scope exercises are narrowed
-          // to that location's calibration track (softened fallback to other
-          // gyms on a first session there).
+          // With a known location, local-scope exercises are narrowed to that
+          // location's calibration track (softened fallback to other gyms on a
+          // first session there).
           const histories: Record<string, ExerciseHistoryData> = buildExerciseHistories(
             allHistoryBlocks,
-            loadedLocationId
-              ? {
-                  currentLocationId: loadedLocationId,
-                  scopeForExercise: (id) => scopeByExercise.get(id) ?? 'global',
-                }
-              : undefined,
-            // Modality per exercise: duration exercises get no e1RM anchor and
-            // a heaviest-load/longest-hold PR instead of an Epley one.
-            Object.fromEntries(
-              transformedBlocks.map((b) => [b.exerciseId, b.exercise.exerciseType])
-            )
+            buildHistoryScopeOptions(
+              loadedLocationId,
+              loadedBlockLocations,
+              transformedBlocks,
+              scopeByExercise
+            ),
+            modalityByExercise
           );
 
           setExerciseHistories(histories);
@@ -2569,9 +2658,14 @@ export default function WorkoutPage() {
           loggedAt,
           setType,
           blockWorkingSets,
-          // Stamp the session's location so this set feeds the right location's
-          // calibration track for local-scope exercises (null = legacy/unknown).
-          locationId: sessionLocationId,
+          // Stamp the location this set was actually performed at so it feeds
+          // the right calibration track for local-scope exercises: this
+          // exercise's own machine if one is pinned, otherwise the session's
+          // gym (null = legacy/unknown).
+          locationId: resolveEffectiveLocation(
+            blockLocations[currentBlock.id],
+            sessionLocationId
+          ),
           parentSetId: data.parentSetId || null,
           note: data.note || null,
           feedback: data.feedback,
@@ -4156,6 +4250,17 @@ export default function WorkoutPage() {
               ...prev,
               [exercise.id]: exerciseHistory!,
             }));
+            // Remember how this was fetched: it came back already scoped to
+            // the current location, so a later location change has to refetch
+            // it rather than re-derive it from the load-time rows it isn't in.
+            if (session?.userId) {
+              midSessionHistoryRef.current.set(exercise.id, {
+                scope: addedScope,
+                exerciseType:
+                  (exercise as { exercise_type?: ExerciseType | null }).exercise_type ?? undefined,
+                userId: session.userId,
+              });
+            }
           }
         }
         const knownE1RM = exerciseHistory?.estimatedE1RM;
@@ -4781,6 +4886,193 @@ export default function WorkoutPage() {
     );
   };
 
+  // ---------------------------------------------------------------------
+  // Training location (which gym / which machine)
+  // ---------------------------------------------------------------------
+
+  const locationNameById = (id: string | null): string | null =>
+    id ? gymLocations.find((l) => l.id === id)?.name ?? null : null;
+
+  const sessionLocationName = locationNameById(sessionLocationId);
+
+  /**
+   * Re-read every exercise's history against a new location assignment.
+   *
+   * The rows themselves are already in memory and don't change — only which of
+   * them count as "this machine's track" does. Recomputing here (rather than
+   * waiting for the next load) is what makes the change feel like a correction
+   * instead of a setting: the suggestion on the card updates to this machine's
+   * numbers immediately.
+   */
+  const rescopeHistories = (
+    nextSessionLocationId: string | null,
+    nextBlockLocations: Record<string, string | null>
+  ) => {
+    const source = historyScopeSourceRef.current;
+    if (source) {
+      const rebuilt = buildExerciseHistories(
+        source.blocks,
+        buildHistoryScopeOptions(
+          nextSessionLocationId,
+          nextBlockLocations,
+          blocks,
+          source.scopeByExercise
+        ),
+        source.modalityByExercise
+      );
+      // Merge, don't replace: exercises added mid-session aren't in these rows
+      // and replacing would blank their cards. They're refreshed below.
+      setExerciseHistories((prev) => ({ ...prev, ...rebuilt }));
+    }
+
+    // Refetch the mid-session additions against their new effective location.
+    for (const [exerciseId, meta] of Array.from(midSessionHistoryRef.current.entries())) {
+      const block = blocks.find((b) => b.exerciseId === exerciseId);
+      const effective = resolveEffectiveLocation(
+        block ? nextBlockLocations[block.id] : null,
+        nextSessionLocationId
+      );
+      void fetchExerciseHistory(
+        exerciseId,
+        meta.userId,
+        effective ? { progressionScope: meta.scope, currentLocationId: effective } : undefined,
+        meta.exerciseType
+      ).then((history) => {
+        if (history) setExerciseHistories((prev) => ({ ...prev, [exerciseId]: history }));
+      });
+    }
+  };
+
+  /**
+   * Apply the picker's choice: persist it, move any already-logged sets onto
+   * the new track, and re-scope suggestions.
+   *
+   * The optimistic order matters. State updates first so the sheet closes on a
+   * chip that already reads right; the write follows and only reverts on a
+   * hard failure. A database that predates the migrations reports the columns
+   * missing, which the helpers treat as "this build doesn't do location
+   * scoping" — the picker then leaves the UI unchanged rather than showing a
+   * selection that nothing is stored behind.
+   */
+  const applyLocationChange = async (locationId: string | null) => {
+    const target = locationPickerTarget;
+    if (!target) return;
+    setLocationPickerTarget(null);
+
+    const supabase = createUntypedClient();
+
+    if (target.kind === 'session') {
+      if (locationId === sessionLocationId) return;
+      const previous = sessionLocationId;
+      setSessionLocationId(locationId);
+      rescopeHistories(locationId, blockLocations);
+
+      // Blocks pinned to their own machine keep it: "I was at a different gym
+      // than I thought" must not silently un-pin a deliberate choice.
+      const inheritingBlockIds = blocks.filter((b) => !blockLocations[b.id]).map((b) => b.id);
+      const result = await updateSessionLocation(
+        supabase,
+        sessionId,
+        locationId,
+        inheritingBlockIds
+      );
+
+      if (result.unsupported) {
+        setSessionLocationId(previous);
+        rescopeHistories(previous, blockLocations);
+        showError('Location tracking needs a database update — nothing was changed');
+        return;
+      }
+      if (!result.ok) {
+        // Reverting matters more than the message: sets logged from here on
+        // read the same state, so an un-reverted UI would keep filing them
+        // under a location the database never accepted.
+        setSessionLocationId(previous);
+        rescopeHistories(previous, blockLocations);
+        showError(
+          isOnline
+            ? 'Could not change the workout location — please try again'
+            : "Can't change location while offline — sets keep logging where they were"
+        );
+        return;
+      }
+      showSuccess(
+        locationId
+          ? `Training at ${locationNameById(locationId) ?? 'this location'}${
+              result.restampedSets > 0 ? ` · ${result.restampedSets} logged sets moved` : ''
+            }`
+          : 'Workout location cleared'
+      );
+      return;
+    }
+
+    const block = blocks.find((b) => b.id === target.blockId);
+    if (!block) return;
+    const previous = blockLocations[block.id] ?? null;
+    if (locationId === previous) return;
+
+    const nextBlockLocations = { ...blockLocations, [block.id]: locationId };
+    setBlockLocations(nextBlockLocations);
+    rescopeHistories(sessionLocationId, nextBlockLocations);
+
+    const result = await updateBlockLocation(
+      supabase,
+      block.id,
+      locationId,
+      resolveEffectiveLocation(locationId, sessionLocationId)
+    );
+
+    if (result.unsupported || !result.ok) {
+      const reverted = { ...blockLocations, [block.id]: previous };
+      setBlockLocations(reverted);
+      rescopeHistories(sessionLocationId, reverted);
+      showError(
+        result.unsupported
+          ? 'Per-exercise locations need a database update — nothing was changed'
+          : isOnline
+            ? "Could not change this exercise's location — please try again"
+            : "Can't change location while offline — sets keep logging where they were"
+      );
+      return;
+    }
+
+    const movedNote = result.restampedSets > 0 ? ` · ${result.restampedSets} logged sets moved` : '';
+    showSuccess(
+      locationId
+        ? `${block.exercise.name} tracked at ${locationNameById(locationId) ?? 'this location'}${movedNote}`
+        : `${block.exercise.name} follows the workout location again${movedNote}`
+    );
+  };
+
+  /**
+   * Create a location from inside the picker and hand it back so the caller can
+   * select it. The machine you've never logged before is exactly the case where
+   * the location doesn't exist yet, so sending the user to Settings mid-set
+   * would defeat the point.
+   */
+  const handleCreateLocation = async (name: string): Promise<GymLocation | null> => {
+    const supabase = createUntypedClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return null;
+
+    const { data, error } = await supabase
+      .from('gym_locations')
+      .insert({ user_id: user.id, name, is_default: gymLocations.length === 0 })
+      .select('id, name, is_default')
+      .single();
+
+    if (error || !data) {
+      console.error('[workout] failed to create location:', error);
+      return null;
+    }
+
+    const created = data as GymLocation;
+    setGymLocations((prev) => [...prev, created]);
+    return created;
+  };
+
   // Toggle the deload flag mid-workout (from the header ⋮ menu). Durable +
   // optimistic: the header/banner reflect it immediately and the choice is
   // queued in the IndexedDB outbox — the same durable path the finish flow
@@ -5298,6 +5590,34 @@ export default function WorkoutPage() {
       },
     });
 
+    // Which machine this lift is on. Sits next to Swap because it answers the
+    // question Swap gets misused for: users duplicate an exercise per gym
+    // ("Hip Adduction (annex)") to stop two stacks averaging together, which
+    // fragments volume and muscle mapping. This does it properly — one
+    // exercise, two calibration tracks.
+    {
+      const override = blockLocations[block.id] ?? null;
+      const overrideName = override ? locationNameById(override) : null;
+      items.push({
+        key: 'location',
+        label: hasLocationOverride(override, sessionLocationId)
+          ? `Machine: ${truncateName(overrideName ?? 'elsewhere')}`
+          : 'Different machine?',
+        icon: (
+          <IconMapPin
+            size={16}
+            className={
+              hasLocationOverride(override, sessionLocationId)
+                ? 'text-primary-400'
+                : 'text-surface-400'
+            }
+            stroke={2}
+          />
+        ),
+        onSelect: () => setLocationPickerTarget({ kind: 'exercise', blockId: block.id }),
+      });
+    }
+
     items.push({
       key: 'plates',
       label: 'Plate calculator',
@@ -5468,6 +5788,8 @@ export default function WorkoutPage() {
         onOpenReadinessModal={() => setShowReadinessModal(true)}
         onOpenMuscleReadiness={() => setShowMuscleReadinessSheet(true)}
         onOpenPlateCalculator={() => setShowPlateCalculator(true)}
+        locationName={sessionLocationName}
+        onOpenLocationPicker={() => setLocationPickerTarget({ kind: 'session' })}
         isDeload={session?.isDeload ?? false}
         onToggleDeload={handleToggleDeloadSession}
         onCancelWorkout={() => setShowCancelModal(true)}
@@ -5990,6 +6312,11 @@ export default function WorkoutPage() {
                     performanceSnapshots={performanceSnapshots[block.exerciseId]}
                     progressionHealthSessions={progressionHealthSessions[block.exerciseId]}
                     equipmentBoundaries={equipmentBoundaries[block.exerciseId]}
+                    locationOverrideName={
+                      hasLocationOverride(blockLocations[block.id], sessionLocationId)
+                        ? locationNameById(blockLocations[block.id] ?? null)
+                        : null
+                    }
                     userGoal={userGoal}
                     onRepRangeChange={(range) => handleRepRangeChange(block.id, range)}
                     isAmrapSuggested={
@@ -6700,6 +7027,47 @@ export default function WorkoutPage() {
         initialWeightKg={plateCalculatorWeight ?? currentBlock?.targetWeightKg}
         exerciseId={currentExercise?.id}
       />
+
+      {/* Training-location picker — the same sheet for "which gym is this
+          workout at" and "which machine is this one exercise on", because
+          they resolve to the same calibration key. */}
+      {locationPickerTarget && (() => {
+        const targetBlock =
+          locationPickerTarget.kind === 'exercise'
+            ? blocks.find((b) => b.id === locationPickerTarget.blockId) ?? null
+            : null;
+        if (locationPickerTarget.kind === 'exercise' && !targetBlock) return null;
+
+        const scope: LocationPickerScope = targetBlock
+          ? {
+              kind: 'exercise',
+              exerciseName: targetBlock.exercise.name,
+              sessionLocationName,
+            }
+          : { kind: 'session' };
+
+        // How many logged sets the change will re-stamp. For a session change
+        // that's every set NOT pinned to its own machine; for one exercise,
+        // just that exercise's.
+        const loggedSetCount = targetBlock
+          ? completedSets.filter((s) => s.exerciseBlockId === targetBlock.id).length
+          : completedSets.filter((s) => !blockLocations[s.exerciseBlockId]).length;
+
+        return (
+          <LocationPickerSheet
+            isOpen
+            onClose={() => setLocationPickerTarget(null)}
+            scope={scope}
+            locations={gymLocations}
+            selectedId={
+              targetBlock ? blockLocations[targetBlock.id] ?? null : sessionLocationId
+            }
+            loggedSetCount={loggedSetCount}
+            onSelect={(id) => void applyLocationChange(id)}
+            onCreate={handleCreateLocation}
+          />
+        );
+      })()}
 
       {/* Motion capture sheet (experimental, flag-gated). Closing mid-review
           keeps the capture in memory; the card button offers to resume. */}

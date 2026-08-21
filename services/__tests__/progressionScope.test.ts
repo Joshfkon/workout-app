@@ -1,5 +1,7 @@
 import {
   deriveProgressionScope,
+  hasLocationOverride,
+  resolveEffectiveLocation,
   resolveLegacyLocationAttribution,
   scopeHistorySets,
   softenOtherLocationEstimate,
@@ -176,5 +178,43 @@ describe('softenOtherLocationEstimate', () => {
 
   it('leaves non-positive values unchanged', () => {
     expect(softenOtherLocationEstimate(0, true)).toBe(0);
+  });
+});
+
+describe('resolveEffectiveLocation', () => {
+  it('a per-exercise pin wins over the session location', () => {
+    expect(resolveEffectiveLocation('annex', 'main')).toBe('annex');
+  });
+
+  it('no pin falls through to the session location', () => {
+    expect(resolveEffectiveLocation(null, 'main')).toBe('main');
+    expect(resolveEffectiveLocation(undefined, 'main')).toBe('main');
+  });
+
+  it('a pin still resolves when the session has no location', () => {
+    expect(resolveEffectiveLocation('annex', null)).toBe('annex');
+  });
+
+  it('neither set resolves to null (legacy / unknown gym)', () => {
+    expect(resolveEffectiveLocation(null, null)).toBeNull();
+    expect(resolveEffectiveLocation(undefined, undefined)).toBeNull();
+  });
+});
+
+describe('hasLocationOverride', () => {
+  it('is true only when the pin differs from the session', () => {
+    expect(hasLocationOverride('annex', 'main')).toBe(true);
+    expect(hasLocationOverride('annex', null)).toBe(true);
+  });
+
+  it('a pin equal to the session location is a no-op, not an override', () => {
+    // Badging this as "somewhere else" would be a lie — it resolves to the
+    // same track the session already uses.
+    expect(hasLocationOverride('main', 'main')).toBe(false);
+  });
+
+  it('is false with no pin', () => {
+    expect(hasLocationOverride(null, 'main')).toBe(false);
+    expect(hasLocationOverride(undefined, null)).toBe(false);
   });
 });
