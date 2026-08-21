@@ -325,6 +325,11 @@ interface ExerciseCardProps {
   // explicit trend-segment boundaries both analyzers must honor even when
   // the level shift is below the detection heuristic.
   equipmentBoundaries?: string[];
+  // Name of the machine/location this exercise is pinned to, when it differs
+  // from the session's (exercise_blocks.location_id). Present only for a real
+  // override, so the last-session line can say "at Annex" instead of the
+  // session-relative "here", which would be wrong.
+  locationOverrideName?: string | null;
   // Diet phase for plateau detection: gains expected on a bulk, holding
   // strength counts as progress on a cut
   userGoal?: PlateauGoal;
@@ -463,6 +468,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   performanceSnapshots,
   progressionHealthSessions,
   equipmentBoundaries,
+  locationOverrideName,
   userGoal,
   onRepRangeChange,
   isAmrapSuggested = false,
@@ -2671,11 +2677,19 @@ export const ExerciseCard = memo(function ExerciseCard({
     // Location-scoped calibration tag: for a local-scope exercise, mark whether
     // the last session shown is this gym's own track ("· here") or a softened
     // estimate carried over from another gym (rule 11).
+    //
+    // When this exercise is pinned to a machine of its own, "here" would be a
+    // lie — the numbers are that machine's, not the session gym's — so the tag
+    // names it instead.
     let locationTag = '';
     if (exerciseHistory?.progressionScope === 'local') {
-      locationTag = exerciseHistory.estimatedFromOtherLocation
-        ? ' · est. from another gym'
-        : ' · here';
+      if (exerciseHistory.estimatedFromOtherLocation) {
+        locationTag = locationOverrideName
+          ? ` · est. — first time on ${locationOverrideName}`
+          : ' · est. from another gym';
+      } else {
+        locationTag = locationOverrideName ? ` · at ${locationOverrideName}` : ' · here';
+      }
     }
     // Total tonnage of the last session (from main's volume-display work),
     // so the summary line answers "how much total weight did I move" without
@@ -4659,6 +4673,9 @@ export const ExerciseCard = memo(function ExerciseCard({
     prevProps.readinessModulation?.banner === nextProps.readinessModulation?.banner &&
     prevProps.performanceSnapshots === nextProps.performanceSnapshots &&
     prevProps.equipmentBoundaries === nextProps.equipmentBoundaries &&
+    // Pinning this exercise to a different machine rewrites the last-session
+    // line's calibration tag, so it has to re-render.
+    prevProps.locationOverrideName === nextProps.locationOverrideName &&
     prevProps.userGoal === nextProps.userGoal &&
     prevProps.isAmrapSuggested === nextProps.isAmrapSuggested &&
     prevProps.userBodyweightKg === nextProps.userBodyweightKg &&
