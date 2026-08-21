@@ -522,7 +522,12 @@ export async function startMesocycleWorkoutSession(
     // exist yet (that's what made it a shell), hence nothing to re-stamp.
     const shellLocationId = await resolveDefaultLocationId(supabase, user.id);
     if (shellLocationId) {
-      await updateSessionLocation(supabase, sessionId, shellLocationId, []);
+      await updateSessionLocation(supabase, {
+        sessionId,
+        locationId: shellLocationId,
+        previousLocationId: null,
+        blockIdsToRestamp: [],
+      });
     }
   } else {
     // Scheduled sessions carry a location like builder-started ones do.

@@ -98,6 +98,24 @@ Everything else is a plain `merge`.
 - The AI coach rationale surfaces the "treat as a starting point" note on a
   first session at a new implement (rule 4).
 
+### Making the move all-or-nothing
+
+There is no transaction across PostgREST calls, and not every set is in the
+database yet, so `sessionLocation.ts` handles both:
+
+- **Compensating rollback.** Moving the owning row and re-stamping its sets are
+  separate requests. If the re-stamp fails, the owning row is put back, so a
+  failure leaves the database where it started instead of half-moved. When even
+  the compensating write fails, the result carries `rolledBack: false` and the
+  UI says the workout is split rather than offering a plain retry.
+- **Queued sets.** A set logged offline sits in the IndexedDB outbox carrying
+  the location it was logged under; the database re-stamp cannot see it and it
+  would flush later onto the old track. Queued rows are patched *first* (local,
+  near-certain to succeed, and it closes the window where a flush could land
+  after the database re-stamp already ran) and rolled back with everything else.
+  They count toward the "N logged sets moved" toast — a queued set is a logged
+  set from the user's side.
+
 ## Where a session gets its location
 
 Every launcher stamps one, so scoping is the norm rather than an opt-in most
@@ -106,13 +124,20 @@ sessions miss:
 | Launcher | Source |
 |---|---|
 | Pre-workout builder (`workout/new`) | The user's chip selection |
-| Mesocycle / scheduled (`startMesocycleSession`) | `resolveDefaultLocationId` — most recently used, else the default flag, else first |
+| Mesocycle / scheduled (`startMesocycleSession`) | `resolveDefaultLocationId` — most recently used, else the default flag, else oldest |
 | Claimed planned shell | Same, stamped at claim time (a shell has no sets to re-stamp) |
 | Anything else / legacy | `null`, which reads as unknown-gym and falls into legacy attribution (rule 6) |
 
 `resolveDefaultLocationId` sits on the critical path of starting a workout and
 therefore never throws: every failure — missing column, missing table — degrades
 to `null`, exactly how sessions behaved before it existed.
+
+Its tie-breakers are load-bearing. `last_used_at` is written from exactly one
+place (`touchLocationLastUsed`, called only by the pre-workout sheet), so for
+most users every row is NULL; ordering on it alone would leave the winner to
+unspecified row order and silently start a scheduled workout at an arbitrary
+gym. `is_default` breaks that tie the way the user asked, and `created_at`
+makes the remainder deterministic.
 
 ## Deferred follow-ups
 

@@ -4896,6 +4896,24 @@ export default function WorkoutPage() {
   const sessionLocationName = locationNameById(sessionLocationId);
 
   /**
+   * What to say when a location move fails.
+   *
+   * `rolledBack` is the honest distinction: the helpers put the session/block
+   * row back when the set re-stamp fails, so the usual failure leaves nothing
+   * changed and "try again" is true. When even that compensating write failed,
+   * the row moved and its sets did not — the session really is split — and
+   * telling the user to just retry would hide it.
+   */
+  const locationFailureMessage = (rolledBack: boolean): string => {
+    if (!rolledBack) {
+      return 'Location change failed partway — reopen this workout and set it again to re-file the sets';
+    }
+    return isOnline
+      ? 'Could not change the location — nothing was changed, please try again'
+      : "Can't change location while offline — sets keep logging where they were";
+  };
+
+  /**
    * Re-read every exercise's history against a new location assignment.
    *
    * The rows themselves are already in memory and don't change — only which of
@@ -4970,12 +4988,12 @@ export default function WorkoutPage() {
       // Blocks pinned to their own machine keep it: "I was at a different gym
       // than I thought" must not silently un-pin a deliberate choice.
       const inheritingBlockIds = blocks.filter((b) => !blockLocations[b.id]).map((b) => b.id);
-      const result = await updateSessionLocation(
-        supabase,
+      const result = await updateSessionLocation(supabase, {
         sessionId,
         locationId,
-        inheritingBlockIds
-      );
+        previousLocationId: previous,
+        blockIdsToRestamp: inheritingBlockIds,
+      });
 
       if (result.unsupported) {
         setSessionLocationId(previous);
@@ -4989,11 +5007,7 @@ export default function WorkoutPage() {
         // under a location the database never accepted.
         setSessionLocationId(previous);
         rescopeHistories(previous, blockLocations);
-        showError(
-          isOnline
-            ? 'Could not change the workout location — please try again'
-            : "Can't change location while offline — sets keep logging where they were"
-        );
+        showError(locationFailureMessage(result.rolledBack));
         return;
       }
       showSuccess(
@@ -5015,12 +5029,13 @@ export default function WorkoutPage() {
     setBlockLocations(nextBlockLocations);
     rescopeHistories(sessionLocationId, nextBlockLocations);
 
-    const result = await updateBlockLocation(
-      supabase,
-      block.id,
+    const result = await updateBlockLocation(supabase, {
+      blockId: block.id,
       locationId,
-      resolveEffectiveLocation(locationId, sessionLocationId)
-    );
+      previousLocationId: previous,
+      effectiveLocationId: resolveEffectiveLocation(locationId, sessionLocationId),
+      previousEffectiveLocationId: resolveEffectiveLocation(previous, sessionLocationId),
+    });
 
     if (result.unsupported || !result.ok) {
       const reverted = { ...blockLocations, [block.id]: previous };
@@ -5029,9 +5044,7 @@ export default function WorkoutPage() {
       showError(
         result.unsupported
           ? 'Per-exercise locations need a database update — nothing was changed'
-          : isOnline
-            ? "Could not change this exercise's location — please try again"
-            : "Can't change location while offline — sets keep logging where they were"
+          : locationFailureMessage(result.rolledBack)
       );
       return;
     }
