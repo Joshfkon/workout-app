@@ -26,6 +26,8 @@ import {
   withVisibleChildren,
 } from '@/components/muscle/MuscleGroupList';
 import { ContributingSets, SourcesDisclosure } from '@/components/muscle/ContributingSets';
+import { RollingVolumeForecast } from '@/components/muscle/RollingVolumeForecast';
+import type { DailyGroupSets } from '@/services/volumeProjection';
 import { MuscleMap } from '@/components/muscleMap/MuscleMap';
 import { readinessRowsToMapData } from '@/lib/muscleMap/adapters';
 import type { MuscleId } from '@/lib/muscleMap/taxonomy';
@@ -318,6 +320,7 @@ export function MuscleReadinessContent({
   rows,
   targets,
   nextUp = null,
+  dailyGroupSets,
   isLoading,
   collapsible = false,
   loadingTestId = 'readiness-sheet-loading',
@@ -328,6 +331,9 @@ export function MuscleReadinessContent({
   rows: ReadinessRow[];
   targets: ReadinessTarget[];
   nextUp?: NextReadyTarget | null;
+  /** Per-day credited group sets (from useMuscleReadiness) — enables the
+   *  rolling-volume decay forecast inside each expanded row. */
+  dailyGroupSets?: DailyGroupSets;
   isLoading: boolean;
   collapsible?: boolean;
   loadingTestId?: string;
@@ -410,22 +416,37 @@ export function MuscleReadinessContent({
               // Expanding a row also reveals WHERE its weekly count came from —
               // and gives chevronless single-muscle groups (Biceps, Quads, …)
               // something to expand to.
-              renderRowDetail={(row) =>
-                row.exercises.length > 0 ? (
-                  // Group-scope panel: MuscleGroupList renders it at ROW level
-                  // (outside the child indent), and the scope label names the
-                  // group, so it can't read as a sub-muscle's breakdown.
-                  // groupScope adds the footnote for why the group total is
-                  // below the sum of the sub-muscle rows.
-                  <ContributingSets
-                    exercises={row.exercises}
-                    muscle={row.muscle}
-                    testIdPrefix="readiness-sources"
-                    scopeLabel={row.children.length > 0 ? `${row.displayName} · whole group` : row.displayName}
-                    groupScope={row.children.length > 0}
-                  />
-                ) : null
-              }
+              renderRowDetail={(row) => {
+                if (row.exercises.length === 0) return null;
+                const daily = dailyGroupSets?.[row.muscle];
+                return (
+                  <>
+                    {/* Group-scope panel: MuscleGroupList renders it at ROW
+                        level (outside the child indent), and the scope label
+                        names the group, so it can't read as a sub-muscle's
+                        breakdown. groupScope adds the footnote for why the
+                        group total is below the sum of the sub-muscle rows. */}
+                    <ContributingSets
+                      exercises={row.exercises}
+                      muscle={row.muscle}
+                      testIdPrefix="readiness-sources"
+                      scopeLabel={row.children.length > 0 ? `${row.displayName} · whole group` : row.displayName}
+                      groupScope={row.children.length > 0}
+                    />
+                    {/* When does this rolling count fall off? Same zone colors
+                        as the row bar and the body map. */}
+                    {daily && (
+                      <RollingVolumeForecast
+                        daily={daily}
+                        band={row.band}
+                        muscle={row.muscle}
+                        displayName={row.displayName}
+                        testIdPrefix="readiness-forecast"
+                      />
+                    )}
+                  </>
+                );
+              }}
               testIdPrefix="readiness-row"
               childrenClassName="border-l border-surface-800/80 ml-5 mb-1 pl-2"
             />
@@ -484,7 +505,7 @@ export function MuscleReadinessSheet({
   // against the same instant (and re-stamped on each fresh open).
   const [now] = useState(() => new Date());
 
-  const { rows, targets, nextUp, isLoading } = useMuscleReadiness({
+  const { rows, targets, nextUp, dailyGroupSets, isLoading } = useMuscleReadiness({
     liveBlocks,
     liveSets,
     now,
@@ -500,6 +521,7 @@ export function MuscleReadinessSheet({
           rows={rows}
           targets={targets}
           nextUp={nextUp}
+          dailyGroupSets={dailyGroupSets}
           isLoading={isLoading}
           collapsible
           wearableNotice={wearableRecovery.reason}

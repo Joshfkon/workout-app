@@ -15,6 +15,7 @@ import {
   withVisibleChildren,
 } from '@/components/muscle/MuscleGroupList';
 import { ContributingSets, SourcesDisclosure } from '@/components/muscle/ContributingSets';
+import { RollingVolumeForecast } from '@/components/muscle/RollingVolumeForecast';
 import { EnhancedAthleteModeCard } from '@/components/settings/EnhancedAthleteModeCard';
 import { MuscleMap } from '@/components/muscleMap/MuscleMap';
 import { volumeRowsToMapData } from '@/lib/muscleMap/adapters';
@@ -24,6 +25,7 @@ import {
   buildVolumeRows,
   belowMevVolumeData,
   STANDARD_TO_COARSE,
+  type CoarseMuscle,
   type VolumeRow,
 } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 import {
@@ -189,7 +191,7 @@ export default function VolumeProfilePage() {
   // Below-MEV muscles for the atrophy-risk warning come from the SAME coarse
   // rows the bars render (shared counter + band), so the warning, the bars and
   // the "This Week vs MEV" card can never disagree on count or zone-status.
-  const { stats: volumeStats, reachable } = useWeeklyMevSummary();
+  const { stats: volumeStats, reachable, dailyGroupSets } = useWeeklyMevSummary();
 
   // Calculate confidence summary
   const confidenceSummary = useMemo(() => {
@@ -394,22 +396,37 @@ export default function VolumeProfilePage() {
             // Expanding a row also reveals WHERE its weekly count came from —
             // and gives chevronless single-muscle groups (Biceps, Quads, …)
             // something to expand to.
-            renderRowDetail={(row) =>
-              row.exercises.length > 0 ? (
-                // Group-scope panel: MuscleGroupList renders it at ROW level
-                // (outside the child indent), and the scope label names the
-                // group, so it can't read as a sub-muscle's breakdown.
-                // groupScope adds the footnote for why the group total is
-                // below the sum of the sub-muscle rows.
-                <ContributingSets
-                  exercises={row.exercises}
-                  muscle={row.muscle}
-                  testIdPrefix="volume-sources"
-                  scopeLabel={row.children.length > 0 ? `${row.displayName} · whole group` : row.displayName}
-                  groupScope={row.children.length > 0}
-                />
-              ) : null
-            }
+            renderRowDetail={(row) => {
+              if (row.exercises.length === 0) return null;
+              const daily = dailyGroupSets[row.muscle as CoarseMuscle];
+              return (
+                <>
+                  {/* Group-scope panel: MuscleGroupList renders it at ROW level
+                      (outside the child indent), and the scope label names the
+                      group, so it can't read as a sub-muscle's breakdown.
+                      groupScope adds the footnote for why the group total is
+                      below the sum of the sub-muscle rows. */}
+                  <ContributingSets
+                    exercises={row.exercises}
+                    muscle={row.muscle}
+                    testIdPrefix="volume-sources"
+                    scopeLabel={row.children.length > 0 ? `${row.displayName} · whole group` : row.displayName}
+                    groupScope={row.children.length > 0}
+                  />
+                  {/* When does this rolling count fall off? Same zone colors as
+                      the row bar and the body map. */}
+                  {daily && (
+                    <RollingVolumeForecast
+                      daily={daily}
+                      band={row.band}
+                      muscle={row.muscle}
+                      displayName={row.displayName}
+                      testIdPrefix="volume-forecast"
+                    />
+                  )}
+                </>
+              );
+            }}
             testIdPrefix="volume-row"
             rowClassName="py-3 border-b border-surface-800 last:border-b-0"
           />
