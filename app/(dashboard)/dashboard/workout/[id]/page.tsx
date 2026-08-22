@@ -2517,6 +2517,33 @@ export default function WorkoutPage() {
     latestBodyweightKg ||
     undefined;
 
+  // Mid-workout weigh-in from ExerciseCard's no-bodyweight-on-record state.
+  // Persists exactly like the pre-workout check-in path (upsert into today's
+  // weight_log row), then updates local state so currentBodyweightKg resolves
+  // and the Weighted/Assisted control appears without leaving the workout.
+  // Identity-stable: the card's memo comparator never compares callbacks.
+  const handleBodyweightLogged = useCallback(async (weightKg: number) => {
+    const supabase = createUntypedClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+    const { error } = await supabase
+      .from('weight_log')
+      .upsert(
+        {
+          user_id: user.id,
+          weight: weightKg,
+          unit: 'kg',
+          logged_at: getLocalDateString(),
+        },
+        { onConflict: 'user_id,logged_at' }
+      );
+    if (error) throw error;
+    setLatestBodyweightKg(weightKg);
+    // Today's weigh-in also pre-fills the check-in form, same as a Body-tab
+    // entry made before the session would have.
+    setTodayCheckInData(prev => ({ ...(prev ?? {}), bodyweightKg: weightKg }));
+  }, []);
+
   // Readiness easing for this session (Phase 1.3): computed from the
   // check-in's readiness score, threaded into ExerciseCard (RIR chips +
   // suggestion banner reason).
@@ -6308,6 +6335,7 @@ export default function WorkoutPage() {
                     recommendedWeight={aiRecommendedWeightKg}
                     coldStartSuggestion={coldStartSuggestion}
                     userBodyweightKg={currentBodyweightKg}
+                    onBodyweightLogged={handleBodyweightLogged}
                     exerciseHistory={exerciseHistories[block.exerciseId]}
                     lastWorkoutSleep={sleepByExerciseId[block.exerciseId] ?? null}
                     sleepLoggingActive={sleepLoggingActive}
