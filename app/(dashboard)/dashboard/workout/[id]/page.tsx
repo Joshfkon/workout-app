@@ -109,6 +109,7 @@ import {
   buildSetEditPatch,
   planBlockRenumber,
   persistSetRenumber,
+  nextSetNumberForBlock,
   type SetNumberChange,
 } from '@/lib/training/logSet';
 import { loadWorkoutSession, resolveResumePosition } from './_lib/loadSession';
@@ -513,6 +514,11 @@ export default function WorkoutPage() {
   const [currentBlockIndex, setCurrentBlockIndex] = useState(0);
   const [completedSets, setCompletedSets] = useState<SetLog[]>([]);
   const [currentSetNumber, setCurrentSetNumber] = useState(1);
+  // An in-flight delete's renumbering UPDATEs, if any. A set logged while they
+  // are still on the wire would probe max(set_number) and see the PRE-compaction
+  // numbering, handing itself a number past the end of the block — re-opening
+  // the gap the delete just closed. Null whenever no delete is outstanding.
+  const pendingSetRenumberRef = useRef<Promise<void> | null>(null);
   const [showRestTimer, setShowRestTimer] = useState(false);
   const [restTimerDuration, setRestTimerDuration] = useState<number | null>(null); // Custom rest time (for warmups)
   // Why the running rest isn't the plain stored prescription (effort
@@ -2622,6 +2628,15 @@ export default function WorkoutPage() {
       // idempotency key: a retry re-sends the same id and the outbox's
       // ignoreDuplicates upsert makes it a no-op instead of a second set.
       const setId = crypto.randomUUID();
+
+      // Let a just-issued delete finish compacting the database first. Its
+      // UPDATEs move rows DOWN, so probing before they land reads a stale
+      // maximum and resolveSetNumber's floor would carry that number forward.
+      // Errors are the delete path's to report; this is only a barrier.
+      if (pendingSetRenumberRef.current) {
+        try { await pendingSetRenumberRef.current; } catch { /* reported by handleDeleteSet */ }
+      }
+
       const blockWorkingSets = completedSets
         .filter((s) => s.exerciseBlockId === currentBlock.id && !s.isWarmup)
         .map((s) => ({ weightKg: s.weightKg }));
@@ -2653,7 +2668,14 @@ export default function WorkoutPage() {
         {
           setId,
           exerciseBlockId: currentBlock.id,
-          localNextSetNumber: currentSetNumber,
+          // Counted from the block's live sets, not from `currentSetNumber`.
+          // The counter is choreography — it drives rest/AMRAP/"last set"
+          // decisions — and it only ever moves forward, so a deleted set left
+          // its number spent and every later set inherited the hole ("Set 1,
+          // Set 3"). The number that reaches the DATABASE is derived from what
+          // is actually logged, which is dense by construction (B1's
+          // compaction) and therefore self-correcting.
+          localNextSetNumber: nextSetNumberForBlock(completedSets, currentBlock.id),
           weightKg: data.weightKg,
           reps: data.reps,
           rpe: data.rpe,
@@ -3125,38 +3147,69 @@ export default function WorkoutPage() {
     }
     setSetSync(prev => { const next = { ...prev }; delete next[setId]; return next; });
 
-    try {
-      const supabase = createUntypedClient();
-      const { queued, error: deleteError } = await persistSetDelete({ supabase }, setId);
-      if (queued) refreshOutboxCount();
-      if (deleteError) {
-        console.error('Failed to delete set:', deleteError);
-        setError(`Failed to delete set: ${deleteError.message}`);
-      } else {
-        // Persist the same compaction the local state just applied, so the
-        // two numberings stay identical (B1). Without this the database keeps
-        // its gaps: the row shown as set 2 stays stored as set 3, and a set
-        // logged offline afterwards can carry a set_number the database still
-        // holds — which the UNIQUE (exercise_block_id, set_number) constraint
-        // refuses, dropping the set after the outbox's retries.
-        const { error: renumberError } = await persistSetRenumber({ supabase }, renumberChanges);
-        if (renumberError) {
-          console.error('Failed to renumber sets after delete:', renumberError);
-          setError(`Failed to renumber sets: ${renumberError.message}`);
+    // Give back the number the deleted set was holding. `currentSetNumber` is
+    // the counter behind the "Set N" logger header, the target-sets comparison
+    // and AMRAP eligibility, and it only ever counts UP — so without this a
+    // delete left it one past where the block actually stands. That is what
+    // made the numbering jump: the next set was written as 3 with only one set
+    // on the block. It is derived from the same `completedSets` snapshot
+    // `setToDelete` came from, minus this set, so it lands on the dense count.
+    // Only the ACTIVE block's counter is meaningful; deleting a set on some
+    // other block must leave it alone.
+    if (setToDelete && setToDelete.exerciseBlockId === currentBlock?.id) {
+      setCurrentSetNumber(
+        nextSetNumberForBlock(
+          completedSets.filter(s => s.id !== setId),
+          setToDelete.exerciseBlockId
+        )
+      );
+    }
+
+    const persist = (async () => {
+      try {
+        const supabase = createUntypedClient();
+        const { queued, error: deleteError } = await persistSetDelete({ supabase }, setId);
+        if (queued) refreshOutboxCount();
+        if (deleteError) {
+          console.error('Failed to delete set:', deleteError);
+          setError(`Failed to delete set: ${deleteError.message}`);
         } else {
-          setError(null);
+          // Persist the same compaction the local state just applied, so the
+          // two numberings stay identical (B1). Without this the database keeps
+          // its gaps: the row shown as set 2 stays stored as set 3, and a set
+          // logged offline afterwards can carry a set_number the database still
+          // holds — which the UNIQUE (exercise_block_id, set_number) constraint
+          // refuses, dropping the set after the outbox's retries.
+          const { error: renumberError } = await persistSetRenumber({ supabase }, renumberChanges);
+          if (renumberError) {
+            console.error('Failed to renumber sets after delete:', renumberError);
+            setError(`Failed to renumber sets: ${renumberError.message}`);
+          } else {
+            setError(null);
+          }
         }
+      } catch (err) {
+        console.error('Failed to delete set:', err);
+        setError(err instanceof Error ? err.message : 'Failed to delete set');
       }
-    } catch (err) {
-      console.error('Failed to delete set:', err);
-      setError(err instanceof Error ? err.message : 'Failed to delete set');
+    })();
+
+    // Published so the next logged set can wait for it — see the await in
+    // handleSetComplete. Cleared once settled so the wait costs nothing in the
+    // usual case where no delete is outstanding.
+    pendingSetRenumberRef.current = persist;
+    try {
+      await persist;
+    } finally {
+      if (pendingSetRenumberRef.current === persist) pendingSetRenumberRef.current = null;
     }
   };
 
   /** Undo the just-logged set (toast action, P1-4). */
   const undoLoggedSet = async (setId: string, _blockId: string) => {
+    // No counter adjustment here: handleDeleteSet already returns the number to
+    // the block's dense count. Decrementing again would double-count the undo.
     await handleDeleteSet(setId);
-    setCurrentSetNumber(prev => Math.max(1, prev - 1));
   };
 
   // Auto-adjust message state

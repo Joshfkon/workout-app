@@ -261,6 +261,29 @@ export interface SetNumberChange {
   setNumber: number;
 }
 
+/** Only working sets carry a 1..n `set_number`; warmups are numbered separately. */
+function isWorkingSet(set: Pick<SetLog, 'isWarmup' | 'setType'>): boolean {
+  return !set.isWarmup && set.setType !== 'warmup';
+}
+
+/**
+ * The number the next set logged against `blockId` should take.
+ *
+ * A block's working sets are DENSE by construction — `planBlockRenumber`
+ * compacts them to 1..n after every deletion — so the next number is one past
+ * the COUNT, never one past the highest number previously handed out.
+ *
+ * That distinction is the whole point of this function. The workout page used
+ * to feed the write path a running counter that only ever incremented, so a
+ * deleted set's number stayed spent: log 1, log 2, delete 2, and the counter
+ * still sitting at 3 gave the next set the number 3. The user saw "Set 1,
+ * Set 3" and every later set inherited the offset. Counting live sets instead
+ * makes the number self-correcting — there is no state to drift.
+ */
+export function nextSetNumberForBlock(sets: SetLog[], blockId: string): number {
+  return sets.filter((s) => s.exerciseBlockId === blockId && isWorkingSet(s)).length + 1;
+}
+
 /**
  * Renumber a block's working sets to a dense 1..n after a deletion, and say
  * which rows actually moved.
@@ -285,7 +308,7 @@ export function planBlockRenumber(
   let n = 1;
   const changes: SetNumberChange[] = [];
   const renumbered = sets.map((set) => {
-    if (set.exerciseBlockId === blockId && !set.isWarmup && set.setType !== 'warmup') {
+    if (set.exerciseBlockId === blockId && isWorkingSet(set)) {
       const setNumber = n++;
       if (setNumber !== set.setNumber) changes.push({ id: set.id, setNumber });
       return { ...set, setNumber };

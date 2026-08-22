@@ -21,6 +21,7 @@
  */
 import {
   logSet,
+  nextSetNumberForBlock,
   persistSetDelete,
   persistSetRenumber,
   planBlockRenumber,
@@ -215,7 +216,9 @@ describe('B1 — delete, renumber, log another set', () => {
       {
         setId: id,
         exerciseBlockId: BLOCK,
-        localNextSetNumber: local.numbering().length + 1,
+        // Through the production helper, not a local count: the harness must
+        // not carry its own copy of the numbering rule.
+        localNextSetNumber: nextSetNumberForBlock(local.sets, BLOCK),
         weightKg,
         reps: 10,
         rpe: 8,
@@ -299,6 +302,85 @@ describe('B1 — delete, renumber, log another set', () => {
       { id: 's4', setNumber: 3 },
     ]);
     expect(db.numbering(BLOCK)).toEqual(local.numbering());
+  });
+
+  it('reuses the number an accidental set gave back', async () => {
+    // The reported bug, in the shape the user hit it: log a set, log a second
+    // one by accident, delete it, log the real second set — and watch the
+    // numbering read "Set 1, Set 3".
+    //
+    // Nothing here is about the DELETE, which already compacted both sides
+    // (the test above proves it). The gap came from the number the NEXT set
+    // asked for. The workout page fed the write path `currentSetNumber`, a
+    // counter that only ever moved up, so the deleted set's number stayed
+    // spent and every later set carried the offset. `nextSetNumberForBlock`
+    // counts what is actually logged, so the number comes back.
+    const db = constrainedSetLogs();
+    const local = localState();
+
+    await log(db, local, 's1', 100);
+    await log(db, local, 'oops', 105);
+    expect(local.numbering()).toEqual([
+      { id: 's1', setNumber: 1 },
+      { id: 'oops', setNumber: 2 },
+    ]);
+
+    const changes = local.deleteAndRenumber('oops');
+    await persistSetDelete({ supabase: db.client }, 'oops');
+    await persistSetRenumber({ supabase: db.client }, changes);
+
+    // The number the accidental set held is free again — the next set is 2,
+    // not 3. A counter-derived number would have asked for 3 here, and
+    // resolveSetNumber's floor (max(3, dbMax + 1)) would have honoured it.
+    expect(nextSetNumberForBlock(local.sets, BLOCK)).toBe(2);
+
+    const second = await log(db, local, 's2', 105);
+    expect(second.status).toBe('saved');
+    expect(local.numbering()).toEqual([
+      { id: 's1', setNumber: 1 },
+      { id: 's2', setNumber: 2 },
+    ]);
+    expect(db.numbering(BLOCK)).toEqual(local.numbering());
+  });
+
+  it('a counter-derived number really would re-open the gap', async () => {
+    // Guards the test above the way 'the stub really does enforce the
+    // constraint' guards the first one. `nextSetNumberForBlock` returning 2 is
+    // only meaningful if the number it replaced would have returned 3 — so
+    // feed the write path exactly what the page's `currentSetNumber` held
+    // (two sets logged, so 3) and watch the hole survive the delete.
+    const db = constrainedSetLogs();
+    const local = localState();
+
+    await log(db, local, 's1', 100);
+    await log(db, local, 'oops', 105);
+    const changes = local.deleteAndRenumber('oops');
+    await persistSetDelete({ supabase: db.client }, 'oops');
+    await persistSetRenumber({ supabase: db.client }, changes);
+
+    clock.advanceMinutes(3);
+    const stale = await logSet(
+      { supabase: db.client, online: true, applyOptimistic: local.apply },
+      {
+        setId: 's2',
+        exerciseBlockId: BLOCK,
+        localNextSetNumber: 3, // the counter, still spent on the deleted set
+        weightKg: 105,
+        reps: 10,
+        rpe: 8,
+        setType: 'normal',
+        blockWorkingSets: [],
+      }
+    );
+
+    // resolveSetNumber floors at the local number, so the stale counter wins
+    // over the (correctly compacted) database maximum of 1.
+    expect(stale.status).toBe('saved');
+    expect(stale.set.setNumber).toBe(3);
+    expect(db.numbering(BLOCK)).toEqual([
+      { id: 's1', setNumber: 1 },
+      { id: 's2', setNumber: 3 }, // "Set 1, Set 3" — the reported symptom
+    ]);
   });
 
   it('the stub really does enforce the constraint', () => {

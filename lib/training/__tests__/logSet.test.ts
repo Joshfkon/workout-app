@@ -13,6 +13,7 @@ import {
   buildSetLog,
   buildSetEditPatch,
   renumberBlockSets,
+  nextSetNumberForBlock,
   logSet,
   persistSetEdit,
   persistSetDelete,
@@ -464,5 +465,28 @@ describe('renumberBlockSets', () => {
     const result = renumberBlockSets([set('w', 'b1', 9, true), set('a', 'b1', 2)], 'b1');
     expect(result.find((s) => s.id === 'w')!.setNumber).toBe(9);
     expect(result.find((s) => s.id === 'a')!.setNumber).toBe(1);
+  });
+});
+
+describe('nextSetNumberForBlock', () => {
+  const set = (id: string, blockId: string, setNumber: number, isWarmup = false): SetLog =>
+    ({ id, exerciseBlockId: blockId, setNumber, isWarmup, setType: isWarmup ? 'warmup' : 'normal' } as SetLog);
+
+  it('counts the block rather than continuing from the highest number', () => {
+    // The distinction the workout page got wrong. These sets are numbered
+    // 1 and 3 — a stale numbering the compaction has not reached yet — and the
+    // answer is still 3, because the block holds two sets. Reading "one past
+    // the highest" would say 4 and preserve the hole forever.
+    expect(nextSetNumberForBlock([set('a', 'b1', 1), set('c', 'b1', 3)], 'b1')).toBe(3);
+  });
+
+  it('starts at 1 for an untouched block', () => {
+    expect(nextSetNumberForBlock([], 'b1')).toBe(1);
+    expect(nextSetNumberForBlock([set('x', 'b2', 4)], 'b1')).toBe(1);
+  });
+
+  it('ignores warmups and other blocks', () => {
+    const sets = [set('w', 'b1', 1, true), set('a', 'b1', 1), set('x', 'b2', 9)];
+    expect(nextSetNumberForBlock(sets, 'b1')).toBe(2);
   });
 });
