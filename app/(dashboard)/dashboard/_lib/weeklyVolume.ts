@@ -853,18 +853,28 @@ export function rowFillClass(row: RowColorInput): string {
   return ZONE_FILL_CLASSES[rowColorToken(row)];
 }
 
-/** Denominator label: the MEV–MRV band, never n/MEV. e.g. "zone 8–20". */
+/**
+ * Denominator label: the MEV–MRV band, never n/MEV. e.g. "credited zone 8–20".
+ *
+ * "credited" names the UNIT, and it is not decoration. These thresholds count
+ * a primary tag as 1.0 per set and a secondary tag as 0.5, which is a
+ * different quantity from the direct programmed sets the settings landmark
+ * editor shows — the same muscle legitimately reads 0 there and 4 here. See
+ * the direct/credited convention note on the credited MEV table in
+ * services/volumeBands.
+ */
 export function zoneBandLabel(band: VolumeBand): string {
-  return `zone ${band.mev}–${band.mrv}`;
+  return `credited zone ${band.mev}–${band.mrv}`;
 }
 
 /**
- * Denominator label for a COARSE row: same band, prefixed "group" so an
- * independent group-level landmark can't be misread as the sum of the child
- * zones shown beneath it (see the band semantics note in services/volumeBands).
+ * Denominator label for a COARSE row: same band and same credited unit,
+ * prefixed "group" so an independent group-level landmark can't be misread as
+ * the sum of the child zones shown beneath it (see the band semantics note in
+ * services/volumeBands).
  */
 export function groupZoneBandLabel(band: VolumeBand): string {
-  return `group zone ${band.mev}–${band.mrv}`;
+  return `credited group zone ${band.mev}–${band.mrv}`;
 }
 
 /** Display name for a coarse group. */

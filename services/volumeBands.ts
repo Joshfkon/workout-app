@@ -193,6 +193,26 @@ export const FINE_CHILD_MUSCLES = new Set<StandardMuscleGroup>([
 ]);
 
 /**
+ * ── THE DIRECT / CREDITED CONVENTION (half of it; the other half is
+ *    DEFAULT_VOLUME_LANDMARKS in types/schema) ────────────────────────────
+ *
+ * This table is stated in CREDITED sets: the volume counter awards 1.0 per set
+ * for a primary-muscle tag and SECONDARY_MUSCLE_CREDIT (0.5) per set for a
+ * secondary tag, and every threshold here is a threshold on that total.
+ * DEFAULT_VOLUME_LANDMARKS is stated in DIRECT programmed sets and is scaled
+ * by experience tier; this table is neither.
+ *
+ * So the two tables give different numbers for the same muscle — 19 of 26 at
+ * the intermediate tier — and that gap is DEFINITIONAL, not drift. It has two
+ * independent causes: the direct-vs-credited unit, and experience scaling.
+ * Do NOT "reconcile" them by editing either side into agreement; a reader who
+ * does has changed research values to fix a units mismatch.
+ *
+ * Which to read: this table for anything judging counted weekly volume (row
+ * colour, below-MEV warnings, the allocator's per-child floor). The direct
+ * table for experience-specific direct-set programming and component bounds.
+ * Relationships pinned in services/__tests__/directCreditedConvention.test.ts.
+ *
  * MEV per standard muscle — the threshold for the 'low' status on the warning
  * surfaces AND the per-child direct-work floor in the generator's
  * indirect-aware allocator. One entry per STANDARD_MUSCLE_GROUPS member
@@ -318,6 +338,21 @@ const FINE_BAND_TOTAL_INCLUSIVE_MRV: Partial<Record<StandardMuscleGroup, number>
   triceps_lat_med: 20,
 };
 
+/**
+ * Settings-page copy for the editable landmark MEV column. Lives beside the
+ * convention it describes so the wording and the tables can't drift apart.
+ *
+ * The second sentence is deliberately hedged. Secondary work MAY close the gap
+ * between a direct MEV and the credited threshold, but it is not guaranteed to
+ * and for generated programs currently does not: every ab slot the generator
+ * fills is a crunch variant tagged `abs` with no oblique secondary, so a
+ * generated program contributes 0.0 credited oblique sets. Do not strengthen
+ * this into a promise that indirect work covers the difference.
+ */
+export const DIRECT_MEV_TOOLTIP =
+  'Minimum direct sets targeting this muscle. Secondary exercises may also ' +
+  'contribute partial credit toward your tracked weekly volume.';
+
 /** Round a scaled ceiling to 0.5-set granularity. */
 const roundHalf = (v: number): number => Math.round(v * 2) / 2;
 
@@ -378,6 +413,10 @@ export function applyRecoveryProfileToLandmarks(
  * and MRV from the total-inclusive overrides or the intermediate research
  * table, floored at mev+2). Enhanced profiles scale the MRV by the muscle's
  * tier; MEV is NEVER scaled.
+ *
+ * Everything here is in CREDITED sets, which is not the unit
+ * DEFAULT_VOLUME_LANDMARKS uses — see the convention note above MEV_TARGETS
+ * before treating a difference between the two tables as a bug.
  */
 /**
  * Per-STANDARD-muscle MEV — the warning-surface threshold. Distinct from
@@ -402,10 +441,30 @@ export function getEffectiveBand(
     tierKey = muscle;
   } else {
     const mev = MEV_TARGETS[muscle];
-    const mrv =
+    // MRV provenance, made explicit rather than implied by the `??`.
+    //
+    // Only 4 of the 15 fine muscles have a credited-sets MRV of their own
+    // (FINE_BAND_TOTAL_INCLUSIVE_MRV). The other 11 — chest_upper/lower,
+    // lateral_delts, lats, upper_back, upper_traps, mid_lower_traps,
+    // glute_med, gastrocnemius, soleus, obliques — fall through to the DIRECT
+    // landmark table's MRV, un-converted. That is a number from the other side
+    // of the direct/credited convention, adopted by OMISSION rather than by
+    // decision: nobody authored a credited MRV for these, so the direct one
+    // stands in. It is defensible where a muscle takes little secondary inflow
+    // (direct ≈ credited) and merely unexamined elsewhere.
+    //
+    // Hardcoding `.intermediate` is also why a fine muscle's credited band is
+    // experience-independent while the settings row the user edits is not: a
+    // novice sees MRV 8 in settings and 10 on the bar, an advanced lifter 12
+    // and 10.
+    //
+    // Recording this, not fixing it, is deliberate — authoring 11 credited MRVs
+    // is a research-review change of its own. See recommendation #3 in
+    // docs/MUSCLE_ATTRIBUTION_CORRECTIONS_PROPOSED.md:240-244.
+    const referenceMrv =
       FINE_BAND_TOTAL_INCLUSIVE_MRV[muscle] ??
-      DEFAULT_VOLUME_LANDMARKS.intermediate[muscle].mrv;
-    base = { mev, mrv: Math.max(mev + 2, mrv) };
+      DEFAULT_VOLUME_LANDMARKS.intermediate[muscle].mrv; // un-converted direct MRV
+    base = { mev, mrv: Math.max(mev + 2, referenceMrv) };
     tierKey = STANDARD_TO_COARSE[muscle];
   }
   return { mev: base.mev, mrv: scaleMrvForProfile(base.mrv, tierKey, ctx) };

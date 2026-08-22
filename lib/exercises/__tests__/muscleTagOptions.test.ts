@@ -23,7 +23,7 @@ const values = (options: { value: string }[]) => new Set(options.map((o) => o.va
 describe('every muscle a volume row can show is taggable', () => {
   it('ALL_MUSCLE_TAG_OPTIONS covers every fine child (the row-stuck-at-0 guard)', () => {
     const taggable = values(ALL_MUSCLE_TAG_OPTIONS);
-    for (const fine of FINE_CHILD_MUSCLES) {
+    for (const fine of Array.from(FINE_CHILD_MUSCLES)) {
       expect(taggable.has(fine)).toBe(true);
     }
     expect(taggable.has('obliques')).toBe(true);
@@ -31,7 +31,7 @@ describe('every muscle a volume row can show is taggable', () => {
 
   it('the filter chips cover them too, so oblique work is findable', () => {
     const filterable = values(MUSCLE_FILTER_OPTIONS);
-    for (const fine of FINE_CHILD_MUSCLES) {
+    for (const fine of Array.from(FINE_CHILD_MUSCLES)) {
       expect(filterable.has(fine)).toBe(true);
     }
   });
@@ -59,7 +59,7 @@ describe('every muscle a volume row can show is taggable', () => {
   it('the primary picker stays a subset — it drops splitting coarse groups only', () => {
     const precise = values(PRECISE_MUSCLE_GROUP_OPTIONS);
     const taggable = values(ALL_MUSCLE_TAG_OPTIONS);
-    for (const value of precise) expect(taggable.has(value)).toBe(true);
+    for (const value of Array.from(precise)) expect(taggable.has(value)).toBe(true);
     // Obliques is a legitimate primary (Russian Twist, Pallof Press, Side Plank).
     expect(precise.has('obliques')).toBe(true);
     // The splitting groups are the ones validateExercisePrimary rejects.
