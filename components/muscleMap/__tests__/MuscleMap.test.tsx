@@ -48,7 +48,7 @@ describe('MuscleMap', () => {
     }
   });
 
-  it('volume mode: zone colors come from the shared helper (gray 0-set, amber low, green in-zone, red over)', () => {
+  it('volume mode: zone colors come from the shared helper (light red 0-set, amber low, green in-zone, red over)', () => {
     const data: MuscleMapData = {
       quads: { value: 10, zone: 'in_zone' },
       biceps: { value: 2, zone: 'below_mev' },
@@ -58,9 +58,13 @@ describe('MuscleMap', () => {
     const { container } = render(<MuscleMap data={data} mode="volume" view="both" />);
     expect(musclePaths(container, 'quads')[0]!.getAttribute('class')).toContain('fill-success-500');
     expect(musclePaths(container, 'biceps')[0]!.getAttribute('class')).toContain('fill-warning-500');
-    expect(musclePaths(container, 'chest_upper')[0]!.getAttribute('class')).toContain('fill-surface-600');
+    // Zero volume warns in light red, and must NOT reuse the over-MRV red.
+    const untrained = musclePaths(container, 'chest_upper')[0]!.getAttribute('class')!;
+    expect(untrained).toContain('fill-danger-300');
+    expect(untrained).not.toContain('fill-danger-500');
     expect(musclePaths(container, 'lats')[0]!.getAttribute('class')).toContain('fill-danger-500');
-    // No data → neutral base tone.
+    // No data at all (region not covered by any row) → neutral base tone, so an
+    // untrained muscle stays distinguishable from an unmapped one.
     expect(musclePaths(container, 'gastrocnemius')[0]!.getAttribute('class')).toContain('fill-surface-800');
   });
 

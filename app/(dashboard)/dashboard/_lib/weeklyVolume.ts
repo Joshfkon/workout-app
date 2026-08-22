@@ -766,40 +766,45 @@ export function volumeZone(sets: number, band: VolumeBand): VolumeZone {
 
 /**
  * The one zone→color decision, shared by bars, text and the SVG muscle map.
- * 'neutral' is the untrained case (0 sets below MEV) that reads gray instead
- * of amber. Every zone*Class helper below is a pure token→utility lookup over
- * this, so a surface can never disagree on which color a zone gets.
+ * 'untrained' is the 0-sets-below-MEV case: a muscle that got NO work this
+ * week is the biggest gap on the screen, so it reads light red rather than
+ * hiding in the same gray as an unmapped region. It stays a lighter red than
+ * 'danger' (over MRV) — too little and too much are opposite problems and must
+ * not look alike. Every zone*Class helper below is a pure token→utility lookup
+ * over this, so a surface can never disagree on which color a zone gets.
  */
-export type ZoneColorToken = 'success' | 'warning' | 'danger' | 'neutral';
+export type ZoneColorToken = 'success' | 'warning' | 'danger' | 'untrained';
 
 export function zoneColorToken(zone: VolumeZone, sets: number): ZoneColorToken {
   if (zone === 'over_mrv') return 'danger';
   if (zone === 'in_zone') return 'success';
-  return sets <= 0 ? 'neutral' : 'warning';
+  return sets <= 0 ? 'untrained' : 'warning';
 }
 
 const ZONE_BAR_CLASSES: Record<ZoneColorToken, string> = {
   danger: 'bg-danger-500',
   success: 'bg-success-500',
   warning: 'bg-warning-500',
-  neutral: 'bg-surface-600',
+  untrained: 'bg-danger-300',
 };
 
+// Text sits on a card, so the untrained row uses the 400 weight the other
+// tokens use for text — danger-300 is a fill tone and too pale to read.
 const ZONE_TEXT_CLASSES: Record<ZoneColorToken, string> = {
   danger: 'text-danger-400',
   success: 'text-success-400',
   warning: 'text-warning-400',
-  neutral: 'text-surface-400',
+  untrained: 'text-danger-400',
 };
 
 const ZONE_FILL_CLASSES: Record<ZoneColorToken, string> = {
   danger: 'fill-danger-500',
   success: 'fill-success-500',
   warning: 'fill-warning-500',
-  neutral: 'fill-surface-600',
+  untrained: 'fill-danger-300',
 };
 
-/** Bar fill colour for a zone. Untrained (0 sets, below MEV) reads gray. */
+/** Bar fill colour for a zone. Untrained (0 sets, below MEV) reads light red. */
 export function zoneBarClass(zone: VolumeZone, sets: number): string {
   return ZONE_BAR_CLASSES[zoneColorToken(zone, sets)];
 }
