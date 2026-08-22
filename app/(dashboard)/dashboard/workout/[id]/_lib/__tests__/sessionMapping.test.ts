@@ -1,4 +1,4 @@
-import { mapLoadedBlockRow } from '../sessionMapping';
+import { mapLoadedBlockRow, mapLoadedExerciseRow } from '../sessionMapping';
 
 // Minimal raw row; only fields the mapper reads need realistic values.
 const exerciseRow = {
@@ -67,5 +67,63 @@ describe('mapLoadedBlockRow', () => {
     expect(mapped.targetWeightKg).toBe(40);
     expect(mapped.exercise.name).toBe('Barbell Curl');
     expect(mapped.createdAt).toBeUndefined();
+  });
+});
+
+/**
+ * The mid-workout add and swap flows fetch the same `exercises` row and must
+ * run it through this mapper. Building the object by hand at those call sites
+ * dropped is_bodyweight / bodyweight_type, so a pull-up added mid-workout
+ * showed a plain weight stepper with no Bodyweight/Weighted/Assisted control
+ * until the session was reloaded.
+ */
+describe('mapLoadedExerciseRow — bodyweight metadata', () => {
+  const pullUpRow = {
+    ...exerciseRow,
+    id: 'ex-pullup',
+    name: 'Pull Up',
+    primary_muscle: 'lats',
+    // Tags that classify as an external implement on their own: only the
+    // is_bodyweight flag can rescue this row.
+    equipment_required: ['assisted pull-up machine'],
+    equipment: 'machine',
+    is_bodyweight: true,
+    bodyweight_type: 'both',
+    assistance_type: 'band',
+  } as any;
+
+  it('carries the flag, the modification type and the assistance type', () => {
+    const mapped = mapLoadedExerciseRow(pullUpRow);
+    expect(mapped.isBodyweight).toBe(true);
+    expect(mapped.bodyweightType).toBe('both');
+    expect(mapped.assistanceType).toBe('band');
+  });
+
+  it('keeps a tagged pull-up bodyweight even with the flag unset', () => {
+    const mapped = mapLoadedExerciseRow({
+      ...pullUpRow,
+      is_bodyweight: false,
+      equipment_required: ['pull-up bar'],
+      equipment: 'barbell',
+    });
+    expect(mapped.isBodyweight).toBe(true);
+  });
+
+  it('honours a hand-corrected equipment_class over the tag derivation', () => {
+    const mapped = mapLoadedExerciseRow({
+      ...exerciseRow,
+      name: 'Ring Row',
+      equipment_required: [],
+      equipment: 'barbell',
+      is_bodyweight: false,
+      equipment_class: 'bodyweight',
+    });
+    expect(mapped.isBodyweight).toBe(true);
+  });
+
+  it('leaves a genuinely loaded lift alone', () => {
+    const mapped = mapLoadedExerciseRow(exerciseRow);
+    expect(mapped.isBodyweight).toBe(false);
+    expect(mapped.bodyweightType).toBeUndefined();
   });
 });

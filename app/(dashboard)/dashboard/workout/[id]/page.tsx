@@ -179,6 +179,8 @@ import {
   type LocationPickerScope,
 } from './_components/LocationPickerSheet';
 import {
+  mapLoadedExerciseRow,
+  type LoadedExerciseRow,
 } from './_lib/sessionMapping';
 import {
   fetchRecentMuscleSessions,
@@ -3244,31 +3246,9 @@ export default function WorkoutPage() {
               .update({ exercise_id: result.replacement.id })
               .eq('id', block.id);
             
-            // Update local state
-            const completeExercise: Exercise = {
-              id: fullExData.id,
-              name: fullExData.name,
-              primaryMuscle: fullExData.primary_muscle,
-              secondaryMuscles: fullExData.secondary_muscles || [],
-              mechanic: fullExData.mechanic,
-              defaultRepRange: fullExData.default_rep_range || [8, 12],
-              defaultRir: fullExData.default_rir || 2,
-              minWeightIncrementKg: fullExData.min_weight_increment_kg || 2.5,
-              availableIncrementsKg: fullExData.available_increments_kg ?? null,
-              formCues: fullExData.form_cues || [],
-              commonMistakes: fullExData.common_mistakes || [],
-              setupNote: fullExData.setup_note || '',
-              movementPattern: fullExData.movement_pattern || '',
-              equipmentRequired: fullExData.equipment_required || [],
-              hypertrophyScore: fullExData.hypertrophy_tier ? {
-                tier: fullExData.hypertrophy_tier,
-                stretchUnderLoad: fullExData.stretch_under_load || 3,
-                resistanceProfile: fullExData.resistance_profile || 3,
-                progressionEase: fullExData.progression_ease || 3,
-              } : undefined,
-              // Exercise type for duration-based exercises (planks, holds)
-              exerciseType: fullExData.exercise_type as ExerciseType | undefined,
-            };
+            // Update local state. Same mapping as the session load, so the
+            // swapped-in exercise carries its bodyweight metadata.
+            const completeExercise = mapLoadedExerciseRow(fullExData as LoadedExerciseRow);
 
             setBlocks(prevBlocks => prevBlocks.map(b =>
               b.id === block.id
@@ -3831,31 +3811,9 @@ export default function WorkoutPage() {
             : block
         ));
       } else {
-        // Create complete exercise object with all fields
-        const completeExercise: Exercise = {
-          id: fullExerciseData.id,
-          name: fullExerciseData.name,
-          primaryMuscle: fullExerciseData.primary_muscle,
-          secondaryMuscles: fullExerciseData.secondary_muscles || [],
-          mechanic: fullExerciseData.mechanic,
-          defaultRepRange: fullExerciseData.default_rep_range || [8, 12],
-          defaultRir: fullExerciseData.default_rir || 2,
-          minWeightIncrementKg: fullExerciseData.min_weight_increment_kg || 2.5,
-          availableIncrementsKg: fullExerciseData.available_increments_kg ?? null,
-          formCues: fullExerciseData.form_cues || [],
-          commonMistakes: fullExerciseData.common_mistakes || [],
-          setupNote: fullExerciseData.setup_note || '',
-          movementPattern: fullExerciseData.movement_pattern || '',
-          equipmentRequired: fullExerciseData.equipment_required || [],
-          hypertrophyScore: fullExerciseData.hypertrophy_tier ? {
-            tier: fullExerciseData.hypertrophy_tier,
-            stretchUnderLoad: fullExerciseData.stretch_under_load || 3,
-            resistanceProfile: fullExerciseData.resistance_profile || 3,
-            progressionEase: fullExerciseData.progression_ease || 3,
-          } : undefined,
-          // Exercise type for duration-based exercises (planks, holds)
-          exerciseType: fullExerciseData.exercise_type as ExerciseType | undefined,
-        };
+        // Create complete exercise object with all fields — the same mapping
+        // the session load uses, so bodyweight metadata survives the swap.
+        const completeExercise = mapLoadedExerciseRow(fullExerciseData as LoadedExerciseRow);
 
         // Update local state with complete exercise data
         setBlocks(prevBlocks => prevBlocks.map(block =>
@@ -4426,24 +4384,11 @@ export default function WorkoutPage() {
         note: null,
         dropsetsPerSet: newBlock.dropsets_per_set ?? 0,
         dropPercentage: newBlock.drop_percentage ?? 0.25,
-        exercise: {
-          id: exerciseData.id,
-          name: exerciseData.name,
-          primaryMuscle: exerciseData.primary_muscle,
-          secondaryMuscles: exerciseData.secondary_muscles || [],
-          mechanic: exerciseData.mechanic,
-          defaultRepRange: exerciseData.default_rep_range || [8, 12],
-          defaultRir: exerciseData.default_rir || 2,
-          minWeightIncrementKg: exerciseData.min_weight_increment_kg || 2.5,
-          availableIncrementsKg: exerciseData.available_increments_kg ?? null,
-          formCues: exerciseData.form_cues || [],
-          commonMistakes: exerciseData.common_mistakes || [],
-          setupNote: exerciseData.setup_note || '',
-          movementPattern: exerciseData.movement_pattern || '',
-          equipmentRequired: exerciseData.equipment_required || [],
-          // Exercise type for duration-based exercises (planks, holds)
-          exerciseType: exerciseData.exercise_type as ExerciseType | undefined,
-        },
+        // Same mapping as the session load. Built by hand this dropped
+        // is_bodyweight / bodyweight_type, so a pull-up added mid-workout
+        // rendered a plain weight stepper with no Bodyweight/Weighted/Assisted
+        // control until the page was reloaded.
+        exercise: mapLoadedExerciseRow(exerciseData as LoadedExerciseRow),
       };
 
       setBlocks(prevBlocks => [...prevBlocks, newBlockWithExercise]);
