@@ -1234,16 +1234,33 @@ export interface SwapSuggestion {
  * One row per STANDARD_MUSCLE_GROUPS entry (the registry is the count — do not
  * restate it here; stale taxonomy counts are what this comment used to carry).
  *
- * SEMANTICS — this is the DIRECT-SET, experience-specific landmark table
- * (`referenceDirectMRV`). It is NOT interchangeable with the coarse
- * total-inclusive bands in services/volumeBands (`referenceInclusiveMRV`),
- * which are experience-independent and stated against credited sets
- * (secondary work at 0.5/set). The two tables diverge for TWO independent
- * reasons — experience scaling AND the direct-vs-credited convention — so a
- * gap between them is not a unit-conversion error and must never be "fixed"
- * by forcing them to agree. See services/volumeBands for the inclusive side.
+ * ── THE DIRECT / CREDITED CONVENTION (half of it; the other half is
+ *    MEV_TARGETS in services/volumeBands) ──────────────────────────────────
  *
- * Notes on values:
+ * SEMANTICS — this is the DIRECT-SET, experience-specific landmark table
+ * (`referenceDirectMRV`): every number is a count of programmed sets that
+ * TARGET the muscle, and it is scaled across novice/intermediate/advanced.
+ * It is NOT interchangeable with the bands in services/volumeBands
+ * (`referenceInclusiveMRV`), which are experience-independent and stated in
+ * CREDITED sets — the counter awards 1.0 per set for a primary tag and 0.5 for
+ * a secondary tag, and those thresholds judge that total.
+ *
+ * The two tables therefore give different numbers for the same muscle (19 of
+ * 26 at the intermediate tier). That gap is DEFINITIONAL, with two independent
+ * causes — experience scaling AND the direct-vs-credited unit — so it is not a
+ * conversion error and must never be "fixed" by editing either side into
+ * agreement. Doing so changes research values to resolve a units mismatch.
+ *
+ * This is the table the settings editor reads and writes, and the one that
+ * feeds weeklyRollover's set allocation and the suggested-workout sheet. The
+ * credited thresholds are what colour and warn on the volume row. Both are
+ * user-visible at once, which is why the settings column is labelled
+ * "Direct MEV" (see DIRECT_MEV_TOOLTIP in services/volumeBands).
+ *
+ * Notes on values — these are the DIRECT-set rationale from the literature.
+ * They explain why a direct landmark is low or zero; none of them is a claim
+ * about how much CREDITED volume this app's programming actually delivers to
+ * the muscle, which is measured separately and can be zero:
  * - Front delts get significant indirect work from pressing, so direct MEV is low
  * - Lateral/rear delts need more direct work - they don't get hit well by compounds
  * - Glute_med and obliques have MEV of 0 because they're often hit indirectly

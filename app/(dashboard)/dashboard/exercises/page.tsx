@@ -13,15 +13,19 @@ import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 const EXERCISE_CATALOG_KEY = ['exercises', 'catalog'] as const;
 const EXERCISE_CATALOG_COLUMNS =
   'id, name, primary_muscle, secondary_muscles, mechanic, form_cues, common_mistakes, equipment_required, equipment, movement_pattern, is_bodyweight, bodyweight_type, assistance_type, exercise_type, is_custom, hypertrophy_tier, stretch_under_load, resistance_profile, progression_ease, demo_gif_url, demo_thumbnail_url, youtube_video_id';
-import { MUSCLE_GROUPS } from '@/types/schema';
 import {
   dedupeExercisesById,
   exerciseMatchesEquipment,
   exerciseMatchesMuscleGroup,
   exerciseMatchesQuery,
 } from '@/services/exerciseFilter';
-import { EQUIPMENT_OPTIONS } from '@/lib/exercises/types';
-import { formatWeight, convertWeight, estimateE1RM, muscleDisplayName } from '@/lib/utils';
+import {
+  ALL_MUSCLE_TAG_OPTIONS,
+  EQUIPMENT_OPTIONS,
+  MUSCLE_FILTER_OPTIONS,
+  coarseSplitWarning,
+} from '@/lib/exercises/types';
+import { formatWeight, convertWeight, estimateE1RM } from '@/lib/utils';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { useExercisePreferences } from '@/hooks/useExercisePreferences';
 import { ExerciseOptionsMenu } from '@/components/exercises/ExerciseOptionsMenu';
@@ -794,17 +798,20 @@ export default function ExercisesPage() {
           >
             All
           </button>
-          {MUSCLE_GROUPS.map((muscle) => (
+          {/* Groups plus their subdivisions — a group chip already matches its
+              fine-tagged exercises, so an "Obliques" chip is the narrower query
+              you need to find (or audit) oblique work specifically. */}
+          {MUSCLE_FILTER_OPTIONS.map((option) => (
             <button
-              key={muscle}
-              onClick={() => setSelectedMuscle(muscle)}
-              className={`shrink-0 whitespace-nowrap px-3 py-1.5 rounded-full text-sm capitalize transition-colors ${
-                selectedMuscle === muscle
+              key={option.value}
+              onClick={() => setSelectedMuscle(option.value)}
+              className={`shrink-0 whitespace-nowrap px-3 py-1.5 rounded-full text-sm transition-colors ${
+                selectedMuscle === option.value
                   ? 'bg-primary-500 text-white'
                   : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
               }`}
             >
-              {muscle}
+              {option.label}
             </button>
           ))}
         </div>
@@ -1379,21 +1386,30 @@ export default function ExercisesPage() {
                     {/* Primary Muscle Group */}
                     <div>
                       <label className="block text-sm text-surface-400 mb-2">Primary Muscle Group</label>
-                      <div className="grid grid-cols-3 gap-2">
-                        {MUSCLE_GROUPS.map((muscle) => (
+                      {/* Groups AND their subdivisions: a coarse tag splits its
+                          credit across every head, so an exercise that actually
+                          targets one (Obliques, Side Delts, the tricep heads)
+                          needs the fine token to land on that row. */}
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto">
+                        {ALL_MUSCLE_TAG_OPTIONS.map((option) => (
                           <button
-                            key={muscle}
-                            onClick={() => setEditData({ ...editData, primaryMuscle: muscle })}
-                            className={`px-3 py-2 rounded-lg text-sm capitalize transition-colors ${
-                              editData.primaryMuscle === muscle
+                            key={option.value}
+                            onClick={() => setEditData({ ...editData, primaryMuscle: option.value })}
+                            className={`px-3 py-2 rounded-lg text-sm transition-colors ${
+                              editData.primaryMuscle === option.value
                                 ? 'bg-primary-500 text-white'
                                 : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
                             }`}
                           >
-                            {muscle}
+                            {option.label}
                           </button>
                         ))}
                       </div>
+                      {coarseSplitWarning(editData.primaryMuscle) && (
+                        <p className="text-xs text-amber-400/90 mt-2">
+                          {coarseSplitWarning(editData.primaryMuscle)}
+                        </p>
+                      )}
                     </div>
 
                     {/* Bodyweight Settings */}
@@ -1557,31 +1573,31 @@ export default function ExercisesPage() {
                           <label className="block text-sm font-medium text-surface-300 mb-2">
                             Secondary Muscles
                           </label>
-                          <div className="grid grid-cols-3 gap-2 max-h-32 overflow-y-auto p-2 bg-surface-800/50 rounded-lg">
-                            {MUSCLE_GROUPS.filter(m => m !== editData.primaryMuscle).map((muscle) => (
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-40 overflow-y-auto p-2 bg-surface-800/50 rounded-lg">
+                            {ALL_MUSCLE_TAG_OPTIONS.filter(o => o.value !== editData.primaryMuscle).map((option) => (
                               <label
-                                key={muscle}
+                                key={option.value}
                                 className="flex items-center gap-2 p-1.5 rounded hover:bg-surface-700/50 cursor-pointer"
                               >
                                 <input
                                   type="checkbox"
-                                  checked={editData.secondaryMuscles.includes(muscle)}
+                                  checked={editData.secondaryMuscles.includes(option.value)}
                                   onChange={(e) => {
                                     if (e.target.checked) {
                                       setEditData(prev => prev ? ({
                                         ...prev,
-                                        secondaryMuscles: [...prev.secondaryMuscles, muscle]
+                                        secondaryMuscles: [...prev.secondaryMuscles, option.value]
                                       }) : null);
                                     } else {
                                       setEditData(prev => prev ? ({
                                         ...prev,
-                                        secondaryMuscles: prev.secondaryMuscles.filter(m => m !== muscle)
+                                        secondaryMuscles: prev.secondaryMuscles.filter(m => m !== option.value)
                                       }) : null);
                                     }
                                   }}
                                   className="w-4 h-4 text-primary-500 bg-surface-700 border-surface-600 rounded focus:ring-primary-500"
                                 />
-                                <span className="text-xs text-surface-300">{muscleDisplayName(muscle)}</span>
+                                <span className="text-xs text-surface-300">{option.label}</span>
                               </label>
                             ))}
                           </div>

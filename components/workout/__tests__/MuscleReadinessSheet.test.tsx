@@ -223,7 +223,7 @@ describe('MuscleReadinessSheet', () => {
 
     // Cap: exactly 6 coarse rows visible before expanding, with a "+N more".
     await waitFor(() => expect(screen.getByTestId('readiness-show-more')).toBeInTheDocument());
-    expect(container.querySelectorAll('[data-testid^="readiness-row-"]').length).toBe(6);
+    expect(muscleRows(container).length).toBe(6);
     // 14 coarse groups total → 8 hidden behind the expander.
     expect(screen.getByTestId('readiness-show-more')).toHaveTextContent('+8 more');
 

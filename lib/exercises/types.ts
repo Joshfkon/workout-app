@@ -413,6 +413,39 @@ export const PRECISE_MUSCLE_GROUP_OPTIONS: { value: string; label: string }[] =
   ]);
 
 /**
+ * Every taggable token — each coarse group followed by its fine heads — for
+ * SECONDARY-muscle pickers and muscle filters. Unlike
+ * PRECISE_MUSCLE_GROUP_OPTIONS this keeps the splitting coarse groups
+ * (chest/back/shoulders): the primary-only rule that rejects them
+ * (validateExercisePrimary) does not apply to secondaries, where an
+ * even split across a group's heads is a fair description of the work.
+ *
+ * These lists are the reason a subdivision is taggable at all. Volume rows for
+ * Obliques, Glute Med and the trap/tricep heads render whether or not anything
+ * feeds them, but only a fine tag applied here can put sets on one — a coarse
+ * 'abs' tag never leaks into Obliques (see resolveMuscleToStandard).
+ */
+export const ALL_MUSCLE_TAG_OPTIONS: { value: string; label: string }[] =
+  GROUPED_MUSCLE_OPTIONS.flatMap((group) => [
+    {
+      value: group.value,
+      label: group.subMuscles.length > 0 ? `${group.label} (whole group)` : group.label,
+    },
+    ...group.subMuscles.map((s) => ({ value: s.value, label: `${group.label} · ${s.label}` })),
+  ]);
+
+/**
+ * Same coverage as ALL_MUSCLE_TAG_OPTIONS with bare labels ("Obliques", not
+ * "Abs · Obliques") — for muscle FILTER chips, where the group already matches
+ * its subdivisions and a fine chip is simply a narrower query.
+ */
+export const MUSCLE_FILTER_OPTIONS: { value: string; label: string }[] =
+  GROUPED_MUSCLE_OPTIONS.flatMap((group) => [
+    { value: group.value, label: group.label },
+    ...group.subMuscles.map((s) => ({ value: s.value, label: s.label })),
+  ]);
+
+/**
  * Warning copy when a SPLITTING coarse token is selected (a group with
  * subdivisions): volume credit will be divided evenly across the listed heads.
  * Returns null for precise tokens and for coarse groups with no subdivisions.
