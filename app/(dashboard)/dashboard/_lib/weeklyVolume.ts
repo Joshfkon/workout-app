@@ -928,17 +928,18 @@ export interface VolumeRow {
    */
   warnable: boolean;
   /**
-   * Coarse rows only: whether the row can be expanded — it has at least one
-   * fine child the user's own exercise tagging can feed. This is what gates
-   * the chevron on every surface; a group whose library can't feed any fine
-   * member never expands (and so never renders a fine row).
+   * Coarse rows only: whether the row can be expanded — i.e. whether the group
+   * HAS anatomical subdivisions. This is what gates the chevron on every
+   * surface. Deliberately independent of reachability: a group's anatomy does
+   * not depend on what the user has logged, so Abs always opens to Obliques
+   * even before anything has fed it.
    */
   expandable: boolean;
   exercises: ExerciseVolume[];
   /**
    * ALL fine children of an expandable coarse row (each flagged belowMev and
-   * reachable; unreachable ones are expand-only context rows). Visibility
-   * (pinned-lagging vs behind-the-chevron) is decided by the shared
+   * reachable; unreachable ones are expand-only context rows shown at 0).
+   * Visibility (pinned-lagging vs behind-the-chevron) is decided by the shared
    * MuscleGroupList component / withVisibleChildren helper, not here.
    */
   children: VolumeRow[];
@@ -1047,11 +1048,11 @@ export function setsByStandardMuscle(
 
 /**
  * THE shared row model. Given the shared counter's per-muscle stats and the
- * reachability set, produce coarse rows (below-MEV first). An expandable row
- * (≥1 reachable fine child) carries ALL its fine children — unreachable ones
- * flagged reachable:false as expand-only context rows. Which children are
- * VISIBLE is a presentation concern — the shared MuscleGroupList component
- * pins reachable lagging children open and puts the rest behind the chevron.
+ * reachability set, produce coarse rows (below-MEV first). Every group with
+ * subdivisions carries ALL of them — unreachable ones flagged reachable:false
+ * as expand-only context rows at 0. Which children are VISIBLE is a
+ * presentation concern — the shared MuscleGroupList component pins reachable
+ * lagging children open and puts the rest behind the chevron.
  * Every surface renders from this so counts and zone-status always agree.
  */
 export function buildVolumeRows(
@@ -1066,12 +1067,15 @@ export function buildVolumeRows(
     const bandCtx: BandContext = { recoveryProfile: opts.recoveryProfile };
     const band = opts.bands?.[coarse] ?? getEffectiveBand(coarse, bandCtx);
 
-    // The chevron rule: a coarse row is expandable when the user's own exercise
-    // tagging can feed at least one of its fine children. When no reachability
-    // is supplied, don't gate (back-compat: all fine children count).
-    const expandable = children.some(
-      (c) => FINE_CHILD_MUSCLES.has(c) && (!reachable || reachable.has(c))
-    );
+    // The chevron rule: a coarse row is expandable when it HAS subdivisions —
+    // reachability does not enter into it. The anatomy of a group is a fact
+    // about the taxonomy, not about what the user happens to have logged, so
+    // Obliques sits under Abs (and Glute Med under Glutes, the trap and tricep
+    // heads under theirs) whether or not anything has fed it yet. An unfed
+    // subdivision reads 0 and carries reachable:false, which is what keeps it
+    // out of the warning, pinning and target-recommendation paths — display is
+    // ungated here, nagging stays gated downstream.
+    const expandable = children.some((c) => FINE_CHILD_MUSCLES.has(c));
 
     // Accumulate the per-exercise breakdown at FULL precision; rounding
     // happens once at emission (emitExerciseList), sum-preserving so the
@@ -1111,14 +1115,13 @@ export function buildVolumeRows(
 
       const childSets = round1(data.sets);
       const childMev = fineChildMev(child);
-      // Children are carried only on EXPANDABLE rows (≥1 reachable fine child —
-      // the chevron rule above). An expandable row carries ALL its fine
-      // children, including unreachable ones at 0: those are context rows the
-      // user can reveal by expanding; they carry reachable:false so the
-      // warning/target selectors skip them and the pinned (always-visible)
-      // rule — reachable AND below-MEV — never surfaces them uninvited.
-      // Which children are VISIBLE (pinned vs behind the chevron) is the
-      // shared MuscleGroupList / withVisibleChildren layer's decision.
+      // Every group with subdivisions carries ALL of them, including unfed ones
+      // at 0: those are context rows the user reveals by expanding; they carry
+      // reachable:false so the warning/target selectors skip them and the
+      // pinned (always-visible) rule — reachable AND below-MEV — never surfaces
+      // them uninvited. Which children are VISIBLE (pinned vs behind the
+      // chevron) is the shared MuscleGroupList / withVisibleChildren layer's
+      // decision.
       if (!expandable) continue;
       const childReachable = !reachable || reachable.has(child);
       const childBelowMev = childSets < childMev;

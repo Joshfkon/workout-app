@@ -123,18 +123,26 @@ describe('the motivating week: pushdowns + pressing, zero overhead work', () => 
   });
 });
 
-describe('reachability gating: a coarse-only library never shows the split', () => {
-  it('coarse-triceps work leaves the heads unreachable and unexpanded', () => {
+describe('reachability gating: a coarse-only library shows the split, but never nags', () => {
+  it('coarse-triceps work leaves the heads unreachable but still listed', () => {
     const blocks: WeeklyVolumeBlockRow[] = [
       block('custom', 'My Triceps Thing', 'triceps', [], 5),
     ];
     const rows = buildVolumeRows(computeWeeklyMuscleVolume(blocks), computeReachableMuscles(blocks));
     const triceps = rows.find((r) => r.muscle === 'triceps')!;
     expect(triceps.sets).toBe(5);
-    // No fine tag anywhere → the group is not expandable, no lagging-child
-    // demotion, no un-clearable amber bar.
-    expect(triceps.expandable).toBe(false);
-    expect(triceps.children).toEqual([]);
+    // The heads are part of the group's anatomy, so they render behind the
+    // chevron at 0 — but no fine tag reached them, so they stay unreachable:
+    // no lagging-child demotion, no un-clearable amber bar.
+    expect(triceps.expandable).toBe(true);
+    expect(triceps.children.map((c) => c.muscle).sort()).toEqual([
+      'triceps_lat_med',
+      'triceps_long',
+    ]);
+    for (const head of triceps.children) {
+      expect(head.sets).toBe(0);
+      expect(head.reachable).toBe(false);
+    }
     expect(triceps.laggingChildren).toBe(false);
   });
 });

@@ -11,6 +11,7 @@ import { useMuscleRecovery, type MuscleRecoveryStatus } from '@/hooks/useMuscleR
 import { useWeeklyVolume } from '@/hooks/useWeeklyVolume';
 import type { MuscleVolumeData } from '@/services/volumeTracker';
 import { getLocalDateString, muscleDisplayName } from '@/lib/utils';
+import { ALL_MUSCLE_TAG_OPTIONS, PRECISE_MUSCLE_GROUP_OPTIONS } from '@/lib/exercises/types';
 import { insertWorkoutSessions } from '@/lib/training/sessionOrigin';
 import { getUserExercisePreferences } from '@/lib/data/exercisePreferencesService';
 import { getVarietyPreferences, saveVarietyPreferences } from '@/services/exerciseVarietyService';
@@ -2182,14 +2183,15 @@ function NewWorkoutContent() {
               </div>
 
               <div>
+                {/* Groups plus their fine heads. The splitting coarse groups
+                    (chest/back/shoulders) are absent by design — the insert
+                    action rejects them as a primary (validateExercisePrimary),
+                    so offering one here would only fail at save. */}
                 <Select
                   label="Muscle Group"
                   value={customExerciseForm.muscle}
                   onChange={(e) => setCustomExerciseForm(prev => ({ ...prev, muscle: e.target.value }))}
-                  options={MUSCLE_GROUPS.map((muscle) => ({
-                    value: muscle,
-                    label: muscle.charAt(0).toUpperCase() + muscle.slice(1),
-                  }))}
+                  options={PRECISE_MUSCLE_GROUP_OPTIONS}
                 />
               </div>
 
@@ -2291,30 +2293,30 @@ function NewWorkoutContent() {
                       Secondary Muscles
                     </label>
                     <div className="grid grid-cols-3 gap-2 max-h-32 overflow-y-auto p-2 bg-surface-800/50 rounded-lg">
-                      {MUSCLE_GROUPS.filter(m => m !== customExerciseForm.muscle).map((muscle) => (
+                      {ALL_MUSCLE_TAG_OPTIONS.filter(o => o.value !== customExerciseForm.muscle).map((option) => (
                         <label
-                          key={muscle}
+                          key={option.value}
                           className="flex items-center gap-2 p-1.5 rounded hover:bg-surface-700/50 cursor-pointer"
                         >
                           <input
                             type="checkbox"
-                            checked={customExerciseForm.secondaryMuscles.includes(muscle)}
+                            checked={customExerciseForm.secondaryMuscles.includes(option.value)}
                             onChange={(e) => {
                               if (e.target.checked) {
                                 setCustomExerciseForm(prev => ({
                                   ...prev,
-                                  secondaryMuscles: [...prev.secondaryMuscles, muscle]
+                                  secondaryMuscles: [...prev.secondaryMuscles, option.value]
                                 }));
                               } else {
                                 setCustomExerciseForm(prev => ({
                                   ...prev,
-                                  secondaryMuscles: prev.secondaryMuscles.filter(m => m !== muscle)
+                                  secondaryMuscles: prev.secondaryMuscles.filter(m => m !== option.value)
                                 }));
                               }
                             }}
                             className="w-4 h-4 text-primary-500 bg-surface-700 border-surface-600 rounded focus:ring-primary-500"
                           />
-                          <span className="text-xs text-surface-300">{muscleDisplayName(muscle)}</span>
+                          <span className="text-xs text-surface-300">{option.label}</span>
                         </label>
                       ))}
                     </div>
