@@ -601,9 +601,21 @@ export interface RecoveryExercise {
 }
 
 /**
- * One training session. For completed sessions pass `completed_at`. For the
- * LIVE in-progress session pass `now`, so its sets count as "just trained" and
- * immediately drive the muscle to Fatigued.
+ * One COMPLETED training session — `performedAt` is its `completed_at`.
+ *
+ * The live, in-progress session is deliberately NOT part of this history. A
+ * session's recovery debt starts when the session FINISHES, not while it is
+ * still being logged: charging it set-by-set told a user mid-workout that the
+ * muscle they were actively training already needed recovery, which is both
+ * useless as a planning signal (they are plainly training it) and actively
+ * misleading (it hid the muscle from "what to train next" while there were
+ * still sets left to do for it). Weekly VOLUME still accrues live — that is a
+ * counter of work done, and it is correct the moment a set is logged.
+ *
+ * Callers therefore feed this only from completed rows; the just-finished
+ * session enters through the normal history query once it is marked completed
+ * (see lib/query/workoutInvalidation, which refreshes that query on
+ * completion).
  */
 export interface RecoverySession {
   performedAt: Date;

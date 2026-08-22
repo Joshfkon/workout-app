@@ -19,8 +19,21 @@ import type { QueryClient } from '@tanstack/react-query';
  *  - 'history':   History list first page + per-exercise detail history
  *  - 'analytics': lift trends / progression inputs cached on Analytics
  *  - 'log':       the Train/log landing surface (recent sessions)
+ *  - 'muscle-readiness-history': the completed-session feed behind every
+ *    recovery surface (readiness sheet, workout volume strip, analytics
+ *    recovery card, useMuscleRecovery). This one is load-bearing rather than
+ *    cosmetic: the live session is deliberately NOT merged into the recovery
+ *    model (see `RecoverySession` in services/muscleRecovery), so completion is
+ *    the ONLY moment a just-trained muscle can start reading as recovering.
+ *    Without this invalidation its 60s staleTime would leave the badge showing
+ *    the pre-workout state for a minute after finishing.
  */
-export const WORKOUT_DERIVED_QUERY_PREFIXES = ['history', 'analytics', 'log'] as const;
+export const WORKOUT_DERIVED_QUERY_PREFIXES = [
+  'history',
+  'analytics',
+  'log',
+  'muscle-readiness-history',
+] as const;
 
 /** Mark all workout-derived caches stale; mounted queries refetch immediately. */
 export async function invalidateWorkoutDerivedCaches(queryClient: QueryClient): Promise<void> {
