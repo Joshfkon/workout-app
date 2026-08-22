@@ -135,6 +135,21 @@ describe('cross-surface parity (one fixture, four surfaces)', () => {
     expect(zoneFillClass(datum.zone!, datum.value)).toBe('fill-success-500');
   });
 
+  it('an untrained muscle warns in light red on the map AND the bar, distinct from over-MRV', () => {
+    // Nothing in the week touches calves, so the row lands at 0 sets.
+    const calvesRow = volumeRows.find((x) => x.muscle === 'calves')!;
+    expect(calvesRow.sets).toBe(0);
+    expect(calvesRow.zone).toBe('below_mev');
+    expect(zoneColorToken(calvesRow.zone, calvesRow.sets)).toBe('untrained');
+
+    const datum = volumeRowsToMapData(volumeRows).gastrocnemius!;
+    expect(zoneBarClass(calvesRow.zone, calvesRow.sets)).toBe('bg-danger-300');
+    expect(zoneFillClass(datum.zone!, datum.value)).toBe('fill-danger-300');
+    // A muscle trained past MRV keeps the solid red — too little and too much
+    // must never paint the same.
+    expect(zoneFillClass('over_mrv', 40)).toBe('fill-danger-500');
+  });
+
   it('recovery map matches the readiness rows on a shared fixture (asserted, not by construction)', () => {
     const hoursAgo = (h: number) => new Date(NOW.getTime() - h * 3600 * 1000);
     const sets = (n: number) => Array.from({ length: n }, () => ({ repsInTank: 2 }));

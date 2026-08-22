@@ -67,6 +67,10 @@ const config: Config = {
           600: '#ca8a04',
         },
         danger: {
+          // 300 is the soft "untrained" red — a warning that must stay clearly
+          // lighter than the solid 500 used for over-MRV (see weeklyVolume's
+          // ZoneColorToken), so the two never read as the same signal.
+          300: '#fca5a5',
           400: '#f87171',
           500: '#ef4444',
           600: '#dc2626',

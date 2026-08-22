@@ -24,8 +24,9 @@ import type { RecoveryStatus } from '@/services/muscleRecovery';
  * never disagree with a bar/row on the same screen.
  *
  * Modes:
- * - volume:    shared zone semantics via zoneFillClass (gray untrained, amber
- *              below MEV, green across the MEV–MRV band, red past MRV).
+ * - volume:    shared zone semantics via zoneFillClass (light red untrained,
+ *              amber below MEV, green across the MEV–MRV band, solid red past
+ *              MRV).
  * - recovery:  fresh green / recovering amber / fatigued gray, matching the
  *              readiness badges.
  * - highlight: primary muscle in full primary color, secondaries dimmed to
