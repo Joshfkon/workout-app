@@ -42,8 +42,16 @@ import {
  * Combines two READ-ONLY signals into a ranked list of muscles:
  *   1. weekly volume — completed-session sets from the DB PLUS the sets logged
  *      so far in the live session (passed in as props),
- *   2. recovery — the pure `muscleRecovery` heuristic over the same history +
- *      the live session (timestamped "now" so its sets read as just-trained).
+ *   2. recovery — the pure `muscleRecovery` heuristic over COMPLETED sessions
+ *      only.
+ *
+ * The asymmetry is deliberate. Volume is a counter of work done, so a set
+ * counts the instant it is logged. Recovery is a forecast of when a muscle will
+ * be ready AGAIN, and that clock starts when the session ends — see the
+ * `RecoverySession` doc in services/muscleRecovery. So mid-workout a muscle's
+ * weekly bar fills as you train it while its recovery badge holds whatever the
+ * last completed session left it at; the session you are logging lands on the
+ * badge once you finish it.
  *
  * It never writes to or reshapes the workout store. Live session data arrives
  * as plain props (the page's own local state), so this hook — and everything it
@@ -85,14 +93,6 @@ interface RawBlockRow {
 
 /** RIR for a raw DB set row: prefer the logged feedback, else derive from RPE. */
 function rirFromRow(set: { rpe: number | null; feedback?: { repsInTank?: number | null } | null }): number | null {
-  const rir = set.feedback?.repsInTank;
-  if (typeof rir === 'number') return rir;
-  return typeof set.rpe === 'number' ? rpeToRir(set.rpe) : null;
-}
-
-/** RIR for a live SetLog: prefer the logged feedback, else derive from RPE.
- *  Exported so useWorkoutMuscleVolume feeds the recovery model identically. */
-export function rirFromSetLog(set: SetLog): number | null {
   const rir = set.feedback?.repsInTank;
   if (typeof rir === 'number') return rir;
   return typeof set.rpe === 'number' ? rpeToRir(set.rpe) : null;
@@ -305,24 +305,10 @@ export function useMuscleReadiness({
     return { stats: volumeAccumulatorToStats(acc), reachable: reachableSet };
   }, [historyRows, liveBlocks, liveWorkingSetsByBlock]);
 
-  // Recovery history: DB sessions + the live session (timestamped `now`).
-  const recoveryHistory = useMemo<RecoverySession[]>(() => {
-    const liveExercises: RecoveryExercise[] = liveBlocks
-      .map((block): RecoveryExercise => {
-        const sets = (liveWorkingSetsByBlock.get(block.id) || []).map((s) => ({
-          repsInTank: rirFromSetLog(s),
-        }));
-        return {
-          primaryMuscle: block.exercise.primaryMuscle,
-          secondaryMuscles: block.exercise.secondaryMuscles,
-          sets,
-        };
-      })
-      .filter((ex) => ex.sets.length > 0);
-
-    if (liveExercises.length === 0) return sessions;
-    return [...sessions, { performedAt: now, exercises: liveExercises }];
-  }, [sessions, liveBlocks, liveWorkingSetsByBlock, now]);
+  // Recovery history is COMPLETED sessions only — the live session is excluded
+  // on purpose (see the module doc and `RecoverySession`). It joins this feed
+  // when it is marked completed, which invalidateWorkoutDerivedCaches refreshes.
+  const recoveryHistory = sessions;
 
   // Enhanced athletes get shorter recovery windows (shared windowScale), the
   // learned per-muscle soreness multipliers scale each muscle's window, and

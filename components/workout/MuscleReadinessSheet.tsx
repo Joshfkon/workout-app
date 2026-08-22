@@ -463,8 +463,10 @@ export function MuscleReadinessContent({
       {showFootnote && (
         <p className="mt-3 text-[11px] leading-relaxed text-surface-600">
           Sorted by what to train now: recovered muscles behind on weekly volume
-          come first; fatigued muscles sink to the bottom. Recovery is a simple
-          planning estimate, not a medical readout.
+          come first; fatigued muscles sink to the bottom. Set counts include
+          today&rsquo;s workout as you log it; recovery updates once you finish
+          the session. Recovery is a simple planning estimate, not a medical
+          readout.
         </p>
       )}
     </>
