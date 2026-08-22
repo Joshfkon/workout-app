@@ -26,6 +26,11 @@ import {
   type RecoveryExercise,
 } from '@/services/muscleRecovery';
 import { useRecoveryMultipliers } from '@/hooks/useRecoveryMultipliers';
+import {
+  computeDailyGroupSets,
+  type DailyGroupSets,
+  type DatedVolumeBlock,
+} from '@/services/volumeProjection';
 import { useWearableRecovery } from '@/hooks/useWearableRecovery';
 import { useSleepLog } from '@/hooks/useSleepLog';
 import {
@@ -120,6 +125,12 @@ export interface UseMuscleReadinessResult {
   targets: ReadinessTarget[];
   /** Soonest-ready lagging muscle, set only when `targets` is empty. */
   nextUp: NextReadyTarget | null;
+  /**
+   * Credited group sets per local day (index = days ago), from the SAME
+   * blocks the rows count — feeds the rolling-volume decay forecast behind
+   * each expanded row.
+   */
+  dailyGroupSets: DailyGroupSets;
   isLoading: boolean;
   error: string | null;
   /** Re-run the history fetch (error retry). */
@@ -305,6 +316,35 @@ export function useMuscleReadiness({
     return { stats: volumeAccumulatorToStats(acc), reachable: reachableSet };
   }, [historyRows, liveBlocks, liveWorkingSetsByBlock]);
 
+  // Per-day credited group sets for the rolling decay forecast — the same
+  // history + live blocks the stats count, dated: history by its session's
+  // completed_at, live sets as today. Same canonical per-set credit, so the
+  // forecast's day-0 value reconciles with the row headers.
+  const dailyGroupSets = useMemo((): DailyGroupSets => {
+    const dated: DatedVolumeBlock[] = [];
+    for (const s of historyRows) {
+      for (const ex of s.exercises) {
+        dated.push({
+          completedAt: s.completedAt,
+          primaryMuscle: ex.primaryMuscle,
+          secondaryMuscles: ex.secondaryMuscles,
+          workingSets: ex.sets.length,
+        });
+      }
+    }
+    for (const block of liveBlocks) {
+      const liveWorkingSets = liveWorkingSetsByBlock.get(block.id) ?? [];
+      if (liveWorkingSets.length === 0) continue;
+      dated.push({
+        completedAt: now.toISOString(),
+        primaryMuscle: block.exercise.primaryMuscle,
+        secondaryMuscles: block.exercise.secondaryMuscles,
+        workingSets: liveWorkingSets.length,
+      });
+    }
+    return computeDailyGroupSets(dated, now);
+  }, [historyRows, liveBlocks, liveWorkingSetsByBlock, now]);
+
   // Recovery history is COMPLETED sessions only — the live session is excluded
   // on purpose (see the module doc and `RecoverySession`). It joins this feed
   // when it is marked completed, which invalidateWorkoutDerivedCaches refreshes.
@@ -368,6 +408,7 @@ export function useMuscleReadiness({
     rows,
     targets,
     nextUp,
+    dailyGroupSets,
     isLoading,
     error,
     refetch,
