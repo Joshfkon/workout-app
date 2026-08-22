@@ -1361,6 +1361,83 @@ describe('ExerciseCard', () => {
         /Log your bodyweight/
       );
     });
+
+    it('takes a mid-workout weigh-in in place and hands it to the parent in kg', async () => {
+      const user = userEvent.setup();
+      const onBodyweightLogged = jest.fn().mockResolvedValue(undefined);
+
+      render(
+        <ExerciseCard
+          {...bodyweightProps}
+          userBodyweightKg={undefined}
+          onBodyweightLogged={onBodyweightLogged}
+        />
+      );
+
+      await user.type(screen.getByRole('spinbutton', { name: 'Bodyweight in kg' }), '80');
+      await user.click(screen.getByRole('button', { name: 'Log bodyweight' }));
+
+      expect(onBodyweightLogged).toHaveBeenCalledWith(80);
+    });
+
+    it('converts a lb weigh-in to kg before handing it to the parent', async () => {
+      const user = userEvent.setup();
+      const onBodyweightLogged = jest.fn().mockResolvedValue(undefined);
+
+      render(
+        <ExerciseCard
+          {...bodyweightProps}
+          unit="lb"
+          userBodyweightKg={undefined}
+          onBodyweightLogged={onBodyweightLogged}
+        />
+      );
+
+      await user.type(screen.getByRole('spinbutton', { name: 'Bodyweight in lbs' }), '176');
+      await user.click(screen.getByRole('button', { name: 'Log bodyweight' }));
+
+      // 176 lb ≈ 79.8 kg
+      expect(onBodyweightLogged).toHaveBeenCalledWith(expect.closeTo(79.83, 1));
+    });
+
+    it('rejects an implausible weigh-in instead of anchoring load math to it', async () => {
+      const user = userEvent.setup();
+      const onBodyweightLogged = jest.fn().mockResolvedValue(undefined);
+
+      render(
+        <ExerciseCard
+          {...bodyweightProps}
+          userBodyweightKg={undefined}
+          onBodyweightLogged={onBodyweightLogged}
+        />
+      );
+
+      await user.type(screen.getByRole('spinbutton', { name: 'Bodyweight in kg' }), '5');
+      await user.click(screen.getByRole('button', { name: 'Log bodyweight' }));
+
+      expect(onBodyweightLogged).not.toHaveBeenCalled();
+      expect(screen.getByRole('alert')).toHaveTextContent(/between 20 and 400 kg/);
+    });
+
+    it('surfaces a save failure and lets the lifter retry', async () => {
+      const user = userEvent.setup();
+      const onBodyweightLogged = jest.fn().mockRejectedValue(new Error('offline'));
+
+      render(
+        <ExerciseCard
+          {...bodyweightProps}
+          userBodyweightKg={undefined}
+          onBodyweightLogged={onBodyweightLogged}
+        />
+      );
+
+      await user.type(screen.getByRole('spinbutton', { name: 'Bodyweight in kg' }), '80');
+      await user.click(screen.getByRole('button', { name: 'Log bodyweight' }));
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(/Couldn't save/);
+      // The form is still there for a retry once connectivity returns.
+      expect(screen.getByRole('button', { name: 'Log bodyweight' })).toBeEnabled();
+    });
   });
 
   describe('Feedback sheet (absorbs SetFeedbackCard)', () => {

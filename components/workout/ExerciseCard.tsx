@@ -311,6 +311,11 @@ interface ExerciseCardProps {
   onDropsetStart?: () => void;  // Called when manual dropset is started (to stop timer)
   // Bodyweight exercise support
   userBodyweightKg?: number;  // User's current bodyweight for bodyweight exercises
+  // Mid-workout weigh-in for the no-bodyweight-on-record state: the card
+  // collects the number, the parent persists it (today's weight_log row) and
+  // hands it back down as userBodyweightKg, which unlocks Weighted/Assisted.
+  // Must be identity-stable (the memo comparator ignores callbacks).
+  onBodyweightLogged?: (weightKg: number) => Promise<void> | void;
   // RPE calibration - full adjustment result (prescribed RIR + reason) based on user's bias
   adjustedRir?: AdjustedRIRResult;
   // Readiness easing for this session (rirDelta + banner copy), from applyReadinessModulation
@@ -461,6 +466,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   onDropsetCancel,
   onDropsetStart,
   userBodyweightKg,
+  onBodyweightLogged,
   adjustedRir,
   readinessModulation,
   setSyncStatus,
@@ -811,6 +817,36 @@ export const ExerciseCard = memo(function ExerciseCard({
   // Added/assistance load input (display units) for weighted/assisted bodyweight
   // modes. Kept separate from pendingInputs because those seed EFFECTIVE loads.
   const [bwLoadInput, setBwLoadInput] = useState('');
+
+  // Mid-workout weigh-in entry (display units) for the no-bodyweight-on-record
+  // state. Once saved, the parent hands the value back as userBodyweightKg and
+  // this whole branch unmounts in favor of the mode control.
+  const [bwEntryInput, setBwEntryInput] = useState('');
+  const [bwEntrySaving, setBwEntrySaving] = useState(false);
+  const [bwEntryError, setBwEntryError] = useState<string | null>(null);
+
+  const handleBodyweightEntrySubmit = async () => {
+    if (!onBodyweightLogged || bwEntrySaving) return;
+    const typed = parseFloat(bwEntryInput);
+    const kg = Number.isFinite(typed) && typed > 0 ? inputWeightToKg(typed, unit) : NaN;
+    // Sanity bounds, not a hard schema limit: a typo'd weigh-in would silently
+    // become the anchor for every weighted/assisted effective load.
+    if (!Number.isFinite(kg) || kg < 20 || kg > 400) {
+      setBwEntryError(
+        unit === 'lb' ? 'Enter a weight between 45 and 880 lbs' : 'Enter a weight between 20 and 400 kg'
+      );
+      return;
+    }
+    setBwEntrySaving(true);
+    setBwEntryError(null);
+    try {
+      await onBodyweightLogged(kg);
+    } catch {
+      setBwEntryError("Couldn't save your bodyweight — try again.");
+    } finally {
+      setBwEntrySaving(false);
+    }
+  };
 
   // Plateau detection for this exercise (services/plateauDetector, Phase 1.7).
   // History snapshots are threaded from the page's already-loaded exercise history.
@@ -2997,13 +3033,55 @@ export const ExerciseCard = memo(function ExerciseCard({
         )}
 
         {/* No bodyweight on record: BW ± load can't be resolved into an
-            effective load, so the mode control stays hidden — say why rather
-            than silently dropping weighted/assisted logging. */}
+            effective load, so the mode control stays hidden. Instead of only
+            pointing at the Body tab, take the weigh-in right here — the parent
+            persists it and the mode control appears in place. */}
         {isBodyweightExercise && !isPureBodyweight && !userBodyweightKg && isActive && (
-          <p className="mt-2 text-[11px] text-surface-500" data-testid="bw-mode-needs-weigh-in">
-            Log your bodyweight (Body tab, or the pre-workout check-in) to log
-            weighted or assisted sets.
-          </p>
+          <div className="mt-2" data-testid="bw-mode-needs-weigh-in">
+            <p className="text-[11px] text-surface-500">
+              Log your bodyweight to unlock weighted and assisted sets.
+            </p>
+            {onBodyweightLogged ? (
+              <form
+                className="mt-1.5 flex items-center gap-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleBodyweightEntrySubmit();
+                }}
+              >
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.1"
+                  value={bwEntryInput}
+                  onChange={(e) => {
+                    setBwEntryInput(e.target.value);
+                    setBwEntryError(null);
+                  }}
+                  placeholder={weightLabel}
+                  aria-label={`Bodyweight in ${weightLabel}`}
+                  className="w-24 px-2 py-1.5 font-mono text-sm bg-surface-900 border border-surface-700 rounded-lg text-surface-100 placeholder:text-surface-600 focus:border-primary-500 focus:outline-none"
+                />
+                <button
+                  type="submit"
+                  disabled={bwEntrySaving || !bwEntryInput.trim()}
+                  className="px-3 py-1.5 text-sm font-medium rounded-lg bg-surface-800 text-surface-200 hover:bg-surface-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {bwEntrySaving ? 'Saving…' : 'Log bodyweight'}
+                </button>
+              </form>
+            ) : (
+              <p className="mt-1 text-[11px] text-surface-500">
+                Use the Body tab or the pre-workout check-in.
+              </p>
+            )}
+            {bwEntryError && (
+              <p className="mt-1 text-[11px] text-red-400" role="alert">
+                {bwEntryError}
+              </p>
+            )}
+          </div>
         )}
 
         {/* Weight mode segmented control for bodyweight exercises */}
