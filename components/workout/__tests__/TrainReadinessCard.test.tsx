@@ -111,4 +111,27 @@ describe('TrainReadinessCard', () => {
     expect(screen.getByTestId('readiness-map-mode-volume')).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByTestId('readiness-map-mode-recovery')).toHaveAttribute('aria-pressed', 'false');
   });
+
+  it('switches to the long-window heatmap: timeframe chips replace the weekly paint', async () => {
+    render(<TrainReadinessCard />, { wrapper });
+
+    await waitFor(() => expect(screen.getByTestId('readiness-map')).toBeInTheDocument());
+    await userEvent.click(screen.getByTestId('readiness-map-mode-heat'));
+    expect(screen.getByTestId('readiness-map-mode-heat')).toHaveAttribute('aria-pressed', 'true');
+
+    // The compact heatmap unit mounts with its own timeframe chips (3M is the
+    // shared default) and the weekly-paint map unmounts.
+    expect(screen.getByTestId('readiness-heatmap')).toBeInTheDocument();
+    expect(screen.getByTestId('readiness-heatmap-timeframe-3m')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByTestId('readiness-muscle-map')).not.toBeInTheDocument();
+
+    // The mocked client has no auth session, so the fetch resolves to "no
+    // data" — the unit must degrade to its empty state, never crash the card.
+    await waitFor(() => expect(screen.getByTestId('readiness-heatmap-empty')).toBeInTheDocument());
+
+    // Switching back restores the weekly paint.
+    await userEvent.click(screen.getByTestId('readiness-map-mode-recovery'));
+    expect(screen.getByTestId('readiness-muscle-map')).toBeInTheDocument();
+    expect(screen.queryByTestId('readiness-heatmap')).not.toBeInTheDocument();
+  });
 });
