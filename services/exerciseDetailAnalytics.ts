@@ -14,7 +14,11 @@
  */
 
 import { estimateE1RM, sumDisplayVolume } from '@/lib/utils';
+import { getSetDuration, type ModalitySource } from '@/services/shared/setModality';
 import { rpeToRir } from '@/types/schema';
+
+/** Modality source asserted by the sparkline's 'duration' metric. */
+const DURATION_MODALITY: ModalitySource = { exerciseType: 'duration_based' };
 
 // === Types ===
 
@@ -405,7 +409,16 @@ export function buildSessionSparkline(
           ? s.bestE1RM
           : metric === 'volume'
             ? sumDisplayVolume(s.sets, unit, null)
-            : s.sets.filter(isNormalDetailSet).reduce((sum, set) => sum + set.reps, 0),
+            : s.sets
+                .filter(isNormalDetailSet)
+                .reduce(
+                  // The 'duration' metric asserts the exercise is
+                  // duration-based (see SparklineMetric), so read the seconds
+                  // through the sanctioned modality accessor.
+                  (sum, set) =>
+                    sum + (getSetDuration(set, DURATION_MODALITY) ?? 0),
+                  0
+                ),
     }))
     .filter((p) => p.value > 0);
 }
