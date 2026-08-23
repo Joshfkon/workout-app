@@ -14,6 +14,7 @@ import {
   computeExerciseRecords,
   buildE1RMTrend,
   buildWeeklyVolume,
+  buildSessionSparkline,
   effortColorClass,
   setRir,
   setE1RM,
@@ -340,5 +341,116 @@ describe('setE1RM', () => {
 
   it('credits reps in reserve via the canonical estimator', () => {
     expect(setE1RM({ weightKg: 100, reps: 5, rpe: 8 })).toBe(estimateE1RM(100, 5, 2));
+  });
+});
+
+// === History sparkline ===
+
+describe('buildSessionSparkline', () => {
+  const NOW = new Date('2026-06-15T12:00:00Z');
+
+  it('plots best e1RM per session, oldest first, within the 12-week window', () => {
+    const sessions = summarizeSessions([
+      // Outside the 84-day window — dropped.
+      makeSession({
+        date: '2026-01-01T10:00:00Z',
+        sets: [{ weightKg: 90, reps: 8, rpe: 8 }],
+      }),
+      makeSession({
+        date: '2026-06-01T10:00:00Z',
+        sets: [{ weightKg: 105, reps: 8, rpe: 8 }],
+      }),
+      makeSession({
+        date: '2026-05-01T10:00:00Z',
+        sets: [{ weightKg: 100, reps: 8, rpe: 8 }],
+      }),
+    ]);
+
+    const points = buildSessionSparkline(sessions, 'e1rm', NOW);
+
+    expect(points.map((p) => p.date)).toEqual([
+      '2026-05-01T10:00:00Z',
+      '2026-06-01T10:00:00Z',
+    ]);
+    expect(points[0].value).toBe(estimateE1RM(100, 8, 2));
+    expect(points[1].value).toBe(estimateE1RM(105, 8, 2));
+  });
+
+  it('excludes deload sessions — their dip is intentional, not regression', () => {
+    const sessions = summarizeSessions([
+      makeSession({
+        date: '2026-06-01T10:00:00Z',
+        isDeload: true,
+        sets: [{ weightKg: 60, reps: 8, rpe: 6 }],
+      }),
+      makeSession({
+        date: '2026-06-08T10:00:00Z',
+        sets: [{ weightKg: 100, reps: 8, rpe: 8 }],
+      }),
+    ]);
+
+    const points = buildSessionSparkline(sessions, 'e1rm', NOW);
+    expect(points.map((p) => p.date)).toEqual(['2026-06-08T10:00:00Z']);
+  });
+
+  it('plots session tonnage for the volume metric', () => {
+    const sessions = summarizeSessions([
+      makeSession({
+        date: '2026-06-01T10:00:00Z',
+        sets: [
+          { weightKg: 100, reps: 10, rpe: 8 },
+          { weightKg: 100, reps: 8, rpe: 8 },
+        ],
+      }),
+    ]);
+
+    const points = buildSessionSparkline(sessions, 'volume', NOW);
+    expect(points).toEqual([{ date: '2026-06-01T10:00:00Z', value: 1800 }]);
+  });
+
+  it('plots total straight-set seconds for the duration metric, ignoring special schemes', () => {
+    const sessions = summarizeSessions([
+      makeSession({
+        date: '2026-06-01T10:00:00Z',
+        sets: [
+          // Duration exercises store seconds in `reps`; a bodyweight plank has
+          // weightKg 0 (zero tonnage — the volume metric would drop it).
+          { weightKg: 0, reps: 60, rpe: 8 },
+          { weightKg: 0, reps: 45, rpe: 9 },
+          { weightKg: 0, reps: 30, rpe: 9, setType: 'dropset' },
+        ],
+      }),
+    ]);
+
+    const points = buildSessionSparkline(sessions, 'duration', NOW);
+    expect(points).toEqual([{ date: '2026-06-01T10:00:00Z', value: 105 }]);
+  });
+
+  it('drops sessions whose metric carries no signal', () => {
+    const sessions = summarizeSessions([
+      // Only a dropset — no straight-set seconds.
+      makeSession({
+        date: '2026-06-01T10:00:00Z',
+        sets: [{ weightKg: 0, reps: 30, rpe: 9, setType: 'dropset' }],
+      }),
+    ]);
+
+    expect(buildSessionSparkline(sessions, 'duration', NOW)).toEqual([]);
+  });
+
+  it('honors a custom window', () => {
+    const sessions = summarizeSessions([
+      makeSession({
+        date: '2026-06-01T10:00:00Z',
+        sets: [{ weightKg: 100, reps: 8, rpe: 8 }],
+      }),
+      makeSession({
+        date: '2026-06-14T10:00:00Z',
+        sets: [{ weightKg: 100, reps: 8, rpe: 8 }],
+      }),
+    ]);
+
+    const points = buildSessionSparkline(sessions, 'e1rm', NOW, 7);
+    expect(points.map((p) => p.date)).toEqual(['2026-06-14T10:00:00Z']);
   });
 });

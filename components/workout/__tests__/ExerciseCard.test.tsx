@@ -55,6 +55,14 @@ jest.mock('../SegmentedControl', () => ({
   ),
 }));
 
+// The 12-week sparkline inside the expanded history detail fetches via React
+// Query (useExerciseDetailHistory); mock the hook so the card renders without
+// a QueryClientProvider. Tests seed sessions through mockDetailHistoryData.
+let mockDetailHistoryData: any[] = [];
+jest.mock('@/hooks/useExerciseDetailHistory', () => ({
+  useExerciseDetailHistory: () => ({ data: mockDetailHistoryData, isLoading: false }),
+}));
+
 // Mock exerciseSwapper
 jest.mock('@/services/exerciseSwapper', () => ({
   findSimilarExercises: jest.fn(() => []),
@@ -395,6 +403,77 @@ describe('ExerciseCard', () => {
       // Tapping again collapses it
       await user.click(metaLine);
       expect(screen.queryByText('Last Workout')).not.toBeInTheDocument();
+    });
+
+    describe('12-week history sparkline in the expanded detail', () => {
+      const daysAgo = (n: number): string => {
+        const d = new Date();
+        d.setDate(d.getDate() - n);
+        return d.toISOString();
+      };
+
+      const detailSession = (date: string, bestE1RM: number) => ({
+        sessionId: `session-${date}`,
+        date,
+        isDeload: false,
+        locationName: null,
+        sets: [{ weightKg: 100, reps: 8, rpe: 8, setType: 'normal' }],
+        bestE1RM,
+        topSet: { weightKg: 100, reps: 8, rpe: 8, setType: 'normal' },
+        totalVolume: 800,
+      });
+
+      const historyProps = {
+        lastWorkoutDate: '2024-01-10',
+        lastWorkoutSets: [{ weightKg: 60, reps: 9, rpe: 8 }],
+        estimatedE1RM: 80,
+        personalRecord: null,
+        totalSessions: 5,
+      };
+
+      afterEach(() => {
+        mockDetailHistoryData = [];
+      });
+
+      it('renders the sparkline when the exercise has recent sessions', async () => {
+        const user = userEvent.setup();
+        mockDetailHistoryData = [
+          detailSession(daysAgo(7), 105),
+          detailSession(daysAgo(14), 100),
+        ];
+        render(<ExerciseCard {...defaultProps} exerciseHistory={historyProps} />);
+
+        await user.click(screen.getByText(/last session 60 kg × 9/));
+        expect(screen.getByTestId('history-sparkline')).toBeInTheDocument();
+        // Default (e1rm-path) exercise plots the est. 1RM per session
+        expect(screen.getByText(/est\. 1RM · 2 sessions/)).toBeInTheDocument();
+      });
+
+      it('does not mount the sparkline on a near-cold-start exercise (< 2 known sessions)', async () => {
+        const user = userEvent.setup();
+        mockDetailHistoryData = [
+          detailSession(daysAgo(7), 105),
+          detailSession(daysAgo(14), 100),
+        ];
+        render(
+          <ExerciseCard
+            {...defaultProps}
+            exerciseHistory={{ ...historyProps, totalSessions: 1 }}
+          />
+        );
+
+        await user.click(screen.getByText(/last session 60 kg × 9/));
+        expect(screen.queryByTestId('history-sparkline')).not.toBeInTheDocument();
+      });
+
+      it('renders no sparkline while the window holds fewer than two sessions', async () => {
+        const user = userEvent.setup();
+        mockDetailHistoryData = [detailSession(daysAgo(7), 105)];
+        render(<ExerciseCard {...defaultProps} exerciseHistory={historyProps} />);
+
+        await user.click(screen.getByText(/last session 60 kg × 9/));
+        expect(screen.queryByTestId('history-sparkline')).not.toBeInTheDocument();
+      });
     });
 
     it('breaks out added weight for bodyweight sets ("BW+25") instead of the blended effective load', async () => {
