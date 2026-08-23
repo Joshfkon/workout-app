@@ -13,7 +13,7 @@
  * the e1RM path for bodyweight movements.
  */
 
-import { estimateE1RM } from '@/lib/utils';
+import { estimateE1RM, sumDisplayVolume } from '@/lib/utils';
 import { rpeToRir } from '@/types/schema';
 
 // === Types ===
@@ -359,7 +359,10 @@ export type SparklineMetric = 'e1rm' | 'volume' | 'duration';
 export interface SessionSparklinePoint {
   /** Session completed_at (ISO). */
   date: string;
-  /** kg for 'e1rm' / 'volume'; total seconds for 'duration'. */
+  /**
+   * kg for 'e1rm'; whole DISPLAY units for 'volume' (native-unit tonnage —
+   * see buildSessionSparkline); total seconds for 'duration'.
+   */
   value: number;
 }
 
@@ -373,10 +376,20 @@ export const SPARKLINE_WINDOW_DAYS = 84;
  * regression (same exclusion the e1RM trend / PR reads apply). Sessions where
  * the metric comes out non-positive (e.g. hold-seconds on a session of only
  * special-scheme sets) carry no signal and are dropped.
+ *
+ * The 'volume' metric goes through the native-unit tonnage path
+ * (sumDisplayVolume): each set converts to `unit` FIRST, then multiplies and
+ * sums, recovering the exact loads a lb user typed. Converting the kg-summed
+ * `totalVolume` once at the end loses them to the DECIMAL(6,2) storage
+ * precision — 160 lb × 12 × 4 would render 7,679 while the Last Workout line
+ * directly above says 7,680. Only rep-based sessions may be plotted as
+ * 'volume' (duration sets store seconds in `reps`); the metric table above
+ * guarantees that.
  */
 export function buildSessionSparkline(
   sessions: ExerciseDetailSession[],
   metric: SparklineMetric,
+  unit: 'kg' | 'lb',
   now: Date,
   windowDays: number = SPARKLINE_WINDOW_DAYS
 ): SessionSparklinePoint[] {
@@ -391,7 +404,7 @@ export function buildSessionSparkline(
         metric === 'e1rm'
           ? s.bestE1RM
           : metric === 'volume'
-            ? s.totalVolume
+            ? sumDisplayVolume(s.sets, unit, null)
             : s.sets.filter(isNormalDetailSet).reduce((sum, set) => sum + set.reps, 0),
     }))
     .filter((p) => p.value > 0);
