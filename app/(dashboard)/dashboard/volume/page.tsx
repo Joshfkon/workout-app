@@ -7,6 +7,7 @@ import { useAdaptiveVolume } from '@/hooks/useAdaptiveVolume';
 import { useUserStore } from '@/stores';
 import { FatigueAlertList } from '@/components/workout/FatigueAlertBanner';
 import { AtrophyRiskAlert } from '@/components/analytics/AtrophyRiskAlert';
+import { VolumeHeatmapCard } from '@/components/analytics/VolumeHeatmapCard';
 import { WeeklyMevSummary } from '@/components/dashboard/WeeklyMevSummary';
 import { VolumeRowContent, VolumeChildContent } from '@/components/analytics/VolumeZoneBar';
 import {
@@ -363,6 +364,11 @@ export default function VolumeProfilePage() {
           />
         )}
       </Card>
+
+      {/* Long-window heatmap — average weekly volume vs MEV over a selectable
+          2w–1y window, painted on the body map (reds/amber below MEV, greens
+          darkening with volume). Complements the this-week map above. */}
+      <VolumeHeatmapCard />
 
       {/* Volume Bars — shared coarse-row model. Green spans the whole MEV–MRV
           band; a bar only turns red past MRV. Tap a group to reveal its fine
