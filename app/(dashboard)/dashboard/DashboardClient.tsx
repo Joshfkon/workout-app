@@ -198,13 +198,15 @@ interface CheckInRow {
   sleep_quality: number | null;
   energy_level: number | null;
   mood_rating: number | null;
+  stress_level: number | null;
 }
 
 /**
  * Derive a 0-100 readiness score from the daily check-in using the existing
  * pure fatigue-engine scorer. Check-in fields map onto ReadinessInput:
- * mood inverts to stress (low mood ~ high stress) and energy stands in for
- * the fueling/nutrition rating.
+ * the logged stress level is used directly when present (older rows predate
+ * the stress question, so mood inverts to stress as a fallback — low mood ~
+ * high stress) and energy stands in for the fueling/nutrition rating.
  */
 function readinessFromCheckIn(row: CheckInRow): number {
   const clampRating = (v: number | null): Rating | null =>
@@ -212,7 +214,9 @@ function readinessFromCheckIn(row: CheckInRow): number {
   return calculateReadinessScore({
     sleepHours: row.sleep_hours,
     sleepQuality: clampRating(row.sleep_quality),
-    stressLevel: row.mood_rating == null ? null : clampRating(6 - row.mood_rating),
+    stressLevel:
+      clampRating(row.stress_level) ??
+      (row.mood_rating == null ? null : clampRating(6 - row.mood_rating)),
     nutritionRating: clampRating(row.energy_level),
   });
 }
@@ -465,7 +469,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
       const supabase = createUntypedClient();
       const { data } = await supabase
         .from('daily_check_ins')
-        .select('sleep_hours, sleep_quality, energy_level, mood_rating')
+        .select('sleep_hours, sleep_quality, energy_level, mood_rating, stress_level')
         .eq('user_id', userId)
         .eq('date', dateKey)
         .maybeSingle();

@@ -64,17 +64,20 @@ describe('DailyCheckIn sleep capture', () => {
     const onComplete = jest.fn();
     renderCheckIn(onComplete);
 
-    // Sleep step (step 1 of 5 for a non-cut goal: sleep, energy, mood,
-    // soreness, optional waist): default 7h, bump to 7.5h.
+    // Sleep step (step 1 of 6 for a non-cut goal: sleep, energy, mood,
+    // stress, soreness, optional waist): default 7h, bump to 7.5h.
     expect(await screen.findByTestId('sleep-hours-value')).toHaveTextContent('7h');
     await user.click(screen.getByRole('button', { name: 'Increase hours' }));
     expect(screen.getByTestId('sleep-hours-value')).toHaveTextContent('7.5h');
     await user.click(screen.getByTestId('sleep-quality-good'));
 
-    // Walk the remaining steps (energy, mood, soreness, waist) and complete —
-    // the waist step is left BLANK to prove it never blocks completion.
+    // Walk the remaining steps and complete — on the stress step pick 2
+    // ("High" — 1 = high stress, 5 = low stress), and leave the waist step
+    // BLANK to prove it never blocks completion.
     await user.click(screen.getByRole('button', { name: 'Next' }));
     await user.click(screen.getByRole('button', { name: 'Next' }));
+    await user.click(screen.getByRole('button', { name: 'Next' }));
+    await user.click(screen.getByRole('button', { name: '2 High' }));
     await user.click(screen.getByRole('button', { name: 'Next' }));
     await user.click(screen.getByRole('button', { name: 'Next' }));
     expect(screen.getByTestId('checkin-waist-field')).toBeInTheDocument();
@@ -87,6 +90,7 @@ describe('DailyCheckIn sleep capture', () => {
     expect(checkInRow).toMatchObject({
       sleep_hours: 7.5,
       sleep_quality: SLEEP_QUALITY_TO_RATING.good,
+      stress_level: 2,
     });
 
     // sleep_log gets the raw pair, one row per local day (upsert).
@@ -112,8 +116,8 @@ describe('DailyCheckIn sleep capture', () => {
     renderCheckIn();
 
     await screen.findByTestId('sleep-hours-value');
-    // Advance to the waist step (sleep → energy → mood → soreness → waist).
-    for (let i = 0; i < 4; i++) {
+    // Advance to the waist step (sleep → energy → mood → stress → soreness → waist).
+    for (let i = 0; i < 5; i++) {
       await user.click(screen.getByRole('button', { name: 'Next' }));
     }
     const waistField = screen.getByTestId('checkin-waist-field');

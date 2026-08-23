@@ -40,6 +40,7 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
   const [sleepQuality, setSleepQuality] = useState<SleepQuality>('ok');
   const [energyLevel, setEnergyLevel] = useState<Rating>(3);
   const [moodRating, setMoodRating] = useState<Rating>(3);
+  const [stressLevel, setStressLevel] = useState<Rating>(3);
   const [focusRating, setFocusRating] = useState<Rating>(3);
   const [libidoRating, setLibidoRating] = useState<Rating>(3);
   const [sorenessLevel, setSorenessLevel] = useState<Rating>(3);
@@ -90,6 +91,18 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
       value: moodRating,
       onChange: (v: Rating) => setMoodRating(v),
       labels: ['Bad', 'Low', 'Neutral', 'Good', 'Great'],
+    },
+    {
+      // 1 = high stress, 5 = low stress — same scale as the pre-workout
+      // readiness check-in and the daily_check_ins.stress_level column.
+      id: 'stress',
+      title: 'Stress',
+      icon: '😰',
+      question: "How's your stress level today?",
+      type: 'rating' as const,
+      value: stressLevel,
+      onChange: (v: Rating) => setStressLevel(v),
+      labels: ['Very High', 'High', 'Moderate', 'Low', 'Very Low'],
     },
   ];
   
@@ -192,6 +205,7 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
         setTodaysCheckIn(data);
         if (typeof data.sleep_hours === 'number') setSleepHours(clampSleepHours(data.sleep_hours));
         setSleepQuality(ratingToSleepQuality(data.sleep_quality));
+        if (typeof data.stress_level === 'number') setStressLevel(data.stress_level as Rating);
       } else if (lastSleep) {
         setSleepHours(clampSleepHours(lastSleep.hours));
         setSleepQuality(lastSleep.quality);
@@ -294,6 +308,7 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
         sleep_quality: SLEEP_QUALITY_TO_RATING[sleepQuality],
         energy_level: energyLevel,
         mood_rating: moodRating,
+        stress_level: stressLevel,
         focus_rating: isOnCut ? focusRating : null,
         libido_rating: isOnCut ? libidoRating : null,
         soreness_level: sorenessLevel,
@@ -374,6 +389,7 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
       sleepHours: (todaysCheckIn as any).sleep_hours ?? (todaysCheckIn as any).sleepHours ?? sleepHours,
       energyLevel: (todaysCheckIn as any).energy_level ?? (todaysCheckIn as any).energyLevel ?? energyLevel,
       moodRating: (todaysCheckIn as any).mood_rating ?? (todaysCheckIn as any).moodRating ?? moodRating,
+      stressLevel: (todaysCheckIn as any).stress_level ?? (todaysCheckIn as any).stressLevel ?? stressLevel,
       sorenessLevel: (todaysCheckIn as any).soreness_level ?? (todaysCheckIn as any).sorenessLevel ?? sorenessLevel,
     };
     
@@ -393,7 +409,7 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
         </div>
         
         {/* Quick stats */}
-        <div className="grid grid-cols-4 gap-2 text-center">
+        <div className="grid grid-cols-5 gap-2 text-center">
           <div className="p-2 bg-surface-800 rounded-lg">
             <p className="text-lg">😴</p>
             <p className="text-sm font-medium text-surface-100">{displayData.sleepHours}h</p>
@@ -408,6 +424,11 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
             <p className="text-lg">🌤️</p>
             <p className="text-sm font-medium text-surface-100">{displayData.moodRating}/5</p>
             <p className="text-xs text-surface-500">Mood</p>
+          </div>
+          <div className="p-2 bg-surface-800 rounded-lg">
+            <p className="text-lg">😰</p>
+            <p className="text-sm font-medium text-surface-100">{displayData.stressLevel}/5</p>
+            <p className="text-xs text-surface-500">Stress</p>
           </div>
           <div className="p-2 bg-surface-800 rounded-lg">
             <p className="text-lg">💪</p>
