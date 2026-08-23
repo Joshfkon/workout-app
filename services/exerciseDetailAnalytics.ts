@@ -345,6 +345,58 @@ function weekStartOf(iso: string): { key: string; label: string } {
   return { key, label: `${monday.getMonth() + 1}/${monday.getDate()}` };
 }
 
+// === History sparkline (workout card expanded detail) ===
+
+/**
+ * Which per-session number the workout card's history sparkline plots,
+ * following the exercise's progression model: best e1RM for e1rm-path
+ * exercises, session tonnage for rep_total (rep totals reset on load changes;
+ * tonnage stays comparable across them), total hold seconds for
+ * duration-based movements (whose "reps" are seconds and never enter Epley).
+ */
+export type SparklineMetric = 'e1rm' | 'volume' | 'duration';
+
+export interface SessionSparklinePoint {
+  /** Session completed_at (ISO). */
+  date: string;
+  /** kg for 'e1rm' / 'volume'; total seconds for 'duration'. */
+  value: number;
+}
+
+/** The sparkline's lookback window: ~12 weeks. */
+export const SPARKLINE_WINDOW_DAYS = 84;
+
+/**
+ * Per-session trend points for the workout card's history sparkline, oldest
+ * first, limited to the last `windowDays`. Deload sessions are excluded —
+ * they are held light on purpose, and on a wordless line their dip reads as
+ * regression (same exclusion the e1RM trend / PR reads apply). Sessions where
+ * the metric comes out non-positive (e.g. hold-seconds on a session of only
+ * special-scheme sets) carry no signal and are dropped.
+ */
+export function buildSessionSparkline(
+  sessions: ExerciseDetailSession[],
+  metric: SparklineMetric,
+  now: Date,
+  windowDays: number = SPARKLINE_WINDOW_DAYS
+): SessionSparklinePoint[] {
+  const cutoff = now.getTime() - windowDays * DAY_MS;
+
+  return [...sessions]
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    .filter((s) => !s.isDeload && new Date(s.date).getTime() >= cutoff)
+    .map((s) => ({
+      date: s.date,
+      value:
+        metric === 'e1rm'
+          ? s.bestE1RM
+          : metric === 'volume'
+            ? s.totalVolume
+            : s.sets.filter(isNormalDetailSet).reduce((sum, set) => sum + set.reps, 0),
+    }))
+    .filter((p) => p.value > 0);
+}
+
 /** Volume for this exercise bucketed per week (Monday start), oldest first. */
 export function buildWeeklyVolume(sessions: ExerciseDetailSession[]): WeeklyVolumePoint[] {
   const buckets = new Map<string, WeeklyVolumePoint>();

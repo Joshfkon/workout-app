@@ -53,6 +53,7 @@ import { DropsetPrompt } from './DropsetPrompt';
 import { BodyweightSetEditRow } from './BodyweightSetEditRow';
 import { SegmentedControl } from './SegmentedControl';
 import { SetLoggerRow } from './SetLoggerRow';
+import { ExerciseHistorySparkline } from './ExerciseHistorySparkline';
 import { SuggestionBanner } from './SuggestionBanner';
 import { BottomSheet } from './BottomSheet';
 import { useKeyboardInset } from '@/hooks/useKeyboardInset';
@@ -3205,6 +3206,17 @@ export const ExerciseCard = memo(function ExerciseCard({
                     </p>
                   ) : null}
                 </div>
+              )}
+              {/* ~12-week per-session trend (cached-first fetch inside; the
+                  component renders nothing until it has two points to join).
+                  Gated on >= 2 known sessions so a cold-start exercise doesn't
+                  fire a doomed history query on every expand. */}
+              {exerciseHistory.totalSessions >= 2 && (
+                <ExerciseHistorySparkline
+                  exerciseId={exercise.id}
+                  metric={isDurationBased ? 'duration' : repTotalMode ? 'volume' : 'e1rm'}
+                  unit={unit}
+                />
               )}
             </div>
           </div>
