@@ -57,9 +57,14 @@ const config: Config = {
           950: 'rgb(var(--surface-950) / <alpha-value>)',
         },
         success: {
+          // 300/700 bracket the volume-heatmap green ramp (light "just over
+          // MEV" through darkest "above MRV" — see HEAT_FILL_CLASSES in
+          // app/(dashboard)/dashboard/_lib/volumeHeatmap.ts).
+          300: '#86efac',
           400: '#4ade80',
           500: '#22c55e',
           600: '#16a34a',
+          700: '#15803d',
         },
         warning: {
           400: '#facc15',

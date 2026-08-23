@@ -15,6 +15,10 @@ import {
   type VolumeZone,
 } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 import type { ReadinessRow } from '@/app/(dashboard)/dashboard/workout/[id]/_lib/readiness';
+import type {
+  HeatLevel,
+  VolumeHeatmapRow,
+} from '@/app/(dashboard)/dashboard/_lib/volumeHeatmap';
 import type { RecoveryStatus } from '@/services/muscleRecovery';
 import { REGIONLESS_COARSE_MEMBERS, type MuscleId } from './taxonomy';
 
@@ -36,6 +40,8 @@ export interface MuscleMapDatum {
   lagging?: boolean;
   /** Recovery mode: the row's status, matching the readiness badges. */
   status?: RecoveryStatus;
+  /** Heat mode: the row's MEV-weighted long-window bucket (volumeHeatmap). */
+  heat?: HeatLevel;
 }
 
 export type MuscleMapData = Partial<Record<MuscleId, MuscleMapDatum>>;
@@ -92,6 +98,24 @@ export function readinessRowsToMapData(rows: ReadinessRow[]): MuscleMapData {
         zone: child.zone,
         status: child.recovery.lastTrainedAt !== null ? child.recovery.status : undefined,
       };
+    }
+  }
+  return out;
+}
+
+/**
+ * Volume heatmap: each coarse row paints ALL its standard children with the
+ * row's heat bucket — the heatmap is deliberately a coarse-group view (its
+ * averages come from the group-capped coarse totals), so every sub-region of a
+ * group reads the group's color, exactly like the card's legend/detail rows.
+ */
+export function heatmapRowsToMapData(rows: VolumeHeatmapRow[]): MuscleMapData {
+  const out: MuscleMapData = {};
+  for (const row of rows) {
+    const children = COARSE_CHILDREN[row.muscle];
+    if (!children) continue;
+    for (const std of children) {
+      out[std] = { value: row.avgWeeklySets, heat: row.heat };
     }
   }
   return out;
