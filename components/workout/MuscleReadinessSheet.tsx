@@ -26,6 +26,7 @@ import {
   withVisibleChildren,
 } from '@/components/muscle/MuscleGroupList';
 import { ContributingSets, SourcesDisclosure } from '@/components/muscle/ContributingSets';
+import { CompactVolumeHeatmap } from '@/components/muscle/VolumeHeatmapView';
 import { RollingVolumeForecast } from '@/components/muscle/RollingVolumeForecast';
 import type { DailyGroupSets } from '@/services/volumeProjection';
 import { MuscleMap } from '@/components/muscleMap/MuscleMap';
@@ -48,14 +49,21 @@ const DEFAULT_ROW_CAP = 6;
 const SHOW_ALL_STORAGE_KEY = 'hypertrack:readiness-show-all';
 
 /**
- * Map paint mode (recovery vs volume) shares the same per-session persistence
- * (and both surfaces share the key) so the choice survives the sheet's lazy
- * re-mounts within a session.
+ * Map paint mode (recovery vs volume vs long-window heatmap) shares the same
+ * per-session persistence (and both surfaces share the key) so the choice
+ * survives the sheet's lazy re-mounts within a session.
  */
 const MAP_MODE_STORAGE_KEY = 'hypertrack:readiness-map-mode';
 
-/** What the sheet's body map paints: recovery status or weekly-volume zones. */
-type ReadinessMapMode = 'recovery' | 'volume';
+/** What the sheet's body map paints: recovery status, weekly-volume zones, or
+ *  the long-window MEV-weighted heatmap (2w–1y averages). */
+type ReadinessMapMode = 'recovery' | 'volume' | 'heat';
+
+const READINESS_MAP_MODES: { id: ReadinessMapMode; label: string }[] = [
+  { id: 'recovery', label: 'Recovery' },
+  { id: 'volume', label: 'Volume' },
+  { id: 'heat', label: 'Heatmap' },
+];
 
 function readShowAll(key: string): boolean {
   if (typeof window === 'undefined') return false;
@@ -78,7 +86,10 @@ function persistShowAll(key: string, value: boolean): void {
 function readMapMode(): ReadinessMapMode {
   if (typeof window === 'undefined') return 'recovery';
   try {
-    return window.sessionStorage.getItem(MAP_MODE_STORAGE_KEY) === 'volume' ? 'volume' : 'recovery';
+    const stored = window.sessionStorage.getItem(MAP_MODE_STORAGE_KEY);
+    return READINESS_MAP_MODES.some((m) => m.id === stored)
+      ? (stored as ReadinessMapMode)
+      : 'recovery';
   } catch {
     return 'recovery';
   }
@@ -146,11 +157,17 @@ function barFillPct(sets: number, mrv: number): number {
 
 /**
  * Compact body map for the sheet: one view at a time (sheet height),
- * front/back toggle, plus a Recovery/Volume paint toggle — recovery status by
- * default, weekly-volume zones (same colors as the bars below) on demand.
- * Both paints come from the SAME rows the badges/bars below render (via
- * readinessRowsToMapData — coarse values per group, rendered fine children
- * override). Tapping a muscle scrolls to its row.
+ * front/back toggle, plus a Recovery/Volume/Heatmap paint toggle — recovery
+ * status by default, weekly-volume zones (same colors as the bars below) on
+ * demand. Those two paints come from the SAME rows the badges/bars below
+ * render (via readinessRowsToMapData — coarse values per group, rendered fine
+ * children override), and tapping a muscle scrolls to its row.
+ *
+ * The third paint is the long-window MEV-weighted heatmap (2w–1y averages,
+ * shared CompactVolumeHeatmap unit with its own timeframe chips and legend).
+ * It deliberately does NOT scroll-to-row on tap: the rows below show THIS
+ * week's volume while the heatmap paints a longer window, so a tap shows the
+ * muscle's own long-window numbers instead of pointing at a different metric.
  */
 function ReadinessMap({ rows, onRevealAll }: { rows: ReadinessRow[]; onRevealAll?: () => void }) {
   const [view, setView] = useState<BodyView>('front');
@@ -185,21 +202,22 @@ function ReadinessMap({ rows, onRevealAll }: { rows: ReadinessRow[]; onRevealAll
   return (
     <div className="mb-2" data-testid="readiness-map">
       <div className="flex items-center justify-between mb-1.5">
-        {/* Paint toggle: recovery status (default) vs weekly-volume zones. */}
+        {/* Paint toggle: recovery status (default), weekly-volume zones, or
+            the long-window heatmap. */}
         <div className="flex gap-1">
-          {(['recovery', 'volume'] as const).map((m) => (
+          {READINESS_MAP_MODES.map((m) => (
             <button
-              key={m}
-              onClick={() => setMode(m)}
+              key={m.id}
+              onClick={() => setMode(m.id)}
               className={`px-2.5 py-1 rounded text-[11px] font-medium transition-colors ${
-                mode === m
+                mode === m.id
                   ? 'bg-surface-700 text-surface-100'
                   : 'text-surface-500 hover:text-surface-300'
               }`}
-              data-testid={`readiness-map-mode-${m}`}
-              aria-pressed={mode === m}
+              data-testid={`readiness-map-mode-${m.id}`}
+              aria-pressed={mode === m.id}
             >
-              {m === 'recovery' ? 'Recovery' : 'Volume'}
+              {m.label}
             </button>
           ))}
         </div>
@@ -221,14 +239,20 @@ function ReadinessMap({ rows, onRevealAll }: { rows: ReadinessRow[]; onRevealAll
           ))}
         </div>
       </div>
-      <MuscleMap
-        data={mapData}
-        mode={mode}
-        view={view}
-        onMuscleTap={scrollToRow}
-        className="h-44"
-        data-testid="readiness-muscle-map"
-      />
+      {mode === 'heat' ? (
+        // Mounted only while active, so the long-window fetch is lazy and the
+        // React Query hook never runs for users who stay on recovery/volume.
+        <CompactVolumeHeatmap view={view} />
+      ) : (
+        <MuscleMap
+          data={mapData}
+          mode={mode}
+          view={view}
+          onMuscleTap={scrollToRow}
+          className="h-44"
+          data-testid="readiness-muscle-map"
+        />
+      )}
     </div>
   );
 }
