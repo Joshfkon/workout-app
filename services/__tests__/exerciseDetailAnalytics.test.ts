@@ -366,7 +366,7 @@ describe('buildSessionSparkline', () => {
       }),
     ]);
 
-    const points = buildSessionSparkline(sessions, 'e1rm', NOW);
+    const points = buildSessionSparkline(sessions, 'e1rm', 'kg', NOW);
 
     expect(points.map((p) => p.date)).toEqual([
       '2026-05-01T10:00:00Z',
@@ -389,7 +389,7 @@ describe('buildSessionSparkline', () => {
       }),
     ]);
 
-    const points = buildSessionSparkline(sessions, 'e1rm', NOW);
+    const points = buildSessionSparkline(sessions, 'e1rm', 'kg', NOW);
     expect(points.map((p) => p.date)).toEqual(['2026-06-08T10:00:00Z']);
   });
 
@@ -404,8 +404,28 @@ describe('buildSessionSparkline', () => {
       }),
     ]);
 
-    const points = buildSessionSparkline(sessions, 'volume', NOW);
+    const points = buildSessionSparkline(sessions, 'volume', 'kg', NOW);
     expect(points).toEqual([{ date: '2026-06-01T10:00:00Z', value: 1800 }]);
+  });
+
+  it('sums lb tonnage in the native unit, matching the Last Workout volume line', () => {
+    // 160 lb survives DECIMAL(6,2) storage as 72.57 kg. Four sets of 160×12
+    // must render 7,680 lbs (each set converts FIRST, like sumDisplayVolume);
+    // converting the kg-summed total once at the end yields 7,679.
+    const sessions = summarizeSessions([
+      makeSession({
+        date: '2026-06-01T10:00:00Z',
+        sets: [
+          { weightKg: 72.57, reps: 12, rpe: 8 },
+          { weightKg: 72.57, reps: 12, rpe: 8 },
+          { weightKg: 72.57, reps: 12, rpe: 8 },
+          { weightKg: 72.57, reps: 12, rpe: 8 },
+        ],
+      }),
+    ]);
+
+    const points = buildSessionSparkline(sessions, 'volume', 'lb', NOW);
+    expect(points).toEqual([{ date: '2026-06-01T10:00:00Z', value: 7680 }]);
   });
 
   it('plots total straight-set seconds for the duration metric, ignoring special schemes', () => {
@@ -422,7 +442,7 @@ describe('buildSessionSparkline', () => {
       }),
     ]);
 
-    const points = buildSessionSparkline(sessions, 'duration', NOW);
+    const points = buildSessionSparkline(sessions, 'duration', 'kg', NOW);
     expect(points).toEqual([{ date: '2026-06-01T10:00:00Z', value: 105 }]);
   });
 
@@ -435,7 +455,7 @@ describe('buildSessionSparkline', () => {
       }),
     ]);
 
-    expect(buildSessionSparkline(sessions, 'duration', NOW)).toEqual([]);
+    expect(buildSessionSparkline(sessions, 'duration', 'kg', NOW)).toEqual([]);
   });
 
   it('honors a custom window', () => {
@@ -450,7 +470,7 @@ describe('buildSessionSparkline', () => {
       }),
     ]);
 
-    const points = buildSessionSparkline(sessions, 'e1rm', NOW, 7);
+    const points = buildSessionSparkline(sessions, 'e1rm', 'kg', NOW, 7);
     expect(points.map((p) => p.date)).toEqual(['2026-06-14T10:00:00Z']);
   });
 });

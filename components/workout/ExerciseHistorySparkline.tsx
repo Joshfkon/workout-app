@@ -19,7 +19,7 @@ import {
   SPARKLINE_WINDOW_DAYS,
   type SparklineMetric,
 } from '@/services/exerciseDetailAnalytics';
-import { convertWeightForDisplay, formatWeightValue } from '@/lib/utils';
+import { formatWeightValue } from '@/lib/utils';
 import { now as clockNow } from '@/lib/clock';
 import type { WeightUnit } from '@/types/schema';
 
@@ -44,8 +44,8 @@ export function ExerciseHistorySparkline({
   const query = useExerciseDetailHistory(exerciseId, true);
 
   const points = useMemo(
-    () => buildSessionSparkline(query.data ?? [], metric, clockNow()),
-    [query.data, metric]
+    () => buildSessionSparkline(query.data ?? [], metric, unit, clockNow()),
+    [query.data, metric, unit]
   );
 
   if (points.length < 2) return null;
@@ -66,15 +66,12 @@ export function ExerciseHistorySparkline({
 
   // Endpoint numbers in the display domain: e1RM through the same
   // plate-increment rounding as the card's "Estimated 1RM" line; tonnage
-  // converted exactly to whole display units (plate rounding is meaningless
-  // on a 6,400-lb total); duration is plain seconds. The delta is computed
-  // BETWEEN the displayed numbers so the two can never disagree.
+  // already arrives in whole display units (buildSessionSparkline sums it
+  // via the native-unit path, matching the Last Workout volume line);
+  // duration is plain seconds. The delta is computed BETWEEN the displayed
+  // numbers so the two can never disagree.
   const toDisplay = (v: number) =>
-    metric === 'duration'
-      ? Math.round(v)
-      : metric === 'volume'
-        ? convertWeightForDisplay(v, unit, 0)
-        : formatWeightValue(v, unit);
+    metric === 'e1rm' ? formatWeightValue(v, unit) : Math.round(v);
   const firstDisplay = toDisplay(values[0]);
   const latestDisplay = toDisplay(values[values.length - 1]);
   const delta = parseFloat((latestDisplay - firstDisplay).toFixed(1));

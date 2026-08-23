@@ -81,16 +81,21 @@ describe('ExerciseHistorySparkline', () => {
     expect(screen.getByTestId('history-sparkline-delta')).toHaveClass('text-danger-400');
   });
 
-  it('plots session volume in display units for rep_total exercises', () => {
+  it('plots session volume natively per set for rep_total exercises', () => {
+    // 160 lb is stored as 72.57 kg (DECIMAL(6,2)); the native-unit path must
+    // recover 160 per set — 4×160×12 = 7,680 lbs, exactly what the Last
+    // Workout line says (kg-summed-then-converted would show 7,679).
+    const set160 = { weightKg: 72.57, reps: 12, rpe: 8, setType: 'normal' };
     mockDetailHistoryData = [
-      detailSession(daysAgo(7), { totalVolume: 900 }),
-      detailSession(daysAgo(35), { totalVolume: 800 }),
+      detailSession(daysAgo(7), { sets: [set160, set160, set160, set160] }),
+      detailSession(daysAgo(35), { sets: [set160, set160] }),
     ];
     render(<ExerciseHistorySparkline exerciseId="exercise-1" metric="volume" unit="lb" />);
 
     expect(screen.getByText(/session volume · 2 sessions/)).toBeInTheDocument();
-    // 800 kg ≈ 1,764 lbs (formatWeightValue, 0 decimals) — comma-grouped.
-    expect(screen.getByText('1,764 lbs')).toBeInTheDocument();
+    expect(screen.getByText('3,840 lbs')).toBeInTheDocument();
+    expect(screen.getByText('7,680 lbs')).toBeInTheDocument();
+    expect(screen.getByTestId('history-sparkline-delta')).toHaveTextContent('+3,840');
   });
 
   it('formats duration metrics as seconds', () => {
