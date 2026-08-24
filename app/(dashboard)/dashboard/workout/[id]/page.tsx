@@ -23,6 +23,7 @@ import { InlineHint } from '@/components/ui/FirstTimeHint';
 import { RestTimer, PauseOverlay, RowOverflowMenu, type RowMenuItem } from '@/components/workout';
 import { IconGripVertical, IconInfoCircle, IconMapPin, IconX } from '@tabler/icons-react';
 import { useRestTimer } from '@/hooks/useRestTimer';
+import { useKeyboardOpen } from '@/hooks/useKeyboardOpen';
 import { useEducationStore } from '@/hooks/useEducationPreferences';
 
 // Dynamic import ExerciseCard (118KB) to reduce initial bundle and improve page load
@@ -991,6 +992,12 @@ export default function WorkoutPage() {
 
   // Rest timer hook
   const restTimer = useRestTimer(restTimerOptions);
+
+  // While the on-screen keyboard is up, iOS unpins fixed-bottom elements from
+  // the screen edge and lets them float mid-page over content — hide the
+  // bottom chrome stack (rest timer + toast) until it dismisses, like
+  // BottomNavigation does. The remount re-anchors it at the true bottom.
+  const keyboardOpen = useKeyboardOpen();
 
   // Workout timer hook - tracks total workout duration with pause/resume.
   // Anchored at the FIRST LOGGED SET, not session creation: an empty session
@@ -6693,8 +6700,11 @@ export default function WorkoutPage() {
           same bottom offset and they overlapped. The in-flow action bar above
           gets matching bottom padding (see restBarVisible / bottomChromeVisible)
           so nothing here covers it. pointer-events pass through the empty gaps
-          so taps land on the exercise list, not an invisible full-width layer. */}
-      {bottomChromeVisible && (
+          so taps land on the exercise list, not an invisible full-width layer.
+          Hidden while the on-screen keyboard is up: iOS detaches fixed-bottom
+          layers from the screen edge then, leaving the timer floating mid-page
+          (see useKeyboardOpen). */}
+      {bottomChromeVisible && !keyboardOpen && (
         <div className="fixed inset-x-3 bottom-3 z-40 max-w-2xl mx-auto flex flex-col items-stretch gap-2 pointer-events-none [&>*]:pointer-events-auto pb-[env(safe-area-inset-bottom)]">
           {sanityCheckResult && (
             <SanityCheckToast
