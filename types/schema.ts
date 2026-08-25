@@ -1697,9 +1697,8 @@ export interface ExerciseFatigueProfile {
   
   /** Stimulus-to-Fatigue Ratio (higher = more efficient, 1.0+ is good) */
   stimulusPerFatigue: number;
-  
-  /** Days before this muscle can be trained hard again */
-  recoveryDays: number;
+  // (recoveryDays removed in #634 — computed for years, read by nothing;
+  // between-session recovery belongs to services/muscleRecovery.)
 }
 
 /**
@@ -1744,23 +1743,9 @@ export interface SessionFatigueSummary {
   recommendation: string;
 }
 
-/**
- * Muscle recovery status for weekly tracking
- */
-export interface MuscleRecoveryStatus {
-  lastTrainedDay: number;
-  fatigueLevel: number;
-  recoveryRate: number;
-}
-
-/**
- * Weekly volume status for a muscle group
- */
-export interface WeeklyMuscleVolumeStatus {
-  currentSets: number;
-  targetSets: { min: number; max: number };
-  status: 'under' | 'optimal' | 'over';
-}
+// (MuscleRecoveryStatus and WeeklyMuscleVolumeStatus removed in #634 with
+// fatigueBudgetEngine.WeeklyFatigueTracker, their only consumer — planning
+// recovery now reads services/muscleRecovery via services/plannedRecovery.)
 
 // ============ MESOCYCLE WEEK STRUCTURE ============
 

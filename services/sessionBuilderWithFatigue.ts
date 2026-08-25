@@ -46,10 +46,15 @@ import {
   calculateExerciseFatigue,
   createFatigueBudget,
   SessionFatigueManager,
-  WeeklyFatigueTracker,
   BASE_SFR,
 } from './fatigueBudgetEngine';
-import { toStandardMuscleForVolume } from '@/lib/migrations/muscle-groups';
+import {
+  PlannedWeekRecovery,
+  plannedSetScale,
+  PLANNED_SKIP_READINESS,
+} from './plannedRecovery';
+import { requiredStabilizersFor } from './muscleRecovery';
+import { resolveMuscleToStandard, type StandardMuscleGroup } from '@/types/schema';
 
 import { calculateRecoveryFactors, buildPeriodizationPlan, calculateVolumeDistribution as calculateVolumeDistributionWithLagging, generateWarmup, isMuscleExcludedByInjury, applyIndirectAwareAllocation } from './mesocycleBuilder';
 import { getEffectiveBand, type CoarseMuscle } from './volumeBands';
@@ -165,6 +170,11 @@ const HYPERTROPHY_TIER_RANK: Record<string, number> = {
  * @param unavailableEquipmentIds - Equipment IDs the user doesn't have access to (from gym equipment settings)
  * @param varietyPrefs - Optional variety preferences to apply exercise rotation
  * @param recentlyUsedExerciseIds - Set of exercise IDs recently used (for variety filtering)
+ * @param fatiguedStabilizers - Stabilizer-tracked muscles whose stabilizer
+ *   channel is under-recovered on this planned day (PlannedWeekRecovery).
+ *   Candidates REQUIRING one are deprioritized within their hypertrophy tier
+ *   (never below a worse tier) — the planning-side counterpart of the live
+ *   pre-set stabilizer warning.
  */
 function selectExercisesWithFatigue(
   muscle: MuscleGroup,
@@ -176,7 +186,8 @@ function selectExercisesWithFatigue(
   quickWorkoutMode: boolean = false,
   unavailableEquipmentIds: string[] = [],
   varietyPrefs?: ExerciseVarietyPreferences | null,
-  recentlyUsedExerciseIds?: Set<string>
+  recentlyUsedExerciseIds?: Set<string>,
+  fatiguedStabilizers?: ReadonlySet<StandardMuscleGroup>
 ): { exercise: ExerciseEntry; sets: number }[] {
   // Get exercises from unified service (DB-backed with fallback)
   const allExercises = getExercisesSync();
@@ -230,12 +241,32 @@ function selectExercisesWithFatigue(
     candidates = allExercises.filter((e) => muscleMatchesGroup(e.primaryMuscle, muscle));
   }
 
-  // Sort by: 1) Hypertrophy tier (S > A > B > C > D > F), 2) Compound/isolation, 3) SFR
+  // True when a candidate REQUIRES a stabilizer that is under-recovered on
+  // this planned day (its `stabilizers` tags, never secondary mover tags —
+  // same predicate as the live warning).
+  const demandsFatiguedStabilizer = (e: ExerciseEntry): boolean => {
+    if (!fatiguedStabilizers || fatiguedStabilizers.size === 0) return false;
+    const required = requiredStabilizersFor({
+      stabilizers: (e as { stabilizers?: string[] }).stabilizers,
+    });
+    return required.some((m) => fatiguedStabilizers.has(m));
+  };
+
+  // Sort by: 1) Hypertrophy tier (S > A > B > C > D > F), 2) stabilizer
+  // availability within the tier, 3) Compound/isolation, 4) SFR
   candidates.sort((a, b) => {
     // ALWAYS sort by hypertrophy tier first - S-tier exercises should come first
     const aTier = HYPERTROPHY_TIER_RANK[a.hypertrophyScore?.tier || 'C'] ?? 3;
     const bTier = HYPERTROPHY_TIER_RANK[b.hypertrophyScore?.tier || 'C'] ?? 3;
     if (aTier !== bTier) return aTier - bTier;
+
+    // Within a tier, prefer candidates that don't lean on a run-down
+    // stabilizer (chest-supported row over barbell row the day after heavy
+    // hinges). Deliberately AFTER the tier key: a fatigued stabilizer never
+    // buys a worse exercise, only a same-tier substitution.
+    const aStab = demandsFatiguedStabilizer(a) ? 1 : 0;
+    const bStab = demandsFatiguedStabilizer(b) ? 1 : 0;
+    if (aStab !== bStab) return aStab - bStab;
 
     // Second: Compounds first for early positions (when fresher)
     if (startingPosition <= 2) {
@@ -397,7 +428,7 @@ export function buildDetailedSessionWithFatigue(
   volumePerMuscle: Record<MuscleGroup, { sets: number; frequency: number }>,
   profile: ExtendedUserProfile,
   fatigueBudgetConfig: FatigueBudgetConfig,
-  weeklyTracker: WeeklyFatigueTracker,
+  weeklyRecovery: PlannedWeekRecovery,
   currentDay: number,
   weekInMesocycle: number,
   totalMesocycleWeeks: number,
@@ -436,6 +467,10 @@ export function buildDetailedSessionWithFatigue(
     (a, b) => muscleOrder.indexOf(a) - muscleOrder.indexOf(b)
   );
 
+  // Stabilizer state for this planned day (from the shared recovery model) —
+  // exercise selection deprioritizes candidates requiring a run-down one.
+  const fatiguedStabilizers = weeklyRecovery.fatiguedStabilizers(currentDay);
+
   let exercisePosition = 1;
 
   for (const muscle of orderedMuscles) {
@@ -443,20 +478,17 @@ export function buildDetailedSessionWithFatigue(
     if (exercisesAdded >= exerciseBudget.total) {
       break;
     }
-    
+
     // Check if we've exceeded time budget (with 5 min buffer)
     if (estimatedTimeUsed >= sessionMinutes - 5) {
       break;
     }
-    // Check if muscle is recovered enough to train
-    const recoveryStatus = weeklyTracker.canTrainMuscle(
-      muscle,
-      currentDay,
-      (volumePerMuscle[muscle]?.sets || 0) / (volumePerMuscle[muscle]?.frequency || 1)
-    );
+    // Readiness on this planned day, from the SAME recovery model the
+    // readiness sheet runs (via PlannedWeekRecovery's virtual history).
+    const readiness = weeklyRecovery.readiness(muscle, currentDay);
 
-    if (!recoveryStatus.ready && recoveryStatus.currentFatigue > 50) {
-      // Skip this muscle entirely if severely fatigued
+    if (readiness.readinessRatio < PLANNED_SKIP_READINESS) {
+      // Skip this muscle entirely if severely under-recovered
       continue;
     }
 
@@ -469,10 +501,10 @@ export function buildDetailedSessionWithFatigue(
     setsThisSession = Math.round(setsThisSession * weeklyProgression.volumeModifier);
     setsThisSession = Math.max(1, setsThisSession);
 
-    // Reduce volume if muscle has residual fatigue
-    if (recoveryStatus.currentFatigue > 25) {
-      const fatigueReduction = 1 - (recoveryStatus.currentFatigue - 25) / 100;
-      setsThisSession = Math.max(1, Math.round(setsThisSession * fatigueReduction));
+    // Trim volume while the muscle is still inside its recovery window
+    const recoveryScale = plannedSetScale(readiness.readinessRatio);
+    if (recoveryScale < 1) {
+      setsThisSession = Math.max(1, Math.round(setsThisSession * recoveryScale));
     }
 
     // Select exercises with fatigue awareness (prioritize S-tier in quick workout mode)
@@ -488,7 +520,8 @@ export function buildDetailedSessionWithFatigue(
       quickWorkoutMode,
       unavailableEquipmentIds,
       varietyPrefs,
-      recentlyUsedIds
+      recentlyUsedIds,
+      fatiguedStabilizers
     );
 
     for (const selection of selectedExercises) {
@@ -599,10 +632,16 @@ export function buildDetailedSessionWithFatigue(
         );
       }
 
-      // Track weekly fatigue (normalize muscle key to match localCost map keys)
-      const normalizedMuscle = toStandardMuscleForVolume(muscle) ?? muscle;
-      const localCost = exerciseFatigue.localCost.get(normalizedMuscle) ?? 0;
-      weeklyTracker.recordTraining(muscle, currentDay, localCost, selection.sets);
+      // Record the planned exercise into the week's virtual history so later
+      // planned days see its recovery debt (the shared model reads primary +
+      // secondary + stabilizer tags itself — no local cost math here).
+      weeklyRecovery.record(currentDay, {
+        primaryMuscle: selection.exercise.primaryMuscle,
+        secondaryMuscles: selection.exercise.secondaryMuscles ?? [],
+        stabilizers: (selection.exercise as { stabilizers?: string[] }).stabilizers,
+        sets: selection.sets,
+        targetRir: adjustedRIR,
+      });
 
       // Track time and exercise count (reuse isCompound and needsWarmup from above)
       estimatedTimeUsed += estimateExerciseTime(isCompound, profile.goal, selection.sets, needsWarmup);
@@ -650,7 +689,7 @@ export function buildDUPSession(
   volumePerMuscle: Record<MuscleGroup, { sets: number; frequency: number }>,
   profile: ExtendedUserProfile,
   fatigueBudgetConfig: FatigueBudgetConfig,
-  weeklyTracker: WeeklyFatigueTracker,
+  weeklyRecovery: PlannedWeekRecovery,
   currentDay: number,
   dupDayType: DUPDayType,
   weekInMesocycle: number,
@@ -692,6 +731,9 @@ export function buildDUPSession(
     power: 0.7, // Lower volume, higher intensity
   };
 
+  // Stabilizer state for this planned day (shared recovery model).
+  const fatiguedStabilizers = weeklyRecovery.fatiguedStabilizers(currentDay);
+
   let exercisePosition = 1;
 
   for (const muscle of orderedMuscles) {
@@ -704,8 +746,10 @@ export function buildDUPSession(
     if (estimatedTimeUsed >= sessionMinutes - 5) {
       break;
     }
-    const recoveryStatus = weeklyTracker.canTrainMuscle(muscle, currentDay, 0);
-    if (!recoveryStatus.ready && recoveryStatus.currentFatigue > 50) continue;
+    // Skip only when severely under-recovered (parity with the old DUP gate,
+    // which never trimmed sets — the DUP day-type modifier owns volume shape).
+    const readiness = weeklyRecovery.readiness(muscle, currentDay);
+    if (readiness.readinessRatio < PLANNED_SKIP_READINESS) continue;
 
     const muscleVolume = volumePerMuscle[muscle];
     if (!muscleVolume) continue;
@@ -714,7 +758,19 @@ export function buildDUPSession(
     setsThisSession = Math.round(setsThisSession * volumeModifiers[dupDayType]);
     setsThisSession = Math.max(1, setsThisSession);
 
-    const selectedExercises = selectExercisesWithFatigue(muscle, setsThisSession, profile, fatigueManager, exercisePosition, true, quickWorkoutMode, unavailableEquipmentIds);
+    const selectedExercises = selectExercisesWithFatigue(
+      muscle,
+      setsThisSession,
+      profile,
+      fatigueManager,
+      exercisePosition,
+      true,
+      quickWorkoutMode,
+      unavailableEquipmentIds,
+      undefined,
+      undefined,
+      fatiguedStabilizers
+    );
 
     for (const selection of selectedExercises) {
       // Check if we've hit limits
@@ -790,10 +846,15 @@ export function buildDUPSession(
         },
       });
 
-      // Normalize muscle key to match localCost map keys
-      const normalizedMuscleKey = toStandardMuscleForVolume(muscle) ?? muscle;
-      const localCost = exerciseFatigue.localCost.get(normalizedMuscleKey) ?? 0;
-      weeklyTracker.recordTraining(muscle, currentDay, localCost, selection.sets);
+      // Record into the week's virtual history so later planned days see
+      // this session's recovery debt (shared model, no local cost math).
+      weeklyRecovery.record(currentDay, {
+        primaryMuscle: selection.exercise.primaryMuscle,
+        secondaryMuscles: selection.exercise.secondaryMuscles ?? [],
+        stabilizers: (selection.exercise as { stabilizers?: string[] }).stabilizers,
+        sets: selection.sets,
+        targetRir: repConfig.targetRIR,
+      });
 
       // Track time and exercise count
       const needsWarmupTrack = isCompound && !warmedUpMuscles.has(muscle);
@@ -985,6 +1046,29 @@ export function generateFullMesocycleWithFatigue(
   };
   const schedule = schedulePatterns[daysPerWeek] || schedulePatterns[4];
 
+  // Day OFFSETS within the planned week, from the actual schedule pattern.
+  // The old tracker numbered sessions consecutively (0,1,2,…) regardless of
+  // rest days, so a Mon/Wed/Fri plan recovered as if it were Mon/Tue/Wed;
+  // the recovery model gets the real gaps.
+  const DAY_NAME_OFFSET: Record<string, number> = {
+    Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6,
+  };
+  const scheduleDayOffsets = schedule.map(
+    (dayName, index) => DAY_NAME_OFFSET[dayName] ?? index
+  );
+
+  // PLANNED weekly frequency per standard muscle — the dose-normalization
+  // denominator the live readiness model uses (sessionCapacityFor).
+  const plannedFrequencyByMuscle: Partial<Record<StandardMuscleGroup, number>> = {};
+  for (const [muscle, vol] of Object.entries(volumePerMuscle)) {
+    for (const standard of resolveMuscleToStandard(muscle)) {
+      plannedFrequencyByMuscle[standard] = Math.max(
+        plannedFrequencyByMuscle[standard] ?? 0,
+        vol.frequency
+      );
+    }
+  }
+
   // Step 8: Build full mesocycle with week-by-week progression
   const bandContext = {
     recoveryProfile: profile.enhancedAthleteMode ? 'enhanced' : 'standard',
@@ -995,8 +1079,14 @@ export function generateFullMesocycleWithFatigue(
     const weekProgression = periodization.weeklyProgression[weekNum - 1];
     const isDeload = weekNum === periodization.mesocycleWeeks;
 
-    // Fresh weekly tracker each week
-    const weeklyTracker = new WeeklyFatigueTracker(profile);
+    // Fresh virtual recovery history each week (the shared model, adapted
+    // for planning — see services/plannedRecovery).
+    const weeklyRecovery = new PlannedWeekRecovery({
+      enhancedAthleteMode: profile.enhancedAthleteMode,
+      experience: profile.experience,
+      sleepQuality: profile.sleepQuality,
+      plannedSessionsPerWeekByMuscle: plannedFrequencyByMuscle,
+    });
     const weekSessions: DetailedSessionWithFatigue[] = [];
 
     // DUP rotation
@@ -1011,6 +1101,10 @@ export function generateFullMesocycleWithFatigue(
         ? { ...fatigueBudgetConfig, systemicLimit: fatigueBudgetConfig.systemicLimit * 0.5 }
         : fatigueBudgetConfig;
 
+      // Real day offset within the week (Mon/Wed/Fri = 0/2/4), so recovery
+      // windows see actual rest days rather than consecutive numbering.
+      const plannedDayOffset = scheduleDayOffsets[dayCounter] ?? dayCounter;
+
       if (periodization.model === 'daily_undulating' && !isDeload) {
         // DUP: rotate through hypertrophy/strength/power
         session = buildDUPSession(
@@ -1018,8 +1112,8 @@ export function generateFullMesocycleWithFatigue(
           volumePerMuscle,
           profile,
           deloadBudget,
-          weeklyTracker,
-          dayCounter,
+          weeklyRecovery,
+          plannedDayOffset,
           dupRotation[dupIndex % 3],
           weekNum,
           periodization.mesocycleWeeks,
@@ -1034,8 +1128,8 @@ export function generateFullMesocycleWithFatigue(
           volumePerMuscle,
           profile,
           deloadBudget,
-          weeklyTracker,
-          dayCounter,
+          weeklyRecovery,
+          plannedDayOffset,
           weekNum,
           periodization.mesocycleWeeks,
           periodization.model,

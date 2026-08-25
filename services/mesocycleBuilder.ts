@@ -92,11 +92,11 @@ export {
   calculateExerciseFatigue,
   createFatigueBudget,
   SessionFatigueManager,
-  WeeklyFatigueTracker,
   SYSTEMIC_FATIGUE_BY_PATTERN,
   EQUIPMENT_FATIGUE_MODIFIER,
   BASE_SFR,
 } from './fatigueBudgetEngine';
+export { PlannedWeekRecovery } from './plannedRecovery';
 
 export {
   checkDeloadTriggers,

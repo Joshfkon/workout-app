@@ -226,6 +226,12 @@ const customJestConfig = {
       branches: 50,
       statements: 70,
     },
+    'services/plannedRecovery.ts': {
+      lines: 90,
+      functions: 90,
+      branches: 80,
+      statements: 90,
+    },
     'services/equipmentFilter.ts': {
       lines: 90,
       functions: 80,

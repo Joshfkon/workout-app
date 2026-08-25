@@ -8,7 +8,8 @@ import {
   formatSessionForDisplay,
   formatMesocycleForDisplay,
 } from '../sessionBuilderWithFatigue';
-import { WeeklyFatigueTracker, createFatigueBudget } from '../fatigueBudgetEngine';
+import { createFatigueBudget } from '../fatigueBudgetEngine';
+import { PlannedWeekRecovery } from '../plannedRecovery';
 import type {
   ExtendedUserProfile,
   RecoveryFactors,
@@ -39,6 +40,16 @@ function createProfile(overrides: Partial<ExtendedUserProfile> = {}): ExtendedUs
     injuryHistory: [],
     ...overrides,
   };
+}
+
+// Planning-recovery adapter for a test profile (#634: the shared recovery
+// model replaced WeeklyFatigueTracker for generation).
+function createWeeklyRecovery(profile: ExtendedUserProfile): PlannedWeekRecovery {
+  return new PlannedWeekRecovery({
+    enhancedAthleteMode: profile.enhancedAthleteMode,
+    experience: profile.experience,
+    sleepQuality: profile.sleepQuality,
+  });
 }
 
 // Default volume per muscle for testing
@@ -80,7 +91,7 @@ describe('sessionBuilderWithFatigue', () => {
     const weeklyProgression = createWeeklyProgression();
 
     it('builds a session with exercises', () => {
-      const weeklyTracker = new WeeklyFatigueTracker(profile);
+      const weeklyTracker = createWeeklyRecovery(profile);
       const template: SessionTemplate = {
         day: 'Upper A',
         focus: 'Horizontal emphasis',
@@ -107,7 +118,7 @@ describe('sessionBuilderWithFatigue', () => {
     });
 
     it('includes warmup instructions', () => {
-      const weeklyTracker = new WeeklyFatigueTracker(profile);
+      const weeklyTracker = createWeeklyRecovery(profile);
       const template: SessionTemplate = {
         day: 'Lower A',
         focus: 'Quad emphasis',
@@ -132,7 +143,7 @@ describe('sessionBuilderWithFatigue', () => {
     });
 
     it('includes fatigue summary', () => {
-      const weeklyTracker = new WeeklyFatigueTracker(profile);
+      const weeklyTracker = createWeeklyRecovery(profile);
       const template: SessionTemplate = {
         day: 'Push',
         focus: 'Chest, shoulders, triceps',
@@ -159,7 +170,7 @@ describe('sessionBuilderWithFatigue', () => {
     });
 
     it('exercises have rep ranges and rest periods', () => {
-      const weeklyTracker = new WeeklyFatigueTracker(profile);
+      const weeklyTracker = createWeeklyRecovery(profile);
       const template: SessionTemplate = {
         day: 'Pull',
         focus: 'Back, biceps',
@@ -189,7 +200,7 @@ describe('sessionBuilderWithFatigue', () => {
     });
 
     it('exercises include fatigue profile', () => {
-      const weeklyTracker = new WeeklyFatigueTracker(profile);
+      const weeklyTracker = createWeeklyRecovery(profile);
       const template: SessionTemplate = {
         day: 'Legs',
         focus: 'Quads and glutes',
@@ -218,7 +229,7 @@ describe('sessionBuilderWithFatigue', () => {
     });
 
     it('respects session time limit', () => {
-      const weeklyTracker = new WeeklyFatigueTracker(profile);
+      const weeklyTracker = createWeeklyRecovery(profile);
       const template: SessionTemplate = {
         day: 'Full Body',
         focus: 'All muscles',
@@ -246,7 +257,7 @@ describe('sessionBuilderWithFatigue', () => {
     });
 
     it('uses quick workout mode for short sessions', () => {
-      const weeklyTracker = new WeeklyFatigueTracker(profile);
+      const weeklyTracker = createWeeklyRecovery(profile);
       const template: SessionTemplate = {
         day: 'Quick Push',
         focus: 'Chest and triceps',
@@ -271,7 +282,7 @@ describe('sessionBuilderWithFatigue', () => {
     });
 
     it('handles different periodization models', () => {
-      const weeklyTracker = new WeeklyFatigueTracker(profile);
+      const weeklyTracker = createWeeklyRecovery(profile);
       const template: SessionTemplate = {
         day: 'Upper',
         focus: 'Upper body',
@@ -286,7 +297,7 @@ describe('sessionBuilderWithFatigue', () => {
           volumePerMuscle,
           profile,
           fatigueBudgetConfig,
-          new WeeklyFatigueTracker(profile),
+          createWeeklyRecovery(profile),
           0,
           1,
           6,
@@ -305,7 +316,7 @@ describe('sessionBuilderWithFatigue', () => {
     const fatigueBudgetConfig = createFatigueBudget(profile);
 
     it('builds a hypertrophy DUP session', () => {
-      const weeklyTracker = new WeeklyFatigueTracker(profile);
+      const weeklyTracker = createWeeklyRecovery(profile);
       const template: SessionTemplate = {
         day: 'Upper A',
         focus: 'Upper body',
@@ -330,7 +341,7 @@ describe('sessionBuilderWithFatigue', () => {
     });
 
     it('builds a strength DUP session', () => {
-      const weeklyTracker = new WeeklyFatigueTracker(profile);
+      const weeklyTracker = createWeeklyRecovery(profile);
       const template: SessionTemplate = {
         day: 'Lower A',
         focus: 'Lower body',
@@ -354,7 +365,7 @@ describe('sessionBuilderWithFatigue', () => {
     });
 
     it('builds a power DUP session', () => {
-      const weeklyTracker = new WeeklyFatigueTracker(profile);
+      const weeklyTracker = createWeeklyRecovery(profile);
       const template: SessionTemplate = {
         day: 'Push',
         focus: 'Push movements',
@@ -378,7 +389,7 @@ describe('sessionBuilderWithFatigue', () => {
     });
 
     it('includes fatigue summary', () => {
-      const weeklyTracker = new WeeklyFatigueTracker(profile);
+      const weeklyTracker = createWeeklyRecovery(profile);
       const template: SessionTemplate = {
         day: 'Pull',
         focus: 'Pull movements',
@@ -413,7 +424,7 @@ describe('sessionBuilderWithFatigue', () => {
         volumePerMuscle,
         profile,
         fatigueBudgetConfig,
-        new WeeklyFatigueTracker(profile),
+        createWeeklyRecovery(profile),
         0,
         'hypertrophy',
         1,
@@ -425,7 +436,7 @@ describe('sessionBuilderWithFatigue', () => {
         volumePerMuscle,
         profile,
         fatigueBudgetConfig,
-        new WeeklyFatigueTracker(profile),
+        createWeeklyRecovery(profile),
         0,
         'power',
         1,
@@ -554,7 +565,7 @@ describe('sessionBuilderWithFatigue', () => {
     const weeklyProgression = createWeeklyProgression();
 
     it('formats a session as a string', () => {
-      const weeklyTracker = new WeeklyFatigueTracker(profile);
+      const weeklyTracker = createWeeklyRecovery(profile);
       const template: SessionTemplate = {
         day: 'Upper A',
         focus: 'Upper body',
@@ -581,7 +592,7 @@ describe('sessionBuilderWithFatigue', () => {
     });
 
     it('includes session day and focus', () => {
-      const weeklyTracker = new WeeklyFatigueTracker(profile);
+      const weeklyTracker = createWeeklyRecovery(profile);
       const template: SessionTemplate = {
         day: 'Push Day',
         focus: 'Chest emphasis',
@@ -608,7 +619,7 @@ describe('sessionBuilderWithFatigue', () => {
     });
 
     it('includes warmup section', () => {
-      const weeklyTracker = new WeeklyFatigueTracker(profile);
+      const weeklyTracker = createWeeklyRecovery(profile);
       const template: SessionTemplate = {
         day: 'Lower',
         focus: 'Legs',
@@ -634,7 +645,7 @@ describe('sessionBuilderWithFatigue', () => {
     });
 
     it('includes exercises section', () => {
-      const weeklyTracker = new WeeklyFatigueTracker(profile);
+      const weeklyTracker = createWeeklyRecovery(profile);
       const template: SessionTemplate = {
         day: 'Pull',
         focus: 'Back',
@@ -662,7 +673,7 @@ describe('sessionBuilderWithFatigue', () => {
     });
 
     it('includes fatigue information', () => {
-      const weeklyTracker = new WeeklyFatigueTracker(profile);
+      const weeklyTracker = createWeeklyRecovery(profile);
       const template: SessionTemplate = {
         day: 'Full Body',
         focus: 'All muscles',
