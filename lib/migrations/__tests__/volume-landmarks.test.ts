@@ -29,11 +29,20 @@ const row = (value: unknown): VolumeLandmarks => value as VolumeLandmarks;
 
 const EXPERIENCES: Experience[] = ['novice', 'intermediate', 'advanced'];
 
+/**
+ * Muscles added AFTER the v1 snapshot was frozen (the snapshot must never be
+ * retrofitted). They have no v1 default, so a v1-stamped payload cannot
+ * contain them and the migration skips them by construction
+ * (defaultChangedForField returns false for a missing v1 row).
+ */
+const POST_V1_MUSCLES = new Set<string>(['rotator_cuff']);
+const V1_MUSCLES = STANDARD_MUSCLE_GROUPS.filter((m) => !POST_V1_MUSCLES.has(m));
+
 describe('the frozen v1 snapshot', () => {
   it('differs from the current defaults in EXACTLY the approved cells', () => {
     const diffs: string[] = [];
     for (const exp of EXPERIENCES) {
-      for (const muscle of STANDARD_MUSCLE_GROUPS) {
+      for (const muscle of V1_MUSCLES) {
         for (const field of ['mev', 'mav', 'mrv'] as const) {
           const before = LANDMARKS_V1[exp][muscle][field];
           const after = DEFAULT_VOLUME_LANDMARKS[exp][muscle][field];
@@ -47,9 +56,9 @@ describe('the frozen v1 snapshot', () => {
     ]);
   });
 
-  it('is a complete table (no missing rows to fall through)', () => {
+  it('is a complete table for the v1-era muscles (post-v1 additions excluded)', () => {
     for (const exp of EXPERIENCES) {
-      expect(Object.keys(LANDMARKS_V1[exp]).sort()).toEqual([...STANDARD_MUSCLE_GROUPS].sort());
+      expect(Object.keys(LANDMARKS_V1[exp]).sort()).toEqual([...V1_MUSCLES].sort());
     }
   });
 });
@@ -68,27 +77,34 @@ describe('migrateDefaultField', () => {
 
 describe('untouched snapshots migrate', () => {
   it('a full untouched advanced snapshot lands on the new defaults', () => {
+    // A genuinely v1-stamped payload can only contain v1-era muscles.
     const stored: Record<string, unknown> = {};
-    for (const muscle of STANDARD_MUSCLE_GROUPS) {
+    for (const muscle of V1_MUSCLES) {
       stored[muscle] = { ...LANDMARKS_V1.advanced[muscle] };
     }
     const { landmarks, migrated } = migrateStoredLandmarks(stored, 'advanced', 1);
     expect(migrated).toBe(true);
-    for (const muscle of STANDARD_MUSCLE_GROUPS) {
+    for (const muscle of V1_MUSCLES) {
       expect(landmarks[muscle]).toEqual(DEFAULT_VOLUME_LANDMARKS.advanced[muscle]);
     }
   });
 
   it('only the changed cell actually moves', () => {
     const stored: Record<string, unknown> = {};
-    for (const muscle of STANDARD_MUSCLE_GROUPS) {
+    for (const muscle of V1_MUSCLES) {
       stored[muscle] = { ...LANDMARKS_V1.advanced[muscle] };
     }
     const { landmarks } = migrateStoredLandmarks(stored, 'advanced', 1);
-    const moved = STANDARD_MUSCLE_GROUPS.filter(
+    const moved = V1_MUSCLES.filter(
       (m) => JSON.stringify(landmarks[m]) !== JSON.stringify(LANDMARKS_V1.advanced[m])
     );
     expect(moved).toEqual(['triceps_lat_med']);
+  });
+
+  it('a post-v1 muscle in a stored payload is passed through untouched, never crashed on', () => {
+    const stored = { rotator_cuff: { mev: 1, mav: 4, mrv: 9 } };
+    const { landmarks } = migrateStoredLandmarks(stored, 'advanced', 1);
+    expect(landmarks.rotator_cuff).toEqual({ mev: 1, mav: 4, mrv: 9 });
   });
 });
 
@@ -174,7 +190,7 @@ describe('UNCHANGED fields are never touched (regression: cross-tier corruption)
     // to come back untouched.
     const violations: string[] = [];
     for (const experience of EXPERIENCES) {
-      for (const muscle of STANDARD_MUSCLE_GROUPS) {
+      for (const muscle of V1_MUSCLES) {
         for (const field of ['mev', 'mav', 'mrv'] as const) {
           const changed =
             LANDMARKS_V1[experience][muscle][field] !==
@@ -199,7 +215,7 @@ describe('UNCHANGED fields are never touched (regression: cross-tier corruption)
   it('only triceps_lat_med.mrv is eligible to migrate at all', () => {
     const eligible: string[] = [];
     for (const experience of EXPERIENCES) {
-      for (const muscle of STANDARD_MUSCLE_GROUPS) {
+      for (const muscle of V1_MUSCLES) {
         for (const field of ['mev', 'mav', 'mrv'] as const) {
           if (
             LANDMARKS_V1[experience][muscle][field] !==

@@ -27,6 +27,7 @@ import {
   removeCustomExercise,
 } from '@/lib/actions/exercises';
 import { SEED_EXERCISE_TAGS } from '@/services/generated/seedExerciseTags';
+import { stabilizersForExerciseName } from '@/services/shared/stabilizerTags';
 import { validateExercisePrimary } from '@/services/muscleAttributionAudit';
 
 import { now as clockNow } from '@/lib/clock';
@@ -456,8 +457,20 @@ function mapDbExercise(row: Record<string, unknown>): Exercise {
       resistanceProfile: (row.resistance_profile as HypertrophyRating) || 3,
       progressionEase: (row.progression_ease as HypertrophyRating) || 3,
     },
-    // Injury/safety metadata
-    stabilizers: (row.stabilizers as MuscleGroup[]) || [],
+    // Injury/safety metadata.
+    // stabilizers: the DB row wins once it carries values; an empty/absent
+    // array on a STOCK row (the pre-seed state — 20260825000002 populates
+    // stock rows) falls back to the canonical map by name, the same
+    // read-time-derivation convention as spinalLoading/positionStress above.
+    // Custom rows never fall back: the seed deliberately excludes them, and a
+    // custom exercise sharing a stock name (a user's own "Deadlift" variant)
+    // must keep its intentionally empty value.
+    stabilizers:
+      ((row.stabilizers as string[]) ?? []).length > 0
+        ? (row.stabilizers as MuscleGroup[])
+        : row.is_custom === true
+          ? []
+          : ((stabilizersForExerciseName(row.name as string) ?? []) as MuscleGroup[]),
     spinalLoading,
     requiresBackArch: (row.requires_back_arch as boolean) ?? false,
     requiresSpinalFlexion: (row.requires_spinal_flexion as boolean) ?? false,
@@ -792,9 +805,19 @@ const FALLBACK_EXERCISES_RAW: Exercise[] = [
  */
 const FALLBACK_EXERCISES: Exercise[] = FALLBACK_EXERCISES_RAW.map((exercise) => {
   const seed = SEED_EXERCISE_TAGS[exercise.name];
-  if (!seed) return exercise;
-  return {
+  // Stabilizers: the hand-written values on the raw entries above are the
+  // drifted legacy list (coarse 'back'/'abs' mover tags nothing consumed).
+  // The canonical map (services/shared/stabilizerTags, mirrored into the DB
+  // by migration 20260825000002) REPLACES them wholesale: names it classifies
+  // get its values, and every other stock name gets [] — matching the empty
+  // column those rows carry in the database, so fallback and DB agree.
+  const withStabilizers = {
     ...exercise,
+    stabilizers: stabilizersForExerciseName(exercise.name) ?? [],
+  };
+  if (!seed) return withStabilizers;
+  return {
+    ...withStabilizers,
     primaryMuscle: seed.primary as Exercise['primaryMuscle'],
     secondaryMuscles: seed.secondaries as Exercise['secondaryMuscles'],
   };

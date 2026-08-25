@@ -46,6 +46,45 @@ export interface RecoveryConfig {
    * user their quads are never Fresh.
    */
   windowHoursByMuscle: Partial<Record<StandardMuscleGroup, number>>;
+  /**
+   * STABILIZER-channel base windows (hours) — the muscles this map names are
+   * the stabilizer-TRACKED muscles, and these windows are deliberately LONGER
+   * than the same muscles' prime-mover windows above: the channel is a proxy
+   * for slow-recovering support capacity (isometric endurance + the
+   * connective tissue behind it), which clears on a different timeline than
+   * contractile freshness. Consumed only by `computeStabilizerRecovery` /
+   * `evaluateStabilizerWarning`; the mover model above never reads it.
+   */
+  stabilizerWindowHoursByMuscle: Partial<Record<StandardMuscleGroup, number>>;
+  /**
+   * Dose fraction a stabilizer TAG contributes per set (exercise.stabilizers).
+   * Defaults to SECONDARY_MUSCLE_CREDIT so the app keeps ONE involvement
+   * coefficient (docs/FATIGUE_MODEL_INVENTORY.md §5-E rule); a muscle that is
+   * both a mover and a tagged stabilizer on one exercise takes the MAX of the
+   * two factors, never the sum.
+   */
+  stabilizerDoseFactor: number;
+  /**
+   * Warn when a required stabilizer's stabilizer-channel readinessRatio sits
+   * BELOW this. Default equals `recoveringThreshold`, i.e. "status fatigued";
+   * raise it to warn earlier in the recovery curve.
+   */
+  stabilizerReadinessThreshold: number;
+  /**
+   * Intensity gate: warn only when planned load ≥ this fraction of the
+   * exercise's reference load (previous top set, else anchor-derived). A
+   * fatigued stabilizer under a LIGHT planned load never warns.
+   */
+  stabilizerIntensityThreshold: number;
+  /**
+   * Fallback reference derivation when no previous top-set weight exists but
+   * an e1RM anchor does: reference = anchor × this fraction (a typical
+   * working weight sits at ~70–80% of e1RM). A raw e1RM denominator would
+   * mis-scale the 0.8 intensity gate — every ordinary working set would hover
+   * at the threshold — so the anchor is first projected into working-weight
+   * space. No previous set AND no anchor → no reference → never warn.
+   */
+  stabilizerE1rmWorkingFraction: number;
   /** A set with RIR at/below this counts as "hard"/"maxed out". */
   hardRirThreshold: number;
   /** Secondary-muscle involvement contributes this fraction of a set's dose. */
@@ -194,6 +233,21 @@ export const RECOVERY_CONFIG: RecoveryConfig = {
     gastrocnemius: 36,
     soleus: 36,
   },
+  // Stabilizer channel (approved spec): windows deliberately LONGER than the
+  // same muscles' mover windows — erectors 96 vs 60, forearms 72 vs 36 —
+  // because support capacity (and the connective tissue behind it) clears
+  // slower than contractile freshness. Tunable heuristic starts, not
+  // physiology; the dose model scales them exactly like mover windows.
+  stabilizerWindowHoursByMuscle: {
+    erectors: 96,
+    rotator_cuff: 96,
+    rear_delts: 72,
+    forearms: 72,
+  },
+  stabilizerDoseFactor: SECONDARY_MUSCLE_CREDIT,
+  stabilizerReadinessThreshold: 0.6,
+  stabilizerIntensityThreshold: 0.8,
+  stabilizerE1rmWorkingFraction: 0.75,
   hardRirThreshold: 1,
   // The ONE secondary-credit coefficient (services/volumeTracker) — recovery
   // dose and volume counting must agree on what a secondary set is worth.
@@ -597,6 +651,12 @@ export interface RecoverySet {
 export interface RecoveryExercise {
   primaryMuscle: string | null;
   secondaryMuscles: string[];
+  /**
+   * Stabilizer tags (exercises.stabilizers) — consumed ONLY by the
+   * stabilizer channel (`computeStabilizerRecovery`). Optional so existing
+   * callers/fixtures keep working; absent reads as "no tagged stabilizers".
+   */
+  stabilizers?: string[];
   sets: RecoverySet[];
 }
 
@@ -761,17 +821,58 @@ function involvementFactor(
   return 0;
 }
 
+/**
+ * Which recovery model a computation runs under.
+ *  - 'mover': the existing per-muscle model (windows from
+ *    `windowHoursByMuscle`, involvement from primary/secondary tags).
+ *  - 'stabilizer': the stabilizer channel — LONGER base windows
+ *    (`stabilizerWindowHoursByMuscle`), involvement additionally flows from
+ *    `RecoveryExercise.stabilizers`, and the enhanced/wearable global window
+ *    scalar is NOT applied (see windowBreakdownForSession).
+ */
+export type RecoveryChannel = 'mover' | 'stabilizer';
+
+/** The muscles the stabilizer channel tracks under this config. */
+export function stabilizerTrackedMuscles(
+  config: RecoveryConfig = RECOVERY_CONFIG
+): StandardMuscleGroup[] {
+  return Object.keys(config.stabilizerWindowHoursByMuscle) as StandardMuscleGroup[];
+}
+
+/**
+ * Involvement for the stabilizer channel: a muscle that is a MOVER on the
+ * exercise keeps its mover factor (the tissue is loaded either way), a tagged
+ * stabilizer contributes `stabilizerDoseFactor`, and an exercise carrying
+ * both takes the MAX — never the sum, so double-tagging cannot double-count.
+ */
+function stabilizerInvolvementFactor(
+  exercise: RecoveryExercise,
+  muscle: StandardMuscleGroup,
+  config: RecoveryConfig
+): number {
+  const moverFactor = involvementFactor(exercise, muscle, config);
+  const stabilizerStandards = (exercise.stabilizers ?? []).flatMap((m) =>
+    resolveMuscleToStandard(m)
+  );
+  const tagFactor = stabilizerStandards.includes(muscle) ? config.stabilizerDoseFactor : 0;
+  return Math.max(moverFactor, tagFactor);
+}
+
 /** Aggregate a session's dose + hard-set count toward one muscle. */
 function sessionInvolvement(
   session: RecoverySession,
   muscle: StandardMuscleGroup,
-  config: RecoveryConfig
+  config: RecoveryConfig,
+  channel: RecoveryChannel = 'mover'
 ): SessionInvolvement | null {
   let dose = 0;
   let hardSets = 0;
 
   for (const exercise of session.exercises) {
-    const factor = involvementFactor(exercise, muscle, config);
+    const factor =
+      channel === 'stabilizer'
+        ? stabilizerInvolvementFactor(exercise, muscle, config)
+        : involvementFactor(exercise, muscle, config);
     if (factor === 0) continue;
 
     dose += exercise.sets.length * factor;
@@ -815,9 +916,13 @@ export interface WindowBreakdown {
 export function windowBreakdownForSession(
   muscle: StandardMuscleGroup,
   involvement: SessionInvolvement,
-  config: RecoveryConfig
+  config: RecoveryConfig,
+  channel: RecoveryChannel = 'mover'
 ): WindowBreakdown {
-  const baseWindowHours = config.windowHoursByMuscle[muscle] ?? config.defaultWindowHours;
+  const baseWindowHours =
+    channel === 'stabilizer'
+      ? config.stabilizerWindowHoursByMuscle[muscle] ?? config.defaultWindowHours
+      : config.windowHoursByMuscle[muscle] ?? config.defaultWindowHours;
 
   const dose = computeDoseScale(muscle, involvement.dose, involvement.hardSets, config);
 
@@ -833,8 +938,17 @@ export function windowBreakdownForSession(
   // effect clamped (×1.25 cap) so stacked bad signals whisper, never shout.
   // The learned multiplier stays OUTSIDE that cap on purpose: environmental
   // modifiers must not consume the whole range and suppress personalization.
+  //
+  // STABILIZER SAFETY INVARIANT (inherits services/exerciseSafety.ts:74-84):
+  // the stabilizer channel NEVER applies `windowScale` — that scalar carries
+  // Enhanced Athlete Mode (and the wearable HRV modifier folded in with it),
+  // and PEDs accelerate MUSCULAR recovery only; the support/connective
+  // capacity this channel proxies runs on its own timeline regardless of
+  // enhancement. Sleep and the learned per-muscle multiplier still apply.
+  // Guarded by a unit test (stabilizer readiness identical with mode on/off).
+  const appliedWindowScale = channel === 'stabilizer' ? 1 : config.windowScale;
   const globalScale = composeGlobalRecoveryScale(
-    config.windowScale,
+    appliedWindowScale,
     config.sleepWindowMultiplier
   );
 
@@ -859,7 +973,10 @@ export function windowBreakdownForSession(
     muscle,
     baseWindowHours,
     dose,
-    windowScale: config.windowScale,
+    // The scale actually APPLIED — 1 on the stabilizer channel regardless of
+    // the config's enhanced/wearable scalar (safety invariant above), so the
+    // breakdown never claims a modifier the window didn't receive.
+    windowScale: appliedWindowScale,
     sleepWindowMultiplier: config.sleepWindowMultiplier,
     globalScale,
     learnedMultiplier,
@@ -910,6 +1027,46 @@ export function computeMuscleRecovery(
   now: Date,
   config: RecoveryConfig = RECOVERY_CONFIG
 ): MuscleRecoveryResult {
+  return computeRecoveryForChannel(history, muscle, now, config, 'mover');
+}
+
+/**
+ * STABILIZER-channel recovery for one tracked muscle: the same debt machinery
+ * and result shape as `computeMuscleRecovery` (readinessRatio / status /
+ * estimatedReadyAt reuse is the point), but
+ *  - involvement additionally flows from `RecoveryExercise.stabilizers`
+ *    (mover tags still count — the tissue is loaded either way; MAX, not sum),
+ *  - base windows come from `stabilizerWindowHoursByMuscle` (deliberately
+ *    longer than the mover windows), and
+ *  - the enhanced/wearable global scalar is NOT applied (safety invariant —
+ *    see windowBreakdownForSession).
+ * Learned per-muscle multipliers and the sleep scalar apply exactly as in the
+ * mover model. Throws for a muscle the stabilizer channel does not track:
+ * callers gate on `stabilizerTrackedMuscles`, and a silent default window
+ * here would let an untracked muscle masquerade as a tracked one.
+ */
+export function computeStabilizerRecovery(
+  history: RecoverySession[],
+  muscle: StandardMuscleGroup,
+  now: Date,
+  config: RecoveryConfig = RECOVERY_CONFIG
+): MuscleRecoveryResult {
+  if (config.stabilizerWindowHoursByMuscle[muscle] === undefined) {
+    throw new Error(
+      `[recovery] '${muscle}' is not a stabilizer-tracked muscle — ` +
+        `add a stabilizerWindowHoursByMuscle entry before computing its stabilizer recovery`
+    );
+  }
+  return computeRecoveryForChannel(history, muscle, now, config, 'stabilizer');
+}
+
+function computeRecoveryForChannel(
+  history: RecoverySession[],
+  muscle: StandardMuscleGroup,
+  now: Date,
+  config: RecoveryConfig,
+  channel: RecoveryChannel
+): MuscleRecoveryResult {
   let lastTrainedAt: Date | null = null;
   let governing: { involvement: SessionInvolvement; breakdown: WindowBreakdown } | null = null;
   let governingReadyAt = -Infinity;
@@ -917,7 +1074,7 @@ export function computeMuscleRecovery(
   const debts: RecoveryDebt[] = [];
 
   for (const session of history) {
-    const involvement = sessionInvolvement(session, muscle, config);
+    const involvement = sessionInvolvement(session, muscle, config, channel);
     if (!involvement) continue;
 
     const performedAt = involvement.performedAt.getTime();
@@ -925,7 +1082,7 @@ export function computeMuscleRecovery(
       lastTrainedAt = involvement.performedAt;
     }
 
-    const breakdown = windowBreakdownForSession(muscle, involvement, config);
+    const breakdown = windowBreakdownForSession(muscle, involvement, config, channel);
     if (breakdown.clamp !== 'none') recordRecoveryClamp(breakdown);
 
     const hoursSince = (now.getTime() - performedAt) / MS_PER_HOUR;
@@ -990,6 +1147,120 @@ export function computeMuscleRecovery(
     windowHours: governing.breakdown.windowHours,
     dose: governing.involvement.dose,
     breakdown: governing.breakdown,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Stabilizer warning — intensity-gated readiness check (fenced)
+// ---------------------------------------------------------------------------
+//
+// NEW, FENCED CODE (approved spec §4-5). Everything below is the stabilizer
+// warning layer and nothing above may call into it. The intensity factor is a
+// pure load ratio — planned load ÷ reference load. It deliberately does NOT
+// touch services/effectiveVolume: that module's RIR weights are a STIMULUS
+// measure with an explicit scope guard forbidding fatigue models from
+// importing them, and effort-weighting an intensity gate would smuggle them
+// in through the side door.
+
+/**
+ * Resolve the reference load the intensity gate divides by.
+ *  1. Previous top-set weight for the exercise (the house "recent working
+ *     weight" convention) when one exists.
+ *  2. Else the e1RM anchor projected into working-weight space
+ *     (× stabilizerE1rmWorkingFraction — see the config doc for why the raw
+ *     anchor would mis-scale the gate).
+ *  3. Else null — NO reference. Per spec, an exercise with no anchor never
+ *     warns: a cold start has no meaningful "80% of" to exceed.
+ */
+export function stabilizerReferenceLoadKg(
+  previousTopSetWeightKg: number | null | undefined,
+  anchorE1RMKg: number | null | undefined,
+  config: RecoveryConfig = RECOVERY_CONFIG
+): number | null {
+  if (typeof previousTopSetWeightKg === 'number' && previousTopSetWeightKg > 0) {
+    return previousTopSetWeightKg;
+  }
+  if (typeof anchorE1RMKg === 'number' && anchorE1RMKg > 0) {
+    return anchorE1RMKg * config.stabilizerE1rmWorkingFraction;
+  }
+  return null;
+}
+
+/**
+ * The stabilizer-tracked muscles an exercise REQUIRES — its `stabilizers`
+ * tags resolved to standard muscles and filtered to the tracked set. This is
+ * the warning's gate: a muscle that is merely a secondary MOVER on the
+ * exercise does not gate it (that would fire on every pull day for
+ * rear-delts), and prime-mover fatigue alone never warns by construction.
+ */
+export function requiredStabilizersFor(
+  exercise: { stabilizers?: string[] | null },
+  config: RecoveryConfig = RECOVERY_CONFIG
+): StandardMuscleGroup[] {
+  const tracked = new Set(stabilizerTrackedMuscles(config));
+  const out: StandardMuscleGroup[] = [];
+  for (const tag of exercise.stabilizers ?? []) {
+    for (const standard of resolveMuscleToStandard(tag)) {
+      if (tracked.has(standard) && !out.includes(standard)) out.push(standard);
+    }
+  }
+  return out;
+}
+
+export interface StabilizerWarningInput {
+  muscle: StandardMuscleGroup;
+  /** Stabilizer-channel state for `muscle` (computeStabilizerRecovery). */
+  recovery: MuscleRecoveryResult;
+  /** The load the user is about to lift (block target / next-set weight). */
+  plannedLoadKg: number | null | undefined;
+  /** Reference load (stabilizerReferenceLoadKg). Null → never warn. */
+  referenceLoadKg: number | null | undefined;
+  config?: RecoveryConfig;
+}
+
+export interface StabilizerWarning {
+  muscle: StandardMuscleGroup;
+  /** Stabilizer-channel readiness at evaluation time, [0, 1]. */
+  readinessRatio: number;
+  /** plannedLoadKg ÷ referenceLoadKg. */
+  intensityRatio: number;
+  plannedLoadKg: number;
+  referenceLoadKg: number;
+  /** Hours since the stabilizer was last loaded at all (null: never). */
+  hoursSinceLoaded: number | null;
+  /** When the stabilizer channel estimates the muscle fresh again. */
+  estimatedReadyAt: Date | null;
+}
+
+/**
+ * Fire iff BOTH hold (approved spec §5):
+ *  1. the stabilizer channel's readinessRatio for the muscle sits below
+ *     `stabilizerReadinessThreshold` (default 0.6 = the 'fatigued' band), AND
+ *  2. planned load ≥ `stabilizerIntensityThreshold` × reference (default 0.8).
+ * Missing planned load or reference → null (no anchor, no warning). The
+ * caller decides which muscles to evaluate (requiredStabilizersFor) — this
+ * function judges one (muscle, exercise-load) pair.
+ */
+export function evaluateStabilizerWarning(
+  input: StabilizerWarningInput
+): StabilizerWarning | null {
+  const config = input.config ?? RECOVERY_CONFIG;
+  const { plannedLoadKg, referenceLoadKg } = input;
+  if (typeof plannedLoadKg !== 'number' || !(plannedLoadKg > 0)) return null;
+  if (typeof referenceLoadKg !== 'number' || !(referenceLoadKg > 0)) return null;
+
+  const intensityRatio = plannedLoadKg / referenceLoadKg;
+  if (intensityRatio < config.stabilizerIntensityThreshold) return null;
+  if (input.recovery.readinessRatio >= config.stabilizerReadinessThreshold) return null;
+
+  return {
+    muscle: input.muscle,
+    readinessRatio: input.recovery.readinessRatio,
+    intensityRatio,
+    plannedLoadKg,
+    referenceLoadKg,
+    hoursSinceLoaded: input.recovery.hoursSinceLast,
+    estimatedReadyAt: input.recovery.estimatedReadyAt,
   };
 }
 

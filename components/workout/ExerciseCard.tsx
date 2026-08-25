@@ -48,6 +48,7 @@ import { beginSetTiming } from '@/lib/debug/setLogTiming';
 import { Input } from '@/components/ui';
 import { IconBone, IconCheck, IconChevronDown, IconCloudPause, IconGripVertical, IconInfoCircle } from '@tabler/icons-react';
 import { RowOverflowMenu, type RowMenuItem } from './RowOverflowMenu';
+import { StabilizerWarningBanner, type StabilizerWarningView } from './StabilizerWarningBanner';
 import { InlineRestTimerBar } from './InlineRestTimerBar';
 import { DropsetPrompt } from './DropsetPrompt';
 import { BodyweightSetEditRow } from './BodyweightSetEditRow';
@@ -379,6 +380,11 @@ interface ExerciseCardProps {
   // dismissible, links to the swap picker's Similar tab.
   painNotice?: { joint: string; count: number } | null;
   onPainNoticeDismiss?: () => void;
+  // Pre-set stabilizer-fatigue warning (services/muscleRecovery stabilizer
+  // channel): the page owns detection, event logging and per-session
+  // dismissal (workoutStore.stabilizerWarnings); the card only renders it.
+  stabilizerWarning?: StabilizerWarningView | null;
+  onStabilizerWarningDismiss?: (muscle: StandardMuscleGroup) => void;
   // Set-level joint pain on COMPLETED rows: parent persists the feedback and
   // records the pain event.
   onSetJointPain?: (setId: string, discomfort: SetDiscomfort) => void;
@@ -488,6 +494,8 @@ export const ExerciseCard = memo(function ExerciseCard({
   onSorenessAnswer,
   painNotice = null,
   onPainNoticeDismiss,
+  stabilizerWarning = null,
+  onStabilizerWarningDismiss,
   onSetJointPain,
   listIndex,
   isCollapsed = false,
@@ -3517,6 +3525,16 @@ export const ExerciseCard = memo(function ExerciseCard({
           </div>
         )}
 
+        {/* Pre-set stabilizer-fatigue warning — non-blocking, dismissible per
+            session; logging a set with it up records 'proceeded'. */}
+        {stabilizerWarning && onStabilizerWarningDismiss && (
+          <StabilizerWarningBanner
+            warning={stabilizerWarning}
+            unit={unit}
+            onDismiss={() => onStabilizerWarningDismiss(stabilizerWarning.muscle)}
+          />
+        )}
+
         {/* Start-of-session soreness ask — one tap, collapses to a ✓ line.
             Ignoring it and logging a set dismisses it for the session. */}
         {sorenessPrompt && onSorenessAnswer && (
@@ -4729,6 +4747,10 @@ export const ExerciseCard = memo(function ExerciseCard({
     (prevProps.painNotice === null) === (nextProps.painNotice === null) &&
     prevProps.painNotice?.joint === nextProps.painNotice?.joint &&
     prevProps.painNotice?.count === nextProps.painNotice?.count &&
+    (prevProps.stabilizerWarning === null) === (nextProps.stabilizerWarning === null) &&
+    prevProps.stabilizerWarning?.muscle === nextProps.stabilizerWarning?.muscle &&
+    prevProps.stabilizerWarning?.readinessRatio === nextProps.stabilizerWarning?.readinessRatio &&
+    prevProps.stabilizerWarning?.intensityRatio === nextProps.stabilizerWarning?.intensityRatio &&
     // Set-level discomfort flags drive the 'stop' suggestion softening + row icons
     prevProps.sets.every(
       (s, i) => s.feedback?.discomfort?.severity === nextProps.sets[i]?.feedback?.discomfort?.severity

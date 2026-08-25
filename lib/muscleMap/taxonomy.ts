@@ -46,6 +46,12 @@ export const MUSCLE_TO_REGIONS = {
   front_delts: ['shoulder-front-left', 'shoulder-front-right'],
   lateral_delts: ['shoulder-side-left', 'shoulder-side-right'],
   rear_delts: ['deltoid-rear-left', 'deltoid-rear-right'],
+  // GAP: the rotator cuff is deep tissue with no surface region in the
+  // body-muscles artwork, and its visual area (posterior shoulder) is owned by
+  // rear_delts — sharing those region ids would corrupt REGION_TO_MUSCLE's
+  // one-owner reverse lookup. Regionless on purpose; readiness surfaces list
+  // it as a row without a body-map paint.
+  rotator_cuff: [],
   lats: [
     'lats-upper-left',
     'lats-mid-left',
@@ -135,3 +141,14 @@ export const REGIONLESS_COARSE_MEMBERS: Partial<Record<MuscleId, readonly Muscle
   calves: ['gastrocnemius', 'soleus'],
   triceps: ['triceps_long', 'triceps_lat_med'],
 };
+
+/**
+ * DEEP muscles with genuinely no surface region in the artwork AND no fine
+ * members to delegate to (unlike the regionless coarse ids above). Their
+ * visual area is owned by another muscle (rotator cuff ⊂ rear-delt area), and
+ * sharing region ids would corrupt REGION_TO_MUSCLE's one-owner lookup — so
+ * they simply never paint. Readiness surfaces list them as rows only.
+ */
+export const REGIONLESS_DEEP_MUSCLES: ReadonlySet<MuscleId> = new Set<MuscleId>([
+  'rotator_cuff',
+]);

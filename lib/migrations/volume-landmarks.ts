@@ -173,7 +173,9 @@ export function migrateDefaultField(
  * one per experience level, because historical experience was not versioned.
  */
 function priorDefaultsFor(muscle: StandardMuscleGroup, field: LandmarkField): number[] {
-  return EXPERIENCES.map((exp) => LANDMARKS_V1[exp][muscle][field]);
+  return EXPERIENCES.map((exp) => LANDMARKS_V1[exp][muscle]?.[field]).filter(
+    (v): v is number => typeof v === 'number'
+  );
 }
 
 /**
@@ -198,10 +200,12 @@ function defaultChangedForField(
   field: LandmarkField,
   experience: Experience
 ): boolean {
-  return (
-    LANDMARKS_V1[experience][muscle][field] !==
-    DEFAULT_VOLUME_LANDMARKS[experience][muscle][field]
-  );
+  // A muscle added AFTER v1 (e.g. rotator_cuff) has no v1 default: nothing to
+  // migrate — its stored value can only ever be the user's or the current
+  // default. The frozen snapshot stays frozen; new muscles are simply skipped.
+  const v1Row = LANDMARKS_V1[experience][muscle];
+  if (!v1Row) return false;
+  return v1Row[field] !== DEFAULT_VOLUME_LANDMARKS[experience][muscle][field];
 }
 
 /**
