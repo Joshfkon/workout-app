@@ -26,6 +26,7 @@ import {
   type RecoveryExercise,
 } from '@/services/muscleRecovery';
 import { useRecoveryMultipliers } from '@/hooks/useRecoveryMultipliers';
+import { stabilizersForExerciseName } from '@/services/shared/stabilizerTags';
 import {
   computeDailyGroupSets,
   type DailyGroupSets,
@@ -75,6 +76,8 @@ interface HistorySessionRow {
     name: string;
     primaryMuscle: string | null;
     secondaryMuscles: string[];
+    /** Stabilizer tags — feed ONLY the stabilizer-recovery channel. */
+    stabilizers: string[];
     // Working sets only (warmups excluded on ingest). `repsInTank` is the
     // recovery-model RIR (feedback, else RPE-derived); `reportedRir` is ONLY
     // the explicitly logged feedback RIR (null otherwise) and is what the
@@ -89,6 +92,7 @@ interface RawBlockRow {
     name: string;
     primary_muscle: string | null;
     secondary_muscles: string[] | null;
+    stabilizers: string[] | null;
   } | null;
   workout_sessions: { id: string; completed_at: string | null } | null;
   set_logs:
@@ -172,7 +176,7 @@ export function useRecoveryHistory(
       const { data, error } = await supabase
         .from('exercise_blocks')
         .select(`
-          exercises!inner ( id, name, primary_muscle, secondary_muscles ),
+          exercises!inner ( id, name, primary_muscle, secondary_muscles, stabilizers ),
           workout_sessions!inner ( id, completed_at, user_id, state ),
           set_logs ( id, is_warmup, rpe, feedback )
         `)
@@ -202,6 +206,12 @@ export function useRecoveryHistory(
           name: exercise.name,
           primaryMuscle: exercise.primary_muscle,
           secondaryMuscles: exercise.secondary_muscles || [],
+          // Pre-seed rows carry '{}' — fall back to the canonical map by name
+          // (same convention as exerciseService.mapDbExercise).
+          stabilizers:
+            exercise.stabilizers && exercise.stabilizers.length > 0
+              ? exercise.stabilizers
+              : stabilizersForExerciseName(exercise.name) ?? [],
           sets: workingSets.map((s) => ({
             repsInTank: rirFromRow(s),
             reportedRir: rirFromFeedback(s.feedback),
@@ -223,6 +233,7 @@ export function useRecoveryHistory(
           (ex): RecoveryExercise => ({
             primaryMuscle: ex.primaryMuscle,
             secondaryMuscles: ex.secondaryMuscles,
+            stabilizers: ex.stabilizers,
             sets: ex.sets,
           })
         ),
