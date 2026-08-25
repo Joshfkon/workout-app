@@ -15,7 +15,7 @@ import * as path from 'path';
 import { STANDARD_MUSCLE_GROUPS } from '@/types/schema';
 
 const MIGRATIONS_DIR = path.join(__dirname, '..', '..', 'supabase', 'migrations');
-const MIGRATION_FILE = '20260802000002_recovery_multiplier_full_muscle_vocabulary.sql';
+const MIGRATION_FILE = '20260825000001_recovery_multiplier_rotator_cuff.sql';
 
 function readMigration(): string {
   return fs.readFileSync(path.join(MIGRATIONS_DIR, MIGRATION_FILE), 'utf8');
@@ -40,7 +40,7 @@ describe('recovery-multiplier muscle vocabulary', () => {
     expect(new Set(vocabulary).size).toBe(vocabulary.length);
   });
 
-  it('includes the six keys the original constraint was missing', () => {
+  it('includes the six keys the original constraint was missing, plus rotator_cuff', () => {
     for (const muscle of [
       'upper_traps',
       'mid_lower_traps',
@@ -48,6 +48,7 @@ describe('recovery-multiplier muscle vocabulary', () => {
       'soleus',
       'triceps_long',
       'triceps_lat_med',
+      'rotator_cuff',
     ]) {
       expect(vocabulary).toContain(muscle);
     }

@@ -5,6 +5,7 @@ import {
   MUSCLE_IDS,
   REGION_TO_MUSCLE,
   REGIONLESS_COARSE_MEMBERS,
+  REGIONLESS_DEEP_MUSCLES,
 } from '../taxonomy';
 
 describe('muscleMap taxonomy', () => {
@@ -24,6 +25,11 @@ describe('muscleMap taxonomy', () => {
         for (const member of members) {
           expect(MUSCLE_TO_REGIONS[member].length).toBeGreaterThanOrEqual(1);
         }
+      } else if (REGIONLESS_DEEP_MUSCLES.has(muscle)) {
+        // Deep tissue with no surface path of its own (rotator cuff): never
+        // paints — its area belongs to another muscle and sharing region ids
+        // would break the one-owner reverse lookup below.
+        expect(MUSCLE_TO_REGIONS[muscle]).toHaveLength(0);
       } else {
         expect(MUSCLE_TO_REGIONS[muscle].length).toBeGreaterThanOrEqual(1);
       }

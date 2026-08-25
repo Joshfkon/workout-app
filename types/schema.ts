@@ -403,7 +403,17 @@ export interface Exercise {
   
   /** Secondary muscles worked */
   secondaryMuscles: string[];
-  
+
+  /**
+   * Muscles loaded isometrically for STABILITY, not as movers
+   * (exercises.stabilizers). Feeds ONLY the stabilizer-recovery channel in
+   * services/muscleRecovery — never volume credit, never the prescription
+   * engine. Empty/absent on rows the seed has not classified; the canonical
+   * stock values live in services/shared/stabilizerTags and are seeded by
+   * migration.
+   */
+  stabilizers?: string[];
+
   /** Compound exercises have higher systemic fatigue */
   mechanic: Mechanic;
   
@@ -1295,6 +1305,12 @@ export const DEFAULT_VOLUME_LANDMARKS: Record<Experience, Record<StandardMuscleG
     front_delts: { mev: 2, mav: 6, mrv: 10 },
     lateral_delts: { mev: 4, mav: 10, mrv: 16 },
     rear_delts: { mev: 4, mav: 10, mrv: 16 },
+    // MEV 0 (glute_med/obliques pattern): the rotator cuff is loaded
+    // isometrically by nearly all pressing and heavy pulling, so no direct
+    // work is required; the small band covers deliberate external-rotation
+    // work. The MRV also serves as the stabilizer-channel dose normalizer in
+    // services/muscleRecovery — keep it > 0.
+    rotator_cuff: { mev: 0, mav: 3, mrv: 6 },
     lats: { mev: 6, mav: 10, mrv: 16 },
     upper_back: { mev: 4, mav: 8, mrv: 14 },
     traps: { mev: 3, mav: 8, mrv: 14 },
@@ -1323,6 +1339,7 @@ export const DEFAULT_VOLUME_LANDMARKS: Record<Experience, Record<StandardMuscleG
     front_delts: { mev: 3, mav: 8, mrv: 12 },
     lateral_delts: { mev: 6, mav: 14, mrv: 20 },
     rear_delts: { mev: 6, mav: 12, mrv: 18 },
+    rotator_cuff: { mev: 0, mav: 4, mrv: 8 },
     lats: { mev: 8, mav: 14, mrv: 20 },
     upper_back: { mev: 6, mav: 10, mrv: 16 },
     traps: { mev: 4, mav: 10, mrv: 16 },
@@ -1355,6 +1372,7 @@ export const DEFAULT_VOLUME_LANDMARKS: Record<Experience, Record<StandardMuscleG
     front_delts: { mev: 4, mav: 10, mrv: 14 },
     lateral_delts: { mev: 8, mav: 18, mrv: 26 },
     rear_delts: { mev: 8, mav: 16, mrv: 22 },
+    rotator_cuff: { mev: 0, mav: 5, mrv: 10 },
     lats: { mev: 10, mav: 18, mrv: 26 },
     upper_back: { mev: 8, mav: 14, mrv: 20 },
     traps: { mev: 6, mav: 12, mrv: 20 },
@@ -1878,6 +1896,7 @@ export const STANDARD_MUSCLE_GROUPS = [
   'front_delts',
   'lateral_delts',
   'rear_delts',
+  'rotator_cuff',
   'lats',
   'upper_back',
   'traps',
@@ -1991,6 +2010,13 @@ export const MUSCLE_VOLUME_AUTHORITY: Record<StandardMuscleGroup, MuscleVolumeAu
   front_delts: { anatomicalRelationship: 'independent', creditAggregation: 'independent', volumeAuthority: 'independent' },
   lateral_delts: { anatomicalRelationship: 'independent', creditAggregation: 'independent', volumeAuthority: 'independent' },
   rear_delts: { anatomicalRelationship: 'independent', creditAggregation: 'independent', volumeAuthority: 'independent' },
+  // Rotator cuff (supraspinatus/infraspinatus/teres minor/subscapularis) is a
+  // first-class standard muscle, NOT a proxy on rear_delts: it is the app's
+  // primary stabilizer-fatigue target (services/muscleRecovery stabilizer
+  // channel) and its recovery state must never be conflated with rear-delt
+  // prime-mover work. Like glute_med under 'glutes', it shares the coarse
+  // 'shoulders' display parent while keeping full independent authority.
+  rotator_cuff: { anatomicalRelationship: 'independent', creditAggregation: 'independent', volumeAuthority: 'independent' },
   lats: { anatomicalRelationship: 'independent', creditAggregation: 'independent', volumeAuthority: 'independent' },
   upper_back: { anatomicalRelationship: 'independent', creditAggregation: 'independent', volumeAuthority: 'independent' },
   biceps: { anatomicalRelationship: 'independent', creditAggregation: 'independent', volumeAuthority: 'independent' },
@@ -2080,7 +2106,7 @@ export function assertNoMixedCapacityAggregation(
 }
 
 /**
- * Detailed Muscle Groups (33) - AI Exercise Metadata & Programming Logic
+ * Detailed Muscle Groups (34) - AI Exercise Metadata & Programming Logic
  * Used internally by the AI when completing exercise metadata, enabling smarter
  * exercise selection and muscle coverage analysis.
  */
@@ -2089,10 +2115,11 @@ export const DETAILED_MUSCLE_GROUPS = [
   'chest_upper',
   'chest_lower',
   'chest_mid',
-  // Delts (3)
+  // Delts + cuff (4)
   'front_delts',
   'lateral_delts',
   'rear_delts',
+  'rotator_cuff',
   // Back (5)
   'lats',
   'upper_back',
@@ -2148,6 +2175,7 @@ export const DETAILED_TO_STANDARD_MAP: Record<DetailedMuscleGroup, StandardMuscl
   front_delts: 'front_delts',
   lateral_delts: 'lateral_delts',
   rear_delts: 'rear_delts',
+  rotator_cuff: 'rotator_cuff',
   // Back
   lats: 'lats',
   upper_back: 'upper_back',
@@ -2425,6 +2453,7 @@ export const STANDARD_MUSCLE_DISPLAY_NAMES: Record<StandardMuscleGroup, string> 
   front_delts: 'Front Delts',
   lateral_delts: 'Side Delts',
   rear_delts: 'Rear Delts',
+  rotator_cuff: 'Rotator Cuff',
   lats: 'Lats',
   upper_back: 'Upper Back',
   traps: 'Traps',
@@ -2458,6 +2487,7 @@ export const DETAILED_MUSCLE_DISPLAY_NAMES: Record<DetailedMuscleGroup, string> 
   front_delts: 'Front Deltoids',
   lateral_delts: 'Lateral Deltoids',
   rear_delts: 'Rear Deltoids',
+  rotator_cuff: 'Rotator Cuff',
   lats: 'Latissimus Dorsi',
   upper_back: 'Upper Back',
   rhomboids: 'Rhomboids',

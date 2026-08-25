@@ -146,7 +146,11 @@ export const RESEARCH_VOLUME_BANDS: Record<CoarseMuscle, VolumeBand> = {
 export const COARSE_CHILDREN: Record<CoarseMuscle, StandardMuscleGroup[]> = {
   chest: ['chest_upper', 'chest_lower'],
   back: ['lats', 'upper_back'],
-  shoulders: ['front_delts', 'lateral_delts', 'rear_delts'],
+  // rotator_cuff rides the shoulders group for DISPLAY (like glute_med under
+  // glutes): its credited volume is nearly always 0 — the muscle exists for
+  // the stabilizer-recovery channel — so it never meaningfully moves the
+  // coarse row.
+  shoulders: ['front_delts', 'lateral_delts', 'rear_delts', 'rotator_cuff'],
   biceps: ['biceps'],
   // Coarse 'triceps' credit stays on the coarse member; the heads are fed
   // only by fine tags (traps/calves precedent — no uniform smear).
@@ -181,6 +185,12 @@ export const STANDARD_TO_COARSE: Record<StandardMuscleGroup, CoarseMuscle> = (()
  * these at their OWN MEV_TARGETS when deducting indirect credit.
  */
 export const FINE_CHILD_MUSCLES = new Set<StandardMuscleGroup>([
+  // rotator_cuff is deliberately NOT here: it is a member of the shoulders
+  // COARSE_CHILDREN (so any credit a custom tag sends it resolves to a real
+  // coarse parent) but it renders no volume child row — its signal lives in
+  // the stabilizer-recovery channel (services/muscleRecovery), not the
+  // volume UI, and a permanent 0.0 row would be noise. This also exempts it
+  // from the template-pool reachability invariant: no mover tag feeds it.
   'chest_upper', 'chest_lower',
   'front_delts', 'lateral_delts', 'rear_delts',
   // 'erectors' is NOT here — it is its own coarse group now, so it renders as
@@ -227,7 +237,10 @@ export const FINE_CHILD_MUSCLES = new Set<StandardMuscleGroup>([
  */
 export const MEV_TARGETS: Record<StandardMuscleGroup, number> = {
   chest_upper: 4, chest_lower: 4,
-  front_delts: 2, lateral_delts: 6, rear_delts: 3,
+  // rotator_cuff 0: loaded isometrically by nearly all pressing/pulling, so
+  // no direct-work warning threshold — MEV 0 (glute_med/obliques pattern,
+  // taken one step further because direct cuff work is purely optional).
+  front_delts: 2, lateral_delts: 6, rear_delts: 3, rotator_cuff: 0,
   lats: 6, upper_back: 4, traps: 4, upper_traps: 3, mid_lower_traps: 2,
   // triceps_long sits near the direct-work literature (pressing gives the
   // long head little); triceps_lat_med is total-inclusive (retagged press

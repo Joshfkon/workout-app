@@ -140,10 +140,15 @@ function reportA(): string {
   for (const muscle of STANDARD_MUSCLE_GROUPS) {
     const a = MUSCLE_VOLUME_AUTHORITY[muscle];
     const lm = EXPERIENCES.map((e) => {
-      const before = LANDMARKS_V1[e][muscle];
+      // Post-v1 muscles (rotator_cuff) have no frozen v1 row — report the
+      // current default as "new" rather than crashing on the missing row.
+      const before = LANDMARKS_V1[e][muscle] as
+        | (typeof DEFAULT_VOLUME_LANDMARKS)[typeof e][typeof muscle]
+        | undefined;
       const after = DEFAULT_VOLUME_LANDMARKS[e][muscle];
-      const b = `${before.mev}/${before.mav}/${before.mrv}`;
       const af = `${after.mev}/${after.mav}/${after.mrv}`;
+      if (!before) return `**new → ${af}**`;
+      const b = `${before.mev}/${before.mav}/${before.mrv}`;
       return b === af ? b : `**${b} → ${af}**`;
     }).join(' · ');
 
@@ -374,6 +379,8 @@ function reportF(): string {
   L.push('|---|---|---|');
   for (const e of EXPERIENCES) {
     for (const muscle of STANDARD_MUSCLE_GROUPS) {
+      // Post-v1 muscles (rotator_cuff) have no frozen v1 row and no delta.
+      if (!LANDMARKS_V1[e][muscle]) continue;
       for (const f of ['mev', 'mav', 'mrv'] as const) {
         const before = LANDMARKS_V1[e][muscle][f];
         const after = DEFAULT_VOLUME_LANDMARKS[e][muscle][f];
@@ -430,9 +437,10 @@ function reportPrescribedVolume(): string {
   L.push('| Muscle | Novice | Intermediate | Advanced | Changed? |');
   L.push('|---|---|---|---|---|');
   for (const muscle of STANDARD_MUSCLE_GROUPS) {
-    const before = EXPERIENCES.map((e) => LANDMARKS_V1[e][muscle].mav);
+    // Post-v1 muscles (rotator_cuff) have no frozen v1 MAV — nothing changed.
+    const before = EXPERIENCES.map((e) => LANDMARKS_V1[e][muscle]?.mav);
     const after = EXPERIENCES.map((e) => DEFAULT_VOLUME_LANDMARKS[e][muscle].mav);
-    const changed = before.some((v, i) => v !== after[i]);
+    const changed = before.some((v, i) => v !== undefined && v !== after[i]);
     L.push(`| \`${muscle}\` | ${after[0]} | ${after[1]} | ${after[2]} | ${changed ? '**yes**' : 'no'} |`);
   }
   L.push('', '## 2. Coarse experience preset (generator target, total-inclusive)', '');

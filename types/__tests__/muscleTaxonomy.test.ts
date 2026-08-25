@@ -313,7 +313,9 @@ describe('erectors is a standalone top-level group', () => {
   it('every other group keeps the children it had', () => {
     // Guards the "preserve existing behavior for all other groups" constraint.
     expect(COARSE_CHILDREN.chest).toEqual(['chest_upper', 'chest_lower']);
-    expect(COARSE_CHILDREN.shoulders).toEqual(['front_delts', 'lateral_delts', 'rear_delts']);
+    // rotator_cuff joined the shoulders display group with the stabilizer
+    // channel (independent authority, MEV 0 — the glute_med pattern).
+    expect(COARSE_CHILDREN.shoulders).toEqual(['front_delts', 'lateral_delts', 'rear_delts', 'rotator_cuff']);
     expect(COARSE_CHILDREN.glutes).toEqual(['glutes', 'glute_med']);
     expect(COARSE_CHILDREN.abs).toEqual(['abs', 'obliques']);
     expect(COARSE_CHILDREN.traps).toEqual(['traps', 'upper_traps', 'mid_lower_traps']);

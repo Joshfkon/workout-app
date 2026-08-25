@@ -249,7 +249,7 @@ describe('calculateWeeklyVolume', () => {
     const result = calculateWeeklyVolume(input);
 
     // Should have entries for all 26 standard muscle groups with 0 sets
-    expect(result.size).toBe(26);
+    expect(result.size).toBe(STANDARD_MUSCLE_GROUPS.length);
     result.forEach((data) => {
       expect(data.totalSets).toBe(0);
       // Muscles with MEV=0 (glute_med, obliques) will have status 'effective' not 'below_mev'
