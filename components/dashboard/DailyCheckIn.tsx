@@ -93,8 +93,9 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
       labels: ['Bad', 'Low', 'Neutral', 'Good', 'Great'],
     },
     {
-      // 1 = high stress, 5 = low stress — same scale as the pre-workout
-      // readiness check-in and the daily_check_ins.stress_level column.
+      // 1 = low stress, 5 = high stress — the ascending scale every consumer
+      // of daily_check_ins.stress_level assumes (calculateReadinessScore,
+      // the settings profile scale, WellnessTrendsCard's lower-is-better).
       id: 'stress',
       title: 'Stress',
       icon: '😰',
@@ -102,7 +103,7 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
       type: 'rating' as const,
       value: stressLevel,
       onChange: (v: Rating) => setStressLevel(v),
-      labels: ['Very High', 'High', 'Moderate', 'Low', 'Very Low'],
+      labels: ['Very Low', 'Low', 'Moderate', 'High', 'Very High'],
     },
   ];
   

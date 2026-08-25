@@ -256,7 +256,7 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
     const lowFocus = focusRating <= 2;
     const lowLibido = libidoRating <= 2;
     const poorSleep = sleepQuality <= 2;
-    const highStress = stressLevel <= 2;
+    const highStress = stressLevel >= 4;
 
     // Recommend refeed if multiple indicators are present
     const indicatorCount = [lowFocus, lowLibido, poorSleep, highStress].filter(Boolean).length;
@@ -297,7 +297,7 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
   const getRatingLabel = (rating: Rating, type: 'sleep' | 'stress' | 'nutrition' | 'focus' | 'libido') => {
     const labels = {
       sleep: ['Terrible', 'Poor', 'Okay', 'Good', 'Great'],
-      stress: ['Very High', 'High', 'Moderate', 'Low', 'Very Low'],
+      stress: ['Very Low', 'Low', 'Moderate', 'High', 'Very High'],
       nutrition: ['Poor', 'Below Average', 'Average', 'Good', 'Excellent'],
       focus: ['Very Foggy', 'Foggy', 'Normal', 'Sharp', 'Very Sharp'],
       libido: ['Very Low', 'Low', 'Normal', 'High', 'Very High'],
@@ -371,7 +371,7 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
           <div className="flex items-center justify-between mb-1.5">
             <label className="text-sm font-medium text-surface-200">
               Stress Level{' '}
-              <span className="font-normal text-xs text-surface-500">(1 = high, 5 = low)</span>
+              <span className="font-normal text-xs text-surface-500">(1 = low, 5 = high)</span>
             </label>
             <span className="text-sm text-primary-400">
               {getRatingLabel(stressLevel, 'stress')}

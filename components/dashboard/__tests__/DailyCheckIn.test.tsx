@@ -71,13 +71,13 @@ describe('DailyCheckIn sleep capture', () => {
     expect(screen.getByTestId('sleep-hours-value')).toHaveTextContent('7.5h');
     await user.click(screen.getByTestId('sleep-quality-good'));
 
-    // Walk the remaining steps and complete — on the stress step pick 2
-    // ("High" — 1 = high stress, 5 = low stress), and leave the waist step
+    // Walk the remaining steps and complete — on the stress step pick 4
+    // ("High" — 1 = low stress, 5 = high stress), and leave the waist step
     // BLANK to prove it never blocks completion.
     await user.click(screen.getByRole('button', { name: 'Next' }));
     await user.click(screen.getByRole('button', { name: 'Next' }));
     await user.click(screen.getByRole('button', { name: 'Next' }));
-    await user.click(screen.getByRole('button', { name: '2 High' }));
+    await user.click(screen.getByRole('button', { name: '4 High' }));
     await user.click(screen.getByRole('button', { name: 'Next' }));
     await user.click(screen.getByRole('button', { name: 'Next' }));
     expect(screen.getByTestId('checkin-waist-field')).toBeInTheDocument();
@@ -90,7 +90,7 @@ describe('DailyCheckIn sleep capture', () => {
     expect(checkInRow).toMatchObject({
       sleep_hours: 7.5,
       sleep_quality: SLEEP_QUALITY_TO_RATING.good,
-      stress_level: 2,
+      stress_level: 4,
     });
 
     // sleep_log gets the raw pair, one row per local day (upsert).

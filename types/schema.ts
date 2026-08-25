@@ -694,7 +694,7 @@ export interface DailyCheckIn {
   /** Mood (1-5) */
   moodRating?: Rating | null;
   
-  /** Stress level (1-5, 1=high stress, 5=low stress) */
+  /** Stress level (1-5, 1=low stress, 5=high stress) */
   stressLevel?: Rating | null;
   
   /** Muscle soreness level (1-5, 1=very sore, 5=no soreness) */
