@@ -93,6 +93,7 @@ interface RawBlockRow {
     primary_muscle: string | null;
     secondary_muscles: string[] | null;
     stabilizers: string[] | null;
+    is_custom: boolean | null;
   } | null;
   workout_sessions: { id: string; completed_at: string | null } | null;
   set_logs:
@@ -176,7 +177,7 @@ export function useRecoveryHistory(
       const { data, error } = await supabase
         .from('exercise_blocks')
         .select(`
-          exercises!inner ( id, name, primary_muscle, secondary_muscles, stabilizers ),
+          exercises!inner ( id, name, primary_muscle, secondary_muscles, stabilizers, is_custom ),
           workout_sessions!inner ( id, completed_at, user_id, state ),
           set_logs ( id, is_warmup, rpe, feedback )
         `)
@@ -206,12 +207,16 @@ export function useRecoveryHistory(
           name: exercise.name,
           primaryMuscle: exercise.primary_muscle,
           secondaryMuscles: exercise.secondary_muscles || [],
-          // Pre-seed rows carry '{}' — fall back to the canonical map by name
-          // (same convention as exerciseService.mapDbExercise).
+          // Pre-seed STOCK rows carry '{}' — fall back to the canonical map by
+          // name (same convention as exerciseService.mapDbExercise). Custom
+          // rows never fall back: the seed excludes them, and a custom sharing
+          // a stock name keeps its intentionally empty value.
           stabilizers:
             exercise.stabilizers && exercise.stabilizers.length > 0
               ? exercise.stabilizers
-              : stabilizersForExerciseName(exercise.name) ?? [],
+              : exercise.is_custom === true
+                ? []
+                : stabilizersForExerciseName(exercise.name) ?? [],
           sets: workingSets.map((s) => ({
             repsInTank: rirFromRow(s),
             reportedRir: rirFromFeedback(s.feedback),

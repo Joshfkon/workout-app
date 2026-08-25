@@ -68,6 +68,7 @@ export interface LoadedExerciseRow {
   primary_muscle: string;
   secondary_muscles: string[] | null;
   stabilizers?: string[] | null;
+  is_custom?: boolean | null;
   mechanic: 'compound' | 'isolation';
   default_rep_range: [number, number] | null;
   default_rir: number | null;
@@ -182,12 +183,16 @@ export function mapLoadedExerciseRow(row: LoadedExerciseRow): LoadedExercise {
     primaryMuscle: row.primary_muscle,
     secondaryMuscles: row.secondary_muscles || [],
     // Stabilizer tags feed the stabilizer-recovery warning
-    // (stabilizerWarningForBlock). Pre-seed rows carry '{}' — fall back to the
-    // canonical map by name, same convention as exerciseService.mapDbExercise.
+    // (stabilizerWarningForBlock). Pre-seed STOCK rows carry '{}' — fall back
+    // to the canonical map by name, same convention as
+    // exerciseService.mapDbExercise. Custom rows never fall back (the seed
+    // excludes them; a custom sharing a stock name keeps its empty value).
     stabilizers:
       row.stabilizers && row.stabilizers.length > 0
         ? row.stabilizers
-        : stabilizersForExerciseName(row.name) ?? [],
+        : row.is_custom === true
+          ? []
+          : stabilizersForExerciseName(row.name) ?? [],
     mechanic: row.mechanic,
     defaultRepRange: row.default_rep_range || [8, 12],
     defaultRir: row.default_rir || 2,

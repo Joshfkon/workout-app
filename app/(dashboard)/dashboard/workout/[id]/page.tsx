@@ -199,6 +199,7 @@ import { getExercisePainPattern, jointToBodyPart, type ExercisePainEvent } from 
 import { rollUpExerciseFeedback } from '@/services/weeklyProgressionEngine';
 import {
   computeMuscleRecovery,
+  computeSleepWindowMultiplier,
   computeStabilizerRecovery,
   evaluateStabilizerWarning,
   recoveryConfigFor,
@@ -207,6 +208,8 @@ import {
   stabilizerTrackedMuscles,
   type MuscleRecoveryResult,
 } from '@/services/muscleRecovery';
+import { useSleepLog } from '@/hooks/useSleepLog';
+import { useWearableRecovery } from '@/hooks/useWearableRecovery';
 import {
   STABILIZER_MITIGATIONS,
   type StabilizerTrackedMuscle,
@@ -2317,15 +2320,32 @@ export default function WorkoutPage() {
   // Detection is pure (computeStabilizerRecovery + evaluateStabilizerWarning
   // over the SAME completed-session history the soreness learning reads);
   // the page owns event logging and the per-session dismissal record.
+  //
+  // The config carries the SAME live modifiers useMuscleReadiness supplies —
+  // sleep (which the stabilizer channel keeps) and the wearable scale (which
+  // it discards internally, but the mover model in the joint-pain readiness
+  // snapshot does not) — so warnings, snapshots and the readiness sheet all
+  // read one consistent model state.
+  const { entries: stabilizerSleepEntries } = useSleepLog();
+  const { state: stabilizerWearableRecovery } = useWearableRecovery();
   const stabilizerRecoveryConfig = useMemo(
     () =>
-      recoveryConfigFor(enhancedAthleteModeActive, recoveryMultipliers, undefined, undefined, {
-        experienceForCapacity: userProfile?.experience,
-        plannedSessionsPerWeekByMuscle,
-      }),
+      recoveryConfigFor(
+        enhancedAthleteModeActive,
+        recoveryMultipliers,
+        computeSleepWindowMultiplier(stabilizerSleepEntries, recoveryNow),
+        stabilizerWearableRecovery.scale,
+        {
+          experienceForCapacity: userProfile?.experience,
+          plannedSessionsPerWeekByMuscle,
+        }
+      ),
     [
       enhancedAthleteModeActive,
       recoveryMultipliers,
+      stabilizerSleepEntries,
+      recoveryNow,
+      stabilizerWearableRecovery.scale,
       userProfile?.experience,
       plannedSessionsPerWeekByMuscle,
     ]
@@ -2425,24 +2445,38 @@ export default function WorkoutPage() {
     return map;
   }, [blocks, skippedBlockIds, stabilizerWarningForBlock]);
 
-  // Log each warning once per (block, muscle) per session, the moment it is
-  // first shown; the row is patched with the user's response later.
+  // Log each warning once per (block, muscle) per session — but only once its
+  // banner is actually ON SCREEN. A computed warning is not a shown warning:
+  // upcoming blocks render in the compact "Up next" list (no card, no banner)
+  // and collapsed cards hide their content, so logging those as 'shown' would
+  // poison calibration data with warnings the user never saw. Visibility here
+  // mirrors the render rules: full card (current block, or a block with
+  // logged working sets — isBlockInMainList) and not collapsed. The row is
+  // patched with the user's response later.
   useEffect(() => {
     if (!session || phase !== 'workout') return;
     for (const [blockId, warning] of Array.from(stabilizerWarningsByBlockId.entries())) {
       const key = `${blockId}:${warning.muscle}`;
       if (stabilizerWarningsState[key]) continue;
+      const index = blocks.findIndex((b) => b.id === blockId);
+      if (index < 0) continue;
+      const inMainList =
+        index === currentBlockIndex ||
+        completedSets.some(
+          (s) => s.exerciseBlockId === blockId && !s.isWarmup && s.setType !== 'warmup'
+        );
+      const isCollapsed = allCollapsed || collapsedBlocks.has(blockId);
+      if (!inMainList || isCollapsed) continue;
       const eventId =
         typeof crypto !== 'undefined' && 'randomUUID' in crypto
           ? crypto.randomUUID()
           : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
       recordStabilizerWarningShown(blockId, warning.muscle, eventId);
-      const block = blocks.find((b) => b.id === blockId);
       void enqueueStabilizerWarningShown(createUntypedClient(), {
         eventId,
         userId: session.userId,
         sessionId: session.id,
-        exerciseId: block?.exerciseId ?? null,
+        exerciseId: blocks[index]?.exerciseId ?? null,
         warning: {
           muscle: warning.muscle,
           readinessRatio: warning.readinessRatio,
@@ -2456,6 +2490,10 @@ export default function WorkoutPage() {
     session,
     phase,
     blocks,
+    currentBlockIndex,
+    completedSets,
+    allCollapsed,
+    collapsedBlocks,
     stabilizerWarningsByBlockId,
     stabilizerWarningsState,
     recordStabilizerWarningShown,

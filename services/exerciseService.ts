@@ -459,13 +459,18 @@ function mapDbExercise(row: Record<string, unknown>): Exercise {
     },
     // Injury/safety metadata.
     // stabilizers: the DB row wins once it carries values; an empty/absent
-    // array (the pre-seed state — 20260825000002 populates stock rows) falls
-    // back to the canonical map by name, the same read-time-derivation
-    // convention as spinalLoading/positionStress above.
+    // array on a STOCK row (the pre-seed state — 20260825000002 populates
+    // stock rows) falls back to the canonical map by name, the same
+    // read-time-derivation convention as spinalLoading/positionStress above.
+    // Custom rows never fall back: the seed deliberately excludes them, and a
+    // custom exercise sharing a stock name (a user's own "Deadlift" variant)
+    // must keep its intentionally empty value.
     stabilizers:
       ((row.stabilizers as string[]) ?? []).length > 0
         ? (row.stabilizers as MuscleGroup[])
-        : ((stabilizersForExerciseName(row.name as string) ?? []) as MuscleGroup[]),
+        : row.is_custom === true
+          ? []
+          : ((stabilizersForExerciseName(row.name as string) ?? []) as MuscleGroup[]),
     spinalLoading,
     requiresBackArch: (row.requires_back_arch as boolean) ?? false,
     requiresSpinalFlexion: (row.requires_spinal_flexion as boolean) ?? false,
