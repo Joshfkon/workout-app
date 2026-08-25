@@ -21,6 +21,18 @@ export interface SorenessAskRecord {
   askedAt: string; // ISO timestamp
 }
 
+/**
+ * One shown pre-set stabilizer warning (per block × muscle), following the
+ * muscleSorenessAsked pattern: recorded once, never re-shown this session,
+ * persisted so a reload cannot resurrect a dismissed warning. `eventId` is
+ * the stabilizer_warning_events row the response patch targets.
+ */
+export interface StabilizerWarningRecord {
+  eventId: string;
+  response: 'shown' | 'dismissed' | 'proceeded';
+  shownAt: string; // ISO timestamp
+}
+
 interface WorkoutState {
   // Current session
   activeSession: WorkoutSession | null;
@@ -40,6 +52,9 @@ interface WorkoutState {
 
   // Subjective feedback (additive) — soreness asks keyed by StandardMuscleGroup
   muscleSorenessAsked: Record<string, SorenessAskRecord>;
+
+  // Stabilizer warnings shown this session, keyed `${blockId}:${muscle}`.
+  stabilizerWarnings: Record<string, StabilizerWarningRecord>;
 
   // Actions
   startSession: (session: WorkoutSession, blocks: ExerciseBlock[], exercises: Exercise[]) => void;
@@ -61,6 +76,14 @@ interface WorkoutState {
 
   // Subjective feedback
   recordSorenessAsked: (muscle: string, rating: SorenessRating | null) => void;
+  /** Record a shown stabilizer warning (once per block×muscle per session). */
+  recordStabilizerWarningShown: (blockId: string, muscle: string, eventId: string) => void;
+  /** Record the user's response to a shown warning (first response wins). */
+  recordStabilizerWarningResponse: (
+    blockId: string,
+    muscle: string,
+    response: 'dismissed' | 'proceeded'
+  ) => void;
   setBlockFeedback: (
     blockId: string,
     feedback: { pump?: PumpRating0to3; workload?: WorkloadRating }
@@ -95,6 +118,7 @@ export const useWorkoutStore = create<WorkoutState>()(
       exercises: {},
       restTimerEnd: null,
       muscleSorenessAsked: {},
+      stabilizerWarnings: {},
 
       startSession: (session, blocks, exercises) => {
         const exerciseRecord: Record<string, Exercise> = {};
@@ -115,6 +139,7 @@ export const useWorkoutStore = create<WorkoutState>()(
           exercises: exerciseRecord,
           restTimerEnd: null,
           muscleSorenessAsked: isSameSession ? get().muscleSorenessAsked : {},
+          stabilizerWarnings: isSameSession ? get().stabilizerWarnings : {},
         });
       },
 
@@ -220,6 +245,34 @@ export const useWorkoutStore = create<WorkoutState>()(
         });
       },
 
+      recordStabilizerWarningShown: (blockId, muscle, eventId) => {
+        const { stabilizerWarnings } = get();
+        const key = `${blockId}:${muscle}`;
+        // Once shown, never re-created this session (mirror of soreness asks).
+        if (stabilizerWarnings[key]) return;
+        set({
+          stabilizerWarnings: {
+            ...stabilizerWarnings,
+            [key]: { eventId, response: 'shown', shownAt: new Date().toISOString() },
+          },
+        });
+      },
+
+      recordStabilizerWarningResponse: (blockId, muscle, response) => {
+        const { stabilizerWarnings } = get();
+        const key = `${blockId}:${muscle}`;
+        const record = stabilizerWarnings[key];
+        // First response wins: 'proceeded' after 'dismissed' must not
+        // overwrite the explicit dismissal (and vice versa).
+        if (!record || record.response !== 'shown') return;
+        set({
+          stabilizerWarnings: {
+            ...stabilizerWarnings,
+            [key]: { ...record, response },
+          },
+        });
+      },
+
       setBlockFeedback: (blockId, feedback) => {
         const { exerciseBlocks } = get();
         set({
@@ -296,6 +349,9 @@ export const useWorkoutStore = create<WorkoutState>()(
         restTimerEnd: state.restTimerEnd,
         // Soreness asks survive reloads so a muscle is never re-asked.
         muscleSorenessAsked: state.muscleSorenessAsked,
+        // Stabilizer warnings survive reloads so a dismissed warning stays
+        // dismissed for the whole session.
+        stabilizerWarnings: state.stabilizerWarnings,
       }),
       // Migrate stale persisted shapes forward. A pre-versioned (version 0)
       // payload predates restTimerEnd persistence; default it so old data

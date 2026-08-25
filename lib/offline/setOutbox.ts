@@ -26,7 +26,8 @@ export type OutboxTable =
   | 'workout_sessions'
   | 'session_muscle_feedback'
   | 'exercise_blocks'
-  | 'motion_captures';
+  | 'motion_captures'
+  | 'stabilizer_warning_events';
 
 export interface OutboxEntry {
   /**
@@ -64,6 +65,10 @@ const UPSERT_OPTIONS: Record<OutboxTable, { onConflict: string; ignoreDuplicates
   // (flush is enqueuedAt-ordered), so the set_id FK is satisfied by the time
   // a capture row is attempted.
   motion_captures: { onConflict: 'id', ignoreDuplicates: true },
+  // Warning events use client-generated ids; the row is upserted when shown
+  // and the user's response lands later as an op:'update' patch. Overwrite on
+  // conflict (not ignore) so a re-enqueued shown-row refreshes its ratios.
+  stabilizer_warning_events: { onConflict: 'id', ignoreDuplicates: false },
 };
 
 interface OutboxDriver {

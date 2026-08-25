@@ -197,7 +197,26 @@ import {
 } from './_lib/jointPainWrites';
 import { getExercisePainPattern, jointToBodyPart, type ExercisePainEvent } from '@/services/discomfortTracker';
 import { rollUpExerciseFeedback } from '@/services/weeklyProgressionEngine';
-import { computeMuscleRecovery, recoveryConfigFor } from '@/services/muscleRecovery';
+import {
+  computeMuscleRecovery,
+  computeStabilizerRecovery,
+  evaluateStabilizerWarning,
+  recoveryConfigFor,
+  requiredStabilizersFor,
+  stabilizerReferenceLoadKg,
+  stabilizerTrackedMuscles,
+  type MuscleRecoveryResult,
+} from '@/services/muscleRecovery';
+import {
+  STABILIZER_MITIGATIONS,
+  type StabilizerTrackedMuscle,
+} from '@/services/shared/stabilizerTags';
+import type { StabilizerWarningView } from '@/components/workout/StabilizerWarningBanner';
+import {
+  enqueueStabilizerWarningShown,
+  enqueueStabilizerWarningResponse,
+} from './_lib/stabilizerWarningWrites';
+import { buildReadinessSnapshot } from './_lib/readinessSnapshot';
 import { useRecoveryHistory } from '@/hooks/useMuscleReadiness';
 import { useWorkoutMuscleVolume } from '@/hooks/useWorkoutMuscleVolume';
 import { useRecoveryMultipliers } from '@/hooks/useRecoveryMultipliers';
@@ -374,6 +393,9 @@ export default function WorkoutPage() {
   const setStoreBlockIndex = useWorkoutStore((state) => state.setCurrentBlock);
   const muscleSorenessAsked = useWorkoutStore((state) => state.muscleSorenessAsked);
   const recordSorenessAsked = useWorkoutStore((state) => state.recordSorenessAsked);
+  const stabilizerWarningsState = useWorkoutStore((state) => state.stabilizerWarnings);
+  const recordStabilizerWarningShown = useWorkoutStore((state) => state.recordStabilizerWarningShown);
+  const recordStabilizerWarningResponse = useWorkoutStore((state) => state.recordStabilizerWarningResponse);
 
   // Recovery model inputs for the soreness-answer learning step: the shared
   // completed-session history (same React Query cache as the readiness sheet)
@@ -2291,6 +2313,173 @@ export default function WorkoutPage() {
     return result;
   }, [muscleSorenessAsked]);
 
+  // ---- Pre-set stabilizer warnings (muscleRecovery stabilizer channel) -----
+  // Detection is pure (computeStabilizerRecovery + evaluateStabilizerWarning
+  // over the SAME completed-session history the soreness learning reads);
+  // the page owns event logging and the per-session dismissal record.
+  const stabilizerRecoveryConfig = useMemo(
+    () =>
+      recoveryConfigFor(enhancedAthleteModeActive, recoveryMultipliers, undefined, undefined, {
+        experienceForCapacity: userProfile?.experience,
+        plannedSessionsPerWeekByMuscle,
+      }),
+    [
+      enhancedAthleteModeActive,
+      recoveryMultipliers,
+      userProfile?.experience,
+      plannedSessionsPerWeekByMuscle,
+    ]
+  );
+
+  // One stabilizer-channel computation per tracked muscle, shared by every
+  // block. (The channel itself ignores the enhanced/wearable scalar inside
+  // the config — safety invariant in services/muscleRecovery.)
+  const stabilizerStateByMuscle = useMemo(() => {
+    const map = new Map<StandardMuscleGroup, MuscleRecoveryResult>();
+    for (const muscle of stabilizerTrackedMuscles(stabilizerRecoveryConfig)) {
+      map.set(
+        muscle,
+        computeStabilizerRecovery(
+          recoveryHistorySessions,
+          muscle,
+          recoveryNow,
+          stabilizerRecoveryConfig
+        )
+      );
+    }
+    return map;
+  }, [recoveryHistorySessions, recoveryNow, stabilizerRecoveryConfig]);
+
+  const stabilizerWarningForBlock = useCallback(
+    (block: ExerciseBlockWithExercise): StabilizerWarningView | null => {
+      const required = requiredStabilizersFor(block.exercise, stabilizerRecoveryConfig);
+      if (required.length === 0) return null;
+
+      const history = exerciseHistories[block.exerciseId];
+      const previousTopSetKg = history?.lastWorkoutSets?.length
+        ? Math.max(...history.lastWorkoutSets.map((s) => s.weightKg))
+        : null;
+      const referenceLoadKg = stabilizerReferenceLoadKg(
+        previousTopSetKg,
+        history?.estimatedE1RM ?? null,
+        stabilizerRecoveryConfig
+      );
+      // Planned load: the block's stored target, else the weight the user will
+      // realistically repeat (recent top set). No reference → never warn
+      // (missing-anchor rule inside evaluateStabilizerWarning).
+      const plannedLoadKg =
+        block.targetWeightKg > 0 ? block.targetWeightKg : previousTopSetKg;
+
+      let worst: ReturnType<typeof evaluateStabilizerWarning> = null;
+      for (const muscle of required) {
+        // A dismissed warning stays dismissed for the session ('proceeded'
+        // keeps the banner up — more sets may follow).
+        if (stabilizerWarningsState[`${block.id}:${muscle}`]?.response === 'dismissed') continue;
+        const recovery = stabilizerStateByMuscle.get(muscle);
+        if (!recovery) continue;
+        const warning = evaluateStabilizerWarning({
+          muscle,
+          recovery,
+          plannedLoadKg,
+          referenceLoadKg,
+          config: stabilizerRecoveryConfig,
+        });
+        if (warning && (!worst || warning.readinessRatio < worst.readinessRatio)) {
+          worst = warning;
+        }
+      }
+      if (!worst) return null;
+
+      return {
+        muscle: worst.muscle,
+        displayName: STANDARD_MUSCLE_DISPLAY_NAMES[worst.muscle],
+        readinessRatio: worst.readinessRatio,
+        intensityRatio: worst.intensityRatio,
+        // "Drop to N%": a load a step under the intensity gate.
+        suggestedLoadKg:
+          worst.referenceLoadKg *
+          Math.max(0.1, stabilizerRecoveryConfig.stabilizerIntensityThreshold - 0.1),
+        hoursSinceLoaded: worst.hoursSinceLoaded,
+        estimatedReadyAt: worst.estimatedReadyAt?.toISOString() ?? null,
+        mitigations:
+          STABILIZER_MITIGATIONS[worst.muscle as StabilizerTrackedMuscle] ?? [],
+        plannedLoadKg: worst.plannedLoadKg,
+        referenceLoadKg: worst.referenceLoadKg,
+      };
+    },
+    [
+      stabilizerRecoveryConfig,
+      exerciseHistories,
+      stabilizerWarningsState,
+      stabilizerStateByMuscle,
+    ]
+  );
+
+  const stabilizerWarningsByBlockId = useMemo(() => {
+    const map = new Map<string, StabilizerWarningView>();
+    for (const block of blocks) {
+      if (skippedBlockIds.has(block.id)) continue;
+      const warning = stabilizerWarningForBlock(block);
+      if (warning) map.set(block.id, warning);
+    }
+    return map;
+  }, [blocks, skippedBlockIds, stabilizerWarningForBlock]);
+
+  // Log each warning once per (block, muscle) per session, the moment it is
+  // first shown; the row is patched with the user's response later.
+  useEffect(() => {
+    if (!session || phase !== 'workout') return;
+    for (const [blockId, warning] of Array.from(stabilizerWarningsByBlockId.entries())) {
+      const key = `${blockId}:${warning.muscle}`;
+      if (stabilizerWarningsState[key]) continue;
+      const eventId =
+        typeof crypto !== 'undefined' && 'randomUUID' in crypto
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      recordStabilizerWarningShown(blockId, warning.muscle, eventId);
+      const block = blocks.find((b) => b.id === blockId);
+      void enqueueStabilizerWarningShown(createUntypedClient(), {
+        eventId,
+        userId: session.userId,
+        sessionId: session.id,
+        exerciseId: block?.exerciseId ?? null,
+        warning: {
+          muscle: warning.muscle,
+          readinessRatio: warning.readinessRatio,
+          intensityRatio: warning.intensityRatio,
+          plannedLoadKg: warning.plannedLoadKg,
+          referenceLoadKg: warning.referenceLoadKg,
+        },
+      });
+    }
+  }, [
+    session,
+    phase,
+    blocks,
+    stabilizerWarningsByBlockId,
+    stabilizerWarningsState,
+    recordStabilizerWarningShown,
+  ]);
+
+  const handleStabilizerWarningDismiss = useCallback(
+    (blockId: string, muscle: StandardMuscleGroup) => {
+      const record = stabilizerWarningsState[`${blockId}:${muscle}`];
+      recordStabilizerWarningResponse(blockId, muscle, 'dismissed');
+      if (record?.eventId) {
+        void enqueueStabilizerWarningResponse(createUntypedClient(), record.eventId, 'dismissed');
+      }
+    },
+    [stabilizerWarningsState, recordStabilizerWarningResponse]
+  );
+
+  // The injury/tweak tag's moment-capture: full mover + stabilizer readiness
+  // at report time, embedded in each joint_pain_events row. Fresh clock per
+  // capture (the report moment, not the session-start stamp).
+  const buildReadinessSnapshotNow = useCallback(
+    () => buildReadinessSnapshot(recoveryHistorySessions, clockNow(), stabilizerRecoveryConfig),
+    [recoveryHistorySessions, stabilizerRecoveryConfig]
+  );
+
   // ---- Top-of-workout weekly-volume strip ----------------------------------
   // Stamp the rolling-window clock once on mount so the per-muscle 7-day window
   // is anchored to a stable local day across re-renders.
@@ -2589,6 +2778,18 @@ export default function WorkoutPage() {
     if (!currentBlock) return null;
     beginSetTiming(); // setLogTiming: no-op if ExerciseCard already opened the row at the tap
 
+    // Stabilizer warning response: logging a WORKING set with a warning still
+    // up on this block records 'proceeded' (first response wins in the store).
+    if (data.setType !== 'warmup') {
+      for (const muscle of requiredStabilizersFor(currentBlock.exercise, stabilizerRecoveryConfig)) {
+        const record = stabilizerWarningsState[`${currentBlock.id}:${muscle}`];
+        if (record?.response === 'shown') {
+          recordStabilizerWarningResponse(currentBlock.id, muscle, 'proceeded');
+          void enqueueStabilizerWarningResponse(createUntypedClient(), record.eventId, 'proceeded');
+        }
+      }
+    }
+
     // Determine quality - factor in form if available
     let quality: 'stimulative' | 'effective' | 'junk';
     if (data.feedback?.form === 'ugly') {
@@ -2764,13 +2965,16 @@ export default function WorkoutPage() {
       if (data.feedback?.discomfort && session) {
         void insertJointPainEvent(
           supabase,
-          eventFromSetDiscomfort({
-            userId: session.userId,
-            sessionId: session.id,
-            exerciseId: currentBlock.exerciseId,
-            setLogId: setRowPersisted ? setId : null,
-            discomfort: data.feedback.discomfort,
-          })
+          {
+            ...eventFromSetDiscomfort({
+              userId: session.userId,
+              sessionId: session.id,
+              exerciseId: currentBlock.exerciseId,
+              setLogId: setRowPersisted ? setId : null,
+              discomfort: data.feedback.discomfort,
+            }),
+            readinessSnapshot: buildReadinessSnapshotNow(),
+          }
         );
       }
 
@@ -3064,13 +3268,16 @@ export default function WorkoutPage() {
       if (block) {
         void insertJointPainEvent(
           supabase,
-          eventFromSetDiscomfort({
-            userId: session.userId,
-            sessionId: session.id,
-            exerciseId: block.exerciseId,
-            setLogId: patchedQueued ? null : setId,
-            discomfort: feedback.discomfort,
-          })
+          {
+            ...eventFromSetDiscomfort({
+              userId: session.userId,
+              sessionId: session.id,
+              exerciseId: block.exerciseId,
+              setLogId: patchedQueued ? null : setId,
+              discomfort: feedback.discomfort,
+            }),
+            readinessSnapshot: buildReadinessSnapshotNow(),
+          }
         );
       }
     }
@@ -4853,6 +5060,7 @@ export default function WorkoutPage() {
           sessionId: session.id,
           joint,
           severity,
+          readinessSnapshot: buildReadinessSnapshotNow(),
         });
       }
     }
@@ -6283,6 +6491,10 @@ export default function WorkoutPage() {
                     onSetJointPain={handleSetJointPain}
                     sorenessPrompt={sorenessPromptForBlock(block)}
                     onSorenessAnswer={handleSorenessAnswer}
+                    stabilizerWarning={stabilizerWarningsByBlockId.get(block.id) ?? null}
+                    onStabilizerWarningDismiss={(muscle) =>
+                      handleStabilizerWarningDismiss(block.id, muscle)
+                    }
                     painNotice={painNoticeForExercise(block.exerciseId)}
                     onPainNoticeDismiss={() => {
                       setPainNoticeDismissed(block.exerciseId, new Date());
