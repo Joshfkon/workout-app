@@ -9,22 +9,19 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Card, Button, Badge, Input, LoadingAnimation, SkeletonExercise, ConfirmModal, ToastContainer, useToasts } from '@/components/ui';
 import {
   enqueueRowUpdate,
-  enqueueSetInsert,
   flushSetOutbox,
-  isMissingColumnError,
   isNetworkError,
   listOutbox,
   outboxCount,
   removeQueuedSet,
   updateQueuedSet,
-  withoutOptionalSetLogColumns,
 } from '@/lib/offline/setOutbox';
 // setLogTiming: TEMPORARY latency instrumentation (docs/SET_LOGGING_LATENCY_DIAGNOSIS.md)
 import { beginSetTiming, markSetPhase, schedulePaintMark, endSetTiming } from '@/lib/debug/setLogTiming';
 import type { SetSyncStatus } from '@/components/workout/ExerciseCard';
 import { InlineHint } from '@/components/ui/FirstTimeHint';
 import { RestTimer, PauseOverlay, RowOverflowMenu, type RowMenuItem } from '@/components/workout';
-import { IconGripVertical, IconInfoCircle, IconX } from '@tabler/icons-react';
+import { IconGripVertical, IconInfoCircle, IconMapPin, IconX } from '@tabler/icons-react';
 import { useRestTimer } from '@/hooks/useRestTimer';
 import { useEducationStore } from '@/hooks/useEducationPreferences';
 
@@ -105,8 +102,18 @@ import { MUSCLE_GROUPS, muscleMatchesGroup, rirToRpe, rpeToRir, STANDARD_MUSCLE_
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { quickWeightEstimate, quickWeightEstimateWithCalibration, type WorkingWeightRecommendation, type TransferCandidate } from '@/services/weightEstimationEngine';
 import { fetchTransferCandidates } from '@/lib/training/transferCandidates';
-import { inferSetRole, sessionTopSetWeightKg } from '@/services/suggestionEngine/setRoles';
-import { SUGGESTION_ENGINE_VERSION } from '@/services/suggestionEngine/constants';
+import {
+  logSet,
+  persistSetEdit,
+  persistSetDelete,
+  buildSetEditPatch,
+  planBlockRenumber,
+  persistSetRenumber,
+  nextSetNumberForBlock,
+  type SetNumberChange,
+} from '@/lib/training/logSet';
+import { loadWorkoutSession, resolveResumePosition } from './_lib/loadSession';
+import { now as clockNow } from '@/lib/clock';
 import { addExerciseOverride, getSessionFromProgramData, applyExerciseOverrides, type ExerciseOverride } from '@/services/mesocycleHelpers';
 import { computeStapleExerciseIds } from '@/services/exerciseStaples';
 import { convertWeightForDisplay, deriveWorkoutLabel, formatMuscleName, formatWeight, getLocalDateString, inputWeightToKg } from '@/lib/utils';
@@ -136,6 +143,16 @@ import { getFailureSafetyTier } from '@/services/exerciseSafety';
 import { SanityCheckToast } from '@/components/workout/SanityCheckToast';
 import { CalibrationResultCard } from '@/components/workout/CalibrationResultCard';
 import { useWorkoutStore } from '@/stores/workoutStore';
+import {
+  estimateWorkoutDuration,
+  formatDurationDelta,
+  formatDurationEstimate,
+} from '@/services/workoutDurationEstimator';
+import {
+  estimatePendingAdditionSeconds,
+  secondsSinceLastSet,
+  toDurationBlocks,
+} from './_lib/durationEstimate';
 import { WorkoutHeader, type ExerciseSegmentStatus } from './_components/WorkoutHeader';
 import { WorkoutVolumeStrip } from './_components/WorkoutVolumeStrip';
 import { AddExercisePicker } from './_components/AddExercisePicker';
@@ -148,13 +165,23 @@ import {
   generateCoachMessage,
   HISTORY_SESSIONS_PER_EXERCISE,
   type ExerciseHistoryQueryRow,
+  type HistoryBlockRow,
+  type HistoryScopeOptions,
 } from './_lib/suggestions';
-import { deriveProgressionScope, type ProgressionScope } from '@/services/progressionScope';
 import {
-  mapLoadedBlockRow,
-  mapSetLogRow,
-  mapWorkoutSessionRow,
-  type LoadedBlockRow,
+  deriveProgressionScope,
+  hasLocationOverride,
+  resolveEffectiveLocation,
+  type ProgressionScope,
+} from '@/services/progressionScope';
+import { updateBlockLocation, updateSessionLocation } from '@/lib/training/sessionLocation';
+import {
+  LocationPickerSheet,
+  type LocationPickerScope,
+} from './_components/LocationPickerSheet';
+import {
+  mapLoadedExerciseRow,
+  type LoadedExerciseRow,
 } from './_lib/sessionMapping';
 import {
   fetchRecentMuscleSessions,
@@ -190,7 +217,7 @@ import { cancelWorkoutSession } from './_lib/cancelWorkout';
 import { sessionIndexFromCompleted } from '@/lib/training/mesocycleProgress';
 import { countCompletedSessions } from '@/lib/training/startMesocycleSession';
 import { matchAdhocToPlannedSession } from '@/lib/training/adhocClaim';
-import { submitFinishOptimistic, confirmClaimOptimistic } from './_lib/finishWorkout';
+import { submitFinishOptimistic, confirmClaimOptimistic, declineClaimOptimistic } from './_lib/finishWorkout';
 import type {
   AvailableExercise,
   CalibratedLift,
@@ -296,6 +323,36 @@ function CancelWorkoutModal({
       </div>
     </div>
   );
+}
+
+/**
+ * Assemble the location-scoping config the history read uses, from the
+ * session's location plus any per-exercise overrides.
+ *
+ * Returns undefined when nothing is located at all — the legacy
+ * cross-location read, unchanged. Note the override check: a session with no
+ * location but one pinned exercise still scopes, because that pin is the
+ * user telling us this lift's history is its own track.
+ */
+function buildHistoryScopeOptions(
+  sessionLocationId: string | null,
+  blockLocations: Record<string, string | null>,
+  blocks: Array<{ id: string; exerciseId: string }>,
+  scopeByExercise: Map<string, ProgressionScope>
+): HistoryScopeOptions | undefined {
+  const overrideByExercise = new Map<string, string>();
+  for (const block of blocks) {
+    const override = blockLocations[block.id];
+    if (override) overrideByExercise.set(block.exerciseId, override);
+  }
+
+  if (!sessionLocationId && overrideByExercise.size === 0) return undefined;
+
+  return {
+    currentLocationId: sessionLocationId,
+    scopeForExercise: (id) => scopeByExercise.get(id) ?? 'global',
+    locationForExercise: (id) => overrideByExercise.get(id) ?? null,
+  };
 }
 
 export default function WorkoutPage() {
@@ -457,6 +514,11 @@ export default function WorkoutPage() {
   const [currentBlockIndex, setCurrentBlockIndex] = useState(0);
   const [completedSets, setCompletedSets] = useState<SetLog[]>([]);
   const [currentSetNumber, setCurrentSetNumber] = useState(1);
+  // An in-flight delete's renumbering UPDATEs, if any. A set logged while they
+  // are still on the wire would probe max(set_number) and see the PRE-compaction
+  // numbering, handing itself a number past the end of the block — re-opening
+  // the gap the delete just closed. Null whenever no delete is outstanding.
+  const pendingSetRenumberRef = useRef<Promise<void> | null>(null);
   const [showRestTimer, setShowRestTimer] = useState(false);
   const [restTimerDuration, setRestTimerDuration] = useState<number | null>(null); // Custom rest time (for warmups)
   // Why the running rest isn't the plain stored prescription (effort
@@ -526,10 +588,22 @@ export default function WorkoutPage() {
   
   // Drag reorder state for exercises
   const [draggedBlockIndex, setDraggedBlockIndex] = useState<number | null>(null);
+  // Identity of the block under the finger. The floating preview renders from
+  // this, never from blocks[draggedBlockIndex] — an index re-resolves to a
+  // different exercise the instant the list reorders, which made the preview
+  // flash the displaced exercise on drop.
+  const [draggedBlockId, setDraggedBlockId] = useState<string | null>(null);
   const [dragOverBlockIndex, setDragOverBlockIndex] = useState<number | null>(null);
   const [isDraggingBlock, setIsDraggingBlock] = useState(false);
+  // Mirrors isDraggingBlock for the document listeners, and doubles as the
+  // drop latch (written synchronously on drag start / drop).
+  const isDraggingBlockRef = useRef(isDraggingBlock);
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const preCollapseStateRef = useRef<{ allCollapsed: boolean; collapsedBlocks: Set<string> } | null>(null);
+  // Latest blocks, for drag handlers that must not take `blocks` as a dep
+  // (their identity is captured by the grip's latest-ref wrappers).
+  const blocksRef = useRef<ExerciseBlockWithExercise[]>(blocks);
+  blocksRef.current = blocks;
 
   // Focus mode: keep only the current exercise expanded so you see just the
   // sets you're working on. Re-focuses when you advance to the next exercise;
@@ -585,6 +659,32 @@ export default function WorkoutPage() {
   // Stamped on every set logged here and used to scope local-scope exercise
   // history for calibration. Null = legacy/unknown session.
   const [sessionLocationId, setSessionLocationId] = useState<string | null>(null);
+  // Per-exercise location overrides (exercise_blocks.location_id), keyed by
+  // block id. A block absent from this map, or mapped to null, follows the
+  // session — "which gym" and "which machine" are different questions, and a
+  // gym with two hip adduction machines needs the second one.
+  const [blockLocations, setBlockLocations] = useState<Record<string, string | null>>({});
+  // Which location the picker sheet is currently editing (null = closed).
+  const [locationPickerTarget, setLocationPickerTarget] = useState<
+    { kind: 'session' } | { kind: 'exercise'; blockId: string } | null
+  >(null);
+  // Everything needed to recompute exercise history when a location changes
+  // mid-session. The history ROWS never change (they're all this user's past
+  // sets, fetched once at load); only which of them count as "this machine's
+  // track" does — so a location change re-scopes in memory rather than
+  // re-querying.
+  const historyScopeSourceRef = useRef<{
+    blocks: HistoryBlockRow[];
+    scopeByExercise: Map<string, ProgressionScope>;
+    modalityByExercise: Record<string, ExerciseType | undefined>;
+  } | null>(null);
+  // Exercises added AFTER load fetch their history individually (already
+  // computed, not raw rows), so they aren't in the ref above and can't be
+  // re-scoped from it. Their inputs are kept here so a location change
+  // refetches them instead of dropping their cards' history.
+  const midSessionHistoryRef = useRef<
+    Map<string, { scope: ProgressionScope; exerciseType: ExerciseType | undefined; userId: string }>
+  >(new Map());
   const [showLocationDropdown, setShowLocationDropdown] = useState(false);
   // Blocklist of equipment_types ids the selected location lacks; consumed by
   // the shared fail-closed equipment filter (picker, swaps, injury adjuster).
@@ -676,7 +776,11 @@ export default function WorkoutPage() {
     libidoRating?: Rating | null;
     bodyweightKg?: number | null;
   } | null>(null);
-  
+
+  // Most recent weigh-in (today's if there is one, otherwise the last one on
+  // record). Used for bodyweight-exercise load math — see currentBodyweightKg.
+  const [latestBodyweightKg, setLatestBodyweightKg] = useState<number | null>(null);
+
   // State for showing swap modal for a specific exercise due to injury
   const [showSwapForInjury, setShowSwapForInjury] = useState<string | null>(null);
   const [showPageLevelSwapModal, setShowPageLevelSwapModal] = useState(false);
@@ -1101,43 +1205,37 @@ export default function WorkoutPage() {
       try {
         const supabase = createUntypedClient();
 
-        // Fetch session and exercise blocks in parallel (both only need sessionId from URL)
-        const [sessionResult, blocksResult] = await Promise.all([
-          supabase
-            .from('workout_sessions')
-            .select('*')
-            .eq('id', sessionId)
-            .single(),
-          supabase
-            .from('exercise_blocks')
-            .select(`
-              *,
-              exercises (*)
-            `)
-            .eq('workout_session_id', sessionId)
-            .order('order')
-        ]);
+        // Reads + row->domain mapping live in ./_lib/loadSession so the
+        // headless driver reads a session back exactly the way the UI does
+        // (same rows, same ordering, same mapping). What stays here is the
+        // routing/auto-discard choreography and the React state it drives.
+        const loaded = await loadWorkoutSession(supabase, sessionId);
+        if (!loaded) throw new Error('Workout session not found');
 
-        const { data: sessionData, error: sessionError } = sessionResult;
-        const { data: blocksData, error: blocksError } = blocksResult;
-
-        if (sessionError || !sessionData) {
-          throw new Error('Workout session not found');
-        }
-        if (blocksError) throw blocksError;
-
-        // Transform data (row → domain mapping lives in ./_lib/sessionMapping)
-        const transformedSession: WorkoutSession = mapWorkoutSessionRow(sessionData);
+        const {
+          session: transformedSession,
+          blocks: transformedBlocks,
+          sets: transformedSets,
+          skippedBlockIds: skippedIds,
+          locationId: loadedLocationId,
+          raw: sessionData,
+        } = loaded;
 
         // The location this session was started at — stamped on new sets and
         // used to scope local-scope exercise history for calibration. `null`
         // for legacy sessions / databases without the location column.
-        const loadedLocationId = (sessionData.location_id as string | null) ?? null;
         setSessionLocationId(loadedLocationId);
 
-        const transformedBlocks: ExerciseBlockWithExercise[] = (blocksData || [])
-          .filter((block: LoadedBlockRow) => block.exercises) // Filter out blocks without exercises
-          .map(mapLoadedBlockRow);
+        // Per-exercise overrides, for the exercise on a different machine than
+        // the rest of the session. Absent column (pre-migration) reads as no
+        // overrides, which is the behavior every session had before this.
+        const loadedBlockLocations: Record<string, string | null> = Object.fromEntries(
+          loaded.rawBlocks.map((row) => [
+            (row as { id: string }).id,
+            ((row as { location_id?: string | null }).location_id ?? null) as string | null,
+          ])
+        );
+        setBlockLocations(loadedBlockLocations);
 
         // An already-archived session (deep link / back-button revisit after
         // auto-discard) behaves like a deleted one: nothing to resume.
@@ -1150,8 +1248,7 @@ export default function WorkoutPage() {
         // Stale-session auto-discard (P0-1): an abandoned empty ad-hoc shell
         // (0 blocks, 0 sets, in_progress, >4h old) is discarded instead of
         // resuming into a phantom "Continue workout". Predicate is the pure
-        // isStaleEmptyAdhocSession (unit-tested); 0 blocks already implies 0
-        // sets, but both are passed explicitly to make the guard unmistakable.
+        // isStaleEmptyAdhocSession (unit-tested).
         // Archived, not deleted (soft delete) once the session_auto_discard
         // migration is applied; hard-delete fallback until then.
         if (
@@ -1161,8 +1258,8 @@ export default function WorkoutPage() {
               mesocycleId: transformedSession.mesocycleId,
               startedAt: transformedSession.startedAt,
             },
-            (blocksData || []).length,
-            0 // no blocks -> no sets; querying sets separately would be redundant
+            loaded.blockRowCount,
+            transformedSets.length
           )
         ) {
           await discardStaleSession(supabase, sessionId);
@@ -1173,53 +1270,21 @@ export default function WorkoutPage() {
 
         setSession(transformedSession);
         setBlocks(transformedBlocks);
-
         // Restore per-block skip state (exercise_blocks.skipped_at)
-        const skippedIds = new Set<string>(
-          ((blocksData || []) as Array<{ id: string; skipped_at?: string | null }>)
-            .filter((block) => Boolean(block.skipped_at))
-            .map((block) => block.id)
-        );
         setSkippedBlockIds(skippedIds);
 
-
-        // Fetch existing sets for this workout (important for viewing completed workouts or resuming)
-        const blockIds = transformedBlocks.map((b: ExerciseBlockWithExercise) => b.id);
-        if (blockIds.length > 0) {
-          const { data: existingSets } = await supabase
-            .from('set_logs')
-            .select('*')
-            .in('exercise_block_id', blockIds)
-            .order('set_number');
-          
-          if (existingSets && existingSets.length > 0) {
-            const transformedSets: SetLog[] = existingSets.map(mapSetLogRow);
-            setCompletedSets(transformedSets);
-            
-            // Set current set number based on existing sets for the first incomplete block
-            const firstIncompleteBlock = transformedBlocks.find((block: ExerciseBlockWithExercise) => {
-              if (skippedIds.has(block.id)) return false;
-              const blockSets = transformedSets.filter(s => s.exerciseBlockId === block.id && !s.isWarmup && s.setType !== 'warmup');
-              return blockSets.length < block.targetSets;
-            });
-            
-            if (firstIncompleteBlock) {
-              const blockIdx = transformedBlocks.findIndex((b: ExerciseBlockWithExercise) => b.id === firstIncompleteBlock.id);
-              const existingBlockSets = transformedSets.filter(s => s.exerciseBlockId === firstIncompleteBlock.id && !s.isWarmup && s.setType !== 'warmup');
-              setCurrentBlockIndex(blockIdx);
-              setCurrentSetNumber(existingBlockSets.length + 1);
-            }
-          } else if (skippedIds.size > 0) {
-            // No sets yet: make sure the starting exercise isn't a skipped block
-            const firstActiveIdx = transformedBlocks.findIndex(
-              (b: ExerciseBlockWithExercise) => !skippedIds.has(b.id)
-            );
-            if (firstActiveIdx > 0) {
-              setCurrentBlockIndex(firstActiveIdx);
-            }
-          }
+        if (transformedSets.length > 0) {
+          setCompletedSets(transformedSets);
         }
-        
+
+        // Where a resumed session picks up (pure; skipped blocks are never the
+        // target, and with no sets logged the first NON-skipped block wins).
+        if (transformedBlocks.length > 0) {
+          const resume = resolveResumePosition(transformedBlocks, transformedSets, skippedIds);
+          setCurrentBlockIndex(resume.blockIndex);
+          setCurrentSetNumber(resume.setNumber);
+        }
+
         // Fetch user profile, DEXA, calibrated lifts, mesocycle, and completed count in parallel
         // Also fetch exercise history for all exercises (moved here from later in the function)
         const exerciseIds = transformedBlocks.map((b: ExerciseBlockWithExercise) => b.exerciseId);
@@ -1441,7 +1506,7 @@ export default function WorkoutPage() {
           // derived, honoring any per-exercise override) so local-scope
           // exercises read location-scoped history for calibration.
           const scopeByExercise = new Map<string, ProgressionScope>();
-          for (const row of (blocksData || []) as LoadedBlockRow[]) {
+          for (const row of loaded.rawBlocks) {
             const ex = row.exercises as
               | {
                   id: string;
@@ -1463,23 +1528,33 @@ export default function WorkoutPage() {
             );
           }
 
+          // Modality per exercise: duration exercises get no e1RM anchor and
+          // a heaviest-load/longest-hold PR instead of an Epley one.
+          const modalityByExercise = Object.fromEntries(
+            transformedBlocks.map((b) => [b.exerciseId, b.exercise.exerciseType])
+          );
+
+          // Retained so a mid-session location change can re-scope these same
+          // rows without another round trip (see applyLocationChange).
+          historyScopeSourceRef.current = {
+            blocks: allHistoryBlocks,
+            scopeByExercise,
+            modalityByExercise,
+          };
+
           // Group by exercise, cap at 10 blocks each, compute E1RM/PR (./_lib/suggestions).
-          // With a known session location, local-scope exercises are narrowed
-          // to that location's calibration track (softened fallback to other
-          // gyms on a first session there).
+          // With a known location, local-scope exercises are narrowed to that
+          // location's calibration track (softened fallback to other gyms on a
+          // first session there).
           const histories: Record<string, ExerciseHistoryData> = buildExerciseHistories(
             allHistoryBlocks,
-            loadedLocationId
-              ? {
-                  currentLocationId: loadedLocationId,
-                  scopeForExercise: (id) => scopeByExercise.get(id) ?? 'global',
-                }
-              : undefined,
-            // Modality per exercise: duration exercises get no e1RM anchor and
-            // a heaviest-load/longest-hold PR instead of an Epley one.
-            Object.fromEntries(
-              transformedBlocks.map((b) => [b.exerciseId, b.exercise.exerciseType])
-            )
+            buildHistoryScopeOptions(
+              loadedLocationId,
+              loadedBlockLocations,
+              transformedBlocks,
+              scopeByExercise
+            ),
+            modalityByExercise
           );
 
           setExerciseHistories(histories);
@@ -1992,15 +2067,32 @@ export default function WorkoutPage() {
           .maybeSingle();
         
         // Convert weight to kg if needed
-        let bodyweightKg: number | null = null;
-        if (weightEntry?.weight) {
-          if (weightEntry.unit === 'lb') {
-            bodyweightKg = weightEntry.weight * 0.453592;
-          } else {
-            bodyweightKg = weightEntry.weight;
-          }
+        const toKg = (entry: { weight: number; unit?: string | null } | null | undefined) => {
+          if (!entry?.weight) return null;
+          return entry.unit === 'lb' ? entry.weight * 0.453592 : entry.weight;
+        };
+        const bodyweightKg = toKg(weightEntry);
+
+        // Bodyweight for load math (weighted/assisted modes, effective load)
+        // must not depend on the lifter having weighed in *today* — most
+        // people don't weigh in before every session. Fall back to the most
+        // recent weigh-in so the Weighted/Assisted control stays available.
+        // Only today's entry pre-fills the check-in form below, so a stale
+        // weight is never written back as today's weigh-in.
+        if (bodyweightKg) {
+          setLatestBodyweightKg(bodyweightKg);
+        } else {
+          const { data: lastWeightEntry } = await supabase
+            .from('weight_log')
+            .select('weight, unit')
+            .eq('user_id', user.id)
+            .lte('logged_at', today)
+            .order('logged_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          setLatestBodyweightKg(toKg(lastWeightEntry));
         }
-        
+
         // Set check-in data for pre-filling
         if (dailyCheckIn || weightEntry) {
           setTodayCheckInData({
@@ -2210,6 +2302,59 @@ export default function WorkoutPage() {
     () => blocks.filter((b) => !skippedBlockIds.has(b.id)),
     [blocks, skippedBlockIds]
   );
+  // ---- Session duration estimate -------------------------------------------
+  // "How much longer is this?" — one estimate feeding the header pill, the
+  // finish card, and the add-exercise picker's "+N min". Declared before the
+  // early returns so the memo obeys the rules of hooks.
+  const durationBlocks = useMemo(
+    () => toDurationBlocks(blocks, completedSets, skippedBlockIds),
+    [blocks, completedSets, skippedBlockIds]
+  );
+  // Elapsed feeds pace calibration, so the estimate re-derives each tick. It's
+  // a handful of arithmetic over the block list — the page already re-renders
+  // every second for the timer.
+  const durationEstimate = useMemo(() => {
+    const elapsedSeconds = timerStartedAt ? workoutTimer.elapsedSeconds : 0;
+    return estimateWorkoutDuration(durationBlocks, {
+      elapsedSeconds,
+      // Time already served in the current rest, so the readout counts down
+      // through a rest instead of climbing and snapping back on the next set.
+      // Read off the wall clock (frozen at pausedAtMs while paused) rather than
+      // elapsed — the window opens at the last logged set, so pauses taken
+      // earlier in the session are outside it and can't eat the credit.
+      secondsSinceLastSet: secondsSinceLastSet(
+        completedSets,
+        Date.now(),
+        workoutTimer.pausedAtMs
+      ),
+    });
+    // Re-derives on each timer tick; while paused the tick stops and
+    // pausedAtMs pins the rest measurement, so the estimate holds steady.
+  }, [
+    durationBlocks,
+    completedSets,
+    timerStartedAt,
+    workoutTimer.elapsedSeconds,
+    workoutTimer.pausedAtMs,
+  ]);
+
+  // What the add-exercise picker shows while the user browses: the session
+  // duration it would have once the pending selection lands, and the cost of
+  // that selection on its own.
+  const pickerSessionDuration = useMemo(() => {
+    const addedSeconds = estimatePendingAdditionSeconds(durationBlocks, selectedExercisesToAdd);
+    const baseSeconds =
+      durationEstimate.remainingSets > 0 || durationEstimate.totalSets > 0
+        ? durationEstimate.projectedTotalSeconds
+        : 0;
+    const totalSeconds = baseSeconds + addedSeconds;
+    if (totalSeconds <= 0) return null;
+    return {
+      totalLabel: formatDurationEstimate(totalSeconds),
+      deltaLabel: addedSeconds > 0 ? formatDurationDelta(addedSeconds) : null,
+    };
+  }, [durationBlocks, durationEstimate, selectedExercisesToAdd]);
+
   // Rolling-7-day credited sets (history + this session) vs the MEV–MRV band,
   // for the coarse muscles this workout trains. Shares the readiness sheet's
   // cached history query and volume model, so the strip and the sheet agree.
@@ -2361,6 +2506,44 @@ export default function WorkoutPage() {
     }
   };
 
+  // Bodyweight used for bodyweight-exercise load math (Bodyweight/Weighted/
+  // Assisted modes and effective load). Freshest source wins: a weight typed
+  // into this session's pre-workout check-in, then today's weigh-in, then the
+  // most recent one on record. Without this the control disappeared entirely
+  // whenever the lifter hadn't weighed in today.
+  const currentBodyweightKg =
+    session?.preWorkoutCheckIn?.bodyweightKg ||
+    todayCheckInData?.bodyweightKg ||
+    latestBodyweightKg ||
+    undefined;
+
+  // Mid-workout weigh-in from ExerciseCard's no-bodyweight-on-record state.
+  // Persists exactly like the pre-workout check-in path (upsert into today's
+  // weight_log row), then updates local state so currentBodyweightKg resolves
+  // and the Weighted/Assisted control appears without leaving the workout.
+  // Identity-stable: the card's memo comparator never compares callbacks.
+  const handleBodyweightLogged = useCallback(async (weightKg: number) => {
+    const supabase = createUntypedClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+    const { error } = await supabase
+      .from('weight_log')
+      .upsert(
+        {
+          user_id: user.id,
+          weight: weightKg,
+          unit: 'kg',
+          logged_at: getLocalDateString(),
+        },
+        { onConflict: 'user_id,logged_at' }
+      );
+    if (error) throw error;
+    setLatestBodyweightKg(weightKg);
+    // Today's weigh-in also pre-fills the check-in form, same as a Body-tab
+    // entry made before the session would have.
+    setTodayCheckInData(prev => ({ ...(prev ?? {}), bodyweightKg: weightKg }));
+  }, []);
+
   // Readiness easing for this session (Phase 1.3): computed from the
   // check-in's readiness score, threaded into ExerciseCard (RIR chips +
   // suggestion banner reason).
@@ -2430,7 +2613,7 @@ export default function WorkoutPage() {
       qualityReason = formLabel;
     }
 
-    const loggedAt = new Date().toISOString();
+    const loggedAt = clockNow().toISOString();
     const setType = data.setType || 'normal';
 
     // Effort-modulated rest for the timer this set starts
@@ -2462,100 +2645,101 @@ export default function WorkoutPage() {
     // the network.
     try {
       const supabase = createUntypedClient();
-      const online = typeof navigator === 'undefined' || navigator.onLine;
 
-      // Prefer the DB's max set_number (avoids races/stale state); fall back
-      // to local numbering when offline.
-      let nextSetNumber = currentSetNumber;
-      if (online) {
-        markSetPhase('probe_sent'); // setLogTiming
-        try {
-          const { data: maxSetResult } = await supabase
-            .from('set_logs')
-            .select('set_number')
-            .eq('exercise_block_id', currentBlock.id)
-            .eq('is_warmup', false)
-            .order('set_number', { ascending: false })
-            .limit(1)
-            .single();
-          if (maxSetResult?.set_number != null) {
-            // Floor at the local number: a set still queued in the offline
-            // outbox isn't in the DB max yet, and reusing its number would
-            // create duplicate set_numbers in the block. DB max still wins
-            // when it's ahead (another tab/device logged sets).
-            nextSetNumber = Math.max(currentSetNumber, maxSetResult.set_number + 1);
-          }
-        } catch {
-          // Numbering probe failed (flaky network) — local numbering is fine.
-        }
-        markSetPhase('probe_done'); // setLogTiming
+      // Offline-first persistence (P0-2). The whole write path — numbering
+      // probe, quality/role classification, row build, insert-or-enqueue and
+      // rollback — lives in lib/training/logSet so the headless driver runs
+      // the same code. Everything below this call is UI choreography.
+      //
+      // The set id is generated HERE and handed in, so it is the operation's
+      // idempotency key: a retry re-sends the same id and the outbox's
+      // ignoreDuplicates upsert makes it a no-op instead of a second set.
+      const setId = crypto.randomUUID();
+
+      // Let a just-issued delete finish compacting the database first. Its
+      // UPDATEs move rows DOWN, so probing before they land reads a stale
+      // maximum and resolveSetNumber's floor would carry that number forward.
+      // Errors are the delete path's to report; this is only a barrier.
+      if (pendingSetRenumberRef.current) {
+        try { await pendingSetRenumberRef.current; } catch { /* reported by handleDeleteSet */ }
       }
 
-      // Infer the set role (working | ramp) from this set's load vs the block's
-      // top working set so far, so ramp/feeder sets aren't graded or counted as
-      // junk volume. Provisional at log time (a heavier later set can't retro-
-      // relabel an earlier row live); the set_roles migration recomputes roles
-      // authoritatively once a session's sets are all known.
       const blockWorkingSets = completedSets
         .filter((s) => s.exerciseBlockId === currentBlock.id && !s.isWarmup)
         .map((s) => ({ weightKg: s.weightKg }));
-      const blockTopKg = sessionTopSetWeightKg([...blockWorkingSets, { weightKg: data.weightKg }]);
-      const setRole = data.weightKg > 0 ? inferSetRole(data.weightKg, blockTopKg) : 'working';
 
-      const setId = crypto.randomUUID();
-      const row = {
-        id: setId,
-        exercise_block_id: currentBlock.id,
-        set_number: nextSetNumber,
-        weight_kg: data.weightKg,
-        reps: data.reps,
-        set_type: setType,
-        set_role: setRole,
-        suggestion_engine_version: SUGGESTION_ENGINE_VERSION,
-        // Stamp the session's location so this set feeds the right location's
-        // calibration track for local-scope exercises (null = legacy/unknown).
-        location_id: sessionLocationId,
-        parent_set_id: data.parentSetId || null,
-        rpe: data.rpe,
-        is_warmup: false,
-        quality: quality,
-        quality_reason: qualityReason,
-        note: data.note || null,
-        logged_at: loggedAt,
-        feedback: data.feedback ? JSON.stringify(data.feedback) : null,
-        bodyweight_data: data.bodyweightData ? JSON.stringify(data.bodyweightData) : null,
-      };
+      let nextSetNumber = currentSetNumber;
+      const result = await logSet(
+        {
+          supabase,
+          onPhase: markSetPhase,
+          applyOptimistic: (set) => {
+            nextSetNumber = set.setNumber;
+            setCompletedSets((prevSets) => [...prevSets, set]);
+            setCurrentSetNumber(set.setNumber + 1);
+            logSetToStore(currentBlock.id, set);
+            // setLogTiming: local commit + first frame after it (approximates paint)
+            schedulePaintMark();
+          },
+          rollbackOptimistic: (set) => {
+            setCompletedSets((prevSets) => prevSets.filter((s) => s.id !== set.id));
+            setCurrentSetNumber(set.setNumber);
+            deleteSetFromStore(currentBlock.id, set.id);
+          },
+          onSyncState: (id, state) =>
+            setSetSync((prev) => {
+              if (state === 'saving') return { ...prev, [id]: 'saving' };
+              return { ...prev, [id]: state };
+            }),
+        },
+        {
+          setId,
+          exerciseBlockId: currentBlock.id,
+          // Counted from the block's live sets, not from `currentSetNumber`.
+          // The counter is choreography — it drives rest/AMRAP/"last set"
+          // decisions — and it only ever moves forward, so a deleted set left
+          // its number spent and every later set inherited the hole ("Set 1,
+          // Set 3"). The number that reaches the DATABASE is derived from what
+          // is actually logged, which is dense by construction (B1's
+          // compaction) and therefore self-correcting.
+          localNextSetNumber: nextSetNumberForBlock(completedSets, currentBlock.id),
+          weightKg: data.weightKg,
+          reps: data.reps,
+          rpe: data.rpe,
+          loggedAt,
+          setType,
+          blockWorkingSets,
+          // Stamp the location this set was actually performed at so it feeds
+          // the right calibration track for local-scope exercises: this
+          // exercise's own machine if one is pinned, otherwise the session's
+          // gym (null = legacy/unknown).
+          locationId: resolveEffectiveLocation(
+            blockLocations[currentBlock.id],
+            sessionLocationId
+          ),
+          parentSetId: data.parentSetId || null,
+          note: data.note || null,
+          feedback: data.feedback,
+          bodyweightData: data.bodyweightData,
+        }
+      );
 
-      const newSet: SetLog = {
-        id: setId,
-        exerciseBlockId: currentBlock.id,
-        setNumber: nextSetNumber,
-        weightKg: data.weightKg,
-        reps: data.reps,
-        rpe: data.rpe,
-        restSeconds: null,
-        isWarmup: false,
-        setType: setType,
-        setRole: setRole,
-        suggestionEngineVersion: SUGGESTION_ENGINE_VERSION,
-        parentSetId: data.parentSetId || null,
-        quality: quality,
-        qualityReason: qualityReason,
-        note: data.note || null,
-        loggedAt: loggedAt,
-        feedback: data.feedback,
-        bodyweightData: data.bodyweightData,
-      };
+      if (result.status === 'rejected') {
+        // Optimistic state was already unwound by rollbackOptimistic.
+        console.error('Failed to save set:', result.error);
+        setSetSync((prev) => { const next = { ...prev }; delete next[setId]; return next; });
+        setError(`Failed to save set: ${result.error.message}`);
+        showError('Failed to save set - please try again');
+        endSetTiming(); // setLogTiming
+        return null;
+      }
 
-      // Optimistic local state first — the UI (and Zustand-persist recovery)
-      // must not depend on the write landing.
-      setCompletedSets(prevSets => [...prevSets, newSet]);
-      setCurrentSetNumber(nextSetNumber + 1);
-      logSetToStore(currentBlock.id, newSet);
-      setSetSync(prev => ({ ...prev, [setId]: 'saving' }));
-      // setLogTiming: local commit + first frame after it (approximates paint)
-      markSetPhase('t1_local_commit');
-      schedulePaintMark();
+      const newSet = result.set;
+      if (result.status === 'queued') refreshOutboxCount();
+      // Whether the set row exists in the DB yet — decides if the joint pain
+      // event below may carry the set_log_id FK or must omit it (queued sets
+      // haven't been inserted, so referencing them would violate the FK).
+      const setRowPersisted = result.status === 'saved';
 
       // Logging a set past a pending soreness ask dismisses it for the
       // session (records null; the muscle is never re-asked). Zero extra taps.
@@ -2568,59 +2752,6 @@ export default function WorkoutPage() {
           !muscleSorenessAsked[blockMuscle]
         ) {
           recordSorenessAsked(blockMuscle, null);
-        }
-      }
-
-      // Whether the set row exists in the DB yet — decides if the joint pain
-      // event below may carry the set_log_id FK or must omit it (queued sets
-      // haven't been inserted, so referencing them would violate the FK).
-      let setRowPersisted = false;
-
-      if (!online) {
-        await enqueueSetInsert(setId, row);
-        markSetPhase('t2_outbox_enqueued'); // setLogTiming
-        setSetSync(prev => ({ ...prev, [setId]: 'queued' }));
-        refreshOutboxCount();
-      } else {
-        let insertError: { message: string; code?: string } | null = null;
-        markSetPhase('t3_insert_sent'); // setLogTiming
-        try {
-          const result = await supabase.from('set_logs').insert(row);
-          insertError = result.error;
-          // Schema-cache column miss (a set_roles-style migration not yet applied
-          // to this database): drop the optional columns and retry once so a
-          // migration lag can't block set logging mid-workout.
-          if (insertError && isMissingColumnError(insertError)) {
-            const retry = await supabase
-              .from('set_logs')
-              .insert(withoutOptionalSetLogColumns(row));
-            insertError = retry.error;
-          }
-        } catch (e) {
-          insertError = { message: e instanceof Error ? e.message : String(e) };
-        }
-        markSetPhase('t4_insert_done'); // setLogTiming
-
-        if (insertError && isNetworkError(insertError)) {
-          // Connectivity died mid-write: queue it, keep the optimistic state.
-          await enqueueSetInsert(setId, row);
-          markSetPhase('t2_outbox_enqueued'); // setLogTiming
-          setSetSync(prev => ({ ...prev, [setId]: 'queued' }));
-          refreshOutboxCount();
-        } else if (insertError) {
-          // Real server rejection: roll the optimistic set back.
-          console.error('Failed to save set:', insertError);
-          setCompletedSets(prevSets => prevSets.filter(s => s.id !== setId));
-          setCurrentSetNumber(nextSetNumber);
-          deleteSetFromStore(currentBlock.id, setId);
-          setSetSync(prev => { const next = { ...prev }; delete next[setId]; return next; });
-          setError(`Failed to save set: ${insertError.message}`);
-          showError('Failed to save set - please try again');
-          endSetTiming(); // setLogTiming
-          return null;
-        } else {
-          setRowPersisted = true;
-          setSetSync(prev => ({ ...prev, [setId]: 'saved' }));
         }
       }
 
@@ -2962,29 +3093,12 @@ export default function WorkoutPage() {
   );
 
   const handleSetEdit = async (setId: string, data: { weightKg: number; reps: number; rpe: number; repsInTank?: RepsInTank; bodyweightData?: BodyweightData }) => {
-    const quality = data.rpe >= 7.5 && data.rpe <= 9.5 ? 'stimulative' : data.rpe <= 5 ? 'junk' : 'effective' as const;
-
-    // Use provided bodyweightData if available, otherwise preserve existing
     const existingSet = completedSets.find(s => s.id === setId);
-    const updatedBodyweightData = data.bodyweightData || existingSet?.bodyweightData;
-
-    // Keep feedback's RIR consistent with the edited effort — the completed-set
-    // display prefers feedback.repsInTank over the RPE-derived value.
-    // An explicit repsInTank (RIR chip in the inline editor) is stored exactly;
-    // otherwise resync from RPE only when the new RPE disagrees with the
-    // existing RIR: that round trip is lossy (RIR 2 → RPE 7.5 → round(2.5) = 3),
-    // so an unconditional rewrite would mutate RIR on weight/reps-only edits.
-    const updatedFeedback: SetFeedback | undefined =
-      data.repsInTank !== undefined
-        ? existingSet?.feedback && existingSet.feedback.repsInTank !== data.repsInTank
-          ? { ...existingSet.feedback, repsInTank: data.repsInTank }
-          : undefined
-        : existingSet?.feedback && rirToRpe(existingSet.feedback.repsInTank) !== data.rpe
-          ? {
-              ...existingSet.feedback,
-              repsInTank: Math.max(0, Math.min(4, Math.round(10 - data.rpe))) as RepsInTank,
-            }
-          : undefined;
+    // Quality recompute + the lossy RIR/RPE resync rule live in the domain
+    // module (lib/training/logSet) so an edit made by the headless driver
+    // produces exactly the same row as one made in the UI.
+    const { patch, quality, feedback: updatedFeedback, bodyweightData: updatedBodyweightData } =
+      buildSetEditPatch(existingSet, data);
 
     // Update local state using functional update to avoid stale closure
     setCompletedSets(prevSets => prevSets.map(set =>
@@ -3013,32 +3127,11 @@ export default function WorkoutPage() {
       });
     }
 
-    // Update in database (or in the outbox if the set hasn't synced yet, P0-2)
     try {
-      const supabase = createUntypedClient();
-      const updateData: any = {
-        weight_kg: data.weightKg,
-        reps: data.reps,
-        rpe: data.rpe,
-        quality,
-      };
-
-      // Update bodyweight_data if provided or if it exists
-      if (updatedBodyweightData) {
-        updateData.bodyweight_data = updatedBodyweightData;
-      }
-
-      if (updatedFeedback) {
-        updateData.feedback = JSON.stringify(updatedFeedback);
-      }
-
-      if (await updateQueuedSet(setId, updateData)) {
-        setError(null);
-        return;
-      }
-
-      const { error: updateError } = await supabase.from('set_logs').update(updateData).eq('id', setId);
-
+      const { error: updateError } = await persistSetEdit(
+        { supabase: createUntypedClient() },
+        { setId, patch }
+      );
       if (updateError) {
         console.error('Failed to update set:', updateError);
         setError(`Failed to update set: ${updateError.message}`);
@@ -3046,16 +3139,6 @@ export default function WorkoutPage() {
         // For now, just show error; user can refresh if needed
       } else {
         setError(null);
-        // P1-3 detection A: stamp edited_at (best-effort, dormant until the
-        // set_logs.edited_at migration is applied). Separate update so a
-        // missing column can't break in-session editing.
-        await supabase
-          .from('set_logs')
-          .update({ edited_at: new Date().toISOString() })
-          .eq('id', setId)
-          .then(({ error: stampErr }: { error: unknown }) => {
-            if (stampErr) console.debug('edited_at stamp skipped (migration not applied?)');
-          });
       }
     } catch (err) {
       console.error('Failed to update set:', err);
@@ -3067,23 +3150,22 @@ export default function WorkoutPage() {
     // Find the set before deleting to get the blockId for store sync
     const setToDelete = completedSets.find(s => s.id === setId);
 
-    // Remove from local state using functional update to avoid stale closure
+    // Remove from local state using functional update to avoid stale closure.
+    // The renumbering PLAN is captured here too: the same compaction has to be
+    // written to the database (B1), and deriving it from a second read of
+    // `completedSets` would risk disagreeing with what local state actually
+    // became. Computing the plan is pure, so a StrictMode double-invoke of
+    // this updater yields the same answer.
+    let renumberChanges: SetNumberChange[] = [];
     setCompletedSets(prevSets => {
       const setInPrev = prevSets.find(s => s.id === setId);
       if (!setInPrev) return prevSets;
-
-      // Filter out the deleted set and renumber remaining sets in the same block
-      const filteredSets = prevSets.filter(set => set.id !== setId);
-      const blockId = setInPrev.exerciseBlockId;
-
-      // Renumber sets in the same block (immutably)
-      let blockSetNumber = 1;
-      return filteredSets.map(set => {
-        if (set.exerciseBlockId === blockId && !set.isWarmup && set.setType !== 'warmup') {
-          return { ...set, setNumber: blockSetNumber++ };
-        }
-        return set;
-      });
+      const plan = planBlockRenumber(
+        prevSets.filter(set => set.id !== setId),
+        setInPrev.exerciseBlockId
+      );
+      renumberChanges = plan.changes;
+      return plan.sets;
     });
 
     // Sync to store for resume functionality
@@ -3092,32 +3174,69 @@ export default function WorkoutPage() {
     }
     setSetSync(prev => { const next = { ...prev }; delete next[setId]; return next; });
 
-    // Delete from database — unless the set never left the outbox (P0-2).
-    try {
-      if (await removeQueuedSet(setId)) {
-        refreshOutboxCount();
-        setError(null);
-        return;
-      }
-      const supabase = createUntypedClient();
-      const { error: deleteError } = await supabase.from('set_logs').delete().eq('id', setId);
+    // Give back the number the deleted set was holding. `currentSetNumber` is
+    // the counter behind the "Set N" logger header, the target-sets comparison
+    // and AMRAP eligibility, and it only ever counts UP — so without this a
+    // delete left it one past where the block actually stands. That is what
+    // made the numbering jump: the next set was written as 3 with only one set
+    // on the block. It is derived from the same `completedSets` snapshot
+    // `setToDelete` came from, minus this set, so it lands on the dense count.
+    // Only the ACTIVE block's counter is meaningful; deleting a set on some
+    // other block must leave it alone.
+    if (setToDelete && setToDelete.exerciseBlockId === currentBlock?.id) {
+      setCurrentSetNumber(
+        nextSetNumberForBlock(
+          completedSets.filter(s => s.id !== setId),
+          setToDelete.exerciseBlockId
+        )
+      );
+    }
 
-      if (deleteError) {
-        console.error('Failed to delete set:', deleteError);
-        setError(`Failed to delete set: ${deleteError.message}`);
-      } else {
-        setError(null);
+    const persist = (async () => {
+      try {
+        const supabase = createUntypedClient();
+        const { queued, error: deleteError } = await persistSetDelete({ supabase }, setId);
+        if (queued) refreshOutboxCount();
+        if (deleteError) {
+          console.error('Failed to delete set:', deleteError);
+          setError(`Failed to delete set: ${deleteError.message}`);
+        } else {
+          // Persist the same compaction the local state just applied, so the
+          // two numberings stay identical (B1). Without this the database keeps
+          // its gaps: the row shown as set 2 stays stored as set 3, and a set
+          // logged offline afterwards can carry a set_number the database still
+          // holds — which the UNIQUE (exercise_block_id, set_number) constraint
+          // refuses, dropping the set after the outbox's retries.
+          const { error: renumberError } = await persistSetRenumber({ supabase }, renumberChanges);
+          if (renumberError) {
+            console.error('Failed to renumber sets after delete:', renumberError);
+            setError(`Failed to renumber sets: ${renumberError.message}`);
+          } else {
+            setError(null);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to delete set:', err);
+        setError(err instanceof Error ? err.message : 'Failed to delete set');
       }
-    } catch (err) {
-      console.error('Failed to delete set:', err);
-      setError(err instanceof Error ? err.message : 'Failed to delete set');
+    })();
+
+    // Published so the next logged set can wait for it — see the await in
+    // handleSetComplete. Cleared once settled so the wait costs nothing in the
+    // usual case where no delete is outstanding.
+    pendingSetRenumberRef.current = persist;
+    try {
+      await persist;
+    } finally {
+      if (pendingSetRenumberRef.current === persist) pendingSetRenumberRef.current = null;
     }
   };
 
   /** Undo the just-logged set (toast action, P1-4). */
   const undoLoggedSet = async (setId: string, _blockId: string) => {
+    // No counter adjustment here: handleDeleteSet already returns the number to
+    // the block's dense count. Decrementing again would double-count the undo.
     await handleDeleteSet(setId);
-    setCurrentSetNumber(prev => Math.max(1, prev - 1));
   };
 
   // Auto-adjust message state
@@ -3207,31 +3326,9 @@ export default function WorkoutPage() {
               .update({ exercise_id: result.replacement.id })
               .eq('id', block.id);
             
-            // Update local state
-            const completeExercise: Exercise = {
-              id: fullExData.id,
-              name: fullExData.name,
-              primaryMuscle: fullExData.primary_muscle,
-              secondaryMuscles: fullExData.secondary_muscles || [],
-              mechanic: fullExData.mechanic,
-              defaultRepRange: fullExData.default_rep_range || [8, 12],
-              defaultRir: fullExData.default_rir || 2,
-              minWeightIncrementKg: fullExData.min_weight_increment_kg || 2.5,
-              availableIncrementsKg: fullExData.available_increments_kg ?? null,
-              formCues: fullExData.form_cues || [],
-              commonMistakes: fullExData.common_mistakes || [],
-              setupNote: fullExData.setup_note || '',
-              movementPattern: fullExData.movement_pattern || '',
-              equipmentRequired: fullExData.equipment_required || [],
-              hypertrophyScore: fullExData.hypertrophy_tier ? {
-                tier: fullExData.hypertrophy_tier,
-                stretchUnderLoad: fullExData.stretch_under_load || 3,
-                resistanceProfile: fullExData.resistance_profile || 3,
-                progressionEase: fullExData.progression_ease || 3,
-              } : undefined,
-              // Exercise type for duration-based exercises (planks, holds)
-              exerciseType: fullExData.exercise_type as ExerciseType | undefined,
-            };
+            // Update local state. Same mapping as the session load, so the
+            // swapped-in exercise carries its bodyweight metadata.
+            const completeExercise = mapLoadedExerciseRow(fullExData as LoadedExerciseRow);
 
             setBlocks(prevBlocks => prevBlocks.map(b =>
               b.id === block.id
@@ -3488,7 +3585,11 @@ export default function WorkoutPage() {
       }
 
       setDraggedBlockIndex(index);
+      setDraggedBlockId(blocksRef.current[index]?.id ?? null);
       setIsDraggingBlock(true);
+      // Arm the drop latch synchronously — a release can land before the
+      // ref-sync effect has run.
+      isDraggingBlockRef.current = true;
       // Collapse all exercises for iPhone-style drag mode
       setAllCollapsed(true);
 
@@ -3554,7 +3655,6 @@ export default function WorkoutPage() {
   }, [isDraggingBlock, draggedBlockIndex, draggedBlockRect, dragTouchOffset, calculateDragTargetIndex, dragOverBlockIndex]);
 
   // Use refs to access latest values in document event listeners
-  const isDraggingBlockRef = useRef(isDraggingBlock);
   const draggedBlockIndexRef = useRef(draggedBlockIndex);
   const draggedBlockRectRef = useRef(draggedBlockRect);
   const dragOverBlockIndexRef = useRef(dragOverBlockIndex);
@@ -3567,9 +3667,64 @@ export default function WorkoutPage() {
     dragOverBlockIndexRef.current = dragOverBlockIndex;
   }, [isDraggingBlock, draggedBlockIndex, draggedBlockRect, dragOverBlockIndex]);
 
-  const handleBlockDragEnd = useCallback(async () => {
+  // Serializes the order saves below. Drops are no longer blocked on the write,
+  // so a second reorder can be requested while the first is still in flight;
+  // interleaving the two would let the older write land last and leave the DB
+  // holding an order the user never saw. Saves run one at a time, and a save
+  // that a newer one has already superseded is skipped — every write covers
+  // every block, so only the newest order matters.
+  const orderSaveChainRef = useRef<Promise<void>>(Promise.resolve());
+  const orderSaveSeqRef = useRef(0);
+
+  // Persist the new block order. exercise_blocks."order" (the column the loader
+  // sorts by) is UNIQUE per session, so write in two passes — park every block
+  // on a temporary offset first, then write the final 1..n values — to avoid
+  // transient unique-constraint collisions mid-update. Each pass fans out in
+  // parallel: within a pass the targets are already collision-free, so the cost
+  // is two round-trip waves rather than 2n sequential ones.
+  const persistBlockOrder = useCallback((ordered: ExerciseBlockWithExercise[]) => {
+    const seq = ++orderSaveSeqRef.current;
+    const ids = ordered.map((b) => b.id);
+
+    orderSaveChainRef.current = orderSaveChainRef.current.then(async () => {
+      if (seq !== orderSaveSeqRef.current) return; // superseded while queued
+      try {
+        const supabase = createUntypedClient();
+        const writePass = async (offset: number) => {
+          const results = await Promise.all(
+            ids.map((id, i) =>
+              supabase.from('exercise_blocks').update({ order: i + offset }).eq('id', id)
+            )
+          );
+          const failed = results.find((r) => r.error);
+          if (failed?.error) throw failed.error;
+        };
+        await writePass(1001);
+        await writePass(1);
+      } catch (err) {
+        console.error('Error saving reorder:', err);
+      }
+    });
+
+    return orderSaveChainRef.current;
+  }, []);
+
+  const handleBlockDragEnd = useCallback(() => {
+    // A single touch/mouse release reaches this twice — once from the document
+    // listener, once from the handle's own onTouchEnd/onMouseUp — and both see
+    // the same pre-batch state, so without this latch the drop would be applied
+    // (and persisted) twice.
+    if (!isDraggingBlockRef.current) return;
+    isDraggingBlockRef.current = false;
+
     const finalTargetIndex = dragOverBlockIndex ?? draggedBlockIndex;
 
+    // Reorder and tear the drag down in the SAME commit. Persistence used to be
+    // awaited here, which left the floating preview on screen for the length of
+    // the round trips while the list underneath had already reordered — the
+    // preview then re-read blocks[draggedBlockIndex] and rendered the displaced
+    // exercise. The write is now fire-and-forget; the local order is the truth
+    // the user sees, and a failure only means the next load re-sorts.
     if (draggedBlockIndex !== null && finalTargetIndex !== null && draggedBlockIndex !== finalTargetIndex) {
       const spliced = [...blocks];
       const [removed] = spliced.splice(draggedBlockIndex, 1);
@@ -3588,32 +3743,11 @@ export default function WorkoutPage() {
         setCurrentBlockIndex(currentBlockIndex + 1);
       }
 
-      // Persist the new order. exercise_blocks."order" (the column the loader
-      // sorts by) is UNIQUE per session, so write in two passes — park every
-      // block on a temporary offset first, then write the final 1..n values —
-      // to avoid transient unique-constraint collisions mid-update.
-      try {
-        const supabase = createUntypedClient();
-        for (let i = 0; i < newBlocks.length; i++) {
-          const { error: parkError } = await supabase
-            .from('exercise_blocks')
-            .update({ order: i + 1001 })
-            .eq('id', newBlocks[i].id);
-          if (parkError) throw parkError;
-        }
-        for (let i = 0; i < newBlocks.length; i++) {
-          const { error: orderError } = await supabase
-            .from('exercise_blocks')
-            .update({ order: i + 1 })
-            .eq('id', newBlocks[i].id);
-          if (orderError) throw orderError;
-        }
-      } catch (err) {
-        console.error('Error saving reorder:', err);
-      }
+      void persistBlockOrder(newBlocks);
     }
 
     setDraggedBlockIndex(null);
+    setDraggedBlockId(null);
     setDragOverBlockIndex(null);
     setIsDraggingBlock(false);
     setDragPosition(null);
@@ -3625,7 +3759,7 @@ export default function WorkoutPage() {
       setCollapsedBlocks(preCollapseStateRef.current.collapsedBlocks);
       preCollapseStateRef.current = null;
     }
-  }, [draggedBlockIndex, dragOverBlockIndex, blocks, currentBlockIndex]);
+  }, [draggedBlockIndex, dragOverBlockIndex, blocks, currentBlockIndex, persistBlockOrder]);
 
   // Identity-stable wrappers around the drag handlers and the ⋮ menu builder,
   // for the grip/menu that now live inside the memoized ExerciseCard header.
@@ -3757,31 +3891,9 @@ export default function WorkoutPage() {
             : block
         ));
       } else {
-        // Create complete exercise object with all fields
-        const completeExercise: Exercise = {
-          id: fullExerciseData.id,
-          name: fullExerciseData.name,
-          primaryMuscle: fullExerciseData.primary_muscle,
-          secondaryMuscles: fullExerciseData.secondary_muscles || [],
-          mechanic: fullExerciseData.mechanic,
-          defaultRepRange: fullExerciseData.default_rep_range || [8, 12],
-          defaultRir: fullExerciseData.default_rir || 2,
-          minWeightIncrementKg: fullExerciseData.min_weight_increment_kg || 2.5,
-          availableIncrementsKg: fullExerciseData.available_increments_kg ?? null,
-          formCues: fullExerciseData.form_cues || [],
-          commonMistakes: fullExerciseData.common_mistakes || [],
-          setupNote: fullExerciseData.setup_note || '',
-          movementPattern: fullExerciseData.movement_pattern || '',
-          equipmentRequired: fullExerciseData.equipment_required || [],
-          hypertrophyScore: fullExerciseData.hypertrophy_tier ? {
-            tier: fullExerciseData.hypertrophy_tier,
-            stretchUnderLoad: fullExerciseData.stretch_under_load || 3,
-            resistanceProfile: fullExerciseData.resistance_profile || 3,
-            progressionEase: fullExerciseData.progression_ease || 3,
-          } : undefined,
-          // Exercise type for duration-based exercises (planks, holds)
-          exerciseType: fullExerciseData.exercise_type as ExerciseType | undefined,
-        };
+        // Create complete exercise object with all fields — the same mapping
+        // the session load uses, so bodyweight metadata survives the swap.
+        const completeExercise = mapLoadedExerciseRow(fullExerciseData as LoadedExerciseRow);
 
         // Update local state with complete exercise data
         setBlocks(prevBlocks => prevBlocks.map(block =>
@@ -4176,6 +4288,17 @@ export default function WorkoutPage() {
               ...prev,
               [exercise.id]: exerciseHistory!,
             }));
+            // Remember how this was fetched: it came back already scoped to
+            // the current location, so a later location change has to refetch
+            // it rather than re-derive it from the load-time rows it isn't in.
+            if (session?.userId) {
+              midSessionHistoryRef.current.set(exercise.id, {
+                scope: addedScope,
+                exerciseType:
+                  (exercise as { exercise_type?: ExerciseType | null }).exercise_type ?? undefined,
+                userId: session.userId,
+              });
+            }
           }
         }
         const knownE1RM = exerciseHistory?.estimatedE1RM;
@@ -4341,24 +4464,11 @@ export default function WorkoutPage() {
         note: null,
         dropsetsPerSet: newBlock.dropsets_per_set ?? 0,
         dropPercentage: newBlock.drop_percentage ?? 0.25,
-        exercise: {
-          id: exerciseData.id,
-          name: exerciseData.name,
-          primaryMuscle: exerciseData.primary_muscle,
-          secondaryMuscles: exerciseData.secondary_muscles || [],
-          mechanic: exerciseData.mechanic,
-          defaultRepRange: exerciseData.default_rep_range || [8, 12],
-          defaultRir: exerciseData.default_rir || 2,
-          minWeightIncrementKg: exerciseData.min_weight_increment_kg || 2.5,
-          availableIncrementsKg: exerciseData.available_increments_kg ?? null,
-          formCues: exerciseData.form_cues || [],
-          commonMistakes: exerciseData.common_mistakes || [],
-          setupNote: exerciseData.setup_note || '',
-          movementPattern: exerciseData.movement_pattern || '',
-          equipmentRequired: exerciseData.equipment_required || [],
-          // Exercise type for duration-based exercises (planks, holds)
-          exerciseType: exerciseData.exercise_type as ExerciseType | undefined,
-        },
+        // Same mapping as the session load. Built by hand this dropped
+        // is_bodyweight / bodyweight_type, so a pull-up added mid-workout
+        // rendered a plain weight stepper with no Bodyweight/Weighted/Assisted
+        // control until the page was reloaded.
+        exercise: mapLoadedExerciseRow(exerciseData as LoadedExerciseRow),
       };
 
       setBlocks(prevBlocks => [...prevBlocks, newBlockWithExercise]);
@@ -4801,6 +4911,206 @@ export default function WorkoutPage() {
     );
   };
 
+  // ---------------------------------------------------------------------
+  // Training location (which gym / which machine)
+  // ---------------------------------------------------------------------
+
+  const locationNameById = (id: string | null): string | null =>
+    id ? gymLocations.find((l) => l.id === id)?.name ?? null : null;
+
+  const sessionLocationName = locationNameById(sessionLocationId);
+
+  /**
+   * What to say when a location move fails.
+   *
+   * `rolledBack` is the honest distinction: the helpers put the session/block
+   * row back when the set re-stamp fails, so the usual failure leaves nothing
+   * changed and "try again" is true. When even that compensating write failed,
+   * the row moved and its sets did not — the session really is split — and
+   * telling the user to just retry would hide it.
+   */
+  const locationFailureMessage = (rolledBack: boolean): string => {
+    if (!rolledBack) {
+      return 'Location change failed partway — reopen this workout and set it again to re-file the sets';
+    }
+    return isOnline
+      ? 'Could not change the location — nothing was changed, please try again'
+      : "Can't change location while offline — sets keep logging where they were";
+  };
+
+  /**
+   * Re-read every exercise's history against a new location assignment.
+   *
+   * The rows themselves are already in memory and don't change — only which of
+   * them count as "this machine's track" does. Recomputing here (rather than
+   * waiting for the next load) is what makes the change feel like a correction
+   * instead of a setting: the suggestion on the card updates to this machine's
+   * numbers immediately.
+   */
+  const rescopeHistories = (
+    nextSessionLocationId: string | null,
+    nextBlockLocations: Record<string, string | null>
+  ) => {
+    const source = historyScopeSourceRef.current;
+    if (source) {
+      const rebuilt = buildExerciseHistories(
+        source.blocks,
+        buildHistoryScopeOptions(
+          nextSessionLocationId,
+          nextBlockLocations,
+          blocks,
+          source.scopeByExercise
+        ),
+        source.modalityByExercise
+      );
+      // Merge, don't replace: exercises added mid-session aren't in these rows
+      // and replacing would blank their cards. They're refreshed below.
+      setExerciseHistories((prev) => ({ ...prev, ...rebuilt }));
+    }
+
+    // Refetch the mid-session additions against their new effective location.
+    for (const [exerciseId, meta] of Array.from(midSessionHistoryRef.current.entries())) {
+      const block = blocks.find((b) => b.exerciseId === exerciseId);
+      const effective = resolveEffectiveLocation(
+        block ? nextBlockLocations[block.id] : null,
+        nextSessionLocationId
+      );
+      void fetchExerciseHistory(
+        exerciseId,
+        meta.userId,
+        effective ? { progressionScope: meta.scope, currentLocationId: effective } : undefined,
+        meta.exerciseType
+      ).then((history) => {
+        if (history) setExerciseHistories((prev) => ({ ...prev, [exerciseId]: history }));
+      });
+    }
+  };
+
+  /**
+   * Apply the picker's choice: persist it, move any already-logged sets onto
+   * the new track, and re-scope suggestions.
+   *
+   * The optimistic order matters. State updates first so the sheet closes on a
+   * chip that already reads right; the write follows and only reverts on a
+   * hard failure. A database that predates the migrations reports the columns
+   * missing, which the helpers treat as "this build doesn't do location
+   * scoping" — the picker then leaves the UI unchanged rather than showing a
+   * selection that nothing is stored behind.
+   */
+  const applyLocationChange = async (locationId: string | null) => {
+    const target = locationPickerTarget;
+    if (!target) return;
+    setLocationPickerTarget(null);
+
+    const supabase = createUntypedClient();
+
+    if (target.kind === 'session') {
+      if (locationId === sessionLocationId) return;
+      const previous = sessionLocationId;
+      setSessionLocationId(locationId);
+      rescopeHistories(locationId, blockLocations);
+
+      // Blocks pinned to their own machine keep it: "I was at a different gym
+      // than I thought" must not silently un-pin a deliberate choice.
+      const inheritingBlockIds = blocks.filter((b) => !blockLocations[b.id]).map((b) => b.id);
+      const result = await updateSessionLocation(supabase, {
+        sessionId,
+        locationId,
+        previousLocationId: previous,
+        blockIdsToRestamp: inheritingBlockIds,
+      });
+
+      if (result.unsupported) {
+        setSessionLocationId(previous);
+        rescopeHistories(previous, blockLocations);
+        showError('Location tracking needs a database update — nothing was changed');
+        return;
+      }
+      if (!result.ok) {
+        // Reverting matters more than the message: sets logged from here on
+        // read the same state, so an un-reverted UI would keep filing them
+        // under a location the database never accepted.
+        setSessionLocationId(previous);
+        rescopeHistories(previous, blockLocations);
+        showError(locationFailureMessage(result.rolledBack));
+        return;
+      }
+      showSuccess(
+        locationId
+          ? `Training at ${locationNameById(locationId) ?? 'this location'}${
+              result.restampedSets > 0 ? ` · ${result.restampedSets} logged sets moved` : ''
+            }`
+          : 'Workout location cleared'
+      );
+      return;
+    }
+
+    const block = blocks.find((b) => b.id === target.blockId);
+    if (!block) return;
+    const previous = blockLocations[block.id] ?? null;
+    if (locationId === previous) return;
+
+    const nextBlockLocations = { ...blockLocations, [block.id]: locationId };
+    setBlockLocations(nextBlockLocations);
+    rescopeHistories(sessionLocationId, nextBlockLocations);
+
+    const result = await updateBlockLocation(supabase, {
+      blockId: block.id,
+      locationId,
+      previousLocationId: previous,
+      effectiveLocationId: resolveEffectiveLocation(locationId, sessionLocationId),
+      previousEffectiveLocationId: resolveEffectiveLocation(previous, sessionLocationId),
+    });
+
+    if (result.unsupported || !result.ok) {
+      const reverted = { ...blockLocations, [block.id]: previous };
+      setBlockLocations(reverted);
+      rescopeHistories(sessionLocationId, reverted);
+      showError(
+        result.unsupported
+          ? 'Per-exercise locations need a database update — nothing was changed'
+          : locationFailureMessage(result.rolledBack)
+      );
+      return;
+    }
+
+    const movedNote = result.restampedSets > 0 ? ` · ${result.restampedSets} logged sets moved` : '';
+    showSuccess(
+      locationId
+        ? `${block.exercise.name} tracked at ${locationNameById(locationId) ?? 'this location'}${movedNote}`
+        : `${block.exercise.name} follows the workout location again${movedNote}`
+    );
+  };
+
+  /**
+   * Create a location from inside the picker and hand it back so the caller can
+   * select it. The machine you've never logged before is exactly the case where
+   * the location doesn't exist yet, so sending the user to Settings mid-set
+   * would defeat the point.
+   */
+  const handleCreateLocation = async (name: string): Promise<GymLocation | null> => {
+    const supabase = createUntypedClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return null;
+
+    const { data, error } = await supabase
+      .from('gym_locations')
+      .insert({ user_id: user.id, name, is_default: gymLocations.length === 0 })
+      .select('id, name, is_default')
+      .single();
+
+    if (error || !data) {
+      console.error('[workout] failed to create location:', error);
+      return null;
+    }
+
+    const created = data as GymLocation;
+    setGymLocations((prev) => [...prev, created]);
+    return created;
+  };
+
   // Toggle the deload flag mid-workout (from the header ⋮ menu). Durable +
   // optimistic: the header/banner reflect it immediately and the choice is
   // queued in the IndexedDB outbox — the same durable path the finish flow
@@ -4835,7 +5145,19 @@ export default function WorkoutPage() {
     }
   };
 
-  const handleDeclineClaim = () => {
+  const handleDeclineClaim = async () => {
+    // "Keep as extra": release the session's post-processing, which was
+    // parked behind the open claim prompt so a to-be-claimed session couldn't
+    // double-count into the standalone fatigue history. Resolves once the
+    // decision is durably recorded; the settlement runs in the background.
+    if (session) {
+      await declineClaimOptimistic({
+        supabase: createUntypedClient(),
+        sessionId,
+        session,
+        sessionRpe: submittedSessionRpe,
+      });
+    }
     setShowClaimPrompt(false);
     finishToDashboard();
   };
@@ -5117,6 +5439,7 @@ export default function WorkoutPage() {
             selectedExercisesToAdd={selectedExercisesToAdd}
             onToggleExerciseSelection={toggleExerciseSelection}
             isAddingExercise={isAddingExercise}
+            sessionDuration={pickerSessionDuration}
             onClose={handleCloseAddExerciseModal}
             onAddSelected={handleAddSelectedExercises}
           />
@@ -5161,6 +5484,23 @@ export default function WorkoutPage() {
   const totalPlannedSets = activeBlocks.reduce((sum, b) => sum + b.targetSets, 0);
   const totalCompletedSets = completedSets.filter(s => !s.isWarmup && s.setType !== 'warmup').length;
   const overallProgress = totalPlannedSets > 0 ? (totalCompletedSets / totalPlannedSets) * 100 : 0;
+
+  // The block under the finger during a reorder, looked up by id so the
+  // floating preview can never re-target itself when the list reorders.
+  const draggedBlock = draggedBlockId
+    ? blocks.find((b) => b.id === draggedBlockId) ?? null
+    : null;
+
+  // Duration estimate copy. Before the first set the honest number is the whole
+  // planned session; once the timer runs it's elapsed + what's left, and the
+  // hint says whether the model has been corrected by today's actual pace.
+  const durationTotalLabel = formatDurationEstimate(durationEstimate.projectedTotalSeconds);
+  const durationHint =
+    durationEstimate.totalSets === 0
+      ? 'Add exercises to see how long this will take'
+      : `Estimated ${durationTotalLabel} total · ${durationEstimate.totalSets} sets across ` +
+        `${durationEstimate.exerciseCount} exercise${durationEstimate.exerciseCount === 1 ? '' : 's'}` +
+        (durationEstimate.isCalibrated ? ' · adjusted to your pace today' : '');
 
   // Header: workout label + per-exercise progress segments (skipped excluded)
   // Derived from activeBlocks (skipped excluded) so it matches the resume
@@ -5287,6 +5627,34 @@ export default function WorkoutPage() {
         setShowPageLevelSwapModal(true);
       },
     });
+
+    // Which machine this lift is on. Sits next to Swap because it answers the
+    // question Swap gets misused for: users duplicate an exercise per gym
+    // ("Hip Adduction (annex)") to stop two stacks averaging together, which
+    // fragments volume and muscle mapping. This does it properly — one
+    // exercise, two calibration tracks.
+    {
+      const override = blockLocations[block.id] ?? null;
+      const overrideName = override ? locationNameById(override) : null;
+      items.push({
+        key: 'location',
+        label: hasLocationOverride(override, sessionLocationId)
+          ? `Machine: ${truncateName(overrideName ?? 'elsewhere')}`
+          : 'Different machine?',
+        icon: (
+          <IconMapPin
+            size={16}
+            className={
+              hasLocationOverride(override, sessionLocationId)
+                ? 'text-primary-400'
+                : 'text-surface-400'
+            }
+            stroke={2}
+          />
+        ),
+        onSelect: () => setLocationPickerTarget({ kind: 'exercise', blockId: block.id }),
+      });
+    }
 
     items.push({
       key: 'plates',
@@ -5439,6 +5807,12 @@ export default function WorkoutPage() {
         exerciseNumber={currentExerciseNumber}
         exerciseTotal={activeBlocks.length}
         segments={headerSegments}
+        remainingDurationLabel={
+          durationEstimate.remainingSets > 0
+            ? formatDurationEstimate(durationEstimate.remainingSeconds)
+            : null
+        }
+        remainingDurationHint={durationHint}
         startedAt={session?.startedAt ?? null}
         timerStarted={timerStartedAt !== null}
         workoutTimer={workoutTimer}
@@ -5452,6 +5826,8 @@ export default function WorkoutPage() {
         onOpenReadinessModal={() => setShowReadinessModal(true)}
         onOpenMuscleReadiness={() => setShowMuscleReadinessSheet(true)}
         onOpenPlateCalculator={() => setShowPlateCalculator(true)}
+        locationName={sessionLocationName}
+        onOpenLocationPicker={() => setLocationPickerTarget({ kind: 'session' })}
         isDeload={session?.isDeload ?? false}
         onToggleDeload={handleToggleDeloadSession}
         onCancelWorkout={() => setShowCancelModal(true)}
@@ -5621,7 +5997,7 @@ export default function WorkoutPage() {
           const isComplete = blockSets.length >= block.targetSets;
           const isCurrent = index === currentBlockIndex;
           const isRowCollapsed = allCollapsed || collapsedBlocks.has(block.id);
-          const isBeingDragged = draggedBlockIndex === index;
+          const isBeingDragged = draggedBlockId === block.id;
 
           // "3/8"-style position badge: position among non-skipped exercises /
           // their total, so it stays correct after reordering AND after
@@ -5958,7 +6334,8 @@ export default function WorkoutPage() {
                     unit={preferences.units}
                     recommendedWeight={aiRecommendedWeightKg}
                     coldStartSuggestion={coldStartSuggestion}
-                    userBodyweightKg={todayCheckInData?.bodyweightKg || undefined}
+                    userBodyweightKg={currentBodyweightKg}
+                    onBodyweightLogged={handleBodyweightLogged}
                     exerciseHistory={exerciseHistories[block.exerciseId]}
                     lastWorkoutSleep={sleepByExerciseId[block.exerciseId] ?? null}
                     sleepLoggingActive={sleepLoggingActive}
@@ -5974,6 +6351,11 @@ export default function WorkoutPage() {
                     performanceSnapshots={performanceSnapshots[block.exerciseId]}
                     progressionHealthSessions={progressionHealthSessions[block.exerciseId]}
                     equipmentBoundaries={equipmentBoundaries[block.exerciseId]}
+                    locationOverrideName={
+                      hasLocationOverride(blockLocations[block.id], sessionLocationId)
+                        ? locationNameById(blockLocations[block.id] ?? null)
+                        : null
+                    }
                     userGoal={userGoal}
                     onRepRangeChange={(range) => handleRepRangeChange(block.id, range)}
                     isAmrapSuggested={
@@ -6149,7 +6531,7 @@ export default function WorkoutPage() {
             </p>
             {upNextEntries.map(({ block, index }) => {
               const isSkipped = skippedBlockIds.has(block.id);
-              const isBeingDragged = draggedBlockIndex === index;
+              const isBeingDragged = draggedBlockId === block.id;
               const translateY = getDragTranslateY(index, isBeingDragged);
               const muscleLabel = formatMuscleName(block.exercise.primaryMuscle);
 
@@ -6235,8 +6617,10 @@ export default function WorkoutPage() {
         )}
       </div>
 
-      {/* Floating drag preview */}
-      {isDraggingBlock && draggedBlockIndex !== null && dragPosition && (
+      {/* Floating drag preview — resolved by block id, not by index, so it
+          always shows the exercise under the finger even if the underlying
+          list reorders while it's on screen. */}
+      {isDraggingBlock && draggedBlock && dragPosition && (
         <div
           className="fixed pointer-events-none z-50 transition-transform duration-75"
           style={{
@@ -6256,20 +6640,20 @@ export default function WorkoutPage() {
               {/* Position badge — same "3/8" format as the list rows */}
               <div className="rounded-md px-1.5 py-1 text-[11px] font-bold leading-none bg-primary-500 text-white flex-shrink-0">
                 {(() => {
-                  const draggedId = blocks[draggedBlockIndex]?.id;
-                  const pos = activeBlocks.findIndex((b) => b.id === draggedId);
+                  const pos = activeBlocks.findIndex((b) => b.id === draggedBlock.id);
+                  const fallback = blocks.findIndex((b) => b.id === draggedBlock.id);
                   return pos >= 0
                     ? `${pos + 1}/${activeBlocks.length}`
-                    : `${draggedBlockIndex + 1}/${blocks.length}`;
+                    : `${fallback + 1}/${blocks.length}`;
                 })()}
               </div>
               {/* Exercise name */}
               <div className="flex-1">
                 <p className="font-medium text-surface-100">
-                  {blocks[draggedBlockIndex]?.exercise?.name}
+                  {draggedBlock.exercise?.name}
                 </p>
                 <p className="text-xs text-surface-500">
-                  {getSetsForBlock(blocks[draggedBlockIndex]?.id).length}/{blocks[draggedBlockIndex]?.targetSets} sets
+                  {getSetsForBlock(draggedBlock.id).length}/{draggedBlock.targetSets} sets
                 </p>
               </div>
             </div>
@@ -6279,11 +6663,19 @@ export default function WorkoutPage() {
 
       {/* Finish workout button at bottom */}
       <Card className="text-center py-6 mt-8">
-        <p className="text-surface-400 mb-4">
-          {overallProgress >= 100 
-            ? '🎉 All exercises complete!' 
+        <p className={durationEstimate.remainingSets > 0 ? 'text-surface-400' : 'text-surface-400 mb-4'}>
+          {overallProgress >= 100
+            ? '🎉 All exercises complete!'
             : `${Math.round(overallProgress)}% complete`}
         </p>
+        {/* The plain-language version of the header pill: what's left, and what
+            the whole session comes to. Hidden once there's nothing left to do. */}
+        {durationEstimate.remainingSets > 0 && (
+          <p className="text-xs text-surface-500 mt-1 mb-4" data-testid="workout-duration-summary">
+            About {formatDurationEstimate(durationEstimate.remainingSeconds)} left ·{' '}
+            {durationTotalLabel} total for {durationEstimate.totalSets} sets
+          </p>
+        )}
         <div className="flex justify-center gap-3">
           <Button variant="ghost" onClick={handleOpenAddExercise}>
             + Add Exercise
@@ -6380,6 +6772,7 @@ export default function WorkoutPage() {
           selectedExercisesToAdd={selectedExercisesToAdd}
           onToggleExerciseSelection={toggleExerciseSelection}
           isAddingExercise={isAddingExercise}
+          sessionDuration={pickerSessionDuration}
           onClose={handleCloseAddExerciseModal}
           onAddSelected={handleAddSelectedExercises}
           onCreateCustom={() => { setCustomSwapBlockId(null); setShowCustomExercise(true); }}
@@ -6673,6 +7066,47 @@ export default function WorkoutPage() {
         initialWeightKg={plateCalculatorWeight ?? currentBlock?.targetWeightKg}
         exerciseId={currentExercise?.id}
       />
+
+      {/* Training-location picker — the same sheet for "which gym is this
+          workout at" and "which machine is this one exercise on", because
+          they resolve to the same calibration key. */}
+      {locationPickerTarget && (() => {
+        const targetBlock =
+          locationPickerTarget.kind === 'exercise'
+            ? blocks.find((b) => b.id === locationPickerTarget.blockId) ?? null
+            : null;
+        if (locationPickerTarget.kind === 'exercise' && !targetBlock) return null;
+
+        const scope: LocationPickerScope = targetBlock
+          ? {
+              kind: 'exercise',
+              exerciseName: targetBlock.exercise.name,
+              sessionLocationName,
+            }
+          : { kind: 'session' };
+
+        // How many logged sets the change will re-stamp. For a session change
+        // that's every set NOT pinned to its own machine; for one exercise,
+        // just that exercise's.
+        const loggedSetCount = targetBlock
+          ? completedSets.filter((s) => s.exerciseBlockId === targetBlock.id).length
+          : completedSets.filter((s) => !blockLocations[s.exerciseBlockId]).length;
+
+        return (
+          <LocationPickerSheet
+            isOpen
+            onClose={() => setLocationPickerTarget(null)}
+            scope={scope}
+            locations={gymLocations}
+            selectedId={
+              targetBlock ? blockLocations[targetBlock.id] ?? null : sessionLocationId
+            }
+            loggedSetCount={loggedSetCount}
+            onSelect={(id) => void applyLocationChange(id)}
+            onCreate={handleCreateLocation}
+          />
+        );
+      })()}
 
       {/* Motion capture sheet (experimental, flag-gated). Closing mid-review
           keeps the capture in memory; the card button offers to resume. */}

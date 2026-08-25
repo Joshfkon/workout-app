@@ -135,6 +135,21 @@ describe('cross-surface parity (one fixture, four surfaces)', () => {
     expect(zoneFillClass(datum.zone!, datum.value)).toBe('fill-success-500');
   });
 
+  it('an untrained muscle warns in light red on the map AND the bar, distinct from over-MRV', () => {
+    // Nothing in the week touches calves, so the row lands at 0 sets.
+    const calvesRow = volumeRows.find((x) => x.muscle === 'calves')!;
+    expect(calvesRow.sets).toBe(0);
+    expect(calvesRow.zone).toBe('below_mev');
+    expect(zoneColorToken(calvesRow.zone, calvesRow.sets)).toBe('untrained');
+
+    const datum = volumeRowsToMapData(volumeRows).gastrocnemius!;
+    expect(zoneBarClass(calvesRow.zone, calvesRow.sets)).toBe('bg-danger-300');
+    expect(zoneFillClass(datum.zone!, datum.value)).toBe('fill-danger-300');
+    // A muscle trained past MRV keeps the solid red — too little and too much
+    // must never paint the same.
+    expect(zoneFillClass('over_mrv', 40)).toBe('fill-danger-500');
+  });
+
   it('recovery map matches the readiness rows on a shared fixture (asserted, not by construction)', () => {
     const hoursAgo = (h: number) => new Date(NOW.getTime() - h * 3600 * 1000);
     const sets = (n: number) => Array.from({ length: n }, () => ({ repsInTank: 2 }));
@@ -159,14 +174,19 @@ describe('cross-surface parity (one fixture, four surfaces)', () => {
       const childByMuscle = new Map(row.children.map((c) => [c.muscle, c]));
       for (const std of COARSE_CHILDREN[row.muscle]) {
         const datum = rMap[std];
+        expect(datum).toBeDefined();
         const source = childByMuscle.get(std) ?? row;
         if (source.recovery.lastTrainedAt === null) {
-          // "No recent data" badge ⇒ neutral region, never a status color.
-          expect(datum).toBeUndefined();
+          // "No recent data" badge ⇒ no status ⇒ neutral region in recovery
+          // mode, never a status color.
+          expect(datum!.status).toBeUndefined();
         } else {
-          expect(datum).toBeDefined();
           expect(datum!.status).toBe(source.recovery.status);
         }
+        // The same datum also carries the volume paint (the sheet's map
+        // toggle), byte-identical to the readiness bar it mirrors.
+        expect(datum!.zone).toBe(source.zone);
+        expect(datum!.value).toBe(source.sets);
       }
     }
   });

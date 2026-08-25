@@ -29,6 +29,7 @@ import type {
   StandardMuscleGroup,
   WorkloadRating,
 } from '@/types/schema';
+import { now as clockNow } from '@/lib/clock';
 
 type UntypedClient = ReturnType<
   typeof import('@/lib/supabase/client').createUntypedClient
@@ -141,7 +142,7 @@ export async function fetchRecentMuscleSessions(
 
   const withinDays = args.withinDays ?? 4;
   const cutoff = new Date(
-    Date.now() - withinDays * 24 * 60 * 60 * 1000
+    clockNow().getTime() - withinDays * 24 * 60 * 60 * 1000
   ).toISOString();
 
   let query = supabase

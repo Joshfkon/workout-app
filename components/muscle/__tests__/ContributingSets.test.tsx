@@ -92,6 +92,42 @@ describe('ContributingSets', () => {
       'Shoulders · whole group · Counted sets'
     );
   });
+
+  it('explains the dedup on a group-scope panel, so the header need not equal Σ(sub-muscle rows)', () => {
+    // The group total is capped at 1.0 credit per performed set per exercise,
+    // while each sub-muscle row keeps its uncapped per-head credit — so the two
+    // legitimately differ. Say why, rather than leaving the user to reconcile.
+    render(
+      <ContributingSets
+        muscle="back"
+        testIdPrefix="volume-sources"
+        scopeLabel="Back · whole group"
+        groupScope
+        exercises={[
+          { id: 'e1', name: 'Barbell Row', performedSets: 8, sets: 8, effective: 8, direct: 8, indirect: 0, directEffective: 8, indirectEffective: 0 },
+        ]}
+      />
+    );
+    expect(screen.getByTestId('volume-sources-group-dedup-note-back')).toHaveTextContent(
+      'A set counts once for the group'
+    );
+  });
+
+  it('omits the dedup note on a single sub-muscle panel, where nothing is deduped', () => {
+    render(
+      <ContributingSets
+        muscle="lats"
+        testIdPrefix="volume-sources"
+        scopeLabel="Lats"
+        exercises={[
+          { id: 'e1', name: 'Lat Pulldown', performedSets: 4, sets: 4, effective: 4, direct: 4, indirect: 0, directEffective: 4, indirectEffective: 0 },
+        ]}
+      />
+    );
+    expect(
+      screen.queryByTestId('volume-sources-group-dedup-note-lats')
+    ).not.toBeInTheDocument();
+  });
 });
 
 describe('SourcesDisclosure', () => {

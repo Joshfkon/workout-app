@@ -178,6 +178,134 @@ describe('recovery aggregation + divergence auto-expand (shoulders fixture)', ()
   });
 });
 
+describe('a trained member always outranks a never-trained one', () => {
+  // Regression: a group whose members are ALL Fresh tied on status rank AND on
+  // hoursUntilReady (0), so the first member listed won — and for the groups
+  // that carry a coarse standard member first ('triceps', 'traps', 'calves',
+  // 'glutes', 'abs'), a user who tags at head level never feeds that member.
+  // The group inherited its null lastTrainedAt and rendered "No recent data"
+  // while every head below it read Fresh off real counted sets.
+  const HEADS = new Set<StandardMuscleGroup>(['triceps_long', 'triceps_lat_med']);
+
+  it('a head-tagging user gets a trained Triceps row, not "no recent data"', () => {
+    // 5 days ago: well past the 36h triceps window → every head reads Fresh.
+    const trainedAt = hoursBefore(NOW, 120);
+    const history: RecoverySession[] = [
+      session(trainedAt, 'triceps_lat_med', 10, 2),
+      session(trainedAt, 'triceps_long', 5, 2),
+    ];
+    const rows = buildReadinessRows([], history, NOW, HEADS);
+    const triceps = rowFor(rows, 'triceps');
+
+    const childStatus = (m: string) =>
+      triceps.children.find((c) => c.muscle === m)!.recovery.status;
+    expect(childStatus('triceps_lat_med')).toBe('fresh');
+    expect(childStatus('triceps_long')).toBe('fresh');
+
+    // The badge reads "No recent data" off a null lastTrainedAt — the group
+    // was trained, so it must carry the real timestamp.
+    expect(triceps.recovery.status).toBe('fresh');
+    expect(triceps.recovery.lastTrainedAt).toEqual(trainedAt);
+  });
+
+  it('reports the MOST RECENT session among equally-recovered members', () => {
+    const older = hoursBefore(NOW, 168);
+    const newer = hoursBefore(NOW, 120);
+    const history: RecoverySession[] = [
+      session(older, 'triceps_long', 5, 2),
+      session(newer, 'triceps_lat_med', 10, 2),
+    ];
+    const triceps = rowFor(buildReadinessRows([], history, NOW, HEADS), 'triceps');
+    expect(triceps.recovery.lastTrainedAt).toEqual(newer);
+  });
+
+  it('still reports no data when NO member has been trained', () => {
+    const triceps = rowFor(buildReadinessRows([], [], NOW, HEADS), 'triceps');
+    expect(triceps.recovery.lastTrainedAt).toBeNull();
+    expect(triceps.recovery.status).toBe('fresh');
+  });
+
+  it('a fatigued member still wins over a fresher, more recently trained one', () => {
+    // Ordering guard: "has data" must break ties only AFTER status rank, never
+    // before it — a recently-trained Fresh head must not displace a Fatigued one.
+    const history: RecoverySession[] = [
+      session(NOW, 'triceps_long', 8, 0), // just maxed → Fatigued
+      session(hoursBefore(NOW, 120), 'triceps_lat_med', 4, 2), // Fresh
+    ];
+    const triceps = rowFor(buildReadinessRows([], history, NOW, HEADS), 'triceps');
+    expect(triceps.recovery.status).toBe('fatigued');
+    expect(triceps.recovery.lastTrainedAt).toEqual(NOW);
+  });
+});
+
+describe('erectors readiness is independent of back', () => {
+  // A hinge session: primary glutes, secondary erectors — the shape that used
+  // to drive back's "Fatigued" reading while lats and upper back were fresh.
+  const hinge = (at: Date): RecoverySession => ({
+    performedAt: at,
+    exercises: [
+      {
+        primaryMuscle: 'glutes',
+        secondaryMuscles: ['erectors'],
+        sets: Array.from({ length: 6 }, () => ({ repsInTank: 0 })),
+      },
+    ],
+  });
+
+  it('erector fatigue drives the Erectors row and leaves Back fresh', () => {
+    const rows = buildReadinessRows([], [hinge(NOW)], NOW);
+
+    expect(rowFor(rows, 'erectors').recovery.status).toBe('fatigued');
+    // Back's worst-of-children now spans lats + upper_back only, so the hinge
+    // cannot reach it. Before the promotion this row read Fatigued.
+    expect(rowFor(rows, 'back').recovery.status).toBe('fresh');
+  });
+
+  it('back fatigue does not make Erectors look fatigued', () => {
+    const pulling: RecoverySession = {
+      performedAt: NOW,
+      exercises: [
+        {
+          primaryMuscle: 'lats',
+          secondaryMuscles: ['upper_back'],
+          sets: Array.from({ length: 6 }, () => ({ repsInTank: 0 })),
+        },
+      ],
+    };
+    const rows = buildReadinessRows([], [pulling], NOW);
+
+    expect(rowFor(rows, 'back').recovery.status).toBe('fatigued');
+    expect(rowFor(rows, 'erectors').recovery.status).toBe('fresh');
+  });
+
+  it('computes its own recovery clock rather than inheriting a back child\'s', () => {
+    // Erectors trained 30h ago, lats 6h ago: two genuinely different clocks.
+    const history = [
+      { ...hinge(hoursBefore(NOW, 30)) },
+      session(hoursBefore(NOW, 6), 'lats', 6, 0),
+    ];
+    const rows = buildReadinessRows([], history, NOW);
+
+    const erectors = rowFor(rows, 'erectors');
+    const back = rowFor(rows, 'back');
+    // Independent clocks: the more recent lat session leaves back with strictly
+    // more time to go than the older hinge leaves the erectors.
+    expect(back.recovery.hoursUntilReady).toBeGreaterThan(
+      erectors.recovery.hoursUntilReady
+    );
+    // And the erector row is a standalone coarse row, carrying no children.
+    expect(erectors.children).toHaveLength(0);
+  });
+
+  it('is a top-level readiness row, never a child of back', () => {
+    const rows = buildReadinessRows([], [], NOW);
+    expect(rows.some((r) => r.muscle === 'erectors')).toBe(true);
+    expect(
+      rowFor(rows, 'back').children.map((c) => c.muscle)
+    ).not.toContain('erectors');
+  });
+});
+
 /** Every coarse group at/above MEV → no coarse group lags on volume. */
 const ALL_AT_MEV = [
   stat('chest_upper', 12), stat('lats', 14), stat('front_delts', 12),
@@ -313,16 +441,33 @@ describe('buildReadinessRows soreness overrides ("still sore" today)', () => {
 });
 
 describe('readinessScore / hoursUntilReadinessThreshold', () => {
-  const rec = (hoursSinceLast: number | null, windowHours: number | null): MuscleRecoveryResult =>
-    ({
+  /** A result carrying one outstanding debt (or none, when never trained). */
+  const rec = (hoursSinceLast: number | null, windowHours: number | null): MuscleRecoveryResult => {
+    const debts =
+      hoursSinceLast === null || windowHours === null || hoursSinceLast >= windowHours
+        ? []
+        : [
+            {
+              performedAt: new Date(NOW.getTime() - hoursSinceLast * 3600 * 1000),
+              windowHours,
+              hoursSince: hoursSinceLast,
+              ratio: hoursSinceLast / windowHours,
+            },
+          ];
+    return {
       status: 'recovering',
+      readinessRatio: debts.length === 0 ? 1 : debts[0].ratio,
+      debts,
       hoursSinceLast,
       estimatedReadyAt: null,
       lastTrainedAt: hoursSinceLast === null ? null : NOW,
       hoursUntilReady: 0,
+      governingTrainedAt: null,
+      hoursSinceGoverning: hoursSinceLast,
       windowHours,
       dose: 4,
-    }) as MuscleRecoveryResult;
+    } as MuscleRecoveryResult;
+  };
 
   it('is 1 for a never-trained muscle', () => {
     expect(readinessScore(rec(null, null))).toBe(1);
@@ -343,6 +488,22 @@ describe('readinessScore / hoursUntilReadinessThreshold', () => {
   it('reports the hours remaining until readiness crosses the threshold', () => {
     // 0.8 × 48h window = 38.4h; 24h elapsed → 14.4h to go.
     expect(hoursUntilReadinessThreshold(rec(24, 48))).toBeCloseTo(14.4);
+  });
+
+  it('waits for the SLOWEST debt, not merely the least-recovered one', () => {
+    // A short-window session sits at the lower ratio, but the long-window
+    // session takes longer to reach the same fraction. Reducing over the
+    // governing window alone would under-report by 4h here.
+    const multi = {
+      ...rec(10, 20),
+      debts: [
+        { performedAt: NOW, windowHours: 20, hoursSince: 10, ratio: 0.5 },
+        { performedAt: NOW, windowHours: 100, hoursSince: 70, ratio: 0.7 },
+      ],
+      readinessRatio: 0.5,
+    } as MuscleRecoveryResult;
+    // 0.8×20 − 10 = 6h; 0.8×100 − 70 = 10h → the 100h debt governs.
+    expect(hoursUntilReadinessThreshold(multi)).toBeCloseTo(10);
   });
 
   it('the thresholds bracket green/amber/red as documented', () => {

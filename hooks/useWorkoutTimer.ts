@@ -272,6 +272,16 @@ export function useWorkoutTimer({ sessionId, startedAt }: UseWorkoutTimerOptions
     elapsedSeconds,
     formattedTime: formatTime(elapsedSeconds),
     isPaused,
+    /**
+     * Epoch ms the current pause began, or null while running — the instant the
+     * workout clock froze. Callers measuring a span that is still open (e.g.
+     * how long the user has been resting) use this as the span's end so it
+     * stops growing during a pause, exactly as elapsed does.
+     *
+     * Safe to read during render: `isPaused` is state and flips in the same
+     * commit, and the underlying record does not change for the pause's life.
+     */
+    pausedAtMs: isPaused ? stateRef.current?.pausedAt ?? null : null,
     pause,
     resume,
     toggle,

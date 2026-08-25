@@ -305,7 +305,17 @@ describe('recommendRepTotalNextSet (re-derived per set — planner parity)', () 
       plannedSets: 3,
     })!;
 
-  it('follows the plan slot when today matches it', () => {
+  it('trims the plan slot to the LIVE ceiling when the session is declining', () => {
+    // Set 2 (11 @ 2 RIR) came in under set 1 (13 @ 2 RIR) at the same load
+    // and effort. The plan's slot-3 target is 12, but 12 is what a FRESHER
+    // set couldn't clear at this effort — re-serving it asks the lifter to
+    // beat a fresher set from a more fatigued state. The live anchor trims
+    // to what the most recent set actually demonstrated (11).
+    //
+    // Before the live-anchor fix this returned 12, because the capacity
+    // ceiling was the max over all observed sets and set 1's 13 propped it
+    // up — the raise-only ask that produced the reported Abdominal Crunch
+    // defect (docs/PRESCRIPTION_STALENESS_AUDIT.md).
     const next = recommendRepTotalNextSet({
       sessionPlan: plan3x(),
       observedSets: [
@@ -316,8 +326,15 @@ describe('recommendRepTotalNextSet (re-derived per set — planner parity)', () 
       targetRir: 2,
       minIncrementKg: 4.54,
     });
+    // The LOAD is untouched: one declining set is absorbed by reps at the
+    // held load, never by a mid-session deload (that lever is gated on
+    // today's BEST set failing to hold the range).
     expect(next.weightKg).toBe(61.23);
-    expect(next.reps).toBe(12); // slot 3's plan (8 floored to 12)
+    expect(next.reps).toBe(11);
+    expect(next.sessionDeclineTrimmed).toBe(true);
+    // INV-1 analog: 11 is below the 12-20 floor, and that contradiction is
+    // rendered rather than papered over with an unattainable 12.
+    expect(next.outsideRange).toBe('below');
     expect(next.totalSoFar).toBe(24);
     // The session target is the per-set sum (12+12+12 — spec §1); beating
     // last session's actual 30 is the separate claim below.

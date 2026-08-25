@@ -17,10 +17,16 @@ import {
   capacityOwnerFor,
   getVolumeAuthority,
   isBoundedComponent,
+  MUSCLE_GROUPS,
   type Experience,
   type StandardMuscleGroup,
 } from '@/types/schema';
-import { COARSE_CHILDREN, COARSE_MUSCLES, STANDARD_TO_COARSE } from '@/services/volumeBands';
+import {
+  COARSE_CHILDREN,
+  COARSE_MUSCLES,
+  STANDARD_TO_COARSE,
+  getEffectiveBand,
+} from '@/services/volumeBands';
 
 const EXPERIENCES: Experience[] = ['novice', 'intermediate', 'advanced'];
 
@@ -265,5 +271,53 @@ describe('registry agrees with the coarse display taxonomy', () => {
       if (!hasFamily) continue;
       expect(() => assertNoMixedCapacityAggregation(children, `COARSE_CHILDREN.${coarse}`)).toThrow();
     }
+  });
+});
+
+describe('erectors is a standalone top-level group', () => {
+  it('the legacy MUSCLE_GROUPS list and COARSE_MUSCLES describe the same groups', () => {
+    // Two vocabularies, one taxonomy: the generator + pickers reason in legacy
+    // MuscleGroup, the volume/readiness surfaces in CoarseMuscle. A group added
+    // to one and not the other silently loses either its prescription or its
+    // row, which is how erectors could sit under 'back' on one side while being
+    // an independent standard muscle on the other.
+    expect([...MUSCLE_GROUPS].sort()).toEqual([...COARSE_MUSCLES].sort());
+  });
+
+  it('erectors is its own coarse group and no longer a child of back', () => {
+    expect(COARSE_MUSCLES).toContain('erectors');
+    expect(COARSE_CHILDREN.erectors).toEqual(['erectors']);
+    expect(COARSE_CHILDREN.back).toEqual(['lats', 'upper_back']);
+    expect(COARSE_CHILDREN.back).not.toContain('erectors');
+    expect(STANDARD_TO_COARSE.erectors).toBe('erectors');
+  });
+
+  it('keeps its per-muscle zone (4–12) and hands back its inflow-driven share of back', () => {
+    expect(getEffectiveBand('erectors')).toEqual({ mev: 4, mrv: 12 });
+    // Back reverts to the direct-literature band it carried before the v2
+    // hinge-spillover conversion, since that spillover was entirely erectors.
+    expect(getEffectiveBand('back')).toEqual({ mev: 10, mrv: 25 });
+  });
+
+  it('back\'s band stays coherent against the sub-muscles it kept', () => {
+    // Not an aggregation rule — coarse bands are independent landmarks. This
+    // pins the sanity relation: a group band sits at or above the largest
+    // child MRV and below their sum.
+    const back = getEffectiveBand('back');
+    const children = COARSE_CHILDREN.back.map((c) => getEffectiveBand(c));
+    expect(back.mrv).toBeGreaterThan(Math.max(...children.map((b) => b.mrv)));
+    expect(back.mrv).toBeLessThan(children.reduce((s, b) => s + b.mrv, 0));
+    expect(back.mev).toBeLessThanOrEqual(children.reduce((s, b) => s + b.mev, 0));
+  });
+
+  it('every other group keeps the children it had', () => {
+    // Guards the "preserve existing behavior for all other groups" constraint.
+    expect(COARSE_CHILDREN.chest).toEqual(['chest_upper', 'chest_lower']);
+    expect(COARSE_CHILDREN.shoulders).toEqual(['front_delts', 'lateral_delts', 'rear_delts']);
+    expect(COARSE_CHILDREN.glutes).toEqual(['glutes', 'glute_med']);
+    expect(COARSE_CHILDREN.abs).toEqual(['abs', 'obliques']);
+    expect(COARSE_CHILDREN.traps).toEqual(['traps', 'upper_traps', 'mid_lower_traps']);
+    expect(COARSE_CHILDREN.calves).toEqual(['calves', 'gastrocnemius', 'soleus']);
+    expect(COARSE_CHILDREN.triceps).toEqual(['triceps', 'triceps_long', 'triceps_lat_med']);
   });
 });

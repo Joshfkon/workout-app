@@ -18,6 +18,8 @@
  */
 
 import {
+  boundedComponentsOf,
+  capacityOwnerFor,
   resolveMuscleToStandard,
   type StandardMuscleGroup,
 } from '@/types/schema';
@@ -44,6 +46,19 @@ export interface PlannedSessionLike {
  * Muscles absent from the plan are omitted rather than defaulted, so the caller
  * can tell "not in the plan" apart from "planned once" and report the fallback
  * honestly.
+ *
+ * FAMILY EXPANSION. A session counts for a whole groupCapacity ↔
+ * boundedComponent family (traps/upper_traps/mid_lower_traps,
+ * calves/gastrocnemius/soleus, triceps/triceps_long/triceps_lat_med), matching
+ * the family flow in muscleRecovery.involvementFactor. This is not cosmetic:
+ * `sessionCapacityFor` divides the CAPACITY OWNER's MRV (the parent's) by this
+ * frequency, so looking the frequency up on the exact child row mixed a
+ * parent's MRV with a child's schedule. A plan that tags its pulls coarsely
+ * ('traps' three times a week) gave the parent 16/3 and the child the 16/2
+ * fallback — the same sets normalized against two different schedules, so the
+ * child's window came out shorter and its Train-page row went Fresh before the
+ * group's. Siblings still never merge: the edge is parent↔child only, so a
+ * shrug-only plan never implies a mid/lower trap session.
  */
 export function plannedSessionsPerWeekByMuscle(
   sessions: readonly PlannedSessionLike[]
@@ -61,7 +76,12 @@ export function plannedSessionsPerWeekByMuscle(
       ];
       for (const token of tokens) {
         if (!token) continue;
-        for (const standard of resolveMuscleToStandard(token)) touched.add(standard);
+        for (const standard of resolveMuscleToStandard(token)) {
+          touched.add(standard);
+          // Parent↔child only — no recursion, so siblings stay independent.
+          touched.add(capacityOwnerFor(standard));
+          for (const component of boundedComponentsOf(standard)) touched.add(component);
+        }
       }
     }
     for (const muscle of Array.from(touched)) {

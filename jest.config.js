@@ -33,7 +33,14 @@ const customJestConfig = {
   // copies of the repo and otherwise double/triple-count every test.
   // fix-suggestion-engine/ is a one-off verification harness (writes artifacts),
   // not part of the product test suite — run it explicitly, not in CI.
-  testPathIgnorePatterns: ['/node_modules/', '/.claude/worktrees/', '/fix-suggestion-engine/'],
+  // simulation/cli is the `npm run simulate` entry point: it runs the whole
+  // harness suite and is invoked explicitly, never as part of `npm test`.
+  testPathIgnorePatterns: [
+    '/node_modules/',
+    '/.claude/worktrees/',
+    '/fix-suggestion-engine/',
+    '/simulation/cli/',
+  ],
   collectCoverageFrom: [
     'lib/utils.ts',
     'lib/nutrition/**/*.ts',
@@ -51,7 +58,19 @@ const customJestConfig = {
       branches: 75,
       statements: 55,
     },
+    'services/volumeProjection.ts': {
+      lines: 90,
+      functions: 80,
+      branches: 80,
+      statements: 90,
+    },
     'services/volumeTrendsData.ts': {
+      lines: 70,
+      functions: 60,
+      branches: 50,
+      statements: 70,
+    },
+    'services/workoutDurationEstimator.ts': {
       lines: 70,
       functions: 60,
       branches: 50,

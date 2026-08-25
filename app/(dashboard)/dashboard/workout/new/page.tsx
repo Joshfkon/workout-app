@@ -11,12 +11,19 @@ import { useMuscleRecovery, type MuscleRecoveryStatus } from '@/hooks/useMuscleR
 import { useWeeklyVolume } from '@/hooks/useWeeklyVolume';
 import type { MuscleVolumeData } from '@/services/volumeTracker';
 import { getLocalDateString, muscleDisplayName } from '@/lib/utils';
+import { ALL_MUSCLE_TAG_OPTIONS, PRECISE_MUSCLE_GROUP_OPTIONS } from '@/lib/exercises/types';
 import { insertWorkoutSessions } from '@/lib/training/sessionOrigin';
 import { getUserExercisePreferences } from '@/lib/data/exercisePreferencesService';
 import { getVarietyPreferences, saveVarietyPreferences } from '@/services/exerciseVarietyService';
 import type { ExerciseVarietyLevel } from '@/types/user-exercise-preferences';
 import { VARIETY_LEVEL_DEFAULTS } from '@/types/user-exercise-preferences';
 import { checkExerciseSafety } from '@/lib/training/exercise-safety';
+import {
+  DURATION_MODEL,
+  estimateWorkoutDuration,
+  formatDurationEstimate,
+  type DurationBlockInput,
+} from '@/services/workoutDurationEstimator';
 import {
   filterExercisesByEquipment,
   unavailableIdsFromLegacyAllowlist,
@@ -83,28 +90,46 @@ function getRestPeriod(isCompound: boolean, goal: Goal, primaryMuscle?: MuscleGr
 }
 
 /**
- * Estimate time for an exercise including all sets and rest
- * Returns time in minutes
+ * Working sets a picked exercise gets, scaled by the session length the user
+ * asked for (60 min = full sets, 30 min = ~half). Shared by the live duration
+ * estimate and the blocks actually written at start, so the number shown while
+ * choosing is the number the workout is built from.
  */
-function estimateExerciseTime(
-  isCompound: boolean, 
-  goal: Goal, 
-  setsCount: number,
-  includeWarmup: boolean
-): number {
-  const restSeconds = getRestPeriod(isCompound, goal);
-  const setDuration = isCompound ? 50 : 35; // seconds per working set
-  
-  // Working sets time: (set duration + rest) * sets, minus rest after last set
-  const workingTime = (setDuration + restSeconds) * setsCount - restSeconds;
-  
-  // Warmup time: typically 3 sets taking about 3-4 minutes total
-  const warmupTime = includeWarmup && isCompound ? 4 * 60 : 0;
-  
-  // Transition time between exercises
-  const transitionTime = 60; // 1 minute
-  
-  return (workingTime + warmupTime + transitionTime) / 60;
+function plannedSetsFor(isCompound: boolean, workoutMinutes: number): number {
+  const timeModifier = Math.min(1.0, workoutMinutes / 60);
+  const baseSets = isCompound ? 4 : 3;
+  return Math.max(2, Math.round(baseSets * timeModifier)); // Minimum 2 sets
+}
+
+/**
+ * Shape the selected exercises for the shared duration model
+ * (services/workoutDurationEstimator) — the same model the live workout and
+ * the add-exercise picker use, so an estimate never contradicts itself between
+ * screens.
+ *
+ * Warmups are charged to the first exercise of each muscle group, matching how
+ * `handleStartWorkout` generates warmup protocols.
+ */
+function toDurationInputs(
+  picked: { id: string; mechanic: string; primary_muscle?: string }[],
+  goal: Goal,
+  workoutMinutes: number
+): DurationBlockInput[] {
+  const warmedMuscles = new Set<string>();
+  return picked.map((exercise) => {
+    const isCompound = exercise.mechanic === 'compound';
+    const muscle = exercise.primary_muscle ?? '';
+    const needsWarmup = muscle.length > 0 && !warmedMuscles.has(muscle);
+    if (needsWarmup) warmedMuscles.add(muscle);
+
+    return {
+      id: exercise.id,
+      targetSets: plannedSetsFor(isCompound, workoutMinutes),
+      restSeconds: getRestPeriod(isCompound, goal, muscle as MuscleGroup),
+      mechanic: isCompound ? 'compound' : 'isolation',
+      warmupSetsRemaining: needsWarmup ? (isCompound ? 3 : 2) : 0,
+    };
+  });
 }
 
 /**
@@ -114,11 +139,27 @@ function getMaxExercisesForTime(
   durationMinutes: number, 
   goal: Goal
 ): { compounds: number; isolations: number; total: number } {
-  // Average time per exercise type (with warmup for first compound per muscle)
-  const compoundWithWarmup = estimateExerciseTime(true, goal, 3, true);
-  const compoundNoWarmup = estimateExerciseTime(true, goal, 3, false);
-  const isolation = estimateExerciseTime(false, goal, 3, false);
-  
+  // Average time per exercise type (with warmup for first compound per muscle),
+  // read off the shared duration model so this budget and the on-screen
+  // estimate can't drift apart. The transition is what the exercise costs the
+  // exercise after it.
+  const minutesFor = (isCompound: boolean, includeWarmup: boolean) =>
+    (estimateWorkoutDuration([
+      {
+        id: 'probe',
+        targetSets: 3,
+        restSeconds: getRestPeriod(isCompound, goal),
+        mechanic: isCompound ? 'compound' : 'isolation',
+        warmupSetsRemaining: includeWarmup ? 3 : 0,
+      },
+    ]).totalSeconds +
+      DURATION_MODEL.transitionSeconds) /
+    60;
+
+  const compoundWithWarmup = minutesFor(true, true);
+  const compoundNoWarmup = minutesFor(true, false);
+  const isolation = minutesFor(false, false);
+
   // Typically 1-2 muscles trained, so 1-2 warmups
   // Estimate: 50% compounds, 50% isolations
   // First compound per muscle gets warmup
@@ -201,6 +242,9 @@ function NewWorkoutContent() {
   
   // Workout duration
   const [workoutDuration, setWorkoutDuration] = useState(45); // Default 45 minutes
+  // Training goal, loaded once — it sets the rest periods, and rest is most of
+  // a workout's clock, so the live duration estimate needs it to be honest.
+  const [userGoal, setUserGoal] = useState<Goal>('maintain');
   // In AI mode, wait for the user to answer "How much time do you have?" before generating
   const [awaitingAiTime, setAwaitingAiTime] = useState(aiMode);
   
@@ -239,20 +283,24 @@ function NewWorkoutContent() {
 
   // Recovery and volume tracking for muscle selection guidance
   const { recoveryStatus, isLoading: isLoadingRecovery } = useMuscleRecovery();
-  const { volumeData, isLoading: isLoadingVolume } = useWeeklyVolume();
+  const { rows: volumeRows, isLoading: isLoadingVolume } = useWeeklyVolume();
 
-  // Aggregate recovery and volume data for UI muscle groups (legacy 13)
-  // Since UI groups map to multiple standard groups, we take the worst-case for recovery
-  // and sum the volume data
+  // Aggregate recovery and volume data for UI muscle groups (legacy 13).
+  // Recovery is per standard muscle, so it takes the worst case across the
+  // group. Volume comes from the SHARED coarse row for the group — never a sum
+  // of its per-head counters, which double-counts within-group credit (a
+  // pushdown crediting both triceps heads would read 6 sets for 4 performed).
   const muscleIndicators = useMemo(() => {
     const indicators = new Map<MuscleGroup, {
       recoveryPercent: number;
       isReady: boolean;
       statusText: string;
       totalSets: number;
-      targetSets: number; // MAV midpoint
+      targetSets: number; // the group's MEV floor
       volumeStatus: 'below_mev' | 'effective' | 'optimal' | 'approaching_mrv' | 'exceeding_mrv';
     }>();
+
+    const rowByMuscle = new Map(volumeRows.map((row) => [row.muscle, row]));
 
     MUSCLE_GROUPS.forEach((muscle) => {
       const standardMuscles = legacyToStandardMuscles(muscle);
@@ -275,34 +323,17 @@ function NewWorkoutContent() {
         }
       });
 
-      // Get volume data - sum across all mapped standard muscles
-      let totalSets = 0;
-      let targetSets = 0;
-      let worstVolumeStatus: MuscleVolumeData['status'] = 'below_mev';
-      const statusPriority: Record<MuscleVolumeData['status'], number> = {
-        'exceeding_mrv': 0,
-        'approaching_mrv': 1,
-        'optimal': 2,
-        'effective': 3,
-        'below_mev': 4,
-      };
-      let currentPriority = 4;
-
-      standardMuscles.forEach((sm) => {
-        const vol = volumeData.find((v) => v.muscleGroup === sm);
-        if (vol) {
-          totalSets += vol.totalSets;
-          // Use midpoint of MEV-MAV as target for display
-          targetSets += Math.round((vol.landmarks.mev + vol.landmarks.mav) / 2);
-
-          // Track worst volume status
-          const priority = statusPriority[vol.status];
-          if (priority < currentPriority) {
-            currentPriority = priority;
-            worstVolumeStatus = vol.status;
-          }
-        }
-      });
+      // Volume: the group's own capped row against its own research band —
+      // the same number the home tile, Train page and volume page show.
+      const row = rowByMuscle.get(muscle);
+      const totalSets = row?.sets ?? 0;
+      const targetSets = row?.band.mev ?? 0;
+      const volumeStatus: MuscleVolumeData['status'] =
+        !row || row.zone === 'below_mev'
+          ? 'below_mev'
+          : row.zone === 'over_mrv'
+            ? 'exceeding_mrv'
+            : 'optimal';
 
       indicators.set(muscle, {
         recoveryPercent: worstRecoveryPercent,
@@ -310,12 +341,12 @@ function NewWorkoutContent() {
         statusText,
         totalSets,
         targetSets,
-        volumeStatus: worstVolumeStatus,
+        volumeStatus,
       });
     });
 
     return indicators;
-  }, [recoveryStatus, volumeData]);
+  }, [recoveryStatus, volumeRows]);
 
   // Suggest exercises based on recent history, goals, AND time available
   // COMPREHENSIVE VERSION: Addresses all 8 identified issues
@@ -834,16 +865,10 @@ function NewWorkoutContent() {
         }
       }
       
-      // Calculate estimated time
-      let estimatedMinutes = 0;
-      const warmupMuscles = new Set<string>();
-      picked.forEach((e: any) => {
-        const isCompound = e.mechanic === 'compound';
-        const needsWarmup = isCompound && !warmupMuscles.has(e.primary_muscle);
-        if (needsWarmup) warmupMuscles.add(e.primary_muscle);
-        estimatedMinutes += estimateExerciseTime(isCompound, userGoal, 3, needsWarmup);
-      });
-      
+      // Calculate estimated time (shared model — see workoutDurationEstimator)
+      const estimatedMinutes =
+        estimateWorkoutDuration(toDurationInputs(picked, userGoal, duration)).totalSeconds / 60;
+
       const reason = Object.keys(trainedMuscles).length === 0 
         ? `${picked.length} exercises for your ${duration}-minute workout (~${Math.round(estimatedMinutes)} min estimated).`
         : `${picked.length} exercises targeting ${suggestedMuscles.join(', ')} for your ${duration}-minute session (~${Math.round(estimatedMinutes)} min estimated).`;
@@ -885,6 +910,21 @@ function NewWorkoutContent() {
   // When ai=true in URL, generation waits for the user to pick a duration
   // (awaitingAiTime) instead of auto-triggering with the default time.
 
+  // Live "how long will this take?" for the exercises picked so far, using the
+  // same sets/rest the workout will actually be built with.
+  const plannedDuration = useMemo(() => {
+    const picked = selectedExercises
+      .map((id) => exercises.find((e) => e.id === id))
+      .filter((e): e is Exercise => Boolean(e));
+    if (picked.length === 0) return null;
+    const estimate = estimateWorkoutDuration(toDurationInputs(picked, userGoal, workoutDuration));
+    return {
+      label: formatDurationEstimate(estimate.totalSeconds),
+      totalSets: estimate.totalSets,
+      minutes: estimate.totalSeconds / 60,
+    };
+  }, [selectedExercises, exercises, userGoal, workoutDuration]);
+
   // Load equipment types on mount
   useEffect(() => {
     const loadEquipmentTypes = async () => {
@@ -899,6 +939,24 @@ function NewWorkoutContent() {
       }
     };
     loadEquipmentTypes();
+  }, []);
+
+  // Load the training goal on mount (drives rest periods in the estimate).
+  // A failure is silent: 'maintain' is the neutral default already used
+  // elsewhere on this page.
+  useEffect(() => {
+    const loadGoal = async () => {
+      const supabase = createUntypedClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase
+        .from('users')
+        .select('goal')
+        .eq('id', user.id)
+        .single();
+      if (data?.goal) setUserGoal(data.goal as Goal);
+    };
+    loadGoal();
   }, []);
 
   // Load gym locations on mount
@@ -1299,12 +1357,10 @@ function NewWorkoutContent() {
           isFirstExercise: index === 0, // First exercise overall gets general warmup
         }) : [];
 
-        // Scale sets based on workout duration
-        // 60 min = full sets, 30 min = ~50%, 20 min = ~33%
-        const timeModifier = Math.min(1.0, workoutDuration / 60);
-        const baseSets = isCompound ? 4 : 3;
-        const scaledSets = Math.max(2, Math.round(baseSets * timeModifier)); // Minimum 2 sets
-        
+        // Scale sets based on workout duration (60 min = full sets, 30 min =
+        // ~50%) — the same helper the on-screen duration estimate uses.
+        const scaledSets = plannedSetsFor(isCompound, workoutDuration);
+
         return {
           workout_session_id: session.id,
           exercise_id: exerciseId,
@@ -1692,27 +1748,48 @@ function NewWorkoutContent() {
                 <strong>{workoutDuration} min</strong> workout
               </span>
             </div>
-            <span className="text-sm text-surface-500">
-              Recommended: <strong>{getExerciseRangeForTime(workoutDuration)}</strong> exercises
-            </span>
+            {/* Once anything is picked, the target gives way to the actual
+                estimate for what's selected — that's the number the user is
+                deciding against. */}
+            {plannedDuration ? (
+              <span className="text-sm text-surface-300" data-testid="planned-duration-estimate">
+                Estimated{' '}
+                <strong
+                  className={
+                    plannedDuration.minutes > workoutDuration * 1.2
+                      ? 'text-warning-400'
+                      : 'text-surface-100'
+                  }
+                >
+                  {plannedDuration.label}
+                </strong>
+                <span className="text-surface-500"> · {plannedDuration.totalSets} sets</span>
+              </span>
+            ) : (
+              <span className="text-sm text-surface-500">
+                Recommended: <strong>{getExerciseRangeForTime(workoutDuration)}</strong> exercises
+              </span>
+            )}
           </div>
           
-          {/* Warning if too many exercises selected */}
-          {selectedExercises.length > 0 && (() => {
-            const budget = getMaxExercisesForTime(workoutDuration, 'maintain');
-            if (selectedExercises.length > budget.total + 1) {
-              return (
-                <div className="p-3 bg-warning-500/10 border border-warning-500/20 rounded-lg flex items-center gap-2">
-                  <svg className="w-5 h-5 text-warning-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                  </svg>
-                  <span className="text-sm text-warning-300">
-                    {selectedExercises.length} exercises may exceed your {workoutDuration} min target. Consider removing {selectedExercises.length - budget.total} exercise{selectedExercises.length - budget.total > 1 ? 's' : ''}.
-                  </span>
-                </div>
-              );
-            }
-            return null;
+          {/* Over-budget warning, now driven by the time estimate itself
+              rather than a raw exercise count — six isolations and six heavy
+              compounds are not the same workout. */}
+          {plannedDuration && plannedDuration.minutes > workoutDuration * 1.2 && (() => {
+            const budget = getMaxExercisesForTime(workoutDuration, userGoal);
+            const overBy = Math.max(1, selectedExercises.length - budget.total);
+            return (
+              <div className="p-3 bg-warning-500/10 border border-warning-500/20 rounded-lg flex items-center gap-2">
+                <svg className="w-5 h-5 text-warning-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <span className="text-sm text-warning-300">
+                  These {selectedExercises.length} exercises run about {plannedDuration.label}, past
+                  your {workoutDuration} min target. Consider removing {overBy} exercise
+                  {overBy > 1 ? 's' : ''} or shortening rest.
+                </span>
+              </div>
+            );
           })()}
 
           {/* Show AI suggestion reason */}
@@ -2040,7 +2117,17 @@ function NewWorkoutContent() {
 
       {/* Floating Start Workout Button */}
       {step === 2 && selectedExercises.length > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex flex-col items-center gap-1.5">
+          {/* Keeps the running estimate in view while scrolling the exercise
+              list — the recommendation bar at the top is long gone by then. */}
+          {plannedDuration && (
+            <span
+              className="px-2.5 py-1 rounded-full bg-surface-900/90 border border-surface-700 text-[11px] text-surface-300 shadow-lg"
+              data-testid="planned-duration-pill"
+            >
+              ~{plannedDuration.label} · {plannedDuration.totalSets} sets
+            </span>
+          )}
           <Button
             onClick={handleStartWorkout}
             disabled={isCreating}
@@ -2096,14 +2183,15 @@ function NewWorkoutContent() {
               </div>
 
               <div>
+                {/* Groups plus their fine heads. The splitting coarse groups
+                    (chest/back/shoulders) are absent by design — the insert
+                    action rejects them as a primary (validateExercisePrimary),
+                    so offering one here would only fail at save. */}
                 <Select
                   label="Muscle Group"
                   value={customExerciseForm.muscle}
                   onChange={(e) => setCustomExerciseForm(prev => ({ ...prev, muscle: e.target.value }))}
-                  options={MUSCLE_GROUPS.map((muscle) => ({
-                    value: muscle,
-                    label: muscle.charAt(0).toUpperCase() + muscle.slice(1),
-                  }))}
+                  options={PRECISE_MUSCLE_GROUP_OPTIONS}
                 />
               </div>
 
@@ -2205,30 +2293,30 @@ function NewWorkoutContent() {
                       Secondary Muscles
                     </label>
                     <div className="grid grid-cols-3 gap-2 max-h-32 overflow-y-auto p-2 bg-surface-800/50 rounded-lg">
-                      {MUSCLE_GROUPS.filter(m => m !== customExerciseForm.muscle).map((muscle) => (
+                      {ALL_MUSCLE_TAG_OPTIONS.filter(o => o.value !== customExerciseForm.muscle).map((option) => (
                         <label
-                          key={muscle}
+                          key={option.value}
                           className="flex items-center gap-2 p-1.5 rounded hover:bg-surface-700/50 cursor-pointer"
                         >
                           <input
                             type="checkbox"
-                            checked={customExerciseForm.secondaryMuscles.includes(muscle)}
+                            checked={customExerciseForm.secondaryMuscles.includes(option.value)}
                             onChange={(e) => {
                               if (e.target.checked) {
                                 setCustomExerciseForm(prev => ({
                                   ...prev,
-                                  secondaryMuscles: [...prev.secondaryMuscles, muscle]
+                                  secondaryMuscles: [...prev.secondaryMuscles, option.value]
                                 }));
                               } else {
                                 setCustomExerciseForm(prev => ({
                                   ...prev,
-                                  secondaryMuscles: prev.secondaryMuscles.filter(m => m !== muscle)
+                                  secondaryMuscles: prev.secondaryMuscles.filter(m => m !== option.value)
                                 }));
                               }
                             }}
                             className="w-4 h-4 text-primary-500 bg-surface-700 border-surface-600 rounded focus:ring-primary-500"
                           />
-                          <span className="text-xs text-surface-300">{muscleDisplayName(muscle)}</span>
+                          <span className="text-xs text-surface-300">{option.label}</span>
                         </label>
                       ))}
                     </div>

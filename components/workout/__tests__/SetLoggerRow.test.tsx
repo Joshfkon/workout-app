@@ -224,6 +224,14 @@ describe('SetLoggerRow hold timer (duration exercises)', () => {
     exerciseId: 'plank-1',
   };
 
+  /** Tap Start and run out the 5s "get in position" lead-in. */
+  async function startHold(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole('button', { name: 'Start hold timer' }));
+    act(() => {
+      jest.advanceTimersByTime(5_000);
+    });
+  }
+
   it('renders a Start hold button only for duration exercises', () => {
     const { rerender } = render(<SetLoggerRow {...defaultProps} />);
     expect(screen.queryByRole('button', { name: 'Start hold timer' })).not.toBeInTheDocument();
@@ -237,7 +245,7 @@ describe('SetLoggerRow hold timer (duration exercises)', () => {
     const onRepsChange = jest.fn();
     render(<SetLoggerRow {...durationProps} onRepsChange={onRepsChange} />);
 
-    await user.click(screen.getByRole('button', { name: 'Start hold timer' }));
+    await startHold(user);
     act(() => {
       jest.advanceTimersByTime(32_000);
     });
@@ -250,7 +258,7 @@ describe('SetLoggerRow hold timer (duration exercises)', () => {
     const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
     render(<SetLoggerRow {...durationProps} />);
 
-    await user.click(screen.getByRole('button', { name: 'Start hold timer' }));
+    await startHold(user);
 
     expect(screen.getByRole('button', { name: 'Decrease seconds' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Increase seconds' })).toBeDisabled();
@@ -295,7 +303,7 @@ describe('SetLoggerRow hold timer (duration exercises)', () => {
     const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
     render(<SetLoggerRow {...durationProps} />);
 
-    await user.click(screen.getByRole('button', { name: 'Start hold timer' }));
+    await startHold(user);
     act(() => {
       jest.advanceTimersByTime(10_000);
     });
@@ -305,5 +313,142 @@ describe('SetLoggerRow hold timer (duration exercises)', () => {
 
     await user.click(screen.getByRole('button', { name: 'Reset hold timer' }));
     expect(screen.getByRole('button', { name: 'Start hold timer' })).toBeInTheDocument();
+  });
+});
+
+describe('SetLoggerRow hold lead-in countdown', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    localStorage.clear();
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  const durationProps = {
+    ...defaultProps,
+    reps: '45',
+    isDurationBased: true,
+    exerciseId: 'plank-1',
+  };
+
+  it('counts down 5 seconds before the hold clock starts', async () => {
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    render(<SetLoggerRow {...durationProps} />);
+
+    await user.click(screen.getByRole('button', { name: 'Start hold timer' }));
+
+    // Counting down, not holding: the countdown readout is showing and the
+    // button offers cancel rather than stop.
+    expect(screen.getByTestId('hold-countdown')).toHaveTextContent('5');
+    expect(screen.getByRole('button', { name: 'Cancel hold countdown' })).toBeInTheDocument();
+
+    act(() => {
+      jest.advanceTimersByTime(3_000);
+    });
+    expect(screen.getByTestId('hold-countdown')).toHaveTextContent('2');
+
+    act(() => {
+      jest.advanceTimersByTime(2_000);
+    });
+    expect(screen.queryByTestId('hold-countdown')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Stop hold timer' })).toBeInTheDocument();
+  });
+
+  it('does not count the lead-in as held time', async () => {
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    const onRepsChange = jest.fn();
+    render(<SetLoggerRow {...durationProps} onRepsChange={onRepsChange} />);
+
+    await user.click(screen.getByRole('button', { name: 'Start hold timer' }));
+    act(() => {
+      jest.advanceTimersByTime(5_000); // lead-in
+      jest.advanceTimersByTime(20_000); // actual hold
+    });
+    await user.click(screen.getByRole('button', { name: 'Stop hold timer' }));
+
+    expect(onRepsChange).toHaveBeenCalledWith('20');
+  });
+
+  it('cancelling the countdown returns to the idle Start state', async () => {
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    const onRepsChange = jest.fn();
+    render(<SetLoggerRow {...durationProps} onRepsChange={onRepsChange} />);
+
+    await user.click(screen.getByRole('button', { name: 'Start hold timer' }));
+    act(() => {
+      jest.advanceTimersByTime(2_000);
+    });
+    await user.click(screen.getByRole('button', { name: 'Cancel hold countdown' }));
+
+    expect(screen.getByRole('button', { name: 'Start hold timer' })).toBeInTheDocument();
+    expect(screen.queryByTestId('hold-countdown')).not.toBeInTheDocument();
+    expect(onRepsChange).not.toHaveBeenCalled();
+  });
+
+  it('"Start hold now" skips the remaining lead-in', async () => {
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    const onRepsChange = jest.fn();
+    render(<SetLoggerRow {...durationProps} onRepsChange={onRepsChange} />);
+
+    await user.click(screen.getByRole('button', { name: 'Start hold timer' }));
+    await user.click(screen.getByRole('button', { name: 'Start hold now' }));
+
+    expect(screen.getByRole('button', { name: 'Stop hold timer' })).toBeInTheDocument();
+
+    act(() => {
+      jest.advanceTimersByTime(12_000);
+    });
+    await user.click(screen.getByRole('button', { name: 'Stop hold timer' }));
+    expect(onRepsChange).toHaveBeenCalledWith('12');
+  });
+
+  it('keeps Log set and the seconds steppers locked during the lead-in', async () => {
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    render(<SetLoggerRow {...durationProps} />);
+
+    await user.click(screen.getByRole('button', { name: 'Start hold timer' }));
+
+    expect(screen.getByRole('button', { name: /Log set/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Increase seconds' })).toBeDisabled();
+  });
+});
+
+describe('SetLoggerRow duration exercises with no load', () => {
+  const timedNoLoadProps = {
+    ...defaultProps,
+    weight: '',
+    reps: '73',
+    isDurationBased: true,
+    exerciseId: 'dead-hang-1',
+  };
+
+  it('logs a timed set that has no load prescription', async () => {
+    const user = userEvent.setup();
+    const onLog = jest.fn();
+    render(<SetLoggerRow {...timedNoLoadProps} onLog={onLog} />);
+
+    const logButton = screen.getByRole('button', { name: /Log set/i });
+    expect(logButton).toBeEnabled();
+
+    await user.click(logButton);
+    expect(onLog).toHaveBeenCalledTimes(1);
+    expect(onLog.mock.calls[0][0]).toMatchObject({ weightKg: 0, reps: 73 });
+  });
+
+  it('logs a timed set entered as zero weight', async () => {
+    const user = userEvent.setup();
+    const onLog = jest.fn();
+    render(<SetLoggerRow {...timedNoLoadProps} weight="0" onLog={onLog} />);
+
+    await user.click(screen.getByRole('button', { name: /Log set/i }));
+    expect(onLog.mock.calls[0][0]).toMatchObject({ weightKg: 0, reps: 73 });
+  });
+
+  it('still requires a load on non-duration exercises', () => {
+    render(<SetLoggerRow {...defaultProps} weight="0" reps="8" />);
+    expect(screen.getByRole('button', { name: /Log set/i })).toBeDisabled();
   });
 });

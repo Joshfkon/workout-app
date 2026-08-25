@@ -145,6 +145,12 @@ export interface AddExercisePickerProps {
   selectedExercisesToAdd: AvailableExercise[];
   onToggleExerciseSelection: (exercise: AvailableExercise) => void;
   isAddingExercise: boolean;
+  /**
+   * Live "how long will this take?" readout under the title: the session's
+   * estimate as it would stand once the current selection is added, plus what
+   * the selection itself costs. Omit to hide the line entirely.
+   */
+  sessionDuration?: { totalLabel: string; deltaLabel: string | null } | null;
   // Actions
   onClose: () => void;
   onAddSelected: () => void;
@@ -179,6 +185,7 @@ export function AddExercisePicker({
   selectedExercisesToAdd,
   onToggleExerciseSelection,
   isAddingExercise,
+  sessionDuration,
   onClose,
   onAddSelected,
   onCreateCustom,
@@ -558,7 +565,22 @@ export function AddExercisePicker({
           >
             <IconX size={20} />
           </button>
-          <h2 className="text-lg font-semibold text-surface-100">Add Exercise</h2>
+          <div className="min-w-0 text-center">
+            <h2 className="text-lg font-semibold text-surface-100">Add Exercise</h2>
+            {/* Live cost of the workout being assembled — the number the user
+                is really deciding against when picking a sixth exercise. */}
+            {sessionDuration && (
+              <p
+                className="text-[11px] leading-4 text-surface-500 truncate"
+                data-testid="picker-duration-estimate"
+              >
+                ~{sessionDuration.totalLabel} workout
+                {sessionDuration.deltaLabel && (
+                  <span className="text-primary-400"> ({sessionDuration.deltaLabel})</span>
+                )}
+              </p>
+            )}
+          </div>
           <button
             onClick={onAddSelected}
             disabled={selectedExercisesToAdd.length === 0 || isAddingExercise}

@@ -34,6 +34,7 @@ import {
   type ExerciseDeloadInfo,
 } from '@/services/deloadEngine';
 import type { FullProgramRecommendation, MesocycleWeek } from '@/types/schema';
+import { now as clockNow } from '@/lib/clock';
 
 // ============================================================
 // Types
@@ -179,13 +180,17 @@ export async function recordDeloadRecommendationIfTriggered(
   // Dynamic import keeps ProgramEngine (and its large exercise constants)
   // out of bundles that only fetch/apply/dismiss (e.g. the dashboard).
   const { checkShouldDeload } = await import('./workoutIntegration');
-  const triggers = await checkShouldDeload(userId, mesocycleId);
+  // Hand the engine the SAME client this call was given, rather than letting
+  // it build the module singleton. That is what makes the whole finish-flow
+  // path — completion → post-session meso updates → deload triggers — run
+  // against one caller-supplied database.
+  const triggers = await checkShouldDeload(userId, mesocycleId, supabase);
   if (!triggers.shouldDeload || triggers.reasons.length === 0) return false;
 
   const { error: updateError } = await supabase
     .from('mesocycles')
     .update({
-      deload_recommended_at: new Date().toISOString(),
+      deload_recommended_at: clockNow().toISOString(),
       deload_reasons: triggers.reasons,
     })
     .eq('id', mesocycleId)

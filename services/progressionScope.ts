@@ -154,6 +154,43 @@ export function deriveProgressionScope(input: ProgressionScopeInput): Progressio
 }
 
 // ---------------------------------------------------------------------------
+// Effective location (session location + per-exercise override)
+// ---------------------------------------------------------------------------
+
+/**
+ * The location one exercise is actually being performed at.
+ *
+ * A session carries a location (workout_sessions.location_id), but "which gym"
+ * and "which machine" are not the same question: one gym can hold two hip
+ * adduction machines whose stacks disagree by 40 lb. `exercise_blocks
+ * .location_id` overrides the session for a single exercise, so the resolution
+ * is simply override-then-session — with `null` meaning unknown/legacy at both
+ * levels.
+ *
+ * This is the single place that ordering is decided: set stamping, history
+ * scoping and the UI's badge all call it, so they cannot drift apart and start
+ * writing sets to one track while reading suggestions off another.
+ */
+export function resolveEffectiveLocation(
+  blockLocationId: string | null | undefined,
+  sessionLocationId: string | null | undefined
+): string | null {
+  return blockLocationId ?? sessionLocationId ?? null;
+}
+
+/**
+ * True when a block's override actually changes where it is logged — i.e. it
+ * is set AND differs from the session. An override equal to the session
+ * location is a no-op and should not be badged in the UI as "somewhere else".
+ */
+export function hasLocationOverride(
+  blockLocationId: string | null | undefined,
+  sessionLocationId: string | null | undefined
+): boolean {
+  return blockLocationId != null && blockLocationId !== sessionLocationId;
+}
+
+// ---------------------------------------------------------------------------
 // Legacy null-location attribution (rule 6)
 // ---------------------------------------------------------------------------
 

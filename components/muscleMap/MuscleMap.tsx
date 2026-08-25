@@ -11,6 +11,10 @@ import {
 import { REGION_TO_MUSCLE, type MuscleId } from '@/lib/muscleMap/taxonomy';
 import type { MuscleMapData, MuscleMapDatum } from '@/lib/muscleMap/adapters';
 import { rowFillClass } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
+import {
+  HEAT_ARIA_STATUS,
+  HEAT_FILL_CLASSES,
+} from '@/app/(dashboard)/dashboard/_lib/volumeHeatmap';
 import { STANDARD_MUSCLE_DISPLAY_NAMES } from '@/types/schema';
 import type { RecoveryStatus } from '@/services/muscleRecovery';
 
@@ -24,10 +28,14 @@ import type { RecoveryStatus } from '@/services/muscleRecovery';
  * never disagree with a bar/row on the same screen.
  *
  * Modes:
- * - volume:    shared zone semantics via zoneFillClass (gray untrained, amber
- *              below MEV, green across the MEV–MRV band, red past MRV).
+ * - volume:    shared zone semantics via zoneFillClass (light red untrained,
+ *              amber below MEV, green across the MEV–MRV band, solid red past
+ *              MRV).
  * - recovery:  fresh green / recovering amber / fatigued gray, matching the
  *              readiness badges.
+ * - heat:      long-window MEV-weighted buckets (volumeHeatmap): reds/amber
+ *              below MEV, greens darkening with volume across and past the
+ *              band.
  * - highlight: primary muscle in full primary color, secondaries dimmed to
  *              their `value` opacity, everything else neutral.
  *
@@ -37,7 +45,7 @@ import type { RecoveryStatus } from '@/services/muscleRecovery';
  * accessible UI, but every mapped path still carries an aria-label.
  */
 
-export type MuscleMapMode = 'volume' | 'recovery' | 'highlight';
+export type MuscleMapMode = 'volume' | 'recovery' | 'heat' | 'highlight';
 
 export interface MuscleMapProps {
   data: MuscleMapData;
@@ -103,6 +111,11 @@ function presentRegion(mode: MuscleMapMode, datum: MuscleMapDatum | undefined): 
   if (mode === 'recovery') {
     if (!datum.status) return { fillClass: BASE_FILL, ariaStatus: null };
     return { fillClass: RECOVERY_FILL[datum.status], ariaStatus: RECOVERY_ARIA[datum.status] };
+  }
+
+  if (mode === 'heat') {
+    if (!datum.heat) return { fillClass: BASE_FILL, ariaStatus: null };
+    return { fillClass: HEAT_FILL_CLASSES[datum.heat], ariaStatus: HEAT_ARIA_STATUS[datum.heat] };
   }
 
   // highlight

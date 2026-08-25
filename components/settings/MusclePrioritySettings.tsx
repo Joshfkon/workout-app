@@ -41,12 +41,19 @@ const PRIORITY_BADGE_VARIANTS: Record<MusclePriorityLevel, 'info' | 'default' | 
   5: 'outline',
 };
 
-// Group muscles by body region for better organization
+// Group muscles by body region for better organization.
+//
+// Every MUSCLE_GROUPS member must appear exactly once here or it silently
+// becomes un-prioritizable: state is seeded from MUSCLE_GROUPS but the form
+// only renders what this map lists. Asserted in the component's test.
+// 'erectors' sits under Core & Spine (matching STANDARD_MUSCLE_GROUPS_BY_REGION
+// in lib/exercises/types.ts) rather than under Pull — it is loaded by hinges
+// and squats, which is the whole reason it is no longer part of 'back'.
 const MUSCLE_GROUPS_BY_REGION: Record<string, MuscleGroup[]> = {
   'Upper Body - Push': ['chest', 'shoulders', 'triceps'],
   'Upper Body - Pull': ['back', 'biceps', 'forearms', 'traps'],
   'Lower Body': ['quads', 'hamstrings', 'glutes', 'calves', 'adductors'],
-  'Core': ['abs'],
+  'Core & Spine': ['abs', 'erectors'],
 };
 
 export function MusclePrioritySettings({

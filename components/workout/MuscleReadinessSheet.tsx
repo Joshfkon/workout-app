@@ -26,6 +26,9 @@ import {
   withVisibleChildren,
 } from '@/components/muscle/MuscleGroupList';
 import { ContributingSets, SourcesDisclosure } from '@/components/muscle/ContributingSets';
+import { CompactVolumeHeatmap } from '@/components/muscle/VolumeHeatmapView';
+import { RollingVolumeForecast } from '@/components/muscle/RollingVolumeForecast';
+import type { DailyGroupSets } from '@/services/volumeProjection';
 import { MuscleMap } from '@/components/muscleMap/MuscleMap';
 import { readinessRowsToMapData } from '@/lib/muscleMap/adapters';
 import type { MuscleId } from '@/lib/muscleMap/taxonomy';
@@ -45,6 +48,23 @@ const DEFAULT_ROW_CAP = 6;
  */
 const SHOW_ALL_STORAGE_KEY = 'hypertrack:readiness-show-all';
 
+/**
+ * Map paint mode (recovery vs volume vs long-window heatmap) shares the same
+ * per-session persistence (and both surfaces share the key) so the choice
+ * survives the sheet's lazy re-mounts within a session.
+ */
+const MAP_MODE_STORAGE_KEY = 'hypertrack:readiness-map-mode';
+
+/** What the sheet's body map paints: recovery status, weekly-volume zones, or
+ *  the long-window MEV-weighted heatmap (2w–1y averages). */
+type ReadinessMapMode = 'recovery' | 'volume' | 'heat';
+
+const READINESS_MAP_MODES: { id: ReadinessMapMode; label: string }[] = [
+  { id: 'recovery', label: 'Recovery' },
+  { id: 'volume', label: 'Volume' },
+  { id: 'heat', label: 'Heatmap' },
+];
+
 function readShowAll(key: string): boolean {
   if (typeof window === 'undefined') return false;
   try {
@@ -60,6 +80,27 @@ function persistShowAll(key: string, value: boolean): void {
     window.sessionStorage.setItem(key, value ? '1' : '0');
   } catch {
     /* sessionStorage unavailable (private mode / SSR) — degrade to in-memory. */
+  }
+}
+
+function readMapMode(): ReadinessMapMode {
+  if (typeof window === 'undefined') return 'recovery';
+  try {
+    const stored = window.sessionStorage.getItem(MAP_MODE_STORAGE_KEY);
+    return READINESS_MAP_MODES.some((m) => m.id === stored)
+      ? (stored as ReadinessMapMode)
+      : 'recovery';
+  } catch {
+    return 'recovery';
+  }
+}
+
+function persistMapMode(mode: ReadinessMapMode): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.setItem(MAP_MODE_STORAGE_KEY, mode);
+  } catch {
+    /* sessionStorage unavailable — degrade to in-memory. */
   }
 }
 
@@ -115,13 +156,26 @@ function barFillPct(sets: number, mrv: number): number {
 }
 
 /**
- * Compact recovery body map for the sheet: one view at a time (sheet height),
- * front/back toggle, painted from the SAME rows the badges below render (via
- * readinessRowsToMapData — coarse status per group, rendered fine children
- * override). Tapping a muscle scrolls to its row.
+ * Compact body map for the sheet: one view at a time (sheet height),
+ * front/back toggle, plus a Recovery/Volume/Heatmap paint toggle — recovery
+ * status by default, weekly-volume zones (same colors as the bars below) on
+ * demand. Those two paints come from the SAME rows the badges/bars below
+ * render (via readinessRowsToMapData — coarse values per group, rendered fine
+ * children override), and tapping a muscle scrolls to its row.
+ *
+ * The third paint is the long-window MEV-weighted heatmap (2w–1y averages,
+ * shared CompactVolumeHeatmap unit with its own timeframe chips and legend).
+ * It deliberately does NOT scroll-to-row on tap: the rows below show THIS
+ * week's volume while the heatmap paints a longer window, so a tap shows the
+ * muscle's own long-window numbers instead of pointing at a different metric.
  */
 function ReadinessMap({ rows, onRevealAll }: { rows: ReadinessRow[]; onRevealAll?: () => void }) {
   const [view, setView] = useState<BodyView>('front');
+  const [mode, setModeState] = useState<ReadinessMapMode>(() => readMapMode());
+  const setMode = (value: ReadinessMapMode) => {
+    setModeState(value);
+    persistMapMode(value);
+  };
   const mapData = useMemo(() => readinessRowsToMapData(rows), [rows]);
   const renderedChildMuscles = useMemo(
     () => new Set(rows.flatMap((row) => row.children.map((c) => c.muscle))),
@@ -147,31 +201,58 @@ function ReadinessMap({ rows, onRevealAll }: { rows: ReadinessRow[]; onRevealAll
 
   return (
     <div className="mb-2" data-testid="readiness-map">
-      <div className="flex justify-center gap-1 mb-1.5">
-        {(['front', 'back'] as const).map((v) => (
-          <button
-            key={v}
-            onClick={() => setView(v)}
-            className={`px-2.5 py-1 rounded text-[11px] font-medium transition-colors ${
-              view === v
-                ? 'bg-surface-700 text-surface-100'
-                : 'text-surface-500 hover:text-surface-300'
-            }`}
-            data-testid={`readiness-map-view-${v}`}
-            aria-pressed={view === v}
-          >
-            {v === 'front' ? 'Front' : 'Back'}
-          </button>
-        ))}
+      <div className="flex items-center justify-between mb-1.5">
+        {/* Paint toggle: recovery status (default), weekly-volume zones, or
+            the long-window heatmap. */}
+        <div className="flex gap-1">
+          {READINESS_MAP_MODES.map((m) => (
+            <button
+              key={m.id}
+              onClick={() => setMode(m.id)}
+              className={`px-2.5 py-1 rounded text-[11px] font-medium transition-colors ${
+                mode === m.id
+                  ? 'bg-surface-700 text-surface-100'
+                  : 'text-surface-500 hover:text-surface-300'
+              }`}
+              data-testid={`readiness-map-mode-${m.id}`}
+              aria-pressed={mode === m.id}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+        <div className="flex gap-1">
+          {(['front', 'back'] as const).map((v) => (
+            <button
+              key={v}
+              onClick={() => setView(v)}
+              className={`px-2.5 py-1 rounded text-[11px] font-medium transition-colors ${
+                view === v
+                  ? 'bg-surface-700 text-surface-100'
+                  : 'text-surface-500 hover:text-surface-300'
+              }`}
+              data-testid={`readiness-map-view-${v}`}
+              aria-pressed={view === v}
+            >
+              {v === 'front' ? 'Front' : 'Back'}
+            </button>
+          ))}
+        </div>
       </div>
-      <MuscleMap
-        data={mapData}
-        mode="recovery"
-        view={view}
-        onMuscleTap={scrollToRow}
-        className="h-44"
-        data-testid="readiness-muscle-map"
-      />
+      {mode === 'heat' ? (
+        // Mounted only while active, so the long-window fetch is lazy and the
+        // React Query hook never runs for users who stay on recovery/volume.
+        <CompactVolumeHeatmap view={view} />
+      ) : (
+        <MuscleMap
+          data={mapData}
+          mode={mode}
+          view={view}
+          onMuscleTap={scrollToRow}
+          className="h-44"
+          data-testid="readiness-muscle-map"
+        />
+      )}
     </div>
   );
 }
@@ -263,6 +344,7 @@ export function MuscleReadinessContent({
   rows,
   targets,
   nextUp = null,
+  dailyGroupSets,
   isLoading,
   collapsible = false,
   loadingTestId = 'readiness-sheet-loading',
@@ -273,6 +355,9 @@ export function MuscleReadinessContent({
   rows: ReadinessRow[];
   targets: ReadinessTarget[];
   nextUp?: NextReadyTarget | null;
+  /** Per-day credited group sets (from useMuscleReadiness) — enables the
+   *  rolling-volume decay forecast inside each expanded row. */
+  dailyGroupSets?: DailyGroupSets;
   isLoading: boolean;
   collapsible?: boolean;
   loadingTestId?: string;
@@ -355,18 +440,37 @@ export function MuscleReadinessContent({
               // Expanding a row also reveals WHERE its weekly count came from —
               // and gives chevronless single-muscle groups (Biceps, Quads, …)
               // something to expand to.
-              renderRowDetail={(row) =>
-                row.exercises.length > 0 ? (
-                  // The scope label keeps this group-wide panel (rendered below
-                  // the last fine child) from reading as that child's breakdown.
-                  <ContributingSets
-                    exercises={row.exercises}
-                    muscle={row.muscle}
-                    testIdPrefix="readiness-sources"
-                    scopeLabel={row.children.length > 0 ? `${row.displayName} · whole group` : row.displayName}
-                  />
-                ) : null
-              }
+              renderRowDetail={(row) => {
+                if (row.exercises.length === 0) return null;
+                const daily = dailyGroupSets?.[row.muscle];
+                return (
+                  <>
+                    {/* Group-scope panel: MuscleGroupList renders it at ROW
+                        level (outside the child indent), and the scope label
+                        names the group, so it can't read as a sub-muscle's
+                        breakdown. groupScope adds the footnote for why the
+                        group total is below the sum of the sub-muscle rows. */}
+                    <ContributingSets
+                      exercises={row.exercises}
+                      muscle={row.muscle}
+                      testIdPrefix="readiness-sources"
+                      scopeLabel={row.children.length > 0 ? `${row.displayName} · whole group` : row.displayName}
+                      groupScope={row.children.length > 0}
+                    />
+                    {/* When does this rolling count fall off? Same zone colors
+                        as the row bar and the body map. */}
+                    {daily && (
+                      <RollingVolumeForecast
+                        daily={daily}
+                        band={row.band}
+                        muscle={row.muscle}
+                        displayName={row.displayName}
+                        testIdPrefix="readiness-forecast"
+                      />
+                    )}
+                  </>
+                );
+              }}
               testIdPrefix="readiness-row"
               childrenClassName="border-l border-surface-800/80 ml-5 mb-1 pl-2"
             />
@@ -404,8 +508,10 @@ export function MuscleReadinessContent({
       {showFootnote && (
         <p className="mt-3 text-[11px] leading-relaxed text-surface-600">
           Sorted by what to train now: recovered muscles behind on weekly volume
-          come first; fatigued muscles sink to the bottom. Recovery is a simple
-          planning estimate, not a medical readout.
+          come first; fatigued muscles sink to the bottom. Set counts include
+          today&rsquo;s workout as you log it; recovery updates once you finish
+          the session. Recovery is a simple planning estimate, not a medical
+          readout.
         </p>
       )}
     </>
@@ -423,7 +529,7 @@ export function MuscleReadinessSheet({
   // against the same instant (and re-stamped on each fresh open).
   const [now] = useState(() => new Date());
 
-  const { rows, targets, nextUp, isLoading } = useMuscleReadiness({
+  const { rows, targets, nextUp, dailyGroupSets, isLoading } = useMuscleReadiness({
     liveBlocks,
     liveSets,
     now,
@@ -439,6 +545,7 @@ export function MuscleReadinessSheet({
           rows={rows}
           targets={targets}
           nextUp={nextUp}
+          dailyGroupSets={dailyGroupSets}
           isLoading={isLoading}
           collapsible
           wearableNotice={wearableRecovery.reason}

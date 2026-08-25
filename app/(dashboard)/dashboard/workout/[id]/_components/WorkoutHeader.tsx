@@ -28,6 +28,7 @@ import {
   IconClock,
   IconDotsVertical,
   IconGauge,
+  IconMapPin,
   IconMoon,
   IconPlayerPause,
   IconPlayerPlay,
@@ -53,6 +54,14 @@ export interface WorkoutHeaderProps {
   exerciseTotal: number;
   /** One entry per non-skipped exercise, in workout order. */
   segments: ExerciseSegmentStatus[];
+  /**
+   * Estimated time left in the session ("1h 05m"), or null when there is
+   * nothing left to do. Sits beside the exercise count because "how much
+   * longer?" is the same question as "where am I?".
+   */
+  remainingDurationLabel?: string | null;
+  /** Tooltip/aria detail for that estimate (total, and whether it's calibrated). */
+  remainingDurationHint?: string;
   /** session.startedAt — elapsed time renders only when the session has started */
   startedAt: string | null;
   /**
@@ -73,6 +82,16 @@ export interface WorkoutHeaderProps {
   /** Opens the "which muscles should I hit today?" volume + recovery sheet. */
   onOpenMuscleReadiness: () => void;
   onOpenPlateCalculator: () => void;
+  /**
+   * Name of the gym this session is being logged at, or null when none is set.
+   * Machine loads aren't comparable between gyms, so this is the key the
+   * session's sets are filed under (see services/progressionScope) — it earns
+   * a permanent spot in the meta line rather than a menu item, because a wrong
+   * location is only noticeable if it's visible.
+   */
+  locationName: string | null;
+  /** Opens the picker that changes where this whole workout is being logged. */
+  onOpenLocationPicker: () => void;
   /** Whether this session is currently flagged as a deload (light) session. */
   isDeload: boolean;
   /** Toggle the deload flag for this session (held light, excluded from PRs/trends). */
@@ -105,6 +124,8 @@ export function WorkoutHeader({
   exerciseNumber,
   exerciseTotal,
   segments,
+  remainingDurationLabel,
+  remainingDurationHint,
   startedAt,
   timerStarted,
   workoutTimer,
@@ -118,6 +139,8 @@ export function WorkoutHeader({
   onOpenReadinessModal,
   onOpenMuscleReadiness,
   onOpenPlateCalculator,
+  locationName,
+  onOpenLocationPicker,
   isDeload,
   onToggleDeload,
   onCancelWorkout,
@@ -154,9 +177,53 @@ export function WorkoutHeader({
         {/* Left: name + position meta */}
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-surface-100 truncate">{workoutName}</p>
-          <p className="text-[11px] text-surface-500 truncate">
-            exercise {exerciseNumber} of {exerciseTotal}
-          </p>
+          <div className="flex items-center gap-1 min-w-0">
+            <p className="text-[11px] text-surface-500 truncate">
+              exercise {exerciseNumber} of {exerciseTotal}
+              {remainingDurationLabel && (
+                <>
+                  <span aria-hidden="true"> · </span>
+                  <span
+                    data-testid="workout-duration-remaining"
+                    title={remainingDurationHint}
+                  >
+                    ~{remainingDurationLabel} left
+                  </span>
+                </>
+              )}
+            </p>
+            <span aria-hidden="true" className="text-[11px] text-surface-600">
+              ·
+            </span>
+            {/* Location chip. Lives in the always-visible meta line rather than
+                behind the menu: a session filed under the wrong gym quietly
+                pollutes every machine lift's history, and the only defense is
+                that the user can see where they are. Also present in the tools
+                menu below at a full-size hit target. */}
+            <button
+              onClick={onOpenLocationPicker}
+              data-testid="workout-location-chip"
+              data-location-set={locationName ? 'true' : 'false'}
+              title={
+                locationName
+                  ? `Training at ${locationName} — tap to change`
+                  : 'No location set — machine lifts share one history until you set it'
+              }
+              aria-label={
+                locationName
+                  ? `Training at ${locationName}. Change workout location.`
+                  : 'Set workout location.'
+              }
+              className={`-my-1.5 flex flex-shrink-0 max-w-[45%] items-center gap-1 rounded-md px-1.5 py-1.5 text-[11px] transition-colors ${
+                locationName
+                  ? 'text-surface-400 hover:bg-surface-800 hover:text-surface-200'
+                  : 'text-surface-500 hover:bg-surface-800 hover:text-surface-300'
+              }`}
+            >
+              <IconMapPin size={12} stroke={2} className="flex-shrink-0" aria-hidden="true" />
+              <span className="truncate">{locationName ?? 'Set location'}</span>
+            </button>
+          </div>
         </div>
 
         {/* Timer pill — before the first set logs there is no elapsed time,
@@ -290,6 +357,15 @@ export function WorkoutHeader({
                   >
                     <IconBarbell size={16} className="text-surface-400" />
                     Plate calculator
+                  </button>
+                  <button
+                    onClick={() => { onOpenLocationPicker(); onCloseToolsMenu(); }}
+                    className={menuItemClass}
+                    role="menuitem"
+                    data-testid="workout-location-menu-item"
+                  >
+                    <IconMapPin size={16} className="text-surface-400" />
+                    {locationName ? `Location: ${locationName}` : 'Set location'}
                   </button>
                   <button
                     onClick={() => { onToggleDeload(); onCloseToolsMenu(); }}

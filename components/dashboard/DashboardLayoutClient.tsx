@@ -24,9 +24,8 @@ export function DashboardLayoutClient({ children }: DashboardLayoutClientProps) 
   // Weekly volume coverage for the Train tab indicator: lit when every
   // muscle group has hit at least MEV this week. Fetched once here so the
   // sidebar and bottom nav share a single query.
-  const { summary, isLoading: volumeLoading } = useWeeklyVolume();
-  const volumeGoalsMet =
-    !volumeLoading && summary.totalSets > 0 && summary.musclesBelowMev.length === 0;
+  const { tiles, isLoading: volumeLoading } = useWeeklyVolume();
+  const volumeGoalsMet = !volumeLoading && tiles.totalSets > 0 && tiles.lowCount === 0;
 
   // Apple Health: anchored pull on entry + every app foreground (iOS native
   // only; no-op everywhere else).
@@ -34,8 +33,20 @@ export function DashboardLayoutClient({ children }: DashboardLayoutClientProps) 
 
   // Offline outbox (P0-2): flush queued set writes whenever connectivity
   // returns, from ANY dashboard tab — not just the workout page.
+  // Post-finish work items (B3) are settled from the same trigger: a finish
+  // whose completion was drained by some other flush leaves work behind, and
+  // this is where it gets picked up — including after an app restart.
   useEffect(() => {
-    const flush = () => { void flushSetOutbox(createUntypedClient()); };
+    const flush = () => {
+      const supabase = createUntypedClient();
+      void flushSetOutbox(supabase).then(() =>
+        // Dynamic so the finish flow (and the deload engine behind it) stays
+        // out of the dashboard shell's initial bundle.
+        import('@/app/(dashboard)/dashboard/workout/[id]/_lib/finishWorkout')
+          .then(({ drainPostFinishWork }) => drainPostFinishWork(supabase))
+          .catch((err) => console.error('Post-finish drain failed:', err))
+      );
+    };
     window.addEventListener('online', flush);
     if (navigator.onLine) flush();
     return () => window.removeEventListener('online', flush);
@@ -49,7 +60,10 @@ export function DashboardLayoutClient({ children }: DashboardLayoutClientProps) 
   };
 
   return (
-    <div className="min-h-screen bg-surface-950 overflow-x-hidden">
+    // overflow-x-clip, NOT -hidden: hidden makes this div a scroll container,
+    // which kills the sticky header below and makes iOS unpin the fixed
+    // bottom nav mid-scroll. clip clips without creating a scroll container.
+    <div className="min-h-screen bg-surface-950 overflow-x-clip">
       <Sidebar onSignOut={handleSignOut} volumeGoalsMet={volumeGoalsMet} />
 
       {/* Main content */}
@@ -91,7 +105,7 @@ export function DashboardLayoutClient({ children }: DashboardLayoutClientProps) 
         </header>
 
         {/* Page content */}
-        <main className="p-4 pb-[calc(5rem+env(safe-area-inset-bottom))] lg:p-6 lg:pb-6 overflow-x-hidden">{children}</main>
+        <main className="p-4 pb-[calc(5rem+env(safe-area-inset-bottom))] lg:p-6 lg:pb-6 overflow-x-clip">{children}</main>
       </div>
 
       {/* Bottom navigation for mobile */}

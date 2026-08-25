@@ -144,7 +144,14 @@
     touch-action: manipulation;
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
+    /* clip, NOT hidden: `overflow-x: hidden` turns the element into a scroll
+       container, which (a) breaks position: sticky for every descendant —
+       the app header just scrolled away — and (b) makes iOS WebKit unpin
+       position: fixed elements mid-scroll (the bottom tab bar floating over
+       page content). `clip` clips horizontal overflow without creating a
+       scroll container. `hidden` stays first as the fallback for Safari <16. */
     overflow-x: hidden;
+    overflow-x: clip;
     overscroll-behavior-x: none;
   }
 
@@ -153,7 +160,9 @@
     font-feature-settings: "rlig" 1, "calt" 1;
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
+    /* clip, not hidden — see the html rule above */
     overflow-x: hidden;
+    overflow-x: clip;
     overscroll-behavior-x: none;
   }
 

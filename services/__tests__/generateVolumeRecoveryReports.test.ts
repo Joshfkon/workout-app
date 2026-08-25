@@ -33,7 +33,7 @@ import {
 } from '@/services/volumeBands';
 import {
   RECOVERY_CONFIG,
-  computeDoseAdjustmentHours,
+  computeDoseScale,
   windowBreakdownForSession,
   type RecoveryConfig,
 } from '@/services/muscleRecovery';
@@ -264,7 +264,7 @@ function reportE(): string {
   const L: string[] = [];
   L.push('# Report E — Recovery diagnostics', '');
   L.push('## Anchor scenarios (advanced triceps, MRV 22, 2 sessions/wk, capacity 11)', '');
-  L.push('| Effective sets | Hard sets | Dose adjustment |');
+  L.push('| Effective sets | Hard sets | Dose scale (x base window) |');
   L.push('|---|---|---|');
   const anchorConfig: RecoveryConfig = {
     ...RECOVERY_CONFIG,
@@ -272,8 +272,8 @@ function reportE(): string {
     plannedSessionsPerWeek: 2,
   };
   for (const [sets, hard] of [[0, 0], [2, 0], [5, 2], [8, 3], [11, 6], [14, 9]]) {
-    const d = computeDoseAdjustmentHours('triceps', sets, hard, anchorConfig);
-    L.push(`| ${sets} | ${hard} | ${r2(d.adjustmentHours)}h |`);
+    const d = computeDoseScale('triceps', sets, hard, anchorConfig);
+    L.push(`| ${sets} | ${hard} | x${r2(d.doseScale)} |`);
   }
 
   L.push('', '## Planned-frequency sensitivity (ACTUAL sets fixed at 8 / 3 hard, advanced)', '');
@@ -282,13 +282,14 @@ function reportE(): string {
   L.push('|---|---|---|---|---|---|');
   for (const muscle of STANDARD_MUSCLE_GROUPS) {
     const cells = [1, 2, 3, 4, 5].map((freq) =>
+      'x' +
       r2(
-        computeDoseAdjustmentHours(muscle, 8, 3, {
+        computeDoseScale(muscle, 8, 3, {
           ...RECOVERY_CONFIG,
           experienceForCapacity: 'advanced',
           plannedSessionsPerWeek: freq,
-        }).adjustmentHours
-      ) + 'h'
+        }).doseScale
+      )
     );
     L.push(`| \`${muscle}\` | ${cells.join(' | ')} |`);
   }
@@ -307,8 +308,8 @@ function reportE(): string {
         };
         let worst = 0;
         for (let sets = 0; sets <= 30; sets += 0.5) {
-          const a = computeDoseAdjustmentHours(muscle, sets, 0, cfg).adjustmentHours;
-          const b = computeDoseAdjustmentHours(muscle, sets + 0.5, 0, cfg).adjustmentHours;
+          const a = computeDoseScale(muscle, sets, 0, cfg).doseScale;
+          const b = computeDoseScale(muscle, sets + 0.5, 0, cfg).doseScale;
           worst = Math.max(worst, Math.abs(b - a));
         }
         slopes.push({ muscle, experience, freq, delta: worst });
@@ -479,7 +480,7 @@ function reportFixedScenarios(): string {
   for (const s of SCENARIOS) {
     const config = scenarioConfig(s);
     L.push(`## ${s.label} — ${s.experience}, ${s.sets} effective sets, ${s.hardSets} hard`, '');
-    L.push('| Muscle | Old dose | New dose | Old raw | New raw | Old final | New final | Clamp | Δ% | Capacity muscle / MRV |');
+    L.push('| Muscle | Old dose adj | New dose scale | Old raw | New raw | Old final | New final | Clamp | Δ% | Capacity muscle / MRV |');
     L.push('|---|---|---|---|---|---|---|---|---|---|');
     let over25 = 0;
     let clamped = 0;
@@ -491,7 +492,7 @@ function reportFixedScenarios(): string {
         config
       );
       L.push(
-        `| \`${muscle}\` | ${r2(legacyDoseAdjustment(s.sets, s.hardSets))}h | ${r2(b.dose.adjustmentHours)}h` +
+        `| \`${muscle}\` | ${r2(legacyDoseAdjustment(s.sets, s.hardSets))}h | x${r2(b.dose.doseScale)}` +
           ` | ${r2(old.raw)}h | ${r2(b.preClampHours)}h | ${r2(old.final)}h | ${r2(b.windowHours)}h` +
           ` | ${b.clamp} | ${pct(old.final, b.windowHours)}${flag(old.final, b.windowHours)}` +
           ` | \`${b.dose.capacityMuscle}\` / ${b.dose.capacityMrv} |`
@@ -525,7 +526,7 @@ const REPORTS: Array<[string, () => string]> = [
 describe('volume/recovery reports', () => {
   const rendered = REPORTS.map(([name, build]) => [name, build()] as const);
 
-  it('every report renders and covers all 26 muscles or 13 groups as applicable', () => {
+  it('every report renders and covers every standard muscle or coarse group as applicable', () => {
     const byName = new Map(rendered);
     for (const muscle of STANDARD_MUSCLE_GROUPS) {
       expect(byName.get('report-a-detailed-muscles.md')).toContain(`\`${muscle}\``);

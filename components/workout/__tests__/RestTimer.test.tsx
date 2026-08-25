@@ -133,10 +133,14 @@ describe('RestTimer', () => {
   describe('structure', () => {
     it('renders as a single slim bar with both action buttons', () => {
       render(<RestTimer {...defaultProps} />);
+      // Two action buttons + the rest-rationale info tooltip trigger.
       const buttons = screen.getAllByRole('button');
-      expect(buttons).toHaveLength(2);
+      expect(buttons).toHaveLength(3);
       expect(screen.getByText('+15s')).toBeInTheDocument();
       expect(screen.getByText('Skip')).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: /learn more about rest between sets/i })
+      ).toBeInTheDocument();
     });
 
     it('uses the success color for the finished state', () => {

@@ -3,7 +3,7 @@
  *
  * The point of these tests is that gastrocnemius 'mixed' is a REAL behavioural
  * change, not an enum edit. Before the resolver existed, the fiber table was
- * keyed by the 13 coarse legacy groups and `RepRangeFactors.muscleGroup` was
+ * keyed by the coarse legacy groups and `RepRangeFactors.muscleGroup` was
  * typed to match, so a fine key could never reach a fiber lookup at all — a
  * per-standard override would have been unreachable dead data.
  */

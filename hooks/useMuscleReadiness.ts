@@ -26,6 +26,11 @@ import {
   type RecoveryExercise,
 } from '@/services/muscleRecovery';
 import { useRecoveryMultipliers } from '@/hooks/useRecoveryMultipliers';
+import {
+  computeDailyGroupSets,
+  type DailyGroupSets,
+  type DatedVolumeBlock,
+} from '@/services/volumeProjection';
 import { useWearableRecovery } from '@/hooks/useWearableRecovery';
 import { useSleepLog } from '@/hooks/useSleepLog';
 import {
@@ -42,8 +47,16 @@ import {
  * Combines two READ-ONLY signals into a ranked list of muscles:
  *   1. weekly volume — completed-session sets from the DB PLUS the sets logged
  *      so far in the live session (passed in as props),
- *   2. recovery — the pure `muscleRecovery` heuristic over the same history +
- *      the live session (timestamped "now" so its sets read as just-trained).
+ *   2. recovery — the pure `muscleRecovery` heuristic over COMPLETED sessions
+ *      only.
+ *
+ * The asymmetry is deliberate. Volume is a counter of work done, so a set
+ * counts the instant it is logged. Recovery is a forecast of when a muscle will
+ * be ready AGAIN, and that clock starts when the session ends — see the
+ * `RecoverySession` doc in services/muscleRecovery. So mid-workout a muscle's
+ * weekly bar fills as you train it while its recovery badge holds whatever the
+ * last completed session left it at; the session you are logging lands on the
+ * badge once you finish it.
  *
  * It never writes to or reshapes the workout store. Live session data arrives
  * as plain props (the page's own local state), so this hook — and everything it
@@ -90,14 +103,6 @@ function rirFromRow(set: { rpe: number | null; feedback?: { repsInTank?: number 
   return typeof set.rpe === 'number' ? rpeToRir(set.rpe) : null;
 }
 
-/** RIR for a live SetLog: prefer the logged feedback, else derive from RPE.
- *  Exported so useWorkoutMuscleVolume feeds the recovery model identically. */
-export function rirFromSetLog(set: SetLog): number | null {
-  const rir = set.feedback?.repsInTank;
-  if (typeof rir === 'number') return rir;
-  return typeof set.rpe === 'number' ? rpeToRir(set.rpe) : null;
-}
-
 export interface UseMuscleReadinessArgs {
   /** Non-skipped blocks of the live session (read-only). */
   liveBlocks: ExerciseBlockWithExercise[];
@@ -120,6 +125,12 @@ export interface UseMuscleReadinessResult {
   targets: ReadinessTarget[];
   /** Soonest-ready lagging muscle, set only when `targets` is empty. */
   nextUp: NextReadyTarget | null;
+  /**
+   * Credited group sets per local day (index = days ago), from the SAME
+   * blocks the rows count — feeds the rolling-volume decay forecast behind
+   * each expanded row.
+   */
+  dailyGroupSets: DailyGroupSets;
   isLoading: boolean;
   error: string | null;
   /** Re-run the history fetch (error retry). */
@@ -305,24 +316,39 @@ export function useMuscleReadiness({
     return { stats: volumeAccumulatorToStats(acc), reachable: reachableSet };
   }, [historyRows, liveBlocks, liveWorkingSetsByBlock]);
 
-  // Recovery history: DB sessions + the live session (timestamped `now`).
-  const recoveryHistory = useMemo<RecoverySession[]>(() => {
-    const liveExercises: RecoveryExercise[] = liveBlocks
-      .map((block): RecoveryExercise => {
-        const sets = (liveWorkingSetsByBlock.get(block.id) || []).map((s) => ({
-          repsInTank: rirFromSetLog(s),
-        }));
-        return {
-          primaryMuscle: block.exercise.primaryMuscle,
-          secondaryMuscles: block.exercise.secondaryMuscles,
-          sets,
-        };
-      })
-      .filter((ex) => ex.sets.length > 0);
+  // Per-day credited group sets for the rolling decay forecast — the same
+  // history + live blocks the stats count, dated: history by its session's
+  // completed_at, live sets as today. Same canonical per-set credit, so the
+  // forecast's day-0 value reconciles with the row headers.
+  const dailyGroupSets = useMemo((): DailyGroupSets => {
+    const dated: DatedVolumeBlock[] = [];
+    for (const s of historyRows) {
+      for (const ex of s.exercises) {
+        dated.push({
+          completedAt: s.completedAt,
+          primaryMuscle: ex.primaryMuscle,
+          secondaryMuscles: ex.secondaryMuscles,
+          workingSets: ex.sets.length,
+        });
+      }
+    }
+    for (const block of liveBlocks) {
+      const liveWorkingSets = liveWorkingSetsByBlock.get(block.id) ?? [];
+      if (liveWorkingSets.length === 0) continue;
+      dated.push({
+        completedAt: now.toISOString(),
+        primaryMuscle: block.exercise.primaryMuscle,
+        secondaryMuscles: block.exercise.secondaryMuscles,
+        workingSets: liveWorkingSets.length,
+      });
+    }
+    return computeDailyGroupSets(dated, now);
+  }, [historyRows, liveBlocks, liveWorkingSetsByBlock, now]);
 
-    if (liveExercises.length === 0) return sessions;
-    return [...sessions, { performedAt: now, exercises: liveExercises }];
-  }, [sessions, liveBlocks, liveWorkingSetsByBlock, now]);
+  // Recovery history is COMPLETED sessions only — the live session is excluded
+  // on purpose (see the module doc and `RecoverySession`). It joins this feed
+  // when it is marked completed, which invalidateWorkoutDerivedCaches refreshes.
+  const recoveryHistory = sessions;
 
   // Enhanced athletes get shorter recovery windows (shared windowScale), the
   // learned per-muscle soreness multipliers scale each muscle's window, and
@@ -382,6 +408,7 @@ export function useMuscleReadiness({
     rows,
     targets,
     nextUp,
+    dailyGroupSets,
     isLoading,
     error,
     refetch,

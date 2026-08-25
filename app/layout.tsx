@@ -199,7 +199,7 @@ export default function RootLayout({
         `}} />
       </head>
       <body
-        className="antialiased min-h-screen font-sans overflow-x-hidden"
+        className="antialiased min-h-screen font-sans overflow-x-clip"
         style={{ fontFamily: systemFontStack }}
       >
         {/* Static splash screen - shows immediately before JS loads */}

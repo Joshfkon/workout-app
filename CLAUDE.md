@@ -305,6 +305,20 @@ npm run cap:livereload:android # Run Android with live reload
    const today = getLocalDateString();
    ```
 
+   **"Now" comes from `lib/clock`, not `new Date()`.** Any read of the current
+   time that can influence behaviour — prescription, fatigue/recovery,
+   progression, trends, staleness windows — or that is persisted as a record
+   timestamp must go through `now()` / `today()` from `@/lib/clock`, or through
+   a helper whose default already does (`getLocalDateString`, and everything in
+   `lib/date/localDay`). Purely visual reads (animations, the rest-timer
+   readout, relative-time labels) may keep using `new Date()`.
+
+   The point is that a simulated user can be moved through months of training
+   time (`setClock` + `test-utils/clock.ControllableClock`) and every date
+   bucket moves with it. `lib/clock.ts` documents what a "day" means; note that
+   advancing a day is a CALENDAR-day move, not +24h — those differ by an hour
+   twice a year and an evening session would drift onto the wrong local day.
+
 3. **Services are pure functions**: No database calls in `/services`. Pass data as input:
    ```typescript
    // GOOD: Pure function
@@ -313,6 +327,14 @@ npm run cap:livereload:android # Run Android with live reload
    // BAD: Database call inside service
    export async function calculateSetQuality(userId: string) { /* db call */ }
    ```
+
+   `@/lib/clock` is the one sanctioned exception, and only as a **default**:
+   `now: Date = clockNow()` keeps the function pure for any caller that passes
+   a time, while a zero-argument call follows simulated time. Prefer a required
+   `now` parameter for anything genuinely time-dependent —
+   `computeMuscleRecovery(history, muscle, now, config)` and `deloadEngine` are
+   the model. Never read the clock in the middle of a calculation when it could
+   have been a parameter.
 
 4. **Type imports from schema.ts**: Use the canonical types:
    ```typescript
@@ -541,3 +563,53 @@ The app supports iOS and Android via Capacitor:
 3. Sync: `npm run cap:sync`
 4. Test: `npm run cap:run:ios` or `npm run cap:run:android`
 5. For live development: `npm run cap:livereload:ios`
+
+## Simulated-User Testing Harness (`simulation/`)
+
+A deterministic, persona-driven harness that runs virtual users against the
+REAL prescription, volume, fatigue/recovery, progression and trend code over
+simulated months. It detects state corruption, accounting errors, temporal
+bugs, stale references, non-deterministic engine behaviour, violated
+prescription contracts, and long-horizon emergent failures.
+
+```bash
+npm run simulate                                      # fast suite (runs in CI)
+npm run simulate -- --full                            # ~6 sim months x 50 seeds
+npm run simulate -- --persona=ego-lifter --seed=3     # reproduce a failure
+npm run simulate -- --scenario=SET3_MISS              # deterministic scenarios
+```
+
+**The governing rule: the harness may model USER BEHAVIOUR, never what the
+engine should prescribe.** Personas decide what a human does with a given
+target; every number the app produces still comes from the app. A harness that
+owns a second implementation of the rules turns every disagreement into
+evidence about itself. Assertions check PRIMITIVES — do the rows add up, are
+the references live, are the numbers numbers.
+
+| Module | Purpose |
+|---|---|
+| `simulation/sessionDriver.ts` | Headless user. Composes production functions only. |
+| `simulation/fakeSupabase.ts` | In-memory client. **Throws on anything it doesn't understand** — a silent `[]` would make the harness report fictional bugs. Enforces no constraints/RLS. |
+| `simulation/persona.ts` / `personas.ts` | The `PerformanceOutcome` contract and seven personas. |
+| `simulation/rng.ts` | Seeded RNG. Nothing may call `Math.random()`. |
+| `simulation/assertions.ts` | INVARIANT / CONTRACT / GUARDRAIL. |
+| `simulation/runner.ts` | Drives a persona, asserting after every state-changing operation. |
+| `simulation/fixtures.ts` | Bootstrap data only (user, exercises, session shell). |
+
+Rules:
+1. **Never** reimplement prescription, volume, fatigue, trend or recovery logic
+   in the harness. Call production.
+2. All randomness is seeded; the same seed reproduces the same normalized trace.
+   Add RNG draws at the END of a decision — inserting one shifts every
+   subsequent value and invalidates recorded seeds.
+3. The clock must advance between logged sets. Three engine paths use
+   `ORDER BY … LIMIT` on a timestamp, and ties resolve by unspecified row order.
+4. **`APPROVED_REPETITION_REASONS` (Set-3 contract) may only be extended by
+   Josh, in a separate change** — never to make a failing assertion pass.
+5. GUARDRAILs are warnings. Promoting one to a CONTRACT is Josh's call.
+6. A failing INVARIANT/CONTRACT is reported as a bug with its reproducing seed;
+   the engine is NOT patched in the same change as harness work.
+
+Open findings live in `docs/SIMULATION_FINDING_*.md`. Known defects are pinned
+with `it.failing` in `simulation/__tests__/scenarios.test.ts`, so they go red
+when the engine is fixed.

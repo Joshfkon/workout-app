@@ -22,8 +22,10 @@
  *   5. Week stats: sets this week · completed/planned sessions · hours
  *      trained + average workout time over the same rolling 7 days · volume
  *      status line (links to /dashboard/volume).
- *   6. Recovery: overall % + ready count, per-muscle bars for recovering
- *      muscles with time remaining, expandable past the first three.
+ *   6. Recovery: the shared muscle-readiness body (same as the in-workout
+ *      sheet / empty workout) — good-targets strip, body map with the
+ *      Recovery/Volume paint toggle, per-muscle volume bars + recovery
+ *      badges with a "+N more" expander.
  *   7. Cardio: today's cardio quick-log (moved here from the Progress
  *      page's Wellness tab — cardio is training).
  *   8. Progression: compact summary (tracked vs building-history muscle
@@ -33,6 +35,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import {
   IconChevronRight,
@@ -67,7 +70,7 @@ import {
 import { getOrCreateTodaySession } from '../workout/_lib/adhocSession';
 import { cancelWorkoutSession } from '../workout/[id]/_lib/cancelWorkout';
 import { useWorkoutStore } from '@/stores/workoutStore';
-import { useMuscleRecovery, type MuscleRecoveryStatus } from '@/hooks/useMuscleRecovery';
+import { useMuscleRecovery } from '@/hooks/useMuscleRecovery';
 import { useWeeklyVolume } from '@/hooks/useWeeklyVolume';
 import { useMuscleProgression } from '@/hooks/useMuscleProgression';
 import {
@@ -88,6 +91,26 @@ import {
   type StandardMuscleGroup,
 } from '@/types/schema';
 import type { FullProgramRecommendation, WorkoutDay } from '@/types/schema';
+
+// The readiness card (good-targets strip + body map + per-muscle rows) shares
+// the in-workout sheet's assembly. Lazy so that whole stack stays out of the
+// train page's initial bundle; the fallback mirrors its card shell.
+const TrainReadinessCard = dynamic(
+  () => import('@/components/workout/TrainReadinessCard').then((m) => m.TrainReadinessCard),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="rounded-2xl p-4 bg-surface-900 border border-surface-800">
+        <h3 className="text-[15px] font-semibold text-surface-100 mb-3">Recovery</h3>
+        <div className="animate-pulse space-y-3">
+          <div className="h-1.5 bg-surface-800 rounded-full" />
+          <div className="h-1.5 bg-surface-800 rounded-full w-2/3" />
+          <div className="h-1.5 bg-surface-800 rounded-full w-1/2" />
+        </div>
+      </div>
+    ),
+  }
+);
 
 interface InProgressSummary {
   id: string;
@@ -221,21 +244,6 @@ function deriveWorkoutTitle(blocks: NonNullable<RecentSessionRow['exercise_block
   return dayName ?? (topMuscles || 'Workout');
 }
 
-/** Row bar/label colors by recovery progress (matches the old RecoveryBar ramp). */
-function recoveryBarColor(recoveryPercent: number): string {
-  if (recoveryPercent >= 75) return 'bg-success-400';
-  if (recoveryPercent >= 50) return 'bg-warning-500';
-  if (recoveryPercent >= 25) return 'bg-orange-500';
-  return 'bg-danger-500';
-}
-
-function recoveryTextColor(recoveryPercent: number): string {
-  if (recoveryPercent >= 75) return 'text-success-300';
-  if (recoveryPercent >= 50) return 'text-warning-400';
-  if (recoveryPercent >= 25) return 'text-orange-400';
-  return 'text-danger-400';
-}
-
 const GRADIENT_CTA_CLASS =
   'py-3 rounded-xl bg-gradient-to-r from-primary-500 to-accent-500 text-white text-[15px] font-semibold hover:opacity-90 transition-opacity disabled:opacity-60';
 const OUTLINE_CTA_CLASS =
@@ -250,13 +258,13 @@ const TOOL_PILLS = [
 export default function TrainPage() {
   const router = useRouter();
   const supabase = createUntypedClient();
-  const { summary, isLoading: volumeLoading } = useWeeklyVolume();
-  const {
-    recoveryStatus,
-    recoveringMuscles,
-    readyMuscles,
-    isLoading: recoveryLoading,
-  } = useMuscleRecovery();
+  // Week totals come from the shared coarse row model (`tiles`) — the same
+  // numbers the home glance tile and the volume page show. Summing the 26
+  // per-head rows instead double-counts within-group credit.
+  const { tiles: volumeTiles, isLoading: volumeLoading } = useWeeklyVolume();
+  // Only the rest-day note reads this now — the Recovery card itself renders
+  // the shared readiness body (TrainReadinessCard) off the same history cache.
+  const { recoveryStatus, isLoading: recoveryLoading } = useMuscleRecovery();
   const { groups: progressionGroups, isLoading: progressionLoading } = useMuscleProgression();
 
   const [isLoading, setIsLoading] = useState(true);
@@ -280,7 +288,6 @@ export default function TrainPage() {
   const [showPreview, setShowPreview] = useState(false);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [isDiscarding, setIsDiscarding] = useState(false);
-  const [showAllRecovering, setShowAllRecovering] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // For the self-contained cardio quick-log card.
   const [userId, setUserId] = useState<string | null>(null);
@@ -668,22 +675,6 @@ export default function TrainPage() {
       })
     : null;
 
-  // Recovery card numbers: "86% · 12 of 20 ready".
-  const recoverySummary = useMemo(() => {
-    const avgPercent =
-      recoveryStatus.length > 0
-        ? Math.round(
-            recoveryStatus.reduce((sum, m) => sum + m.recoveryPercent, 0) / recoveryStatus.length
-          )
-        : 100;
-    return { avgPercent, ready: readyMuscles.length, total: recoveryStatus.length };
-  }, [recoveryStatus, readyMuscles]);
-
-  const visibleRecovering = showAllRecovering
-    ? recoveringMuscles
-    : recoveringMuscles.slice(0, 3);
-  const hiddenRecoveringCount = recoveringMuscles.length - 3;
-
   // Progression summary: "2 muscle groups tracked · 18 building history (wk 1)".
   const progressionSubtitle = useMemo(() => {
     if (progressionLoading) return 'Analyzing progression...';
@@ -703,12 +694,12 @@ export default function TrainPage() {
 
   const volumeStatusLine = volumeLoading
     ? { text: 'Loading...', className: 'text-surface-500' }
-    : summary.totalSets === 0
+    : volumeTiles.totalSets === 0
       ? { text: 'No sets logged yet this week', className: 'text-surface-500' }
-      : summary.musclesBelowMev.length > 0
+      : volumeTiles.lowCount > 0
         ? {
-            text: `${summary.musclesBelowMev.length} muscle ${
-              summary.musclesBelowMev.length === 1 ? 'group' : 'groups'
+            text: `${volumeTiles.lowCount} muscle ${
+              volumeTiles.lowCount === 1 ? 'group' : 'groups'
             } below minimum`,
             className: 'text-warning-400',
           }
@@ -904,7 +895,7 @@ export default function TrainPage() {
         <span className="flex-1 min-w-0">
           <span className="block text-[15px] text-surface-400">
             <span className="font-semibold text-surface-100">
-              {volumeLoading ? '—' : summary.totalSets} sets
+              {volumeLoading ? '—' : volumeTiles.totalSets} sets
             </span>{' '}
             this week ·{' '}
             <span className="font-semibold text-surface-100">
@@ -935,92 +926,10 @@ export default function TrainPage() {
         <IconChevronRight size={16} className="text-surface-500 flex-shrink-0" aria-hidden="true" />
       </Link>
 
-      {/* Recovery */}
-      <div className="rounded-2xl p-4 bg-surface-900 border border-surface-800">
-        <div className="flex items-center justify-between gap-2">
-          <h3 className="text-[15px] font-semibold text-surface-100">Recovery</h3>
-          {recoveryLoading ? (
-            <span className="text-[13px] text-surface-500">Loading...</span>
-          ) : (
-            <span className="text-[15px] text-surface-400">
-              <span
-                className={`font-semibold ${
-                  recoverySummary.avgPercent >= 80
-                    ? 'text-success-400'
-                    : recoverySummary.avgPercent >= 50
-                      ? 'text-warning-400'
-                      : 'text-danger-400'
-                }`}
-              >
-                {recoverySummary.avgPercent}%
-              </span>{' '}
-              · {recoverySummary.ready} of {recoverySummary.total} ready
-            </span>
-          )}
-        </div>
-
-        {recoveryLoading ? (
-          <div className="animate-pulse space-y-3 mt-3">
-            <div className="h-1.5 bg-surface-800 rounded-full" />
-            <div className="h-1.5 bg-surface-800 rounded-full w-2/3" />
-            <div className="h-1.5 bg-surface-800 rounded-full w-1/2" />
-          </div>
-        ) : (
-          <>
-            <div className="mt-3 h-1.5 bg-surface-800 rounded-full overflow-hidden">
-              <div
-                className={`h-full transition-all duration-500 ${
-                  recoverySummary.avgPercent >= 80
-                    ? 'bg-success-500'
-                    : recoverySummary.avgPercent >= 50
-                      ? 'bg-warning-500'
-                      : 'bg-danger-500'
-                }`}
-                style={{ width: `${recoverySummary.avgPercent}%` }}
-              />
-            </div>
-
-            {recoveringMuscles.length === 0 ? (
-              <p className="mt-3 text-[13px] text-success-400">
-                All muscle groups ready to train
-              </p>
-            ) : (
-              <>
-                <div className="mt-4 space-y-3">
-                  {visibleRecovering.map((status: MuscleRecoveryStatus) => (
-                    <div key={status.muscle} className="flex items-center gap-3">
-                      <span className="w-24 text-[13px] text-surface-200 truncate flex-shrink-0">
-                        {status.displayName}
-                      </span>
-                      <div className="flex-1 h-1.5 bg-surface-800 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full transition-all duration-300 ${recoveryBarColor(status.recoveryPercent)}`}
-                          style={{ width: `${status.recoveryPercent}%` }}
-                        />
-                      </div>
-                      <span
-                        className={`w-12 text-right text-[13px] font-medium flex-shrink-0 ${recoveryTextColor(status.recoveryPercent)}`}
-                      >
-                        {status.statusText}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-                {hiddenRecoveringCount > 0 && (
-                  <button
-                    onClick={() => setShowAllRecovering(!showAllRecovering)}
-                    className="mt-4 w-full text-center text-[13px] text-surface-400 hover:text-surface-200 transition-colors"
-                  >
-                    {showAllRecovering
-                      ? 'Show less'
-                      : `Show ${hiddenRecoveringCount} more recovering`}
-                  </button>
-                )}
-              </>
-            )}
-          </>
-        )}
-      </div>
+      {/* Recovery: the same readiness body as the in-workout sheet / empty
+          workout — good-targets strip, body map with the Recovery/Volume
+          paint toggle, per-muscle volume bars + recovery badges. */}
+      <TrainReadinessCard />
 
       {/* Cardio quick-log (moved here from the Progress page's Wellness
           tab). Self-contained: fetches and writes today's cardio_log. */}

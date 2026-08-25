@@ -13,6 +13,8 @@ import type {
 } from '@/types/schema';
 import { INJURY_TYPES, type InjuryType } from '@/lib/training/injury-types';
 
+import { now as clockNow } from '@/lib/clock';
+
 /**
  * A logged discomfort entry with context
  */
@@ -144,7 +146,7 @@ export function detectDiscomfortPatterns(
   daysWindow: number = 14
 ): DiscomfortPattern[] {
   const patterns: DiscomfortPattern[] = [];
-  const now = new Date();
+  const now = clockNow();
   const windowStart = new Date(now.getTime() - daysWindow * 24 * 60 * 60 * 1000);
 
   // Filter to recent entries

@@ -14,6 +14,8 @@ import type { TrainingPhase, PhaseType } from '@/types/schema';
 import type { WeighIn } from '@/lib/nutrition/interval-tdee';
 import { addLocalDays, localDay, localDaysBetweenDays } from '@/lib/date/localDay';
 
+import { now as clockNow } from '@/lib/clock';
+
 // === BASIC SELECTORS ===
 
 /** Phases sorted by startDay ascending. */
@@ -83,7 +85,7 @@ export interface PhaseSwitchPlan {
 export function planPhaseSwitch(
   phases: TrainingPhase[],
   nextType: PhaseType,
-  now: Date = new Date()
+  now: Date = clockNow()
 ): PhaseSwitchPlan {
   const today = localDay(now);
   const active = phaseOnDay(phases, today);

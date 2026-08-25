@@ -10,6 +10,11 @@ import {
   type WeeklyVolumeBlockRow,
 } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 import { logCoarsePrimaryRetagDryRun } from '@/lib/migrations/coarsePrimaryRetag';
+import {
+  computeDailyGroupSets,
+  type DailyGroupSets,
+  type DatedVolumeBlock,
+} from '@/services/volumeProjection';
 import type { StandardMuscleGroup } from '@/types/schema';
 
 export interface UseWeeklyMevSummaryResult {
@@ -17,6 +22,9 @@ export interface UseWeeklyMevSummaryResult {
   stats: MuscleVolumeStats[];
   /** Muscles the user's exercises can credit (gates fine-muscle rows/warnings). */
   reachable: Set<StandardMuscleGroup>;
+  /** Credited group sets per local day (index = days ago), from the same
+   *  blocks as `stats` — feeds the rolling-volume decay forecast. */
+  dailyGroupSets: DailyGroupSets;
   loaded: boolean;
 }
 
@@ -32,6 +40,7 @@ export function useWeeklyMevSummary(): UseWeeklyMevSummaryResult {
   const [result, setResult] = useState<Omit<UseWeeklyMevSummaryResult, 'loaded'>>({
     stats: [],
     reachable: new Set(),
+    dailyGroupSets: {},
   });
   const [loaded, setLoaded] = useState(false);
 
@@ -57,7 +66,21 @@ export function useWeeklyMevSummary(): UseWeeklyMevSummaryResult {
         const blocks = (data as any) || [];
         const stats = computeWeeklyMuscleVolume(blocks);
         const reachable = computeReachableMuscles(blocks);
-        setResult({ stats, reachable });
+        // Same blocks, dated by their session's completed_at — the per-day
+        // buckets behind the rolling decay forecast.
+        const dailyGroupSets = computeDailyGroupSets(
+          (blocks as (WeeklyVolumeBlockRow & {
+            workout_sessions?: { completed_at: string | null } | null;
+          })[]).map(
+            (block): DatedVolumeBlock => ({
+              completedAt: block.workout_sessions?.completed_at ?? null,
+              primaryMuscle: block.exercises?.primary_muscle ?? null,
+              secondaryMuscles: block.exercises?.secondary_muscles ?? [],
+              workingSets: (block.set_logs || []).filter((s) => !s.is_warmup).length,
+            })
+          )
+        );
+        setResult({ stats, reachable, dailyGroupSets });
 
         // Dev-only DRY RUN: surface logged exercises whose coarse tags smear
         // volume credit across a whole group, with proposed precise retags.

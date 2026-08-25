@@ -1,4 +1,10 @@
-import { exerciseHighlightData, SECONDARY_HIGHLIGHT_EMPHASIS } from '../adapters';
+import {
+  exerciseHighlightData,
+  heatmapRowsToMapData,
+  SECONDARY_HIGHLIGHT_EMPHASIS,
+} from '../adapters';
+import { getEffectiveBand } from '@/services/volumeBands';
+import type { VolumeHeatmapRow } from '@/app/(dashboard)/dashboard/_lib/volumeHeatmap';
 
 describe('exerciseHighlightData', () => {
   it('back extension: glutes full accent, hamstrings + erectors dimmed', () => {
@@ -31,5 +37,37 @@ describe('exerciseHighlightData', () => {
   it('ignores unrecognized tokens and handles missing fields', () => {
     expect(exerciseHighlightData('not-a-muscle', undefined)).toEqual({});
     expect(exerciseHighlightData(null, ['also-nope'])).toEqual({});
+  });
+});
+
+describe('heatmapRowsToMapData', () => {
+  const row = (
+    muscle: VolumeHeatmapRow['muscle'],
+    avgWeeklySets: number,
+    heat: VolumeHeatmapRow['heat']
+  ): VolumeHeatmapRow => ({
+    muscle,
+    displayName: muscle,
+    avgWeeklySets,
+    totalSets: avgWeeklySets * 4,
+    band: getEffectiveBand(muscle),
+    heat,
+  });
+
+  it('paints every standard child of a coarse row with the row\'s heat bucket', () => {
+    const data = heatmapRowsToMapData([
+      row('shoulders', 14, 'low'),
+      row('calves', 0, 'untrained'),
+    ]);
+    // Shoulders fan out to all three delt heads with one shared datum.
+    expect(data.front_delts).toEqual({ value: 14, heat: 'low' });
+    expect(data.lateral_delts).toEqual({ value: 14, heat: 'low' });
+    expect(data.rear_delts).toEqual({ value: 14, heat: 'low' });
+    // Regionless coarse 'calves' still lights its whole area via the fine
+    // members that own the artwork paths.
+    expect(data.gastrocnemius).toEqual({ value: 0, heat: 'untrained' });
+    expect(data.soleus).toEqual({ value: 0, heat: 'untrained' });
+    // No row for chest → no datum → the map's neutral base tone.
+    expect(data.chest_upper).toBeUndefined();
   });
 });

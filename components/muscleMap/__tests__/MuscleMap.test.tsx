@@ -48,7 +48,7 @@ describe('MuscleMap', () => {
     }
   });
 
-  it('volume mode: zone colors come from the shared helper (gray 0-set, amber low, green in-zone, red over)', () => {
+  it('volume mode: zone colors come from the shared helper (light red 0-set, amber low, green in-zone, red over)', () => {
     const data: MuscleMapData = {
       quads: { value: 10, zone: 'in_zone' },
       biceps: { value: 2, zone: 'below_mev' },
@@ -58,9 +58,13 @@ describe('MuscleMap', () => {
     const { container } = render(<MuscleMap data={data} mode="volume" view="both" />);
     expect(musclePaths(container, 'quads')[0]!.getAttribute('class')).toContain('fill-success-500');
     expect(musclePaths(container, 'biceps')[0]!.getAttribute('class')).toContain('fill-warning-500');
-    expect(musclePaths(container, 'chest_upper')[0]!.getAttribute('class')).toContain('fill-surface-600');
+    // Zero volume warns in light red, and must NOT reuse the over-MRV red.
+    const untrained = musclePaths(container, 'chest_upper')[0]!.getAttribute('class')!;
+    expect(untrained).toContain('fill-danger-300');
+    expect(untrained).not.toContain('fill-danger-500');
     expect(musclePaths(container, 'lats')[0]!.getAttribute('class')).toContain('fill-danger-500');
-    // No data → neutral base tone.
+    // No data at all (region not covered by any row) → neutral base tone, so an
+    // untrained muscle stays distinguishable from an unmapped one.
     expect(musclePaths(container, 'gastrocnemius')[0]!.getAttribute('class')).toContain('fill-surface-800');
   });
 
@@ -75,6 +79,33 @@ describe('MuscleMap', () => {
     expect(musclePaths(container, 'quads')[0]!.getAttribute('class')).toContain('fill-warning-500');
     expect(musclePaths(container, 'biceps')[0]!.getAttribute('class')).toContain('fill-surface-600');
     expect(musclePaths(container, 'lats')[0]!.getAttribute('class')).toContain('fill-surface-800');
+  });
+
+  it('heat mode: reds/amber below MEV, greens darkening with volume, neutral without a bucket', () => {
+    const data: MuscleMapData = {
+      chest_upper: { value: 0, heat: 'untrained' },
+      biceps: { value: 2, heat: 'critical' },
+      quads: { value: 6, heat: 'below' },
+      lats: { value: 11, heat: 'low' },
+      hamstrings: { value: 14, heat: 'moderate' },
+      glutes: { value: 20, heat: 'high' },
+      erectors: { value: 15, heat: 'very_high' },
+      // Datum without a heat bucket (e.g. reused from another mode) → base tone.
+      forearms: { value: 3 },
+    };
+    const { container } = render(<MuscleMap data={data} mode="heat" view="both" />);
+    expect(musclePaths(container, 'chest_upper')[0]!.getAttribute('class')).toContain('fill-danger-300');
+    expect(musclePaths(container, 'biceps')[0]!.getAttribute('class')).toContain('fill-danger-500');
+    expect(musclePaths(container, 'quads')[0]!.getAttribute('class')).toContain('fill-warning-500');
+    expect(musclePaths(container, 'lats')[0]!.getAttribute('class')).toContain('fill-success-300');
+    expect(musclePaths(container, 'hamstrings')[0]!.getAttribute('class')).toContain('fill-success-500');
+    expect(musclePaths(container, 'glutes')[0]!.getAttribute('class')).toContain('fill-success-600');
+    expect(musclePaths(container, 'erectors')[0]!.getAttribute('class')).toContain('fill-success-700');
+    expect(musclePaths(container, 'forearms')[0]!.getAttribute('class')).toContain('fill-surface-800');
+    // Aria reads the bucket, not the color.
+    expect(musclePaths(container, 'glutes')[0]!.getAttribute('aria-label')).toBe(
+      'Glutes: upper end of the optimal volume zone'
+    );
   });
 
   it('highlight mode: primary at full opacity, secondaries dimmed, rest neutral', () => {

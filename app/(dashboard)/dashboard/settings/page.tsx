@@ -9,6 +9,7 @@ import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 
 const SETTINGS_KEY = ['settings', 'user'] as const;
 import { STANDARD_MUSCLE_GROUPS, STANDARD_MUSCLE_DISPLAY_NAMES, DEFAULT_VOLUME_LANDMARKS, MUSCLE_VOLUME_AUTHORITY, MUSCLE_GROUPS } from '@/types/schema';
+import { DIRECT_MEV_TOOLTIP } from '@/services/volumeBands';
 import {
   migrateStoredLandmarks,
   readLandmarkVersion,
@@ -1707,7 +1708,7 @@ function VolumeLandmarksCard({ experience, volumeLandmarks, setVolumeLandmarks }
             <div className="flex gap-6 flex-wrap text-sm">
               <div className="flex items-center gap-2">
                 <span className="w-10 h-6 bg-warning-500/20 border border-warning-500/40 rounded text-xs flex items-center justify-center font-medium text-warning-400">MEV</span>
-                <span className="text-surface-400"><span className="font-medium text-surface-200">Minimum Effective Volume</span> — Fewest sets to maintain muscle</span>
+                <span className="text-surface-400"><span className="font-medium text-surface-200">Minimum Effective Volume</span> — {DIRECT_MEV_TOOLTIP}</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="w-10 h-6 bg-success-500/20 border border-success-500/40 rounded text-xs flex items-center justify-center font-medium text-success-400">MAV</span>
@@ -1727,7 +1728,7 @@ function VolumeLandmarksCard({ experience, volumeLandmarks, setVolumeLandmarks }
           <div className="flex items-center gap-4">
             <span className="w-24 text-xs text-surface-500 font-medium">Muscle</span>
             <div className="flex-1 grid grid-cols-3 gap-2 text-xs text-center">
-              <span className="text-warning-400 font-medium">MEV</span>
+              <span className="text-warning-400 font-medium" title={DIRECT_MEV_TOOLTIP}>Direct MEV</span>
               <span className="text-success-400 font-medium">MAV</span>
               <span className="text-danger-400 font-medium">MRV</span>
             </div>

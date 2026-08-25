@@ -1,10 +1,11 @@
 import {
-  computeDoseAdjustmentHours,
+  computeDoseScale,
   computeMuscleRecovery,
   computeSleepWindowMultiplier,
   recoveryConfigFor,
   adjustRecoveryMultiplier,
   clampRecoveryMultiplier,
+  MAX_DOSE_SCALE,
   RECOVERY_CONFIG,
   RECOVERY_MULTIPLIER_BOUNDS,
   RECOVERY_MULTIPLIER_STEP,
@@ -21,10 +22,10 @@ import type { StandardMuscleGroup } from '@/types/schema';
  * `hardSets` were at/below the hard-RIR threshold.
  *
  * These tests used to restate the retired step function's discrete outputs
- * (base, base-12, base+24). The dose adjustment is now CONTINUOUS, so the
- * expectation is DERIVED from the same model the code uses and each test keeps
- * asserting what it always meant: that the window composes as
- * (base + dose) x globalScale x learned. Behavioural claims (light < base <
+ * (base, base-12, base+24). The dose response is now a CONTINUOUS MULTIPLIER,
+ * so the expectation is DERIVED from the same model the code uses and each
+ * test keeps asserting what it always meant: that the window composes as
+ * base x doseScale x globalScale x learned. Behavioural claims (light < base <
  * heavy, quads > biceps, learning flips a verdict) are asserted directly.
  */
 function expectedWindow(
@@ -35,8 +36,14 @@ function expectedWindow(
   learned = 1
 ): number {
   const base = config.windowHoursByMuscle[muscle] ?? config.defaultWindowHours;
-  const { adjustmentHours } = computeDoseAdjustmentHours(muscle, sets, hardSets, config);
-  return (base + adjustmentHours) * config.windowScale * config.sleepWindowMultiplier * learned;
+  const { doseScale } = computeDoseScale(muscle, sets, hardSets, config);
+  return base * doseScale * config.windowScale * config.sleepWindowMultiplier * learned;
+}
+
+/** The window a saturated (scale-capped) session earns for a muscle. */
+function saturatedWindow(muscle: StandardMuscleGroup): number {
+  return (RECOVERY_CONFIG.windowHoursByMuscle[muscle] ?? RECOVERY_CONFIG.defaultWindowHours) *
+    MAX_DOSE_SCALE;
 }
 
 // A fixed clock injected into every call — no ambient Date reads anywhere.
@@ -74,11 +81,12 @@ describe('computeMuscleRecovery', () => {
 
     expect(result.status).toBe('fatigued');
     expect(result.hoursSinceLast).toBeCloseTo(24, 5);
-    // High dose (10 ≥ 8) → 48 + 24 = 72h window.
-    expect(result.windowHours).toBe(72);
-    expect(result.hoursUntilReady).toBeCloseTo(48, 5);
+    // 10 sets all at RIR 0 saturates the dose scale → 48 × 1.45 = 69.6h.
+    expect(result.windowHours).toBeCloseTo(saturatedWindow('chest_upper'), 6);
+    expect(result.breakdown!.dose.doseScaleClamp).toBe('upper');
+    expect(result.hoursUntilReady).toBeCloseTo(saturatedWindow('chest_upper') - 24, 5);
     expect(result.estimatedReadyAt).toEqual(
-      new Date(hoursAgo(24).getTime() + 72 * 60 * 60 * 1000)
+      new Date(hoursAgo(24).getTime() + saturatedWindow('chest_upper') * 60 * 60 * 1000)
     );
   });
 
@@ -95,21 +103,24 @@ describe('computeMuscleRecovery', () => {
     expect(result.hoursSinceLast).toBeCloseTo(80, 5);
   });
 
-  it('secondary-only involvement 30h ago (glutes via RDL) → half dose → Recovering not Fatigued', () => {
+  it('secondary-only involvement carries HALF the primary dose, and a much shorter window', () => {
     // RDL: primary hamstrings, secondary glutes. 3 non-hard sets.
-    // Glutes see half dose (1.5) → light → 60 - 12 = 48h window. 30h ≥ 0.6×48
-    // (28.8) and < 48 → Recovering.
     const history = [session(hoursAgo(30), 'hamstrings', 3, 2, ['glutes'])];
     const result = computeMuscleRecovery(history, 'glutes', NOW);
-
-    expect(result.status).toBe('recovering');
-    expect(result.dose).toBeCloseTo(1.5, 5);
-    expect(result.windowHours).toBeCloseTo(expectedWindow('glutes', 1.5, 0), 6);
+    const hams = computeMuscleRecovery(history, 'hamstrings', NOW);
 
     // The secondary muscle carries exactly half the primary's dose.
-    const hams = computeMuscleRecovery(history, 'hamstrings', NOW);
+    expect(result.dose).toBeCloseTo(1.5, 5);
     expect(hams.dose).toBeCloseTo(3, 5);
     expect(result.dose).toBeCloseTo(hams.dose / 2, 5);
+    expect(result.windowHours).toBeCloseTo(expectedWindow('glutes', 1.5, 0), 6);
+
+    // Half the dose now buys a MATERIALLY shorter window. Under the additive
+    // model both sat within 12h of their base, so 30h left the secondary
+    // muscle Recovering off 1.5 sets of incidental work; it is now done while
+    // the primary (full dose, longer base) is not.
+    expect(result.status).toBe('fresh');
+    expect(hams.status).not.toBe('fresh');
   });
 
   it('sets logged in the current session move the muscle to Fatigued immediately', () => {
@@ -133,17 +144,18 @@ describe('computeMuscleRecovery', () => {
     expect(result.dose).toBe(0);
   });
 
-  it('uses the MOST RECENT session that involved the muscle', () => {
+  it('a settled older session stops governing once its own window has elapsed', () => {
     const history = [
-      session(hoursAgo(90), 'quads', 10, 0), // old, heavy
+      session(hoursAgo(90), 'quads', 10, 0), // old, heavy — window already run out
       session(hoursAgo(20), 'quads', 2, 3), // recent, light
     ];
     const result = computeMuscleRecovery(history, 'quads', NOW);
 
-    // Should key off the recent LIGHT session, not the old heavy one.
+    // The heavy session's debt is settled (90h > its window), so the light one
+    // governs — but by outliving it, not by being the most recent.
+    expect(expectedWindow('quads', 10, 10)).toBeLessThan(90);
     expect(result.windowHours).toBeCloseTo(expectedWindow('quads', 2, 0), 6);
-    const heavyWindow = expectedWindow('quads', 10, 10);
-    expect(result.windowHours!).toBeLessThan(heavyWindow);
+    expect(result.governingTrainedAt).toEqual(hoursAgo(20));
     expect(result.hoursSinceLast).toBeCloseTo(20, 5);
     expect(result.lastTrainedAt).toEqual(hoursAgo(20));
   });
@@ -159,7 +171,10 @@ describe('computeMuscleRecovery', () => {
     // Same volume, none of it hard → strictly shorter.
     const easy = computeMuscleRecovery([session(hoursAgo(30), 'lateral_delts', 4, 3)], 'lateral_delts', NOW);
     expect(result.windowHours!).toBeGreaterThan(easy.windowHours!);
-    expect(result.status).toBe('fatigued');
+    // Sharper than a bare status check: at the SAME elapsed hours, taking the
+    // same volume to failure leaves the muscle strictly less recovered.
+    expect(result.readinessRatio).toBeLessThan(easy.readinessRatio);
+    expect(result.status).toBe('recovering');
   });
 
   it('unrated sets are not treated as hard and do not block the light-session discount', () => {
@@ -268,6 +283,125 @@ describe('computeMuscleRecovery', () => {
   it('recoveryConfigFor(false) is the unscaled default config', () => {
     expect(recoveryConfigFor(false)).toBe(RECOVERY_CONFIG);
     expect(RECOVERY_CONFIG.windowScale).toBe(1);
+  });
+});
+
+describe('every session leaves an INDEPENDENT debt (no last-session-wins)', () => {
+  // The reported defect: a 2-set dead hang, credited to lats as a secondary
+  // (1.0 effective set), overwrote a real pull day's window with its own and
+  // moved the muscle from "Recovering, Fresh in ~8h" to "Fatigued, Fresh in
+  // ~42h". A light touch must never lengthen a debt it did not create.
+  const heavyPull: RecoverySession = {
+    performedAt: hoursAgo(72),
+    exercises: [
+      { primaryMuscle: 'lats', secondaryMuscles: [], sets: Array.from({ length: 4 }, () => ({ repsInTank: 1 })) },
+      { primaryMuscle: 'upper_back', secondaryMuscles: ['lats'], sets: Array.from({ length: 5 }, () => ({ repsInTank: 1 })) },
+    ],
+  };
+  const gripHold = session(hoursAgo(6), 'forearms', 2, 3, ['lats']);
+
+  it('a trivial later session cannot REPLACE the heavy debt it followed', () => {
+    const alone = computeMuscleRecovery([heavyPull], 'lats', NOW);
+    const withHold = computeMuscleRecovery([heavyPull, gripHold], 'lats', NOW);
+
+    // The heavy day's own debt survives intact — same window, still listed —
+    // where last-session-wins deleted it and substituted the hold's.
+    const heavyDebt = withHold.debts.find(
+      (d) => d.performedAt.getTime() === hoursAgo(72).getTime()
+    );
+    expect(heavyDebt).toBeDefined();
+    expect(heavyDebt!.windowHours).toBeCloseTo(alone.windowHours!, 6);
+
+    // The hold may still add its OWN short debt — that is legitimate, you did
+    // hang from a bar 6h ago — but it is bounded by that window, not by the
+    // heavy day's. Pre-fix this added 34h; the hold's whole window is ~21h.
+    expect(withHold.hoursUntilReady).toBeGreaterThanOrEqual(alone.hoursUntilReady);
+    expect(withHold.hoursUntilReady - alone.hoursUntilReady).toBeLessThan(4);
+
+    // `lastTrainedAt` stays literal — it is what the sheet shows.
+    expect(withHold.lastTrainedAt).toEqual(hoursAgo(6));
+    expect(withHold.hoursSinceLast).toBeCloseTo(6, 6);
+  });
+
+  it('a trivial later session cannot SHORTEN the heavy session either', () => {
+    const heavyOnly = computeMuscleRecovery([heavyPull], 'lats', NOW);
+    // A grip hold logged right after the heavy day, whose own window is long
+    // since over, must not discharge the heavy day's remaining debt.
+    const withEarlyHold = computeMuscleRecovery(
+      [heavyPull, session(hoursAgo(70), 'forearms', 2, 3, ['lats'])],
+      'lats',
+      NOW
+    );
+    expect(withEarlyHold.estimatedReadyAt).toEqual(heavyOnly.estimatedReadyAt);
+    expect(withEarlyHold.status).toBe(heavyOnly.status);
+  });
+
+  it('reports the WORST status across debts, and the LATEST ready-time — even from different sessions', () => {
+    // Heavy day 60h ago: further through its window, but the longer-dated
+    // debt. Grip hold 6h ago: barely started, but a short window.
+    const recentHeavy = { ...heavyPull, performedAt: hoursAgo(60) };
+    const result = computeMuscleRecovery([recentHeavy, gripHold], 'lats', NOW);
+    const heavyOnly = computeMuscleRecovery([recentHeavy], 'lats', NOW);
+    const holdOnly = computeMuscleRecovery([gripHold], 'lats', NOW);
+
+    // Status comes from the hold (the least-recovered debt)…
+    expect(heavyOnly.status).toBe('recovering');
+    expect(holdOnly.status).toBe('fatigued');
+    expect(result.status).toBe('fatigued');
+
+    // …while the ready-time comes from the heavy day (the longest-dated one).
+    expect(result.governingTrainedAt).toEqual(hoursAgo(60));
+    expect(result.hoursUntilReady).toBeCloseTo(heavyOnly.hoursUntilReady, 6);
+    expect(result.hoursUntilReady).toBeGreaterThan(holdOnly.hoursUntilReady);
+
+    expect(result.debts).toHaveLength(2);
+    expect(result.debts[0].ratio).toBeLessThanOrEqual(result.debts[1].ratio);
+  });
+
+  it('status is exactly readinessRatio banded — the two can never disagree', () => {
+    for (const history of [[heavyPull], [gripHold], [heavyPull, gripHold], []]) {
+      const r = computeMuscleRecovery(history, 'lats', NOW);
+      expect(r.status).toBe(
+        r.readinessRatio >= 1
+          ? 'fresh'
+          : r.readinessRatio >= RECOVERY_CONFIG.recoveringThreshold
+            ? 'recovering'
+            : 'fatigued'
+      );
+      // Fresh implies every debt settled, so nothing is outstanding.
+      if (r.status === 'fresh') {
+        expect(r.debts).toEqual([]);
+        expect(r.hoursUntilReady).toBe(0);
+      }
+    }
+  });
+
+  it('the end-to-end regression: 2 secondary sets no longer buy 42h of unreadiness', () => {
+    const withHold = computeMuscleRecovery([heavyPull, gripHold], 'lats', NOW);
+    // Pre-fix this returned windowHours 48 and hoursUntilReady 42 — a 34h
+    // increase over the heavy day alone, off one effective set.
+    expect(withHold.hoursUntilReady).toBeLessThan(20);
+    const holdOnly = computeMuscleRecovery([gripHold], 'lats', NOW);
+    expect(holdOnly.windowHours!).toBeLessThan(30);
+  });
+
+  it('ties on ready-time resolve to the more recent session, deterministically', () => {
+    const twice = [session(hoursAgo(10), 'biceps', 4, 2), session(hoursAgo(10), 'biceps', 4, 2)];
+    const a = computeMuscleRecovery(twice, 'biceps', NOW);
+    const b = computeMuscleRecovery([...twice].reverse(), 'biceps', NOW);
+    expect(a.governingTrainedAt).toEqual(b.governingTrainedAt);
+    expect(a.windowHours).toBeCloseTo(b.windowHours!, 10);
+    expect(a.status).toBe(b.status);
+  });
+
+  it('is order-independent for the same set of sessions', () => {
+    const sessions = [heavyPull, gripHold, session(hoursAgo(30), 'lats', 3, 2)];
+    const forward = computeMuscleRecovery(sessions, 'lats', NOW);
+    const backward = computeMuscleRecovery([...sessions].reverse(), 'lats', NOW);
+    expect(backward.status).toBe(forward.status);
+    expect(backward.readinessRatio).toBeCloseTo(forward.readinessRatio, 10);
+    expect(backward.estimatedReadyAt).toEqual(forward.estimatedReadyAt);
+    expect(backward.governingTrainedAt).toEqual(forward.governingTrainedAt);
   });
 });
 
@@ -485,7 +619,7 @@ describe('computeSleepWindowMultiplier', () => {
 
 describe('sleep multiplier applied to recovery windows', () => {
   it('short sleep (<6h trailing avg) extends a muscle ready-time by 15%', () => {
-    // High-dose chest session 24h ago → base window 48 + 24 = 72h.
+    // Saturating chest session 24h ago → 48 × 1.45 = 69.6h base-case window.
     const history = [session(hoursAgo(24), 'chest_upper', 10, 0)];
 
     const shortNights: SleepNight[] = [
@@ -501,8 +635,8 @@ describe('sleep multiplier applied to recovery windows', () => {
     const baseline = computeMuscleRecovery(history, 'chest_upper', NOW);
     const shortSleep = computeMuscleRecovery(history, 'chest_upper', NOW, config);
 
-    expect(baseline.windowHours).toBe(72);
-    expect(shortSleep.windowHours).toBeCloseTo(72 * 1.15, 5);
+    expect(baseline.windowHours).toBeCloseTo(saturatedWindow('chest_upper'), 6);
+    expect(shortSleep.windowHours).toBeCloseTo(saturatedWindow('chest_upper') * 1.15, 5);
     // Ready-time (time-until-fresh from the last session) extends by exactly 15%.
     expect(shortSleep.estimatedReadyAt!.getTime() - shortSleep.lastTrainedAt!.getTime()).toBeCloseTo(
       (baseline.estimatedReadyAt!.getTime() - baseline.lastTrainedAt!.getTime()) * 1.15,
@@ -522,7 +656,7 @@ describe('sleep multiplier applied to recovery windows', () => {
       computeSleepWindowMultiplier(goodNights, NOW)
     );
     const result = computeMuscleRecovery(history, 'chest_upper', NOW, config);
-    expect(result.windowHours).toBeCloseTo(72 * 0.95, 5);
+    expect(result.windowHours).toBeCloseTo(saturatedWindow('chest_upper') * 0.95, 5);
   });
 
   it('composes with the enhanced-athlete windowScale and learned multipliers', () => {
@@ -530,7 +664,7 @@ describe('sleep multiplier applied to recovery windows', () => {
     const config = recoveryConfigFor(true, { chest_upper: 1.2 }, 1.15);
     const result = computeMuscleRecovery(history, 'chest_upper', NOW, config);
     expect(result.windowHours).toBeCloseTo(
-      (72 / ENHANCED_RECOVERY_MULTIPLIER) * 1.2 * 1.15,
+      (saturatedWindow('chest_upper') / ENHANCED_RECOVERY_MULTIPLIER) * 1.2 * 1.15,
       5
     );
   });

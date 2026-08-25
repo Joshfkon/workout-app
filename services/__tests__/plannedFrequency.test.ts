@@ -18,7 +18,7 @@ import {
 import {
   DEFAULT_PLANNED_SESSIONS_PER_WEEK,
   RECOVERY_CONFIG,
-  computeDoseAdjustmentHours,
+  computeDoseScale,
   sessionCapacityFor,
 } from '@/services/muscleRecovery';
 
@@ -61,9 +61,52 @@ describe('plannedSessionsPerWeekByMuscle', () => {
     // Legacy 'chest' expands to both heads.
     expect(counts.chest_upper).toBe(1);
     expect(counts.chest_lower).toBe(1);
-    // A fine tag credits only itself — coarse 'calves' is NOT implied.
+    // A component tag DOES imply its capacity owner. This map is the divisor
+    // under the capacity owner's MRV in sessionCapacityFor, so counting a
+    // gastrocnemius session against the parent's schedule but not the parent
+    // itself would normalize one set of work against two schedules. Siblings
+    // are still not implied — soleus was never planned.
     expect(counts.gastrocnemius).toBe(1);
-    expect(counts.calves).toBeUndefined();
+    expect(counts.calves).toBe(1);
+    expect(counts.soleus).toBeUndefined();
+  });
+
+  it('spreads a coarse plan across the family it cannot name', () => {
+    // Three coarsely-tagged pull days: the parent and both heads must agree on
+    // the schedule, or the same sets get normalized against 16/3 for the group
+    // and the 16/2 fallback for the heads — which sent the head rows Fresh
+    // ahead of the group row on the Train page.
+    const counts = plannedSessionsPerWeekByMuscle([
+      day(['glutes', ['traps']]),
+      day(['glutes', ['traps']]),
+      day(['glutes', ['traps']]),
+    ]);
+    expect(counts.traps).toBe(3);
+    expect(counts.upper_traps).toBe(3);
+    expect(counts.mid_lower_traps).toBe(3);
+  });
+
+  it('gives a family member the same session capacity as its capacity owner', () => {
+    const counts = plannedSessionsPerWeekByMuscle([
+      day(['glutes', ['traps']]),
+      day(['glutes', ['traps']]),
+      day(['glutes', ['traps']]),
+    ]);
+    const config = {
+      ...RECOVERY_CONFIG,
+      experienceForCapacity: 'intermediate' as const,
+      plannedSessionsPerWeekByMuscle: counts,
+    };
+
+    const parent = sessionCapacityFor('traps', config);
+    for (const child of ['upper_traps', 'mid_lower_traps'] as const) {
+      const component = sessionCapacityFor(child, config);
+      expect(component.plannedFrequencySource).toBe('perMuscle');
+      expect(component.plannedSessionsPerWeek).toBe(parent.plannedSessionsPerWeek);
+      expect(component.sessionCapacity).toBe(parent.sessionCapacity);
+      // Not the silent fallback the exact-row lookup used to land on.
+      expect(component.plannedSessionsPerWeek).not.toBe(DEFAULT_PLANNED_SESSIONS_PER_WEEK);
+    }
   });
 
   it('omits muscles absent from the plan rather than defaulting them', () => {
@@ -117,15 +160,15 @@ describe('frequency feeds the dose model', () => {
     // Higher planned frequency → smaller session capacity → same work reads heavier.
     expect(withPlan.sessionCapacity).toBeLessThan(withFallback.sessionCapacity);
 
-    const heavier = computeDoseAdjustmentHours('quads', 8, 3, {
+    const heavier = computeDoseScale('quads', 8, 3, {
       ...RECOVERY_CONFIG,
       experienceForCapacity: 'advanced',
       plannedSessionsPerWeekByMuscle: plan,
-    }).adjustmentHours;
-    const lighter = computeDoseAdjustmentHours('quads', 8, 3, {
+    }).doseScale;
+    const lighter = computeDoseScale('quads', 8, 3, {
       ...RECOVERY_CONFIG,
       experienceForCapacity: 'advanced',
-    }).adjustmentHours;
+    }).doseScale;
     expect(heavier).toBeGreaterThan(lighter);
   });
 
@@ -165,12 +208,12 @@ describe('frequency-source metrics', () => {
 
   it('every dose evaluation records its source', () => {
     const plan = plannedSessionsPerWeekByMuscle([day(['quads']), day(['quads'])]);
-    computeDoseAdjustmentHours('quads', 6, 2, {
+    computeDoseScale('quads', 6, 2, {
       ...RECOVERY_CONFIG,
       experienceForCapacity: 'advanced',
       plannedSessionsPerWeekByMuscle: plan,
     });
-    computeDoseAdjustmentHours('biceps', 6, 2, {
+    computeDoseScale('biceps', 6, 2, {
       ...RECOVERY_CONFIG,
       experienceForCapacity: 'advanced',
     });

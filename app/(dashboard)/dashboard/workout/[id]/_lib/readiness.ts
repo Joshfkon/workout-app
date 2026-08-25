@@ -169,29 +169,35 @@ export const READINESS_READY_THRESHOLD = 0.8;
 export const READINESS_AMBER_THRESHOLD = 0.5;
 
 /**
- * Scalar readiness in [0, 1]: how far through its recovery window a muscle is
- * (`hoursSinceLast / windowHours`, clamped). Derived from the recovery
- * heuristic's own outputs — NOT a parallel model: the window already carries
- * dose, athlete-profile, sleep, wearable and learned-multiplier adjustments.
+ * Scalar readiness in [0, 1]: how far through recovery a muscle is. Read
+ * straight off the heuristic's own `readinessRatio` (the minimum across every
+ * outstanding debt) — NOT a parallel model, and deliberately not recomputed
+ * from `hoursSinceLast / windowHours`: those two describe DIFFERENT sessions
+ * once a light session follows a heavy one, and dividing one by the other
+ * produced a score that could read "ready" while the status said Fatigued.
  * A never-trained muscle is fully ready (1).
  */
 export function readinessScore(rec: MuscleRecoveryResult): number {
-  if (rec.lastTrainedAt === null || rec.windowHours === null || rec.windowHours <= 0) return 1;
-  const ratio = (rec.hoursSinceLast ?? 0) / rec.windowHours;
-  return Math.min(1, Math.max(0, ratio));
+  return Math.min(1, Math.max(0, rec.readinessRatio));
 }
 
 /**
  * Estimated hours until the readiness score crosses `threshold` (0 when
  * already at/above it) — drives the "~{N}h" microcopy.
+ *
+ * Reduced over ALL outstanding debts, not just the worst one: a short-window
+ * session can sit at the lowest ratio while a long-window session takes longer
+ * to reach the same fraction, and the microcopy has to wait for both.
  */
 export function hoursUntilReadinessThreshold(
   rec: MuscleRecoveryResult,
   threshold: number = READINESS_READY_THRESHOLD
 ): number {
   if (readinessScore(rec) >= threshold) return 0;
-  // score < threshold ≤ 1 implies the muscle was trained, so windowHours is set.
-  return Math.max(0, threshold * (rec.windowHours ?? 0) - (rec.hoursSinceLast ?? 0));
+  return rec.debts.reduce(
+    (worst, debt) => Math.max(worst, threshold * debt.windowHours - debt.hoursSince),
+    0
+  );
 }
 
 /**
@@ -233,8 +239,44 @@ function applySorenessOverride(
 }
 
 /**
+ * Is `candidate` a LESS recovered reading of the group than `incumbent`?
+ *
+ * Least-recovered wins, in this order:
+ *  1. status rank — fatigued beats recovering beats fresh;
+ *  2. hours until Fresh — further from ready is worse;
+ *  3. HAS DATA — a member the user has never trained says nothing about the
+ *     group, so it must never displace a member they have. Untrained members
+ *     report `fresh` with `hoursUntilReady: 0` and `lastTrainedAt: null`, so
+ *     without this they tie every trained-and-Fresh sibling and the FIRST
+ *     child listed won — handing the group a null `lastTrainedAt`, which the
+ *     badge renders as "No recent data". That is how Triceps (coarse member
+ *     'triceps', never tagged by a head-tagging user) reported no recent data
+ *     while both its heads read Fresh off 21 counted sets;
+ *  4. most recently trained — among equally-recovered trained members, the
+ *     latest session is both the least-recovered reading and the honest answer
+ *     to "when was this group last trained?".
+ */
+function isLessRecovered(
+  candidate: MuscleRecoveryResult,
+  incumbent: MuscleRecoveryResult
+): boolean {
+  const rank = RECOVERY_RANK[candidate.status] - RECOVERY_RANK[incumbent.status];
+  if (rank !== 0) return rank > 0;
+  if (candidate.hoursUntilReady !== incumbent.hoursUntilReady) {
+    return candidate.hoursUntilReady > incumbent.hoursUntilReady;
+  }
+  const candidateTrained = candidate.lastTrainedAt !== null;
+  const incumbentTrained = incumbent.lastTrainedAt !== null;
+  if (candidateTrained !== incumbentTrained) return candidateTrained;
+  if (!candidateTrained || !incumbentTrained) return false;
+  return candidate.lastTrainedAt!.getTime() > incumbent.lastTrainedAt!.getTime();
+}
+
+/**
  * Recovery for a coarse group (exported so the weekly-volume strip can pair
  * the SAME worst-of-children recovery with its rows as the readiness sheet).
+ * A group reads "no recent data" only when EVERY member is untrained — see
+ * isLessRecovered.
  */
 export function coarseRecovery(
   coarse: CoarseMuscle,
@@ -249,13 +291,7 @@ export function coarseRecovery(
       computeMuscleRecovery(history, child, now, config),
       sorenessOverrides?.has(child) ?? false
     );
-    if (
-      !worst ||
-      RECOVERY_RANK[rec.status] > RECOVERY_RANK[worst.status] ||
-      (RECOVERY_RANK[rec.status] === RECOVERY_RANK[worst.status] && rec.hoursUntilReady > worst.hoursUntilReady)
-    ) {
-      worst = rec;
-    }
+    if (!worst || isLessRecovered(rec, worst)) worst = rec;
   }
   return worst ?? computeMuscleRecovery(history, COARSE_CHILDREN[coarse][0], now, config);
 }

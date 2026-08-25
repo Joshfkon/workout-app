@@ -101,8 +101,6 @@
 
 import type { PrevSessionSet } from '@/services/setRecommender';
 import {
-  DEADBAND_RIR,
-  EFFORT_MATCH_TOLERANCE,
   MAX_REDUCE_PCT,
   HIGH_REP_COST_TAPER_PER_REP,
   HIGH_REP_COST_MIN_PER_PCT,
@@ -113,6 +111,7 @@ import {
   REP_TOTAL_RANGE_FIT_MAX_STEP_PCT,
 } from './constants';
 import { smallestIncrement, roundPrescribedLoad } from './loadGrid';
+import { gradeEffort } from './effortGrade';
 
 export type ProgressionModel = 'e1rm' | 'rep_total';
 export type RepBoundary = 'crisp' | 'drifting';
@@ -569,6 +568,16 @@ export interface RepTotalNextSet {
    * ceiling. The banner must say so.
    */
   sessionCapacityClamped?: boolean;
+  /**
+   * The ask was trimmed because the session is DECLINING: the most recent
+   * set demonstrated less capacity at the asked load/effort than an earlier
+   * set did, so the live ceiling sits below the session best. Distinct from
+   * `sessionCapacityClamped` (a trim at today's best) so the banner can name
+   * the real reason instead of "capped at today's best", which would be
+   * false. The banner must say so — a silently shrinking ask is how this
+   * defect stayed invisible in the other direction.
+   */
+  sessionDeclineTrimmed?: boolean;
   /** INV-1 analog: the ask falls outside the stated rep range — banner must acknowledge. */
   outsideRange?: 'below' | 'above';
   /**
@@ -618,16 +627,12 @@ export function recommendRepTotalNextSet(input: RepTotalNextSetInput): RepTotalN
   );
   const deviated = Math.abs(currentLoadKg - sessionPlan.weightKg) > deviationToleranceKg;
 
-  // Effort classification of the last set, same grammar as recommendSet.
-  const dev = last && last.rir !== undefined ? last.rir - targetRir : 0;
-  const effortVsTarget: RepTotalNextSet['effortVsTarget'] =
-    !last || last.rir === undefined
-      ? 'on_target'
-      : dev >= EFFORT_MATCH_TOLERANCE
-        ? 'easier'
-        : dev <= -EFFORT_MATCH_TOLERANCE
-          ? 'harder'
-          : 'on_target';
+  // Effort of the last set, graded through the SHARED reading
+  // (services/suggestionEngine/effortGrade) — the same one the rest timer
+  // uses, so one set never gets two verdicts.
+  const effort = last ? gradeEffort(last.rir, targetRir) : null;
+  const dev = effort?.dev ?? 0;
+  const effortVsTarget: RepTotalNextSet['effortVsTarget'] = effort?.vsTarget ?? 'on_target';
 
   // Re-price a plan rep target onto a different load. Spec §4: the exchange
   // is a REPRICING, not evidence — an in-range plan target must come out of
@@ -663,8 +668,10 @@ export function recommendRepTotalNextSet(input: RepTotalNextSetInput): RepTotalN
   // the problem, and no rep target at this load is a prescription. Step the
   // load down so the set's demonstrated capacity prices out at the range mid,
   // capped at −MAX_REDUCE_PCT, on the loading grid.
-  if (last && last.reps < repMin && last.rir !== undefined && dev <= -DEADBAND_RIR) {
-    const zeroRirCapacity = last.reps + Math.max(0, last.rir);
+  // `effort` is non-null only when `last.rir` was defined, so the ?? 0 below
+  // is a type narrowing the compiler can't see, never a silent default.
+  if (last && last.reps < repMin && effort?.pastDeadband) {
+    const zeroRirCapacity = last.reps + Math.max(0, last.rir ?? 0);
     const neededZeroRir = mid + Math.max(0, targetRir);
     const pctDrop = (zeroRirCapacity - neededZeroRir) / repCostPerPctLoad(zeroRirCapacity);
     const rawKg = Math.max(
@@ -697,35 +704,81 @@ export function recommendRepTotalNextSet(input: RepTotalNextSetInput): RepTotalN
     reps = Math.min(repMax, Math.max(reps, lastSetAskCeiling - 1));
   }
 
-  // INV-2 analog: once ≥1 set is logged, the ask may not exceed what today's
-  // best observed set supports at the asked load and effort.
+  // INV-2 analog, LIVE anchor: once ≥1 set is logged, the ask may not exceed
+  // what today's MOST RECENT set supports at the asked load and effort.
+  //
+  // This anchor used to be the session's BEST set (max over all observed
+  // sets), which made the whole rep ask raise-only: the plan target is flat,
+  // the evidence floor is a Math.max, and a max-ceiling can only be raised by
+  // a later set, never lowered. A session that DECLINED therefore re-served
+  // its opening ask verbatim — the live 175→180 lb Abdominal Crunch case
+  // (set 1: 9 @ 2 RIR → ask 9; set 2: 7 @ 1 RIR → ask 9 again), where the
+  // rest timer extended for a hotter-than-target set while the prescription
+  // registered nothing. See docs/PRESCRIPTION_STALENESS_AUDIT.md.
+  //
+  // Within-session capacity is non-increasing, so the LATEST observation is
+  // the live estimate of what the lifter can do on the next set; the max is
+  // an estimate of what they could do at the session's START. With one set
+  // logged the two anchors are identical — this only diverges once a later
+  // set comes in under an earlier one, i.e. exactly the defect.
+  //
+  // The evidence floor above still raises the ask off a strong set, so the
+  // ask lands in [liveCeiling − 1, liveCeiling]: reps absorb the decline at
+  // a HELD load, and the load only moves if that lands below the range floor
+  // (the step below). Reps first, load second — never re-serve an ask the
+  // lifter just disproved.
   let sessionCapacityClamped = false;
-  if (valid.length > 0) {
-    let ceiling = 0;
-    for (const s of valid) {
-      const c = observedAskCeiling(s, weightKg, targetRir);
-      if (c > ceiling) ceiling = c;
-    }
-    if (ceiling > 0 && reps > ceiling) {
-      reps = ceiling;
-      sessionCapacityClamped = true;
+  let sessionDeclineTrimmed = false;
+  // Session-best ceiling — the ORIGINAL INV-2 bound, unchanged. It still
+  // gates the load lever below: "even today's best set can't hold this load
+  // in range" is a statement about the load, and it must not be triggered by
+  // one weaker set. The live trim that follows moves REPS only.
+  let bestCeiling = 0;
+  for (const s of valid) {
+    const c = observedAskCeiling(s, weightKg, targetRir);
+    if (c > bestCeiling) bestCeiling = c;
+  }
+  if (bestCeiling > 0 && reps > bestCeiling) {
+    reps = bestCeiling;
+    sessionCapacityClamped = true;
+  }
+  // The ask the LOAD lever is judged on: post-best-clamp, pre-live-trim. A
+  // declining set must not be able to trigger a mid-session load drop by
+  // itself (spec: reps absorb fatigue, the load absorbs a wrong load).
+  const repsAtBestCeiling = reps;
+
+  // LIVE trim — the fix. Capacity within a session is non-increasing, so the
+  // MOST RECENT set, not the best one, is the live estimate of what the next
+  // set can do. Trimming to it makes the rep ask two-directional.
+  if (last) {
+    const liveCeiling = observedAskCeiling(last, weightKg, targetRir);
+    if (liveCeiling > 0 && reps > liveCeiling) {
+      reps = liveCeiling;
+      sessionDeclineTrimmed = true;
     }
   }
 
   // Step 5: a capacity-trimmed ask below the range floor is a config
   // violation with a lever available — the LOAD. Instead of shipping a
   // target the configured range forbids (the old "target N — below the
-  // range" state), step the load down so the best observed set's
-  // demonstrated capacity delivers the range mid, on the loading grid.
-  // When no meaningful step-down exists (already at the smallest load),
-  // the honest below-floor ask remains and carries `outsideRange`.
-  if (reps < repMin && rationale === 'follow_plan' && valid.length > 0) {
+  // range" state), step the load down so the reference set's demonstrated
+  // capacity delivers the range mid, on the loading grid. When no meaningful
+  // step-down exists (already at the smallest load), the honest below-floor
+  // ask remains and carries `outsideRange`.
+  //
+  // Gated on `repsAtBestCeiling`, NOT the live-trimmed ask: the load only
+  // moves when today's BEST set cannot hold this load inside the range. A
+  // single declining set is absorbed by reps at the held load (which is what
+  // the lifter asked for — "drop reps, hold load"), and shows up as an
+  // honest below-floor ask carrying `outsideRange` rather than an 11%
+  // mid-session deload off one weak set.
+  if (repsAtBestCeiling < repMin && rationale === 'follow_plan' && valid.length > 0) {
     let best = valid[0];
-    let bestCeiling = 0;
+    let bestSetCeiling = 0;
     for (const s of valid) {
       const c = observedAskCeiling(s, weightKg, targetRir);
-      if (c > bestCeiling) {
-        bestCeiling = c;
+      if (c > bestSetCeiling) {
+        bestSetCeiling = c;
         best = s;
       }
     }
@@ -796,6 +849,7 @@ export function recommendRepTotalNextSet(input: RepTotalNextSetInput): RepTotalN
     rationale,
     effortVsTarget,
     ...(sessionCapacityClamped ? { sessionCapacityClamped } : {}),
+    ...(sessionDeclineTrimmed ? { sessionDeclineTrimmed } : {}),
     ...(outsideRange ? { outsideRange } : {}),
     ...(refReps !== undefined ? { positionRef: { setNo: slot + 1, prevReps: refReps } } : {}),
     ...(deviated

@@ -18,6 +18,8 @@ import type {
   UpdateVarietyPreferencesInput,
 } from '@/types/user-exercise-preferences';
 import type { Exercise } from './exerciseService';
+import { now as clockNow } from '@/lib/clock';
+
 import {
   fetchVarietyPreferences,
   upsertVarietyPreferences,
@@ -80,7 +82,7 @@ export async function getVarietyPreferences(
   // Check cache
   const cachedTs = varietyCacheTimestamp.get(userId);
   const cached = varietyPrefsCache.get(userId);
-  if (cached !== undefined && cachedTs && Date.now() - cachedTs < CACHE_TTL) {
+  if (cached !== undefined && cachedTs && clockNow().getTime() - cachedTs < CACHE_TTL) {
     return cached;
   }
 
@@ -90,7 +92,7 @@ export async function getVarietyPreferences(
     if (error) {
       if (error.code === 'PGRST116' || error.code === 'PGRST205' || error.code === '42P01') {
         varietyPrefsCache.set(userId, null);
-        varietyCacheTimestamp.set(userId, Date.now());
+        varietyCacheTimestamp.set(userId, clockNow().getTime());
         return null;
       }
       console.warn('Failed to load variety preferences:', error);
@@ -99,7 +101,7 @@ export async function getVarietyPreferences(
 
     const prefs = data ? mapRowToVarietyPrefs(data) : null;
     varietyPrefsCache.set(userId, prefs);
-    varietyCacheTimestamp.set(userId, Date.now());
+    varietyCacheTimestamp.set(userId, clockNow().getTime());
     return prefs;
   } catch (err) {
     console.warn('Error fetching variety preferences:', err);
@@ -120,8 +122,8 @@ export async function getVarietyPreferencesWithDefaults(
     id: '',
     userId,
     ...DEFAULT_VARIETY_PREFS,
-    createdAt: new Date(),
-    updatedAt: new Date(),
+    createdAt: clockNow(),
+    updatedAt: clockNow(),
   };
 }
 
@@ -239,13 +241,13 @@ export async function getRecentExerciseUsage(
   const cachedTs = usageCacheTimestamp.get(cacheKey);
   const cached = usageHistoryCache.get(cacheKey);
 
-  if (cached && cachedTs && Date.now() - cachedTs < USAGE_CACHE_TTL) {
+  if (cached && cachedTs && clockNow().getTime() - cachedTs < USAGE_CACHE_TTL) {
     const muscleUsage = cached.get(muscleGroup.toLowerCase()) ?? [];
     return muscleUsage;
   }
 
   try {
-    const cutoffDate = new Date();
+    const cutoffDate = clockNow();
     cutoffDate.setDate(cutoffDate.getDate() - limitDays);
 
     const { data, error } = await fetchRecentExerciseUsage(userId, cutoffDate);
@@ -270,7 +272,7 @@ export async function getRecentExerciseUsage(
     });
 
     usageHistoryCache.set(cacheKey, usageByMuscle);
-    usageCacheTimestamp.set(cacheKey, Date.now());
+    usageCacheTimestamp.set(cacheKey, clockNow().getTime());
 
     return usageByMuscle.get(muscleGroup.toLowerCase()) ?? [];
   } catch (err) {

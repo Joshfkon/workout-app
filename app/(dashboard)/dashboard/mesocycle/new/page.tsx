@@ -15,6 +15,7 @@ import { UpgradePrompt } from '@/components/subscription';
 import { formatWeight, getLocalDateString, muscleDisplayName } from '@/lib/utils';
 import { describeSupabaseError } from '@/lib/errors';
 import { describeMesocycleInsertFailure } from '../_lib/mesocycleErrors';
+import { createMesocycle } from '@/lib/training/createMesocycle';
 import type { Goal, Experience, DexaScan, Equipment, MuscleGroup, Rating, ExtendedUserProfile, FullProgramRecommendation, DexaRegionalData, WorkoutDay } from '@/types/schema';
 import { TrainingScheduleSelector, MesocycleLengthGuidance } from '@/components/mesocycle';
 import {
@@ -388,25 +389,11 @@ export default function NewMesocyclePage() {
     try {
       const supabase = createUntypedClient();
       const { data: { user } } = await supabase.auth.getUser();
-      
+
       if (!user) throw new Error('You must be logged in');
 
-      // Deactivate any existing active mesocycles. Surface a failure here
-      // rather than pressing on — silently leaving the old block active would
-      // give the user two active mesocycles.
-      const { error: deactivateError } = await supabase
-        .from('mesocycles')
-        .update({ state: 'completed', is_active: false })
-        .eq('user_id', user.id)
-        .eq('state', 'active');
-
-      if (deactivateError) {
-        throw new Error(
-          `Couldn't close your current mesocycle: ${describeSupabaseError(deactivateError)}`
-        );
-      }
-
-      // Calculate recovery factors for program data
+      // Recovery factors feed the stored recovery_multiplier. The planners are
+      // already pure and headless; only the WRITE needed extracting.
       const userProfile: ExtendedUserProfile = {
         age: userAge,
         experience: userExperience,
@@ -422,60 +409,29 @@ export default function NewMesocyclePage() {
       };
       const recoveryFactors = calculateRecoveryFactors(userProfile);
 
-      // Reconcile the stored week count with the program actually generated.
-      // If program_data has fewer weeks than the chosen total_weeks, prefer the
-      // program's length so current_week indexing can't run out of bounds.
-      const programWeekCount = fullProgram?.mesocycleWeeks?.length ?? 0;
-      const effectiveTotalWeeks =
-        programWeekCount > 0 ? Math.min(totalWeeks, programWeekCount) : totalWeeks;
-
-      // Deload week = the program's actual deload week if marked, else last week.
-      const programDeloadWeek = fullProgram?.mesocycleWeeks?.find((w) => w.isDeload)?.weekNumber;
-      const effectiveDeloadWeek =
-        programDeloadWeek && programDeloadWeek <= effectiveTotalWeeks
-          ? programDeloadWeek
-          : effectiveTotalWeeks;
-
-      // Create mesocycle with full program data
-      const { data: mesocycle, error: insertError } = await supabase
-        .from('mesocycles')
-        .insert({
-          user_id: user.id,
-          name: name || `${splitType} - ${new Date().toLocaleDateString()}`,
-          split_type: splitType,
-          days_per_week: daysPerWeek,
-          total_weeks: effectiveTotalWeeks,
-          deload_week: effectiveDeloadWeek,
-          current_week: 1,
-          state: 'active',
-          fatigue_score: 0,
-          is_active: true,
-          start_date: scheduleAnchorDate,
-          // Schedule shape: fixed weekdays, or every-N-days from start_date.
-          schedule_mode: scheduleMode,
-          training_interval_days: scheduleMode === 'interval' ? trainingIntervalDays : null,
-          // Preferred workout days (user-selected; unused in interval mode but
-          // kept so switching back to fixed days restores the choice)
-          preferred_workout_days: preferredWorkoutDays,
-          // Session duration for time-based workout planning
-          session_duration_minutes: sessionDurationMinutes,
-          // New fields for training science integration
-          periodization_model: fullProgram?.periodization?.model || 'linear',
-          program_data: fullProgram,
-          fatigue_budget_config: fullProgram?.fatigueBudget || null,
-          // Use the volume targets from the program actually generated (not legacy rec).
-          volume_per_muscle: fullProgram?.volumePerMuscle || recommendation?.volumePerMuscle || null,
-          recovery_multiplier: recoveryFactors?.volumeMultiplier || 1.0,
-          // Mode active at generation time — governs in-flight weekly
-          // progression and keeps historical volume analysis unpolluted.
-          generated_with_enhanced_mode: enhancedAthleteMode,
-        })
-        .select()
-        .single();
-
-      if (insertError || !mesocycle) {
-        throw new Error(describeMesocycleInsertFailure(insertError));
-      }
+      // Deactivating the previous block, reconciling total_weeks/deload_week
+      // against the generated program, and the row shape all live in
+      // lib/training/createMesocycle so a headless run creates an identical one.
+      await createMesocycle(
+        supabase,
+        {
+          userId: user.id,
+          name,
+          splitType,
+          daysPerWeek,
+          totalWeeks,
+          scheduleMode,
+          trainingIntervalDays,
+          preferredWorkoutDays,
+          sessionDurationMinutes,
+          fullProgram,
+          recommendation,
+          recoveryFactors,
+          enhancedAthleteMode,
+          startDate: scheduleAnchorDate,
+        },
+        { describeInsertFailure: describeMesocycleInsertFailure }
+      );
 
       // A brand-new plan changes every muscle's planned weekly frequency, which
       // is the denominator for recovery session capacity. Drop the cached plan

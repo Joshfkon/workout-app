@@ -174,7 +174,8 @@ function goalMultiplier(goal: Goal): number {
 // safe as floors.
 export const PROPOSED_MAINTENANCE_VOLUME: Record<CoarseMuscle, number> = {
   chest: 6, //      8 × 0.8
-  back: 10, //     12 × 0.8
+  back: 8, //      10 × 0.8 (tracked its band down when erectors were promoted
+  //                out of the group — same RP ×0.8 rule, new group MEV)
   shoulders: 9, // 12 × 0.75
   biceps: 6, //    10 × 0.62
   triceps: 5, //    8 × 0.67
@@ -186,6 +187,11 @@ export const PROPOSED_MAINTENANCE_VOLUME: Record<CoarseMuscle, number> = {
   traps: 3, //      6 × 0.5 (placeholder)
   forearms: 2, //   4 × 0.5 (placeholder)
   adductors: 2, //  4 × 0.5 (placeholder)
+  // Erectors: RP lists MV ≈ 0 for lifters doing compound work, and erector
+  // volume is almost entirely hinge/squat credit — same declared 0.5 × MEV
+  // placeholder as glutes/abs/traps, for the same reason (a literal 0 would
+  // let a cut prescribe zero).
+  erectors: 2, //   4 × 0.5 (placeholder)
 };
 
 /** The volume floor a preset's output must clear at a given goal:

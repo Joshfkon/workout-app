@@ -52,6 +52,7 @@ import {
   EQUIPMENT_FATIGUE_MODIFIER,
   EXERCISE_RELATIONSHIPS,
 } from './constants';
+import { now as clockNow } from '@/lib/clock';
 
 // ============================================================
 // UTILITY FUNCTIONS
@@ -59,7 +60,7 @@ import {
 
 function calculateAge(birthDate: string | null): number {
   if (!birthDate) return 30;
-  const today = new Date();
+  const today = clockNow();
   const birth = new Date(birthDate);
   let age = today.getFullYear() - birth.getFullYear();
   const monthDiff = today.getMonth() - birth.getMonth();
@@ -123,9 +124,16 @@ function getFFMIBracket(ffmi: number): FFMIBracket {
 // PROGRAM ENGINE CLASS
 // ============================================================
 
+/**
+ * The Supabase client shape the engine reads through. Untyped by construction
+ * (see lib/supabase/client.createUntypedClient) — named here so callers that
+ * thread a client in don't have to spell out the ReturnType.
+ */
+export type EngineClient = ReturnType<typeof createUntypedClient>;
+
 export class ProgramEngine {
   private userId: string;
-  private supabase: ReturnType<typeof createUntypedClient>;
+  private supabase: EngineClient;
   
   // Cached data
   private userProfile: UserProfile | null = null;
@@ -133,15 +141,26 @@ export class ProgramEngine {
   private calibrations: Map<string, StrengthCalibrationRow> = new Map();
   private exerciseHistory: Map<string, ExerciseHistoryRow[]> = new Map();
   
-  constructor(userId: string) {
+  /**
+   * `supabase` is optional so every existing caller is unchanged; pass one to
+   * run the engine against a client the caller already owns.
+   *
+   * This is the ONE reason the parameter exists: without it the engine builds
+   * the module-singleton browser client itself, which pins it to whatever
+   * database that singleton was constructed with and makes the engine
+   * unreachable from a headless/simulated run. Threading the caller's client
+   * through also means a request that already has one doesn't silently open a
+   * second path to the database.
+   */
+  constructor(userId: string, supabase?: EngineClient) {
     this.userId = userId;
-    this.supabase = createUntypedClient();
+    this.supabase = supabase ?? createUntypedClient();
   }
-  
+
   // ---- Static Factory ----
-  
-  static async create(userId: string): Promise<ProgramEngine> {
-    const engine = new ProgramEngine(userId);
+
+  static async create(userId: string, supabase?: EngineClient): Promise<ProgramEngine> {
+    const engine = new ProgramEngine(userId, supabase);
     await engine.loadUserData();
     return engine;
   }
@@ -284,7 +303,7 @@ export class ProgramEngine {
   }
   
   private async loadExerciseHistory(): Promise<void> {
-    const fourWeeksAgo = new Date();
+    const fourWeeksAgo = clockNow();
     fourWeeksAgo.setDate(fourWeeksAgo.getDate() - 28);
     
     const { data } = await this.supabase
@@ -934,7 +953,7 @@ export class ProgramEngine {
       .from('mesocycles')
       .insert({
         user_id: this.userId,
-        name: config.name || `${split} - ${new Date().toLocaleDateString()}`,
+        name: config.name || `${split} - ${clockNow().toLocaleDateString()}`,
         state: 'active',
         total_weeks: periodization.mesocycleWeeks,
         current_week: 1,
@@ -1392,7 +1411,7 @@ export class ProgramEngine {
     
     if (!mesocycle || mesocycle.state !== 'active') return null;
     
-    const today = new Date();
+    const today = clockNow();
     const dayOfWeek = today.getDay() || 7; // 1-7, Monday = 1
     
     const program = mesocycle.program_data as FullProgramRecommendation;
@@ -1480,7 +1499,7 @@ export class ProgramEngine {
     // but can never trip a deload on its own.
     if (shouldDeload) {
       try {
-        const now = new Date();
+        const now = clockNow();
         const cutoff = new Date(now);
         cutoff.setDate(cutoff.getDate() - (SLEEP_DEBT_WINDOW_DAYS - 1));
         const { data: sleepRows } = await this.supabase
@@ -1560,7 +1579,7 @@ export class ProgramEngine {
       user_id: this.userId,
       workout_session_id: workoutSessionId,
       exercise_name: exerciseName,
-      performed_at: new Date().toISOString(),
+      performed_at: clockNow().toISOString(),
       sets,
       estimated_1rm_kg: estimated1RM
     });
@@ -1578,7 +1597,7 @@ export class ProgramEngine {
           estimated_1rm_kg: estimated1RM,
           confidence: 'high',
           source: 'workout',
-          tested_at: new Date().toISOString()
+          tested_at: clockNow().toISOString()
         }, {
           onConflict: 'user_id,exercise_name,tested_at'
         });

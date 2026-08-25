@@ -187,7 +187,8 @@ export function SetLoggerRow({
   const repsStep = isDurationBased ? 5 : 1;
 
   // ---- Hold timer (duration exercises) ----
-  // Start the hold, count up live (wall-clock based — survives phone lock),
+  // Tap Start, get a 5-second camera-style countdown to grip the bar / set the
+  // plank, then the hold counts up live (wall-clock based — survives phone lock),
   // chime at the target, and on Stop commit the elapsed seconds into the
   // seconds field, where the −/+ steppers and tap-to-type adjust it before
   // logging. The prefilled suggestion IS the target. Hook is called
@@ -202,6 +203,8 @@ export function SetLoggerRow({
     exerciseId,
   });
   const holdRunning = isDurationBased && holdTimer.isRunning;
+  const holdCountingDown = isDurationBased && holdTimer.isCountingDown;
+  const holdBusy = holdRunning || holdCountingDown;
   const holdCommittedRef = useRef(false);
 
   // Commit the hold time when the timer stops (never mid-run: the steppers
@@ -248,12 +251,19 @@ export function SetLoggerRow({
   }, [minIncrementKg, unit]);
 
   const isPlainBodyweight = isBodyweight && weightMode === 'bodyweight';
-  const weightNum = parseFloat(weight);
+  const parsedWeight = parseFloat(weight);
+  // Timed holds (dead hang, plank) frequently carry no external load, and a
+  // duration exercise with no load prescription arrives here with a blank or
+  // zero weight. That is a real, loggable set — treat it as 0 kg rather than
+  // an invalid entry that silently disables "Log set".
+  const weightNum = isDurationBased && isNaN(parsedWeight) ? 0 : parsedWeight;
   const repsNum = parseInt(reps);
-  const weightValid = isPlainBodyweight || (!isNaN(weightNum) && weightNum >= 0 && (isBodyweight || weightNum > 0));
+  const weightValid =
+    isPlainBodyweight ||
+    (!isNaN(weightNum) && weightNum >= 0 && (isBodyweight || isDurationBased || weightNum > 0));
   const repsValid = !isNaN(repsNum) && repsNum >= 1 && repsNum <= maxReps;
   // Mid-hold you're holding, not logging: Stop commits the time first.
-  const canLog = !disabled && weightValid && repsValid && !holdRunning;
+  const canLog = !disabled && weightValid && repsValid && !holdBusy;
   const hasSheetFeedback = form !== null || discomfort !== undefined || note.trim().length > 0;
 
   const stepWeight = (direction: 1 | -1) => {
@@ -307,6 +317,12 @@ export function SetLoggerRow({
         };
       }
       weightKg = bodyweightData.effectiveLoadKg;
+    } else if (isPlainBodyweight) {
+      // Bodyweight movement with no weigh-in on record: there is no load to
+      // resolve and no field to type one into. Log the set at 0 rather than
+      // handing the persistence path a NaN it silently drops — the card's
+      // "log your bodyweight" hint is what fixes the missing load.
+      weightKg = 0;
     } else {
       weightKg = inputWeightToKg(weightNum, unit);
     }
@@ -454,13 +470,28 @@ export function SetLoggerRow({
           <button
             type="button"
             onClick={() => stepReps(-1)}
-            disabled={disabled || holdRunning}
+            disabled={disabled || holdBusy}
             aria-label={isDurationBased ? 'Decrease seconds' : 'Decrease reps'}
             className={stepperButtonClass}
           >
             <IconMinus size={16} />
           </button>
-          {holdRunning ? (
+          {holdCountingDown ? (
+            // Camera-style lead-in: big count, then the hold clock starts.
+            <div
+              className="w-full min-w-0 min-h-[52px] flex flex-col items-center justify-center leading-tight"
+              aria-live="assertive"
+              aria-label={`Starting in ${holdTimer.countdownRemaining} seconds`}
+              data-testid="hold-countdown"
+            >
+              <span className="font-mono text-[22px] font-semibold text-primary-400 whitespace-nowrap tabular-nums">
+                {holdTimer.countdownRemaining}
+              </span>
+              <span className="text-[10px] uppercase tracking-wide text-surface-500">
+                get set
+              </span>
+            </div>
+          ) : holdRunning ? (
             // Live hold readout while the timer runs — the field commits on Stop.
             <div
               className="w-full min-w-0 min-h-[52px] flex flex-col items-center justify-center leading-tight"
@@ -489,7 +520,7 @@ export function SetLoggerRow({
           <button
             type="button"
             onClick={() => stepReps(1)}
-            disabled={disabled || holdRunning}
+            disabled={disabled || holdBusy}
             aria-label={isDurationBased ? 'Increase seconds' : 'Increase reps'}
             className={stepperButtonClass}
           >
@@ -498,8 +529,9 @@ export function SetLoggerRow({
         </div>
       </div>
 
-      {/* Hold timer row (duration exercises): start the hold, stop to capture,
-          then adjust with the −/+ steppers above before logging. */}
+      {/* Hold timer row (duration exercises): tap Start, get the 5-second
+          "get in position" countdown, hold, stop to capture, then adjust with
+          the −/+ steppers above before logging. */}
       {isDurationBased && (
         <div className="flex items-center gap-1.5">
           <button
@@ -507,10 +539,16 @@ export function SetLoggerRow({
             onClick={() => holdTimer.toggle()}
             disabled={disabled}
             aria-label={
-              holdTimer.isRunning ? 'Stop hold timer' : holdTimer.hasStarted ? 'Resume hold timer' : 'Start hold timer'
+              holdTimer.isCountingDown
+                ? 'Cancel hold countdown'
+                : holdTimer.isRunning
+                  ? 'Stop hold timer'
+                  : holdTimer.hasStarted
+                    ? 'Resume hold timer'
+                    : 'Start hold timer'
             }
             className={`relative flex-1 min-h-[44px] rounded-lg overflow-hidden flex items-center justify-center gap-2 text-[13px] font-semibold transition-colors ${
-              holdTimer.isRunning
+              holdTimer.isRunning || holdTimer.isCountingDown
                 ? 'bg-primary-500/20 text-primary-300 border border-primary-500/50'
                 : 'bg-surface-800/50 text-surface-200 hover:bg-surface-800 border border-surface-700'
             } disabled:opacity-30`}
@@ -526,7 +564,9 @@ export function SetLoggerRow({
               />
             ) : null}
             <span className="relative z-10 flex items-center gap-2">
-              {holdTimer.isRunning ? (
+              {holdTimer.isCountingDown ? (
+                <>Get in position · {holdTimer.countdownRemaining}s — tap to cancel</>
+              ) : holdTimer.isRunning ? (
                 <>
                   <IconPlayerStopFilled size={16} aria-hidden="true" />
                   Stop · {holdTimer.elapsed}s
@@ -539,7 +579,19 @@ export function SetLoggerRow({
               )}
             </span>
           </button>
-          {holdTimer.hasStarted && !holdTimer.isRunning && (
+          {holdTimer.isCountingDown && (
+            // Already gripped? Skip the lead-in and start the clock now.
+            <button
+              type="button"
+              onClick={() => holdTimer.startNow()}
+              disabled={disabled}
+              aria-label="Start hold now"
+              className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg bg-surface-800/50 text-surface-300 hover:text-surface-100 transition-colors disabled:opacity-30"
+            >
+              <IconPlayerPlayFilled size={16} />
+            </button>
+          )}
+          {holdTimer.hasStarted && !holdTimer.isRunning && !holdTimer.isCountingDown && (
             <button
               type="button"
               onClick={() => {

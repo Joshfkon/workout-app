@@ -13,10 +13,20 @@
 
 import { DEFAULT_VOLUME_LANDMARKS, type StandardMuscleGroup, type VolumeLandmarks } from '@/types/schema';
 
-/** The 13 coarse muscle groups that are the default ROW in every surface. */
+/**
+ * The 14 coarse muscle groups that are the default ROW in every surface.
+ *
+ * 'erectors' is a TOP-LEVEL group, not a subdivision of 'back'. Erector volume
+ * accrues almost entirely from hinge/squat work (deadlifts, RDLs, good
+ * mornings, squats, back extensions) rather than from pulling, so carrying it
+ * under 'back' polluted that group's zone and its worst-of-children readiness
+ * signal with axial fatigue the lats and upper back never saw. It is a
+ * single-muscle group (like biceps or quads): one standard muscle, its own
+ * band, its own recovery row.
+ */
 export const COARSE_MUSCLES = [
   'chest', 'back', 'shoulders', 'biceps', 'triceps', 'quads', 'hamstrings',
-  'glutes', 'calves', 'abs', 'traps', 'forearms', 'adductors',
+  'glutes', 'calves', 'abs', 'traps', 'forearms', 'adductors', 'erectors',
 ] as const;
 export type CoarseMuscle = (typeof COARSE_MUSCLES)[number];
 
@@ -77,9 +87,30 @@ export interface VolumeBand {
  *                                per sign-off amendment alongside its
  *                                14/18/23 presets — the v2 "hold" was
  *                                overridden at review)
+ *                                ↳ REVERTED to {10,25} when erectors were
+ *                                  promoted out of the group — see below.
  *
  * chest / quads / calves / abs / forearms / adductors: direct and
  * total-inclusive readings coincide (little cross-group inflow).
+ *
+ * ERECTOR PROMOTION (this pass) — back {12,28} → {10,25}:
+ * the v2 conversion above shifted back by its measured HINGE spillover, and
+ * every hinge in the library (conventional deadlift, RDL, good morning,
+ * pull-through, kettlebell swing, back/front squat) tags exactly ONE back-group
+ * muscle: erectors. Lats and upper back receive no hinge inflow at all. So the
+ * entire +2 MEV / +3 MRV conversion was erector-driven, and moving erectors to
+ * its own group zeroes the inflow term — back reverts to its direct-literature
+ * band {10,25}, and its 14/18/23 presets revert to 12/16/20 in the same pass
+ * (mesocycleBuilder.recommendVolume), exactly as they converted together.
+ *
+ * This is NOT derived by aggregating the remaining children: per the SEMANTICS
+ * note below, a coarse band is never Σ(children). For the record, the reverted
+ * band remains coherent against them — Σ child MEV (lats 6 + upper_back 4) = 10
+ * and max child MRV (lats 20) < 25 < Σ child MRV (36).
+ *
+ * erectors {4,12}: the band it already carried as a subdivision, promoted
+ * unchanged (MEV_TARGETS 4 / DEFAULT_VOLUME_LANDMARKS.intermediate 12), so the
+ * row's zone label and color are byte-identical to before the promotion.
  *
  * The generator's recommendVolume presets converted in the same pass (see
  * services/mesocycleBuilder.ts) — presets and bands convert together or the
@@ -87,7 +118,7 @@ export interface VolumeBand {
  */
 export const RESEARCH_VOLUME_BANDS: Record<CoarseMuscle, VolumeBand> = {
   chest: { mev: 8, mrv: 22 },
-  back: { mev: 12, mrv: 28 },
+  back: { mev: 10, mrv: 25 },
   shoulders: { mev: 12, mrv: 26 },
   biceps: { mev: 10, mrv: 26 },
   triceps: { mev: 8, mrv: 24 },
@@ -99,6 +130,10 @@ export const RESEARCH_VOLUME_BANDS: Record<CoarseMuscle, VolumeBand> = {
   traps: { mev: 6, mrv: 20 },
   forearms: { mev: 4, mrv: 14 },
   adductors: { mev: 4, mrv: 12 },
+  // Single-muscle group: the band it carried as a back subdivision, promoted
+  // unchanged. Already total-inclusive — erector volume is overwhelmingly
+  // hinge/squat secondary credit, which is what the 4–12 range was set against.
+  erectors: { mev: 4, mrv: 12 },
 };
 
 /**
@@ -110,7 +145,7 @@ export const RESEARCH_VOLUME_BANDS: Record<CoarseMuscle, VolumeBand> = {
  */
 export const COARSE_CHILDREN: Record<CoarseMuscle, StandardMuscleGroup[]> = {
   chest: ['chest_upper', 'chest_lower'],
-  back: ['lats', 'upper_back', 'erectors'],
+  back: ['lats', 'upper_back'],
   shoulders: ['front_delts', 'lateral_delts', 'rear_delts'],
   biceps: ['biceps'],
   // Coarse 'triceps' credit stays on the coarse member; the heads are fed
@@ -124,6 +159,10 @@ export const COARSE_CHILDREN: Record<CoarseMuscle, StandardMuscleGroup[]> = {
   traps: ['traps', 'upper_traps', 'mid_lower_traps'],
   forearms: ['forearms'],
   adductors: ['adductors'],
+  // Own group as of the erector promotion — hinge/squat credit lands here and
+  // NOT on 'back', so back's zone and its worst-of-children readiness no longer
+  // carry axial fatigue.
+  erectors: ['erectors'],
 };
 
 /** Reverse map: every standard muscle to its coarse display parent. */
@@ -144,7 +183,9 @@ export const STANDARD_TO_COARSE: Record<StandardMuscleGroup, CoarseMuscle> = (()
 export const FINE_CHILD_MUSCLES = new Set<StandardMuscleGroup>([
   'chest_upper', 'chest_lower',
   'front_delts', 'lateral_delts', 'rear_delts',
-  'lats', 'upper_back', 'erectors',
+  // 'erectors' is NOT here — it is its own coarse group now, so it renders as
+  // a top-level row rather than an indented child of 'back'.
+  'lats', 'upper_back',
   'glute_med', 'obliques',
   'upper_traps', 'mid_lower_traps',
   'gastrocnemius', 'soleus',
@@ -152,6 +193,26 @@ export const FINE_CHILD_MUSCLES = new Set<StandardMuscleGroup>([
 ]);
 
 /**
+ * ── THE DIRECT / CREDITED CONVENTION (half of it; the other half is
+ *    DEFAULT_VOLUME_LANDMARKS in types/schema) ────────────────────────────
+ *
+ * This table is stated in CREDITED sets: the volume counter awards 1.0 per set
+ * for a primary-muscle tag and SECONDARY_MUSCLE_CREDIT (0.5) per set for a
+ * secondary tag, and every threshold here is a threshold on that total.
+ * DEFAULT_VOLUME_LANDMARKS is stated in DIRECT programmed sets and is scaled
+ * by experience tier; this table is neither.
+ *
+ * So the two tables give different numbers for the same muscle — 19 of 26 at
+ * the intermediate tier — and that gap is DEFINITIONAL, not drift. It has two
+ * independent causes: the direct-vs-credited unit, and experience scaling.
+ * Do NOT "reconcile" them by editing either side into agreement; a reader who
+ * does has changed research values to fix a units mismatch.
+ *
+ * Which to read: this table for anything judging counted weekly volume (row
+ * colour, below-MEV warnings, the allocator's per-child floor). The direct
+ * table for experience-specific direct-set programming and component bounds.
+ * Relationships pinned in services/__tests__/directCreditedConvention.test.ts.
+ *
  * MEV per standard muscle — the threshold for the 'low' status on the warning
  * surfaces AND the per-child direct-work floor in the generator's
  * indirect-aware allocator. One entry per STANDARD_MUSCLE_GROUPS member
@@ -220,7 +281,7 @@ export interface BandContext {
  *            (incl. gastrocnemius/soleus), forearms
  *   × 1.25 — chest (both heads), glutes (incl. glute_med), traps (all
  *            regions), abs/obliques, adductors
- *   × 1.15 — quads, back (lats/upper_back/erectors), hamstrings
+ *   × 1.15 — quads, back (lats/upper_back), hamstrings, erectors
  * Coarse group bands scale with their children's tier (each group's children
  * share one tier, so the roll-up is unambiguous).
  *
@@ -237,13 +298,13 @@ export interface BandContext {
  *
  * COMPUTED SCALED TABLE (0.5-set granularity — review record; flag anything
  * implausible here before amending tiers):
- *   coarse: chest 22→27.5, back 28→32, shoulders 26→35, biceps 26→35,
+ *   coarse: chest 22→27.5, back 25→28.5, shoulders 26→35, biceps 26→35,
  *           triceps 24→32.5, quads 20→23, hamstrings 20→23, glutes 24→30,
  *           calves 20→27, abs 20→25, traps 20→25, forearms 14→19,
- *           adductors 12→15
+ *           adductors 12→15, erectors 12→14
  *   fine:   front_delts 14→19, lateral_delts 20→27, rear_delts 20→27,
  *           chest_upper 16→20, chest_lower 12→15, lats 20→23,
- *           upper_back 16→18.5, erectors 12→14, glute_med 10→12.5,
+ *           upper_back 16→18.5, glute_med 10→12.5,
  *           obliques 10→12.5, upper_traps 12→15, mid_lower_traps 10→12.5,
  *           gastrocnemius 16→21.5, soleus via max(mev+2, table)
  *   (The fine values above are illustrative of the SHAPE of the scaling, not a
@@ -260,6 +321,12 @@ export const ENHANCED_MRV_MULTIPLIERS: Record<CoarseMuscle, number> = {
   shoulders: 1.35, biceps: 1.35, triceps: 1.35, calves: 1.35, forearms: 1.35,
   chest: 1.25, glutes: 1.25, traps: 1.25, abs: 1.25, adductors: 1.25,
   quads: 1.15, back: 1.15, hamstrings: 1.15,
+  // Erectors keep back's tier — the tier rationale ("spinal-loading-heavy
+  // groups stay closest to natural ceilings") applies to them most of all, and
+  // holding 1.15 makes the promotion behaviour-preserving for the row's
+  // enhanced scaling (its tier resolved through STANDARD_TO_COARSE['erectors']
+  // = 'back' = 1.15 before).
+  erectors: 1.15,
 };
 
 /** Adopted total-inclusive MRV overrides for cross-group-inflow fine muscles
@@ -270,6 +337,21 @@ const FINE_BAND_TOTAL_INCLUSIVE_MRV: Partial<Record<StandardMuscleGroup, number>
   triceps_long: 18,
   triceps_lat_med: 20,
 };
+
+/**
+ * Settings-page copy for the editable landmark MEV column. Lives beside the
+ * convention it describes so the wording and the tables can't drift apart.
+ *
+ * The second sentence is deliberately hedged. Secondary work MAY close the gap
+ * between a direct MEV and the credited threshold, but it is not guaranteed to
+ * and for generated programs currently does not: every ab slot the generator
+ * fills is a crunch variant tagged `abs` with no oblique secondary, so a
+ * generated program contributes 0.0 credited oblique sets. Do not strengthen
+ * this into a promise that indirect work covers the difference.
+ */
+export const DIRECT_MEV_TOOLTIP =
+  'Minimum direct sets targeting this muscle. Secondary exercises may also ' +
+  'contribute partial credit toward your tracked weekly volume.';
 
 /** Round a scaled ceiling to 0.5-set granularity. */
 const roundHalf = (v: number): number => Math.round(v * 2) / 2;
@@ -331,6 +413,10 @@ export function applyRecoveryProfileToLandmarks(
  * and MRV from the total-inclusive overrides or the intermediate research
  * table, floored at mev+2). Enhanced profiles scale the MRV by the muscle's
  * tier; MEV is NEVER scaled.
+ *
+ * Everything here is in CREDITED sets, which is not the unit
+ * DEFAULT_VOLUME_LANDMARKS uses — see the convention note above MEV_TARGETS
+ * before treating a difference between the two tables as a bug.
  */
 /**
  * Per-STANDARD-muscle MEV — the warning-surface threshold. Distinct from
@@ -355,10 +441,30 @@ export function getEffectiveBand(
     tierKey = muscle;
   } else {
     const mev = MEV_TARGETS[muscle];
-    const mrv =
+    // MRV provenance, made explicit rather than implied by the `??`.
+    //
+    // Only 4 of the 15 fine muscles have a credited-sets MRV of their own
+    // (FINE_BAND_TOTAL_INCLUSIVE_MRV). The other 11 — chest_upper/lower,
+    // lateral_delts, lats, upper_back, upper_traps, mid_lower_traps,
+    // glute_med, gastrocnemius, soleus, obliques — fall through to the DIRECT
+    // landmark table's MRV, un-converted. That is a number from the other side
+    // of the direct/credited convention, adopted by OMISSION rather than by
+    // decision: nobody authored a credited MRV for these, so the direct one
+    // stands in. It is defensible where a muscle takes little secondary inflow
+    // (direct ≈ credited) and merely unexamined elsewhere.
+    //
+    // Hardcoding `.intermediate` is also why a fine muscle's credited band is
+    // experience-independent while the settings row the user edits is not: a
+    // novice sees MRV 8 in settings and 10 on the bar, an advanced lifter 12
+    // and 10.
+    //
+    // Recording this, not fixing it, is deliberate — authoring 11 credited MRVs
+    // is a research-review change of its own. See recommendation #3 in
+    // docs/MUSCLE_ATTRIBUTION_CORRECTIONS_PROPOSED.md:240-244.
+    const referenceMrv =
       FINE_BAND_TOTAL_INCLUSIVE_MRV[muscle] ??
-      DEFAULT_VOLUME_LANDMARKS.intermediate[muscle].mrv;
-    base = { mev, mrv: Math.max(mev + 2, mrv) };
+      DEFAULT_VOLUME_LANDMARKS.intermediate[muscle].mrv; // un-converted direct MRV
+    base = { mev, mrv: Math.max(mev + 2, referenceMrv) };
     tierKey = STANDARD_TO_COARSE[muscle];
   }
   return { mev: base.mev, mrv: scaleMrvForProfile(base.mrv, tierKey, ctx) };

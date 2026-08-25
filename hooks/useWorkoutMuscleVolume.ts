@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useRecoveryHistory, rirFromSetLog } from '@/hooks/useMuscleReadiness';
+import { useRecoveryHistory } from '@/hooks/useMuscleReadiness';
 import { useUserStore } from '@/stores';
 import { usePlannedFrequency } from '@/hooks/usePlannedFrequency';
 import { useRecoveryMultipliers } from '@/hooks/useRecoveryMultipliers';
@@ -22,12 +22,7 @@ import { resolveMuscleToStandard, type StandardMuscleGroup } from '@/types/schem
 import type { SetLog } from '@/types/schema';
 import { rirFromFeedback, summarizeEffectiveVolume } from '@/services/effectiveVolume';
 import type { ExerciseBlockWithExercise } from '@/app/(dashboard)/dashboard/workout/[id]/_lib/types';
-import {
-  computeSleepWindowMultiplier,
-  recoveryConfigFor,
-  type RecoveryExercise,
-  type RecoverySession,
-} from '@/services/muscleRecovery';
+import { computeSleepWindowMultiplier, recoveryConfigFor } from '@/services/muscleRecovery';
 import {
   applyFrozenOrder,
   coarseRecovery,
@@ -49,11 +44,16 @@ import {
  * a muscle's weekly set count, zone or recovery. Read-only: it never touches
  * the workout store.
  *
+ * Weekly sets include the live session; readiness does NOT — recovery is
+ * forecast from completed sessions only, so a muscle's score holds steady while
+ * you train it and moves once the session is finished (see `RecoverySession`).
+ *
  * Ordering: readiness descending — but FROZEN once per local day. The first
  * loaded computation of a day persists the order (localStorage), and every
- * later render that day replays it, so logging sets mid-workout (which drops
- * a trained muscle's readiness to 0) never reshuffles the cards under the
- * user's thumb. Muscles that join the session later append at the end.
+ * later render that day replays it, so nothing reshuffles the cards under the
+ * user's thumb mid-session — not a history refetch, and not the completed
+ * session landing in the feed. Muscles that join the session later append at
+ * the end.
  */
 
 export interface WorkoutMuscleVolumeRow extends VolumeRow {
@@ -217,23 +217,10 @@ export function useWorkoutMuscleVolume({
 
   const { stats, reachable } = useWeeklyStats(historyRows, liveBlocks, liveWorkingSetsByBlock);
 
-  // Recovery history: DB sessions + the live session (timestamped `now`), the
-  // same merge the readiness sheet performs, so a set logged five minutes ago
-  // reads as just-trained on both surfaces.
-  const recoveryHistory = useMemo<RecoverySession[]>(() => {
-    const liveExercises: RecoveryExercise[] = liveBlocks
-      .map((block): RecoveryExercise => ({
-        primaryMuscle: block.exercise.primaryMuscle,
-        secondaryMuscles: block.exercise.secondaryMuscles,
-        sets: (liveWorkingSetsByBlock.get(block.id) || []).map((s) => ({
-          repsInTank: rirFromSetLog(s),
-        })),
-      }))
-      .filter((ex) => ex.sets.length > 0);
-
-    if (liveExercises.length === 0) return sessions;
-    return [...sessions, { performedAt: now, exercises: liveExercises }];
-  }, [sessions, liveBlocks, liveWorkingSetsByBlock, now]);
+  // Recovery reads COMPLETED sessions only — the same rule the readiness sheet
+  // follows, so the strip's readiness score and the sheet's badge still agree.
+  // Weekly sets above DO include the live session; readiness does not.
+  const recoveryHistory = sessions;
 
   // Same config resolution as the readiness sheet: athlete profile, learned
   // per-muscle multipliers, sleep and wearable modifiers.

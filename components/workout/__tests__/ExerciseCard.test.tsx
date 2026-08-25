@@ -55,6 +55,14 @@ jest.mock('../SegmentedControl', () => ({
   ),
 }));
 
+// The 12-week sparkline inside the expanded history detail fetches via React
+// Query (useExerciseDetailHistory); mock the hook so the card renders without
+// a QueryClientProvider. Tests seed sessions through mockDetailHistoryData.
+let mockDetailHistoryData: any[] = [];
+jest.mock('@/hooks/useExerciseDetailHistory', () => ({
+  useExerciseDetailHistory: () => ({ data: mockDetailHistoryData, isLoading: false }),
+}));
+
 // Mock exerciseSwapper
 jest.mock('@/services/exerciseSwapper', () => ({
   findSimilarExercises: jest.fn(() => []),
@@ -397,6 +405,77 @@ describe('ExerciseCard', () => {
       expect(screen.queryByText('Last Workout')).not.toBeInTheDocument();
     });
 
+    describe('12-week history sparkline in the expanded detail', () => {
+      const daysAgo = (n: number): string => {
+        const d = new Date();
+        d.setDate(d.getDate() - n);
+        return d.toISOString();
+      };
+
+      const detailSession = (date: string, bestE1RM: number) => ({
+        sessionId: `session-${date}`,
+        date,
+        isDeload: false,
+        locationName: null,
+        sets: [{ weightKg: 100, reps: 8, rpe: 8, setType: 'normal' }],
+        bestE1RM,
+        topSet: { weightKg: 100, reps: 8, rpe: 8, setType: 'normal' },
+        totalVolume: 800,
+      });
+
+      const historyProps = {
+        lastWorkoutDate: '2024-01-10',
+        lastWorkoutSets: [{ weightKg: 60, reps: 9, rpe: 8 }],
+        estimatedE1RM: 80,
+        personalRecord: null,
+        totalSessions: 5,
+      };
+
+      afterEach(() => {
+        mockDetailHistoryData = [];
+      });
+
+      it('renders the sparkline when the exercise has recent sessions', async () => {
+        const user = userEvent.setup();
+        mockDetailHistoryData = [
+          detailSession(daysAgo(7), 105),
+          detailSession(daysAgo(14), 100),
+        ];
+        render(<ExerciseCard {...defaultProps} exerciseHistory={historyProps} />);
+
+        await user.click(screen.getByText(/last session 60 kg × 9/));
+        expect(screen.getByTestId('history-sparkline')).toBeInTheDocument();
+        // Default (e1rm-path) exercise plots the est. 1RM per session
+        expect(screen.getByText(/est\. 1RM · 2 sessions/)).toBeInTheDocument();
+      });
+
+      it('does not mount the sparkline on a near-cold-start exercise (< 2 known sessions)', async () => {
+        const user = userEvent.setup();
+        mockDetailHistoryData = [
+          detailSession(daysAgo(7), 105),
+          detailSession(daysAgo(14), 100),
+        ];
+        render(
+          <ExerciseCard
+            {...defaultProps}
+            exerciseHistory={{ ...historyProps, totalSessions: 1 }}
+          />
+        );
+
+        await user.click(screen.getByText(/last session 60 kg × 9/));
+        expect(screen.queryByTestId('history-sparkline')).not.toBeInTheDocument();
+      });
+
+      it('renders no sparkline while the window holds fewer than two sessions', async () => {
+        const user = userEvent.setup();
+        mockDetailHistoryData = [detailSession(daysAgo(7), 105)];
+        render(<ExerciseCard {...defaultProps} exerciseHistory={historyProps} />);
+
+        await user.click(screen.getByText(/last session 60 kg × 9/));
+        expect(screen.queryByTestId('history-sparkline')).not.toBeInTheDocument();
+      });
+    });
+
     it('breaks out added weight for bodyweight sets ("BW+25") instead of the blended effective load', async () => {
       const user = userEvent.setup();
       render(
@@ -687,14 +766,22 @@ describe('ExerciseCard', () => {
           '100 kg × 12 ≈ 0 RIR — predicted max for you'
         );
       });
-      expect(screen.queryByText(/100 kg × 9 @ 2 RIR/)).not.toBeInTheDocument();
+      // The suggestion copy stays mounted (it reserves the banner's height so
+      // the flip can't shift the steppers below) but is hidden from AT.
+      expect(screen.getByText(/100 kg × 9 @ 2 RIR/).closest('p')).toHaveAttribute(
+        'aria-hidden',
+        'true'
+      );
 
       // Step back down to 11 → predicted RIR 1 → hysteresis exit, blue restored.
       await user.click(screen.getByRole('button', { name: 'Decrease reps' }));
       await waitFor(() => {
         expect(screen.queryByTestId('effort-warning')).not.toBeInTheDocument();
       });
-      expect(screen.getByText(/100 kg × 9 @ 2 RIR/)).toBeInTheDocument();
+      expect(screen.getByText(/100 kg × 9 @ 2 RIR/).closest('p')).toHaveAttribute(
+        'aria-hidden',
+        'false'
+      );
     });
 
     it('does not warn at predicted RIR 1 (enter threshold is ≤ 0 only)', async () => {
@@ -927,10 +1014,16 @@ describe('ExerciseCard', () => {
       await user.type(weightInput, '999');
 
       // The logger reflects the edit, but the banner must NOT echo it —
-      // it keeps showing what the recommender actually suggested.
+      // it keeps showing what the recommender actually suggested. The
+      // entered-weight copy exists only as the banner's invisible height
+      // sizer (layout stability), hidden from AT, with no warning exposed.
       expect(weightInput).toHaveValue(999);
-      expect(screen.getByText(/100 kg × 9 @ 2 RIR/)).toBeInTheDocument();
-      expect(screen.queryByText(/999 kg ×/)).not.toBeInTheDocument();
+      expect(screen.getByText(/100 kg × 9 @ 2 RIR/).closest('p')).toHaveAttribute(
+        'aria-hidden',
+        'false'
+      );
+      expect(screen.queryByTestId('effort-warning')).not.toBeInTheDocument();
+      expect(screen.getByText(/999 kg ×/).closest('p')).toHaveAttribute('aria-hidden', 'true');
     });
 
     it('shows the suggestion banner with a reason', () => {
@@ -1146,6 +1239,38 @@ describe('ExerciseCard', () => {
       expect(note).toHaveTextContent(/from your 44(\.\d+)? lbs e1RM/);
     });
 
+    it('note slot stays mounted at all times — toggling it must not move the steppers (layout stability)', async () => {
+      const user = setupUser();
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          sets={[completedSet()]}
+          isActive={true}
+          onSetComplete={jest.fn().mockResolvedValue('id')}
+        />
+      );
+
+      // Before any edit: the slot is already in the layout, just invisible.
+      const note = screen.getByTestId('weight-edit-recompute-note');
+      expect(note).toHaveAttribute('aria-hidden', 'true');
+
+      // Debounced recompute fills the SAME element in.
+      await editWeight(user, /Weight: 100 kg/, '90');
+      flushDebounce();
+      expect(screen.getByTestId('weight-edit-recompute-note')).toHaveAttribute(
+        'aria-hidden',
+        'false'
+      );
+
+      // A stepper press clears the note immediately — it hides, never unmounts,
+      // so the logger row below cannot shift under the user's finger.
+      await user.click(screen.getByRole('button', { name: 'Increase weight' }));
+      expect(screen.getByTestId('weight-edit-recompute-note')).toHaveAttribute(
+        'aria-hidden',
+        'true'
+      );
+    });
+
     it('cold start (no e1RM anywhere): weight edits leave reps untouched', async () => {
       const user = setupUser();
       // No completed sets, no previous session, no exercise history — only the
@@ -1295,6 +1420,102 @@ describe('ExerciseCard', () => {
           }),
         })
       );
+    });
+
+    it('offers Weighted/Assisted off a stale weigh-in, not just today\'s', () => {
+      // The page falls back to the most recent weigh-in; the card only ever
+      // sees a number, so any non-null bodyweight must keep the control up.
+      render(<ExerciseCard {...bodyweightProps} userBodyweightKg={72.4} />);
+
+      expect(screen.getByRole('button', { name: 'Weighted' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Assisted' })).toBeInTheDocument();
+      expect(screen.queryByTestId('bw-mode-needs-weigh-in')).not.toBeInTheDocument();
+    });
+
+    it('explains the missing control when no bodyweight is on record', () => {
+      render(<ExerciseCard {...bodyweightProps} userBodyweightKg={undefined} />);
+
+      expect(screen.queryByRole('button', { name: 'Weighted' })).not.toBeInTheDocument();
+      expect(screen.getByTestId('bw-mode-needs-weigh-in')).toHaveTextContent(
+        /Log your bodyweight/
+      );
+    });
+
+    it('takes a mid-workout weigh-in in place and hands it to the parent in kg', async () => {
+      const user = userEvent.setup();
+      const onBodyweightLogged = jest.fn().mockResolvedValue(undefined);
+
+      render(
+        <ExerciseCard
+          {...bodyweightProps}
+          userBodyweightKg={undefined}
+          onBodyweightLogged={onBodyweightLogged}
+        />
+      );
+
+      await user.type(screen.getByRole('spinbutton', { name: 'Bodyweight in kg' }), '80');
+      await user.click(screen.getByRole('button', { name: 'Log bodyweight' }));
+
+      expect(onBodyweightLogged).toHaveBeenCalledWith(80);
+    });
+
+    it('converts a lb weigh-in to kg before handing it to the parent', async () => {
+      const user = userEvent.setup();
+      const onBodyweightLogged = jest.fn().mockResolvedValue(undefined);
+
+      render(
+        <ExerciseCard
+          {...bodyweightProps}
+          unit="lb"
+          userBodyweightKg={undefined}
+          onBodyweightLogged={onBodyweightLogged}
+        />
+      );
+
+      await user.type(screen.getByRole('spinbutton', { name: 'Bodyweight in lbs' }), '176');
+      await user.click(screen.getByRole('button', { name: 'Log bodyweight' }));
+
+      // 176 lb ≈ 79.8 kg
+      expect(onBodyweightLogged).toHaveBeenCalledWith(expect.closeTo(79.83, 1));
+    });
+
+    it('rejects an implausible weigh-in instead of anchoring load math to it', async () => {
+      const user = userEvent.setup();
+      const onBodyweightLogged = jest.fn().mockResolvedValue(undefined);
+
+      render(
+        <ExerciseCard
+          {...bodyweightProps}
+          userBodyweightKg={undefined}
+          onBodyweightLogged={onBodyweightLogged}
+        />
+      );
+
+      await user.type(screen.getByRole('spinbutton', { name: 'Bodyweight in kg' }), '5');
+      await user.click(screen.getByRole('button', { name: 'Log bodyweight' }));
+
+      expect(onBodyweightLogged).not.toHaveBeenCalled();
+      expect(screen.getByRole('alert')).toHaveTextContent(/between 20 and 400 kg/);
+    });
+
+    it('surfaces a save failure and lets the lifter retry', async () => {
+      const user = userEvent.setup();
+      const onBodyweightLogged = jest.fn().mockRejectedValue(new Error('offline'));
+
+      render(
+        <ExerciseCard
+          {...bodyweightProps}
+          userBodyweightKg={undefined}
+          onBodyweightLogged={onBodyweightLogged}
+        />
+      );
+
+      await user.type(screen.getByRole('spinbutton', { name: 'Bodyweight in kg' }), '80');
+      await user.click(screen.getByRole('button', { name: 'Log bodyweight' }));
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(/Couldn't save/);
+      // The form is still there for a retry once connectivity returns.
+      expect(screen.getByRole('button', { name: 'Log bodyweight' })).toBeEnabled();
     });
   });
 
@@ -1969,5 +2190,230 @@ describe('warmup decision with unknown working weight (Codex review fix)', () =>
       <ExerciseCard {...unknownLoadProps} workingWeight={60} warmupDecision={placeholderDecision} />
     );
     expect(screen.getByText(/\(0\/3\)/)).toBeInTheDocument();
+  });
+});
+
+describe('bodyweight warmup loads (added weight, not effective load)', () => {
+  // Reported defect: a 98 kg lifter on a bodyweight Back Extension saw a ramp
+  // set of "51 kg" — 60% of the effective load, a weight nobody can set up —
+  // and no way to see what they had added last session.
+  const bwProps = {
+    exercise: createMockExercise({
+      id: 'back-ext',
+      name: 'Back Extension',
+      primaryMuscle: 'glutes',
+      equipmentRequired: ['bodyweight'],
+      minWeightIncrementKg: 2.5,
+    }),
+    block: createMockBlock({ exerciseId: 'back-ext', targetWeightKg: 85 }),
+    sets: [],
+    unit: 'kg' as const,
+    isActive: true,
+    userBodyweightKg: 98,
+    workingWeight: 85,
+    onSetComplete: jest.fn().mockResolvedValue('id'),
+    onWarmupComplete: jest.fn(),
+  };
+
+  const rampDecision = {
+    kind: 'targeted_ramp' as const,
+    reason: 'Muscle is warm, but first hip hinging of the session — one targeted ramp set, full ROM.',
+    sets: [
+      {
+        setNumber: 1,
+        percentOfWorking: 60,
+        targetReps: 10,
+        purpose: 'Groove hip hinging',
+        restSeconds: 45,
+      },
+    ],
+  };
+
+  const historyWithAddedWeight = (bw?: { modification: 'none' | 'weighted' | 'assisted'; addedWeightKg?: number }) => ({
+    lastWorkoutDate: '2026-08-02',
+    lastWorkoutSets: [{ weightKg: 118, reps: 13, rpe: 7.5, ...(bw ? { bw } : {}) }],
+    estimatedE1RM: 0,
+    personalRecord: null,
+    totalSessions: 10,
+  });
+
+  it('prescribes the ramp as bodyweight when the percentage falls below bodyweight', async () => {
+    const user = userEvent.setup();
+    render(<ExerciseCard {...bwProps} warmupDecision={rampDecision} />);
+
+    await user.click(screen.getByText('Ramp Set'));
+    const rampRow = screen.getByText('W1').closest('tr')!;
+
+    // The old behaviour printed 60% of the page's target weight (51 kg).
+    expect(rampRow).toHaveTextContent('BW');
+    expect(rampRow).not.toHaveTextContent('51');
+    expect(screen.getByTestId('warmup-bodyweight-floor-note')).toHaveTextContent(
+      /bodyweight is the lightest this movement goes/i
+    );
+  });
+
+  it('ramps the ADDED weight when the working set carries added weight', async () => {
+    const user = userEvent.setup();
+    render(
+      <ExerciseCard
+        {...bwProps}
+        warmupDecision={rampDecision}
+        exerciseHistory={historyWithAddedWeight({ modification: 'weighted', addedWeightKg: 20 })}
+      />
+    );
+
+    // Last session was BW+20 → the card opens in Weighted mode with 20 seeded,
+    // so the working set is 118 kg and 60% of that is 70.8 kg — below the
+    // lifter's 98 kg, so the ramp is bodyweight, with the belt for the top set.
+    await user.click(screen.getByText('Ramp Set'));
+    expect(screen.getByText('W1').closest('tr')).toHaveTextContent('BW');
+
+    // A 95% step, by contrast, IS loadable: BW + 14 kg.
+    const heavyRamp = {
+      ...rampDecision,
+      sets: [{ ...rampDecision.sets[0], percentOfWorking: 95 }],
+    };
+    render(
+      <ExerciseCard
+        {...bwProps}
+        warmupDecision={heavyRamp}
+        exerciseHistory={historyWithAddedWeight({ modification: 'weighted', addedWeightKg: 20 })}
+      />
+    );
+    expect(screen.getAllByText(/BW \+\d/).length).toBeGreaterThan(0);
+  });
+
+  it('seeds the added weight from last session instead of prescribing BW+0', () => {
+    render(
+      <ExerciseCard
+        {...bwProps}
+        exerciseHistory={historyWithAddedWeight({ modification: 'weighted', addedWeightKg: 20 })}
+      />
+    );
+    // Mode control follows last session, and the banner carries the load.
+    expect(screen.getByRole('button', { name: 'Weighted' })).toHaveAttribute('data-selected', 'true');
+    expect(screen.getByText(/BW \+20 kg/)).toBeInTheDocument();
+  });
+
+  it('derives the composition for legacy sets that stored only the effective load', () => {
+    render(<ExerciseCard {...bwProps} exerciseHistory={historyWithAddedWeight()} />);
+    // 118 kg effective − 98 kg bodyweight ≈ BW+20, marked approximate because
+    // the bodyweight of that day was never recorded.
+    expect(screen.getByText(/last session ~BW\+20 kg × 13/)).toBeInTheDocument();
+  });
+
+  it('seeds from the heaviest set of an ascending session, not set 1', () => {
+    // lastWorkoutSets is ordered by set_number, so an ascending session puts
+    // the LIGHTEST set at index 0. Seeding from it would prescribe BW+10 for
+    // a session whose top sets were BW+20.
+    render(
+      <ExerciseCard
+        {...bwProps}
+        exerciseHistory={{
+          lastWorkoutDate: '2026-08-02',
+          lastWorkoutSets: [
+            { weightKg: 108, reps: 12, rpe: 7, bw: { modification: 'weighted' as const, addedWeightKg: 10 } },
+            { weightKg: 113, reps: 10, rpe: 8, bw: { modification: 'weighted' as const, addedWeightKg: 15 } },
+            { weightKg: 118, reps: 8, rpe: 9, bw: { modification: 'weighted' as const, addedWeightKg: 20 } },
+          ],
+          estimatedE1RM: 0,
+          personalRecord: null,
+          totalSessions: 10,
+        }}
+      />
+    );
+    expect(screen.getByText(/BW \+20 kg/)).toBeInTheDocument();
+  });
+
+  it('a manual mode change outranks the last-session default', async () => {
+    const user = userEvent.setup();
+    render(
+      <ExerciseCard
+        {...bwProps}
+        exerciseHistory={historyWithAddedWeight({ modification: 'weighted', addedWeightKg: 20 })}
+      />
+    );
+    await user.click(screen.getByRole('button', { name: 'Bodyweight' }));
+    expect(screen.getByRole('button', { name: 'Bodyweight' })).toHaveAttribute('data-selected', 'true');
+  });
+});
+
+describe('timed holds are bodyweight, not zero-load lifts', () => {
+  // Reported defect: a Dead Hang rendered a weight stepper sitting at 0 and
+  // "Log set" was disabled — the exercise row's is_bodyweight flag was false
+  // (the column is NOT NULL DEFAULT false and was never backfilled for
+  // station movements), so the card asked for an external load the movement
+  // does not have. A hang IS loaded — by the lifter.
+  const deadHangProps = {
+    exercise: createMockExercise({
+      id: 'dead-hang',
+      name: 'Dead Hang',
+      primaryMuscle: 'forearms',
+      secondaryMuscles: ['lats'],
+      mechanic: 'isolation' as const,
+      defaultRepRange: [20, 60] as [number, number],
+      equipmentRequired: ['pull-up bar'],
+      exerciseType: 'duration_based' as const,
+      isBodyweight: false,
+      minWeightIncrementKg: 0,
+    }),
+    block: createMockBlock({
+      exerciseId: 'dead-hang',
+      targetRepRange: [20, 60] as [number, number],
+      targetWeightKg: 0,
+    }),
+    sets: [],
+    unit: 'kg' as const,
+    isActive: true,
+    userBodyweightKg: 80,
+    onSetComplete: jest.fn().mockResolvedValue('id'),
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('renders BW instead of a weight stepper even with the flag unset', () => {
+    render(<ExerciseCard {...deadHangProps} />);
+
+    expect(screen.getByText('BW')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Increase weight' })).not.toBeInTheDocument();
+  });
+
+  it('logs the hold at bodyweight as the effective load', async () => {
+    const user = userEvent.setup();
+    const onSetComplete = jest.fn().mockResolvedValue('id');
+    render(<ExerciseCard {...deadHangProps} onSetComplete={onSetComplete} />);
+
+    const logButton = screen.getByRole('button', { name: /Log set/i });
+    expect(logButton).toBeEnabled();
+    await user.click(logButton);
+
+    expect(onSetComplete).toHaveBeenCalledTimes(1);
+    const logged = onSetComplete.mock.calls[0][0];
+    expect(logged.weightKg).toBe(80);
+    expect(logged.bodyweightData).toMatchObject({
+      userBodyweightKg: 80,
+      modification: 'none',
+      effectiveLoadKg: 80,
+    });
+  });
+
+  it('still asks for a load on a timed hold that names its implement', () => {
+    render(
+      <ExerciseCard
+        {...deadHangProps}
+        exercise={createMockExercise({
+          id: 'pinch-hold',
+          name: 'Plate Pinch Hold',
+          primaryMuscle: 'forearms',
+          equipmentRequired: ['weight plates'],
+          exerciseType: 'duration_based' as const,
+          isBodyweight: false,
+        })}
+      />
+    );
+
+    expect(screen.getByRole('button', { name: 'Increase weight' })).toBeInTheDocument();
   });
 });

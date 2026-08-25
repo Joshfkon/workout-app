@@ -42,6 +42,7 @@ import type {
   UserContext,
   UserProfileForWeights,
 } from './types';
+import { now as clockNow } from '@/lib/clock';
 
 /**
  * THE anchor-pool eligibility predicate — single source of truth, shared by
@@ -447,12 +448,21 @@ function computeHistoryFromBlocks(
  *   - `currentLocationId` is the session's location,
  *   - `scopeForExercise` returns each exercise's progression scope
  *     (services/progressionScope.deriveProgressionScope),
+ *   - `locationForExercise` (optional) overrides the session location for one
+ *     exercise — the per-block override, for the exercise you did on the
+ *     annex machine while the rest of the session was on the main floor,
  *   - `legacy` (optional) attributes null-location sets; derived from the
  *     blocks' own location usage when omitted.
  */
 export interface HistoryScopeOptions {
   currentLocationId: string | null;
   scopeForExercise: (exerciseId: string) => ProgressionScope;
+  /**
+   * Per-exercise location, when this session pins one. Returning undefined (or
+   * omitting the callback entirely) falls back to `currentLocationId`, so the
+   * common case — no overrides anywhere — behaves exactly as before.
+   */
+  locationForExercise?: (exerciseId: string) => string | null | undefined;
   legacy?: LegacyAttribution;
 }
 
@@ -529,7 +539,12 @@ export function buildExerciseHistories(
       const scopeConfig: HistoryScopeConfig | undefined = scopeOptions
         ? {
             scope: scopeOptions.scopeForExercise(exerciseId),
-            currentLocationId: scopeOptions.currentLocationId,
+            // A per-exercise override wins over the session's location: this
+            // exercise's sets are being logged there, so its history must be
+            // read from there too. Reading one track while writing another is
+            // exactly the conflation the location key exists to prevent.
+            currentLocationId:
+              scopeOptions.locationForExercise?.(exerciseId) ?? scopeOptions.currentLocationId,
             legacy,
           }
         : undefined;
@@ -557,9 +572,16 @@ export async function fetchExerciseHistory(
   userId: string,
   scope?: { progressionScope: ProgressionScope; currentLocationId: string | null },
   /** Exercise modality — duration exercises get no e1RM anchor (seconds ≠ reps). */
-  exerciseType?: ExerciseType
+  exerciseType?: ExerciseType,
+  /**
+   * Supabase client to read through. Optional so the existing UI call site is
+   * unchanged; pass one to run against a client the caller already owns — this
+   * is the only way a headless/simulated run can reach this query, since the
+   * default builds the module-singleton browser client.
+   */
+  client?: ReturnType<typeof createUntypedClient>
 ): Promise<ExerciseHistoryData | null> {
-  const supabase = createUntypedClient();
+  const supabase = client ?? createUntypedClient();
 
   const { data: historyBlocks, error } = await supabase
     .from('exercise_blocks')
@@ -642,7 +664,7 @@ export function generateCoachMessage(
   else workoutType = muscles.map(m => m.charAt(0).toUpperCase() + m.slice(1)).join(' & ');
 
   // Generate greeting based on time of day and goal
-  const hour = new Date().getHours();
+  const hour = clockNow().getHours();
   let timeGreeting = 'Hey';
   if (hour < 12) timeGreeting = 'Good morning';
   else if (hour < 17) timeGreeting = 'Good afternoon';

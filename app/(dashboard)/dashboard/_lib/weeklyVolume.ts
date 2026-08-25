@@ -74,6 +74,10 @@ export const ALL_MUSCLE_GROUPS: readonly StandardMuscleGroup[] = STANDARD_MUSCLE
 // muscles are therefore only reachable when the user logs an exercise tagged
 // at fine grain for them.
 //
+// 'erectors' is a coarse GROUP since its promotion, but it stays on this list:
+// the group holds exactly one standard muscle and no coarse token reaches it
+// either, so its WARNING gating is unchanged. Only its ROW moved.
+//
 // Their coarse "parent" region (below) is where that work physiologically
 // lands. When a user's data is entirely coarse (e.g. only 'glutes'/'back'/'abs'
 // work), a fine child gets zero credit and its MEV warning can NEVER clear —
@@ -83,6 +87,12 @@ export const ALL_MUSCLE_GROUPS: readonly StandardMuscleGroup[] = STANDARD_MUSCLE
 // parent and no standalone warning is rendered (ticket policy: never warn on a
 // muscle no logged-exercise tagging could satisfy).
 export const FINE_MUSCLE_PARENTS: Partial<Record<StandardMuscleGroup, StandardMuscleGroup[]>> = {
+  // Still listed after the erector promotion: this map is about TAG
+  // REACHABILITY, not display grouping. A legacy 'back' tag still resolves to
+  // [lats, upper_back] and still cannot credit erectors, so the MEV summary
+  // must keep gating the erector warning for users whose library is entirely
+  // coarse. (The volume/readiness ROW is no longer gated — 'erectors' is a
+  // coarse row now, and coarse rows always render, like adductors.)
   erectors: ['lats', 'upper_back'], // legacy 'back'
   glute_med: ['glutes'], // legacy 'glutes'
   obliques: ['abs'], // legacy 'abs'
@@ -172,6 +182,13 @@ function round1(value: number): number {
 function roundWhole(value: number): number {
   return Math.round(value + ROUNDING_EPSILON);
 }
+
+// Exported under explicit names for consumers OUTSIDE this module that emit
+// credited-set values (hooks/useWeeklyVolume). Rounding a credited count
+// anywhere must go through these: rounding components separately and adding
+// them (the pre-fix useWeeklyVolume rounded direct and indirect apart, on 26
+// rows) biases every total upward.
+export { round1 as round1Sets, roundWhole as roundWholeSets };
 
 /**
  * Round a list of non-negative raw values to one decimal so that the rounded
@@ -749,40 +766,45 @@ export function volumeZone(sets: number, band: VolumeBand): VolumeZone {
 
 /**
  * The one zone→color decision, shared by bars, text and the SVG muscle map.
- * 'neutral' is the untrained case (0 sets below MEV) that reads gray instead
- * of amber. Every zone*Class helper below is a pure token→utility lookup over
- * this, so a surface can never disagree on which color a zone gets.
+ * 'untrained' is the 0-sets-below-MEV case: a muscle that got NO work this
+ * week is the biggest gap on the screen, so it reads light red rather than
+ * hiding in the same gray as an unmapped region. It stays a lighter red than
+ * 'danger' (over MRV) — too little and too much are opposite problems and must
+ * not look alike. Every zone*Class helper below is a pure token→utility lookup
+ * over this, so a surface can never disagree on which color a zone gets.
  */
-export type ZoneColorToken = 'success' | 'warning' | 'danger' | 'neutral';
+export type ZoneColorToken = 'success' | 'warning' | 'danger' | 'untrained';
 
 export function zoneColorToken(zone: VolumeZone, sets: number): ZoneColorToken {
   if (zone === 'over_mrv') return 'danger';
   if (zone === 'in_zone') return 'success';
-  return sets <= 0 ? 'neutral' : 'warning';
+  return sets <= 0 ? 'untrained' : 'warning';
 }
 
 const ZONE_BAR_CLASSES: Record<ZoneColorToken, string> = {
   danger: 'bg-danger-500',
   success: 'bg-success-500',
   warning: 'bg-warning-500',
-  neutral: 'bg-surface-600',
+  untrained: 'bg-danger-300',
 };
 
+// Text sits on a card, so the untrained row uses the 400 weight the other
+// tokens use for text — danger-300 is a fill tone and too pale to read.
 const ZONE_TEXT_CLASSES: Record<ZoneColorToken, string> = {
   danger: 'text-danger-400',
   success: 'text-success-400',
   warning: 'text-warning-400',
-  neutral: 'text-surface-400',
+  untrained: 'text-danger-400',
 };
 
 const ZONE_FILL_CLASSES: Record<ZoneColorToken, string> = {
   danger: 'fill-danger-500',
   success: 'fill-success-500',
   warning: 'fill-warning-500',
-  neutral: 'fill-surface-600',
+  untrained: 'fill-danger-300',
 };
 
-/** Bar fill colour for a zone. Untrained (0 sets, below MEV) reads gray. */
+/** Bar fill colour for a zone. Untrained (0 sets, below MEV) reads light red. */
 export function zoneBarClass(zone: VolumeZone, sets: number): string {
   return ZONE_BAR_CLASSES[zoneColorToken(zone, sets)];
 }
@@ -836,18 +858,28 @@ export function rowFillClass(row: RowColorInput): string {
   return ZONE_FILL_CLASSES[rowColorToken(row)];
 }
 
-/** Denominator label: the MEV–MRV band, never n/MEV. e.g. "zone 8–20". */
+/**
+ * Denominator label: the MEV–MRV band, never n/MEV. e.g. "credited zone 8–20".
+ *
+ * "credited" names the UNIT, and it is not decoration. These thresholds count
+ * a primary tag as 1.0 per set and a secondary tag as 0.5, which is a
+ * different quantity from the direct programmed sets the settings landmark
+ * editor shows — the same muscle legitimately reads 0 there and 4 here. See
+ * the direct/credited convention note on the credited MEV table in
+ * services/volumeBands.
+ */
 export function zoneBandLabel(band: VolumeBand): string {
-  return `zone ${band.mev}–${band.mrv}`;
+  return `credited zone ${band.mev}–${band.mrv}`;
 }
 
 /**
- * Denominator label for a COARSE row: same band, prefixed "group" so an
- * independent group-level landmark can't be misread as the sum of the child
- * zones shown beneath it (see the band semantics note in services/volumeBands).
+ * Denominator label for a COARSE row: same band and same credited unit,
+ * prefixed "group" so an independent group-level landmark can't be misread as
+ * the sum of the child zones shown beneath it (see the band semantics note in
+ * services/volumeBands).
  */
 export function groupZoneBandLabel(band: VolumeBand): string {
-  return `group zone ${band.mev}–${band.mrv}`;
+  return `credited group zone ${band.mev}–${band.mrv}`;
 }
 
 /** Display name for a coarse group. */
@@ -893,17 +925,36 @@ export interface VolumeRow {
   /** Whether the user's exercises can feed this muscle (children only gate). */
   reachable: boolean;
   /**
-   * Coarse rows only: whether the row can be expanded — it has at least one
-   * fine child the user's own exercise tagging can feed. This is what gates
-   * the chevron on every surface; a group whose library can't feed any fine
-   * member never expands (and so never renders a fine row).
+   * Whether a below-MEV reading on this row may raise a WARNING (the atrophy
+   * alert, the glance tile's "N below MEV"). The row still RENDERS and still
+   * colours by its true zone either way — this gates nagging, not display.
+   *
+   * A coarse row is warnable when at least one of its standard members is
+   * (isMuscleWarnable): non-fine members always are, fine members only when
+   * the user's own exercise tagging can actually feed them. That matters for
+   * exactly one group — 'erectors', whose single member is a fine muscle no
+   * coarse token can credit. A user logging only legacy 'back'-tagged work
+   * does erector work the tagging cannot express, so warning them would be the
+   * permanent un-clearable nag the fine-muscle policy exists to prevent. Every
+   * other group holds a non-fine member and is therefore always warnable —
+   * an untrained 'adductors' warns exactly as it did before.
+   *
+   * Always true on child rows (they gate on `reachable` instead).
+   */
+  warnable: boolean;
+  /**
+   * Coarse rows only: whether the row can be expanded — i.e. whether the group
+   * HAS anatomical subdivisions. This is what gates the chevron on every
+   * surface. Deliberately independent of reachability: a group's anatomy does
+   * not depend on what the user has logged, so Abs always opens to Obliques
+   * even before anything has fed it.
    */
   expandable: boolean;
   exercises: ExerciseVolume[];
   /**
    * ALL fine children of an expandable coarse row (each flagged belowMev and
-   * reachable; unreachable ones are expand-only context rows). Visibility
-   * (pinned-lagging vs behind-the-chevron) is decided by the shared
+   * reachable; unreachable ones are expand-only context rows shown at 0).
+   * Visibility (pinned-lagging vs behind-the-chevron) is decided by the shared
    * MuscleGroupList component / withVisibleChildren helper, not here.
    */
   children: VolumeRow[];
@@ -917,7 +968,7 @@ export interface BuildVolumeRowsOptions {
 }
 
 /** Per-standard-muscle rollup carried into the row model (full precision). */
-interface StandardMuscleRollup {
+export interface StandardMuscleRollup {
   sets: number;
   effectiveSets: number;
   unratedSets: number;
@@ -939,8 +990,18 @@ const emptyRollup = (): StandardMuscleRollup => ({
   exercises: [],
 });
 
-/** Accumulate credited sets + contributing exercises per standard muscle. */
-function setsByStandardMuscle(
+/**
+ * Accumulate credited sets + contributing exercises per standard muscle.
+ *
+ * This is the PER-HEAD view: sub-muscle counters are independent and may
+ * legitimately overlap (one incline-press set feeds chest_upper 1.0 AND
+ * chest_lower 0.5), which is correct for per-head programming decisions. It is
+ * therefore NOT summable into a group total — the group rollup applies the
+ * within-group credit cap in buildVolumeRows. Exported so per-head consumers
+ * (hooks/useWeeklyVolume) read the SAME accumulation the rows are built from
+ * instead of running a second pass.
+ */
+export function setsByStandardMuscle(
   stats: MuscleVolumeStats[]
 ): Map<StandardMuscleGroup, StandardMuscleRollup> {
   const out = new Map<StandardMuscleGroup, StandardMuscleRollup>();
@@ -1002,11 +1063,11 @@ function setsByStandardMuscle(
 
 /**
  * THE shared row model. Given the shared counter's per-muscle stats and the
- * reachability set, produce coarse rows (below-MEV first). An expandable row
- * (≥1 reachable fine child) carries ALL its fine children — unreachable ones
- * flagged reachable:false as expand-only context rows. Which children are
- * VISIBLE is a presentation concern — the shared MuscleGroupList component
- * pins reachable lagging children open and puts the rest behind the chevron.
+ * reachability set, produce coarse rows (below-MEV first). Every group with
+ * subdivisions carries ALL of them — unreachable ones flagged reachable:false
+ * as expand-only context rows at 0. Which children are VISIBLE is a
+ * presentation concern — the shared MuscleGroupList component pins reachable
+ * lagging children open and puts the rest behind the chevron.
  * Every surface renders from this so counts and zone-status always agree.
  */
 export function buildVolumeRows(
@@ -1021,12 +1082,15 @@ export function buildVolumeRows(
     const bandCtx: BandContext = { recoveryProfile: opts.recoveryProfile };
     const band = opts.bands?.[coarse] ?? getEffectiveBand(coarse, bandCtx);
 
-    // The chevron rule: a coarse row is expandable when the user's own exercise
-    // tagging can feed at least one of its fine children. When no reachability
-    // is supplied, don't gate (back-compat: all fine children count).
-    const expandable = children.some(
-      (c) => FINE_CHILD_MUSCLES.has(c) && (!reachable || reachable.has(c))
-    );
+    // The chevron rule: a coarse row is expandable when it HAS subdivisions —
+    // reachability does not enter into it. The anatomy of a group is a fact
+    // about the taxonomy, not about what the user happens to have logged, so
+    // Obliques sits under Abs (and Glute Med under Glutes, the trap and tricep
+    // heads under theirs) whether or not anything has fed it yet. An unfed
+    // subdivision reads 0 and carries reachable:false, which is what keeps it
+    // out of the warning, pinning and target-recommendation paths — display is
+    // ungated here, nagging stays gated downstream.
+    const expandable = children.some((c) => FINE_CHILD_MUSCLES.has(c));
 
     // Accumulate the per-exercise breakdown at FULL precision; rounding
     // happens once at emission (emitExerciseList), sum-preserving so the
@@ -1066,14 +1130,13 @@ export function buildVolumeRows(
 
       const childSets = round1(data.sets);
       const childMev = fineChildMev(child);
-      // Children are carried only on EXPANDABLE rows (≥1 reachable fine child —
-      // the chevron rule above). An expandable row carries ALL its fine
-      // children, including unreachable ones at 0: those are context rows the
-      // user can reveal by expanding; they carry reachable:false so the
-      // warning/target selectors skip them and the pinned (always-visible)
-      // rule — reachable AND below-MEV — never surfaces them uninvited.
-      // Which children are VISIBLE (pinned vs behind the chevron) is the
-      // shared MuscleGroupList / withVisibleChildren layer's decision.
+      // Every group with subdivisions carries ALL of them, including unfed ones
+      // at 0: those are context rows the user reveals by expanding; they carry
+      // reachable:false so the warning/target selectors skip them and the
+      // pinned (always-visible) rule — reachable AND below-MEV — never surfaces
+      // them uninvited. Which children are VISIBLE (pinned vs behind the
+      // chevron) is the shared MuscleGroupList / withVisibleChildren layer's
+      // decision.
       if (!expandable) continue;
       const childReachable = !reachable || reachable.has(child);
       const childBelowMev = childSets < childMev;
@@ -1097,6 +1160,7 @@ export function buildVolumeRows(
         belowMev: childBelowMev,
         laggingChildren: false,
         reachable: childReachable,
+        warnable: true,
         expandable: false,
         exercises: emitExerciseList(data.exercises),
         children: [],
@@ -1162,6 +1226,7 @@ export function buildVolumeRows(
       // collapse must not turn a lagging-subdivision parent green.
       laggingChildren: childRows.some((c) => c.reachable && c.belowMev),
       reachable: true,
+      warnable: children.some((c) => isMuscleWarnable(c, reachable)),
       expandable,
       exercises: emitExerciseList(cappedExercises),
       children: childRows.sort((a, b) => Number(b.belowMev) - Number(a.belowMev) || b.sets - a.sets),
@@ -1196,7 +1261,9 @@ export function coarseMevTiles(rows: VolumeRow[]): CoarseMevTiles {
     totalSets += row.sets;
     totalEffectiveSets += row.effectiveSets;
     totalTarget += row.band.mev;
-    if (row.zone === 'below_mev') lowCount++;
+    // Same warnability gate as belowMevVolumeData, so the tile's "N below MEV"
+    // can't count a group the warning list deliberately omits.
+    if (row.zone === 'below_mev' && row.warnable) lowCount++;
   }
   // Rows carry one-decimal values; re-round the sums to shed float dust.
   return { totalSets: round1(totalSets), totalEffectiveSets: round1(totalEffectiveSets), totalTarget, lowCount };
@@ -1230,7 +1297,11 @@ export function belowMevVolumeData(rows: VolumeRow[]): MuscleVolumeData[] {
     });
 
   for (const row of rows) {
-    if (row.zone === 'below_mev') push(row.muscle, row.sets, row.band, row.exercises);
+    // `warnable` keeps a group no logged-exercise tagging could satisfy out of
+    // the warning (see VolumeRow.warnable) — today only an unreachable
+    // 'erectors'. Every other group is always warnable, so this is a no-op for
+    // them.
+    if (row.zone === 'below_mev' && row.warnable) push(row.muscle, row.sets, row.band, row.exercises);
     for (const child of row.children) {
       // Unreachable children can be present when the user expanded the parent
       // (context rows) — never warn on those; the warning stays satisfiable.

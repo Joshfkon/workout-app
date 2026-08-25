@@ -6,7 +6,7 @@
  *
  * Covers the Playwright-level intents that don't need a running app:
  *  - the sheet opens and dismisses,
- *  - logged sets move a muscle's weekly count AND recovery status,
+ *  - logged sets move a muscle's weekly count but NOT its recovery status,
  *  - a Fresh/under-volume muscle sorts above a Fatigued/under-volume one.
  */
 
@@ -164,10 +164,10 @@ describe('MuscleReadinessSheet', () => {
     expect(order.indexOf('calves')).toBeLessThan(order.indexOf('quads'));
   });
 
-  it('reflects live-session sets in both weekly count and recovery status', async () => {
+  it('reflects live-session sets in the weekly count but NOT in recovery status', async () => {
     const block = liveBlock('b-calf', 'calves');
 
-    // First render: no live sets. Calves start at 0 and Fresh.
+    // First render: no live sets. Calves start at 0 and untrained.
     const { rerender } = render(
       <MuscleReadinessSheet isOpen onClose={jest.fn()} liveBlocks={[block]} liveSets={[]} />,
       { wrapper }
@@ -183,12 +183,16 @@ describe('MuscleReadinessSheet', () => {
       <MuscleReadinessSheet isOpen onClose={jest.fn()} liveBlocks={[block]} liveSets={sets} />
     );
 
-    // Just trained → Fatigued, so calves sinks below the 6-row cap; reveal all.
+    // Reveal every row so the assertions don't depend on where calves ranks.
     await waitFor(() => expect(screen.getByTestId('readiness-show-more')).toBeInTheDocument());
     await userEvent.click(screen.getByTestId('readiness-show-more'));
 
+    // Weekly volume counts the live sets straight away…
     await waitFor(() => expect(screen.getByTestId('readiness-sets-calves')).toHaveTextContent('3'));
-    expect(screen.getByTestId('readiness-badge-calves')).toHaveTextContent('Fatigued');
+    // …while recovery keeps reading off completed sessions only: the workout is
+    // still in progress, so calves has not started owing recovery yet. It does
+    // once the session is finished and lands in the history feed.
+    expect(screen.getByTestId('readiness-badge-calves')).toHaveTextContent('No recent data');
   });
 
   it('surfaces recovered, under-volume muscles in the "good targets" strip', async () => {
@@ -219,14 +223,14 @@ describe('MuscleReadinessSheet', () => {
 
     // Cap: exactly 6 coarse rows visible before expanding, with a "+N more".
     await waitFor(() => expect(screen.getByTestId('readiness-show-more')).toBeInTheDocument());
-    expect(container.querySelectorAll('[data-testid^="readiness-row-"]').length).toBe(6);
-    // 13 coarse groups total → 7 hidden behind the expander.
-    expect(screen.getByTestId('readiness-show-more')).toHaveTextContent('+7 more');
+    expect(muscleRows(container).length).toBe(6);
+    // 14 coarse groups total → 8 hidden behind the expander.
+    expect(screen.getByTestId('readiness-show-more')).toHaveTextContent('+8 more');
 
     // Expanding reveals the full list inline.
     await userEvent.click(screen.getByTestId('readiness-show-more'));
     const order = muscleRows(container);
-    expect(order.length).toBe(13);
+    expect(order.length).toBe(14);
 
     // Yesterday's glutes did NOT vanish — present, Fatigued, and last in the sort.
     expect(screen.getByTestId('readiness-badge-glutes')).toHaveTextContent('Fatigued');
@@ -279,6 +283,36 @@ describe('MuscleReadinessSheet', () => {
     const quadsPanel = screen.getByTestId('readiness-sources-quads');
     expect(quadsPanel).toHaveTextContent('Squat');
     expect(quadsPanel).toHaveTextContent('8 sets');
+  });
+
+  it('toggles the body map between recovery and volume painting, remembered per session', async () => {
+    const { container, unmount } = render(
+      <MuscleReadinessSheet isOpen onClose={jest.fn()} liveBlocks={[]} liveSets={[]} />,
+      { wrapper }
+    );
+    await waitFor(() => expect(screen.getByTestId('readiness-map')).toBeInTheDocument());
+
+    const quadsPath = () =>
+      container.querySelector('[data-testid="readiness-muscle-map"] path[data-muscle="quads"]');
+
+    // Default: recovery paint. Quads were maxed 30h ago → Fatigued gray, even
+    // though their weekly volume is on target.
+    expect(screen.getByTestId('readiness-map-mode-recovery')).toHaveAttribute('aria-pressed', 'true');
+    expect(quadsPath()!.getAttribute('class')).toContain('fill-surface-600');
+
+    // Toggle to volume → quads paint by their weekly-volume zone instead.
+    await userEvent.click(screen.getByTestId('readiness-map-mode-volume'));
+    expect(screen.getByTestId('readiness-map-mode-volume')).toHaveAttribute('aria-pressed', 'true');
+    expect(quadsPath()!.getAttribute('class')).toMatch(/fill-(success|warning|danger)-500/);
+    unmount();
+
+    // Re-open (a fresh lazy mount) → still in volume mode.
+    render(
+      <MuscleReadinessSheet isOpen onClose={jest.fn()} liveBlocks={[]} liveSets={[]} />,
+      { wrapper }
+    );
+    await waitFor(() => expect(screen.getByTestId('readiness-map')).toBeInTheDocument());
+    expect(screen.getByTestId('readiness-map-mode-volume')).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('remembers the expanded state across re-mounts within the session', async () => {

@@ -372,7 +372,7 @@ const fine = (value: StandardMuscleGroup): { value: StandardMuscleGroup; label: 
  *  (components/workout/exercise-details/editFormOptions.ts). */
 export const GROUPED_MUSCLE_OPTIONS: GroupedMuscleOption[] = [
   { value: 'chest', label: 'Chest', subMuscles: [fine('chest_upper'), fine('chest_lower')] },
-  { value: 'back', label: 'Back', subMuscles: [fine('lats'), fine('upper_back'), fine('erectors')] },
+  { value: 'back', label: 'Back', subMuscles: [fine('lats'), fine('upper_back')] },
   { value: 'shoulders', label: 'Shoulders', subMuscles: [fine('front_delts'), fine('lateral_delts'), fine('rear_delts')] },
   { value: 'biceps', label: 'Biceps', subMuscles: [] },
   { value: 'triceps', label: 'Triceps', subMuscles: [fine('triceps_long'), fine('triceps_lat_med')] },
@@ -384,6 +384,8 @@ export const GROUPED_MUSCLE_OPTIONS: GroupedMuscleOption[] = [
   { value: 'adductors', label: 'Adductors', subMuscles: [] },
   { value: 'calves', label: 'Calves', subMuscles: [fine('gastrocnemius'), fine('soleus')] },
   { value: 'abs', label: 'Abs', subMuscles: [fine('obliques')] },
+  // Top-level group, not a back subdivision — hinge/squat work is what loads it.
+  { value: 'erectors', label: 'Erectors', subMuscles: [] },
 ];
 
 /**
@@ -408,6 +410,39 @@ export const PRECISE_MUSCLE_GROUP_OPTIONS: { value: string; label: string }[] =
           },
         ]),
     ...group.subMuscles.map((s) => ({ value: s.value, label: `${group.label} · ${s.label}` })),
+  ]);
+
+/**
+ * Every taggable token — each coarse group followed by its fine heads — for
+ * SECONDARY-muscle pickers and muscle filters. Unlike
+ * PRECISE_MUSCLE_GROUP_OPTIONS this keeps the splitting coarse groups
+ * (chest/back/shoulders): the primary-only rule that rejects them
+ * (validateExercisePrimary) does not apply to secondaries, where an
+ * even split across a group's heads is a fair description of the work.
+ *
+ * These lists are the reason a subdivision is taggable at all. Volume rows for
+ * Obliques, Glute Med and the trap/tricep heads render whether or not anything
+ * feeds them, but only a fine tag applied here can put sets on one — a coarse
+ * 'abs' tag never leaks into Obliques (see resolveMuscleToStandard).
+ */
+export const ALL_MUSCLE_TAG_OPTIONS: { value: string; label: string }[] =
+  GROUPED_MUSCLE_OPTIONS.flatMap((group) => [
+    {
+      value: group.value,
+      label: group.subMuscles.length > 0 ? `${group.label} (whole group)` : group.label,
+    },
+    ...group.subMuscles.map((s) => ({ value: s.value, label: `${group.label} · ${s.label}` })),
+  ]);
+
+/**
+ * Same coverage as ALL_MUSCLE_TAG_OPTIONS with bare labels ("Obliques", not
+ * "Abs · Obliques") — for muscle FILTER chips, where the group already matches
+ * its subdivisions and a fine chip is simply a narrower query.
+ */
+export const MUSCLE_FILTER_OPTIONS: { value: string; label: string }[] =
+  GROUPED_MUSCLE_OPTIONS.flatMap((group) => [
+    { value: group.value, label: group.label },
+    ...group.subMuscles.map((s) => ({ value: s.value, label: s.label })),
   ]);
 
 /**

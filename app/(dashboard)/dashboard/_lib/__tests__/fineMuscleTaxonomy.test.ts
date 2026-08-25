@@ -275,7 +275,7 @@ describe('property: parent total == Σ per-exercise CAPPED group credit, once ea
   });
 });
 
-describe('unfeedable libraries: no fine row, no chevron, no warning', () => {
+describe('unfeedable libraries: subdivisions are visible but never nag', () => {
   // Entirely coarse-tagged logging — nothing can feed any FINE_MUSCLE_PARENTS
   // member (coarse tags never leak into them).
   const blocks = [
@@ -286,25 +286,45 @@ describe('unfeedable libraries: no fine row, no chevron, no warning', () => {
     block('row', 'back', [], 4),
   ];
 
-  it('coarse-only calves/traps/glutes/abs rows are not expandable', () => {
+  it('coarse-only calves/traps/glutes/abs rows still expand — anatomy does not depend on tagging', () => {
     const { rows } = rowsFor(blocks);
     for (const muscle of ['calves', 'traps', 'glutes', 'abs'] as const) {
-      expect(rows.find((r) => r.muscle === muscle)!.expandable).toBe(false);
+      const row = rows.find((r) => r.muscle === muscle)!;
+      expect(row.expandable).toBe(true);
+      // The subdivisions are carried as context rows: present, at 0, and
+      // flagged unreachable so every warning/target path skips them.
+      expect(row.children.length).toBeGreaterThan(0);
+      for (const child of row.children) {
+        expect(child.sets).toBe(0);
+        expect(child.reachable).toBe(false);
+      }
     }
-    // 'back' still expands: a coarse 'back' tag resolves to lats + upper_back,
-    // which are themselves fine children of the back row.
+    // 'back' expands for the older reason too: a coarse 'back' tag resolves to
+    // lats + upper_back, which are themselves fine children of the back row.
     expect(rows.find((r) => r.muscle === 'back')!.expandable).toBe(true);
   });
 
-  it('a stale persisted expansion cannot resurrect an unfeedable fine row', () => {
+  it('an unfed subdivision never pins itself open or demotes its parent', () => {
     const { rows } = rowsFor(blocks);
-    // Non-expandable rows carry no children at all — so even a stale persisted
-    // expansion (presentation layer) has nothing to reveal.
-    const stale = visibleFor(rows, new Set<CoarseMuscle>(['calves', 'traps', 'glutes', 'abs']));
+    // The anti-nag guarantee: the row exists behind the chevron, but a
+    // COLLAPSED group surfaces nothing on its own — pinning requires
+    // reachable AND below-MEV, and an unfed child is never reachable.
+    const collapsed = visibleFor(rows);
     for (const muscle of ['calves', 'traps', 'glutes', 'abs'] as const) {
-      expect(rows.find((r) => r.muscle === muscle)!.children).toHaveLength(0);
-      expect(stale.find((r) => r.muscle === muscle)!.children).toHaveLength(0);
+      expect(collapsed.find((r) => r.muscle === muscle)!.children).toHaveLength(0);
+      expect(rows.find((r) => r.muscle === muscle)!.laggingChildren).toBe(false);
     }
+  });
+
+  it('expanding reveals the unfed subdivisions at 0 (Obliques under Abs)', () => {
+    const { rows } = rowsFor(blocks);
+    const expanded = visibleFor(rows, new Set<CoarseMuscle>(['calves', 'traps', 'glutes', 'abs']));
+    const names = (muscle: CoarseMuscle) =>
+      expanded.find((r) => r.muscle === muscle)!.children.map((c) => c.muscle);
+    expect(names('abs')).toEqual(['obliques']);
+    expect(names('glutes')).toEqual(['glute_med']);
+    expect(names('calves').sort()).toEqual(['gastrocnemius', 'soleus']);
+    expect(names('traps').sort()).toEqual(['mid_lower_traps', 'upper_traps']);
   });
 
   it('every fine member is gated by isMuscleWarnable — the shared gate legacy volume consumers (useWeeklyVolume) apply too', () => {

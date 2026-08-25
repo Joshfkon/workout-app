@@ -1,0 +1,341 @@
+'use client';
+
+import { useState, useEffect, useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { Card, Button, ConfirmModal, ErrorRetry, FullPageLoading } from '@/components/ui';
+import { createUntypedClient } from '@/lib/supabase/client';
+import { resolveAuthState } from '@/lib/supabase/authState';
+import { useUserPreferences } from '@/hooks/useUserPreferences';
+import { kgToLbs } from '@/lib/utils';
+import { ComparePhotos } from '@/components/progress-photos/ComparePhotos';
+import { PhotoDetailModal } from '@/components/progress-photos/PhotoDetailModal';
+import { TimelapseModal } from '@/components/progress-photos/TimelapseModal';
+import { AddPhotoModal } from '@/components/progress-photos/AddPhotoModal';
+import type { ProgressPhoto } from '@/types/schema';
+
+const AUTH_REQUIRED = { authRequired: true } as const;
+
+function transformRow(photo: any): ProgressPhoto {
+  return {
+    id: photo.id,
+    userId: photo.user_id,
+    photoDate: photo.photo_date,
+    photoUrl: photo.photo_url,
+    weightKg: photo.weight_kg,
+    bodyFatPercent: photo.body_fat_percent,
+    notes: photo.notes,
+    bfEstimateLow: photo.bf_estimate_low ?? null,
+    bfEstimateHigh: photo.bf_estimate_high ?? null,
+    bfEstimatedAt: photo.bf_estimated_at ?? null,
+    createdAt: photo.created_at,
+  };
+}
+
+export default function ProgressPhotosPage() {
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const { preferences } = useUserPreferences();
+  const units = preferences.units;
+  const weightUnit = units === 'lb' ? 'lbs' : 'kg';
+
+  const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
+  const [isAddOpen, setIsAddOpen] = useState(false);
+  const [isCompareOpen, setIsCompareOpen] = useState(false);
+  const [isTimelapseOpen, setIsTimelapseOpen] = useState(false);
+  const [viewingPhoto, setViewingPhoto] = useState<ProgressPhoto | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ProgressPhoto | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const photosQuery = useQuery({
+    queryKey: ['analytics', 'photos', 'all'],
+    queryFn: async () => {
+      const supabase = createUntypedClient();
+      const auth = await resolveAuthState(supabase);
+      if (auth.status === 'unauthenticated') return AUTH_REQUIRED;
+      if (auth.status === 'error') {
+        throw auth.error instanceof Error
+          ? auth.error
+          : new Error('Could not verify your session');
+      }
+      const { data, error } = await supabase
+        .from('progress_photos')
+        .select('*')
+        .eq('user_id', auth.userId)
+        .order('photo_date', { ascending: false })
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      const rows: any[] = data ?? [];
+      const photos: ProgressPhoto[] = rows.map(transformRow);
+      return { userId: auth.userId, photos };
+    },
+    staleTime: 1000 * 60 * 5,
+  });
+
+  useEffect(() => {
+    if (photosQuery.data && 'authRequired' in photosQuery.data) {
+      router.push('/login');
+    }
+  }, [photosQuery.data, router]);
+
+  const photos =
+    photosQuery.data && !('authRequired' in photosQuery.data)
+      ? photosQuery.data.photos
+      : [];
+  const userId =
+    photosQuery.data && !('authRequired' in photosQuery.data)
+      ? photosQuery.data.userId
+      : null;
+
+  // Signed URLs are short-lived, so they live in local state, not the query
+  // cache. Fetched in one batch per photo list change.
+  useEffect(() => {
+    let cancelled = false;
+    async function loadUrls() {
+      if (photos.length === 0) return;
+      const supabase = createUntypedClient();
+      const paths = photos.map((p) => p.photoUrl).filter(Boolean);
+      const { data } = await supabase.storage
+        .from('progress-photos')
+        .createSignedUrls(paths, 3600);
+      if (cancelled || !data) return;
+      const urls: Record<string, string> = {};
+      photos.forEach((photo) => {
+        const entry = data.find(
+          (d: { path: string | null; signedUrl: string }) => d.path === photo.photoUrl
+        );
+        if (entry?.signedUrl) urls[photo.id] = entry.signedUrl;
+      });
+      setPhotoUrls(urls);
+    }
+    loadUrls();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [photosQuery.dataUpdatedAt]);
+
+  const invalidatePhotos = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['analytics', 'photos'] });
+    // The Analytics page bundles its own copy of recent photos.
+    queryClient.invalidateQueries({ queryKey: ['analytics', 'main'] });
+  }, [queryClient]);
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    try {
+      const supabase = createUntypedClient();
+      const { error } = await supabase
+        .from('progress_photos')
+        .delete()
+        .eq('id', deleteTarget.id);
+      if (error) throw error;
+      // Best effort — an orphaned storage object is invisible to the app.
+      if (deleteTarget.photoUrl) {
+        await supabase.storage.from('progress-photos').remove([deleteTarget.photoUrl]);
+      }
+      setDeleteTarget(null);
+      setViewingPhoto(null);
+      invalidatePhotos();
+    } catch (err) {
+      console.error('Failed to delete progress photo:', err);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const displayWeight = (kg: number) =>
+    units === 'lb' ? `${kgToLbs(kg).toFixed(1)} lbs` : `${kg.toFixed(1)} kg`;
+
+  const formatDate = (dateStr: string) =>
+    new Date(`${dateStr}T00:00:00`).toLocaleDateString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+
+  if (photosQuery.isLoading && !photosQuery.data) {
+    return <FullPageLoading />;
+  }
+
+  if (photosQuery.isError) {
+    return (
+      <div className="max-w-4xl mx-auto px-4 py-6">
+        <ErrorRetry
+          message="Couldn't load your progress photos."
+          onRetry={() => photosQuery.refetch()}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <Link
+            href="/dashboard/analytics"
+            className="text-sm text-surface-400 hover:text-surface-200"
+          >
+            ← Analytics
+          </Link>
+          <h1 className="text-xl font-bold text-surface-100 mt-1">Progress Photos</h1>
+        </div>
+        <div className="flex gap-2">
+          {photos.length >= 3 && (
+            <Button variant="secondary" onClick={() => setIsTimelapseOpen(true)}>
+              Timelapse
+            </Button>
+          )}
+          {photos.length >= 2 && (
+            <Button variant="secondary" onClick={() => setIsCompareOpen(true)}>
+              Compare
+            </Button>
+          )}
+          <Button onClick={() => setIsAddOpen(true)}>Add Photo</Button>
+        </div>
+      </div>
+
+      {/* Empty state */}
+      {photos.length === 0 && (
+        <Card className="text-center py-12">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-surface-800 flex items-center justify-center">
+            <svg
+              className="w-8 h-8 text-surface-500"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"
+              />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"
+              />
+            </svg>
+          </div>
+          <h2 className="text-lg font-semibold text-surface-200">No progress photos yet</h2>
+          <p className="text-surface-500 mt-2 max-w-md mx-auto">
+            Photos are the most honest progress tracker there is. Take them in
+            consistent lighting and poses, and future you will thank you.
+          </p>
+          <Button className="mt-6" onClick={() => setIsAddOpen(true)}>
+            Add Your First Photo
+          </Button>
+        </Card>
+      )}
+
+      {/* Gallery */}
+      {photos.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+          {photos.map((photo) => {
+            const url = photoUrls[photo.id];
+            return (
+              <button
+                key={photo.id}
+                onClick={() => setViewingPhoto(photo)}
+                className="text-left group"
+              >
+                <div className="aspect-[3/4] rounded-lg overflow-hidden bg-surface-800 ring-1 ring-surface-700 group-hover:ring-primary-500 transition-shadow">
+                  {url ? (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img
+                      src={url}
+                      alt={`Progress photo from ${formatDate(photo.photoDate)}`}
+                      className="w-full h-full object-cover"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <div className="w-6 h-6 border-2 border-surface-600 border-t-transparent rounded-full animate-spin" />
+                    </div>
+                  )}
+                </div>
+                <div className="mt-1.5 px-0.5">
+                  <p className="text-sm text-surface-200">{formatDate(photo.photoDate)}</p>
+                  {(photo.weightKg != null || photo.bodyFatPercent != null) && (
+                    <p className="text-xs text-surface-500">
+                      {[
+                        photo.weightKg != null ? displayWeight(photo.weightKg) : null,
+                        photo.bodyFatPercent != null ? `${photo.bodyFatPercent}% BF` : null,
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </p>
+                  )}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Lightbox / detail view */}
+      <PhotoDetailModal
+        photo={viewingPhoto}
+        signedUrl={viewingPhoto ? photoUrls[viewingPhoto.id] : undefined}
+        formatDate={formatDate}
+        displayWeight={displayWeight}
+        onClose={() => setViewingPhoto(null)}
+        onDelete={setDeleteTarget}
+        onEstimated={invalidatePhotos}
+      />
+
+      {/* Delete confirmation */}
+      <ConfirmModal
+        isOpen={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+        title="Delete this photo?"
+        message="This permanently removes the photo and its notes."
+        confirmText="Delete"
+        variant="danger"
+        isLoading={isDeleting}
+      />
+
+      {/* Timelapse */}
+      <TimelapseModal
+        isOpen={isTimelapseOpen}
+        onClose={() => setIsTimelapseOpen(false)}
+        photos={photos}
+        photoUrls={photoUrls}
+        units={units}
+      />
+
+      {/* Compare viewer */}
+      <ComparePhotos
+        isOpen={isCompareOpen}
+        onClose={() => setIsCompareOpen(false)}
+        photos={photos}
+        photoUrls={photoUrls}
+        units={units}
+      />
+
+      {/* Add photo modal */}
+      {userId && (
+        <AddPhotoModal
+          isOpen={isAddOpen}
+          onClose={() => setIsAddOpen(false)}
+          userId={userId}
+          units={units}
+          weightUnit={weightUnit}
+          ghostUrl={photos[0] ? photoUrls[photos[0].id] : undefined}
+          onAdded={() => {
+            setIsAddOpen(false);
+            invalidatePhotos();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+

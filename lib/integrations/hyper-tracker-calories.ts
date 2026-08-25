@@ -76,6 +76,11 @@ const MUSCLE_GROUP_MULTIPLIER: Record<MuscleGroup, number> = {
   forearms: 0.6,
   abs: 0.75,
   adductors: 0.7,
+  // Erectors reach this table only as the PRIMARY group — i.e. direct spinal
+  // extension work (back extensions, supermans), which is light isolation
+  // despite the muscle column's size. Hinges and squats still bill at their
+  // own primary group's rate, unchanged by the promotion.
+  erectors: 0.9,
 };
 
 /**

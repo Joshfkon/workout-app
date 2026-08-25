@@ -63,6 +63,7 @@ function createSupabaseMock(responder: Responder) {
         query.filters[col] = val;
         return builder;
       },
+      order: () => builder,
       limit: () => builder,
       single: () => {
         query.single = true;

@@ -27,6 +27,7 @@ import type {
   WorkoutSession,
 } from '@/types/schema';
 import type { ExerciseBlockWithExercise } from './types';
+import { resolveIsBodyweight } from '@/services/bodyweightClassification';
 
 /**
  * Exercise plus the extra runtime fields the workout page has always attached
@@ -79,6 +80,8 @@ export interface LoadedExerciseRow {
   rom_demands: string[] | null;
   equipment_required: string[] | null;
   equipment: string | null;
+  /** Hand-correctable normalized implement; wins over tag/name derivation. */
+  equipment_class?: string | null;
   hypertrophy_tier: HypertrophyTier | null;
   stretch_under_load: HypertrophyRating | null;
   resistance_profile: HypertrophyRating | null;
@@ -159,6 +162,72 @@ export function mapWorkoutSessionRow(sessionData: WorkoutSessionRow): WorkoutSes
 }
 
 /**
+ * Map a raw `exercises` row into the page's exercise shape.
+ *
+ * EVERY path that puts an exercise into the page's block state must go through
+ * this — the session load, and equally the mid-workout add and swap flows,
+ * which fetch the same `exercises` row. Hand-rolling a smaller object at those
+ * call sites drops `is_bodyweight` / `bodyweight_type` / `equipment`, and the
+ * card then has to guess "is this bodyweight?" from the equipment tags alone:
+ * a pull-up added mid-workout rendered a plain weight stepper with no
+ * Bodyweight/Weighted/Assisted control until the page was reloaded and this
+ * mapping finally ran.
+ */
+export function mapLoadedExerciseRow(row: LoadedExerciseRow): LoadedExercise {
+  return {
+    id: row.id,
+    name: row.name,
+    primaryMuscle: row.primary_muscle,
+    secondaryMuscles: row.secondary_muscles || [],
+    mechanic: row.mechanic,
+    defaultRepRange: row.default_rep_range || [8, 12],
+    defaultRir: row.default_rir || 2,
+    minWeightIncrementKg: row.min_weight_increment_kg || 2.5,
+    availableIncrementsKg: row.available_increments_kg ?? null,
+    progressionModel: row.progression_model ?? null,
+    repBoundary: row.rep_boundary ?? 'crisp',
+    formCues: row.form_cues || [],
+    commonMistakes: row.common_mistakes || [],
+    setupNote: row.setup_note || '',
+    movementPattern: row.movement_pattern || '',
+    romDemands: row.rom_demands || [],
+    equipmentRequired: row.equipment_required || [],
+    equipment: row.equipment || (row.equipment_required?.[0] || 'barbell'),
+    // Include hypertrophy scoring for tier badges
+    hypertrophyScore: row.hypertrophy_tier ? {
+      tier: row.hypertrophy_tier,
+      stretchUnderLoad: row.stretch_under_load || 3,
+      resistanceProfile: row.resistance_profile || 3,
+      progressionEase: row.progression_ease || 3,
+    } : undefined,
+    // Bodyweight exercise metadata. `is_bodyweight` is a positive signal only:
+    // the column is NOT NULL DEFAULT false, so the old `??` fallback to the
+    // equipment fields never fired and station movements (dead hang, pull-up,
+    // dip) whose flag was never set read as externally loaded. The shared
+    // classifier falls through to the equipment signals — see
+    // services/bodyweightClassification#resolveIsBodyweight. The stored
+    // equipment_class is the hand-correctable override and wins over the
+    // signals derived from tags and name.
+    isBodyweight: resolveIsBodyweight({
+      isBodyweight: row.is_bodyweight,
+      equipment: row.equipment,
+      equipmentRequired: row.equipment_required,
+      equipment_class: row.equipment_class,
+      name: row.name,
+      exerciseType: row.exercise_type,
+    }),
+    bodyweightType: row.bodyweight_type ?? undefined,
+    assistanceType: row.assistance_type ?? undefined,
+    // Video demonstration fields
+    demoGifUrl: row.demo_gif_url ?? undefined,
+    demoThumbnailUrl: row.demo_thumbnail_url ?? undefined,
+    youtubeVideoId: row.youtube_video_id ?? undefined,
+    // Exercise type for duration-based exercises (planks, holds)
+    exerciseType: row.exercise_type ?? undefined,
+  };
+}
+
+/**
  * Map a loaded exercise_blocks row (with joined exercises) into the page's
  * block-with-exercise shape. Caller must have filtered out rows without
  * a joined exercise.
@@ -166,46 +235,7 @@ export function mapWorkoutSessionRow(sessionData: WorkoutSessionRow): WorkoutSes
 export function mapLoadedBlockRow(
   block: LoadedBlockRow & { exercises: LoadedExerciseRow }
 ): ExerciseBlockWithExercise {
-  const exercise: LoadedExercise = {
-    id: block.exercises.id,
-    name: block.exercises.name,
-    primaryMuscle: block.exercises.primary_muscle,
-    secondaryMuscles: block.exercises.secondary_muscles || [],
-    mechanic: block.exercises.mechanic,
-    defaultRepRange: block.exercises.default_rep_range || [8, 12],
-    defaultRir: block.exercises.default_rir || 2,
-    minWeightIncrementKg: block.exercises.min_weight_increment_kg || 2.5,
-    availableIncrementsKg: block.exercises.available_increments_kg ?? null,
-    progressionModel: block.exercises.progression_model ?? null,
-    repBoundary: block.exercises.rep_boundary ?? 'crisp',
-    formCues: block.exercises.form_cues || [],
-    commonMistakes: block.exercises.common_mistakes || [],
-    setupNote: block.exercises.setup_note || '',
-    movementPattern: block.exercises.movement_pattern || '',
-    romDemands: block.exercises.rom_demands || [],
-    equipmentRequired: block.exercises.equipment_required || [],
-    equipment: block.exercises.equipment || (block.exercises.equipment_required?.[0] || 'barbell'),
-    // Include hypertrophy scoring for tier badges
-    hypertrophyScore: block.exercises.hypertrophy_tier ? {
-      tier: block.exercises.hypertrophy_tier,
-      stretchUnderLoad: block.exercises.stretch_under_load || 3,
-      resistanceProfile: block.exercises.resistance_profile || 3,
-      progressionEase: block.exercises.progression_ease || 3,
-    } : undefined,
-    // Bodyweight exercise metadata
-    // Check is_bodyweight column first, then fall back to equipment field, then equipment_required array
-    isBodyweight: block.exercises.is_bodyweight ??
-                 (block.exercises.equipment === 'bodyweight' ||
-                  Boolean(block.exercises.equipment_required && block.exercises.equipment_required.includes('bodyweight'))),
-    bodyweightType: block.exercises.bodyweight_type ?? undefined,
-    assistanceType: block.exercises.assistance_type ?? undefined,
-    // Video demonstration fields
-    demoGifUrl: block.exercises.demo_gif_url ?? undefined,
-    demoThumbnailUrl: block.exercises.demo_thumbnail_url ?? undefined,
-    youtubeVideoId: block.exercises.youtube_video_id ?? undefined,
-    // Exercise type for duration-based exercises (planks, holds)
-    exerciseType: block.exercises.exercise_type ?? undefined,
-  };
+  const exercise: LoadedExercise = mapLoadedExerciseRow(block.exercises);
 
   return {
     id: block.id,

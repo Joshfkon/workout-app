@@ -58,6 +58,7 @@ import {
   type TodayWorkout,
 } from '@/lib/training/trainingSchedule';
 import { insertWorkoutSessions } from '@/lib/training/sessionOrigin';
+import { resolveDefaultLocationId, updateSessionLocation } from '@/lib/training/sessionLocation';
 import { quickWeightEstimate, type TransferCandidate } from '@/services/weightEstimationEngine';
 import { fetchTransferCandidates } from '@/lib/training/transferCandidates';
 import {
@@ -74,6 +75,7 @@ import type {
   MuscleGroup,
   WarmupSet,
 } from '@/types/schema';
+import { now as clockNow } from '@/lib/clock';
 
 // ============================================================
 // Types
@@ -501,7 +503,7 @@ export async function startMesocycleWorkoutSession(
     // succeed and both callers insert blocks, duplicating every exercise.
     const { data: claimedRows, error: claimError } = await supabase
       .from('workout_sessions')
-      .update({ state: 'in_progress', started_at: new Date().toISOString() })
+      .update({ state: 'in_progress', started_at: clockNow().toISOString() })
       .eq('id', claimedShellId)
       .eq('state', 'planned')
       .eq('mesocycle_id', mesocycle.id)
@@ -514,16 +516,37 @@ export async function startMesocycleWorkoutSession(
       return { sessionId: claimedShellId, resumedExisting: true };
     }
     sessionId = claimedShellId;
+
+    // A planned shell was written by the schedule editor, which has no
+    // location to give it — so stamp one now, same as a fresh insert. No sets
+    // exist yet (that's what made it a shell), hence nothing to re-stamp.
+    const shellLocationId = await resolveDefaultLocationId(supabase, user.id);
+    if (shellLocationId) {
+      await updateSessionLocation(supabase, {
+        sessionId,
+        locationId: shellLocationId,
+        previousLocationId: null,
+        blockIdsToRestamp: [],
+      });
+    }
   } else {
+    // Scheduled sessions carry a location like builder-started ones do.
+    // Without this every mesocycle session was locationless, so machine loads
+    // from different gyms shared one history — the conflation location-scoped
+    // calibration exists to prevent. Wrong on a travel day; the in-workout
+    // header chip fixes it in one tap and re-files the sets already logged.
+    const defaultLocationId = await resolveDefaultLocationId(supabase, user.id);
+
     const { data: sessions, error: sessionError } = await insertWorkoutSessions(supabase, [
       {
         user_id: user.id,
         mesocycle_id: mesocycle.id,
         planned_date: today,
         state: 'in_progress',
-        started_at: new Date().toISOString(),
+        started_at: clockNow().toISOString(),
         completion_percent: 0,
         origin: 'scheduled' as const,
+        location_id: defaultLocationId,
       },
     ]);
 

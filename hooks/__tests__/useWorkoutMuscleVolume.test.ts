@@ -156,22 +156,28 @@ describe('useWorkoutMuscleVolume', () => {
     expect(abs!.zone).toBe('below_mev');
   });
 
-  it('reports full readiness for an untrained muscle and zero for a just-trained one', () => {
-    setHistory([]);
+  it('scores readiness from completed sessions only — live sets move volume, not readiness', () => {
+    // Biceps trained 6h ago in a COMPLETED session; abs trained only right now,
+    // in the live session that is still in progress.
+    setHistory([], false, [recoverySession('biceps', 6)]);
     const liveBlocks = [block('curl', 'biceps'), block('twist', 'obliques')];
-    const liveSets = Array.from({ length: 4 }, () => workingSet('curl'));
+    const liveSets = Array.from({ length: 4 }, () => workingSet('twist'));
 
     const { result } = renderHook(() =>
       useWorkoutMuscleVolume({ liveBlocks, liveSets, now: NOW })
     );
 
+    // The 4 live ab sets count toward weekly volume immediately…
     const abs = result.current.rows.find((r) => r.muscle === 'abs')!;
+    expect(abs.sessionSets).toBeGreaterThan(0);
+    // …but abs still reads fully ready: this session has not finished, so it
+    // owes no recovery yet.
     expect(abs.readiness).toBe(1);
     expect(abs.readyInHours).toBe(0);
 
-    // Biceps sets logged in the LIVE session read as just-trained.
+    // The COMPLETED biceps session does count against readiness.
     const biceps = result.current.rows.find((r) => r.muscle === 'biceps')!;
-    expect(biceps.readiness).toBe(0);
+    expect(biceps.readiness).toBeLessThan(1);
     expect(biceps.readyInHours).toBeGreaterThan(0);
   });
 
@@ -198,7 +204,8 @@ describe('useWorkoutMuscleVolume', () => {
     const { result } = renderHook(() =>
       useWorkoutMuscleVolume({ liveBlocks, liveSets, now: NOW })
     );
-    // Both just trained live (readiness 0) → biceps (6 session sets) first.
+    // Nothing completed, so every group ties at readiness 1 → biceps (6 session
+    // sets) sorts ahead of abs (2).
     const muscles = result.current.rows.map((r) => r.muscle);
     expect(muscles.indexOf('biceps')).toBeLessThan(muscles.indexOf('abs'));
   });
@@ -215,15 +222,16 @@ describe('useWorkoutMuscleVolume', () => {
     expect(frozenOrder.indexOf('abs')).toBeLessThan(frozenOrder.indexOf('biceps'));
     first.unmount();
 
-    // Later the same local day the picture inverts (abs just trained live,
-    // biceps now fully recovered) — a fresh mount still replays the frozen order.
-    setHistory([], false, [recoverySession('biceps', 200)]);
-    const liveSets = Array.from({ length: 4 }, () => workingSet('twist'));
+    // Later the same local day the picture inverts: an ab session has since
+    // been FINISHED (so it now owes recovery) while the biceps session has aged
+    // out. A fresh mount still replays the frozen order.
+    setHistory([], false, [recoverySession('biceps', 200), recoverySession('obliques', 1)]);
     const second = renderHook(() =>
-      useWorkoutMuscleVolume({ liveBlocks, liveSets, now: NOW })
+      useWorkoutMuscleVolume({ liveBlocks, liveSets: [], now: NOW })
     );
     const abs = second.result.current.rows.find((r) => r.muscle === 'abs')!;
-    expect(abs.readiness).toBe(0); // live sets DID move the score…
+    const biceps = second.result.current.rows.find((r) => r.muscle === 'biceps')!;
+    expect(abs.readiness).toBeLessThan(biceps.readiness); // the scores DID invert…
     expect(second.result.current.rows.map((r) => r.muscle)).toEqual(frozenOrder); // …but not the order
   });
 
@@ -259,8 +267,8 @@ describe('useWorkoutMuscleVolume', () => {
     ).toBe(false);
 
     // Once the workout hydrates, the freeze happens WITH the live session's
-    // sets counted: biceps was just trained live, so it pins below abs even
-    // though the history-only order (biceps 6h ago vs fresh abs) matches.
+    // sets counted — they feed the weekly totals that break readiness ties, so
+    // pinning an order before hydration could pin the wrong one.
     const liveBlocks = [block('curl', 'biceps'), block('twist', 'obliques')];
     const liveSets = Array.from({ length: 4 }, () => workingSet('curl'));
     const loaded = renderHook(() =>

@@ -21,6 +21,7 @@ import {
 } from '@/services/deloadEngine';
 import { upsertWeeklyFatigueLog } from './sessionWrites';
 import type { DiscomfortSeverity, Rating } from '@/types/schema';
+import { now as clockNow } from '@/lib/clock';
 
 type UntypedSupabase = ReturnType<typeof import('@/lib/supabase/client').createUntypedClient>;
 
@@ -33,6 +34,45 @@ export interface PostSessionMesoInput {
     sleepQuality?: Rating | null;
     stressLevel?: Rating | null;
   } | null;
+  /**
+   * Stable per-session timestamp (the work item's enqueue time) forwarded to
+   * the weekly fatigue upsert so a retrying older item can't overwrite a
+   * newer session's row — see WeeklyFatigueWriteInput.loggedAt.
+   */
+  loggedAt?: string;
+}
+
+/**
+ * Deload signal 5 for the weekly fatigue log: severity-weighted joint-pain
+ * events in the trailing window, reduced to the log's boolean flag. Shared by
+ * the mesocycle and standalone post-session paths. Best-effort — any failure
+ * logs and reads as "no pain" rather than blocking the finish flow.
+ */
+export async function lookupJointPainFlag(
+  supabase: UntypedSupabase,
+  userId: string
+): Promise<boolean> {
+  try {
+    const now = clockNow();
+    const cutoff = new Date(
+      now.getTime() - JOINT_PAIN_WINDOW_DAYS * 24 * 60 * 60 * 1000
+    ).toISOString();
+    const { data: painEvents } = await supabase
+      .from('joint_pain_events')
+      .select('severity, created_at')
+      .eq('user_id', userId)
+      .gte('created_at', cutoff);
+    const painScore = computeJointPainSignal(
+      ((painEvents ?? []) as { severity: DiscomfortSeverity; created_at: string }[]).map(
+        (e) => ({ severity: e.severity, occurredAt: new Date(e.created_at) })
+      ),
+      now
+    );
+    return painScore >= JOINT_PAIN_TRIGGER_THRESHOLD;
+  } catch (painErr) {
+    console.error('Joint pain signal lookup failed:', painErr);
+    return false;
+  }
 }
 
 /**
@@ -40,12 +80,23 @@ export interface PostSessionMesoInput {
  * the completed-session count, and run the deload-trigger check. Assumes the
  * session is already state='completed' (and linked to the mesocycle) so it is
  * included in the count.
+ *
+ * Returns `{ ok: false }` when a step did not land. Errors are still caught
+ * and logged here — this must never throw into the finish flow — but the
+ * outcome is REPORTED, because the durable work item that drives this
+ * (lib/offline/postFinishQueue) may only be cleared once the work actually
+ * happened. Swallowing a failure silently would make its at-least-once
+ * guarantee vacuous: the item would be dropped after a run that did nothing.
  */
 export async function runPostSessionMesoUpdates(
   supabase: UntypedSupabase,
   input: PostSessionMesoInput
-): Promise<void> {
+): Promise<{ ok: boolean }> {
   const { mesocycleId, userId, sessionRpe, checkIn } = input;
+  // Steps that must have LANDED for this session's processing to count as
+  // done. The joint-pain lookup is deliberately excluded: it is a best-effort
+  // signal with a defined fallback (no pain), not a write that can be lost.
+  let ok = true;
   try {
     const { data: meso } = await supabase
       .from('mesocycles')
@@ -84,27 +135,7 @@ export async function runPostSessionMesoUpdates(
     // Deload signal 5: severity-weighted joint-pain events in the trailing
     // window drive this week's joint_pain flag (ProgramEngine trigger 5).
     // Best-effort — a missing table or query error must not block the finish.
-    let jointPain = false;
-    try {
-      const now = new Date();
-      const cutoff = new Date(
-        now.getTime() - JOINT_PAIN_WINDOW_DAYS * 24 * 60 * 60 * 1000
-      ).toISOString();
-      const { data: painEvents } = await supabase
-        .from('joint_pain_events')
-        .select('severity, created_at')
-        .eq('user_id', userId)
-        .gte('created_at', cutoff);
-      const painScore = computeJointPainSignal(
-        ((painEvents ?? []) as { severity: DiscomfortSeverity; created_at: string }[]).map(
-          (e) => ({ severity: e.severity, occurredAt: new Date(e.created_at) })
-        ),
-        now
-      );
-      jointPain = painScore >= JOINT_PAIN_TRIGGER_THRESHOLD;
-    } catch (painErr) {
-      console.error('Joint pain signal lookup failed:', painErr);
-    }
+    const jointPain = await lookupJointPainFlag(supabase, userId);
 
     const fatigueResult = await upsertWeeklyFatigueLog(supabase, {
       userId,
@@ -115,9 +146,11 @@ export async function runPostSessionMesoUpdates(
       stressLevel: checkIn?.stressLevel ?? null,
       sessionAvgRpe: sessionRpe,
       jointPain,
+      loggedAt: input.loggedAt,
     });
     if (!fatigueResult.ok) {
       console.error('Failed to save weekly fatigue log:', fatigueResult.error);
+      ok = false;
     }
 
     // current_week was historically written only at creation (always 1),
@@ -134,6 +167,7 @@ export async function runPostSessionMesoUpdates(
         .lt('current_week', weekNumber);
       if (weekError) {
         console.error('Failed to advance mesocycle current_week:', weekError);
+        ok = false;
       }
     }
 
@@ -144,5 +178,7 @@ export async function runPostSessionMesoUpdates(
     await recordDeloadRecommendationIfTriggered(supabase, userId, mesocycleId);
   } catch (err) {
     console.error('Post-session deload check failed:', err);
+    ok = false;
   }
+  return { ok };
 }

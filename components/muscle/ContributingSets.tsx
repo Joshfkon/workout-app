@@ -50,6 +50,7 @@ export function ContributingSets({
   muscle,
   testIdPrefix,
   scopeLabel,
+  groupScope = false,
 }: {
   exercises: ExerciseVolume[];
   muscle: string;
@@ -57,10 +58,16 @@ export function ContributingSets({
   testIdPrefix: string;
   /**
    * Which muscle scope this panel counts for ("Rear Delts", "Shoulders ·
-   * whole group"). Rendered in the header so a group-scope panel sitting
-   * beneath the last child row can't be misread as that child's breakdown.
+   * whole group"). Rendered in the header so a group-scope panel can't be
+   * misread as a single sub-muscle's breakdown.
    */
   scopeLabel?: string;
+  /**
+   * True when this panel counts for a COARSE group that has sub-muscle rows.
+   * Adds the footnote explaining why the group total is smaller than the sum
+   * of those rows — see the note where it's rendered below.
+   */
+  groupScope?: boolean;
 }) {
   const isFractional = (v: number) => !Number.isInteger(Math.round(v * 10) / 10);
   const hasFractional = exercises.some((ex) => isFractional(ex.sets));
@@ -75,13 +82,17 @@ export function ContributingSets({
       <ul className="space-y-0.5">
         {exercises.map((ex) => (
           <li key={ex.id} className="flex items-baseline justify-between gap-2 text-xs">
-            <span className="text-surface-300 truncate">
-              {ex.name}
+            {/* Only the NAME truncates. The badge is a fixed-width chip: with
+                `truncate` on the shared parent it was the tail of the line and
+                clipped to "SECOND…" whenever the name was long, turning the
+                one word that explains the halved credit into noise. */}
+            <span className="flex items-baseline gap-1.5 min-w-0">
+              <span className="text-surface-300 truncate">{ex.name}</span>
               {/* Indirect-only credit (no primary-tag share): this exercise is
                   here purely via a secondary-muscle tag — say so inline. */}
               {ex.direct === 0 && (
                 <span
-                  className="ml-1.5 rounded bg-surface-700/60 px-1 py-px text-[9px] uppercase tracking-wide text-surface-400"
+                  className="flex-shrink-0 rounded bg-surface-700/60 px-1 py-px text-[9px] uppercase tracking-wide text-surface-400"
                   data-testid={`${testIdPrefix}-secondary-${ex.id}`}
                 >
                   secondary
@@ -98,6 +109,24 @@ export function ContributingSets({
           </li>
         ))}
       </ul>
+      {/* The group total is NOT the sum of the sub-muscle rows above it, and
+          that gap is intentional dedup, not a rounding bug: buildVolumeRows
+          caps each exercise's GROUP credit at 1.0 per performed set, so a row
+          tagged primary-to-one-head and secondary-to-another-head of the same
+          group counts once here — while each sub-muscle row keeps its own
+          uncapped per-head credit, which is what per-head programming needs.
+          Say so, rather than leaving the user to reconcile two numbers that
+          were never meant to add up. */}
+      {groupScope && (
+        <p
+          className="mt-1 text-[10px] leading-relaxed text-surface-600"
+          data-testid={`${testIdPrefix}-group-dedup-note-${muscle}`}
+        >
+          A set counts once for the group even when it works more than one of
+          the muscles below, so this total is lower than the sub-muscle totals
+          added up.
+        </p>
+      )}
       {(hasFractional || hasDownWeighted) && (
         <p className="mt-1 text-[10px] leading-relaxed text-surface-600">
           {hasFractional && (
