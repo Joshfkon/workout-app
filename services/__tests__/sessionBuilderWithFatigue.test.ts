@@ -10,6 +10,7 @@ import {
 } from '../sessionBuilderWithFatigue';
 import { createFatigueBudget } from '../fatigueBudgetEngine';
 import { PlannedWeekRecovery } from '../plannedRecovery';
+import { resolveMuscleToStandard } from '@/types/schema';
 import type {
   ExtendedUserProfile,
   RecoveryFactors,
@@ -307,6 +308,47 @@ describe('sessionBuilderWithFatigue', () => {
 
         expect(session.exercises.length).toBeGreaterThan(0);
       });
+    });
+  });
+
+  describe('per-head readiness gating (Codex review on #636)', () => {
+    it('a fatigued head hidden by the coarse mean cannot be trained through its own exercises', () => {
+      // Day 0: hammer ONLY front delts, hard. On day 1 front_delts sits below
+      // the skip line while lateral/rear are fresh, so the coarse 'shoulders'
+      // MEAN passes the session gate — exactly the hole the review flagged.
+      // Selection must then drop front-delt-primary candidates (presses,
+      // front raises) and serve the fresh heads instead.
+      const profile = createProfile();
+      const weeklyTracker = createWeeklyRecovery(profile);
+      weeklyTracker.record(0, {
+        primaryMuscle: 'front_delts',
+        secondaryMuscles: [],
+        sets: 8,
+        targetRir: 1,
+      });
+
+      const gate = weeklyTracker.readiness('shoulders', 1);
+      // Scenario guard: the setup must actually reproduce the hole.
+      expect(gate.byStandard.front_delts ?? 1).toBeLessThan(0.35);
+      expect(gate.readinessRatio).toBeGreaterThanOrEqual(0.35);
+
+      const session = buildDetailedSessionWithFatigue(
+        { day: 'Shoulders', focus: 'Delts', targetMuscles: ['shoulders'] },
+        createVolumePerMuscle(),
+        profile,
+        createFatigueBudget(profile),
+        weeklyTracker,
+        1,
+        1,
+        6,
+        'linear',
+        createWeeklyProgression()
+      );
+
+      expect(session.exercises.length).toBeGreaterThan(0);
+      for (const e of session.exercises) {
+        expect(resolveMuscleToStandard(e.exercise.primaryMuscle)).not.toContain('front_delts');
+      }
     });
   });
 

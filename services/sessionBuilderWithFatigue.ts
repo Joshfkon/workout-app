@@ -52,6 +52,7 @@ import {
   PlannedWeekRecovery,
   plannedSetScale,
   PLANNED_SKIP_READINESS,
+  PLANNED_TRIM_READINESS,
 } from './plannedRecovery';
 import { requiredStabilizersFor } from './muscleRecovery';
 import { resolveMuscleToStandard, type StandardMuscleGroup } from '@/types/schema';
@@ -175,6 +176,13 @@ const HYPERTROPHY_TIER_RANK: Record<string, number> = {
  *   Candidates REQUIRING one are deprioritized within their hypertrophy tier
  *   (never below a worse tier) — the planning-side counterpart of the live
  *   pre-set stabilizer warning.
+ * @param standardReadiness - Per-standard-muscle readiness behind the coarse
+ *   gate (PlannedMuscleReadiness.byStandard). The coarse mean deliberately
+ *   lets one fatigued head through so it can't veto the whole group — but
+ *   the head's own detail must then gate INDIVIDUAL candidates: a candidate
+ *   whose PRIMARY standard sits below the skip line is dropped (unless that
+ *   would empty the pool — the existing fallback-ladder convention), and one
+ *   inside the trim band is deprioritized within its tier.
  */
 function selectExercisesWithFatigue(
   muscle: MuscleGroup,
@@ -187,7 +195,8 @@ function selectExercisesWithFatigue(
   unavailableEquipmentIds: string[] = [],
   varietyPrefs?: ExerciseVarietyPreferences | null,
   recentlyUsedExerciseIds?: Set<string>,
-  fatiguedStabilizers?: ReadonlySet<StandardMuscleGroup>
+  fatiguedStabilizers?: ReadonlySet<StandardMuscleGroup>,
+  standardReadiness?: Partial<Record<StandardMuscleGroup, number>>
 ): { exercise: ExerciseEntry; sets: number }[] {
   // Get exercises from unified service (DB-backed with fallback)
   const allExercises = getExercisesSync();
@@ -241,6 +250,30 @@ function selectExercisesWithFatigue(
     candidates = allExercises.filter((e) => muscleMatchesGroup(e.primaryMuscle, muscle));
   }
 
+  // Readiness of a candidate's own PRIMARY muscle (worst resolved standard).
+  // Secondary movers are deliberately not gated here: their 0.5-weighted dose
+  // already shaped the coarse gate, and every press carries a front-delt
+  // secondary — gating on them would block whole sessions.
+  const primaryReadiness = (e: ExerciseEntry): number => {
+    if (!standardReadiness) return 1;
+    const ratios = resolveMuscleToStandard(e.primaryMuscle)
+      .map((standard) => standardReadiness[standard])
+      .filter((v): v is number => typeof v === 'number');
+    return ratios.length > 0 ? Math.min(...ratios) : 1;
+  };
+
+  // Drop candidates whose primary standard is below the SKIP line — the
+  // fatigued head the coarse mean let through must not be trained at full
+  // volume through the side door. Fallback-ladder convention: if that empties
+  // the pool (every candidate hits the fatigued head), keep the originals —
+  // the coarse gate has already trimmed the session's set count.
+  const restedCandidates = candidates.filter(
+    (e) => primaryReadiness(e) >= PLANNED_SKIP_READINESS
+  );
+  if (restedCandidates.length > 0) {
+    candidates = restedCandidates;
+  }
+
   // True when a candidate REQUIRES a stabilizer that is under-recovered on
   // this planned day (its `stabilizers` tags, never secondary mover tags —
   // same predicate as the live warning).
@@ -260,10 +293,16 @@ function selectExercisesWithFatigue(
     const bTier = HYPERTROPHY_TIER_RANK[b.hypertrophyScore?.tier || 'C'] ?? 3;
     if (aTier !== bTier) return aTier - bTier;
 
-    // Within a tier, prefer candidates that don't lean on a run-down
-    // stabilizer (chest-supported row over barbell row the day after heavy
-    // hinges). Deliberately AFTER the tier key: a fatigued stabilizer never
-    // buys a worse exercise, only a same-tier substitution.
+    // Within a tier, prefer candidates whose own primary head is outside the
+    // trim band (fresh lateral/rear work over front-delt pressing the day
+    // after a heavy press session). AFTER the tier key on purpose: fatigue
+    // buys a same-tier substitution, never a worse exercise.
+    const aPrimaryTired = primaryReadiness(a) < PLANNED_TRIM_READINESS ? 1 : 0;
+    const bPrimaryTired = primaryReadiness(b) < PLANNED_TRIM_READINESS ? 1 : 0;
+    if (aPrimaryTired !== bPrimaryTired) return aPrimaryTired - bPrimaryTired;
+
+    // Then prefer candidates that don't lean on a run-down stabilizer
+    // (chest-supported row over barbell row the day after heavy hinges).
     const aStab = demandsFatiguedStabilizer(a) ? 1 : 0;
     const bStab = demandsFatiguedStabilizer(b) ? 1 : 0;
     if (aStab !== bStab) return aStab - bStab;
@@ -521,7 +560,8 @@ export function buildDetailedSessionWithFatigue(
       unavailableEquipmentIds,
       varietyPrefs,
       recentlyUsedIds,
-      fatiguedStabilizers
+      fatiguedStabilizers,
+      readiness.byStandard
     );
 
     for (const selection of selectedExercises) {
@@ -769,7 +809,8 @@ export function buildDUPSession(
       unavailableEquipmentIds,
       undefined,
       undefined,
-      fatiguedStabilizers
+      fatiguedStabilizers,
+      readiness.byStandard
     );
 
     for (const selection of selectedExercises) {

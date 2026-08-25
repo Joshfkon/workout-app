@@ -23,6 +23,18 @@ behavioral corrections rode along:
    requiring a stabilizer whose stabilizer channel is under-recovered on the
    planned day are deprioritized (never across tiers). This is the planning
    counterpart of the live pre-set warning.
+3. **Per-head candidate gating** (added for the Codex review on #636). The
+   coarse session gate aggregates a group's standard muscles by MEAN so one
+   fatigued head cannot veto the group — but that left a hole: a front-delt
+   press could be selected at full volume while `front_delts` sat below the
+   skip line and the `shoulders` mean passed. Selection now also reads the
+   per-standard detail: a candidate whose own PRIMARY standard is below the
+   skip line is dropped (fallback-ladder rule if that empties the pool), and
+   one inside the trim band is deprioritized within its tier. Net effect in
+   the fixed scenarios: shoulder slots redistribute between the 6-day PPL's
+   repeat days (fresh rear/lateral heads earlier, no volume change); the
+   other three scenarios stay byte-identical. Pinned by a regression test
+   that reproduces the exact reviewed scenario.
 
 The within-session budget (`SessionFatigueManager`) is unchanged; its local
 costs are now derived from the shared `SECONDARY_MUSCLE_CREDIT` coefficient
