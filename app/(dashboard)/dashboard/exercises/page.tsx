@@ -433,12 +433,15 @@ export default function ExercisesPage() {
     
     try {
       const supabase = createUntypedClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      // Local session read, not auth.getUser(): getUser() is a network
+      // round-trip that could fail the save before the write was even tried;
+      // RLS on the write itself is the real auth check.
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) {
         setSaveResult({ success: false, message: '❌ You must be logged in to edit exercises' });
         return;
       }
-      
+
       // Build update payload
       const updatePayload: any = {
         primary_muscle: editData.primaryMuscle,

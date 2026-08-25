@@ -85,6 +85,7 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccessMessage, setSaveSuccessMessage] = useState<string | null>(null);
+  const saveMessageRef = useRef<HTMLDivElement | null>(null);
   // true = stock catalog row (is_custom false): saved through the audited
   // update_catalog_exercise RPC and applied to the shared catalog for every
   // user — the form says so up-front and in the success confirmation.
@@ -116,6 +117,14 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
     loadEquipmentTypes();
     loadGymLocations();
   }, []);
+
+  // The banner sits beside Save at the top of the form; if the user scrolled
+  // elsewhere before the outcome landed, bring it back into view.
+  useEffect(() => {
+    if (saveError || saveSuccessMessage) {
+      saveMessageRef.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+    }
+  }, [saveError, saveSuccessMessage]);
 
   // Initialize edit data from the exercise row
   useEffect(() => {
@@ -211,7 +220,12 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
 
     try {
       const supabase = createUntypedClient();
-      const { data: { user } } = await supabase.auth.getUser();
+      // Local session read, not auth.getUser(): getUser() is a network
+      // round-trip to the auth server, so on a flaky connection the save died
+      // before attempting the actual write. RLS on the write is the real
+      // auth check; the id here only fills the availability upsert rows.
+      const { data: { session } } = await supabase.auth.getSession();
+      const user = session?.user;
       if (!user) {
         setSaveError('You must be logged in to edit exercises');
         return;
@@ -274,22 +288,26 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
       let availabilityFailure: string | null = null;
       let availabilitySaved = false;
       if (gymLocations.length > 0 && Object.keys(locationAvailability).length > 0) {
-        for (const [locationId, isAvailable] of Object.entries(locationAvailability)) {
-          const { error: availError } = await supabase
-            .from('exercise_location_availability')
-            .upsert({
-              user_id: user.id,
-              exercise_id: exercise.id,
-              location_id: locationId,
-              is_available: isAvailable,
-            }, {
-              onConflict: 'user_id,exercise_id,location_id',
-            });
-          if (availError) {
-            availabilityFailure = `Failed to save gym availability: ${availError.message}`;
-          } else {
-            availabilitySaved = true;
-          }
+        // One batched upsert, not one request per gym: the save often runs
+        // mid-workout on a weak connection, and each extra round-trip is
+        // another chance to fail halfway.
+        const availabilityRows = Object.entries(locationAvailability).map(
+          ([locationId, isAvailable]) => ({
+            user_id: user.id,
+            exercise_id: exercise.id,
+            location_id: locationId,
+            is_available: isAvailable,
+          })
+        );
+        const { error: availError } = await supabase
+          .from('exercise_location_availability')
+          .upsert(availabilityRows, {
+            onConflict: 'user_id,exercise_id,location_id',
+          });
+        if (availError) {
+          availabilityFailure = `Failed to save gym availability: ${availError.message}`;
+        } else {
+          availabilitySaved = true;
         }
       }
 
@@ -373,6 +391,29 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
           </button>
         </div>
       </div>
+
+      {/* Save outcome renders HERE, next to the Save button the user just
+          pressed — not at the bottom of a form taller than a phone viewport,
+          where a failed save read as a silent no-op (the "edits don't save"
+          report: the write was failing and the error was off-screen). */}
+      {saveError && (
+        <div
+          ref={saveMessageRef}
+          data-testid="exercise-edit-save-error"
+          className="p-3 bg-danger-900/30 border border-danger-700 rounded-lg"
+        >
+          <p className="text-sm text-danger-400">{saveError}</p>
+        </div>
+      )}
+      {saveSuccessMessage && (
+        <div
+          ref={saveMessageRef}
+          data-testid="exercise-edit-save-success"
+          className="p-3 bg-success-900/30 border border-success-700 rounded-lg"
+        >
+          <p className="text-sm text-success-400">{saveSuccessMessage}</p>
+        </div>
+      )}
 
       {/* Catalog rows are shared — edits go through the audited catalog
           write path and apply to every user. Say so before saving. */}
@@ -774,17 +815,6 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
         })()}
       </div>
 
-      {/* Error/Success Messages */}
-      {saveError && (
-        <div className="p-3 bg-danger-900/30 border border-danger-700 rounded-lg">
-          <p className="text-sm text-danger-400">{saveError}</p>
-        </div>
-      )}
-      {saveSuccessMessage && (
-        <div className="p-3 bg-success-900/30 border border-success-700 rounded-lg">
-          <p className="text-sm text-success-400">{saveSuccessMessage}</p>
-        </div>
-      )}
     </div>
   );
 }
