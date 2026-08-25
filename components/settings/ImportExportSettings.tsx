@@ -254,6 +254,11 @@ export function ImportExportSettings() {
           }
         }
 
+        // Import-created customs carry only name-inferred tags — no
+        // secondary muscles, stabilizers, or safety metadata. Their empty
+        // fields put them in the mandatory muscle-review queue
+        // (getIncompleteExercises), and the result card below says so.
+        let createdExerciseCount = 0;
         if (uniqueExerciseNames.size > 0) {
           for (const name of Array.from(uniqueExerciseNames)) {
             try {
@@ -281,6 +286,7 @@ export function ImportExportSettings() {
                 }
               } else if (newEx) {
                 exerciseCache.set(newEx.name.toLowerCase().trim(), newEx.id);
+                createdExerciseCount++;
               }
             } catch {
               // Exercise creation failed, will be skipped
@@ -435,7 +441,7 @@ export function ImportExportSettings() {
 
         const imported = sessionMap.size;
         const skipped = workouts.length - imported;
-        setResult({ success: true, imported, skipped, errors });
+        setResult({ success: true, imported, skipped, errors, newExercises: createdExerciseCount });
       } else if (importSource === 'loseit') {
         const entries = previewData as ParsedLoseItEntry[];
         let imported = 0;
@@ -778,6 +784,12 @@ export function ImportExportSettings() {
                       <p className="text-xs text-surface-400">
                         {result.imported} imported, {result.skipped} skipped
                       </p>
+                      {(result.newExercises ?? 0) > 0 && (
+                        <p className="text-xs text-warning-400 mt-1">
+                          {result.newExercises} new custom exercise{result.newExercises === 1 ? '' : 's'} created
+                          from this file — queued for AI muscle review on the Exercises page.
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>

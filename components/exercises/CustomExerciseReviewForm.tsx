@@ -129,6 +129,26 @@ export function CustomExerciseReviewForm({
         ))}
       </div>
 
+      {/* Fallback disclosure — defaults must never masquerade as an AI
+          verdict. When the completion didn't come from the model (offline,
+          error, or usage limit), say so and set the expectation that the
+          exercise stays queued for a real muscle review. */}
+      {formData.aiSource === 'fallback' && (
+        <div
+          className="bg-warning-900/30 border border-warning-700 rounded-lg p-4"
+          data-testid="ai-fallback-notice"
+        >
+          <p className="text-warning-300 font-medium">
+            AI review didn&apos;t run — these are defaults
+          </p>
+          <p className="text-sm text-warning-300/80 mt-1">
+            The muscle assignments below were not reviewed. Check the muscles
+            section before saving; the exercise will also be flagged for an AI
+            review on the Exercises page once it&apos;s available.
+          </p>
+        </div>
+      )}
+
       {/* Confidence Indicator */}
       <ConfidenceIndicator
         confidence={formData.aiConfidence}
