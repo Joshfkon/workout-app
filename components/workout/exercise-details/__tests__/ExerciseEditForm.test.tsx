@@ -65,6 +65,11 @@ jest.mock('@/lib/supabase/client', () => ({
       }),
       auth: {
         getUser: jest.fn(async () => ({ data: { user: { id: 'user-1' } } })),
+        // The save path reads the local session (no network) instead of
+        // round-tripping to the auth server via getUser().
+        getSession: jest.fn(async () => ({
+          data: { session: { user: { id: 'user-1' } } },
+        })),
       },
     };
   },
@@ -231,6 +236,31 @@ describe('ExerciseEditForm save reporting', () => {
     const exercisesUpdate = mockState.updateCalls.find((c) => c.table === 'exercises');
     expect(exercisesUpdate).toBeDefined();
     expect(exercisesUpdate!.payload.secondary_muscles).toEqual(['hamstrings', 'quads']);
+  });
+
+  it('renders a failed save at the top of the form, next to the Save button', async () => {
+    // Regression for the "editing doesn't seem to save" report: the form is
+    // taller than a phone viewport and Save sits at the top, so an error
+    // banner rendered at the BOTTOM was off-screen — a failed save was
+    // indistinguishable from a silent no-op.
+    mockState.isCustom = false;
+    mockState.updateResult = { data: [], error: null };
+    mockState.rpcResult = {
+      data: null,
+      error: { message: 'function update_catalog_exercise does not exist' },
+    };
+
+    const user = userEvent.setup();
+    render(<ExerciseEditForm exercise={exercise} onCancel={() => {}} />);
+
+    await toggleQuadsAndSave(user);
+
+    const error = await screen.findByTestId('exercise-edit-save-error');
+    const nameInput = screen.getByPlaceholderText('Exercise name');
+    // The banner must precede the first field in document order.
+    expect(
+      error.compareDocumentPosition(nameInput) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
   });
 
   it('reports plain success when a custom row saves directly (no RPC involved)', async () => {
