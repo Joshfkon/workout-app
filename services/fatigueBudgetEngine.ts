@@ -5,35 +5,17 @@
  */
 
 import type {
-  Goal,
-  Experience,
-  MuscleGroup,
   MovementPattern,
   Equipment,
-  Rating,
   ExerciseEntry,
   ExtendedUserProfile,
   ExerciseFatigueProfile,
   FatigueBudgetConfig,
   ExerciseAddResult,
   SessionFatigueSummary,
-  MuscleRecoveryStatus,
-  WeeklyMuscleVolumeStatus,
 } from '@/types/schema';
-import { MUSCLE_GROUPS } from '@/types/schema';
-import { fiberTypeForMuscle } from './repRangeEngine';
 import { toStandardMuscleForVolume } from '@/lib/migrations/muscle-groups';
-
-/**
- * Fiber type for ANY muscle token. Delegates to the SHARED resolver in
- * repRangeEngine so rep prescription and recovery decay can never disagree
- * about a muscle's fiber profile — this used to be a local coarse-only lookup,
- * which meant a per-standard override (gastrocnemius 'mixed') was invisible
- * here even though it was visible to the rep-range path.
- */
-function lookupFiberType(muscle: string): string {
-  return fiberTypeForMuscle(muscle);
-}
+import { SECONDARY_MUSCLE_CREDIT } from '@/services/shared/volumeCredit';
 
 // ============================================================
 // FATIGUE COST CONSTANTS
@@ -62,7 +44,7 @@ export const SYSTEMIC_FATIGUE_BY_PATTERN: Record<MovementPattern | 'isolation' |
 };
 
 // Import and re-export the shared equipment fatigue multiplier
-import { EQUIPMENT_FATIGUE_MULTIPLIER, ENHANCED_RECOVERY_MULTIPLIER } from '@/services/shared/fatigueConstants';
+import { EQUIPMENT_FATIGUE_MULTIPLIER } from '@/services/shared/fatigueConstants';
 export const EQUIPMENT_FATIGUE_MODIFIER = EQUIPMENT_FATIGUE_MULTIPLIER;
 
 /**
@@ -133,57 +115,42 @@ export function calculateExerciseFatigue(
   }
   
   // === LOCAL FATIGUE ===
-  // Normalize muscle keys to standard format for consistent lookups
+  // Normalize muscle keys to standard format for consistent lookups.
+  // Secondary involvement is derived from the app's ONE secondary coefficient
+  // (SECONDARY_MUSCLE_CREDIT, 0.5) rather than a parallel constant — the
+  // historical 8-vs-4 point split was that same ratio restated (#634).
   const localCost = new Map<string, number>();
+  const primaryPointsPerSet = 8;
 
   // Primary muscle gets full local fatigue
-  const primaryLocalCost = sets * 8 * intensityFactor;
+  const primaryLocalCost = sets * primaryPointsPerSet * intensityFactor;
   const normalizedPrimary = toStandardMuscleForVolume(exercise.primaryMuscle) ?? exercise.primaryMuscle;
   localCost.set(normalizedPrimary, primaryLocalCost);
 
   // Secondary muscles get partial fatigue
   for (const secondary of exercise.secondaryMuscles) {
-    const secondaryCost = sets * 4 * intensityFactor;
+    const secondaryCost = sets * primaryPointsPerSet * SECONDARY_MUSCLE_CREDIT * intensityFactor;
     const normalizedSecondary = toStandardMuscleForVolume(secondary) ?? secondary;
     // Accumulate if same standard muscle hit multiple times
     const existing = localCost.get(normalizedSecondary) ?? 0;
     localCost.set(normalizedSecondary, existing + secondaryCost);
   }
-  
+
   // === STIMULUS-TO-FATIGUE RATIO ===
   const baseSFR = BASE_SFR[exercise.pattern]?.[exercise.equipment] ?? 1.0;
-  
+
   // SFR decreases later in workout (diminishing returns)
   const positionSFRPenalty = Math.max(0.5, 1 - (positionInWorkout - 1) * 0.1);
   const stimulusPerFatigue = baseSFR * positionSFRPenalty;
-  
-  // === RECOVERY TIME ===
-  let recoveryDays = 2;  // Base recovery
-  
-  // Big compounds need more recovery
-  if (['squat', 'hip_hinge'].includes(exercise.pattern)) {
-    recoveryDays = 3;
-  }
-  
-  // High intensity extends recovery
-  if (rirTarget <= 1) {
-    recoveryDays += 0.5;
-  }
-  
-  // Fast-twitch dominant muscles recover slower from heavy work. The fiber
-  // table is keyed by coarse legacy group, so resolve fine-grained primaries
-  // ('front_delts', 'triceps_lat_med') to their coarse parent first.
-  const fiberType = lookupFiberType(exercise.primaryMuscle);
-  // (Duration exercises excluded: a short hold is not a heavy low-rep set.)
-  if (fiberType === 'fast' && reps <= 6 && !isDurationExercise) {
-    recoveryDays += 0.5;
-  }
-  
+
+  // (recoveryDays was computed here for years and read by nothing — between-
+  // session recovery belongs to services/muscleRecovery, which planning now
+  // consults via services/plannedRecovery. Removed in #634.)
+
   return {
     systemicCost: Math.round(systemicCost * 10) / 10,
     localCost,
     stimulusPerFatigue: Math.round(stimulusPerFatigue * 100) / 100,
-    recoveryDays: Math.round(recoveryDays * 2) / 2,  // Round to nearest 0.5
   };
 }
 
@@ -199,15 +166,15 @@ export function createFatigueBudget(profile: ExtendedUserProfile): FatigueBudget
   let localLimit = 80;
   let minSFRThreshold = 0.6;
   
-  // Age adjustments
+  // Age adjustment. (A stricter >=55 tier used to sit in an `else if` AFTER
+  // the >=45 check, making it unreachable — every 55+ profile matched >=45
+  // first. Deleted rather than reordered in #634 so shipped behavior is
+  // preserved exactly; introducing a real 55+ tier is a plan-shape change
+  // that needs its own review.)
   if (profile.age >= 45) {
     systemicLimit *= 0.85;
     localLimit *= 0.9;
     minSFRThreshold = 0.7;
-  } else if (profile.age >= 55) {
-    systemicLimit *= 0.7;
-    localLimit *= 0.8;
-    minSFRThreshold = 0.8;
   }
   
   // Experience adjustments
@@ -412,168 +379,11 @@ export class SessionFatigueManager {
 }
 
 // ============================================================
-// WEEKLY FATIGUE TRACKER
+// (WeeklyFatigueTracker lived here until #634. It was a second between-
+// session fatigue model — its own accumulation points, decay rate and
+// thresholds, disagreeing with the readiness model users see. Mesocycle
+// generation now consults the shared model through
+// services/plannedRecovery.PlannedWeekRecovery instead. This module keeps
+// only the WITHIN-SESSION systemic/local budget, which has no counterpart
+// in services/muscleRecovery.)
 // ============================================================
-
-interface WeeklyFatigueState {
-  muscleRecoveryStatus: Map<string, MuscleRecoveryStatus>;
-  totalWeeklyVolume: Map<string, number>;
-  cumulativeSystemicFatigue: number;
-}
-
-/**
- * Tracks fatigue and recovery across the training week
- */
-export class WeeklyFatigueTracker {
-  private state: WeeklyFatigueState;
-  private profile: ExtendedUserProfile;
-  
-  constructor(profile: ExtendedUserProfile) {
-    this.profile = profile;
-    this.state = {
-      muscleRecoveryStatus: new Map(),
-      totalWeeklyVolume: new Map(),
-      cumulativeSystemicFatigue: 0,
-    };
-    
-    // Initialize all muscles from the canonical list so every muscle group
-    // (including traps/forearms/adductors) has an entry. Using a partial list
-    // here left later `.get(muscle)!` lookups returning undefined -> crash.
-    const allMuscles: readonly MuscleGroup[] = MUSCLE_GROUPS;
-
-    for (const muscle of allMuscles) {
-      this.state.muscleRecoveryStatus.set(muscle, {
-        lastTrainedDay: -7,  // Assume fully recovered at start
-        fatigueLevel: 0,
-        recoveryRate: this.calculateRecoveryRate(muscle),
-      });
-      this.state.totalWeeklyVolume.set(muscle, 0);
-    }
-  }
-  
-  private calculateRecoveryRate(muscle: string): number {
-    // Base recovery: clear ~30 fatigue points per day
-    let rate = 30;
-
-    // Adjust by age
-    if (this.profile.age >= 45) rate *= 0.85;
-    if (this.profile.age >= 55) rate *= 0.75;
-
-    // Adjust by sleep
-    rate *= 0.7 + (this.profile.sleepQuality / 5) * 0.6;
-
-    // Fiber type affects recovery (coarse-resolved — see lookupFiberType).
-    const fiberType = lookupFiberType(muscle);
-    if (fiberType === 'fast') {
-      rate *= 0.9;  // Fast-twitch recovers slower
-    } else if (fiberType === 'slow') {
-      rate *= 1.1;  // Slow-twitch recovers faster
-    }
-
-    // Enhanced athletes clear muscular fatigue faster between sessions.
-    // This affects the recovery time-constant only — session fatigue costs
-    // and the joint-stress-driven limits elsewhere are untouched.
-    if (this.profile.enhancedAthleteMode) {
-      rate *= ENHANCED_RECOVERY_MULTIPLIER;
-    }
-
-    return rate;
-  }
-  
-  /**
-   * Check if a muscle is ready to be trained
-   */
-  canTrainMuscle(muscle: string, currentDay: number, plannedFatigue: number): {
-    ready: boolean;
-    currentFatigue: number;
-    daysUntilReady: number;
-    recommendation: string;
-  } {
-    const status = this.state.muscleRecoveryStatus.get(muscle)!;
-    
-    // Calculate current fatigue (decays over time)
-    const daysSinceTraining = currentDay - status.lastTrainedDay;
-    const recoveredAmount = daysSinceTraining * status.recoveryRate;
-    const currentFatigue = Math.max(0, status.fatigueLevel - recoveredAmount);
-    
-    // Threshold: can train if below 30% residual fatigue
-    const fatigueThreshold = 25;
-    const ready = currentFatigue < fatigueThreshold;
-    
-    // Calculate days until ready
-    const daysUntilReady = ready ? 0 : Math.ceil(
-      (currentFatigue - fatigueThreshold) / status.recoveryRate
-    );
-    
-    // Build recommendation
-    let recommendation: string;
-    if (currentFatigue === 0) {
-      recommendation = 'Fully recovered - can train at full intensity';
-    } else if (currentFatigue < 15) {
-      recommendation = 'Well recovered - normal training';
-    } else if (currentFatigue < 30) {
-      recommendation = 'Moderate residual fatigue - consider reducing intensity';
-    } else if (currentFatigue < 50) {
-      recommendation = 'High residual fatigue - reduce volume significantly or skip';
-    } else {
-      recommendation = 'Not recovered - skip this muscle today';
-    }
-    
-    return { ready, currentFatigue, daysUntilReady, recommendation };
-  }
-  
-  /**
-   * Record that a muscle was trained
-   */
-  recordTraining(muscle: string, day: number, fatigueAdded: number, sets: number): void {
-    const status = this.state.muscleRecoveryStatus.get(muscle)!;
-    
-    // Update fatigue level (accounting for decay since last training)
-    const daysSince = day - status.lastTrainedDay;
-    const recoveredAmount = daysSince * status.recoveryRate;
-    const currentFatigue = Math.max(0, status.fatigueLevel - recoveredAmount);
-    
-    status.fatigueLevel = currentFatigue + fatigueAdded;
-    status.lastTrainedDay = day;
-    
-    // Track weekly volume
-    const currentVolume = this.state.totalWeeklyVolume.get(muscle) ?? 0;
-    this.state.totalWeeklyVolume.set(muscle, currentVolume + sets);
-  }
-  
-  /**
-   * Get weekly volume status for all muscles
-   */
-  getWeeklyVolumeStatus(): Map<string, WeeklyMuscleVolumeStatus> {
-    const result = new Map<string, WeeklyMuscleVolumeStatus>();
-    
-    const volumeEntries = Array.from(this.state.totalWeeklyVolume.entries());
-    for (const [muscle, sets] of volumeEntries) {
-      const isSmallMuscle = ['biceps', 'triceps', 'calves', 'abs'].includes(muscle);
-      const target = isSmallMuscle 
-        ? { min: 8, max: 14 } 
-        : { min: 10, max: 20 };
-      
-      let status: 'under' | 'optimal' | 'over';
-      if (sets < target.min) status = 'under';
-      else if (sets > target.max) status = 'over';
-      else status = 'optimal';
-      
-      result.set(muscle, { currentSets: sets, targetSets: target, status });
-    }
-    
-    return result;
-  }
-  
-  /**
-   * Reset weekly counters (call at start of new week)
-   */
-  resetWeek(): void {
-    const muscleKeys = Array.from(this.state.totalWeeklyVolume.keys());
-    for (const muscle of muscleKeys) {
-      this.state.totalWeeklyVolume.set(muscle, 0);
-    }
-    this.state.cumulativeSystemicFatigue = 0;
-  }
-}
-
