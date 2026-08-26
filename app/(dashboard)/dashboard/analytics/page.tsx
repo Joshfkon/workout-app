@@ -688,6 +688,7 @@ function AnalyticsPageContent() {
             scheduleMode: meso.schedule_mode || null,
             preferredWorkoutDays: meso.preferred_workout_days || null,
             trainingIntervalDays: meso.training_interval_days ?? null,
+            sessionsPerDay: meso.sessions_per_day ?? null,
             sessionDurationMinutes: meso.session_duration_minutes || null,
             createdAt: meso.created_at,
             startedAt: meso.started_at,

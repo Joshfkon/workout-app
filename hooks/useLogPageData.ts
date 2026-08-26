@@ -66,6 +66,7 @@ export interface LogActiveMesocycleRow {
   /** Schedule shape: fixed weekdays, or every-N-days from start_date. */
   schedule_mode?: ScheduleMode | null;
   training_interval_days?: number | null;
+  sessions_per_day?: number | null;
   start_date?: string | null;
   program_data: unknown;
   exercise_overrides?: ExerciseOverride[];
@@ -145,7 +146,7 @@ async function fetchLogHomeData(): Promise<LogHomeData | null> {
       .limit(1),
     supabase
       .from('mesocycles')
-      .select('id, name, current_week, total_weeks, deload_week, split_type, days_per_week, preferred_workout_days, schedule_mode, training_interval_days, start_date, program_data, exercise_overrides, generated_with_enhanced_mode')
+      .select('id, name, current_week, total_weeks, deload_week, split_type, days_per_week, preferred_workout_days, schedule_mode, training_interval_days, sessions_per_day, start_date, program_data, exercise_overrides, generated_with_enhanced_mode')
       .eq('user_id', userId)
       .eq('state', 'active')
       .order('created_at', { ascending: false })

@@ -4,6 +4,7 @@ import {
   getTrainingDays,
   getWorkoutForDate,
   getWorkoutForDay,
+  getWorkoutsForDate,
   intervalDaysPerWeek,
   isTrainingDate,
   localDaysBetween,
@@ -340,5 +341,86 @@ describe('describeTrainingSchedule', () => {
       preferred_workout_days: ['Sunday', 'Wednesday', 'Friday'],
     });
     expect(describeTrainingSchedule(schedule, { short: true })).toBe('Wed, Fri, Sun');
+  });
+});
+
+describe('two-a-day schedules (sessions_per_day = 2)', () => {
+  const twoADay = buildTrainingSchedule({
+    days_per_week: 8, // 4 calendar days x 2 sessions
+    sessions_per_day: 2,
+    preferred_workout_days: ['Monday', 'Tuesday', 'Thursday', 'Friday'],
+  });
+
+  it('defaults to one session per day and clamps out-of-range values', () => {
+    expect(buildTrainingSchedule({ days_per_week: 4 }).sessionsPerDay).toBe(1);
+    expect(
+      buildTrainingSchedule({ days_per_week: 4, sessions_per_day: 9 }).sessionsPerDay
+    ).toBe(2);
+  });
+
+  it('puts two consecutive rotation slots on each training date', () => {
+    const monday = getWorkoutsForDate('PPL', d('2026-08-03'), twoADay);
+    expect(monday.map((w) => w.dayName)).toEqual(['Push', 'Pull']);
+    const tuesday = getWorkoutsForDate('PPL', d('2026-08-04'), twoADay);
+    expect(tuesday.map((w) => w.dayName)).toEqual(['Legs', 'Push 2']);
+    expect(getWorkoutsForDate('PPL', d('2026-08-05'), twoADay)).toEqual([]); // Wed rest
+  });
+
+  it('keeps getWorkoutForDate returning the FIRST session of the date', () => {
+    expect(getWorkoutForDate('PPL', d('2026-08-03'), twoADay)?.dayName).toBe('Push');
+    expect(resolveScheduledSlot(twoADay, d('2026-08-03'))?.ordinal).toBe(0);
+  });
+
+  it('counts both sessions in sessionsPerWeek', () => {
+    expect(sessionsPerWeek(twoADay)).toBe(8);
+    const daily = buildTrainingSchedule({
+      days_per_week: 14,
+      sessions_per_day: 2,
+      preferred_workout_days: [
+        'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday',
+      ],
+    });
+    expect(sessionsPerWeek(daily)).toBe(14);
+  });
+
+  it('falls back to the right default weekday spread without preferred days', () => {
+    // 8 sessions at 2/day = the 4-day default spread (Mon/Tue/Thu/Fri).
+    const noPreferred = buildTrainingSchedule({ days_per_week: 8, sessions_per_day: 2 });
+    expect(isTrainingDate(noPreferred, d('2026-08-03'))).toBe(true); // Mon
+    expect(isTrainingDate(noPreferred, d('2026-08-05'))).toBe(false); // Wed rest
+  });
+
+  it('supports two-a-day on an interval cadence', () => {
+    const everyOtherDayTwice = buildTrainingSchedule({
+      days_per_week: 7,
+      sessions_per_day: 2,
+      schedule_mode: 'interval',
+      training_interval_days: 2,
+      start_date: MONDAY,
+    });
+    const day1 = getWorkoutsForDate('PPL', d('2026-08-03'), everyOtherDayTwice);
+    expect(day1.map((w) => w.dayName)).toEqual(['Push', 'Pull']);
+    const day2 = getWorkoutsForDate('PPL', d('2026-08-05'), everyOtherDayTwice);
+    expect(day2.map((w) => w.dayName)).toEqual(['Legs', 'Push 2']);
+    expect(getWorkoutsForDate('PPL', d('2026-08-04'), everyOtherDayTwice)).toEqual([]);
+    expect(sessionsPerWeek(everyOtherDayTwice)).toBe(7);
+  });
+
+  it('notes two-a-day in the schedule description', () => {
+    expect(describeTrainingSchedule(twoADay, { short: true })).toBe(
+      'Mon, Tue, Thu, Fri (2 sessions/day)'
+    );
+  });
+
+  it('does not change once-a-day resolution', () => {
+    const oneADay = buildTrainingSchedule({
+      days_per_week: 4,
+      sessions_per_day: 1,
+      preferred_workout_days: ['Monday', 'Tuesday', 'Thursday', 'Friday'],
+    });
+    expect(getWorkoutsForDate('PPL', d('2026-08-03'), oneADay).map((w) => w.dayName)).toEqual([
+      'Push',
+    ]);
+    expect(getWorkoutForDate('PPL', d('2026-08-04'), oneADay)?.dayName).toBe('Pull');
   });
 });

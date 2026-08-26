@@ -1202,3 +1202,52 @@ describe('straggler-removal movement-pattern floor (close-out 3a)', () => {
     expect(bicepsMovements[0].sets).toBe(1);
   });
 });
+
+describe('high-frequency planning (7-14 sessions/week)', () => {
+  it('recommends PPL for 7 days/week', () => {
+    const result = recommendSplit(7, 'bulk', 'intermediate');
+    expect(result.split).toBe('PPL');
+  });
+
+  it('recommends PPL for two-a-day session counts (8-14)', () => {
+    for (const sessions of [8, 10, 14]) {
+      expect(recommendSplit(sessions, 'bulk', 'advanced').split).toBe('PPL');
+    }
+  });
+
+  it('keeps 6-day PPL templates byte-identical', () => {
+    const templates = buildSessionTemplates('PPL', 6);
+    expect(templates.map((t) => t.day)).toEqual([
+      'Push 1', 'Pull 1', 'Legs 1', 'Push 2', 'Pull 2', 'Legs 2',
+    ]);
+  });
+
+  it('repeats the rotation to fill a 14-session two-a-day week', () => {
+    const templates = buildSessionTemplates('PPL', 14);
+    expect(templates).toHaveLength(14);
+    expect(templates[0].day).toBe('Push 1');
+    expect(templates[6].day).toBe('Push 3');
+    expect(templates[13].day).toBe('Pull 5');
+  });
+
+  it('fills 7 daily sessions for Upper/Lower without touching <=6', () => {
+    expect(buildSessionTemplates('Upper/Lower', 4)).toHaveLength(4);
+    expect(buildSessionTemplates('Upper/Lower', 5)).toHaveLength(4); // legacy slice
+    const seven = buildSessionTemplates('Upper/Lower', 7);
+    expect(seven).toHaveLength(7);
+    expect(seven[4].day).toBe('Upper A 2');
+  });
+
+  it('scales per-muscle frequency with the number of rotation cycles', () => {
+    const recovery: RecoveryFactors = {
+      volumeMultiplier: 1.0,
+      frequencyMultiplier: 1.0,
+      deloadFrequencyWeeks: 5,
+      warnings: [],
+    };
+    const at12 = calculateVolumeDistribution('PPL', 12, 'advanced', 'bulk', recovery);
+    expect(at12.chest.frequency).toBe(4); // 12 sessions / 3-day rotation
+    const at6 = calculateVolumeDistribution('PPL', 6, 'advanced', 'bulk', recovery);
+    expect(at6.chest.frequency).toBe(2); // unchanged legacy value
+  });
+});

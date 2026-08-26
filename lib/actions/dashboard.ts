@@ -37,6 +37,8 @@ export interface DashboardMesocycle {
   /** Schedule shape: fixed weekdays, or every-N-days from startDate. */
   scheduleMode?: ScheduleMode | null;
   trainingIntervalDays?: number | null;
+  /** 1 = one session per training date; 2 = two-a-day. */
+  sessionsPerDay?: number | null;
   /** Sessions completed vs expected inside the current mesocycle week. */
   weekSessionsDone?: number;
   weekSessionsTotal?: number;
@@ -92,7 +94,7 @@ export async function fetchMesocycleData(userId: string): Promise<{
 
   const { data: mesocycles } = await supabase
     .from('mesocycles')
-    .select(`id, name, start_date, total_weeks, split_type, days_per_week, preferred_workout_days, schedule_mode, training_interval_days, state, is_active,
+    .select(`id, name, start_date, total_weeks, split_type, days_per_week, preferred_workout_days, schedule_mode, training_interval_days, sessions_per_day, state, is_active,
       workout_sessions (id, planned_date, state, completed_at)`)
     .eq('user_id', userId)
     .order('created_at', { ascending: false });
@@ -132,6 +134,7 @@ export async function fetchMesocycleData(userId: string): Promise<{
     preferredWorkoutDays: mesocycle.preferred_workout_days || null,
     scheduleMode: mesocycle.schedule_mode || null,
     trainingIntervalDays: mesocycle.training_interval_days ?? null,
+    sessionsPerDay: mesocycle.sessions_per_day ?? null,
     weekSessionsDone: weekSessions?.done,
     weekSessionsTotal: weekSessions?.total,
   };

@@ -969,12 +969,17 @@ function buildSessionTemplates(split: Split, daysPerWeek: number): SessionTempla
 
   const baseTemplates = templates[split];
 
-  // Adjust number of templates based on days per week
-  if (split === 'PPL' && daysPerWeek >= 6) {
-    return [
-      ...baseTemplates.map((t) => ({ ...t, day: t.day + ' 1' })),
-      ...baseTemplates.map((t) => ({ ...t, day: t.day + ' 2' })),
-    ].slice(0, daysPerWeek);
+  // Adjust number of templates based on days per week. 6-day PPL doubles the
+  // rotation ('Push 1' ... 'Legs 2'); above 6 sessions/week (daily training or
+  // two-a-day, up to 14) every split repeats its rotation the same way so the
+  // planned week really contains daysPerWeek sessions.
+  if ((split === 'PPL' && daysPerWeek >= 6) || daysPerWeek > 6) {
+    const rounds = Math.max(2, Math.ceil(daysPerWeek / baseTemplates.length));
+    const repeated: SessionTemplate[] = [];
+    for (let round = 1; round <= rounds; round++) {
+      repeated.push(...baseTemplates.map((t) => ({ ...t, day: `${t.day} ${round}` })));
+    }
+    return repeated.slice(0, daysPerWeek);
   }
 
   return baseTemplates.slice(0, daysPerWeek);
@@ -988,7 +993,14 @@ export function generateFullMesocycleWithFatigue(
   profile: ExtendedUserProfile,
   sessionMinutes: number = 60,
   laggingAreas?: string[],
-  unavailableEquipmentIds: string[] = []
+  unavailableEquipmentIds: string[] = [],
+  /**
+   * Sessions on each training day (1 or 2). `daysPerWeek` always counts
+   * SESSIONS per week, so a 7-day two-a-day plan passes daysPerWeek=14,
+   * sessionsPerDay=2 — the split rotation advances every session while the
+   * recovery model sees both sessions landing on the same calendar day.
+   */
+  sessionsPerDay: number = 1
 ): FullProgramRecommendation {
   const warnings: string[] = [];
   const programNotes: string[] = [];
@@ -1084,18 +1096,27 @@ export function generateFullMesocycleWithFatigue(
     4: ['Mon', 'Tue', 'Thu', 'Fri'],
     5: ['Mon', 'Tue', 'Wed', 'Fri', 'Sat'],
     6: ['Mon', 'Tue', 'Wed', 'Fri', 'Sat', 'Sun'],
+    7: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
   };
-  const schedule = schedulePatterns[daysPerWeek] || schedulePatterns[4];
+  const safeSessionsPerDay = Math.max(1, Math.min(2, Math.round(sessionsPerDay)));
+  // daysPerWeek counts sessions; the pattern lookup wants calendar days.
+  const calendarDays = Math.max(1, Math.min(7, Math.ceil(daysPerWeek / safeSessionsPerDay)));
+  const dayPattern = schedulePatterns[calendarDays] || schedulePatterns[4];
+  // One schedule entry per SESSION: two-a-day repeats each calendar day.
+  const schedule = dayPattern.flatMap((dayName) =>
+    safeSessionsPerDay === 2 ? [`${dayName} AM`, `${dayName} PM`] : [dayName]
+  ).slice(0, daysPerWeek);
 
   // Day OFFSETS within the planned week, from the actual schedule pattern.
   // The old tracker numbered sessions consecutively (0,1,2,…) regardless of
   // rest days, so a Mon/Wed/Fri plan recovered as if it were Mon/Tue/Wed;
-  // the recovery model gets the real gaps.
+  // the recovery model gets the real gaps. Two-a-day sessions share their
+  // calendar day's offset, so the model sees a 0-day gap between them.
   const DAY_NAME_OFFSET: Record<string, number> = {
     Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6,
   };
   const scheduleDayOffsets = schedule.map(
-    (dayName, index) => DAY_NAME_OFFSET[dayName] ?? index
+    (dayName, index) => DAY_NAME_OFFSET[dayName.split(' ')[0]] ?? index
   );
 
   // PLANNED weekly frequency per standard muscle — the dose-normalization

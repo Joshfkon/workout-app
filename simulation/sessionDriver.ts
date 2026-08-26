@@ -146,6 +146,7 @@ export class SessionDriver {
       preferred_workout_days: meso.preferred_workout_days as never,
       schedule_mode: meso.schedule_mode as string | null,
       training_interval_days: meso.training_interval_days as number | null,
+      sessions_per_day: meso.sessions_per_day as number | null,
       start_date: meso.start_date as string | null,
     });
     const todayWorkout = getWorkoutForDate(
@@ -404,6 +405,7 @@ export class SessionDriver {
       preferred_workout_days: meso.preferred_workout_days as never,
       schedule_mode: meso.schedule_mode as string | null,
       training_interval_days: meso.training_interval_days as number | null,
+      sessions_per_day: meso.sessions_per_day as number | null,
       start_date: meso.start_date as string | null,
     });
     for (let i = 0; i < maxDays; i++) {

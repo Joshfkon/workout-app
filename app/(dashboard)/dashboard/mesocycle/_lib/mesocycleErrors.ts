@@ -11,7 +11,7 @@
 import { describeSupabaseError, isMissingColumnError } from '@/lib/errors';
 
 /** Columns added by the interval-schedule migration (20260803000001). */
-export const SCHEDULE_COLUMNS = ['schedule_mode', 'training_interval_days'];
+export const SCHEDULE_COLUMNS = ['schedule_mode', 'training_interval_days', 'sessions_per_day'];
 
 /**
  * Turn a mesocycle insert failure into something the user can act on.

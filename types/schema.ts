@@ -567,6 +567,12 @@ export interface Mesocycle {
    */
   trainingIntervalDays: number | null;
 
+  /**
+   * Sessions on each training day. 2 = two-a-day (each training date carries
+   * two consecutive split-rotation slots). Null/absent rows mean 1.
+   */
+  sessionsPerDay?: number | null;
+
   /** Target workout duration in minutes (15-120), used for exercise planning */
   sessionDurationMinutes: number | null;
 

@@ -271,6 +271,7 @@ export interface Database {
           current_week: number;
           deload_week: number;
           days_per_week: number;
+          sessions_per_day: number;
           split_type: string;
           fatigue_score: number;
           start_date: string | null;
@@ -294,6 +295,7 @@ export interface Database {
           current_week?: number;
           deload_week?: number;
           days_per_week?: number;
+          sessions_per_day?: number;
           split_type?: string;
           fatigue_score?: number;
           start_date?: string | null;
@@ -317,6 +319,7 @@ export interface Database {
           current_week?: number;
           deload_week?: number;
           days_per_week?: number;
+          sessions_per_day?: number;
           split_type?: string;
           fatigue_score?: number;
           start_date?: string | null;
