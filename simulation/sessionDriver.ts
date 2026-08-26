@@ -40,9 +40,15 @@ import {
 } from '@/lib/training/createMesocycle';
 import {
   startMesocycleWorkoutSession,
+  countCompletedSessionsOnDate,
   type StartableMesocycle,
 } from '@/lib/training/startMesocycleSession';
-import { buildTrainingSchedule, getWorkoutForDate } from '@/lib/training/trainingSchedule';
+import { getLocalDateString } from '@/lib/utils';
+import {
+  buildTrainingSchedule,
+  getWorkoutForDate,
+  getNextWorkoutForDate,
+} from '@/lib/training/trainingSchedule';
 import {
   loadWorkoutSession,
   resolveResumePosition,
@@ -149,10 +155,18 @@ export class SessionDriver {
       sessions_per_day: meso.sessions_per_day as number | null,
       start_date: meso.start_date as string | null,
     });
-    const todayWorkout = getWorkoutForDate(
+    // Next UNDONE session today — a two-a-day date rotates to its second
+    // slot when the persona starts again after completing the first.
+    const completedToday = await countCompletedSessionsOnDate(
+      this.supabase as never,
+      meso.id as string,
+      getLocalDateString(this.clock.now())
+    );
+    const todayWorkout = getNextWorkoutForDate(
       meso.split_type as never,
       this.clock.now(),
-      schedule
+      schedule,
+      completedToday
     );
     if (!todayWorkout) return null;
 

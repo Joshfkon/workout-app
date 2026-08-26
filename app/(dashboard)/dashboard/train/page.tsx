@@ -54,6 +54,7 @@ import { getLocalDateString } from '@/lib/utils';
 import {
   startMesocycleWorkoutSession,
   getWorkoutForDate,
+  getNextWorkoutForDate,
   type TodayWorkout,
 } from '@/lib/training/startMesocycleSession';
 import {
@@ -280,6 +281,8 @@ export default function TrainPage() {
     avgMin: null,
   });
   const [mesoCompletedCount, setMesoCompletedCount] = useState<number | null>(null);
+  // Completed sessions dated today — picks a two-a-day date's next session.
+  const [completedTodayCount, setCompletedTodayCount] = useState(0);
   const [lastCycleDone, setLastCycleDone] = useState<Date | null>(null);
   const [isStarting, setIsStarting] = useState(false);
   const [isStartingEmpty, setIsStartingEmpty] = useState(false);
@@ -419,12 +422,19 @@ export default function TrainPage() {
         if (meso) {
           const { data: completedRows } = await supabase
             .from('workout_sessions')
-            .select('started_at')
+            .select('started_at, planned_date')
             .eq('mesocycle_id', meso.id)
             .eq('state', 'completed')
             .order('started_at', { ascending: true });
-          const completed = (completedRows ?? []) as { started_at: string | null }[];
+          const completed = (completedRows ?? []) as {
+            started_at: string | null;
+            planned_date: string | null;
+          }[];
           setMesoCompletedCount(completed.length);
+          const todayStr = getLocalDateString();
+          setCompletedTodayCount(
+            completed.filter((row) => row.planned_date === todayStr).length
+          );
           const lastCycleIdx = completed.length - meso.days_per_week;
           const lastStartedAt = lastCycleIdx >= 0 ? completed[lastCycleIdx]?.started_at : null;
           setLastCycleDone(lastStartedAt ? new Date(lastStartedAt) : null);
@@ -453,7 +463,14 @@ export default function TrainPage() {
       return date;
     };
 
-    const todays = getWorkoutForDate(activeMeso.split_type, dateAt(0), schedule);
+    // Today's NEXT undone session — on a two-a-day date this advances to the
+    // PM session once the AM one is completed.
+    const todays = getNextWorkoutForDate(
+      activeMeso.split_type,
+      dateAt(0),
+      schedule,
+      completedTodayCount
+    );
     if (todays) return { todayWorkout: todays, nextWorkoutInfo: null };
 
     // Interval schedules can skip more than a week's worth of weekdays, so
@@ -478,7 +495,7 @@ export default function TrainPage() {
       }
     }
     return { todayWorkout: null, nextWorkoutInfo: null };
-  }, [activeMeso]);
+  }, [activeMeso, completedTodayCount]);
 
   // The next session from program_data (exercises, sets, est. minutes) — what
   // "Start workout" will build and what the preview sheet shows.
@@ -550,6 +567,9 @@ export default function TrainPage() {
         ? Math.round(nextProgramSession!.estimatedMinutes)
         : exerciseCount * 9;
     return [
+      todayWorkout.sessionsScheduledToday === 2 && todayWorkout.sessionOfDay
+        ? `session ${todayWorkout.sessionOfDay} of 2 today`
+        : null,
       exerciseCount > 0 ? `${exerciseCount} exercises` : null,
       estMinutes > 0 ? `est. ${estMinutes} min` : null,
       lastCycleDone ? `last done ${formatRelativeDay(lastCycleDone)}` : null,

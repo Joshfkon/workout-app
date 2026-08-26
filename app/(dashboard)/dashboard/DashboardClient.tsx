@@ -29,7 +29,8 @@ import { computeWeekSessions } from './_lib/weekSessions';
 // startMesocycleSession would drag its session-building deps into this bundle.
 import {
   buildTrainingSchedule,
-  getWorkoutForDate,
+  getNextWorkoutForDate,
+  resolveScheduledSlots,
   type ScheduleMode,
   type TrainingSchedule,
 } from '@/lib/training/trainingSchedule';
@@ -164,6 +165,8 @@ interface ActiveMesocycle {
   trainingIntervalDays?: number | null;
   /** 1 = one session per training date; 2 = two-a-day. */
   sessionsPerDay?: number | null;
+  /** Completed sessions dated today — picks a two-a-day date's next session. */
+  completedTodayCount?: number | null;
   /** Sessions completed vs expected inside the current mesocycle week. */
   weekSessionsDone?: number;
   weekSessionsTotal?: number;
@@ -173,6 +176,10 @@ interface ScheduledWorkout {
   dayName: string;
   muscles: string[];
   dayNumber: number;
+  /** 1-based position within today (2 = the PM session of a two-a-day date). */
+  sessionOfDay?: number;
+  /** Sessions the schedule puts on today (1 or 2). */
+  sessionsScheduledToday?: number;
 }
 
 /** Resolve the calendar for a dashboard mesocycle summary (camelCase fields). */
@@ -273,10 +280,11 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
     // the split-day name ("Chest & Back") as its title and the muscle list
     // for the recovery note, not just as the block-less fallback.
     if (!initialData?.mesocycle) return null;
-    return getWorkoutForDate(
+    return getNextWorkoutForDate(
       initialData.mesocycle.splitType || 'Upper/Lower',
       new Date(),
-      scheduleFor(initialData.mesocycle)
+      scheduleFor(initialData.mesocycle),
+      initialData.mesocycle.completedTodayCount ?? 0
     );
   });
   const [nutritionTotals, setNutritionTotals] = useState<NutritionTotals>(initialData?.nutritionTotals ?? { calories: 0, protein: 0, carbs: 0, fat: 0 });
@@ -588,13 +596,19 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   const workoutHeroMeta = useMemo(() => {
     if (todaysWorkout && todaysWorkout.state !== 'planned') return null;
     const parts: string[] = [];
+    if (
+      scheduledWorkout?.sessionsScheduledToday === 2 &&
+      scheduledWorkout.sessionOfDay
+    ) {
+      parts.push(`session ${scheduledWorkout.sessionOfDay} of 2 today`);
+    }
     if (todaysWorkout && todaysWorkout.exercises > 0) {
       parts.push(`${todaysWorkout.exercises} exercises`);
       parts.push(`est. ${Math.round((10 + todaysWorkout.exercises * 8) / 5) * 5} min`);
     }
     if (heroRecoveryNote) parts.push(heroRecoveryNote);
     return parts.length > 0 ? parts.join(' · ') : null;
-  }, [todaysWorkout, heroRecoveryNote]);
+  }, [todaysWorkout, scheduledWorkout, heroRecoveryNote]);
 
   // "ARNOLD WK 1" eyebrow context for the workout hero.
   const heroEyebrowContext = activeMesocycle
@@ -703,10 +717,11 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
           setWeightUnit(data.weightUnit);
           setMuscleVolume(data.muscleVolume);
           if (!todaysWorkout && data.activeMesocycle) {
-            setScheduledWorkout(getWorkoutForDate(
+            setScheduledWorkout(getNextWorkoutForDate(
               data.activeMesocycle.splitType || 'Upper/Lower',
               new Date(),
-              scheduleFor(data.activeMesocycle)
+              scheduleFor(data.activeMesocycle),
+              data.activeMesocycle.completedTodayCount ?? 0
             ));
           }
           // Show content immediately with cached data
@@ -1015,6 +1030,14 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
             mesocycle.days_per_week || 0
           );
 
+          const completedTodayCount = sessions.filter(
+            (s: any) => s.state === 'completed' && s.planned_date === todayStr
+          ).length;
+          const scheduledTodayCount = resolveScheduledSlots(
+            buildTrainingSchedule(mesocycle),
+            new Date()
+          ).length;
+
           setActiveMesocycle({
             id: mesocycle.id,
             name: mesocycle.name,
@@ -1029,13 +1052,21 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
             scheduleMode: mesocycle.schedule_mode || null,
             trainingIntervalDays: mesocycle.training_interval_days ?? null,
             sessionsPerDay: mesocycle.sessions_per_day ?? null,
+            completedTodayCount,
             weekSessionsDone: weekSessions?.done,
             weekSessionsTotal: weekSessions?.total,
           });
 
-          const todaySession = sessions.find((s: any) =>
-            s.planned_date === todayStr || s.state === 'in_progress'
-          );
+          // Prefer the pending session (in-progress, then planned); a
+          // completed row only fronts the hero once every session scheduled
+          // today is done — on a two-a-day date the second session should
+          // show as up next instead.
+          const todaySession =
+            sessions.find((s: any) => s.state === 'in_progress') ??
+            sessions.find((s: any) => s.planned_date === todayStr && s.state === 'planned') ??
+            (completedTodayCount >= scheduledTodayCount
+              ? sessions.find((s: any) => s.planned_date === todayStr)
+              : undefined);
 
           if (todaySession) {
             // Single join query - fetches blocks with their set_logs in one request
@@ -1067,19 +1098,21 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
             // hero uses the split-day name as its title and the muscle list
             // for the recovery note.
             setScheduledWorkout(
-              getWorkoutForDate(
+              getNextWorkoutForDate(
                 mesocycle.split_type || 'Upper/Lower',
                 new Date(),
-                buildTrainingSchedule(mesocycle)
+                buildTrainingSchedule(mesocycle),
+                completedTodayCount
               )
             );
           } else {
             // No session today — clear any stale workout from the previous day (rollover refetch)
             setTodaysWorkout(null);
-            const scheduled = getWorkoutForDate(
+            const scheduled = getNextWorkoutForDate(
               mesocycle.split_type || 'Upper/Lower',
               new Date(),
-              buildTrainingSchedule(mesocycle)
+              buildTrainingSchedule(mesocycle),
+              completedTodayCount
             );
             setScheduledWorkout(scheduled);
           }

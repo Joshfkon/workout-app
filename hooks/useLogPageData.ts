@@ -34,6 +34,7 @@ import { getLocalDateString } from '@/lib/utils';
 import { bootMark } from '@/lib/perf/bootTrace';
 import {
   getWorkoutForDate,
+  getNextWorkoutForDate,
   programSessionHasUsableExercises,
 } from '@/lib/training/startMesocycleSession';
 import { sessionIndexFromCompleted } from '@/lib/training/mesocycleProgress';
@@ -105,6 +106,11 @@ export interface LogHeroInfo {
   estMinutes: number;
   /** ISO timestamp when this split day was last completed, if ever. */
   lastDoneAt: string | null;
+  /**
+   * Completed sessions dated today — how far through a two-a-day date's
+   * sessions the user is, so the hero can advertise the day's NEXT session.
+   */
+  completedTodayCount: number;
 }
 
 interface InProgressBlockRow {
@@ -316,11 +322,17 @@ export function useLogHeroInfoQuery(meso: LogActiveMesocycleRow | null) {
       const supabase = createUntypedClient();
       const { data: completedRows } = await supabase
         .from('workout_sessions')
-        .select('started_at')
+        .select('started_at, planned_date')
         .eq('mesocycle_id', meso.id)
         .eq('state', 'completed')
         .order('started_at', { ascending: true });
-      const completed = (completedRows ?? []) as { started_at: string | null }[];
+      const completed = (completedRows ?? []) as {
+        started_at: string | null;
+        planned_date: string | null;
+      }[];
+      const completedTodayCount = completed.filter(
+        (row) => row.planned_date === getLocalDateString()
+      ).length;
 
       // The session index is TOTAL completed sessions % days/week (the
       // self-extending scheme the start path uses), so the same ordinal
@@ -348,7 +360,12 @@ export function useLogHeroInfoQuery(meso: LogActiveMesocycleRow | null) {
 
       // Fallback mirrors the start path's legacy behavior: 2 exercises per
       // scheduled muscle when program_data has no usable session.
-      const tw = getWorkoutForDate(meso.split_type, new Date(), buildTrainingSchedule(meso));
+      const tw = getNextWorkoutForDate(
+        meso.split_type,
+        new Date(),
+        buildTrainingSchedule(meso),
+        completedTodayCount
+      );
       const exerciseCount =
         programSession?.exercises.length || (tw ? tw.muscles.length * 2 : 0);
       const estMinutes =
@@ -364,6 +381,7 @@ export function useLogHeroInfoQuery(meso: LogActiveMesocycleRow | null) {
         exerciseCount,
         estMinutes,
         lastDoneAt: lastStartedAt ?? null,
+        completedTodayCount,
       };
     },
   });

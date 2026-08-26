@@ -304,6 +304,14 @@ export interface TodayWorkout {
   dayName: string;
   muscles: MuscleGroup[];
   dayNumber: number;
+  /**
+   * 1-based position of this session within its calendar date (set by
+   * getWorkoutsForDate / getNextWorkoutForDate). 2 only on two-a-day
+   * schedules; absent from the legacy single-slot lookups.
+   */
+  sessionOfDay?: number;
+  /** How many sessions the schedule puts on this date (1 or 2). */
+  sessionsScheduledToday?: number;
 }
 
 /** The split-day rotation for each split type. */
@@ -390,9 +398,34 @@ export function getWorkoutsForDate(
   date: Date,
   schedule: TrainingSchedule
 ): TodayWorkout[] {
-  return resolveScheduledSlots(schedule, date).map((slot) =>
-    workoutForSlot(splitType, slot, schedule)
-  );
+  const slots = resolveScheduledSlots(schedule, date);
+  return slots.map((slot, index) => ({
+    ...workoutForSlot(splitType, slot, schedule),
+    sessionOfDay: index + 1,
+    sessionsScheduledToday: slots.length,
+  }));
+}
+
+/**
+ * The date's next UNDONE session, given how many of its sessions are already
+ * completed — what "today's workout" surfaces should show, so a two-a-day
+ * date advertises the PM session once the AM one is finished.
+ *
+ * Null on a rest day. When every scheduled session is done (including the
+ * once-a-day case, where this matches getWorkoutForDate's behavior of still
+ * returning the day's workout), the LAST session is returned — surfaces
+ * layer their own completed state on top of the returned name.
+ */
+export function getNextWorkoutForDate(
+  splitType: string,
+  date: Date,
+  schedule: TrainingSchedule,
+  completedOnDate: number
+): TodayWorkout | null {
+  const workouts = getWorkoutsForDate(splitType, date, schedule);
+  if (workouts.length === 0) return null;
+  const index = Math.min(Math.max(0, Math.floor(completedOnDate)), workouts.length - 1);
+  return workouts[index];
 }
 
 /**

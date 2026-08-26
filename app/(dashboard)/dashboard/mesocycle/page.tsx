@@ -17,9 +17,11 @@ import {
 } from '@/services/mesocycleHelpers';
 import {
   startMesocycleWorkoutSession,
-  getWorkoutForDate,
+  getWorkoutsForDate,
+  getNextWorkoutForDate,
   getTrainingDays,
   countCompletedSessions,
+  countCompletedSessionsOnDate,
   programSessionHasUsableExercises,
   type TodayWorkout,
 } from '@/lib/training/startMesocycleSession';
@@ -482,7 +484,14 @@ export default function MesocyclePage() {
 
       // Refresh today's workout so the schedule reflects the new training days
       if (mesocycleId === mesocycles.find(m => m.state === 'active')?.id) {
-        setTodayWorkout(getWorkoutForDate(newSplitType, new Date(), newSchedule));
+        const completedToday = await countCompletedSessionsOnDate(
+          supabase,
+          mesocycleId,
+          getLocalDateString()
+        );
+        setTodayWorkout(
+          getNextWorkoutForDate(newSplitType, new Date(), newSchedule, completedToday)
+        );
 
         // program_data was just rewritten, and Start will build from the
         // regenerated program — re-resolve the slot session so the card's
@@ -562,10 +571,18 @@ export default function MesocyclePage() {
         // Calculate today's workout for active mesocycle
         const active = data.find((m: Mesocycle) => m.state === 'active');
         if (active) {
-          const workout = getWorkoutForDate(
+          // Next UNDONE session today — a two-a-day date advances to its PM
+          // session once the AM one is completed.
+          const completedToday = await countCompletedSessionsOnDate(
+            supabase,
+            active.id,
+            getLocalDateString()
+          );
+          const workout = getNextWorkoutForDate(
             active.split_type,
             new Date(),
-            buildTrainingSchedule(active)
+            buildTrainingSchedule(active),
+            completedToday
           );
           setTodayWorkout(workout);
 
@@ -1051,11 +1068,12 @@ export default function MesocyclePage() {
                     const date = new Date();
                     date.setHours(0, 0, 0, 0);
                     date.setDate(date.getDate() + offset);
-                    const workout = getWorkoutForDate(
+                    const dayWorkouts = getWorkoutsForDate(
                       activeMesocycle.split_type,
                       date,
                       activeSchedule
                     );
+                    const workout = dayWorkouts[0] ?? null;
                     const isToday = offset === 0;
 
                     return (
@@ -1075,8 +1093,11 @@ export default function MesocyclePage() {
                             : date.toLocaleDateString('en-US', { weekday: 'short' })}
                         </p>
                         {workout ? (
-                          <p className="text-xs text-surface-300 mt-1 truncate" title={workout.dayName}>
-                            {workout.dayName.split(' ')[0]}
+                          <p
+                            className="text-xs text-surface-300 mt-1 truncate"
+                            title={dayWorkouts.map((w) => w.dayName).join(' + ')}
+                          >
+                            {dayWorkouts.map((w) => w.dayName.split(' ')[0]).join(' + ')}
                           </p>
                         ) : (
                           <p className="text-xs text-surface-600 mt-1">Rest</p>
