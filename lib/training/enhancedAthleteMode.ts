@@ -45,7 +45,10 @@ export interface ActiveMesocycleRow {
   current_week: number;
   total_weeks: number;
   deload_week: number;
+  /** Planned SESSIONS per week (a 7-day two-a-day block stores 14). */
   days_per_week: number;
+  /** 1 = one session per training date; 2 = two-a-day. Null on legacy rows. */
+  sessions_per_day: number | null;
   session_duration_minutes: number | null;
   program_data: unknown;
 }
@@ -58,7 +61,7 @@ export async function getActiveMesocycle(
   const { data, error } = await supabase
     .from('mesocycles')
     .select(
-      'id, name, current_week, total_weeks, deload_week, days_per_week, session_duration_minutes, program_data'
+      'id, name, current_week, total_weeks, deload_week, days_per_week, sessions_per_day, session_duration_minutes, program_data'
     )
     .eq('user_id', userId)
     .eq('state', 'active')
@@ -196,7 +199,11 @@ export async function regenerateRemainingWeeksForEnhancedMode(
     extendedProfile,
     mesocycle.session_duration_minutes || 60,
     laggingAreas,
-    []
+    [],
+    // Keep the stored two-a-day cadence: without it a 8-14-session block
+    // regenerates as once daily and the recovery model sees rest days
+    // between sessions that actually share a calendar day.
+    mesocycle.sessions_per_day ?? 1
   );
 
   // Mid-week? Carry the in-flight week's plan over so prescriptions the user

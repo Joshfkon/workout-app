@@ -823,3 +823,20 @@ describe('sessionBuilderWithFatigue', () => {
     });
   });
 });
+
+describe('two-a-day generation (Codex review on #637)', () => {
+  it('repeats each calendar day in the schedule when sessionsPerDay is 2', () => {
+    const profile = createProfile();
+    const program = generateFullMesocycleWithFatigue(8, profile, 45, undefined, [], 2);
+    expect(program.schedule).toEqual([
+      'Mon AM', 'Mon PM', 'Tue AM', 'Tue PM', 'Thu AM', 'Thu PM', 'Fri AM', 'Fri PM',
+    ]);
+    expect(program.mesocycleWeeks?.[0]?.sessions).toHaveLength(8);
+  });
+
+  it('defaults to once daily, so 8+ sessions spread over distinct weekdays', () => {
+    const profile = createProfile();
+    const program = generateFullMesocycleWithFatigue(7, profile, 45);
+    expect(program.schedule).toEqual(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
+  });
+});
