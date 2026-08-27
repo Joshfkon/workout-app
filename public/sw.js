@@ -17,9 +17,12 @@
  */
 
 // Bump this version on releases to invalidate old caches and trigger an update.
-// v5: Progress-page restructure (Body tab cleanup, Training tab removal,
-// wellness card moves) — bumped so deployed clients drop the cached old shell.
-const CACHE_NAME = 'hypertrack-v5';
+// v6: Purge caches poisoned with redirected responses. /dashboard 307s to
+// /login for signed-out visitors; caching the followed redirect and replaying
+// it for a navigation is a fetch-spec network error (Safari: "Response served
+// by service worker has redirections"), which bricked the site until site data
+// was cleared.
+const CACHE_NAME = 'hypertrack-v6';
 
 // Critical assets to cache on install (app shell + key routes)
 const PRECACHE_ASSETS = [
@@ -45,11 +48,35 @@ const INSTANT_LOAD_ROUTES = [
   '/dashboard/nutrition',
 ];
 
+/**
+ * A response may be cached only if it is a full 200 that did NOT arrive via a
+ * redirect. Navigation requests carry redirect mode "manual", and serving a
+ * `redirected` response to one is a network error per the fetch spec — the
+ * page fails to render entirely. 206s are excluded because partial video
+ * content must not be replayed as a whole resource.
+ */
+function isCacheableResponse(response) {
+  return response.ok && response.status !== 206 && !response.redirected;
+}
+
 // Install event - cache app shell
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(PRECACHE_ASSETS);
+      // Not cache.addAll: it would store redirected responses (e.g.
+      // /dashboard -> /login when signed out), which then break every
+      // navigation served from cache. Precache is best-effort per asset.
+      return Promise.all(
+        PRECACHE_ASSETS.map((asset) =>
+          fetch(asset)
+            .then((response) => {
+              if (isCacheableResponse(response)) {
+                return cache.put(asset, response);
+              }
+            })
+            .catch(() => {})
+        )
+      );
     })
   );
   // Activate immediately
@@ -75,7 +102,7 @@ self.addEventListener('activate', (event) => {
           PREFETCH_ROUTES.forEach((route) => {
             fetch(route, { priority: 'low' })
               .then((response) => {
-                if (response.ok) {
+                if (isCacheableResponse(response)) {
                   cache.put(route, response);
                 }
               })
@@ -139,8 +166,7 @@ self.addEventListener('fetch', (event) => {
           event.waitUntil(
             fetch(request)
               .then((response) => {
-                // Don't cache partial responses (206) - these are range requests for videos
-                if (response.ok && response.status !== 206) {
+                if (isCacheableResponse(response)) {
                   const responseToCache = response.clone();
                   caches.open(CACHE_NAME).then((cache) => {
                     cache.put(request, responseToCache);
@@ -153,8 +179,7 @@ self.addEventListener('fetch', (event) => {
         }
 
         return fetch(request).then((response) => {
-          // Don't cache partial responses (206) - these are range requests for videos
-          if (response.ok && response.status !== 206) {
+          if (isCacheableResponse(response)) {
             const responseToCache = response.clone();
             caches.open(CACHE_NAME).then((cache) => {
               cache.put(request, responseToCache);
@@ -174,10 +199,13 @@ self.addEventListener('fetch', (event) => {
 
   if (isInstantLoadRoute) {
     event.respondWith(
-      caches.match(request).then((cached) => {
+      caches.match(request).then((maybeCached) => {
+        // A redirected response replayed for a navigation is a network error
+        // (this is what bricked the site on Safari) — never serve one.
+        const cached = maybeCached && !maybeCached.redirected ? maybeCached : undefined;
         const fetchPromise = fetch(request)
           .then((response) => {
-            if (response.ok) {
+            if (isCacheableResponse(response)) {
               const responseToCache = response.clone();
               caches.open(CACHE_NAME).then((cache) => {
                 cache.put(request, responseToCache);
@@ -198,7 +226,7 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     fetch(request)
       .then((response) => {
-        if (response.ok) {
+        if (isCacheableResponse(response)) {
           const responseToCache = response.clone();
           caches.open(CACHE_NAME).then((cache) => {
             cache.put(request, responseToCache);
@@ -208,13 +236,13 @@ self.addEventListener('fetch', (event) => {
       })
       .catch(() => {
         return caches.match(request).then((cached) => {
-          if (cached) {
+          if (cached && !cached.redirected) {
             return cached;
           }
           // Return offline page for navigation requests
           if (request.mode === 'navigate') {
             return caches.match('/').then((homePage) => {
-              if (homePage) {
+              if (homePage && !homePage.redirected) {
                 return homePage;
               }
               return new Response(
