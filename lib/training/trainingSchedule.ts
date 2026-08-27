@@ -10,8 +10,13 @@
 //                  weekdays shift every week, which is exactly why it cannot
 //                  be expressed as a set of preferred weekdays.
 //
+// Either mode can additionally run two-a-day (sessions_per_day = 2): each
+// training date carries two consecutive slots of the split rotation, and
+// days_per_week keeps counting SESSIONS per week (7 days x 2/day = 14), the
+// same "the plan counts sessions" convention interval mode established.
+//
 // Everything that asks "is there a workout on this date, and which slot of
-// the split is it?" goes through resolveScheduledSlot() so the two modes
+// the split is it?" goes through resolveScheduledSlots() so the two modes
 // cannot drift apart across the dashboard / log / train / mesocycle pages.
 //
 // Pure module: no DB access, no I/O. Callers pass the mesocycle row fields.
@@ -33,6 +38,9 @@ export const TRAINING_INTERVAL_OPTIONS = [2, 3, 4] as const;
 export const MIN_TRAINING_INTERVAL_DAYS = 2;
 export const MAX_TRAINING_INTERVAL_DAYS = 14;
 
+export const MIN_SESSIONS_PER_DAY = 1;
+export const MAX_SESSIONS_PER_DAY = 2;
+
 /** How far ahead the "next training day" search will look. */
 const MAX_LOOKAHEAD_DAYS = 30;
 
@@ -43,9 +51,15 @@ export interface TrainingSchedule {
   /**
    * Planned sessions per week used by the program/progression math. In
    * interval mode this is a rounded stand-in for 7 / intervalDays — the
-   * calendar is driven by intervalDays, not by this number.
+   * calendar is driven by intervalDays, not by this number. With two-a-day
+   * training this counts SESSIONS, not calendar days (7 days x 2 = 14).
    */
   daysPerWeek: number;
+  /**
+   * Sessions on each training day (1 or 2). Two-a-day schedules put two
+   * consecutive slots of the split rotation on every training date.
+   */
+  sessionsPerDay: number;
   /** fixed_days: the weekdays the user picked. Null falls back to a default spread. */
   preferredWorkoutDays: WorkoutDay[] | null;
   /** interval: train every N days. */
@@ -57,6 +71,7 @@ export interface TrainingSchedule {
 /** The mesocycle row columns a schedule is built from. */
 export interface ScheduleSourceRow {
   days_per_week: number;
+  sessions_per_day?: number | null;
   preferred_workout_days?: WorkoutDay[] | null;
   schedule_mode?: string | null;
   training_interval_days?: number | null;
@@ -143,6 +158,24 @@ export function clampInterval(intervalDays: number): number {
   );
 }
 
+export function clampSessionsPerDay(sessionsPerDay: number | null | undefined): number {
+  if (!Number.isFinite(sessionsPerDay ?? NaN)) return MIN_SESSIONS_PER_DAY;
+  return Math.max(
+    MIN_SESSIONS_PER_DAY,
+    Math.min(MAX_SESSIONS_PER_DAY, Math.round(sessionsPerDay as number))
+  );
+}
+
+/**
+ * Calendar days trained per week — the number of weekdays the schedule
+ * occupies, as opposed to `daysPerWeek`, which counts sessions. Identical for
+ * once-a-day schedules; halved (rounded up) for two-a-day.
+ */
+export function calendarDaysPerWeek(schedule: TrainingSchedule): number {
+  if (schedule.preferredWorkoutDays?.length) return schedule.preferredWorkoutDays.length;
+  return Math.max(1, Math.min(7, Math.ceil(schedule.daysPerWeek / schedule.sessionsPerDay)));
+}
+
 /**
  * Build a normalized schedule from raw mesocycle fields. An interval schedule
  * missing its interval or anchor degrades to fixed days rather than silently
@@ -150,6 +183,7 @@ export function clampInterval(intervalDays: number): number {
  */
 export function buildTrainingSchedule(row: ScheduleSourceRow): TrainingSchedule {
   const daysPerWeek = Math.max(1, Math.floor(row.days_per_week || 4));
+  const sessionsPerDay = clampSessionsPerDay(row.sessions_per_day ?? 1);
   const preferredWorkoutDays = row.preferred_workout_days?.length
     ? row.preferred_workout_days
     : null;
@@ -159,12 +193,13 @@ export function buildTrainingSchedule(row: ScheduleSourceRow): TrainingSchedule 
   const anchorDate = row.start_date ? row.start_date.slice(0, 10) : null;
 
   if (wantsInterval && intervalDays && anchorDate && parseLocalDate(anchorDate)) {
-    return { mode: 'interval', daysPerWeek, preferredWorkoutDays, intervalDays, anchorDate };
+    return { mode: 'interval', daysPerWeek, sessionsPerDay, preferredWorkoutDays, intervalDays, anchorDate };
   }
 
   return {
     mode: 'fixed_days',
     daysPerWeek,
+    sessionsPerDay,
     preferredWorkoutDays,
     intervalDays: null,
     anchorDate,
@@ -180,27 +215,43 @@ export interface ScheduledSlot {
    * 0-based ordinal of this session within the rotation. Fixed-day schedules
    * restart at 0 each calendar week; interval schedules count continuously
    * from the anchor, so the split rotates through the week instead of
-   * re-pinning to weekdays.
+   * re-pinning to weekdays. A two-a-day schedule occupies two consecutive
+   * ordinals per training date.
    */
   ordinal: number;
 }
 
-/** The scheduled slot for a date, or null when it is a rest day. */
-export function resolveScheduledSlot(schedule: TrainingSchedule, date: Date): ScheduledSlot | null {
+/**
+ * Every scheduled slot for a date, in session order — [] on a rest day, one
+ * slot for a once-a-day schedule, two consecutive slots for two-a-day.
+ */
+export function resolveScheduledSlots(schedule: TrainingSchedule, date: Date): ScheduledSlot[] {
+  let dayIndex: number | null = null;
+
   if (schedule.mode === 'interval') {
-    if (!schedule.intervalDays || !schedule.anchorDate) return null;
+    if (!schedule.intervalDays || !schedule.anchorDate) return [];
     const anchor = parseLocalDate(schedule.anchorDate);
-    if (!anchor) return null;
+    if (!anchor) return [];
 
     const elapsed = localDaysBetween(anchor, date);
-    if (elapsed < 0) return null;
-    if (elapsed % schedule.intervalDays !== 0) return null;
-    return { ordinal: elapsed / schedule.intervalDays };
+    if (elapsed < 0 || elapsed % schedule.intervalDays !== 0) return [];
+    dayIndex = elapsed / schedule.intervalDays;
+  } else {
+    const trainingDays = getTrainingDays(calendarDaysPerWeek(schedule), schedule.preferredWorkoutDays);
+    const index = trainingDays.indexOf(isoDayOfWeek(date));
+    if (index === -1) return [];
+    dayIndex = index;
   }
 
-  const trainingDays = getTrainingDays(schedule.daysPerWeek, schedule.preferredWorkoutDays);
-  const ordinal = trainingDays.indexOf(isoDayOfWeek(date));
-  return ordinal === -1 ? null : { ordinal };
+  const perDay = clampSessionsPerDay(schedule.sessionsPerDay);
+  return Array.from({ length: perDay }, (_, session) => ({
+    ordinal: dayIndex! * perDay + session,
+  }));
+}
+
+/** The date's FIRST scheduled slot, or null when it is a rest day. */
+export function resolveScheduledSlot(schedule: TrainingSchedule, date: Date): ScheduledSlot | null {
+  return resolveScheduledSlots(schedule, date)[0] ?? null;
 }
 
 export function isTrainingDate(schedule: TrainingSchedule, date: Date): boolean {
@@ -253,6 +304,14 @@ export interface TodayWorkout {
   dayName: string;
   muscles: MuscleGroup[];
   dayNumber: number;
+  /**
+   * 1-based position of this session within its calendar date (set by
+   * getWorkoutsForDate / getNextWorkoutForDate). 2 only on two-a-day
+   * schedules; absent from the legacy single-slot lookups.
+   */
+  sessionOfDay?: number;
+  /** How many sessions the schedule puts on this date (1 or 2). */
+  sessionsScheduledToday?: number;
 }
 
 /** The split-day rotation for each split type. */
@@ -294,21 +353,11 @@ function getSplitRotation(splitType: string): { dayName: string; muscles: Muscle
   return splits[splitType] || splits['Upper/Lower'];
 }
 
-/**
- * The scheduled workout for a calendar date, or null on a rest day.
- *
- * Works for both schedule modes: a fixed-day schedule maps the weekday to its
- * position in the week, an every-N-days schedule counts sessions from the
- * anchor so the split keeps rotating instead of re-pinning to weekdays.
- */
-export function getWorkoutForDate(
+function workoutForSlot(
   splitType: string,
-  date: Date,
+  slot: ScheduledSlot,
   schedule: TrainingSchedule
-): TodayWorkout | null {
-  const slot = resolveScheduledSlot(schedule, date);
-  if (!slot) return null;
-
+): TodayWorkout {
   const rotation = getSplitRotation(splitType);
   return {
     ...rotation[slot.ordinal % rotation.length],
@@ -319,6 +368,64 @@ export function getWorkoutForDate(
         ? (slot.ordinal % Math.max(1, schedule.daysPerWeek)) + 1
         : slot.ordinal + 1,
   };
+}
+
+/**
+ * The scheduled workout for a calendar date, or null on a rest day.
+ *
+ * Works for both schedule modes: a fixed-day schedule maps the weekday to its
+ * position in the week, an every-N-days schedule counts sessions from the
+ * anchor so the split keeps rotating instead of re-pinning to weekdays.
+ * On a two-a-day schedule this is the FIRST session of the date — use
+ * getWorkoutsForDate for both.
+ */
+export function getWorkoutForDate(
+  splitType: string,
+  date: Date,
+  schedule: TrainingSchedule
+): TodayWorkout | null {
+  const slot = resolveScheduledSlot(schedule, date);
+  if (!slot) return null;
+  return workoutForSlot(splitType, slot, schedule);
+}
+
+/**
+ * Every scheduled workout for a calendar date, in session order — [] on a
+ * rest day, two entries on a two-a-day schedule.
+ */
+export function getWorkoutsForDate(
+  splitType: string,
+  date: Date,
+  schedule: TrainingSchedule
+): TodayWorkout[] {
+  const slots = resolveScheduledSlots(schedule, date);
+  return slots.map((slot, index) => ({
+    ...workoutForSlot(splitType, slot, schedule),
+    sessionOfDay: index + 1,
+    sessionsScheduledToday: slots.length,
+  }));
+}
+
+/**
+ * The date's next UNDONE session, given how many of its sessions are already
+ * completed — what "today's workout" surfaces should show, so a two-a-day
+ * date advertises the PM session once the AM one is finished.
+ *
+ * Null on a rest day. When every scheduled session is done (including the
+ * once-a-day case, where this matches getWorkoutForDate's behavior of still
+ * returning the day's workout), the LAST session is returned — surfaces
+ * layer their own completed state on top of the returned name.
+ */
+export function getNextWorkoutForDate(
+  splitType: string,
+  date: Date,
+  schedule: TrainingSchedule,
+  completedOnDate: number
+): TodayWorkout | null {
+  const workouts = getWorkoutsForDate(splitType, date, schedule);
+  if (workouts.length === 0) return null;
+  const index = Math.min(Math.max(0, Math.floor(completedOnDate)), workouts.length - 1);
+  return workouts[index];
 }
 
 /**
@@ -349,10 +456,15 @@ export function getWorkoutForDay(
 
 /** Average sessions per week — 3.5 for every other day, not rounded. */
 export function sessionsPerWeek(schedule: TrainingSchedule): number {
+  const perDay = clampSessionsPerDay(schedule.sessionsPerDay);
   if (schedule.mode === 'interval' && schedule.intervalDays) {
-    return 7 / schedule.intervalDays;
+    return (7 / schedule.intervalDays) * perDay;
   }
-  return schedule.preferredWorkoutDays?.length || schedule.daysPerWeek;
+  if (schedule.preferredWorkoutDays?.length) {
+    return schedule.preferredWorkoutDays.length * perDay;
+  }
+  // daysPerWeek already counts sessions (7 days x 2/day is stored as 14).
+  return schedule.daysPerWeek;
 }
 
 function formatSessionsPerWeek(value: number): string {
@@ -367,21 +479,24 @@ export function describeTrainingSchedule(
   schedule: TrainingSchedule,
   options: { short?: boolean } = {}
 ): string {
+  const twoADaySuffix =
+    clampSessionsPerDay(schedule.sessionsPerDay) === 2 ? ' (2 sessions/day)' : '';
+
   if (schedule.mode === 'interval' && schedule.intervalDays) {
     const cadence =
       schedule.intervalDays === 2
         ? 'Every other day'
         : `Every ${schedule.intervalDays} days`;
     return options.short
-      ? cadence
-      : `${cadence} (~${formatSessionsPerWeek(sessionsPerWeek(schedule))} sessions/week)`;
+      ? cadence + twoADaySuffix
+      : `${cadence}${twoADaySuffix} (~${formatSessionsPerWeek(sessionsPerWeek(schedule))} sessions/week)`;
   }
 
   const days = schedule.preferredWorkoutDays?.length
     ? [...schedule.preferredWorkoutDays].sort(
         (a, b) => DAYS_OF_WEEK.indexOf(a) - DAYS_OF_WEEK.indexOf(b)
       )
-    : getTrainingDays(schedule.daysPerWeek).map(numberToDayName);
+    : getTrainingDays(calendarDaysPerWeek(schedule)).map(numberToDayName);
 
-  return days.map((day) => (options.short ? day.slice(0, 3) : day)).join(', ');
+  return days.map((day) => (options.short ? day.slice(0, 3) : day)).join(', ') + twoADaySuffix;
 }

@@ -93,6 +93,7 @@ function makeMesocycle(overrides: Partial<ActiveMesocycleRow> = {}): ActiveMesoc
     total_weeks: 6,
     deload_week: 6,
     days_per_week: 4,
+    sessions_per_day: 1,
     session_duration_minutes: 60,
     program_data: null,
     ...overrides,

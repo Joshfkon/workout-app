@@ -17,9 +17,11 @@ import {
 } from '@/services/mesocycleHelpers';
 import {
   startMesocycleWorkoutSession,
-  getWorkoutForDate,
+  getWorkoutsForDate,
+  getNextWorkoutForDate,
   getTrainingDays,
   countCompletedSessions,
+  countCompletedSessionsOnDate,
   programSessionHasUsableExercises,
   type TodayWorkout,
 } from '@/lib/training/startMesocycleSession';
@@ -43,6 +45,16 @@ import type { MuscleGroup, WorkoutDay, ExtendedUserProfile, DexaRegionalData, Go
 
 function getDefaultPreferredDays(daysPerWeek: number): WorkoutDay[] {
   return getTrainingDays(daysPerWeek).map(numberToDayName);
+}
+
+/**
+ * Calendar days a mesocycle trains on. days_per_week counts SESSIONS
+ * (a 7-day two-a-day block stores 14); pickers and preferred-day counts
+ * want weekdays.
+ */
+function mesoCalendarDays(mesocycle: { days_per_week: number; sessions_per_day?: number | null }): number {
+  const perDay = mesocycle.sessions_per_day === 2 ? 2 : 1;
+  return Math.max(1, Math.min(7, Math.ceil(mesocycle.days_per_week / perDay)));
 }
 
 /** Interval cadences aren't whole numbers — every other day is 3.5/week. */
@@ -73,6 +85,8 @@ interface Mesocycle {
   schedule_mode?: ScheduleMode | null;
   /** Interval schedules only: train every N days from start_date. */
   training_interval_days?: number | null;
+  /** 1 = one session per training date; 2 = two-a-day. Null on legacy rows. */
+  sessions_per_day?: number | null;
   session_duration_minutes: number | null;
   program_data: unknown;
   exercise_overrides?: ExerciseOverride[];
@@ -278,13 +292,20 @@ export default function MesocyclePage() {
       // spread if the count no longer matches days/week), then detect whether
       // the schedule actually changed — we only rewrite planned sessions
       // when it did.
-      const normalizedPreferredDays = newScheduleInput.preferredDays.length === newDaysPerWeek
+      // Two-a-day blocks only combine with fixed weekdays; switching the
+      // schedule to an interval cadence drops back to one session per day.
+      const newSessionsPerDay =
+        newScheduleInput.mode === 'fixed_days' && mesocycle.sessions_per_day === 2 ? 2 : 1;
+      const newCalendarDays = Math.max(1, Math.min(7, Math.ceil(newDaysPerWeek / newSessionsPerDay)));
+
+      const normalizedPreferredDays = newScheduleInput.preferredDays.length === newCalendarDays
         ? newScheduleInput.preferredDays
-        : getDefaultPreferredDays(newDaysPerWeek);
+        : getDefaultPreferredDays(newCalendarDays);
 
       const currentSchedule = buildTrainingSchedule(mesocycle);
       const newSchedule = buildTrainingSchedule({
         days_per_week: newDaysPerWeek,
+        sessions_per_day: newSessionsPerDay,
         preferred_workout_days: normalizedPreferredDays,
         schedule_mode: newScheduleInput.mode,
         training_interval_days: newScheduleInput.intervalDays,
@@ -298,7 +319,7 @@ export default function MesocyclePage() {
           normalizedPreferredDays,
           currentSchedule.preferredWorkoutDays?.length
             ? currentSchedule.preferredWorkoutDays
-            : getDefaultPreferredDays(mesocycle.days_per_week)
+            : getDefaultPreferredDays(mesoCalendarDays(mesocycle))
         );
 
       // Keep the plan's generation-time mode on a duration/day edit — the
@@ -337,7 +358,8 @@ export default function MesocyclePage() {
         extendedProfile,
         newDuration,
         laggingAreas,
-        [] // unavailableEquipmentIds - could fetch from gym locations if needed
+        [], // unavailableEquipmentIds - could fetch from gym locations if needed
+        newSessionsPerDay
       );
 
       // Calculate recovery factors
@@ -422,6 +444,7 @@ export default function MesocyclePage() {
         .update({
           session_duration_minutes: newDuration,
           days_per_week: newDaysPerWeek,
+          sessions_per_day: newSessionsPerDay,
           split_type: newSplitType,
           schedule_mode: newSchedule.mode,
           training_interval_days: newSchedule.mode === 'interval' ? newSchedule.intervalDays : null,
@@ -448,6 +471,7 @@ export default function MesocyclePage() {
             ...m,
             session_duration_minutes: newDuration,
             days_per_week: newDaysPerWeek,
+            sessions_per_day: newSessionsPerDay,
             split_type: newSplitType,
             schedule_mode: newSchedule.mode,
             training_interval_days:
@@ -460,7 +484,14 @@ export default function MesocyclePage() {
 
       // Refresh today's workout so the schedule reflects the new training days
       if (mesocycleId === mesocycles.find(m => m.state === 'active')?.id) {
-        setTodayWorkout(getWorkoutForDate(newSplitType, new Date(), newSchedule));
+        const completedToday = await countCompletedSessionsOnDate(
+          supabase,
+          mesocycleId,
+          getLocalDateString()
+        );
+        setTodayWorkout(
+          getNextWorkoutForDate(newSplitType, new Date(), newSchedule, completedToday)
+        );
 
         // program_data was just rewritten, and Start will build from the
         // regenerated program — re-resolve the slot session so the card's
@@ -540,10 +571,18 @@ export default function MesocyclePage() {
         // Calculate today's workout for active mesocycle
         const active = data.find((m: Mesocycle) => m.state === 'active');
         if (active) {
-          const workout = getWorkoutForDate(
+          // Next UNDONE session today — a two-a-day date advances to its PM
+          // session once the AM one is completed.
+          const completedToday = await countCompletedSessionsOnDate(
+            supabase,
+            active.id,
+            getLocalDateString()
+          );
+          const workout = getNextWorkoutForDate(
             active.split_type,
             new Date(),
-            buildTrainingSchedule(active)
+            buildTrainingSchedule(active),
+            completedToday
           );
           setTodayWorkout(workout);
 
@@ -873,7 +912,7 @@ export default function MesocyclePage() {
                   <p className="text-2xl font-bold text-surface-100">
                     {formatDaysPerWeek(sessionsPerWeek(activeSchedule))}
                   </p>
-                  <p className="text-sm text-surface-500">Days/Week</p>
+                  <p className="text-sm text-surface-500">Sessions/Week</p>
                 </div>
                 <div
                   className="text-center p-4 bg-surface-800/50 rounded-lg cursor-pointer hover:bg-surface-700/50 transition-colors"
@@ -882,7 +921,7 @@ export default function MesocyclePage() {
                     setEditPreferredDays(
                       activeMesocycle.preferred_workout_days?.length
                         ? activeMesocycle.preferred_workout_days
-                        : getDefaultPreferredDays(activeMesocycle.days_per_week)
+                        : getDefaultPreferredDays(mesoCalendarDays(activeMesocycle))
                     );
                     setEditScheduleMode(activeSchedule.mode);
                     setEditIntervalDays(activeSchedule.intervalDays ?? 2);
@@ -950,11 +989,11 @@ export default function MesocyclePage() {
                     </label>
                     <p className="text-xs text-surface-500 mb-2">
                       {editScheduleMode === 'fixed_days'
-                        ? `Pick ${activeMesocycle.days_per_week} days that match your new schedule.`
+                        ? `Pick ${mesoCalendarDays(activeMesocycle)} days that match your new schedule.`
                         : 'Sessions roll through the week from this block’s start date.'}
                     </p>
                     <TrainingScheduleSelector
-                      daysPerWeek={activeMesocycle.days_per_week}
+                      daysPerWeek={mesoCalendarDays(activeMesocycle)}
                       mode={editScheduleMode}
                       onModeChange={setEditScheduleMode}
                       selectedDays={editPreferredDays}
@@ -986,7 +1025,7 @@ export default function MesocyclePage() {
                         isRegenerating
                         || (
                           editScheduleMode === 'fixed_days'
-                          && editPreferredDays.length !== activeMesocycle.days_per_week
+                          && editPreferredDays.length !== mesoCalendarDays(activeMesocycle)
                         )
                         || (
                           editDuration === (activeMesocycle.session_duration_minutes || 60)
@@ -996,7 +1035,7 @@ export default function MesocyclePage() {
                             editPreferredDays,
                             activeMesocycle.preferred_workout_days?.length
                               ? activeMesocycle.preferred_workout_days
-                              : getDefaultPreferredDays(activeMesocycle.days_per_week)
+                              : getDefaultPreferredDays(mesoCalendarDays(activeMesocycle))
                           )
                         )
                       }
@@ -1029,11 +1068,12 @@ export default function MesocyclePage() {
                     const date = new Date();
                     date.setHours(0, 0, 0, 0);
                     date.setDate(date.getDate() + offset);
-                    const workout = getWorkoutForDate(
+                    const dayWorkouts = getWorkoutsForDate(
                       activeMesocycle.split_type,
                       date,
                       activeSchedule
                     );
+                    const workout = dayWorkouts[0] ?? null;
                     const isToday = offset === 0;
 
                     return (
@@ -1053,8 +1093,11 @@ export default function MesocyclePage() {
                             : date.toLocaleDateString('en-US', { weekday: 'short' })}
                         </p>
                         {workout ? (
-                          <p className="text-xs text-surface-300 mt-1 truncate" title={workout.dayName}>
-                            {workout.dayName.split(' ')[0]}
+                          <p
+                            className="text-xs text-surface-300 mt-1 truncate"
+                            title={dayWorkouts.map((w) => w.dayName).join(' + ')}
+                          >
+                            {dayWorkouts.map((w) => w.dayName.split(' ')[0]).join(' + ')}
                           </p>
                         ) : (
                           <p className="text-xs text-surface-600 mt-1">Rest</p>

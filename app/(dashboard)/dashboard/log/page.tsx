@@ -49,6 +49,7 @@ import { getLocalDateString } from '@/lib/utils';
 import {
   startMesocycleWorkoutSession,
   getWorkoutForDate,
+  getNextWorkoutForDate,
 } from '@/lib/training/startMesocycleSession';
 import { buildTrainingSchedule } from '@/lib/training/trainingSchedule';
 import { getOrCreateTodaySession } from '../workout/_lib/adhocSession';
@@ -132,16 +133,25 @@ export default function LogPage() {
       ? 'done'
       : 'missing';
 
-  // Today's scheduled split day, derived from the calendar (time-dependent,
-  // so computed at render rather than cached).
-  const todayWorkout = useMemo(() => {
-    if (!activeMeso) return null;
-    return getWorkoutForDate(activeMeso.split_type, new Date(), buildTrainingSchedule(activeMeso));
-  }, [activeMeso]);
-
   // Hero meta (exercise count / est. duration / last done): a dependent query
   // whose extra round trips fill the meta line in without gating first paint.
+  // Declared before todayWorkout because its completed-today count picks
+  // which of a two-a-day date's sessions the hero shows next.
   const heroQuery = useLogHeroInfoQuery(activeMeso);
+
+  // Today's scheduled split day, derived from the calendar (time-dependent,
+  // so computed at render rather than cached). On a two-a-day date this is
+  // the NEXT undone session (the PM slot once the AM session is completed);
+  // until the hero query lands it defaults to the day's first session.
+  const todayWorkout = useMemo(() => {
+    if (!activeMeso) return null;
+    return getNextWorkoutForDate(
+      activeMeso.split_type,
+      new Date(),
+      buildTrainingSchedule(activeMeso),
+      heroQuery.data?.completedTodayCount ?? 0
+    );
+  }, [activeMeso, heroQuery.data?.completedTodayCount]);
   const programDayName = heroQuery.data?.programDayName ?? null;
   const heroInfo = useMemo(
     () =>

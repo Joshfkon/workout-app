@@ -34,6 +34,7 @@ import { getLocalDateString } from '@/lib/utils';
 import { bootMark } from '@/lib/perf/bootTrace';
 import {
   getWorkoutForDate,
+  getNextWorkoutForDate,
   programSessionHasUsableExercises,
 } from '@/lib/training/startMesocycleSession';
 import { sessionIndexFromCompleted } from '@/lib/training/mesocycleProgress';
@@ -66,6 +67,7 @@ export interface LogActiveMesocycleRow {
   /** Schedule shape: fixed weekdays, or every-N-days from start_date. */
   schedule_mode?: ScheduleMode | null;
   training_interval_days?: number | null;
+  sessions_per_day?: number | null;
   start_date?: string | null;
   program_data: unknown;
   exercise_overrides?: ExerciseOverride[];
@@ -104,6 +106,11 @@ export interface LogHeroInfo {
   estMinutes: number;
   /** ISO timestamp when this split day was last completed, if ever. */
   lastDoneAt: string | null;
+  /**
+   * Completed sessions dated today — how far through a two-a-day date's
+   * sessions the user is, so the hero can advertise the day's NEXT session.
+   */
+  completedTodayCount: number;
 }
 
 interface InProgressBlockRow {
@@ -145,7 +152,7 @@ async function fetchLogHomeData(): Promise<LogHomeData | null> {
       .limit(1),
     supabase
       .from('mesocycles')
-      .select('id, name, current_week, total_weeks, deload_week, split_type, days_per_week, preferred_workout_days, schedule_mode, training_interval_days, start_date, program_data, exercise_overrides, generated_with_enhanced_mode')
+      .select('id, name, current_week, total_weeks, deload_week, split_type, days_per_week, preferred_workout_days, schedule_mode, training_interval_days, sessions_per_day, start_date, program_data, exercise_overrides, generated_with_enhanced_mode')
       .eq('user_id', userId)
       .eq('state', 'active')
       .order('created_at', { ascending: false })
@@ -315,11 +322,17 @@ export function useLogHeroInfoQuery(meso: LogActiveMesocycleRow | null) {
       const supabase = createUntypedClient();
       const { data: completedRows } = await supabase
         .from('workout_sessions')
-        .select('started_at')
+        .select('started_at, planned_date')
         .eq('mesocycle_id', meso.id)
         .eq('state', 'completed')
         .order('started_at', { ascending: true });
-      const completed = (completedRows ?? []) as { started_at: string | null }[];
+      const completed = (completedRows ?? []) as {
+        started_at: string | null;
+        planned_date: string | null;
+      }[];
+      const completedTodayCount = completed.filter(
+        (row) => row.planned_date === getLocalDateString()
+      ).length;
 
       // The session index is TOTAL completed sessions % days/week (the
       // self-extending scheme the start path uses), so the same ordinal
@@ -347,7 +360,12 @@ export function useLogHeroInfoQuery(meso: LogActiveMesocycleRow | null) {
 
       // Fallback mirrors the start path's legacy behavior: 2 exercises per
       // scheduled muscle when program_data has no usable session.
-      const tw = getWorkoutForDate(meso.split_type, new Date(), buildTrainingSchedule(meso));
+      const tw = getNextWorkoutForDate(
+        meso.split_type,
+        new Date(),
+        buildTrainingSchedule(meso),
+        completedTodayCount
+      );
       const exerciseCount =
         programSession?.exercises.length || (tw ? tw.muscles.length * 2 : 0);
       const estMinutes =
@@ -363,6 +381,7 @@ export function useLogHeroInfoQuery(meso: LogActiveMesocycleRow | null) {
         exerciseCount,
         estMinutes,
         lastDoneAt: lastStartedAt ?? null,
+        completedTodayCount,
       };
     },
   });
