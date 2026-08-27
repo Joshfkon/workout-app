@@ -29,3 +29,4 @@ export { RecalcTargetsBanner } from './RecalcTargetsBanner';
 
 // Pause Overlay
 export { PauseOverlay } from './PauseOverlay';
+export { PRCelebration, type PRCelebrationData } from './PRCelebration';
