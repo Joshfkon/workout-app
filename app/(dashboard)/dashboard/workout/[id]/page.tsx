@@ -69,6 +69,9 @@ const SessionSummary = dynamic(() => import('@/components/workout').then(m => m.
 });
 const ExerciseDetailsModal = dynamic(() => import('@/components/workout').then(m => m.ExerciseDetailsModal), { ssr: false });
 const PlateCalculatorModal = dynamic(() => import('@/components/workout').then(m => m.PlateCalculatorModal), { ssr: false });
+// PR celebration overlay (confetti + badge) — only ever mounts when a logged
+// set beats the exercise's record, so keep it out of the initial bundle.
+const PRCelebration = dynamic(() => import('@/components/workout').then(m => m.PRCelebration), { ssr: false });
 // Motion capture sheet (experimental, flag-gated) — loaded on demand.
 const MotionCaptureSheet = dynamic(() => import('@/components/motion/MotionCaptureSheet').then(m => m.MotionCaptureSheet), { ssr: false });
 import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaRegionalData, TemporaryInjury, PreWorkoutCheckIn, SetFeedback, Rating, BodyweightData, ExerciseType, StandardMuscleGroup, ExercisePerformanceSnapshot, RepsInTank, SorenessRating, SetDiscomfort, JointPainJoint, SleepLogEntry } from '@/types/schema';
@@ -113,6 +116,8 @@ import {
   type SetNumberChange,
 } from '@/lib/training/logSet';
 import { loadWorkoutSession, resolveResumePosition } from './_lib/loadSession';
+import { detectLiveSetPr } from '@/services/livePrDetector';
+import type { PRCelebrationData } from '@/components/workout/PRCelebration';
 import { now as clockNow } from '@/lib/clock';
 import { addExerciseOverride, getSessionFromProgramData, applyExerciseOverrides, type ExerciseOverride } from '@/services/mesocycleHelpers';
 import { computeStapleExerciseIds } from '@/services/exerciseStaples';
@@ -414,6 +419,10 @@ export default function WorkoutPage() {
 
   // Toast notifications for errors
   const { toasts, dismissToast, showError, showSuccess, addToast } = useToasts();
+
+  // Live PR celebration (confetti overlay) — set when a just-logged set beats
+  // the exercise's record (services/livePrDetector), cleared on dismiss.
+  const [prCelebration, setPrCelebration] = useState<PRCelebrationData | null>(null);
 
   // --- Offline outbox state (P0-2) ---------------------------------------
   // Per-set write status drives the glyphs on completed set rows; outboxSize
@@ -3022,6 +3031,63 @@ export default function WorkoutPage() {
         onClick: () => { void undoLoggedSet(setId, currentBlock.id); },
       });
 
+      // Live PR celebration: fire the confetti overlay the moment a working
+      // set beats the exercise's record. Same rules as the summary's PR list
+      // (services/livePrDetector mirrors them), with the baseline raised by
+      // earlier sets this session so each high-water mark fires once.
+      // `completedSets` here still excludes the just-logged set — the
+      // optimistic append went through setState, not this closure.
+      {
+        const prHistory = exerciseHistories[currentBlock.exerciseId];
+        const toPrSet = (s: { weightKg: number; reps: number; rpe: number; isWarmup?: boolean; setType?: string; feedback?: SetFeedback }) => ({
+          weightKg: s.weightKg,
+          reps: s.reps,
+          rpe: s.rpe,
+          form: s.feedback?.form ?? null,
+          isWarmup: !!s.isWarmup || s.setType === 'warmup',
+        });
+        const pr = detectLiveSetPr({
+          set: toPrSet({ ...data, setType, feedback: data.feedback }),
+          priorSessionSets: completedSets
+            .filter((s) => s.exerciseBlockId === currentBlock.id)
+            .map(toPrSet),
+          previousBest: prHistory?.personalRecord
+            ? {
+                weight: prHistory.personalRecord.weightKg,
+                reps: prHistory.personalRecord.reps,
+                e1rm: prHistory.personalRecord.e1rm,
+              }
+            : null,
+          isDeload: session?.isDeload ?? false,
+          isDurationExercise: currentBlock.exercise.exerciseType === 'duration_based',
+        });
+        if (pr) {
+          const unitLabel = preferences.units === 'lb' ? 'lbs' : 'kg';
+          const fmtKg = (kg: number) => {
+            const v = convertWeightForDisplay(kg, preferences.units, 1);
+            return `${Number.isInteger(v) ? v.toFixed(0) : v} ${unitLabel}`;
+          };
+          const pct = pr.improvement > 0 ? ` · +${pr.improvement}%` : '';
+          const celebrationByType: Record<typeof pr.type, { title: string; detail: string }> = {
+            e1rm: { title: 'New e1RM PR', detail: `${fmtKg(pr.value)} est. 1RM${pct}` },
+            weight: { title: 'New Weight PR', detail: `${fmtKg(pr.value)}${pct}` },
+            reps: {
+              title: 'New Reps PR',
+              detail: `${pr.value} reps${pr.improvement > 0 ? ` · +${pr.improvement}` : ''}`,
+            },
+            duration: {
+              title: 'New Hold PR',
+              detail: `${pr.value}s${pr.improvement > 0 ? ` · +${pr.improvement}s` : ''}`,
+            },
+          };
+          setPrCelebration({
+            id: setId,
+            exerciseName: currentBlock.exercise.name,
+            ...celebrationByType[pr.type],
+          });
+        }
+      }
+
       // Motion capture (experimental): the "Log set" tap ends any running
       // auto capture and attaches it to this set (silently dropped when it
       // has fewer than 3 detected reps). A logged WARMUP set instead
@@ -3479,6 +3545,8 @@ export default function WorkoutPage() {
 
   /** Undo the just-logged set (toast action, P1-4). */
   const undoLoggedSet = async (setId: string, _blockId: string) => {
+    // An undone set's PR celebration is no longer earned — pull it down.
+    setPrCelebration((prev) => (prev?.id === setId ? null : prev));
     // No counter adjustment here: handleDeleteSet already returns the number to
     // the block's dense count. Decrementing again would double-count the undo.
     await handleDeleteSet(setId);
@@ -7659,6 +7727,10 @@ export default function WorkoutPage() {
 
       {/* Toast Container for notifications */}
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+
+      {/* PR celebration overlay — confetti + badge when a set beats the record.
+          z-[90]: above modals, below toasts so the Undo toast stays tappable. */}
+      <PRCelebration celebration={prCelebration} onDone={() => setPrCelebration(null)} />
 
       {/* Delete Exercise Confirmation Modal (for header row delete button) */}
       <ConfirmModal
