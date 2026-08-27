@@ -90,6 +90,7 @@ Shoulders:
 - front_delts (anterior deltoid - pressing, front raises)
 - lateral_delts (lateral deltoid - lateral raises, upright rows)
 - rear_delts (posterior deltoid - reverse flyes, face pulls)
+- rotator_cuff (supraspinatus/infraspinatus/teres minor/subscapularis - external rotations; a STABILIZER on pressing and overhead work, rarely a primary)
 
 Back:
 - lats (latissimus dorsi - pulldowns, rows with elbow tucked)
@@ -132,7 +133,11 @@ FIELD INSTRUCTIONS:
 
 - primaryMuscleDetailed: The SINGLE most targeted detailed muscle from the list above
 - secondaryMuscles: Other muscles significantly worked (use detailed muscle names from above)
-- stabilizers: Muscles used for stability, not primary movers (use detailed muscle names)
+- stabilizers: Muscles loaded isometrically for STABILITY, not as movers (use detailed muscle names). This field gates recovery warnings, so apply these rules strictly:
+  * erectors — on unsupported rows, hip hinges, squats, loaded carries, and heavy standing work. NOT on machine/chest-supported variants (that support is the point of them).
+  * rotator_cuff AND rear_delts — on horizontal/vertical pressing and heavy overhead work.
+  * forearm_flexors — on hand-supported pulling (rows, pulldowns, pull-ups, shrugs, hangs) where forearms are not already a mover.
+  * Do NOT list a muscle here that you already listed as primary or secondary. Leave the array empty when nothing meets these rules (e.g. seated machine isolation).
 - pattern: Movement pattern - one of: horizontal_push, horizontal_pull, vertical_push, vertical_pull, hip_hinge, squat, lunge, knee_flexion, elbow_flexion, elbow_extension, shoulder_isolation, calf_raise, core, isolation, carry
 - mechanic: "compound" (multi-joint) or "isolation" (single-joint)
 - difficulty: "beginner" | "intermediate" | "advanced"
@@ -479,6 +484,7 @@ function parseAIResponse(
     // Metadata
     aiConfidence: confidence,
     aiNotes: response.notes || undefined,
+    aiSource: 'ai',
   };
 }
 
@@ -560,6 +566,9 @@ export function getDefaultsByEquipment(input: BasicExerciseInput): CompletedExer
     ],
     aiConfidence: 'low',
     aiNotes: 'AI unavailable - using equipment-based defaults. Please review all fields.',
+    // Not an AI verdict: the review form must say so, and the exercise stays
+    // in the incomplete-review queue until a real review runs.
+    aiSource: 'fallback',
   };
 }
 

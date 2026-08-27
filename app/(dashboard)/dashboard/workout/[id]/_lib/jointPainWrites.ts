@@ -13,6 +13,8 @@
 
 import { bodyPartToJoint } from '@/services/discomfortTracker';
 import type { DiscomfortSeverity, JointPainJoint, SetDiscomfort } from '@/types/schema';
+import { isMissingColumnError } from '@/lib/offline/setOutbox';
+import type { ReadinessSnapshot } from './readinessSnapshot';
 
 type UntypedClient = ReturnType<
   typeof import('@/lib/supabase/client').createUntypedClient
@@ -25,6 +27,12 @@ export interface JointPainEventWrite {
   setLogId?: string | null;
   joint: JointPainJoint;
   severity: DiscomfortSeverity;
+  /**
+   * Full readiness state at report time (the injury/tweak tag's
+   * moment-capture, migration 20260825000004). Optional — a caller without
+   * recovery history in hand still records the bare event.
+   */
+  readinessSnapshot?: ReadinessSnapshot | null;
 }
 
 export async function insertJointPainEvent(
@@ -32,14 +40,23 @@ export async function insertJointPainEvent(
   write: JointPainEventWrite
 ): Promise<void> {
   try {
-    const { error } = await supabase.from('joint_pain_events').insert({
+    const row: Record<string, unknown> = {
       user_id: write.userId,
       session_id: write.sessionId,
       exercise_id: write.exerciseId ?? null,
       set_log_id: write.setLogId ?? null,
       joint: write.joint,
       severity: write.severity,
-    });
+      readiness_snapshot: write.readinessSnapshot ?? null,
+    };
+    let { error } = await supabase.from('joint_pain_events').insert(row);
+    // Migration lag (readiness_snapshot column not applied yet): strip it and
+    // retry so the pain event itself still lands — the OPTIONAL_SET_LOG_COLUMNS
+    // pattern.
+    if (error && isMissingColumnError(error)) {
+      const { readiness_snapshot: _dropped, ...bare } = row;
+      ({ error } = await supabase.from('joint_pain_events').insert(bare));
+    }
     if (error) console.error('Failed to record joint pain event:', error.message);
   } catch (err) {
     console.error('Failed to record joint pain event:', err);

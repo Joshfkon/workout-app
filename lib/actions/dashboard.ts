@@ -7,7 +7,11 @@ import { localDay, rollingWindowStart } from '@/lib/date/localDay';
 import { analyzeBodyCompTrend, computeFFMI } from '@/services/bodyCompEngine';
 import { getBodyCompLayout } from '@/services/compositionSpace';
 import { type WorkoutDay } from '@/types/schema';
-import { type ScheduleMode } from '@/lib/training/trainingSchedule';
+import {
+  buildTrainingSchedule,
+  resolveScheduledSlots,
+  type ScheduleMode,
+} from '@/lib/training/trainingSchedule';
 import {
   computeWeeklyMuscleVolume,
   computeReachableMuscles,
@@ -37,6 +41,14 @@ export interface DashboardMesocycle {
   /** Schedule shape: fixed weekdays, or every-N-days from startDate. */
   scheduleMode?: ScheduleMode | null;
   trainingIntervalDays?: number | null;
+  /** 1 = one session per training date; 2 = two-a-day. */
+  sessionsPerDay?: number | null;
+  /**
+   * Completed sessions dated today — how far through today's scheduled
+   * sessions the user is. Drives which of a two-a-day date's sessions the
+   * hero advertises next.
+   */
+  completedTodayCount?: number;
   /** Sessions completed vs expected inside the current mesocycle week. */
   weekSessionsDone?: number;
   weekSessionsTotal?: number;
@@ -92,7 +104,7 @@ export async function fetchMesocycleData(userId: string): Promise<{
 
   const { data: mesocycles } = await supabase
     .from('mesocycles')
-    .select(`id, name, start_date, total_weeks, split_type, days_per_week, preferred_workout_days, schedule_mode, training_interval_days, state, is_active,
+    .select(`id, name, start_date, total_weeks, split_type, days_per_week, preferred_workout_days, schedule_mode, training_interval_days, sessions_per_day, state, is_active,
       workout_sessions (id, planned_date, state, completed_at)`)
     .eq('user_id', userId)
     .order('created_at', { ascending: false });
@@ -110,6 +122,14 @@ export async function fetchMesocycleData(userId: string): Promise<{
   const weeksSinceStart = Math.floor((today.getTime() - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1;
   const sessions = mesocycle.workout_sessions || [];
   const completed = sessions.filter((s: any) => s.state === 'completed').length;
+  const completedTodayCount = sessions.filter(
+    (s: any) => s.state === 'completed' && s.planned_date === todayStr
+  ).length;
+  // How many sessions the calendar puts on today (0 rest day, 2 two-a-day).
+  const scheduledTodayCount = resolveScheduledSlots(
+    buildTrainingSchedule(mesocycle),
+    today
+  ).length;
 
   const currentWeek = Math.min(weeksSinceStart, mesocycle.total_weeks);
   const weekSessions = computeWeekSessions(
@@ -132,14 +152,22 @@ export async function fetchMesocycleData(userId: string): Promise<{
     preferredWorkoutDays: mesocycle.preferred_workout_days || null,
     scheduleMode: mesocycle.schedule_mode || null,
     trainingIntervalDays: mesocycle.training_interval_days ?? null,
+    sessionsPerDay: mesocycle.sessions_per_day ?? null,
+    completedTodayCount,
     weekSessionsDone: weekSessions?.done,
     weekSessionsTotal: weekSessions?.total,
   };
 
-  // Check for today's workout
-  const todaySession = sessions.find((s: any) =>
-    s.planned_date === todayStr || s.state === 'in_progress'
-  );
+  // Today's hero session. A two-a-day date can hold two rows, so prefer the
+  // one that is actually pending (in-progress, then planned); a completed row
+  // only fronts the hero once every session scheduled today is done —
+  // otherwise the day's next session should show as up next instead.
+  const todaySession =
+    sessions.find((s: any) => s.state === 'in_progress') ??
+    sessions.find((s: any) => s.planned_date === todayStr && s.state === 'planned') ??
+    (completedTodayCount >= scheduledTodayCount
+      ? sessions.find((s: any) => s.planned_date === todayStr)
+      : undefined);
 
   let todaysWorkout: TodaysWorkoutData | null = null;
   if (todaySession) {

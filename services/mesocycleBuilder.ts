@@ -92,11 +92,11 @@ export {
   calculateExerciseFatigue,
   createFatigueBudget,
   SessionFatigueManager,
-  WeeklyFatigueTracker,
   SYSTEMIC_FATIGUE_BY_PATTERN,
   EQUIPMENT_FATIGUE_MODIFIER,
   BASE_SFR,
 } from './fatigueBudgetEngine';
+export { PlannedWeekRecovery } from './plannedRecovery';
 
 export {
   checkDeloadTriggers,
@@ -635,9 +635,27 @@ export function recommendSplit(
           { split: 'Upper/Lower', reason: 'Upper/Lower 3x is very high frequency but doable' }
         ]
       };
-      
+
+    case 7:
+      return {
+        split: 'PPL',
+        reason: 'Daily PPL keeps each muscle recovering ~48-72h between direct hits even with no rest days - keep per-session volume moderate',
+        alternatives: [
+          { split: 'Upper/Lower', reason: 'Alternating Upper/Lower daily also spreads the load well' }
+        ]
+      };
+
     default:
-      // 7 days or edge cases
+      // 8+ sessions/week means multiple sessions on some days (two-a-day).
+      if (daysPerWeek > 7) {
+        return {
+          split: 'PPL',
+          reason: 'With two-a-day sessions, PPL rotation splits the day\'s work so no muscle is hit twice in one day - keep sessions short and manage recovery carefully',
+          alternatives: [
+            { split: 'Bro Split', reason: 'One muscle per session caps overlap between the day\'s two workouts' }
+          ]
+        };
+      }
       return {
         split: 'PPL',
         reason: 'PPL with strategic rest days allows daily training if desired',
@@ -945,37 +963,45 @@ export function calculateVolumeDistribution(
   const muscles: MuscleGroup[] = ['chest', 'back', 'shoulders', 'biceps', 'triceps', 'quads', 'hamstrings', 'glutes', 'calves', 'abs', 'traps'];
   const result: Record<MuscleGroup, { sets: number; frequency: number }> = {} as Record<MuscleGroup, { sets: number; frequency: number }>;
 
+  // Above 6 sessions/week (daily training, or two-a-day at up to 14) the
+  // session templates repeat the split's base rotation, so a muscle's weekly
+  // frequency grows with the number of rotation cycles rather than staying at
+  // the hardcoded <=6 values: PPL hits everything once per 3-session cycle,
+  // Upper/Lower twice per 4, Bro Split once per 5. <=6 sessions keeps the
+  // long-standing map below byte-for-byte.
+  const highFrequency = (rotationLength: number, floor: number) =>
+    Math.max(floor, Math.round(daysPerWeek / rotationLength));
+
+  const uniformFrequency = (frequency: number): Record<MuscleGroup, number> => ({
+    chest: frequency, back: frequency, shoulders: frequency, biceps: frequency, triceps: frequency,
+    quads: frequency, hamstrings: frequency, glutes: frequency, calves: frequency, abs: frequency,
+    adductors: frequency, forearms: frequency, traps: frequency, erectors: frequency
+  } as Record<MuscleGroup, number>);
+
   // Determine frequency based on split
   const frequencyMap: Record<Split, Record<MuscleGroup, number>> = {
-    'Full Body': {
+    'Full Body': daysPerWeek > 6 ? {
+      // Every session is full-body, but hitting every muscle with direct sets
+      // 7-14x/week is junk volume — hold the big movers at ~every other
+      // session and smaller muscles at ~every third.
+      chest: highFrequency(2, 3), back: highFrequency(2, 3), shoulders: highFrequency(2, 3),
+      biceps: highFrequency(3, 2), triceps: highFrequency(3, 2), quads: highFrequency(2, 3),
+      hamstrings: highFrequency(3, 2), glutes: highFrequency(3, 2), calves: highFrequency(3, 2), abs: highFrequency(3, 2),
+      adductors: highFrequency(3, 2), forearms: highFrequency(3, 2), traps: highFrequency(3, 2),
+      erectors: highFrequency(3, 2)
+    } : {
       chest: Math.min(daysPerWeek, 3), back: Math.min(daysPerWeek, 3), shoulders: Math.min(daysPerWeek, 3),
       biceps: Math.min(daysPerWeek, 2), triceps: Math.min(daysPerWeek, 2), quads: Math.min(daysPerWeek, 3),
       hamstrings: Math.min(daysPerWeek, 2), glutes: Math.min(daysPerWeek, 2), calves: Math.min(daysPerWeek, 2), abs: Math.min(daysPerWeek, 2),
       adductors: Math.min(daysPerWeek, 2), forearms: Math.min(daysPerWeek, 2), traps: Math.min(daysPerWeek, 2),
       erectors: Math.min(daysPerWeek, 2)
     },
-    'Upper/Lower': {
-      chest: 2, back: 2, shoulders: 2, biceps: 2, triceps: 2,
-      quads: 2, hamstrings: 2, glutes: 2, calves: 2, abs: 2,
-      adductors: 2, forearms: 2, traps: 2, erectors: 2
-    },
-    'PPL': {
-      chest: daysPerWeek >= 6 ? 2 : 1, back: daysPerWeek >= 6 ? 2 : 1, shoulders: daysPerWeek >= 6 ? 2 : 1,
-      biceps: daysPerWeek >= 6 ? 2 : 1, triceps: daysPerWeek >= 6 ? 2 : 1, quads: daysPerWeek >= 6 ? 2 : 1,
-      hamstrings: daysPerWeek >= 6 ? 2 : 1, glutes: daysPerWeek >= 6 ? 2 : 1, calves: daysPerWeek >= 6 ? 2 : 1, abs: daysPerWeek >= 6 ? 2 : 1,
-      adductors: daysPerWeek >= 6 ? 2 : 1, forearms: daysPerWeek >= 6 ? 2 : 1, traps: daysPerWeek >= 6 ? 2 : 1,
-      erectors: daysPerWeek >= 6 ? 2 : 1
-    },
-    'Arnold': {
-      chest: 2, back: 2, shoulders: 2, biceps: 2, triceps: 2,
-      quads: 2, hamstrings: 2, glutes: 2, calves: 2, abs: 2,
-      adductors: 2, forearms: 2, traps: 2, erectors: 2
-    },
-    'Bro Split': {
-      chest: 1, back: 1, shoulders: 1, biceps: 1, triceps: 1,
-      quads: 1, hamstrings: 1, glutes: 1, calves: 1, abs: 1,
-      adductors: 1, forearms: 1, traps: 1, erectors: 1
-    }
+    'Upper/Lower': daysPerWeek > 6 ? uniformFrequency(highFrequency(2, 2)) : uniformFrequency(2),
+    'PPL': daysPerWeek > 6
+      ? uniformFrequency(highFrequency(3, 2))
+      : uniformFrequency(daysPerWeek >= 6 ? 2 : 1),
+    'Arnold': daysPerWeek > 6 ? uniformFrequency(highFrequency(3, 2)) : uniformFrequency(2),
+    'Bro Split': daysPerWeek > 6 ? uniformFrequency(highFrequency(5, 1)) : uniformFrequency(1)
   };
 
   const frequencies = frequencyMap[split];
@@ -1315,16 +1341,20 @@ export function buildSessionTemplates(
   };
   
   const baseTemplates = templates[split];
-  
-  // Adjust number of templates based on days per week
-  if (split === 'PPL' && daysPerWeek >= 6) {
-    // Double up PPL for 6 days
-    return [
-      ...baseTemplates.map(t => ({ ...t, day: t.day + ' 1' })),
-      ...baseTemplates.map(t => ({ ...t, day: t.day + ' 2' })),
-    ].slice(0, daysPerWeek);
+
+  // Adjust number of templates based on days per week. 6-day PPL doubles the
+  // rotation ('Push 1' ... 'Legs 2'); above 6 sessions/week (daily training or
+  // two-a-day, up to 14) every split repeats its rotation the same way so the
+  // planned week really contains daysPerWeek sessions.
+  if ((split === 'PPL' && daysPerWeek >= 6) || daysPerWeek > 6) {
+    const rounds = Math.max(2, Math.ceil(daysPerWeek / baseTemplates.length));
+    const repeated: SessionTemplate[] = [];
+    for (let round = 1; round <= rounds; round++) {
+      repeated.push(...baseTemplates.map(t => ({ ...t, day: `${t.day} ${round}` })));
+    }
+    return repeated.slice(0, daysPerWeek);
   }
-  
+
   return baseTemplates.slice(0, daysPerWeek);
 }
 
@@ -1766,8 +1796,11 @@ export function generateFullProgram(
     4: ['Mon', 'Tue', 'Thu', 'Fri'],
     5: ['Mon', 'Tue', 'Wed', 'Fri', 'Sat'],
     6: ['Mon', 'Tue', 'Wed', 'Fri', 'Sat', 'Sun'],
+    7: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
   };
-  const schedule = schedulePatterns[daysPerWeek] || schedulePatterns[4];
+  // >7 sessions/week means two-a-day; the weekday pattern still tops out at 7.
+  const schedule =
+    schedulePatterns[Math.min(daysPerWeek, 7)] || schedulePatterns[4];
   
   // Step 8: Validate and warn
   const avgSessionTime = sessions.reduce((sum, s) => sum + s.estimatedMinutes, 0) / sessions.length;

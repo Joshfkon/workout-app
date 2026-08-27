@@ -74,6 +74,7 @@ function historyRow(primaryMuscle: string, workingSets: number, secondaryMuscles
         name: `History ${primaryMuscle}`,
         primaryMuscle,
         secondaryMuscles,
+        stabilizers: [],
         sets: Array.from({ length: workingSets }, () => ({ repsInTank: 2, reportedRir: 2 })),
       },
     ],

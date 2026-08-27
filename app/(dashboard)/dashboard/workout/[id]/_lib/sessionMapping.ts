@@ -28,6 +28,7 @@ import type {
 } from '@/types/schema';
 import type { ExerciseBlockWithExercise } from './types';
 import { resolveIsBodyweight } from '@/services/bodyweightClassification';
+import { stabilizersForExerciseName } from '@/services/shared/stabilizerTags';
 
 /**
  * Exercise plus the extra runtime fields the workout page has always attached
@@ -66,6 +67,8 @@ export interface LoadedExerciseRow {
   name: string;
   primary_muscle: string;
   secondary_muscles: string[] | null;
+  stabilizers?: string[] | null;
+  is_custom?: boolean | null;
   mechanic: 'compound' | 'isolation';
   default_rep_range: [number, number] | null;
   default_rir: number | null;
@@ -179,6 +182,17 @@ export function mapLoadedExerciseRow(row: LoadedExerciseRow): LoadedExercise {
     name: row.name,
     primaryMuscle: row.primary_muscle,
     secondaryMuscles: row.secondary_muscles || [],
+    // Stabilizer tags feed the stabilizer-recovery warning
+    // (stabilizerWarningForBlock). Pre-seed STOCK rows carry '{}' — fall back
+    // to the canonical map by name, same convention as
+    // exerciseService.mapDbExercise. Custom rows never fall back (the seed
+    // excludes them; a custom sharing a stock name keeps its empty value).
+    stabilizers:
+      row.stabilizers && row.stabilizers.length > 0
+        ? row.stabilizers
+        : row.is_custom === true
+          ? []
+          : stabilizersForExerciseName(row.name) ?? [],
     mechanic: row.mechanic,
     defaultRepRange: row.default_rep_range || [8, 12],
     defaultRir: row.default_rir || 2,

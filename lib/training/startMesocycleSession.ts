@@ -55,6 +55,8 @@ import {
   getTrainingDays,
   getWorkoutForDate,
   getWorkoutForDay,
+  getWorkoutsForDate,
+  getNextWorkoutForDate,
   type TodayWorkout,
 } from '@/lib/training/trainingSchedule';
 import { insertWorkoutSessions } from '@/lib/training/sessionOrigin';
@@ -147,7 +149,7 @@ interface ExerciseBlockInsert {
 // startMesocycleWorkoutSession.
 // ============================================================
 
-export { getTrainingDays, getWorkoutForDate, getWorkoutForDay };
+export { getTrainingDays, getWorkoutForDate, getWorkoutForDay, getWorkoutsForDate, getNextWorkoutForDate };
 
 /**
  * Get rest period based on exercise type and user's goal
@@ -188,6 +190,26 @@ export async function countCompletedSessions(
     .select('id', { count: 'exact', head: true })
     .eq('mesocycle_id', mesocycleId)
     .eq('state', 'completed');
+
+  return count || 0;
+}
+
+/**
+ * Completed sessions on ONE calendar date — how far through a two-a-day
+ * date's slots the user is. Feeds getNextWorkoutForDate so "today's workout"
+ * surfaces advance to the PM session once the AM one is finished.
+ */
+export async function countCompletedSessionsOnDate(
+  supabase: SupabaseClient,
+  mesocycleId: string,
+  dateStr: string
+): Promise<number> {
+  const { count } = await supabase
+    .from('workout_sessions')
+    .select('id', { count: 'exact', head: true })
+    .eq('mesocycle_id', mesocycleId)
+    .eq('state', 'completed')
+    .eq('planned_date', dateStr);
 
   return count || 0;
 }

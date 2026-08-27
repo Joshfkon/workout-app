@@ -68,6 +68,8 @@ export default function NewMesocyclePage() {
   // Form state
   const [name, setName] = useState('');
   const [daysPerWeek, setDaysPerWeek] = useState(4);
+  // Two-a-day training: 2 sessions on every training day (fixed-day mode).
+  const [sessionsPerDay, setSessionsPerDay] = useState(1);
   const [sessionDurationMinutes, setSessionDurationMinutes] = useState(60);
   const [useAiRecommendation, setUseAiRecommendation] = useState(true);
   
@@ -96,6 +98,14 @@ export default function NewMesocyclePage() {
   // True cadence of an interval schedule: every other day is 3.5/week, not 4.
   const intervalSessionsPerWeek = (7 / trainingIntervalDays).toFixed(1).replace(/\.0$/, '');
 
+  // Two-a-day only combines with fixed weekdays; an interval cadence stays 1/day.
+  const effectiveSessionsPerDay = scheduleMode === 'fixed_days' ? sessionsPerDay : 1;
+
+  // What the program/progression math plans in: SESSIONS per week. days_per_week
+  // stores this number (the same convention interval mode already uses), so a
+  // 7-day two-a-day plan is 14. The slider keeps counting calendar days.
+  const plannedSessionsPerWeek = daysPerWeek * effectiveSessionsPerDay;
+
   // Interval cadences aren't whole sessions per week (every other day is 3.5),
   // but the program/progression math plans in whole sessions — keep
   // daysPerWeek pinned to the nearest whole number so every downstream
@@ -112,7 +122,8 @@ export default function NewMesocyclePage() {
 
   const scheduleSummary = describeTrainingSchedule(
     buildTrainingSchedule({
-      days_per_week: daysPerWeek,
+      days_per_week: plannedSessionsPerWeek,
+      sessions_per_day: effectiveSessionsPerDay,
       preferred_workout_days: preferredWorkoutDays,
       schedule_mode: scheduleMode,
       training_interval_days: trainingIntervalDays,
@@ -129,6 +140,7 @@ export default function NewMesocyclePage() {
       4: ['Monday', 'Tuesday', 'Thursday', 'Friday'],
       5: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
       6: ['Monday', 'Tuesday', 'Wednesday', 'Friday', 'Saturday', 'Sunday'],
+      7: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
     };
     return patterns[days] || patterns[4];
   };
@@ -168,9 +180,9 @@ export default function NewMesocyclePage() {
   
   const exerciseEstimate = getExerciseEstimate(sessionDurationMinutes);
 
-  // Optimal session duration based on training frequency
-  const getOptimalSessionTime = (days: number): { min: number; optimal: number; max: number; quickMin: number; reason: string } => {
-    switch (days) {
+  // Optimal session duration based on weekly SESSION count (two-a-day counts both)
+  const getOptimalSessionTime = (sessions: number): { min: number; optimal: number; max: number; quickMin: number; reason: string } => {
+    switch (sessions) {
       case 2:
         return { min: 60, optimal: 75, max: 90, quickMin: 30, reason: 'Full body 2x/week needs longer sessions to hit all muscle groups' };
       case 3:
@@ -181,7 +193,12 @@ export default function NewMesocyclePage() {
         return { min: 40, optimal: 50, max: 65, quickMin: 15, reason: 'Higher frequency allows shorter, more focused sessions' };
       case 6:
         return { min: 35, optimal: 45, max: 60, quickMin: 15, reason: 'PPL 2x/week - keep sessions efficient to manage recovery' };
+      case 7:
+        return { min: 30, optimal: 45, max: 60, quickMin: 15, reason: 'Daily training - keep sessions moderate so recovery keeps up' };
       default:
+        if (sessions > 7) {
+          return { min: 25, optimal: 40, max: 50, quickMin: 15, reason: 'Two-a-day training - split the volume into short, focused sessions to stay recoverable' };
+        }
         return { min: 45, optimal: 60, max: 75, quickMin: 20, reason: 'Standard recommendation' };
     }
   };
@@ -231,8 +248,8 @@ export default function NewMesocyclePage() {
     return { status, message, color, totalHours, optimalMin, optimalMax };
   };
 
-  const optimalTime = getOptimalSessionTime(daysPerWeek);
-  const volumeAssessment = assessWeeklyVolume(daysPerWeek, sessionDurationMinutes);
+  const optimalTime = getOptimalSessionTime(plannedSessionsPerWeek);
+  const volumeAssessment = assessWeeklyVolume(plannedSessionsPerWeek, sessionDurationMinutes);
 
   // Load user data on mount
   useEffect(() => {
@@ -335,7 +352,7 @@ export default function NewMesocyclePage() {
       // Generate legacy recommendation for backwards compatibility
       const rec = generateMesocycleRecommendation(
         { goal: userGoal, experience: userExperience, heightCm, latestDexa },
-        daysPerWeek
+        plannedSessionsPerWeek
       );
       setRecommendation(rec);
       setSplitType(rec.splitType);
@@ -364,11 +381,11 @@ export default function NewMesocyclePage() {
       
       // Generate full program with extended profile and lagging areas
       // Uses the full-featured generator with fatigue tracking, SFR, and mesocycle weeks
-      const program = generateFullMesocycleWithFatigue(daysPerWeek, extendedProfile, sessionDurationMinutes, laggingAreas, unavailableEquipmentIds);
+      const program = generateFullMesocycleWithFatigue(plannedSessionsPerWeek, extendedProfile, sessionDurationMinutes, laggingAreas, unavailableEquipmentIds, effectiveSessionsPerDay);
       setFullProgram(program);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [daysPerWeek, userGoal, userExperience, heightCm, latestDexa, useAiRecommendation,
+  }, [daysPerWeek, plannedSessionsPerWeek, effectiveSessionsPerDay, userGoal, userExperience, heightCm, latestDexa, useAiRecommendation,
       userAge, sleepQuality, stressLevel, trainingAge, availableEquipment, injuryHistory, sessionDurationMinutes, unavailableEquipmentIds, enhancedAthleteMode]);
 
   // Generate default name
@@ -418,7 +435,9 @@ export default function NewMesocyclePage() {
           userId: user.id,
           name,
           splitType,
-          daysPerWeek,
+          // days_per_week counts SESSIONS per week (7 days x 2/day = 14).
+          daysPerWeek: plannedSessionsPerWeek,
+          sessionsPerDay: effectiveSessionsPerDay,
           totalWeeks,
           scheduleMode,
           trainingIntervalDays,
@@ -635,21 +654,50 @@ export default function NewMesocyclePage() {
             </div>
 
             {scheduleMode === 'fixed_days' ? (
-              <Slider
-                label="Training Days per Week"
-                min={2}
-                max={6}
-                value={daysPerWeek}
-                onChange={(e) => setDaysPerWeek(parseInt(e.target.value))}
-                valueFormatter={(v) => `${v} days`}
-                marks={[
-                  { value: 2, label: '2' },
-                  { value: 3, label: '3' },
-                  { value: 4, label: '4' },
-                  { value: 5, label: '5' },
-                  { value: 6, label: '6' },
-                ]}
-              />
+              <>
+                <Slider
+                  label="Training Days per Week"
+                  min={2}
+                  max={7}
+                  value={daysPerWeek}
+                  onChange={(e) => setDaysPerWeek(parseInt(e.target.value))}
+                  valueFormatter={(v) => `${v} days`}
+                  marks={[
+                    { value: 2, label: '2' },
+                    { value: 3, label: '3' },
+                    { value: 4, label: '4' },
+                    { value: 5, label: '5' },
+                    { value: 6, label: '6' },
+                    { value: 7, label: '7' },
+                  ]}
+                />
+
+                {/* Two-a-day sessions */}
+                <div className="flex items-center justify-between p-3 bg-surface-800/30 rounded-lg">
+                  <div>
+                    <p className="font-medium text-surface-200">Train twice a day</p>
+                    <p className="text-xs text-surface-500">
+                      {sessionsPerDay === 2
+                        ? `2 sessions on each training day — ${plannedSessionsPerWeek} sessions/week`
+                        : 'Two shorter sessions on each training day (advanced)'}
+                    </p>
+                  </div>
+                  <Toggle
+                    checked={sessionsPerDay === 2}
+                    onChange={(checked) => setSessionsPerDay(checked ? 2 : 1)}
+                  />
+                </div>
+
+                {sessionsPerDay === 2 && (
+                  <div className="p-3 bg-warning-500/10 border border-warning-500/20 rounded-lg">
+                    <p className="text-xs text-warning-400">
+                      ⚠️ Two-a-day training is demanding. The plan alternates the split across
+                      both sessions (e.g. Push in the morning, Pull in the evening) — make sure
+                      sleep and nutrition can support {plannedSessionsPerWeek} weekly sessions.
+                    </p>
+                  </div>
+                )}
+              </>
             ) : (
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium text-surface-200">Training Days per Week</span>
@@ -719,7 +767,9 @@ export default function NewMesocyclePage() {
             {/* Optimal session recommendation */}
             <div className="p-4 bg-surface-800/50 rounded-lg space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-surface-300">Recommended for {daysPerWeek} days/week:</span>
+                <span className="text-sm font-medium text-surface-300">
+                  Recommended for {plannedSessionsPerWeek} sessions/week:
+                </span>
                 <span className="text-sm text-primary-400 font-medium">{optimalTime.optimal} min</span>
               </div>
               <div className="flex items-center gap-2">
@@ -991,6 +1041,8 @@ export default function NewMesocyclePage() {
                 <span className="text-surface-200 font-medium">
                   {scheduleMode === 'interval'
                     ? `~${intervalSessionsPerWeek} days/week`
+                    : effectiveSessionsPerDay === 2
+                    ? `${daysPerWeek} days × 2/day (${plannedSessionsPerWeek} sessions/week)`
                     : `${daysPerWeek} days/week`}
                 </span>
               </div>
@@ -1112,14 +1164,14 @@ export default function NewMesocyclePage() {
                     Why {splitType}?
                   </h4>
                   <p className="text-sm text-surface-400 mb-3">
-                    {splitType === 'Full Body' 
-                      ? `Full Body training ${daysPerWeek}x/week allows you to train each muscle 2-3x per week for optimal protein synthesis and frequency. Each session hits all major muscle groups with moderate volume.`
+                    {splitType === 'Full Body'
+                      ? `Full Body training ${plannedSessionsPerWeek}x/week allows you to train each muscle 2-3x per week for optimal protein synthesis and frequency. Each session hits all major muscle groups with moderate volume.`
                       : splitType === 'Upper/Lower'
-                      ? `Upper/Lower splits hit each muscle group 2x/week with ${daysPerWeek} training days. This provides excellent recovery (72+ hours between sessions) while maintaining high frequency for growth.`
+                      ? `Upper/Lower splits hit each muscle group 2x/week with ${plannedSessionsPerWeek} weekly sessions. This provides excellent recovery (72+ hours between sessions) while maintaining high frequency for growth.`
                       : splitType === 'PPL'
-                      ? `Push/Pull/Legs ${daysPerWeek >= 6 ? '2x/week' : '1x/week'} allows higher volume per muscle group per session. Push days hit chest/shoulders/triceps, Pull days hit back/biceps, and Leg days cover the lower body.`
+                      ? `Push/Pull/Legs ${plannedSessionsPerWeek >= 6 ? '2x/week' : '1x/week'} allows higher volume per muscle group per session. Push days hit chest/shoulders/triceps, Pull days hit back/biceps, and Leg days cover the lower body.`
                       : splitType === 'Arnold'
-                      ? `The Arnold split groups Chest/Back, Shoulders/Arms, and Legs for ${daysPerWeek} training days. This classic approach allows high volume with antagonist supersets.`
+                      ? `The Arnold split groups Chest/Back, Shoulders/Arms, and Legs for ${plannedSessionsPerWeek} weekly sessions. This classic approach allows high volume with antagonist supersets.`
                       : `The Bro Split dedicates entire sessions to single muscle groups, allowing maximum volume per muscle but lower frequency (1x/week per muscle).`
                     }
                   </p>
@@ -1127,9 +1179,9 @@ export default function NewMesocyclePage() {
                     <div className="p-2 bg-surface-800 rounded text-center">
                       <p className="text-surface-500">Frequency</p>
                       <p className="text-surface-200 font-medium">
-                        {splitType === 'Full Body' ? '2-3x' 
-                          : splitType === 'Upper/Lower' ? '2x' 
-                          : splitType === 'PPL' ? (daysPerWeek >= 6 ? '2x' : '1x')
+                        {splitType === 'Full Body' ? '2-3x'
+                          : splitType === 'Upper/Lower' ? '2x'
+                          : splitType === 'PPL' ? (plannedSessionsPerWeek >= 6 ? '2x' : '1x')
                           : splitType === 'Arnold' ? '2x'
                           : '1x'}/week per muscle
                       </p>
@@ -1137,9 +1189,9 @@ export default function NewMesocyclePage() {
                     <div className="p-2 bg-surface-800 rounded text-center">
                       <p className="text-surface-500">Recovery</p>
                       <p className="text-surface-200 font-medium">
-                        {splitType === 'Full Body' ? '48h' 
-                          : splitType === 'Upper/Lower' ? '72h' 
-                          : splitType === 'PPL' ? (daysPerWeek >= 6 ? '72h' : '168h')
+                        {splitType === 'Full Body' ? '48h'
+                          : splitType === 'Upper/Lower' ? '72h'
+                          : splitType === 'PPL' ? (plannedSessionsPerWeek >= 6 ? '72h' : '168h')
                           : splitType === 'Arnold' ? '72h'
                           : '168h'} between
                       </p>

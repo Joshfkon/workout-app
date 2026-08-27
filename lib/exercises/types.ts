@@ -165,6 +165,14 @@ export interface CompletedExerciseData {
   // === Metadata ===
   aiConfidence: AIConfidence;
   aiNotes?: string;
+  /**
+   * Where this completion actually came from. 'ai' = the model reviewed the
+   * exercise; 'fallback' = equipment-based defaults stood in (no API key, AI
+   * error, unparseable response, or usage limit). The review form surfaces
+   * 'fallback' explicitly — muscle review is mandatory, so defaults must
+   * never masquerade as an AI verdict. Absent on legacy payloads = unknown.
+   */
+  aiSource?: 'ai' | 'fallback';
 }
 
 // ============================================

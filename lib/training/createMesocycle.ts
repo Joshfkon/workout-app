@@ -40,7 +40,13 @@ export interface CreateMesocycleInput {
   /** Blank falls back to "<split> - <date>". */
   name?: string;
   splitType: Split | string;
+  /**
+   * Planned SESSIONS per week — with two-a-day training this is days x 2 (up
+   * to 14), matching the sessions-count convention interval mode set.
+   */
   daysPerWeek: number;
+  /** Sessions on each training day (1 or 2). Defaults to 1. */
+  sessionsPerDay?: number;
   /** Requested length; clamped to the generated program's actual week count. */
   totalWeeks: number;
   scheduleMode: ScheduleMode;
@@ -119,6 +125,7 @@ export function buildMesocycleRow(
     name: input.name || `${input.splitType} - ${clockNow().toLocaleDateString()}`,
     split_type: input.splitType,
     days_per_week: input.daysPerWeek,
+    sessions_per_day: input.sessionsPerDay ?? 1,
     total_weeks: weeks.effectiveTotalWeeks,
     deload_week: weeks.effectiveDeloadWeek,
     current_week: 1,

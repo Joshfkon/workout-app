@@ -237,6 +237,13 @@ A mesocycle's calendar has two shapes, both resolved by
   this mode exists for exactly that reason. The split rotates continuously
   rather than re-pinning to weekdays.
 
+Either mode can run **two-a-day** (`sessions_per_day = 2`): each training date
+carries two consecutive slots of the split rotation, resolved by
+`resolveScheduledSlots` / `getWorkoutsForDate` (the singular forms return the
+date's FIRST session). `days_per_week` counts SESSIONS per week — a 7-day
+two-a-day block stores 14 — so the count-based progression math
+(`sessionIndexFromCompleted`, week rollover) needs no special casing.
+
 Rules:
 1. **Always go through `buildTrainingSchedule(row)` + `getWorkoutForDate(splitType, date, schedule)`.**
    Never re-derive a schedule from `days_per_week`/`preferred_workout_days`
@@ -244,7 +251,8 @@ Rules:
    silently cannot represent interval schedules. `getWorkoutForDay` remains only
    as a fixed-day convenience wrapper.
 2. Any query whose result feeds a schedule must select `schedule_mode`,
-   `training_interval_days` and `start_date` alongside `preferred_workout_days`.
+   `training_interval_days`, `sessions_per_day` and `start_date` alongside
+   `preferred_workout_days`.
 3. `days_per_week` stays a whole number in interval mode
    (`intervalDaysPerWeek()` rounds 7/N) because the program, volume and
    progression math plan in whole sessions per week. The interval drives the

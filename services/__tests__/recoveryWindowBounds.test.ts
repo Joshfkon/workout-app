@@ -216,12 +216,16 @@ describe('ordinary-grid saturation', () => {
   const breakdowns = cells.map(evaluate);
   const metrics = summarizeClamps(breakdowns);
 
-  it('has the expected shape (26 muscles x grid, invalid combinations rejected)', () => {
-    expect(cells.length).toBe(11960);
+  it('has the expected shape (all standard muscles x grid, invalid combinations rejected)', () => {
+    // Derived from the muscle count so a taxonomy addition (rotator_cuff)
+    // doesn't stale a restated literal: 460 grid cells per muscle, half of
+    // which are duplicate states across the two-value axes.
+    const perMuscle = 11960 / 26;
+    expect(cells.length).toBe(perMuscle * STANDARD_MUSCLE_GROUPS.length);
     const uniqueStates = new Set(
       cells.map((c) => `${c.muscle}|${c.enhanced}|${c.learned}|${c.totalDoseRatio}|${c.hardDoseRatio}`)
     );
-    expect(uniqueStates.size).toBe(5980);
+    expect(uniqueStates.size).toBe((perMuscle / 2) * STANDARD_MUSCLE_GROUPS.length);
   });
 
   it('keeps combined clamp saturation under 5% — measured, never hard-coded', () => {

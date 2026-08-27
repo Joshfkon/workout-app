@@ -101,20 +101,22 @@ export async function completeExerciseWithAI(
       return { success: false, error: 'Unauthorized' };
     }
 
-    // Check usage limits
+    // Check usage limits. Exhausted quota must not block creating the
+    // exercise — the muscle review is mandatory but EVENTUAL: the flow
+    // proceeds with clearly-flagged defaults (aiSource 'fallback'), and the
+    // exercise stays in the incomplete-review queue
+    // (getIncompleteExercises → IncompleteExercisesPrompt) until a real AI
+    // review runs once quota resets.
     const usage = await getAIUsage(user.id);
-    if (usage.today >= DAILY_LIMIT) {
+    if (usage.today >= DAILY_LIMIT || usage.thisMonth >= MONTHLY_LIMIT) {
       return {
-        success: false,
-        error: `Daily AI limit reached (${DAILY_LIMIT}/day). You can create exercises with manual entry or wait until tomorrow.`,
+        success: true,
+        data: getDefaultsByEquipment(input),
         limitReached: true,
-      };
-    }
-    if (usage.thisMonth >= MONTHLY_LIMIT) {
-      return {
-        success: false,
-        error: `Monthly AI limit reached (${MONTHLY_LIMIT}/month). Please use manual entry for additional exercises.`,
-        limitReached: true,
+        error:
+          usage.today >= DAILY_LIMIT
+            ? `Daily AI limit reached (${DAILY_LIMIT}/day) — defaults shown; the exercise will be queued for AI review.`
+            : `Monthly AI limit reached (${MONTHLY_LIMIT}/month) — defaults shown; the exercise will be queued for AI review.`,
       };
     }
 

@@ -44,6 +44,7 @@ export interface MesocyclePlanRow {
   schedule_mode: ScheduleMode | null;
   /** Interval schedules only: train every N days from start_date. */
   training_interval_days: number | null;
+  sessions_per_day?: number | null;
   program_data: unknown;
   exercise_overrides?: ExerciseOverride[] | null;
 }
@@ -57,7 +58,7 @@ export interface MesocyclePlanData {
 const PLAN_COLUMNS =
   'id, name, state, split_type, total_weeks, current_week, days_per_week, deload_week, ' +
   'session_duration_minutes, start_date, preferred_workout_days, schedule_mode, ' +
-  'training_interval_days, program_data, exercise_overrides';
+  'training_interval_days, sessions_per_day, program_data, exercise_overrides';
 
 async function fetchMesocyclePlan(mesocycleId: string | null): Promise<MesocyclePlanData> {
   const supabase = createUntypedClient();

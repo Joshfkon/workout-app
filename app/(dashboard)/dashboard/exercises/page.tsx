@@ -31,7 +31,12 @@ import { useExercisePreferences } from '@/hooks/useExercisePreferences';
 import { ExerciseOptionsMenu } from '@/components/exercises/ExerciseOptionsMenu';
 import { ExerciseStatusModal } from '@/components/exercises/ExerciseStatusModal';
 import type { ExerciseVisibilityStatus, ExerciseHideReason } from '@/types/user-exercise-preferences';
-import { batchCompleteAllExercises } from '@/lib/actions/exercise-completion';
+import {
+  batchCompleteAllExercises,
+  completeSingleExercise,
+  getIncompleteExercises,
+} from '@/lib/actions/exercise-completion';
+import { IncompleteExercisesPrompt } from '@/components/exercises/IncompleteExercisesPrompt';
 import { updateExerciseRow } from '@/lib/exercises/updateExerciseRow';
 import { useKeyboardInset } from '@/hooks/useKeyboardInset';
 
@@ -178,6 +183,10 @@ export default function ExercisesPage() {
   const [isBatchCompleting, setIsBatchCompleting] = useState(false);
   const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; exerciseName: string } | null>(null);
   const [batchResult, setBatchResult] = useState<{ processed: number; updated: number; skipped: number; errors: number } | null>(null);
+  // Incomplete-review queue (mandatory muscle review): remounting the prompt
+  // via this key makes it re-fetch its list after a completion run.
+  const [incompletePromptKey, setIncompletePromptKey] = useState(0);
+  const [isCompletingIncomplete, setIsCompletingIncomplete] = useState(false);
 
   // Set mounted flag to prevent hydration mismatches
   useEffect(() => {
@@ -225,6 +234,52 @@ export default function ExercisesPage() {
     },
     [queryClient]
   );
+
+  // Re-pull the catalog from the DB after AI completions land server-side.
+  const refetchCatalog = useCallback(async () => {
+    const supabase = createUntypedClient();
+    const { data } = await supabase
+      .from('exercises')
+      .select('*')
+      .is('deleted_at', null)
+      .order('name');
+    if (data) mutateExercises(data as Exercise[]);
+  }, [mutateExercises]);
+
+  // Mandatory-review repair loop: run the AI review on one (or every)
+  // incomplete custom exercise, then refresh both the catalog and the
+  // prompt's own list (key remount). completeSingleExercise fills only
+  // missing fields, so a user's manual edits are never overwritten.
+  const handleCompleteIncompleteOne = useCallback(
+    async (exerciseId: string) => {
+      setIsCompletingIncomplete(true);
+      try {
+        await completeSingleExercise(exerciseId);
+        await refetchCatalog();
+      } finally {
+        setIsCompletingIncomplete(false);
+        setIncompletePromptKey((k) => k + 1);
+      }
+    },
+    [refetchCatalog]
+  );
+
+  const handleCompleteIncompleteAll = useCallback(async () => {
+    setIsCompletingIncomplete(true);
+    try {
+      const incomplete = await getIncompleteExercises();
+      for (const exercise of incomplete) {
+        const result = await completeSingleExercise(exercise.id);
+        // Quota exhausted: stop burning calls — the rest stay queued and the
+        // prompt re-surfaces them next visit.
+        if (result.limitReached) break;
+      }
+      await refetchCatalog();
+    } finally {
+      setIsCompletingIncomplete(false);
+      setIncompletePromptKey((k) => k + 1);
+    }
+  }, [refetchCatalog]);
 
   const fetchExerciseHistory = async (exerciseId: string) => {
     if (exerciseHistories[exerciseId]) return; // Already loaded
@@ -722,6 +777,22 @@ export default function ExercisesPage() {
             <p>Skipped: {batchResult.skipped}</p>
             {batchResult.errors > 0 && <p className="text-orange-400">Errors: {batchResult.errors}</p>}
           </div>
+        </div>
+      )}
+
+      {/* Mandatory muscle review — customs that slipped past the AI review
+          (offline creation, quota fallback, CSV import) queue here until a
+          real review fills their muscle/safety metadata. */}
+      {!isCompletingIncomplete && (
+        <IncompleteExercisesPrompt
+          key={incompletePromptKey}
+          onCompleteAll={() => void handleCompleteIncompleteAll()}
+          onCompleteOne={(id) => void handleCompleteIncompleteOne(id)}
+        />
+      )}
+      {isCompletingIncomplete && (
+        <div className="bg-primary-500/10 border border-primary-500/20 rounded-lg p-4">
+          <p className="text-sm text-primary-300">Running AI review on incomplete exercises…</p>
         </div>
       )}
 

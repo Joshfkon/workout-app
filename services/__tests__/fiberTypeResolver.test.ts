@@ -138,19 +138,16 @@ describe('Model B fatigue-decay behaviour', () => {
     }
   });
 
-  it('gastrocnemius recovery days are unchanged by this fix (slow->mixed misses the fast branch)', () => {
-    // Honest reporting: the recoveryDays branch keys on 'fast', so moving
-    // gastrocnemius from 'slow' to 'mixed' does not alter it. The change that
-    // DOES land is calculateRecoveryRate's slow-twitch x1.1 bonus, which
-    // gastrocnemius no longer receives.
-    const before = calculateExerciseFatigue(exercise('calves') as never, 3, 12, 2, 1);
-    const after = calculateExerciseFatigue(exercise('gastrocnemius') as never, 3, 12, 2, 1);
-    expect(after.recoveryDays).toBe(before.recoveryDays);
-  });
-
-  it('a fast-twitch primary still extends recovery on heavy low-rep work', () => {
-    const heavy = calculateExerciseFatigue(exercise('hamstrings') as never, 3, 5, 1, 1);
-    const light = calculateExerciseFatigue(exercise('hamstrings') as never, 3, 12, 1, 1);
-    expect(heavy.recoveryDays).toBeGreaterThan(light.recoveryDays);
+  it('fiber label no longer influences the WITHIN-SESSION fatigue profile at all', () => {
+    // recoveryDays (the only fiber-keyed output here) was removed in #634 —
+    // computed for years, read by nothing; between-session recovery belongs
+    // to services/muscleRecovery. What remains of the profile must be
+    // fiber-independent: same pattern/equipment/sets/reps/RIR, different
+    // fiber primaries, identical systemic cost and SFR.
+    const mixed = calculateExerciseFatigue(exercise('gastrocnemius') as never, 3, 12, 2, 1);
+    const fast = calculateExerciseFatigue(exercise('hamstrings') as never, 3, 12, 2, 1);
+    expect(mixed.systemicCost).toBe(fast.systemicCost);
+    expect(mixed.stimulusPerFatigue).toBe(fast.stimulusPerFatigue);
+    expect('recoveryDays' in mixed).toBe(false);
   });
 });

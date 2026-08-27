@@ -50,6 +50,14 @@ export interface ImportResult {
   imported: number;
   skipped: number;
   errors: string[];
+  /**
+   * Custom exercises the import had to CREATE (unknown names). They carry
+   * only name-inferred tags and no stabilizer/safety metadata, so they enter
+   * the mandatory muscle-review queue (getIncompleteExercises →
+   * IncompleteExercisesPrompt on the Exercises page). The result card tells
+   * the user so.
+   */
+  newExercises?: number;
 }
 
 export interface ParsedStrongWorkout {
