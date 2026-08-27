@@ -16,14 +16,29 @@ import type {
   VolumeLandmarks,
   VolumeStatus,
   StandardMuscleGroup,
+  RepsInTank,
 } from '@/types/schema';
 import {
   STANDARD_MUSCLE_GROUPS,
   DEFAULT_VOLUME_LANDMARKS,
   resolveMuscleToStandard,
 } from '@/types/schema';
-import { rirFromFeedback, sumEffectiveVolume } from '@/services/effectiveVolume';
-import { resolvePrimaryMuscleCredits, SECONDARY_MUSCLE_CREDIT } from '@/services/shared/volumeCredit';
+import {
+  rirFromFeedback,
+  sumEffectiveVolume,
+  EFFECTIVE_VOLUME_WEIGHTS,
+} from '@/services/effectiveVolume';
+import {
+  resolvePrimaryMuscleCredits,
+  SECONDARY_MUSCLE_CREDIT,
+  perSetCredits,
+  GROUP_SET_CREDIT_CAP,
+} from '@/services/shared/volumeCredit';
+import {
+  getEffectiveBand,
+  STANDARD_TO_COARSE,
+  type CoarseMuscle,
+} from '@/services/volumeBands';
 
 // ============================================
 // CONSTANTS / HELPERS
@@ -608,4 +623,228 @@ export function getVolumeSummary(volumeData: Map<StandardMuscleGroup, MuscleVolu
 // table — was removed with the table itself (20260730000001): nothing ever
 // wrote those rows, and readers preferring them over set_log derivation was
 // the stale-aggregate trap the removal disarms.)
+
+// ============================================
+// PLANNED-SCHEDULE LOAD ESTIMATION
+// (schedule-builder recovery warnings)
+// ============================================
+//
+// The schedule builder used to warn on clock time (hrs/week, minutes/session)
+// — a weak proxy for recovery cost. These helpers estimate RIR-weighted hard
+// sets per coarse muscle group from a PROPOSED program (planned exercises with
+// set counts and RIR targets), using the same canonical attribution
+// (services/shared/volumeCredit) and stimulus weights
+// (services/effectiveVolume) as every logged-volume surface, so the plan is
+// judged by the same currency the tracking pages report.
+
+/** Just enough of a planned exercise for load estimation. */
+export interface PlannedExerciseLoadInput {
+  primaryMuscle: string;
+  secondaryMuscles?: string[] | null;
+  sets: number;
+  /**
+   * Planned RIR target. Unknown counts at FULL weight — this feeds a
+   * too-much-volume warning, so missing intensity data must not hide load
+   * (the opposite convention from logged effective volume, where unrated
+   * sets are excluded to keep the stimulus metric honest).
+   */
+  targetRir?: number | null;
+}
+
+export interface PlannedSessionLoadInput {
+  exercises: readonly PlannedExerciseLoadInput[];
+}
+
+/** One planned week of sessions, as the mesocycle generator lays them out. */
+export interface PlannedWeekLoadInput {
+  /** 1-based week number in the mesocycle; omit when assessing a lone week. */
+  weekNumber?: number;
+  sessions: readonly PlannedSessionLoadInput[];
+}
+
+/**
+ * The only groups the hard-set warning fires for. Small-muscle accessory
+ * volume (forearms, traps, calves, abs, adductors, erectors, biceps,
+ * triceps) is deliberately exempt — low systemic cost, and padding a session
+ * with it should never read as a recovery problem.
+ */
+export const HARD_SET_WARNING_GROUPS = [
+  'chest',
+  'back',
+  'shoulders',
+  'quads',
+  'hamstrings',
+  'glutes',
+] as const satisfies readonly CoarseMuscle[];
+
+/**
+ * Standard muscles excluded from the WARNING rollup even though they sit
+ * inside a warned group: rear delts roll up into 'shoulders' but are
+ * low-systemic-cost accessory work. WARNING SCOPE ONLY — the
+ * connective-tissue/stabilizer channel (services/plannedRecovery) still
+ * receives every rear-delt and pressing set, because shoulder-joint load is
+ * exactly what that channel models.
+ */
+export const WARNING_EXEMPT_MUSCLES: ReadonlySet<StandardMuscleGroup> = new Set([
+  'rear_delts',
+]);
+
+/**
+ * Stimulus weight for a PLANNED set at a target RIR. Same table as logged
+ * sets (EFFECTIVE_VOLUME_WEIGHTS: 0–2 → 1.0, 3 → 0.6, 4 → 0.25); a missing
+ * target weighs 1.0 (see PlannedExerciseLoadInput.targetRir).
+ */
+export function plannedRirWeight(targetRir: number | null | undefined): number {
+  if (targetRir == null || !Number.isFinite(targetRir)) return 1;
+  const clamped = Math.max(0, Math.min(4, Math.round(targetRir)));
+  return EFFECTIVE_VOLUME_WEIGHTS[clamped as RepsInTank];
+}
+
+/**
+ * Session-total weighted hard sets: Σ sets × RIR weight, no muscle
+ * attribution. This is the "how hard is this day" number the
+ * consecutive-day streak check (services/plannedRecovery) classifies
+ * low-intensity days with.
+ */
+export function plannedSessionWeightedHardSets(
+  exercises: readonly PlannedExerciseLoadInput[]
+): number {
+  let total = 0;
+  for (const exercise of exercises) {
+    total += Math.max(0, exercise.sets) * plannedRirWeight(exercise.targetRir);
+  }
+  return total;
+}
+
+/**
+ * RIR-weighted hard sets per coarse muscle group for one planned week.
+ *
+ * Attribution is the canonical per-set credit (primary 1.0 split, secondary
+ * 0.5 split, within-group cap), with the RIR weight applied ON TOP of the
+ * cap — the same order volumeCredit specifies for logged sets.
+ * `excludeMuscles` drops those standard muscles before the rollup (the
+ * warning path passes WARNING_EXEMPT_MUSCLES).
+ */
+export function estimatePlannedWeeklyGroupLoad(
+  sessions: readonly PlannedSessionLoadInput[],
+  options?: { excludeMuscles?: ReadonlySet<StandardMuscleGroup> }
+): Map<CoarseMuscle, number> {
+  const exclude = options?.excludeMuscles;
+  const totals = new Map<CoarseMuscle, number>();
+
+  for (const session of sessions) {
+    for (const exercise of session.exercises ?? []) {
+      const sets = Math.max(0, exercise.sets);
+      if (sets === 0) continue;
+      const weight = plannedRirWeight(exercise.targetRir);
+
+      const uncappedByGroup = new Map<CoarseMuscle, number>();
+      for (const { muscle, credit } of perSetCredits(
+        exercise.primaryMuscle,
+        exercise.secondaryMuscles ?? []
+      )) {
+        if (exclude?.has(muscle)) continue;
+        const group = STANDARD_TO_COARSE[muscle];
+        if (!group) continue;
+        uncappedByGroup.set(group, (uncappedByGroup.get(group) ?? 0) + credit);
+      }
+
+      uncappedByGroup.forEach((uncapped, group) => {
+        const capped = Math.min(GROUP_SET_CREDIT_CAP, uncapped);
+        totals.set(group, (totals.get(group) ?? 0) + capped * weight * sets);
+      });
+    }
+  }
+
+  return totals;
+}
+
+/** A group's heaviest planned week. */
+export interface PlannedGroupPeak {
+  group: CoarseMuscle;
+  /** RIR-weighted hard sets in the peak week (one decimal). */
+  weightedHardSets: number;
+  /** 1-based week that peaks; null when the input weeks carried no numbers. */
+  weekNumber: number | null;
+}
+
+export interface PlannedLoadWarning extends PlannedGroupPeak {
+  /** The capacity-scaled per-week threshold the peak exceeded. */
+  thresholdSets: number;
+  message: string;
+}
+
+export interface AssessPlannedMuscleLoadResult {
+  /** Peak weighted hard sets per group across all weeks (warned groups and not). */
+  peaksByGroup: Map<CoarseMuscle, PlannedGroupPeak>;
+  warnings: PlannedLoadWarning[];
+}
+
+function groupDisplayName(group: CoarseMuscle): string {
+  return group.charAt(0).toUpperCase() + group.slice(1);
+}
+
+/**
+ * Warn when any major muscle group's PEAK planned week exceeds its effective
+ * band MRV (volumeBands.getEffectiveBand — total-inclusive, the same
+ * denominator the tracking bars use, enhanced-profile scaling included),
+ * scaled by the user's recovery-capacity multiplier — so the warning and the
+ * volume page can never disagree about where "too much" starts.
+ */
+export function assessPlannedMuscleLoad(
+  weeks: readonly PlannedWeekLoadInput[],
+  options?: { capacityMultiplier?: number; enhancedAthleteMode?: boolean }
+): AssessPlannedMuscleLoadResult {
+  const rawMultiplier = options?.capacityMultiplier;
+  const capacityMultiplier =
+    typeof rawMultiplier === 'number' && Number.isFinite(rawMultiplier) && rawMultiplier > 0
+      ? rawMultiplier
+      : 1;
+
+  const peaksByGroup = new Map<CoarseMuscle, PlannedGroupPeak>();
+  for (const week of weeks) {
+    const load = estimatePlannedWeeklyGroupLoad(week.sessions, {
+      excludeMuscles: WARNING_EXEMPT_MUSCLES,
+    });
+    load.forEach((weightedHardSets, group) => {
+      const rounded = Math.round(weightedHardSets * 10) / 10;
+      const current = peaksByGroup.get(group);
+      if (!current || rounded > current.weightedHardSets) {
+        peaksByGroup.set(group, {
+          group,
+          weightedHardSets: rounded,
+          weekNumber: week.weekNumber ?? null,
+        });
+      }
+    });
+  }
+
+  const warnings: PlannedLoadWarning[] = [];
+  for (const group of HARD_SET_WARNING_GROUPS) {
+    const peak = peaksByGroup.get(group);
+    if (!peak) continue;
+
+    const band = getEffectiveBand(group, {
+      recoveryProfile: options?.enhancedAthleteMode ? 'enhanced' : 'standard',
+    });
+    const thresholdSets = Math.round(band.mrv * capacityMultiplier);
+    if (peak.weightedHardSets <= thresholdSets) continue;
+
+    const name = groupDisplayName(group);
+    const sets = Math.round(peak.weightedHardSets);
+    const message =
+      peak.weekNumber != null && weeks.length > 1
+        ? `${name} peaks at ${sets} weighted hard sets in week ${peak.weekNumber} — above the ~${thresholdSets}-set range where returns flatten.`
+        : `${name} estimated at ${sets} hard sets/week — above the ~${thresholdSets}-set range where returns flatten.`;
+
+    warnings.push({ ...peak, thresholdSets, message });
+  }
+
+  // Worst overshoot first, so the page can surface the top finding alone.
+  warnings.sort(
+    (a, b) => b.weightedHardSets / b.thresholdSets - a.weightedHardSets / a.thresholdSets
+  );
+
+  return { peaksByGroup, warnings };
+}
 
