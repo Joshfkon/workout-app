@@ -1190,7 +1190,7 @@ function NutritionPageContent() {
 
       if (error) {
         console.error('Error updating custom food:', error);
-        throw error;
+        throw new Error(error.message || 'Failed to update custom food');
       }
       setCustomFoods((prev) => prev.map((f) => (f.id === editingCustomFood.id ? (updated as CustomFood) : f)));
     } else {
@@ -1215,7 +1215,7 @@ function NutritionPageContent() {
 
       if (error) {
         console.error('Error creating custom food:', error);
-        throw error;
+        throw new Error(error.message || 'Failed to create custom food');
       }
       setCustomFoods((prev) => [created as CustomFood, ...prev]);
     }
