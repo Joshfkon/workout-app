@@ -18,7 +18,7 @@ interface PRCelebrationProps {
   onDone: () => void;
 }
 
-const AUTO_DISMISS_MS = 2800;
+const AUTO_DISMISS_MS = 2000;
 const CONFETTI_COLORS = ['#facc15', '#38bdf8', '#4ade80', '#f472b6', '#fb923c', '#a78bfa'];
 const CONFETTI_COUNT = 28;
 
@@ -37,7 +37,7 @@ function makeConfetti(): ConfettiPiece[] {
   return Array.from({ length: CONFETTI_COUNT }, (_, i) => ({
     x: (Math.random() - 0.5) * 30,
     delay: Math.random() * 0.4,
-    duration: 1.6 + Math.random() * 1.2,
+    duration: 1.2 + Math.random() * 0.8,
     rotate: (Math.random() - 0.5) * 720,
     color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
     size: 6 + Math.random() * 6,
