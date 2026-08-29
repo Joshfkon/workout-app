@@ -14,6 +14,11 @@
  *  - duration exercises (seconds in the reps field) record max weight, then
  *    max seconds at >= 95% of record weight — never e1RM
  *  - otherwise precedence is e1RM > weight > reps-at->=95%-weight
+ *  - all weights compare at storage precision (services/shared/weightPrecision)
+ *    — the stored record comes back DECIMAL(6,2)-rounded while a just-logged
+ *    set carries the full-precision lb→kg conversion, and without quantizing,
+ *    repeating last session's top weight "beats" it by a milligram and fires
+ *    a 0%-improvement weight PR
  *
  * One live-specific addition: the baseline is the stored previous best
  * RAISED by the best earlier qualifying set of the current session, so the
@@ -27,6 +32,7 @@
 
 import type { FormRating } from '@/types/schema';
 import { e1rmValueFromRpe } from '@/services/shared/e1rm';
+import { storageWeightKg } from '@/services/shared/weightPrecision';
 import {
   getSetDuration,
   getSetReps,
@@ -94,38 +100,44 @@ export function detectLiveSetPr(input: LivePrDetectionInput): LivePr | null {
   // duration, and seconds through a rep formula fabricate a 1RM).
   const countOf = (s: LivePrSetInput): number =>
     (isDuration ? getSetDuration(s, exercise) : getSetReps(s, exercise)) ?? 0;
+  // Every weight read (comparison AND e1RM input) goes through storage
+  // precision so a fresh in-memory set is commensurable with the
+  // DECIMAL(6,2)-rounded record — see the module doc.
+  const weightOf = (s: LivePrSetInput): number => storageWeightKg(s.weightKg);
   const e1rmOf = (s: LivePrSetInput): number => {
     const reps = getSetReps(s, exercise);
-    return reps === null ? 0 : e1rmValueFromRpe(s.weightKg, reps, s.rpe);
+    return reps === null ? 0 : e1rmValueFromRpe(weightOf(s), reps, s.rpe);
   };
 
   // Baseline: stored record raised by the best earlier qualifying set this
   // session, so only a new session high-water mark fires (set 2 matching
   // set 1's PR numbers is not a second PR). `bestCount` follows the count
   // convention above (reps or seconds).
-  const { weightKg: recordWeight, reps: recordCount, e1rm: recordE1rm } = previousBest;
-  let bestWeight = recordWeight;
+  const { reps: recordCount, e1rm: recordE1rm } = previousBest;
+  let bestWeight = storageWeightKg(previousBest.weightKg);
   let bestCount = recordCount;
   let bestE1rm = recordE1rm;
   for (const prior of priorSessionSets) {
     if (isWarmupSet(prior) || isUglyForm(prior)) continue;
-    if (prior.weightKg > bestWeight) bestWeight = prior.weightKg;
+    const priorWeight = weightOf(prior);
+    if (priorWeight > bestWeight) bestWeight = priorWeight;
     const priorCount = countOf(prior);
     if (priorCount > bestCount) bestCount = priorCount;
     const priorE1rm = e1rmOf(prior);
     if (priorE1rm > bestE1rm) bestE1rm = priorE1rm;
   }
 
+  const setWeight = weightOf(set);
   const setCount = countOf(set);
-  const atRecordWeight = set.weightKg >= bestWeight * REPS_PR_WEIGHT_TOLERANCE;
+  const atRecordWeight = setWeight >= bestWeight * REPS_PR_WEIGHT_TOLERANCE;
 
   // Duration exercise: the record is max seconds at (>=) weight — never e1RM.
   if (isDuration) {
-    if (set.weightKg > bestWeight) {
+    if (setWeight > bestWeight) {
       return {
         type: 'weight',
-        value: set.weightKg,
-        improvement: pctImprovement(set.weightKg, bestWeight),
+        value: setWeight,
+        improvement: pctImprovement(setWeight, bestWeight),
       };
     }
     if (setCount > bestCount && atRecordWeight) {
@@ -140,11 +152,11 @@ export function detectLiveSetPr(input: LivePrDetectionInput): LivePr | null {
   if (setE1rm > 0 && setE1rm > bestE1rm) {
     return { type: 'e1rm', value: setE1rm, improvement: pctImprovement(setE1rm, bestE1rm) };
   }
-  if (set.weightKg > bestWeight) {
+  if (setWeight > bestWeight) {
     return {
       type: 'weight',
-      value: set.weightKg,
-      improvement: pctImprovement(set.weightKg, bestWeight),
+      value: setWeight,
+      improvement: pctImprovement(setWeight, bestWeight),
     };
   }
   if (setCount > bestCount && atRecordWeight) {

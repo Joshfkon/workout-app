@@ -153,4 +153,65 @@ describe('detectLiveSetPr', () => {
   it('treats a missing exercise (no exerciseType) as rep-based', () => {
     expect(detectLiveSetPr(baseInput({ exercise: undefined }))?.type).toBe('e1rm');
   });
+
+  describe('storage precision (DECIMAL(6,2) round-trip)', () => {
+    // set_logs.weight_kg is DECIMAL(6,2): the stored record reads back
+    // rounded to 2 decimals, while a just-logged set carries the
+    // full-precision lb→kg conversion. 82.5 lb → 37.42095890…kg in memory,
+    // 37.42 in the record.
+    const liveKg = 82.5 / 2.20462;
+    const storedKg = 37.42;
+
+    it('does not fire when exactly repeating the stored record set', () => {
+      // The cable-curl bug: same 82.5 lb top set as last session fired a
+      // "New Weight PR · 82.5 lbs" with a 0% improvement.
+      const pr = detectLiveSetPr(
+        baseInput({
+          set: workingSet({ weightKg: liveKg, reps: 12, rpe: 9 }),
+          previousBest: {
+            weightKg: storedKg,
+            reps: 12,
+            e1rm: e1rmValueFromRpe(storedKg, 12, 9),
+          },
+        })
+      );
+      expect(pr).toBeNull();
+    });
+
+    it('does not fire a duration weight PR on the same round-tripped weight', () => {
+      const pr = detectLiveSetPr(
+        baseInput({
+          exercise: { exerciseType: 'duration_based' },
+          set: workingSet({ weightKg: liveKg, reps: 45 }),
+          previousBest: { weightKg: storedKg, reps: 45, e1rm: 0 },
+        })
+      );
+      expect(pr).toBeNull();
+    });
+
+    it('does not re-fire when a set repeats an earlier full-precision session set', () => {
+      // Prior session set is in-memory (full precision) while previousBest is
+      // stale — the raised baseline must also compare at storage precision.
+      const pr = detectLiveSetPr(
+        baseInput({
+          priorSessionSets: [workingSet({ weightKg: liveKg, reps: 12, rpe: 9 })],
+          set: workingSet({ weightKg: liveKg, reps: 12, rpe: 9 }),
+          previousBest: { weightKg: 30, reps: 12, e1rm: e1rmValueFromRpe(30, 12, 9) },
+        })
+      );
+      expect(pr).toBeNull();
+    });
+
+    it('still fires for a genuine increment above the stored record', () => {
+      // 85 lb → 38.556…kg beats the 37.42 record by a real increment.
+      const pr = detectLiveSetPr(
+        baseInput({
+          set: workingSet({ weightKg: 85 / 2.20462, reps: 20, rpe: 8 }), // no e1RM estimate
+          previousBest: { weightKg: storedKg, reps: 20, e1rm: 100 },
+        })
+      );
+      expect(pr?.type).toBe('weight');
+      expect(pr?.improvement).toBeGreaterThan(0);
+    });
+  });
 });

@@ -29,6 +29,7 @@ import {
   sumDisplayVolume,
 } from '@/lib/utils';
 import { e1rmValueFromRpe } from '@/services/shared/e1rm';
+import { storageWeightKg } from '@/services/shared/weightPrecision';
 import { getCalibrationVerdict, type CalibrationMethod } from '@/services/rpeCalibration';
 import type { ShareExercise, WorkoutShareTextInput } from '@/services/workoutShareText';
 import { ShareWorkoutText } from './ShareWorkoutText';
@@ -295,7 +296,12 @@ export function SessionSummary({
 
       const isDurationBlock = durationBlockIds.has(block.id);
 
-      // Find best set this workout (considering form)
+      // Find best set this workout (considering form). Weights compare at
+      // storage precision (services/shared/weightPrecision): the stored
+      // record is DECIMAL(6,2)-rounded while this session's sets still carry
+      // the full-precision lb→kg conversion — same rule as livePrDetector,
+      // so the summary and the live celebration agree.
+      const recordWeight = storageWeightKg(history.previousBest.weight);
       let bestWeight = 0;
       let bestReps = 0;
       let bestE1RM = 0;
@@ -307,8 +313,9 @@ export function SessionSummary({
         // Skip ugly form sets for PR consideration
         if (setForm === 'ugly') return;
 
-        if (set.weightKg > bestWeight) {
-          bestWeight = set.weightKg;
+        const setWeight = storageWeightKg(set.weightKg);
+        if (setWeight > bestWeight) {
+          bestWeight = setWeight;
           bestForm = setForm;
         }
         if (set.reps > bestReps) bestReps = set.reps;
@@ -316,7 +323,7 @@ export function SessionSummary({
           // e1RM is explicitly excluded for duration blocks: seconds through
           // the rep formula fabricate a 1RM. Canonical estimator with the
           // set's logged RPE; 0 = no estimate (never displayed as a value).
-          const e1rm = e1rmValueFromRpe(set.weightKg, set.reps, set.rpe);
+          const e1rm = e1rmValueFromRpe(setWeight, set.reps, set.rpe);
           if (e1rm > bestE1RM) bestE1RM = e1rm;
         }
       });
@@ -325,7 +332,7 @@ export function SessionSummary({
 
       // No PR if best set had ugly form
       const hasUglyBestSet = sets.some(
-        (s) => s.weightKg === bestWeight && s.feedback?.form === 'ugly'
+        (s) => storageWeightKg(s.weightKg) === bestWeight && s.feedback?.form === 'ugly'
       );
       if (hasUglyBestSet) {
         // Could add a "potential PR" note here if desired
@@ -335,21 +342,21 @@ export function SessionSummary({
       // Duration exercise: the record is max seconds at (>=) weight — never
       // e1RM/reps. bestReps carries SECONDS here.
       if (isDurationBlock) {
-        if (bestWeight > history.previousBest.weight) {
+        if (bestWeight > recordWeight) {
           prs.push({
             blockId: block.id,
             exerciseName,
             type: 'weight',
             value: bestWeight,
             improvement: Math.round(
-              ((bestWeight - history.previousBest.weight) / history.previousBest.weight) * 100
+              ((bestWeight - recordWeight) / recordWeight) * 100
             ),
             form: bestForm,
             formNote: bestForm === 'clean' ? 'Clean form' : 'Some breakdown',
           });
         } else if (
           bestReps > history.previousBest.reps &&
-          bestWeight >= history.previousBest.weight * 0.95
+          bestWeight >= recordWeight * 0.95
         ) {
           prs.push({
             blockId: block.id,
@@ -379,21 +386,21 @@ export function SessionSummary({
         });
       }
       // Check for weight PR
-      else if (bestWeight > history.previousBest.weight) {
+      else if (bestWeight > recordWeight) {
         prs.push({
           blockId: block.id,
           exerciseName,
           type: 'weight',
           value: bestWeight,
           improvement: Math.round(
-            ((bestWeight - history.previousBest.weight) / history.previousBest.weight) * 100
+            ((bestWeight - recordWeight) / recordWeight) * 100
           ),
           form: bestForm,
           formNote: bestForm === 'clean' ? 'Clean form' : 'Some breakdown',
         });
       }
       // Check for reps PR (at same or higher weight)
-      else if (bestReps > history.previousBest.reps && bestWeight >= history.previousBest.weight * 0.95) {
+      else if (bestReps > history.previousBest.reps && bestWeight >= recordWeight * 0.95) {
         prs.push({
           blockId: block.id,
           exerciseName,
@@ -564,8 +571,11 @@ export function SessionSummary({
       const avgRpe = sets.length > 0
         ? Math.round((sets.reduce((sum, s) => sum + s.rpe, 0) / sets.length) * 10) / 10
         : 0;
+      // e1RM from the storage-precision weight, so the hasPR comparison
+      // against the DB-rounded record can't tip on float dust (same rule as
+      // the personalRecords memo above).
       const bestE1RM = !isDuration && sets.length > 0
-        ? Math.max(...sets.map(s => e1rmValueFromRpe(s.weightKg, s.reps, s.rpe)))
+        ? Math.max(...sets.map(s => e1rmValueFromRpe(storageWeightKg(s.weightKg), s.reps, s.rpe)))
         : 0;
 
       // Check if this exercise had a PR (never on a deload session). Duration
