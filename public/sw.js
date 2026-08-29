@@ -59,6 +59,70 @@ function isCacheableResponse(response) {
   return response.ok && response.status !== 206 && !response.redirected;
 }
 
+/**
+ * One rejected fetch is not proof of being offline: iOS drops in-flight
+ * requests on Wi-Fi<->cellular handoff and when the webview resumes from
+ * background, and those recover instantly. Retry once before giving up.
+ * Only GET requests reach this worker, so replaying the request is safe.
+ */
+function fetchWithRetry(request, retryDelayMs = 400) {
+  return fetch(request).catch(() =>
+    new Promise((resolve) => setTimeout(resolve, retryDelayMs)).then(() =>
+      fetch(request)
+    )
+  );
+}
+
+/**
+ * Fallback for a navigation that failed even after a retry and has nothing
+ * usable in cache. Unlike a bare "you are offline" dead end, this page can
+ * recover on its own: it reloads when connectivity returns or the app is
+ * foregrounded again, and only claims "offline" if the device agrees.
+ */
+const OFFLINE_PAGE_HTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Can't connect &mdash; HyperTrack</title>
+<style>
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    background: #0a0a0a; color: #fafafa; text-align: center; padding: 24px; box-sizing: border-box;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+  h1 { font-size: 1.375rem; margin: 0 0 8px; }
+  p { color: #a1a1aa; margin: 0 0 24px; line-height: 1.5; max-width: 28rem; }
+  button { background: #fafafa; color: #0a0a0a; border: 0; border-radius: 9999px;
+    padding: 12px 28px; font-size: 1rem; font-weight: 600; cursor: pointer; }
+</style>
+</head>
+<body>
+<main>
+<h1>Can't reach HyperTrack</h1>
+<p id="msg">This is usually a brief connection hiccup and fixes itself in a moment.</p>
+<button onclick="location.reload()">Try again</button>
+</main>
+<script>
+  if (!navigator.onLine) {
+    document.getElementById('msg').textContent =
+      'You appear to be offline. This page will retry when your connection returns.';
+  }
+  window.addEventListener('online', function () { location.reload(); });
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible' && navigator.onLine) {
+      location.reload();
+    }
+  });
+</script>
+</body>
+</html>`;
+
+function offlineFallbackResponse() {
+  return new Response(OFFLINE_PAGE_HTML, {
+    status: 503,
+    headers: { 'Content-Type': 'text/html; charset=utf-8' },
+  });
+}
+
 // Install event - cache app shell
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -203,7 +267,7 @@ self.addEventListener('fetch', (event) => {
         // A redirected response replayed for a navigation is a network error
         // (this is what bricked the site on Safari) — never serve one.
         const cached = maybeCached && !maybeCached.redirected ? maybeCached : undefined;
-        const fetchPromise = fetch(request)
+        const fetchPromise = fetchWithRetry(request)
           .then((response) => {
             if (isCacheableResponse(response)) {
               const responseToCache = response.clone();
@@ -213,7 +277,7 @@ self.addEventListener('fetch', (event) => {
             }
             return response;
           })
-          .catch(() => cached || new Response('Offline', { status: 503 }));
+          .catch(() => cached || offlineFallbackResponse());
 
         // Return cached immediately if available, otherwise wait for network
         return cached || fetchPromise;
@@ -224,7 +288,7 @@ self.addEventListener('fetch', (event) => {
 
   // For other HTML pages - network-first with cache fallback
   event.respondWith(
-    fetch(request)
+    fetchWithRetry(request)
       .then((response) => {
         if (isCacheableResponse(response)) {
           const responseToCache = response.clone();
@@ -245,12 +309,7 @@ self.addEventListener('fetch', (event) => {
               if (homePage && !homePage.redirected) {
                 return homePage;
               }
-              return new Response(
-                '<!DOCTYPE html><html><head><title>Offline</title></head><body><h1>You are offline</h1><p>Please check your internet connection.</p></body></html>',
-                {
-                  headers: { 'Content-Type': 'text/html' },
-                }
-              );
+              return offlineFallbackResponse();
             });
           }
           return new Response('Offline', { status: 503 });
