@@ -5,7 +5,7 @@ const workingSet = (overrides: Partial<LivePrSetInput> = {}): LivePrSetInput => 
   weightKg: 100,
   reps: 5,
   rpe: 9,
-  form: 'clean',
+  feedback: { form: 'clean' },
   isWarmup: false,
   ...overrides,
 });
@@ -13,9 +13,9 @@ const workingSet = (overrides: Partial<LivePrSetInput> = {}): LivePrSetInput => 
 const baseInput = (overrides: Partial<LivePrDetectionInput> = {}): LivePrDetectionInput => ({
   set: workingSet(),
   priorSessionSets: [],
-  previousBest: { weight: 95, reps: 8, e1rm: 100 },
+  previousBest: { weightKg: 95, reps: 8, e1rm: 100 },
   isDeload: false,
-  isDurationExercise: false,
+  exercise: { exerciseType: 'rep_based' },
   ...overrides,
 });
 
@@ -42,7 +42,7 @@ describe('detectLiveSetPr', () => {
     // Heavy-single e1RM record stands; more reps near record weight is a reps PR.
     const pr = detectLiveSetPr(
       baseInput({
-        previousBest: { weight: 100, reps: 8, e1rm: 150 },
+        previousBest: { weightKg: 100, reps: 8, e1rm: 150 },
         set: workingSet({ weightKg: 96, reps: 10, rpe: 8 }),
       })
     );
@@ -52,7 +52,7 @@ describe('detectLiveSetPr', () => {
   it('does not award a reps PR below the 95% weight tolerance', () => {
     const pr = detectLiveSetPr(
       baseInput({
-        previousBest: { weight: 100, reps: 8, e1rm: 150 },
+        previousBest: { weightKg: 100, reps: 8, e1rm: 150 },
         set: workingSet({ weightKg: 90, reps: 12, rpe: 8 }),
       })
     );
@@ -63,12 +63,20 @@ describe('detectLiveSetPr', () => {
     expect(detectLiveSetPr(baseInput({ isDeload: true }))).toBeNull();
   });
 
-  it('never fires for warmup sets', () => {
+  it('never fires for warmup sets (isWarmup flag)', () => {
     expect(detectLiveSetPr(baseInput({ set: workingSet({ isWarmup: true }) }))).toBeNull();
   });
 
+  it('never fires for warmup sets (setType shape)', () => {
+    expect(
+      detectLiveSetPr(baseInput({ set: workingSet({ setType: 'warmup' }) }))
+    ).toBeNull();
+  });
+
   it('never fires for ugly-form sets', () => {
-    expect(detectLiveSetPr(baseInput({ set: workingSet({ form: 'ugly' }) }))).toBeNull();
+    expect(
+      detectLiveSetPr(baseInput({ set: workingSet({ feedback: { form: 'ugly' } }) }))
+    ).toBeNull();
   });
 
   it('returns null with no stored record (cold start)', () => {
@@ -76,7 +84,7 @@ describe('detectLiveSetPr', () => {
   });
 
   it('treats missing form feedback as qualifying', () => {
-    expect(detectLiveSetPr(baseInput({ set: workingSet({ form: null }) }))?.type).toBe('e1rm');
+    expect(detectLiveSetPr(baseInput({ set: workingSet({ feedback: null }) }))?.type).toBe('e1rm');
   });
 
   describe('session high-water mark', () => {
@@ -102,7 +110,7 @@ describe('detectLiveSetPr', () => {
         baseInput({
           priorSessionSets: [
             workingSet({ isWarmup: true }),
-            workingSet({ form: 'ugly' }),
+            workingSet({ feedback: { form: 'ugly' } }),
           ],
           set: workingSet(),
         })
@@ -115,8 +123,8 @@ describe('detectLiveSetPr', () => {
   describe('duration exercises (seconds in reps)', () => {
     const durationInput = (overrides: Partial<LivePrDetectionInput> = {}) =>
       baseInput({
-        isDurationExercise: true,
-        previousBest: { weight: 20, reps: 45, e1rm: 0 },
+        exercise: { exerciseType: 'duration_based' },
+        previousBest: { weightKg: 20, reps: 45, e1rm: 0 },
         ...overrides,
       });
 
@@ -140,5 +148,9 @@ describe('detectLiveSetPr', () => {
       );
       expect(pr).toBeNull();
     });
+  });
+
+  it('treats a missing exercise (no exerciseType) as rep-based', () => {
+    expect(detectLiveSetPr(baseInput({ exercise: undefined }))?.type).toBe('e1rm');
   });
 });

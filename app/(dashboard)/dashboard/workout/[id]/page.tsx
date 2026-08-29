@@ -3039,27 +3039,12 @@ export default function WorkoutPage() {
       // optimistic append went through setState, not this closure.
       {
         const prHistory = exerciseHistories[currentBlock.exerciseId];
-        const toPrSet = (s: { weightKg: number; reps: number; rpe: number; isWarmup?: boolean; setType?: string; feedback?: SetFeedback }) => ({
-          weightKg: s.weightKg,
-          reps: s.reps,
-          rpe: s.rpe,
-          form: s.feedback?.form ?? null,
-          isWarmup: !!s.isWarmup || s.setType === 'warmup',
-        });
         const pr = detectLiveSetPr({
-          set: toPrSet({ ...data, setType, feedback: data.feedback }),
-          priorSessionSets: completedSets
-            .filter((s) => s.exerciseBlockId === currentBlock.id)
-            .map(toPrSet),
-          previousBest: prHistory?.personalRecord
-            ? {
-                weight: prHistory.personalRecord.weightKg,
-                reps: prHistory.personalRecord.reps,
-                e1rm: prHistory.personalRecord.e1rm,
-              }
-            : null,
+          set: { ...data, setType },
+          priorSessionSets: completedSets.filter((s) => s.exerciseBlockId === currentBlock.id),
+          previousBest: prHistory?.personalRecord ?? null,
           isDeload: session?.isDeload ?? false,
-          isDurationExercise: currentBlock.exercise.exerciseType === 'duration_based',
+          exercise: currentBlock.exercise,
         });
         if (pr) {
           const unitLabel = preferences.units === 'lb' ? 'lbs' : 'kg';
