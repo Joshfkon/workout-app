@@ -4,7 +4,7 @@ import { WorkoutVolumeStrip } from '../WorkoutVolumeStrip';
 import type { WorkoutMuscleVolumeRow } from '@/hooks/useWorkoutMuscleVolume';
 
 function row(muscle: string, over: Partial<WorkoutMuscleVolumeRow> = {}): WorkoutMuscleVolumeRow {
-  return {
+  const base = {
     key: muscle,
     muscle,
     displayName: muscle.charAt(0).toUpperCase() + muscle.slice(1),
@@ -22,8 +22,14 @@ function row(muscle: string, over: Partial<WorkoutMuscleVolumeRow> = {}): Workou
     trainedThisSession: true,
     readiness: 1,
     readyInHours: 0,
+    plannedSets: 0,
+    projectedZone: 'in_zone',
+    deficitLockedIn: false,
     ...over,
   } as WorkoutMuscleVolumeRow;
+  // Projected defaults to completed + planned unless the test pins it.
+  if (over.projectedSets === undefined) base.projectedSets = base.sets + base.plannedSets;
+  return base;
 }
 
 const noop = () => {};
@@ -156,6 +162,196 @@ describe('WorkoutVolumeStrip', () => {
     expect(screen.getByTestId('workout-volume-chip-chest')).toBeInTheDocument();
     expect(screen.getByTestId('workout-volume-chip-back')).toBeInTheDocument();
     expect(screen.queryByTestId('workout-volume-strip-show-all')).not.toBeInTheDocument();
+  });
+
+  it('renders the hatched planned segment sized to today’s remaining contribution', () => {
+    render(
+      <WorkoutVolumeStrip
+        rows={[row('chest', { sets: 10, plannedSets: 5, band: { mev: 8, mrv: 20 } })]}
+        isLoading={false}
+        onOpenDetail={noop}
+      />
+    );
+    // Completed 10/20 = 50%; projected 15/20 = 75% → planned segment 25%.
+    expect(screen.getByTestId('workout-volume-bar-chest')).toHaveStyle({ width: '50%' });
+    expect(screen.getByTestId('workout-volume-planned-bar-chest')).toHaveStyle({ width: '25%' });
+  });
+
+  it('hides the planned segment when nothing is planned', () => {
+    render(
+      <WorkoutVolumeStrip rows={[row('chest')]} isLoading={false} onOpenDetail={noop} />
+    );
+    expect(screen.queryByTestId('workout-volume-planned-bar-chest')).not.toBeInTheDocument();
+  });
+
+  it('digests the session muscles into one "After today’s plan" line', () => {
+    render(
+      <WorkoutVolumeStrip
+        rows={[
+          row('chest', { sets: 10, plannedSets: 4 }),
+          row('quads', { sets: 6, plannedSets: 4 }),
+          row('back', {
+            sets: 3,
+            plannedSets: 2,
+            zone: 'below_mev',
+            projectedZone: 'below_mev',
+          }),
+          row('shoulders', { sets: 18, plannedSets: 6, projectedZone: 'over_mrv' }),
+          row('biceps', {
+            sets: 2,
+            plannedSets: 1,
+            zone: 'below_mev',
+            projectedZone: 'below_mev',
+            deficitLockedIn: true,
+            readiness: 0.2,
+            readyInHours: 40,
+          }),
+          // Not part of this session — never counted in the digest.
+          row('calves', { trainedThisSession: false, sets: 0, zone: 'below_mev' }),
+        ]}
+        isLoading={false}
+        onOpenDetail={noop}
+      />
+    );
+
+    const digest = screen.getByTestId('workout-volume-projection-summary');
+    expect(digest).toHaveTextContent('After today’s plan:');
+    expect(digest).toHaveTextContent('2 in range');
+    expect(digest).toHaveTextContent('1 under');
+    expect(digest).toHaveTextContent('1 over max');
+    expect(digest).toHaveTextContent('1 locked under');
+  });
+
+  it('hides the projection line while loading and when no session muscles exist', () => {
+    const loading = render(
+      <WorkoutVolumeStrip rows={[row('chest')]} isLoading={true} onOpenDetail={noop} />
+    );
+    expect(screen.queryByTestId('workout-volume-projection-summary')).not.toBeInTheDocument();
+    loading.unmount();
+
+    render(
+      <WorkoutVolumeStrip
+        rows={[row('chest', { trainedThisSession: false })]}
+        isLoading={false}
+        onOpenDetail={noop}
+      />
+    );
+    expect(screen.queryByTestId('workout-volume-projection-summary')).not.toBeInTheDocument();
+  });
+
+  it('expands the digest into a per-muscle projection list with the numbers', async () => {
+    const user = userEvent.setup();
+    render(
+      <WorkoutVolumeStrip
+        rows={[
+          row('chest', { sets: 10, plannedSets: 4, band: { mev: 8, mrv: 20 } }),
+          row('quads', { sets: 8, plannedSets: 0 }),
+        ]}
+        isLoading={false}
+        onOpenDetail={noop}
+      />
+    );
+
+    const digest = screen.getByTestId('workout-volume-projection-summary');
+    expect(digest).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByTestId('workout-volume-projection-list')).not.toBeInTheDocument();
+
+    await user.click(digest);
+    expect(digest).toHaveAttribute('aria-expanded', 'true');
+    const chestRow = screen.getByTestId('workout-volume-projection-row-chest');
+    expect(chestRow).toHaveTextContent('Chest');
+    expect(chestRow).toHaveTextContent('10 +4 → 14');
+    expect(chestRow).toHaveTextContent('8–20');
+    expect(chestRow).toHaveTextContent('In range');
+    // A muscle with nothing left planned shows its standing without a fake "+0".
+    const quadsRow = screen.getByTestId('workout-volume-projection-row-quads');
+    expect(quadsRow).toHaveTextContent('8');
+    expect(quadsRow).not.toHaveTextContent('→');
+
+    await user.click(digest);
+    expect(screen.queryByTestId('workout-volume-projection-list')).not.toBeInTheDocument();
+  });
+
+  it('marks a projected MRV overshoot amber on chip tint, digest and list row', async () => {
+    const user = userEvent.setup();
+    render(
+      <WorkoutVolumeStrip
+        rows={[
+          row('chest', {
+            sets: 18,
+            plannedSets: 6,
+            projectedZone: 'over_mrv',
+            band: { mev: 8, mrv: 20 },
+          }),
+        ]}
+        isLoading={false}
+        onOpenDetail={noop}
+      />
+    );
+    expect(screen.getByTestId('workout-volume-chip-chest')).toHaveClass('border-warning-500/50');
+    await user.click(screen.getByTestId('workout-volume-projection-summary'));
+    const label = screen.getByText('Over max');
+    expect(label).toHaveClass('text-warning-400');
+  });
+
+  it('marks a locked-in deficit red and explains it in the expanded list', async () => {
+    const user = userEvent.setup();
+    render(
+      <WorkoutVolumeStrip
+        rows={[
+          row('back', {
+            sets: 3,
+            plannedSets: 2,
+            zone: 'below_mev',
+            projectedZone: 'below_mev',
+            deficitLockedIn: true,
+            readiness: 0.2,
+            readyInHours: 40,
+          }),
+        ]}
+        isLoading={false}
+        onOpenDetail={noop}
+      />
+    );
+    expect(screen.getByTestId('workout-volume-chip-back')).toHaveClass('border-danger-500/50');
+    await user.click(screen.getByTestId('workout-volume-projection-summary'));
+    const label = screen.getByText('Locked in');
+    expect(label).toHaveClass('text-danger-400');
+    expect(screen.getByTestId('workout-volume-projection-list')).toHaveTextContent(
+      'recovery won’t allow more quality sets'
+    );
+  });
+
+  it('a merely-under projection carries no warning tint (still the user’s choice)', async () => {
+    const user = userEvent.setup();
+    render(
+      <WorkoutVolumeStrip
+        rows={[
+          row('back', {
+            sets: 3,
+            plannedSets: 2,
+            zone: 'below_mev',
+            projectedZone: 'below_mev',
+            deficitLockedIn: false,
+          }),
+        ]}
+        isLoading={false}
+        onOpenDetail={noop}
+      />
+    );
+    expect(screen.getByTestId('workout-volume-chip-back')).toHaveClass('border-surface-800');
+    await user.click(screen.getByTestId('workout-volume-projection-summary'));
+    expect(screen.getByText('Under min')).toHaveClass('text-surface-400');
+  });
+
+  it('tapping a chip opens the full "What to train" sheet', async () => {
+    const user = userEvent.setup();
+    const onOpenDetail = jest.fn();
+    render(
+      <WorkoutVolumeStrip rows={[row('chest')]} isLoading={false} onOpenDetail={onOpenDetail} />
+    );
+    await user.click(screen.getByTestId('workout-volume-chip-chest'));
+    expect(onOpenDetail).toHaveBeenCalledTimes(1);
   });
 
   it('persists the collapse preference across mounts', async () => {
