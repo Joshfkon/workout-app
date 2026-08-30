@@ -233,6 +233,7 @@ import { useSleepForDays } from '@/hooks/useSleepForDays';
 import { sleepDayForSession } from '@/services/sessionContext';
 import { isStaleEmptyAdhocSession, discardStaleSession } from '../_lib/adhocSession';
 import { computeSupersetAdvance } from './_lib/supersetFlow';
+import { moveJustStartedBlock } from './_lib/performedOrder';
 import {
   findStaleTargetBlocks,
   computeRecalcChanges,
@@ -3147,6 +3148,45 @@ export default function WorkoutPage() {
         startWorkingRest();
       }
       setError(null);
+
+      // Performed-order list: this block's FIRST working set moves it to sit
+      // directly after the last already-started block, so started/completed
+      // exercises stack in the order they were actually done instead of
+      // re-interleaving by plan position when the user jumps around. Runs
+      // only after the write settled (a rejected set never reorders) and
+      // persists through the same write path as a drag, so reloads and
+      // history keep the sequence. `completedSets` is still the pre-append
+      // closure value here (see the PR-detection note above), so "first
+      // working set" and the started-block anchor are both graded against
+      // the state at the moment this set was logged. Must stay AFTER the
+      // superset-advance branch: the advance queues an index computed
+      // against the pre-move order, and the functional remap below then
+      // re-points it into the reordered array.
+      if (setType !== 'warmup' && !isDraggingBlockRef.current) {
+        const isWorkingSet = (s: SetLog) => !s.isWarmup && s.setType !== 'warmup';
+        const hadWorkingSets = completedSets.some(
+          (s) => s.exerciseBlockId === currentBlock.id && isWorkingSet(s)
+        );
+        if (!hadWorkingSets) {
+          const startedBlockIds = new Set(
+            completedSets.filter(isWorkingSet).map((s) => s.exerciseBlockId)
+          );
+          const prevBlocks = blocksRef.current;
+          const reordered = moveJustStartedBlock(prevBlocks, startedBlockIds, currentBlock.id);
+          if (reordered) {
+            setBlocks(reordered);
+            // Re-point the current index at whatever block it referenced
+            // before the move (this block, or the superset partner the
+            // advance just stepped to).
+            setCurrentBlockIndex((prevIdx) => {
+              const prevId = prevBlocks[prevIdx]?.id;
+              const nextIdx = reordered.findIndex((b) => b.id === prevId);
+              return nextIdx >= 0 ? nextIdx : prevIdx;
+            });
+            void persistBlockOrder(reordered);
+          }
+        }
+      }
 
       // Run sanity checks on the completed set
       if (currentExercise && setType === 'normal') {
