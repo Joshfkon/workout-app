@@ -11,13 +11,22 @@ import { getLocalDateString } from '@/lib/utils';
 import {
   accumulateExerciseVolume,
   buildVolumeRows,
+  round1Sets,
   volumeAccumulatorToStats,
+  volumeZone,
   STANDARD_TO_COARSE,
   type CoarseMuscle,
   type MuscleVolumeStats,
   type VolumeAccumulator,
   type VolumeRow,
+  type VolumeZone,
 } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
+import {
+  hoursLeftInLocalDay,
+  isDeficitLockedIn,
+  plannedGroupSets,
+  remainingPlannedSets,
+} from '@/services/plannedVolumeProjection';
 import { resolveMuscleToStandard, type StandardMuscleGroup } from '@/types/schema';
 import type { SetLog } from '@/types/schema';
 import { rirFromFeedback, summarizeEffectiveVolume } from '@/services/effectiveVolume';
@@ -35,7 +44,10 @@ import {
  * strip. For EVERY coarse muscle group, it reports the rolling-7-day credited
  * set total (completed history + the sets logged so far in the live session)
  * positioned in that muscle's MEV–MRV band, plus a scalar readiness score
- * projected from the shared recovery heuristic.
+ * projected from the shared recovery heuristic — and the WEEK PROJECTION:
+ * where the total lands if today's remaining planned sets are finished
+ * (services/plannedVolumeProjection), with a locked-in flag for deficits
+ * recovery has already decided.
  *
  * It reuses the SAME cached history query (`useRecoveryHistory`), the SAME
  * shared volume model (`buildVolumeRows`) and the SAME recovery config
@@ -68,6 +80,25 @@ export interface WorkoutMuscleVolumeRow extends VolumeRow {
   readiness: number;
   /** Estimated hours until readiness crosses the ready threshold (0 = ready). */
   readyInHours: number;
+  /**
+   * Credited sets this session's REMAINING planned work would still add
+   * (non-skipped blocks, target minus logged working sets — see
+   * services/plannedVolumeProjection). Rounded to one decimal. Moves live: a
+   * logged set migrates from here into `sets`; a skipped block drops out.
+   */
+  plannedSets: number;
+  /** Week total if today's plan is finished: `sets + plannedSets` (rounded). */
+  projectedSets: number;
+  /** The shared zone rule applied to the PROJECTED total — 'below_mev' means
+   *  the week ends under the band minimum even if today's plan is finished. */
+  projectedZone: VolumeZone;
+  /**
+   * Projected below the band minimum AND the muscle's recovery ETA runs past
+   * the end of the local day — no additional quality sets can realistically
+   * land in this week's window, so the deficit is already decided (renders
+   * red, vs merely-under which is still the user's choice).
+   */
+  deficitLockedIn: boolean;
 }
 
 export interface UseWorkoutMuscleVolumeArgs {
@@ -285,6 +316,27 @@ export function useWorkoutMuscleVolume({
     return out;
   }, [liveBlocks, liveWorkingSetsByBlock]);
 
+  // Credited group sets today's REMAINING planned work would still add:
+  // per block, target sets minus logged working sets, credited through the
+  // same canonical per-set math as the weekly rows. Skipped blocks never
+  // reach this hook (the caller filters them), so a skip's volume consequence
+  // shows up here immediately — as does a logged set, which migrates its
+  // credit from "planned" into the weekly total.
+  const plannedByCoarse = useMemo(
+    () =>
+      plannedGroupSets(
+        liveBlocks.map((block) => ({
+          primaryMuscle: block.exercise.primaryMuscle,
+          secondaryMuscles: block.exercise.secondaryMuscles || [],
+          remainingSets: remainingPlannedSets(
+            block.targetSets,
+            liveWorkingSetsByBlock.get(block.id)?.length ?? 0
+          ),
+        }))
+      ),
+    [liveBlocks, liveWorkingSetsByBlock]
+  );
+
   // The coarse groups this session TARGETS — derived from the exercises
   // (primary + secondary). These render by default; the rest of the groups sit
   // behind the strip's "Show all" expander.
@@ -309,6 +361,7 @@ export function useWorkoutMuscleVolume({
   // frozen daily order is applied on top below.
   const sortedRows = useMemo<WorkoutMuscleVolumeRow[]>(() => {
     const coarseRows = buildVolumeRows(stats, reachable, { recoveryProfile });
+    const hoursLeftInDay = hoursLeftInLocalDay(now);
     return coarseRows
       .map((row) => {
         const recovery = coarseRecovery(
@@ -317,12 +370,27 @@ export function useWorkoutMuscleVolume({
           now,
           recoveryConfig
         );
+        const readyInHours = hoursUntilReadinessThreshold(recovery);
+        const plannedRaw = plannedByCoarse.get(row.muscle as CoarseMuscle) ?? 0;
+        // `row.sets` is already rounded at emission; adding the full-precision
+        // planned credit and rounding once keeps projected = sets when nothing
+        // is planned, and shy of double-rounding drift otherwise.
+        const projectedSets = round1Sets(row.sets + plannedRaw);
+        const projectedZone = volumeZone(projectedSets, row.band);
         return {
           ...row,
           sessionSets: sessionSetsByCoarse.get(row.muscle as CoarseMuscle) ?? 0,
           trainedThisSession: trainedCoarse.has(row.muscle as CoarseMuscle),
           readiness: readinessScore(recovery),
-          readyInHours: hoursUntilReadinessThreshold(recovery),
+          readyInHours,
+          plannedSets: round1Sets(plannedRaw),
+          projectedSets,
+          projectedZone,
+          deficitLockedIn: isDeficitLockedIn({
+            projectedBelowMin: projectedZone === 'below_mev',
+            readyInHours,
+            hoursLeftInDay,
+          }),
         };
       })
       .sort(
@@ -332,7 +400,7 @@ export function useWorkoutMuscleVolume({
           b.sets - a.sets ||
           a.displayName.localeCompare(b.displayName)
       );
-  }, [stats, reachable, trainedCoarse, sessionSetsByCoarse, recoveryHistory, now, recoveryConfig]);
+  }, [stats, reachable, trainedCoarse, sessionSetsByCoarse, plannedByCoarse, recoveryHistory, now, recoveryConfig]);
 
   // ---- Freeze the order once per local day --------------------------------
   const localDay = getLocalDateString(now);

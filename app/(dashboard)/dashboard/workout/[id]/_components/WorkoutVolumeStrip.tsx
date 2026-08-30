@@ -9,11 +9,22 @@
  * readiness status dot next to the name (green ready / amber part-recovered /
  * red just-trained) and a "Ready" / "~Nh" recovery ETA in the band row.
  *
+ * The bar also carries the WEEK PROJECTION: today's remaining planned sets
+ * render as a hatched, lighter segment on top of the week-to-date fill, and a
+ * "+N → M" microline shows where the week lands if the plan is finished.
+ * Warning states: amber when the PROJECTED total overshoots MRV, red when a
+ * projected deficit is locked in (below the band minimum even with today's
+ * plan, and recovery says no more quality sets fit this week — see
+ * services/plannedVolumeProjection). Both recompute live as sets are logged
+ * or exercises skipped, so a skip shows its volume consequence immediately.
+ *
  * By default only the muscles THIS session trains render; a trailing
  * "Show all (+N)" card appends the remaining groups (session muscles stay
  * first). The whole card row is also collapsible via the header chevron.
- * Both choices persist across sessions. Tapping any muscle chip opens the
- * full "What to train" sheet for the per-muscle breakdown + recovery.
+ * Both choices persist across sessions. Tapping a muscle chip expands an
+ * inline panel with the numbers (completed, planned, projected vs band,
+ * recovery); the header "Details" button and the panel's "Full breakdown"
+ * link open the full "What to train" sheet.
  *
  * Purely presentational — all data comes from useWorkoutMuscleVolume, which
  * shares the readiness sheet's cached history query and volume model so the
@@ -80,6 +91,53 @@ function readinessDotClass(readiness: number): string {
   return 'bg-danger-500';
 }
 
+/** The two projection warning states (spec'd colors): red for a locked-in
+ *  deficit, amber for a projected MRV overshoot. Null = no warning. */
+function projectionWarning(row: WorkoutMuscleVolumeRow): 'locked' | 'over' | null {
+  if (row.deficitLockedIn) return 'locked';
+  if (row.projectedZone === 'over_mrv') return 'over';
+  return null;
+}
+
+/** Card border tint for a projection warning. */
+function chipBorderClass(row: WorkoutMuscleVolumeRow): string {
+  const warning = projectionWarning(row);
+  if (warning === 'locked') return 'border-danger-500/50';
+  if (warning === 'over') return 'border-warning-500/50';
+  return 'border-surface-800';
+}
+
+/** Fill for the hatched planned segment (lighter than the week-to-date fill;
+ *  tinted by the projection warning). */
+function plannedSegmentClass(row: WorkoutMuscleVolumeRow): string {
+  const warning = projectionWarning(row);
+  if (warning === 'locked') return 'bg-danger-500/50';
+  if (warning === 'over') return 'bg-warning-500/60';
+  return 'bg-surface-400/50';
+}
+
+/** Text colour for the "+N → M" projection microline. */
+function projectionTextClass(row: WorkoutMuscleVolumeRow): string {
+  const warning = projectionWarning(row);
+  if (warning === 'locked') return 'text-danger-400';
+  if (warning === 'over') return 'text-warning-400';
+  return 'text-surface-400';
+}
+
+/** Diagonal hatch so the planned segment reads "not done yet" at a glance. */
+const PLANNED_HATCH_STYLE = {
+  backgroundImage:
+    'repeating-linear-gradient(135deg, rgba(255,255,255,0.28) 0 2px, transparent 2px 4px)',
+} as const;
+
+/** Human label for where the projected total lands in the band. */
+function projectionLabel(row: WorkoutMuscleVolumeRow): string {
+  if (row.deficitLockedIn) return 'Deficit locked in';
+  if (row.projectedZone === 'over_mrv') return 'Projected over max';
+  if (row.projectedZone === 'below_mev') return 'Projected under min';
+  return 'Projected in range';
+}
+
 /** "~{N}h" hours label for the not-ready microcopy (never "~0h"). */
 function readyInLabel(readyInHours: number): string {
   return `~${Math.max(1, Math.ceil(readyInHours))}h`;
@@ -88,6 +146,8 @@ function readyInLabel(readyInHours: number): string {
 export function WorkoutVolumeStrip({ rows, isLoading, onOpenDetail }: WorkoutVolumeStripProps) {
   const [collapsed, setCollapsed] = useState(() => readFlag(COLLAPSED_STORAGE_KEY));
   const [showAll, setShowAll] = useState(() => readFlag(SHOW_ALL_STORAGE_KEY));
+  // Which muscle's numbers panel is open (per-mount UI state, not persisted).
+  const [expandedMuscle, setExpandedMuscle] = useState<string | null>(null);
 
   if (rows.length === 0) return null;
 
@@ -113,6 +173,10 @@ export function WorkoutVolumeStrip({ rows, isLoading, onOpenDetail }: WorkoutVol
   const showEverything = showAll || sessionRows.length === 0;
   const visibleRows = showEverything ? [...sessionRows, ...restRows] : sessionRows;
   const expanderVisible = sessionRows.length > 0 && restRows.length > 0;
+
+  // The numbers panel follows chip visibility: hiding a chip (Show less)
+  // closes its panel rather than leaving an orphaned detail on screen.
+  const expandedRow = visibleRows.find((r) => r.muscle === expandedMuscle) ?? null;
 
   return (
     <div className="-mt-1" data-testid="workout-volume-strip">
@@ -141,6 +205,7 @@ export function WorkoutVolumeStrip({ rows, isLoading, onOpenDetail }: WorkoutVol
       </div>
 
       {!collapsed && (
+        <>
         <div
           id="workout-volume-strip-cards"
           className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 snap-x"
@@ -148,14 +213,21 @@ export function WorkoutVolumeStrip({ rows, isLoading, onOpenDetail }: WorkoutVol
           {visibleRows.map((row) => (
             <button
               key={row.key}
-              onClick={onOpenDetail}
-              className="flex-shrink-0 snap-start w-[104px] text-left rounded-lg border border-surface-800 bg-surface-900/60 px-2.5 py-2 hover:border-surface-700 transition-colors"
+              onClick={() =>
+                setExpandedMuscle((cur) => (cur === row.muscle ? null : row.muscle))
+              }
+              className={`flex-shrink-0 snap-start w-[104px] text-left rounded-lg border ${chipBorderClass(row)} bg-surface-900/60 px-2.5 py-2 hover:border-surface-700 transition-colors`}
               data-testid={`workout-volume-chip-${row.muscle}`}
+              aria-expanded={expandedRow?.muscle === row.muscle}
               aria-label={`${row.displayName}: ${formatEffectiveVolume(row.effectiveSets)} effective of ${row.sets} weekly sets${
                 row.unratedSets > 0 ? `, ${formatEffectiveVolume(row.unratedSets)} unrated` : ''
+              }${
+                row.plannedSets > 0
+                  ? `, ${row.plannedSets} planned today, projected ${row.projectedSets}`
+                  : ''
               }, ${groupZoneBandLabel(row.band)}, ${
                 row.readyInHours <= 0 ? 'ready' : `ready in ${readyInLabel(row.readyInHours)}`
-              }`}
+              }${row.deficitLockedIn ? ', deficit locked in' : ''}`}
             >
               {/* Name gets the full card width — the set count lives on its own
                   line below so wide values ("16.6 eff") can never crush the
@@ -198,15 +270,41 @@ export function WorkoutVolumeStrip({ rows, isLoading, onOpenDetail }: WorkoutVol
                   </>
                 )}
               </div>
-              <div className="mt-1.5 h-1.5 rounded-full bg-surface-800 overflow-hidden">
+              <div className="mt-1.5 h-1.5 rounded-full bg-surface-800 overflow-hidden flex">
                 {!isLoading && (
-                  <div
-                    className={`h-full rounded-full ${rowBarClass(row)}`}
-                    style={{ width: `${barFillPct(row.sets, row.band.mrv)}%` }}
-                    data-testid={`workout-volume-bar-${row.muscle}`}
-                  />
+                  <>
+                    <div
+                      className={`h-full ${rowBarClass(row)}`}
+                      style={{ width: `${barFillPct(row.sets, row.band.mrv)}%` }}
+                      data-testid={`workout-volume-bar-${row.muscle}`}
+                    />
+                    {row.plannedSets > 0 && (
+                      <div
+                        className={`h-full ${plannedSegmentClass(row)}`}
+                        style={{
+                          // Today's still-planned contribution: the slice of the
+                          // MRV scale between week-to-date and projected.
+                          width: `${
+                            barFillPct(row.projectedSets, row.band.mrv) -
+                            barFillPct(row.sets, row.band.mrv)
+                          }%`,
+                          ...PLANNED_HATCH_STYLE,
+                        }}
+                        data-testid={`workout-volume-planned-bar-${row.muscle}`}
+                        aria-hidden
+                      />
+                    )}
+                  </>
                 )}
               </div>
+              {!isLoading && row.plannedSets > 0 && (
+                <p
+                  className={`mt-0.5 text-[10px] tabular-nums ${projectionTextClass(row)}`}
+                  data-testid={`workout-volume-projection-${row.muscle}`}
+                >
+                  +{row.plannedSets} today → {row.projectedSets}
+                </p>
+              )}
               <p className="mt-1 flex items-baseline justify-between gap-1 text-[10px] tabular-nums">
                 <span className="text-surface-500">
                   {row.band.mev}–{row.band.mrv}
@@ -241,6 +339,61 @@ export function WorkoutVolumeStrip({ rows, isLoading, onOpenDetail }: WorkoutVol
             </button>
           )}
         </div>
+
+        {/* Tap-to-see-the-numbers panel: completed, planned, projected vs the
+            band, recovery — the same values the chip encodes visually. */}
+        {expandedRow && (
+          <div
+            className="mt-1 rounded-lg border border-surface-800 bg-surface-900/60 px-3 py-2.5"
+            data-testid={`workout-volume-detail-${expandedRow.muscle}`}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold text-surface-200">
+                {expandedRow.displayName}
+              </span>
+              <span
+                className={`text-[11px] font-medium ${projectionTextClass(expandedRow)}`}
+                data-testid={`workout-volume-detail-status-${expandedRow.muscle}`}
+              >
+                {projectionLabel(expandedRow)}
+              </span>
+            </div>
+            <dl className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] tabular-nums">
+              <dt className="text-surface-500">Completed this week</dt>
+              <dd className="text-right text-surface-200">
+                {expandedRow.sets} sets · {formatEffectiveVolume(expandedRow.effectiveSets)} eff
+              </dd>
+              <dt className="text-surface-500">Still planned today</dt>
+              <dd className="text-right text-surface-200">
+                {expandedRow.plannedSets > 0 ? `+${expandedRow.plannedSets} sets` : '—'}
+              </dd>
+              <dt className="text-surface-500">Projected week</dt>
+              <dd className={`text-right ${projectionTextClass(expandedRow)}`}>
+                {expandedRow.projectedSets} of {expandedRow.band.mev}–{expandedRow.band.mrv}
+              </dd>
+              <dt className="text-surface-500">Recovery</dt>
+              <dd className="text-right text-surface-200">
+                {expandedRow.readyInHours <= 0
+                  ? 'Ready'
+                  : `Ready in ${readyInLabel(expandedRow.readyInHours)}`}
+              </dd>
+            </dl>
+            {expandedRow.deficitLockedIn && (
+              <p className="mt-1.5 text-[11px] text-danger-400">
+                Recovery won’t allow more quality sets before this week’s window
+                closes — the deficit is locked in.
+              </p>
+            )}
+            <button
+              onClick={onOpenDetail}
+              className="mt-1.5 text-[11px] font-medium text-primary-400 hover:text-primary-300"
+              data-testid={`workout-volume-detail-full-${expandedRow.muscle}`}
+            >
+              Full breakdown →
+            </button>
+          </div>
+        )}
+        </>
       )}
     </div>
   );

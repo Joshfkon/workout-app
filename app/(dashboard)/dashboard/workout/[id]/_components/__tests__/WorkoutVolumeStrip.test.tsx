@@ -4,7 +4,7 @@ import { WorkoutVolumeStrip } from '../WorkoutVolumeStrip';
 import type { WorkoutMuscleVolumeRow } from '@/hooks/useWorkoutMuscleVolume';
 
 function row(muscle: string, over: Partial<WorkoutMuscleVolumeRow> = {}): WorkoutMuscleVolumeRow {
-  return {
+  const base = {
     key: muscle,
     muscle,
     displayName: muscle.charAt(0).toUpperCase() + muscle.slice(1),
@@ -22,8 +22,14 @@ function row(muscle: string, over: Partial<WorkoutMuscleVolumeRow> = {}): Workou
     trainedThisSession: true,
     readiness: 1,
     readyInHours: 0,
+    plannedSets: 0,
+    projectedZone: 'in_zone',
+    deficitLockedIn: false,
     ...over,
   } as WorkoutMuscleVolumeRow;
+  // Projected defaults to completed + planned unless the test pins it.
+  if (over.projectedSets === undefined) base.projectedSets = base.sets + base.plannedSets;
+  return base;
 }
 
 const noop = () => {};
@@ -156,6 +162,147 @@ describe('WorkoutVolumeStrip', () => {
     expect(screen.getByTestId('workout-volume-chip-chest')).toBeInTheDocument();
     expect(screen.getByTestId('workout-volume-chip-back')).toBeInTheDocument();
     expect(screen.queryByTestId('workout-volume-strip-show-all')).not.toBeInTheDocument();
+  });
+
+  it('renders the hatched planned segment sized to today’s remaining contribution', () => {
+    render(
+      <WorkoutVolumeStrip
+        rows={[row('chest', { sets: 10, plannedSets: 5, band: { mev: 8, mrv: 20 } })]}
+        isLoading={false}
+        onOpenDetail={noop}
+      />
+    );
+    // Completed 10/20 = 50%; projected 15/20 = 75% → planned segment 25%.
+    expect(screen.getByTestId('workout-volume-bar-chest')).toHaveStyle({ width: '50%' });
+    expect(screen.getByTestId('workout-volume-planned-bar-chest')).toHaveStyle({ width: '25%' });
+    expect(screen.getByTestId('workout-volume-projection-chest')).toHaveTextContent('+5 today → 15');
+  });
+
+  it('hides the planned segment and projection line when nothing is planned', () => {
+    render(
+      <WorkoutVolumeStrip rows={[row('chest')]} isLoading={false} onOpenDetail={noop} />
+    );
+    expect(screen.queryByTestId('workout-volume-planned-bar-chest')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('workout-volume-projection-chest')).not.toBeInTheDocument();
+  });
+
+  it('reads amber when the projection overshoots MRV', () => {
+    render(
+      <WorkoutVolumeStrip
+        rows={[
+          row('chest', {
+            sets: 18,
+            plannedSets: 6,
+            projectedZone: 'over_mrv',
+            band: { mev: 8, mrv: 20 },
+          }),
+        ]}
+        isLoading={false}
+        onOpenDetail={noop}
+      />
+    );
+    expect(screen.getByTestId('workout-volume-projection-chest')).toHaveClass('text-warning-400');
+    expect(screen.getByTestId('workout-volume-chip-chest')).toHaveClass('border-warning-500/50');
+  });
+
+  it('reads red for a locked-in deficit', () => {
+    render(
+      <WorkoutVolumeStrip
+        rows={[
+          row('back', {
+            sets: 3,
+            plannedSets: 2,
+            zone: 'below_mev',
+            projectedZone: 'below_mev',
+            deficitLockedIn: true,
+            readiness: 0.2,
+            readyInHours: 40,
+          }),
+        ]}
+        isLoading={false}
+        onOpenDetail={noop}
+      />
+    );
+    expect(screen.getByTestId('workout-volume-projection-back')).toHaveClass('text-danger-400');
+    expect(screen.getByTestId('workout-volume-chip-back')).toHaveClass('border-danger-500/50');
+  });
+
+  it('a merely-under projection carries no warning tint (still the user’s choice)', () => {
+    render(
+      <WorkoutVolumeStrip
+        rows={[
+          row('back', {
+            sets: 3,
+            plannedSets: 2,
+            zone: 'below_mev',
+            projectedZone: 'below_mev',
+            deficitLockedIn: false,
+          }),
+        ]}
+        isLoading={false}
+        onOpenDetail={noop}
+      />
+    );
+    expect(screen.getByTestId('workout-volume-projection-back')).toHaveClass('text-surface-400');
+    expect(screen.getByTestId('workout-volume-chip-back')).toHaveClass('border-surface-800');
+  });
+
+  it('tapping a chip opens the numbers panel; tapping again closes it', async () => {
+    const user = userEvent.setup();
+    render(
+      <WorkoutVolumeStrip
+        rows={[row('chest', { sets: 10, plannedSets: 4, readyInHours: 0 })]}
+        isLoading={false}
+        onOpenDetail={noop}
+      />
+    );
+
+    const chip = screen.getByTestId('workout-volume-chip-chest');
+    expect(chip).toHaveAttribute('aria-expanded', 'false');
+
+    await user.click(chip);
+    const panel = screen.getByTestId('workout-volume-detail-chest');
+    expect(chip).toHaveAttribute('aria-expanded', 'true');
+    expect(panel).toHaveTextContent('10 sets');
+    expect(panel).toHaveTextContent('+4 sets');
+    expect(panel).toHaveTextContent('14 of 8–20');
+    expect(panel).toHaveTextContent('Ready');
+
+    await user.click(chip);
+    expect(screen.queryByTestId('workout-volume-detail-chest')).not.toBeInTheDocument();
+  });
+
+  it('the panel explains a locked-in deficit and links to the full sheet', async () => {
+    const user = userEvent.setup();
+    const onOpenDetail = jest.fn();
+    render(
+      <WorkoutVolumeStrip
+        rows={[
+          row('back', {
+            sets: 3,
+            plannedSets: 2,
+            zone: 'below_mev',
+            projectedZone: 'below_mev',
+            deficitLockedIn: true,
+            readiness: 0.2,
+            readyInHours: 40,
+          }),
+        ]}
+        isLoading={false}
+        onOpenDetail={onOpenDetail}
+      />
+    );
+
+    await user.click(screen.getByTestId('workout-volume-chip-back'));
+    expect(screen.getByTestId('workout-volume-detail-status-back')).toHaveTextContent(
+      'Deficit locked in'
+    );
+    expect(screen.getByTestId('workout-volume-detail-back')).toHaveTextContent(
+      'locked in'
+    );
+
+    await user.click(screen.getByTestId('workout-volume-detail-full-back'));
+    expect(onOpenDetail).toHaveBeenCalledTimes(1);
   });
 
   it('persists the collapse preference across mounts', async () => {
