@@ -73,12 +73,15 @@ export default function TemplateDetailPage() {
   const [isDragging, setIsDragging] = useState(false);
   const preCollapseStateRef = useRef<Set<string> | null>(null);
 
-  // Auto-arrange state. `previewExercises` holds the proposed order — nothing
-  // persists until the user hits Apply (never a silent reorder); `undoExercises`
-  // keeps the pre-apply order for the one-shot Undo. Auto-arrange never runs on
-  // its own again afterwards, so manual drags are preserved.
-  const [previewExercises, setPreviewExercises] = useState<WorkoutTemplateExercise[] | null>(null);
-  const [undoExercises, setUndoExercises] = useState<WorkoutTemplateExercise[] | null>(null);
+  // Auto-arrange state. Both hold ID ORDERS, never row snapshots — a stored
+  // row object would go stale the moment the user edits sets/reps/weight, and
+  // restoring it would silently revert that edit in state and the query cache
+  // (Codex P2 on #646). `previewOrder` is the proposed order — nothing
+  // persists until the user hits Apply (never a silent reorder); `undoOrder`
+  // keeps the pre-apply order for the one-shot Undo. Auto-arrange never runs
+  // on its own again afterwards, so manual drags are preserved.
+  const [previewOrder, setPreviewOrder] = useState<string[] | null>(null);
+  const [undoOrder, setUndoOrder] = useState<string[] | null>(null);
   const [isArranging, setIsArranging] = useState(false);
   const [arrangeNote, setArrangeNote] = useState<string | null>(null);
 
@@ -228,8 +231,8 @@ export default function TemplateDetailPage() {
       setShowAddExercise(false);
       setExerciseSearch('');
       // The list changed — a pending auto-arrange preview/undo is stale now.
-      setPreviewExercises(null);
-      setUndoExercises(null);
+      setPreviewOrder(null);
+      setUndoOrder(null);
       await loadTemplate();
     } catch (err) {
       console.error('Error adding exercise:', err);
@@ -313,8 +316,8 @@ export default function TemplateDetailPage() {
 
       if (error) throw error;
       // The list changed — a pending auto-arrange preview/undo is stale now.
-      setPreviewExercises(null);
-      setUndoExercises(null);
+      setPreviewOrder(null);
+      setUndoOrder(null);
       await loadTemplate();
     } catch (err) {
       console.error('Error removing exercise:', err);
@@ -338,7 +341,7 @@ export default function TemplateDetailPage() {
   // Long press handlers for drag reorder
   const handleLongPressStart = useCallback((index: number) => {
     // No dragging while an auto-arrange preview is up — Apply/Cancel first.
-    if (previewExercises) return;
+    if (previewOrder) return;
     longPressTimer.current = setTimeout(() => {
       // Save current collapse state before collapsing all for drag mode
       preCollapseStateRef.current = new Set(collapsedExercises);
@@ -353,7 +356,7 @@ export default function TemplateDetailPage() {
         navigator.vibrate(50);
       }
     }, 500);
-  }, [collapsedExercises, exercises, previewExercises]);
+  }, [collapsedExercises, exercises, previewOrder]);
 
   const handleLongPressEnd = useCallback(() => {
     if (longPressTimer.current) {
@@ -390,7 +393,7 @@ export default function TemplateDetailPage() {
         );
         // A manual re-drag supersedes any auto-arrange Undo — undoing now
         // would silently destroy the drag the user just made.
-        setUndoExercises(null);
+        setUndoOrder(null);
       } catch (err) {
         console.error('Error saving reorder:', err);
         // Reload to get correct order
@@ -436,22 +439,38 @@ export default function TemplateDetailPage() {
         prev ? { ...prev, exercises: newExercises } : prev
       );
       // A manual reorder supersedes any auto-arrange Undo.
-      setUndoExercises(null);
+      setUndoOrder(null);
     } catch (err) {
       console.error('Error reordering exercises:', err);
     }
   }
 
+  // Map an ID order onto the CURRENT exercise rows. Ids that no longer exist
+  // drop out; rows the order has never seen append at the end — so a preview
+  // or undo can never resurrect stale row data.
+  function orderedByIds(ids: string[]): WorkoutTemplateExercise[] {
+    const byId = new Map(exercises.map((e) => [e.id, e]));
+    const ordered = ids
+      .map((id) => byId.get(id))
+      .filter((e): e is WorkoutTemplateExercise => e !== undefined);
+    const seen = new Set(ids);
+    return [...ordered, ...exercises.filter((e) => !seen.has(e.id))];
+  }
+
   // Persist an arbitrary new exercise order (auto-arrange Apply / Undo) —
   // same sequential sort_order rewrite + cache mirror as the drag handler.
+  // PostgREST reports failures via the RESOLVED `error` value, not a
+  // rejection, so each row's result is checked — otherwise a partial write
+  // would still show the success banner (Codex P1 on #646).
   async function persistExerciseOrder(newExercises: WorkoutTemplateExercise[]) {
     setExercises(newExercises);
     try {
       for (let i = 0; i < newExercises.length; i++) {
-        await supabase
+        const { error: updateError } = await supabase
           .from('workout_template_exercises')
           .update({ sort_order: i })
           .eq('id', newExercises[i].id);
+        if (updateError) throw updateError;
       }
       queryClient.setQueryData(templateDetailKey(templateId), (prev: any) =>
         prev ? { ...prev, exercises: newExercises } : prev
@@ -468,7 +487,7 @@ export default function TemplateDetailPage() {
   // exactly the template's exercises; the algorithm itself is the pure
   // services/exerciseOrdering module.
   async function handleAutoArrange() {
-    if (isArranging || previewExercises || exercises.length < 2) return;
+    if (isArranging || previewOrder || exercises.length < 2) return;
     setIsArranging(true);
     setArrangeNote(null);
     try {
@@ -495,8 +514,8 @@ export default function TemplateDetailPage() {
       if (!orderChanged(exercises, arranged, (row) => row.id)) {
         setArrangeNote('Already in a good order — nothing to change.');
       } else {
-        setUndoExercises(null);
-        setPreviewExercises(arranged);
+        setUndoOrder(null);
+        setPreviewOrder(arranged.map((row) => row.id));
       }
     } catch (err) {
       console.error('Error auto-arranging exercises:', err);
@@ -507,21 +526,22 @@ export default function TemplateDetailPage() {
   }
 
   async function applyArrangement() {
-    if (!previewExercises) return;
-    const previous = exercises;
-    setPreviewExercises(null);
+    if (!previewOrder) return;
+    const previousOrder = exercises.map((e) => e.id);
+    const next = orderedByIds(previewOrder);
+    setPreviewOrder(null);
     try {
-      await persistExerciseOrder(previewExercises);
-      setUndoExercises(previous);
+      await persistExerciseOrder(next);
+      setUndoOrder(previousOrder);
     } catch {
       setError('Failed to save the new order');
     }
   }
 
   async function undoArrangement() {
-    if (!undoExercises) return;
-    const restore = undoExercises;
-    setUndoExercises(null);
+    if (!undoOrder) return;
+    const restore = orderedByIds(undoOrder);
+    setUndoOrder(null);
     try {
       await persistExerciseOrder(restore);
     } catch {
@@ -658,7 +678,7 @@ export default function TemplateDetailPage() {
                   variant="ghost"
                   size="sm"
                   onClick={handleAutoArrange}
-                  disabled={isArranging || !!previewExercises}
+                  disabled={isArranging || !!previewOrder}
                 >
                   {isArranging ? 'Arranging…' : 'Auto-arrange'}
                 </Button>
@@ -690,7 +710,7 @@ export default function TemplateDetailPage() {
 
               {/* Auto-arrange PREVIEW: the list below shows the proposed order;
                   nothing persists until Apply. */}
-              {previewExercises && (
+              {previewOrder && (
                 <div
                   className="mb-3 flex items-center justify-between gap-2 rounded-lg border border-primary-500/40 bg-primary-500/10 px-3 py-2"
                   data-testid="auto-arrange-preview-banner"
@@ -700,7 +720,7 @@ export default function TemplateDetailPage() {
                     interleaved. Nothing is saved until you apply.
                   </p>
                   <div className="flex flex-shrink-0 gap-2">
-                    <Button variant="ghost" size="sm" onClick={() => setPreviewExercises(null)}>
+                    <Button variant="ghost" size="sm" onClick={() => setPreviewOrder(null)}>
                       Cancel
                     </Button>
                     <Button variant="primary" size="sm" onClick={applyArrangement}>
@@ -711,7 +731,7 @@ export default function TemplateDetailPage() {
               )}
 
               {/* One-shot Undo after applying an arrangement. */}
-              {undoExercises && !previewExercises && (
+              {undoOrder && !previewOrder && (
                 <div
                   className="mb-3 flex items-center justify-between gap-2 rounded-lg border border-surface-700 bg-surface-800/60 px-3 py-2"
                   data-testid="auto-arrange-undo-banner"
@@ -723,7 +743,7 @@ export default function TemplateDetailPage() {
                 </div>
               )}
 
-              {(previewExercises ?? exercises).map((exercise, index) => {
+              {(previewOrder ? orderedByIds(previewOrder) : exercises).map((exercise, index) => {
                 const isCollapsed = collapsedExercises.has(exercise.id);
                 const isBeingDragged = draggedIndex === index;
                 const isDragTarget = dragOverIndex === index;
@@ -772,7 +792,7 @@ export default function TemplateDetailPage() {
                       {/* Exercise name */}
                       <div className="flex-1">
                         <p className="font-medium text-primary-400">{exercise.exercise_name}</p>
-                        {previewExercises && (() => {
+                        {previewOrder && (() => {
                           const was = exercises.findIndex((e) => e.id === exercise.id);
                           return was !== index ? (
                             <p className="text-[10px] text-primary-300/80">moved from #{was + 1}</p>
