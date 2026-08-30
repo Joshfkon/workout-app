@@ -25,14 +25,23 @@ import {
 interface ChartsTabProps {
   sessions: ExerciseDetailSession[] | undefined;
   unit: 'kg' | 'lb';
-  /** rep_total exercise: chart session rep totals, never an e1RM (ADD 2). */
+  /** rep_total exercise: the trend chart defaults to session rep totals. */
   repTotalMode?: boolean;
 }
+
+/** Which number the trend chart plots. Both are switchable on any exercise;
+ * the exercise's progression model only picks the default. */
+type ChartMetric = 'reps' | 'e1rm';
 
 const RANGE_OPTIONS = [
   { value: '3m', label: '3M' },
   { value: '1y', label: '1Y' },
   { value: 'all', label: 'All' },
+];
+
+const METRIC_OPTIONS = [
+  { value: 'reps', label: 'Reps' },
+  { value: 'e1rm', label: 'Est 1RM' },
 ];
 
 const TOOLTIP_STYLE = {
@@ -44,12 +53,15 @@ const TOOLTIP_STYLE = {
 
 export function ChartsTab({ sessions, unit, repTotalMode = false }: ChartsTabProps) {
   const [range, setRange] = useState<TrendRange>('all');
+  // Default to the exercise's progression metric; the toggle lets the user
+  // view the other one as reference.
+  const [metric, setMetric] = useState<ChartMetric>(repTotalMode ? 'reps' : 'e1rm');
 
-  // rep_total: the progression metric is the session rep total — chart that
-  // instead of an e1RM that doesn't exist for this exercise. Deload sessions
-  // are excluded (held light on purpose). Oldest-first for the time axis.
+  // Session rep totals — the progression metric for rep_total exercises,
+  // reference for everything else. Deload sessions are excluded (held light
+  // on purpose). Oldest-first for the time axis.
   const repTotalTrend = useMemo(() => {
-    if (!repTotalMode || !sessions) return [];
+    if (metric !== 'reps' || !sessions) return [];
     const now = new Date();
     const cutoff =
       range === '3m'
@@ -66,17 +78,17 @@ export function ChartsTab({ sessions, unit, repTotalMode = false }: ChartsTabPro
         // Straight sets only — same rule the rep_total policy grades.
         total: sn.sets.filter(isNormalDetailSet).reduce((sum, st) => sum + st.reps, 0),
       }));
-  }, [repTotalMode, sessions, range]);
+  }, [metric, sessions, range]);
 
   // Lazy-computed: this component only mounts on first visit to the tab.
   const trendData = useMemo(() => {
-    if (!sessions) return [];
+    if (metric !== 'e1rm' || !sessions) return [];
     return buildE1RMTrend(sessions, range, new Date()).map((p) => ({
       label: p.label,
       e1rm: p.e1rm === null ? null : Math.round(convertWeight(p.e1rm, 'kg', unit)),
       deloadE1rm: p.deloadE1rm === null ? null : Math.round(convertWeight(p.deloadE1rm, 'kg', unit)),
     }));
-  }, [sessions, range, unit]);
+  }, [metric, sessions, range, unit]);
 
   const weeklyVolume = useMemo(() => {
     if (!sessions) return [];
@@ -109,18 +121,26 @@ export function ChartsTab({ sessions, unit, repTotalMode = false }: ChartsTabPro
 
   return (
     <div className="space-y-5" data-testid="exercise-detail-charts">
-      {repTotalMode ? (
-        /* rep_total: session rep-total trend replaces the e1RM chart. */
-        <div className="bg-surface-800/30 rounded-lg p-3">
-          <div className="flex items-center justify-between mb-3 gap-2">
-            <p className="text-sm font-medium text-surface-200">Session rep total</p>
-            <SegmentedControl
-              options={RANGE_OPTIONS}
-              value={range}
-              onChange={(v) => setRange(v as TrendRange)}
-            />
-          </div>
-          {repTotalTrend.length >= 1 ? (
+      <div className="bg-surface-800/30 rounded-lg p-3">
+        <div className="flex items-center justify-between mb-2 gap-2">
+          <p className="text-sm font-medium text-surface-200">
+            {metric === 'reps' ? 'Session rep total' : 'Est. 1RM trend'}
+          </p>
+          <SegmentedControl
+            options={RANGE_OPTIONS}
+            value={range}
+            onChange={(v) => setRange(v as TrendRange)}
+          />
+        </div>
+        <div className="mb-3">
+          <SegmentedControl
+            options={METRIC_OPTIONS}
+            value={metric}
+            onChange={(v) => setMetric(v as ChartMetric)}
+          />
+        </div>
+        {metric === 'reps' ? (
+          repTotalTrend.length >= 1 ? (
             <div className="h-48">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={repTotalTrend}>
@@ -152,23 +172,8 @@ export function ChartsTab({ sessions, unit, repTotalMode = false }: ChartsTabPro
             <p className="text-surface-500 text-sm py-8 text-center">
               No sessions in this range
             </p>
-          )}
-          <p className="text-[11px] text-surface-500 mt-1.5">
-            Rep-total progression: this exercise trends total reps at its working
-            load — no estimated 1RM is computed for it.
-          </p>
-        </div>
-      ) : (
-      <div className="bg-surface-800/30 rounded-lg p-3">
-        <div className="flex items-center justify-between mb-3 gap-2">
-          <p className="text-sm font-medium text-surface-200">Est. 1RM trend</p>
-          <SegmentedControl
-            options={RANGE_OPTIONS}
-            value={range}
-            onChange={(v) => setRange(v as TrendRange)}
-          />
-        </div>
-        {trendPointCount >= 1 ? (
+          )
+        ) : trendPointCount >= 1 ? (
           <>
             <div className="h-48">
               <ResponsiveContainer width="100%" height="100%">
@@ -217,11 +222,24 @@ export function ChartsTab({ sessions, unit, repTotalMode = false }: ChartsTabPro
           </>
         ) : (
           <p className="text-surface-500 text-sm py-6 text-center">
-            No non-deload sessions in this range
+            {repTotalMode
+              ? 'No est. 1RM in this range — high-rep sets fall outside the estimator'
+              : 'No non-deload sessions in this range'}
           </p>
         )}
+        {metric === 'reps' ? (
+          <p className="text-[11px] text-surface-500 mt-1.5">
+            {repTotalMode
+              ? 'Rep-total progression: this exercise trends total reps at its working load.'
+              : 'Total reps across straight sets per session; deload sessions excluded.'}
+          </p>
+        ) : repTotalMode ? (
+          <p className="text-[11px] text-surface-500 mt-1.5">
+            Shown for reference — this exercise progresses by session rep total,
+            and only sets low-rep enough to estimate a 1RM appear here.
+          </p>
+        ) : null}
       </div>
-      )}
 
       {/* Volume per week */}
       <div className="bg-surface-800/30 rounded-lg p-3">
