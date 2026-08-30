@@ -17,6 +17,9 @@ beforeAll(() => {
 /**
  * ADD 2 follow-up: the exercise-detail sheet must not present e1RM-derived
  * numbers for a rep_total exercise — session rep totals replace them.
+ * Exception (user request): the Charts tab carries an explicit Reps | Est 1RM
+ * toggle, so e1RM is reachable there — but only behind the toggle, never as
+ * the default.
  */
 
 const LB135_KG = 61.23496995;
@@ -60,8 +63,40 @@ describe('rep_total detail tabs (no e1RM anywhere)', () => {
     expect(screen.queryByText(/Best est\. 1RM/i)).not.toBeInTheDocument();
   });
 
-  it('ChartsTab: e1RM trend is replaced by the session rep-total trend', () => {
+  it('ChartsTab: defaults to the session rep-total trend, not e1RM', () => {
     render(<ChartsTab sessions={sessions} unit="lb" repTotalMode />);
+    expect(screen.getByText(/Session rep total/)).toBeInTheDocument();
+    expect(screen.queryByText(/Est\. 1RM trend/)).not.toBeInTheDocument();
+  });
+
+  it('ChartsTab: metric toggle switches to the e1RM trend and back', async () => {
+    const user = userEvent.setup();
+    render(<ChartsTab sessions={sessions} unit="lb" repTotalMode />);
+
+    await user.click(screen.getByRole('button', { name: 'Est 1RM' }));
+    expect(screen.getByText(/Est\. 1RM trend/)).toBeInTheDocument();
+    expect(screen.queryByText(/Session rep total/)).not.toBeInTheDocument();
+    // Reference framing, since rep total stays the progression metric.
+    expect(screen.getByText(/Shown for reference/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Reps' }));
+    expect(screen.getByText(/Session rep total/)).toBeInTheDocument();
+    expect(screen.queryByText(/Est\. 1RM trend/)).not.toBeInTheDocument();
+  });
+
+  it('ChartsTab: duration-based exercise gets no metric toggle (seconds are not reps)', () => {
+    render(<ChartsTab sessions={sessions} unit="lb" repTotalMode isDuration />);
+    expect(screen.getByText(/Session rep total/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Est 1RM' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reps' })).not.toBeInTheDocument();
+  });
+
+  it('ChartsTab: e1rm-path exercise defaults to e1RM and can switch to reps', async () => {
+    const user = userEvent.setup();
+    render(<ChartsTab sessions={sessions} unit="lb" />);
+    expect(screen.getByText(/Est\. 1RM trend/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Reps' }));
     expect(screen.getByText(/Session rep total/)).toBeInTheDocument();
     expect(screen.queryByText(/Est\. 1RM trend/)).not.toBeInTheDocument();
   });
