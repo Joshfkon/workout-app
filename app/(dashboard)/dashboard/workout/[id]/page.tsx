@@ -4020,13 +4020,40 @@ export default function WorkoutPage() {
   // transient unique-constraint collisions mid-update. Each pass fans out in
   // parallel: within a pass the targets are already collision-free, so the cost
   // is two round-trip waves rather than 2n sequential ones.
+  //
+  // Offline posture (same as target-sets patches): a failed or offline save is
+  // queued into the outbox as per-block order patches so the order still lands
+  // when connectivity returns, instead of silently reverting to the last saved
+  // order on reload. The flush replays entries one row at a time, so the queue
+  // carries the same park-then-final dance; entry ids are stable per block, so
+  // a newer offline reorder replaces the queued rows rather than stacking.
   const persistBlockOrder = useCallback((ordered: ExerciseBlockWithExercise[]) => {
     const seq = ++orderSaveSeqRef.current;
     const ids = ordered.map((b) => b.id);
 
+    // The flush applies entries oldest-first; the park loop is enqueued before
+    // the write loop, and for same-millisecond puts the id tie-break also
+    // keeps parks first ('block-order:park:' < 'block-order:write:').
+    const enqueueOrder = async () => {
+      for (let i = 0; i < ids.length; i++) {
+        await enqueueRowUpdate(`block-order:park:${ids[i]}`, 'exercise_blocks', ids[i], {
+          order: i + 1001,
+        });
+      }
+      for (let i = 0; i < ids.length; i++) {
+        await enqueueRowUpdate(`block-order:write:${ids[i]}`, 'exercise_blocks', ids[i], {
+          order: i + 1,
+        });
+      }
+    };
+
     orderSaveChainRef.current = orderSaveChainRef.current.then(async () => {
       if (seq !== orderSaveSeqRef.current) return; // superseded while queued
       try {
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          await enqueueOrder();
+          return;
+        }
         const supabase = createUntypedClient();
         const writePass = async (offset: number) => {
           const results = await Promise.all(
@@ -4039,8 +4066,23 @@ export default function WorkoutPage() {
         };
         await writePass(1001);
         await writePass(1);
+        // Direct write landed: order entries a previous offline save queued
+        // are stale now — drop them so a later flush can't clobber this
+        // newer order with an older one.
+        await Promise.all(
+          ids.flatMap((id) => [
+            removeQueuedSet(`block-order:park:${id}`),
+            removeQueuedSet(`block-order:write:${id}`),
+          ])
+        );
       } catch (err) {
-        console.error('Error saving reorder:', err);
+        console.error('Error saving reorder, queueing for outbox:', err);
+        try {
+          await enqueueOrder();
+        } catch (queueErr) {
+          // Memory-store worst case: the order reverts on the next load.
+          console.error('Error queueing reorder:', queueErr);
+        }
       }
     });
 
@@ -4428,13 +4470,14 @@ export default function WorkoutPage() {
   };
 
   const handleNextExercise = () => {
-    // Advance to the next non-skipped block
-    const nextIndex = blocks.findIndex(
-      (b, i) => i > currentBlockIndex && !skippedBlockIds.has(b.id)
-    );
+    // Advance to the next block with work left. Performed-order moves started
+    // blocks to sit BEFORE the current one, so after a backtrack the pending
+    // blocks can all be at lower indices — search forward first, then wrap.
+    const nextIndex = findNextExerciseIndex();
     if (nextIndex !== -1) {
       setCurrentBlockIndex(nextIndex);
-      setCurrentSetNumber(1);
+      // Resume a partially-done block at its next set, not set 1.
+      setCurrentSetNumber(getSetsForBlock(blocks[nextIndex].id).length + 1);
       // Clear AMRAP accepted state when changing blocks
       setAmrapAcceptedBlockId(null);
       // Keep rest timer running - need rest between sets even when switching exercises
@@ -5818,6 +5861,23 @@ export default function WorkoutPage() {
     return blockSets.length >= block.targetSets;
   };
 
+  // "Next Exercise →" target: the next block that still has work to do (not
+  // skipped, fewer working sets than target). Performed-order keeps started
+  // blocks BEFORE the current one, so after a backtrack the pending blocks can
+  // all sit at lower indices — search forward from the current block first,
+  // then wrap to the top. -1 when nothing but the current block has work left.
+  const findNextExerciseIndex = (): number => {
+    const hasWorkLeft = (b: ExerciseBlockWithExercise) =>
+      !skippedBlockIds.has(b.id) && !isBlockComplete(b);
+    for (let i = currentBlockIndex + 1; i < blocks.length; i++) {
+      if (hasWorkLeft(blocks[i])) return i;
+    }
+    for (let i = 0; i < currentBlockIndex; i++) {
+      if (hasWorkLeft(blocks[i])) return i;
+    }
+    return -1;
+  };
+
   // Calculate overall workout progress (skipped blocks excluded)
   const activeBlocks = blocks.filter(b => !skippedBlockIds.has(b.id));
   const totalPlannedSets = activeBlocks.reduce((sum, b) => sum + b.targetSets, 0);
@@ -6850,7 +6910,10 @@ export default function WorkoutPage() {
                         >
                           + Add Extra Set
                         </Button>
-                        {blocks.some((b, i) => i > index && !skippedBlockIds.has(b.id)) && (
+                        {/* Same wrap-around search as handleNextExercise: after a
+                            backtrack the pending blocks sit BEFORE this one, so an
+                            index-forward check would hide the button with work left. */}
+                        {findNextExerciseIndex() !== -1 && (
                           <Button variant="secondary" onClick={handleNextExercise}>
                             Next Exercise →
                           </Button>
