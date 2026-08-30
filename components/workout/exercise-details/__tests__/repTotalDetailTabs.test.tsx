@@ -84,6 +84,13 @@ describe('rep_total detail tabs (no e1RM anywhere)', () => {
     expect(screen.queryByText(/Est\. 1RM trend/)).not.toBeInTheDocument();
   });
 
+  it('ChartsTab: duration-based exercise gets no metric toggle (seconds are not reps)', () => {
+    render(<ChartsTab sessions={sessions} unit="lb" repTotalMode isDuration />);
+    expect(screen.getByText(/Session rep total/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Est 1RM' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reps' })).not.toBeInTheDocument();
+  });
+
   it('ChartsTab: e1rm-path exercise defaults to e1RM and can switch to reps', async () => {
     const user = userEvent.setup();
     render(<ChartsTab sessions={sessions} unit="lb" />);

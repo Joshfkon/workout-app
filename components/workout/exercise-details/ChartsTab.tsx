@@ -27,6 +27,12 @@ interface ChartsTabProps {
   unit: 'kg' | 'lb';
   /** rep_total exercise: the trend chart defaults to session rep totals. */
   repTotalMode?: boolean;
+  /**
+   * duration_based exercise: `reps` holds seconds, which must never enter the
+   * e1RM estimator — the metric toggle is hidden and the chart stays on the
+   * progression-model default.
+   */
+  isDuration?: boolean;
 }
 
 /** Which number the trend chart plots. Both are switchable on any exercise;
@@ -51,11 +57,13 @@ const TOOLTIP_STYLE = {
   color: '#f3f4f6',
 } as const;
 
-export function ChartsTab({ sessions, unit, repTotalMode = false }: ChartsTabProps) {
+export function ChartsTab({ sessions, unit, repTotalMode = false, isDuration = false }: ChartsTabProps) {
   const [range, setRange] = useState<TrendRange>('all');
   // Default to the exercise's progression metric; the toggle lets the user
-  // view the other one as reference.
-  const [metric, setMetric] = useState<ChartMetric>(repTotalMode ? 'reps' : 'e1rm');
+  // view the other one as reference. Duration-based movements get no toggle:
+  // their "reps" are seconds and never enter the e1RM estimator.
+  const [selectedMetric, setSelectedMetric] = useState<ChartMetric>(repTotalMode ? 'reps' : 'e1rm');
+  const metric: ChartMetric = isDuration ? (repTotalMode ? 'reps' : 'e1rm') : selectedMetric;
 
   // Session rep totals — the progression metric for rep_total exercises,
   // reference for everything else. Deload sessions are excluded (held light
@@ -132,13 +140,15 @@ export function ChartsTab({ sessions, unit, repTotalMode = false }: ChartsTabPro
             onChange={(v) => setRange(v as TrendRange)}
           />
         </div>
-        <div className="mb-3">
-          <SegmentedControl
-            options={METRIC_OPTIONS}
-            value={metric}
-            onChange={(v) => setMetric(v as ChartMetric)}
-          />
-        </div>
+        {!isDuration && (
+          <div className="mb-3">
+            <SegmentedControl
+              options={METRIC_OPTIONS}
+              value={metric}
+              onChange={(v) => setSelectedMetric(v as ChartMetric)}
+            />
+          </div>
+        )}
         {metric === 'reps' ? (
           repTotalTrend.length >= 1 ? (
             <div className="h-48">
