@@ -3412,7 +3412,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                               type="button"
                               onClick={() => onPlateCalculatorOpen(row.effectiveKg)}
                               aria-label={`Open plate calculator for warmup set ${warmup.setNumber}`}
-                              className="p-1.5 -my-1.5 text-surface-500 hover:text-primary-400 transition-colors"
+                              className="min-h-[44px] min-w-[40px] -my-2.5 px-1 inline-flex items-center justify-center text-surface-500 hover:text-primary-400 transition-colors"
                             >
                               <IconBarbell size={13} aria-hidden="true" />
                             </button>
