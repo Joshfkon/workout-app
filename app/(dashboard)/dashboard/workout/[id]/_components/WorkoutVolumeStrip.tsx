@@ -9,22 +9,24 @@
  * readiness status dot next to the name (green ready / amber part-recovered /
  * red just-trained) and a "Ready" / "~Nh" recovery ETA in the band row.
  *
- * The bar also carries the WEEK PROJECTION: today's remaining planned sets
- * render as a hatched, lighter segment on top of the week-to-date fill, and a
- * "+N → M" microline shows where the week lands if the plan is finished.
- * Warning states: amber when the PROJECTED total overshoots MRV, red when a
- * projected deficit is locked in (below the band minimum even with today's
- * plan, and recovery says no more quality sets fit this week — see
- * services/plannedVolumeProjection). Both recompute live as sets are logged
- * or exercises skipped, so a skip shows its volume consequence immediately.
+ * The bar also carries the WEEK PROJECTION, kept deliberately quiet on the
+ * chips themselves: today's remaining planned sets render as a hatched,
+ * lighter segment on top of the week-to-date fill — no extra text per card.
+ * The numbers live in ONE line under the strip ("After today's plan: …"), a
+ * digest of where each of this session's muscle groups lands if the plan is
+ * finished; tapping it expands a per-muscle projection list (completed,
+ * +planned, projected vs band, status). Warning states: amber when a
+ * PROJECTED total overshoots MRV, red when a projected deficit is locked in
+ * (below the band minimum even with today's plan, and recovery says no more
+ * quality sets fit this week — see services/plannedVolumeProjection).
+ * Everything recomputes live as sets are logged or exercises skipped, so a
+ * skip shows its volume consequence immediately.
  *
  * By default only the muscles THIS session trains render; a trailing
  * "Show all (+N)" card appends the remaining groups (session muscles stay
  * first). The whole card row is also collapsible via the header chevron.
- * Both choices persist across sessions. Tapping a muscle chip expands an
- * inline panel with the numbers (completed, planned, projected vs band,
- * recovery); the header "Details" button and the panel's "Full breakdown"
- * link open the full "What to train" sheet.
+ * Both choices persist across sessions. Tapping any muscle chip opens the
+ * full "What to train" sheet for the per-muscle breakdown + recovery.
  *
  * Purely presentational — all data comes from useWorkoutMuscleVolume, which
  * shares the readiness sheet's cached history query and volume model so the
@@ -132,10 +134,10 @@ const PLANNED_HATCH_STYLE = {
 
 /** Human label for where the projected total lands in the band. */
 function projectionLabel(row: WorkoutMuscleVolumeRow): string {
-  if (row.deficitLockedIn) return 'Deficit locked in';
-  if (row.projectedZone === 'over_mrv') return 'Projected over max';
-  if (row.projectedZone === 'below_mev') return 'Projected under min';
-  return 'Projected in range';
+  if (row.deficitLockedIn) return 'Locked in';
+  if (row.projectedZone === 'over_mrv') return 'Over max';
+  if (row.projectedZone === 'below_mev') return 'Under min';
+  return 'In range';
 }
 
 /** "~{N}h" hours label for the not-ready microcopy (never "~0h"). */
@@ -146,8 +148,9 @@ function readyInLabel(readyInHours: number): string {
 export function WorkoutVolumeStrip({ rows, isLoading, onOpenDetail }: WorkoutVolumeStripProps) {
   const [collapsed, setCollapsed] = useState(() => readFlag(COLLAPSED_STORAGE_KEY));
   const [showAll, setShowAll] = useState(() => readFlag(SHOW_ALL_STORAGE_KEY));
-  // Which muscle's numbers panel is open (per-mount UI state, not persisted).
-  const [expandedMuscle, setExpandedMuscle] = useState<string | null>(null);
+  // Whether the projection digest is expanded into the per-muscle list
+  // (per-mount UI state, not persisted).
+  const [projectionOpen, setProjectionOpen] = useState(false);
 
   if (rows.length === 0) return null;
 
@@ -174,9 +177,15 @@ export function WorkoutVolumeStrip({ rows, isLoading, onOpenDetail }: WorkoutVol
   const visibleRows = showEverything ? [...sessionRows, ...restRows] : sessionRows;
   const expanderVisible = sessionRows.length > 0 && restRows.length > 0;
 
-  // The numbers panel follows chip visibility: hiding a chip (Show less)
-  // closes its panel rather than leaving an orphaned detail on screen.
-  const expandedRow = visibleRows.find((r) => r.muscle === expandedMuscle) ?? null;
+  // The projection digest covers exactly the muscle groups in TODAY'S planned
+  // workout (session-trained rows, in the strip's frozen order).
+  const projectionRows = sessionRows;
+  const lockedCount = projectionRows.filter((r) => r.deficitLockedIn).length;
+  const underCount = projectionRows.filter(
+    (r) => r.projectedZone === 'below_mev' && !r.deficitLockedIn
+  ).length;
+  const overCount = projectionRows.filter((r) => r.projectedZone === 'over_mrv').length;
+  const inRangeCount = projectionRows.length - lockedCount - underCount - overCount;
 
   return (
     <div className="-mt-1" data-testid="workout-volume-strip">
@@ -213,12 +222,9 @@ export function WorkoutVolumeStrip({ rows, isLoading, onOpenDetail }: WorkoutVol
           {visibleRows.map((row) => (
             <button
               key={row.key}
-              onClick={() =>
-                setExpandedMuscle((cur) => (cur === row.muscle ? null : row.muscle))
-              }
+              onClick={onOpenDetail}
               className={`flex-shrink-0 snap-start w-[104px] text-left rounded-lg border ${chipBorderClass(row)} bg-surface-900/60 px-2.5 py-2 hover:border-surface-700 transition-colors`}
               data-testid={`workout-volume-chip-${row.muscle}`}
-              aria-expanded={expandedRow?.muscle === row.muscle}
               aria-label={`${row.displayName}: ${formatEffectiveVolume(row.effectiveSets)} effective of ${row.sets} weekly sets${
                 row.unratedSets > 0 ? `, ${formatEffectiveVolume(row.unratedSets)} unrated` : ''
               }${
@@ -297,14 +303,6 @@ export function WorkoutVolumeStrip({ rows, isLoading, onOpenDetail }: WorkoutVol
                   </>
                 )}
               </div>
-              {!isLoading && row.plannedSets > 0 && (
-                <p
-                  className={`mt-0.5 text-[10px] tabular-nums ${projectionTextClass(row)}`}
-                  data-testid={`workout-volume-projection-${row.muscle}`}
-                >
-                  +{row.plannedSets} today → {row.projectedSets}
-                </p>
-              )}
               <p className="mt-1 flex items-baseline justify-between gap-1 text-[10px] tabular-nums">
                 <span className="text-surface-500">
                   {row.band.mev}–{row.band.mrv}
@@ -340,57 +338,83 @@ export function WorkoutVolumeStrip({ rows, isLoading, onOpenDetail }: WorkoutVol
           )}
         </div>
 
-        {/* Tap-to-see-the-numbers panel: completed, planned, projected vs the
-            band, recovery — the same values the chip encodes visually. */}
-        {expandedRow && (
-          <div
-            className="mt-1 rounded-lg border border-surface-800 bg-surface-900/60 px-3 py-2.5"
-            data-testid={`workout-volume-detail-${expandedRow.muscle}`}
-          >
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-semibold text-surface-200">
-                {expandedRow.displayName}
-              </span>
-              <span
-                className={`text-[11px] font-medium ${projectionTextClass(expandedRow)}`}
-                data-testid={`workout-volume-detail-status-${expandedRow.muscle}`}
-              >
-                {projectionLabel(expandedRow)}
-              </span>
-            </div>
-            <dl className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] tabular-nums">
-              <dt className="text-surface-500">Completed this week</dt>
-              <dd className="text-right text-surface-200">
-                {expandedRow.sets} sets · {formatEffectiveVolume(expandedRow.effectiveSets)} eff
-              </dd>
-              <dt className="text-surface-500">Still planned today</dt>
-              <dd className="text-right text-surface-200">
-                {expandedRow.plannedSets > 0 ? `+${expandedRow.plannedSets} sets` : '—'}
-              </dd>
-              <dt className="text-surface-500">Projected week</dt>
-              <dd className={`text-right ${projectionTextClass(expandedRow)}`}>
-                {expandedRow.projectedSets} of {expandedRow.band.mev}–{expandedRow.band.mrv}
-              </dd>
-              <dt className="text-surface-500">Recovery</dt>
-              <dd className="text-right text-surface-200">
-                {expandedRow.readyInHours <= 0
-                  ? 'Ready'
-                  : `Ready in ${readyInLabel(expandedRow.readyInHours)}`}
-              </dd>
-            </dl>
-            {expandedRow.deficitLockedIn && (
-              <p className="mt-1.5 text-[11px] text-danger-400">
-                Recovery won’t allow more quality sets before this week’s window
-                closes — the deficit is locked in.
-              </p>
-            )}
+        {/* ONE quiet line for the projection numbers: where each of today's
+            muscle groups lands if the plan is finished. Expands into the
+            per-muscle list; the chips above stay text-free about it. */}
+        {!isLoading && projectionRows.length > 0 && (
+          <div className="mt-1">
             <button
-              onClick={onOpenDetail}
-              className="mt-1.5 text-[11px] font-medium text-primary-400 hover:text-primary-300"
-              data-testid={`workout-volume-detail-full-${expandedRow.muscle}`}
+              onClick={() => setProjectionOpen((prev) => !prev)}
+              className="flex w-full items-center gap-1 px-0.5 text-[11px] text-surface-500 hover:text-surface-300"
+              data-testid="workout-volume-projection-summary"
+              aria-expanded={projectionOpen}
+              aria-controls="workout-volume-projection-list"
             >
-              Full breakdown →
+              <span className="text-surface-500">After today’s plan:</span>
+              <span className="flex items-baseline gap-1 tabular-nums">
+                {inRangeCount > 0 && (
+                  <span className="text-surface-400">{inRangeCount} in range</span>
+                )}
+                {underCount > 0 && (
+                  <span className="text-surface-400">
+                    {inRangeCount > 0 && '· '}
+                    {underCount} under
+                  </span>
+                )}
+                {overCount > 0 && (
+                  <span className="text-warning-400">
+                    {(inRangeCount > 0 || underCount > 0) && '· '}
+                    {overCount} over max
+                  </span>
+                )}
+                {lockedCount > 0 && (
+                  <span className="text-danger-400">
+                    {(inRangeCount > 0 || underCount > 0 || overCount > 0) && '· '}
+                    {lockedCount} locked under
+                  </span>
+                )}
+              </span>
+              <IconChevronDown
+                size={12}
+                className={`ml-auto flex-shrink-0 transition-transform ${projectionOpen ? '' : '-rotate-90'}`}
+                aria-hidden
+              />
             </button>
+
+            {projectionOpen && (
+              <div
+                id="workout-volume-projection-list"
+                className="mt-1 rounded-lg border border-surface-800 bg-surface-900/60 px-3 py-2"
+                data-testid="workout-volume-projection-list"
+              >
+                {projectionRows.map((row) => (
+                  <div
+                    key={row.key}
+                    className="grid grid-cols-[minmax(0,1fr)_auto_auto_auto] items-baseline gap-x-3 py-0.5 text-[11px] tabular-nums"
+                    data-testid={`workout-volume-projection-row-${row.muscle}`}
+                  >
+                    <span className="truncate text-surface-300">{row.displayName}</span>
+                    <span className="text-right text-surface-200">
+                      {row.plannedSets > 0
+                        ? `${row.sets} +${row.plannedSets} → ${row.projectedSets}`
+                        : `${row.sets}`}
+                    </span>
+                    <span className="text-right text-surface-500">
+                      {row.band.mev}–{row.band.mrv}
+                    </span>
+                    <span className={`text-right font-medium ${projectionTextClass(row)}`}>
+                      {projectionLabel(row)}
+                    </span>
+                  </div>
+                ))}
+                {lockedCount > 0 && (
+                  <p className="mt-1 text-[11px] text-danger-400">
+                    Locked in: recovery won’t allow more quality sets before this
+                    week’s window closes.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         )}
         </>
