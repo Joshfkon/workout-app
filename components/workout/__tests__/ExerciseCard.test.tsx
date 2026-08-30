@@ -1965,6 +1965,61 @@ describe('ExerciseCard', () => {
       expect(screen.queryByText('Warmup Protocol')).not.toBeInTheDocument();
     });
   });
+
+  describe('Warmup plate calculator (per-row trigger)', () => {
+    const warmupPlateProps = {
+      ...defaultProps,
+      isActive: true,
+      listIndex: 0,
+      workingWeight: 100,
+      warmupSets: [
+        { setNumber: 1, percentOfWorking: 0, targetReps: 10, purpose: 'Bar warmup', restSeconds: 30 },
+        { setNumber: 2, percentOfWorking: 50, targetReps: 5, purpose: 'Neuro prep', restSeconds: 45 },
+      ],
+    };
+
+    const expandWarmups = async (user: ReturnType<typeof userEvent.setup>) => {
+      await user.click(screen.getByText('Warmup Protocol'));
+    };
+
+    it('opens the calculator pre-filled with the row load in kg', async () => {
+      const user = userEvent.setup();
+      const onPlateCalculatorOpen = jest.fn();
+      render(
+        <ExerciseCard {...warmupPlateProps} onPlateCalculatorOpen={onPlateCalculatorOpen} />
+      );
+
+      await expandWarmups(user);
+      await user.click(
+        screen.getByRole('button', { name: 'Open plate calculator for warmup set 2' })
+      );
+
+      // 50% of the 100 kg working weight
+      expect(onPlateCalculatorOpen).toHaveBeenCalledWith(50);
+    });
+
+    it('offers no plates trigger on a zero-load row (empty bar)', async () => {
+      const user = userEvent.setup();
+      render(<ExerciseCard {...warmupPlateProps} onPlateCalculatorOpen={jest.fn()} />);
+
+      await expandWarmups(user);
+
+      expect(
+        screen.queryByRole('button', { name: 'Open plate calculator for warmup set 1' })
+      ).not.toBeInTheDocument();
+    });
+
+    it('renders no trigger when the page does not wire the calculator', async () => {
+      const user = userEvent.setup();
+      render(<ExerciseCard {...warmupPlateProps} />);
+
+      await expandWarmups(user);
+
+      expect(
+        screen.queryByRole('button', { name: /Open plate calculator/ })
+      ).not.toBeInTheDocument();
+    });
+  });
 });
 
 describe('rep_total progression path (ADD 2)', () => {

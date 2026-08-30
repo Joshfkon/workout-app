@@ -46,7 +46,7 @@ import { lightHaptic } from '@/lib/integrations/notifications';
 // setLogTiming: TEMPORARY latency instrumentation (docs/SET_LOGGING_LATENCY_DIAGNOSIS.md)
 import { beginSetTiming } from '@/lib/debug/setLogTiming';
 import { Input } from '@/components/ui';
-import { IconBone, IconCheck, IconChevronDown, IconCloudPause, IconGripVertical, IconInfoCircle } from '@tabler/icons-react';
+import { IconBarbell, IconBone, IconCheck, IconChevronDown, IconCloudPause, IconGripVertical, IconInfoCircle } from '@tabler/icons-react';
 import { RowOverflowMenu, type RowMenuItem } from './RowOverflowMenu';
 import { StabilizerWarningBanner, type StabilizerWarningView } from './StabilizerWarningBanner';
 import { InlineRestTimerBar } from './InlineRestTimerBar';
@@ -3344,6 +3344,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                         W{warmup.setNumber}
                       </td>
                       <td className="px-1 py-2 text-center">
+                        <div className="inline-flex items-center justify-center gap-0.5">
                         {isEditingThis ? (
                           <input
                             type="number"
@@ -3371,7 +3372,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                               }
                             }}
                             autoFocus
-                            className="w-full px-1 py-0.5 text-center font-mono text-sm bg-surface-900 border border-amber-500 rounded text-surface-100"
+                            className="w-16 px-1 py-0.5 text-center font-mono text-sm bg-surface-900 border border-amber-500 rounded text-surface-100"
                           />
                         ) : row.editable ? (
                           <button
@@ -3399,6 +3400,24 @@ export const ExerciseCard = memo(function ExerciseCard({
                             {displayWarmupWeight}
                           </span>
                         )}
+                        {/* Plate calculator for this ramp step (same modal the
+                            working-set logger opens, pre-filled with the row's
+                            load). External-load rows with actual weight only —
+                            an empty bar or a bodyweight step has no plates. */}
+                        {onPlateCalculatorOpen &&
+                          !isBodyweightExercise &&
+                          !isEditingThis &&
+                          row.effectiveKg > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => onPlateCalculatorOpen(row.effectiveKg)}
+                              aria-label={`Open plate calculator for warmup set ${warmup.setNumber}`}
+                              className="min-h-[44px] min-w-[40px] -my-2.5 px-1 inline-flex items-center justify-center text-surface-500 hover:text-primary-400 transition-colors"
+                            >
+                              <IconBarbell size={13} aria-hidden="true" />
+                            </button>
+                          )}
+                        </div>
                       </td>
                       <td className="px-1 py-2 text-center font-mono text-surface-300">
                         {warmup.targetReps}
