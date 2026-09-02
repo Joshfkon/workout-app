@@ -668,25 +668,33 @@ export default function TrainPage() {
     if (!inProgress || isDiscarding) return;
     setIsDiscarding(true);
     setError(null);
-    const { ok, errors } = await cancelWorkoutSession(supabase, {
-      sessionId: inProgress.id,
-      mesocycleId: inProgress.mesocycleId,
-      blockIds: inProgress.blockIds,
-    });
-    if (ok) {
-      // Clear the persisted store too if this session is the one driving the
-      // global resume pill (matches the log page's discard flow).
-      const { activeSession, endSession } = useWorkoutStore.getState();
-      if (activeSession?.id === inProgress.id) {
-        endSession();
+    // try/finally so nothing can leave the modal wedged on "Discarding..."
+    // with both buttons disabled — isDiscarding always resets.
+    try {
+      const { ok, errors } = await cancelWorkoutSession(supabase, {
+        sessionId: inProgress.id,
+        mesocycleId: inProgress.mesocycleId,
+        blockIds: inProgress.blockIds,
+      });
+      if (ok) {
+        // Clear the persisted store too if this session is the one driving the
+        // global resume pill (matches the log page's discard flow).
+        const { activeSession, endSession } = useWorkoutStore.getState();
+        if (activeSession?.id === inProgress.id) {
+          endSession();
+        }
+        setInProgress(null);
+      } else {
+        console.error('Failed to discard workout:', errors);
+        setError('Failed to discard workout. Please try again.');
       }
-      setInProgress(null);
-    } else {
-      console.error('Failed to discard workout:', errors);
+    } catch (err) {
+      console.error('Failed to discard workout:', err);
       setError('Failed to discard workout. Please try again.');
+    } finally {
+      setIsDiscarding(false);
+      setShowDiscardConfirm(false);
     }
-    setIsDiscarding(false);
-    setShowDiscardConfirm(false);
   };
 
   const startedAtLabel = inProgress?.startedAt
