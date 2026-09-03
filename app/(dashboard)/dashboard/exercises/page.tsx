@@ -12,7 +12,7 @@ import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 // revisiting Exercises renders instantly instead of re-blocking on a spinner.
 const EXERCISE_CATALOG_KEY = ['exercises', 'catalog'] as const;
 const EXERCISE_CATALOG_COLUMNS =
-  'id, name, primary_muscle, secondary_muscles, mechanic, form_cues, common_mistakes, equipment_required, equipment, movement_pattern, is_bodyweight, bodyweight_type, assistance_type, exercise_type, is_custom, hypertrophy_tier, stretch_under_load, resistance_profile, progression_ease, demo_gif_url, demo_thumbnail_url, youtube_video_id';
+  'id, name, primary_muscle, secondary_muscles, mechanic, form_cues, common_mistakes, equipment_required, equipment, movement_pattern, is_bodyweight, bodyweight_type, assistance_type, exercise_type, is_custom, created_by, hypertrophy_tier, stretch_under_load, resistance_profile, progression_ease, demo_gif_url, demo_thumbnail_url, youtube_video_id';
 import {
   dedupeExercisesById,
   exerciseMatchesEquipment,
@@ -66,6 +66,7 @@ interface Exercise {
   /** Modality — duration_based exercises store seconds in set reps fields */
   exercise_type?: 'rep_based' | 'duration_based';
   is_custom?: boolean;
+  created_by?: string | null;
   // Hypertrophy scoring (Nippard methodology)
   hypertrophy_tier?: 'S' | 'A' | 'B' | 'C' | 'D' | 'F';
   stretch_under_load?: number;
@@ -191,6 +192,17 @@ export default function ExercisesPage() {
   // Set mounted flag to prevent hydration mismatches
   useEffect(() => {
     setMounted(true);
+  }, []);
+
+  // Who's editing — the shared-edit notice shows on every row the user
+  // doesn't own (stock catalog rows, and custom rows created by others).
+  // Local session read, no auth-server round-trip.
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  useEffect(() => {
+    const supabase = createUntypedClient();
+    supabase.auth.getSession().then(({ data }: { data: { session: { user?: { id?: string } } | null } }) => {
+      setCurrentUserId(data.session?.user?.id ?? null);
+    });
   }, []);
 
   const catalogQuery = useQuery({
@@ -560,7 +572,7 @@ export default function ExercisesPage() {
         success: true,
         message:
           result.outcome === 'updated_catalog'
-            ? '✅ Catalog exercise updated for all users (audited).'
+            ? '✅ Shared exercise updated for all users (audited).'
             : '✅ Exercise updated successfully!',
       });
       
@@ -1440,17 +1452,24 @@ export default function ExercisesPage() {
                   <p className="text-surface-100 font-medium">{editingExercise.name}</p>
                 </div>
 
-                {/* Catalog rows are shared — edits go through the audited
-                    catalog write path and apply to every user. */}
-                {!editingExercise.is_custom && (
+                {/* Rows the user doesn't own are shared — edits go through
+                    the audited shared write path and apply to every user. */}
+                {!(
+                  editingExercise.is_custom &&
+                  // While the session is still resolving, assume a custom row
+                  // is the user's own rather than flashing the notice.
+                  (!editingExercise.created_by ||
+                    currentUserId === null ||
+                    editingExercise.created_by === currentUserId)
+                ) && (
                   <div
                     className="p-3 bg-warning-900/30 border border-warning-700 rounded-lg"
                     data-testid="catalog-exercise-notice"
                   >
                     <p className="text-sm text-warning-400">
-                      Built-in catalog exercise — saving edits the shared
-                      catalog for every user (previous values are kept in the
-                      audit trail).
+                      Shared exercise (not created by you) — saving edits it
+                      for every user (previous values are kept in the audit
+                      trail).
                     </p>
                   </div>
                 )}

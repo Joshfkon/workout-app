@@ -86,10 +86,11 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccessMessage, setSaveSuccessMessage] = useState<string | null>(null);
   const saveMessageRef = useRef<HTMLDivElement | null>(null);
-  // true = stock catalog row (is_custom false): saved through the audited
-  // update_catalog_exercise RPC and applied to the shared catalog for every
+  // true = a row the user doesn't own (stock catalog row, or a custom row
+  // created by another user): saved through the audited
+  // update_catalog_exercise RPC and applied to the shared row for every
   // user — the form says so up-front and in the success confirmation.
-  const [isCatalogExercise, setIsCatalogExercise] = useState<boolean | null>(null);
+  const [isSharedExercise, setIsSharedExercise] = useState<boolean | null>(null);
 
   // Load equipment types + gym locations when the form opens
   useEffect(() => {
@@ -165,17 +166,25 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
     setEditData(initialData);
     setShowAdvancedFields(false);
 
-    // Ownership check: catalog rows (is_custom false) are not updatable under
-    // RLS — surface that BEFORE the user invests in edits that can't save.
+    // Ownership check: rows the user doesn't own (stock catalog rows, and
+    // custom rows created by another user) save through the audited shared
+    // write path and change the exercise for EVERYONE — surface that BEFORE
+    // the user invests in edits.
     const loadOwnership = async () => {
       if (!exercise.id) return;
       const supabase = createUntypedClient();
+      const { data: { session } } = await supabase.auth.getSession();
       const { data } = await supabase
         .from('exercises')
-        .select('is_custom')
+        .select('is_custom, created_by')
         .eq('id', exercise.id)
         .maybeSingle();
-      if (data) setIsCatalogExercise(!data.is_custom);
+      if (data) {
+        const ownRow =
+          data.is_custom === true &&
+          (!data.created_by || data.created_by === session?.user?.id);
+        setIsSharedExercise(!ownRow);
+      }
     };
     loadOwnership();
 
@@ -322,7 +331,7 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
 
       setSaveSuccessMessage(
         wroteSharedCatalog
-          ? 'Catalog exercise updated for all users (audited). Refreshing...'
+          ? 'Shared exercise updated for all users (audited). Refreshing...'
           : 'Exercise updated successfully! Refreshing...'
       );
       setTimeout(() => {
@@ -415,13 +424,13 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
         </div>
       )}
 
-      {/* Catalog rows are shared — edits go through the audited catalog
-          write path and apply to every user. Say so before saving. */}
-      {isCatalogExercise === true && (
+      {/* Rows the user doesn't own are shared — edits go through the audited
+          shared write path and apply to every user. Say so before saving. */}
+      {isSharedExercise === true && (
         <div className="p-3 bg-warning-900/30 border border-warning-700 rounded-lg" data-testid="catalog-exercise-notice">
           <p className="text-sm text-warning-400">
-            Built-in catalog exercise — saving edits the shared catalog for
-            every user (previous values are kept in the audit trail). Gym
+            Shared exercise (not created by you) — saving edits it for every
+            user (previous values are kept in the audit trail). Gym
             availability below stays personal to you.
           </p>
         </div>
