@@ -3,14 +3,36 @@
 import { memo, useState, useMemo } from 'react';
 import {
   calculatePlates,
+  getAvailablePlates,
   getPlateColor,
   BARBELL_WEIGHTS,
+  DEFAULT_SMALLEST_PLATE,
+  SMALLEST_PLATE_OPTIONS,
   type BarbellType,
   type PlateCalculationResult,
   formatWeightValue,
 } from '@/lib/utils';
 import type { WeightUnit } from '@/types/schema';
 import { BarbellVisualization, PlateChip } from './PlateVisualization';
+
+/**
+ * The smallest-plate choice is a per-unit device setting (plate inventory is
+ * a property of the gym, not the account), persisted in localStorage like the
+ * rest timer and theme.
+ */
+const smallestPlateStorageKey = (unit: WeightUnit) => `plate_calculator_smallest_plate_${unit}`;
+
+function readStoredSmallestPlate(unit: WeightUnit): number {
+  if (typeof window === 'undefined') return DEFAULT_SMALLEST_PLATE[unit];
+  try {
+    const stored = parseFloat(window.localStorage.getItem(smallestPlateStorageKey(unit)) ?? '');
+    const options: readonly number[] = SMALLEST_PLATE_OPTIONS[unit];
+    if (options.includes(stored)) return stored;
+  } catch {
+    // Storage unavailable (e.g. private browsing) — fall through to default.
+  }
+  return DEFAULT_SMALLEST_PLATE[unit];
+}
 
 interface PlateCalculatorProps {
   /** Initial target weight in kg (will be converted based on unit) */
@@ -60,6 +82,26 @@ export const PlateCalculator = memo(function PlateCalculator({
       : ''
   );
 
+  // Smallest plate pair the user owns (per side). Drives both the ± stepper
+  // increment (2 × plate) and which plates the solver may load.
+  const [storedSmallestPlate, setStoredSmallestPlate] = useState<number>(() =>
+    readStoredSmallestPlate(unit)
+  );
+  const smallestPlateOptions: readonly number[] = SMALLEST_PLATE_OPTIONS[unit];
+  const smallestPlate = smallestPlateOptions.includes(storedSmallestPlate)
+    ? storedSmallestPlate
+    : DEFAULT_SMALLEST_PLATE[unit];
+  const increment = smallestPlate * 2;
+
+  const handleSmallestPlateChange = (plate: number) => {
+    setStoredSmallestPlate(plate);
+    try {
+      window.localStorage.setItem(smallestPlateStorageKey(unit), String(plate));
+    } catch {
+      // Storage unavailable — the choice still applies for this session.
+    }
+  };
+
   const barbellWeights = BARBELL_WEIGHTS[unit];
   const barbellWeight = barbellWeights[barbellType].weight;
 
@@ -75,15 +117,20 @@ export const PlateCalculator = memo(function PlateCalculator({
   const targetNum = parseFloat(targetWeight) || 0;
   const belowBase = targetNum < baseWeight;
 
+  const availablePlates = useMemo(
+    () => getAvailablePlates(unit, smallestPlate),
+    [unit, smallestPlate]
+  );
+
   const calculation = useMemo(() => {
     const weight = parseFloat(targetWeight) || 0;
     // For machines, use 0 as barbell weight since the base weight is the floor.
     const effectiveBarbellWeight = isMachine ? 0 : barbellWeight;
     // Pass starting weight in display units (not kg) since calculatePlates expects all weights in same unit
-    const result = calculatePlates(weight, effectiveBarbellWeight, unit, undefined, machineBaseWeight);
+    const result = calculatePlates(weight, effectiveBarbellWeight, unit, availablePlates, machineBaseWeight);
     onCalculate?.(result);
     return result;
-  }, [targetWeight, barbellWeight, unit, machineBaseWeight, isMachine, onCalculate]);
+  }, [targetWeight, barbellWeight, unit, availablePlates, machineBaseWeight, isMachine, onCalculate]);
 
   const handleWeightChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -95,7 +142,8 @@ export const PlateCalculator = memo(function PlateCalculator({
 
   const handleQuickAdjust = (amount: number) => {
     const current = parseFloat(targetWeight) || 0;
-    const newWeight = Math.max(baseWeight, current + amount);
+    // Round to 2dp so fractional increments never accumulate float noise.
+    const newWeight = Math.max(baseWeight, Math.round((current + amount) * 100) / 100);
     setTargetWeight(String(newWeight));
   };
 
@@ -184,18 +232,18 @@ export const PlateCalculator = memo(function PlateCalculator({
         </div>
       )}
 
-      {/* Weight Input with labeled ± steppers (step by 5 = 2.5 plate per side) */}
+      {/* Weight Input with labeled ± steppers (step by the smallest plate pair) */}
       <div className="space-y-2">
         <label className="text-sm font-medium text-surface-300">Target Weight</label>
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => handleQuickAdjust(-5)}
-            aria-label="Decrease target weight by 5"
-            title="−5"
-            className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg bg-surface-700 text-lg font-semibold text-surface-100 transition-colors hover:bg-surface-600 active:bg-surface-800"
+            onClick={() => handleQuickAdjust(-increment)}
+            aria-label={`Decrease target weight by ${increment}`}
+            title={`−${increment}`}
+            className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg bg-surface-700 text-base font-semibold text-surface-100 transition-colors hover:bg-surface-600 active:bg-surface-800"
           >
-            −5
+            −{increment}
           </button>
           <div className="relative flex-1">
             <input
@@ -212,13 +260,41 @@ export const PlateCalculator = memo(function PlateCalculator({
           </div>
           <button
             type="button"
-            onClick={() => handleQuickAdjust(5)}
-            aria-label="Increase target weight by 5"
-            title="+5"
-            className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg bg-surface-700 text-lg font-semibold text-surface-100 transition-colors hover:bg-surface-600 active:bg-surface-800"
+            onClick={() => handleQuickAdjust(increment)}
+            aria-label={`Increase target weight by ${increment}`}
+            title={`+${increment}`}
+            className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg bg-surface-700 text-base font-semibold text-surface-100 transition-colors hover:bg-surface-600 active:bg-surface-800"
           >
-            +5
+            +{increment}
           </button>
+        </div>
+      </div>
+
+      {/* Weight Increment — which smallest plate pair the user owns */}
+      <div className="space-y-2">
+        <div className="flex items-baseline justify-between">
+          <label className="text-sm font-medium text-surface-300">Weight Increment</label>
+          <span className="text-xs text-surface-300">smallest plates you have</span>
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          {smallestPlateOptions.map((plate) => (
+            <button
+              key={plate}
+              type="button"
+              onClick={() => handleSmallestPlateChange(plate)}
+              aria-pressed={smallestPlate === plate}
+              className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                smallestPlate === plate
+                  ? 'bg-primary-700 text-white'
+                  : 'bg-surface-700 text-surface-200 hover:bg-surface-600'
+              }`}
+            >
+              <span className="block">±{plate * 2}{unit}</span>
+              <span className={`block text-xs ${smallestPlate === plate ? 'text-white/75' : 'text-surface-300'}`}>
+                {plate}{unit} plates
+              </span>
+            </button>
+          ))}
         </div>
       </div>
 
