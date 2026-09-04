@@ -1,4 +1,5 @@
 import type { SetLog } from '@/types/schema';
+import { DURATION_MODEL, PLANNED_WARMUP_SETS } from '@/services/workoutDurationEstimator';
 import {
   ADDED_BLOCK_DEFAULTS,
   estimatePendingAdditionSeconds,
@@ -294,5 +295,80 @@ describe('estimatePendingAdditionSeconds', () => {
   it('uses the same set/rest defaults the add path writes', () => {
     expect(ADDED_BLOCK_DEFAULTS.compound).toEqual({ targetSets: 4, restSeconds: 180 });
     expect(ADDED_BLOCK_DEFAULTS.isolation).toEqual({ targetSets: 3, restSeconds: 90 });
+  });
+
+  it('charges the warmup the add path will generate for a cold muscle', () => {
+    const context = { blocks: [], completedSets: [] };
+    const without = estimatePendingAdditionSeconds([], [{ id: 'x', mechanic: 'compound' }], context);
+    const withMuscle = estimatePendingAdditionSeconds(
+      [],
+      [{ id: 'x', mechanic: 'compound', primary_muscle: 'chest' }],
+      context
+    );
+    expect(withMuscle - without).toBe(
+      PLANNED_WARMUP_SETS.compound *
+        (DURATION_MODEL.warmupWorkSeconds + DURATION_MODEL.defaultWarmupRestSeconds)
+    );
+  });
+
+  it('skips the warmup when an existing block already covers the muscle', () => {
+    const blocks = [makeBlock({ id: 'b1', exercise: { primaryMuscle: 'chest' } })];
+    const current = toDurationBlocks(blocks, [], new Set());
+    const context = { blocks, completedSets: [] };
+    const chestPending = estimatePendingAdditionSeconds(
+      current,
+      [{ id: 'x', mechanic: 'compound', primary_muscle: 'chest' }],
+      context
+    );
+    const muscleless = estimatePendingAdditionSeconds(
+      current,
+      [{ id: 'x', mechanic: 'compound' }],
+      context
+    );
+    expect(chestPending).toBe(muscleless);
+  });
+
+  it('skips the warmup when completed sets already warmed the muscle', () => {
+    const blocks = [
+      makeBlock({ id: 'b1', exercise: { primaryMuscle: 'back', secondaryMuscles: ['biceps'] } }),
+    ];
+    const sets = [makeSet({ exerciseBlockId: 'b1' })];
+    const current = toDurationBlocks(blocks, sets, new Set());
+    const context = { blocks, completedSets: sets };
+    const bicepsPending = estimatePendingAdditionSeconds(
+      current,
+      [{ id: 'x', mechanic: 'isolation', primary_muscle: 'biceps' }],
+      context
+    );
+    const muscleless = estimatePendingAdditionSeconds(
+      current,
+      [{ id: 'x', mechanic: 'isolation' }],
+      context
+    );
+    expect(bicepsPending).toBe(muscleless);
+  });
+
+  it('charges one warmup per muscle within the pending batch', () => {
+    const context = { blocks: [], completedSets: [] };
+    const sameMuscle = estimatePendingAdditionSeconds(
+      [],
+      [
+        { id: 'x', mechanic: 'isolation', primary_muscle: 'biceps' },
+        { id: 'y', mechanic: 'isolation', primary_muscle: 'biceps' },
+      ],
+      context
+    );
+    const twoMuscles = estimatePendingAdditionSeconds(
+      [],
+      [
+        { id: 'x', mechanic: 'isolation', primary_muscle: 'biceps' },
+        { id: 'y', mechanic: 'isolation', primary_muscle: 'triceps' },
+      ],
+      context
+    );
+    expect(twoMuscles - sameMuscle).toBe(
+      PLANNED_WARMUP_SETS.isolation *
+        (DURATION_MODEL.warmupWorkSeconds + DURATION_MODEL.defaultWarmupRestSeconds)
+    );
   });
 });

@@ -406,6 +406,66 @@ export function estimateWorkoutDuration(
 }
 
 /**
+ * Warmup sets assumed for a PLANNED exercise — one whose real warmup protocol
+ * doesn't exist yet (the add-exercise picker, the blank-workout builder,
+ * mesocycle program previews). `generateWarmupProtocol` sizes the real thing
+ * off the working weight, which these surfaces can't know; 3 sets for a
+ * compound and 2 for an isolation is its typical output. Shared so every
+ * planning surface promises the same warmup cost the session will charge.
+ */
+export const PLANNED_WARMUP_SETS = { compound: 3, isolation: 2 } as const;
+
+/** Warmup sets a planned exercise of this mechanic is assumed to need. */
+export function plannedWarmupSetsFor(mechanic: SetMechanic | null | undefined): number {
+  return mechanic === 'isolation'
+    ? PLANNED_WARMUP_SETS.isolation
+    : PLANNED_WARMUP_SETS.compound;
+}
+
+export interface PlannedExerciseInput {
+  /** Planned working sets. */
+  sets: number;
+  restSeconds?: number | null;
+  mechanic?: SetMechanic | null;
+  /**
+   * Primary muscle. The first exercise of each muscle is charged a warmup,
+   * matching how warmup protocols are generated at session start.
+   */
+  muscle?: string | null;
+}
+
+/**
+ * Duration-model blocks for a planned, not-yet-started session. Warmups go to
+ * the first exercise of each muscle; matching is by exact muscle key, which is
+ * what program generation uses (coarse `MuscleGroup` per session slot).
+ */
+export function toPlannedBlocks(exercises: PlannedExerciseInput[]): DurationBlockInput[] {
+  const warmedMuscles = new Set<string>();
+  return exercises.map((exercise, index) => {
+    const muscle = (exercise.muscle ?? '').trim();
+    const needsWarmup = muscle.length > 0 && !warmedMuscles.has(muscle);
+    if (needsWarmup) warmedMuscles.add(muscle);
+
+    return {
+      id: `planned-${index}`,
+      targetSets: exercise.sets,
+      restSeconds: exercise.restSeconds,
+      mechanic: exercise.mechanic ?? 'compound',
+      warmupSetsRemaining: needsWarmup ? plannedWarmupSetsFor(exercise.mechanic) : 0,
+    };
+  });
+}
+
+/**
+ * Minutes a planned session should take — the one number program generation
+ * attaches to a generated session. Same model as the live workout header, so
+ * a plan's promise and the session's readout can't disagree.
+ */
+export function estimatePlannedSessionMinutes(exercises: PlannedExerciseInput[]): number {
+  return Math.round(estimateWorkoutDuration(toPlannedBlocks(exercises)).totalSeconds / 60);
+}
+
+/**
  * Format an estimate for display: "45 min", "1h 15m", "2h".
  *
  * Rounded to 5-minute granularity by default — a duration estimate that reads
