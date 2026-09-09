@@ -3,9 +3,16 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, Badge } from '@/components/ui';
+import { TIER_FEATURES } from '@/lib/stripe';
 
 export default function PublicPricingPage() {
   const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'yearly'>('yearly');
+
+  // Derive prices from the same source as authenticated checkout
+  const proMonthly = TIER_FEATURES.pro.monthlyPrice;
+  const proYearly = TIER_FEATURES.pro.yearlyPrice;
+  const eliteMonthly = TIER_FEATURES.elite.monthlyPrice;
+  const eliteYearly = TIER_FEATURES.elite.yearlyPrice;
 
   return (
     <div className="min-h-screen bg-surface-950">
@@ -98,7 +105,7 @@ export default function PublicPricingPage() {
             <PricingCard
               tier="pro"
               name="Pro"
-              price={billingPeriod === 'monthly' ? '$10' : '$100'}
+              price={billingPeriod === 'monthly' ? `$${proMonthly}` : `$${proYearly}`}
               period={billingPeriod === 'monthly' ? 'per month' : 'per year'}
               description="Unlock advanced features for serious lifters"
               features={[
@@ -116,7 +123,7 @@ export default function PublicPricingPage() {
             <PricingCard
               tier="elite"
               name="Elite"
-              price={billingPeriod === 'monthly' ? '$15' : '$150'}
+              price={billingPeriod === 'monthly' ? `$${eliteMonthly}` : `$${eliteYearly}`}
               period={billingPeriod === 'monthly' ? 'per month' : 'per year'}
               description="Maximum optimization for competitive athletes"
               features={[

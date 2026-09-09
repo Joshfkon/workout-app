@@ -65,7 +65,7 @@ export default function SupportPage() {
               <div className="p-4 bg-surface-800/50 rounded-lg">
                 <h3 className="font-medium text-surface-200 mb-2">How do I disconnect a wearable integration?</h3>
                 <p className="text-sm text-surface-400">
-                  Go to <em>Settings → Integrations</em> and disconnect the integration you no longer want to use.
+                  Go to <em>Analytics → Activity card → Connect Wearable button</em>, then disconnect from the modal.
                 </p>
               </div>
             </div>
