@@ -260,11 +260,12 @@ export function CreateCustomExercise({
   };
 
   const handleEditExercise = () => {
-    // Navigate to the exercise library where users can search for and edit
-    // their newly created exercise. The exercise will appear in the catalog
-    // and can be expanded to access the edit form.
+    // Navigate to the exercise library with the edit query param to open
+    // the edit modal for this specific exercise
     setShowSecondariesNudge(false);
-    router.push('/dashboard/exercises');
+    if (savedExerciseId) {
+      router.push(`/dashboard/exercises?edit=${savedExerciseId}`);
+    }
   };
 
   return (

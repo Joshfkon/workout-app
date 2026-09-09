@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient, useIsRestoring } from '@tanstack/react-query';
+import { useSearchParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { Card, Input, Badge, Button, LoadingAnimation, SkeletonExercise } from '@/components/ui';
@@ -131,6 +132,8 @@ interface ExerciseHistory {
 export default function ExercisesPage() {
   const [mounted, setMounted] = useState(false);
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const [search, setSearch] = useState('');
   const [selectedMuscle, setSelectedMuscle] = useState<string | null>(null);
   const [selectedEquipment, setSelectedEquipment] = useState<string | null>(null);
@@ -228,6 +231,20 @@ export default function ExercisesPage() {
   // query is paused (no data yet) but the cache is warm — don't flash the
   // skeleton then.
   const isRestoring = useIsRestoring();
+
+  // Handle deep-link to edit a specific exercise via ?edit=<exerciseId>
+  useEffect(() => {
+    const editId = searchParams.get('edit');
+    if (!editId || exercises.length === 0) return;
+
+    // Find the exercise to edit
+    const exerciseToEdit = exercises.find((ex) => ex.id === editId);
+    if (exerciseToEdit) {
+      setEditingExercise(exerciseToEdit);
+      // Clear the query param after opening the modal
+      router.replace('/dashboard/exercises');
+    }
+  }, [searchParams, exercises, router]);
 
   // Skeleton only when we have NO catalog to show and aren't mid-restore. A
   // disabled/pre-mount query still returns cached data, so a revisit (SPA) or
