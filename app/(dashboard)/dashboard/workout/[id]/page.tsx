@@ -21,9 +21,11 @@ import { beginSetTiming, markSetPhase, schedulePaintMark, endSetTiming } from '@
 import type { SetSyncStatus } from '@/components/workout/ExerciseCard';
 import { InlineHint } from '@/components/ui/FirstTimeHint';
 import { RestTimer, PauseOverlay, RowOverflowMenu, type RowMenuItem } from '@/components/workout';
+import { IdleWorkoutPrompt } from '@/components/workout/IdleWorkoutPrompt';
 import { IconGripVertical, IconInfoCircle, IconMapPin, IconX } from '@tabler/icons-react';
 import { useRestTimer } from '@/hooks/useRestTimer';
 import { useEducationStore } from '@/hooks/useEducationPreferences';
+import { useIdleWorkoutPrompt } from '@/hooks/useIdleWorkoutPrompt';
 
 // Dynamic import ExerciseCard (118KB) to reduce initial bundle and improve page load
 const ExerciseCard = dynamic(
@@ -5576,11 +5578,25 @@ export default function WorkoutPage() {
         sessionRpe: submittedSessionRpe,
       });
     }
-    setShowClaimPrompt(false);
-    finishToDashboard();
-  };
+  setShowClaimPrompt(false);
+  finishToDashboard();
+};
 
-  if (phase === 'loading') {
+// Idle workout prompt: show when user has been inactive for 20+ minutes.
+// Uses the same threshold as abandoned-session backdating at finish (#662).
+const lastSetTimestamp = completedSets.length > 0
+  ? completedSets.reduce((latest, set) => 
+      set.loggedAt > latest ? set.loggedAt : latest, 
+      completedSets[0].loggedAt
+    )
+  : null;
+
+const idlePrompt = useIdleWorkoutPrompt(
+  lastSetTimestamp,
+  phase === 'workout' && !showFinishConfirm
+);
+
+if (phase === 'loading') {
     // Skeleton matching the workout layout instead of a full-screen spinner
     // (P2-16) — mirrors this route's loading.tsx so route-level and
     // in-page loading states look identical.
@@ -6247,6 +6263,14 @@ export default function WorkoutPage() {
         onFinishWorkout={handleWorkoutComplete}
         onMinimize={() => router.push('/dashboard/log')}
       />
+
+      {/* Idle workout prompt: "Still training?" after 20min of inactivity */}
+      {idlePrompt.shouldShowPrompt && (
+        <IdleWorkoutPrompt
+          onDismiss={idlePrompt.dismissPrompt}
+          onFinish={handleWorkoutComplete}
+        />
+      )}
 
       {/* Readiness modulation banner (Phase 1.3): eased targets today, with a
           session-local "Train as planned" override that zeroes the modulation */}

@@ -80,8 +80,11 @@ export function sessionClaimEntryId(sessionId: string): string {
  * minutes, treat the session as abandoned and backdate the end time to the
  * last set's timestamp. Prevents inflated session durations when the user
  * forgets to hit save/finish.
+ * 
+ * This same threshold is also used for the in-workout idle prompt (see
+ * useIdleWorkoutPrompt hook).
  */
-const ABANDONED_SESSION_THRESHOLD_MINUTES = 20;
+export const ABANDONED_SESSION_THRESHOLD_MINUTES = 20;
 
 // ---------------------------------------------------------------------------
 // Timing
