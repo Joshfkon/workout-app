@@ -40,6 +40,8 @@ export function CreateCustomExercise({
   const [completedData, setCompletedData] = useState<CompletedExerciseData | null>(
     null
   );
+  const [showSecondariesNudge, setShowSecondariesNudge] = useState(false);
+  const [savedExerciseId, setSavedExerciseId] = useState<string | null>(null);
 
   const handleBasicSubmit = async (input: BasicExerciseInput) => {
     setIsLoading(true);
@@ -164,6 +166,7 @@ export function CreateCustomExercise({
     
     setIsSaving(true);
     setError(null);
+    setShowSecondariesNudge(false);
 
     try {
       // Create minimal exercise with sensible defaults
@@ -227,7 +230,10 @@ export function CreateCustomExercise({
       }
 
       clearExerciseCache();
-      onSuccess?.(exercise.id);
+      
+      // Show nudge about secondaries after saving with basics only
+      setSavedExerciseId(exercise.id);
+      setShowSecondariesNudge(true);
     } catch (err: any) {
       if (err?.message?.includes('duplicate key') || err?.message?.includes('already exists') || err?.code === '23505') {
         setError(`An exercise named "${basicInput.name}" already exists. Please choose a different name.`);
@@ -244,8 +250,59 @@ export function CreateCustomExercise({
     setError(null);
   };
 
+  const handleDismissNudge = () => {
+    setShowSecondariesNudge(false);
+    if (savedExerciseId) {
+      onSuccess?.(savedExerciseId);
+    }
+  };
+
+  const handleEditExercise = () => {
+    // The exercise library page will show the exercise details modal
+    // where users can edit all fields including secondaries
+    setShowSecondariesNudge(false);
+    if (savedExerciseId) {
+      onSuccess?.(savedExerciseId);
+    }
+  };
+
   return (
     <div className="max-w-lg mx-auto">
+      {/* Secondaries Nudge - Light reminder after basics-only save */}
+      {showSecondariesNudge && savedExerciseId && (
+        <div className="mb-6 bg-primary-900/20 border border-primary-700/60 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <div className="flex-shrink-0 mt-0.5">
+              <svg className="w-5 h-5 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <h4 className="text-sm font-medium text-primary-200 mb-1">
+                Exercise Saved
+              </h4>
+              <p className="text-sm text-surface-300 mb-3">
+                No secondary muscles were added yet. You can refine this later from the exercise library.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={handleEditExercise}
+                  className="text-sm font-medium text-primary-400 hover:text-primary-300 transition-colors"
+                >
+                  Edit Exercise
+                </button>
+                <button
+                  onClick={handleDismissNudge}
+                  className="text-sm font-medium text-surface-400 hover:text-surface-300 transition-colors"
+                >
+                  Continue
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Error Display with fallback option */}
       {error && (
         <div className="mb-6 bg-danger-900/30 border border-danger-700 rounded-lg p-4">
