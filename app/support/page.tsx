@@ -23,7 +23,7 @@ export default function SupportPage() {
         </Link>
 
         <h1 className="text-4xl font-black text-surface-100 mb-2">Support</h1>
-        <p className="text-surface-400 mb-10">We're here to help.</p>
+        <p className="text-surface-400 mb-10">We&apos;re here to help.</p>
 
         <div className="space-y-10 text-surface-300 leading-relaxed">
           <section className="space-y-3">
@@ -44,7 +44,7 @@ export default function SupportPage() {
               <div className="p-4 bg-surface-800/50 rounded-lg">
                 <h3 className="font-medium text-surface-200 mb-2">How do I reset my password?</h3>
                 <p className="text-sm text-surface-400">
-                  Use the &ldquo;Forgot Password&rdquo; link on the login page. You'll receive a password reset email.
+                  Use the &ldquo;Forgot Password&rdquo; link on the login page. You&apos;ll receive a password reset email.
                 </p>
               </div>
 
