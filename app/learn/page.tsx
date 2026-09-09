@@ -132,8 +132,9 @@ const scienceConcepts: Array<{
   {
     title: 'Periodization Models',
     source: 'Training Science',
-    citation: 'Nuckols, G., Israetel, M. (2016). The Art and Science of Lifting. Available at Stronger by Science.',
-    explanation: 'Periodization involves systematically varying training variables over time. Different models (linear, undulating, block) can support long-term progress by managing fatigue and varying stimulus.',
+    citation: 'Grgic, J., et al. (2017). Effects of linear and daily undulating periodized resistance training programs on measures of muscle hypertrophy: a systematic review and meta-analysis. PeerJ, 5, e3695.',
+    doi: 'https://doi.org/10.7717/peerj.3695',
+    explanation: 'Periodization involves systematically varying training variables over time. Research comparing different models (linear, daily undulating) suggests both can be effective when volume is equated, with potential advantages for undulating approaches in trained individuals.',
     application: 'Our mesocycle builder incorporates periodization principles to help vary intensity and volume across training phases for sustainable progress.',
   },
   {
