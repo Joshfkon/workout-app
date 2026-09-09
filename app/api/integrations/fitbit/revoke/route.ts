@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Revoke the token
+    // Revoke the token at Fitbit
     const revokeResponse = await fetch('https://api.fitbit.com/oauth2/revoke', {
       method: 'POST',
       headers: {
@@ -67,8 +67,23 @@ export async function POST(request: NextRequest) {
       }),
     });
 
+    // Only proceed to clear tokens if revocation succeeded or token was already invalid
     if (!revokeResponse.ok) {
-      console.warn('Fitbit token revoke failed, but continuing...');
+      const statusCode = revokeResponse.status;
+      // 400 or 401 typically means token is already invalid/revoked
+      const alreadyRevoked = statusCode === 400 || statusCode === 401;
+      
+      if (!alreadyRevoked) {
+        // Transient error (5xx, network timeout, etc.) - keep credentials for retry
+        console.error(`Fitbit revoke failed with status ${statusCode}`);
+        return NextResponse.json(
+          { error: 'Failed to revoke access at Fitbit. Please try again.' },
+          { status: 502 }
+        );
+      }
+      
+      // Token already invalid - safe to clear
+      console.info('Fitbit token already revoked or invalid, clearing credentials');
     }
 
     // Mark the connection as disconnected after successful revocation
@@ -87,13 +102,18 @@ export async function POST(request: NextRequest) {
 
     if (updateError) {
       console.error('Failed to update connection status:', updateError);
-      // Still return success - token was revoked on Fitbit's side
+      return NextResponse.json(
+        { error: 'Failed to clear credentials' },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Fitbit token revoke error:', error);
-    // Still return success - token may already be invalid
-    return NextResponse.json({ success: true });
+    return NextResponse.json(
+      { error: 'An error occurred during revocation' },
+      { status: 500 }
+    );
   }
 }
