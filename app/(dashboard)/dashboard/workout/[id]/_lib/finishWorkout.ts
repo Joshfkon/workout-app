@@ -60,7 +60,9 @@ import { upsertSessionMuscleFeedback } from './muscleFeedbackWrites';
 import type { SessionMuscleFeedbackEntry } from '@/components/workout/SessionSummary';
 import type { WorkoutSession } from '@/types/schema';
 import { now as clockNow } from '@/lib/clock';
-export { ABANDONED_SESSION_THRESHOLD_MINUTES } from './constants';
+import { ABANDONED_SESSION_THRESHOLD_MINUTES } from './constants';
+
+export { ABANDONED_SESSION_THRESHOLD_MINUTES };
 
 type UntypedSupabase = ReturnType<typeof import('@/lib/supabase/client').createUntypedClient>;
 
@@ -76,7 +78,7 @@ export function sessionClaimEntryId(sessionId: string): string {
 // Abandoned session detection  
 // ---------------------------------------------------------------------------
 
-import { ABANDONED_SESSION_THRESHOLD_MINUTES } from './constants';
+// Uses ABANDONED_SESSION_THRESHOLD_MINUTES imported at top of file
 
 // ---------------------------------------------------------------------------
 // Timing
