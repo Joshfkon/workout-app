@@ -266,6 +266,7 @@ export function CustomExerciseBasicForm({
           onChange={setPrimaryMuscle}
           error={errors.primaryMuscle}
           placeholder="Select body region"
+          isPrimary
           required
         />
 

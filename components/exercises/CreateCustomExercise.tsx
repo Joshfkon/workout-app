@@ -9,6 +9,7 @@
  */
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { CustomExerciseBasicForm } from './CustomExerciseBasicForm';
 import { CustomExerciseReviewForm } from './CustomExerciseReviewForm';
 import type { BasicExerciseInput, CompletedExerciseData } from '@/lib/exercises/types';
@@ -32,6 +33,7 @@ export function CreateCustomExercise({
   userId,
   initialName,
 }: CreateCustomExerciseProps) {
+  const router = useRouter();
   const [phase, setPhase] = useState<Phase>('input');
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -258,12 +260,11 @@ export function CreateCustomExercise({
   };
 
   const handleEditExercise = () => {
-    // The exercise library page will show the exercise details modal
-    // where users can edit all fields including secondaries
+    // Navigate to the exercise library where users can search for and edit
+    // their newly created exercise. The exercise will appear in the catalog
+    // and can be expanded to access the edit form.
     setShowSecondariesNudge(false);
-    if (savedExerciseId) {
-      onSuccess?.(savedExerciseId);
-    }
+    router.push('/dashboard/exercises');
   };
 
   return (

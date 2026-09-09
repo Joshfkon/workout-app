@@ -11,6 +11,7 @@ import { useState } from 'react';
 import { Select } from '@/components/ui/Select';
 import { GROUPED_MUSCLE_OPTIONS, coarseSplitWarning } from '@/lib/exercises/types';
 import type { GroupedMuscleOption } from '@/lib/exercises/types';
+import { isGroupSplitPrimary } from '@/services/muscleAttributionAudit';
 
 interface TwoStepMusclePickerProps {
   label: string;
@@ -19,6 +20,12 @@ interface TwoStepMusclePickerProps {
   error?: string;
   required?: boolean;
   placeholder?: string;
+  /**
+   * When true, filters out whole-group options for split primaries
+   * (chest/back/shoulders) that validateExercisePrimary would reject.
+   * Set to true for primary muscle pickers, false for secondaries.
+   */
+  isPrimary?: boolean;
 }
 
 export function TwoStepMusclePicker({
@@ -28,6 +35,7 @@ export function TwoStepMusclePicker({
   error,
   required = false,
   placeholder = 'Select muscle group',
+  isPrimary = false,
 }: TwoStepMusclePickerProps) {
   // Find the selected group and sub-muscle based on current value
   const findSelectedGroup = (): GroupedMuscleOption | null => {
@@ -78,8 +86,13 @@ export function TwoStepMusclePicker({
   // Show sub-muscle picker if the selected group has subdivisions
   const showSubMuscles = activeGroup && activeGroup.subMuscles.length > 0;
 
-  // Show "whole group" option for groups with subdivisions (for secondaries)
-  const canSelectWholeGroup = activeGroup && activeGroup.subMuscles.length > 0;
+  // Show "whole group" option for groups with subdivisions, but only when:
+  // - Not in primary mode, OR
+  // - The group is not a split primary (e.g., glutes, traps are allowed as primaries)
+  const canSelectWholeGroup = 
+    activeGroup && 
+    activeGroup.subMuscles.length > 0 && 
+    (!isPrimary || !isGroupSplitPrimary(activeGroup.value));
 
   return (
     <div className="space-y-3">
