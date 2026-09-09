@@ -94,6 +94,12 @@ export function TwoStepMusclePicker({
     activeGroup.subMuscles.length > 0 && 
     (!isPrimary || !isGroupSplitPrimary(activeGroup.value));
 
+  // Label for whole-group option: only say "split evenly" when it actually splits
+  const wholeGroupLabel = 
+    activeGroup && isGroupSplitPrimary(activeGroup.value)
+      ? 'Whole group (split evenly)'
+      : 'Whole group';
+
   return (
     <div className="space-y-3">
       {/* Step 1: Body Region */}
@@ -114,7 +120,7 @@ export function TwoStepMusclePicker({
             label="Specific Muscle"
             options={[
               ...(canSelectWholeGroup
-                ? [{ value: activeGroup.value, label: 'Whole group (split evenly)' }]
+                ? [{ value: activeGroup.value, label: wholeGroupLabel }]
                 : []),
               ...activeGroup.subMuscles.map((sub) => ({
                 value: sub.value,

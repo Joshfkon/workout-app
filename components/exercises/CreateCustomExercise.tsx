@@ -260,11 +260,16 @@ export function CreateCustomExercise({
   };
 
   const handleEditExercise = () => {
-    // Navigate to the exercise library with the edit query param to open
-    // the edit modal for this specific exercise
     setShowSecondariesNudge(false);
     if (savedExerciseId) {
-      router.push(`/dashboard/exercises?edit=${savedExerciseId}`);
+      // If onSuccess is provided (workout/modal context), call it to add the
+      // exercise and stay in the current flow. Otherwise (standalone page),
+      // navigate to the exercise library for editing.
+      if (onSuccess) {
+        onSuccess(savedExerciseId);
+      } else {
+        router.push(`/dashboard/exercises?edit=${savedExerciseId}`);
+      }
     }
   };
 
@@ -334,7 +339,15 @@ export function CreateCustomExercise({
       {phase === 'input' && (
         <CustomExerciseBasicForm
           onSubmit={handleBasicSubmit}
-          onCancel={onCancel}
+          onCancel={() => {
+            // If nudge is showing, dismiss it and call onSuccess
+            if (showSecondariesNudge && savedExerciseId) {
+              setShowSecondariesNudge(false);
+              onSuccess?.(savedExerciseId);
+            } else {
+              onCancel?.();
+            }
+          }}
           isLoading={isLoading}
           initialData={basicInput || (initialName ? { name: initialName } : undefined)}
           // Picking an existing match routes through the same success handler
