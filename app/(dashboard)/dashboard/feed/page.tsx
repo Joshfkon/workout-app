@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { ActivityCard } from '@/components/social/feed';
 import { Avatar, ProfilePromptModal } from '@/components/social/profile';
 import { isAnonymousUsername } from '@/lib/social';
@@ -328,7 +329,7 @@ export default function FeedPage() {
     const displayName = profile.display_name || profile.username;
 
     return (
-      <div className="space-y-6 py-6">
+      <div className="space-y-4">
         {/* Profile Header */}
         <Card>
           <div className="flex items-start gap-4">
@@ -520,9 +521,9 @@ export default function FeedPage() {
     const selectedTab = LEADERBOARD_TABS.find(t => t.id === selectedLeaderboardType);
 
     return (
-      <div className="space-y-6 py-6">
+      <div className="space-y-4">
         {/* Leaderboard type selector */}
-        <div className="flex gap-2 overflow-x-auto pb-2 -mb-2 scrollbar-hide">
+        <div className="flex gap-2 overflow-x-auto scrollbar-hide -mx-1 px-1">
           {LEADERBOARD_TABS.map((tab) => (
             <button
               key={tab.id}
@@ -613,7 +614,7 @@ export default function FeedPage() {
 
   const renderDiscoverWorkoutsContent = () => {
     return (
-      <div className="space-y-6 py-6">
+      <div className="space-y-4">
         {/* Search bar */}
         <div className="flex gap-2">
           <div className="relative flex-1">
@@ -862,7 +863,7 @@ export default function FeedPage() {
         )}
 
         {/* Activity list */}
-        <div className="space-y-4 py-6">
+        <div className="space-y-4">
           {activities.map((activity) => (
             <div key={activity.id} id={`activity-${activity.id}`}>
               <ActivityCard
@@ -908,115 +909,111 @@ export default function FeedPage() {
   };
 
   return (
-    <div className="min-h-screen bg-surface-950">
-      {/* Header */}
-      <header className="sticky top-0 z-10 bg-surface-950/95 backdrop-blur-sm border-b border-surface-800">
-        <div className="max-w-2xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between mb-4">
-            <h1 className="text-2xl font-bold text-surface-100">
-              {activeTab === 'profile'
-                ? 'Profile'
-                : activeTab === 'leaderboards'
-                  ? 'Leaderboards'
-                  : activeTab === 'discover_workouts'
-                    ? 'Discover Workouts'
-                    : 'Activity Feed'}
-            </h1>
-            {activeTab !== 'profile' && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={activeTab === 'leaderboards' ? refreshLeaderboard : activeTab === 'discover_workouts' ? refreshWorkouts : refresh}
-                disabled={isLoading}
+    <div className="max-w-2xl mx-auto px-4 space-y-4">
+      {/* Page Header */}
+      <PageHeader
+        title={
+          activeTab === 'profile'
+            ? 'Profile'
+            : activeTab === 'leaderboards'
+              ? 'Leaderboards'
+              : activeTab === 'discover_workouts'
+                ? 'Discover Workouts'
+                : 'Activity Feed'
+        }
+        actions={
+          activeTab !== 'profile' && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={activeTab === 'leaderboards' ? refreshLeaderboard : activeTab === 'discover_workouts' ? refreshWorkouts : refresh}
+              disabled={isLoading}
+            >
+              <svg
+                className={cn('w-5 h-5', isLoading && 'animate-spin')}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
               >
-                <svg
-                  className={cn('w-5 h-5', isLoading && 'animate-spin')}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                  />
-                </svg>
-              </Button>
-            )}
-          </div>
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                />
+              </svg>
+            </Button>
+          )
+        }
+      />
 
-          {/* Tabs */}
-          <div className="flex gap-2 overflow-x-auto pb-2 -mb-2 scrollbar-hide">
-            <button
-              onClick={() => setActiveTab('following')}
-              className={cn(
-                'px-4 py-2 rounded-full text-sm font-medium transition-colors whitespace-nowrap',
-                activeTab === 'following'
-                  ? 'bg-primary-600 text-white'
-                  : 'bg-surface-800 text-surface-400 hover:text-surface-200'
-              )}
-            >
-              Following
-            </button>
-            <button
-              onClick={() => setActiveTab('discover')}
-              className={cn(
-                'px-4 py-2 rounded-full text-sm font-medium transition-colors whitespace-nowrap',
-                activeTab === 'discover'
-                  ? 'bg-primary-600 text-white'
-                  : 'bg-surface-800 text-surface-400 hover:text-surface-200'
-              )}
-            >
-              Discover
-            </button>
-            <button
-              onClick={() => setActiveTab('discover_workouts')}
-              className={cn(
-                'px-4 py-2 rounded-full text-sm font-medium transition-colors whitespace-nowrap',
-                activeTab === 'discover_workouts'
-                  ? 'bg-primary-600 text-white'
-                  : 'bg-surface-800 text-surface-400 hover:text-surface-200'
-              )}
-            >
-              Workouts
-            </button>
-            <button
-              onClick={() => setActiveTab('leaderboards')}
-              className={cn(
-                'px-4 py-2 rounded-full text-sm font-medium transition-colors whitespace-nowrap',
-                activeTab === 'leaderboards'
-                  ? 'bg-primary-600 text-white'
-                  : 'bg-surface-800 text-surface-400 hover:text-surface-200'
-              )}
-            >
-              Leaderboards
-            </button>
-            <button
-              onClick={() => setActiveTab('profile')}
-              className={cn(
-                'px-4 py-2 rounded-full text-sm font-medium transition-colors whitespace-nowrap',
-                activeTab === 'profile'
-                  ? 'bg-primary-600 text-white'
-                  : 'bg-surface-800 text-surface-400 hover:text-surface-200'
-              )}
-            >
-              Profile
-            </button>
-          </div>
-        </div>
-      </header>
+      {/* Tabs */}
+      <div className="flex gap-2 overflow-x-auto scrollbar-hide -mx-1 px-1">
+        <button
+          onClick={() => setActiveTab('following')}
+          className={cn(
+            'px-4 py-2 rounded-full text-sm font-medium transition-colors whitespace-nowrap',
+            activeTab === 'following'
+              ? 'bg-primary-600 text-white'
+              : 'bg-surface-800 text-surface-400 hover:text-surface-200'
+          )}
+        >
+          Following
+        </button>
+        <button
+          onClick={() => setActiveTab('discover')}
+          className={cn(
+            'px-4 py-2 rounded-full text-sm font-medium transition-colors whitespace-nowrap',
+            activeTab === 'discover'
+              ? 'bg-primary-600 text-white'
+              : 'bg-surface-800 text-surface-400 hover:text-surface-200'
+          )}
+        >
+          Discover
+        </button>
+        <button
+          onClick={() => setActiveTab('discover_workouts')}
+          className={cn(
+            'px-4 py-2 rounded-full text-sm font-medium transition-colors whitespace-nowrap',
+            activeTab === 'discover_workouts'
+              ? 'bg-primary-600 text-white'
+              : 'bg-surface-800 text-surface-400 hover:text-surface-200'
+          )}
+        >
+          Workouts
+        </button>
+        <button
+          onClick={() => setActiveTab('leaderboards')}
+          className={cn(
+            'px-4 py-2 rounded-full text-sm font-medium transition-colors whitespace-nowrap',
+            activeTab === 'leaderboards'
+              ? 'bg-primary-600 text-white'
+              : 'bg-surface-800 text-surface-400 hover:text-surface-200'
+          )}
+        >
+          Leaderboards
+        </button>
+        <button
+          onClick={() => setActiveTab('profile')}
+          className={cn(
+            'px-4 py-2 rounded-full text-sm font-medium transition-colors whitespace-nowrap',
+            activeTab === 'profile'
+              ? 'bg-primary-600 text-white'
+              : 'bg-surface-800 text-surface-400 hover:text-surface-200'
+          )}
+        >
+          Profile
+        </button>
+      </div>
 
       {/* Content */}
-      <main className="max-w-2xl mx-auto px-4">
-        {activeTab === 'profile'
-          ? renderProfileContent()
-          : activeTab === 'leaderboards'
-            ? renderLeaderboardContent()
-            : activeTab === 'discover_workouts'
-              ? renderDiscoverWorkoutsContent()
-              : renderFeedContent()}
-      </main>
+      {activeTab === 'profile'
+        ? renderProfileContent()
+        : activeTab === 'leaderboards'
+          ? renderLeaderboardContent()
+          : activeTab === 'discover_workouts'
+            ? renderDiscoverWorkoutsContent()
+            : renderFeedContent()}
 
       {/* Copy Modal */}
       {copyModalWorkout && (
