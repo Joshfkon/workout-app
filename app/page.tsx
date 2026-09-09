@@ -195,6 +195,36 @@ export default async function Home({
           />
         </div>
       </div>
+
+      {/* Footer */}
+      <footer className="relative z-10 border-t border-surface-800/50 mt-20">
+        <div className="max-w-5xl mx-auto px-4 py-8">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center flex-shrink-0">
+                <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              </div>
+              <span className="text-sm text-surface-400">© 2026 HyperTrack</span>
+            </div>
+            <div className="flex items-center gap-6 text-sm">
+              <Link href="/privacy" className="text-surface-400 hover:text-surface-200 transition-colors">
+                Privacy
+              </Link>
+              <Link href="/terms" className="text-surface-400 hover:text-surface-200 transition-colors">
+                Terms
+              </Link>
+              <Link href="/support" className="text-surface-400 hover:text-surface-200 transition-colors">
+                Support
+              </Link>
+              <Link href="/pricing" className="text-surface-400 hover:text-surface-200 transition-colors">
+                Pricing
+              </Link>
+            </div>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }
