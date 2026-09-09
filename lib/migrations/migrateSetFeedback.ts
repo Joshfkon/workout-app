@@ -17,7 +17,7 @@ export interface MigratedSetLog extends SetLog {
 
 /**
  * Convert old RPE to RIR value
- * RPE 10 = 0 RIR, RPE 9 = 1 RIR, RPE 7-8 = 2-3 RIR, RPE <= 6 = 4+ RIR
+ * RPE 10 = 0 RIR, RPE 9 = 1 RIR, RPE 8 = 2 RIR, RPE 7 = 3 RIR, RPE <= 6 = 4+ RIR
  */
 export function rpeToRepsInTank(rpe: number): RepsInTank {
   if (rpe >= 10) return 0;

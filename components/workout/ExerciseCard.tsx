@@ -61,11 +61,11 @@ import { useKeyboardInset } from '@/hooks/useKeyboardInset';
 
 const MUSCLE_GROUPS = ['chest', 'back', 'shoulders', 'traps', 'biceps', 'triceps', 'quads', 'hamstrings', 'glutes', 'adductors', 'calves', 'abs', 'erectors'];
 
-// Compact RIR chips for the inline set editor — same buckets as RIRSelector.
-// A stored RIR of 3 (logged as RPE 7) lights up the "2-3" chip.
+// Compact RIR chips for the inline set editor — discrete values for each RIR level.
 const EDIT_RIR_OPTIONS: { value: RepsInTank; label: string }[] = [
   { value: 4, label: '4+' },
-  { value: 2, label: '2-3' },
+  { value: 3, label: '3' },
+  { value: 2, label: '2' },
   { value: 1, label: '1' },
   { value: 0, label: '0' },
 ];
@@ -3670,23 +3670,15 @@ export const ExerciseCard = memo(function ExerciseCard({
                 <div className="flex items-center gap-1.5">
                   <span className="text-[11px] font-medium text-surface-400">RIR</span>
                   {EDIT_RIR_OPTIONS.map((option) => {
-                    const isSelected =
-                      editRir === option.value || (option.value === 2 && editRir === 3);
+                    const isSelected = editRir === option.value;
                     return (
                       <button
                         key={option.value}
                         type="button"
-                        onClick={() =>
-                          // The "2-3" bucket is a band: when the set's exact
-                          // value is already 3, tapping it keeps 3 instead of
-                          // silently rewriting the logged effort to 2 / RPE 7.5.
-                          setEditRir(
-                            option.value === 2 && editInitialRirRef.current === 3 ? 3 : option.value
-                          )
-                        }
+                        onClick={() => setEditRir(option.value)}
                         aria-label={`Set RIR to ${option.label}`}
                         aria-pressed={isSelected}
-                        className={`min-h-[44px] px-3 py-2 rounded-full border text-[12px] font-medium transition-colors ${
+                        className={`min-h-[44px] px-2.5 py-2 rounded-full border text-[12px] font-medium transition-colors ${
                           isSelected
                             ? 'bg-primary-500 border-primary-500 text-white'
                             : 'bg-surface-900 border-surface-600 text-surface-300 hover:bg-surface-700'

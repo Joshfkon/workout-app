@@ -23,7 +23,7 @@ import type { RepsInTank, SetFeedback } from '@/types/schema';
  * partial stimulus; a 4+ RIR "cruise" set is mostly non-stimulative. The
  * weights at 3-4 RIR are deliberately NONZERO because self-reported RIR
  * error is typically ±1-2 reps — a set logged "4+" may truly have been a
- * 2-3 RIR set, so discounting it to zero would throw away real stimulus.
+ * 2 or 3 RIR set, so discounting it to zero would throw away real stimulus.
  */
 export const EFFECTIVE_VOLUME_WEIGHTS: Readonly<Record<RepsInTank, number>> = {
   0: 1.0,

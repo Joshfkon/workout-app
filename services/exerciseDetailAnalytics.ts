@@ -141,7 +141,7 @@ export function setE1RM(set: ExerciseDetailSet): number {
 
 /**
  * Effort text color for a set, following the app's RIR convention
- * (see RIRSelector): 2-3 RIR green "good", 1 RIR amber "hard",
+ * (see RIRSelector): 2 or 3 RIR green "good", 1 RIR amber "hard",
  * 0 RIR orange "maxed", 4+ RIR red "too easy / junk".
  */
 export function effortColorClass(rpe: number | null): string {
