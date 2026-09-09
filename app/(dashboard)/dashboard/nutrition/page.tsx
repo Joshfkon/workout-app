@@ -5,6 +5,7 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import { useQueryClient, useIsRestoring } from '@tanstack/react-query';
 import dynamic from 'next/dynamic';
 import { Card, CardHeader, CardTitle, CardContent, Button, LoadingAnimation, SwipeableRow, ToastContainer, useToasts } from '@/components/ui';
+import { Button as StyledButton } from '@/components/ui/Button';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { getLocalUserId } from '@/lib/supabase/authState';
 
@@ -1765,7 +1766,17 @@ function NutritionPageContent() {
             <IconScale size={18} className="text-primary-400" aria-hidden="true" />
             <span className="text-[13px] text-surface-200">Log today&apos;s weight</span>
           </span>
-          <span className="text-[12px] font-semibold text-primary-400">Log</span>
+          <StyledButton
+            variant="primary"
+            size="sm"
+            className="rounded-full px-4 py-1"
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowWeightLog(true);
+            }}
+          >
+            Log
+          </StyledButton>
         </button>
       )}
 
@@ -1932,12 +1943,14 @@ function NutritionPageContent() {
 
               {/* Add Food pill */}
               <div className={`flex justify-end ${hasEntries ? 'mt-2' : 'mt-3'}`}>
-                <button
+                <StyledButton
                   onClick={() => openAddFood(meal.type)}
-                  className="rounded-full bg-primary-600 px-5 py-2 text-[13px] font-semibold text-white hover:bg-primary-500 active:bg-primary-700 transition-colors"
+                  variant="primary"
+                  size="sm"
+                  className="rounded-full px-5"
                 >
                   Add Food
-                </button>
+                </StyledButton>
               </div>
             </div>
           );
@@ -1968,9 +1981,17 @@ function NutritionPageContent() {
             </span>
           </span>
         </span>
-        <span className="flex-shrink-0 rounded-full bg-primary-600 px-4 py-1.5 text-[13px] font-semibold text-white">
+        <StyledButton
+          variant="primary"
+          size="sm"
+          className="rounded-full px-4 flex-shrink-0"
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowWeightLog(true);
+          }}
+        >
           {hasLoggedWeightToday ? 'Update' : 'Log'}
-        </span>
+        </StyledButton>
       </button>
 
       {/* Weight Trend */}
