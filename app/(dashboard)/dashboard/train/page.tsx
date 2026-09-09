@@ -48,6 +48,7 @@ import {
   IconTemplate,
   IconTrendingUp,
 } from '@tabler/icons-react';
+import { Button as StyledButton } from '@/components/ui/Button';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { resolveAuthState } from '@/lib/supabase/authState';
 import { getLocalDateString } from '@/lib/utils';
@@ -246,10 +247,7 @@ function deriveWorkoutTitle(blocks: NonNullable<RecentSessionRow['exercise_block
   return dayName ?? (topMuscles || 'Workout');
 }
 
-const GRADIENT_CTA_CLASS =
-  'py-3 rounded-xl bg-gradient-to-r from-primary-500 to-accent-500 text-white text-[15px] font-semibold hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed';
-const OUTLINE_CTA_CLASS =
-  'py-3 rounded-xl border border-surface-700 text-surface-100 text-[15px] font-semibold hover:bg-surface-800/70 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed';
+// Removed custom gradient/outline classes in favor of Button component variants
 
 const TOOL_PILLS = [
   { name: 'History', href: '/dashboard/history', icon: IconHistory },
@@ -727,7 +725,7 @@ export default function TrainPage() {
         : { text: 'All muscle groups at target', className: 'text-success-400' };
 
   return (
-    <div className="max-w-lg mx-auto space-y-4">
+    <div className="max-w-lg mx-auto px-4 space-y-4">
       {/* Title row: Train + tool pills */}
       <div className="flex items-center gap-2.5">
         <h1 className="text-[28px] leading-none font-bold text-surface-100 flex-shrink-0">
@@ -790,22 +788,27 @@ export default function TrainPage() {
             </h2>
             <p className="text-[13px] text-surface-400 mt-1">{trainingDayMeta}</p>
             <div className="flex gap-2 mt-4">
-              <button
+              <StyledButton
                 onClick={handleStartWorkout}
                 disabled={isStarting}
-                className={`flex-[2] ${GRADIENT_CTA_CLASS}`}
+                variant="primary"
+                className="flex-[2] text-[15px]"
               >
                 {isStarting
                   ? 'Starting...'
                   : inProgress
                     ? 'Continue workout'
                     : 'Start workout'}
-              </button>
+              </StyledButton>
               {/* Read-only look at today's session — starting a workout must
                   never be the only way to find out what's in it. */}
-              <button onClick={() => setShowPreview(true)} className={`flex-1 ${OUTLINE_CTA_CLASS}`}>
+              <StyledButton 
+                onClick={() => setShowPreview(true)} 
+                variant="outline"
+                className="flex-1 text-[15px]"
+              >
                 Preview
-              </button>
+              </StyledButton>
             </div>
           </>
         ) : activeMeso ? (
@@ -819,20 +822,22 @@ export default function TrainPage() {
                 : 'No upcoming workouts scheduled'}
             </p>
             <div className="flex gap-2 mt-4">
-              <button
+              <StyledButton
                 onClick={handleStartWorkout}
                 disabled={isStarting || !nextWorkoutInfo}
-                className={`flex-1 ${OUTLINE_CTA_CLASS}`}
+                variant="secondary"
+                className="flex-1 text-[15px]"
               >
                 {isStarting ? 'Starting...' : 'Train anyway'}
-              </button>
-              <button
+              </StyledButton>
+              <StyledButton
                 onClick={() => setShowPreview(true)}
                 disabled={!nextWorkoutInfo}
-                className={`flex-1 ${GRADIENT_CTA_CLASS}`}
+                variant="outline"
+                className="flex-1 text-[15px]"
               >
                 Preview {nextWorkoutInfo?.dayLabel === 'Tomorrow' ? 'tomorrow' : 'next'}
-              </button>
+              </StyledButton>
             </div>
           </>
         ) : (
@@ -849,9 +854,14 @@ export default function TrainPage() {
               <div className="flex gap-2 mt-4">
                 <Link
                   href="/dashboard/mesocycle/new"
-                  className={`flex-1 text-center ${GRADIENT_CTA_CLASS}`}
+                  className="flex-1"
                 >
-                  Plan a mesocycle
+                  <StyledButton
+                    variant="primary"
+                    className="w-full text-[15px]"
+                  >
+                    Plan a mesocycle
+                  </StyledButton>
                 </Link>
               </div>
             )}
@@ -1081,16 +1091,17 @@ export default function TrainPage() {
           </p>
 
           <div className="space-y-2">
-            <button
+            <StyledButton
               onClick={() => {
                 setShowPreview(false);
                 handleStartWorkout();
               }}
               disabled={isStarting}
-              className={`w-full ${GRADIENT_CTA_CLASS}`}
+              variant="primary"
+              className="w-full text-[15px]"
             >
               {isStarting ? 'Starting...' : todayWorkout ? 'Start workout' : 'Train anyway today'}
-            </button>
+            </StyledButton>
             <Link
               href="/dashboard/mesocycle/plan"
               onClick={() => setShowPreview(false)}
