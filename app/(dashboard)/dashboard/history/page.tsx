@@ -19,7 +19,6 @@ import { formatWeight, convertWeight, convertWeightForDisplay, inputWeightToKg, 
 import { e1rmValueFromRpe } from '@/services/shared/e1rm';
 import { computeTrend } from '@/services/shared/trend';
 import { rpeToRir, rirToRpe, type RepsInTank } from '@/types/schema';
-import { getSetReps, type RepsCarrier, type ModalitySource } from '@/services/shared/setModality';
 import { createRepeatSession } from '@/lib/training/repeatWorkout';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import HistoryCalendar from './_components/HistoryCalendar';
