@@ -1,13 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
 
 /**
  * Fitbit OAuth Token Exchange
  *
  * Exchanges authorization code for access tokens.
  * This must be server-side as it requires the client secret.
+ * Requires authentication to prevent unauthorized token exchanges.
  */
 export async function POST(request: NextRequest) {
   try {
+    // Verify user is authenticated
+    const supabase = await createClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
     const { code } = await request.json();
 
     if (!code) {

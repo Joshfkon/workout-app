@@ -1,18 +1,47 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
 
 /**
  * Fitbit OAuth Token Refresh
  *
  * Refreshes expired access tokens using the refresh token.
+ * Requires authentication and verifies token ownership.
  */
 export async function POST(request: NextRequest) {
   try {
+    // Verify user is authenticated
+    const supabase = await createClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
     const { refreshToken } = await request.json();
 
     if (!refreshToken) {
       return NextResponse.json(
         { error: 'Refresh token required' },
         { status: 400 }
+      );
+    }
+
+    // Verify the refresh token belongs to this user
+    const { data: connection, error: connectionError } = await supabase
+      .from('wearable_connections')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('source', 'fitbit')
+      .eq('refresh_token', refreshToken)
+      .single();
+
+    if (connectionError || !connection) {
+      return NextResponse.json(
+        { error: 'Invalid refresh token or token does not belong to user' },
+        { status: 403 }
       );
     }
 

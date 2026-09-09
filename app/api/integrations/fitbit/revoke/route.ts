@@ -1,18 +1,47 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
 
 /**
  * Fitbit OAuth Token Revocation
  *
  * Revokes access tokens when user disconnects.
+ * Requires authentication and verifies token ownership.
  */
 export async function POST(request: NextRequest) {
   try {
+    // Verify user is authenticated
+    const supabase = await createClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
     const { accessToken } = await request.json();
 
     if (!accessToken) {
       return NextResponse.json(
         { error: 'Access token required' },
         { status: 400 }
+      );
+    }
+
+    // Verify the access token belongs to this user
+    const { data: connection, error: connectionError } = await supabase
+      .from('wearable_connections')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('source', 'fitbit')
+      .eq('access_token', accessToken)
+      .single();
+
+    if (connectionError || !connection) {
+      return NextResponse.json(
+        { error: 'Invalid access token or token does not belong to user' },
+        { status: 403 }
       );
     }
 
