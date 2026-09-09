@@ -2921,12 +2921,16 @@ export default function WorkoutPage() {
       // ignoreDuplicates upsert makes it a no-op instead of a second set.
       const setId = crypto.randomUUID();
 
-      // Let a just-issued delete finish compacting the database first. Its
-      // UPDATEs move rows DOWN, so probing before they land reads a stale
-      // maximum and resolveSetNumber's floor would carry that number forward.
-      // Errors are the delete path's to report; this is only a barrier.
+      // OPTIMIZATION: Don't block on pending deletes. The floor at
+      // localNextSetNumber (in resolveSetNumber, logSet.ts:119) guarantees we
+      // never reuse a number held by a queued set, even if the DB max is
+      // stale. A delete renumber that lands AFTER our probe will move numbers
+      // below ours; a probe that reads BEFORE the renumber finishes gets
+      // floored anyway. The only observable effect is a temporary gap
+      // (set 1, set 3) that compaction fixes on reload. Fire-and-forget so
+      // delete errors are still reported by handleDeleteSet.
       if (pendingSetRenumberRef.current) {
-        try { await pendingSetRenumberRef.current; } catch { /* reported by handleDeleteSet */ }
+        pendingSetRenumberRef.current.catch(() => { /* reported by handleDeleteSet */ });
       }
 
       const blockWorkingSets = completedSets
@@ -3020,26 +3024,27 @@ export default function WorkoutPage() {
         }
       }
 
-      // Joint pain flagged on this set (inline picker or feedback sheet) →
-      // record the event for the deload advisor + exercise pattern detection.
-      // Runs only AFTER the set write settled: a saved set is referenced via
-      // set_log_id; a queued (offline) set isn't in set_logs yet, so the event
-      // omits the FK rather than racing the insert. Best-effort either way —
-      // the discomfort also rides the set's feedback JSONB.
+      // OPTIMIZATION: Defer joint pain event insert to avoid blocking the
+      // critical path. It's already fire-and-forget (void), just move it off
+      // the synchronous execution stack. Capture the discomfort value to
+      // satisfy TypeScript's null checks in the async closure.
       if (data.feedback?.discomfort && session) {
-        void insertJointPainEvent(
-          supabase,
-          {
-            ...eventFromSetDiscomfort({
-              userId: session.userId,
-              sessionId: session.id,
-              exerciseId: currentBlock.exerciseId,
-              setLogId: setRowPersisted ? setId : null,
-              discomfort: data.feedback.discomfort,
-            }),
-            readinessSnapshot: buildReadinessSnapshotNow(),
-          }
-        );
+        const capturedDiscomfort = data.feedback.discomfort;
+        queueMicrotask(() => {
+          insertJointPainEvent(
+            supabase,
+            {
+              ...eventFromSetDiscomfort({
+                userId: session.userId,
+                sessionId: session.id,
+                exerciseId: currentBlock.exerciseId,
+                setLogId: setRowPersisted ? setId : null,
+                discomfort: capturedDiscomfort,
+              }),
+              readinessSnapshot: buildReadinessSnapshotNow(),
+            }
+          );
+        });
       }
 
       // Undo toast (P1-4) — same pattern as nutrition's delete-undo.
@@ -3048,13 +3053,10 @@ export default function WorkoutPage() {
         onClick: () => { void undoLoggedSet(setId, currentBlock.id); },
       });
 
-      // Live PR celebration: fire the confetti overlay the moment a working
-      // set beats the exercise's record. Same rules as the summary's PR list
-      // (services/livePrDetector mirrors them), with the baseline raised by
-      // earlier sets this session so each high-water mark fires once.
-      // `completedSets` here still excludes the just-logged set — the
-      // optimistic append went through setState, not this closure.
-      {
+      // OPTIMIZATION: Defer PR detection off the critical path. The celebration
+      // can appear a few ms later without impacting the perceived snappiness of
+      // logging the next set. Capture the closure state needed for detection.
+      queueMicrotask(() => {
         const prHistory = exerciseHistories[currentBlock.exerciseId];
         const pr = detectLiveSetPr({
           set: { ...data, setType },
@@ -3088,7 +3090,7 @@ export default function WorkoutPage() {
             ...celebrationByType[pr.type],
           });
         }
-      }
+      });
 
       // Motion capture (experimental): the "Log set" tap ends any running
       // auto capture and attaches it to this set (silently dropped when it
@@ -3165,19 +3167,9 @@ export default function WorkoutPage() {
       }
       setError(null);
 
-      // Performed-order list: this block's FIRST working set moves it to sit
-      // directly after the last already-started block, so started/completed
-      // exercises stack in the order they were actually done instead of
-      // re-interleaving by plan position when the user jumps around. Runs
-      // only after the write settled (a rejected set never reorders) and
-      // persists through the same write path as a drag, so reloads and
-      // history keep the sequence. `completedSets` is still the pre-append
-      // closure value here (see the PR-detection note above), so "first
-      // working set" and the started-block anchor are both graded against
-      // the state at the moment this set was logged. Must stay AFTER the
-      // superset-advance branch: the advance queues an index computed
-      // against the pre-move order, and the functional remap below then
-      // re-points it into the reordered array.
+      // OPTIMIZATION: Block reordering can happen immediately in local state for
+      // instant UI response, but the persistence can be deferred off the
+      // critical path.
       if (setType !== 'warmup' && !isDraggingBlockRef.current) {
         const isWorkingSet = (s: SetLog) => !s.isWarmup && s.setType !== 'warmup';
         const hadWorkingSets = completedSets.some(
@@ -3191,143 +3183,140 @@ export default function WorkoutPage() {
           const reordered = moveJustStartedBlock(prevBlocks, startedBlockIds, currentBlock.id);
           if (reordered) {
             setBlocks(reordered);
-            // Re-point the current index at whatever block it referenced
-            // before the move (this block, or the superset partner the
-            // advance just stepped to).
             setCurrentBlockIndex((prevIdx) => {
               const prevId = prevBlocks[prevIdx]?.id;
               const nextIdx = reordered.findIndex((b) => b.id === prevId);
               return nextIdx >= 0 ? nextIdx : prevIdx;
             });
-            void persistBlockOrder(reordered);
+            // Defer the persistence off the critical path
+            queueMicrotask(() => {
+              persistBlockOrder(reordered);
+            });
           }
         }
       }
 
-      // Run sanity checks on the completed set
-      if (currentExercise && setType === 'normal') {
-        const setLog = {
-          exerciseName: currentExercise.name,
-          weight: data.weightKg,
-          reps: data.reps,
-          reportedRIR: 10 - data.rpe, // Convert RPE to RIR
-          isWarmup: false,
-          setNumber: currentSetNumber,
-        };
-
-        const checkContext = {
-          workingWeight: currentBlock.targetWeightKg,
-          currentTimestamp: new Date(),
-          previousSets: currentBlockSets.map(s => ({
-            exerciseName: currentExercise.name,
-            weight: s.weightKg,
-            reps: s.reps,
-            reportedRIR: 10 - s.rpe,
-            isWarmup: s.isWarmup,
-            setNumber: s.setNumber,
-          })),
-        };
-
-        const checkResult = checkSetSanity(setLog, checkContext);
-        if (checkResult) {
-          setSanityCheckResult(checkResult);
-        }
-
-        // Check if this is an AMRAP-eligible set (last set on a safe exercise).
-        // rep_total exercises ingest NO calibration input at all (ADD 2):
-        // their reps aren't crisp units, so neither AMRAP results nor
-        // comparison sets from them may move the RPE bias.
-        const repTotalExercise =
-          resolveProgressionModel(
-            (currentExercise as { progressionModel?: 'e1rm' | 'rep_total' | null }).progressionModel,
-            exerciseHistories[currentExercise.id]?.estimableSetCount ?? 0,
-            exerciseHistories[currentExercise.id]?.inestimableSetCount ?? 0
-          ) === 'rep_total';
-        const safetyTier = getFailureSafetyTier(currentExercise.name);
-        const isLastSet = currentSetNumber >= currentBlock.targetSets;
-        const isAmrapEligible =
-          !repTotalExercise && safetyTier === 'push_freely' && isLastSet && data.rpe >= 9.5;
-
-        if (isAmrapEligible) {
-          // Log to calibration engine and check for result
-          // Use actual reported RIR from the set (converted from RPE), not the target RIR
-          const reportedRIR = 10 - data.rpe;
-          const calibResult = calibrationEngineRef.current.addSetLog({
-            exerciseId: currentExercise.id,
+      // OPTIMIZATION: Defer sanity checks and AMRAP calibration off the critical
+      // path. These are important but don't need to block the next set's UI.
+      // Capture the closure state needed for these checks.
+      queueMicrotask(async () => {
+        if (currentExercise && setType === 'normal') {
+          const setLog = {
             exerciseName: currentExercise.name,
             weight: data.weightKg,
-            prescribedReps: { min: currentBlock.targetRepRange[0], max: currentBlock.targetRepRange[1] },
-            actualReps: data.reps,
-            reportedRIR: Math.max(0, Math.round(reportedRIR)), // Ensure RIR is non-negative integer
-            wasAMRAP: true,
-            timestamp: new Date(),
-          });
+            reps: data.reps,
+            reportedRIR: 10 - data.rpe,
+            isWarmup: false,
+            setNumber: currentSetNumber,
+          };
 
-          if (calibResult) {
-            setCalibrationResult(calibResult);
+          const checkContext = {
+            workingWeight: currentBlock.targetWeightKg,
+            currentTimestamp: new Date(),
+            previousSets: currentBlockSets.map(s => ({
+              exerciseName: currentExercise.name,
+              weight: s.weightKg,
+              reps: s.reps,
+              reportedRIR: 10 - s.rpe,
+              isWarmup: s.isWarmup,
+              setNumber: s.setNumber,
+            })),
+          };
 
-            // Track calibration for session summary
-            const calibWithMeta = {
-              ...calibResult,
+          const checkResult = checkSetSanity(setLog, checkContext);
+          if (checkResult) {
+            setSanityCheckResult(checkResult);
+          }
+
+          // AMRAP calibration processing (deferred except for display updates)
+          const repTotalExercise =
+            resolveProgressionModel(
+              (currentExercise as { progressionModel?: 'e1rm' | 'rep_total' | null }).progressionModel,
+              exerciseHistories[currentExercise.id]?.estimableSetCount ?? 0,
+              exerciseHistories[currentExercise.id]?.inestimableSetCount ?? 0
+            ) === 'rep_total';
+          const safetyTier = getFailureSafetyTier(currentExercise.name);
+          const isLastSet = currentSetNumber >= currentBlock.targetSets;
+          const isAmrapEligible =
+            !repTotalExercise && safetyTier === 'push_freely' && isLastSet && data.rpe >= 9.5;
+
+          if (isAmrapEligible) {
+            const reportedRIR = 10 - data.rpe;
+            const calibResult = calibrationEngineRef.current.addSetLog({
               exerciseId: currentExercise.id,
-              weightKg: data.weightKg,
-              setLogId: setId,
-            };
-            setSessionCalibrations(prev => [...prev, calibWithMeta]);
+              exerciseName: currentExercise.name,
+              weight: data.weightKg,
+              prescribedReps: { min: currentBlock.targetRepRange[0], max: currentBlock.targetRepRange[1] },
+              actualReps: data.reps,
+              reportedRIR: Math.max(0, Math.round(reportedRIR)),
+              wasAMRAP: true,
+              timestamp: new Date(),
+            });
 
-            // Persist calibration to database (best-effort: skipped offline —
-            // the local calibration engine still holds the data point).
-            try {
-              markSetPhase('auth_getuser_sent'); // setLogTiming
-              const { data: { user } } = await supabase.auth.getUser();
-              markSetPhase('auth_getuser_done'); // setLogTiming
-              if (user) {
-                supabase.from('amrap_calibrations').insert({
-                  user_id: user.id,
-                  workout_session_id: sessionId,
-                  set_log_id: setId,
-                  exercise_id: currentExercise.id,
-                  exercise_name: calibResult.exerciseName,
-                  weight_kg: data.weightKg,
-                  predicted_max_reps: calibResult.predictedMaxReps,
-                  actual_max_reps: calibResult.actualMaxReps,
-                  bias: calibResult.bias,
-                  bias_interpretation: calibResult.biasInterpretation,
-                  confidence_level: calibResult.confidenceLevel,
-                  data_points: calibResult.dataPoints,
-                  raw_predicted_max_reps: calibResult.rawPredictedMaxReps ?? calibResult.predictedMaxReps,
-                  method: calibResult.method ?? 'fatigue_adjusted_v2',
-                  calibrated_at: calibResult.lastCalibrated.toISOString(),
-                }).then(({ error }: { error: Error | null }) => {
-                  if (error) console.error('Failed to save AMRAP calibration:', error);
-                });
+            if (calibResult) {
+              setCalibrationResult(calibResult);
+
+              const calibWithMeta = {
+                ...calibResult,
+                exerciseId: currentExercise.id,
+                weightKg: data.weightKg,
+                setLogId: setId,
+              };
+              setSessionCalibrations(prev => [...prev, calibWithMeta]);
+
+              // Persist calibration (best-effort, deferred)
+              try {
+                markSetPhase('auth_getuser_sent');
+                const { data: { user } } = await supabase.auth.getUser();
+                markSetPhase('auth_getuser_done');
+                if (user) {
+                  supabase.from('amrap_calibrations').insert({
+                    user_id: user.id,
+                    workout_session_id: sessionId,
+                    set_log_id: setId,
+                    exercise_id: currentExercise.id,
+                    exercise_name: calibResult.exerciseName,
+                    weight_kg: data.weightKg,
+                    predicted_max_reps: calibResult.predictedMaxReps,
+                    actual_max_reps: calibResult.actualMaxReps,
+                    bias: calibResult.bias,
+                    bias_interpretation: calibResult.biasInterpretation,
+                    confidence_level: calibResult.confidenceLevel,
+                    data_points: calibResult.dataPoints,
+                    raw_predicted_max_reps: calibResult.rawPredictedMaxReps ?? calibResult.predictedMaxReps,
+                    method: calibResult.method ?? 'fatigue_adjusted_v2',
+                    calibrated_at: calibResult.lastCalibrated.toISOString(),
+                  }).then(({ error }: { error: Error | null }) => {
+                    if (error) console.error('Failed to save AMRAP calibration:', error);
+                  });
+                }
+              } catch (calibErr) {
+                console.error('Skipping AMRAP calibration persist (offline?):', calibErr);
               }
-            } catch (calibErr) {
-              console.error('Skipping AMRAP calibration persist (offline?):', calibErr);
             }
           }
-        }
-        
-        // Also log non-AMRAP sets for calibration comparison (but don't show result)
-        if (!repTotalExercise && safetyTier === 'push_freely' && !isAmrapEligible && setType === 'normal') {
-          const reportedRIR = 10 - data.rpe;
-          calibrationEngineRef.current.addSetLog({
-            exerciseId: currentExercise.id,
-            exerciseName: currentExercise.name,
-            weight: data.weightKg,
-            prescribedReps: { min: currentBlock.targetRepRange[0], max: currentBlock.targetRepRange[1] },
-            actualReps: data.reps,
-            reportedRIR: Math.max(0, Math.round(reportedRIR)),
-            wasAMRAP: false,
-            timestamp: new Date(),
-          });
-        }
+          
+          // Non-AMRAP comparison sets for calibration
+          if (!repTotalExercise && safetyTier === 'push_freely' && !isAmrapEligible && setType === 'normal') {
+            const reportedRIR = 10 - data.rpe;
+            calibrationEngineRef.current.addSetLog({
+              exerciseId: currentExercise.id,
+              exerciseName: currentExercise.name,
+              weight: data.weightKg,
+              prescribedReps: { min: currentBlock.targetRepRange[0], max: currentBlock.targetRepRange[1] },
+              actualReps: data.reps,
+              reportedRIR: Math.max(0, Math.round(reportedRIR)),
+              wasAMRAP: false,
+              timestamp: new Date(),
+            });
+          }
 
-        // Clear AMRAP accepted state when last set is completed
-        if (isLastSet) {
-          setAmrapAcceptedBlockId(null);
+          // Clear AMRAP accepted state when last set is completed
+          if (isLastSet) {
+            setAmrapAcceptedBlockId(null);
+          }
         }
-      }
+      });
 
       // Return the set ID for optional feedback
       endSetTiming(); // setLogTiming
