@@ -461,8 +461,8 @@ NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 
-# AI Coaching (Elite tier)
-ANTHROPIC_API_KEY=
+# AI Coaching (Elite tier) - uses xAI Grok
+XAI_API_KEY=
 
 # Payments
 STRIPE_SECRET_KEY=
@@ -479,7 +479,7 @@ FITBIT_CLIENT_SECRET=
 
 ## Important Warnings
 
-1. **Never expose server-side keys**: `SUPABASE_SERVICE_ROLE_KEY`, `STRIPE_SECRET_KEY`, and `ANTHROPIC_API_KEY` are server-only
+1. **Never expose server-side keys**: `SUPABASE_SERVICE_ROLE_KEY`, `STRIPE_SECRET_KEY`, and `XAI_API_KEY` are server-only
 
 2. **Weight units**: Always store in kg, convert only for display
 
