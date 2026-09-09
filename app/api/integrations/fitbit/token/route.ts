@@ -88,6 +88,30 @@ export async function POST(request: NextRequest) {
     const expiresAt = new Date();
     expiresAt.setSeconds(expiresAt.getSeconds() + tokens.expires_in);
 
+    // Persist tokens to wearable_connections for ownership verification
+    const { error: upsertError } = await supabase
+      .from('wearable_connections')
+      .upsert({
+        user_id: user.id,
+        source: 'fitbit',
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token,
+        token_expires_at: expiresAt.toISOString(),
+        is_connected: true,
+        permissions: tokens.scope ? tokens.scope.split(' ') : [],
+        last_sync_at: new Date().toISOString(),
+      }, {
+        onConflict: 'user_id,source',
+      });
+
+    if (upsertError) {
+      console.error('Failed to persist Fitbit tokens:', upsertError);
+      return NextResponse.json(
+        { error: 'Failed to save connection' },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json({
       accessToken: tokens.access_token,
       refreshToken: tokens.refresh_token,

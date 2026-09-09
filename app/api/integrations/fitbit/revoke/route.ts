@@ -71,6 +71,22 @@ export async function POST(request: NextRequest) {
       console.warn('Fitbit token revoke failed, but continuing...');
     }
 
+    // Mark the connection as disconnected after successful revocation
+    const { error: updateError } = await supabase
+      .from('wearable_connections')
+      .update({
+        is_connected: false,
+        access_token: null,
+        refresh_token: null,
+        token_expires_at: null,
+      })
+      .eq('id', connection.id);
+
+    if (updateError) {
+      console.error('Failed to update connection status:', updateError);
+      // Still return success - token was revoked on Fitbit's side
+    }
+
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Fitbit token revoke error:', error);
