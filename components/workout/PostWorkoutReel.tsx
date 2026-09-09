@@ -9,7 +9,7 @@
  */
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Button, Card } from '@/components/ui';
 import { IconSparkles, IconMessageCircle, IconX } from '@tabler/icons-react';
 
@@ -28,15 +28,7 @@ export function PostWorkoutReel({
   onDismiss,
   className = '',
 }: PostWorkoutReelProps) {
-  const router = useRouter();
   const [isDismissed, setIsDismissed] = useState(false);
-
-  const handleAskCoach = () => {
-    // Deep-link to AI Coach with session context
-    // TODO: AI Coach page doesn't yet accept session param - can be added in follow-up
-    // When implemented, it should pre-seed the conversation with this session's context
-    router.push(`/dashboard/ai-coach?session=${sessionId}`);
-  };
 
   const handleDismiss = () => {
     setIsDismissed(true);
@@ -93,14 +85,18 @@ export function PostWorkoutReel({
         )}
 
         {/* Ask Coach CTA */}
-        <Button
-          onClick={handleAskCoach}
-          disabled={isLoading}
-          className="w-full flex items-center justify-center gap-2 bg-primary-600 hover:bg-primary-500 text-white font-semibold py-3 rounded-xl transition-colors"
+        <Link
+          href={`/dashboard/ai-coach?session=${sessionId}`}
+          className={`block ${isLoading ? 'pointer-events-none opacity-50' : ''}`}
         >
-          <IconMessageCircle className="w-5 h-5" />
-          Ask Coach About This Session
-        </Button>
+          <Button
+            disabled={isLoading}
+            className="w-full flex items-center justify-center gap-2 bg-primary-600 hover:bg-primary-500 text-white font-semibold py-3 rounded-xl transition-colors"
+          >
+            <IconMessageCircle className="w-5 h-5" />
+            Ask Coach About This Session
+          </Button>
+        </Link>
 
         <p className="mt-2 text-xs text-surface-400 text-center">
           Get personalized analysis and recommendations
