@@ -891,6 +891,20 @@ export default function WorkoutPage() {
     calibrationEngineRef.current = calibrationEngine;
   }, [calibrationEngine]);
 
+  // Idle workout prompt: detect when user has been inactive for 20+ minutes
+  // and show a non-blocking "Still training?" prompt. Uses the same threshold
+  // as abandoned-session backdating at finish (#662).
+  const lastSetTimestamp = completedSets.length > 0
+    ? completedSets.reduce((latest, set) => 
+        set.loggedAt > latest ? set.loggedAt : latest, 
+        completedSets[0].loggedAt
+      )
+    : null;
+  const idlePrompt = useIdleWorkoutPrompt(
+    lastSetTimestamp,
+    phase === 'workout' && !showFinishConfirm
+  );
+
   const currentBlock = blocks[currentBlockIndex];
   const currentExercise = currentBlock?.exercise;
   const currentBlockSets = completedSets.filter(s => s.exerciseBlockId === currentBlock?.id);
@@ -5578,25 +5592,11 @@ export default function WorkoutPage() {
         sessionRpe: submittedSessionRpe,
       });
     }
-  setShowClaimPrompt(false);
-  finishToDashboard();
-};
+    setShowClaimPrompt(false);
+    finishToDashboard();
+  };
 
-// Idle workout prompt: show when user has been inactive for 20+ minutes.
-// Uses the same threshold as abandoned-session backdating at finish (#662).
-const lastSetTimestamp = completedSets.length > 0
-  ? completedSets.reduce((latest, set) => 
-      set.loggedAt > latest ? set.loggedAt : latest, 
-      completedSets[0].loggedAt
-    )
-  : null;
-
-const idlePrompt = useIdleWorkoutPrompt(
-  lastSetTimestamp,
-  phase === 'workout' && !showFinishConfirm
-);
-
-if (phase === 'loading') {
+  if (phase === 'loading') {
     // Skeleton matching the workout layout instead of a full-screen spinner
     // (P2-16) — mirrors this route's loading.tsx so route-level and
     // in-page loading states look identical.

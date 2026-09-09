@@ -1,6 +1,7 @@
 /**
  * Shared constants for workout session management.
- * Can be imported by both client and server code.
+ * Exported from a dedicated constants file to avoid client/server boundary
+ * issues when importing into client components (hooks, UI).
  */
 
 /**
