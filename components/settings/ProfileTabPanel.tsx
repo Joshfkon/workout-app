@@ -31,6 +31,7 @@ interface ProfileTabPanelProps {
   // Save handling
   onSave: () => void;
   isSaving: boolean;
+  hasUnsavedChanges: boolean;
   
   // Volume landmarks change handler
   onExperienceChange: (exp: Experience) => void;
@@ -56,6 +57,7 @@ export function ProfileTabPanel({
   setStressLevel,
   onSave,
   isSaving,
+  hasUnsavedChanges,
   onExperienceChange,
 }: ProfileTabPanelProps) {
   return (
@@ -245,11 +247,20 @@ export function ProfileTabPanel({
       {/* Motion Capture (experimental) — off by default, persists on toggle */}
       <MotionCaptureLabCard />
 
-      {/* Sticky Save Button */}
+      {/* Sticky Save Button with unsaved indicator */}
       <div className="sticky bottom-4 z-10">
-        <Button onClick={onSave} isLoading={isSaving} className="w-full shadow-lg">
-          Save Profile Changes
-        </Button>
+        <div className="relative">
+          {hasUnsavedChanges && !isSaving && (
+            <div className="absolute -top-8 left-0 right-0 text-center">
+              <span className="text-xs text-warning-400 bg-surface-900/95 px-3 py-1 rounded-full border border-warning-500/30">
+                Unsaved changes
+              </span>
+            </div>
+          )}
+          <Button onClick={onSave} isLoading={isSaving} className="w-full shadow-lg">
+            Save Profile Changes
+          </Button>
+        </div>
       </div>
     </div>
   );

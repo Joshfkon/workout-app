@@ -97,6 +97,7 @@ export default function SettingsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   // Extended profile fields
   const [age, setAge] = useState('');
@@ -268,7 +269,19 @@ export default function SettingsPage() {
       }
     }
     setIsLoading(false);
+    // Reset unsaved changes flag when fresh data loads
+    setHasUnsavedChanges(false);
   }, [settingsQuery.data]);
+
+  // Track changes to mark form as dirty
+  useEffect(() => {
+    // Only set unsaved if we've loaded initial data and user has made changes
+    if (!isLoading && settingsQuery.data) {
+      setHasUnsavedChanges(true);
+    }
+  }, [goal, experience, heightDisplay, weightDisplay, age, sleepQuality, stressLevel, trainingAge, 
+      availableEquipment, injuryHistory, units, restTimer, showFormCues, showWarmupSuggestions, 
+      prioritizeHypertrophy, skipPreWorkoutCheckIn, trackWaistInCheckin, showAiCoachNotes, volumeLandmarks]);
 
   // Refresh settings when the tab regains focus (weight may have changed in
   // another tab) — refetches the cached query.
@@ -374,6 +387,7 @@ export default function SettingsPage() {
       }
 
       setSaveMessage({ type: 'success', text: successText });
+      setHasUnsavedChanges(false); // Clear unsaved flag on successful save
     } catch (err) {
       setSaveMessage({ type: 'error', text: err instanceof Error ? err.message : 'Failed to save settings' });
     } finally {
@@ -452,6 +466,7 @@ export default function SettingsPage() {
           setStressLevel={setStressLevel}
           onSave={handleSave}
           isSaving={isSaving}
+          hasUnsavedChanges={hasUnsavedChanges}
           onExperienceChange={handleExperienceChange}
         />
       )}
@@ -468,6 +483,7 @@ export default function SettingsPage() {
           setVolumeLandmarks={setVolumeLandmarks}
           onSave={handleSave}
           isSaving={isSaving}
+          hasUnsavedChanges={hasUnsavedChanges}
         />
       )}
 
@@ -491,6 +507,7 @@ export default function SettingsPage() {
           setShowAiCoachNotes={setShowAiCoachNotes}
           onSave={handleSave}
           isSaving={isSaving}
+          hasUnsavedChanges={hasUnsavedChanges}
         />
       )}
 

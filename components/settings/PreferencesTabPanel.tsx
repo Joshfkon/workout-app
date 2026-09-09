@@ -30,6 +30,7 @@ interface PreferencesTabPanelProps {
   // Save handling
   onSave: () => void;
   isSaving: boolean;
+  hasUnsavedChanges: boolean;
 }
 
 export function PreferencesTabPanel({
@@ -51,6 +52,7 @@ export function PreferencesTabPanel({
   setShowAiCoachNotes,
   onSave,
   isSaving,
+  hasUnsavedChanges,
 }: PreferencesTabPanelProps) {
   return (
     <div className="space-y-6">
@@ -173,11 +175,20 @@ export function PreferencesTabPanel({
       {/* Education & Tips */}
       <EducationPreferencesCard />
 
-      {/* Sticky Save Button */}
+      {/* Sticky Save Button with unsaved indicator */}
       <div className="sticky bottom-4 z-10">
-        <Button onClick={onSave} isLoading={isSaving} className="w-full shadow-lg">
-          Save Preferences
-        </Button>
+        <div className="relative">
+          {hasUnsavedChanges && !isSaving && (
+            <div className="absolute -top-8 left-0 right-0 text-center">
+              <span className="text-xs text-warning-400 bg-surface-900/95 px-3 py-1 rounded-full border border-warning-500/30">
+                Unsaved changes
+              </span>
+            </div>
+          )}
+          <Button onClick={onSave} isLoading={isSaving} className="w-full shadow-lg">
+            Save Preferences
+          </Button>
+        </div>
       </div>
     </div>
   );

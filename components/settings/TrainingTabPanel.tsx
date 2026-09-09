@@ -1,7 +1,7 @@
 'use client';
 
 import type { Equipment, MuscleGroup, Experience } from '@/types/schema';
-import { Card, CardHeader, CardTitle, CardContent, Button } from '@/components/ui';
+import { Card, CardHeader, CardTitle, CardContent, Button, Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui';
 import { MUSCLE_GROUPS } from '@/types/schema';
 import { muscleDisplayName } from '@/lib/utils';
 import { GymEquipmentSettings } from '@/components/settings/GymEquipmentSettings';
@@ -30,6 +30,7 @@ interface TrainingTabPanelProps {
   // Save handling
   onSave: () => void;
   isSaving: boolean;
+  hasUnsavedChanges: boolean;
 }
 
 export function TrainingTabPanel({
@@ -43,18 +44,26 @@ export function TrainingTabPanel({
   setVolumeLandmarks,
   onSave,
   isSaving,
+  hasUnsavedChanges,
 }: TrainingTabPanelProps) {
   return (
     <div className="space-y-6">
-      {/* Equipment & Gym */}
+      {/* Collapsible sections to reduce scroll cliff */}
       <Card>
         <CardHeader>
-          <CardTitle>Equipment & Gym</CardTitle>
+          <CardTitle>Training Configuration</CardTitle>
           <p className="text-sm text-surface-400 mt-1">
-            Select available equipment to customize exercise selection
+            Configure equipment, gym setup, exercise preferences, and volume parameters
           </p>
         </CardHeader>
-        <CardContent className="space-y-6">
+        <CardContent>
+          <Accordion type="multiple" defaultOpen={['equipment']}>
+            <AccordionItem id="equipment">
+              <AccordionTrigger id="equipment">
+                <span className="text-base font-semibold">Equipment & Injuries</span>
+              </AccordionTrigger>
+              <AccordionContent id="equipment">
+                <div className="space-y-6 pt-2">
           <div>
             <label className="block text-sm font-medium text-surface-200 mb-3">
               Available Equipment
@@ -124,62 +133,93 @@ export function TrainingTabPanel({
               ))}
             </div>
           </div>
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+
+            {/* Gym Equipment */}
+            <AccordionItem id="gym">
+              <AccordionTrigger id="gym">
+                <span className="text-base font-semibold">Gym Equipment & Locations</span>
+              </AccordionTrigger>
+              <AccordionContent id="gym">
+                <div className="pt-2">
+                  <GymEquipmentSettings />
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+
+            {/* Exercise Variety */}
+            {userId && (
+              <AccordionItem id="variety">
+                <AccordionTrigger id="variety">
+                  <span className="text-base font-semibold">Exercise Variety</span>
+                </AccordionTrigger>
+                <AccordionContent id="variety">
+                  <div className="pt-2">
+                    <p className="text-sm text-surface-400 mb-4">
+                      Control how much the AI rotates between different exercises for each muscle group.
+                      Higher variety means different exercises each session for the same muscle.
+                    </p>
+                    <ExerciseVarietySettings userId={userId} />
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            )}
+
+            {/* Muscle Priorities */}
+            {userId && (
+              <AccordionItem id="priorities">
+                <AccordionTrigger id="priorities">
+                  <span className="text-base font-semibold">Muscle Group Priorities</span>
+                </AccordionTrigger>
+                <AccordionContent id="priorities">
+                  <div className="pt-2">
+                    <p className="text-sm text-surface-400 mb-4">
+                      Set training priorities for each muscle group. Higher priority muscles will receive more volume in program generation.
+                    </p>
+                    <MusclePrioritySettings userId={userId} />
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            )}
+
+            {/* Volume Landmarks */}
+            <AccordionItem id="volume">
+              <AccordionTrigger id="volume">
+                <span className="text-base font-semibold">Volume Landmarks</span>
+              </AccordionTrigger>
+              <AccordionContent id="volume">
+                <div className="pt-2">
+                  <p className="text-sm text-surface-400 mb-4">
+                    Weekly sets per muscle group (based on Dr. Mike Israetel&apos;s research)
+                  </p>
+                  <VolumeLandmarksCard
+                    experience={experience}
+                    volumeLandmarks={volumeLandmarks}
+                    setVolumeLandmarks={setVolumeLandmarks}
+                  />
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
         </CardContent>
       </Card>
 
-      {/* Detailed Gym Equipment */}
-      <div id="gym-equipment">
-        <GymEquipmentSettings />
-      </div>
-
-      {/* Exercise Variety Settings */}
-      {userId && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <svg className="w-5 h-5 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              Exercise Variety
-            </CardTitle>
-            <p className="text-sm text-surface-400 mt-1">
-              Control how much the AI rotates between different exercises for each muscle group.
-              Higher variety means different exercises each session for the same muscle.
-            </p>
-          </CardHeader>
-          <CardContent>
-            <ExerciseVarietySettings userId={userId} />
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Muscle Priorities */}
-      {userId && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Muscle Group Priorities</CardTitle>
-            <p className="text-sm text-surface-400 mt-1">
-              Set training priorities for each muscle group. Higher priority muscles will receive more volume in program generation.
-            </p>
-          </CardHeader>
-          <CardContent>
-            <MusclePrioritySettings userId={userId} />
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Volume Landmarks */}
-      <VolumeLandmarksCard
-        experience={experience}
-        volumeLandmarks={volumeLandmarks}
-        setVolumeLandmarks={setVolumeLandmarks}
-      />
-
-      {/* Sticky Save Button */}
+      {/* Sticky Save Button with unsaved indicator */}
       <div className="sticky bottom-4 z-10">
-        <Button onClick={onSave} isLoading={isSaving} className="w-full shadow-lg">
-          Save Training Changes
-        </Button>
+        <div className="relative">
+          {hasUnsavedChanges && !isSaving && (
+            <div className="absolute -top-8 left-0 right-0 text-center">
+              <span className="text-xs text-warning-400 bg-surface-900/95 px-3 py-1 rounded-full border border-warning-500/30">
+                Unsaved changes
+              </span>
+            </div>
+          )}
+          <Button onClick={onSave} isLoading={isSaving} className="w-full shadow-lg">
+            Save Training Changes
+          </Button>
+        </div>
       </div>
     </div>
   );
