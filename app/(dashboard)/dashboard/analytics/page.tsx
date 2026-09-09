@@ -5,7 +5,7 @@ import { useQuery, useQueryClient, useIsRestoring } from '@tanstack/react-query'
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Card, CardHeader, CardTitle, CardContent, Button, Badge, FullPageLoading, ErrorRetry } from '@/components/ui';
+import { Card, CardHeader, CardTitle, CardContent, Button, Badge, FullPageLoading, ErrorRetry, PageHeader } from '@/components/ui';
 import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 import { resolveAuthState } from '@/lib/supabase/authState';
 import { useMusclePriorities } from '@/components/settings/MusclePrioritySettings';
@@ -1489,13 +1489,11 @@ function AnalyticsPageContent() {
       {/* Header. The page title now matches the "Progress" nav label. The
           range selector renders here only on tabs it actually scopes
           (Training / Wellness); Body and Strength carry no dead control. */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-surface-100">Progress</h1>
-          <p className="text-surface-400">Track your body composition, strength, and training progress</p>
-        </div>
-        {rangeAppliesToTab && <div className="flex gap-2">{timeRangeSelector}</div>}
-      </div>
+      <PageHeader
+        title="Progress"
+        subtitle="Track your body composition, strength, and training progress"
+        actions={rangeAppliesToTab ? <div className="flex gap-2">{timeRangeSelector}</div> : undefined}
+      />
 
       {/* Tab Navigation */}
       <div className="flex gap-1 bg-surface-800/50 p-1 rounded-xl">

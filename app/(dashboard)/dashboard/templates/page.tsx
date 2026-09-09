@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient, useIsRestoring } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { Card, CardContent, Button, LoadingAnimation } from '@/components/ui';
+import { Card, CardContent, Button, LoadingAnimation, PageHeader, EmptyState, SectionLabel } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { getLocalUserId } from '@/lib/supabase/authState';
 import { startWorkoutFromTemplate } from '@/lib/training/startTemplateWorkout';
@@ -321,9 +321,10 @@ export default function TemplatesPage() {
   return (
     <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-surface-100">Templates</h1>
-        <div className="flex gap-2">
+      <PageHeader
+        title="Templates"
+        actions={
+          <div className="flex gap-2">
           <Button
             variant="primary"
             onClick={() => {
@@ -340,7 +341,8 @@ export default function TemplatesPage() {
             📁
           </Button>
         </div>
-      </div>
+        }
+      />
 
       {/* Quick start (P2-15): curated starter templates that deep-link into
           the new-workout flow — no saved template needed. Always available so
@@ -348,7 +350,7 @@ export default function TemplatesPage() {
           presets. Horizontal scroller keeps it to one compact row. */}
       <div>
         <div className="flex items-baseline justify-between mb-2">
-          <h2 className="text-sm font-semibold text-surface-200 uppercase tracking-wide">Quick start</h2>
+          <SectionLabel>Quick start</SectionLabel>
           <span className="text-xs text-surface-500">No template needed</span>
         </div>
         <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0">
@@ -482,18 +484,16 @@ export default function TemplatesPage() {
 
         {/* Empty State */}
         {folders.length === 0 && unfolderedTemplates.length === 0 && (
-          <Card>
-            <CardContent className="py-12 text-center">
-              <span className="text-5xl mb-4 block">📋</span>
-              <h3 className="text-lg font-semibold text-surface-100 mb-2">No Templates Yet</h3>
-              <p className="text-surface-400 mb-4">
-                Create workout templates to quickly start your favorite routines
-              </p>
+          <EmptyState
+            icon="📋"
+            title="No Templates Yet"
+            description="Create workout templates to quickly start your favorite routines"
+            action={
               <Button variant="primary" onClick={() => setShowCreateTemplate(true)}>
                 Create Your First Template
               </Button>
-            </CardContent>
-          </Card>
+            }
+          />
         )}
       </div>
 
