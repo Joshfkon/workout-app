@@ -46,9 +46,10 @@ export function CustomExerciseReviewForm({
   const [editingSection, setEditingSection] = useState<string | null>(null);
   // Only reveal the technical editing controls when the user asks for them
   // (or when the AI wasn't confident and a look is warranted).
-  const [showDetails, setShowDetails] = useState(data.aiConfidence === 'low');
+  // Default to collapsed so the primary path is "glance at summary → Save"
+  const [showDetails, setShowDetails] = useState(false);
 
-  // Determine which sections to open by default
+  // Determine which sections to open by default when details are shown
   const defaultOpenSections =
     data.aiConfidence === 'low'
       ? ['muscles', 'movement', 'loading', 'safety', 'hypertrophy', 'form']
@@ -98,10 +99,10 @@ export function CustomExerciseReviewForm({
       {/* Header */}
       <div className="text-center">
         <h2 className="text-xl font-semibold text-surface-100">
-          You&apos;re all set
+          Ready to save
         </h2>
         <p className="text-sm text-surface-400 mt-1">
-          AI filled in the details below. Save it, or fine-tune anything first.
+          AI completed the exercise details. Review the summary and save, or adjust details if needed.
         </p>
       </div>
 
@@ -191,7 +192,7 @@ export function CustomExerciseReviewForm({
           bg-surface-800/50 px-4 py-3 text-sm font-medium text-surface-200
           hover:bg-surface-800 transition-colors disabled:opacity-60 disabled:cursor-default"
       >
-        <span>{detailsVisible ? 'Hide details' : 'Customize details (optional)'}</span>
+        <span>{detailsVisible ? 'Hide advanced details' : 'Adjust advanced details (optional)'}</span>
         <svg
           className={`w-5 h-5 text-surface-400 transition-transform ${detailsVisible ? 'rotate-180' : ''}`}
           fill="none"
