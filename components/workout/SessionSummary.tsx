@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Button, Card, Badge } from '@/components/ui';
 import type {
   WorkoutSession,
@@ -33,6 +33,8 @@ import { storageWeightKg } from '@/services/shared/weightPrecision';
 import { getCalibrationVerdict, type CalibrationMethod } from '@/services/rpeCalibration';
 import type { ShareExercise, WorkoutShareTextInput } from '@/services/workoutShareText';
 import { ShareWorkoutText } from './ShareWorkoutText';
+import { PostWorkoutReel } from './PostWorkoutReel';
+import { generatePostWorkoutReel } from '@/lib/actions/inWorkoutCoach';
 
 /**
  * Per-muscle end-of-session feedback. Captured in the finish popup
@@ -223,6 +225,11 @@ export function SessionSummary({
   // Guards against double-submits; navigation away happens right after
   // onSubmit, so the "Finishing…" state is only briefly visible.
   const [submitting, setSubmitting] = useState(false);
+  
+  // Post-workout reel state (async generation, off critical path)
+  const [reelBullets, setReelBullets] = useState<string[]>([]);
+  const [reelLoading, setReelLoading] = useState(true);
+  const [reelDismissed, setReelDismissed] = useState(false);
 
   // Duration is the frozen snapshot taken at finish (excludes paused time).
   // Never derived from Date.now(), so this screen shows a fixed value rather
@@ -638,6 +645,75 @@ export function SessionSummary({
     });
   };
 
+  // Generate post-workout reel (async, off critical path)
+  useEffect(() => {
+    let cancelled = false;
+
+    const generateReel = async () => {
+      try {
+        // Build exercise data with PR status and vs last session
+        const reelExercises = exerciseDetails.map(ex => {
+          const history = exerciseHistories?.[ex.exerciseId || ''];
+          const vsLastSession =
+            history?.previousBest && !ex.isDuration
+              ? {
+                  weightDelta: ex.maxWeight - history.previousBest.weight,
+                  repDelta: ex.maxReps - history.previousBest.reps,
+                }
+              : undefined;
+
+          return {
+            name: ex.name,
+            sets: ex.sets.length,
+            isPR: ex.hasPR,
+            vsLastSession,
+          };
+        });
+
+        // Extract fatigue signals from working sets
+        const fatigueSignals: Array<{ exerciseName: string; signal: string }> = [];
+        const rpeWarnings = exerciseDetails.filter(ex => ex.avgRpe >= 9.5);
+        if (rpeWarnings.length > 0) {
+          fatigueSignals.push({
+            exerciseName: rpeWarnings[0].name,
+            signal: `high fatigue (avg RPE ${rpeWarnings[0].avgRpe})`,
+          });
+        }
+
+        const result = await generatePostWorkoutReel({
+          totalSets,
+          totalVolume: totalVolume,
+          units: unit, // Use unit ('kg' | 'lb') not weightUnit ('kg' | 'lbs')
+          durationMinutes,
+          exercises: reelExercises,
+          fatigueSignals,
+        });
+
+        if (!cancelled) {
+          setReelBullets(result.bullets);
+          setReelLoading(false);
+        }
+      } catch (error) {
+        console.error('[Post-Workout Reel] Generation failed:', error);
+        if (!cancelled) {
+          // Fallback bullets on error
+          setReelBullets([
+            `${totalSets} sets, ${totalVolume.toFixed(0)}${weightUnit} volume in ${durationMinutes} minutes`,
+            `${exerciseDetails.length} exercises trained`,
+            'Session complete — good work',
+          ]);
+          setReelLoading(false);
+        }
+      }
+    };
+
+    generateReel();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [exerciseDetails, exerciseHistories, totalSets, totalVolume, weightUnit, durationMinutes]);
+
   const buildSubmitData = (): SessionSummarySubmitData => ({
     sessionRpe,
     notes,
@@ -963,6 +1039,17 @@ export function SessionSummary({
           <ShareWorkoutText input={shareInput} />
         </div>
       </div>
+
+      {/* Post-Workout Reel */}
+      {!reelDismissed && (
+        <PostWorkoutReel
+          bullets={reelBullets}
+          isLoading={reelLoading}
+          sessionId={session.id}
+          onDismiss={() => setReelDismissed(true)}
+          className="mb-6"
+        />
+      )}
 
       {/* Personal Records Celebration */}
       {personalRecords.length > 0 && (

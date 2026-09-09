@@ -20,12 +20,13 @@ import {
 import { beginSetTiming, markSetPhase, schedulePaintMark, endSetTiming } from '@/lib/debug/setLogTiming';
 import type { SetSyncStatus } from '@/components/workout/ExerciseCard';
 import { InlineHint } from '@/components/ui/FirstTimeHint';
-import { RestTimer, PauseOverlay, RowOverflowMenu, type RowMenuItem } from '@/components/workout';
+import { RestTimer, PauseOverlay, RowOverflowMenu, type RowMenuItem, ExerciseWhisper, SignalToast, RestCoachTip, SessionSpine } from '@/components/workout';
 import { IdleWorkoutPrompt } from '@/components/workout/IdleWorkoutPrompt';
 import { IconGripVertical, IconInfoCircle, IconMapPin, IconX } from '@tabler/icons-react';
 import { useRestTimer } from '@/hooks/useRestTimer';
 import { useEducationStore } from '@/hooks/useEducationPreferences';
 import { useIdleWorkoutPrompt } from '@/hooks/useIdleWorkoutPrompt';
+import { useInWorkoutCoach } from '@/hooks/useInWorkoutCoach';
 
 // Dynamic import ExerciseCard (118KB) to reduce initial bundle and improve page load
 const ExerciseCard = dynamic(
@@ -1055,6 +1056,41 @@ export default function WorkoutPage() {
   const workoutTimer = useWorkoutTimer({
     sessionId,
     startedAt: timerStartedAt,
+  });
+
+  // In-workout AI coaching (whispers, signals, rest tips, session spine)
+  const inWorkoutCoach = useInWorkoutCoach({
+    exercises: blocks.map(block => {
+      // Get performed sets for this block
+      const blockSets = getSetsForBlock(block.id);
+      return {
+        blockId: block.id,
+        name: block.exercise?.name ?? 'Exercise',
+        primaryMuscle: block.exercise?.primaryMuscle ?? 'chest',
+        sets: block.targetSets,
+        setsToday: blockSets,
+        lastSessionSets: exerciseHistories[block.exerciseId]?.lastWorkoutSets?.map(s => ({
+          weight_kg: s.weightKg,
+          reps_completed: s.reps,
+          rpe: s.rpe,
+          is_warmup: false,
+          logged_at: s.loggedAt ?? new Date().toISOString(),
+        })),
+      };
+    }),
+    workoutType: session?.mesocycleId ? 'Mesocycle Session' : 'Workout',
+    weekInMeso: undefined,
+    totalWeeks: undefined,
+    injuries: [],
+    units: preferences.units,
+    isRestTimerRunning: restTimer.isRunning,
+    restSecondsRemaining: restTimer.seconds,
+    nextExercise: currentBlock ? {
+      name: currentBlock.exercise?.name ?? 'Exercise',
+      weight: convertWeightForDisplay(currentBlock.targetWeightKg, preferences.units, 1),
+      repRange: `${currentBlock.targetRepRange[0]}–${currentBlock.targetRepRange[1]}`,
+    } : undefined,
+    enabled: phase === 'workout',
   });
 
   // Clear any stale timer when a DIFFERENT session mounts. Deliberately no
@@ -6291,6 +6327,19 @@ export default function WorkoutPage() {
         onOpenDetail={() => setShowMuscleReadinessSheet(true)}
       />
 
+      {/* Session Spine - AI coaching checklist */}
+      {blocks.length > 0 && inWorkoutCoach.sessionSpine.length > 0 && (
+        <div className="mb-4">
+          <SessionSpine
+            spine={inWorkoutCoach.sessionSpine}
+            completedItems={inWorkoutCoach.spineCompleted}
+            onToggleItem={inWorkoutCoach.toggleSpineItem}
+            isGenerating={inWorkoutCoach.spineLoading}
+            onRefresh={inWorkoutCoach.refreshSpine}
+          />
+        </div>
+      )}
+
       {/* First workout guidance */}
       {isFirstWorkout && showBeginnerTips && (
         <InlineHint id="first-workout-intro">
@@ -7165,6 +7214,12 @@ export default function WorkoutPage() {
                   .getElementById(`exercise-${currentBlockIndex}`)
                   ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
               }}
+            />
+          )}
+          {restBarVisible && restTimer.isRunning && inWorkoutCoach.restTip && (
+            <RestCoachTip
+              tip={inWorkoutCoach.restTip}
+              nextExercise={currentBlock?.exercise?.name}
             />
           )}
         </div>
