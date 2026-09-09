@@ -3,11 +3,11 @@
 /**
  * AI Coaching Server Actions
  *
- * Handles communication with Anthropic's Claude API to provide
+ * Handles communication with xAI's Grok API to provide
  * personalized training advice based on user's actual data.
  */
 
-import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 import { createClient } from '@/lib/supabase/server';
 import { buildCoachingContext } from '@/lib/data/coachingContext';
 import { formatCoachingContext } from '@/services/coachingContextService';
@@ -77,9 +77,9 @@ export async function sendCoachingMessage(
     }
 
     // Check for API key
-    const apiKey = process.env.ANTHROPIC_API_KEY;
+    const apiKey = process.env.XAI_API_KEY;
     if (!apiKey) {
-      console.error('[AI Coach] ANTHROPIC_API_KEY is not set');
+      console.error('[AI Coach] XAI_API_KEY is not set');
       throw new ServerError('AI coaching is not configured. Please contact support.', 500);
     }
 
@@ -93,9 +93,10 @@ export async function sendCoachingMessage(
       context = null;
     }
 
-    // Initialize Anthropic client
-    const anthropic = new Anthropic({
+    // Initialize xAI client using OpenAI SDK with xAI base URL
+    const openai = new OpenAI({
       apiKey: apiKey,
+      baseURL: 'https://api.x.ai/v1',
     });
 
   // Load or create conversation
@@ -130,8 +131,14 @@ export async function sendCoachingMessage(
   // Format context for AI (if available)
   const contextString = context ? formatCoachingContext(context) : 'No user context available yet.';
 
-  // Build message history for Anthropic API
-  const apiMessages: { role: 'user' | 'assistant'; content: string }[] = [];
+  // Build message history for OpenAI Chat Completions API
+  const apiMessages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [];
+
+  // Add system prompt
+  apiMessages.push({
+    role: 'system',
+    content: SYSTEM_PROMPT,
+  });
 
   // Add conversation history (without duplicating context for each message)
   for (const msg of messages) {
@@ -150,30 +157,26 @@ export async function sendCoachingMessage(
   }
 
   // Replace the last user message with one that includes context
-  if (apiMessages.length > 0 && apiMessages[apiMessages.length - 1].role === 'user') {
+  if (apiMessages.length > 1 && apiMessages[apiMessages.length - 1].role === 'user') {
     apiMessages[apiMessages.length - 1].content = `${contextString}\n\n${message}`;
   }
 
-  // Call Anthropic API
+  // Call xAI Grok API via OpenAI SDK
   let response;
   try {
-    response = await anthropic.messages.create({
-      model: 'claude-3-5-haiku-latest',
+    response = await openai.chat.completions.create({
+      model: 'grok-4.6',
       max_tokens: 2000,
-      system: SYSTEM_PROMPT,
       messages: apiMessages,
     });
   } catch (apiError: unknown) {
     const message = getErrorMessage(apiError);
-    console.error('[AI Coach] Anthropic API error:', message);
+    console.error('[AI Coach] xAI API error:', message);
     throw new ServerError(`AI service error: ${message}`, 500);
   }
 
   // Extract assistant's response
-  const assistantContent = response.content
-    .filter((block) => block.type === 'text')
-    .map((block) => (block as any).text)
-    .join('\n');
+  const assistantContent = response.choices[0]?.message?.content || '';
 
   // Add assistant message
   const assistantMessage: CoachingMessage = {
@@ -390,7 +393,7 @@ export async function generateWorkoutCoachNotes(
 ): Promise<WorkoutCoachNotesResult> {
   try {
     // Check for API key first
-    const apiKey = process.env.ANTHROPIC_API_KEY;
+    const apiKey = process.env.XAI_API_KEY;
     if (!apiKey) {
       return {
         notes: generateFallbackNotes(input),
@@ -419,25 +422,24 @@ ${workoutDescription}
 
 Please provide brief, personalized pre-workout coaching notes for this session. Remember: 3-5 sentences max.`;
 
-    // Initialize Anthropic client
-    const anthropic = new Anthropic({
+    // Initialize xAI client using OpenAI SDK with xAI base URL
+    const openai = new OpenAI({
       apiKey: apiKey,
+      baseURL: 'https://api.x.ai/v1',
     });
 
-    // Call API with a quick model for fast responses
-    const response = await anthropic.messages.create({
-      model: 'claude-3-5-haiku-latest',
+    // Call API with Grok for fast responses
+    const response = await openai.chat.completions.create({
+      model: 'grok-4.6',
       max_tokens: 500,
-      system: WORKOUT_COACH_PROMPT,
-      messages: [{ role: 'user', content: prompt }],
+      messages: [
+        { role: 'system', content: WORKOUT_COACH_PROMPT },
+        { role: 'user', content: prompt },
+      ],
     });
 
     // Extract response
-    const notes = response.content
-      .filter((block) => block.type === 'text')
-      .map((block) => (block as any).text)
-      .join('\n')
-      .trim();
+    const notes = response.choices[0]?.message?.content?.trim() || '';
 
     return {
       notes: notes || generateFallbackNotes(input),
