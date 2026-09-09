@@ -60,6 +60,9 @@ import { upsertSessionMuscleFeedback } from './muscleFeedbackWrites';
 import type { SessionMuscleFeedbackEntry } from '@/components/workout/SessionSummary';
 import type { WorkoutSession } from '@/types/schema';
 import { now as clockNow } from '@/lib/clock';
+import { ABANDONED_SESSION_THRESHOLD_MINUTES } from '@/lib/workout/constants';
+
+export { ABANDONED_SESSION_THRESHOLD_MINUTES };
 
 type UntypedSupabase = ReturnType<typeof import('@/lib/supabase/client').createUntypedClient>;
 
@@ -72,16 +75,10 @@ export function sessionClaimEntryId(sessionId: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Abandoned session detection
+// Abandoned session detection  
 // ---------------------------------------------------------------------------
 
-/**
- * If the gap between the last logged set and "now" is at least this many
- * minutes, treat the session as abandoned and backdate the end time to the
- * last set's timestamp. Prevents inflated session durations when the user
- * forgets to hit save/finish.
- */
-const ABANDONED_SESSION_THRESHOLD_MINUTES = 20;
+// Uses ABANDONED_SESSION_THRESHOLD_MINUTES imported at top of file
 
 // ---------------------------------------------------------------------------
 // Timing
