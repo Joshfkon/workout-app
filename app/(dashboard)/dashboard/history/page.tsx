@@ -383,7 +383,7 @@ function HistoryPageContent() {
           reps: repsNum,
           targetRepRange: [8, 12], // Default hypertrophy range
           isLastSet,
-          exerciseType: exercise.isDuration ? 'duration_based' : 'strength',
+          exerciseType: exercise.isDuration ? 'duration_based' : 'rep_based',
         });
         quality = qualityResult.quality;
         quality_reason = qualityResult.reason;
