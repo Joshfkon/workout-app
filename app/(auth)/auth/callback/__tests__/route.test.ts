@@ -92,7 +92,7 @@ describe('recovery implies confirmation', () => {
 
     expect(mockUpdateUserById).toHaveBeenCalledWith('u2', { email_confirm: true });
     // Not a recovery — proceeds to the normal onboarding-aware redirect.
-    expect(res.redirectedTo).toBe(`${ORIGIN}/dashboard/log`);
+    expect(res.redirectedTo).toBe(`${ORIGIN}/dashboard/train`);
   });
 
   it('does not touch an already-confirmed user', async () => {
