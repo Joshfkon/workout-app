@@ -63,6 +63,10 @@ import { BodyHubNudges } from '@/components/body/BodyHubNudges';
 import { MeasurementTrendCard } from '@/components/body/MeasurementTrendCard';
 import type { BodyLogSegment } from '@/components/body/LogBodyDataSheet';
 import { LiftTrendsCard } from '@/components/analytics/LiftTrendsCard';
+import { ProgressPhotosHero } from '@/components/analytics/ProgressPhotosHero';
+import { ComparePhotos } from '@/components/progress-photos/ComparePhotos';
+import { TimelapseModal } from '@/components/progress-photos/TimelapseModal';
+import { AddPhotoModal } from '@/components/progress-photos/AddPhotoModal';
 import {
   computeLiftTrends,
   LIFT_TREND_WINDOW_DAYS,
@@ -274,6 +278,10 @@ function AnalyticsPageContent() {
   // Body hub: unified log sheet + refresh signal for the hub widgets
   const [logSegment, setLogSegment] = useState<BodyLogSegment | null>(null);
   const [bodyRefreshKey, setBodyRefreshKey] = useState(0);
+  // Progress photos modals (for the hero on Body tab)
+  const [isCompareOpen, setIsCompareOpen] = useState(false);
+  const [isTimelapseOpen, setIsTimelapseOpen] = useState(false);
+  const [isAddPhotoOpen, setIsAddPhotoOpen] = useState(false);
 
   // DEXA-anchored body comp trend — the single source for both the trend
   // chart (BodyHubTrends) and the FFMI gauge, so they can never disagree.
@@ -1646,51 +1654,17 @@ function AnalyticsPageContent() {
             weightHistory={weightHistory}
           />
 
-          {/* Progress Photos */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Recent Progress Photos</CardTitle>
-                <Link href="/dashboard/progress-photos">
-                  <Button variant="ghost" size="sm">
-                    {progressPhotos.length > 0 ? 'View All →' : 'Add Photos →'}
-                  </Button>
-                </Link>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {progressPhotos.length > 0 ? (
-                <div className="grid grid-cols-4 gap-2">
-                  {progressPhotos.slice(0, 4).map((photo) => {
-                    const photoUrl = photoUrls[photo.id];
-                    return (
-                      <Link key={photo.id} href="/dashboard/progress-photos">
-                        <div className="aspect-square rounded-lg overflow-hidden bg-surface-800">
-                          {photoUrl ? (
-                            /* eslint-disable-next-line @next/next/no-img-element */
-                            <img
-                              src={photoUrl}
-                              alt={`Progress ${new Date(photo.photoDate).toLocaleDateString()}`}
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center">
-                              <div className="w-6 h-6 border-2 border-surface-600 border-t-transparent rounded-full animate-spin" />
-                            </div>
-                          )}
-                        </div>
-                      </Link>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p className="text-sm text-surface-500">
-                  No photos yet. Consistent progress photos are one of the best
-                  ways to see change that the scale misses.
-                </p>
-              )}
-            </CardContent>
-          </Card>
+          {/* Progress Photos Hero */}
+          <ProgressPhotosHero
+            photos={progressPhotos}
+            photoUrls={photoUrls}
+            units={units}
+            weightUnit={weightUnit}
+            displayWeight={displayWeight}
+            onCompare={() => setIsCompareOpen(true)}
+            onTimelapse={() => setIsTimelapseOpen(true)}
+            onAddPhoto={() => setIsAddPhotoOpen(true)}
+          />
 
           {/* The target EDITOR (weight / BF% / FFMI — what the Composition
               Map's goal vector reads). id-anchored so the header "Edit goals"
@@ -1751,6 +1725,27 @@ function AnalyticsPageContent() {
               goal={progressionRaw?.goal}
             />
           )}
+
+          {/* Link to detailed Volume tracking */}
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex-1">
+                  <h3 className="text-sm font-semibold text-surface-100 mb-1">
+                    Weekly Volume Tracking
+                  </h3>
+                  <p className="text-xs text-surface-400">
+                    Track sets per muscle group, compare against your volume landmarks (MEV/MAV/MRV), 
+                    and see detailed breakdowns by exercise.
+                  </p>
+                </div>
+                <Link href="/dashboard/volume">
+                  <Button size="sm">View Volume →</Button>
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+
           {strengthProfile ? (
             <>
               {/* Overall Score — rendered exactly ONCE (was duplicated). */}
@@ -1953,6 +1948,39 @@ function AnalyticsPageContent() {
           onSaved={handleBodyDataSaved}
         />
       )}
+
+      {/* Progress photos modals (accessible from Body tab hero) */}
+      {userId && (
+        <AddPhotoModal
+          isOpen={isAddPhotoOpen}
+          onClose={() => setIsAddPhotoOpen(false)}
+          userId={userId}
+          units={units}
+          weightUnit={weightUnit}
+          ghostUrl={progressPhotos[0] ? photoUrls[progressPhotos[0].id] : undefined}
+          onAdded={() => {
+            setIsAddPhotoOpen(false);
+            // Refresh both the analytics query (for this page's photo list)
+            // and mark the body hub for refresh
+            void queryClient.invalidateQueries({ queryKey: ['analytics'] });
+            setBodyRefreshKey((k) => k + 1);
+          }}
+        />
+      )}
+      <ComparePhotos
+        isOpen={isCompareOpen}
+        onClose={() => setIsCompareOpen(false)}
+        photos={progressPhotos}
+        photoUrls={photoUrls}
+        units={units}
+      />
+      <TimelapseModal
+        isOpen={isTimelapseOpen}
+        onClose={() => setIsTimelapseOpen(false)}
+        photos={progressPhotos}
+        photoUrls={photoUrls}
+        units={units}
+      />
     </div>
   );
 }

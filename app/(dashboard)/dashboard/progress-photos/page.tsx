@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Card, Button, ConfirmModal, ErrorRetry, FullPageLoading } from '@/components/ui';
+import { Card, Button, ConfirmModal, ErrorRetry, FullPageLoading, PageHeader } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { resolveAuthState } from '@/lib/supabase/authState';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
@@ -173,31 +173,36 @@ export default function ProgressPhotosPage() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <Link
-            href="/dashboard/analytics"
-            className="text-sm text-surface-400 hover:text-surface-200"
-          >
-            ← Analytics
-          </Link>
-          <h1 className="text-xl font-bold text-surface-100 mt-1">Progress Photos</h1>
-        </div>
-        <div className="flex gap-2">
-          {photos.length >= 3 && (
-            <Button variant="secondary" onClick={() => setIsTimelapseOpen(true)}>
-              Timelapse
+      {/* Back link */}
+      <Link
+        href="/dashboard/analytics"
+        className="text-sm text-surface-400 hover:text-surface-200 inline-flex items-center gap-1"
+      >
+        ← Back to Progress
+      </Link>
+
+      {/* Header with mobile-friendly action buttons */}
+      <PageHeader
+        title="Progress Photos"
+        subtitle="Track your transformation over time"
+        actions={
+          <>
+            <Button onClick={() => setIsAddOpen(true)} size="sm">
+              Add Photo
             </Button>
-          )}
-          {photos.length >= 2 && (
-            <Button variant="secondary" onClick={() => setIsCompareOpen(true)}>
-              Compare
-            </Button>
-          )}
-          <Button onClick={() => setIsAddOpen(true)}>Add Photo</Button>
-        </div>
-      </div>
+            {photos.length >= 2 && (
+              <Button variant="secondary" size="sm" onClick={() => setIsCompareOpen(true)}>
+                Compare
+              </Button>
+            )}
+            {photos.length >= 3 && (
+              <Button variant="secondary" size="sm" onClick={() => setIsTimelapseOpen(true)}>
+                Timelapse
+              </Button>
+            )}
+          </>
+        }
+      />
 
       {/* Empty state */}
       {photos.length === 0 && (
