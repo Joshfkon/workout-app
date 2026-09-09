@@ -1,13 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
 
 /**
  * Fitbit OAuth Token Exchange
  *
  * Exchanges authorization code for access tokens.
  * This must be server-side as it requires the client secret.
+ * Requires authentication to prevent unauthorized token exchanges.
  */
 export async function POST(request: NextRequest) {
   try {
+    // Verify user is authenticated
+    const supabase = await createClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
     const { code } = await request.json();
 
     if (!code) {
@@ -74,6 +87,31 @@ export async function POST(request: NextRequest) {
     // Calculate expiration time
     const expiresAt = new Date();
     expiresAt.setSeconds(expiresAt.getSeconds() + tokens.expires_in);
+
+    // Persist tokens to wearable_connections for ownership verification
+    const { error: upsertError } = await supabase
+      .from('wearable_connections')
+      // @ts-ignore - Supabase type generation issue with wearable_connections table
+      .upsert({
+        user_id: user.id,
+        source: 'fitbit' as const,
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token,
+        token_expires_at: expiresAt.toISOString(),
+        is_connected: true,
+        permissions: tokens.scope ? tokens.scope.split(' ') : [],
+        last_sync_at: new Date().toISOString(),
+      }, {
+        onConflict: 'user_id,source',
+      });
+
+    if (upsertError) {
+      console.error('Failed to persist Fitbit tokens:', upsertError);
+      return NextResponse.json(
+        { error: 'Failed to save connection' },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({
       accessToken: tokens.access_token,

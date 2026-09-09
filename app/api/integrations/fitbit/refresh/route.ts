@@ -1,18 +1,47 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
 
 /**
  * Fitbit OAuth Token Refresh
  *
  * Refreshes expired access tokens using the refresh token.
+ * Requires authentication and verifies token ownership.
  */
 export async function POST(request: NextRequest) {
   try {
+    // Verify user is authenticated
+    const supabase = await createClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
     const { refreshToken } = await request.json();
 
     if (!refreshToken) {
       return NextResponse.json(
         { error: 'Refresh token required' },
         { status: 400 }
+      );
+    }
+
+    // Verify the refresh token belongs to this user
+    const { data: connection, error: connectionError } = await supabase
+      .from('wearable_connections')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('source', 'fitbit')
+      .eq('refresh_token', refreshToken)
+      .single();
+
+    if (connectionError || !connection) {
+      return NextResponse.json(
+        { error: 'Invalid refresh token or token does not belong to user' },
+        { status: 403 }
       );
     }
 
@@ -62,6 +91,28 @@ export async function POST(request: NextRequest) {
     // Calculate expiration time
     const expiresAt = new Date();
     expiresAt.setSeconds(expiresAt.getSeconds() + tokens.expires_in);
+
+    // Update the stored tokens atomically after successful refresh
+    // Use user_id + source to avoid type issues with connection.id
+    const { error: updateError } = await supabase
+      .from('wearable_connections')
+      // @ts-ignore - Supabase type generation issue with wearable_connections table
+      .update({
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token,
+        token_expires_at: expiresAt.toISOString(),
+        last_sync_at: new Date().toISOString(),
+      })
+      .eq('user_id', user.id)
+      .eq('source', 'fitbit');
+
+    if (updateError) {
+      console.error('Failed to update stored Fitbit tokens:', updateError);
+      return NextResponse.json(
+        { error: 'Failed to update connection' },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({
       accessToken: tokens.access_token,

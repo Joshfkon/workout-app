@@ -897,6 +897,54 @@ export interface Database {
         };
         Relationships: [];
       };
+      wearable_connections: {
+        Row: {
+          id: string;
+          user_id: string;
+          source: 'apple_healthkit' | 'google_fit' | 'fitbit' | 'samsung_health' | 'garmin' | 'manual';
+          is_connected: boolean;
+          last_sync_at: string | null;
+          permissions: string[];
+          device_name: string | null;
+          step_calibration_factor: number;
+          access_token: string | null;
+          refresh_token: string | null;
+          token_expires_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          source: 'apple_healthkit' | 'google_fit' | 'fitbit' | 'samsung_health' | 'garmin' | 'manual';
+          is_connected?: boolean;
+          last_sync_at?: string | null;
+          permissions?: string[];
+          device_name?: string | null;
+          step_calibration_factor?: number;
+          access_token?: string | null;
+          refresh_token?: string | null;
+          token_expires_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          source?: 'apple_healthkit' | 'google_fit' | 'fitbit' | 'samsung_health' | 'garmin' | 'manual';
+          is_connected?: boolean;
+          last_sync_at?: string | null;
+          permissions?: string[];
+          device_name?: string | null;
+          step_calibration_factor?: number;
+          access_token?: string | null;
+          refresh_token?: string | null;
+          token_expires_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: {
       [_ in never]: never;
