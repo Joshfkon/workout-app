@@ -276,30 +276,48 @@ export function WorkoutVolumeStrip({ rows, isLoading, onOpenDetail }: WorkoutVol
                   </>
                 )}
               </div>
-              <div className="mt-1.5 h-1.5 rounded-full bg-surface-800 overflow-hidden flex">
+              <div className="mt-1.5 relative h-1.5 rounded-full bg-surface-800 overflow-visible">
                 {!isLoading && (
                   <>
+                    {/* Optimal zone markers (MEV and MRV) - vertical ticks showing the target band */}
                     <div
-                      className={`h-full ${rowBarClass(row)}`}
-                      style={{ width: `${barFillPct(row.sets, row.band.mrv)}%` }}
-                      data-testid={`workout-volume-bar-${row.muscle}`}
+                      className="absolute -top-px -bottom-px w-px bg-surface-400"
+                      style={{ left: `${(row.band.mev / row.band.mrv) * 100}%` }}
+                      data-testid={`workout-volume-mev-marker-${row.muscle}`}
+                      aria-label={`MEV marker at ${row.band.mev} sets`}
+                      title={`MEV: ${row.band.mev} sets`}
                     />
-                    {row.plannedSets > 0 && (
+                    <div
+                      className="absolute -top-px -bottom-px w-px bg-surface-400"
+                      style={{ left: '100%' }}
+                      data-testid={`workout-volume-mrv-marker-${row.muscle}`}
+                      aria-label={`MRV marker at ${row.band.mrv} sets`}
+                      title={`MRV: ${row.band.mrv} sets`}
+                    />
+                    {/* Progress fills */}
+                    <div className="h-full rounded-full overflow-hidden flex">
                       <div
-                        className={`h-full ${plannedSegmentClass(row)}`}
-                        style={{
-                          // Today's still-planned contribution: the slice of the
-                          // MRV scale between week-to-date and projected.
-                          width: `${
-                            barFillPct(row.projectedSets, row.band.mrv) -
-                            barFillPct(row.sets, row.band.mrv)
-                          }%`,
-                          ...PLANNED_HATCH_STYLE,
-                        }}
-                        data-testid={`workout-volume-planned-bar-${row.muscle}`}
-                        aria-hidden
+                        className={`h-full ${rowBarClass(row)}`}
+                        style={{ width: `${barFillPct(row.sets, row.band.mrv)}%` }}
+                        data-testid={`workout-volume-bar-${row.muscle}`}
                       />
-                    )}
+                      {row.plannedSets > 0 && (
+                        <div
+                          className={`h-full ${plannedSegmentClass(row)}`}
+                          style={{
+                            // Today's still-planned contribution: the slice of the
+                            // MRV scale between week-to-date and projected.
+                            width: `${
+                              barFillPct(row.projectedSets, row.band.mrv) -
+                              barFillPct(row.sets, row.band.mrv)
+                            }%`,
+                            ...PLANNED_HATCH_STYLE,
+                          }}
+                          data-testid={`workout-volume-planned-bar-${row.muscle}`}
+                          aria-hidden
+                        />
+                      )}
+                    </div>
                   </>
                 )}
               </div>

@@ -90,6 +90,54 @@ describe('WorkoutVolumeStrip', () => {
     expect(screen.getByTestId('workout-volume-bar-quads')).toHaveStyle({ width: '100%' });
   });
 
+  it('renders MEV and MRV zone markers on each bar', () => {
+    render(
+      <WorkoutVolumeStrip
+        rows={[
+          row('chest', { sets: 10, band: { mev: 10, mrv: 25 } }),
+          row('back', { sets: 5, band: { mev: 8, mrv: 20 } }),
+        ]}
+        isLoading={false}
+        onOpenDetail={noop}
+      />
+    );
+
+    // MEV marker at (mev / mrv) * 100%
+    const chestMevMarker = screen.getByTestId('workout-volume-mev-marker-chest');
+    expect(chestMevMarker).toBeInTheDocument();
+    expect(chestMevMarker).toHaveStyle({ left: '40%' }); // 10/25 = 40%
+    expect(chestMevMarker).toHaveAttribute('title', 'MEV: 10 sets');
+
+    const backMevMarker = screen.getByTestId('workout-volume-mev-marker-back');
+    expect(backMevMarker).toBeInTheDocument();
+    expect(backMevMarker).toHaveStyle({ left: '40%' }); // 8/20 = 40%
+
+    // MRV marker at 100%
+    const chestMrvMarker = screen.getByTestId('workout-volume-mrv-marker-chest');
+    expect(chestMrvMarker).toBeInTheDocument();
+    expect(chestMrvMarker).toHaveStyle({ left: '100%' });
+    expect(chestMrvMarker).toHaveAttribute('title', 'MRV: 25 sets');
+
+    const backMrvMarker = screen.getByTestId('workout-volume-mrv-marker-back');
+    expect(backMrvMarker).toBeInTheDocument();
+    expect(backMrvMarker).toHaveStyle({ left: '100%' });
+  });
+
+  it('shows markers even when only projected (hatched) fill is present', () => {
+    render(
+      <WorkoutVolumeStrip
+        rows={[row('biceps', { sets: 0, plannedSets: 10, projectedSets: 10, band: { mev: 10, mrv: 26 } })]}
+        isLoading={false}
+        onOpenDetail={noop}
+      />
+    );
+
+    // Markers should be present even with zero completed sets
+    expect(screen.getByTestId('workout-volume-mev-marker-biceps')).toBeInTheDocument();
+    expect(screen.getByTestId('workout-volume-mrv-marker-biceps')).toBeInTheDocument();
+    expect(screen.getByTestId('workout-volume-planned-bar-biceps')).toBeInTheDocument();
+  });
+
   it('collapses and re-expands the card row via the header toggle', async () => {
     const user = userEvent.setup();
     render(<WorkoutVolumeStrip rows={[row('chest')]} isLoading={false} onOpenDetail={noop} />);
