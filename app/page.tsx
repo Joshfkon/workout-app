@@ -80,7 +80,7 @@ export default async function Home({
         }}
       />
 
-      <div className="relative z-10 flex flex-col items-center justify-center min-h-screen px-4 pt-16">
+      <div className="relative z-10 flex flex-col items-center justify-center min-h-screen px-4 pt-20 md:pt-16">
         {/* Hero content */}
         <div className="text-center max-w-2xl animate-fade-in">
           <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold text-surface-100 mb-6 tracking-tight">
