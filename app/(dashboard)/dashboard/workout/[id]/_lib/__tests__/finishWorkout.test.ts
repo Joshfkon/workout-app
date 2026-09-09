@@ -242,6 +242,102 @@ describe('submitFinishOptimistic', () => {
     expect(finish.row).not.toHaveProperty('duration_seconds');
   });
 
+  it('uses the last set timestamp as end time when the gap is >= 20 minutes', async () => {
+    const { client } = makeGatedSupabase();
+    const lastSetTime = new Date('2026-07-07T10:00:00Z');
+    const now = new Date('2026-07-07T10:25:00Z'); // 25 minutes later
+    
+    // Use setClock to control time
+    const { setClock, resetClock } = await import('@/lib/clock');
+    setClock({
+      now: () => now,
+      today: () => '2026-07-07',
+    });
+
+    try {
+      await submitFinishOptimistic(
+        { supabase: client, sessionId: 's1', session: makeSession(), navigate: jest.fn() },
+        { ...SUMMARY_DATA, lastSetTimestamp: lastSetTime.toISOString() }
+      );
+
+      const finish = (await listOutbox()).find((e) => e.id === sessionFinishEntryId('s1'))!;
+      expect(finish.row.completed_at).toBe(lastSetTime.toISOString());
+    } finally {
+      resetClock();
+    }
+  });
+
+  it('uses current time as end time when the gap is < 20 minutes', async () => {
+    const { client } = makeGatedSupabase();
+    const lastSetTime = new Date('2026-07-07T10:00:00Z');
+    const now = new Date('2026-07-07T10:15:00Z'); // 15 minutes later
+    
+    const { setClock, resetClock } = await import('@/lib/clock');
+    setClock({
+      now: () => now,
+      today: () => '2026-07-07',
+    });
+
+    try {
+      await submitFinishOptimistic(
+        { supabase: client, sessionId: 's1', session: makeSession(), navigate: jest.fn() },
+        { ...SUMMARY_DATA, lastSetTimestamp: lastSetTime.toISOString() }
+      );
+
+      const finish = (await listOutbox()).find((e) => e.id === sessionFinishEntryId('s1'))!;
+      expect(finish.row.completed_at).toBe(now.toISOString());
+    } finally {
+      resetClock();
+    }
+  });
+
+  it('uses current time as end time when no lastSetTimestamp is provided', async () => {
+    const { client } = makeGatedSupabase();
+    const now = new Date('2026-07-07T10:25:00Z');
+    
+    const { setClock, resetClock } = await import('@/lib/clock');
+    setClock({
+      now: () => now,
+      today: () => '2026-07-07',
+    });
+
+    try {
+      await submitFinishOptimistic(
+        { supabase: client, sessionId: 's1', session: makeSession(), navigate: jest.fn() },
+        SUMMARY_DATA // No lastSetTimestamp
+      );
+
+      const finish = (await listOutbox()).find((e) => e.id === sessionFinishEntryId('s1'))!;
+      expect(finish.row.completed_at).toBe(now.toISOString());
+    } finally {
+      resetClock();
+    }
+  });
+
+  it('uses the exact threshold (20 minutes) to trigger abandoned session logic', async () => {
+    const { client } = makeGatedSupabase();
+    const lastSetTime = new Date('2026-07-07T10:00:00Z');
+    const now = new Date('2026-07-07T10:20:00Z'); // Exactly 20 minutes later
+    
+    const { setClock, resetClock } = await import('@/lib/clock');
+    setClock({
+      now: () => now,
+      today: () => '2026-07-07',
+    });
+
+    try {
+      await submitFinishOptimistic(
+        { supabase: client, sessionId: 's1', session: makeSession(), navigate: jest.fn() },
+        { ...SUMMARY_DATA, lastSetTimestamp: lastSetTime.toISOString() }
+      );
+
+      const finish = (await listOutbox()).find((e) => e.id === sessionFinishEntryId('s1'))!;
+      expect(finish.row.completed_at).toBe(lastSetTime.toISOString());
+    } finally {
+      resetClock();
+    }
+  });
+
   it('responds in under 100ms even when the network never answers', async () => {
     // Requests are gated and never released — a fully dead connection.
     const { client } = makeGatedSupabase();
