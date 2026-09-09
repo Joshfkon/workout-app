@@ -23,8 +23,8 @@ import {
   type FinishSummaryData,
 } from '../finishWorkout';
 import { drainPostFinishWork } from '../finishWorkout';
-import { hasQueuedEntry } from '@/lib/offline/setOutbox';
 import {
+  hasQueuedEntry,
   __setDriverForTests,
   createMemoryStore,
   enqueueRowUpsert,
@@ -42,6 +42,7 @@ import {
   type PostFinishWork,
 } from '@/lib/offline/postFinishQueue';
 import type { WorkoutSession } from '@/types/schema';
+import { setClock, now as clockNow } from '@/lib/clock';
 
 jest.mock('@/lib/actions/workout-calories', () => ({
   // The real action reports { success } — the settlement checks it, so the
@@ -333,6 +334,37 @@ describe('submitFinishOptimistic', () => {
 
       const finish = (await listOutbox()).find((e) => e.id === sessionFinishEntryId('s1'))!;
       expect(finish.row.completed_at).toBe(lastSetTime.toISOString());
+    } finally {
+      resetClock();
+    }
+  });
+
+  it('idle prompt → finish uses last set timestamp when gap >= 20min', async () => {
+    // Simulate finishing from the idle prompt after 25 minutes idle.
+    // The last set was 25 minutes ago, so completed_at should be backdated
+    // to that set's time (not "now").
+    const { client } = makeGatedSupabase();
+    const lastSetTime = new Date('2026-07-07T10:00:00Z');
+    const now = new Date('2026-07-07T10:25:00Z'); // 25 minutes later
+    
+    const { setClock, resetClock } = await import('@/lib/clock');
+    setClock({
+      now: () => now,
+      today: () => '2026-07-07',
+    });
+
+    try {
+      await submitFinishOptimistic(
+        { supabase: client, sessionId: 's1', session: makeSession(), navigate: jest.fn() },
+        { ...SUMMARY_DATA, lastSetTimestamp: lastSetTime.toISOString() }
+      );
+
+      // The completion patch should have backdated completed_at to the last set
+      const finish = (await listOutbox()).find((e) => e.id === sessionFinishEntryId('s1'))!;
+      expect(finish.row.completed_at).toBe(lastSetTime.toISOString());
+      
+      // It should NOT be "now"
+      expect(finish.row.completed_at).not.toBe(now.toISOString());
     } finally {
       resetClock();
     }
