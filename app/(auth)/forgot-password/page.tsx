@@ -19,11 +19,6 @@ export default function ForgotPasswordPage() {
     try {
       const supabase = createClient();
       
-      // Get the current origin for the redirect URL
-      // Use auth/callback which will handle the code exchange and redirect to reset-password
-      // Prefer environment variable for production consistency
-      // IMPORTANT: This URL must be whitelisted in Supabase Dashboard > Authentication > URL Configuration
-      // Add it to "Redirect URLs" as: https://www.hypertrack.app/auth/callback
       const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 
         (typeof window !== 'undefined' ? window.location.origin : 'https://www.hypertrack.app');
       const redirectUrl = `${baseUrl}/auth/callback?next=/reset-password`;
