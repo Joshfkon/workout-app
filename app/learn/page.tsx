@@ -102,8 +102,8 @@ const scienceConcepts: Array<{
     source: 'Peer-Reviewed Research',
     citation: 'Morton, R.W., et al. (2018). A systematic review, meta-analysis and meta-regression of the effect of protein supplementation on resistance training-induced gains in muscle mass and strength in healthy adults. British Journal of Sports Medicine, 52(6), 376-384.',
     doi: 'https://doi.org/10.1136/bjsports-2017-097608',
-    explanation: 'Research suggests that muscle protein synthesis is optimized at approximately 1.6-2.2g/kg of protein daily for trained individuals. Higher protein intake becomes particularly important during caloric deficits to help preserve muscle mass.',
-    application: 'Our macro calculator uses 1g/lb (2.2g/kg) as a starting point, which aligns with research recommendations for lifters. When on GLP-1 medications, we increase to 1.2g/lb to help protect muscle during aggressive cuts.',
+    explanation: 'A meta-analysis of resistance training studies found that gains in fat-free mass and strength plateaued beyond approximately 1.6 g/kg/day total protein intake, with confidence intervals extending to ~2.2 g/kg/day.',
+    application: 'Our macro calculator uses 1g/lb (2.2g/kg) as a starting point, which is consistent with this research. Higher intakes may be used when supported by individual goals and preferences.',
   },
   {
     title: 'Muscle Fiber Type & Rep Ranges',
@@ -134,7 +134,7 @@ const scienceConcepts: Array<{
     source: 'Training Science',
     citation: 'Grgic, J., et al. (2017). Effects of linear and daily undulating periodized resistance training programs on measures of muscle hypertrophy: a systematic review and meta-analysis. PeerJ, 5, e3695.',
     doi: 'https://doi.org/10.7717/peerj.3695',
-    explanation: 'Periodization involves systematically varying training variables over time. Research comparing different models (linear, daily undulating) suggests both can be effective when volume is equated, with potential advantages for undulating approaches in trained individuals.',
+    explanation: 'Periodization involves systematically varying training variables over time. Research comparing linear and daily undulating models found both produce similar hypertrophy outcomes when training volume is equated.',
     application: 'Our mesocycle builder incorporates periodization principles to help vary intensity and volume across training phases for sustainable progress.',
   },
   {
