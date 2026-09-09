@@ -2921,10 +2921,14 @@ export default function WorkoutPage() {
       // ignoreDuplicates upsert makes it a no-op instead of a second set.
       const setId = crypto.randomUUID();
 
-      // OPTIMIZATION: Don't block on pending deletes. resolveSetNumber's floor
-      // at the local number protects against stale DB reads, and the typical
-      // case (no pending delete) paid 100% of the await cost for 0% of the
-      // cases. Fire-and-forget so delete errors are still reported.
+      // OPTIMIZATION: Don't block on pending deletes. The floor at
+      // localNextSetNumber (in resolveSetNumber, logSet.ts:119) guarantees we
+      // never reuse a number held by a queued set, even if the DB max is
+      // stale. A delete renumber that lands AFTER our probe will move numbers
+      // below ours; a probe that reads BEFORE the renumber finishes gets
+      // floored anyway. The only observable effect is a temporary gap
+      // (set 1, set 3) that compaction fixes on reload. Fire-and-forget so
+      // delete errors are still reported by handleDeleteSet.
       if (pendingSetRenumberRef.current) {
         pendingSetRenumberRef.current.catch(() => { /* reported by handleDeleteSet */ });
       }
@@ -3022,8 +3026,10 @@ export default function WorkoutPage() {
 
       // OPTIMIZATION: Defer joint pain event insert to avoid blocking the
       // critical path. It's already fire-and-forget (void), just move it off
-      // the synchronous execution stack.
+      // the synchronous execution stack. Capture the discomfort value to
+      // satisfy TypeScript's null checks in the async closure.
       if (data.feedback?.discomfort && session) {
+        const capturedDiscomfort = data.feedback.discomfort;
         queueMicrotask(() => {
           insertJointPainEvent(
             supabase,
@@ -3033,7 +3039,7 @@ export default function WorkoutPage() {
                 sessionId: session.id,
                 exerciseId: currentBlock.exerciseId,
                 setLogId: setRowPersisted ? setId : null,
-                discomfort: data.feedback.discomfort,
+                discomfort: capturedDiscomfort,
               }),
               readinessSnapshot: buildReadinessSnapshotNow(),
             }
