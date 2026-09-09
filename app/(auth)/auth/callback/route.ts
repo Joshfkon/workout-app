@@ -83,8 +83,8 @@ export async function GET(request: Request) {
         }
       }
 
-      // User has completed onboarding, go to specified next page or the log launcher
-      return NextResponse.redirect(`${origin}${next || '/dashboard/log'}`);
+      // User has completed onboarding, go to specified next page or the train page
+      return NextResponse.redirect(`${origin}${next || '/dashboard/train'}`);
     }
   }
 

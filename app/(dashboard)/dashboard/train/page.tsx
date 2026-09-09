@@ -247,9 +247,9 @@ function deriveWorkoutTitle(blocks: NonNullable<RecentSessionRow['exercise_block
 }
 
 const GRADIENT_CTA_CLASS =
-  'py-3 rounded-xl bg-gradient-to-r from-primary-500 to-accent-500 text-white text-[15px] font-semibold hover:opacity-90 transition-opacity disabled:opacity-60';
+  'py-3 rounded-xl bg-gradient-to-r from-primary-500 to-accent-500 text-white text-[15px] font-semibold hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed';
 const OUTLINE_CTA_CLASS =
-  'py-3 rounded-xl border border-surface-700 text-surface-100 text-[15px] font-semibold hover:bg-surface-800/70 transition-colors disabled:opacity-60';
+  'py-3 rounded-xl border border-surface-700 text-surface-100 text-[15px] font-semibold hover:bg-surface-800/70 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed';
 
 const TOOL_PILLS = [
   { name: 'History', href: '/dashboard/history', icon: IconHistory },
