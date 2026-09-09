@@ -346,6 +346,10 @@ function AnalyticsPageContent() {
     const value = units === 'lb' ? kgToLbs(kg) : kg;
     return roundToIncrement(value, 2.5);
   };
+  const displayWeightString = (kg: number) => {
+    const value = displayWeight(kg);
+    return units === 'lb' ? `${value.toFixed(1)} lbs` : `${value.toFixed(1)} kg`;
+  };
   const weightUnit = units === 'lb' ? 'lbs' : 'kg';
 
   // Load photo URLs
@@ -1660,7 +1664,7 @@ function AnalyticsPageContent() {
             photoUrls={photoUrls}
             units={units}
             weightUnit={weightUnit}
-            displayWeight={displayWeight}
+            displayWeight={displayWeightString}
             onCompare={() => setIsCompareOpen(true)}
             onTimelapse={() => setIsTimelapseOpen(true)}
             onAddPhoto={() => setIsAddPhotoOpen(true)}
