@@ -18,7 +18,8 @@ interface PRCelebrationProps {
   onDone: () => void;
 }
 
-const AUTO_DISMISS_MS = 2000;
+const AUTO_DISMISS_MS = 3000;
+const INTERACTION_DELAY_MS = 200; // Brief delay before interaction-based dismiss
 const CONFETTI_COLORS = ['#facc15', '#38bdf8', '#4ade80', '#f472b6', '#fb923c', '#a78bfa'];
 const CONFETTI_COUNT = 28;
 
@@ -56,8 +57,41 @@ export function PRCelebration({ celebration, onDone }: PRCelebrationProps) {
 
   useEffect(() => {
     if (!celebration) return;
-    const t = setTimeout(onDone, AUTO_DISMISS_MS);
-    return () => clearTimeout(t);
+
+    // Auto-dismiss after timeout
+    const autoTimeout = setTimeout(onDone, AUTO_DISMISS_MS);
+
+    // Dismiss on any browser interaction after a brief delay
+    // (delay prevents dismissing from the same interaction that triggered the PR)
+    let interactionTimeout: ReturnType<typeof setTimeout>;
+    let listenersActive = false;
+
+    const handleInteraction = () => {
+      if (listenersActive) {
+        onDone();
+      }
+    };
+
+    interactionTimeout = setTimeout(() => {
+      listenersActive = true;
+      // Listen for any user interaction
+      window.addEventListener('click', handleInteraction, { capture: true });
+      window.addEventListener('keydown', handleInteraction, { capture: true });
+      window.addEventListener('scroll', handleInteraction, { capture: true, passive: true });
+      window.addEventListener('touchstart', handleInteraction, { capture: true, passive: true });
+    }, INTERACTION_DELAY_MS);
+
+    return () => {
+      clearTimeout(autoTimeout);
+      clearTimeout(interactionTimeout);
+      // Clean up event listeners
+      window.removeEventListener('click', handleInteraction, { capture: true });
+      window.removeEventListener('keydown', handleInteraction, { capture: true });
+      // @ts-expect-error - passive option exists but TS doesn't recognize it in removeEventListener
+      window.removeEventListener('scroll', handleInteraction, { capture: true, passive: true });
+      // @ts-expect-error - passive option exists but TS doesn't recognize it in removeEventListener
+      window.removeEventListener('touchstart', handleInteraction, { capture: true, passive: true });
+    };
   }, [celebration, onDone]);
 
   // Regenerate the burst per celebration id (not per render).
