@@ -5,7 +5,7 @@ import { useQuery, useQueryClient, useIsRestoring } from '@tanstack/react-query'
 import { useSearchParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import { Card, Input, Badge, Button, LoadingAnimation, SkeletonExercise } from '@/components/ui';
+import { Card, Input, Badge, Button, LoadingAnimation, SkeletonExercise, PageHeader, EmptyState } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 
@@ -730,14 +730,11 @@ export default function ExercisesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-surface-100">Exercise Library</h1>
-          <p className="text-surface-400 mt-1">
-            {isCatalogLoading ? 'Loading...' : `${exercises.length} exercises available`}
-          </p>
-        </div>
-        <div className="flex gap-3">
+      <PageHeader
+        title="Exercise Library"
+        subtitle={isCatalogLoading ? 'Loading...' : `${exercises.length} exercises available`}
+        actions={
+          <div className="flex gap-3">
           {/* Dev-only bulk AI enrichment — hidden from end users (set
               NEXT_PUBLIC_DEV_TOOLS=true locally to expose it) */}
           {process.env.NEXT_PUBLIC_DEV_TOOLS === 'true' && (
@@ -796,7 +793,8 @@ export default function ExercisesPage() {
             </Button>
           </Link>
         </div>
-      </div>
+        }
+      />
 
       {/* Batch completion progress */}
       {batchProgress && (
@@ -1458,12 +1456,11 @@ export default function ExercisesPage() {
       )}
 
       {!isCatalogLoading && filteredExercises.length === 0 && (
-        <Card className="text-center py-12">
-          <p className="text-surface-400">No exercises found</p>
-          <p className="text-sm text-surface-500 mt-1">
-            Try adjusting your search or filters
-          </p>
-        </Card>
+        <EmptyState
+          icon="🔍"
+          title="No exercises found"
+          description="Try adjusting your search or filters"
+        />
       )}
 
       {/* Edit Exercise Modal */}

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, Badge } from '@/components/ui';
 import { TIER_FEATURES } from '@/lib/stripe';
+import { PublicAppShell } from '@/components/marketing/PublicAppShell';
 
 export default function PublicPricingPage() {
   const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'yearly'>('yearly');
@@ -15,18 +16,8 @@ export default function PublicPricingPage() {
   const eliteYearly = TIER_FEATURES.elite.yearlyPrice;
 
   return (
-    <div className="min-h-screen bg-surface-950">
+    <PublicAppShell>
       <div className="max-w-5xl mx-auto px-4 py-16">
-        <Link
-          href="/"
-          className="inline-flex items-center gap-2 text-surface-400 hover:text-surface-200 mb-10 transition-colors"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-          Back to Home
-        </Link>
-
         <div className="space-y-8">
           {/* Header */}
           <div className="text-center">
@@ -214,7 +205,7 @@ export default function PublicPricingPage() {
           </div>
         </div>
       </div>
-    </div>
+    </PublicAppShell>
   );
 }
 

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient, useIsRestoring } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Card, CardHeader, CardTitle, CardContent, Button, Input, Select, Slider, Badge, Toggle, LoadingAnimation, Modal } from '@/components/ui';
+import { Card, CardHeader, CardTitle, CardContent, Button, Input, Select, Slider, Badge, Toggle, LoadingAnimation, Modal, PageHeader } from '@/components/ui';
 import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 
 const SETTINGS_KEY = ['settings', 'user'] as const;
@@ -449,10 +449,10 @@ export default function SettingsPage() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-surface-100">Settings</h1>
-        <p className="text-surface-400 mt-1">Customize your training preferences</p>
-      </div>
+      <PageHeader
+        title="Settings"
+        subtitle="Customize your training preferences"
+      />
 
       {/* Tab Navigation */}
       <div className="flex gap-1 p-1 bg-surface-800/50 rounded-lg overflow-x-auto">

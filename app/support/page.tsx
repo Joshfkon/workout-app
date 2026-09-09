@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import type { Metadata } from 'next';
+import { PublicAppShell } from '@/components/marketing/PublicAppShell';
 
 export const metadata: Metadata = {
   title: 'Support',
@@ -10,18 +11,8 @@ const SUPPORT_EMAIL = 'support@hypertrack.app';
 
 export default function SupportPage() {
   return (
-    <div className="min-h-screen bg-surface-950">
+    <PublicAppShell>
       <div className="max-w-3xl mx-auto px-4 py-16">
-        <Link
-          href="/"
-          className="inline-flex items-center gap-2 text-surface-400 hover:text-surface-200 mb-10 transition-colors"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-          Back to Home
-        </Link>
-
         <h1 className="text-4xl font-black text-surface-100 mb-2">Support</h1>
         <p className="text-surface-400 mb-10">We&apos;re here to help.</p>
 
@@ -96,6 +87,6 @@ export default function SupportPage() {
           </section>
         </div>
       </div>
-    </div>
+    </PublicAppShell>
   );
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { PublicAppShell } from '@/components/marketing/PublicAppShell';
 
 const features: Array<{
   icon: string;
@@ -167,7 +168,7 @@ const comparisonTable = [
 
 export default function LearnPage() {
   return (
-    <div className="min-h-screen bg-surface-950">
+    <PublicAppShell>
       {/* Hero */}
       <div className="relative overflow-hidden">
         <div className="absolute inset-0">
@@ -176,13 +177,6 @@ export default function LearnPage() {
         </div>
         
         <div className="relative max-w-6xl mx-auto px-4 py-20">
-          <Link href="/" className="inline-flex items-center gap-2 text-surface-400 hover:text-surface-200 mb-8 transition-colors">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-            Back to Home
-          </Link>
-          
           <h1 className="text-4xl md:text-6xl font-black text-surface-100 mb-6">
             The Science Behind{' '}
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary-400 to-purple-400">
@@ -215,21 +209,33 @@ export default function LearnPage() {
           <h2 className="text-3xl font-bold text-surface-100 mb-6">The Problem with Most Workout Apps</h2>
           <div className="grid md:grid-cols-3 gap-6">
             <div className="p-6 bg-surface-900/50 rounded-xl border border-surface-800">
-              <div className="text-4xl mb-4">📝</div>
+              <div className="w-12 h-12 mb-4 rounded-lg bg-surface-800 flex items-center justify-center">
+                <svg className="w-6 h-6 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </div>
               <h3 className="font-semibold text-surface-200 mb-2">They&apos;re Just Digital Notepads</h3>
               <p className="text-surface-400 text-sm">
                 Log your sets, see a chart, repeat. No intelligence, no optimization, no understanding of WHY you&apos;re doing what you&apos;re doing.
               </p>
             </div>
             <div className="p-6 bg-surface-900/50 rounded-xl border border-surface-800">
-              <div className="text-4xl mb-4">🎲</div>
+              <div className="w-12 h-12 mb-4 rounded-lg bg-surface-800 flex items-center justify-center">
+                <svg className="w-6 h-6 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                </svg>
+              </div>
               <h3 className="font-semibold text-surface-200 mb-2">Random Workout Generators</h3>
               <p className="text-surface-400 text-sm">
                 Some apps generate workouts, but without understanding periodization, fatigue accumulation, or your specific needs. It&apos;s fitness roulette.
               </p>
             </div>
             <div className="p-6 bg-surface-900/50 rounded-xl border border-surface-800">
-              <div className="text-4xl mb-4">🔄</div>
+              <div className="w-12 h-12 mb-4 rounded-lg bg-surface-800 flex items-center justify-center">
+                <svg className="w-6 h-6 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </div>
               <h3 className="font-semibold text-surface-200 mb-2">One-Size-Fits-All Volume</h3>
               <p className="text-surface-400 text-sm">
                 &quot;Do 3x10 for everything&quot; ignores that muscles respond differently, people recover differently, and goals require different approaches.
@@ -499,7 +505,7 @@ export default function LearnPage() {
           HyperTrack © {new Date().getFullYear()} • Built with ❤️ for the lifting community
         </p>
       </div>
-    </div>
+    </PublicAppShell>
   );
 }
 

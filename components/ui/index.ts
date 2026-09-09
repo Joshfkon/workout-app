@@ -37,3 +37,6 @@ export { ErrorRetry } from './ErrorRetry';
 export { SwipeableRow } from './SwipeableRow';
 export { InfoTooltip, ExplainedTerm, type InfoTooltipProps } from './InfoTooltip';
 export { FirstTimeHint, InlineHint, type FirstTimeHintProps } from './FirstTimeHint';
+export { PageHeader, type PageHeaderProps } from './PageHeader';
+export { EmptyState, type EmptyStateProps } from './EmptyState';
+export { SectionLabel, type SectionLabelProps } from './SectionLabel';
