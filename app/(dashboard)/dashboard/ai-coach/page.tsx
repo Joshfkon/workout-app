@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Button, Card, CardContent } from '@/components/ui';
+import { Button, Card, CardContent, PageHeader } from '@/components/ui';
 import { sendCoachingMessage, getCoachingConversations, getCoachingContext } from '@/lib/actions/coaching';
 import type { CoachingMessage, CoachingContext } from '@/types/coaching';
 import { useSubscription } from '@/hooks/useSubscription';
@@ -100,12 +100,10 @@ export default function AICoachPage() {
   if (!hasAccess) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold text-surface-100 mb-2">AI Coach</h1>
-          <p className="text-surface-400">
-            Get personalized training advice based on your actual data
-          </p>
-        </div>
+        <PageHeader
+          title="AI Coach"
+          subtitle="Get personalized training advice based on your actual data"
+        />
 
         <UpgradePrompt
           feature="ai-coaching"
@@ -117,35 +115,32 @@ export default function AICoachPage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-6 space-y-4">
+    <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-surface-100 mb-2">AI Coach</h1>
-          <p className="text-surface-400">
-            Ask me anything about your training, nutrition, or progress
-          </p>
-        </div>
-
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowContext(!showContext)}
-          >
-            {showContext ? 'Hide' : 'Show'} Context
-          </Button>
-          {messages.length > 0 && (
-            <Button variant="outline" size="sm" onClick={startNewConversation}>
-              New Chat
+      <PageHeader
+        title="AI Coach"
+        subtitle="Ask me anything about your training, nutrition, or progress"
+        actions={
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowContext(!showContext)}
+            >
+              {showContext ? 'Hide' : 'Show'} Context
             </Button>
-          )}
-        </div>
-      </div>
+            {messages.length > 0 && (
+              <Button variant="outline" size="sm" onClick={startNewConversation}>
+                New Chat
+              </Button>
+            )}
+          </>
+        }
+      />
 
       {/* Context Panel */}
       {showContext && context && (
-        <Card className="bg-surface-800 border-surface-700">
+        <Card>
           <CardContent className="p-4">
             <h3 className="text-sm font-semibold text-surface-100 mb-2">Your Data Context</h3>
             <div className="text-xs text-surface-300 space-y-1">
@@ -179,9 +174,9 @@ export default function AICoachPage() {
       )}
 
       {/* Messages Container */}
-      <div className="space-y-4 min-h-[400px]">
+      <div className="min-h-[500px] max-h-[calc(100vh-28rem)] overflow-y-auto space-y-4">
         {messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center text-center space-y-4 py-12">
+          <div className="flex flex-col items-center justify-center text-center space-y-4 py-16">
             <div className="w-16 h-16 rounded-full bg-primary-500/10 flex items-center justify-center">
               <svg
                 className="w-8 h-8 text-primary-500"
@@ -208,7 +203,7 @@ export default function AICoachPage() {
               </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 max-w-2xl mt-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-2xl mt-8">
               <button
                 onClick={() => setInput("How's my progress looking?")}
                 className="p-4 bg-surface-800 hover:bg-surface-700 border border-surface-700 rounded-lg text-left transition-colors"
@@ -306,30 +301,32 @@ export default function AICoachPage() {
       </div>
 
       {/* Input Area */}
-      <div className="sticky bottom-0 bg-surface-800 border border-surface-700 rounded-lg p-4">
-        <div className="flex gap-2">
-          <textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder="Ask me anything about your training..."
-            className="flex-1 bg-surface-900 text-surface-100 border border-surface-700 rounded-lg p-3 resize-none focus:outline-none focus:ring-2 focus:ring-primary-500"
-            rows={3}
-            disabled={isLoading}
-          />
-          <Button
-            onClick={handleSendMessage}
-            disabled={!input.trim() || isLoading}
-            className="self-end"
-          >
-            Send
-          </Button>
-        </div>
-        {/* Keyboard hint is desktop-only copy (P2-8) */}
-        <p className="hidden sm:block text-xs text-surface-400 mt-2">
-          Press Enter to send, Shift+Enter for new line
-        </p>
-      </div>
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex gap-2">
+            <textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyPress={handleKeyPress}
+              placeholder="Ask me anything about your training..."
+              className="flex-1 bg-surface-900 text-surface-100 border border-surface-700 rounded-lg p-3 resize-none focus:outline-none focus:ring-2 focus:ring-primary-500"
+              rows={3}
+              disabled={isLoading}
+            />
+            <Button
+              onClick={handleSendMessage}
+              disabled={!input.trim() || isLoading}
+              className="self-end"
+            >
+              Send
+            </Button>
+          </div>
+          {/* Keyboard hint is desktop-only copy (P2-8) */}
+          <p className="hidden sm:block text-xs text-surface-400 mt-2">
+            Press Enter to send, Shift+Enter for new line
+          </p>
+        </CardContent>
+      </Card>
     </div>
   );
 }
