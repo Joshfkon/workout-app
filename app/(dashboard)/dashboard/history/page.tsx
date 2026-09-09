@@ -579,6 +579,7 @@ function HistoryPageContent() {
     
     // P2-3: Re-insert the set with ALL original fields (full restoration)
     // P1-1: Use actual set_type from deleted set (or fallback to 'normal')
+    // Note: DB rejects 'straight' — only 'normal'|'warmup'|'dropset'|'myorep'|'rest_pause' are valid.
     // Raw .reps access: database field assignment, works for both modalities.
     const { data: newSet, error } = await supabase
       .from('set_logs')
