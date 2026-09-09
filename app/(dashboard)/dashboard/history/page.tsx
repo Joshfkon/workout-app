@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import { useQuery, useQueryClient, useIsRestoring } from '@tanstack/react-query';
-import { Card, Badge, Button, FullPageLoading, LoadingAnimation, ConfirmModal } from '@/components/ui';
+import { Card, Badge, Button, FullPageLoading, LoadingAnimation, ConfirmModal, ToastContainer, useToasts } from '@/components/ui';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { createUntypedClient } from '@/lib/supabase/client';
@@ -18,6 +18,7 @@ const HISTORY_FIRST_PAGE_KEY = ['history', 'sessions', 'page0', 'v2'] as const;
 import { formatWeight, convertWeight, convertWeightForDisplay, inputWeightToKg, getLocalDateString, muscleDisplayName } from '@/lib/utils';
 import { e1rmValueFromRpe } from '@/services/shared/e1rm';
 import { computeTrend } from '@/services/shared/trend';
+import { rpeToRir, rirToRpe, type RepsInTank } from '@/types/schema';
 import { createRepeatSession } from '@/lib/training/repeatWorkout';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import HistoryCalendar from './_components/HistoryCalendar';
@@ -35,6 +36,9 @@ interface SetDetail {
   weight_kg: number;
   reps: number;
   rpe: number | null;
+  feedback?: {
+    repsInTank?: RepsInTank;
+  };
 }
 
 interface ExerciseDetail {
@@ -83,6 +87,7 @@ function transformSessions(data: any[]): WorkoutHistory[] {
             weight_kg: set.weight_kg,
             reps: set.reps,
             rpe: set.rpe,
+            feedback: set.feedback,
           })),
         };
       });
@@ -288,12 +293,19 @@ function HistoryPageContent() {
   const [editingSetId, setEditingSetId] = useState<string | null>(null);
   const [editWeight, setEditWeight] = useState('');
   const [editReps, setEditReps] = useState('');
+  const [editRir, setEditRir] = useState<RepsInTank | ''>('');
   const [savingSetEdit, setSavingSetEdit] = useState(false);
+
+  // Toast management for undo functionality
+  const { toasts, addToast, dismissToast } = useToasts();
 
   const startSetEdit = (set: SetDetail) => {
     setEditingSetId(set.id);
     setEditWeight(String(convertWeightForDisplay(set.weight_kg, unit)));
     setEditReps(String(set.reps));
+    // Derive RIR from RPE or use feedback value if available
+    const rir = set.feedback?.repsInTank ?? (set.rpe ? rpeToRir(set.rpe) : 2);
+    setEditRir(rir);
   };
 
   const saveSetEdit = async (workoutId: string, exerciseBlockId: string, setId: string) => {
@@ -302,14 +314,21 @@ function HistoryPageContent() {
     // 600 matches the DB CHECK on set_logs.reps (duration sets store seconds,
     // capped at 600) — the old 999 ceiling allowed values Postgres rejects.
     if (isNaN(weightNum) || weightNum < 0 || isNaN(repsNum) || repsNum < 1 || repsNum > 600) return;
+    if (editRir === '') return;
 
     setSavingSetEdit(true);
     try {
       const weightKg = inputWeightToKg(weightNum, unit);
+      const rpe = rirToRpe(editRir as RepsInTank);
       const supabase = createUntypedClient();
       const { error } = await supabase
         .from('set_logs')
-        .update({ weight_kg: weightKg, reps: repsNum })
+        .update({ 
+          weight_kg: weightKg, 
+          reps: repsNum, 
+          rpe,
+          feedback: { repsInTank: editRir as RepsInTank }
+        })
         .eq('id', setId);
       if (error) {
         console.error('Failed to update set:', error);
@@ -337,7 +356,20 @@ function HistoryPageContent() {
           const exercises = w.exercises.map(ex =>
             ex.id !== exerciseBlockId
               ? ex
-              : { ...ex, sets: ex.sets.map(s => (s.id === setId ? { ...s, weight_kg: weightKg, reps: repsNum } : s)) }
+              : { 
+                  ...ex, 
+                  sets: ex.sets.map(s => 
+                    s.id === setId 
+                      ? { 
+                          ...s, 
+                          weight_kg: weightKg, 
+                          reps: repsNum, 
+                          rpe,
+                          feedback: { repsInTank: editRir as RepsInTank }
+                        } 
+                      : s
+                  ) 
+                }
           );
           const totalVolume = exercises.reduce(
             (sum, ex) =>
@@ -352,6 +384,134 @@ function HistoryPageContent() {
     } finally {
       setSavingSetEdit(false);
     }
+  };
+
+  // Delete set with undo toast (following nutrition pattern)
+  const handleDeleteSet = async (workoutId: string, exerciseBlockId: string, set: SetDetail) => {
+    const supabase = createUntypedClient();
+    
+    // Store snapshot for undo
+    const snapshot = { 
+      workoutId, 
+      exerciseBlockId, 
+      set: { ...set } 
+    };
+    
+    // Optimistically remove from UI
+    mutateWorkouts(prev =>
+      prev.map(w => {
+        if (w.id !== workoutId) return w;
+        const exercises = w.exercises.map(ex =>
+          ex.id !== exerciseBlockId
+            ? ex
+            : { ...ex, sets: ex.sets.filter(s => s.id !== set.id) }
+        );
+        // Recompute volume
+        const totalVolume = exercises.reduce(
+          (sum, ex) =>
+            sum +
+            (ex.isDuration ? 0 : ex.sets.reduce((s2, s) => s2 + s.weight_kg * s.reps, 0)),
+          0
+        );
+        return { ...w, exercises, totalVolume };
+      })
+    );
+
+    // Delete from database
+    const { error } = await supabase
+      .from('set_logs')
+      .delete()
+      .eq('id', set.id);
+
+    if (error) {
+      console.error('Error deleting set:', error);
+      // Revert optimistic update on error
+      mutateWorkouts(prev =>
+        prev.map(w => {
+          if (w.id !== workoutId) return w;
+          const exercises = w.exercises.map(ex =>
+            ex.id !== exerciseBlockId
+              ? ex
+              : { ...ex, sets: [...ex.sets, set].sort((a, b) => a.id.localeCompare(b.id)) }
+          );
+          const totalVolume = exercises.reduce(
+            (sum, ex) =>
+              sum +
+              (ex.isDuration ? 0 : ex.sets.reduce((s2, s) => s2 + s.weight_kg * s.reps, 0)),
+            0
+          );
+          return { ...w, exercises, totalVolume };
+        })
+      );
+      return;
+    }
+
+    // Show undo toast
+    addToast('success', 'Set deleted', 5000, {
+      label: 'Undo',
+      onClick: () => { void undoDeleteSet(snapshot); },
+    });
+  };
+
+  // Undo set deletion
+  const undoDeleteSet = async (snapshot: { workoutId: string; exerciseBlockId: string; set: SetDetail }) => {
+    const supabase = createUntypedClient();
+    
+    // Re-insert the set (note: we can't truly restore with same ID due to constraints,
+    // so we insert a new record with the same data)
+    const { data: newSet, error } = await supabase
+      .from('set_logs')
+      .insert({
+        exercise_block_id: snapshot.exerciseBlockId,
+        weight_kg: snapshot.set.weight_kg,
+        reps: snapshot.set.reps,
+        rpe: snapshot.set.rpe ?? 7,
+        feedback: snapshot.set.feedback,
+        set_number: 999, // Will be at end - user can see it was restored
+        is_warmup: false,
+        rest_seconds: null,
+        set_type: 'straight',
+        logged_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (error || !newSet) {
+      console.error('Error undoing set deletion:', error);
+      addToast('error', 'Failed to undo deletion');
+      return;
+    }
+
+    // Restore in UI with new ID
+    mutateWorkouts(prev =>
+      prev.map(w => {
+        if (w.id !== snapshot.workoutId) return w;
+        const exercises = w.exercises.map(ex =>
+          ex.id !== snapshot.exerciseBlockId
+            ? ex
+            : { 
+                ...ex, 
+                sets: [
+                  ...ex.sets, 
+                  { 
+                    id: newSet.id, 
+                    weight_kg: newSet.weight_kg, 
+                    reps: newSet.reps, 
+                    rpe: newSet.rpe,
+                    feedback: newSet.feedback as SetDetail['feedback']
+                  }
+                ]
+              }
+        );
+        const totalVolume = exercises.reduce(
+          (sum, ex) =>
+            sum +
+            (ex.isDuration ? 0 : ex.sets.reduce((s2, s) => s2 + s.weight_kg * s.reps, 0)),
+          0
+        );
+        return { ...w, exercises, totalVolume };
+      })
+    );
   };
   const [deletingId, setDeletingId] = useState<string | null>(null);
   // Styled confirmation for destructive actions (P2-7 — replaces native
@@ -1645,6 +1805,18 @@ function HistoryPageContent() {
                                         aria-label="Reps"
                                         className="w-16 min-h-[44px] px-2 bg-surface-900 border border-primary-500/50 rounded-lg text-center font-mono text-surface-100 focus:outline-none"
                                       />
+                                      <select
+                                        value={editRir}
+                                        onChange={(e) => setEditRir(Number(e.target.value) as RepsInTank)}
+                                        aria-label="RIR"
+                                        className="min-h-[44px] px-2 bg-surface-900 border border-primary-500/50 rounded-lg text-center text-surface-100 focus:outline-none"
+                                      >
+                                        <option value={4}>4+ Easy</option>
+                                        <option value={3}>2-3 Good</option>
+                                        <option value={2}>1-2 Good</option>
+                                        <option value={1}>1 Hard</option>
+                                        <option value={0}>0 Max</option>
+                                      </select>
                                       <button
                                         onClick={() => saveSetEdit(workout.id, exercise.id, set.id)}
                                         disabled={savingSetEdit}
@@ -1698,16 +1870,28 @@ function HistoryPageContent() {
                                       </span>
                                     )}
                                     {workout.state === 'completed' && !isSelectMode && (
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          startSetEdit(set);
-                                        }}
-                                        aria-label={`Edit set ${idx + 1}`}
-                                        className="ml-auto min-w-[44px] min-h-[44px] rounded-lg text-surface-500 hover:text-primary-400 hover:bg-surface-700 transition-colors"
-                                      >
-                                        ✎
-                                      </button>
+                                      <>
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            startSetEdit(set);
+                                          }}
+                                          aria-label={`Edit set ${idx + 1}`}
+                                          className="ml-auto min-w-[44px] min-h-[44px] rounded-lg text-surface-500 hover:text-primary-400 hover:bg-surface-700 transition-colors"
+                                        >
+                                          ✎
+                                        </button>
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            void handleDeleteSet(workout.id, exercise.id, set);
+                                          }}
+                                          aria-label={`Delete set ${idx + 1}`}
+                                          className="min-w-[44px] min-h-[44px] rounded-lg text-surface-500 hover:text-danger-400 hover:bg-surface-700 transition-colors"
+                                        >
+                                          🗑
+                                        </button>
+                                      </>
                                     )}
                                   </div>
                                   )
@@ -1817,6 +2001,10 @@ function HistoryPageContent() {
         </div>
       )}
     </div>
+
+    {/* Toast container for undo functionality */}
+    <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+  </div>
   );
 }
 
