@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient, useIsRestoring } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Card, CardHeader, CardTitle, CardContent, Button, Input, Select, Slider, Badge, Toggle, LoadingAnimation, Modal, PageHeader } from '@/components/ui';
+import { Card, CardHeader, CardTitle, CardContent, Button, Input, Select, Slider, Badge, Toggle, LoadingState, Modal, PageHeader } from '@/components/ui';
 import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 
 const SETTINGS_KEY = ['settings', 'user'] as const;
@@ -440,9 +440,8 @@ export default function SettingsPage() {
   // (warm cache) or reload (IndexedDB restore) renders settings immediately.
   if (isLoading && !settingsQuery.data && !isRestoring) {
     return (
-      <div className="max-w-2xl mx-auto flex flex-col items-center justify-center py-20" data-testid="settings-full-loading">
-        <LoadingAnimation type="random" size="lg" />
-        <p className="mt-4 text-surface-400">Loading settings...</p>
+      <div className="max-w-2xl mx-auto py-20" data-testid="settings-full-loading">
+        <LoadingState label="Loading settings..." size="lg" />
       </div>
     );
   }

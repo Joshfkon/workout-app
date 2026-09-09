@@ -5,7 +5,7 @@ import { useQuery, useQueryClient, useIsRestoring } from '@tanstack/react-query'
 import { useSearchParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import { Card, Input, Badge, Button, LoadingAnimation, SkeletonExercise, PageHeader, EmptyState } from '@/components/ui';
+import { Card, Input, Badge, Button, LoadingState, SkeletonExercise, PageHeader, EmptyState } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 
@@ -980,16 +980,11 @@ export default function ExercisesPage() {
 
       {/* Exercise list */}
       {isCatalogLoading ? (
-        <div className="space-y-4" data-testid="exercises-loading">
-          <div className="flex justify-center py-8">
-            <LoadingAnimation type="random" size="lg" text="Loading exercises..." />
-          </div>
-          <div className="grid gap-3">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <SkeletonExercise key={i} />
-            ))}
-          </div>
-        </div>
+        <LoadingState 
+          label="Loading exercises..." 
+          size="lg"
+          data-testid="exercises-loading"
+        />
       ) : (
         <div className="grid gap-3">
           {filteredExercises.map((exercise) => {

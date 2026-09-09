@@ -5,7 +5,7 @@ import { useQuery, useQueryClient, useIsRestoring } from '@tanstack/react-query'
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Card, CardHeader, CardTitle, CardContent, Button, Badge, FullPageLoading, ErrorRetry, PageHeader } from '@/components/ui';
+import { Card, CardHeader, CardTitle, CardContent, Button, Badge, FullPageLoading, ErrorRetry, PageHeader, LoadingState } from '@/components/ui';
 import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 import { resolveAuthState } from '@/lib/supabase/authState';
 import { useMusclePriorities } from '@/components/settings/MusclePrioritySettings';
@@ -1979,7 +1979,7 @@ function MusclePrioritiesDisplay({ userId }: { userId: string }) {
           <CardTitle>Muscle Group Priorities</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="text-center py-4 text-surface-400 text-sm">Loading...</div>
+          <LoadingState label="Loading priorities..." size="sm" />
         </CardContent>
       </Card>
     );

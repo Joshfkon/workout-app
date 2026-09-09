@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import { useQuery, useQueryClient, useIsRestoring } from '@tanstack/react-query';
-import { Card, Badge, Button, FullPageLoading, LoadingAnimation, ConfirmModal, ToastContainer, useToasts, PageHeader, EmptyState } from '@/components/ui';
+import { Card, Badge, Button, FullPageLoading, LoadingState, ConfirmModal, ToastContainer, useToasts, PageHeader, EmptyState } from '@/components/ui';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { createUntypedClient } from '@/lib/supabase/client';
@@ -1546,10 +1546,7 @@ function HistoryPageContent() {
           <h1 className="text-2xl font-bold text-surface-100">Workout History</h1>
           <p className="text-surface-400 mt-1">Your past training sessions</p>
         </div>
-        <Card className="text-center py-12">
-          <LoadingAnimation type="random" size="md" />
-          <p className="text-surface-400 mt-4">Loading your workout history...</p>
-        </Card>
+        <LoadingState label="Loading your workout history..." size="md" />
       </div>
     );
   }

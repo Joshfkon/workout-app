@@ -4,6 +4,9 @@ import { useState, useEffect } from 'react';
 
 type AnimationType = 'barbell' | 'dumbbell' | 'pulse' | 'reps' | 'heartbeat' | 'weights' | 'kettlebell' | 'muscle' | 'spinner' | 'dots' | 'pullup' | 'squat' | 'pushup' | 'jumprope' | 'deadlift' | 'random';
 
+// Export AnimationType for use in other components
+export type { AnimationType };
+
 // All fitness animations (excluding utility ones like spinner/dots)
 const FITNESS_ANIMATIONS: AnimationType[] = [
   'barbell', 'dumbbell', 'reps', 'heartbeat', 'weights', 
