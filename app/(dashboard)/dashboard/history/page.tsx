@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import { useQuery, useQueryClient, useIsRestoring } from '@tanstack/react-query';
-import { Card, Badge, Button, FullPageLoading, LoadingAnimation, ConfirmModal } from '@/components/ui';
+import { Card, Badge, Button, FullPageLoading, LoadingAnimation, ConfirmModal, ToastContainer, useToasts } from '@/components/ui';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { createUntypedClient } from '@/lib/supabase/client';
@@ -18,6 +18,7 @@ const HISTORY_FIRST_PAGE_KEY = ['history', 'sessions', 'page0', 'v2'] as const;
 import { formatWeight, convertWeight, convertWeightForDisplay, inputWeightToKg, getLocalDateString, muscleDisplayName } from '@/lib/utils';
 import { e1rmValueFromRpe } from '@/services/shared/e1rm';
 import { computeTrend } from '@/services/shared/trend';
+import { rpeToRir, rirToRpe, type RepsInTank } from '@/types/schema';
 import { createRepeatSession } from '@/lib/training/repeatWorkout';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import HistoryCalendar from './_components/HistoryCalendar';
@@ -35,6 +36,22 @@ interface SetDetail {
   weight_kg: number;
   reps: number;
   rpe: number | null;
+  feedback?: {
+    repsInTank?: RepsInTank;
+    form?: 'clean' | 'some_breakdown' | 'ugly';
+    discomfort?: unknown;
+  };
+  set_type?: 'normal' | 'warmup' | 'dropset' | 'myorep' | 'rest_pause';
+  parent_set_id?: string | null;
+  quality?: 'junk' | 'effective' | 'stimulative' | 'excessive';
+  quality_reason?: string;
+  note?: string | null;
+  logged_at?: string;
+  set_role?: 'working' | 'ramp' | null;
+  suggestion_engine_version?: number | null;
+  rest_seconds?: number | null;
+  set_number?: number;
+  is_warmup?: boolean;
 }
 
 interface ExerciseDetail {
@@ -81,14 +98,29 @@ function transformSessions(data: any[]): WorkoutHistory[] {
           sets: workingSets.map((set: any) => ({
             id: set.id,
             weight_kg: set.weight_kg,
+            // Raw .reps access is safe: copying the database field as-is.
+            // ExerciseDetail.isDuration flags the modality for downstream code.
             reps: set.reps,
             rpe: set.rpe,
+            feedback: set.feedback,
+            set_type: set.set_type,
+            parent_set_id: set.parent_set_id,
+            quality: set.quality,
+            quality_reason: set.quality_reason,
+            note: set.note,
+            logged_at: set.logged_at,
+            set_role: set.set_role,
+            suggestion_engine_version: set.suggestion_engine_version,
+            rest_seconds: set.rest_seconds,
+            set_number: set.set_number,
+            is_warmup: set.is_warmup,
           })),
         };
       });
 
     const totalSets = exercises.reduce((sum, ex) => sum + ex.sets.length, 0);
     // Duration sets store seconds in reps — excluded from tonnage.
+    // Raw .reps access is safe: already guarded by isDuration check.
     const totalVolume = exercises.reduce(
       (sum, ex) =>
         sum +
@@ -284,16 +316,27 @@ function HistoryPageContent() {
     new Set(workouts.flatMap(w => w.exercises.map(ex => ex.name)))
   ).sort().slice(0, 12);
 
-  // Inline past-set editing (P1-3)
+  // Inline past-set editing (P1-3): weight, reps, and RIR
   const [editingSetId, setEditingSetId] = useState<string | null>(null);
   const [editWeight, setEditWeight] = useState('');
   const [editReps, setEditReps] = useState('');
+  const [editRir, setEditRir] = useState<RepsInTank | ''>('');
   const [savingSetEdit, setSavingSetEdit] = useState(false);
+
+  // Toast management for undo functionality
+  const { toasts, addToast, dismissToast } = useToasts();
 
   const startSetEdit = (set: SetDetail) => {
     setEditingSetId(set.id);
     setEditWeight(String(convertWeightForDisplay(set.weight_kg, unit)));
+    // Raw .reps access is safe: inline editor handles both rep and duration
+    // sets. The UI displays appropriate labels ('reps' vs 's') based on
+    // exercise.isDuration checked elsewhere. The value is written back to the
+    // database reps field regardless of modality.
     setEditReps(String(set.reps));
+    // Derive RIR from RPE or use feedback value if available
+    const rir = set.feedback?.repsInTank ?? (set.rpe ? rpeToRir(set.rpe) : 2);
+    setEditRir(rir);
   };
 
   const saveSetEdit = async (workoutId: string, exerciseBlockId: string, setId: string) => {
@@ -302,14 +345,60 @@ function HistoryPageContent() {
     // 600 matches the DB CHECK on set_logs.reps (duration sets store seconds,
     // capped at 600) — the old 999 ceiling allowed values Postgres rejects.
     if (isNaN(weightNum) || weightNum < 0 || isNaN(repsNum) || repsNum < 1 || repsNum > 600) return;
+    if (editRir === '') return;
 
     setSavingSetEdit(true);
     try {
       const weightKg = inputWeightToKg(weightNum, unit);
+      const rpe = rirToRpe(editRir as RepsInTank);
       const supabase = createUntypedClient();
+      
+      // P1-2: Fetch existing set to merge feedback (preserve form/discomfort)
+      const { data: existingSet } = await supabase
+        .from('set_logs')
+        .select('feedback, exercise_block_id')
+        .eq('id', setId)
+        .single();
+      
+      const mergedFeedback = {
+        ...existingSet?.feedback,
+        repsInTank: editRir as RepsInTank,
+      };
+      
+      // P2-6: Get exercise details for quality reclassification
+      const workout = workouts.find(w => w.id === workoutId);
+      const exercise = workout?.exercises.find(ex => ex.id === exerciseBlockId);
+      const setIndex = exercise?.sets.findIndex(s => s.id === setId) ?? 0;
+      const isLastSet = setIndex === (exercise?.sets.length ?? 0) - 1;
+      
+      // P2-6: Reclassify quality based on new RPE/RIR
+      let quality: 'junk' | 'effective' | 'stimulative' | 'excessive' | undefined;
+      let quality_reason: string | undefined;
+      
+      if (exercise) {
+        const { calculateSetQuality } = await import('@/services/progressionEngine');
+        const qualityResult = calculateSetQuality({
+          rpe,
+          targetRir: 2, // Default hypertrophy target
+          reps: repsNum,
+          targetRepRange: [8, 12], // Default hypertrophy range
+          isLastSet,
+          exerciseType: exercise.isDuration ? 'duration_based' : 'rep_based',
+        });
+        quality = qualityResult.quality;
+        quality_reason = qualityResult.reason;
+      }
+      
       const { error } = await supabase
         .from('set_logs')
-        .update({ weight_kg: weightKg, reps: repsNum })
+        .update({ 
+          weight_kg: weightKg, 
+          reps: repsNum, 
+          rpe,
+          feedback: mergedFeedback,
+          ...(quality && { quality }),
+          ...(quality_reason && { quality_reason }),
+        })
         .eq('id', setId);
       if (error) {
         console.error('Failed to update set:', error);
@@ -331,13 +420,29 @@ function HistoryPageContent() {
       // Update local card state + recompute the workout's volume total.
       // (E1RM, PRs, weekly volume, and future suggestions all derive from
       // set_logs at read time — no stored aggregates to fix up.)
+      // Raw .reps accesses in volume calculation: safe, guarded by isDuration.
       mutateWorkouts(prev =>
         prev.map(w => {
           if (w.id !== workoutId) return w;
           const exercises = w.exercises.map(ex =>
             ex.id !== exerciseBlockId
               ? ex
-              : { ...ex, sets: ex.sets.map(s => (s.id === setId ? { ...s, weight_kg: weightKg, reps: repsNum } : s)) }
+              : { 
+                  ...ex, 
+                  sets: ex.sets.map(s => 
+                    s.id === setId 
+                      ? { 
+                          ...s, 
+                          weight_kg: weightKg, 
+                          reps: repsNum, 
+                          rpe,
+                          feedback: mergedFeedback,
+                          ...(quality && { quality }),
+                          ...(quality_reason && { quality_reason }),
+                        } 
+                      : s
+                  ) 
+                }
           );
           const totalVolume = exercises.reduce(
             (sum, ex) =>
@@ -352,6 +457,222 @@ function HistoryPageContent() {
     } finally {
       setSavingSetEdit(false);
     }
+  };
+
+  // Delete set with undo toast (following nutrition pattern)
+  const handleDeleteSet = async (workoutId: string, exerciseBlockId: string, set: SetDetail) => {
+    const supabase = createUntypedClient();
+    
+    // P2-3: Store full snapshot for complete undo restoration
+    const snapshot = { 
+      workoutId, 
+      exerciseBlockId, 
+      set: { ...set } 
+    };
+    
+    // Optimistically remove from UI
+    // Raw .reps access in volume calculation: safe, guarded by isDuration.
+    mutateWorkouts(prev =>
+      prev.map(w => {
+        if (w.id !== workoutId) return w;
+        const exercises = w.exercises.map(ex =>
+          ex.id !== exerciseBlockId
+            ? ex
+            : { ...ex, sets: ex.sets.filter(s => s.id !== set.id) }
+        );
+        // P2-5: Recompute totalSets
+        const totalSets = exercises.reduce((sum, ex) => sum + ex.sets.length, 0);
+        // Recompute volume
+        const totalVolume = exercises.reduce(
+          (sum, ex) =>
+            sum +
+            (ex.isDuration ? 0 : ex.sets.reduce((s2, s) => s2 + s.weight_kg * s.reps, 0)),
+          0
+        );
+        return { ...w, exercises, totalSets, totalVolume };
+      })
+    );
+
+    // P2-4: Update dayWorkouts when calendar day is selected
+    if (selectedDay && dayWorkouts) {
+      setDayWorkouts(prev =>
+        prev ? prev.map(w => {
+          if (w.id !== workoutId) return w;
+          const exercises = w.exercises.map(ex =>
+            ex.id !== exerciseBlockId
+              ? ex
+              : { ...ex, sets: ex.sets.filter(s => s.id !== set.id) }
+          );
+          const totalSets = exercises.reduce((sum, ex) => sum + ex.sets.length, 0);
+          const totalVolume = exercises.reduce(
+            (sum, ex) =>
+              sum +
+              (ex.isDuration ? 0 : ex.sets.reduce((s2, s) => s2 + s.weight_kg * s.reps, 0)),
+            0
+          );
+          return { ...w, exercises, totalSets, totalVolume };
+        }) : prev
+      );
+    }
+
+    // Delete from database
+    const { error } = await supabase
+      .from('set_logs')
+      .delete()
+      .eq('id', set.id);
+
+    if (error) {
+      console.error('Error deleting set:', error);
+      // Revert optimistic update on error
+      // Raw .reps access in volume calculation: safe, guarded by isDuration.
+      mutateWorkouts(prev =>
+        prev.map(w => {
+          if (w.id !== workoutId) return w;
+          const exercises = w.exercises.map(ex =>
+            ex.id !== exerciseBlockId
+              ? ex
+              : { ...ex, sets: [...ex.sets, set].sort((a, b) => a.id.localeCompare(b.id)) }
+          );
+          const totalSets = exercises.reduce((sum, ex) => sum + ex.sets.length, 0);
+          const totalVolume = exercises.reduce(
+            (sum, ex) =>
+              sum +
+              (ex.isDuration ? 0 : ex.sets.reduce((s2, s) => s2 + s.weight_kg * s.reps, 0)),
+            0
+          );
+          return { ...w, exercises, totalSets, totalVolume };
+        })
+      );
+      if (selectedDay && dayWorkouts) {
+        setDayWorkouts(prev =>
+          prev ? prev.map(w => {
+            if (w.id !== workoutId) return w;
+            const exercises = w.exercises.map(ex =>
+              ex.id !== exerciseBlockId
+                ? ex
+                : { ...ex, sets: [...ex.sets, set].sort((a, b) => a.id.localeCompare(b.id)) }
+            );
+            const totalSets = exercises.reduce((sum, ex) => sum + ex.sets.length, 0);
+            const totalVolume = exercises.reduce(
+              (sum, ex) =>
+                sum +
+                (ex.isDuration ? 0 : ex.sets.reduce((s2, s) => s2 + s.weight_kg * s.reps, 0)),
+              0
+            );
+            return { ...w, exercises, totalSets, totalVolume };
+          }) : prev
+        );
+      }
+      return;
+    }
+
+    // Show undo toast
+    addToast('success', 'Set deleted', 5000, {
+      label: 'Undo',
+      onClick: () => { void undoDeleteSet(snapshot); },
+    });
+  };
+
+  // Undo set deletion
+  const undoDeleteSet = async (snapshot: { workoutId: string; exerciseBlockId: string; set: SetDetail }) => {
+    const supabase = createUntypedClient();
+    
+    // P2-3: Re-insert the set with ALL original fields (full restoration)
+    // P1-1: Use actual set_type from deleted set (or fallback to 'normal')
+    // Note: DB rejects 'straight' — only 'normal'|'warmup'|'dropset'|'myorep'|'rest_pause' are valid.
+    // Raw .reps access: database field assignment, works for both modalities.
+    const { data: newSet, error } = await supabase
+      .from('set_logs')
+      .insert({
+        exercise_block_id: snapshot.exerciseBlockId,
+        weight_kg: snapshot.set.weight_kg,
+        reps: snapshot.set.reps,
+        rpe: snapshot.set.rpe ?? 7,
+        feedback: snapshot.set.feedback,
+        set_number: snapshot.set.set_number ?? 999, // Will be at end if set_number missing
+        is_warmup: snapshot.set.is_warmup ?? false,
+        rest_seconds: snapshot.set.rest_seconds ?? null,
+        set_type: snapshot.set.set_type ?? 'normal', // P1-1: Use real set_type, fallback to 'normal'
+        parent_set_id: snapshot.set.parent_set_id ?? null, // P2-3: Restore parent for dropsets
+        quality: snapshot.set.quality,
+        quality_reason: snapshot.set.quality_reason,
+        note: snapshot.set.note ?? null, // P2-3: Restore notes
+        logged_at: snapshot.set.logged_at ?? new Date().toISOString(),
+        set_role: snapshot.set.set_role ?? null, // P2-3: Restore set role
+        suggestion_engine_version: snapshot.set.suggestion_engine_version ?? null,
+      })
+      .select()
+      .single();
+
+    if (error || !newSet) {
+      console.error('Error undoing set deletion:', error);
+      addToast('error', 'Failed to undo deletion');
+      return;
+    }
+
+    // Restore in UI with new ID
+    // Raw .reps accesses: reading from DB result and in volume calc (guarded by isDuration).
+    mutateWorkouts(prev =>
+      prev.map(w => {
+        if (w.id !== snapshot.workoutId) return w;
+        const exercises = w.exercises.map(ex =>
+          ex.id !== snapshot.exerciseBlockId
+            ? ex
+            : { 
+                ...ex, 
+                sets: [
+                  ...ex.sets, 
+                  { 
+                    ...snapshot.set,
+                    id: newSet.id,
+                  }
+                ].sort((a, b) => (a.set_number ?? 999) - (b.set_number ?? 999))
+              }
+        );
+        // P2-5: Recompute totalSets on undo
+        const totalSets = exercises.reduce((sum, ex) => sum + ex.sets.length, 0);
+        const totalVolume = exercises.reduce(
+          (sum, ex) =>
+            sum +
+            (ex.isDuration ? 0 : ex.sets.reduce((s2, s) => s2 + s.weight_kg * s.reps, 0)),
+          0
+        );
+        return { ...w, exercises, totalSets, totalVolume };
+      })
+    );
+    
+    // P2-4: Update dayWorkouts on undo when calendar day is selected
+    if (selectedDay && dayWorkouts) {
+      setDayWorkouts(prev =>
+        prev ? prev.map(w => {
+          if (w.id !== snapshot.workoutId) return w;
+          const exercises = w.exercises.map(ex =>
+            ex.id !== snapshot.exerciseBlockId
+              ? ex
+              : { 
+                  ...ex, 
+                  sets: [
+                    ...ex.sets, 
+                    { 
+                      ...snapshot.set,
+                      id: newSet.id,
+                    }
+                  ].sort((a, b) => (a.set_number ?? 999) - (b.set_number ?? 999))
+                }
+          );
+          const totalSets = exercises.reduce((sum, ex) => sum + ex.sets.length, 0);
+          const totalVolume = exercises.reduce(
+            (sum, ex) =>
+              sum +
+              (ex.isDuration ? 0 : ex.sets.reduce((s2, s) => s2 + s.weight_kg * s.reps, 0)),
+            0
+          );
+          return { ...w, exercises, totalSets, totalVolume };
+        }) : prev
+      );
+    }
+
+    addToast('success', 'Set restored');
   };
   const [deletingId, setDeletingId] = useState<string | null>(null);
   // Styled confirmation for destructive actions (P2-7 — replaces native
@@ -841,7 +1162,17 @@ function HistoryPageContent() {
               weight_kg,
               reps,
               rpe,
-              is_warmup
+              is_warmup,
+              set_type,
+              parent_set_id,
+              quality,
+              quality_reason,
+              note,
+              logged_at,
+              set_role,
+              suggestion_engine_version,
+              rest_seconds,
+              feedback
             )
           )
         `;
@@ -1645,6 +1976,18 @@ function HistoryPageContent() {
                                         aria-label="Reps"
                                         className="w-16 min-h-[44px] px-2 bg-surface-900 border border-primary-500/50 rounded-lg text-center font-mono text-surface-100 focus:outline-none"
                                       />
+                                      <select
+                                        value={editRir}
+                                        onChange={(e) => setEditRir(Number(e.target.value) as RepsInTank)}
+                                        aria-label="RIR"
+                                        className="min-h-[44px] px-2 bg-surface-900 border border-primary-500/50 rounded-lg text-center text-surface-100 focus:outline-none"
+                                      >
+                                        <option value={4}>4+ Easy</option>
+                                        <option value={3}>2-3 Good</option>
+                                        <option value={2}>1-2 Good</option>
+                                        <option value={1}>1 Hard</option>
+                                        <option value={0}>0 Max</option>
+                                      </select>
                                       <button
                                         onClick={() => saveSetEdit(workout.id, exercise.id, set.id)}
                                         disabled={savingSetEdit}
@@ -1698,16 +2041,28 @@ function HistoryPageContent() {
                                       </span>
                                     )}
                                     {workout.state === 'completed' && !isSelectMode && (
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          startSetEdit(set);
-                                        }}
-                                        aria-label={`Edit set ${idx + 1}`}
-                                        className="ml-auto min-w-[44px] min-h-[44px] rounded-lg text-surface-500 hover:text-primary-400 hover:bg-surface-700 transition-colors"
-                                      >
-                                        ✎
-                                      </button>
+                                      <>
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            startSetEdit(set);
+                                          }}
+                                          aria-label={`Edit set ${idx + 1}`}
+                                          className="ml-auto min-w-[44px] min-h-[44px] rounded-lg text-surface-500 hover:text-primary-400 hover:bg-surface-700 transition-colors"
+                                        >
+                                          ✎
+                                        </button>
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            void handleDeleteSet(workout.id, exercise.id, set);
+                                          }}
+                                          aria-label={`Delete set ${idx + 1}`}
+                                          className="min-w-[44px] min-h-[44px] rounded-lg text-surface-500 hover:text-danger-400 hover:bg-surface-700 transition-colors"
+                                        >
+                                          🗑
+                                        </button>
+                                      </>
                                     )}
                                   </div>
                                   )
@@ -1816,6 +2171,9 @@ function HistoryPageContent() {
           </div>
         </div>
       )}
+
+      {/* Toast container for undo functionality */}
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }
