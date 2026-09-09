@@ -3599,35 +3599,40 @@ export const ExerciseCard = memo(function ExerciseCard({
           // Editing: standard sets get inline weight/reps inputs + RIR chips
           if (editingSetId === set.id) {
             return (
-              <div key={set.id} className="rounded-lg bg-primary-500/10 px-2 py-1.5">
+              <div key={set.id} className="rounded-lg bg-primary-500/10 px-2 py-1.5 space-y-2">
+                {/* Row 1: Set number + input fields (weight/reps) */}
                 <div className="flex items-center gap-2">
-                <span className="w-6 flex-shrink-0 text-[12px] font-medium text-surface-300 text-center">
-                  {set.setNumber}
-                </span>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  value={editWeight}
-                  onChange={(e) => setEditWeight(e.target.value)}
-                  onFocus={(e) => e.target.select()}
-                  onKeyDown={handleEditKeyDown}
-                  step="0.5"
-                  aria-label="Edit weight"
-                  className="w-20 px-1 py-1.5 bg-surface-900 border border-surface-600 rounded text-center font-mono text-surface-100 text-sm"
-                  autoFocus
-                />
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  value={editReps}
-                  onChange={(e) => setEditReps(e.target.value)}
-                  onFocus={(e) => e.target.select()}
-                  onKeyDown={handleEditKeyDown}
-                  aria-label="Edit reps"
-                  className="w-14 px-1 py-1.5 bg-surface-900 border border-surface-600 rounded text-center font-mono text-surface-100 text-sm"
-                />
-                <div className="ml-auto flex items-center gap-1">
+                  <span className="w-6 flex-shrink-0 text-[12px] font-medium text-surface-300 text-center">
+                    {set.setNumber}
+                  </span>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    value={editWeight}
+                    onChange={(e) => setEditWeight(e.target.value)}
+                    onFocus={(e) => e.target.select()}
+                    onKeyDown={handleEditKeyDown}
+                    step="0.5"
+                    aria-label="Edit weight"
+                    className="flex-1 min-w-0 px-1 py-1.5 bg-surface-900 border border-surface-600 rounded text-center font-mono text-surface-100 text-sm"
+                    autoFocus
+                  />
+                  <span className="text-[11px] text-surface-500">×</span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    value={editReps}
+                    onChange={(e) => setEditReps(e.target.value)}
+                    onFocus={(e) => e.target.select()}
+                    onKeyDown={handleEditKeyDown}
+                    aria-label="Edit reps"
+                    className="w-16 px-1 py-1.5 bg-surface-900 border border-surface-600 rounded text-center font-mono text-surface-100 text-sm"
+                  />
+                </div>
+
+                {/* Row 2: Action buttons (save/cancel/delete) */}
+                <div className="flex items-center justify-end gap-1">
                   <button
                     onClick={saveEdit}
                     aria-label="Save set edit"
@@ -3659,8 +3664,9 @@ export const ExerciseCard = memo(function ExerciseCard({
                     </button>
                   )}
                 </div>
-                </div>
-                <div className="mt-1.5 flex items-center gap-1.5 pl-8">
+
+                {/* Row 3: RIR chips */}
+                <div className="flex items-center gap-1.5">
                   <span className="text-[11px] font-medium text-surface-400">RIR</span>
                   {EDIT_RIR_OPTIONS.map((option) => {
                     const isSelected =
