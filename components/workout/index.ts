@@ -37,3 +37,4 @@ export { ExerciseWhisper } from './ExerciseWhisper';
 export { SignalToast } from './SignalToast';
 export { RestCoachTip } from './RestCoachTip';
 export { SessionSpine } from './SessionSpine';
+export { PostWorkoutReel } from './PostWorkoutReel';

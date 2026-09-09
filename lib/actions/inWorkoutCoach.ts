@@ -359,3 +359,149 @@ function generateFallbackSpine(input: Parameters<typeof generateSessionSpine>[0]
   
   return spine.slice(0, 5);
 }
+
+/**
+ * Generate post-workout reel - summary of the session with key highlights
+ */
+export async function generatePostWorkoutReel(input: {
+  totalSets: number;
+  totalVolume: number; // in display units
+  units: 'kg' | 'lb';
+  durationMinutes: number;
+  exercises: Array<{
+    name: string;
+    sets: number;
+    isPR?: boolean;
+    vsLastSession?: {
+      weightDelta: number;
+      repDelta: number;
+    };
+  }>;
+  fatigueSignals?: Array<{
+    exerciseName: string;
+    signal: string;
+  }>;
+}): Promise<{ bullets: string[]; generated: boolean }> {
+  const apiKey = process.env.XAI_API_KEY;
+  if (!apiKey) {
+    return {
+      bullets: generateFallbackReel(input),
+      generated: false,
+    };
+  }
+
+  try {
+    const openai = new OpenAI({
+      apiKey,
+      baseURL: 'https://api.x.ai/v1',
+    });
+
+    const context = buildReelContext(input);
+    
+    const response = await openai.chat.completions.create({
+      model: 'grok-4.6',
+      max_tokens: 200,
+      temperature: 0.7,
+      messages: [
+        { 
+          role: 'system', 
+          content: `You are a concise strength coach summarizing a completed workout. Provide exactly 3 short bullet points highlighting the most important aspects: volume/PRs/progression vs last time, and notable fatigue signals if any. Each bullet should be one short sentence (max 15 words). Be specific with numbers.` 
+        },
+        { role: 'user', content: `Summarize this workout in 3 bullets:\n\n${context}` },
+      ],
+    });
+
+    const rawReel = response.choices[0]?.message?.content?.trim() || '';
+    const bullets = parseReelResponse(rawReel);
+
+    return {
+      bullets: bullets.length > 0 ? bullets : generateFallbackReel(input),
+      generated: true,
+    };
+  } catch (error) {
+    console.error('[Post-Workout Reel] Generation failed:', error);
+    return {
+      bullets: generateFallbackReel(input),
+      generated: false,
+    };
+  }
+}
+
+function buildReelContext(input: Parameters<typeof generatePostWorkoutReel>[0]): string {
+  const parts: string[] = [
+    `Duration: ${input.durationMinutes} minutes`,
+    `Total: ${input.totalSets} sets, ${input.totalVolume.toFixed(0)}${input.units} volume`,
+  ];
+
+  const prs = input.exercises.filter(e => e.isPR);
+  if (prs.length > 0) {
+    parts.push(`PRs: ${prs.map(e => e.name).join(', ')}`);
+  }
+
+  const progressions = input.exercises.filter(e => e.vsLastSession && 
+    (Math.abs(e.vsLastSession.weightDelta) >= 2.5 || Math.abs(e.vsLastSession.repDelta) >= 2));
+  if (progressions.length > 0) {
+    const examples = progressions.slice(0, 2).map(e => {
+      const vs = e.vsLastSession!;
+      if (Math.abs(vs.weightDelta) >= 2.5) {
+        return `${e.name}: ${vs.weightDelta > 0 ? '+' : ''}${vs.weightDelta.toFixed(1)}${input.units}`;
+      }
+      return `${e.name}: ${vs.repDelta > 0 ? '+' : ''}${vs.repDelta} reps`;
+    }).join(', ');
+    parts.push(`Progression: ${examples}`);
+  }
+
+  if (input.fatigueSignals && input.fatigueSignals.length > 0) {
+    const signals = input.fatigueSignals.slice(0, 2).map(s => `${s.exerciseName}: ${s.signal}`).join('; ');
+    parts.push(`Fatigue signals: ${signals}`);
+  }
+
+  return parts.join('\n');
+}
+
+function parseReelResponse(raw: string): string[] {
+  const lines = raw
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => line.length > 0)
+    .map(line => line.replace(/^[-*•]\s*/, '').replace(/^\d+\.\s*/, ''));
+  
+  return lines.slice(0, 3);
+}
+
+function generateFallbackReel(input: Parameters<typeof generatePostWorkoutReel>[0]): string[] {
+  const bullets: string[] = [];
+
+  // Bullet 1: Volume summary
+  bullets.push(`${input.totalSets} sets, ${input.totalVolume.toFixed(0)}${input.units} volume in ${input.durationMinutes} minutes`);
+
+  // Bullet 2: PRs or progression
+  const prs = input.exercises.filter(e => e.isPR);
+  if (prs.length > 0) {
+    bullets.push(`New PR${prs.length > 1 ? 's' : ''}: ${prs.map(e => e.name).join(', ')}`);
+  } else {
+    const progressions = input.exercises.filter(e => e.vsLastSession && 
+      (Math.abs(e.vsLastSession.weightDelta) >= 2.5 || Math.abs(e.vsLastSession.repDelta) >= 2));
+    if (progressions.length > 0) {
+      const first = progressions[0];
+      const vs = first.vsLastSession!;
+      if (Math.abs(vs.weightDelta) >= 2.5) {
+        bullets.push(`${first.name}: ${vs.weightDelta > 0 ? '+' : ''}${vs.weightDelta.toFixed(1)}${input.units} vs last time`);
+      } else {
+        bullets.push(`${first.name}: ${vs.repDelta > 0 ? '+' : ''}${vs.repDelta} reps vs last time`);
+      }
+    } else {
+      bullets.push(`${input.exercises.length} exercises trained across ${input.totalSets} sets`);
+    }
+  }
+
+  // Bullet 3: Fatigue signals or completion note
+  if (input.fatigueSignals && input.fatigueSignals.length > 0) {
+    const signal = input.fatigueSignals[0];
+    bullets.push(`${signal.exerciseName}: ${signal.signal}`);
+  } else {
+    bullets.push('All sets completed — good session');
+  }
+
+  return bullets;
+}
