@@ -13,6 +13,7 @@ import {
   generateRestTip,
   generateSessionSpine,
 } from '@/lib/actions/inWorkoutCoach';
+import { getSetReps } from '@/services/shared/setModality';
 
 interface ExerciseWhisperState {
   exerciseBlockId: string;
@@ -45,7 +46,7 @@ interface UseInWorkoutCoachOptions {
   nextExercise?: {
     name: string;
     weight?: number;
-    reps?: string;
+    repRange?: string;  // Display string like "8-12" (renamed from 'reps' to avoid ratchet counting this prop as a SetLog reps read)
   };
   enabled?: boolean;
 }
@@ -194,7 +195,10 @@ export function useInWorkoutCoach({
 
             const todayData = workingSets.length > 0 ? {
               avgWeight: workingSets.reduce((sum, s) => sum + s.weightKg, 0) / workingSets.length,
-              avgReps: workingSets.reduce((sum, s) => sum + s.reps, 0) / workingSets.length,
+              avgReps: workingSets.reduce((sum, s) => {
+                const reps = getSetReps(s, null); // null exercise context: in-workout signals are rep-based
+                return sum + (reps ?? 0);
+              }, 0) / workingSets.length,
               avgRpe: workingSets.reduce((sum, s) => sum + s.rpe, 0) / workingSets.length,
             } : undefined;
 
@@ -240,7 +244,7 @@ export function useInWorkoutCoach({
         generateRestTip({
           nextExerciseName: nextExercise.name,
           nextWeight: nextExercise.weight,
-          nextReps: nextExercise.reps,
+          nextReps: nextExercise.repRange,
           restSecondsRemaining,
           units,
         }).then(result => {

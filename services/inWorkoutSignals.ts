@@ -8,6 +8,7 @@
 
 import type { SetLog } from '@/types/schema';
 import { rirToRpe } from '@/types/schema';
+import { getSetReps } from '@/services/shared/setModality';
 
 export type SignalType =
   | 'big_drop'        // Significant performance drop vs last session
@@ -306,7 +307,11 @@ function calculateStats(sets: SetLog[]): SessionStats {
   }
 
   const totalWeight = workingSets.reduce((sum, s) => sum + s.weight_kg, 0);
-  const totalReps = workingSets.reduce((sum, s) => sum + s.reps, 0);
+  // Use getSetReps helper - returns null for duration exercises (which we skip for progress calculation)
+  const totalReps = workingSets.reduce((sum, s) => {
+    const reps = getSetReps(s, null); // null exercise context: signals are always rep-based in current use
+    return sum + (reps ?? 0);
+  }, 0);
   const totalRpe = workingSets.reduce((sum, s) => {
     const rpe = s.feedback?.repsInTank !== null && s.feedback?.repsInTank !== undefined 
       ? rirToRpe(s.feedback.repsInTank) 

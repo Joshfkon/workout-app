@@ -33,8 +33,9 @@ export function PostWorkoutReel({
 
   const handleAskCoach = () => {
     // Deep-link to AI Coach with session context
-    // Pass session ID as query param so coach can load context
-    router.push(`/dashboard/coach?session=${sessionId}`);
+    // TODO: AI Coach page doesn't yet accept session param - can be added in follow-up
+    // When implemented, it should pre-seed the conversation with this session's context
+    router.push(`/dashboard/ai-coach?session=${sessionId}`);
   };
 
   const handleDismiss = () => {

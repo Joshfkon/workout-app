@@ -1088,7 +1088,7 @@ export default function WorkoutPage() {
     nextExercise: currentBlock ? {
       name: currentBlock.exercise?.name ?? 'Exercise',
       weight: convertWeightForDisplay(currentBlock.targetWeightKg, preferences.units, 1),
-      reps: `${currentBlock.targetRepRange[0]}–${currentBlock.targetRepRange[1]}`,
+      repRange: `${currentBlock.targetRepRange[0]}–${currentBlock.targetRepRange[1]}`,
     } : undefined,
     enabled: phase === 'workout',
   });
