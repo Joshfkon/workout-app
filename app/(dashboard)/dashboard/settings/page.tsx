@@ -2,50 +2,32 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient, useIsRestoring } from '@tanstack/react-query';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { Card, CardHeader, CardTitle, CardContent, Button, Input, Select, Slider, Badge, Toggle, LoadingState, Modal, PageHeader } from '@/components/ui';
+import { LoadingState, PageHeader } from '@/components/ui';
 import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 
 const SETTINGS_KEY = ['settings', 'user'] as const;
-import { STANDARD_MUSCLE_GROUPS, STANDARD_MUSCLE_DISPLAY_NAMES, DEFAULT_VOLUME_LANDMARKS, MUSCLE_VOLUME_AUTHORITY, MUSCLE_GROUPS } from '@/types/schema';
-import { DIRECT_MEV_TOOLTIP } from '@/services/volumeBands';
+import { DEFAULT_VOLUME_LANDMARKS } from '@/types/schema';
 import {
   migrateStoredLandmarks,
   readLandmarkVersion,
   LANDMARK_VERSION,
   LANDMARK_VERSION_PREFERENCE_KEY,
 } from '@/lib/migrations/volume-landmarks';
-import {
-  boundedComponentHint,
-  parentMrvFor,
-  validateLandmarkRow,
-} from '@/lib/training/landmarkValidation';
-import type { Goal, Experience, WeightUnit, Equipment, StandardMuscleGroup, MuscleGroup, Rating } from '@/types/schema';
+import type { Goal, Experience, WeightUnit, Equipment, MuscleGroup, Rating } from '@/types/schema';
 import { createUntypedClient } from '@/lib/supabase/client';
-import { convertWeight, muscleDisplayName } from '@/lib/utils';
 import { getDisplayWeight, validateWeightEntry } from '@/lib/weightUtils';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
-import { useSubscription } from '@/hooks/useSubscription';
-import { useIsNativePlatform } from '@/hooks/useIsNativePlatform';
-import { usePWA } from '@/hooks/usePWA';
-import { TIER_FEATURES } from '@/lib/stripe';
-import { redeemPromoCode } from '@/lib/actions/promoCodes';
-import { deleteAccount } from '@/lib/actions/account';
 import { updateTrainingPhase, type TrainingPhase } from '@/lib/actions/phase';
-import { GymEquipmentSettings } from '@/components/settings/GymEquipmentSettings';
-import { EnhancedAthleteModeCard } from '@/components/settings/EnhancedAthleteModeCard';
-import { MotionCaptureLabCard } from '@/components/settings/MotionCaptureLabCard';
-import { ImportExportSettings } from '@/components/settings/ImportExportSettings';
-import { MusclePrioritySettings } from '@/components/settings/MusclePrioritySettings';
-import { ExerciseVarietySettings } from '@/components/settings/ExerciseVarietySettings';
-import { EatingWindowSettings } from '@/components/settings/EatingWindowSettings';
-import { BloodPressureSettings } from '@/components/settings/BloodPressureSettings';
-import { ThemeToggle } from '@/components/settings/ThemeToggle';
-import { AddToHomescreenGuide } from '@/components/onboarding/AddToHomescreenGuide';
-import { useEducationStore } from '@/hooks/useEducationPreferences';
+import { ProfileTabPanel } from '@/components/settings/ProfileTabPanel';
+import { TrainingTabPanel } from '@/components/settings/TrainingTabPanel';
+import { PreferencesTabPanel } from '@/components/settings/PreferencesTabPanel';
+import { AccountTabPanel } from '@/components/settings/AccountTabPanel';
 
-const ALL_EQUIPMENT: Equipment[] = ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight', 'kettlebell'];
+// Helper functions for unit conversion
+const cmToInches = (cm: number) => cm / 2.54;
+const inchesToCm = (inches: number) => inches * 2.54;
+const kgToLbs = (kg: number) => kg * 2.20462;
+const lbsToKg = (lbs: number) => lbs / 2.20462;
 
 type SettingsTab = 'profile' | 'training' | 'preferences' | 'account';
 
@@ -89,14 +71,7 @@ const SETTINGS_TABS: { id: SettingsTab; label: string; icon: React.ReactNode }[]
   },
 ];
 
-// Helper functions for unit conversion
-const cmToInches = (cm: number) => cm / 2.54;
-const inchesToCm = (inches: number) => inches * 2.54;
-const kgToLbs = (kg: number) => kg * 2.20462;
-const lbsToKg = (lbs: number) => lbs / 2.20462;
-
 export default function SettingsPage() {
-  const router = useRouter();
   const { preferences, updatePreference } = useUserPreferences();
   const [userId, setUserId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<SettingsTab>('profile');
@@ -122,6 +97,7 @@ export default function SettingsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   // Extended profile fields
   const [age, setAge] = useState('');
@@ -130,11 +106,6 @@ export default function SettingsPage() {
   const [trainingAge, setTrainingAge] = useState('');
   const [availableEquipment, setAvailableEquipment] = useState<Equipment[]>(['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight']);
   const [injuryHistory, setInjuryHistory] = useState<MuscleGroup[]>([]);
-  
-  // Promo code state
-  const [promoCode, setPromoCode] = useState('');
-  const [promoLoading, setPromoLoading] = useState(false);
-  const [promoResult, setPromoResult] = useState<{ success: boolean; message: string } | null>(null);
 
   // Convert display values when units change
   const handleUnitsChange = (newUnits: WeightUnit) => {
@@ -298,7 +269,19 @@ export default function SettingsPage() {
       }
     }
     setIsLoading(false);
+    // Reset unsaved changes flag when fresh data loads
+    setHasUnsavedChanges(false);
   }, [settingsQuery.data]);
+
+  // Track changes to mark form as dirty
+  useEffect(() => {
+    // Only set unsaved if we've loaded initial data and user has made changes
+    if (!isLoading && settingsQuery.data) {
+      setHasUnsavedChanges(true);
+    }
+  }, [goal, experience, heightDisplay, weightDisplay, age, sleepQuality, stressLevel, trainingAge, 
+      availableEquipment, injuryHistory, units, restTimer, showFormCues, showWarmupSuggestions, 
+      prioritizeHypertrophy, skipPreWorkoutCheckIn, trackWaistInCheckin, showAiCoachNotes, volumeLandmarks]);
 
   // Refresh settings when the tab regains focus (weight may have changed in
   // another tab) — refetches the cached query.
@@ -404,6 +387,7 @@ export default function SettingsPage() {
       }
 
       setSaveMessage({ type: 'success', text: successText });
+      setHasUnsavedChanges(false); // Clear unsaved flag on successful save
     } catch (err) {
       setSaveMessage({ type: 'error', text: err instanceof Error ? err.message : 'Failed to save settings' });
     } finally {
@@ -411,29 +395,8 @@ export default function SettingsPage() {
     }
   };
 
-  const handleRedeemPromo = async () => {
-    if (!promoCode.trim()) return;
-
-    setPromoLoading(true);
-    setPromoResult(null);
-
-    try {
-      const result = await redeemPromoCode(promoCode);
-      setPromoResult(result);
-
-      if (result.success) {
-        setPromoCode('');
-        // Clear subscription cache and refresh to show updated subscription
-        setTimeout(() => {
-          sessionStorage.removeItem('subscription_data');
-          window.location.reload();
-        }, 2000);
-      }
-    } catch {
-      setPromoResult({ success: false, message: 'An error occurred. Please try again.' });
-    } finally {
-      setPromoLoading(false);
-    }
+  const handleExperienceChange = (exp: Experience) => {
+    setVolumeLandmarks(DEFAULT_VOLUME_LANDMARKS[exp]);
   };
 
   // Full-screen loader only on first-ever load with an empty cache. A revisit
@@ -450,24 +413,23 @@ export default function SettingsPage() {
     <div className="max-w-2xl mx-auto space-y-6">
       <PageHeader
         title="Settings"
-        subtitle="Customize your training preferences"
+        subtitle="Customize your training preferences and account"
       />
 
-      {/* Tab Navigation */}
-      <div className="flex gap-1 p-1 bg-surface-800/50 rounded-lg overflow-x-auto">
+      {/* Tab Navigation - Improved mobile UX */}
+      <div className="flex gap-1 p-1 bg-surface-800/50 rounded-lg overflow-x-auto scrollbar-thin scrollbar-thumb-surface-600 scrollbar-track-transparent">
         {SETTINGS_TABS.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex-1 sm:flex-none flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-2 px-2 sm:px-4 py-2 sm:py-2.5 min-h-[52px] rounded-md text-sm font-medium transition-all whitespace-nowrap ${
+            className={`flex-shrink-0 flex items-center justify-center gap-2 px-4 py-2.5 rounded-md text-sm font-medium transition-all whitespace-nowrap ${
               activeTab === tab.id
                 ? 'bg-primary-500 text-white shadow-lg'
                 : 'text-surface-400 hover:text-surface-200 hover:bg-surface-700/50'
             }`}
           >
-            {tab.icon}
-            {/* P1-7: labels always visible on mobile too */}
-            <span className="text-[10px] leading-tight sm:text-sm">{tab.label}</span>
+            <span className="hidden sm:inline">{tab.icon}</span>
+            <span>{tab.label}</span>
           </button>
         ))}
       </div>
@@ -482,1323 +444,74 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {/* Profile Tab */}
+      {/* Tab Panels */}
       {activeTab === 'profile' && (
-        <>
-      {/* Appearance */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Appearance</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-surface-100">Theme</p>
-              <p className="text-xs text-surface-400">
-                Light, dark, or match your device. Synced to your account.
-              </p>
-            </div>
-            <ThemeToggle />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Profile settings */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Profile</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Select
-            label="Primary Goal"
-            value={goal}
-            onChange={(e) => setGoal(e.target.value as Goal)}
-            options={[
-              { value: 'bulk', label: 'Build Muscle (Bulk)' },
-              { value: 'maintenance', label: 'Maintain / Recomp' },
-              { value: 'cut', label: 'Lose Fat (Cut)' },
-            ]}
-          />
-
-          <Select
-            label="Experience Level"
-            value={experience}
-            onChange={(e) => {
-              const exp = e.target.value as Experience;
-              setExperience(exp);
-              setVolumeLandmarks(DEFAULT_VOLUME_LANDMARKS[exp]);
-            }}
-            options={[
-              { value: 'novice', label: 'Novice (< 1 year)' },
-              { value: 'intermediate', label: 'Intermediate (1-3 years)' },
-              { value: 'advanced', label: 'Advanced (3+ years)' },
-            ]}
-            hint="Changing this will reset your volume landmarks to defaults"
-          />
-
-          <Input
-            label={`Height (${units === 'lb' ? 'inches' : 'cm'})`}
-            type="number"
-            step="0.1"
-            min={units === 'lb' ? '40' : '100'}
-            max={units === 'lb' ? '96' : '250'}
-            value={heightDisplay}
-            onChange={(e) => setHeightDisplay(e.target.value)}
-            placeholder={units === 'lb' ? 'e.g., 69' : 'e.g., 175'}
-            hint="Required for FFMI and weight recommendations"
-          />
-
-          <Input
-            label={`Body Weight (${units === 'lb' ? 'lbs' : 'kg'})`}
-            type="number"
-            step="0.1"
-            min={units === 'lb' ? '66' : '30'}
-            max={units === 'lb' ? '660' : '300'}
-            value={weightDisplay}
-            onChange={(e) => setWeightDisplay(e.target.value)}
-            placeholder={units === 'lb' ? 'e.g., 175' : 'e.g., 80'}
-            hint="Required for AI weight recommendations in workouts"
-          />
-
-          <Input
-            label="Age"
-            type="number"
-            min="13"
-            max="100"
-            value={age}
-            onChange={(e) => setAge(e.target.value)}
-            placeholder="e.g., 30"
-            hint="Used to adjust recovery recommendations"
-          />
-
-          <Input
-            label="Training Age (years)"
-            type="number"
-            step="0.5"
-            min="0"
-            max="50"
-            value={trainingAge}
-            onChange={(e) => setTrainingAge(e.target.value)}
-            placeholder="e.g., 2.5"
-            hint="Years of consistent resistance training"
-          />
-        </CardContent>
-      </Card>
-
-      {/* Recovery Profile */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Recovery Profile</CardTitle>
-          <p className="text-sm text-surface-400 mt-1">
-            These factors affect your volume and frequency recommendations
-          </p>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div>
-            <label className="block text-sm font-medium text-surface-200 mb-2">
-              Sleep Quality
-            </label>
-            <div className="flex items-center gap-2">
-              {([1, 2, 3, 4, 5] as Rating[]).map((rating) => (
-                <button
-                  key={rating}
-                  onClick={() => setSleepQuality(rating)}
-                  className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
-                    sleepQuality === rating
-                      ? 'bg-primary-500 text-white'
-                      : 'bg-surface-800 text-surface-300 hover:bg-surface-700'
-                  }`}
-                >
-                  {rating}
-                </button>
-              ))}
-            </div>
-            <div className="flex justify-between text-xs text-surface-500 mt-1">
-              <span>Poor</span>
-              <span>Excellent</span>
-            </div>
-            {sleepQuality <= 2 && (
-              <p className="text-xs text-warning-400 mt-2">
-                ⚠️ Poor sleep significantly impacts recovery. Volume will be reduced.
-              </p>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-surface-200 mb-2">
-              Life Stress Level
-            </label>
-            <div className="flex items-center gap-2">
-              {([1, 2, 3, 4, 5] as Rating[]).map((rating) => (
-                <button
-                  key={rating}
-                  onClick={() => setStressLevel(rating)}
-                  className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
-                    stressLevel === rating
-                      ? 'bg-primary-500 text-white'
-                      : 'bg-surface-800 text-surface-300 hover:bg-surface-700'
-                  }`}
-                >
-                  {rating}
-                </button>
-              ))}
-            </div>
-            <div className="flex justify-between text-xs text-surface-500 mt-1">
-              <span>Low stress</span>
-              <span>High stress</span>
-            </div>
-            {stressLevel >= 4 && (
-              <p className="text-xs text-warning-400 mt-2">
-                ⚠️ High life stress impairs recovery. Training should be a release, not another stressor.
-              </p>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Enhanced Athlete Mode — physiological profile fact; persists on
-          toggle (not on Save) and prompts if a mesocycle is in progress */}
-      <EnhancedAthleteModeCard />
-
-      {/* Motion Capture (experimental) — off by default, persists on toggle */}
-      <MotionCaptureLabCard />
-
-      {/* Save button for Profile tab */}
-      <div className="flex justify-end">
-        <Button onClick={handleSave} isLoading={isSaving}>
-          Save Changes
-        </Button>
-      </div>
-        </>
-      )}
-
-      {/* Training Tab */}
-      {activeTab === 'training' && (
-        <>
-      {/* Equipment & Gym */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Equipment & Gym</CardTitle>
-          <p className="text-sm text-surface-400 mt-1">
-            Select available equipment to customize exercise selection
-          </p>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div>
-            <label className="block text-sm font-medium text-surface-200 mb-3">
-              Available Equipment
-            </label>
-            <div className="grid grid-cols-2 gap-2">
-              {ALL_EQUIPMENT.map((equip) => (
-                <label
-                  key={equip}
-                  className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
-                    availableEquipment.includes(equip)
-                      ? 'bg-primary-500/10 border border-primary-500/30'
-                      : 'bg-surface-800 border border-surface-700 hover:border-surface-600'
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={availableEquipment.includes(equip)}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setAvailableEquipment([...availableEquipment, equip]);
-                      } else {
-                        setAvailableEquipment(availableEquipment.filter((e) => e !== equip));
-                      }
-                    }}
-                    className="w-4 h-4 rounded border-surface-600 bg-surface-800 text-primary-500 focus:ring-primary-500"
-                  />
-                  <span className="text-sm text-surface-200 capitalize">{equip}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-surface-200 mb-3">
-              Injury History / Cautious Areas
-            </label>
-            <p className="text-xs text-surface-500 mb-3">
-              Select muscle groups to be cautious with. The AI will avoid or modify exercises for these areas.
-            </p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {MUSCLE_GROUPS.map((muscle) => (
-                <label
-                  key={muscle}
-                  className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
-                    injuryHistory.includes(muscle)
-                      ? 'bg-warning-500/10 border border-warning-500/30'
-                      : 'bg-surface-800 border border-surface-700 hover:border-surface-600'
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={injuryHistory.includes(muscle)}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setInjuryHistory([...injuryHistory, muscle]);
-                      } else {
-                        setInjuryHistory(injuryHistory.filter((m) => m !== muscle));
-                      }
-                    }}
-                    className="w-4 h-4 rounded border-surface-600 bg-surface-800 text-warning-500 focus:ring-warning-500"
-                  />
-                  <span className="text-sm text-surface-200">{muscleDisplayName(muscle)}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Detailed Gym Equipment */}
-      <div id="gym-equipment">
-        <GymEquipmentSettings />
-      </div>
-
-      {/* Exercise Variety Settings */}
-      {userId && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <svg className="w-5 h-5 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              Exercise Variety
-            </CardTitle>
-            <p className="text-sm text-surface-400 mt-1">
-              Control how much the AI rotates between different exercises for each muscle group.
-              Higher variety means different exercises each session for the same muscle.
-            </p>
-          </CardHeader>
-          <CardContent>
-            <ExerciseVarietySettings userId={userId} />
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Muscle Priorities */}
-      {userId && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Muscle Group Priorities</CardTitle>
-            <p className="text-sm text-surface-400 mt-1">
-              Set training priorities for each muscle group. Higher priority muscles will receive more volume in program generation.
-            </p>
-          </CardHeader>
-          <CardContent>
-            <MusclePrioritySettings userId={userId} />
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Volume Landmarks (moved to Training tab) */}
-      <VolumeLandmarksCard
-        experience={experience}
-        volumeLandmarks={volumeLandmarks}
-        setVolumeLandmarks={setVolumeLandmarks}
-      />
-
-      {/* Save button for Training tab */}
-      <div className="flex justify-end">
-        <Button onClick={handleSave} isLoading={isSaving}>
-          Save Changes
-        </Button>
-      </div>
-        </>
-      )}
-
-      {/* Preferences Tab */}
-      {activeTab === 'preferences' && (
-        <>
-      {/* Preferences */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Preferences</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <Select
-            label="Weight Units"
-            value={units}
-            onChange={(e) => handleUnitsChange(e.target.value as WeightUnit)}
-            options={[
-              { value: 'kg', label: 'Metric (kg, cm)' },
-              { value: 'lb', label: 'Imperial (lbs, inches)' },
-            ]}
-            hint="Changes how measurements are displayed throughout the app"
-          />
-
-          <Slider
-            label="Default Rest Timer"
-            min={30}
-            max={300}
-            step={15}
-            value={restTimer}
-            onChange={(e) => setRestTimer(parseInt(e.target.value))}
-            valueFormatter={(v) => `${Math.floor(v / 60)}:${(v % 60).toString().padStart(2, '0')}`}
-          />
-
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-surface-200">Show Form Cues</p>
-                <p className="text-xs text-surface-500">Display exercise form tips during workouts</p>
-              </div>
-              <Toggle
-                checked={showFormCues}
-                onChange={setShowFormCues}
-              />
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-surface-200">Show Warmup Suggestions</p>
-                <p className="text-xs text-surface-500">Display warmup protocol before exercises</p>
-              </div>
-              <Toggle
-                checked={showWarmupSuggestions}
-                onChange={setShowWarmupSuggestions}
-              />
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-surface-200">Prioritize Hypertrophy</p>
-                <p className="text-xs text-surface-500">Select S-tier exercises first (Nippard methodology)</p>
-              </div>
-              <Toggle
-                checked={prioritizeHypertrophy}
-                onChange={setPrioritizeHypertrophy}
-              />
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-surface-200">Skip Pre-Workout Check-In</p>
-                <p className="text-xs text-surface-500">Start workouts immediately without readiness questions</p>
-              </div>
-              <Toggle
-                checked={skipPreWorkoutCheckIn}
-                onChange={setSkipPreWorkoutCheckIn}
-              />
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-surface-200">Morning Waist in Check-In</p>
-                <p className="text-xs text-surface-500">Optional waist entry in the daily check-in; feeds your composition trend</p>
-              </div>
-              <Toggle
-                checked={trackWaistInCheckin}
-                onChange={setTrackWaistInCheckin}
-              />
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-surface-200">AI Coach Notes</p>
-                <p className="text-xs text-surface-500">Show AI-generated coaching tips during workouts</p>
-              </div>
-              <Toggle
-                checked={showAiCoachNotes}
-                onChange={setShowAiCoachNotes}
-              />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Eating window (drives nutrition pacing verdicts) */}
-      <EatingWindowSettings />
-
-      {/* Health reminders (blood pressure daily nudge — opt-in) */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Health Reminders</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <BloodPressureSettings />
-        </CardContent>
-      </Card>
-
-      {/* Education & Tips */}
-      <EducationPreferencesCard />
-
-      {/* Save button for Preferences tab */}
-      <div className="flex justify-end">
-        <Button onClick={handleSave} isLoading={isSaving}>
-          Save Changes
-        </Button>
-      </div>
-        </>
-      )}
-
-      {/* Account Tab */}
-      {activeTab === 'account' && (
-        <>
-      {/* Install App */}
-      <InstallAppCard />
-
-      {/* Subscription Management */}
-      <SubscriptionCard />
-
-      {/* Account & Setup */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Account & Setup</CardTitle>
-          <p className="text-sm text-surface-400 mt-1">
-            Re-run the setup wizard or manage your account
-          </p>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between p-4 bg-surface-800/50 rounded-lg">
-            <div>
-              <p className="text-sm font-medium text-surface-200">Setup Wizard</p>
-              <p className="text-xs text-surface-500">Re-run the onboarding process to update your profile</p>
-            </div>
-            <Link href="/onboarding">
-              <Button variant="outline" size="sm">
-                <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                Re-run Setup
-              </Button>
-            </Link>
-          </div>
-          
-          <div className="flex items-center justify-between p-4 bg-surface-800/50 rounded-lg">
-            <div>
-              <p className="text-sm font-medium text-surface-200">Strength Calibration</p>
-              <p className="text-xs text-surface-500">Update your benchmark lifts for better weight recommendations</p>
-            </div>
-            <Link href="/onboarding/calibrate">
-              <Button variant="outline" size="sm">
-                <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
-                Calibrate
-              </Button>
-            </Link>
-          </div>
-
-          {/* Promo Code Redemption */}
-          <div className="p-4 bg-gradient-to-r from-primary-500/10 to-accent-500/10 rounded-lg border border-primary-500/20">
-            <div className="flex items-center gap-2 mb-3">
-              <svg className="w-5 h-5 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" />
-              </svg>
-              <p className="text-sm font-medium text-surface-200">Redeem Promo Code</p>
-            </div>
-            <p className="text-xs text-surface-400 mb-3">Have a promo code? Enter it below to unlock premium features.</p>
-
-            <div className="flex gap-2">
-              <Input
-                value={promoCode}
-                onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
-                placeholder="Enter code (e.g., FAMILY-ELITE-001)"
-                className="flex-1 uppercase"
-                disabled={promoLoading}
-              />
-              <Button
-                onClick={handleRedeemPromo}
-                disabled={!promoCode.trim() || promoLoading}
-                isLoading={promoLoading}
-              >
-                Redeem
-              </Button>
-            </div>
-
-            {promoResult && (
-              <div className={`mt-3 p-3 rounded-lg text-sm ${
-                promoResult.success
-                  ? 'bg-success-500/10 border border-success-500/20 text-success-400'
-                  : 'bg-danger-500/10 border border-danger-500/20 text-danger-400'
-              }`}>
-                {promoResult.message}
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Import & Export */}
-      <ImportExportSettings />
-
-      {/* Legal */}
-      <div className="text-center text-xs text-surface-500 space-x-3">
-        <Link href="/privacy" className="hover:text-surface-300 underline">
-          Privacy Policy
-        </Link>
-        <Link href="/terms" className="hover:text-surface-300 underline">
-          Terms of Service
-        </Link>
-      </div>
-
-      {/* Danger Zone — account deletion (App Store Guideline 5.1.1(v)) */}
-      <DeleteAccountCard />
-        </>
-      )}
-    </div>
-  );
-}
-
-// Subscription Management Component
-function SubscriptionCard() {
-  const { 
-    tier, 
-    status, 
-    effectiveTier, 
-    isTrialing, 
-    trialDaysRemaining, 
-    trialEndsAt,
-    currentPeriodEnd, 
-    cancelAtPeriodEnd,
-    openPortal,
-    isLoading
-  } = useSubscription();
-  const isNative = useIsNativePlatform();
-
-  const [isOpeningPortal, setIsOpeningPortal] = useState(false);
-  
-  const handleManageSubscription = async () => {
-    setIsOpeningPortal(true);
-    try {
-      const url = await openPortal();
-      if (url) {
-        window.location.href = url;
-      }
-    } finally {
-      setIsOpeningPortal(false);
-    }
-  };
-  
-  const tierInfo = TIER_FEATURES[effectiveTier];
-  
-  if (isLoading) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Subscription</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="animate-pulse space-y-4">
-            <div className="h-4 bg-surface-700 rounded w-1/3" />
-            <div className="h-4 bg-surface-700 rounded w-1/2" />
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle>Subscription</CardTitle>
-          <Badge 
-            variant={
-              status === 'active' ? 'success' : 
-              isTrialing ? 'warning' : 
-              status === 'past_due' ? 'danger' : 
-              'default'
-            }
-          >
-            {isTrialing ? 'Trial' : status === 'active' ? 'Active' : status === 'past_due' ? 'Past Due' : 'Free'}
-          </Badge>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Current Plan */}
-        <div className="p-4 bg-surface-800/50 rounded-lg">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm text-surface-400">Current Plan</span>
-            <span className={`text-lg font-bold ${
-              effectiveTier === 'elite' ? 'text-accent-400' :
-              effectiveTier === 'pro' ? 'text-primary-400' :
-              'text-surface-300'
-            }`}>
-              {tierInfo.name}
-            </span>
-          </div>
-          <p className="text-xs text-surface-500">{tierInfo.description}</p>
-        </div>
-        
-        {/* Trial Info */}
-        {isTrialing && trialEndsAt && (
-          <div className="p-4 bg-warning-500/10 border border-warning-500/20 rounded-lg">
-            <div className="flex items-center gap-2 text-warning-400 mb-1">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span className="text-sm font-medium">Trial ends in {trialDaysRemaining} days</span>
-            </div>
-            <p className="text-xs text-surface-400">
-              {trialEndsAt.toLocaleDateString('en-US', { 
-                weekday: 'long', 
-                year: 'numeric', 
-                month: 'long', 
-                day: 'numeric' 
-              })}
-            </p>
-          </div>
-        )}
-        
-        {/* Billing Period */}
-        {status === 'active' && currentPeriodEnd && (
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-surface-400">
-              {cancelAtPeriodEnd ? 'Access until' : 'Next billing date'}
-            </span>
-            <span className="text-surface-200">
-              {currentPeriodEnd.toLocaleDateString('en-US', { 
-                month: 'short', 
-                day: 'numeric', 
-                year: 'numeric' 
-              })}
-            </span>
-          </div>
-        )}
-        
-        {cancelAtPeriodEnd && (
-          <div className="p-3 bg-danger-500/10 border border-danger-500/20 rounded-lg">
-            <p className="text-sm text-danger-400">
-              Your subscription will be canceled at the end of this billing period.
-            </p>
-          </div>
-        )}
-        
-        {/* Actions — billing is web-only, so hide all purchase/management
-            actions inside the native app (App Store Guideline 3.1.1). */}
-        {isNative ? (
-          <p className="text-xs text-surface-500">
-            Your subscription is managed on the web.
-          </p>
-        ) : (
-          <div className="flex gap-3">
-            {tier === 'free' && !isTrialing ? (
-              <Link href="/dashboard/pricing" className="flex-1">
-                <Button className="w-full" variant="primary">
-                  Upgrade Now
-                </Button>
-              </Link>
-            ) : status === 'active' || isTrialing ? (
-              <>
-                <Button
-                  variant="outline"
-                  onClick={handleManageSubscription}
-                  isLoading={isOpeningPortal}
-                  className="flex-1"
-                >
-                  Manage Subscription
-                </Button>
-                <Link href="/dashboard/pricing">
-                  <Button variant="secondary">
-                    Change Plan
-                  </Button>
-                </Link>
-              </>
-            ) : (
-              <Link href="/dashboard/pricing" className="flex-1">
-                <Button className="w-full" variant="primary">
-                  Reactivate
-                </Button>
-              </Link>
-            )}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-// Danger Zone — permanent account deletion
-function DeleteAccountCard() {
-  const [showConfirm, setShowConfirm] = useState(false);
-  const [confirmText, setConfirmText] = useState('');
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const canDelete = confirmText.trim().toUpperCase() === 'DELETE';
-
-  const handleDelete = async () => {
-    if (!canDelete) return;
-    setIsDeleting(true);
-    setError(null);
-
-    try {
-      const result = await deleteAccount();
-      if (!result.success) {
-        setError(result.message);
-        setIsDeleting(false);
-        return;
-      }
-
-      // Account is gone — clear the now-invalid session and leave the app.
-      const supabase = createUntypedClient();
-      await supabase.auth.signOut();
-      window.location.href = '/login';
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete your account.');
-      setIsDeleting(false);
-    }
-  };
-
-  const closeModal = () => {
-    if (isDeleting) return;
-    setShowConfirm(false);
-    setConfirmText('');
-    setError(null);
-  };
-
-  return (
-    <>
-      <Card className="border-danger-500/30">
-        <CardHeader>
-          <CardTitle className="text-danger-400">Delete Account</CardTitle>
-          <p className="text-sm text-surface-400 mt-1">
-            Permanently delete your account and all associated data. This cannot be undone.
-          </p>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-between p-4 bg-danger-500/5 border border-danger-500/20 rounded-lg">
-            <div>
-              <p className="text-sm font-medium text-surface-200">Delete my account</p>
-              <p className="text-xs text-surface-500">Removes your profile, workouts, nutrition, and all other data</p>
-            </div>
-            <Button variant="danger" size="sm" onClick={() => setShowConfirm(true)}>
-              Delete Account
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Modal isOpen={showConfirm} onClose={closeModal} title="Delete account?" size="md">
-        <div className="space-y-4">
-          <p className="text-sm text-surface-300">
-            This will <strong className="text-danger-400">permanently delete</strong> your account and
-            all of your data — workouts, history, body composition, nutrition, and settings. This action
-            cannot be undone.
-          </p>
-          <p className="text-xs text-surface-500">
-            If you have a paid subscription, cancel it on the web first — deleting your account here does
-            not automatically cancel web billing.
-          </p>
-
-          <div>
-            <label className="block text-sm text-surface-300 mb-1.5">
-              Type <span className="font-mono font-semibold text-surface-100">DELETE</span> to confirm
-            </label>
-            <Input
-              value={confirmText}
-              onChange={(e) => setConfirmText(e.target.value)}
-              placeholder="DELETE"
-              disabled={isDeleting}
-              autoFocus
-            />
-          </div>
-
-          {error && (
-            <div className="p-3 bg-danger-500/10 border border-danger-500/20 rounded-lg text-sm text-danger-400">
-              {error}
-            </div>
-          )}
-
-          <div className="flex justify-end gap-3 pt-2">
-            <Button variant="ghost" onClick={closeModal} disabled={isDeleting}>
-              Cancel
-            </Button>
-            <Button
-              variant="danger"
-              onClick={handleDelete}
-              disabled={!canDelete || isDeleting}
-              isLoading={isDeleting}
-            >
-              Permanently Delete
-            </Button>
-          </div>
-        </div>
-      </Modal>
-    </>
-  );
-}
-
-// Install App Card Component
-function InstallAppCard() {
-  const { pwaContext, isInstalled, installPrefs, isLoading } = usePWA();
-  const [showInstructions, setShowInstructions] = useState(false);
-
-  // Don't show if already installed as PWA
-  if (isLoading || isInstalled || pwaContext?.isStandalone) {
-    return null;
-  }
-
-  // Don't show if user has already completed installation
-  if (installPrefs.homescreenInstallCompleted) {
-    return null;
-  }
-
-  return (
-    <>
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <svg className="w-5 h-5 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
-            </svg>
-            Install App
-          </CardTitle>
-          <p className="text-sm text-surface-400 mt-1">
-            Add HyperTrack to your homescreen for the best experience
-          </p>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-between p-4 bg-gradient-to-r from-primary-500/10 to-accent-500/10 rounded-lg border border-primary-500/20">
-            <div className="flex-1">
-              <div className="flex items-center gap-3 mb-2">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center">
-                  <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-surface-200">Quick Access</p>
-                  <p className="text-xs text-surface-500">Launch instantly from your homescreen</p>
-                </div>
-              </div>
-              <ul className="space-y-1 ml-13">
-                <li className="flex items-center gap-2 text-xs text-surface-400">
-                  <svg className="w-3 h-3 text-success-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  Works offline after first load
-                </li>
-                <li className="flex items-center gap-2 text-xs text-surface-400">
-                  <svg className="w-3 h-3 text-success-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  Full-screen experience
-                </li>
-              </ul>
-            </div>
-            <Button onClick={() => setShowInstructions(true)} size="sm">
-              <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-              </svg>
-              View Instructions
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Install Instructions Modal */}
-      <Modal
-        isOpen={showInstructions}
-        onClose={() => setShowInstructions(false)}
-        title=""
-        size="lg"
-      >
-        <AddToHomescreenGuide
-          onComplete={() => setShowInstructions(false)}
-          onSkip={() => setShowInstructions(false)}
-          showSkipOption={false}
+        <ProfileTabPanel
+          goal={goal}
+          setGoal={setGoal}
+          experience={experience}
+          setExperience={setExperience}
+          heightDisplay={heightDisplay}
+          setHeightDisplay={setHeightDisplay}
+          weightDisplay={weightDisplay}
+          setWeightDisplay={setWeightDisplay}
+          age={age}
+          setAge={setAge}
+          trainingAge={trainingAge}
+          setTrainingAge={setTrainingAge}
+          units={units}
+          sleepQuality={sleepQuality}
+          setSleepQuality={setSleepQuality}
+          stressLevel={stressLevel}
+          setStressLevel={setStressLevel}
+          onSave={handleSave}
+          isSaving={isSaving}
+          hasUnsavedChanges={hasUnsavedChanges}
+          onExperienceChange={handleExperienceChange}
         />
-      </Modal>
-    </>
-  );
-}
+      )}
 
-// Experience level descriptions for the education section
-const EXPERIENCE_LEVEL_INFO = {
-  novice: {
-    label: 'Beginner',
-    sublabel: 'New to training (< 1 year)',
-    description: 'More guidance, detailed explanations, and conservative recommendations',
-    features: [
-      'Extra tooltips and hints throughout the app',
-      'Simpler exercise selections',
-      'Lower starting volume (easier to recover)',
-      'More detailed form cues',
-    ],
-  },
-  intermediate: {
-    label: 'Intermediate',
-    sublabel: '1-3 years of training',
-    description: 'Balanced guidance with room to customize',
-    features: [
-      'Standard tooltips for complex terms',
-      'Full exercise library access',
-      'Moderate volume recommendations',
-      'Optional form cues',
-    ],
-  },
-  advanced: {
-    label: 'Advanced',
-    sublabel: '3+ years of training',
-    description: 'Minimal hand-holding, maximum flexibility',
-    features: [
-      'Concise interface with fewer prompts',
-      'Advanced exercise variations',
-      'Higher volume capacity',
-      'You know what you\'re doing',
-    ],
-  },
-} as const;
+      {activeTab === 'training' && (
+        <TrainingTabPanel
+          userId={userId}
+          availableEquipment={availableEquipment}
+          setAvailableEquipment={setAvailableEquipment}
+          injuryHistory={injuryHistory}
+          setInjuryHistory={setInjuryHistory}
+          experience={experience}
+          volumeLandmarks={volumeLandmarks}
+          setVolumeLandmarks={setVolumeLandmarks}
+          onSave={handleSave}
+          isSaving={isSaving}
+          hasUnsavedChanges={hasUnsavedChanges}
+        />
+      )}
 
-// Education Preferences Card Component
-function EducationPreferencesCard() {
-  const {
-    showBeginnerTips,
-    explainScienceTerms,
-    dismissedHints,
-    setShowBeginnerTips,
-    setExplainScienceTerms,
-    resetAllHints,
-  } = useEducationStore();
+      {activeTab === 'preferences' && (
+        <PreferencesTabPanel
+          units={units}
+          handleUnitsChange={handleUnitsChange}
+          restTimer={restTimer}
+          setRestTimer={setRestTimer}
+          showFormCues={showFormCues}
+          setShowFormCues={setShowFormCues}
+          showWarmupSuggestions={showWarmupSuggestions}
+          setShowWarmupSuggestions={setShowWarmupSuggestions}
+          prioritizeHypertrophy={prioritizeHypertrophy}
+          setPrioritizeHypertrophy={setPrioritizeHypertrophy}
+          skipPreWorkoutCheckIn={skipPreWorkoutCheckIn}
+          setSkipPreWorkoutCheckIn={setSkipPreWorkoutCheckIn}
+          trackWaistInCheckin={trackWaistInCheckin}
+          setTrackWaistInCheckin={setTrackWaistInCheckin}
+          showAiCoachNotes={showAiCoachNotes}
+          setShowAiCoachNotes={setShowAiCoachNotes}
+          onSave={handleSave}
+          isSaving={isSaving}
+          hasUnsavedChanges={hasUnsavedChanges}
+        />
+      )}
 
-  const [showResetConfirm, setShowResetConfirm] = useState(false);
-  const [localExperience, setLocalExperience] = useState<Experience | null>(null);
-  const [isLoadingExperience, setIsLoadingExperience] = useState(true);
-  const [showExperienceDetails, setShowExperienceDetails] = useState(false);
-
-  // Load experience level on mount
-  useEffect(() => {
-    async function loadExperience() {
-      const supabase = createUntypedClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data } = await supabase
-          .from('users')
-          .select('experience')
-          .eq('id', user.id)
-          .single();
-        if (data?.experience) {
-          setLocalExperience(data.experience as Experience);
-        }
-      }
-      setIsLoadingExperience(false);
-    }
-    loadExperience();
-  }, []);
-
-  // Save experience level when changed
-  const handleExperienceChange = async (newExperience: Experience) => {
-    setLocalExperience(newExperience);
-    const supabase = createUntypedClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      await supabase
-        .from('users')
-        .update({ experience: newExperience })
-        .eq('id', user.id);
-    }
-  };
-
-  const handleResetHints = () => {
-    resetAllHints();
-    setShowResetConfirm(false);
-  };
-
-  const currentExperienceInfo = localExperience ? EXPERIENCE_LEVEL_INFO[localExperience] : null;
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <svg className="w-5 h-5 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-          </svg>
-          Education & Tips
-        </CardTitle>
-        <p className="text-sm text-surface-400 mt-1">
-          Control how the app explains features and terminology
-        </p>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Experience Level Selection */}
-        <div className="p-4 bg-surface-800/50 rounded-lg border border-surface-700">
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <p className="text-sm font-medium text-surface-200">Training Experience</p>
-              <p className="text-xs text-surface-500">Adjusts guidance level throughout the app</p>
-            </div>
-            <button
-              onClick={() => setShowExperienceDetails(!showExperienceDetails)}
-              className="text-xs text-primary-400 hover:text-primary-300 flex items-center gap-1"
-            >
-              {showExperienceDetails ? 'Hide' : 'What changes?'}
-              <svg
-                className={`w-3 h-3 transition-transform ${showExperienceDetails ? 'rotate-180' : ''}`}
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
-          </div>
-
-          {isLoadingExperience ? (
-            <div className="h-12 bg-surface-700/50 rounded-lg animate-pulse" />
-          ) : (
-            <div className="grid grid-cols-3 gap-2">
-              {(['novice', 'intermediate', 'advanced'] as Experience[]).map((level) => {
-                const info = EXPERIENCE_LEVEL_INFO[level];
-                const isSelected = localExperience === level;
-                return (
-                  <button
-                    key={level}
-                    onClick={() => handleExperienceChange(level)}
-                    className={`p-3 rounded-lg text-center transition-all ${
-                      isSelected
-                        ? 'bg-primary-500/20 border-2 border-primary-500'
-                        : 'bg-surface-700/50 border border-surface-600 hover:border-surface-500'
-                    }`}
-                  >
-                    <p className={`text-sm font-medium ${isSelected ? 'text-primary-400' : 'text-surface-200'}`}>
-                      {info.label}
-                    </p>
-                    <p className="text-xs text-surface-500 mt-0.5">{info.sublabel}</p>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Expandable details about what changes */}
-          {showExperienceDetails && currentExperienceInfo && (
-            <div className="mt-4 pt-4 border-t border-surface-700">
-              <p className="text-sm text-surface-300 mb-2">{currentExperienceInfo.description}</p>
-              <ul className="space-y-1.5">
-                {currentExperienceInfo.features.map((feature, idx) => (
-                  <li key={idx} className="flex items-start gap-2 text-xs text-surface-400">
-                    <svg className="w-3.5 h-3.5 text-primary-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                    {feature}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium text-surface-200">Show Beginner Tips</p>
-            <p className="text-xs text-surface-500">Display helpful hints when you first use features</p>
-          </div>
-          <Toggle
-            checked={showBeginnerTips}
-            onChange={setShowBeginnerTips}
-          />
-        </div>
-
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium text-surface-200">Explain Science Terms</p>
-            <p className="text-xs text-surface-500">Show tooltips for terms like MEV, RIR, FFMI, etc.</p>
-          </div>
-          <Toggle
-            checked={explainScienceTerms}
-            onChange={setExplainScienceTerms}
-          />
-        </div>
-
-        {dismissedHints.length > 0 && (
-          <div className="pt-4 border-t border-surface-700">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-surface-200">Reset Tips</p>
-                <p className="text-xs text-surface-500">
-                  You&apos;ve dismissed {dismissedHints.length} tips. Reset to see them again.
-                </p>
-              </div>
-              {showResetConfirm ? (
-                <div className="flex gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowResetConfirm(false)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    variant="danger"
-                    size="sm"
-                    onClick={handleResetHints}
-                  >
-                    Reset
-                  </Button>
-                </div>
-              ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowResetConfirm(true)}
-                >
-                  Reset Tips
-                </Button>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Glossary Link */}
-        <div className="pt-4 border-t border-surface-700">
-          <Link
-            href="/dashboard/glossary"
-            className="flex items-center justify-between p-3 bg-surface-800/50 rounded-lg hover:bg-surface-700/50 transition-colors group"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-primary-500/10 flex items-center justify-center">
-                <svg className="w-4 h-4 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                </svg>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-surface-200">Training Glossary</p>
-                <p className="text-xs text-surface-500">Look up any training term or concept</p>
-              </div>
-            </div>
-            <svg
-              className="w-5 h-5 text-surface-500 group-hover:text-primary-400 transition-colors"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-          </Link>
-        </div>
-
-        <div className="p-3 bg-surface-800/50 rounded-lg">
-          <p className="text-xs text-surface-400">
-            <span className="text-primary-400">Tip:</span> You can always learn more about training concepts
-            in the <Link href="/dashboard/learn" className="text-primary-400 hover:underline">Learn Hub</Link>.
-          </p>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-// Volume Landmarks Card Component
-interface VolumeLandmarksCardProps {
-  experience: Experience;
-  volumeLandmarks: Record<string, { mev: number; mav: number; mrv: number }>;
-  setVolumeLandmarks: React.Dispatch<React.SetStateAction<Record<string, { mev: number; mav: number; mrv: number }>>>;
-}
-
-function VolumeLandmarksCard({ experience, volumeLandmarks, setVolumeLandmarks }: VolumeLandmarksCardProps) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Volume Landmarks</CardTitle>
-        <p className="text-sm text-surface-400 mt-1">
-          Weekly sets per muscle group (based on Dr. Mike Israetel&apos;s research)
-        </p>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
-          {/* Explanation box */}
-          <div className="p-4 bg-surface-800/50 rounded-lg border border-surface-700 space-y-3">
-            <div className="flex gap-6 flex-wrap text-sm">
-              <div className="flex items-center gap-2">
-                <span className="w-10 h-6 bg-warning-500/20 border border-warning-500/40 rounded text-xs flex items-center justify-center font-medium text-warning-400">MEV</span>
-                <span className="text-surface-400"><span className="font-medium text-surface-200">Minimum Effective Volume</span> — {DIRECT_MEV_TOOLTIP}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-10 h-6 bg-success-500/20 border border-success-500/40 rounded text-xs flex items-center justify-center font-medium text-success-400">MAV</span>
-                <span className="text-surface-400"><span className="font-medium text-surface-200">Maximum Adaptive Volume</span> — Sweet spot for growth</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-10 h-6 bg-danger-500/20 border border-danger-500/40 rounded text-xs flex items-center justify-center font-medium text-danger-400">MRV</span>
-                <span className="text-surface-400"><span className="font-medium text-surface-200">Maximum Recoverable Volume</span> — Upper limit before overtraining</span>
-              </div>
-            </div>
-            <p className="text-xs text-surface-500 border-t border-surface-700 pt-3">
-              These values are pre-filled based on your experience level and published hypertrophy research. Adjust based on your personal recovery capacity and response.
-            </p>
-          </div>
-
-          {/* Column headers */}
-          <div className="flex items-center gap-4">
-            <span className="w-24 text-xs text-surface-500 font-medium">Muscle</span>
-            <div className="flex-1 grid grid-cols-3 gap-2 text-xs text-center">
-              <span className="text-warning-400 font-medium" title={DIRECT_MEV_TOOLTIP}>Direct MEV</span>
-              <span className="text-success-400 font-medium">MAV</span>
-              <span className="text-danger-400 font-medium">MRV</span>
-            </div>
-          </div>
-
-          {STANDARD_MUSCLE_GROUPS.map((muscle) => {
-            const defaultLandmark = DEFAULT_VOLUME_LANDMARKS[experience][muscle] || { mev: 6, mav: 12, mrv: 20 };
-            const landmarks = volumeLandmarks[muscle] || defaultLandmark;
-            const parent = MUSCLE_VOLUME_AUTHORITY[muscle].parent;
-            // Bounded components stay EDITABLE — their values still drive
-            // local status and progression, so making them read-only would
-            // hide behaviourally-active numbers. They are validated instead:
-            // a component may not claim more capacity than its parent.
-            const parentMrv = parentMrvFor(
-              muscle,
-              volumeLandmarks,
-              DEFAULT_VOLUME_LANDMARKS[experience]
-            );
-            const violation = validateLandmarkRow(landmarks, parentMrv);
-            const hint = boundedComponentHint(muscle, parentMrv);
-            const commit = (next: { mev: number; mav: number; mrv: number }) =>
-              setVolumeLandmarks({ ...volumeLandmarks, [muscle]: next });
-            return (
-              <div key={muscle} className="space-y-1">
-                <div className="flex items-center gap-4">
-                  <span className="w-24 text-sm text-surface-300">
-                    {STANDARD_MUSCLE_DISPLAY_NAMES[muscle]}
-                    {parent && (
-                      <span className="block text-[10px] leading-tight text-surface-500">
-                        subtarget
-                      </span>
-                    )}
-                  </span>
-                  <div className="flex-1 grid grid-cols-3 gap-2">
-                    <Input
-                      type="number"
-                      value={landmarks.mev ?? 6}
-                      onChange={(e) => commit({ ...landmarks, mev: parseInt(e.target.value) || 0 })}
-                      className="text-center"
-                    />
-                    <Input
-                      type="number"
-                      value={landmarks.mav ?? 12}
-                      onChange={(e) => commit({ ...landmarks, mav: parseInt(e.target.value) || 0 })}
-                      className="text-center"
-                    />
-                    <Input
-                      type="number"
-                      value={landmarks.mrv ?? 20}
-                      onChange={(e) => commit({ ...landmarks, mrv: parseInt(e.target.value) || 0 })}
-                      className="text-center"
-                    />
-                  </div>
-                </div>
-                {hint && <p className="pl-28 text-xs text-surface-500">{hint}</p>}
-                {violation && (
-                  <p className="pl-28 text-xs text-warning-400">{violation}</p>
-                )}
-              </div>
-            );
-          })}
-          <div className="flex items-center gap-4 pt-2 border-t border-surface-800">
-            <span className="w-24 text-xs text-surface-500">Legend</span>
-            <div className="flex-1 grid grid-cols-3 gap-2 text-center text-xs text-surface-500">
-              <span>MEV</span>
-              <span>MAV</span>
-              <span>MRV</span>
-            </div>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+      {activeTab === 'account' && <AccountTabPanel />}
+    </div>
   );
 }
