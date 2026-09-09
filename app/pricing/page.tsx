@@ -185,7 +185,7 @@ export default function PublicPricingPage() {
                 />
                 <FaqItem
                   question="What happens after my trial ends?"
-                  answer="After your 14-day trial, you'll be on the Free plan with basic features. You can upgrade anytime to unlock Pro or Elite features."
+                  answer="After your 14-day free trial (no credit card required), your account continues on the Free plan with basic features. You can upgrade to Pro or Elite anytime to unlock advanced features."
                 />
                 <FaqItem
                   question="Can I change plans later?"
@@ -269,6 +269,13 @@ function PricingCard({
         >
           {cta}
         </Link>
+
+        {/* Accurate billing disclosure for paid tiers */}
+        {tier !== 'free' && (
+          <p className="text-xs text-surface-500 text-center leading-relaxed">
+            Sign up for 14-day Elite trial. Free plan after trial—upgrade anytime for {price}/{period === 'per year' ? 'year' : 'month'}.
+          </p>
+        )}
 
         <div className="pt-4 border-t border-surface-800">
           <ul className="space-y-3">
