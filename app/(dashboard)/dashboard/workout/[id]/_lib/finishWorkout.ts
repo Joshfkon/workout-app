@@ -72,6 +72,18 @@ export function sessionClaimEntryId(sessionId: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Abandoned session detection
+// ---------------------------------------------------------------------------
+
+/**
+ * If the gap between the last logged set and "now" is at least this many
+ * minutes, treat the session as abandoned and backdate the end time to the
+ * last set's timestamp. Prevents inflated session durations when the user
+ * forgets to hit save/finish.
+ */
+const ABANDONED_SESSION_THRESHOLD_MINUTES = 20;
+
+// ---------------------------------------------------------------------------
 // Timing
 // ---------------------------------------------------------------------------
 
@@ -123,6 +135,13 @@ export interface FinishSummaryData {
    * that don't surface the toggle (leaves the stored flag untouched).
    */
   isDeload?: boolean;
+  /**
+   * ISO timestamp of the last logged set in this workout. Used to detect
+   * abandoned sessions: if the gap between this and "now" is >= the threshold,
+   * the session end time is backdated to this timestamp instead of using the
+   * current time. Omit on legacy callers or sessions with no sets.
+   */
+  lastSetTimestamp?: string;
 }
 
 export interface FinishFlowDeps {
@@ -150,9 +169,20 @@ export interface FinishFlowDeps {
 }
 
 function completionPatch(data: FinishSummaryData): Record<string, unknown> {
+  // Determine the end time: if there's been a long gap since the last set,
+  // use that set's timestamp instead of now (abandoned session).
+  let completedAt = clockNow();
+  if (data.lastSetTimestamp) {
+    const lastSetTime = new Date(data.lastSetTimestamp);
+    const gapMinutes = (completedAt.getTime() - lastSetTime.getTime()) / (1000 * 60);
+    if (gapMinutes >= ABANDONED_SESSION_THRESHOLD_MINUTES) {
+      completedAt = lastSetTime;
+    }
+  }
+
   const patch: Record<string, unknown> = {
     state: 'completed',
-    completed_at: clockNow().toISOString(),
+    completed_at: completedAt.toISOString(),
     session_rpe: data.sessionRpe,
     session_notes: data.notes,
     completion_percent: 100,

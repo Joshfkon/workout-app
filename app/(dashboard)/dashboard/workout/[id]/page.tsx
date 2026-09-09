@@ -5245,6 +5245,14 @@ export default function WorkoutPage() {
     const claimArmed = !session.mesocycleId && !!claimCandidate;
     if (claimArmed) setSubmittedSessionRpe(data.sessionRpe);
 
+    // Find the last logged set's timestamp for abandoned session detection
+    const lastSetTimestamp = completedSets.length > 0
+      ? completedSets.reduce((latest, set) => 
+          set.loggedAt > latest ? set.loggedAt : latest, 
+          completedSets[0].loggedAt
+        )
+      : undefined;
+
     await submitFinishOptimistic(
       {
         supabase: createUntypedClient(),
@@ -5260,7 +5268,11 @@ export default function WorkoutPage() {
         onCompletionSynced: () => void invalidateWorkoutDerivedCaches(queryClient),
       },
       // Persist the same frozen duration the summary is showing.
-      { ...data, durationSeconds: finishSnapshot?.durationSeconds ?? null }
+      { 
+        ...data, 
+        durationSeconds: finishSnapshot?.durationSeconds ?? null,
+        lastSetTimestamp,
+      }
     );
   };
 
