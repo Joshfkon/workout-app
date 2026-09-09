@@ -211,9 +211,9 @@ describe('inWorkoutSignals', () => {
       const context: ExerciseContext = {
         exerciseName: 'Bench Press',
         setsToday: [
-          mockSet({ form_rating: 'ugly' }),
-          mockSet({ form_rating: 'ugly' }),
-          mockSet({ form_rating: 'clean' }),
+          mockSet({ feedback: { repsInTank: 3, form: 'ugly' } }),
+          mockSet({ feedback: { repsInTank: 3, form: 'ugly' } }),
+          mockSet({ feedback: { repsInTank: 3, form: 'clean' } }),
         ],
       };
 
@@ -227,8 +227,8 @@ describe('inWorkoutSignals', () => {
       const context: ExerciseContext = {
         exerciseName: 'Squat',
         setsToday: [
-          mockSet({ form_rating: 'clean' }),
-          mockSet({ form_rating: 'clean' }),
+          mockSet({ feedback: { repsInTank: 3, form: 'clean' } }),
+          mockSet({ feedback: { repsInTank: 3, form: 'clean' } }),
         ],
       };
 

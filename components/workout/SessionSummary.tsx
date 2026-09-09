@@ -683,7 +683,7 @@ export function SessionSummary({
         const result = await generatePostWorkoutReel({
           totalSets,
           totalVolume: totalVolume,
-          units: weightUnit,
+          units: unit, // Use unit ('kg' | 'lb') not weightUnit ('kg' | 'lbs')
           durationMinutes,
           exercises: reelExercises,
           fatigueSignals,

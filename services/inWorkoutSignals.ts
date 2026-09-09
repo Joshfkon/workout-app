@@ -208,7 +208,7 @@ export function detectFormBreakdown(context: ExerciseContext): WorkoutSignal | n
     return null;
   }
 
-  const uglyCount = workingSets.filter(s => s.form_rating === 'ugly').length;
+  const uglyCount = workingSets.filter(s => s.feedback?.form === 'ugly').length;
 
   if (uglyCount >= 2) {
     return {
@@ -251,8 +251,8 @@ export function detectFatigueWarning(context: ExerciseContext): WorkoutSignal | 
     : s.rpe ?? 7);
   const avgLastRpe = lastRpes.reduce((sum, r) => sum + r, 0) / lastRpes.length;
 
-  const firstWeight = firstSet.weight_kg;
-  const avgLastWeight = lastSets.reduce((sum, s) => sum + s.weight_kg, 0) / lastSets.length;
+  const firstWeight = firstSet.weightKg;
+  const avgLastWeight = lastSets.reduce((sum, s) => sum + s.weightKg, 0) / lastSets.length;
 
   // If RPE increased by 1.5+ despite weight drop, flag fatigue
   const rpeIncrease = avgLastRpe - firstRpe;
@@ -306,7 +306,7 @@ function calculateStats(sets: SetLog[]): SessionStats {
     return { avgWeight: 0, avgReps: 0, avgRpe: 7, totalSets: 0 };
   }
 
-  const totalWeight = workingSets.reduce((sum, s) => sum + s.weight_kg, 0);
+  const totalWeight = workingSets.reduce((sum, s) => sum + s.weightKg, 0);
   // Use getSetReps helper - returns null for duration exercises (which we skip for progress calculation)
   const totalReps = workingSets.reduce((sum, s) => {
     const reps = getSetReps(s, null); // null exercise context: signals are always rep-based in current use
