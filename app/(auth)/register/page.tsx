@@ -264,7 +264,10 @@ export default function RegisterPage() {
       </Card>
       )}
 
-      <div className="mt-4 text-center">
+      <div className="mt-4 text-center space-y-2">
+        <p className="text-sm text-surface-500">
+          Get full Elite access for 14 days—no credit card required.
+        </p>
         <p className="text-xs text-surface-600">
           By signing up, you agree to our{' '}
           <Link href="/terms" className="text-surface-500 hover:text-surface-300 underline">

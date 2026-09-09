@@ -296,7 +296,7 @@ function PricingContent() {
                 />
                 <FaqItem
                   question="What happens after my trial ends?"
-                  answer="After your 14-day trial, you'll be on the Free plan with basic features. You can upgrade anytime to unlock Pro or Elite features."
+                  answer="After your 14-day free trial (no credit card required), your account continues on the Free plan with basic features. You can upgrade to Pro or Elite anytime to unlock advanced features."
                 />
                 <FaqItem
                   question="Can I change plans later?"

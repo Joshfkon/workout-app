@@ -119,9 +119,16 @@ export function PricingCard({
             ? 'Current Plan' 
             : tier === 'free' 
             ? 'Free Forever'
-            : `Upgrade to ${tierData.name}`
+            : `Start Free Trial`
           }
         </Button>
+        
+        {/* Trial disclosure for paid tiers */}
+        {tier !== 'free' && !isCurrentPlan && (
+          <p className="text-xs text-surface-500 text-center mt-3 leading-relaxed">
+            14-day free trial, then ${billingPeriod === 'yearly' ? price.amount : (tierData as typeof TIER_FEATURES.pro).monthlyPrice}{price.period}. Cancel anytime.
+          </p>
+        )}
       </CardContent>
     </Card>
   );
