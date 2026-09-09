@@ -236,7 +236,7 @@ function PricingCard({
     <Card className={`relative ${isPopular ? 'border-primary-500/50 shadow-lg shadow-primary-500/10' : ''}`}>
       {isPopular && (
         <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-          <Badge variant="primary" size="sm">Most Popular</Badge>
+          <Badge variant="info" size="sm">Most Popular</Badge>
         </div>
       )}
       <CardContent className="p-6 space-y-6">
