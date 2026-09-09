@@ -1613,8 +1613,8 @@ describe('ExerciseCard', () => {
       );
 
       await user.click(screen.getByText(/Set 1 · 100 kg × 10/));
-      // rpeToRir(8) = 2, so the "2-3" chip starts selected
-      expect(screen.getByRole('button', { name: 'Set RIR to 2-3' })).toHaveAttribute('aria-pressed', 'true');
+      // rpeToRir(8) = 2, so the "2" chip starts selected
+      expect(screen.getByRole('button', { name: 'Set RIR to 2' })).toHaveAttribute('aria-pressed', 'true');
 
       await user.click(screen.getByRole('button', { name: 'Set RIR to 0' }));
       await user.click(screen.getByRole('button', { name: 'Save set edit' }));
@@ -1639,14 +1639,14 @@ describe('ExerciseCard', () => {
       const weightInput = screen.getByLabelText('Edit weight');
       await user.clear(weightInput);
       await user.type(weightInput, '105');
-      // Re-tapping the already-selected bucket is also a no-op for effort
-      await user.click(screen.getByRole('button', { name: 'Set RIR to 2-3' }));
+      // Re-tapping the already-selected chip is also a no-op for effort
+      await user.click(screen.getByRole('button', { name: 'Set RIR to 2' }));
       await user.click(screen.getByRole('button', { name: 'Save set edit' }));
 
       expect(onSetEdit).toHaveBeenCalledWith('set-1', { weightKg: 105, reps: 10, rpe: 8 });
     });
 
-    it('pre-selects the chip from logged feedback (RIR 3 lights up the 2-3 bucket)', async () => {
+    it('pre-selects the chip from logged feedback (RIR 3 has its own discrete chip)', async () => {
       const user = userEvent.setup();
       const onSetEdit = jest.fn();
       const sets = [
@@ -1664,15 +1664,13 @@ describe('ExerciseCard', () => {
       render(<ExerciseCard {...defaultProps} sets={sets} isActive={true} onSetEdit={onSetEdit} />);
 
       await user.click(screen.getByText(/Set 1 · 100 kg × 10/));
-      expect(screen.getByRole('button', { name: 'Set RIR to 2-3' })).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByRole('button', { name: 'Set RIR to 3' })).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByRole('button', { name: 'Set RIR to 2' })).toHaveAttribute('aria-pressed', 'false');
       expect(screen.getByRole('button', { name: 'Set RIR to 4+' })).toHaveAttribute('aria-pressed', 'false');
 
-      // Codex review fix: the 2-3 chip is a band — tapping it (even after
-      // visiting another chip) must preserve the exact stored RIR 3, not
-      // silently rewrite the set to RIR 2 / RPE 7.5.
-      await user.click(screen.getByRole('button', { name: 'Set RIR to 2-3' }));
+      // Tapping a different chip changes the value; tapping the same chip re-selects it
       await user.click(screen.getByRole('button', { name: 'Set RIR to 1' }));
-      await user.click(screen.getByRole('button', { name: 'Set RIR to 2-3' }));
+      await user.click(screen.getByRole('button', { name: 'Set RIR to 3' }));
       await user.click(screen.getByRole('button', { name: 'Save set edit' }));
 
       expect(onSetEdit).toHaveBeenCalledWith('set-1', { weightKg: 100, reps: 10, rpe: 7 });

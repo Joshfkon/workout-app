@@ -205,7 +205,7 @@ Based on RPE analysis in `types/schema.ts`:
 
 ### Set Feedback System
 Users provide structured feedback per set:
-- **RIR (Reps In Reserve)**: 4+ = Easy, 2-3 = Good, 1 = Hard, 0 = Maxed Out
+- **RIR (Reps In Reserve)**: 4+ = Easy, 3 = Good, 2 = Good, 1 = Hard, 0 = Maxed Out
 - **Form Rating**: clean, some_breakdown, ugly
 - **Discomfort**: Optional pain/discomfort logging by body part
 

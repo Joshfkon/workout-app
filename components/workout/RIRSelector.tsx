@@ -23,8 +23,16 @@ const RIR_OPTIONS: RIROption[] = [
     selectedBg: 'bg-danger-500 text-white border-danger-500',
   },
   {
+    value: 3,
+    label: '3',
+    subLabel: 'Good',
+    color: 'text-success-400',
+    bgColor: 'bg-success-500/10 border-success-500/20 hover:bg-success-500/20',
+    selectedBg: 'bg-success-500 text-white border-success-500',
+  },
+  {
     value: 2,
-    label: '2-3',
+    label: '2',
     subLabel: 'Good',
     color: 'text-success-400',
     bgColor: 'bg-success-500/10 border-success-500/20 hover:bg-success-500/20',
@@ -69,7 +77,7 @@ export const RIRSelector = memo(function RIRSelector({
         Reps left in tank?
         <InfoTooltip term="RIR" size="sm" />
       </label>
-      <div className="grid grid-cols-4 gap-2">
+      <div className="grid grid-cols-5 gap-2">
         {RIR_OPTIONS.map((option) => {
           const isSelected = value === option.value;
           return (
