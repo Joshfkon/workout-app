@@ -21,11 +21,12 @@ import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Button } from '@/components/ui/Button';
 import type { BasicExerciseInput } from '@/lib/exercises/types';
-import { PRECISE_MUSCLE_GROUP_OPTIONS, coarseSplitWarning, EQUIPMENT_OPTIONS } from '@/lib/exercises/types';
+import { EQUIPMENT_OPTIONS } from '@/lib/exercises/types';
 import type { Equipment } from '@/types/schema';
 import { getExercises, type Exercise } from '@/services/exerciseService';
 import { findNameMatches, type NameMatch } from '@/services/exerciseNameMatch';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { TwoStepMusclePicker } from './TwoStepMusclePicker';
 
 interface GymLocation {
   id: string;
@@ -259,23 +260,15 @@ export function CustomExerciseBasicForm({
           </div>
         )}
 
-        <div>
-          <Select
-            label="Primary Muscle"
-            options={PRECISE_MUSCLE_GROUP_OPTIONS}
-            value={primaryMuscle}
-            onChange={(e) => setPrimaryMuscle(e.target.value)}
-            placeholder="Select primary muscle"
-            error={errors.primaryMuscle}
-            required
-          />
-          {/* Whole-group tags split volume credit evenly across the group's
-              heads — make that trade-off visible at tagging time instead of
-              surfacing later as smeared per-muscle volume. */}
-          {coarseSplitWarning(primaryMuscle) && (
-            <p className="mt-1.5 text-sm text-warning-400">{coarseSplitWarning(primaryMuscle)}</p>
-          )}
-        </div>
+        <TwoStepMusclePicker
+          label="Primary Muscle"
+          value={primaryMuscle}
+          onChange={setPrimaryMuscle}
+          error={errors.primaryMuscle}
+          placeholder="Select body region"
+          isPrimary
+          required
+        />
 
         <Select
           label="Equipment"

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient, useIsRestoring } from '@tanstack/react-query';
+import { useSearchParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { Card, Input, Badge, Button, LoadingAnimation, SkeletonExercise } from '@/components/ui';
@@ -131,6 +132,8 @@ interface ExerciseHistory {
 export default function ExercisesPage() {
   const [mounted, setMounted] = useState(false);
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const [search, setSearch] = useState('');
   const [selectedMuscle, setSelectedMuscle] = useState<string | null>(null);
   const [selectedEquipment, setSelectedEquipment] = useState<string | null>(null);
@@ -228,6 +231,50 @@ export default function ExercisesPage() {
   // query is paused (no data yet) but the cache is warm — don't flash the
   // skeleton then.
   const isRestoring = useIsRestoring();
+
+  // Handle deep-link to edit a specific exercise via ?edit=<exerciseId>
+  useEffect(() => {
+    const editId = searchParams.get('edit');
+    if (!editId) return;
+
+    // The catalog may be stale (24h staleTime), and the newly saved exercise
+    // might not be in the cache yet. Invalidate and wait for fresh data.
+    const openEditModal = async () => {
+      // Force refetch of the catalog to include the newly created exercise
+      await queryClient.invalidateQueries({ queryKey: EXERCISE_CATALOG_KEY });
+      
+      // Wait for the query to refetch
+      await queryClient.refetchQueries({ queryKey: EXERCISE_CATALOG_KEY });
+      
+      // Get the fresh catalog
+      const freshCatalog = queryClient.getQueryData<Exercise[]>(EXERCISE_CATALOG_KEY);
+      if (!freshCatalog) return;
+      
+      // Find the exercise to edit
+      const exerciseToEdit = freshCatalog.find((ex) => ex.id === editId);
+      if (exerciseToEdit) {
+        // Initialize editData the same way handleEditExercise does
+        setEditingExercise(exerciseToEdit);
+        setEditData({
+          primaryMuscle: exerciseToEdit.primary_muscle,
+          isBodyweight: exerciseToEdit.is_bodyweight || false,
+          bodyweightType: exerciseToEdit.bodyweight_type || null,
+          assistanceType: exerciseToEdit.assistance_type || null,
+          equipment: exerciseToEdit.equipment || 'barbell',
+          equipmentRequired: Array.isArray(exerciseToEdit.equipment_required) ? exerciseToEdit.equipment_required : [],
+          movementPattern: exerciseToEdit.movement_pattern || 'compound',
+          secondaryMuscles: Array.isArray(exerciseToEdit.secondary_muscles) ? exerciseToEdit.secondary_muscles : [],
+          hypertrophyTier: exerciseToEdit.hypertrophy_tier,
+        });
+        setShowAdvancedFields(false);
+        setSaveResult(null);
+        // Clear the query param after opening the modal
+        router.replace('/dashboard/exercises');
+      }
+    };
+
+    openEditModal();
+  }, [searchParams, queryClient, router]);
 
   // Skeleton only when we have NO catalog to show and aren't mid-restore. A
   // disabled/pre-mount query still returns cached data, so a revisit (SPA) or
