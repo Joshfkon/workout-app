@@ -270,10 +270,10 @@ function PricingCard({
           {cta}
         </Link>
 
-        {/* Trial disclosure for paid tiers */}
+        {/* Accurate billing disclosure for paid tiers */}
         {tier !== 'free' && (
           <p className="text-xs text-surface-500 text-center leading-relaxed">
-            14-day free trial, then {price}/{period === 'per year' ? 'year' : 'month'}. Cancel anytime.
+            Sign up for 14-day Elite trial. Free plan after trial—upgrade anytime for {price}/{period === 'per year' ? 'year' : 'month'}.
           </p>
         )}
 
