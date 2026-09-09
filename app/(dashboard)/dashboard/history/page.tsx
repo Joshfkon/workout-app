@@ -19,6 +19,7 @@ import { formatWeight, convertWeight, convertWeightForDisplay, inputWeightToKg, 
 import { e1rmValueFromRpe } from '@/services/shared/e1rm';
 import { computeTrend } from '@/services/shared/trend';
 import { rpeToRir, rirToRpe, type RepsInTank } from '@/types/schema';
+import { getSetReps, type RepsCarrier, type ModalitySource } from '@/services/shared/setModality';
 import { createRepeatSession } from '@/lib/training/repeatWorkout';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import HistoryCalendar from './_components/HistoryCalendar';
@@ -85,6 +86,8 @@ function transformSessions(data: any[]): WorkoutHistory[] {
           sets: workingSets.map((set: any) => ({
             id: set.id,
             weight_kg: set.weight_kg,
+            // Raw .reps access is safe: copying the database field as-is.
+            // ExerciseDetail.isDuration flags the modality for downstream code.
             reps: set.reps,
             rpe: set.rpe,
             feedback: set.feedback,
@@ -94,6 +97,7 @@ function transformSessions(data: any[]): WorkoutHistory[] {
 
     const totalSets = exercises.reduce((sum, ex) => sum + ex.sets.length, 0);
     // Duration sets store seconds in reps — excluded from tonnage.
+    // Raw .reps access is safe: already guarded by isDuration check.
     const totalVolume = exercises.reduce(
       (sum, ex) =>
         sum +
@@ -302,6 +306,10 @@ function HistoryPageContent() {
   const startSetEdit = (set: SetDetail) => {
     setEditingSetId(set.id);
     setEditWeight(String(convertWeightForDisplay(set.weight_kg, unit)));
+    // Raw .reps access is safe: inline editor handles both rep and duration
+    // sets. The UI displays appropriate labels ('reps' vs 's') based on
+    // exercise.isDuration checked elsewhere. The value is written back to the
+    // database reps field regardless of modality.
     setEditReps(String(set.reps));
     // Derive RIR from RPE or use feedback value if available
     const rir = set.feedback?.repsInTank ?? (set.rpe ? rpeToRir(set.rpe) : 2);
@@ -350,6 +358,7 @@ function HistoryPageContent() {
       // Update local card state + recompute the workout's volume total.
       // (E1RM, PRs, weekly volume, and future suggestions all derive from
       // set_logs at read time — no stored aggregates to fix up.)
+      // Raw .reps accesses in volume calculation: safe, guarded by isDuration.
       mutateWorkouts(prev =>
         prev.map(w => {
           if (w.id !== workoutId) return w;
@@ -398,6 +407,7 @@ function HistoryPageContent() {
     };
     
     // Optimistically remove from UI
+    // Raw .reps access in volume calculation: safe, guarded by isDuration.
     mutateWorkouts(prev =>
       prev.map(w => {
         if (w.id !== workoutId) return w;
@@ -426,6 +436,7 @@ function HistoryPageContent() {
     if (error) {
       console.error('Error deleting set:', error);
       // Revert optimistic update on error
+      // Raw .reps access in volume calculation: safe, guarded by isDuration.
       mutateWorkouts(prev =>
         prev.map(w => {
           if (w.id !== workoutId) return w;
@@ -459,6 +470,7 @@ function HistoryPageContent() {
     
     // Re-insert the set (note: we can't truly restore with same ID due to constraints,
     // so we insert a new record with the same data)
+    // Raw .reps access: database field assignment, works for both modalities.
     const { data: newSet, error } = await supabase
       .from('set_logs')
       .insert({
@@ -483,6 +495,7 @@ function HistoryPageContent() {
     }
 
     // Restore in UI with new ID
+    // Raw .reps accesses: reading from DB result and in volume calc (guarded by isDuration).
     mutateWorkouts(prev =>
       prev.map(w => {
         if (w.id !== snapshot.workoutId) return w;
