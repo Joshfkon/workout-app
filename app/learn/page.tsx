@@ -2,7 +2,13 @@
 
 import Link from 'next/link';
 
-const features = [
+const features: Array<{
+  icon: string;
+  title: string;
+  description: string;
+  howItWorks: string;
+  disclaimer?: string;
+}> = [
   {
     icon: '🧠',
     title: 'AI-Powered Mesocycle Planning',
@@ -14,12 +20,14 @@ const features = [
     title: 'AI Coaching & Personalized Notes',
     description: 'Get real AI-powered coaching advice before every workout. Our system analyzes your history, body composition, and current mesocycle phase to give context-aware guidance.',
     howItWorks: 'Using Claude AI, we generate personalized coach notes that consider your workout type, week in mesocycle, recent performance, body composition goals, and training history—like having a knowledgeable coach in your pocket.',
+    disclaimer: 'AI-generated coaching is informational and educational. It is not a substitute for professional coaching, medical advice, or personalized training supervision.',
   },
   {
     icon: '🍎',
     title: 'Complete Nutrition Tracking',
     description: 'Track your nutrition with our integrated food database powered by USDA FoodData Central. Log meals, scan barcodes, calculate macros, and auto-adjust targets as your body changes.',
     howItWorks: 'Search 300,000+ foods from the USDA database. Use our smart macro calculator that factors in your goals, activity level, and even GLP-1 medications. Your macro targets automatically recalculate when you log new weight.',
+    disclaimer: 'Nutrition recommendations are general guidelines based on common research-backed approaches. They are not medical or dietitian advice. Consult a healthcare provider for personalized nutrition guidance.',
   },
   {
     icon: '⚡',
@@ -44,12 +52,14 @@ const features = [
     title: 'DEXA Tracking & FFMI Analysis',
     description: 'Track body composition scans over time. Calculate your Fat-Free Mass Index to see where you stand against natural limits.',
     howItWorks: 'Enter your DEXA scan data (or estimates). We calculate FFMI (Lean Mass / Height²) and compare you to natural benchmarks (21-25 range). AI coaching suggests bulk, cut, or recomp.',
+    disclaimer: 'FFMI analysis and body composition metrics are informational tools, not medical assessments. Natural limit estimates are based on population studies and may not apply to every individual.',
   },
   {
     icon: '💊',
     title: 'GLP-1 & Peptide Support',
     description: 'On Ozempic, Mounjaro, or other GLP-1 medications? Our macro calculator adjusts protein targets to prevent muscle loss during aggressive cuts.',
     howItWorks: 'Select your medication and we automatically increase protein recommendations (up to 1.2g/lb) and allow larger caloric deficits while keeping you in a safe, muscle-preserving range.',
+    disclaimer: 'This feature provides nutrition guidance for those already prescribed GLP-1 medications by their doctor. It is not medical advice. Always follow your healthcare provider\'s instructions and discuss dietary changes with them.',
   },
   {
     icon: '🔄',
@@ -65,54 +75,75 @@ const features = [
   },
 ];
 
-const scienceConcepts = [
+const scienceConcepts: Array<{
+  title: string;
+  source: string;
+  citation?: string;
+  doi?: string;
+  explanation: string;
+  application: string;
+}> = [
   {
     title: 'Volume Landmarks (MEV, MAV, MRV)',
     source: 'Renaissance Periodization',
+    citation: 'Israetel, M., Hoffman, J., Smith, C. (2015). Scientific Principles of Strength Training. Renaissance Periodization.',
     explanation: 'MEV (Minimum Effective Volume) is the least you need to grow. MAV (Maximum Adaptive Volume) is the sweet spot for gains. MRV (Maximum Recoverable Volume) is the ceiling—go beyond it and you regress.',
     application: 'We track your weekly sets per muscle and keep you in the productive zone—typically 10-20 sets/week for most muscles, adjusted for your recovery capacity.',
   },
   {
     title: 'Stimulus-to-Fatigue Ratio (SFR)',
-    source: 'Dr. Mike Israetel',
+    source: 'Renaissance Periodization',
+    citation: 'Israetel, M. (2017). Training Volume Landmarks for Muscle Growth. Renaissance Periodization.',
     explanation: 'Not all exercises are equal. A machine fly gives great chest stimulus with minimal fatigue to recover from. A barbell bench press stimulates chest but also taxes shoulders, triceps, and CNS.',
     application: 'When building your program, we prioritize high-SFR exercises (machines, cables, isolation work) later in mesocycles when fatigue is high, saving low-SFR compounds for when you&apos;re fresh.',
   },
   {
     title: 'Evidence-Based Protein Requirements',
-    source: 'Schoenfeld & Aragon Research',
-    explanation: 'Muscle protein synthesis is maximized at 1.6-2.2g/kg of protein daily for trained individuals. Higher protein becomes even more critical during caloric deficits to prevent muscle loss.',
-    application: 'Our macro calculator sets protein at 1g/lb (2.2g/kg) by default—the gold standard for lifters. When on GLP-1 medications, we increase to 1.2g/lb to protect muscle during aggressive cuts.',
+    source: 'Peer-Reviewed Research',
+    citation: 'Morton, R.W., et al. (2018). A systematic review, meta-analysis and meta-regression of the effect of protein supplementation on resistance training-induced gains in muscle mass and strength in healthy adults. British Journal of Sports Medicine, 52(6), 376-384.',
+    doi: 'https://doi.org/10.1136/bjsports-2017-097608',
+    explanation: 'A meta-analysis of resistance training studies found that gains in fat-free mass and strength plateaued beyond approximately 1.6 g/kg/day total protein intake, with confidence intervals extending to ~2.2 g/kg/day.',
+    application: 'Our macro calculator uses 1g/lb (2.2g/kg) as a starting point, which is consistent with this research. Higher intakes may be used when supported by individual goals and preferences.',
   },
   {
-    title: 'Muscle Fiber Type Dominance',
-    source: 'Exercise Physiology Research',
-    explanation: 'Muscles have different proportions of fast-twitch (explosive, fatigable) and slow-twitch (endurance, resistant) fibers. Each type responds to different rep ranges.',
-    application: 'Hamstrings are ~70% fast-twitch → respond to 4-8 reps. Calves are ~60% slow-twitch → need 15-25 reps. Your rep ranges should reflect the muscle being trained, not a one-size-fits-all &quot;3x10&quot;.',
+    title: 'Muscle Fiber Type & Rep Ranges',
+    source: 'Exercise Physiology',
+    citation: 'Schoenfeld, B.J., et al. (2021). Resistance Training Recommendations to Maximize Muscle Hypertrophy in an Athletic Population. International Journal of Strength and Conditioning, 1(1).',
+    doi: 'https://doi.org/10.47206/ijsc.v1i1.81',
+    explanation: 'Different muscles may have varying proportions of fast-twitch (explosive, fatigable) and slow-twitch (endurance, resistant) fibers. Research suggests a wide rep range (6-20+) can be effective for hypertrophy.',
+    application: 'We program varied rep ranges: typically lower reps (4-8) for posterior chain work, moderate (8-12) for mixed-fiber muscles, and higher (12-20+) for slow-twitch dominant muscles, while acknowledging individual variation.',
   },
   {
     title: 'Autoregulation with RPE/RIR',
-    source: 'Powerlifting & Sports Science',
-    explanation: 'RPE (Rate of Perceived Exertion) and RIR (Reps in Reserve) let you train to appropriate intensity based on how you feel that day, not a fixed percentage of 1RM that ignores recovery state.',
-    application: 'Start mesocycles at 3 RIR (could do 3 more). Progress to 1 RIR by the end. Last sets can go to 0 RIR. This systematic approach ensures progressive overload without burning out.',
+    source: 'Strength & Conditioning',
+    citation: 'Helms, E.R., et al. (2016). Application of the Repetitions in Reserve-Based Rating of Perceived Exertion Scale for Resistance Training. Strength & Conditioning Journal, 38(4), 42-49.',
+    doi: 'https://doi.org/10.1519/ssc.0000000000000218',
+    explanation: 'RPE (Rate of Perceived Exertion) and RIR (Reps in Reserve) allow training to appropriate intensity based on daily readiness, rather than fixed percentages that may not account for recovery state.',
+    application: 'We guide progression through RIR: start mesocycles conservatively at 3 RIR, progress to 1 RIR, with final sets potentially reaching 0 RIR. This systematic approach helps manage fatigue.',
   },
   {
-    title: 'TDEE & Adaptive Thermogenesis',
-    source: 'Metabolic Research',
-    explanation: 'Your Total Daily Energy Expenditure (TDEE) includes BMR, activity, and exercise. During dieting, metabolic adaptation can reduce TDEE by 10-15%. Tracking weight helps recalibrate.',
-    application: 'Our macro calculator computes TDEE from your stats and activity level. When you log new weight, we automatically recalculate your targets to keep progress on track.',
+    title: 'Energy Balance & Metabolic Adaptation',
+    source: 'Nutrition Research',
+    citation: 'Trexler, E.T., Smith-Ryan, A.E., & Norton, L.E. (2014). Metabolic adaptation to weight loss: implications for the athlete. Journal of the International Society of Sports Nutrition, 11(1), 7.',
+    doi: 'https://doi.org/10.1186/1550-2783-11-7',
+    explanation: 'Total Daily Energy Expenditure (TDEE) includes basal metabolic rate, activity, and exercise. During prolonged caloric restriction, metabolic adaptation can reduce TDEE. Regular monitoring helps adjust targets.',
+    application: 'Our calculator estimates TDEE from your stats and activity level. When you log new weight, we can help recalculate your targets to support continued progress.',
   },
   {
-    title: 'Daily Undulating Periodization (DUP)',
-    source: 'Dr. Greg Nuckols & Others',
-    explanation: 'Instead of training heavy for weeks then light for weeks (linear periodization), DUP rotates intensity daily. Monday: strength (4-6 reps). Wednesday: hypertrophy (8-12). Friday: power (explosive work).',
-    application: 'Our mesocycle builder can create DUP programs that hit each muscle with different stimuli each session, maximizing both strength and size adaptations.',
+    title: 'Periodization Models',
+    source: 'Training Science',
+    citation: 'Grgic, J., et al. (2017). Effects of linear and daily undulating periodized resistance training programs on measures of muscle hypertrophy: a systematic review and meta-analysis. PeerJ, 5, e3695.',
+    doi: 'https://doi.org/10.7717/peerj.3695',
+    explanation: 'Periodization involves systematically varying training variables over time. Research comparing linear and daily undulating models found both produce similar hypertrophy outcomes when training volume is equated.',
+    application: 'Our mesocycle builder incorporates periodization principles to help vary intensity and volume across training phases for sustainable progress.',
   },
   {
-    title: 'Progressive Overload Mechanics',
-    source: 'Fundamental Training Principle',
-    explanation: 'To grow, you must progressively do more: more weight, more reps, more sets, less rest, better technique. The body adapts to what you demand of it.',
-    application: 'Each week, we suggest adding 1-2 reps or 2.5% weight to key lifts. When you hit the top of your rep range with good form, we recommend increasing load.',
+    title: 'Progressive Overload',
+    source: 'Fundamental Principle',
+    citation: 'Schoenfeld, B.J. (2010). The mechanisms of muscle hypertrophy and their application to resistance training. Journal of Strength & Conditioning Research, 24(10), 2857-2872.',
+    doi: 'https://doi.org/10.1519/jsc.0b013e3181e840f3',
+    explanation: 'Progressive overload—gradually increasing training demands—is a foundational principle for continued adaptation. This can involve increasing weight, reps, sets, or improving technique over time.',
+    application: 'We track progression over time and suggest incremental increases when performance indicates readiness, such as adding 1-2 reps or modest weight increases when you hit target rep ranges with good form.',
   },
 ];
 
@@ -162,6 +193,17 @@ export default function LearnPage() {
             We didn&apos;t just build another workout logger. We encoded decades of exercise science and nutrition research 
             into AI-powered algorithms that optimize your training, diet, and recovery in real-time.
           </p>
+
+          {/* Quick Navigation */}
+          <div className="mt-8 p-6 bg-surface-900/50 rounded-xl border border-surface-800">
+            <h2 className="text-sm font-semibold text-surface-300 mb-3 uppercase tracking-wider">On This Page</h2>
+            <div className="grid md:grid-cols-2 gap-2 text-sm">
+              <a href="#features" className="text-surface-400 hover:text-primary-400 transition-colors">→ Features That Matter</a>
+              <a href="#science" className="text-surface-400 hover:text-primary-400 transition-colors">→ Scientific Foundation</a>
+              <a href="#comparison" className="text-surface-400 hover:text-primary-400 transition-colors">→ How We Compare</a>
+              <a href="#sources" className="text-surface-400 hover:text-primary-400 transition-colors">→ Sources & Disclaimers</a>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -197,7 +239,7 @@ export default function LearnPage() {
         </section>
 
         {/* Features Deep Dive */}
-        <section>
+        <section id="features">
           <h2 className="text-3xl font-bold text-surface-100 mb-8 text-center">Features That Actually Matter</h2>
           <div className="space-y-8">
             {features.map((feature, idx) => (
@@ -220,6 +262,14 @@ export default function LearnPage() {
                         {feature.howItWorks}
                       </p>
                     </div>
+                    {feature.disclaimer && (
+                      <div className="mt-3 p-3 bg-warning-500/10 rounded-lg border border-warning-500/20 flex gap-2">
+                        <svg className="w-4 h-4 text-warning-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <p className="text-xs text-surface-400">{feature.disclaimer}</p>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -228,10 +278,10 @@ export default function LearnPage() {
         </section>
 
         {/* The Science */}
-        <section>
+        <section id="science">
           <h2 className="text-3xl font-bold text-surface-100 mb-4 text-center">Built on Real Science</h2>
           <p className="text-center text-surface-400 mb-12 max-w-2xl mx-auto">
-            Every algorithm in HyperTrack is based on peer-reviewed research and proven training methodologies.
+            Our features are informed by peer-reviewed research and established training methodologies. See citations below.
           </p>
           
           <div className="grid gap-6">
@@ -243,7 +293,26 @@ export default function LearnPage() {
                     {concept.source}
                   </span>
                 </div>
-                <p className="text-surface-300 mb-4">{concept.explanation}</p>
+                <p className="text-surface-300 mb-3">{concept.explanation}</p>
+                {concept.citation && (
+                  <p className="text-xs text-surface-500 mb-3 italic">
+                    <span className="font-semibold">Citation: </span>
+                    {concept.citation}
+                    {concept.doi && (
+                      <>
+                        {' '}
+                        <Link 
+                          href={concept.doi} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-primary-400 hover:text-primary-300 underline"
+                        >
+                          [DOI]
+                        </Link>
+                      </>
+                    )}
+                  </p>
+                )}
                 <div className="flex items-start gap-2 p-3 bg-primary-500/10 rounded-lg border border-primary-500/20">
                   <svg className="w-5 h-5 text-primary-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -258,7 +327,7 @@ export default function LearnPage() {
         </section>
 
         {/* Comparison */}
-        <section>
+        <section id="comparison">
           <h2 className="text-3xl font-bold text-surface-100 mb-8 text-center">How We Compare</h2>
           <div className="overflow-hidden rounded-xl border border-surface-800">
             <table className="w-full">
@@ -292,6 +361,77 @@ export default function LearnPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        </section>
+
+        {/* Sources & Disclaimers */}
+        <section id="sources" className="py-12 border-t border-surface-800">
+          <h2 className="text-3xl font-bold text-surface-100 mb-6 text-center">Sources & Disclaimers</h2>
+          
+          <div className="space-y-6 max-w-4xl mx-auto">
+            {/* General Disclaimer */}
+            <div className="p-6 bg-surface-900/50 rounded-xl border border-surface-800">
+              <h3 className="text-lg font-semibold text-surface-100 mb-3">General Disclaimer</h3>
+              <p className="text-sm text-surface-400 mb-3">
+                HyperTrack is a training and nutrition tracking tool designed for informational and educational purposes. 
+                It is not a substitute for professional medical advice, diagnosis, or treatment. Always consult with qualified 
+                healthcare professionals, registered dietitians, or certified personal trainers before starting any new training 
+                program, dietary regimen, or supplementation.
+              </p>
+              <p className="text-sm text-surface-400">
+                Individual results may vary. The recommendations and calculations provided by HyperTrack are based on general 
+                research findings and population-level data, which may not apply to every individual.
+              </p>
+            </div>
+
+            {/* AI & Automation */}
+            <div className="p-6 bg-surface-900/50 rounded-xl border border-surface-800">
+              <h3 className="text-lg font-semibold text-surface-100 mb-3">AI-Generated Content</h3>
+              <p className="text-sm text-surface-400">
+                Our AI coaching features use Claude AI to generate personalized guidance. While informed by training science, 
+                AI outputs are probabilistic and may occasionally contain errors. AI coaching does not replace human coaching, 
+                supervision, or professional expertise. For detailed information about data handling, see our{' '}
+                <Link href="/privacy" className="text-primary-400 hover:text-primary-300 underline">
+                  Privacy Policy
+                </Link>.
+              </p>
+            </div>
+
+            {/* Health & Medical */}
+            <div className="p-6 bg-surface-900/50 rounded-xl border border-surface-800">
+              <h3 className="text-lg font-semibold text-surface-100 mb-3">Health & Medical Information</h3>
+              <p className="text-sm text-surface-400 mb-3">
+                Features related to body composition (DEXA, FFMI), nutrition targets, and medication support (GLP-1) provide 
+                general information only. They are not medical assessments, diagnoses, or prescriptions.
+              </p>
+              <p className="text-sm text-surface-400">
+                If you are taking prescription medications, have existing health conditions, or are under medical supervision, 
+                consult your healthcare provider before making dietary or training changes. For our full terms, see our{' '}
+                <Link href="/terms" className="text-primary-400 hover:text-primary-300 underline">
+                  Terms of Service
+                </Link>.
+              </p>
+            </div>
+
+            {/* Research Sources */}
+            <div className="p-6 bg-surface-900/50 rounded-xl border border-surface-800">
+              <h3 className="text-lg font-semibold text-surface-100 mb-3">Research & Methodology</h3>
+              <p className="text-sm text-surface-400 mb-4">
+                Our features are informed by exercise science research, established training methodologies, and industry 
+                best practices. Citations are provided where specific claims reference published work. Training science is 
+                an evolving field; our understanding continues to improve as new research emerges.
+              </p>
+              <div className="space-y-2 text-xs text-surface-500">
+                <p className="font-semibold text-surface-400">Key Sources & Resources:</p>
+                <ul className="list-disc list-inside space-y-1 ml-2">
+                  <li>Renaissance Periodization — Volume landmarks, stimulus-to-fatigue ratio research</li>
+                  <li>Stronger By Science — Evidence reviews and training science</li>
+                  <li>Brad Schoenfeld, PhD — Hypertrophy mechanisms and training research</li>
+                  <li>Eric Helms, PhD — Natural bodybuilding and training optimization</li>
+                  <li>British Journal of Sports Medicine, Journal of Strength & Conditioning Research, and other peer-reviewed journals</li>
+                </ul>
+              </div>
+            </div>
           </div>
         </section>
 
