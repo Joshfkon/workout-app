@@ -43,4 +43,78 @@ describe('PRCelebration', () => {
       jest.useRealTimers();
     }
   });
+
+  it('dismisses on click anywhere after interaction delay', () => {
+    jest.useFakeTimers();
+    try {
+      const onDone = jest.fn();
+      render(<PRCelebration celebration={celebration} onDone={onDone} />);
+      
+      // Should not dismiss immediately (within the delay window)
+      act(() => {
+        window.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+      expect(onDone).not.toHaveBeenCalled();
+      
+      // Should dismiss after the interaction delay
+      act(() => {
+        jest.advanceTimersByTime(200);
+        window.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+      expect(onDone).toHaveBeenCalledTimes(1);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('dismisses on keydown after interaction delay', () => {
+    jest.useFakeTimers();
+    try {
+      const onDone = jest.fn();
+      render(<PRCelebration celebration={celebration} onDone={onDone} />);
+      
+      // Should dismiss after the interaction delay
+      act(() => {
+        jest.advanceTimersByTime(200);
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      });
+      expect(onDone).toHaveBeenCalledTimes(1);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('dismisses on scroll after interaction delay', () => {
+    jest.useFakeTimers();
+    try {
+      const onDone = jest.fn();
+      render(<PRCelebration celebration={celebration} onDone={onDone} />);
+      
+      // Should dismiss after the interaction delay
+      act(() => {
+        jest.advanceTimersByTime(200);
+        window.dispatchEvent(new Event('scroll', { bubbles: true }));
+      });
+      expect(onDone).toHaveBeenCalledTimes(1);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('dismisses on touchstart after interaction delay', () => {
+    jest.useFakeTimers();
+    try {
+      const onDone = jest.fn();
+      render(<PRCelebration celebration={celebration} onDone={onDone} />);
+      
+      // Should dismiss after the interaction delay
+      act(() => {
+        jest.advanceTimersByTime(200);
+        window.dispatchEvent(new TouchEvent('touchstart', { bubbles: true }));
+      });
+      expect(onDone).toHaveBeenCalledTimes(1);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
 });
