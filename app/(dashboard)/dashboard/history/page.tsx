@@ -2012,11 +2012,10 @@ function HistoryPageContent() {
           </div>
         </div>
       )}
-    </div>
 
-    {/* Toast container for undo functionality */}
-    <ToastContainer toasts={toasts} onDismiss={dismissToast} />
-  </div>
+      {/* Toast container for undo functionality */}
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+    </div>
   );
 }
 
