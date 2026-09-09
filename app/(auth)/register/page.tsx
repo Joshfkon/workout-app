@@ -30,8 +30,19 @@ export default function RegisterPage() {
 
     // Validation (P2-6: no confirm-password field — the show-password
     // toggle lets users verify what they typed instead of retyping it)
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters');
+    // Match the password policy in supabase/config.toml
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters');
+      return;
+    }
+    
+    // Check for lowercase, uppercase, and digits
+    const hasLowercase = /[a-z]/.test(password);
+    const hasUppercase = /[A-Z]/.test(password);
+    const hasDigit = /\d/.test(password);
+    
+    if (!hasLowercase || !hasUppercase || !hasDigit) {
+      setError('Password must contain lowercase, uppercase letters, and digits');
       return;
     }
 
@@ -56,12 +67,22 @@ export default function RegisterPage() {
       });
 
       if (signUpError) {
-        // Check for duplicate email error
-        if (signUpError.message.toLowerCase().includes('already registered') ||
-            signUpError.message.toLowerCase().includes('already exists') ||
-            signUpError.message.toLowerCase().includes('user already') ||
-            signUpError.status === 422) {
+        // Distinguish weak password from duplicate email
+        const errorMsg = signUpError.message.toLowerCase();
+        if (errorMsg.includes('password') && 
+            (errorMsg.includes('weak') || errorMsg.includes('strength') || errorMsg.includes('requirement'))) {
+          setError('Password does not meet security requirements. Use 8+ characters with lowercase, uppercase letters, and digits.');
+        } else if (errorMsg.includes('already registered') ||
+                   errorMsg.includes('already exists') ||
+                   errorMsg.includes('user already')) {
           setError('EMAIL_EXISTS');
+        } else if (signUpError.status === 422) {
+          // 422 could be weak password or duplicate - check message
+          if (errorMsg.includes('email')) {
+            setError('EMAIL_EXISTS');
+          } else {
+            setError('Password does not meet security requirements. Use 8+ characters with lowercase, uppercase letters, and digits.');
+          }
         } else {
           setError(signUpError.message);
         }
@@ -167,7 +188,7 @@ export default function RegisterPage() {
             onChange={(e) => setPassword(e.target.value)}
             placeholder="••••••••"
             required
-            hint="At least 6 characters"
+            hint="8+ characters with lowercase, uppercase letters, and digits"
             autoComplete="new-password"
             rightIcon={
               <button

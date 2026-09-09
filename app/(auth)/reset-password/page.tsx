@@ -117,8 +117,19 @@ export default function ResetPasswordPage() {
       return;
     }
     
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters');
+    // Match the password policy in supabase/config.toml
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters');
+      return;
+    }
+    
+    // Check for lowercase, uppercase, and digits
+    const hasLowercase = /[a-z]/.test(password);
+    const hasUppercase = /[A-Z]/.test(password);
+    const hasDigit = /\d/.test(password);
+    
+    if (!hasLowercase || !hasUppercase || !hasDigit) {
+      setError('Password must contain lowercase, uppercase letters, and digits');
       return;
     }
     
@@ -131,7 +142,14 @@ export default function ResetPasswordPage() {
       });
 
       if (error) {
-        setError(error.message);
+        // Provide more specific error for weak passwords
+        const errorMsg = error.message.toLowerCase();
+        if (errorMsg.includes('password') && 
+            (errorMsg.includes('weak') || errorMsg.includes('strength') || errorMsg.includes('requirement'))) {
+          setError('Password does not meet security requirements. Use 8+ characters with lowercase, uppercase letters, and digits.');
+        } else {
+          setError(error.message);
+        }
       } else {
         setSuccess(true);
         // Redirect to dashboard after 2 seconds
@@ -237,7 +255,7 @@ export default function ResetPasswordPage() {
                 placeholder="••••••••"
                 required
                 autoComplete="new-password"
-                hint="Must be at least 6 characters"
+                hint="8+ characters with lowercase, uppercase letters, and digits"
               />
 
               <Input
