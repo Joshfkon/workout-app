@@ -2017,9 +2017,10 @@ export const ExerciseCard = memo(function ExerciseCard({
       console.error('Set submission failed:', error);
       // Lock will be released in finally block
     } finally {
-      // Always unlock after async operation completes (success or failure)
-      // Small delay to prevent accidental double-taps on fast networks
-      setTimeout(() => setIsCompletingSet(false), 100);
+      // Unlock immediately after handler completes - optimistic UI is already
+      // applied and the button needs to be ready for the next set ASAP.
+      // The handler's lock duration naturally prevents double-taps.
+      setIsCompletingSet(false);
     }
   };
 
