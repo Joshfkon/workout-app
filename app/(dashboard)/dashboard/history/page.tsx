@@ -1555,7 +1555,7 @@ function HistoryPageContent() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="px-4 space-y-6">
       <PageHeader
         title="Workout History"
         subtitle="Your past training sessions"

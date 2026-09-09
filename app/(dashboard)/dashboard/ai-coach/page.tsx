@@ -99,7 +99,7 @@ export default function AICoachPage() {
 
   if (!hasAccess) {
     return (
-      <div className="max-w-4xl mx-auto p-6 space-y-6">
+      <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
         <div>
           <h1 className="text-3xl font-bold text-surface-100 mb-2">AI Coach</h1>
           <p className="text-surface-400">
@@ -117,9 +117,9 @@ export default function AICoachPage() {
   }
 
   return (
-    <div className="h-[calc(100vh-8rem)] max-w-5xl mx-auto p-6 flex flex-col">
+    <div className="max-w-5xl mx-auto px-4 py-6 space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-surface-100 mb-2">AI Coach</h1>
           <p className="text-surface-400">
@@ -145,7 +145,7 @@ export default function AICoachPage() {
 
       {/* Context Panel */}
       {showContext && context && (
-        <Card className="mb-4 bg-surface-800 border-surface-700">
+        <Card className="bg-surface-800 border-surface-700">
           <CardContent className="p-4">
             <h3 className="text-sm font-semibold text-surface-100 mb-2">Your Data Context</h3>
             <div className="text-xs text-surface-300 space-y-1">
@@ -179,9 +179,9 @@ export default function AICoachPage() {
       )}
 
       {/* Messages Container */}
-      <div className="flex-1 overflow-y-auto mb-4 space-y-4">
+      <div className="space-y-4 min-h-[400px]">
         {messages.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-center space-y-4">
+          <div className="flex flex-col items-center justify-center text-center space-y-4 py-12">
             <div className="w-16 h-16 rounded-full bg-primary-500/10 flex items-center justify-center">
               <svg
                 className="w-8 h-8 text-primary-500"
@@ -306,7 +306,7 @@ export default function AICoachPage() {
       </div>
 
       {/* Input Area */}
-      <div className="bg-surface-800 border border-surface-700 rounded-lg p-4">
+      <div className="sticky bottom-0 bg-surface-800 border border-surface-700 rounded-lg p-4">
         <div className="flex gap-2">
           <textarea
             value={input}

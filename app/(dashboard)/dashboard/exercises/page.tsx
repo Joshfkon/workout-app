@@ -729,7 +729,7 @@ export default function ExercisesPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="px-4 space-y-6">
       <PageHeader
         title="Exercise Library"
         subtitle={isCatalogLoading ? 'Loading...' : `${exercises.length} exercises available`}
