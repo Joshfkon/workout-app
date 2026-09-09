@@ -13,6 +13,8 @@ import { MuscleMap } from '@/components/muscleMap/MuscleMap';
 import { exerciseHighlightData } from '@/lib/muscleMap/adapters';
 import { muscleDisplayName } from '@/lib/utils';
 import { getExerciseProp } from './helpers';
+import { perSetCredits } from '@/services/shared/volumeCredit';
+import { STANDARD_MUSCLE_DISPLAY_NAMES } from '@/types/schema';
 
 interface AboutTabProps {
   exercise: Exercise;
@@ -219,6 +221,12 @@ interface MusclesWorkedProps {
 function MusclesWorked({ primaryMuscle, secondaryMuscles, repRange }: MusclesWorkedProps) {
   if (!primaryMuscle && secondaryMuscles.length === 0 && repRange.length < 2) return null;
 
+  const credits = primaryMuscle ? perSetCredits(primaryMuscle, secondaryMuscles) : [];
+  const sortedCredits = [...credits].sort((a, b) => {
+    if (a.isDirect !== b.isDirect) return a.isDirect ? -1 : 1;
+    return b.credit - a.credit;
+  });
+
   return (
     <div>
       {(primaryMuscle || secondaryMuscles.length > 0) && (
@@ -255,6 +263,33 @@ function MusclesWorked({ primaryMuscle, secondaryMuscles, repRange }: MusclesWor
           </div>
         )}
       </div>
+
+      {sortedCredits.length > 0 && (
+        <div className="mt-3 p-3 bg-surface-800/50 rounded-lg" data-testid="muscle-credits-list">
+          <p className="text-xs font-medium text-surface-400 uppercase tracking-wider mb-2">
+            Volume Credits Per Set
+          </p>
+          <div className="space-y-1.5">
+            {sortedCredits.map(({ muscle, credit, isDirect }) => (
+              <div key={muscle} className="flex items-center justify-between text-sm">
+                <div className="flex items-center gap-2">
+                  <span className="text-surface-200">
+                    {STANDARD_MUSCLE_DISPLAY_NAMES[muscle] || muscle}
+                  </span>
+                  {isDirect && (
+                    <Badge variant="info" size="sm" className="text-[10px] px-1.5 py-0">
+                      Primary
+                    </Badge>
+                  )}
+                </div>
+                <span className="text-surface-300 font-mono">
+                  {credit.toFixed(1)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
