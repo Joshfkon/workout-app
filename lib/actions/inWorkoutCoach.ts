@@ -8,8 +8,20 @@
  * deterministic and off the critical path.
  */
 
-import OpenAI from 'openai';
 import type { SetLog } from '@/types/schema';
+
+/**
+ * Lazy-load OpenAI client to avoid pulling in `Response` dependency at module load time.
+ * This prevents "Response is not defined" errors in Jest when client components
+ * transitively import this module through the workout components barrel.
+ */
+async function getXaiClient() {
+  const { default: OpenAI } = await import('openai');
+  return new OpenAI({
+    apiKey: process.env.XAI_API_KEY,
+    baseURL: 'https://api.x.ai/v1',
+  });
+}
 
 // System prompts for different coaching contexts
 const WHISPER_PROMPT = `You are a concise strength coach providing real-time exercise guidance during an active workout. Your cues must be:
@@ -59,10 +71,7 @@ export async function generateExerciseWhisper(input: {
   }
 
   try {
-    const openai = new OpenAI({
-      apiKey,
-      baseURL: 'https://api.x.ai/v1',
-    });
+    const openai = await getXaiClient();
 
     const context = buildWhisperContext(input);
     const response = await openai.chat.completions.create({
@@ -107,10 +116,7 @@ export async function polishSignalMessage(input: {
   }
 
   try {
-    const openai = new OpenAI({
-      apiKey,
-      baseURL: 'https://api.x.ai/v1',
-    });
+    const openai = await getXaiClient();
 
     const prompt = `Signal detected: ${input.signalType}. Raw: ${input.details}. Rephrase into ONE SHORT coaching line (max 15 words) that's specific and actionable.`;
     
@@ -158,10 +164,7 @@ export async function generateRestTip(input: {
   }
 
   try {
-    const openai = new OpenAI({
-      apiKey,
-      baseURL: 'https://api.x.ai/v1',
-    });
+    const openai = await getXaiClient();
 
     const context = `Next: ${input.nextExerciseName}${input.nextWeight ? ` at ${input.nextWeight}${input.units}` : ''}${input.nextReps ? ` for ${input.nextReps}` : ''}. ${input.restSecondsRemaining}s rest remaining.`;
     
@@ -209,10 +212,7 @@ export async function generateSessionSpine(input: {
   }
 
   try {
-    const openai = new OpenAI({
-      apiKey,
-      baseURL: 'https://api.x.ai/v1',
-    });
+    const openai = await getXaiClient();
 
     const context = buildSpineContext(input);
     
@@ -391,10 +391,7 @@ export async function generatePostWorkoutReel(input: {
   }
 
   try {
-    const openai = new OpenAI({
-      apiKey,
-      baseURL: 'https://api.x.ai/v1',
-    });
+    const openai = await getXaiClient();
 
     const context = buildReelContext(input);
     

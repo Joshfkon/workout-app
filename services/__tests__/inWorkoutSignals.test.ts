@@ -12,16 +12,38 @@ import {
 import type { SetLog } from '@/types/schema';
 
 describe('inWorkoutSignals', () => {
-  const mockSet = (overrides: Partial<SetLog> = {}): SetLog => ({
-    id: 'set-1',
-    weight_kg: 100,
-    reps_completed: 10,
-    rpe: 7,
-    rir: 3,
-    is_warmup: false,
-    logged_at: new Date().toISOString(),
-    ...overrides,
-  });
+  const mockSet = (overrides: Partial<SetLog> = {}): SetLog => {
+    // Handle snake_case to camelCase sync for test convenience
+    const weightKg = (overrides as any).weight_kg ?? overrides.weightKg ?? 100;
+    const reps = (overrides as any).reps_completed ?? overrides.reps ?? 10;
+    const isWarmup = (overrides as any).is_warmup ?? overrides.isWarmup ?? false;
+    
+    return {
+      id: 'set-1',
+      exerciseBlockId: 'block-1',
+      workoutSessionId: 'session-1',
+      setNumber: 1,
+      weightKg,
+      weight_kg: weightKg,
+      reps,
+      reps_completed: reps,
+      rpe: 7,
+      isWarmup,
+      is_warmup: isWarmup,
+      restSeconds: null,
+      logged_at: new Date().toISOString(),
+      loggedAt: new Date().toISOString(),
+      setType: isWarmup ? 'warmup' : 'normal',
+      parentSetId: null,
+      feedback: overrides.feedback ?? { repsInTank: 3, formRating: 'clean' },
+      amrapTarget: null,
+      amrapRepsCompleted: null,
+      quality: 'effective',
+      qualityReason: null,
+      note: '',
+      ...overrides,
+    };
+  };
 
   describe('detectBigDrop', () => {
     it('detects significant weight drop (>10% and >5kg)', () => {
@@ -88,9 +110,9 @@ describe('inWorkoutSignals', () => {
       const context: ExerciseContext = {
         exerciseName: 'Bench Press',
         setsToday: [
-          mockSet({ rir: 0 }), // RPE 10
-          mockSet({ rir: 0 }), // RPE 10
-          mockSet({ rir: 0 }), // RPE 10
+          mockSet({ feedback: { repsInTank: 0, formRating: 'clean' } }), // RPE 10
+          mockSet({ feedback: { repsInTank: 0, formRating: 'clean' } }), // RPE 10
+          mockSet({ feedback: { repsInTank: 0, formRating: 'clean' } }), // RPE 10
         ],
       };
 
@@ -219,9 +241,9 @@ describe('inWorkoutSignals', () => {
       const context: ExerciseContext = {
         exerciseName: 'Bench Press',
         setsToday: [
-          mockSet({ weight_kg: 100, rir: 3 }), // RPE 7
-          mockSet({ weight_kg: 95, rir: 1 }), // RPE 9
-          mockSet({ weight_kg: 90, rir: 0 }), // RPE 10
+          mockSet({ weight_kg: 100, feedback: { repsInTank: 3, formRating: 'clean' } }), // RPE 7
+          mockSet({ weight_kg: 95, feedback: { repsInTank: 1, formRating: 'clean' } }), // RPE 9
+          mockSet({ weight_kg: 90, feedback: { repsInTank: 0, formRating: 'clean' } }), // RPE 10
         ],
       };
 
@@ -235,9 +257,9 @@ describe('inWorkoutSignals', () => {
       const context: ExerciseContext = {
         exerciseName: 'Squat',
         setsToday: [
-          mockSet({ rir: 2 }),
-          mockSet({ rir: 2 }),
-          mockSet({ rir: 2 }),
+          mockSet({ feedback: { repsInTank: 2, formRating: 'clean' } }),
+          mockSet({ feedback: { repsInTank: 2, formRating: 'clean' } }),
+          mockSet({ feedback: { repsInTank: 2, formRating: 'clean' } }),
         ],
       };
 
@@ -262,8 +284,8 @@ describe('inWorkoutSignals', () => {
       const context: ExerciseContext = {
         exerciseName: 'Squat',
         setsToday: [
-          mockSet({ is_warmup: true }),
-          mockSet({ is_warmup: true }),
+          mockSet({ isWarmup: true, setType: 'warmup' }),
+          mockSet({ isWarmup: true, setType: 'warmup' }),
         ],
       };
 
