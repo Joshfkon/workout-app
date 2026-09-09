@@ -3599,46 +3599,51 @@ export const ExerciseCard = memo(function ExerciseCard({
           // Editing: standard sets get inline weight/reps inputs + RIR chips
           if (editingSetId === set.id) {
             return (
-              <div key={set.id} className="rounded-lg bg-primary-500/10 px-2 py-1.5">
+              <div key={set.id} className="rounded-lg bg-primary-500/10 px-2 py-1.5 space-y-2">
+                {/* Row 1: Set number + input fields (weight/reps) */}
                 <div className="flex items-center gap-2">
-                <span className="w-6 flex-shrink-0 text-[12px] font-medium text-surface-300 text-center">
-                  {set.setNumber}
-                </span>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  value={editWeight}
-                  onChange={(e) => setEditWeight(e.target.value)}
-                  onFocus={(e) => e.target.select()}
-                  onKeyDown={handleEditKeyDown}
-                  step="0.5"
-                  aria-label="Edit weight"
-                  className="w-20 px-1 py-1.5 bg-surface-900 border border-surface-600 rounded text-center font-mono text-surface-100 text-sm"
-                  autoFocus
-                />
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  value={editReps}
-                  onChange={(e) => setEditReps(e.target.value)}
-                  onFocus={(e) => e.target.select()}
-                  onKeyDown={handleEditKeyDown}
-                  aria-label="Edit reps"
-                  className="w-14 px-1 py-1.5 bg-surface-900 border border-surface-600 rounded text-center font-mono text-surface-100 text-sm"
-                />
-                <div className="ml-auto flex items-center gap-1">
+                  <span className="w-6 flex-shrink-0 text-[12px] font-medium text-surface-300 text-center">
+                    {set.setNumber}
+                  </span>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    value={editWeight}
+                    onChange={(e) => setEditWeight(e.target.value)}
+                    onFocus={(e) => e.target.select()}
+                    onKeyDown={handleEditKeyDown}
+                    step="0.5"
+                    aria-label="Edit weight"
+                    className="flex-1 min-w-0 px-1 py-1.5 bg-surface-900 border border-surface-600 rounded text-center font-mono text-surface-100 text-sm"
+                    autoFocus
+                  />
+                  <span className="text-[11px] text-surface-500">×</span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    value={editReps}
+                    onChange={(e) => setEditReps(e.target.value)}
+                    onFocus={(e) => e.target.select()}
+                    onKeyDown={handleEditKeyDown}
+                    aria-label="Edit reps"
+                    className="w-16 px-1 py-1.5 bg-surface-900 border border-surface-600 rounded text-center font-mono text-surface-100 text-sm"
+                  />
+                </div>
+
+                {/* Row 2: Action buttons (save/cancel/delete) */}
+                <div className="flex items-center justify-end gap-1">
                   <button
                     onClick={saveEdit}
                     aria-label="Save set edit"
-                    className="p-2 text-success-400 hover:bg-success-500/20 rounded-lg"
+                    className="min-h-[44px] min-w-[44px] flex items-center justify-center text-success-400 hover:bg-success-500/20 rounded-lg"
                   >
                     <IconCheck size={16} />
                   </button>
                   <button
                     onClick={cancelEditing}
                     aria-label="Cancel set edit"
-                    className="p-2 text-surface-400 hover:bg-surface-700 rounded-lg"
+                    className="min-h-[44px] min-w-[44px] flex items-center justify-center text-surface-400 hover:bg-surface-700 rounded-lg"
                   >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -3651,7 +3656,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                         onSetDelete(set.id);
                       }}
                       aria-label="Delete set"
-                      className="p-2 text-danger-400 hover:bg-danger-500/10 rounded-lg"
+                      className="min-h-[44px] min-w-[44px] flex items-center justify-center text-danger-400 hover:bg-danger-500/10 rounded-lg"
                     >
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -3659,8 +3664,9 @@ export const ExerciseCard = memo(function ExerciseCard({
                     </button>
                   )}
                 </div>
-                </div>
-                <div className="mt-1.5 flex items-center gap-1.5 pl-8">
+
+                {/* Row 3: RIR chips */}
+                <div className="flex items-center gap-1.5">
                   <span className="text-[11px] font-medium text-surface-400">RIR</span>
                   {EDIT_RIR_OPTIONS.map((option) => {
                     const isSelected =
@@ -3679,7 +3685,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                         }
                         aria-label={`Set RIR to ${option.label}`}
                         aria-pressed={isSelected}
-                        className={`px-2.5 py-1 rounded-full border text-[12px] font-medium transition-colors ${
+                        className={`min-h-[44px] px-3 py-2 rounded-full border text-[12px] font-medium transition-colors ${
                           isSelected
                             ? 'bg-primary-500 border-primary-500 text-white'
                             : 'bg-surface-900 border-surface-600 text-surface-300 hover:bg-surface-700'
@@ -3752,7 +3758,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                     }}
                     aria-label={`Log joint pain on set ${set.setNumber}`}
                     data-testid={`set-joint-pain-${set.setNumber}`}
-                    className={`flex-shrink-0 min-w-[32px] min-h-[32px] -my-1 flex items-center justify-center rounded-lg transition-colors ${
+                    className={`flex-shrink-0 min-w-[44px] min-h-[44px] -my-1 flex items-center justify-center rounded-lg transition-colors ${
                       set.feedback?.discomfort
                         ? 'text-danger-400'
                         : 'text-surface-600 hover:text-surface-300'
@@ -3782,7 +3788,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                pendingSetsCount === 0 && (!block.dropsetsPerSet || block.dropsetsPerSet === 0) && (
                 <button
                   onClick={() => startDropset(set)}
-                  className="w-full flex items-center justify-center gap-2 py-1.5 text-sm text-purple-400 hover:text-purple-300 hover:bg-purple-500/10 rounded-lg transition-colors"
+                  className="w-full min-h-[44px] flex items-center justify-center gap-2 py-2.5 text-sm text-purple-400 hover:text-purple-300 hover:bg-purple-500/10 rounded-lg transition-colors"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
