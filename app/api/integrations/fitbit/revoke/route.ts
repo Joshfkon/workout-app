@@ -72,15 +72,18 @@ export async function POST(request: NextRequest) {
     }
 
     // Mark the connection as disconnected after successful revocation
+    // Use user_id + source to avoid type issues with connection.id
     const { error: updateError } = await supabase
       .from('wearable_connections')
+      // @ts-ignore - Supabase type generation issue with wearable_connections table
       .update({
         is_connected: false,
         access_token: null,
         refresh_token: null,
         token_expires_at: null,
       })
-      .eq('id', connection.id);
+      .eq('user_id', user.id)
+      .eq('source', 'fitbit');
 
     if (updateError) {
       console.error('Failed to update connection status:', updateError);

@@ -93,15 +93,18 @@ export async function POST(request: NextRequest) {
     expiresAt.setSeconds(expiresAt.getSeconds() + tokens.expires_in);
 
     // Update the stored tokens atomically after successful refresh
+    // Use user_id + source to avoid type issues with connection.id
     const { error: updateError } = await supabase
       .from('wearable_connections')
+      // @ts-ignore - Supabase type generation issue with wearable_connections table
       .update({
         access_token: tokens.access_token,
         refresh_token: tokens.refresh_token,
         token_expires_at: expiresAt.toISOString(),
         last_sync_at: new Date().toISOString(),
       })
-      .eq('id', connection.id);
+      .eq('user_id', user.id)
+      .eq('source', 'fitbit');
 
     if (updateError) {
       console.error('Failed to update stored Fitbit tokens:', updateError);
