@@ -38,7 +38,20 @@ interface SetDetail {
   rpe: number | null;
   feedback?: {
     repsInTank?: RepsInTank;
+    form?: 'clean' | 'some_breakdown' | 'ugly';
+    discomfort?: unknown;
   };
+  set_type?: 'normal' | 'warmup' | 'dropset' | 'myorep' | 'rest_pause';
+  parent_set_id?: string | null;
+  quality?: 'junk' | 'effective' | 'stimulative' | 'excessive';
+  quality_reason?: string;
+  note?: string | null;
+  logged_at?: string;
+  set_role?: 'working' | 'ramp' | null;
+  suggestion_engine_version?: number | null;
+  rest_seconds?: number | null;
+  set_number?: number;
+  is_warmup?: boolean;
 }
 
 interface ExerciseDetail {
@@ -90,6 +103,17 @@ function transformSessions(data: any[]): WorkoutHistory[] {
             reps: set.reps,
             rpe: set.rpe,
             feedback: set.feedback,
+            set_type: set.set_type,
+            parent_set_id: set.parent_set_id,
+            quality: set.quality,
+            quality_reason: set.quality_reason,
+            note: set.note,
+            logged_at: set.logged_at,
+            set_role: set.set_role,
+            suggestion_engine_version: set.suggestion_engine_version,
+            rest_seconds: set.rest_seconds,
+            set_number: set.set_number,
+            is_warmup: set.is_warmup,
           })),
         };
       });
@@ -328,13 +352,52 @@ function HistoryPageContent() {
       const weightKg = inputWeightToKg(weightNum, unit);
       const rpe = rirToRpe(editRir as RepsInTank);
       const supabase = createUntypedClient();
+      
+      // P1-2: Fetch existing set to merge feedback (preserve form/discomfort)
+      const { data: existingSet } = await supabase
+        .from('set_logs')
+        .select('feedback, exercise_block_id')
+        .eq('id', setId)
+        .single();
+      
+      const mergedFeedback = {
+        ...existingSet?.feedback,
+        repsInTank: editRir as RepsInTank,
+      };
+      
+      // P2-6: Get exercise details for quality reclassification
+      const workout = workouts.find(w => w.id === workoutId);
+      const exercise = workout?.exercises.find(ex => ex.id === exerciseBlockId);
+      const setIndex = exercise?.sets.findIndex(s => s.id === setId) ?? 0;
+      const isLastSet = setIndex === (exercise?.sets.length ?? 0) - 1;
+      
+      // P2-6: Reclassify quality based on new RPE/RIR
+      let quality: 'junk' | 'effective' | 'stimulative' | 'excessive' | undefined;
+      let quality_reason: string | undefined;
+      
+      if (exercise) {
+        const { calculateSetQuality } = await import('@/services/progressionEngine');
+        const qualityResult = calculateSetQuality({
+          rpe,
+          targetRir: 2, // Default hypertrophy target
+          reps: repsNum,
+          targetRepRange: [8, 12], // Default hypertrophy range
+          isLastSet,
+          exerciseType: exercise.isDuration ? 'duration_based' : 'strength',
+        });
+        quality = qualityResult.quality;
+        quality_reason = qualityResult.reason;
+      }
+      
       const { error } = await supabase
         .from('set_logs')
         .update({ 
           weight_kg: weightKg, 
           reps: repsNum, 
           rpe,
-          feedback: { repsInTank: editRir as RepsInTank }
+          feedback: mergedFeedback,
+          ...(quality && { quality }),
+          ...(quality_reason && { quality_reason }),
         })
         .eq('id', setId);
       if (error) {
@@ -373,7 +436,9 @@ function HistoryPageContent() {
                           weight_kg: weightKg, 
                           reps: repsNum, 
                           rpe,
-                          feedback: { repsInTank: editRir as RepsInTank }
+                          feedback: mergedFeedback,
+                          ...(quality && { quality }),
+                          ...(quality_reason && { quality_reason }),
                         } 
                       : s
                   ) 
@@ -398,7 +463,7 @@ function HistoryPageContent() {
   const handleDeleteSet = async (workoutId: string, exerciseBlockId: string, set: SetDetail) => {
     const supabase = createUntypedClient();
     
-    // Store snapshot for undo
+    // P2-3: Store full snapshot for complete undo restoration
     const snapshot = { 
       workoutId, 
       exerciseBlockId, 
@@ -415,6 +480,8 @@ function HistoryPageContent() {
             ? ex
             : { ...ex, sets: ex.sets.filter(s => s.id !== set.id) }
         );
+        // P2-5: Recompute totalSets
+        const totalSets = exercises.reduce((sum, ex) => sum + ex.sets.length, 0);
         // Recompute volume
         const totalVolume = exercises.reduce(
           (sum, ex) =>
@@ -422,9 +489,31 @@ function HistoryPageContent() {
             (ex.isDuration ? 0 : ex.sets.reduce((s2, s) => s2 + s.weight_kg * s.reps, 0)),
           0
         );
-        return { ...w, exercises, totalVolume };
+        return { ...w, exercises, totalSets, totalVolume };
       })
     );
+
+    // P2-4: Update dayWorkouts when calendar day is selected
+    if (selectedDay && dayWorkouts) {
+      setDayWorkouts(prev =>
+        prev ? prev.map(w => {
+          if (w.id !== workoutId) return w;
+          const exercises = w.exercises.map(ex =>
+            ex.id !== exerciseBlockId
+              ? ex
+              : { ...ex, sets: ex.sets.filter(s => s.id !== set.id) }
+          );
+          const totalSets = exercises.reduce((sum, ex) => sum + ex.sets.length, 0);
+          const totalVolume = exercises.reduce(
+            (sum, ex) =>
+              sum +
+              (ex.isDuration ? 0 : ex.sets.reduce((s2, s) => s2 + s.weight_kg * s.reps, 0)),
+            0
+          );
+          return { ...w, exercises, totalSets, totalVolume };
+        }) : prev
+      );
+    }
 
     // Delete from database
     const { error } = await supabase
@@ -444,15 +533,36 @@ function HistoryPageContent() {
               ? ex
               : { ...ex, sets: [...ex.sets, set].sort((a, b) => a.id.localeCompare(b.id)) }
           );
+          const totalSets = exercises.reduce((sum, ex) => sum + ex.sets.length, 0);
           const totalVolume = exercises.reduce(
             (sum, ex) =>
               sum +
               (ex.isDuration ? 0 : ex.sets.reduce((s2, s) => s2 + s.weight_kg * s.reps, 0)),
             0
           );
-          return { ...w, exercises, totalVolume };
+          return { ...w, exercises, totalSets, totalVolume };
         })
       );
+      if (selectedDay && dayWorkouts) {
+        setDayWorkouts(prev =>
+          prev ? prev.map(w => {
+            if (w.id !== workoutId) return w;
+            const exercises = w.exercises.map(ex =>
+              ex.id !== exerciseBlockId
+                ? ex
+                : { ...ex, sets: [...ex.sets, set].sort((a, b) => a.id.localeCompare(b.id)) }
+            );
+            const totalSets = exercises.reduce((sum, ex) => sum + ex.sets.length, 0);
+            const totalVolume = exercises.reduce(
+              (sum, ex) =>
+                sum +
+                (ex.isDuration ? 0 : ex.sets.reduce((s2, s) => s2 + s.weight_kg * s.reps, 0)),
+              0
+            );
+            return { ...w, exercises, totalSets, totalVolume };
+          }) : prev
+        );
+      }
       return;
     }
 
@@ -467,8 +577,8 @@ function HistoryPageContent() {
   const undoDeleteSet = async (snapshot: { workoutId: string; exerciseBlockId: string; set: SetDetail }) => {
     const supabase = createUntypedClient();
     
-    // Re-insert the set (note: we can't truly restore with same ID due to constraints,
-    // so we insert a new record with the same data)
+    // P2-3: Re-insert the set with ALL original fields (full restoration)
+    // P1-1: Use actual set_type from deleted set (or fallback to 'normal')
     // Raw .reps access: database field assignment, works for both modalities.
     const { data: newSet, error } = await supabase
       .from('set_logs')
@@ -478,11 +588,17 @@ function HistoryPageContent() {
         reps: snapshot.set.reps,
         rpe: snapshot.set.rpe ?? 7,
         feedback: snapshot.set.feedback,
-        set_number: 999, // Will be at end - user can see it was restored
-        is_warmup: false,
-        rest_seconds: null,
-        set_type: 'straight',
-        logged_at: new Date().toISOString(),
+        set_number: snapshot.set.set_number ?? 999, // Will be at end if set_number missing
+        is_warmup: snapshot.set.is_warmup ?? false,
+        rest_seconds: snapshot.set.rest_seconds ?? null,
+        set_type: snapshot.set.set_type ?? 'normal', // P1-1: Use real set_type, fallback to 'normal'
+        parent_set_id: snapshot.set.parent_set_id ?? null, // P2-3: Restore parent for dropsets
+        quality: snapshot.set.quality,
+        quality_reason: snapshot.set.quality_reason,
+        note: snapshot.set.note ?? null, // P2-3: Restore notes
+        logged_at: snapshot.set.logged_at ?? new Date().toISOString(),
+        set_role: snapshot.set.set_role ?? null, // P2-3: Restore set role
+        suggestion_engine_version: snapshot.set.suggestion_engine_version ?? null,
       })
       .select()
       .single();
@@ -506,24 +622,56 @@ function HistoryPageContent() {
                 sets: [
                   ...ex.sets, 
                   { 
-                    id: newSet.id, 
-                    weight_kg: newSet.weight_kg, 
-                    reps: newSet.reps, 
-                    rpe: newSet.rpe,
-                    feedback: newSet.feedback as SetDetail['feedback']
+                    ...snapshot.set,
+                    id: newSet.id,
                   }
-                ]
+                ].sort((a, b) => (a.set_number ?? 999) - (b.set_number ?? 999))
               }
         );
+        // P2-5: Recompute totalSets on undo
+        const totalSets = exercises.reduce((sum, ex) => sum + ex.sets.length, 0);
         const totalVolume = exercises.reduce(
           (sum, ex) =>
             sum +
             (ex.isDuration ? 0 : ex.sets.reduce((s2, s) => s2 + s.weight_kg * s.reps, 0)),
           0
         );
-        return { ...w, exercises, totalVolume };
+        return { ...w, exercises, totalSets, totalVolume };
       })
     );
+    
+    // P2-4: Update dayWorkouts on undo when calendar day is selected
+    if (selectedDay && dayWorkouts) {
+      setDayWorkouts(prev =>
+        prev ? prev.map(w => {
+          if (w.id !== snapshot.workoutId) return w;
+          const exercises = w.exercises.map(ex =>
+            ex.id !== snapshot.exerciseBlockId
+              ? ex
+              : { 
+                  ...ex, 
+                  sets: [
+                    ...ex.sets, 
+                    { 
+                      ...snapshot.set,
+                      id: newSet.id,
+                    }
+                  ].sort((a, b) => (a.set_number ?? 999) - (b.set_number ?? 999))
+                }
+          );
+          const totalSets = exercises.reduce((sum, ex) => sum + ex.sets.length, 0);
+          const totalVolume = exercises.reduce(
+            (sum, ex) =>
+              sum +
+              (ex.isDuration ? 0 : ex.sets.reduce((s2, s) => s2 + s.weight_kg * s.reps, 0)),
+            0
+          );
+          return { ...w, exercises, totalSets, totalVolume };
+        }) : prev
+      );
+    }
+
+    addToast('success', 'Set restored');
   };
   const [deletingId, setDeletingId] = useState<string | null>(null);
   // Styled confirmation for destructive actions (P2-7 — replaces native
@@ -1013,7 +1161,17 @@ function HistoryPageContent() {
               weight_kg,
               reps,
               rpe,
-              is_warmup
+              is_warmup,
+              set_type,
+              parent_set_id,
+              quality,
+              quality_reason,
+              note,
+              logged_at,
+              set_role,
+              suggestion_engine_version,
+              rest_seconds,
+              feedback
             )
           )
         `;
