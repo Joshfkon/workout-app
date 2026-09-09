@@ -38,11 +38,12 @@ export function TimelapseModal({ isOpen, onClose, photos, photoUrls, units }: Ti
   const [index, setIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
 
-  // Restart from the beginning each time the modal opens.
+  // Restart from the beginning each time the modal opens, but start paused
+  // to give context (user can see first photo date/stats before auto-advance)
   useEffect(() => {
     if (isOpen) {
       setIndex(0);
-      setIsPlaying(frames.length > 1);
+      setIsPlaying(false); // Start paused for user to review first
     } else {
       setIsPlaying(false);
     }
@@ -69,9 +70,25 @@ export function TimelapseModal({ isOpen, onClose, photos, photoUrls, units }: Ti
   const displayWeight = (kg: number) =>
     units === 'lb' ? `${kgToLbs(kg).toFixed(1)} lbs` : `${kg.toFixed(1)} kg`;
 
+  const firstDate = frames[0] ? formatDate(frames[0].photoDate) : '';
+  const lastDate = frames[frames.length - 1]
+    ? formatDate(frames[frames.length - 1].photoDate)
+    : '';
+
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Timelapse" size="lg">
+    <Modal isOpen={isOpen} onClose={onClose} title="Progress Timelapse" size="lg">
       <div className="space-y-3">
+        {/* Info banner with date range and photo count */}
+        {frames.length > 0 && (
+          <div className="rounded-lg bg-surface-800 border border-surface-700 px-3 py-2">
+            <p className="text-xs text-surface-400 text-center">
+              <span className="font-medium text-surface-200">{frames.length} photos</span>
+              {firstDate && lastDate && firstDate !== lastDate && (
+                <span> • {firstDate} to {lastDate}</span>
+              )}
+            </p>
+          </div>
+        )}
         <div className="relative aspect-[3/4] max-h-[60vh] mx-auto rounded-lg overflow-hidden bg-surface-900 ring-1 ring-surface-700">
           {/* Stack all frames; only the active one is visible. Keeps every
               image decoded so playback never flashes. */}

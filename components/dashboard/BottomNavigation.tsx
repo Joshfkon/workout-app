@@ -45,7 +45,7 @@ const navItems: NavItem[] = [
     name: 'Progress',
     href: '/dashboard/analytics',
     icon: IconChartLine,
-    matchPaths: ['/dashboard/analytics', '/dashboard/volume', '/dashboard/body-composition'],
+    matchPaths: ['/dashboard/analytics', '/dashboard/volume', '/dashboard/body-composition', '/dashboard/progress-photos'],
   },
   {
     name: 'More',
