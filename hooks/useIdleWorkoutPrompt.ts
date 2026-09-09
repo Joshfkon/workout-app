@@ -11,7 +11,7 @@
  */
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { ABANDONED_SESSION_THRESHOLD_MINUTES } from '@/app/(dashboard)/dashboard/workout/[id]/_lib/constants';
+import { ABANDONED_SESSION_THRESHOLD_MINUTES } from '@/lib/workout/constants';
 
 const IDLE_THRESHOLD_MS = ABANDONED_SESSION_THRESHOLD_MINUTES * 60 * 1000;
 

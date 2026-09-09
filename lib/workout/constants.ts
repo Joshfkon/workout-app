@@ -1,7 +1,6 @@
 /**
  * Shared constants for workout session management.
- * Exported from a dedicated constants file to avoid client/server boundary
- * issues when importing into client components (hooks, UI).
+ * Placed in lib/ to avoid dynamic-segment import issues with [id] routes.
  */
 
 /**

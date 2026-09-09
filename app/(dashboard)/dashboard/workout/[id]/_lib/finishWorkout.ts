@@ -60,7 +60,7 @@ import { upsertSessionMuscleFeedback } from './muscleFeedbackWrites';
 import type { SessionMuscleFeedbackEntry } from '@/components/workout/SessionSummary';
 import type { WorkoutSession } from '@/types/schema';
 import { now as clockNow } from '@/lib/clock';
-import { ABANDONED_SESSION_THRESHOLD_MINUTES } from './constants';
+import { ABANDONED_SESSION_THRESHOLD_MINUTES } from '@/lib/workout/constants';
 
 export { ABANDONED_SESSION_THRESHOLD_MINUTES };
 

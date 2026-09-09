@@ -34,7 +34,7 @@ export function IdleWorkoutPrompt({ onDismiss, onFinish }: IdleWorkoutPromptProp
             Still training?
           </h3>
           <p className="text-sm text-warning-300/90 mb-3">
-            It's been ~20 minutes since your last set. Are you still working out?
+            It&apos;s been ~20 minutes since your last set. Are you still working out?
           </p>
           <div className="flex gap-2">
             <Button

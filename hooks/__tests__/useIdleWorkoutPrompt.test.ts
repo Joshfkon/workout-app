@@ -4,7 +4,7 @@
 
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { useIdleWorkoutPrompt } from '../useIdleWorkoutPrompt';
-import { ABANDONED_SESSION_THRESHOLD_MINUTES } from '@/app/(dashboard)/dashboard/workout/[id]/_lib/constants';
+import { ABANDONED_SESSION_THRESHOLD_MINUTES } from '@/lib/workout/constants';
 
 // Helper to create timestamps relative to now
 const minutesAgo = (minutes: number): string => {
