@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Card } from '@/components/ui/Card';
+import { muscleDisplayName } from '@/lib/utils';
 import { useAdaptiveVolume } from '@/hooks/useAdaptiveVolume';
 import { useUserStore } from '@/stores';
 import { FatigueAlertList } from '@/components/workout/FatigueAlertBanner';
@@ -135,7 +136,7 @@ function CompareToResearchCard({ volumeProfile }: { volumeProfile: UserVolumePro
               <div key={entry.muscle} className="p-3 bg-surface-800/50 rounded-lg">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium text-surface-200">
-                    {capitalize(entry.muscle)}
+                    {muscleDisplayName(entry.muscle)}
                   </span>
                   <span
                     className={`text-xs font-medium ${

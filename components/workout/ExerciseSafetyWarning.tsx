@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { Card, Button, Badge } from '@/components/ui';
+import { formatMuscleName } from '@/lib/utils';
 import type { Exercise } from '@/services/exerciseService';
 import type { SafetyLevel, SafetyReason, ExerciseSafetyResult } from '@/lib/training/exercise-safety';
 
@@ -113,7 +114,7 @@ export function ExerciseSafetyWarning({
       {showAlternatives && safetyResult.alternatives.length > 0 && (
         <div className="mt-4">
           <p className="text-sm font-medium text-surface-300 mb-2">
-            Safer alternatives for {exercise.primaryMuscle}:
+            Safer alternatives for {formatMuscleName(exercise.primaryMuscle)}:
           </p>
           <div className="space-y-2">
             {safetyResult.alternatives.slice(0, 3).map((alt) => (
