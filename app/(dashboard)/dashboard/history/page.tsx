@@ -289,7 +289,7 @@ function HistoryPageContent() {
     new Set(workouts.flatMap(w => w.exercises.map(ex => ex.name)))
   ).sort().slice(0, 12);
 
-  // Inline past-set editing (P1-3)
+  // Inline past-set editing (P1-3): weight, reps, and RIR
   const [editingSetId, setEditingSetId] = useState<string | null>(null);
   const [editWeight, setEditWeight] = useState('');
   const [editReps, setEditReps] = useState('');
