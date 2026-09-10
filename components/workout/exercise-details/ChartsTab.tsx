@@ -13,7 +13,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { SegmentedControl } from '../SegmentedControl';
-import { convertWeight } from '@/lib/utils';
+import { convertWeight, parseLocalDate } from '@/lib/utils';
 import {
   buildE1RMTrend,
   buildWeeklyVolume,
@@ -78,11 +78,11 @@ export function ChartsTab({ sessions, unit, repTotalMode = false, isDuration = f
           ? new Date(now.getFullYear() - 1, now.getMonth(), now.getDate())
           : null;
     return sessions
-      .filter((sn) => !sn.isDeload && (!cutoff || new Date(sn.date) >= cutoff))
+      .filter((sn) => !sn.isDeload && (!cutoff || parseLocalDate(sn.date) >= cutoff))
       .slice()
       .reverse()
       .map((sn) => ({
-        label: new Date(sn.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        label: parseLocalDate(sn.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
         // Straight sets only — same rule the rep_total policy grades.
         total: sn.sets.filter(isNormalDetailSet).reduce((sum, st) => sum + st.reps, 0),
       }));

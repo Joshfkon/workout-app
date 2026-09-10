@@ -37,22 +37,30 @@ export function getLocalDateString(date: Date = clockNow()): string {
 }
 
 /**
+ * Parse a date-only string (YYYY-MM-DD) as a local date, not UTC.
+ * 
+ * `new Date('2024-01-15')` parses as UTC midnight (2024-01-15T00:00:00Z), which
+ * is 2024-01-14 19:00 local in US Eastern. When that's compared against a local
+ * date range, entries near day boundaries land in the wrong bucket.
+ * 
+ * This helper parses YYYY-MM-DD as local midnight instead, matching how range
+ * bounds are built. Used for filtering weigh-ins, exercise history, etc.
+ */
+export function parseLocalDate(dateStr: string): Date {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    // If it's not a date-only string, fall back to Date constructor
+    return new Date(dateStr);
+  }
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day); // month is 0-indexed
+}
+
+/**
  * Format a date to a readable string
  * Handles date strings in YYYY-MM-DD format by parsing as local date (not UTC)
  */
 export function formatDate(date: string | Date, options?: Intl.DateTimeFormatOptions): string {
-  let d: Date;
-  if (typeof date === 'string') {
-    // If it's a date string in YYYY-MM-DD format, parse it as local date to avoid timezone issues
-    if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      const [year, month, day] = date.split('-').map(Number);
-      d = new Date(year, month - 1, day); // month is 0-indexed
-    } else {
-      d = new Date(date);
-    }
-  } else {
-    d = date;
-  }
+  const d = typeof date === 'string' ? parseLocalDate(date) : date;
   return d.toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',

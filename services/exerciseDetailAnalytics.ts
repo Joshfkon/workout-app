@@ -13,7 +13,7 @@
  * the e1RM path for bodyweight movements.
  */
 
-import { estimateE1RM, sumDisplayVolume } from '@/lib/utils';
+import { estimateE1RM, sumDisplayVolume, parseLocalDate } from '@/lib/utils';
 import { getSetDuration, type ModalitySource } from '@/services/shared/setModality';
 import { rpeToRir } from '@/types/schema';
 
@@ -341,7 +341,7 @@ export function buildE1RMTrend(
 
 /** Local-time Monday of the week containing `d`, as YYYY-MM-DD. */
 function weekStartOf(iso: string): { key: string; label: string } {
-  const d = new Date(iso);
+  const d = parseLocalDate(iso);
   const monday = new Date(d.getFullYear(), d.getMonth(), d.getDate());
   const daysSinceMonday = (monday.getDay() + 6) % 7;
   monday.setDate(monday.getDate() - daysSinceMonday);
