@@ -1365,6 +1365,7 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
     // Cold-start "easy" rating: the RIR chip caps at 4+, so Epley can't see
     // the real headroom — a rated-easy first set means the estimate was low.
     // Bump by the full cold-start step rather than deriving from reported RIR.
+    trigger = 'top_range_reserve';
     const r = gridRound(lastWeightKg * (1 + COLD_START_STEP_PCT));
     if (r.noMeaningfulChange) {
       weightKg = lastWeightKg;
