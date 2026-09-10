@@ -417,3 +417,77 @@ describe('analyzeMesocycle threads subjective signals into the verdict (existing
     expect(after.volumeVerdict).not.toBe('too_low');
   });
 });
+
+// ============================================
+// VOLUME SUMMARY WITH WEEK-OVER-WEEK TREND
+// ============================================
+
+import { getVolumeSummary } from '@/src/lib/training/adaptive-volume';
+
+describe('getVolumeSummary week-over-week trend', () => {
+  const profile = createInitialVolumeProfile('user-1', 'intermediate', false);
+
+  const makeVolumeData = (muscle: 'chest', sets: number): MuscleVolumeData => ({
+    id: `${muscle}-week`,
+    muscle,
+    weekNumber: 1,
+    mesocycleId: 'meso-1',
+    totalSets: sets,
+    workingSets: sets,
+    effectiveSets: sets,
+    totalVolume: 0,
+    averageRIR: 2,
+    averageFormScore: 0.8,
+    exercisePerformance: [],
+  });
+
+  it('reports "stable" trend when previous week data is empty', () => {
+    const currentWeek = [makeVolumeData('chest', 12)];
+    const previousWeek: MuscleVolumeData[] = [];
+
+    const summary = getVolumeSummary(currentWeek, previousWeek, profile);
+    const chestSummary = summary.find(s => s.muscle === 'chest');
+
+    expect(chestSummary?.trend).toBe('stable');
+  });
+
+  it('reports "up" trend when current week sets increased by >1', () => {
+    const currentWeek = [makeVolumeData('chest', 15)];
+    const previousWeek = [makeVolumeData('chest', 12)];
+
+    const summary = getVolumeSummary(currentWeek, previousWeek, profile);
+    const chestSummary = summary.find(s => s.muscle === 'chest');
+
+    expect(chestSummary?.trend).toBe('up');
+  });
+
+  it('reports "down" trend when current week sets decreased by >1', () => {
+    const currentWeek = [makeVolumeData('chest', 10)];
+    const previousWeek = [makeVolumeData('chest', 14)];
+
+    const summary = getVolumeSummary(currentWeek, previousWeek, profile);
+    const chestSummary = summary.find(s => s.muscle === 'chest');
+
+    expect(chestSummary?.trend).toBe('down');
+  });
+
+  it('reports "stable" trend when sets changed by 1 or less', () => {
+    const currentWeek = [makeVolumeData('chest', 12)];
+    const previousWeek = [makeVolumeData('chest', 11)];
+
+    const summary = getVolumeSummary(currentWeek, previousWeek, profile);
+    const chestSummary = summary.find(s => s.muscle === 'chest');
+
+    expect(chestSummary?.trend).toBe('stable');
+  });
+
+  it('falls back to stable when muscle is present in current week but not previous', () => {
+    const currentWeek = [makeVolumeData('chest', 12)];
+    const previousWeek: MuscleVolumeData[] = []; // No chest data
+
+    const summary = getVolumeSummary(currentWeek, previousWeek, profile);
+    const chestSummary = summary.find(s => s.muscle === 'chest');
+
+    expect(chestSummary?.trend).toBe('stable');
+  });
+});
