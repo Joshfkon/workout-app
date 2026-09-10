@@ -85,7 +85,12 @@ export function useInWorkoutCoach({
   const isGeneratingWhisper = useRef(false);
   const lastRestTipSeconds = useRef<number | null>(null);
 
-  // Generate session spine on mount or exercise change
+  // Generate session spine on mount or exercise change. Keyed on injury
+  // CONTENT, not array identity — callers build `injuries` inline, so the
+  // reference changes every render and a reference dep would re-trigger
+  // generation on each render (rest-timer ticks re-render the workout page
+  // every second), leaving the spine stuck flashing between skeleton and text.
+  const injuriesKey = JSON.stringify(injuries ?? []);
   useEffect(() => {
     if (!enabled || exercises.length === 0) return;
 
@@ -112,7 +117,8 @@ export function useInWorkoutCoach({
     };
 
     generateSpine();
-  }, [enabled, exercises.length, workoutType, weekInMeso, totalWeeks, injuries]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, exercises.length, workoutType, weekInMeso, totalWeeks, injuriesKey]);
 
   // Check for whispers and signals after sets are logged
   useEffect(() => {
