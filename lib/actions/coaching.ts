@@ -16,6 +16,8 @@ import {
   ServerError,
   NotFoundError,
   getErrorMessage,
+  categorizeError,
+  AppError,
 } from '@/lib/errors';
 import type { CoachingMessage, CoachingResponse } from '@/types/coaching';
 import type { Database, Json } from '@/types/database';
@@ -66,6 +68,7 @@ export async function sendCoachingMessage(
   message: string,
   conversationId?: string
 ): Promise<CoachingResponse> {
+  // Wrap entire function in try-catch to prevent raw Next.js error pages
   try {
     const supabase = await createClient();
 
@@ -76,11 +79,15 @@ export async function sendCoachingMessage(
       throw new AuthenticationError('Please sign in to use AI coaching.');
     }
 
-    // Check for API key
+    // Check for API key - return user-friendly error instead of throwing
     const apiKey = process.env.XAI_API_KEY;
     if (!apiKey) {
       console.error('[AI Coach] XAI_API_KEY is not set');
-      throw new ServerError('AI coaching is not configured. Please contact support.', 500);
+      // Return a proper error response instead of throwing to prevent Next.js error page
+      throw new ServerError(
+        'AI coaching is temporarily unavailable. Please try again later or contact support if the issue persists.',
+        503
+      );
     }
 
     // Build coaching context
@@ -234,8 +241,17 @@ export async function sendCoachingMessage(
     timestamp: assistantMessage.timestamp,
   };
   } catch (error: unknown) {
-    console.error('[AI Coach] Error in sendCoachingMessage:', getErrorMessage(error));
-    throw error;
+    // Log the full error for debugging
+    console.error('[AI Coach] Error in sendCoachingMessage:', error);
+    
+    // Re-throw AppError instances as-is for proper client handling
+    if (error instanceof AppError) {
+      throw error;
+    }
+    
+    // For unknown errors, categorize them to prevent raw Next.js error pages
+    const categorized = categorizeError(error);
+    throw categorized;
   }
 }
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQuery, useQueryClient, useIsRestoring } from '@tanstack/react-query';
 import { LoadingState, PageHeader } from '@/components/ui';
 import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
@@ -106,6 +106,10 @@ export default function SettingsPage() {
   const [trainingAge, setTrainingAge] = useState('');
   const [availableEquipment, setAvailableEquipment] = useState<Equipment[]>(['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight']);
   const [injuryHistory, setInjuryHistory] = useState<MuscleGroup[]>([]);
+
+  // Track whether initial data load is complete to prevent false dirty state
+  // Use state instead of ref so it resets on component remount
+  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
 
   // Convert display values when units change
   const handleUnitsChange = (newUnits: WeightUnit) => {
@@ -273,13 +277,26 @@ export default function SettingsPage() {
     setHasUnsavedChanges(false);
   }, [settingsQuery.data]);
 
-  // Track changes to mark form as dirty
+  // Mark initial load complete in a separate effect after state has settled
+  // This prevents the dirty tracking effect from firing during initial load
   useEffect(() => {
-    // Only set unsaved if we've loaded initial data and user has made changes
-    if (!isLoading && settingsQuery.data) {
+    if (!isLoading && settingsQuery.data && !initialLoadComplete) {
+      // Use setTimeout to ensure this runs after the dirty tracking effect
+      const timer = setTimeout(() => {
+        setInitialLoadComplete(true);
+      }, 0);
+      return () => clearTimeout(timer);
+    }
+  }, [isLoading, settingsQuery.data, initialLoadComplete]);
+
+  // Track changes to mark form as dirty (only after initial load completes)
+  useEffect(() => {
+    // Only set unsaved if initial data load is complete
+    // This prevents false "unsaved changes" warning on mount
+    if (initialLoadComplete && !isLoading && settingsQuery.data) {
       setHasUnsavedChanges(true);
     }
-  }, [goal, experience, heightDisplay, weightDisplay, age, sleepQuality, stressLevel, trainingAge, 
+  }, [initialLoadComplete, isLoading, settingsQuery.data, goal, experience, heightDisplay, weightDisplay, age, sleepQuality, stressLevel, trainingAge, 
       availableEquipment, injuryHistory, units, restTimer, showFormCues, showWarmupSuggestions, 
       prioritizeHypertrophy, skipPreWorkoutCheckIn, trackWaistInCheckin, showAiCoachNotes, volumeLandmarks]);
 

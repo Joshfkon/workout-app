@@ -71,8 +71,18 @@ export default function AICoachPage() {
     } catch (error: any) {
       console.error('Failed to send message:', error);
 
-      // Show error message with more details
-      const errorText = error?.message || 'Unknown error occurred';
+      // Extract user-friendly error message
+      let errorText = 'An unexpected error occurred. Please try again.';
+      
+      // Handle AppError instances with userMessage
+      if (error && typeof error === 'object' && 'userMessage' in error) {
+        errorText = error.userMessage;
+      } else if (error && typeof error === 'object' && 'message' in error) {
+        errorText = error.message;
+      } else if (typeof error === 'string') {
+        errorText = error;
+      }
+      
       const errorMessage: CoachingMessage = {
         role: 'assistant',
         content: `Sorry, I encountered an error: ${errorText}. Please try again or contact support if the issue persists.`,
