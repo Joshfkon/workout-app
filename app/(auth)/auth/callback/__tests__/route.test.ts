@@ -177,3 +177,42 @@ describe('failure paths route to the OTP fallback, never a dead end', () => {
     expect(res.redirectedTo).toBe(`${ORIGIN}/verify-code?type=signup&reason=cross_device`);
   });
 });
+
+describe('open-redirect protection', () => {
+  beforeEach(() => {
+    mockGetUser.mockResolvedValue({
+      data: { user: { id: 'u1', email_confirmed_at: '2026-01-01T00:00:00Z' } },
+    });
+    mockSingle.mockResolvedValue({ data: { onboarding_completed: true } });
+  });
+
+  it('allows relative same-origin paths', async () => {
+    const res = await get('?code=abc&next=%2Fdashboard%2Fanalytics');
+
+    expect(res.redirectedTo).toBe(`${ORIGIN}/dashboard/analytics`);
+  });
+
+  it('rejects protocol-relative URLs and defaults to /dashboard/train', async () => {
+    const res = await get('?code=abc&next=%2F%2Fevil.com%2Fphishing');
+
+    expect(res.redirectedTo).toBe(`${ORIGIN}/dashboard/train`);
+  });
+
+  it('rejects absolute URLs with protocols and defaults to /dashboard/train', async () => {
+    const res = await get('?code=abc&next=https%3A%2F%2Fevil.com');
+
+    expect(res.redirectedTo).toBe(`${ORIGIN}/dashboard/train`);
+  });
+
+  it('rejects paths not starting with / and defaults to /dashboard/train', async () => {
+    const res = await get('?code=abc&next=dashboard%2Ftrain');
+
+    expect(res.redirectedTo).toBe(`${ORIGIN}/dashboard/train`);
+  });
+
+  it('handles missing next param by defaulting to /dashboard/train', async () => {
+    const res = await get('?code=abc');
+
+    expect(res.redirectedTo).toBe(`${ORIGIN}/dashboard/train`);
+  });
+});

@@ -54,7 +54,7 @@ This matters because:
 The only way to calibrate is to occasionally experience true failure.`,
     },
     {
-      heading: 'How HyperTracker Calibrates You',
+      heading: 'How HyperTrack Calibrates You',
       content: `We prescribe AMRAP (As Many Reps As Possible) sets on safe exercises - machines, cables, isolation work.
 
 When you do an AMRAP, we compare your actual max reps to what your recent RIR reports predicted. If you've been reporting "RIR 3" at 8 reps, you implied you could do 11 reps. If the AMRAP shows you can do 14, you've been sandbagging.
