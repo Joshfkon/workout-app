@@ -1652,6 +1652,7 @@ export function recommendSessionStart(input: SessionStartInput): SetRecommendati
     rir: input.targetRir,
     rationale: 'maintain',
     effortVsTarget: rec.effortVsTarget,
+    trigger: 'none',
   };
 }
 
