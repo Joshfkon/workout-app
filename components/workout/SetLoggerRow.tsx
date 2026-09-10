@@ -10,6 +10,7 @@ import {
   IconPlayerStopFilled,
   IconRotate,
   IconInfoCircle,
+  IconRepeat,
 } from '@tabler/icons-react';
 import { useDurationTimer } from '@/hooks/useDurationTimer';
 import { BottomSheet } from './BottomSheet';
@@ -26,6 +27,7 @@ import type {
   FormRating,
   SetDiscomfort,
   BodyweightData,
+  SetType,
 } from '@/types/schema';
 import { rirToRpe, calculateEffectiveLoad } from '@/types/schema';
 import {
@@ -84,6 +86,8 @@ interface SetLoggerRowProps {
     note?: string;
     feedback: SetFeedback;
     bodyweightData?: BodyweightData;
+    setType: SetType;
+    rirExplicitlySelected: boolean;
   }) => void;
   /**
    * Opens the plate calculator pre-filled with the current weight (P1-5).
@@ -172,8 +176,11 @@ export function SetLoggerRow({
   onPlateCalculatorOpen,
 }: SetLoggerRowProps) {
   const [selectedRir, setSelectedRir] = useState<RepsInTank>(() => clampToChip(targetRir));
+  const [rirTouched, setRirTouched] = useState(false);
+  const [selectedSetType, setSelectedSetType] = useState<SetType>('normal');
   const [editingField, setEditingField] = useState<'weight' | 'reps' | null>(null);
   const [showFeedbackSheet, setShowFeedbackSheet] = useState(false);
+  const [showSetTypeSheet, setShowSetTypeSheet] = useState(false);
   const [showPredictionInfo, setShowPredictionInfo] = useState(false);
   const [showSheetDiscomfortPicker, setShowSheetDiscomfortPicker] = useState(false);
   const [form, setForm] = useState<FormRating | null>(null);
@@ -184,6 +191,7 @@ export function SetLoggerRow({
   // Re-sync the default chip when the set advances or the prescription changes.
   useEffect(() => {
     setSelectedRir(clampToChip(targetRir));
+    setRirTouched(false);
   }, [setNumber, targetRir]);
 
   // Clear per-set feedback when the set advances.
@@ -191,6 +199,7 @@ export function SetLoggerRow({
     setForm(null);
     setDiscomfort(undefined);
     setNote('');
+    setSelectedSetType('normal');
     setShowSheetDiscomfortPicker(false);
   }, [setNumber]);
 
@@ -346,6 +355,8 @@ export function SetLoggerRow({
       note: note.trim() || undefined,
       feedback,
       bodyweightData,
+      setType: selectedSetType,
+      rirExplicitlySelected: rirTouched,
     });
 
     // Reset per-set feedback for the next set.
@@ -652,13 +663,16 @@ export function SetLoggerRow({
         </div>
       )}
 
-      {/* Row 2: RIR chips (labeled, full-width) + feedback sheet trigger */}
+      {/* Row 2: RIR chips (labeled, full-width) + set type + feedback sheet trigger */}
       <div className="flex items-stretch gap-2">
         {RIR_CHIPS.map((chip) => (
           <button
             key={chip}
             type="button"
-            onClick={() => setSelectedRir(chip)}
+            onClick={() => {
+              setSelectedRir(chip);
+              setRirTouched(true);
+            }}
             disabled={disabled}
             aria-label={`${RIR_CHIP_TEXT[chip]} reps in reserve (${RIR_LABELS[chip]})`}
             aria-pressed={selectedRir === chip}
@@ -672,6 +686,26 @@ export function SetLoggerRow({
             </span>
           </button>
         ))}
+        <button
+          type="button"
+          onClick={() => setShowSetTypeSheet(true)}
+          disabled={disabled}
+          aria-label={selectedSetType === 'normal' ? 'Set type: normal (tap to change)' : `Set type: ${selectedSetType}`}
+          className={`relative min-w-[52px] min-h-[52px] rounded-xl flex items-center justify-center transition-colors ${
+            selectedSetType !== 'normal'
+              ? 'text-primary-400 bg-primary-500/10 border border-primary-500/40'
+              : 'text-surface-400 hover:text-surface-200 bg-surface-800/50 hover:bg-surface-800'
+          }`}
+          title={selectedSetType === 'normal' ? 'Normal set' : selectedSetType.replace('_', '-')}
+        >
+          <IconRepeat size={20} />
+          {selectedSetType !== 'normal' && (
+            <span
+              className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-primary-400"
+              aria-hidden="true"
+            />
+          )}
+        </button>
         <button
           type="button"
           onClick={() => setShowFeedbackSheet(true)}
@@ -774,6 +808,64 @@ export function SetLoggerRow({
           <p className="text-[11px] text-surface-500 text-center">
             All optional — feedback is saved with the set when you tap Log set.
           </p>
+        </div>
+      </BottomSheet>
+
+      {/* Set type selector sheet */}
+      <BottomSheet
+        isOpen={showSetTypeSheet}
+        onClose={() => setShowSetTypeSheet(false)}
+        title="Set type"
+      >
+        <div className="space-y-3">
+          <p className="text-[13px] text-surface-400">
+            Mark advanced training techniques so they don&apos;t contaminate progression estimates.
+          </p>
+          {(['normal', 'rest_pause', 'myorep', 'dropset'] as const).map((type) => {
+            const labels: Record<typeof type, { name: string; desc: string }> = {
+              normal: {
+                name: 'Normal',
+                desc: 'Standard straight set',
+              },
+              rest_pause: {
+                name: 'Rest-Pause',
+                desc: 'Multiple mini-sets with short pauses',
+              },
+              myorep: {
+                name: 'Myo-Rep',
+                desc: 'Activation set + mini-sets near failure',
+              },
+              dropset: {
+                name: 'Drop Set',
+                desc: 'Immediately reduce weight and continue',
+              },
+            };
+            const label = labels[type];
+            return (
+              <button
+                key={type}
+                type="button"
+                onClick={() => {
+                  setSelectedSetType(type);
+                  setShowSetTypeSheet(false);
+                }}
+                disabled={disabled}
+                className={`w-full min-h-[44px] flex items-start gap-3 rounded-lg px-3 py-2.5 text-left transition-colors ${
+                  selectedSetType === type
+                    ? 'bg-primary-500/20 border border-primary-500/50'
+                    : 'bg-surface-800/50 hover:bg-surface-800 border border-surface-700'
+                }`}
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="text-[14px] font-medium text-surface-100">{label.name}</div>
+                  <div className="text-[12px] text-surface-400 mt-0.5">{label.desc}</div>
+                </div>
+                {selectedSetType === type && (
+                  <span className="text-primary-400 text-[12px] font-medium mt-0.5">✓</span>
+                )}
+              </button>
+            );
+          })}
         </div>
       </BottomSheet>
 

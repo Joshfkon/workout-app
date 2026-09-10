@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo, memo, useRef, useCallback } from 'react';
 import { Card, Button, ConfirmModal, InfoTooltip } from '@/components/ui';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/Accordion';
-import type { Exercise, ExerciseBlock, SetLog, WeightUnit, SetQuality, SetFeedback, BodyweightData, ExercisePerformanceSnapshot, StandardMuscleGroup, SorenessRating, SetDiscomfort, RepsInTank, SleepQuality } from '@/types/schema';
+import type { Exercise, ExerciseBlock, SetLog, WeightUnit, SetQuality, SetFeedback, BodyweightData, ExercisePerformanceSnapshot, StandardMuscleGroup, SorenessRating, SetDiscomfort, RepsInTank, SleepQuality, SetType } from '@/types/schema';
 import { rpeToRir, rirToRpe } from '@/types/schema';
 import { formatSetHistoryLine } from '@/lib/formatSetHistory';
 import { SorenessChipRow, JointPainPicker } from './FeedbackChips';
@@ -200,8 +200,6 @@ function getExerciseInjuryRiskFromService(
     risk: worstRisk
   };
 }
-
-type SetType = 'normal' | 'warmup' | 'dropset' | 'myorep' | 'rest_pause';
 
 /**
  * Entered load (kg + display label) from the logger's CURRENT stepper values,
@@ -2018,6 +2016,8 @@ export const ExerciseCard = memo(function ExerciseCard({
     note?: string;
     feedback: SetFeedback;
     bodyweightData?: BodyweightData;
+    setType: SetType;
+    rirExplicitlySelected: boolean;
   }) => {
     if (isCompletingSet || !onSetComplete) return;
     if (isNaN(data.weightKg) || data.weightKg < 0 || data.reps < 1) return;
@@ -2036,7 +2036,7 @@ export const ExerciseCard = memo(function ExerciseCard({
         reps: data.reps,
         rpe: data.rpe,
         note: data.note,
-        setType: 'normal',
+        setType: data.setType,
         feedback: data.feedback,
         bodyweightData: data.bodyweightData,
       });
