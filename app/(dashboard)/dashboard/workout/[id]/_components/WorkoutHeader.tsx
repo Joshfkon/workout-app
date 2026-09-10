@@ -395,7 +395,7 @@ export function WorkoutHeader({
                     role="menuitem"
                   >
                     <IconX size={16} />
-                    Cancel workout
+                    Discard workout
                   </button>
                 </div>
               </>

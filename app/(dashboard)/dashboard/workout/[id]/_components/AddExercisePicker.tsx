@@ -607,29 +607,35 @@ export function AddExercisePicker({
 
           {/* Muscle chips + adjustments toggle */}
           <div className="mt-2 flex items-center gap-2">
-            <div
-              className="flex-1 flex items-center gap-1.5 overflow-x-auto"
-              style={{ scrollbarWidth: 'none' }}
-            >
-              <button
-                type="button"
-                onClick={() => onSelectedMuscleFilterChange(null)}
-                className={chipClass(!selectedMuscleFilter)}
+            <div className="flex-1 relative">
+              <div
+                className="flex items-center gap-1.5 overflow-x-auto pr-4"
+                style={{ scrollbarWidth: 'none' }}
               >
-                All
-              </button>
-              {muscleOptions.map(muscle => (
                 <button
-                  key={muscle}
                   type="button"
-                  onClick={() =>
-                    onSelectedMuscleFilterChange(selectedMuscleFilter === muscle ? null : muscle)
-                  }
-                  className={chipClass(selectedMuscleFilter === muscle)}
+                  onClick={() => onSelectedMuscleFilterChange(null)}
+                  className={chipClass(!selectedMuscleFilter)}
                 >
-                  {formatMuscleName(muscle)}
+                  All
                 </button>
-              ))}
+                {muscleOptions.map(muscle => (
+                  <button
+                    key={muscle}
+                    type="button"
+                    onClick={() =>
+                      onSelectedMuscleFilterChange(selectedMuscleFilter === muscle ? null : muscle)
+                    }
+                    className={chipClass(selectedMuscleFilter === muscle)}
+                  >
+                    {formatMuscleName(muscle)}
+                  </button>
+                ))}
+              </div>
+              {/* Fade gradient to indicate scrollable content */}
+              {muscleOptions.length > 5 && (
+                <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-surface-900 to-transparent pointer-events-none" />
+              )}
             </div>
             <button
               type="button"
@@ -651,29 +657,35 @@ export function AddExercisePicker({
               "All" clears the whole axis. Rendered only when the library spans
               more than one equipment group. */}
           {equipmentOptions.length > 1 && (
-            <div
-              className="mt-1.5 flex items-center gap-1.5 overflow-x-auto"
-              style={{ scrollbarWidth: 'none' }}
-              data-testid="equipment-filter-row"
-            >
-              <button
-                type="button"
-                onClick={() => selectedEquipmentGroups.forEach(onToggleEquipmentGroup)}
-                className={chipClass(selectedEquipmentGroups.length === 0)}
+            <div className="mt-1.5 relative">
+              <div
+                className="flex items-center gap-1.5 overflow-x-auto pr-4"
+                style={{ scrollbarWidth: 'none' }}
+                data-testid="equipment-filter-row"
               >
-                All Gear
-              </button>
-              {equipmentOptions.map(group => (
                 <button
-                  key={group}
                   type="button"
-                  onClick={() => onToggleEquipmentGroup(group)}
-                  className={chipClass(selectedEquipmentGroups.includes(group))}
-                  aria-pressed={selectedEquipmentGroups.includes(group)}
+                  onClick={() => selectedEquipmentGroups.forEach(onToggleEquipmentGroup)}
+                  className={chipClass(selectedEquipmentGroups.length === 0)}
                 >
-                  {equipmentGroupLabel(group)}
+                  All Gear
                 </button>
-              ))}
+                {equipmentOptions.map(group => (
+                  <button
+                    key={group}
+                    type="button"
+                    onClick={() => onToggleEquipmentGroup(group)}
+                    className={chipClass(selectedEquipmentGroups.includes(group))}
+                    aria-pressed={selectedEquipmentGroups.includes(group)}
+                  >
+                    {equipmentGroupLabel(group)}
+                  </button>
+                ))}
+              </div>
+              {/* Fade gradient to indicate scrollable content */}
+              {equipmentOptions.length > 3 && (
+                <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-surface-900 to-transparent pointer-events-none" />
+              )}
             </div>
           )}
 
