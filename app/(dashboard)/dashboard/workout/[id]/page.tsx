@@ -1064,6 +1064,12 @@ export default function WorkoutPage() {
     startedAt: timerStartedAt,
   });
 
+  // Helper to get sets for a specific block. Declared BEFORE useInWorkoutCoach:
+  // its exercises array is built synchronously during render, so a later
+  // declaration is still in its temporal dead zone here and throws
+  // "Cannot access 'X' before initialization" as soon as blocks load.
+  const getSetsForBlock = (blockId: string) => completedSets.filter(s => s.exerciseBlockId === blockId && !s.isWarmup && s.setType !== 'warmup');
+
   // In-workout AI coaching (whispers, signals, rest tips, session spine)
   const inWorkoutCoach = useInWorkoutCoach({
     exercises: blocks.map(block => {
@@ -5997,10 +6003,8 @@ export default function WorkoutPage() {
     );
   }
 
-  // Helper to get sets for a specific block
-  const getSetsForBlock = (blockId: string) => completedSets.filter(s => s.exerciseBlockId === blockId && !s.isWarmup && s.setType !== 'warmup');
-
-  // Check if a block is complete
+  // Check if a block is complete (getSetsForBlock is declared near the top of
+  // the component, before useInWorkoutCoach)
   const isBlockComplete = (block: ExerciseBlockWithExercise) => {
     const blockSets = getSetsForBlock(block.id);
     return blockSets.length >= block.targetSets;
