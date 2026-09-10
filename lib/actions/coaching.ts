@@ -235,7 +235,11 @@ export async function sendCoachingMessage(
   };
   } catch (error: unknown) {
     console.error('[AI Coach] Error in sendCoachingMessage:', getErrorMessage(error));
-    throw error;
+    // Server actions require serializable errors. Custom Error instances lose
+    // their message during serialization, exposing raw Next.js internals.
+    // Re-throw a plain Error with the user-friendly message instead.
+    const userMessage = getErrorMessage(error);
+    throw new Error(userMessage);
   }
 }
 

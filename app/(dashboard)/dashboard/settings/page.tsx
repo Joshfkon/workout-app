@@ -98,6 +98,8 @@ export default function SettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  // Snapshot of loaded values to detect real changes vs. initial data population
+  const [initialValues, setInitialValues] = useState<Record<string, any>>({});
 
   // Extended profile fields
   const [age, setAge] = useState('');
@@ -271,17 +273,69 @@ export default function SettingsPage() {
     setIsLoading(false);
     // Reset unsaved changes flag when fresh data loads
     setHasUnsavedChanges(false);
+    // Capture initial values snapshot for dirty detection
+    setInitialValues({
+      goal,
+      experience,
+      heightDisplay,
+      weightDisplay,
+      age,
+      sleepQuality,
+      stressLevel,
+      trainingAge,
+      availableEquipment: JSON.stringify(availableEquipment),
+      injuryHistory: JSON.stringify(injuryHistory),
+      units,
+      restTimer,
+      showFormCues,
+      showWarmupSuggestions,
+      prioritizeHypertrophy,
+      skipPreWorkoutCheckIn,
+      trackWaistInCheckin,
+      showAiCoachNotes,
+      volumeLandmarks: JSON.stringify(volumeLandmarks),
+    });
   }, [settingsQuery.data]);
 
-  // Track changes to mark form as dirty
+  // Track changes to mark form as dirty — only when values differ from loaded snapshot
   useEffect(() => {
-    // Only set unsaved if we've loaded initial data and user has made changes
-    if (!isLoading && settingsQuery.data) {
-      setHasUnsavedChanges(true);
+    // Skip if still loading or no initial snapshot yet
+    if (isLoading || !settingsQuery.data || Object.keys(initialValues).length === 0) {
+      return;
     }
+    
+    // Compare current values to the initial snapshot
+    const currentValues = {
+      goal,
+      experience,
+      heightDisplay,
+      weightDisplay,
+      age,
+      sleepQuality,
+      stressLevel,
+      trainingAge,
+      availableEquipment: JSON.stringify(availableEquipment),
+      injuryHistory: JSON.stringify(injuryHistory),
+      units,
+      restTimer,
+      showFormCues,
+      showWarmupSuggestions,
+      prioritizeHypertrophy,
+      skipPreWorkoutCheckIn,
+      trackWaistInCheckin,
+      showAiCoachNotes,
+      volumeLandmarks: JSON.stringify(volumeLandmarks),
+    };
+    
+    const isDirty = Object.keys(currentValues).some(
+      key => currentValues[key] !== initialValues[key]
+    );
+    
+    setHasUnsavedChanges(isDirty);
   }, [goal, experience, heightDisplay, weightDisplay, age, sleepQuality, stressLevel, trainingAge, 
       availableEquipment, injuryHistory, units, restTimer, showFormCues, showWarmupSuggestions, 
-      prioritizeHypertrophy, skipPreWorkoutCheckIn, trackWaistInCheckin, showAiCoachNotes, volumeLandmarks]);
+      prioritizeHypertrophy, skipPreWorkoutCheckIn, trackWaistInCheckin, showAiCoachNotes, volumeLandmarks,
+      isLoading, settingsQuery.data, initialValues]);
 
   // Refresh settings when the tab regains focus (weight may have changed in
   // another tab) — refetches the cached query.
@@ -387,7 +441,29 @@ export default function SettingsPage() {
       }
 
       setSaveMessage({ type: 'success', text: successText });
-      setHasUnsavedChanges(false); // Clear unsaved flag on successful save
+      setHasUnsavedChanges(false);
+      // Update the initial values snapshot after successful save
+      setInitialValues({
+        goal,
+        experience,
+        heightDisplay,
+        weightDisplay,
+        age,
+        sleepQuality,
+        stressLevel,
+        trainingAge,
+        availableEquipment: JSON.stringify(availableEquipment),
+        injuryHistory: JSON.stringify(injuryHistory),
+        units,
+        restTimer,
+        showFormCues,
+        showWarmupSuggestions,
+        prioritizeHypertrophy,
+        skipPreWorkoutCheckIn,
+        trackWaistInCheckin,
+        showAiCoachNotes,
+        volumeLandmarks: JSON.stringify(volumeLandmarks),
+      });
     } catch (err) {
       setSaveMessage({ type: 'error', text: err instanceof Error ? err.message : 'Failed to save settings' });
     } finally {
