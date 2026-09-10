@@ -109,6 +109,12 @@ describe('EmptyWorkoutReadiness', () => {
     );
 
     expect(screen.getByTestId('readiness-inline')).toBeInTheDocument();
+    
+    // Readiness starts collapsed; expand it to see the content
+    const expandButton = screen.getByRole('button', { name: /today's readiness/i });
+    expect(expandButton).toBeInTheDocument();
+    await userEvent.click(expandButton);
+    
     // Rows appear once the mocked history resolves; a Fresh/under-volume muscle
     // is surfaced as a good target, and Fatigued quads never is.
     await waitFor(() => expect(screen.getByTestId('readiness-targets')).not.toHaveTextContent('Quads'));
@@ -120,6 +126,10 @@ describe('EmptyWorkoutReadiness', () => {
       <EmptyWorkoutReadiness quickAddExercises={[]} onAddExercise={jest.fn()} />,
       { wrapper }
     );
+
+    // Readiness starts collapsed; expand it first
+    const expandButton = screen.getByRole('button', { name: /today's readiness/i });
+    await userEvent.click(expandButton);
 
     // Row testids only — expansion toggles share the prefix (readiness-row-toggle-*).
     const rowIds = () =>
