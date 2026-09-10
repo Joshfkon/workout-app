@@ -9,9 +9,11 @@ import {
   IconPlayerPlayFilled,
   IconPlayerStopFilled,
   IconRotate,
+  IconInfoCircle,
 } from '@tabler/icons-react';
 import { useDurationTimer } from '@/hooks/useDurationTimer';
 import { BottomSheet } from './BottomSheet';
+import type { EffortCheck } from './SuggestionBanner';
 import { FormRatingSelector } from './FormRatingSelector';
 import { JointPainPicker } from './FeedbackChips';
 import { SELECTOR_CHIP_BASE, SELECTOR_CHIP_IDLE, SELECTOR_CHIP_SELECTED } from './selectorChips';
@@ -63,6 +65,14 @@ interface SetLoggerRowProps {
   isBodyweight?: boolean;
   weightMode?: WeightMode;
   userBodyweightKg?: number;
+  /**
+   * Live predicted effort for the CURRENTLY ENTERED weight × reps, computed
+   * by the caller on the suggestion engine's own e1RM/curve (same object the
+   * SuggestionBanner uses for its amber warning). Renders an always-visible
+   * "~N RIR" readout under the steppers with an (i) reasoning sheet.
+   * Null/omitted (no capacity anchor, duration-based) hides the readout.
+   */
+  effortCheck?: EffortCheck | null;
   /**
    * One-tap commit. Data shape matches the existing onSetComplete persistence
    * path exactly (weight converted to kg, RPE derived from the selected RIR).
@@ -157,12 +167,14 @@ export function SetLoggerRow({
   isBodyweight = false,
   weightMode = 'bodyweight',
   userBodyweightKg,
+  effortCheck = null,
   onLog,
   onPlateCalculatorOpen,
 }: SetLoggerRowProps) {
   const [selectedRir, setSelectedRir] = useState<RepsInTank>(() => clampToChip(targetRir));
   const [editingField, setEditingField] = useState<'weight' | 'reps' | null>(null);
   const [showFeedbackSheet, setShowFeedbackSheet] = useState(false);
+  const [showPredictionInfo, setShowPredictionInfo] = useState(false);
   const [showSheetDiscomfortPicker, setShowSheetDiscomfortPicker] = useState(false);
   const [form, setForm] = useState<FormRating | null>(null);
   const [discomfort, setDiscomfort] = useState<SetDiscomfort | undefined>(undefined);
@@ -608,6 +620,38 @@ export function SetLoggerRow({
         </div>
       )}
 
+      {/* Row 1.5: live predicted RIR for the ENTERED weight × reps. Always
+          visible while a prediction exists (unlike the banner's amber
+          warning, which only fires at ≤ 0 RIR); the (i) opens a sheet that
+          walks through the math in plain language. */}
+      {effortCheck && (
+        <div className="flex items-center justify-between gap-2 pl-1" data-testid="predicted-rir">
+          <span
+            aria-live="polite"
+            className={`text-[12px] leading-snug ${
+              effortCheck.predictedRir <= 0 ? 'text-amber-400' : 'text-surface-400'
+            }`}
+          >
+            {effortCheck.predictedRir < 0
+              ? `Predicted: ${Math.abs(effortCheck.predictedRir)} rep${
+                  Math.abs(effortCheck.predictedRir) === 1 ? '' : 's'
+                } past your max`
+              : `Predicted: ~${effortCheck.predictedRir} RIR (${
+                  RIR_LABELS[clampToChip(effortCheck.predictedRir)]
+                })`}
+            {effortCheck.softened ? ' · rough estimate' : ''}
+          </span>
+          <button
+            type="button"
+            onClick={() => setShowPredictionInfo(true)}
+            aria-label="How this RIR prediction works"
+            className="min-w-[44px] min-h-[44px] -my-2 flex items-center justify-center flex-shrink-0 text-surface-500 hover:text-surface-300 transition-colors"
+          >
+            <IconInfoCircle size={16} />
+          </button>
+        </div>
+      )}
+
       {/* Row 2: RIR chips (labeled, full-width) + feedback sheet trigger */}
       <div className="flex items-stretch gap-2">
         {RIR_CHIPS.map((chip) => (
@@ -732,6 +776,35 @@ export function SetLoggerRow({
           </p>
         </div>
       </BottomSheet>
+
+      {/* Predicted-RIR reasoning sheet (mirrors the SuggestionBanner info
+          sheet's list styling — one input layer of the math per line). */}
+      {effortCheck && (
+        <BottomSheet
+          isOpen={showPredictionInfo}
+          onClose={() => setShowPredictionInfo(false)}
+          title={`Why ${effortCheck.weightLabel} × ${effortCheck.reps} ≈ ${
+            effortCheck.predictedRir < 0 ? 'past max' : `${effortCheck.predictedRir} RIR`
+          }`}
+        >
+          <ul className="space-y-2.5" data-testid="predicted-rir-reasoning">
+            {effortCheck.reasoning.map((line, i) => (
+              <li key={i} className="flex items-start gap-2 text-[13px] text-surface-300">
+                <span
+                  className="mt-1.5 w-1 h-1 rounded-full bg-primary-400 flex-shrink-0"
+                  aria-hidden="true"
+                />
+                {line}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-4 text-[11px] text-surface-500">
+            The prediction updates live as you change the weight or reps, and it uses the same
+            math as the set suggestion above — it can be off on any given day, so trust how the
+            set actually feels.
+          </p>
+        </BottomSheet>
+      )}
     </div>
   );
 }
