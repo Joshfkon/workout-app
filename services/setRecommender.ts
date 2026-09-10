@@ -1312,6 +1312,7 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
             : pm.weightKg < lastWeightKg
               ? 'reduce_load'
               : 'maintain',
+        trigger: 'none',
         effortVsTarget,
         positionMatch: pm,
       });
