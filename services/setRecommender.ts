@@ -199,6 +199,13 @@ export interface SetRecommendation {
    */
   provenance?: PrescriptionProvenance;
   /**
+   * Which adjustment rule moved the weight off the reference set — names the
+   * exact engine branch that fired (see AdjustmentTrigger). 'none' when the
+   * weight was held. The banner builds its factual copy from this instead of
+   * judgment words like "clearly too light" / "harder than target".
+   */
+  trigger: AdjustmentTrigger;
+  /**
    * How the REFERENCE set's actual effort compared to the target RIR, derived
    * from the same `dev` (lastRir − targetRir) the weight/rep math uses. The
    * banner phrases a hold from this instead of assuming every in-deadband set
@@ -904,6 +911,7 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
       reps: clamp(lastReps || repMin, repMin, repMax),
       rir: targetRir,
       rationale: 'maintain',
+      trigger: 'none',
       effortVsTarget: 'on_target',
     };
   }
@@ -1313,6 +1321,7 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
   // ---- 1) Decide the WEIGHT (default: hold) ----
   let weightKg: number;
   let rationale: SetRecommendation['rationale'];
+  let trigger: AdjustmentTrigger;
   let noMeaningfulChange = false;
 
   // Grid rounding for an intended load CHANGE against the just-completed
@@ -1336,10 +1345,11 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
   const stepCap = input.coldStart ? COLD_START_STEP_PCT : MAX_STEP_PCT;
 
   if (lastReps > repMax + REP_OVERSHOOT || (lastReps >= repMax && dev >= DEADBAND_RIR)) {
-    // Too light — either an unambiguous rep-overshoot (reps prove it regardless
+    // Under-loaded — either an unambiguous rep-overshoot (reps prove it regardless
     // of RIR — checked BEFORE the effort branch, so a rep range moved down by
     // the one-tap plateau switch reprices upward even off a near-failure set)
     // OR cleared the top of the range with >= DEADBAND reserve.
+    trigger = lastReps > repMax + REP_OVERSHOOT ? 'rep_overshoot' : 'top_range_reserve';
     const ideal = weightForReps(e1rm, repMax, targetRir);
     const r = gridRound(Math.max(Math.min(ideal, lastWeightKg * (1 + stepCap)), lastWeightKg));
     if (r.noMeaningfulChange) {
@@ -1364,7 +1374,10 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
       rationale = 'increase_load';
     }
   } else if (lastReps < repMin || dev <= -DEADBAND_RIR) {
-    // Too heavy, or went too close to failure → reduce toward mid-range.
+    // Over-loaded (reps below range) or went too close to failure → reduce
+    // toward mid-range. Reps-below-min is the more objective signal, so it
+    // names the trigger when both conditions hold.
+    trigger = lastReps < repMin ? 'below_rep_min' : 'rir_deficit';
     const ideal = weightForReps(e1rm, mid, targetRir);
     const r = gridRound(Math.min(Math.max(ideal, lastWeightKg * (1 - MAX_REDUCE_PCT)), lastWeightKg));
     if (r.noMeaningfulChange) {
@@ -1378,6 +1391,7 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
   } else {
     weightKg = lastWeightKg;
     rationale = 'maintain';
+    trigger = 'none';
   }
 
   // ---- 2) Predict the REPS for the next set ----
@@ -1403,6 +1417,7 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
     reps,
     rir: targetRir,
     rationale,
+    trigger,
     effortVsTarget,
     ...(noMeaningfulChange ? { noMeaningfulChange } : {}),
   });
@@ -1696,6 +1711,18 @@ export function predictAmrapReps(
  */
 export type AnchorSource = 'e1rm' | 'last_session' | 'ramp_percent' | 'position_match' | 'none';
 
+/**
+ * Which adjustment rule fired to change the load off the reference set.
+ * Surfaces the exact decision branch in the banner copy — "reps vs range" and
+ * "RIR vs target" rather than vague judgment words like "clearly too light".
+ */
+export type AdjustmentTrigger =
+  | 'rep_overshoot'       // reps > repMax + REP_OVERSHOOT
+  | 'top_range_reserve'   // reps >= repMax with >= DEADBAND reserve
+  | 'below_rep_min'       // reps < repMin
+  | 'rir_deficit'         // effort deviation <= −DEADBAND (too close to failure)
+  | 'none';               // held the weight
+
 export interface SeedSlotInput {
   /** Resolved role for this slot (user tag beats inference — resolve upstream). */
   role: SetRole;
@@ -1793,6 +1820,12 @@ export interface SeedRecommendation {
   clampBinder?: SeedClampBinder;
   /** The raw curve pick (kg) BEFORE any clamp/gate/rounding, for provenance. */
   preClampWeightKg?: number;
+  /**
+   * For the `last_session` anchor: the rule that moved the seed off the previous
+   * session's load (see AdjustmentTrigger). 'none' for every other anchor and
+   * for a seed that repeats last session.
+   */
+  trigger: AdjustmentTrigger;
   engineVersion: number;
   /**
    * The specific rep target that comes WITH the seeded weight, when the seed
@@ -1943,6 +1976,7 @@ export function recommendSeedForSlot(input: SeedSlotInput): SeedRecommendation {
         showRirTarget: true,
         anchorSource: 'last_session',
         clamped: false,
+        trigger: rec.trigger,
         engineVersion: SUGGESTION_ENGINE_VERSION,
         // The policy's seconds target (+step / ceiling hold / floor reset) —
         // without this the card would fall back to the mid of the range and
@@ -1967,6 +2001,7 @@ export function recommendSeedForSlot(input: SeedSlotInput): SeedRecommendation {
       showRirTarget: true,
       anchorSource: 'none',
       clamped: false,
+      trigger: 'none',
       engineVersion: SUGGESTION_ENGINE_VERSION,
     };
   }
@@ -2041,6 +2076,7 @@ export function recommendSeedForSlot(input: SeedSlotInput): SeedRecommendation {
       showRirTarget: false,
       anchorSource: topWorkingKg > 0 ? 'ramp_percent' : 'none',
       clamped: false,
+      trigger: 'none',
       engineVersion: SUGGESTION_ENGINE_VERSION,
     };
   }
@@ -2080,6 +2116,7 @@ export function recommendSeedForSlot(input: SeedSlotInput): SeedRecommendation {
         showRirTarget: true,
         anchorSource: 'position_match',
         clamped: false,
+        trigger: 'none',
         engineVersion: SUGGESTION_ENGINE_VERSION,
         seedReps: pm.reps,
         positionMatch: pm,
@@ -2099,6 +2136,7 @@ export function recommendSeedForSlot(input: SeedSlotInput): SeedRecommendation {
       // not the e1RM curve — provenance must say so.
       anchorSource: 'last_session',
       clamped: false,
+      trigger: 'none',
       engineVersion: SUGGESTION_ENGINE_VERSION,
     };
   }
@@ -2135,6 +2173,7 @@ export function recommendSeedForSlot(input: SeedSlotInput): SeedRecommendation {
       clamped: w.clamped || workingClamped,
       clampBinder: w.binder,
       preClampWeightKg: w.preClampKg,
+      trigger: 'none',
       engineVersion: SUGGESTION_ENGINE_VERSION,
     };
   }
@@ -2160,6 +2199,7 @@ export function recommendSeedForSlot(input: SeedSlotInput): SeedRecommendation {
       showRirTarget: true,
       anchorSource: 'last_session',
       clamped: false,
+      trigger: rec.trigger,
       engineVersion: SUGGESTION_ENGINE_VERSION,
     };
   }
@@ -2173,6 +2213,7 @@ export function recommendSeedForSlot(input: SeedSlotInput): SeedRecommendation {
     showRirTarget: true,
     anchorSource: 'none',
     clamped: false,
+    trigger: 'none',
     engineVersion: SUGGESTION_ENGINE_VERSION,
   };
 }
