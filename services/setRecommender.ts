@@ -1651,6 +1651,7 @@ export function recommendSessionStart(input: SessionStartInput): SetRecommendati
     reps: Math.min(input.prevReps + 1, Math.max(ceiling, input.prevReps)),
     rir: input.targetRir,
     rationale: 'maintain',
+    trigger: 'none',
     effortVsTarget: rec.effortVsTarget,
   };
 }
