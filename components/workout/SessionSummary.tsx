@@ -723,7 +723,8 @@ export function SessionSummary({
               // kg-sum roundtrip that loses storage precision.
               const vol = sumDisplayVolume(
                 workingSets.filter((s) => !isDurationSet(s)),
-                unit
+                unit,
+                null // Already filtered duration sets
               );
               return vol >= 1000 ? `${(vol / 1000).toFixed(1)}k` : Math.round(vol);
             })()}
