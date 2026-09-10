@@ -1653,7 +1653,6 @@ export function recommendSessionStart(input: SessionStartInput): SetRecommendati
     rationale: 'maintain',
     trigger: 'none',
     effortVsTarget: rec.effortVsTarget,
-    trigger: 'none',
   };
 }
 
