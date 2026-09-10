@@ -100,8 +100,21 @@ export function createSimulationWorld(options: WorldOptions = {}): FakeSupabase 
       name: 'Simulation mesocycle',
       split_type: 'upper_lower',
       goal: 'hypertrophy',
-      status: 'active',
-      total_weeks: 24,
+      // `state`, not `status`: the production active-mesocycle lookup filters
+      // `.eq('state', 'active')`, so a `status` field leaves this row invisible
+      // to `startSession()` — the fixture would silently fail to represent the
+      // path it exists to represent.
+      state: 'active',
+      // The schema caps total_weeks at 12 AND requires current_week <=
+      // total_weeks. A 24-week row is a world production could never hold, and
+      // on a long run the week advance would have climbed past the cap and
+      // violated that second constraint too. The fake enforces no constraints
+      // (L1), so a fixture that could not exist is exactly what it lets pass.
+      //
+      // 12 is enough for the full sweep: computeCurrentWeekFromSessions clamps
+      // the week at total_weeks, so 78 sessions land on week 12, not week 26.
+      total_weeks: 12,
+      deload_week: 6,
       days_per_week: 3,
       current_week: 1,
       start_date: plannedDate,
