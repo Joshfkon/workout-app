@@ -685,7 +685,7 @@ export const HARD_SET_WARNING_GROUPS = [
  * receives every rear-delt and pressing set, because shoulder-joint load is
  * exactly what that channel models.
  */
-export const WARNING_EXEMPT_MUSCLES: ReadonlySet<StandardMuscleGroup> = new Set([
+export const WARNING_EXEMPT_MUSCLES: ReadonlySet<StandardMuscleGroup> = new Set<StandardMuscleGroup>([
   'rear_delts',
 ]);
 
