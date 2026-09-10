@@ -118,7 +118,16 @@ export function createSimulationWorld(options: WorldOptions = {}): FakeSupabase 
       days_per_week: 3,
       current_week: 1,
       start_date: plannedDate,
-      preferred_workout_days: [1, 3, 5],
+      // WEEKDAY NAMES, not numbers. `getTrainingDays` maps these through
+      // `dayNameToNumber` (DAYS_OF_WEEK.indexOf(name) + 1), so a numeric value
+      // resolves to 0 — a day-of-week that never matches, leaving
+      // `startSession()` returning null on every date and
+      // `advanceToNextTrainingDay()` finding nothing. The row would be visible
+      // to the active-mesocycle lookup and still unusable by the scheduler.
+      preferred_workout_days: ['Monday', 'Wednesday', 'Friday'],
+      // NOT NULL DEFAULT 1 in the schema, and the fake applies no defaults —
+      // `buildTrainingSchedule` reads it, so it has to be here explicitly.
+      sessions_per_day: 1,
       schedule_mode: 'fixed_days',
       training_interval_days: null,
       deleted_at: null,
