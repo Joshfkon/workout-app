@@ -262,6 +262,53 @@ export function checkPrescriptionSanity(
   return findings;
 }
 
+/**
+ * A finished session must actually be recorded as finished.
+ *
+ * The finish flow is optimistic — it responds to the UI, queues the completion
+ * in the outbox and syncs in the background — so "the driver returned from
+ * completeSession" is not evidence that anything landed. This asserts the
+ * primitive: after quiescence, the row says `completed`. It does not check
+ * WHAT post-processing did, only that the completion itself is durable.
+ */
+export function checkSessionCompleted(
+  sessionId: string,
+  rows: { id: string; state?: string; completed_at?: string | null }[],
+  ctx: AssertionContext
+): Finding[] {
+  const row = rows.find((r) => r.id === sessionId);
+  if (!row) {
+    return [
+      finding('COMPLETED_SESSION_MISSING', 'INVARIANT', 'A finished session has no row', ctx, {
+        actual: sessionId,
+      }),
+    ];
+  }
+  if (row.state !== 'completed') {
+    return [
+      finding(
+        'SESSION_NOT_COMPLETED',
+        'INVARIANT',
+        'A session finished through the real finish flow is not recorded as completed',
+        ctx,
+        { expected: 'completed', actual: row.state ?? null }
+      ),
+    ];
+  }
+  if (!row.completed_at) {
+    return [
+      finding(
+        'COMPLETED_SESSION_HAS_NO_TIMESTAMP',
+        'INVARIANT',
+        'A completed session carries no completed_at',
+        ctx,
+        { actual: sessionId }
+      ),
+    ];
+  }
+  return [];
+}
+
 /** A deleted set must be gone — `set_logs` has no soft-delete (audit H3). */
 export function checkDeletionIsHard(
   deletedSetId: string,
