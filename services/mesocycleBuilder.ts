@@ -1099,15 +1099,53 @@ const HYPERTROPHY_TIER_RANK: Record<string, number> = {
 };
 
 /**
+ * Deterministically shuffle an array using a seed (for rotation within equivalence classes)
+ */
+function seededShuffle<T>(arr: T[], seed: number): T[] {
+  const result = [...arr];
+  let random = seed;
+  for (let i = result.length - 1; i > 0; i--) {
+    random = (random * 9301 + 49297) % 233280;
+    const j = Math.floor((random / 233280) * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
+
+/**
+ * Get the fine muscle heads targeted by an exercise's primary muscle.
+ * Returns the fine heads if the exercise targets a coarse group with subdivisions,
+ * otherwise returns the muscle itself.
+ */
+function getTargetedHeads(primaryMuscle: string): StandardMuscleGroup[] {
+  const coarse = STANDARD_TO_COARSE[primaryMuscle as StandardMuscleGroup];
+  if (coarse && COARSE_CHILDREN[coarse]) {
+    // Check if this muscle is a fine head within that coarse group
+    const children = COARSE_CHILDREN[coarse];
+    if (children.includes(primaryMuscle as StandardMuscleGroup)) {
+      return [primaryMuscle as StandardMuscleGroup];
+    }
+    // If it's the coarse muscle itself, it doesn't specifically target any head
+    return [];
+  }
+  return [];
+}
+
+/**
  * Select exercises for a muscle group considering equipment, experience, fatigue,
- * and hypertrophy effectiveness (Nippard methodology)
+ * hypertrophy effectiveness (Nippard methodology), and movement pattern diversity.
+ * 
+ * Now includes:
+ * - Head coverage tracking (chest_upper/lower, delt heads, etc.)
+ * - Deterministic rotation within equivalence classes to prevent machine monoculture
  */
 export function selectExercises(
   muscle: MuscleGroup,
   setsNeeded: number,
   profile: ExtendedUserProfile,
   sessionFatigueBudget: number,
-  prioritizeHypertrophy: boolean = true
+  prioritizeHypertrophy: boolean = true,
+  rotationSeed: number = 0
 ): { exercises: ExerciseEntry[]; setsPerExercise: number[]; remainingFatigueBudget: number } {
 
   // Read live exercise data on each call (DB-backed with fallback)
@@ -1149,28 +1187,53 @@ export function selectExercises(
     candidates = exerciseDb.filter(e => muscleMatchesGroup(e.primaryMuscle, muscle));
   }
   
-  // Sort by: 1) Hypertrophy tier (if enabled), 2) Compound vs isolation, 3) Fatigue rating
-  candidates.sort((a, b) => {
-    // First: Hypertrophy tier (S-tier first)
-    if (prioritizeHypertrophy) {
-      const aTier = HYPERTROPHY_TIER_RANK[a.hypertrophyScore?.tier || 'C'] ?? 3;
-      const bTier = HYPERTROPHY_TIER_RANK[b.hypertrophyScore?.tier || 'C'] ?? 3;
-      if (aTier !== bTier) return aTier - bTier;
+  // Group candidates by (tier, compound) equivalence class
+  type EquivClass = { tier: number; isCompound: boolean; exercises: ExerciseEntry[] };
+  const equivClasses = new Map<string, EquivClass>();
+  
+  for (const ex of candidates) {
+    const tier = prioritizeHypertrophy 
+      ? (HYPERTROPHY_TIER_RANK[ex.hypertrophyScore?.tier || 'C'] ?? 3)
+      : 3;
+    const isCompound = ex.pattern !== 'isolation';
+    const key = `${tier}-${isCompound}`;
+    
+    if (!equivClasses.has(key)) {
+      equivClasses.set(key, { tier, isCompound, exercises: [] });
     }
-    
-    // Second: Compounds first (for first half of workout)
-    const aCompound = a.pattern !== 'isolation' ? 0 : 1;
-    const bCompound = b.pattern !== 'isolation' ? 0 : 1;
-    if (aCompound !== bCompound) return aCompound - bCompound;
-    
-    // Third: Lower fatigue rating preferred (better SFR)
-    return a.fatigueRating - b.fatigueRating;
+    equivClasses.get(key)!.exercises.push(ex);
+  }
+  
+  // Sort equivalence classes by (tier, compound status)
+  const sortedClasses = Array.from(equivClasses.values()).sort((a, b) => {
+    if (a.tier !== b.tier) return a.tier - b.tier;
+    return (a.isCompound ? 0 : 1) - (b.isCompound ? 0 : 1);
   });
+  
+  // Within each equivalence class: rotate deterministically, then sort by fatigue as tiebreaker
+  candidates = [];
+  for (const cls of sortedClasses) {
+    // Deterministic rotation using the seed
+    const rotated = seededShuffle(cls.exercises, rotationSeed + cls.tier);
+    // Sort rotated exercises by fatigue rating (as a secondary consideration, not primary)
+    rotated.sort((a, b) => a.fatigueRating - b.fatigueRating);
+    candidates.push(...rotated);
+  }
   
   const exercises: ExerciseEntry[] = [];
   const setsPerExercise: number[] = [];
   let remainingSets = setsNeeded;
   let fatigueBudget = sessionFatigueBudget;
+  
+  // Track which muscle heads have been covered for head-aware selection
+  const coveredHeads = new Set<StandardMuscleGroup>();
+  
+  // Get the coarse muscle and its children to enable head coverage
+  const coarse = STANDARD_TO_COARSE[muscle as StandardMuscleGroup];
+  const availableHeads = coarse && COARSE_CHILDREN[coarse] 
+    ? COARSE_CHILDREN[coarse].filter(h => FINE_CHILD_MUSCLES.has(h))
+    : [];
+  const useHeadCoverage = availableHeads.length > 0;
   
   // Pick exercises. The fatigue budget gates ADDITIONAL exercises, not the
   // first one: a muscle with an allocation is guaranteed one movement even on
@@ -1181,6 +1244,28 @@ export function selectExercises(
   for (const exercise of candidates) {
     if (remainingSets <= 0) break;
     if (exercises.length > 0 && fatigueBudget < exercise.fatigueRating) continue;
+    
+    // Head coverage filter: if we're selecting for a muscle with fine heads
+    // and we already have exercises, prefer exercises targeting uncovered heads
+    if (useHeadCoverage && exercises.length > 0) {
+      const targetedHeads = getTargetedHeads(exercise.primaryMuscle);
+      const coversNewHead = targetedHeads.length > 0 && 
+        targetedHeads.some(h => !coveredHeads.has(h));
+      const coversExistingHead = targetedHeads.length > 0 && 
+        targetedHeads.every(h => coveredHeads.has(h));
+      
+      // Skip this exercise if it only covers already-covered heads and there are
+      // still uncovered heads in the candidate list
+      if (coversExistingHead && !coversNewHead) {
+        const hasUncoveredInRemaining = candidates
+          .slice(candidates.indexOf(exercise) + 1)
+          .some(e => {
+            const heads = getTargetedHeads(e.primaryMuscle);
+            return heads.length > 0 && heads.some(h => !coveredHeads.has(h));
+          });
+        if (hasUncoveredInRemaining) continue;
+      }
+    }
 
     // Determine sets for this exercise
     // Compounds get more sets, isolations get fewer
@@ -1191,6 +1276,12 @@ export function selectExercises(
     setsPerExercise.push(setsForThis);
     remainingSets -= setsForThis;
     fatigueBudget -= exercise.fatigueRating;
+    
+    // Track covered heads
+    const targetedHeads = getTargetedHeads(exercise.primaryMuscle);
+    for (const head of targetedHeads) {
+      coveredHeads.add(head);
+    }
   }
   
   // If we still have sets to allocate, add to existing exercises - but respect
@@ -1365,7 +1456,8 @@ export function buildSessionTemplates(
 export function buildDetailedSession(
   sessionTemplate: SessionTemplate,
   volumePerMuscle: Record<MuscleGroup, { sets: number; frequency: number }>,
-  profile: ExtendedUserProfile
+  profile: ExtendedUserProfile,
+  sessionIndex: number = 0
 ): DetailedSession {
   
   const exercises: DetailedExercise[] = [];
@@ -1392,7 +1484,8 @@ export function buildDetailedSession(
     
     const setsThisSession = Math.ceil(muscleVolume.sets / muscleVolume.frequency);
     
-    const selection = selectExercises(muscle, setsThisSession, profile, fatigueBudget);
+    // Use session index as rotation seed for deterministic but varied selection
+    const selection = selectExercises(muscle, setsThisSession, profile, fatigueBudget, true, sessionIndex);
     fatigueBudget = selection.remainingFatigueBudget;
     
     for (let i = 0; i < selection.exercises.length; i++) {
@@ -1762,9 +1855,9 @@ export function generateFullProgram(
   // Step 5: Build session templates
   const sessionTemplates = buildSessionTemplates(splitRec.split, daysPerWeek);
   
-  // Step 6: Build detailed sessions
-  const sessions = sessionTemplates.map(template =>
-    buildDetailedSession(template, volumePerMuscle, profile)
+  // Step 6: Build detailed sessions with rotation seeds
+  const sessions = sessionTemplates.map((template, index) =>
+    buildDetailedSession(template, volumePerMuscle, profile, index)
   );
 
   // Step 6.5: Indirect-aware allocation (convention-conversion v2). Targets
