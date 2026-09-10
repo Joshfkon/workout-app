@@ -6,6 +6,7 @@ import { useWorkoutStore } from '@/stores/workoutStore';
 import { useIsOverlayOpen } from '@/hooks/useOverlayRegistry';
 import { Button } from '@/components/ui';
 import { deriveWorkoutLabel, formatDistanceToNow, formatDuration } from '@/lib/utils';
+import { discardWorkoutSession } from '@/lib/actions/workout-session';
 
 /** Matches hooks/useRestTimer's persisted shape. */
 const TIMER_STORAGE_KEY = 'workout_rest_timer';
@@ -47,6 +48,8 @@ export function ResumeWorkoutBanner() {
   const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+  const [isDiscarding, setIsDiscarding] = useState(false);
+  const [discardError, setDiscardError] = useState<string | null>(null);
   const [restRemaining, setRestRemaining] = useState<number | null>(null);
 
   const activeSession = useWorkoutStore((state) => state.activeSession);
@@ -110,16 +113,47 @@ export function ResumeWorkoutBanner() {
   };
 
   const handleDiscard = () => {
+    setDiscardError(null);
     setShowDiscardConfirm(true);
   };
 
-  const confirmDiscard = () => {
-    endSession();
-    setShowDiscardConfirm(false);
+  const confirmDiscard = async () => {
+    if (!activeSession || isDiscarding) return;
+
+    setIsDiscarding(true);
+    setDiscardError(null);
+
+    try {
+      // Cancel the session in the database first
+      const blockIds = exerciseBlocks.map((b) => b.id);
+      const result = await discardWorkoutSession(
+        activeSession.id,
+        activeSession.mesocycleId ?? null,
+        blockIds
+      );
+
+      if (!result.ok) {
+        // Keep the modal open on failure so the user can retry
+        console.error('Failed to discard workout:', result.errors);
+        setDiscardError('Failed to discard workout. Please try again.');
+        setIsDiscarding(false);
+        return;
+      }
+
+      // Only clear local state after successful DB cleanup
+      endSession();
+      setShowDiscardConfirm(false);
+    } catch (err) {
+      console.error('Failed to discard workout:', err);
+      setDiscardError('Failed to discard workout. Please try again.');
+    } finally {
+      setIsDiscarding(false);
+    }
   };
 
   const cancelDiscard = () => {
     setShowDiscardConfirm(false);
+    setDiscardError(null);
   };
 
   // Same derived label the workout page header shows ("Upper Body", "Push")
@@ -214,14 +248,20 @@ export function ResumeWorkoutBanner() {
             </h3>
             <p className="text-surface-400 text-sm mb-4">
               {completedSetsCount > 0
-                ? `You have ${completedSetsCount} set${completedSetsCount !== 1 ? 's' : ''} logged. Discarding will lose your local progress. Sets already saved to the database will remain.`
-                : 'This will clear your current workout session.'}
+                ? `You have ${completedSetsCount} set${completedSetsCount !== 1 ? 's' : ''} logged. Discarding will permanently remove this workout.`
+                : 'This will permanently remove this workout session.'}
             </p>
+            {discardError && (
+              <p className="text-danger-400 text-sm mb-4">
+                {discardError}
+              </p>
+            )}
             <div className="flex gap-3">
               <Button
                 onClick={cancelDiscard}
                 variant="secondary"
                 className="flex-1"
+                disabled={isDiscarding}
               >
                 Keep Workout
               </Button>
@@ -229,8 +269,9 @@ export function ResumeWorkoutBanner() {
                 onClick={confirmDiscard}
                 variant="danger"
                 className="flex-1"
+                disabled={isDiscarding}
               >
-                Discard
+                {isDiscarding ? 'Discarding...' : 'Discard'}
               </Button>
             </div>
           </div>
