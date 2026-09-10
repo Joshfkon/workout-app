@@ -328,7 +328,7 @@ export default function SettingsPage() {
     };
     
     const isDirty = Object.keys(currentValues).some(
-      key => currentValues[key] !== initialValues[key]
+      key => currentValues[key as keyof typeof currentValues] !== initialValues[key as keyof typeof currentValues]
     );
     
     setHasUnsavedChanges(isDirty);
