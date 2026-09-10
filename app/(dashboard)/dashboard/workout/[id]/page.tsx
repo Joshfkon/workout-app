@@ -326,10 +326,10 @@ function CancelWorkoutModal({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
           </div>
-          <h3 className="text-lg font-semibold text-surface-100 mb-2">Cancel Workout?</h3>
+          <h3 className="text-lg font-semibold text-surface-100 mb-2">Discard Workout?</h3>
           <p className="text-sm text-surface-400 mb-6">
             {totalCompletedSets > 0
-              ? `You've logged ${totalCompletedSets} set${totalCompletedSets !== 1 ? 's' : ''}. Cancelling will delete all progress and reset this workout.`
+              ? `You've logged ${totalCompletedSets} set${totalCompletedSets !== 1 ? 's' : ''}. Discarding will delete all progress and reset this workout.`
               : 'This will reset the workout so you can start fresh later.'}
           </p>
           <div className="flex gap-3">
@@ -347,7 +347,7 @@ function CancelWorkoutModal({
               disabled={isCancelling}
               className="flex-1 border-danger-500/50 text-danger-400 hover:bg-danger-500/10"
             >
-              {isCancelling ? 'Cancelling...' : 'Cancel Workout'}
+              {isCancelling ? 'Discarding...' : 'Discard Workout'}
             </Button>
           </div>
         </div>

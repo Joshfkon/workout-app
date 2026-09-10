@@ -38,6 +38,7 @@ export function EmptyWorkoutReadiness({
 }: EmptyWorkoutReadinessProps) {
   // Stamp the clock once so every muscle is evaluated against the same instant.
   const [now] = useState(() => new Date());
+  const [showReadiness, setShowReadiness] = useState(false);
 
   // Empty workout: no live blocks/sets yet, so readiness is purely history-based.
   // Hierarchy expansion lives inside MuscleReadinessContent (shared
@@ -84,23 +85,36 @@ export function EmptyWorkoutReadiness({
 
   return (
     <>
-      {/* Inline readiness: same read-only body as the sheet (all coarse groups,
-          6-row cap + "+N more" expander), rendered directly on the empty
-          workout (no icon tap needed). */}
+      {/* Inline readiness: collapsed by default on empty workouts to avoid
+          taking up too much space. User can expand if they want to see details. */}
       <div className="mt-8" data-testid="readiness-inline">
-        <p className="text-xs font-semibold uppercase tracking-[0.15em] text-surface-500 mb-3">
+        <button
+          onClick={() => setShowReadiness(!showReadiness)}
+          className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.15em] text-surface-500 hover:text-surface-400 transition-colors mb-3"
+        >
+          <svg
+            className={`w-3.5 h-3.5 transition-transform ${showReadiness ? 'rotate-90' : ''}`}
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2.5}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+          </svg>
           Today&apos;s readiness
-        </p>
-        <MuscleReadinessContent
-          rows={rows}
-          targets={targets}
-          nextUp={nextUp}
-          dailyGroupSets={dailyGroupSets}
-          isLoading={isLoading}
-          collapsible
-          loadingTestId="readiness-inline-loading"
-          wearableNotice={wearableRecovery.reason}
-        />
+        </button>
+        {showReadiness && (
+          <MuscleReadinessContent
+            rows={rows}
+            targets={targets}
+            nextUp={nextUp}
+            dailyGroupSets={dailyGroupSets}
+            isLoading={isLoading}
+            collapsible
+            loadingTestId="readiness-inline-loading"
+            wearableNotice={wearableRecovery.reason}
+          />
+        )}
       </div>
 
       {/* Quick add: the user's frequent exercises, re-ordered by readiness. */}
