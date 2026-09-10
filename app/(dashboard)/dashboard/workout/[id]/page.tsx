@@ -386,6 +386,10 @@ function buildHistoryScopeOptions(
   };
 }
 
+// Stable empty injuries list for useInWorkoutCoach — an inline [] would be a
+// new reference every render and churn the hook's effect dependencies.
+const NO_INJURIES: Array<{ area: string; severity: 1 | 2 | 3 }> = [];
+
 export default function WorkoutPage() {
   const params = useParams();
   const router = useRouter();
@@ -1093,7 +1097,7 @@ export default function WorkoutPage() {
     workoutType: session?.mesocycleId ? 'Mesocycle Session' : 'Workout',
     weekInMeso: undefined,
     totalWeeks: undefined,
-    injuries: [],
+    injuries: NO_INJURIES,
     units: preferences.units,
     isRestTimerRunning: restTimer.isRunning,
     restSecondsRemaining: restTimer.seconds,
