@@ -283,6 +283,14 @@ export function convertWeightForDisplay(weightKg: number, unit: 'kg' | 'lb', dec
 }
 
 /**
+ * Format estimated weights (e1RM, projections) with one decimal place,
+ * no plate rounding. Estimates are not prescribed loads.
+ */
+export function formatEstimateWeight(weightKg: number, unit: 'kg' | 'lb'): string {
+  return `${convertWeightForDisplay(weightKg, unit, 1).toFixed(1)} ${unit === 'kg' ? 'kg' : 'lbs'}`;
+}
+
+/**
  * Session/tonnage volume in the DISPLAY unit, computed natively (Phase 3):
  * each set's load converts to the display unit FIRST (recovering the exact
  * value the user typed, e.g. 72.57 kg → 160.0 lb), THEN multiplies and sums.
