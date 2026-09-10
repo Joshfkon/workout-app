@@ -12,6 +12,20 @@ import { NextResponse } from 'next/server';
  */
 const MAILBOX_PROOF_TYPES = new Set(['recovery', 'magiclink', 'invite']);
 
+/**
+ * Validate that a redirect path is a safe same-origin relative path.
+ * Only allow paths starting with a single `/`, reject `//` (protocol-relative)
+ * and absolute URLs.
+ */
+function isValidRedirectPath(path: string | null): boolean {
+  if (!path) return false;
+  // Must start with exactly one `/` and not be protocol-relative (`//`)
+  if (!path.startsWith('/') || path.startsWith('//')) return false;
+  // Reject absolute URLs (containing `://`)
+  if (path.includes('://')) return false;
+  return true;
+}
+
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get('code');
@@ -84,7 +98,8 @@ export async function GET(request: Request) {
       }
 
       // User has completed onboarding, go to specified next page or the train page
-      return NextResponse.redirect(`${origin}${next || '/dashboard/train'}`);
+      const safePath = isValidRedirectPath(next) ? next : '/dashboard/train';
+      return NextResponse.redirect(`${origin}${safePath}`);
     }
   }
 
