@@ -6,7 +6,7 @@
  * causing incorrect plate calculations.
  */
 
-import { calculatePlates } from '../utils';
+import { calculatePlates, getAvailablePlates } from '../utils';
 
 describe('calculatePlates', () => {
   describe('barbell calculations (no starting weight)', () => {
@@ -148,5 +148,31 @@ describe('calculatePlates', () => {
       expect(result.actualTotal).toBe(225); // 45 + 90*2
       expect(result.error).toContain('Closest: 225lb');
     });
+  });
+});
+
+describe('getAvailablePlates', () => {
+  it('returns the standard set when no smallest plate is given', () => {
+    expect(getAvailablePlates('lb')).toEqual([45, 35, 25, 10, 5, 2.5]);
+    expect(getAvailablePlates('kg')).toEqual([25, 20, 15, 10, 5, 2.5, 1.25]);
+  });
+
+  it('adds micro plates below the standard range', () => {
+    expect(getAvailablePlates('lb', 1.25)).toEqual([45, 35, 25, 10, 5, 2.5, 1.25]);
+    expect(getAvailablePlates('kg', 0.5)).toEqual([25, 20, 15, 10, 5, 2.5, 1.25, 0.5]);
+  });
+
+  it('drops plates smaller than the smallest owned plate', () => {
+    expect(getAvailablePlates('lb', 5)).toEqual([45, 35, 25, 10, 5]);
+    expect(getAvailablePlates('kg', 2.5)).toEqual([25, 20, 15, 10, 5, 2.5]);
+  });
+
+  it('lets calculatePlates hit 2.5lb jumps with 1.25lb micro plates', () => {
+    // 202.5lb = 45lb bar + 78.75lb per side = 45 + 25 + 5 + 2.5 + 1.25
+    const result = calculatePlates(202.5, 45, 'lb', getAvailablePlates('lb', 1.25));
+
+    expect(result.isValid).toBe(true);
+    expect(result.actualTotal).toBe(202.5);
+    expect(result.platesPerSide).toEqual([45, 25, 5, 2.5, 1.25]);
   });
 });
