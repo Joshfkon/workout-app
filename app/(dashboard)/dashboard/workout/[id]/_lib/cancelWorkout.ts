@@ -8,9 +8,16 @@
  * 'use client'. It surfaces errors (returns them) rather than swallowing.
  */
 
-type UntypedClient = ReturnType<
-  typeof import('@/lib/supabase/client').createUntypedClient
->;
+import type { SupabaseClient } from '@supabase/supabase-js';
+
+/**
+ * A concrete client type, NOT `ReturnType<typeof createUntypedClient>`: that
+ * factory returns `as any`, which once let a caller pass an un-awaited
+ * `Promise<client>` from the async server factory without a compile error
+ * (every discard then failed at runtime on `supabase.from`). `any` from the
+ * untyped factories still assigns here, but a Promise does not.
+ */
+type UntypedClient = SupabaseClient<any, 'public', any>;
 
 export interface CancelWorkoutArgs {
   sessionId: string;
