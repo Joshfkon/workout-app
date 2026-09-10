@@ -1541,6 +1541,7 @@ export function recommendSessionStart(input: SessionStartInput): SetRecommendati
     rir: input.targetRir,
     rationale: 'maintain',
     effortVsTarget: rec.effortVsTarget,
+    trigger: 'none',
     ...(suggestDeload ? { suggestDeload } : {}),
   });
 
@@ -1562,6 +1563,7 @@ export function recommendSessionStart(input: SessionStartInput): SetRecommendati
         rir: input.targetRir,
         rationale: 'reduce_load',
         effortVsTarget: rec.effortVsTarget,
+        trigger: 'below_rep_min',
       };
     }
     return holdVerbatim();
@@ -1623,6 +1625,7 @@ export function recommendSessionStart(input: SessionStartInput): SetRecommendati
       rir: input.targetRir,
       rationale: 'increase_load',
       effortVsTarget: rec.effortVsTarget,
+      trigger: 'rep_overshoot',
     };
   }
 
