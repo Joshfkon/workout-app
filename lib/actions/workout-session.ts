@@ -18,7 +18,7 @@ export async function discardWorkoutSession(
   blockIds: string[]
 ): Promise<{ ok: boolean; errors?: string[] }> {
   try {
-    const supabase = createUntypedServerClient();
+    const supabase = await createUntypedServerClient();
     const result = await cancelWorkoutSession(supabase, {
       sessionId,
       mesocycleId,
