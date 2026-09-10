@@ -591,7 +591,7 @@ the references live, are the numbers numbers.
 
 | Module | Purpose |
 |---|---|
-| `simulation/sessionDriver.ts` | Headless user. Composes production functions only. |
+| `simulation/sessionDriver.ts` | Headless user. Composes production functions only — including `completeSession` (real finish flow) and the shared delete+renumber operation. |
 | `simulation/fakeSupabase.ts` | In-memory client. **Throws on anything it doesn't understand** — a silent `[]` would make the harness report fictional bugs. Enforces no constraints/RLS. |
 | `simulation/persona.ts` / `personas.ts` | The `PerformanceOutcome` contract and seven personas. |
 | `simulation/rng.ts` | Seeded RNG. Nothing may call `Math.random()`. |
@@ -612,6 +612,15 @@ Rules:
 5. GUARDRAILs are warnings. Promoting one to a CONTRACT is Josh's call.
 6. A failing INVARIANT/CONTRACT is reported as a bug with its reproducing seed;
    the engine is NOT patched in the same change as harness work.
+7. Every operation the driver exposes must be the one the APP calls, not a
+   local composition of smaller ones. Sessions finish through
+   `submitFinishOptimistic`; deletions go through `planSetDeletion` +
+   `persistSetDeletion`, the same pair the workout page uses. A driver that
+   assembles its own version of a multi-step operation quietly tests different
+   semantics from the app, which makes its findings fiction.
+8. Simulated sessions must BELONG to a mesocycle. `runPostSessionMesoUpdates`
+   short-circuits on a null `mesocycle_id`, so unlinked sessions silently skip
+   the week advance, the weekly fatigue log and the deload check.
 
 Open findings live in `docs/SIMULATION_FINDING_*.md`. Known defects are pinned
 with `it.failing` in `simulation/__tests__/scenarios.test.ts`, so they go red
