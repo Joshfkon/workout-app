@@ -2237,7 +2237,18 @@ export default function WorkoutPage() {
       new Set(
         blocks
           .filter((b) => !skippedBlockIds.has(b.id))
-          .map((b) => resolvePrimaryMuscle(b.exercise?.primaryMuscle))
+          .flatMap((b) => {
+            const muscles: (StandardMuscleGroup | null)[] = [
+              resolvePrimaryMuscle(b.exercise?.primaryMuscle),
+            ];
+            // Include secondary muscles so they can surface on the card when not recovered
+            if (b.exercise?.secondaryMuscles) {
+              muscles.push(
+                ...b.exercise.secondaryMuscles.map((m) => resolvePrimaryMuscle(m))
+              );
+            }
+            return muscles;
+          })
           .filter((m): m is StandardMuscleGroup => m !== null)
       )
     );
@@ -2320,6 +2331,74 @@ export default function WorkoutPage() {
       };
     },
     [firstBlockIdByMuscle, recentMuscleSessions, muscleSorenessAsked]
+  );
+
+  /**
+   * Recovery status for all involved muscles (primary + secondaries) that have
+   * recent training history. Shows muscles that are recovering or fatigued so
+   * secondary muscles surface when they limit the exercise.
+   */
+  const muscleReadinessForBlock = useCallback(
+    (block: ExerciseBlockWithExercise): Array<{ muscle: StandardMuscleGroup; displayName: string; status: string }> => {
+      const involvedMuscles: StandardMuscleGroup[] = [];
+      
+      // Primary muscle
+      const primary = resolvePrimaryMuscle(block.exercise?.primaryMuscle);
+      if (primary) involvedMuscles.push(primary);
+      
+      // Secondary muscles
+      if (block.exercise?.secondaryMuscles) {
+        for (const m of block.exercise.secondaryMuscles) {
+          const resolved = resolvePrimaryMuscle(m);
+          if (resolved) involvedMuscles.push(resolved);
+        }
+      }
+
+      const results: Array<{ muscle: StandardMuscleGroup; displayName: string; status: string }> = [];
+      
+      for (const muscle of involvedMuscles) {
+        // Only show if trained in the last 5 days
+        if (!recentMuscleSessions[muscle]) continue;
+        
+        // Compute recovery status
+        const config = recoveryConfigFor(
+          enhancedAthleteModeActive,
+          recoveryMultipliers,
+          undefined,
+          undefined,
+          {
+            experienceForCapacity: userProfile?.experience,
+            plannedSessionsPerWeekByMuscle,
+          }
+        );
+        const recovery = computeMuscleRecovery(
+          recoveryHistorySessions,
+          muscle,
+          new Date(),
+          config
+        );
+        
+        // Only show muscles that aren't fresh
+        if (recovery.status !== 'fresh') {
+          const statusLabel = recovery.status === 'recovering' ? 'recovered' : 'fatigued';
+          results.push({
+            muscle,
+            displayName: STANDARD_MUSCLE_DISPLAY_NAMES[muscle],
+            status: statusLabel,
+          });
+        }
+      }
+      
+      return results;
+    },
+    [
+      recentMuscleSessions,
+      recoveryHistorySessions,
+      enhancedAthleteModeActive,
+      recoveryMultipliers,
+      userProfile?.experience,
+      plannedSessionsPerWeekByMuscle,
+    ]
   );
 
   const handleSorenessAnswer = useCallback(
@@ -6769,6 +6848,7 @@ export default function WorkoutPage() {
                     onSetJointPain={handleSetJointPain}
                     sorenessPrompt={sorenessPromptForBlock(block)}
                     onSorenessAnswer={handleSorenessAnswer}
+                    muscleReadiness={muscleReadinessForBlock(block)}
                     stabilizerWarning={stabilizerWarningsByBlockId.get(block.id) ?? null}
                     onStabilizerWarningDismiss={(muscle) =>
                       handleStabilizerWarningDismiss(block.id, muscle)

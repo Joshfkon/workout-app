@@ -377,6 +377,9 @@ interface ExerciseCardProps {
     answered?: SorenessRating | null;
   } | null;
   onSorenessAnswer?: (muscle: StandardMuscleGroup, rating: SorenessRating) => void;
+  // Recovery status for all involved muscles (primary + secondaries) with recent
+  // training. Shows muscles that are recovering or fatigued.
+  muscleReadiness?: Array<{ muscle: StandardMuscleGroup; displayName: string; status: string }>;
   // Exercise-level pain pattern notice (≥3 flags in 6 weeks): one-time,
   // dismissible, links to the swap picker's Similar tab.
   painNotice?: { joint: string; count: number } | null;
@@ -493,6 +496,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   coldStartSuggestion,
   sorenessPrompt = null,
   onSorenessAnswer,
+  muscleReadiness = [],
   painNotice = null,
   onPainNoticeDismiss,
   stabilizerWarning = null,
@@ -3633,6 +3637,20 @@ export const ExerciseCard = memo(function ExerciseCard({
             answered={sorenessPrompt.answered}
             onAnswer={(rating) => onSorenessAnswer(sorenessPrompt.muscle, rating)}
           />
+        )}
+
+        {/* Muscle readiness status — shows all involved muscles (primary + secondaries)
+            that have recent training and aren't fully recovered. */}
+        {muscleReadiness && muscleReadiness.length > 0 && (
+          <div className="px-3 py-2 text-[13px] text-surface-300 border-l-2 border-surface-700 bg-surface-900/50">
+            <span className="font-medium">Recovery:</span>{' '}
+            {muscleReadiness.map((mr, i) => (
+              <span key={mr.muscle}>
+                {i > 0 && ' · '}
+                {mr.displayName}: <span className={mr.status === 'fatigued' ? 'text-amber-400' : 'text-green-400'}>{mr.status}</span>
+              </span>
+            ))}
+          </div>
         )}
 
         {/* Completed working sets */}
