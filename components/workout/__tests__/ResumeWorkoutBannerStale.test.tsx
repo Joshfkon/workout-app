@@ -12,11 +12,21 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ResumeWorkoutBanner } from '../ResumeWorkoutBanner';
 import { resetOverlayRegistry } from '@/lib/ui/overlayRegistry';
+import { discardWorkoutSession } from '@/lib/actions/workout-session';
 
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: jest.fn() }),
   usePathname: () => '/dashboard',
 }));
+
+// Mock the server action so tests don't try to call Next.js server APIs
+jest.mock('@/lib/actions/workout-session', () => ({
+  discardWorkoutSession: jest.fn(),
+}));
+
+const mockDiscardWorkoutSession = discardWorkoutSession as jest.MockedFunction<
+  typeof discardWorkoutSession
+>;
 
 // The wild repro: started 11h ago, zero sets logged.
 const startedAt = new Date(Date.now() - 11 * 60 * 60 * 1000).toISOString();
@@ -34,9 +44,15 @@ jest.mock('@/stores/workoutStore', () => ({
 }));
 
 describe('ResumeWorkoutBanner with a stale, empty session', () => {
+  beforeEach(() => {
+    // Mock the server action to succeed
+    mockDiscardWorkoutSession.mockResolvedValue({ ok: true });
+  });
+
   afterEach(() => {
     resetOverlayRegistry();
     storeState.endSession.mockClear();
+    mockDiscardWorkoutSession.mockClear();
   });
 
   it('shows the passive pill, not a blocking resume-or-discard prompt', () => {
@@ -67,6 +83,9 @@ describe('ResumeWorkoutBanner with a stale, empty session', () => {
     expect(screen.getByText('Discard Workout?')).toBeInTheDocument();
     const discardButtons = screen.getAllByRole('button', { name: 'Discard' });
     await user.click(discardButtons[discardButtons.length - 1]);
+
+    // Wait for the async discard to complete
+    await screen.findByRole('button', { name: 'Resume workout' });
 
     expect(storeState.endSession).toHaveBeenCalled();
   });
