@@ -25,6 +25,13 @@ export interface EffortCheck {
   softened: boolean;
   /** Names the estimate's source for the softened copy. */
   sourceLabel?: string;
+  /**
+   * Plain-language reasoning lines for the predicted-RIR info sheet
+   * (SetLoggerRow's always-visible readout): the capacity anchor and its
+   * source, any within-session fatigue de-rate, the rep-max curve answer at
+   * the entered load, and the subtraction that yields the predicted RIR.
+   */
+  reasoning: string[];
 }
 
 interface SuggestionBannerProps {
