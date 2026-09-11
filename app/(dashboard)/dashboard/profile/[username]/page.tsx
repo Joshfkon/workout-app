@@ -1,5 +1,7 @@
 'use client';
 
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, notFound } from 'next/navigation';
 import Link from 'next/link';
@@ -13,6 +15,7 @@ import { useUserStore } from '@/stores/userStore';
 import type { UserProfile, FollowRelationship } from '@/types/social';
 
 export default function UserProfilePage() {
+  useDocumentTitle('User Profile');
   const params = useParams();
   const username = params.username as string;
 

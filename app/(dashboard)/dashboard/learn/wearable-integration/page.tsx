@@ -1,9 +1,12 @@
 'use client';
 
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+
 import Link from 'next/link';
 import { Card } from '@/components/ui/Card';
 
 export default function WearableIntegrationArticle() {
+  useDocumentTitle('Wearable Integration');
   return (
     <div className="max-w-3xl mx-auto pb-12">
       {/* Back Navigation */}

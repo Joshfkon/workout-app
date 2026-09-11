@@ -1,4 +1,9 @@
 import { redirect } from 'next/navigation';
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = {
+  title: 'Workouts',
+};
 
 /**
  * The old "Workouts" hub (a 3,000-line, 4-tab page) has been retired (P2-12).

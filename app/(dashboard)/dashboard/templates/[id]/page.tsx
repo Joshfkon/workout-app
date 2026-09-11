@@ -1,5 +1,7 @@
 'use client';
 
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery, useQueryClient, useIsRestoring } from '@tanstack/react-query';
 import { useParams, useRouter } from 'next/navigation';
@@ -24,6 +26,7 @@ interface Exercise {
 }
 
 export default function TemplateDetailPage() {
+  useDocumentTitle('Template');
   const params = useParams();
   const router = useRouter();
   const templateId = params.id as string;

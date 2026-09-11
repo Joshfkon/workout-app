@@ -1,5 +1,7 @@
 'use client';
 
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Card, CardContent, Button, Badge, Input } from '@/components/ui';
@@ -369,6 +371,7 @@ function FaqItem({ question, answer }: { question: string; answer: string }) {
 
 // Export with Suspense wrapper for useSearchParams
 export default function PricingPage() {
+  useDocumentTitle('Pricing');
   return (
     <Suspense fallback={
       <div className="max-w-5xl mx-auto space-y-8">

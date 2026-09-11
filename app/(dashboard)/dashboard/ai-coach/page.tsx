@@ -6,8 +6,11 @@ import { sendCoachingMessage, getCoachingConversations, getCoachingContext } fro
 import type { CoachingMessage, CoachingContext } from '@/types/coaching';
 import { useSubscription } from '@/hooks/useSubscription';
 import { UpgradePrompt } from '@/components/subscription';
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 
 export default function AICoachPage() {
+  useDocumentTitle('AI Coach');
+  
   const { tier, canAccess } = useSubscription();
   const [messages, setMessages] = useState<CoachingMessage[]>([]);
   const [input, setInput] = useState('');

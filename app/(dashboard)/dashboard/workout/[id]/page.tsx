@@ -1,5 +1,7 @@
 'use client';
 
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { invalidateWorkoutDerivedCaches } from '@/lib/query/workoutInvalidation';
@@ -391,6 +393,7 @@ function buildHistoryScopeOptions(
 const NO_INJURIES: Array<{ area: string; severity: 1 | 2 | 3 }> = [];
 
 export default function WorkoutPage() {
+  useDocumentTitle('Workout');
   const params = useParams();
   const router = useRouter();
   const queryClient = useQueryClient();

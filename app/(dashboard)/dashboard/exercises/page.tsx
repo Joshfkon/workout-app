@@ -1,5 +1,7 @@
 'use client';
 
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient, useIsRestoring } from '@tanstack/react-query';
 import { useSearchParams, useRouter } from 'next/navigation';
@@ -130,6 +132,7 @@ interface ExerciseHistory {
 }
 
 export default function ExercisesPage() {
+  useDocumentTitle('Exercises');
   const [mounted, setMounted] = useState(false);
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();

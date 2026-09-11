@@ -1,5 +1,7 @@
 'use client';
 
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent, Button, Input, Badge } from '@/components/ui';
@@ -14,6 +16,7 @@ const kgToLbs = (kg: number) => kg * 2.20462;
 const lbsToKg = (lbs: number) => lbs / 2.20462;
 
 export default function AddDexaScanPage() {
+  useDocumentTitle('Add DEXA Scan');
   const router = useRouter();
   const { preferences } = useUserPreferences();
   const units = preferences.units;

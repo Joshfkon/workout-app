@@ -1,5 +1,7 @@
 'use client';
 
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -14,6 +16,7 @@ import { useUserStore } from '@/stores/userStore';
 import type { UserProfile, ProfileStats } from '@/types/social';
 
 export default function MyProfilePage() {
+  useDocumentTitle('Profile');
   const router = useRouter();
   const user = useUserStore((state) => state.user);
   const units = user?.preferences?.units ?? 'kg';

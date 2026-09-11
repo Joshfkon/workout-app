@@ -1,5 +1,7 @@
 'use client';
 
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+
 import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardContent, Input, Badge } from '@/components/ui';
@@ -11,6 +13,7 @@ import {
 } from '@/types/education';
 
 export default function GlossaryPage() {
+  useDocumentTitle('Glossary');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<GlossaryCategory | 'all'>('all');
   const [expandedTerm, setExpandedTerm] = useState<string | null>(null);

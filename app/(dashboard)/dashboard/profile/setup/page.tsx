@@ -1,5 +1,7 @@
 'use client';
 
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+
 import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
@@ -17,6 +19,7 @@ import type { TrainingExperience } from '@/types/social';
 import type { Database } from '@/types/database';
 
 export default function ProfileSetupPage() {
+  useDocumentTitle('Profile Setup');
   const router = useRouter();
 
   const [username, setUsername] = useState('');

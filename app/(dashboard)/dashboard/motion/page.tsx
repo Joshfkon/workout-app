@@ -1,5 +1,7 @@
 'use client';
 
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+
 /**
  * Motion Capture (experimental) — capture + calibration management page.
  * Fully gated behind users.motion_capture_enabled (off by default); when the
@@ -23,6 +25,7 @@ interface ExerciseOption {
 }
 
 export default function MotionPage() {
+  useDocumentTitle('Motion Capture');
   const [isLoading, setIsLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
   const [enabled, setEnabled] = useState(false);

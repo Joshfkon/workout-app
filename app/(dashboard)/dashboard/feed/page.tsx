@@ -1,5 +1,7 @@
 'use client';
 
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+
 import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -70,6 +72,7 @@ const LEADERBOARD_TABS: Array<{
 ];
 
 export default function FeedPage() {
+  useDocumentTitle('Feed');
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabType>('following');
   // P1-8: units come from useUserPreferences (DB-backed, same source as the

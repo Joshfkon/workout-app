@@ -1,5 +1,7 @@
 'use client';
 
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
@@ -34,6 +36,7 @@ function transformRow(photo: any): ProgressPhoto {
 }
 
 export default function ProgressPhotosPage() {
+  useDocumentTitle('Progress Photos');
   const router = useRouter();
   const queryClient = useQueryClient();
   const { preferences } = useUserPreferences();

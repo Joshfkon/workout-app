@@ -1,5 +1,7 @@
 'use client';
 
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+
 import { useState, useEffect, useRef, useMemo, Suspense } from 'react';
 import { useQuery, useQueryClient, useIsRestoring } from '@tanstack/react-query';
 import dynamic from 'next/dynamic';
@@ -1993,6 +1995,7 @@ function AnalyticsPageContent() {
 // boundary for the static prerender pass — the fallback matches the page's
 // own loading state so nothing visibly changes.
 export default function AnalyticsPage() {
+  useDocumentTitle('Analytics');
   return (
     <Suspense fallback={<FullPageLoading text="Loading your analytics..." type="heartbeat" />}>
       <AnalyticsPageContent />

@@ -1,5 +1,7 @@
 'use client';
 
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+
 import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import { useQuery, useQueryClient, useIsRestoring } from '@tanstack/react-query';
 import { Card, Badge, Button, FullPageLoading, LoadingAnimation, ConfirmModal } from '@/components/ui';
@@ -1894,6 +1896,7 @@ function HistoryPageContent() {
 }
 
 export default function HistoryPage() {
+  useDocumentTitle('History');
   return (
     <Suspense fallback={<FullPageLoading text="Loading workout history..." type="barbell" />}>
       <HistoryPageContent />

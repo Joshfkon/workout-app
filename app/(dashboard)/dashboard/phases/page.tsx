@@ -1,5 +1,7 @@
 'use client';
 
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+
 /**
  * Training phase editor (Progress → Body → Manage).
  *
@@ -71,6 +73,7 @@ function fmtDay(day: string): string {
 }
 
 export default function TrainingPhasesPage() {
+  useDocumentTitle('Training Phases');
   const { user: authUser } = useAuthUser();
   const storeUserId = useUserStore((state) => state.user?.id ?? null);
   const userId = storeUserId || authUser?.id || null;
