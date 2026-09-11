@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { Toggle } from '@/components/ui/Toggle';
 import { usePWA } from '@/hooks/usePWA';
 import { persistEnhancedAthleteMode } from '@/lib/training/enhancedAthleteMode';
+import { updateOnboardingStep, completeOnboarding } from '@/lib/onboarding/onboardingProgress';
 
 /**
  * Onboarding: Enhanced Athlete Mode — asked right after training experience.
@@ -26,11 +27,30 @@ function EnhancedModeContent() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const goToNextStep = () => {
-    if (shouldShowInOnboarding()) {
-      router.push(`/onboarding/install?session=${sessionId}`);
+  const goToNextStep = async () => {
+    const supabase = createUntypedClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (user) {
+      // Track enhanced step completion
+      await updateOnboardingStep(supabase, user.id, 'enhanced');
+      
+      // If PWA install should show, go there; otherwise mark onboarding complete
+      if (shouldShowInOnboarding()) {
+        await updateOnboardingStep(supabase, user.id, 'install');
+        router.push(`/onboarding/install?session=${sessionId}`);
+      } else {
+        // No install step - mark onboarding as complete
+        await completeOnboarding(supabase, user.id);
+        router.push('/dashboard');
+      }
     } else {
-      router.push('/dashboard/log');
+      // Fallback if no user
+      if (shouldShowInOnboarding()) {
+        router.push(`/onboarding/install?session=${sessionId}`);
+      } else {
+        router.push('/dashboard');
+      }
     }
   };
 

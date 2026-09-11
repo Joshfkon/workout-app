@@ -8,6 +8,7 @@ import { ContextCard } from '@/components/onboarding/ContextCard';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { calculateBodyComposition, getFFMIAssessment, getFFMIBracket } from '@/services/coachingEngine';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
+import { updateOnboardingStep } from '@/lib/onboarding/onboardingProgress';
 import type { WeightUnit } from '@/types/schema';
 
 // Unit conversion helpers
@@ -78,6 +79,14 @@ export default function OnboardingBodyCompPage() {
   // Save unit preference and proceed
   const handleUnitsConfirm = async () => {
     await updatePreference('units', selectedUnits);
+    
+    // Track progress
+    const supabase = createUntypedClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      await updateOnboardingStep(supabase, user.id, 'units');
+    }
+    
     setStep('body-comp');
   };
   
@@ -230,6 +239,9 @@ export default function OnboardingBodyCompPage() {
         .from('users')
         .update({ sex, height_cm: height, weight_kg: weight, goal })
         .eq('id', user.id);
+      
+      // Track progress - user completed goal selection
+      await updateOnboardingStep(supabase, user.id, 'goal');
       
       // Navigate to benchmark selection with session ID
       router.push(`/onboarding/benchmarks?session=${session.id}`);
@@ -794,7 +806,15 @@ export default function OnboardingBodyCompPage() {
       <div className="flex justify-end pt-4">
         <Button
           size="lg"
-          onClick={() => setStep('goal')}
+          onClick={async () => {
+            // Track progress - user completed body composition
+            const supabase = createUntypedClient();
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+              await updateOnboardingStep(supabase, user.id, 'body_comp');
+            }
+            setStep('goal');
+          }}
           disabled={!canContinue}
         >
           Continue
