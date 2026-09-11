@@ -4,6 +4,8 @@ import { useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { AddToHomescreenGuide } from '@/components/onboarding/AddToHomescreenGuide';
 import { usePWA } from '@/hooks/usePWA';
+import { createUntypedClient } from '@/lib/supabase/client';
+import { completeOnboarding } from '@/lib/onboarding/onboardingProgress';
 
 function InstallContent() {
   const router = useRouter();
@@ -18,12 +20,26 @@ function InstallContent() {
     }
   }, [isLoading, shouldShowInOnboarding, router]);
 
-  const handleComplete = () => {
-    router.push('/dashboard/log');
+  const handleComplete = async () => {
+    // Mark onboarding as complete
+    const supabase = createUntypedClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      await completeOnboarding(supabase, user.id);
+    }
+    
+    router.push('/dashboard');
   };
 
-  const handleSkip = () => {
-    router.push('/dashboard/log');
+  const handleSkip = async () => {
+    // Mark onboarding as complete even when skipping
+    const supabase = createUntypedClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      await completeOnboarding(supabase, user.id);
+    }
+    
+    router.push('/dashboard');
   };
 
   if (isLoading) {
