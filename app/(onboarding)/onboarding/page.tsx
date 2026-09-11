@@ -673,27 +673,41 @@ export default function OnboardingBodyCompPage() {
                       </div>
                     </>
                   ) : (
-                    // Female options (no image yet, but keep text options)
-                    <div className="grid grid-cols-2 gap-2">
-                      {BODY_FAT_OPTIONS.female.map((option) => (
-                        <button
-                          key={option.value}
-                          type="button"
-                          onClick={() => {
-                            setBodyFatPercent(String(option.value));
-                            setShowBodyFatGuide(false);
-                          }}
-                          className={`p-3 rounded-lg text-left transition-all ${
-                            bodyFatPercent === String(option.value)
-                              ? 'bg-primary-500 text-white'
-                              : 'bg-surface-700 hover:bg-surface-600 text-surface-200'
-                          }`}
-                        >
-                          <p className="text-lg font-bold">{option.label}</p>
-                          <p className="text-xs opacity-75">{option.description}</p>
-                        </button>
-                      ))}
-                    </div>
+                    <>
+                      {/* Visual guide image for females */}
+                      <div className="rounded-lg overflow-hidden mb-3 relative">
+                        <Image 
+                          src="/images/body-fat-guide-female.png" 
+                          alt="Female body fat percentage visual guide"
+                          width={600}
+                          height={600}
+                          className="w-full h-auto"
+                          priority
+                        />
+                      </div>
+                      
+                      {/* Clickable options */}
+                      <div className="grid grid-cols-4 gap-2">
+                        {BODY_FAT_OPTIONS.female.map((option) => (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => {
+                              setBodyFatPercent(String(option.value));
+                              setShowBodyFatGuide(false);
+                            }}
+                            className={`p-2 rounded-lg text-center transition-all ${
+                              bodyFatPercent === String(option.value)
+                                ? 'bg-primary-500 text-white'
+                                : 'bg-surface-700 hover:bg-surface-600 text-surface-200'
+                            }`}
+                          >
+                            <p className="text-lg font-bold">{option.label}</p>
+                            <p className="text-xs opacity-75">{option.description}</p>
+                          </button>
+                        ))}
+                      </div>
+                    </>
                   )}
                   
                   <p className="text-xs text-surface-500 mt-3 text-center">
