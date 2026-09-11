@@ -31,10 +31,3 @@ export { RecalcTargetsBanner } from './RecalcTargetsBanner';
 // Pause Overlay
 export { PauseOverlay } from './PauseOverlay';
 export { PRCelebration, type PRCelebrationData } from './PRCelebration';
-
-// In-Workout AI Coaching
-export { ExerciseWhisper } from './ExerciseWhisper';
-export { SignalToast } from './SignalToast';
-export { RestCoachTip } from './RestCoachTip';
-export { SessionSpine } from './SessionSpine';
-export { PostWorkoutReel } from './PostWorkoutReel';
