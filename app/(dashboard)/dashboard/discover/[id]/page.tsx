@@ -1,5 +1,7 @@
 'use client';
 
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -21,6 +23,7 @@ const difficultyColors: Record<Difficulty, string> = {
 };
 
 export default function SharedWorkoutDetailPage() {
+  useDocumentTitle('Shared Workout');
   const params = useParams();
   const router = useRouter();
   const workoutId = params.id as string;

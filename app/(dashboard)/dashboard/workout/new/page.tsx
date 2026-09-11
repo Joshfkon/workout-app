@@ -1,5 +1,7 @@
 'use client';
 
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+
 import React, { useState, useEffect, Suspense, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -2448,6 +2450,7 @@ function NewWorkoutContent() {
 }
 
 export default function NewWorkoutPage() {
+  useDocumentTitle('New Workout');
   return (
     <Suspense fallback={
       <div className="flex flex-col items-center justify-center min-h-[400px]">

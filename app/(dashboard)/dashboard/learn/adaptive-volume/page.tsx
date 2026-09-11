@@ -1,5 +1,7 @@
 'use client';
 
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+
 import Link from 'next/link';
 import { Card } from '@/components/ui/Card';
 
@@ -61,6 +63,7 @@ const phases = [
 ];
 
 export default function AdaptiveVolumeArticle() {
+  useDocumentTitle('Adaptive Volume');
   return (
     <div className="max-w-3xl mx-auto pb-12">
       {/* Back Navigation */}

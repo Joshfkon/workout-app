@@ -1,5 +1,7 @@
 'use client';
 
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+
 import { useState } from 'react';
 import { Card } from '@/components/ui';
 import Link from 'next/link';
@@ -365,6 +367,7 @@ const colorClasses: Record<string, { bg: string; border: string; text: string }>
 };
 
 export default function SciencePage() {
+  useDocumentTitle('Training Science');
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
 
   const toggleExpanded = (title: string) => {

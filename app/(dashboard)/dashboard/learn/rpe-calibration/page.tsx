@@ -1,5 +1,7 @@
 'use client';
 
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+
 import Link from 'next/link';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
@@ -7,6 +9,7 @@ import { SafetyTierBadge, SafetyTierLegend } from '@/components/workout/SafetyTi
 import { RPE_CALIBRATION_CONTENT, SAFETY_TIERS_CONTENT } from '@/lib/content/learnContent';
 
 export default function RPECalibrationPage() {
+  useDocumentTitle('RPE Calibration');
   const rpeContent = RPE_CALIBRATION_CONTENT;
   const safetyContent = SAFETY_TIERS_CONTENT;
 

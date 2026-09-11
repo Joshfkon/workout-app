@@ -1,5 +1,7 @@
 'use client';
 
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+
 /**
  * /dashboard/train — the Train tab's dashboard.
  *
@@ -256,6 +258,7 @@ const TOOL_PILLS = [
 ];
 
 export default function TrainPage() {
+  useDocumentTitle('Train');
   const router = useRouter();
   const supabase = createUntypedClient();
   // Week totals come from the shared coarse row model (`tiles`) — the same

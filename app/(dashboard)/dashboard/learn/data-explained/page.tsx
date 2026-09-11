@@ -1,5 +1,7 @@
 'use client';
 
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+
 import Link from 'next/link';
 import { Card } from '@/components/ui/Card';
 
@@ -43,6 +45,7 @@ const metrics = [
 ];
 
 export default function DataExplainedArticle() {
+  useDocumentTitle('Data Explained');
   return (
     <div className="max-w-3xl mx-auto pb-12">
       {/* Back Navigation */}

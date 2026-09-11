@@ -1,5 +1,7 @@
 'use client';
 
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+
 import { useState, useEffect, useRef, useCallback, useMemo, Suspense } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useQueryClient, useIsRestoring } from '@tanstack/react-query';
@@ -2344,6 +2346,7 @@ function NutritionPageContent() {
 // requires a Suspense boundary for the static prerender pass — the fallback
 // matches the page's own loading state so nothing visibly changes.
 export default function NutritionPage() {
+  useDocumentTitle('Nutrition');
   return (
     <Suspense
       fallback={

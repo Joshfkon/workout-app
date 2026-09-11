@@ -1,5 +1,7 @@
 'use client';
 
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+
 import Link from 'next/link';
 import type { Icon as TablerIcon } from '@tabler/icons-react';
 import {
@@ -43,6 +45,7 @@ const moreLinks: MoreLink[] = [
 ];
 
 export default function MorePage() {
+  useDocumentTitle('More');
   return (
     <div className="space-y-4 animate-fade-in">
       <h1 className="text-[17px] font-medium text-surface-100">More</h1>

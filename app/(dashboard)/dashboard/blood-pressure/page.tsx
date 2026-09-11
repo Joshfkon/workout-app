@@ -1,5 +1,7 @@
 'use client';
 
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+
 import { useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { Card, CardContent, Button, ConfirmModal } from '@/components/ui';
@@ -54,6 +56,7 @@ function timeLabel(iso: string): string {
 }
 
 export default function BloodPressurePage() {
+  useDocumentTitle('Blood Pressure');
   const { entries, isLoading, deleteReading } = useBloodPressureLog();
   const [period, setPeriod] = useState<BloodPressurePeriod>('30d');
   const [showLog, setShowLog] = useState(false);

@@ -1,5 +1,7 @@
 'use client';
 
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient, useIsRestoring } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
@@ -32,6 +34,7 @@ const FOLDER_COLORS = [
 ];
 
 export default function TemplatesPage() {
+  useDocumentTitle('Templates');
   const [folders, setFolders] = useState<FolderWithTemplates[]>([]);
   const [unfolderedTemplates, setUnfolderedTemplates] = useState<(WorkoutTemplate & { exercises: WorkoutTemplateExercise[] })[]>([]);
   const [isLoading, setIsLoading] = useState(true);

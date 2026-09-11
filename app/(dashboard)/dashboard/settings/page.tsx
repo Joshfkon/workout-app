@@ -1,5 +1,7 @@
 'use client';
 
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient, useIsRestoring } from '@tanstack/react-query';
 import { LoadingState, PageHeader } from '@/components/ui';
@@ -72,6 +74,7 @@ const SETTINGS_TABS: { id: SettingsTab; label: string; icon: React.ReactNode }[]
 ];
 
 export default function SettingsPage() {
+  useDocumentTitle('Settings');
   const { preferences, updatePreference } = useUserPreferences();
   const [userId, setUserId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<SettingsTab>('profile');

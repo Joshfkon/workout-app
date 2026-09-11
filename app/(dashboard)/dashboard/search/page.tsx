@@ -1,5 +1,7 @@
 'use client';
 
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { UserSearch } from '@/components/social/UserSearch';
@@ -7,6 +9,7 @@ import { getProfileUrl } from '@/lib/social';
 import type { UserProfile } from '@/types/social';
 
 export default function SearchPage() {
+  useDocumentTitle('Search');
   const router = useRouter();
 
   const handleSelectUser = (profile: UserProfile) => {

@@ -1,5 +1,7 @@
 'use client';
 
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+
 import { useCallback, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Card } from '@/components/ui/Card';
@@ -179,6 +181,7 @@ function CompareToResearchCard({ volumeProfile }: { volumeProfile: UserVolumePro
 }
 
 export default function VolumeProfilePage() {
+  useDocumentTitle('Volume');
   const {
     volumeProfile,
     fatigueAlerts,
