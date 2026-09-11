@@ -235,30 +235,35 @@ export function useInWorkoutCoach({
     });
   }, [exercises, enabled, units, whisperHistory, signalHistory]);
 
-  // Generate rest tip when timer starts (but only once per rest period)
+  // Generate ONE rest tip per rest period. `restSecondsRemaining` ticks DOWN
+  // every second while the timer runs, so "the count changed" means a tick,
+  // not a new rest period — keying generation off inequality regenerated the
+  // tip every second, flashing a different random fallback tip each tick. A
+  // new rest period is: the tip was cleared because the timer stopped, or the
+  // count jumped UP past the previous tick's value (start() while already
+  // running, e.g. logging the next set mid-rest).
   useEffect(() => {
     if (!enabled || !isRestTimerRunning || !nextExercise || !restSecondsRemaining) {
       return;
     }
 
-    // Only generate if we haven't generated for this rest period
-    if (lastRestTipSeconds.current !== restSecondsRemaining || restTip === null) {
-      lastRestTipSeconds.current = restSecondsRemaining;
-      
-      if (!restTipLoading) {
-        setRestTipLoading(true);
-        generateRestTip({
-          nextExerciseName: nextExercise.name,
-          nextWeight: nextExercise.weight,
-          nextReps: nextExercise.repRange,
-          restSecondsRemaining,
-          units,
-        }).then(result => {
-          setRestTip(result.tip);
-        }).finally(() => {
-          setRestTipLoading(false);
-        });
-      }
+    const previousSeconds = lastRestTipSeconds.current;
+    lastRestTipSeconds.current = restSecondsRemaining;
+    const timerRestarted = previousSeconds !== null && restSecondsRemaining > previousSeconds;
+
+    if ((restTip === null || timerRestarted) && !restTipLoading) {
+      setRestTipLoading(true);
+      generateRestTip({
+        nextExerciseName: nextExercise.name,
+        nextWeight: nextExercise.weight,
+        nextReps: nextExercise.repRange,
+        restSecondsRemaining,
+        units,
+      }).then(result => {
+        setRestTip(result.tip);
+      }).finally(() => {
+        setRestTipLoading(false);
+      });
     }
   }, [enabled, isRestTimerRunning, restSecondsRemaining, nextExercise, units, restTip, restTipLoading]);
 
