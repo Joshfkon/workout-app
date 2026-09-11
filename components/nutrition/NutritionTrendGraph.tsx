@@ -249,6 +249,30 @@ export function NutritionTrendGraph({ targets }: NutritionTrendGraphProps) {
     );
   }
 
+  // Show empty state if no data logged
+  if (!averages || averages.daysTracked === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Nutrition Trends</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-12">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-surface-800 flex items-center justify-center">
+              <span className="text-4xl" role="img" aria-hidden="true">📊</span>
+            </div>
+            <h3 className="text-lg font-semibold text-surface-200 mb-2">
+              No nutrition data yet
+            </h3>
+            <p className="text-surface-500 max-w-md mx-auto">
+              Start logging meals to see your nutrition trends over time. Track how your intake aligns with your targets.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card>
       <CardHeader>
