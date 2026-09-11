@@ -6,7 +6,7 @@ import { useState, useEffect, useRef, useCallback, useMemo, Suspense } from 'rea
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useQueryClient, useIsRestoring } from '@tanstack/react-query';
 import dynamic from 'next/dynamic';
-import { Card, CardHeader, CardTitle, CardContent, Button, LoadingAnimation, SwipeableRow, ToastContainer, useToasts } from '@/components/ui';
+import { Card, CardHeader, CardTitle, CardContent, Button, LoadingAnimation, SwipeableRow, ToastContainer, useToasts, EmptyState } from '@/components/ui';
 import { Button as StyledButton } from '@/components/ui/Button';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { getLocalUserId } from '@/lib/supabase/authState';
@@ -1858,8 +1858,8 @@ function NutritionPageContent() {
                     {hasEntries
                       ? `${mealFat}g fat · ${mealCarbs}g carbs · ${mealProtein}g protein`
                       : perMealAvailable > 0
-                        ? `~${perMealAvailable.toLocaleString()} calories available`
-                        : 'Nothing logged yet'}
+                        ? `~${perMealAvailable.toLocaleString()} calories remaining for this meal`
+                        : 'Tap Add Food to log your first item'}
                   </p>
                 </div>
                 {hasMenuActions && (
@@ -1979,7 +1979,7 @@ function NutritionPageContent() {
             <span className="block text-[12px] text-surface-400 truncate">
               {hasLoggedWeightToday
                 ? `Logged today: ${todayWeightDisplay} ${weightUnit}`
-                : 'A few weigh-ins a week keep your adaptive TDEE accurate'}
+                : 'Weigh in a few times a week to track your trend and keep your adaptive TDEE accurate'}
             </span>
           </span>
         </span>
@@ -1998,11 +1998,16 @@ function NutritionPageContent() {
 
       {/* Weight Trend */}
       {weightEntries.length === 0 && (
-        <div className="rounded-2xl border border-surface-800 bg-surface-900 p-6 text-center">
-          <p className="text-[13px] text-surface-400">
-            No weight entries yet. Log your first weigh-in to start tracking your trend.
-          </p>
-        </div>
+        <EmptyState
+          icon="⚖️"
+          title="Start tracking your weight"
+          description="Log weigh-ins a few times a week to track your trend and keep your adaptive TDEE accurate. Consistent data helps us calculate your true maintenance calories."
+          action={
+            <Button variant="primary" onClick={() => setShowWeightLog(true)}>
+              Log Your First Weigh-In
+            </Button>
+          }
+        />
       )}
       {weightEntries.length > 0 && (
         <Card>
