@@ -1624,8 +1624,8 @@ function AnalyticsPageContent() {
           {bodyCompLayout.showScanPrompt && (
             <p className="text-xs text-surface-500 text-center">
               {scans.length === 0
-                ? 'Log a DEXA scan to unlock composition trends and the Composition Map.'
-                : 'One more DEXA scan unlocks the Composition Map and scan-to-scan analysis.'}{' '}
+                ? 'Track weight, measurements, and strength now. Log a DEXA scan to add composition trends and the Composition Map.'
+                : 'You can see overall progress. One more scan adds the Composition Map and phase-to-phase analysis.'}{' '}
               <button
                 type="button"
                 onClick={() => setLogSegment('dexa')}
@@ -1699,13 +1699,21 @@ function AnalyticsPageContent() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                 </svg>
               </div>
-              <h2 className="text-lg font-semibold text-surface-200">No body composition data yet</h2>
+              <h2 className="text-lg font-semibold text-surface-200">Building Your Body Data</h2>
               <p className="text-surface-500 mt-2 max-w-md mx-auto">
-                Add your first DEXA scan to start tracking your body composition.
+                You&apos;re already tracking workouts, weight, and measurements. Add a DEXA scan to see lean vs. fat trends and unlock composition insights.
               </p>
-              <Link href="/dashboard/body-composition/add">
-                <Button className="mt-6">Add DEXA Scan</Button>
-              </Link>
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-6">
+                <Link href="/dashboard/body-composition/add">
+                  <Button>Add DEXA Scan</Button>
+                </Link>
+                <Button
+                  variant="outline"
+                  onClick={() => setLogSegment('weight')}
+                >
+                  Log Weight
+                </Button>
+              </div>
             </Card>
           )}
         </div>

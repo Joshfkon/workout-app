@@ -440,9 +440,9 @@ export function generateCoachingRecommendations(
     // the boundary would mix regimes, so composition advice waits.
     recommendations.push({
       type: 'info',
-      title: 'Composition Trend Still Calibrating',
+      title: 'Building Your Phase Trend',
       message:
-        'Composition advice needs 2 DEXA scans inside the current phase — scans from a previous phase can\'t be compared across the boundary. Log your next scan to unlock it.',
+        'We have your past scans and can show overall progress. To get composition advice specific to your current phase, log one more scan — comparing across phase boundaries would mix different training approaches.',
       priority: 1,
       evidence: `${trendScans.length} of ${scans.length} DEXA scans fall inside the current phase (started ${formatScanDate(activePhase.startDay)})`,
     });
@@ -452,10 +452,10 @@ export function generateCoachingRecommendations(
     // Soften instead of asserting: say WHY there's no composition advice.
     recommendations.push({
       type: 'info',
-      title: 'Composition Trend Still Calibrating',
+      title: inPhaseWindow ? 'Waiting Out the Water Shift' : 'Building Your Trend',
       message: inPhaseWindow
-        ? `A recent phase change puts a scan inside the ~${PHASE_BOUNDARY_DAYS}-day water/glycogen shift window, so scan-to-scan changes mostly reflect water — composition advice is paused until a scan lands outside it.`
-        : 'Composition advice needs at least 3 DEXA scans to separate a real trend from scan-to-scan noise. Log your next scan to unlock it.',
+        ? `Your recent phase change puts a scan inside the ~${PHASE_BOUNDARY_DAYS}-day water/glycogen adjustment window. Your weight and measurements are still useful — we're just pausing composition advice until the water settles and a new scan captures true tissue change.`
+        : 'You can track weight, measurements, and strength right now. Composition advice (lean vs. fat trends) needs 3+ scans to filter out day-to-day noise and show real patterns. Log your next scan to unlock it.',
       priority: 1,
       evidence: `${trend.dataPoints} DEXA scans (${formatScanDate(trendScans[trendScans.length - 1].scanDate)} → ${formatScanDate(trendScans[0].scanDate)})`,
     });
