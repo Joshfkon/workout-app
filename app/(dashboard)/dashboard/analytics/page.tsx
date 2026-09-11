@@ -1701,7 +1701,7 @@ function AnalyticsPageContent() {
               </div>
               <h2 className="text-lg font-semibold text-surface-200">Building Your Body Data</h2>
               <p className="text-surface-500 mt-2 max-w-md mx-auto">
-                You're already tracking workouts, weight, and measurements. Add a DEXA scan to see lean vs. fat trends and unlock composition insights.
+                You&apos;re already tracking workouts, weight, and measurements. Add a DEXA scan to see lean vs. fat trends and unlock composition insights.
               </p>
               <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-6">
                 <Link href="/dashboard/body-composition/add">
