@@ -607,7 +607,10 @@ export function AddExercisePicker({
 
           {/* Muscle chips + adjustments toggle */}
           <div className="mt-2 flex items-center gap-2">
-            <div className="flex-1 relative">
+            {/* min-w-0: without it this flex item's automatic minimum size is
+                the full chip-row width, so the inner overflow-x-auto never
+                actually overflows and the row can't scroll past the modal edge */}
+            <div className="flex-1 min-w-0 relative">
               <div
                 className="flex items-center gap-1.5 overflow-x-auto pr-4"
                 style={{ scrollbarWidth: 'none' }}
