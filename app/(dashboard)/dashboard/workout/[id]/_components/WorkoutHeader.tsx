@@ -56,8 +56,10 @@ export interface WorkoutHeaderProps {
   segments: ExerciseSegmentStatus[];
   /**
    * Estimated time left in the session ("1h 05m"), or null when there is
-   * nothing left to do. Sits beside the exercise count because "how much
-   * longer?" is the same question as "where am I?".
+   * nothing left to do. Shown in two places: beside the exercise count
+   * (because "how much longer?" is the same question as "where am I?"),
+   * and stacked under the elapsed time inside the timer pill — the meta
+   * line truncates first on narrow phones, the pill never does.
    */
   remainingDurationLabel?: string | null;
   /** Tooltip/aria detail for that estimate (total, and whether it's calibrated). */
@@ -254,9 +256,11 @@ export function WorkoutHeader({
             }`}
             title={workoutTimer.isPaused ? 'Resume timer' : 'Pause timer'}
             aria-label={
-              workoutTimer.isPaused
-                ? `Paused at ${workoutTimer.formattedTime}. Resume timer.`
-                : `Elapsed ${workoutTimer.formattedTime}. Pause timer.`
+              (workoutTimer.isPaused
+                ? `Paused at ${workoutTimer.formattedTime}.`
+                : `Elapsed ${workoutTimer.formattedTime}.`) +
+              (remainingDurationLabel ? ` About ${remainingDurationLabel} remaining.` : '') +
+              (workoutTimer.isPaused ? ' Resume timer.' : ' Pause timer.')
             }
           >
             {workoutTimer.isPaused ? (
@@ -264,10 +268,26 @@ export function WorkoutHeader({
             ) : (
               <IconPlayerPause size={16} stroke={2.25} />
             )}
-            <span>
-              {workoutTimer.isPaused
-                ? `Paused · ${workoutTimer.formattedTime}`
-                : workoutTimer.formattedTime}
+            {/* Elapsed on top; the remaining estimate stacks under it so
+                "how much longer?" is readable where the eye already is —
+                the meta line's copy truncates first on narrow phones. */}
+            <span className="flex flex-col items-start leading-tight py-1">
+              <span>
+                {workoutTimer.isPaused
+                  ? `Paused · ${workoutTimer.formattedTime}`
+                  : workoutTimer.formattedTime}
+              </span>
+              {remainingDurationLabel && (
+                <span
+                  data-testid="workout-timer-pill-remaining"
+                  title={remainingDurationHint}
+                  className={`text-[10px] font-normal ${
+                    workoutTimer.isPaused ? 'text-warning-400/80' : 'text-surface-400'
+                  }`}
+                >
+                  ~{remainingDurationLabel} left
+                </span>
+              )}
             </span>
           </button>
         )}

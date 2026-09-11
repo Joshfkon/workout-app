@@ -207,6 +207,42 @@ describe('WorkoutHeader duration estimate', () => {
     renderHeader({ exerciseNumber: 3, exerciseTotal: 6, remainingDurationLabel: '20 min' });
     expect(screen.getByText(/exercise 3 of 6/)).toBeInTheDocument();
   });
+
+  it('also stacks the remaining time inside the timer pill (the meta line truncates on phones)', () => {
+    renderHeader({ remainingDurationLabel: '25 min' });
+    const pill = screen.getByTestId('workout-timer-pill');
+    const remaining = within(pill).getByTestId('workout-timer-pill-remaining');
+    expect(remaining).toHaveTextContent('~25 min left');
+    // Elapsed time is still the pill's primary content.
+    expect(pill).toHaveTextContent('5:13');
+  });
+
+  it('keeps the pill remaining line while paused', () => {
+    renderHeader({
+      remainingDurationLabel: '25 min',
+      workoutTimer: { isPaused: true, formattedTime: '5:13', toggle: jest.fn() },
+    });
+    const pill = screen.getByTestId('workout-timer-pill');
+    expect(within(pill).getByTestId('workout-timer-pill-remaining')).toHaveTextContent(
+      '~25 min left'
+    );
+    expect(pill).toHaveTextContent('Paused · 5:13');
+  });
+
+  it('announces the remaining estimate through the pill aria-label', () => {
+    renderHeader({ remainingDurationLabel: '25 min' });
+    expect(screen.getByTestId('workout-timer-pill')).toHaveAttribute(
+      'aria-label',
+      'Elapsed 5:13. About 25 min remaining. Pause timer.'
+    );
+  });
+
+  it('shows a plain pill when there is nothing left to report', () => {
+    renderHeader({ remainingDurationLabel: null });
+    const pill = screen.getByTestId('workout-timer-pill');
+    expect(within(pill).queryByTestId('workout-timer-pill-remaining')).not.toBeInTheDocument();
+    expect(pill).toHaveAttribute('aria-label', 'Elapsed 5:13. Pause timer.');
+  });
 });
 
 describe('WorkoutHeader location chip', () => {
