@@ -70,6 +70,12 @@ const customJestConfig = {
       branches: 80,
       statements: 90,
     },
+    'services/volumeDeficitSuggestions.ts': {
+      lines: 90,
+      functions: 80,
+      branches: 80,
+      statements: 90,
+    },
     'services/exerciseOrdering.ts': {
       lines: 90,
       functions: 80,

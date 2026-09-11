@@ -414,4 +414,87 @@ describe('WorkoutVolumeStrip', () => {
     expect(screen.getByTestId('workout-volume-strip-toggle')).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByTestId('workout-volume-chip-chest')).not.toBeInTheDocument();
   });
+
+  describe('deficit suggestions in the projection panel', () => {
+    const underRow = () =>
+      row('biceps', {
+        sets: 6,
+        plannedSets: 3,
+        band: { mev: 10, mrv: 26 },
+        zone: 'below_mev',
+        projectedZone: 'below_mev',
+      });
+
+    it('renders an add-sets remedy and applies it through the callback', async () => {
+      const user = userEvent.setup();
+      const onAddSetsToBlock = jest.fn();
+      render(
+        <WorkoutVolumeStrip
+          rows={[underRow()]}
+          isLoading={false}
+          onOpenDetail={noop}
+          suggestions={[
+            {
+              muscle: 'biceps',
+              displayName: 'Biceps',
+              setsNeeded: 1,
+              action: { kind: 'add_sets', blockId: 'b1', exerciseName: 'EZ-Bar Curl', addSets: 1 },
+            },
+          ]}
+          onAddSetsToBlock={onAddSetsToBlock}
+          onAddExerciseForMuscle={noop}
+        />
+      );
+
+      await user.click(screen.getByTestId('workout-volume-projection-summary'));
+      expect(screen.getByTestId('volume-deficit-suggestion-biceps')).toHaveTextContent(
+        'Biceps: +1 set of EZ-Bar Curl clears the minimum'
+      );
+      await user.click(screen.getByTestId('volume-deficit-add-sets-biceps'));
+      expect(onAddSetsToBlock).toHaveBeenCalledWith('b1', 1);
+    });
+
+    it('renders an add-exercise remedy and routes the muscle to the callback', async () => {
+      const user = userEvent.setup();
+      const onAddExerciseForMuscle = jest.fn();
+      render(
+        <WorkoutVolumeStrip
+          rows={[underRow()]}
+          isLoading={false}
+          onOpenDetail={noop}
+          suggestions={[
+            {
+              muscle: 'biceps',
+              displayName: 'Biceps',
+              setsNeeded: 2,
+              action: { kind: 'add_exercise' },
+            },
+          ]}
+          onAddSetsToBlock={noop}
+          onAddExerciseForMuscle={onAddExerciseForMuscle}
+        />
+      );
+
+      await user.click(screen.getByTestId('workout-volume-projection-summary'));
+      expect(screen.getByTestId('volume-deficit-suggestion-biceps')).toHaveTextContent(
+        'Biceps: needs 2 more direct sets — add an exercise for it'
+      );
+      await user.click(screen.getByTestId('volume-deficit-add-exercise-biceps'));
+      expect(onAddExerciseForMuscle).toHaveBeenCalledWith('biceps');
+    });
+
+    it('renders no suggestion rows when none are supplied (e.g. all deficits locked)', async () => {
+      const user = userEvent.setup();
+      render(
+        <WorkoutVolumeStrip
+          rows={[underRow()]}
+          isLoading={false}
+          onOpenDetail={noop}
+        />
+      );
+      await user.click(screen.getByTestId('workout-volume-projection-summary'));
+      expect(screen.getByTestId('workout-volume-projection-list')).toBeInTheDocument();
+      expect(screen.queryByTestId('volume-deficit-suggestion-biceps')).not.toBeInTheDocument();
+    });
+  });
 });

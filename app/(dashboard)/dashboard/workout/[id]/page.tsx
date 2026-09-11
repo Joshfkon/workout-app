@@ -164,6 +164,11 @@ import {
 } from './_lib/durationEstimate';
 import { WorkoutHeader, type ExerciseSegmentStatus } from './_components/WorkoutHeader';
 import { WorkoutVolumeStrip } from './_components/WorkoutVolumeStrip';
+import {
+  buildDeficitSuggestions,
+  type SuggestionBlock,
+} from '@/services/volumeDeficitSuggestions';
+import type { CoarseMuscle } from '@/services/volumeBands';
 import { AddExercisePicker } from './_components/AddExercisePicker';
 import { SaveAsTemplateModal } from './_components/SaveAsTemplateModal';
 import { buildTemplateExercises } from '@/services/templateFromSession';
@@ -2716,6 +2721,36 @@ export default function WorkoutPage() {
     // workout itself (blocks + resumed sets) has hydrated.
     liveDataReady: phase !== 'loading',
   });
+
+  // One concrete remedy per muscle the projection leaves under its minimum
+  // (and recovery still allows fixing today): add sets to a direct block, or
+  // add an exercise. Recomputes live, so applying a suggestion makes it
+  // disappear as the projection crosses the band minimum. Only the muscles
+  // this session trains — the same scope as the projection digest.
+  const volumeDeficitSuggestions = useMemo(() => {
+    if (weeklyVolumeLoading) return [];
+    return buildDeficitSuggestions(
+      weeklyVolumeRows
+        .filter((r) => r.trainedThisSession)
+        .map((r) => ({
+          muscle: r.muscle as CoarseMuscle,
+          displayName: r.displayName,
+          projectedSets: r.projectedSets,
+          mev: r.band.mev,
+          projectedUnderMin: r.projectedZone === 'below_mev',
+          deficitLockedIn: r.deficitLockedIn,
+        })),
+      volumeLiveBlocks.map(
+        (b): SuggestionBlock => ({
+          blockId: b.id,
+          exerciseName: b.exercise.name,
+          primaryMuscle: b.exercise.primaryMuscle,
+          secondaryMuscles: b.exercise.secondaryMuscles || [],
+          targetSets: b.targetSets,
+        })
+      )
+    );
+  }, [weeklyVolumeRows, weeklyVolumeLoading, volumeLiveBlocks]);
 
   // ---- Joint pain: pattern notices per exercise ----------------------------
   useEffect(() => {
@@ -6385,6 +6420,18 @@ export default function WorkoutPage() {
         rows={weeklyVolumeRows}
         isLoading={weeklyVolumeLoading}
         onOpenDetail={() => setShowMuscleReadinessSheet(true)}
+        suggestions={volumeDeficitSuggestions}
+        onAddSetsToBlock={(blockId, addSets) => {
+          const block = blocks.find((b) => b.id === blockId);
+          if (block) handleTargetSetsChange(blockId, block.targetSets + addSets);
+        }}
+        onAddExerciseForMuscle={(muscle) => {
+          // Land the user in the picker already filtered to the deficit
+          // muscle; a stale search string would override the filter view.
+          setExerciseSearch('');
+          setSelectedMuscleFilter(muscle);
+          handleOpenAddExercise();
+        }}
       />
 
       {/* First workout guidance */}
