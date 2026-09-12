@@ -40,6 +40,7 @@ import { resolveWarmupLoad, type WarmupLoadMode } from '@/services/warmupEngine'
 import { formatSessionTimeOfDay } from '@/services/sessionContext';
 import { formatSleepHours, SLEEP_QUALITY_LABELS } from '@/lib/sleep/formatSleep';
 import { useUserStore } from '@/stores';
+import { useWorkoutStore } from '@/stores/workoutStore';
 import type { AdjustedRIRResult } from '@/services/rpeCalibration';
 import type { ReadinessModulation } from '@/services/fatigueEngine';
 import { lightHaptic } from '@/lib/integrations/notifications';
@@ -518,7 +519,15 @@ export const ExerciseCard = memo(function ExerciseCard({
 
   const [editingSetId, setEditingSetId] = useState<string | null>(null);
   const [jointPickerSetId, setJointPickerSetId] = useState<string | null>(null);
-  const [completedWarmups, setCompletedWarmups] = useState<Set<number>>(new Set());
+  // Warmup checkmarks live in the workout store (persisted, keyed by block)
+  // so switching exercises, remounting, or reloading never wipes them; they
+  // expire only once ~15 min stale (expireStaleWarmupCompletions). The
+  // rendered Set is derived below, after warmupRows, so checkmarks recorded
+  // for set numbers a recomputed protocol no longer prescribes are ignored.
+  const warmupCompletionTimes = useWorkoutStore((s) => s.warmupCompletions[block.id]);
+  const toggleWarmupCompletion = useWorkoutStore((s) => s.toggleWarmupCompletion);
+  const completeAllWarmupsInStore = useWorkoutStore((s) => s.completeAllWarmups);
+  const expireStaleWarmupCompletions = useWorkoutStore((s) => s.expireStaleWarmupCompletions);
   const [editingWarmupId, setEditingWarmupId] = useState<number | null>(null);
   const [customWarmupWeights, setCustomWarmupWeights] = useState<Map<number, number>>(new Map());
   const [warmupWeightInput, setWarmupWeightInput] = useState('');
@@ -553,17 +562,23 @@ export const ExerciseCard = memo(function ExerciseCard({
     }
   }, [showSwapOnMount]);
   
-  // Reset warmup completion state when this exercise becomes active
-  // This ensures warmups are fresh when switching exercises out of order
+  // When this exercise becomes active, EXPIRE stale warmup checkmarks rather
+  // than wiping them: switching exercises and coming back within the ~15 min
+  // warmth window (services/warmupEngine.WARMTH_HALF_LIFE_MINUTES) keeps the
+  // ramp progress; only a block whose freshest checkmark has gone stale
+  // resets, because the muscle has cooled and the ramp is worth redoing.
   const prevIsActiveRef = useRef(isActive);
   useEffect(() => {
-    // Only reset if we just became active (wasn't active before, now is)
-    if (isActive && !prevIsActiveRef.current) {
-      setCompletedWarmups(new Set());
-      setIsWarmupExpanded(true); // Reset to expanded when exercise becomes active
+    if (isActive) {
+      expireStaleWarmupCompletions(block.id);
+      // Only re-expand on an inactive -> active transition, preserving the
+      // collapsed-by-default initial mount.
+      if (!prevIsActiveRef.current) {
+        setIsWarmupExpanded(true);
+      }
     }
     prevIsActiveRef.current = isActive;
-  }, [isActive]);
+  }, [isActive, block.id, expireStaleWarmupCompletions]);
 
   const [swapMuscleFilter, setSwapMuscleFilter] = useState('');
   const [editWeight, setEditWeight] = useState('');
@@ -1103,6 +1118,20 @@ export const ExerciseCard = memo(function ExerciseCard({
     isBodyweightExercise,
     unit,
   ]);
+
+  // Store-backed checkmarks resolved against the CURRENT protocol: a
+  // completion recorded for a set number the recomputed protocol no longer
+  // prescribes is ignored rather than inflating the count.
+  const completedWarmups = useMemo(() => {
+    const done = new Set<number>();
+    if (!warmupCompletionTimes) return done;
+    const valid = new Set(warmupRows.rows.map((r) => r.warmup.setNumber));
+    for (const key of Object.keys(warmupCompletionTimes)) {
+      const n = Number(key);
+      if (valid.has(n)) done.add(n);
+    }
+    return done;
+  }, [warmupCompletionTimes, warmupRows]);
 
   // Auto-collapse warmup sets when all are completed
   useEffect(() => {
@@ -3510,15 +3539,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                         <button
                           onClick={() => {
                             const wasCompleted = completedWarmups.has(warmup.setNumber);
-                            setCompletedWarmups(prev => {
-                              const next = new Set(prev);
-                              if (next.has(warmup.setNumber)) {
-                                next.delete(warmup.setNumber);
-                              } else {
-                                next.add(warmup.setNumber);
-                              }
-                              return next;
-                            });
+                            toggleWarmupCompletion(block.id, warmup.setNumber);
                             if (!wasCompleted && onWarmupComplete) {
                               const restTime = warmup.restSeconds || 45;
                               onWarmupComplete(restTime);
@@ -3571,7 +3592,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                   <tr className="bg-surface-800/30">
                     <td colSpan={6} className="px-3 py-1.5 text-center">
                       <button
-                        onClick={() => setCompletedWarmups(new Set(warmupRows.rows.map(r => r.warmup.setNumber)))}
+                        onClick={() => completeAllWarmupsInStore(block.id, warmupRows.rows.map(r => r.warmup.setNumber))}
                         className="text-xs text-surface-500 hover:text-surface-400 transition-colors"
                       >
                         Skip warmup (already warm)

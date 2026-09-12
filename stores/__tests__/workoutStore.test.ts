@@ -4,7 +4,8 @@
  */
 
 import { act } from '@testing-library/react';
-import { useWorkoutStore } from '../workoutStore';
+import { useWorkoutStore, WARMUP_COMPLETION_TTL_MS } from '../workoutStore';
+import { WARMTH_HALF_LIFE_MINUTES } from '@/services/warmupEngine';
 import type { SetLog } from '@/types/schema';
 import {
   makeWorkoutSession,
@@ -691,6 +692,110 @@ describe('Workout Flow Integration', () => {
     expect(stats.totalSets).toBe(2);
     expect(stats.totalReps).toBe(19); // 10 + 9
     expect(stats.totalVolume).toBe(1900); // 100*10 + 100*9
+  });
+});
+
+describe('warmup completions (persisted checkmarks)', () => {
+  beforeEach(() => {
+    act(() => {
+      useWorkoutStore.getState().endSession();
+      useWorkoutStore.setState({ warmupCompletions: {} });
+    });
+  });
+
+  it('pins the expiry window to the warmup engine warmth half-life', () => {
+    // The store keeps its own constant so it does not drag the engine into
+    // every bundle importing a store — this is the coupling test instead.
+    expect(WARMUP_COMPLETION_TTL_MS).toBe(WARMTH_HALF_LIFE_MINUTES * 60 * 1000);
+  });
+
+  it('toggles a checkmark on (with a timestamp) and off', () => {
+    act(() => {
+      useWorkoutStore.getState().toggleWarmupCompletion('block-1', 2);
+    });
+    const checked = useWorkoutStore.getState().warmupCompletions['block-1'];
+    expect(typeof checked[2]).toBe('string');
+    expect(Number.isNaN(Date.parse(checked[2]))).toBe(false);
+
+    act(() => {
+      useWorkoutStore.getState().toggleWarmupCompletion('block-1', 2);
+    });
+    expect(useWorkoutStore.getState().warmupCompletions['block-1'][2]).toBeUndefined();
+  });
+
+  it('completeAllWarmups stamps missing sets and keeps existing timestamps', () => {
+    act(() => {
+      useWorkoutStore.getState().toggleWarmupCompletion('block-1', 1);
+    });
+    const firstStamp = useWorkoutStore.getState().warmupCompletions['block-1'][1];
+
+    act(() => {
+      useWorkoutStore.getState().completeAllWarmups('block-1', [1, 2, 3]);
+    });
+    const checked = useWorkoutStore.getState().warmupCompletions['block-1'];
+    expect(Object.keys(checked).sort()).toEqual(['1', '2', '3']);
+    expect(checked[1]).toBe(firstStamp);
+  });
+
+  it('keeps every checkmark while the freshest one is inside the window', () => {
+    const staleIso = new Date(Date.now() - WARMUP_COMPLETION_TTL_MS - 60_000).toISOString();
+    act(() => {
+      useWorkoutStore.setState({
+        warmupCompletions: { 'block-1': { 1: staleIso, 2: new Date().toISOString() } },
+      });
+      useWorkoutStore.getState().expireStaleWarmupCompletions('block-1');
+    });
+    // Block-level expiry: one fresh checkmark keeps the whole ramp's progress
+    // (a lifter mid-warmup hasn't cooled down because set 1 was 20 min ago).
+    expect(Object.keys(useWorkoutStore.getState().warmupCompletions['block-1'] ?? {})).toHaveLength(2);
+  });
+
+  it('drops a block whose freshest checkmark is older than the window', () => {
+    const staleIso = new Date(Date.now() - WARMUP_COMPLETION_TTL_MS - 60_000).toISOString();
+    act(() => {
+      useWorkoutStore.setState({
+        warmupCompletions: {
+          'block-1': { 1: staleIso, 2: staleIso },
+          'block-2': { 1: new Date().toISOString() },
+        },
+      });
+      useWorkoutStore.getState().expireStaleWarmupCompletions('block-1');
+    });
+    const state = useWorkoutStore.getState();
+    expect(state.warmupCompletions['block-1']).toBeUndefined();
+    // Other blocks are untouched.
+    expect(state.warmupCompletions['block-2']).toBeDefined();
+  });
+
+  it('expires corrupt timestamps rather than keeping them forever', () => {
+    act(() => {
+      useWorkoutStore.setState({ warmupCompletions: { 'block-1': { 1: 'not-a-date' } } });
+      useWorkoutStore.getState().expireStaleWarmupCompletions('block-1');
+    });
+    expect(useWorkoutStore.getState().warmupCompletions['block-1']).toBeUndefined();
+  });
+
+  it('survives a same-session re-sync but clears for a new session and on endSession', () => {
+    const blocks = [createMockBlock()];
+    const exercises = [createMockExercise()];
+    act(() => {
+      useWorkoutStore.getState().startSession(createMockSession({ id: 'session-1' }), blocks, exercises);
+      useWorkoutStore.getState().toggleWarmupCompletion('block-1', 1);
+      // Same session re-synced (exercise added / page reload path)
+      useWorkoutStore.getState().startSession(createMockSession({ id: 'session-1' }), blocks, exercises);
+    });
+    expect(useWorkoutStore.getState().warmupCompletions['block-1'][1]).toBeDefined();
+
+    act(() => {
+      useWorkoutStore.getState().startSession(createMockSession({ id: 'session-2' }), blocks, exercises);
+    });
+    expect(useWorkoutStore.getState().warmupCompletions).toEqual({});
+
+    act(() => {
+      useWorkoutStore.getState().toggleWarmupCompletion('block-1', 1);
+      useWorkoutStore.getState().endSession();
+    });
+    expect(useWorkoutStore.getState().warmupCompletions).toEqual({});
   });
 });
 
