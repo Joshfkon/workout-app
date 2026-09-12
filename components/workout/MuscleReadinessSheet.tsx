@@ -285,9 +285,11 @@ function ReadinessChildContent({ child }: { child: ReadinessChild }) {
     >
       <div className="flex items-center gap-3 py-1.5">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-xs text-surface-400 truncate">{child.displayName}</span>
-            <span className="text-[10px] tabular-nums text-surface-500 flex-shrink-0">
+          {/* flex-wrap: same as the coarse row — never truncate the name to fit
+              the band label; wrap the label instead. */}
+          <div className="flex flex-wrap items-center justify-between gap-x-2">
+            <span className="text-xs text-surface-400">{child.displayName}</span>
+            <span className="text-[10px] tabular-nums text-surface-500 flex-shrink-0 ml-auto">
               <span className={zoneTextClass(child.zone, child.sets)} data-testid={`readiness-sets-${child.muscle}`}>{child.sets}</span>
               <span className="text-surface-600"> · {zoneBandLabel(child.band)}</span>
             </span>
@@ -307,9 +309,11 @@ function ReadinessRowContent({ row }: { row: ReadinessRow }) {
   return (
     <div className="flex items-center gap-3 py-2.5">
       <div className="flex-1 min-w-0">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-sm text-surface-100 truncate">{row.displayName}</span>
-          <span className="text-[11px] tabular-nums flex-shrink-0">
+        {/* flex-wrap: on narrow screens the band label drops to its own line
+            instead of shrink-squeezing the muscle name into "Ham…". */}
+        <div className="flex flex-wrap items-center justify-between gap-x-2">
+          <span className="text-sm text-surface-100">{row.displayName}</span>
+          <span className="text-[11px] tabular-nums flex-shrink-0 ml-auto">
             {/* Row-aware color: an in-zone parent with a lagging fine child
                 reads warning, never green. Coarse bands are group landmarks. */}
             <span className={rowTextClass(row)} data-testid={`readiness-sets-${row.muscle}`}>{row.sets}</span>
