@@ -135,10 +135,10 @@ export interface AddExercisePickerProps {
   stapleExerciseIds: Set<string>;
   frequentExerciseIds: Map<string, number>;
   lastDoneExercises: Map<string, Date>;
-  /** Exercise IDs the user has favorited */
-  favoriteExerciseIds: Set<string>;
-  /** Callback to toggle favorite status */
-  onToggleFavorite: (exerciseId: string) => void;
+  /** Exercise IDs the user has favorited (defaults to empty Set) */
+  favoriteExerciseIds?: Set<string>;
+  /** Callback to toggle favorite status (optional, no-op if omitted) */
+  onToggleFavorite?: (exerciseId: string) => void;
   /**
    * Primary muscles already in today's session plan (variant="workout").
    * Drives the "Suggested" section; falls back to the big movement-pattern
@@ -185,8 +185,8 @@ export function AddExercisePicker({
   stapleExerciseIds,
   frequentExerciseIds,
   lastDoneExercises,
-  favoriteExerciseIds,
-  onToggleFavorite,
+  favoriteExerciseIds = new Set(),
+  onToggleFavorite = () => {},
   planMuscles,
   selectedExercisesToAdd,
   onToggleExerciseSelection,
@@ -449,21 +449,23 @@ export function AddExercisePicker({
           </div>
         </button>
         <div className="flex items-center gap-2 flex-shrink-0">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleFavorite(exercise.id);
-            }}
-            disabled={isAddingExercise}
-            className="p-1.5 hover:bg-surface-800 rounded transition-colors disabled:opacity-50"
-            aria-label={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
-          >
-            {isFavorited ? (
-              <IconStarFilled size={16} className="text-amber-400" />
-            ) : (
-              <IconStar size={16} className="text-surface-500" />
-            )}
-          </button>
+          {onToggleFavorite && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleFavorite(exercise.id);
+              }}
+              disabled={isAddingExercise}
+              className="p-1.5 hover:bg-surface-800 rounded transition-colors disabled:opacity-50"
+              aria-label={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
+            >
+              {isFavorited ? (
+                <IconStarFilled size={16} className="text-amber-400" />
+              ) : (
+                <IconStar size={16} className="text-surface-500" />
+              )}
+            </button>
+          )}
           {isSelected && <IconCheck size={18} className="text-primary-400 flex-shrink-0" />}
         </div>
       </div>
