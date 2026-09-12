@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { isSessionCookieValid } from "@/lib/supabase/sessionCookie";
 import { ThemeToggleCompact } from "@/components/settings/ThemeToggle";
+import { PhoneShowcase } from "@/components/marketing/PhoneShowcase";
 
 export default async function Home({
   searchParams,
@@ -135,7 +136,12 @@ export default async function Home({
             </svg>
           </Link>
         </div>
+      </div>
 
+      {/* Phone Showcase Section */}
+      <PhoneShowcase />
+
+      <div className="relative z-10 flex flex-col items-center justify-center px-4">
         {/* Feature highlights - Row 1 */}
         <div className="mt-16 sm:mt-20 grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 max-w-5xl animate-slide-up px-2" style={{ animationDelay: '0.2s' }}>
           <FeatureCard

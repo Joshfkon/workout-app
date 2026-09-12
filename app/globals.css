@@ -398,6 +398,16 @@ body.barcode-scanner-active .barcode-scanner-overlay {
     background: radial-gradient(ellipse at center, var(--tw-gradient-stops));
   }
 
+  /* Hide scrollbar but keep functionality */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
   /* Utility class for selectable content */
   .selectable {
     -webkit-user-select: text;
