@@ -674,6 +674,7 @@ export default function WorkoutPage() {
   const [availableExercises, setAvailableExercises] = useState<AvailableExercise[]>([]);
   const [frequentExerciseIds, setFrequentExerciseIds] = useState<Map<string, number>>(new Map());
   const [lastDoneExercises, setLastDoneExercises] = useState<Map<string, Date>>(new Map());
+  const [favoriteExerciseIds, setFavoriteExerciseIds] = useState<Set<string>>(new Set());
   const [exerciseSearch, setExerciseSearch] = useState('');
   const [selectedMuscle, setSelectedMuscle] = useState<string>('');
   const [isAddingExercise, setIsAddingExercise] = useState(false);
@@ -2112,6 +2113,26 @@ export default function WorkoutPage() {
       }
     }
     loadFrequentExercises();
+  }, []);
+
+  // Fetch favorite exercises
+  useEffect(() => {
+    async function loadFavorites() {
+      const supabase = createUntypedClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data } = await supabase
+        .from('user_exercise_preferences')
+        .select('exercise_id')
+        .eq('user_id', user.id)
+        .eq('is_favorite', true);
+
+      if (data) {
+        setFavoriteExerciseIds(new Set(data.map(row => row.exercise_id)));
+      }
+    }
+    loadFavorites();
   }, []);
 
   // Fetch today's nutrition data, daily check-in, and weight for check-in
@@ -5014,6 +5035,53 @@ export default function WorkoutPage() {
     });
   };
 
+  // Toggle favorite status for an exercise
+  const toggleFavorite = async (exerciseId: string) => {
+    const supabase = createUntypedClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const isFavorite = favoriteExerciseIds.has(exerciseId);
+    
+    // Check if preference exists
+    const { data: existing } = await supabase
+      .from('user_exercise_preferences')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('exercise_id', exerciseId)
+      .single();
+    
+    if (existing) {
+      // Update existing preference
+      await supabase
+        .from('user_exercise_preferences')
+        .update({ is_favorite: !isFavorite })
+        .eq('user_id', user.id)
+        .eq('exercise_id', exerciseId);
+    } else {
+      // Create new preference
+      await supabase
+        .from('user_exercise_preferences')
+        .insert({
+          user_id: user.id,
+          exercise_id: exerciseId,
+          status: 'active',
+          is_favorite: !isFavorite,
+        });
+    }
+    
+    // Update local state
+    setFavoriteExerciseIds(prev => {
+      const next = new Set(prev);
+      if (isFavorite) {
+        next.delete(exerciseId);
+      } else {
+        next.add(exerciseId);
+      }
+      return next;
+    });
+  };
+
   // Add all selected exercises
   const handleAddSelectedExercises = async () => {
     if (selectedExercisesToAdd.length === 0) return;
@@ -5976,6 +6044,8 @@ export default function WorkoutPage() {
             stapleExerciseIds={stapleExerciseIds}
             frequentExerciseIds={frequentExerciseIds}
             lastDoneExercises={lastDoneExercises}
+            favoriteExerciseIds={favoriteExerciseIds}
+            onToggleFavorite={toggleFavorite}
             selectedExercisesToAdd={selectedExercisesToAdd}
             onToggleExerciseSelection={toggleExerciseSelection}
             isAddingExercise={isAddingExercise}
@@ -7361,6 +7431,8 @@ export default function WorkoutPage() {
           stapleExerciseIds={stapleExerciseIds}
           frequentExerciseIds={frequentExerciseIds}
           lastDoneExercises={lastDoneExercises}
+          favoriteExerciseIds={favoriteExerciseIds}
+          onToggleFavorite={toggleFavorite}
           planMuscles={blocks.map((b) => b.exercise.primaryMuscle)}
           selectedExercisesToAdd={selectedExercisesToAdd}
           onToggleExerciseSelection={toggleExerciseSelection}

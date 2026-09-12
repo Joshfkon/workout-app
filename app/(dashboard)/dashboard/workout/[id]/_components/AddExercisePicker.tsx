@@ -26,7 +26,7 @@
  */
 
 import { useMemo, useState } from 'react';
-import { IconAdjustments, IconCheck, IconPlus, IconX } from '@tabler/icons-react';
+import { IconAdjustments, IconCheck, IconPlus, IconX, IconStar, IconStarFilled } from '@tabler/icons-react';
 import type { AvailableExercise, GymLocation } from '../_lib/types';
 import { formatMuscleName } from '@/lib/utils';
 import { useKeyboardInset } from '@/hooks/useKeyboardInset';
@@ -135,6 +135,10 @@ export interface AddExercisePickerProps {
   stapleExerciseIds: Set<string>;
   frequentExerciseIds: Map<string, number>;
   lastDoneExercises: Map<string, Date>;
+  /** Exercise IDs the user has favorited */
+  favoriteExerciseIds: Set<string>;
+  /** Callback to toggle favorite status */
+  onToggleFavorite: (exerciseId: string) => void;
   /**
    * Primary muscles already in today's session plan (variant="workout").
    * Drives the "Suggested" section; falls back to the big movement-pattern
@@ -181,6 +185,8 @@ export function AddExercisePicker({
   stapleExerciseIds,
   frequentExerciseIds,
   lastDoneExercises,
+  favoriteExerciseIds,
+  onToggleFavorite,
   planMuscles,
   selectedExercisesToAdd,
   onToggleExerciseSelection,
@@ -193,6 +199,9 @@ export function AddExercisePicker({
 }: AddExercisePickerProps) {
   // Local UI state: the sort + location controls are collapsed by default.
   const [showAdjustments, setShowAdjustments] = useState(false);
+  // Tab selection: 'default' shows Recent + Favorites (old behavior), 'all' shows Browse all
+  type ViewTab = 'default' | 'all';
+  const [selectedTab, setSelectedTab] = useState<ViewTab>('default');
   // Only mounted while open, so the keyboard listeners can always be on.
   const { inset: keyboardInset, scrollContainerRef } = useKeyboardInset<HTMLDivElement>(true);
 
@@ -326,8 +335,9 @@ export function AddExercisePicker({
     return FALLBACK_SUGGESTED_MUSCLES;
   };
 
-  /** The default (pre-search) view: Recent + Suggested, capped to one screen. */
+  /** The default (pre-search) view: Recent + Favorites + Suggested, capped to one screen. */
   const getDefaultSections = (pool: AvailableExercise[]) => {
+    // Recent: exercises the user has performed, sorted by recency
     const performed = pool.filter(
       ex => (frequentExerciseIds.get(ex.id) ?? 0) > 0 || lastDoneExercises.has(ex.id)
     );
@@ -345,6 +355,17 @@ export function AddExercisePicker({
       .slice(0, MAX_RECENT);
     const recentIds = new Set(recent.map(ex => ex.id));
 
+    // Favorites: exercises the user has starred
+    const favorites = pool
+      .filter(ex => favoriteExerciseIds.has(ex.id) && !recentIds.has(ex.id))
+      .sort((a, b) => {
+        const availabilityDiff = availabilityRank(a) - availabilityRank(b);
+        if (availabilityDiff !== 0) return availabilityDiff;
+        return a.name.localeCompare(b.name);
+      })
+      .slice(0, MAX_RECENT);
+    const favoriteIds = new Set(favorites.map(ex => ex.id));
+
     // Staples for the relevant muscles, interleaved one-per-muscle so every
     // muscle gets representation within the row cap. With a muscle chip
     // active the pool is already scoped, so all its staples are relevant.
@@ -353,7 +374,7 @@ export function AddExercisePicker({
       : getRelevantMuscles();
     const candidatesByMuscle = new Map<string, AvailableExercise[]>();
     for (const ex of pool) {
-      if (!stapleExerciseIds.has(ex.id) || recentIds.has(ex.id)) continue;
+      if (!stapleExerciseIds.has(ex.id) || recentIds.has(ex.id) || favoriteIds.has(ex.id)) continue;
       // Suggested = "do this today" — exercises the location can't support
       // stay reachable via search/browse (flagged), not suggested.
       if (isUnavailableHere(ex)) continue;
@@ -366,7 +387,7 @@ export function AddExercisePicker({
     candidatesByMuscle.forEach(list => list.sort((a, b) => a.name.localeCompare(b.name)));
 
     const suggested: AvailableExercise[] = [];
-    const maxSuggested = Math.max(0, MAX_DEFAULT_ROWS - recent.length);
+    const maxSuggested = Math.max(0, MAX_DEFAULT_ROWS - recent.length - favorites.length);
     for (let round = 0; suggested.length < maxSuggested; round++) {
       let added = false;
       for (const muscle of relevantMuscles) {
@@ -380,24 +401,27 @@ export function AddExercisePicker({
       if (!added) break;
     }
 
-    return { recent, suggested };
+    return { recent, favorites, suggested };
   };
 
   const renderExerciseRow = (exercise: AvailableExercise) => {
     const isSelected = selectedExercisesToAdd.some(e => e.id === exercise.id);
+    const isFavorited = favoriteExerciseIds.has(exercise.id);
     const unavailableReason = unavailableAtLocation.get(exercise.id);
     return (
-      <button
+      <div
         key={exercise.id}
         data-testid="add-exercise-row"
         data-exercise-id={exercise.id}
-        onClick={() => onToggleExerciseSelection(exercise)}
-        disabled={isAddingExercise}
-        className={`w-full flex items-center justify-between gap-3 px-4 py-1.5 min-h-[44px] transition-colors text-left disabled:opacity-50 border-b border-surface-800/50 ${
-          isSelected ? 'bg-primary-500/10' : 'hover:bg-surface-800/50'
+        className={`w-full flex items-center justify-between gap-2 px-4 py-1.5 min-h-[44px] transition-colors border-b border-surface-800/50 ${
+          isSelected ? 'bg-primary-500/10' : ''
         } ${unavailableReason ? 'opacity-60' : ''}`}
       >
-        <div className="min-w-0 flex-1">
+        <button
+          onClick={() => onToggleExerciseSelection(exercise)}
+          disabled={isAddingExercise}
+          className="min-w-0 flex-1 text-left disabled:opacity-50 hover:opacity-80 transition-opacity"
+        >
           <div className="flex items-center gap-1.5">
             <span className="text-[13px] leading-5 text-surface-200 truncate">{exercise.name}</span>
             {frequentExerciseIds.has(exercise.id) && (
@@ -423,9 +447,26 @@ export function AddExercisePicker({
               </span>
             )}
           </div>
+        </button>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleFavorite(exercise.id);
+            }}
+            disabled={isAddingExercise}
+            className="p-1.5 hover:bg-surface-800 rounded transition-colors disabled:opacity-50"
+            aria-label={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
+          >
+            {isFavorited ? (
+              <IconStarFilled size={16} className="text-amber-400" />
+            ) : (
+              <IconStar size={16} className="text-surface-500" />
+            )}
+          </button>
+          {isSelected && <IconCheck size={18} className="text-primary-400 flex-shrink-0" />}
         </div>
-        {isSelected && <IconCheck size={18} className="text-primary-400 flex-shrink-0" />}
-      </button>
+      </div>
     );
   };
 
@@ -474,9 +515,9 @@ export function AddExercisePicker({
       );
     }
 
-    // Default view: Recent + Suggested, capped so it fits one screen.
-    const { recent, suggested } = getDefaultSections(pool);
-    const shownCount = recent.length + suggested.length;
+    // Default view: Recent + Favorites + Suggested, capped so it fits one screen.
+    const { recent, favorites, suggested } = getDefaultSections(pool);
+    const shownCount = recent.length + favorites.length + suggested.length;
     // Graceful fallback (e.g. no history and no staples in the pool): show
     // the top of the sorted list instead of an empty modal.
     const fallback = shownCount === 0 ? sortByOption(pool).slice(0, MAX_DEFAULT_ROWS) : [];
@@ -487,6 +528,12 @@ export function AddExercisePicker({
           <>
             {renderSectionHeader('Recent')}
             {recent.map(renderExerciseRow)}
+          </>
+        )}
+        {favorites.length > 0 && (
+          <>
+            {renderSectionHeader('Favorites')}
+            {favorites.map(renderExerciseRow)}
           </>
         )}
         {suggested.length > 0 && (
