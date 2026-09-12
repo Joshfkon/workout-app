@@ -25,6 +25,7 @@ export interface UserExercisePreference {
   userId: string;
   exerciseId: string;
   status: ExerciseVisibilityStatus;
+  isFavorite: boolean;
   reason?: ExerciseHideReason;
   reasonNote?: string;  // Custom note if reason is 'other'
   createdAt: Date;
@@ -37,6 +38,7 @@ export interface UserExercisePreferenceRow {
   user_id: string;
   exercise_id: string;
   status: ExerciseVisibilityStatus;
+  is_favorite: boolean;
   reason?: ExerciseHideReason | null;
   reason_note?: string | null;
   created_at: string;
