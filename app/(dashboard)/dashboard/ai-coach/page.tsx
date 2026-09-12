@@ -177,12 +177,12 @@ export default function AICoachPage() {
       )}
 
       {/* Messages Container */}
-      <div className="min-h-[500px] max-h-[calc(100vh-28rem)] overflow-y-auto space-y-4">
+      <div className="min-h-[200px] sm:min-h-[400px] max-h-[calc(100dvh-28rem)] overflow-y-auto space-y-4">
         {messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center text-center space-y-4 py-16">
-            <div className="w-16 h-16 rounded-full bg-primary-500/10 flex items-center justify-center">
+          <div className="flex flex-col items-center justify-center text-center space-y-3 py-8 sm:py-12">
+            <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-primary-500/10 flex items-center justify-center">
               <svg
-                className="w-8 h-8 text-primary-500"
+                className="w-6 h-6 sm:w-8 sm:h-8 text-primary-500"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -197,22 +197,22 @@ export default function AICoachPage() {
             </div>
 
             <div>
-              <h3 className="text-xl font-semibold text-surface-100 mb-2">
+              <h3 className="text-lg sm:text-xl font-semibold text-surface-100 mb-1 sm:mb-2">
                 Welcome to Your AI Coach
               </h3>
-              <p className="text-surface-400 max-w-md">
+              <p className="text-sm sm:text-base text-surface-400 max-w-md px-4">
                 I have access to your training data, body composition, and current program.
                 Ask me anything about your progress, form, programming, or recovery.
               </p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-2xl mt-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 max-w-2xl mt-4 sm:mt-6 w-full px-4">
               <button
                 onClick={() => setInput("How's my progress looking?")}
-                className="p-4 bg-surface-800 hover:bg-surface-700 border border-surface-700 rounded-lg text-left transition-colors"
+                className="p-3 sm:p-4 bg-surface-800 hover:bg-surface-700 border border-surface-700 rounded-lg text-left transition-colors"
               >
                 <p className="text-sm font-medium text-surface-100">How&apos;s my progress?</p>
-                <p className="text-xs text-surface-400 mt-1">
+                <p className="text-xs text-surface-400 mt-0.5 sm:mt-1">
                   Get a summary of your recent performance
                 </p>
               </button>
@@ -221,20 +221,20 @@ export default function AICoachPage() {
                 onClick={() =>
                   setInput('Should I deload this week or keep pushing?')
                 }
-                className="p-4 bg-surface-800 hover:bg-surface-700 border border-surface-700 rounded-lg text-left transition-colors"
+                className="p-3 sm:p-4 bg-surface-800 hover:bg-surface-700 border border-surface-700 rounded-lg text-left transition-colors"
               >
                 <p className="text-sm font-medium text-surface-100">Deload or push?</p>
-                <p className="text-xs text-surface-400 mt-1">
+                <p className="text-xs text-surface-400 mt-0.5 sm:mt-1">
                   Get advice on when to take a deload week
                 </p>
               </button>
 
               <button
                 onClick={() => setInput('What exercises should I focus on for hypertrophy?')}
-                className="p-4 bg-surface-800 hover:bg-surface-700 border border-surface-700 rounded-lg text-left transition-colors"
+                className="p-3 sm:p-4 bg-surface-800 hover:bg-surface-700 border border-surface-700 rounded-lg text-left transition-colors"
               >
                 <p className="text-sm font-medium text-surface-100">Exercise selection</p>
-                <p className="text-xs text-surface-400 mt-1">
+                <p className="text-xs text-surface-400 mt-0.5 sm:mt-1">
                   Get recommendations on exercise choices
                 </p>
               </button>
@@ -243,10 +243,10 @@ export default function AICoachPage() {
                 onClick={() =>
                   setInput('How should I adjust my training for my current phase?')
                 }
-                className="p-4 bg-surface-800 hover:bg-surface-700 border border-surface-700 rounded-lg text-left transition-colors"
+                className="p-3 sm:p-4 bg-surface-800 hover:bg-surface-700 border border-surface-700 rounded-lg text-left transition-colors"
               >
                 <p className="text-sm font-medium text-surface-100">Phase adjustments</p>
-                <p className="text-xs text-surface-400 mt-1">
+                <p className="text-xs text-surface-400 mt-0.5 sm:mt-1">
                   Optimize training for cut/bulk/maintenance
                 </p>
               </button>
@@ -305,15 +305,15 @@ export default function AICoachPage() {
 
       {/* Input Area */}
       <Card>
-        <CardContent className="p-4">
+        <CardContent className="p-3 sm:p-4">
           <div className="flex gap-2">
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyPress={handleKeyPress}
               placeholder="Ask me anything about your training..."
-              className="flex-1 bg-surface-900 text-surface-100 border border-surface-700 rounded-lg p-3 resize-none focus:outline-none focus:ring-2 focus:ring-primary-500"
-              rows={3}
+              className="flex-1 bg-surface-900 text-surface-100 border border-surface-700 rounded-lg p-2.5 sm:p-3 resize-none focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm sm:text-base"
+              rows={2}
               disabled={isLoading}
             />
             <Button
