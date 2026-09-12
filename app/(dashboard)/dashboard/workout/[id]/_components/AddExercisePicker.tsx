@@ -579,7 +579,7 @@ export function AddExercisePicker({
   const adjustmentsActive = selectedLocationFilter !== null || exerciseSortOption !== 'frequency';
 
   const chipClass = (active: boolean) =>
-    `flex-shrink-0 px-2.5 py-1 rounded-full text-[11px] leading-4 capitalize border transition-colors ${
+    `shrink-0 whitespace-nowrap px-2.5 py-1 rounded-full text-[11px] leading-4 capitalize border transition-colors ${
       active
         ? 'bg-primary-500/20 border-primary-500/40 text-primary-300'
         : 'bg-surface-800 border-surface-700 text-surface-400 hover:text-surface-200'
@@ -661,7 +661,7 @@ export function AddExercisePicker({
                 actually overflows and the row can't scroll past the modal edge */}
             <div className="flex-1 min-w-0 relative">
               <div
-                className="flex items-center gap-1.5 overflow-x-auto pr-4"
+                className="flex items-center gap-1.5 overflow-x-auto pb-2 pr-8"
                 style={{ scrollbarWidth: 'none' }}
               >
                 <button
@@ -686,7 +686,7 @@ export function AddExercisePicker({
               </div>
               {/* Fade gradient to indicate scrollable content */}
               {muscleOptions.length > 5 && (
-                <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-surface-900 to-transparent pointer-events-none" />
+                <div className="absolute right-0 top-0 bottom-2 w-8 bg-gradient-to-l from-surface-900 to-transparent pointer-events-none" />
               )}
             </div>
             <button
@@ -711,7 +711,7 @@ export function AddExercisePicker({
           {equipmentOptions.length > 1 && (
             <div className="mt-1.5 relative">
               <div
-                className="flex items-center gap-1.5 overflow-x-auto pr-4"
+                className="flex items-center gap-1.5 overflow-x-auto pb-2 pr-8"
                 style={{ scrollbarWidth: 'none' }}
                 data-testid="equipment-filter-row"
               >
@@ -736,7 +736,7 @@ export function AddExercisePicker({
               </div>
               {/* Fade gradient to indicate scrollable content */}
               {equipmentOptions.length > 3 && (
-                <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-surface-900 to-transparent pointer-events-none" />
+                <div className="absolute right-0 top-0 bottom-2 w-8 bg-gradient-to-l from-surface-900 to-transparent pointer-events-none" />
               )}
             </div>
           )}
@@ -763,7 +763,7 @@ export function AddExercisePicker({
                 <div className="flex items-center gap-2">
                   <span className="text-[11px] text-surface-500 w-14 flex-shrink-0">Location</span>
                   <div
-                    className="flex-1 flex items-center gap-1.5 overflow-x-auto"
+                    className="flex-1 flex items-center gap-1.5 overflow-x-auto pb-2 pr-8"
                     style={{ scrollbarWidth: 'none' }}
                   >
                     <button
