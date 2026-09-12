@@ -46,6 +46,8 @@ import {
 } from '@/app/(dashboard)/dashboard/workout/[id]/_lib/readiness';
 import type { WorkoutMuscleVolumeRow } from '@/hooks/useWorkoutMuscleVolume';
 import { formatEffectiveVolume } from '@/services/effectiveVolume';
+import type { DeficitSuggestion } from '@/services/volumeDeficitSuggestions';
+import type { CoarseMuscle } from '@/services/volumeBands';
 
 interface WorkoutVolumeStripProps {
   rows: WorkoutMuscleVolumeRow[];
@@ -53,6 +55,16 @@ interface WorkoutVolumeStripProps {
   isLoading: boolean;
   /** Opens the full volume + recovery sheet ("What to train"). */
   onOpenDetail: () => void;
+  /**
+   * One remedy per under-min (not locked) muscle — the smallest action today
+   * that clears the band minimum (services/volumeDeficitSuggestions). Renders
+   * inside the expanded projection panel; locked-in deficits never get one.
+   */
+  suggestions?: DeficitSuggestion[];
+  /** Applies an add_sets suggestion: bump the block's target sets. */
+  onAddSetsToBlock?: (blockId: string, addSets: number) => void;
+  /** Applies an add_exercise suggestion: open the picker filtered to the muscle. */
+  onAddExerciseForMuscle?: (muscle: CoarseMuscle) => void;
 }
 
 /** Persisted collapse preference (a lasting UI choice, not per-day state). */
@@ -145,7 +157,14 @@ function readyInLabel(readyInHours: number): string {
   return `~${Math.max(1, Math.ceil(readyInHours))}h`;
 }
 
-export function WorkoutVolumeStrip({ rows, isLoading, onOpenDetail }: WorkoutVolumeStripProps) {
+export function WorkoutVolumeStrip({
+  rows,
+  isLoading,
+  onOpenDetail,
+  suggestions = [],
+  onAddSetsToBlock,
+  onAddExerciseForMuscle,
+}: WorkoutVolumeStripProps) {
   const [collapsed, setCollapsed] = useState(() => readFlag(COLLAPSED_STORAGE_KEY));
   const [showAll, setShowAll] = useState(() => readFlag(SHOW_ALL_STORAGE_KEY));
   // Whether the projection digest is expanded into the per-muscle list
@@ -425,6 +444,53 @@ export function WorkoutVolumeStrip({ rows, isLoading, onOpenDetail }: WorkoutVol
                     </span>
                   </div>
                 ))}
+                {/* One remedy per under-min muscle, right under the numbers it
+                    fixes. Locked-in deficits deliberately get none — the red
+                    note below owns those. */}
+                {suggestions.map((s) => {
+                  const action = s.action;
+                  return (
+                    <div
+                      key={s.muscle}
+                      className="mt-1 flex items-center gap-2 border-t border-surface-800 pt-1.5 text-[11px]"
+                      data-testid={`volume-deficit-suggestion-${s.muscle}`}
+                    >
+                      <span className="min-w-0 flex-1 text-surface-400">
+                        {action.kind === 'add_sets' ? (
+                          <>
+                            {s.displayName}: +{action.addSets} set
+                            {action.addSets === 1 ? '' : 's'} of {action.exerciseName} clears
+                            the minimum
+                          </>
+                        ) : (
+                          <>
+                            {s.displayName}: needs {s.setsNeeded} more direct set
+                            {s.setsNeeded === 1 ? '' : 's'} — add an exercise for it
+                          </>
+                        )}
+                      </span>
+                      {action.kind === 'add_sets'
+                        ? onAddSetsToBlock && (
+                            <button
+                              onClick={() => onAddSetsToBlock(action.blockId, action.addSets)}
+                              className="flex-shrink-0 rounded-md border border-primary-500/40 px-2 py-0.5 font-medium text-primary-400 hover:bg-primary-500/10"
+                              data-testid={`volume-deficit-add-sets-${s.muscle}`}
+                            >
+                              +{action.addSets} set{action.addSets === 1 ? '' : 's'}
+                            </button>
+                          )
+                        : onAddExerciseForMuscle && (
+                            <button
+                              onClick={() => onAddExerciseForMuscle(s.muscle)}
+                              className="flex-shrink-0 rounded-md border border-primary-500/40 px-2 py-0.5 font-medium text-primary-400 hover:bg-primary-500/10"
+                              data-testid={`volume-deficit-add-exercise-${s.muscle}`}
+                            >
+                              Add exercise
+                            </button>
+                          )}
+                    </div>
+                  );
+                })}
                 {lockedCount > 0 && (
                   <p className="mt-1 text-[11px] text-danger-400">
                     Locked in: recovery won’t allow more quality sets before this

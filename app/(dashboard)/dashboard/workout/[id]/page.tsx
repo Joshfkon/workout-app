@@ -22,14 +22,13 @@ import {
 import { beginSetTiming, markSetPhase, schedulePaintMark, endSetTiming } from '@/lib/debug/setLogTiming';
 import type { SetSyncStatus } from '@/components/workout/ExerciseCard';
 import { InlineHint } from '@/components/ui/FirstTimeHint';
-import { RestTimer, PauseOverlay, RowOverflowMenu, type RowMenuItem, ExerciseWhisper, SignalToast, RestCoachTip, SessionSpine } from '@/components/workout';
+import { RestTimer, PauseOverlay, RowOverflowMenu, type RowMenuItem } from '@/components/workout';
 import { IdleWorkoutPrompt } from '@/components/workout/IdleWorkoutPrompt';
 import { IconGripVertical, IconInfoCircle, IconMapPin, IconX } from '@tabler/icons-react';
 import { useRestTimer } from '@/hooks/useRestTimer';
 import { useKeyboardOpen } from '@/hooks/useKeyboardOpen';
 import { useEducationStore } from '@/hooks/useEducationPreferences';
 import { useIdleWorkoutPrompt } from '@/hooks/useIdleWorkoutPrompt';
-import { useInWorkoutCoach } from '@/hooks/useInWorkoutCoach';
 
 // Dynamic import ExerciseCard (118KB) to reduce initial bundle and improve page load
 const ExerciseCard = dynamic(
@@ -165,6 +164,11 @@ import {
 } from './_lib/durationEstimate';
 import { WorkoutHeader, type ExerciseSegmentStatus } from './_components/WorkoutHeader';
 import { WorkoutVolumeStrip } from './_components/WorkoutVolumeStrip';
+import {
+  buildDeficitSuggestions,
+  type SuggestionBlock,
+} from '@/services/volumeDeficitSuggestions';
+import type { CoarseMuscle } from '@/services/volumeBands';
 import { AddExercisePicker } from './_components/AddExercisePicker';
 import { SaveAsTemplateModal } from './_components/SaveAsTemplateModal';
 import { buildTemplateExercises } from '@/services/templateFromSession';
@@ -387,10 +391,6 @@ function buildHistoryScopeOptions(
     locationForExercise: (id) => overrideByExercise.get(id) ?? null,
   };
 }
-
-// Stable empty injuries list for useInWorkoutCoach — an inline [] would be a
-// new reference every render and churn the hook's effect dependencies.
-const NO_INJURIES: Array<{ area: string; severity: 1 | 2 | 3 }> = [];
 
 export default function WorkoutPage() {
   useDocumentTitle('Workout');
@@ -1072,46 +1072,8 @@ export default function WorkoutPage() {
     startedAt: timerStartedAt,
   });
 
-  // Helper to get sets for a specific block. Declared BEFORE useInWorkoutCoach:
-  // its exercises array is built synchronously during render, so a later
-  // declaration is still in its temporal dead zone here and throws
-  // "Cannot access 'X' before initialization" as soon as blocks load.
+  // Helper to get working (non-warmup) sets for a specific block.
   const getSetsForBlock = (blockId: string) => completedSets.filter(s => s.exerciseBlockId === blockId && !s.isWarmup && s.setType !== 'warmup');
-
-  // In-workout AI coaching (whispers, signals, rest tips, session spine)
-  const inWorkoutCoach = useInWorkoutCoach({
-    exercises: blocks.map(block => {
-      // Get performed sets for this block
-      const blockSets = getSetsForBlock(block.id);
-      return {
-        blockId: block.id,
-        name: block.exercise?.name ?? 'Exercise',
-        primaryMuscle: block.exercise?.primaryMuscle ?? 'chest',
-        sets: block.targetSets,
-        setsToday: blockSets,
-        lastSessionSets: exerciseHistories[block.exerciseId]?.lastWorkoutSets?.map(s => ({
-          weight_kg: s.weightKg,
-          reps_completed: s.reps,
-          rpe: s.rpe,
-          is_warmup: false,
-          logged_at: s.loggedAt ?? new Date().toISOString(),
-        })),
-      };
-    }),
-    workoutType: session?.mesocycleId ? 'Mesocycle Session' : 'Workout',
-    weekInMeso: undefined,
-    totalWeeks: undefined,
-    injuries: NO_INJURIES,
-    units: preferences.units,
-    isRestTimerRunning: restTimer.isRunning,
-    restSecondsRemaining: restTimer.seconds,
-    nextExercise: currentBlock ? {
-      name: currentBlock.exercise?.name ?? 'Exercise',
-      weight: convertWeightForDisplay(currentBlock.targetWeightKg, preferences.units, 1),
-      repRange: `${currentBlock.targetRepRange[0]}–${currentBlock.targetRepRange[1]}`,
-    } : undefined,
-    enabled: phase === 'workout',
-  });
 
   // Clear any stale timer when a DIFFERENT session mounts. Deliberately no
   // unmount cleanup (P0-3): minimizing the workout must leave the persisted
@@ -2780,6 +2742,36 @@ export default function WorkoutPage() {
     // workout itself (blocks + resumed sets) has hydrated.
     liveDataReady: phase !== 'loading',
   });
+
+  // One concrete remedy per muscle the projection leaves under its minimum
+  // (and recovery still allows fixing today): add sets to a direct block, or
+  // add an exercise. Recomputes live, so applying a suggestion makes it
+  // disappear as the projection crosses the band minimum. Only the muscles
+  // this session trains — the same scope as the projection digest.
+  const volumeDeficitSuggestions = useMemo(() => {
+    if (weeklyVolumeLoading) return [];
+    return buildDeficitSuggestions(
+      weeklyVolumeRows
+        .filter((r) => r.trainedThisSession)
+        .map((r) => ({
+          muscle: r.muscle as CoarseMuscle,
+          displayName: r.displayName,
+          projectedSets: r.projectedSets,
+          mev: r.band.mev,
+          projectedUnderMin: r.projectedZone === 'below_mev',
+          deficitLockedIn: r.deficitLockedIn,
+        })),
+      volumeLiveBlocks.map(
+        (b): SuggestionBlock => ({
+          blockId: b.id,
+          exerciseName: b.exercise.name,
+          primaryMuscle: b.exercise.primaryMuscle,
+          secondaryMuscles: b.exercise.secondaryMuscles || [],
+          targetSets: b.targetSets,
+        })
+      )
+    );
+  }, [weeklyVolumeRows, weeklyVolumeLoading, volumeLiveBlocks]);
 
   // ---- Joint pain: pattern notices per exercise ----------------------------
   useEffect(() => {
@@ -6081,7 +6073,7 @@ export default function WorkoutPage() {
   }
 
   // Check if a block is complete (getSetsForBlock is declared near the top of
-  // the component, before useInWorkoutCoach)
+  // the component)
   const isBlockComplete = (block: ExerciseBlockWithExercise) => {
     const blockSets = getSetsForBlock(block.id);
     return blockSets.length >= block.targetSets;
@@ -6498,20 +6490,19 @@ export default function WorkoutPage() {
         rows={weeklyVolumeRows}
         isLoading={weeklyVolumeLoading}
         onOpenDetail={() => setShowMuscleReadinessSheet(true)}
+        suggestions={volumeDeficitSuggestions}
+        onAddSetsToBlock={(blockId, addSets) => {
+          const block = blocks.find((b) => b.id === blockId);
+          if (block) handleTargetSetsChange(blockId, block.targetSets + addSets);
+        }}
+        onAddExerciseForMuscle={(muscle) => {
+          // Land the user in the picker already filtered to the deficit
+          // muscle; a stale search string would override the filter view.
+          setExerciseSearch('');
+          setSelectedMuscleFilter(muscle);
+          handleOpenAddExercise();
+        }}
       />
-
-      {/* Session Spine - AI coaching checklist */}
-      {blocks.length > 0 && inWorkoutCoach.sessionSpine.length > 0 && (
-        <div className="mb-4">
-          <SessionSpine
-            spine={inWorkoutCoach.sessionSpine}
-            completedItems={inWorkoutCoach.spineCompleted}
-            onToggleItem={inWorkoutCoach.toggleSpineItem}
-            isGenerating={inWorkoutCoach.spineLoading}
-            onRefresh={inWorkoutCoach.refreshSpine}
-          />
-        </div>
-      )}
 
       {/* First workout guidance */}
       {isFirstWorkout && showBeginnerTips && (
@@ -7391,12 +7382,6 @@ export default function WorkoutPage() {
                   .getElementById(`exercise-${currentBlockIndex}`)
                   ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
               }}
-            />
-          )}
-          {restBarVisible && restTimer.isRunning && inWorkoutCoach.restTip && (
-            <RestCoachTip
-              tip={inWorkoutCoach.restTip}
-              nextExercise={currentBlock?.exercise?.name}
             />
           )}
         </div>
