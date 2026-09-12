@@ -1376,14 +1376,14 @@ function HistoryPageContent() {
       {/* Exercise filter chips (P1-6) — horizontal scroll with fade gradient */}
       {workouts.length > 0 && exerciseChips.length > 1 && (
         <div className="relative">
-          <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
+          <div className="flex gap-2 overflow-x-auto pb-2 pr-8 scrollbar-hide">
             {exerciseChips.map((name) => (
               <button
                 key={name}
                 onClick={() => setExerciseFilter(exerciseFilter === name ? null : name)}
                 aria-pressed={exerciseFilter === name}
                 aria-label={exerciseFilter === name ? `Remove ${name} filter` : `Filter by ${name}`}
-                className={`flex-shrink-0 min-h-[44px] px-4 rounded-full text-sm font-medium transition-colors ${
+                className={`shrink-0 whitespace-nowrap min-h-[44px] px-4 rounded-full text-sm font-medium transition-colors ${
                   exerciseFilter === name
                     ? 'bg-primary-500 text-white'
                     : 'bg-surface-800 text-surface-300 hover:bg-surface-700'
@@ -1394,7 +1394,7 @@ function HistoryPageContent() {
             ))}
           </div>
           {/* Fade gradient on right edge to indicate more content */}
-          <div className="absolute right-0 top-0 bottom-1 w-8 bg-gradient-to-l from-surface-950 to-transparent pointer-events-none" />
+          <div className="absolute right-0 top-0 bottom-2 w-8 bg-gradient-to-l from-surface-950 to-transparent pointer-events-none" />
         </div>
       )}
 
