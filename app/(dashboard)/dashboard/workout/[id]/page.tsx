@@ -2091,7 +2091,7 @@ export default function WorkoutPage() {
         .eq('is_favorite', true);
 
       if (data) {
-        setFavoriteExerciseIds(new Set(data.map(row => row.exercise_id)));
+        setFavoriteExerciseIds(new Set(data.map((row: { exercise_id: string }) => row.exercise_id)));
       }
     }
     loadFavorites();
