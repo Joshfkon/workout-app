@@ -11,8 +11,8 @@
  * bars/rows, left-right color equality, tap callback) is covered headlessly
  * in Jest (`lib/muscleMap/__tests__`, `components/muscleMap/__tests__`,
  * `volumeSurfaceParity.test.ts`); this spec verifies the in-app behavior:
- * rendering, tap-to-scroll, collapse persistence, view toggle, DOM-level
- * color parity with the live bars, and dark-mode legibility of the figure.
+ * rendering, tap-to-scroll, collapse persistence, DOM-level color parity
+ * with the live bars, and dark-mode legibility of the figure.
  */
 
 import { newHarness, json, BASE } from './lib.mjs';
@@ -184,8 +184,8 @@ async function workoutSurfacesChecks(page, assert) {
   assert(await rMap.isVisible(), 'readiness sheet: recovery map renders above the rows');
   assert(
     (await page.locator('[data-testid="readiness-muscle-map"] [data-testid="muscle-map-front"]').count()) === 1 &&
-      (await page.locator('[data-testid="readiness-muscle-map"] [data-testid="muscle-map-back"]').count()) === 0,
-    'readiness sheet: compact map shows a single view at a time (front by default)'
+      (await page.locator('[data-testid="readiness-muscle-map"] [data-testid="muscle-map-back"]').count()) === 1,
+    'readiness sheet: front and back figures render side by side'
   );
   await page.screenshot({ path: `${out}muscle-map-3-readiness.png` });
 
@@ -231,15 +231,6 @@ async function workoutSurfacesChecks(page, assert) {
     ).includes(expectedFill),
     'readiness sheet: Recovery toggle restores the status paint'
   );
-
-  // Front/back toggle swaps the figure.
-  await page.getByTestId('readiness-map-view-back').click();
-  assert(
-    (await page.locator('[data-testid="readiness-muscle-map"] [data-testid="muscle-map-back"]').count()) === 1,
-    'readiness sheet: Back toggle switches to the posterior view'
-  );
-  await page.screenshot({ path: `${out}muscle-map-4-readiness-back.png` });
-  await page.getByTestId('readiness-map-view-front').click();
 
   // Dismiss the sheet.
   await page.mouse.click(5, 5);
