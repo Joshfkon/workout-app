@@ -519,12 +519,15 @@ export const ExerciseCard = memo(function ExerciseCard({
 
   const [editingSetId, setEditingSetId] = useState<string | null>(null);
   const [jointPickerSetId, setJointPickerSetId] = useState<string | null>(null);
-  // Warmup checkmarks live in the workout store (persisted, keyed by block)
-  // so switching exercises, remounting, or reloading never wipes them; they
-  // expire only once ~15 min stale (expireStaleWarmupCompletions). The
+  // Warmup checkmarks live in the workout store (persisted) so switching
+  // exercises, remounting, or reloading never wipes them; they expire only
+  // once ~15 min stale (expireStaleWarmupCompletions). Keyed by block AND
+  // exercise: a mid-workout swap keeps the block id while changing the
+  // exercise, and the replacement's protocol must start unchecked. The
   // rendered Set is derived below, after warmupRows, so checkmarks recorded
   // for set numbers a recomputed protocol no longer prescribes are ignored.
-  const warmupCompletionTimes = useWorkoutStore((s) => s.warmupCompletions[block.id]);
+  const warmupStoreKey = `${block.id}:${exercise.id}`;
+  const warmupCompletionTimes = useWorkoutStore((s) => s.warmupCompletions[warmupStoreKey]);
   const toggleWarmupCompletion = useWorkoutStore((s) => s.toggleWarmupCompletion);
   const completeAllWarmupsInStore = useWorkoutStore((s) => s.completeAllWarmups);
   const expireStaleWarmupCompletions = useWorkoutStore((s) => s.expireStaleWarmupCompletions);
@@ -570,7 +573,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   const prevIsActiveRef = useRef(isActive);
   useEffect(() => {
     if (isActive) {
-      expireStaleWarmupCompletions(block.id);
+      expireStaleWarmupCompletions(warmupStoreKey);
       // Only re-expand on an inactive -> active transition, preserving the
       // collapsed-by-default initial mount.
       if (!prevIsActiveRef.current) {
@@ -578,7 +581,7 @@ export const ExerciseCard = memo(function ExerciseCard({
       }
     }
     prevIsActiveRef.current = isActive;
-  }, [isActive, block.id, expireStaleWarmupCompletions]);
+  }, [isActive, warmupStoreKey, expireStaleWarmupCompletions]);
 
   const [swapMuscleFilter, setSwapMuscleFilter] = useState('');
   const [editWeight, setEditWeight] = useState('');
@@ -3539,7 +3542,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                         <button
                           onClick={() => {
                             const wasCompleted = completedWarmups.has(warmup.setNumber);
-                            toggleWarmupCompletion(block.id, warmup.setNumber);
+                            toggleWarmupCompletion(warmupStoreKey, warmup.setNumber);
                             if (!wasCompleted && onWarmupComplete) {
                               const restTime = warmup.restSeconds || 45;
                               onWarmupComplete(restTime);
@@ -3592,7 +3595,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                   <tr className="bg-surface-800/30">
                     <td colSpan={6} className="px-3 py-1.5 text-center">
                       <button
-                        onClick={() => completeAllWarmupsInStore(block.id, warmupRows.rows.map(r => r.warmup.setNumber))}
+                        onClick={() => completeAllWarmupsInStore(warmupStoreKey, warmupRows.rows.map(r => r.warmup.setNumber))}
                         className="text-xs text-surface-500 hover:text-surface-400 transition-colors"
                       >
                         Skip warmup (already warm)

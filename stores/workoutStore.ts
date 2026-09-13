@@ -68,9 +68,12 @@ interface WorkoutState {
   // Stabilizer warnings shown this session, keyed `${blockId}:${muscle}`.
   stabilizerWarnings: Record<string, StabilizerWarningRecord>;
 
-  // Warmup checkmarks per block: setNumber -> ISO timestamp checked. Kept
-  // here (persisted) so switching exercises or reloading never wipes them;
-  // expiry is time-based only (WARMUP_COMPLETION_TTL_MS), never navigation.
+  // Warmup checkmarks, keyed `${blockId}:${exerciseId}` (the exercise id is
+  // part of the key because a mid-workout swap keeps the block id while
+  // changing the exercise — the replacement must start unchecked). Value is
+  // setNumber -> ISO timestamp checked. Kept here (persisted) so switching
+  // exercises or reloading never wipes them; expiry is time-based only
+  // (WARMUP_COMPLETION_TTL_MS), never navigation.
   warmupCompletions: Record<string, Record<number, string>>;
 
   // Actions
@@ -106,16 +109,16 @@ interface WorkoutState {
     feedback: { pump?: PumpRating0to3; workload?: WorkloadRating }
   ) => void;
 
-  // Warmup checkmarks
-  /** Toggle one warmup checkbox for a block (checking stamps the time). */
-  toggleWarmupCompletion: (blockId: string, setNumber: number) => void;
+  // Warmup checkmarks — `key` is `${blockId}:${exerciseId}` (see above)
+  /** Toggle one warmup checkbox (checking stamps the time). */
+  toggleWarmupCompletion: (key: string, setNumber: number) => void;
   /** Mark every given warmup set complete ("Skip warmup (already warm)"). */
-  completeAllWarmups: (blockId: string, setNumbers: number[]) => void;
+  completeAllWarmups: (key: string, setNumbers: number[]) => void;
   /**
-   * Drop a block's warmup checkmarks only when the freshest one is older
+   * Drop a key's warmup checkmarks only when the freshest one is older
    * than WARMUP_COMPLETION_TTL_MS; fresher checkmarks are left untouched.
    */
-  expireStaleWarmupCompletions: (blockId: string) => void;
+  expireStaleWarmupCompletions: (key: string) => void;
 
   // Timer
   startRestTimer: (seconds: number) => void;
@@ -313,40 +316,40 @@ export const useWorkoutStore = create<WorkoutState>()(
         });
       },
 
-      toggleWarmupCompletion: (blockId, setNumber) => {
+      toggleWarmupCompletion: (key, setNumber) => {
         const { warmupCompletions } = get();
-        const block = { ...(warmupCompletions[blockId] ?? {}) };
-        if (block[setNumber]) {
-          delete block[setNumber];
+        const checked = { ...(warmupCompletions[key] ?? {}) };
+        if (checked[setNumber]) {
+          delete checked[setNumber];
         } else {
-          block[setNumber] = now().toISOString();
+          checked[setNumber] = now().toISOString();
         }
-        set({ warmupCompletions: { ...warmupCompletions, [blockId]: block } });
+        set({ warmupCompletions: { ...warmupCompletions, [key]: checked } });
       },
 
-      completeAllWarmups: (blockId, setNumbers) => {
+      completeAllWarmups: (key, setNumbers) => {
         const { warmupCompletions } = get();
         const at = now().toISOString();
-        const block = { ...(warmupCompletions[blockId] ?? {}) };
+        const checked = { ...(warmupCompletions[key] ?? {}) };
         // Keep the original timestamp on sets already checked individually.
         setNumbers.forEach((n) => {
-          if (!block[n]) block[n] = at;
+          if (!checked[n]) checked[n] = at;
         });
-        set({ warmupCompletions: { ...warmupCompletions, [blockId]: block } });
+        set({ warmupCompletions: { ...warmupCompletions, [key]: checked } });
       },
 
-      expireStaleWarmupCompletions: (blockId) => {
+      expireStaleWarmupCompletions: (key) => {
         const { warmupCompletions } = get();
-        const block = warmupCompletions[blockId];
-        if (!block) return;
+        const checked = warmupCompletions[key];
+        if (!checked) return;
         const newest = Math.max(
-          ...Object.values(block).map((iso) => Date.parse(iso))
+          ...Object.values(checked).map((iso) => Date.parse(iso))
         );
         // NaN (corrupt timestamp) and -Infinity (empty record) both fail this
         // comparison, so they fall through to removal — corrupt state expires.
         if (newest >= now().getTime() - WARMUP_COMPLETION_TTL_MS) return;
         const next = { ...warmupCompletions };
-        delete next[blockId];
+        delete next[key];
         set({ warmupCompletions: next });
       },
 

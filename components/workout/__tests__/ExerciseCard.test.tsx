@@ -2618,7 +2618,9 @@ describe('warmup checkmark persistence (~15 min warmth window)', () => {
     // Backdate the stored checkmark past the 15-minute window
     const staleIso = new Date(Date.now() - WARMUP_COMPLETION_TTL_MS - 60_000).toISOString();
     act(() => {
-      useWorkoutStore.setState({ warmupCompletions: { 'block-1': { 1: staleIso } } });
+      useWorkoutStore.setState({
+        warmupCompletions: { 'block-1:exercise-1': { 1: staleIso } },
+      });
     });
 
     rerender(<ExerciseCard {...props} isActive={true} />);
@@ -2626,7 +2628,32 @@ describe('warmup checkmark persistence (~15 min warmth window)', () => {
     expect(
       screen.getByRole('button', { name: 'Complete warmup set 1' })
     ).toBeInTheDocument();
-    expect(useWorkoutStore.getState().warmupCompletions['block-1']).toBeUndefined();
+    expect(useWorkoutStore.getState().warmupCompletions['block-1:exercise-1']).toBeUndefined();
+  });
+
+  it('does not carry checkmarks onto a swapped-in exercise on the same block', async () => {
+    const user = userEvent.setup();
+    const props = warmupProps();
+    const { rerender } = render(<ExerciseCard {...props} />);
+
+    await expandWarmups(user);
+    await user.click(screen.getByRole('button', { name: 'Complete warmup set 1' }));
+
+    // Mid-workout swap: the page keeps the block id and replaces the exercise
+    rerender(
+      <ExerciseCard
+        {...props}
+        exercise={createMockExercise({ id: 'exercise-2', name: 'Incline Press' })}
+      />
+    );
+
+    // The replacement's protocol starts unchecked; the old exercise's
+    // checkmarks stay under their own key (and would restore on swap-back).
+    expect(
+      screen.getByRole('button', { name: 'Complete warmup set 1' })
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Mark warmup set 1 incomplete' })).toBeNull();
+    expect(useWorkoutStore.getState().warmupCompletions['block-1:exercise-1'][1]).toBeDefined();
   });
 
   it('persists "Skip warmup (already warm)" across an exercise switch', async () => {
