@@ -10,6 +10,7 @@ import React from 'react';
 import { render, screen, act, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ExerciseCard } from '../ExerciseCard';
+import { useWorkoutStore, WARMUP_COMPLETION_TTL_MS } from '@/stores/workoutStore';
 import type {
   Exercise,
   ExerciseBlock,
@@ -202,6 +203,15 @@ const plateauedSnapshots: ExercisePerformanceSnapshot[] = [
   createSnapshot({ id: 's4', sessionDate: weeksAgo(1) }),
   createSnapshot({ id: 's5', sessionDate: weeksAgo(0) }),
 ];
+
+// Warmup checkmarks live in the persisted workout store keyed by block id;
+// every fixture here uses 'block-1', so clear them between tests or a
+// checkbox clicked in one test bleeds into the next test's (n/m) count.
+beforeEach(() => {
+  act(() => {
+    useWorkoutStore.setState({ warmupCompletions: {} });
+  });
+});
 
 describe('ExerciseCard', () => {
   const defaultProps = {
@@ -2536,5 +2546,128 @@ describe('swipe-to-delete requires tap to confirm', () => {
 
     expect(props.onSetDelete).not.toHaveBeenCalled();
     expect(screen.queryByTestId('confirm-delete-set-1')).not.toBeInTheDocument();
+  });
+});
+
+describe('warmup checkmark persistence (~15 min warmth window)', () => {
+  const warmupProps = () => ({
+    exercise: createMockExercise(),
+    block: createMockBlock(),
+    sets: [],
+    unit: 'kg' as const,
+    isActive: true,
+    listIndex: 0,
+    workingWeight: 100,
+    warmupSets: [
+      { setNumber: 1, percentOfWorking: 0, targetReps: 10, purpose: 'General warmup', restSeconds: 30 },
+      { setNumber: 2, percentOfWorking: 50, targetReps: 5, purpose: 'Neuro prep', restSeconds: 45 },
+    ],
+  });
+
+  const expandWarmups = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(screen.getByText('Warmup Protocol'));
+  };
+
+  it('keeps checkmarks when switching to another exercise and back', async () => {
+    const user = userEvent.setup();
+    const props = warmupProps();
+    const { rerender } = render(<ExerciseCard {...props} />);
+
+    await expandWarmups(user);
+    await user.click(screen.getByRole('button', { name: 'Complete warmup set 1' }));
+
+    // Switch away (another exercise becomes active) and back
+    rerender(<ExerciseCard {...props} isActive={false} />);
+    rerender(<ExerciseCard {...props} isActive={true} />);
+
+    // Reactivation auto-expands the table; W1 is still checked, W2 is not
+    expect(
+      screen.getByRole('button', { name: 'Mark warmup set 1 incomplete' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Complete warmup set 2' })
+    ).toBeInTheDocument();
+  });
+
+  it('keeps checkmarks across an unmount/remount (page reload) inside the window', async () => {
+    const user = userEvent.setup();
+    const props = warmupProps();
+    const { unmount } = render(<ExerciseCard {...props} />);
+
+    await expandWarmups(user);
+    await user.click(screen.getByRole('button', { name: 'Complete warmup set 2' }));
+    unmount();
+
+    render(<ExerciseCard {...props} />);
+    await expandWarmups(user);
+    expect(
+      screen.getByRole('button', { name: 'Mark warmup set 2 incomplete' })
+    ).toBeInTheDocument();
+  });
+
+  it('resets checkmarks on reactivation once they are older than the window', async () => {
+    const user = userEvent.setup();
+    const props = warmupProps();
+    const { rerender } = render(<ExerciseCard {...props} />);
+
+    await expandWarmups(user);
+    await user.click(screen.getByRole('button', { name: 'Complete warmup set 1' }));
+
+    rerender(<ExerciseCard {...props} isActive={false} />);
+
+    // Backdate the stored checkmark past the 15-minute window
+    const staleIso = new Date(Date.now() - WARMUP_COMPLETION_TTL_MS - 60_000).toISOString();
+    act(() => {
+      useWorkoutStore.setState({
+        warmupCompletions: { 'block-1:exercise-1': { 1: staleIso } },
+      });
+    });
+
+    rerender(<ExerciseCard {...props} isActive={true} />);
+
+    expect(
+      screen.getByRole('button', { name: 'Complete warmup set 1' })
+    ).toBeInTheDocument();
+    expect(useWorkoutStore.getState().warmupCompletions['block-1:exercise-1']).toBeUndefined();
+  });
+
+  it('does not carry checkmarks onto a swapped-in exercise on the same block', async () => {
+    const user = userEvent.setup();
+    const props = warmupProps();
+    const { rerender } = render(<ExerciseCard {...props} />);
+
+    await expandWarmups(user);
+    await user.click(screen.getByRole('button', { name: 'Complete warmup set 1' }));
+
+    // Mid-workout swap: the page keeps the block id and replaces the exercise
+    rerender(
+      <ExerciseCard
+        {...props}
+        exercise={createMockExercise({ id: 'exercise-2', name: 'Incline Press' })}
+      />
+    );
+
+    // The replacement's protocol starts unchecked; the old exercise's
+    // checkmarks stay under their own key (and would restore on swap-back).
+    expect(
+      screen.getByRole('button', { name: 'Complete warmup set 1' })
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Mark warmup set 1 incomplete' })).toBeNull();
+    expect(useWorkoutStore.getState().warmupCompletions['block-1:exercise-1'][1]).toBeDefined();
+  });
+
+  it('persists "Skip warmup (already warm)" across an exercise switch', async () => {
+    const user = userEvent.setup();
+    const props = warmupProps();
+    const { rerender } = render(<ExerciseCard {...props} />);
+
+    await expandWarmups(user);
+    await user.click(screen.getByText('Skip warmup (already warm)'));
+
+    rerender(<ExerciseCard {...props} isActive={false} />);
+    rerender(<ExerciseCard {...props} isActive={true} />);
+
+    // All sets stay checked, so the header shows the full count
+    expect(screen.getByText('(2/2)')).toBeInTheDocument();
   });
 });

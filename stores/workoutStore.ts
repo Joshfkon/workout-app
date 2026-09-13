@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { now } from '@/lib/clock';
 import type {
   WorkoutSession,
   ExerciseBlock,
@@ -33,6 +34,17 @@ export interface StabilizerWarningRecord {
   shownAt: string; // ISO timestamp
 }
 
+/**
+ * How long a checked-off warmup set stays checked while the lifter is away
+ * from the exercise. Mirrors services/warmupEngine.WARMTH_HALF_LIFE_MINUTES
+ * (15 min): once the freshest checkmark on a block is older than this, the
+ * muscle has cooled enough that the ramp is worth redoing, so the block's
+ * checkmarks reset. Deliberately a local constant rather than an import —
+ * pulling the warmup engine into the store would drag it into every bundle
+ * that touches a store; a test pins the two values together.
+ */
+export const WARMUP_COMPLETION_TTL_MS = 15 * 60 * 1000;
+
 interface WorkoutState {
   // Current session
   activeSession: WorkoutSession | null;
@@ -55,6 +67,14 @@ interface WorkoutState {
 
   // Stabilizer warnings shown this session, keyed `${blockId}:${muscle}`.
   stabilizerWarnings: Record<string, StabilizerWarningRecord>;
+
+  // Warmup checkmarks, keyed `${blockId}:${exerciseId}` (the exercise id is
+  // part of the key because a mid-workout swap keeps the block id while
+  // changing the exercise — the replacement must start unchecked). Value is
+  // setNumber -> ISO timestamp checked. Kept here (persisted) so switching
+  // exercises or reloading never wipes them; expiry is time-based only
+  // (WARMUP_COMPLETION_TTL_MS), never navigation.
+  warmupCompletions: Record<string, Record<number, string>>;
 
   // Actions
   startSession: (session: WorkoutSession, blocks: ExerciseBlock[], exercises: Exercise[]) => void;
@@ -89,6 +109,17 @@ interface WorkoutState {
     feedback: { pump?: PumpRating0to3; workload?: WorkloadRating }
   ) => void;
 
+  // Warmup checkmarks — `key` is `${blockId}:${exerciseId}` (see above)
+  /** Toggle one warmup checkbox (checking stamps the time). */
+  toggleWarmupCompletion: (key: string, setNumber: number) => void;
+  /** Mark every given warmup set complete ("Skip warmup (already warm)"). */
+  completeAllWarmups: (key: string, setNumbers: number[]) => void;
+  /**
+   * Drop a key's warmup checkmarks only when the freshest one is older
+   * than WARMUP_COMPLETION_TTL_MS; fresher checkmarks are left untouched.
+   */
+  expireStaleWarmupCompletions: (key: string) => void;
+
   // Timer
   startRestTimer: (seconds: number) => void;
   clearRestTimer: () => void;
@@ -119,6 +150,7 @@ export const useWorkoutStore = create<WorkoutState>()(
       restTimerEnd: null,
       muscleSorenessAsked: {},
       stabilizerWarnings: {},
+      warmupCompletions: {},
 
       startSession: (session, blocks, exercises) => {
         const exerciseRecord: Record<string, Exercise> = {};
@@ -140,6 +172,7 @@ export const useWorkoutStore = create<WorkoutState>()(
           restTimerEnd: null,
           muscleSorenessAsked: isSameSession ? get().muscleSorenessAsked : {},
           stabilizerWarnings: isSameSession ? get().stabilizerWarnings : {},
+          warmupCompletions: isSameSession ? get().warmupCompletions : {},
         });
       },
 
@@ -154,6 +187,7 @@ export const useWorkoutStore = create<WorkoutState>()(
           exercises: {},
           restTimerEnd: null,
           muscleSorenessAsked: {},
+          warmupCompletions: {},
         });
       },
 
@@ -282,6 +316,43 @@ export const useWorkoutStore = create<WorkoutState>()(
         });
       },
 
+      toggleWarmupCompletion: (key, setNumber) => {
+        const { warmupCompletions } = get();
+        const checked = { ...(warmupCompletions[key] ?? {}) };
+        if (checked[setNumber]) {
+          delete checked[setNumber];
+        } else {
+          checked[setNumber] = now().toISOString();
+        }
+        set({ warmupCompletions: { ...warmupCompletions, [key]: checked } });
+      },
+
+      completeAllWarmups: (key, setNumbers) => {
+        const { warmupCompletions } = get();
+        const at = now().toISOString();
+        const checked = { ...(warmupCompletions[key] ?? {}) };
+        // Keep the original timestamp on sets already checked individually.
+        setNumbers.forEach((n) => {
+          if (!checked[n]) checked[n] = at;
+        });
+        set({ warmupCompletions: { ...warmupCompletions, [key]: checked } });
+      },
+
+      expireStaleWarmupCompletions: (key) => {
+        const { warmupCompletions } = get();
+        const checked = warmupCompletions[key];
+        if (!checked) return;
+        const newest = Math.max(
+          ...Object.values(checked).map((iso) => Date.parse(iso))
+        );
+        // NaN (corrupt timestamp) and -Infinity (empty record) both fail this
+        // comparison, so they fall through to removal — corrupt state expires.
+        if (newest >= now().getTime() - WARMUP_COMPLETION_TTL_MS) return;
+        const next = { ...warmupCompletions };
+        delete next[key];
+        set({ warmupCompletions: next });
+      },
+
       startRestTimer: (seconds) => {
         set({ restTimerEnd: Date.now() + seconds * 1000 });
       },
@@ -352,6 +423,9 @@ export const useWorkoutStore = create<WorkoutState>()(
         // Stabilizer warnings survive reloads so a dismissed warning stays
         // dismissed for the whole session.
         stabilizerWarnings: state.stabilizerWarnings,
+        // Warmup checkmarks survive reloads; staleness is judged from their
+        // timestamps on the next activation, not from the reload itself.
+        warmupCompletions: state.warmupCompletions,
       }),
       // Migrate stale persisted shapes forward. A pre-versioned (version 0)
       // payload predates restTimerEnd persistence; default it so old data
