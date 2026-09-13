@@ -81,7 +81,7 @@ describe('ResumeWorkoutBanner with a stale, empty session', () => {
     // Confirmation modal opens; the pill's own Discard is still mounted, so
     // target the confirm button inside the modal.
     expect(screen.getByText('Discard Workout?')).toBeInTheDocument();
-    const discardButtons = screen.getAllByRole('button', { name: 'Discard' });
+    const discardButtons = screen.getAllByRole('button', { name: 'Discard workout' });
     await user.click(discardButtons[discardButtons.length - 1]);
 
     // Wait for the async discard to complete
