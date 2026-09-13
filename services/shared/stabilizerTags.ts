@@ -13,6 +13,15 @@
  * migration and compares it to this map
  * (services/__tests__/stabilizerSeed.test.ts).
  *
+ * CUSTOM rows never fall back at read time, but a one-time backfill
+ * (20260913000001_backfill_custom_stabilizers.sql, its own drift guard in
+ * services/__tests__/stabilizerCustomBackfill.test.ts) copied an entry's tags
+ * onto EMPTY custom rows whose normalized name token-set matches it (a user's
+ * 'Shrug (Dumbbell)' ↔ 'Dumbbell Shrug') — on a custom row, '{}' is
+ * indistinguishable from never-classified, and such rows silently opted out
+ * of the warning AND the dose credit. Custom rows already carrying tags were
+ * not touched. Editing this map means updating BOTH migrations.
+ *
  * SEMANTICS — a stabilizer tag means two things, both consumed ONLY by the
  * stabilizer-recovery channel in services/muscleRecovery (never volume credit,
  * never the prescription engine):
