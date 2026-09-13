@@ -136,6 +136,19 @@ export const MIN_MEANINGFUL_CHANGE_FRACTION = 0.025;
 export const HISTORY_SESSIONS_PER_EXERCISE = 10;
 
 /**
+ * Per-exercise DB fetch limit for the direct-history queries, slightly above
+ * HISTORY_SESSIONS_PER_EXERCISE. The queries exclude set-less blocks
+ * (`set_logs!inner` — a planned-but-skipped exercise leaves an empty block in
+ * every completed session, and ten of those in a row starved the window into
+ * a false cold start: 50 lb "training profile" estimates on a 240 lb lift).
+ * Blocks that still reach the client but carry no suggestion signal — deload
+ * sessions, warmup-only blocks — also consume no window slots
+ * (selectRecentSignalBlocks); the extra rows here are the headroom that trim
+ * draws from.
+ */
+export const HISTORY_BLOCK_FETCH_LIMIT = HISTORY_SESSIONS_PER_EXERCISE + 5;
+
+/**
  * The anchor aggregation window, in SESSIONS (Phase 2): the prescription
  * anchor is the best qualifying set among the newest this-many sessions.
  * Counted in sessions — not wall-clock — so the anchor moves only when the

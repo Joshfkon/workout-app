@@ -100,6 +100,12 @@ const customJestConfig = {
       branches: 80,
       statements: 90,
     },
+    'services/suggestionEngine/historyWindow.ts': {
+      lines: 90,
+      functions: 80,
+      branches: 80,
+      statements: 90,
+    },
     'services/exerciseFilter.ts': {
       lines: 70,
       functions: 60,

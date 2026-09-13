@@ -177,7 +177,7 @@ import {
   fetchExerciseHistory,
   flattenExerciseHistoryRows,
   generateCoachMessage,
-  HISTORY_SESSIONS_PER_EXERCISE,
+  HISTORY_BLOCK_FETCH_LIMIT,
   type ExerciseHistoryQueryRow,
   type HistoryBlockRow,
   type HistoryScopeOptions,
@@ -1417,7 +1417,7 @@ export default function WorkoutPage() {
                       user_id,
                       is_deload
                     ),
-                    set_logs (
+                    set_logs!inner (
                       weight_kg,
                       reps,
                       rpe,
@@ -1437,7 +1437,15 @@ export default function WorkoutPage() {
                   referencedTable: 'exercise_blocks',
                   ascending: false,
                 })
-                .limit(HISTORY_SESSIONS_PER_EXERCISE, { referencedTable: 'exercise_blocks' })
+                // `set_logs!inner`: blocks from sessions where this exercise
+                // was planned but never logged carry no history signal, and
+                // ten of them in a row used to fill the per-exercise window
+                // and flip a well-trained lift into cold-start mode (false
+                // cold start, audit failure mode #2 in per-exercise form).
+                // The fetch limit carries headroom over the window size so
+                // deload / warmup-only blocks — dropped client-side by
+                // selectRecentSignalBlocks — don't starve it either.
+                .limit(HISTORY_BLOCK_FETCH_LIMIT, { referencedTable: 'exercise_blocks' })
             : Promise.resolve({ data: null }),
           // Cross-exercise strength summary for cold-start transfer estimation
           // (never-trained exercises seed from a related exercise's e1RM).
