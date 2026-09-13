@@ -109,8 +109,53 @@ describe('AboutTab', () => {
 
   it('shows rep range alongside muscles worked section', () => {
     render(<AboutTab exercise={baseExercise} sessionCount={0} />);
-    
+
     expect(screen.getByText('Rep range')).toBeInTheDocument();
     expect(screen.getByText('8-12')).toBeInTheDocument();
+  });
+
+  it('renders a labeled stabilizers row, kept out of volume credits', () => {
+    const benchLike: Exercise = {
+      ...baseExercise,
+      primaryMuscle: 'chest',
+      secondaryMuscles: ['triceps'],
+      stabilizers: ['rotator_cuff', 'rear_delts'],
+    };
+
+    render(<AboutTab exercise={benchLike} sessionCount={0} />);
+
+    const stabilizerRow = screen.getByTestId('stabilizer-muscles');
+    expect(stabilizerRow).toHaveTextContent('Stabilizers');
+    expect(stabilizerRow).toHaveTextContent('Rotator Cuff');
+    expect(stabilizerRow).toHaveTextContent('Rear Delts');
+
+    // Stabilizers earn no volume credit — never listed in the credits block.
+    const creditsList = screen.getByTestId('muscle-credits-list');
+    expect(creditsList).not.toHaveTextContent('Rotator Cuff');
+    expect(creditsList).not.toHaveTextContent('Rear Delts');
+  });
+
+  it('omits a stabilizer already covered by a mover tag', () => {
+    // Legacy coarse 'shoulders' fans out to rear_delts, so the rear_delts
+    // stabilizer chip would duplicate the mover chip.
+    const overheadLike: Exercise = {
+      ...baseExercise,
+      primaryMuscle: 'shoulders',
+      secondaryMuscles: ['triceps'],
+      stabilizers: ['rotator_cuff', 'rear_delts', 'erectors'],
+    };
+
+    render(<AboutTab exercise={overheadLike} sessionCount={0} />);
+
+    const stabilizerRow = screen.getByTestId('stabilizer-muscles');
+    expect(stabilizerRow).toHaveTextContent('Rotator Cuff');
+    expect(stabilizerRow).toHaveTextContent('Erectors');
+    expect(stabilizerRow).not.toHaveTextContent('Rear Delts');
+  });
+
+  it('renders no stabilizers row when the exercise has none', () => {
+    render(<AboutTab exercise={baseExercise} sessionCount={0} />);
+
+    expect(screen.queryByTestId('stabilizer-muscles')).not.toBeInTheDocument();
   });
 });

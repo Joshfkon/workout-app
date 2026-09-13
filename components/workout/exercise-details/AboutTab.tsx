@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Badge, Button } from '@/components/ui';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/Accordion';
 import type { Exercise } from '@/types/schema';
+import { resolveMuscleToStandard } from '@/types/schema';
 import { completeSingleExercise } from '@/lib/actions/exercise-completion';
 import { parseYouTubeVideoId } from '@/lib/youtube';
 import { shouldCollapseGuides } from '@/services/exerciseDetailAnalytics';
@@ -210,16 +211,32 @@ function CompleteWithAIButton({ exerciseId }: { exerciseId: string }) {
 interface MusclesWorkedProps {
   primaryMuscle: string | null;
   secondaryMuscles: string[];
+  stabilizers: string[];
   repRange: number[];
 }
 
 /**
- * Highlight body map (primary full accent, secondaries dimmed), with the
- * chips as the accessible text representation and the default rep range on
- * the same row.
+ * Highlight body map (primary full accent, secondaries dimmed, stabilizers
+ * faint), with the chips as the accessible text representation and the
+ * default rep range on the same row. Stabilizers get their own labeled chip
+ * row — they are isometric support, not movers, and earn no volume credit.
  */
-function MusclesWorked({ primaryMuscle, secondaryMuscles, repRange }: MusclesWorkedProps) {
-  if (!primaryMuscle && secondaryMuscles.length === 0 && repRange.length < 2) return null;
+function MusclesWorked({ primaryMuscle, secondaryMuscles, stabilizers, repRange }: MusclesWorkedProps) {
+  if (!primaryMuscle && secondaryMuscles.length === 0 && stabilizers.length === 0 && repRange.length < 2) {
+    return null;
+  }
+
+  // A muscle already listed as a mover (primary/secondary, resolved through
+  // the canonical taxonomy so legacy coarse tags fan out) is not re-listed as
+  // a stabilizer — the mover chip already covers it.
+  const moverStandardIds = new Set(
+    [...(primaryMuscle ? [primaryMuscle] : []), ...secondaryMuscles].flatMap((muscle) =>
+      resolveMuscleToStandard(muscle)
+    )
+  );
+  const visibleStabilizers = stabilizers.filter(
+    (muscle) => !resolveMuscleToStandard(muscle).some((std) => moverStandardIds.has(std))
+  );
 
   const credits = primaryMuscle ? perSetCredits(primaryMuscle, secondaryMuscles) : [];
   const sortedCredits = [...credits].sort((a, b) => {
@@ -229,13 +246,13 @@ function MusclesWorked({ primaryMuscle, secondaryMuscles, repRange }: MusclesWor
 
   return (
     <div>
-      {(primaryMuscle || secondaryMuscles.length > 0) && (
+      {(primaryMuscle || secondaryMuscles.length > 0 || visibleStabilizers.length > 0) && (
         <>
           <p className="text-xs font-medium text-surface-400 uppercase tracking-wider mb-2">
             Muscles Worked
           </p>
           <MuscleMap
-            data={exerciseHighlightData(primaryMuscle, secondaryMuscles)}
+            data={exerciseHighlightData(primaryMuscle, secondaryMuscles, visibleStabilizers)}
             mode="highlight"
             view="both"
             className="h-40 mb-2"
@@ -263,6 +280,17 @@ function MusclesWorked({ primaryMuscle, secondaryMuscles, repRange }: MusclesWor
           </div>
         )}
       </div>
+
+      {visibleStabilizers.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 mt-2" data-testid="stabilizer-muscles">
+          <span className="text-xs text-surface-500 uppercase tracking-wider">Stabilizers</span>
+          {visibleStabilizers.map((muscle, idx) => (
+            <Badge key={idx} variant="outline" size="sm">
+              {muscleDisplayName(String(muscle))}
+            </Badge>
+          ))}
+        </div>
+      )}
 
       {sortedCredits.length > 0 && (
         <div className="mt-3 p-3 bg-surface-800/50 rounded-lg" data-testid="muscle-credits-list">
@@ -309,6 +337,7 @@ export function AboutTab({ exercise, sessionCount }: AboutTabProps) {
   const hypertrophyScore = getExerciseProp(exercise, 'hypertrophyScore', 'hypertrophy_score');
   const primaryMuscle = getExerciseProp(exercise, 'primaryMuscle', 'primary_muscle');
   const secondaryMusclesRaw = getExerciseProp(exercise, 'secondaryMuscles', 'secondary_muscles');
+  const stabilizersRaw = getExerciseProp(exercise, 'stabilizers', 'stabilizers');
   const repRangeRaw = getExerciseProp(exercise, 'defaultRepRange', 'default_rep_range');
   const formCuesRaw = getExerciseProp(exercise, 'formCues', 'form_cues');
   const mistakesRaw = getExerciseProp(exercise, 'commonMistakes', 'common_mistakes');
@@ -316,6 +345,7 @@ export function AboutTab({ exercise, sessionCount }: AboutTabProps) {
   const notes = getExerciseProp(exercise, 'notes', 'notes') || null;
 
   const secondaryMuscles: string[] = Array.isArray(secondaryMusclesRaw) ? secondaryMusclesRaw : [];
+  const stabilizers: string[] = Array.isArray(stabilizersRaw) ? stabilizersRaw : [];
   const repRange: number[] = Array.isArray(repRangeRaw) ? repRangeRaw : [];
   const formCues: string[] = Array.isArray(formCuesRaw) ? formCuesRaw : [];
   const commonMistakes: string[] = Array.isArray(mistakesRaw) ? mistakesRaw : [];
@@ -347,6 +377,7 @@ export function AboutTab({ exercise, sessionCount }: AboutTabProps) {
       <MusclesWorked
         primaryMuscle={primaryMuscle || null}
         secondaryMuscles={secondaryMuscles}
+        stabilizers={stabilizers}
         repRange={repRange}
       />
 

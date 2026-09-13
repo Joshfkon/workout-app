@@ -36,8 +36,9 @@ import type { RecoveryStatus } from '@/services/muscleRecovery';
  * - heat:      long-window MEV-weighted buckets (volumeHeatmap): reds/amber
  *              below MEV, greens darkening with volume across and past the
  *              band.
- * - highlight: primary muscle in full primary color, secondaries dimmed to
- *              their `value` opacity, everything else neutral.
+ * - highlight: primary muscle in full primary color, secondaries and
+ *              stabilizers dimmed to their `value` opacity, everything else
+ *              neutral.
  *
  * Regions with no data (and decorative regions — head, hands, knees, …)
  * render in a neutral theme-aware base tone. The map is a secondary,
@@ -123,7 +124,11 @@ function presentRegion(mode: MuscleMapMode, datum: MuscleMapDatum | undefined): 
   return {
     fillClass: 'fill-primary-500',
     fillOpacity: primary ? 1 : datum.value,
-    ariaStatus: primary ? 'primary muscle' : 'secondary muscle',
+    ariaStatus: primary
+      ? 'primary muscle'
+      : datum.stabilizer
+        ? 'stabilizer muscle'
+        : 'secondary muscle',
   };
 }
 
