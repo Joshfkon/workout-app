@@ -1,12 +1,14 @@
 /**
- * Drift guard: the custom-exercise stabilizer backfill migration must track
+ * Drift guard: the custom-exercise stabilizer backfill migrations must track
  * services/shared/stabilizerTags.STABILIZERS_BY_EXERCISE_NAME exactly, and
- * the normalized-token-set matching it relies on must be unambiguous.
+ * the normalized-token-set matching they rely on must be unambiguous.
  *
- * SQL cannot import the TypeScript map, so this test parses the migration's
- * canonical VALUES list (the stabilizerSeed.test.ts pattern) and compares
- * name → stabilizer-array pairs both ways. It also mirrors the migration's
- * SQL tokenizer in TS to pin the two properties the UPDATE depends on:
+ * SQL cannot import the TypeScript map, so this test parses each migration's
+ * canonical VALUES list (the stabilizerSeed.test.ts pattern) and compares the
+ * UNION of name → stabilizer-array pairs both ways (migrations are immutable
+ * once applied, so map additions ship as new backfill files). It also mirrors
+ * the migrations' SQL tokenizer in TS to pin the two properties the UPDATEs
+ * depend on:
  *   1. token sets are pairwise UNIQUE across the canonical map, so a custom
  *      row can never match two entries with different tags;
  *   2. the motivating case actually matches — a custom 'Shrug (Dumbbell)'
@@ -22,10 +24,13 @@ import {
 } from '@/services/shared/stabilizerTags';
 
 const MIGRATIONS_DIR = path.join(__dirname, '..', '..', 'supabase', 'migrations');
-const MIGRATION_FILE = '20260913000001_backfill_custom_stabilizers.sql';
+const CUSTOM_BACKFILL_MIGRATIONS = [
+  '20260913000001_backfill_custom_stabilizers.sql',
+  '20260913000003_backfill_custom_stabilizers_audit_additions.sql',
+];
 
-function readMigration(): string {
-  return fs.readFileSync(path.join(MIGRATIONS_DIR, MIGRATION_FILE), 'utf8');
+function readMigration(file: string): string {
+  return fs.readFileSync(path.join(MIGRATIONS_DIR, file), 'utf8');
 }
 
 /** Parse every canonical VALUES row into { name, stabilizers } pairs. */
@@ -41,7 +46,7 @@ function parseCanonicalValues(sql: string): Map<string, string[]> {
 }
 
 /**
- * TS mirror of pg_temp.stabilizer_name_tokens in the migration: lowercase,
+ * TS mirror of pg_temp.stabilizer_name_tokens in the migrations: lowercase,
  * split on any non-alphanumeric run, deduplicate, sort.
  */
 function nameTokens(name: string): string[] {
@@ -56,20 +61,33 @@ function nameTokens(name: string): string[] {
   ).sort();
 }
 
-describe('custom-exercise stabilizer backfill migration', () => {
-  const sql = readMigration();
-  const canonical = parseCanonicalValues(sql);
+describe('custom-exercise stabilizer backfill migrations', () => {
+  const perFile = CUSTOM_BACKFILL_MIGRATIONS.map((file) => {
+    const sql = readMigration(file);
+    return { file, sql, canonical: parseCanonicalValues(sql) };
+  });
+  const canonical = new Map<string, string[]>();
+  for (const { canonical: part } of perFile) {
+    for (const [name, values] of Array.from(part.entries())) canonical.set(name, values);
+  }
 
-  it('matches STABILIZERS_BY_EXERCISE_NAME exactly (both directions)', () => {
+  it('union of all backfill migrations matches STABILIZERS_BY_EXERCISE_NAME exactly (both directions)', () => {
     expect(Object.fromEntries(canonical)).toEqual(STABILIZERS_BY_EXERCISE_NAME);
   });
 
-  it('every VALUES row in the file was parsed (no row shape drift)', () => {
-    // Each canonical row carries exactly one ARRAY literal; the UPDATE itself
-    // carries none (it assigns c.stabs), so the counts must agree.
-    const arrayLiterals = (sql.match(/ARRAY\['/g) ?? []).length;
-    expect(arrayLiterals).toBe(canonical.size);
-    expect(canonical.size).toBeGreaterThan(0);
+  it('no exercise appears in more than one backfill migration', () => {
+    const total = perFile.reduce((n, { canonical: part }) => n + part.size, 0);
+    expect(total).toBe(canonical.size);
+  });
+
+  it('every VALUES row in every file was parsed (no row shape drift)', () => {
+    for (const { file, sql, canonical: part } of perFile) {
+      // Each canonical row carries exactly one ARRAY literal; the UPDATE
+      // itself carries none (it assigns c.stabs), so the counts must agree.
+      const arrayLiterals = (sql.match(/ARRAY\['/g) ?? []).length;
+      expect({ file, arrayLiterals }).toEqual({ file, arrayLiterals: part.size });
+      expect(part.size).toBeGreaterThan(0);
+    }
   });
 
   it('uses only the tracked stabilizer vocabulary, all valid standard muscles', () => {
@@ -107,12 +125,14 @@ describe('custom-exercise stabilizer backfill migration', () => {
   });
 
   it('touches empty custom rows only and deletes nothing', () => {
-    expect(sql).not.toMatch(/\bDELETE\b/i);
-    expect(sql).not.toMatch(/\bTRUNCATE\b/i);
-    // Custom-only scope — the stock seed owns stock rows.
-    expect(sql).toContain('e.is_custom IS TRUE');
-    expect(sql).not.toMatch(/is_custom IS NOT TRUE/);
-    // Empty-only guard — never overwrite tags a custom row already carries.
-    expect(sql).toContain("(e.stabilizers IS NULL OR e.stabilizers = '{}')");
+    for (const { sql } of perFile) {
+      expect(sql).not.toMatch(/\bDELETE\b/i);
+      expect(sql).not.toMatch(/\bTRUNCATE\b/i);
+      // Custom-only scope — the stock seed owns stock rows.
+      expect(sql).toContain('e.is_custom IS TRUE');
+      expect(sql).not.toMatch(/is_custom IS NOT TRUE/);
+      // Empty-only guard — never overwrite tags a custom row already carries.
+      expect(sql).toContain("(e.stabilizers IS NULL OR e.stabilizers = '{}')");
+    }
   });
 });

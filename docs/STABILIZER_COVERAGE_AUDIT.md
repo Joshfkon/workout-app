@@ -8,7 +8,16 @@
 question of the STOCK library: **which exercises has the channel never even
 looked at?**
 
-**Status: PROPOSALS ONLY.** Per the approved-plan rule in
+**Status: IMPLEMENTED 2026-09-13** — Josh approved the audit's leans as
+written. F1 shipped plus the F3 leans (Bulgarian Split Squat → `erectors`,
+forearms deliberately excluded; all other judgment calls → no tags): map +
+`20260913000002` (stock) + `20260913000003` (matching customs); every no-tag
+verdict is recorded in `NO_STABILIZERS_BY_DECISION`; all 21 UNSEEDED
+questions are resolved and the list emptied; the F5 exhaustiveness guard is
+`services/__tests__/stabilizerCoverage.test.ts`. The text below is the audit
+as reviewed.
+
+**Original status: PROPOSALS ONLY.** Per the approved-plan rule in
 `services/shared/stabilizerTags.ts`, non-obvious classifications are Josh's to
 approve — nothing in this document changes code or data. Each recommendation
 carries a confidence so the low-confidence ones are easy to pick out and

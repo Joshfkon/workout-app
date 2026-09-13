@@ -58,6 +58,13 @@
  * Exercises whose classification was NOT obvious are deliberately absent and
  * enumerated in UNSEEDED_STABILIZER_EXERCISES for Josh to fill in — per the
  * approved plan, no guessing.
+ *
+ * COVERAGE (2026-09-13 audit, docs/STABILIZER_COVERAGE_AUDIT.md, approved):
+ * every stock exercise now lives in exactly ONE of STABILIZERS_BY_EXERCISE_NAME,
+ * NO_STABILIZERS_BY_DECISION, or UNSEEDED_STABILIZER_EXERCISES — enforced by
+ * services/__tests__/stabilizerCoverage.test.ts, so a new stock exercise fails
+ * CI until it is classified. The audit's additions ship in
+ * 20260913000002 (stock) + 20260913000003 (matching customs).
  */
 
 import type { StandardMuscleGroup } from '@/types/schema';
@@ -91,6 +98,10 @@ export const STABILIZERS_BY_EXERCISE_NAME: Record<string, StabilizerTrackedMuscl
   // ── Squats / standing lower-body ─────────────────────────────────────────
   'Barbell Back Squat': ['erectors'],
   'Smith Machine Squat': ['erectors'],
+  // Audit 2026-09-13: heavy rear-elevated work is un-supported standing load,
+  // matching the lunge family below. Forearms deliberately NOT tagged — it
+  // only applies when dumbbell-held and tags cannot condition on equipment.
+  'Bulgarian Split Squat': ['erectors'],
   'Walking Lunges': ['erectors'],
   'Reverse Lunge': ['erectors'],
   'Step Up': ['erectors'],
@@ -147,6 +158,18 @@ export const STABILIZERS_BY_EXERCISE_NAME: Record<string, StabilizerTrackedMuscl
   'Rear Delt Machine': ['rotator_cuff'],
   'Reverse Cable Crossover': ['rotator_cuff'],
   'Prone Y-Raise': ['rotator_cuff'],
+  'Band Pull-Apart': ['rotator_cuff'],
+
+  // ── Cuff loaded at end range (2026-09-13 audit) ───────────────────────────
+  // Dumbbell Fly is the one fly variant where the cuff carries full load in
+  // the deepest stretch (cable flys and Pec Deck stay untagged — resistance
+  // falls off / machine guides the path). The overhead extensions hold the
+  // shoulder at end-range flexion under load for the whole set — the same
+  // dose-visibility argument as the external-rotation group above.
+  'Dumbbell Fly': ['rotator_cuff'],
+  'Overhead Tricep Extension': ['rotator_cuff'],
+  'Cable Overhead Tricep Extension': ['rotator_cuff'],
+  'Katana Tricep Extension': ['rotator_cuff'],
 };
 
 /**
@@ -154,32 +177,121 @@ export const STABILIZERS_BY_EXERCISE_NAME: Record<string, StabilizerTrackedMuscl
  * classification was not obvious — enumerated so the review can fill them in
  * rather than the seed guessing (approved-plan rule). Each entry names the
  * open question.
+ *
+ * Emptied 2026-09-13: every open question was resolved by the coverage audit
+ * (docs/STABILIZER_COVERAGE_AUDIT.md, approved by Josh). Six names moved into
+ * STABILIZERS_BY_EXERCISE_NAME; the rest are recorded in
+ * NO_STABILIZERS_BY_DECISION. A NEW stock exercise with a genuinely open
+ * question goes here — the coverage guard test forces every stock name into
+ * exactly one of the three lists.
  */
 export const UNSEEDED_STABILIZER_EXERCISES: ReadonlyArray<{
   name: string;
   question: string;
-}> = [
-  { name: 'Barbell Curl', question: 'standing barbell arm work — is the erector demand meaningful, or noise relative to a curl anchor?' },
-  { name: 'EZ Bar Curl', question: 'same question as Barbell Curl' },
-  { name: 'Bulgarian Split Squat', question: 'erectors likely; forearms only when dumbbell-held — equipment varies per user' },
-  { name: 'Cossack Squat', question: 'loaded vs bodyweight varies; erector demand unclear' },
-  { name: 'Adductor Side Lunge', question: 'loaded vs bodyweight varies; erector demand unclear' },
-  { name: 'Cable Fly', question: 'cuff loaded in deep stretch — stabilizer-grade or negligible?' },
-  { name: 'Seated Cable Fly', question: 'same question as Cable Fly' },
-  { name: 'Dumbbell Fly', question: 'same question as Cable Fly, deeper stretch under load' },
-  { name: 'Pec Deck', question: 'same question as Cable Fly' },
-  { name: 'Lateral Raise', question: 'cuff involvement is real but loads are light — gate-worthy?' },
-  { name: 'Behind-the-Back Cable Lateral Raise', question: 'same question as Lateral Raise' },
-  { name: 'Cable Cross Body Lateral Raise', question: 'same question as Lateral Raise' },
-  { name: 'Machine Lateral Raise', question: 'same question as Lateral Raise' },
-  { name: 'Front Raise', question: 'same question as Lateral Raise' },
-  { name: 'Cable Y-Raise', question: 'raise vs pull — forearm and cuff grading unclear' },
-  { name: 'Overhead Tricep Extension', question: 'shoulder held at end-range overhead — cuff stabilizer?' },
-  { name: 'Cable Overhead Tricep Extension', question: 'same question as Overhead Tricep Extension' },
-  { name: 'Katana Tricep Extension', question: 'same question as Overhead Tricep Extension' },
-  { name: 'L-Sit', question: 'scapular/cuff loading in support position?' },
-  { name: 'Cable Woodchop', question: 'standing anti-rotation — erector grading unclear' },
-  { name: 'Pallof Press', question: 'standing anti-rotation — erector grading unclear' },
+}> = [];
+
+/**
+ * Stock exercises DECIDED to carry no stabilizer tags — the explicit
+ * complement of STABILIZERS_BY_EXERCISE_NAME, so "no tags by decision" is
+ * distinguishable from "no tags by omission" (the failure mode that made an
+ * exercise silently invisible to the stabilizer-recovery channel).
+ *
+ * Per-exercise reasons live in docs/STABILIZER_COVERAGE_AUDIT.md (reason
+ * groups A–H and F3); the common ones: the tracked muscle is already the
+ * PRIMARY mover (wrist curls, dead hang — the mover tag feeds the dose
+ * channel and the readiness sheet covers the warning), machine/bench/pad
+ * support removes the demand (leg press family), loads too light to gate
+ * (lateral raises, standing curls), or core work whose tracked-muscle demand
+ * is minimal. Documentation + guard-test input only — no runtime consumer.
+ */
+export const NO_STABILIZERS_BY_DECISION: readonly string[] = [
+  '45° Preacher Curl',
+  'Ab Wheel Rollout',
+  'Adductor Side Lunge',
+  'Back Extension',
+  'Banded Lateral Walk',
+  'Barbell Curl',
+  'Barbell Reverse Wrist Curl',
+  'Barbell Wrist Curl',
+  'Bayesian Cable Curl',
+  'Behind-the-Back Cable Lateral Raise',
+  'Behind-the-Back Wrist Curl',
+  'Cable Bicep Curl',
+  'Cable Cross Body Lateral Raise',
+  'Cable Crunch',
+  'Cable Curl',
+  'Cable Fly',
+  'Cable Hip Abduction',
+  'Cable Hip Adduction',
+  'Cable Tricep Pushdown',
+  'Cable Woodchop',
+  'Cable Y-Raise',
+  'Calf Press Machine',
+  "Captain's Chair Leg Raise",
+  'Clamshell',
+  'Concentration Curl',
+  'Copenhagen Plank',
+  'Cossack Squat',
+  'Dead Bug',
+  'Dead Hang',
+  'Decline Crunch',
+  'Donkey Calf Raise',
+  'Dumbbell Curl',
+  'Dumbbell Kickback',
+  'Dumbbell Side Bend',
+  'Dumbbell Wrist Curl',
+  'EZ Bar Curl',
+  'EZ Bar Reverse Curl',
+  'Front Raise',
+  'Glute Bridge',
+  'Glute Bridge Hold',
+  'Glute Drive Machine',
+  'Hack Squat',
+  'Hammer Curl',
+  'Hammer Strength Ab Crunch',
+  'Hip Abduction Machine',
+  'Hip Adduction Machine',
+  'Hip Thrust',
+  'Hollow Body Hold',
+  'Incline Dumbbell Curl',
+  'Incline Leg Press',
+  'Jefferson Curl',
+  'L-Sit',
+  'Lateral Raise',
+  'Leg Extension',
+  'Leg Press',
+  'Leg Press Calf Raise',
+  'Lying Leg Curl',
+  'Machine Ab Crunch',
+  'Machine Back Extension',
+  'Machine Bicep Curl',
+  'Machine Lateral Raise',
+  'Machine Tricep Extension',
+  'Nordic Curl',
+  'Pallof Press',
+  'Pec Deck',
+  'Pendulum Squat',
+  'Plank',
+  'Plate Pinch Hold',
+  'Preacher Curl',
+  'RKC Plank',
+  'Reverse Wrist Curl',
+  'Rope Tricep Pushdown',
+  'Russian Twist',
+  'Seated Cable Fly',
+  'Seated Calf Raise',
+  'Seated Leg Curl',
+  'Side Plank',
+  'Side-Lying Hip Abduction',
+  'Single Leg Calf Raise',
+  'Single Leg Hip Thrust',
+  'Sissy Squat',
+  'Skull Crusher',
+  'Superman Hold',
+  'Tricep Pushdown',
+  'Triceps Extension (Dumbbell)',
+  'Wall Sit',
+  'Wrist Roller',
 ];
 
 /** Lookup with the same name-key convention as SEED_EXERCISE_TAGS. */
