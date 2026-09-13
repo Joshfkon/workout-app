@@ -22,7 +22,8 @@ function block(
   sessionId: string,
   completedAt: string,
   weightKg: number,
-  reps: number
+  reps: number,
+  opts?: { isDeload?: boolean; skipped?: boolean; warmupOnly?: boolean }
 ): HistoryBlockRow {
   return {
     id: `${sessionId}-${exerciseId}`,
@@ -32,20 +33,24 @@ function block(
       completed_at: completedAt,
       state: 'completed',
       user_id: 'u1',
-      is_deload: false,
+      is_deload: opts?.isDeload ?? false,
     },
-    set_logs: [
-      {
-        weight_kg: weightKg,
-        reps,
-        rpe: 8,
-        is_warmup: false,
-        set_number: 1,
-        set_type: 'normal',
-        logged_at: completedAt,
-        location_id: null,
-      },
-    ],
+    // A "skipped" block mirrors a completed session where this exercise was
+    // planned but never logged — the block row persists with no set_logs.
+    set_logs: opts?.skipped
+      ? []
+      : [
+          {
+            weight_kg: weightKg,
+            reps,
+            rpe: 8,
+            is_warmup: opts?.warmupOnly ?? false,
+            set_number: 1,
+            set_type: 'normal',
+            logged_at: completedAt,
+            location_id: null,
+          },
+        ],
   };
 }
 
@@ -111,6 +116,89 @@ describe('per-exercise history window (Fix 1)', () => {
     expect(benchBlocks.map((b) => b.workout_sessions?.completed_at)).toEqual(
       Array.from({ length: 10 }, (_, i) => recentDate(i))
     );
+  });
+
+  // The Machine Back Extension failure: real 240-lb sessions in the DB, but
+  // every completed session since then carried a planned-but-skipped (empty)
+  // block for the exercise. Counted as raw blocks, ten of those filled the
+  // whole window → totalSessions === 0 → cold-start mode ("starting point
+  // estimated from your training profile", ~50 lbs) on a well-trained lift.
+  // The window must be counted in blocks that CARRY SIGNAL.
+  it('planned-but-skipped (set-less) blocks do not starve the window into a false cold start', () => {
+    const rows: ExerciseHistoryQueryRow[] = [
+      {
+        id: 'back-ext',
+        exercise_blocks: [
+          // 12 newer sessions where the exercise was skipped…
+          ...Array.from({ length: 12 }, (_, i) =>
+            block('back-ext', `skip-s${i}`, recentDate(i), 0, 0, { skipped: true })
+          ),
+          // …and the real history just past them.
+          block('back-ext', 'real-s0', '2026-06-24T10:00:00Z', 109, 13),
+          block('back-ext', 'real-s1', '2026-06-17T10:00:00Z', 109, 12),
+        ],
+      },
+    ];
+
+    const history = buildExerciseHistories(flattenExerciseHistoryRows(rows))['back-ext'];
+    expect(history.totalSessions).toBe(2);
+    expect(history.lastWorkoutDate).toBe('2026-06-24T10:00:00Z');
+    expect(history.lastWorkoutSets).toEqual([
+      expect.objectContaining({ weightKg: 109, reps: 13 }),
+    ]);
+    expect(history.estimatedE1RM).toBeGreaterThan(0);
+  });
+
+  it('deload and warmup-only blocks do not spend window slots either', () => {
+    const rows: ExerciseHistoryQueryRow[] = [
+      {
+        id: 'bench',
+        exercise_blocks: [
+          ...Array.from({ length: 6 }, (_, i) =>
+            block('bench', `dl-s${i}`, recentDate(i), 60, 10, { isDeload: true })
+          ),
+          ...Array.from({ length: 6 }, (_, i) =>
+            block('bench', `wu-s${i}`, recentDate(6 + i), 40, 8, { warmupOnly: true })
+          ),
+          block('bench', 'real-s0', '2026-06-20T10:00:00Z', 100, 8),
+        ],
+      },
+    ];
+
+    const history = buildExerciseHistories(flattenExerciseHistoryRows(rows))['bench'];
+    expect(history.totalSessions).toBe(1);
+    expect(history.lastWorkoutDate).toBe('2026-06-20T10:00:00Z');
+    expect(history.estimatedE1RM).toBeGreaterThan(0);
+  });
+
+  it('the window still caps at HISTORY_SESSIONS_PER_EXERCISE signal blocks', () => {
+    const rows: ExerciseHistoryQueryRow[] = [
+      {
+        id: 'squat',
+        exercise_blocks: Array.from({ length: 14 }, (_, i) =>
+          block('squat', `sq-s${i}`, recentDate(i), 140, 5)
+        ),
+      },
+    ];
+    const history = buildExerciseHistories(flattenExerciseHistoryRows(rows))['squat'];
+    expect(history.totalSessions).toBe(HISTORY_SESSIONS_PER_EXERCISE);
+  });
+
+  it('an exercise whose blocks ALL lack signal still gets an empty-shape entry', () => {
+    const rows: ExerciseHistoryQueryRow[] = [
+      {
+        id: 'row',
+        exercise_blocks: [
+          block('row', 'skip-only', recentDate(0), 0, 0, { skipped: true }),
+        ],
+      },
+    ];
+    const history = buildExerciseHistories(flattenExerciseHistoryRows(rows))['row'];
+    // Entry exists (so the page doesn't refetch mid-session) but cold start
+    // is earned: no signal anywhere.
+    expect(history).toBeDefined();
+    expect(history.totalSessions).toBe(0);
+    expect(history.estimatedE1RM).toBe(0);
   });
 
   it('handles exercises with no history (true cold start) and null rows', () => {

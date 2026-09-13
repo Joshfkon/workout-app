@@ -25,7 +25,11 @@ import {
   historySetE1RM,
   type AnchorCandidate,
 } from '@/services/suggestionEngine/e1rmAnchor';
-import { HISTORY_SESSIONS_PER_EXERCISE } from '@/services/suggestionEngine/constants';
+import {
+  HISTORY_SESSIONS_PER_EXERCISE,
+  HISTORY_BLOCK_FETCH_LIMIT,
+} from '@/services/suggestionEngine/constants';
+import { selectRecentSignalBlocks } from '@/services/suggestionEngine/historyWindow';
 import { resolveExerciseStartedAt } from '@/services/sessionContext';
 import {
   resolveLegacyLocationAttribution,
@@ -124,7 +128,7 @@ export interface HistoryBlockRow {
 
 // Re-exported for the page's history query (canonical home:
 // services/suggestionEngine/constants — shared with the session build).
-export { HISTORY_SESSIONS_PER_EXERCISE };
+export { HISTORY_SESSIONS_PER_EXERCISE, HISTORY_BLOCK_FETCH_LIMIT };
 
 /**
  * Row shape of the per-exercise batched history query: one row per exercise in
@@ -522,38 +526,45 @@ export function buildExerciseHistories(
     }
   }
 
-  // Group results by exercise_id and limit to the per-exercise window
+  // Group results by exercise_id, then trim each exercise to the last-N
+  // window counted in SIGNAL blocks (non-deload, ≥1 non-warmup set). Blocks
+  // from sessions where the exercise was skipped, or from deload sessions,
+  // must not spend window slots: ten skipped sessions in a row otherwise
+  // starve the window into a false cold start while real history sits just
+  // past it (the query's `set_logs!inner` already drops fully set-less
+  // blocks server-side; this is the client half, and the reason the fetch
+  // limit carries headroom above HISTORY_SESSIONS_PER_EXERCISE).
   const groupedByExercise: Record<string, HistoryBlockRow[]> = {};
   for (const block of allHistoryBlocks || []) {
-    const exId = block.exercise_id;
-    if (!groupedByExercise[exId]) groupedByExercise[exId] = [];
-    if (groupedByExercise[exId].length < HISTORY_SESSIONS_PER_EXERCISE) {
-      groupedByExercise[exId].push(block);
-    }
+    (groupedByExercise[block.exercise_id] ??= []).push(block);
   }
 
   const histories: Record<string, ExerciseHistoryData> = {};
 
-  for (const [exerciseId, historyBlocks] of Object.entries(groupedByExercise)) {
-    if (historyBlocks && historyBlocks.length > 0) {
-      const scopeConfig: HistoryScopeConfig | undefined = scopeOptions
-        ? {
-            scope: scopeOptions.scopeForExercise(exerciseId),
-            // A per-exercise override wins over the session's location: this
-            // exercise's sets are being logged there, so its history must be
-            // read from there too. Reading one track while writing another is
-            // exactly the conflation the location key exists to prevent.
-            currentLocationId:
-              scopeOptions.locationForExercise?.(exerciseId) ?? scopeOptions.currentLocationId,
-            legacy,
-          }
-        : undefined;
-      histories[exerciseId] = computeHistoryFromBlocks(
-        historyBlocks,
-        scopeConfig,
-        modalityByExercise?.[exerciseId]
-      );
-    }
+  for (const [exerciseId, allBlocks] of Object.entries(groupedByExercise)) {
+    // An exercise whose blocks ALL lack signal still gets its (empty-shape)
+    // entry — same as before, so callers don't refetch it mid-session.
+    const historyBlocks = selectRecentSignalBlocks(
+      allBlocks,
+      HISTORY_SESSIONS_PER_EXERCISE
+    );
+    const scopeConfig: HistoryScopeConfig | undefined = scopeOptions
+      ? {
+          scope: scopeOptions.scopeForExercise(exerciseId),
+          // A per-exercise override wins over the session's location: this
+          // exercise's sets are being logged there, so its history must be
+          // read from there too. Reading one track while writing another is
+          // exactly the conflation the location key exists to prevent.
+          currentLocationId:
+            scopeOptions.locationForExercise?.(exerciseId) ?? scopeOptions.currentLocationId,
+          legacy,
+        }
+      : undefined;
+    histories[exerciseId] = computeHistoryFromBlocks(
+      historyBlocks,
+      scopeConfig,
+      modalityByExercise?.[exerciseId]
+    );
   }
 
   return histories;
@@ -596,7 +607,7 @@ export async function fetchExerciseHistory(
         user_id,
         is_deload
       ),
-      set_logs (
+      set_logs!inner (
         weight_kg,
         reps,
         rpe,
@@ -612,13 +623,20 @@ export async function fetchExerciseHistory(
     .eq('workout_sessions.user_id', userId)
     .eq('workout_sessions.state', 'completed')
     .order('workout_sessions(completed_at)', { ascending: false })
-    .limit(HISTORY_SESSIONS_PER_EXERCISE);
+    // `set_logs!inner` + headroom above the window size: set-less blocks
+    // (planned-but-skipped sessions) never reach the client, and deload /
+    // warmup-only blocks that do are dropped by the signal trim below
+    // instead of spending window slots (the false-cold-start starvation).
+    .limit(HISTORY_BLOCK_FETCH_LIMIT);
 
   if (error || !historyBlocks || historyBlocks.length === 0) {
     return null;
   }
 
-  const blocks = historyBlocks as HistoryBlockRow[];
+  const blocks = selectRecentSignalBlocks(
+    historyBlocks as HistoryBlockRow[],
+    HISTORY_SESSIONS_PER_EXERCISE
+  );
   const scopeConfig: HistoryScopeConfig | undefined = scope
     ? {
         scope: scope.progressionScope,
