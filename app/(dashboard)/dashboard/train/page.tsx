@@ -1214,7 +1214,7 @@ export default function TrainPage() {
               {inProgress.setsDone > 0
                 ? `This will delete the ${inProgress.setsDone} ${
                     inProgress.setsDone === 1 ? 'set' : 'sets'
-                  } you logged. `
+                  } you logged and can't be undone. `
                 : ''}
               {inProgress.mesocycleId
                 ? 'The planned workout stays on your schedule so you can restart it fresh.'
@@ -1226,14 +1226,14 @@ export default function TrainPage() {
                 disabled={isDiscarding}
                 className="flex-1 py-2.5 rounded-lg bg-surface-800 text-surface-200 text-[13px] font-medium hover:bg-surface-700 transition-colors disabled:opacity-60"
               >
-                Keep workout
+                Keep training
               </button>
               <button
                 onClick={handleDiscardWorkout}
                 disabled={isDiscarding}
                 className="flex-1 py-2.5 rounded-lg bg-danger-500 text-white text-[13px] font-medium hover:bg-danger-600 transition-colors disabled:opacity-60"
               >
-                {isDiscarding ? 'Discarding...' : 'Discard'}
+                {isDiscarding ? 'Discarding...' : 'Discard workout'}
               </button>
             </div>
           </div>

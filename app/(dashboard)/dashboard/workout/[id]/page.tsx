@@ -335,25 +335,25 @@ function CancelWorkoutModal({
           <h3 className="text-lg font-semibold text-surface-100 mb-2">Discard Workout?</h3>
           <p className="text-sm text-surface-400 mb-6">
             {totalCompletedSets > 0
-              ? `You've logged ${totalCompletedSets} set${totalCompletedSets !== 1 ? 's' : ''}. Discarding will delete all progress and reset this workout.`
-              : 'This will reset the workout so you can start fresh later.'}
+              ? `You've logged ${totalCompletedSets} set${totalCompletedSets !== 1 ? 's' : ''}. Discarding will delete all progress and can't be undone.`
+              : 'This will remove the workout session. You can start fresh later.'}
           </p>
           <div className="flex gap-3">
             <Button
-              variant="ghost"
+              variant="secondary"
               onClick={onKeepGoing}
               disabled={isCancelling}
               className="flex-1"
             >
-              Keep Going
+              Keep training
             </Button>
             <Button
-              variant="outline"
+              variant="danger"
               onClick={onConfirm}
               disabled={isCancelling}
-              className="flex-1 border-danger-500/50 text-danger-400 hover:bg-danger-500/10"
+              className="flex-1"
             >
-              {isCancelling ? 'Discarding...' : 'Discard Workout'}
+              {isCancelling ? 'Discarding...' : 'Discard workout'}
             </Button>
           </div>
         </div>

@@ -248,8 +248,8 @@ export function ResumeWorkoutBanner() {
             </h3>
             <p className="text-surface-400 text-sm mb-4">
               {completedSetsCount > 0
-                ? `You have ${completedSetsCount} set${completedSetsCount !== 1 ? 's' : ''} logged. Discarding will permanently remove this workout.`
-                : 'This will permanently remove this workout session.'}
+                ? `You have ${completedSetsCount} set${completedSetsCount !== 1 ? 's' : ''} logged. Discarding will delete this progress and can't be undone.`
+                : 'This will remove the workout session. You can start fresh later.'}
             </p>
             {discardError && (
               <p className="text-danger-400 text-sm mb-4">
@@ -263,7 +263,7 @@ export function ResumeWorkoutBanner() {
                 className="flex-1"
                 disabled={isDiscarding}
               >
-                Keep Workout
+                Keep training
               </Button>
               <Button
                 onClick={confirmDiscard}
@@ -271,7 +271,7 @@ export function ResumeWorkoutBanner() {
                 className="flex-1"
                 disabled={isDiscarding}
               >
-                {isDiscarding ? 'Discarding...' : 'Discard'}
+                {isDiscarding ? 'Discarding...' : 'Discard workout'}
               </Button>
             </div>
           </div>
