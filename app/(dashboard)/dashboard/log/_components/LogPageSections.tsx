@@ -95,11 +95,11 @@ export function UnfinishedWorkoutBanner({
 // ============================================================
 
 const HERO_CTA_CLASS =
-  'flex-1 py-3 rounded-xl bg-gradient-to-r from-primary-500 to-accent-500 text-white text-[15px] font-semibold hover:opacity-90 transition-opacity disabled:opacity-60';
+  'flex-1 py-3 rounded-xl bg-gradient-to-r from-primary-500 to-accent-500 text-white text-[15px] font-semibold hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed';
 const HERO_SECONDARY_CTA_CLASS =
-  'flex-1 py-3 rounded-xl bg-surface-800 text-surface-200 text-[15px] font-semibold hover:bg-surface-700 transition-colors';
+  'flex-1 py-3 rounded-xl bg-surface-800 text-surface-200 text-[15px] font-semibold hover:bg-surface-700 active:scale-[0.98] transition-all disabled:cursor-not-allowed';
 const HERO_SPARKLE_CLASS =
-  'w-12 self-stretch rounded-xl bg-surface-900 border border-surface-800 flex items-center justify-center hover:bg-surface-800/70 transition-colors disabled:opacity-60';
+  'w-12 self-stretch rounded-xl bg-surface-900 border border-surface-800 flex items-center justify-center hover:bg-surface-800/70 active:scale-95 transition-all disabled:opacity-60';
 
 interface LogHeroCardProps {
   /** Gradient (primary action) or muted (rest day) framing. */
@@ -185,7 +185,7 @@ export function QuickLogRow({ icon, title, subtitle, onTap, disabled }: QuickLog
     <button
       onClick={onTap}
       disabled={disabled}
-      className="w-full flex items-center gap-3 p-3 rounded-2xl bg-surface-900 border border-surface-800 text-left hover:bg-surface-800/70 transition-colors disabled:opacity-60"
+      className="w-full flex items-center gap-3 p-3 rounded-2xl bg-surface-900 border border-surface-800 text-left hover:bg-surface-800/70 active:scale-[0.99] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
     >
       {icon}
       <span className="flex-1 min-w-0">

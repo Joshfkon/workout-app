@@ -1,5 +1,7 @@
 'use client';
 
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+
 import { useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
@@ -57,6 +59,7 @@ const LEADERBOARD_TABS: Array<{
 ];
 
 export default function LeaderboardsPage() {
+  useDocumentTitle('Leaderboards');
   const [selectedType, setSelectedType] = useState<LeaderboardType>('total_volume_week');
   const userId = useUserStore((state) => state.user?.id);
   // P1-8: DB-backed units (kg showed to lb users when the store was cold)

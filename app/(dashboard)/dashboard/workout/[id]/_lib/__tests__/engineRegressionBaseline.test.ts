@@ -143,6 +143,7 @@ describe('engine regression baseline — staple exercise, recent history', () =>
       // pick (100.29) rounds to the recent 100 on its own.
       clampBinder: 'none',
       preClampWeightKg: expect.any(Number),
+      trigger: 'none',
       engineVersion: SUGGESTION_ENGINE_VERSION,
     });
   });
@@ -177,6 +178,7 @@ describe('engine regression baseline — staple exercise, recent history', () =>
       clamped: false,
       clampBinder: 'bump_gate',
       preClampWeightKg: expect.any(Number),
+      trigger: 'none',
       engineVersion: SUGGESTION_ENGINE_VERSION,
     });
   });
@@ -230,6 +232,7 @@ describe('engine regression baseline — staple exercise, recent history', () =>
       rationale: 'maintain',
       effortVsTarget: 'on_target',
       provenance: { source: 'anchor' },
+      trigger: 'none',
     });
   });
 

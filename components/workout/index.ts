@@ -1,6 +1,7 @@
 // Workout Components
 export { ExerciseCard } from './ExerciseCard';
 export { ExerciseDetailsModal } from './ExerciseDetailsModal';
+export { IdleWorkoutPrompt } from './IdleWorkoutPrompt';
 export { YouTubeEmbed } from './YouTubeEmbed';
 export { MuscleWikiVideo } from './MuscleWikiVideo';
 export { SetLoggerRow } from './SetLoggerRow';
@@ -29,3 +30,4 @@ export { RecalcTargetsBanner } from './RecalcTargetsBanner';
 
 // Pause Overlay
 export { PauseOverlay } from './PauseOverlay';
+export { PRCelebration, type PRCelebrationData } from './PRCelebration';

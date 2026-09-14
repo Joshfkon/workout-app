@@ -4,7 +4,6 @@ import { useCallback, useMemo, useState } from 'react';
 import { MuscleMap } from '@/components/muscleMap/MuscleMap';
 import { heatmapRowsToMapData } from '@/lib/muscleMap/adapters';
 import type { MuscleId } from '@/lib/muscleMap/taxonomy';
-import type { BodyView } from '@/lib/muscleMap/paths';
 import { useVolumeHeatmap } from '@/hooks/useVolumeHeatmap';
 import {
   DEFAULT_HEATMAP_TIMEFRAME,
@@ -161,16 +160,14 @@ export function heatmapCaption(
 
 /**
  * CompactVolumeHeatmap — the whole heatmap unit at sheet size: timeframe
- * chips, single-view body map, legend, tap-for-detail and caption. Dropped
- * into the readiness map when its paint toggle is on "Heatmap"; the parent
- * keeps owning the Front/Back toggle and passes `view` down. Fetches lazily
- * (the hook only runs while this is mounted, i.e. while the mode is active).
+ * chips, front+back body map, legend, tap-for-detail and caption. Dropped
+ * into the readiness map when its paint toggle is on "Heatmap". Fetches
+ * lazily (the hook only runs while this is mounted, i.e. while the mode is
+ * active).
  */
 export function CompactVolumeHeatmap({
-  view,
   testIdPrefix = 'readiness-heatmap',
 }: {
-  view: BodyView;
   testIdPrefix?: string;
 }) {
   const [timeframe, setTimeframe] = useHeatmapTimeframe();
@@ -207,7 +204,7 @@ export function CompactVolumeHeatmap({
           <MuscleMap
             data={mapData}
             mode="heat"
-            view={view}
+            view="both"
             onMuscleTap={selectMuscle}
             className={`h-44 ${isPlaceholderData ? 'opacity-60' : ''}`}
             data-testid={`${testIdPrefix}-map`}

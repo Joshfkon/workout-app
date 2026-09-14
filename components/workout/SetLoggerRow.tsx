@@ -9,9 +9,12 @@ import {
   IconPlayerPlayFilled,
   IconPlayerStopFilled,
   IconRotate,
+  IconInfoCircle,
+  IconRepeat,
 } from '@tabler/icons-react';
 import { useDurationTimer } from '@/hooks/useDurationTimer';
 import { BottomSheet } from './BottomSheet';
+import type { EffortCheck } from './SuggestionBanner';
 import { FormRatingSelector } from './FormRatingSelector';
 import { JointPainPicker } from './FeedbackChips';
 import { SELECTOR_CHIP_BASE, SELECTOR_CHIP_IDLE, SELECTOR_CHIP_SELECTED } from './selectorChips';
@@ -24,6 +27,7 @@ import type {
   FormRating,
   SetDiscomfort,
   BodyweightData,
+  SetType,
 } from '@/types/schema';
 import { rirToRpe, calculateEffectiveLoad } from '@/types/schema';
 import {
@@ -64,6 +68,14 @@ interface SetLoggerRowProps {
   weightMode?: WeightMode;
   userBodyweightKg?: number;
   /**
+   * Live predicted effort for the CURRENTLY ENTERED weight × reps, computed
+   * by the caller on the suggestion engine's own e1RM/curve (same object the
+   * SuggestionBanner uses for its amber warning). Renders an always-visible
+   * "~N RIR" readout under the steppers with an (i) reasoning sheet.
+   * Null/omitted (no capacity anchor, duration-based) hides the readout.
+   */
+  effortCheck?: EffortCheck | null;
+  /**
    * One-tap commit. Data shape matches the existing onSetComplete persistence
    * path exactly (weight converted to kg, RPE derived from the selected RIR).
    */
@@ -74,6 +86,8 @@ interface SetLoggerRowProps {
     note?: string;
     feedback: SetFeedback;
     bodyweightData?: BodyweightData;
+    setType: SetType;
+    rirExplicitlySelected: boolean;
   }) => void;
   /**
    * Opens the plate calculator pre-filled with the current weight (P1-5).
@@ -157,12 +171,17 @@ export function SetLoggerRow({
   isBodyweight = false,
   weightMode = 'bodyweight',
   userBodyweightKg,
+  effortCheck = null,
   onLog,
   onPlateCalculatorOpen,
 }: SetLoggerRowProps) {
   const [selectedRir, setSelectedRir] = useState<RepsInTank>(() => clampToChip(targetRir));
+  const [rirTouched, setRirTouched] = useState(false);
+  const [selectedSetType, setSelectedSetType] = useState<SetType>('normal');
   const [editingField, setEditingField] = useState<'weight' | 'reps' | null>(null);
   const [showFeedbackSheet, setShowFeedbackSheet] = useState(false);
+  const [showSetTypeSheet, setShowSetTypeSheet] = useState(false);
+  const [showPredictionInfo, setShowPredictionInfo] = useState(false);
   const [showSheetDiscomfortPicker, setShowSheetDiscomfortPicker] = useState(false);
   const [form, setForm] = useState<FormRating | null>(null);
   const [discomfort, setDiscomfort] = useState<SetDiscomfort | undefined>(undefined);
@@ -172,6 +191,7 @@ export function SetLoggerRow({
   // Re-sync the default chip when the set advances or the prescription changes.
   useEffect(() => {
     setSelectedRir(clampToChip(targetRir));
+    setRirTouched(false);
   }, [setNumber, targetRir]);
 
   // Clear per-set feedback when the set advances.
@@ -179,6 +199,7 @@ export function SetLoggerRow({
     setForm(null);
     setDiscomfort(undefined);
     setNote('');
+    setSelectedSetType('normal');
     setShowSheetDiscomfortPicker(false);
   }, [setNumber]);
 
@@ -334,6 +355,8 @@ export function SetLoggerRow({
       note: note.trim() || undefined,
       feedback,
       bodyweightData,
+      setType: selectedSetType,
+      rirExplicitlySelected: rirTouched,
     });
 
     // Reset per-set feedback for the next set.
@@ -608,13 +631,48 @@ export function SetLoggerRow({
         </div>
       )}
 
-      {/* Row 2: RIR chips (labeled, full-width) + feedback sheet trigger */}
+      {/* Row 1.5: live predicted RIR for the ENTERED weight × reps. Always
+          visible while a prediction exists (unlike the banner's amber
+          warning, which only fires at ≤ 0 RIR); the (i) opens a sheet that
+          walks through the math in plain language. */}
+      {effortCheck && (
+        <div className="flex items-center justify-between gap-2 pl-1" data-testid="predicted-rir">
+          <span
+            aria-live="polite"
+            className={`text-[12px] leading-snug ${
+              effortCheck.predictedRir <= 0 ? 'text-amber-400' : 'text-surface-400'
+            }`}
+          >
+            {effortCheck.predictedRir < 0
+              ? `Predicted: ${Math.abs(effortCheck.predictedRir)} rep${
+                  Math.abs(effortCheck.predictedRir) === 1 ? '' : 's'
+                } past your max`
+              : `Predicted: ~${effortCheck.predictedRir} RIR (${
+                  RIR_LABELS[clampToChip(effortCheck.predictedRir)]
+                })`}
+            {effortCheck.softened ? ' · rough estimate' : ''}
+          </span>
+          <button
+            type="button"
+            onClick={() => setShowPredictionInfo(true)}
+            aria-label="How this RIR prediction works"
+            className="min-w-[44px] min-h-[44px] -my-2 flex items-center justify-center flex-shrink-0 text-surface-500 hover:text-surface-300 transition-colors"
+          >
+            <IconInfoCircle size={16} />
+          </button>
+        </div>
+      )}
+
+      {/* Row 2: RIR chips (labeled, full-width) + set type + feedback sheet trigger */}
       <div className="flex items-stretch gap-2">
         {RIR_CHIPS.map((chip) => (
           <button
             key={chip}
             type="button"
-            onClick={() => setSelectedRir(chip)}
+            onClick={() => {
+              setSelectedRir(chip);
+              setRirTouched(true);
+            }}
             disabled={disabled}
             aria-label={`${RIR_CHIP_TEXT[chip]} reps in reserve (${RIR_LABELS[chip]})`}
             aria-pressed={selectedRir === chip}
@@ -628,6 +686,26 @@ export function SetLoggerRow({
             </span>
           </button>
         ))}
+        <button
+          type="button"
+          onClick={() => setShowSetTypeSheet(true)}
+          disabled={disabled}
+          aria-label={selectedSetType === 'normal' ? 'Set type: normal (tap to change)' : `Set type: ${selectedSetType}`}
+          className={`relative min-w-[52px] min-h-[52px] rounded-xl flex items-center justify-center transition-colors ${
+            selectedSetType !== 'normal'
+              ? 'text-primary-400 bg-primary-500/10 border border-primary-500/40'
+              : 'text-surface-400 hover:text-surface-200 bg-surface-800/50 hover:bg-surface-800'
+          }`}
+          title={selectedSetType === 'normal' ? 'Normal set' : selectedSetType.replace('_', '-')}
+        >
+          <IconRepeat size={20} />
+          {selectedSetType !== 'normal' && (
+            <span
+              className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-primary-400"
+              aria-hidden="true"
+            />
+          )}
+        </button>
         <button
           type="button"
           onClick={() => setShowFeedbackSheet(true)}
@@ -732,6 +810,93 @@ export function SetLoggerRow({
           </p>
         </div>
       </BottomSheet>
+
+      {/* Set type selector sheet */}
+      <BottomSheet
+        isOpen={showSetTypeSheet}
+        onClose={() => setShowSetTypeSheet(false)}
+        title="Set type"
+      >
+        <div className="space-y-3">
+          <p className="text-[13px] text-surface-400">
+            Mark advanced training techniques so they don&apos;t contaminate progression estimates.
+          </p>
+          {(['normal', 'rest_pause', 'myorep', 'dropset'] as const).map((type) => {
+            const labels: Record<typeof type, { name: string; desc: string }> = {
+              normal: {
+                name: 'Normal',
+                desc: 'Standard straight set',
+              },
+              rest_pause: {
+                name: 'Rest-Pause',
+                desc: 'Multiple mini-sets with short pauses',
+              },
+              myorep: {
+                name: 'Myo-Rep',
+                desc: 'Activation set + mini-sets near failure',
+              },
+              dropset: {
+                name: 'Drop Set',
+                desc: 'Immediately reduce weight and continue',
+              },
+            };
+            const label = labels[type];
+            return (
+              <button
+                key={type}
+                type="button"
+                onClick={() => {
+                  setSelectedSetType(type);
+                  setShowSetTypeSheet(false);
+                }}
+                disabled={disabled}
+                className={`w-full min-h-[44px] flex items-start gap-3 rounded-lg px-3 py-2.5 text-left transition-colors ${
+                  selectedSetType === type
+                    ? 'bg-primary-500/20 border border-primary-500/50'
+                    : 'bg-surface-800/50 hover:bg-surface-800 border border-surface-700'
+                }`}
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="text-[14px] font-medium text-surface-100">{label.name}</div>
+                  <div className="text-[12px] text-surface-400 mt-0.5">{label.desc}</div>
+                </div>
+                {selectedSetType === type && (
+                  <span className="text-primary-400 text-[12px] font-medium mt-0.5">✓</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </BottomSheet>
+
+      {/* Predicted-RIR reasoning sheet (mirrors the SuggestionBanner info
+          sheet's list styling — one input layer of the math per line). */}
+      {effortCheck && (
+        <BottomSheet
+          isOpen={showPredictionInfo}
+          onClose={() => setShowPredictionInfo(false)}
+          title={`Why ${effortCheck.weightLabel} × ${effortCheck.reps} ≈ ${
+            effortCheck.predictedRir < 0 ? 'past max' : `${effortCheck.predictedRir} RIR`
+          }`}
+        >
+          <ul className="space-y-2.5" data-testid="predicted-rir-reasoning">
+            {effortCheck.reasoning.map((line, i) => (
+              <li key={i} className="flex items-start gap-2 text-[13px] text-surface-300">
+                <span
+                  className="mt-1.5 w-1 h-1 rounded-full bg-primary-400 flex-shrink-0"
+                  aria-hidden="true"
+                />
+                {line}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-4 text-[11px] text-surface-500">
+            The prediction updates live as you change the weight or reps, and it uses the same
+            math as the set suggestion above — it can be off on any given day, so trust how the
+            set actually feels.
+          </p>
+        </BottomSheet>
+      )}
     </div>
   );
 }

@@ -472,6 +472,7 @@ describe('rep_total path', () => {
       rir: 2,
       rationale: 'maintain',
       effortVsTarget: 'on_target',
+      trigger: 'none',
     });
     expect(echo(9).reps).toBe(15);
     expect(echo(40).reps).toBe(25);

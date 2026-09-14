@@ -64,6 +64,24 @@ const customJestConfig = {
       branches: 80,
       statements: 90,
     },
+    'services/plannedVolumeProjection.ts': {
+      lines: 90,
+      functions: 80,
+      branches: 80,
+      statements: 90,
+    },
+    'services/volumeDeficitSuggestions.ts': {
+      lines: 90,
+      functions: 80,
+      branches: 80,
+      statements: 90,
+    },
+    'services/exerciseOrdering.ts': {
+      lines: 90,
+      functions: 80,
+      branches: 80,
+      statements: 90,
+    },
     'services/volumeTrendsData.ts': {
       lines: 70,
       functions: 60,
@@ -75,6 +93,18 @@ const customJestConfig = {
       functions: 60,
       branches: 50,
       statements: 70,
+    },
+    'services/livePrDetector.ts': {
+      lines: 90,
+      functions: 80,
+      branches: 80,
+      statements: 90,
+    },
+    'services/suggestionEngine/historyWindow.ts': {
+      lines: 90,
+      functions: 80,
+      branches: 80,
+      statements: 90,
     },
     'services/exerciseFilter.ts': {
       lines: 70,

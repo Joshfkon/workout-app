@@ -26,7 +26,7 @@
  */
 
 import { useMemo, useState } from 'react';
-import { IconAdjustments, IconCheck, IconPlus, IconX } from '@tabler/icons-react';
+import { IconAdjustments, IconCheck, IconPlus, IconX, IconStar, IconStarFilled } from '@tabler/icons-react';
 import type { AvailableExercise, GymLocation } from '../_lib/types';
 import { formatMuscleName } from '@/lib/utils';
 import { useKeyboardInset } from '@/hooks/useKeyboardInset';
@@ -135,6 +135,10 @@ export interface AddExercisePickerProps {
   stapleExerciseIds: Set<string>;
   frequentExerciseIds: Map<string, number>;
   lastDoneExercises: Map<string, Date>;
+  /** Exercise IDs the user has favorited (defaults to empty Set) */
+  favoriteExerciseIds?: Set<string>;
+  /** Callback to toggle favorite status (optional, no-op if omitted) */
+  onToggleFavorite?: (exerciseId: string) => void;
   /**
    * Primary muscles already in today's session plan (variant="workout").
    * Drives the "Suggested" section; falls back to the big movement-pattern
@@ -181,6 +185,8 @@ export function AddExercisePicker({
   stapleExerciseIds,
   frequentExerciseIds,
   lastDoneExercises,
+  favoriteExerciseIds = new Set(),
+  onToggleFavorite = () => {},
   planMuscles,
   selectedExercisesToAdd,
   onToggleExerciseSelection,
@@ -193,6 +199,9 @@ export function AddExercisePicker({
 }: AddExercisePickerProps) {
   // Local UI state: the sort + location controls are collapsed by default.
   const [showAdjustments, setShowAdjustments] = useState(false);
+  // Tab selection: 'default' shows Recent + Favorites (old behavior), 'all' shows Browse all
+  type ViewTab = 'default' | 'all';
+  const [selectedTab, setSelectedTab] = useState<ViewTab>('default');
   // Only mounted while open, so the keyboard listeners can always be on.
   const { inset: keyboardInset, scrollContainerRef } = useKeyboardInset<HTMLDivElement>(true);
 
@@ -326,8 +335,9 @@ export function AddExercisePicker({
     return FALLBACK_SUGGESTED_MUSCLES;
   };
 
-  /** The default (pre-search) view: Recent + Suggested, capped to one screen. */
+  /** The default (pre-search) view: Recent + Favorites + Suggested, capped to one screen. */
   const getDefaultSections = (pool: AvailableExercise[]) => {
+    // Recent: exercises the user has performed, sorted by recency
     const performed = pool.filter(
       ex => (frequentExerciseIds.get(ex.id) ?? 0) > 0 || lastDoneExercises.has(ex.id)
     );
@@ -345,6 +355,17 @@ export function AddExercisePicker({
       .slice(0, MAX_RECENT);
     const recentIds = new Set(recent.map(ex => ex.id));
 
+    // Favorites: exercises the user has starred
+    const favorites = pool
+      .filter(ex => favoriteExerciseIds.has(ex.id) && !recentIds.has(ex.id))
+      .sort((a, b) => {
+        const availabilityDiff = availabilityRank(a) - availabilityRank(b);
+        if (availabilityDiff !== 0) return availabilityDiff;
+        return a.name.localeCompare(b.name);
+      })
+      .slice(0, MAX_RECENT);
+    const favoriteIds = new Set(favorites.map(ex => ex.id));
+
     // Staples for the relevant muscles, interleaved one-per-muscle so every
     // muscle gets representation within the row cap. With a muscle chip
     // active the pool is already scoped, so all its staples are relevant.
@@ -353,7 +374,7 @@ export function AddExercisePicker({
       : getRelevantMuscles();
     const candidatesByMuscle = new Map<string, AvailableExercise[]>();
     for (const ex of pool) {
-      if (!stapleExerciseIds.has(ex.id) || recentIds.has(ex.id)) continue;
+      if (!stapleExerciseIds.has(ex.id) || recentIds.has(ex.id) || favoriteIds.has(ex.id)) continue;
       // Suggested = "do this today" — exercises the location can't support
       // stay reachable via search/browse (flagged), not suggested.
       if (isUnavailableHere(ex)) continue;
@@ -366,7 +387,7 @@ export function AddExercisePicker({
     candidatesByMuscle.forEach(list => list.sort((a, b) => a.name.localeCompare(b.name)));
 
     const suggested: AvailableExercise[] = [];
-    const maxSuggested = Math.max(0, MAX_DEFAULT_ROWS - recent.length);
+    const maxSuggested = Math.max(0, MAX_DEFAULT_ROWS - recent.length - favorites.length);
     for (let round = 0; suggested.length < maxSuggested; round++) {
       let added = false;
       for (const muscle of relevantMuscles) {
@@ -380,24 +401,27 @@ export function AddExercisePicker({
       if (!added) break;
     }
 
-    return { recent, suggested };
+    return { recent, favorites, suggested };
   };
 
   const renderExerciseRow = (exercise: AvailableExercise) => {
     const isSelected = selectedExercisesToAdd.some(e => e.id === exercise.id);
+    const isFavorited = favoriteExerciseIds.has(exercise.id);
     const unavailableReason = unavailableAtLocation.get(exercise.id);
     return (
-      <button
+      <div
         key={exercise.id}
         data-testid="add-exercise-row"
         data-exercise-id={exercise.id}
-        onClick={() => onToggleExerciseSelection(exercise)}
-        disabled={isAddingExercise}
-        className={`w-full flex items-center justify-between gap-3 px-4 py-1.5 min-h-[44px] transition-colors text-left disabled:opacity-50 border-b border-surface-800/50 ${
-          isSelected ? 'bg-primary-500/10' : 'hover:bg-surface-800/50'
+        className={`w-full flex items-center justify-between gap-2 px-4 py-1.5 min-h-[44px] transition-colors border-b border-surface-800/50 ${
+          isSelected ? 'bg-primary-500/10' : ''
         } ${unavailableReason ? 'opacity-60' : ''}`}
       >
-        <div className="min-w-0 flex-1">
+        <button
+          onClick={() => onToggleExerciseSelection(exercise)}
+          disabled={isAddingExercise}
+          className="min-w-0 flex-1 text-left disabled:opacity-50 hover:opacity-80 transition-opacity"
+        >
           <div className="flex items-center gap-1.5">
             <span className="text-[13px] leading-5 text-surface-200 truncate">{exercise.name}</span>
             {frequentExerciseIds.has(exercise.id) && (
@@ -423,9 +447,28 @@ export function AddExercisePicker({
               </span>
             )}
           </div>
+        </button>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {onToggleFavorite && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleFavorite(exercise.id);
+              }}
+              disabled={isAddingExercise}
+              className="p-1.5 hover:bg-surface-800 rounded transition-colors disabled:opacity-50"
+              aria-label={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
+            >
+              {isFavorited ? (
+                <IconStarFilled size={16} className="text-amber-400" />
+              ) : (
+                <IconStar size={16} className="text-surface-500" />
+              )}
+            </button>
+          )}
+          {isSelected && <IconCheck size={18} className="text-primary-400 flex-shrink-0" />}
         </div>
-        {isSelected && <IconCheck size={18} className="text-primary-400 flex-shrink-0" />}
-      </button>
+      </div>
     );
   };
 
@@ -474,9 +517,9 @@ export function AddExercisePicker({
       );
     }
 
-    // Default view: Recent + Suggested, capped so it fits one screen.
-    const { recent, suggested } = getDefaultSections(pool);
-    const shownCount = recent.length + suggested.length;
+    // Default view: Recent + Favorites + Suggested, capped so it fits one screen.
+    const { recent, favorites, suggested } = getDefaultSections(pool);
+    const shownCount = recent.length + favorites.length + suggested.length;
     // Graceful fallback (e.g. no history and no staples in the pool): show
     // the top of the sorted list instead of an empty modal.
     const fallback = shownCount === 0 ? sortByOption(pool).slice(0, MAX_DEFAULT_ROWS) : [];
@@ -487,6 +530,12 @@ export function AddExercisePicker({
           <>
             {renderSectionHeader('Recent')}
             {recent.map(renderExerciseRow)}
+          </>
+        )}
+        {favorites.length > 0 && (
+          <>
+            {renderSectionHeader('Favorites')}
+            {favorites.map(renderExerciseRow)}
           </>
         )}
         {suggested.length > 0 && (
@@ -530,7 +579,7 @@ export function AddExercisePicker({
   const adjustmentsActive = selectedLocationFilter !== null || exerciseSortOption !== 'frequency';
 
   const chipClass = (active: boolean) =>
-    `flex-shrink-0 px-2.5 py-1 rounded-full text-[11px] leading-4 capitalize border transition-colors ${
+    `shrink-0 whitespace-nowrap px-2.5 py-1 rounded-full text-[11px] leading-4 capitalize border transition-colors ${
       active
         ? 'bg-primary-500/20 border-primary-500/40 text-primary-300'
         : 'bg-surface-800 border-surface-700 text-surface-400 hover:text-surface-200'
@@ -607,29 +656,38 @@ export function AddExercisePicker({
 
           {/* Muscle chips + adjustments toggle */}
           <div className="mt-2 flex items-center gap-2">
-            <div
-              className="flex-1 flex items-center gap-1.5 overflow-x-auto"
-              style={{ scrollbarWidth: 'none' }}
-            >
-              <button
-                type="button"
-                onClick={() => onSelectedMuscleFilterChange(null)}
-                className={chipClass(!selectedMuscleFilter)}
+            {/* min-w-0: without it this flex item's automatic minimum size is
+                the full chip-row width, so the inner overflow-x-auto never
+                actually overflows and the row can't scroll past the modal edge */}
+            <div className="flex-1 min-w-0 relative">
+              <div
+                className="flex items-center gap-1.5 overflow-x-auto pb-2 pr-8"
+                style={{ scrollbarWidth: 'none' }}
               >
-                All
-              </button>
-              {muscleOptions.map(muscle => (
                 <button
-                  key={muscle}
                   type="button"
-                  onClick={() =>
-                    onSelectedMuscleFilterChange(selectedMuscleFilter === muscle ? null : muscle)
-                  }
-                  className={chipClass(selectedMuscleFilter === muscle)}
+                  onClick={() => onSelectedMuscleFilterChange(null)}
+                  className={chipClass(!selectedMuscleFilter)}
                 >
-                  {formatMuscleName(muscle)}
+                  All
                 </button>
-              ))}
+                {muscleOptions.map(muscle => (
+                  <button
+                    key={muscle}
+                    type="button"
+                    onClick={() =>
+                      onSelectedMuscleFilterChange(selectedMuscleFilter === muscle ? null : muscle)
+                    }
+                    className={chipClass(selectedMuscleFilter === muscle)}
+                  >
+                    {formatMuscleName(muscle)}
+                  </button>
+                ))}
+              </div>
+              {/* Fade gradient to indicate scrollable content */}
+              {muscleOptions.length > 5 && (
+                <div className="absolute right-0 top-0 bottom-2 w-8 bg-gradient-to-l from-surface-900 to-transparent pointer-events-none" />
+              )}
             </div>
             <button
               type="button"
@@ -651,29 +709,35 @@ export function AddExercisePicker({
               "All" clears the whole axis. Rendered only when the library spans
               more than one equipment group. */}
           {equipmentOptions.length > 1 && (
-            <div
-              className="mt-1.5 flex items-center gap-1.5 overflow-x-auto"
-              style={{ scrollbarWidth: 'none' }}
-              data-testid="equipment-filter-row"
-            >
-              <button
-                type="button"
-                onClick={() => selectedEquipmentGroups.forEach(onToggleEquipmentGroup)}
-                className={chipClass(selectedEquipmentGroups.length === 0)}
+            <div className="mt-1.5 relative">
+              <div
+                className="flex items-center gap-1.5 overflow-x-auto pb-2 pr-8"
+                style={{ scrollbarWidth: 'none' }}
+                data-testid="equipment-filter-row"
               >
-                All Gear
-              </button>
-              {equipmentOptions.map(group => (
                 <button
-                  key={group}
                   type="button"
-                  onClick={() => onToggleEquipmentGroup(group)}
-                  className={chipClass(selectedEquipmentGroups.includes(group))}
-                  aria-pressed={selectedEquipmentGroups.includes(group)}
+                  onClick={() => selectedEquipmentGroups.forEach(onToggleEquipmentGroup)}
+                  className={chipClass(selectedEquipmentGroups.length === 0)}
                 >
-                  {equipmentGroupLabel(group)}
+                  All Gear
                 </button>
-              ))}
+                {equipmentOptions.map(group => (
+                  <button
+                    key={group}
+                    type="button"
+                    onClick={() => onToggleEquipmentGroup(group)}
+                    className={chipClass(selectedEquipmentGroups.includes(group))}
+                    aria-pressed={selectedEquipmentGroups.includes(group)}
+                  >
+                    {equipmentGroupLabel(group)}
+                  </button>
+                ))}
+              </div>
+              {/* Fade gradient to indicate scrollable content */}
+              {equipmentOptions.length > 3 && (
+                <div className="absolute right-0 top-0 bottom-2 w-8 bg-gradient-to-l from-surface-900 to-transparent pointer-events-none" />
+              )}
             </div>
           )}
 
@@ -699,7 +763,7 @@ export function AddExercisePicker({
                 <div className="flex items-center gap-2">
                   <span className="text-[11px] text-surface-500 w-14 flex-shrink-0">Location</span>
                   <div
-                    className="flex-1 flex items-center gap-1.5 overflow-x-auto"
+                    className="flex-1 flex items-center gap-1.5 overflow-x-auto pb-2 pr-8"
                     style={{ scrollbarWidth: 'none' }}
                   >
                     <button

@@ -7,9 +7,11 @@
  * what a pending picker selection would add — is unit-testable on its own.
  */
 
-import type { SetLog } from '@/types/schema';
+import { muscleMatchesGroup, type SetLog } from '@/types/schema';
+import { isMuscleWarmedUp } from '@/services/progressionEngine';
 import {
   estimateWorkoutDuration,
+  plannedWarmupSetsFor,
   type DurationBlockInput,
   type WorkoutDurationEstimate,
 } from '@/services/workoutDurationEstimator';
@@ -134,27 +136,70 @@ export function estimateSessionDuration({
   });
 }
 
+export interface PendingExercise {
+  id: string;
+  mechanic?: string | null;
+  /** Primary muscle (picker rows carry it as `primary_muscle`). */
+  primary_muscle?: string | null;
+}
+
+/** Session state the warmup decision reads — the same inputs handleAddExercise uses. */
+export interface PendingWarmupContext {
+  blocks: ExerciseBlockWithExercise[];
+  completedSets: SetLog[];
+}
+
+/**
+ * Would the add path generate a warmup protocol for this pending exercise?
+ * Mirrors `handleAddExercise`: no warmup when the muscle is already covered by
+ * an existing block, warmed by completed sets, or covered by an exercise
+ * earlier in the same pending selection (`addedEarlierInBatch`).
+ */
+function pendingNeedsWarmup(
+  muscle: string | null | undefined,
+  context: PendingWarmupContext | undefined,
+  batchMusclesSoFar: string[]
+): boolean {
+  if (!muscle) return false;
+  if (batchMusclesSoFar.some((prev) => muscleMatchesGroup(prev, muscle))) return false;
+  if (!context) return true;
+  if (context.blocks.some((block) => muscleMatchesGroup(block.exercise.primaryMuscle, muscle))) {
+    return false;
+  }
+  return !isMuscleWarmedUp(muscle, {
+    completedSets: context.completedSets,
+    blocks: context.blocks,
+  });
+}
+
 /**
  * Seconds the exercises pending in the add-exercise picker would add to what's
- * left of the session, using the same defaults the add path writes. Warmups are
- * left out: whether a new exercise gets one depends on which muscles are
- * already warm, which the picker can't know until the block exists.
+ * left of the session, using the same set/rest defaults the add path writes —
+ * including the warmup protocol it will generate for the first exercise of
+ * each not-yet-warm muscle group. Leaving warmups out is what made the
+ * picker's promise undershoot the post-add estimate by the whole warmup bill.
  */
 export function estimatePendingAdditionSeconds(
   current: DurationBlockInput[],
-  pending: { id: string; mechanic?: string | null }[]
+  pending: PendingExercise[],
+  context?: PendingWarmupContext
 ): number {
   if (pending.length === 0) return 0;
 
+  const batchMuscles: string[] = [];
   const pendingBlocks: DurationBlockInput[] = pending.map((exercise) => {
     const isIsolation = exercise.mechanic === 'isolation';
+    const mechanic = isIsolation ? ('isolation' as const) : ('compound' as const);
     const defaults = isIsolation ? ADDED_BLOCK_DEFAULTS.isolation : ADDED_BLOCK_DEFAULTS.compound;
+    const needsWarmup = pendingNeedsWarmup(exercise.primary_muscle, context, batchMuscles);
+    if (exercise.primary_muscle) batchMuscles.push(exercise.primary_muscle);
     return {
       id: `pending-${exercise.id}`,
       targetSets: defaults.targetSets,
       completedSets: 0,
       restSeconds: defaults.restSeconds,
-      mechanic: isIsolation ? 'isolation' : 'compound',
+      mechanic,
+      warmupSetsRemaining: needsWarmup ? plannedWarmupSetsFor(mechanic) : 0,
     };
   });
 

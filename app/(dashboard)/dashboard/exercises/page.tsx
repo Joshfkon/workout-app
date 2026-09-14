@@ -1,10 +1,13 @@
 'use client';
 
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient, useIsRestoring } from '@tanstack/react-query';
+import { useSearchParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import { Card, Input, Badge, Button, LoadingAnimation, SkeletonExercise } from '@/components/ui';
+import { Card, Input, Badge, Button, LoadingState, SkeletonExercise, PageHeader, EmptyState } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 
@@ -12,7 +15,7 @@ import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 // revisiting Exercises renders instantly instead of re-blocking on a spinner.
 const EXERCISE_CATALOG_KEY = ['exercises', 'catalog'] as const;
 const EXERCISE_CATALOG_COLUMNS =
-  'id, name, primary_muscle, secondary_muscles, mechanic, form_cues, common_mistakes, equipment_required, equipment, movement_pattern, is_bodyweight, bodyweight_type, assistance_type, exercise_type, is_custom, hypertrophy_tier, stretch_under_load, resistance_profile, progression_ease, demo_gif_url, demo_thumbnail_url, youtube_video_id';
+  'id, name, primary_muscle, secondary_muscles, mechanic, form_cues, common_mistakes, equipment_required, equipment, movement_pattern, is_bodyweight, bodyweight_type, assistance_type, exercise_type, is_custom, created_by, hypertrophy_tier, stretch_under_load, resistance_profile, progression_ease, demo_gif_url, demo_thumbnail_url, youtube_video_id';
 import {
   dedupeExercisesById,
   exerciseMatchesEquipment,
@@ -66,6 +69,7 @@ interface Exercise {
   /** Modality — duration_based exercises store seconds in set reps fields */
   exercise_type?: 'rep_based' | 'duration_based';
   is_custom?: boolean;
+  created_by?: string | null;
   // Hypertrophy scoring (Nippard methodology)
   hypertrophy_tier?: 'S' | 'A' | 'B' | 'C' | 'D' | 'F';
   stretch_under_load?: number;
@@ -128,8 +132,11 @@ interface ExerciseHistory {
 }
 
 export default function ExercisesPage() {
+  useDocumentTitle('Exercises');
   const [mounted, setMounted] = useState(false);
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const [search, setSearch] = useState('');
   const [selectedMuscle, setSelectedMuscle] = useState<string | null>(null);
   const [selectedEquipment, setSelectedEquipment] = useState<string | null>(null);
@@ -193,6 +200,17 @@ export default function ExercisesPage() {
     setMounted(true);
   }, []);
 
+  // Who's editing — the shared-edit notice shows on every row the user
+  // doesn't own (stock catalog rows, and custom rows created by others).
+  // Local session read, no auth-server round-trip.
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  useEffect(() => {
+    const supabase = createUntypedClient();
+    supabase.auth.getSession().then(({ data }: { data: { session: { user?: { id?: string } } | null } }) => {
+      setCurrentUserId(data.session?.user?.id ?? null);
+    });
+  }, []);
+
   const catalogQuery = useQuery({
     queryKey: EXERCISE_CATALOG_KEY,
     queryFn: async () => {
@@ -216,6 +234,50 @@ export default function ExercisesPage() {
   // query is paused (no data yet) but the cache is warm — don't flash the
   // skeleton then.
   const isRestoring = useIsRestoring();
+
+  // Handle deep-link to edit a specific exercise via ?edit=<exerciseId>
+  useEffect(() => {
+    const editId = searchParams.get('edit');
+    if (!editId) return;
+
+    // The catalog may be stale (24h staleTime), and the newly saved exercise
+    // might not be in the cache yet. Invalidate and wait for fresh data.
+    const openEditModal = async () => {
+      // Force refetch of the catalog to include the newly created exercise
+      await queryClient.invalidateQueries({ queryKey: EXERCISE_CATALOG_KEY });
+      
+      // Wait for the query to refetch
+      await queryClient.refetchQueries({ queryKey: EXERCISE_CATALOG_KEY });
+      
+      // Get the fresh catalog
+      const freshCatalog = queryClient.getQueryData<Exercise[]>(EXERCISE_CATALOG_KEY);
+      if (!freshCatalog) return;
+      
+      // Find the exercise to edit
+      const exerciseToEdit = freshCatalog.find((ex) => ex.id === editId);
+      if (exerciseToEdit) {
+        // Initialize editData the same way handleEditExercise does
+        setEditingExercise(exerciseToEdit);
+        setEditData({
+          primaryMuscle: exerciseToEdit.primary_muscle,
+          isBodyweight: exerciseToEdit.is_bodyweight || false,
+          bodyweightType: exerciseToEdit.bodyweight_type || null,
+          assistanceType: exerciseToEdit.assistance_type || null,
+          equipment: exerciseToEdit.equipment || 'barbell',
+          equipmentRequired: Array.isArray(exerciseToEdit.equipment_required) ? exerciseToEdit.equipment_required : [],
+          movementPattern: exerciseToEdit.movement_pattern || 'compound',
+          secondaryMuscles: Array.isArray(exerciseToEdit.secondary_muscles) ? exerciseToEdit.secondary_muscles : [],
+          hypertrophyTier: exerciseToEdit.hypertrophy_tier,
+        });
+        setShowAdvancedFields(false);
+        setSaveResult(null);
+        // Clear the query param after opening the modal
+        router.replace('/dashboard/exercises');
+      }
+    };
+
+    openEditModal();
+  }, [searchParams, queryClient, router]);
 
   // Skeleton only when we have NO catalog to show and aren't mid-restore. A
   // disabled/pre-mount query still returns cached data, so a revisit (SPA) or
@@ -560,7 +622,7 @@ export default function ExercisesPage() {
         success: true,
         message:
           result.outcome === 'updated_catalog'
-            ? '✅ Catalog exercise updated for all users (audited).'
+            ? '✅ Shared exercise updated for all users (audited).'
             : '✅ Exercise updated successfully!',
       });
       
@@ -670,15 +732,12 @@ export default function ExercisesPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-surface-100">Exercise Library</h1>
-          <p className="text-surface-400 mt-1">
-            {isCatalogLoading ? 'Loading...' : `${exercises.length} exercises available`}
-          </p>
-        </div>
-        <div className="flex gap-3">
+    <div className="px-4 space-y-6">
+      <PageHeader
+        title="Exercise Library"
+        subtitle={isCatalogLoading ? 'Loading...' : `${exercises.length} exercises available`}
+        actions={
+          <div className="flex gap-3">
           {/* Dev-only bulk AI enrichment — hidden from end users (set
               NEXT_PUBLIC_DEV_TOOLS=true locally to expose it) */}
           {process.env.NEXT_PUBLIC_DEV_TOOLS === 'true' && (
@@ -737,7 +796,8 @@ export default function ExercisesPage() {
             </Button>
           </Link>
         </div>
-      </div>
+        }
+      />
 
       {/* Batch completion progress */}
       {batchProgress && (
@@ -923,16 +983,11 @@ export default function ExercisesPage() {
 
       {/* Exercise list */}
       {isCatalogLoading ? (
-        <div className="space-y-4" data-testid="exercises-loading">
-          <div className="flex justify-center py-8">
-            <LoadingAnimation type="random" size="lg" text="Loading exercises..." />
-          </div>
-          <div className="grid gap-3">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <SkeletonExercise key={i} />
-            ))}
-          </div>
-        </div>
+        <LoadingState 
+          label="Loading exercises..." 
+          size="lg"
+          data-testid="exercises-loading"
+        />
       ) : (
         <div className="grid gap-3">
           {filteredExercises.map((exercise) => {
@@ -1399,12 +1454,11 @@ export default function ExercisesPage() {
       )}
 
       {!isCatalogLoading && filteredExercises.length === 0 && (
-        <Card className="text-center py-12">
-          <p className="text-surface-400">No exercises found</p>
-          <p className="text-sm text-surface-500 mt-1">
-            Try adjusting your search or filters
-          </p>
-        </Card>
+        <EmptyState
+          icon="🔍"
+          title="No exercises found"
+          description="Try adjusting your search or filters"
+        />
       )}
 
       {/* Edit Exercise Modal */}
@@ -1440,17 +1494,24 @@ export default function ExercisesPage() {
                   <p className="text-surface-100 font-medium">{editingExercise.name}</p>
                 </div>
 
-                {/* Catalog rows are shared — edits go through the audited
-                    catalog write path and apply to every user. */}
-                {!editingExercise.is_custom && (
+                {/* Rows the user doesn't own are shared — edits go through
+                    the audited shared write path and apply to every user. */}
+                {!(
+                  editingExercise.is_custom &&
+                  // While the session is still resolving, assume a custom row
+                  // is the user's own rather than flashing the notice.
+                  (!editingExercise.created_by ||
+                    currentUserId === null ||
+                    editingExercise.created_by === currentUserId)
+                ) && (
                   <div
                     className="p-3 bg-warning-900/30 border border-warning-700 rounded-lg"
                     data-testid="catalog-exercise-notice"
                   >
                     <p className="text-sm text-warning-400">
-                      Built-in catalog exercise — saving edits the shared
-                      catalog for every user (previous values are kept in the
-                      audit trail).
+                      Shared exercise (not created by you) — saving edits it
+                      for every user (previous values are kept in the audit
+                      trail).
                     </p>
                   </div>
                 )}

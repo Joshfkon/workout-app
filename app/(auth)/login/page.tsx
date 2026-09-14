@@ -132,7 +132,7 @@ export default function LoginPage() {
         } catch {
           // Storage unavailable — nothing to clean up.
         }
-        router.push('/dashboard/log');
+        router.push('/dashboard/train');
         router.refresh();
       }
     } catch (err) {

@@ -19,7 +19,10 @@ import { __setDriverForTests, type OutboxEntry } from '@/lib/offline/setOutbox';
 // action that cannot resolve headlessly. Production catches it; mocking here
 // keeps simulated output clean without pretending the path ran.
 jest.mock('@/lib/actions/workout-calories', () => ({
-  calculateAndSaveWorkoutCalories: jest.fn().mockResolvedValue(undefined),
+  // The real action is a SERVER action and cannot resolve headlessly; it also
+  // reports { success }, which the post-finish settlement checks. A mock
+  // returning undefined reads as a failed run and leaves work items behind.
+  calculateAndSaveWorkoutCalories: jest.fn().mockResolvedValue({ success: true }),
 }));
 
 function memoryOutbox() {

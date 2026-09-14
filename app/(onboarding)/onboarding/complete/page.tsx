@@ -6,6 +6,7 @@ import { Button, Card, CardContent, CardHeader, CardTitle, Badge, ExplainedTerm 
 import { InlineHint } from '@/components/ui/FirstTimeHint';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { usePWA } from '@/hooks/usePWA';
+import { updateOnboardingStep } from '@/lib/onboarding/onboardingProgress';
 import {
   CoachingSessionManager,
   type StrengthProfile,
@@ -178,11 +179,9 @@ function CompleteContent() {
     const { data: { user } } = await supabase.auth.getUser();
 
     if (user) {
-      // Mark onboarding as complete
-      await supabase
-        .from('users')
-        .update({ onboarding_completed: true })
-        .eq('id', user.id);
+      // DO NOT mark onboarding as complete yet - still have profile/enhanced/install steps
+      // Track that user has viewed their results
+      await updateOnboardingStep(supabase, user.id, 'complete');
 
       // Check if user already has a profile
       const { data: existingProfile } = await supabase

@@ -205,7 +205,7 @@ Based on RPE analysis in `types/schema.ts`:
 
 ### Set Feedback System
 Users provide structured feedback per set:
-- **RIR (Reps In Reserve)**: 4+ = Easy, 2-3 = Good, 1 = Hard, 0 = Maxed Out
+- **RIR (Reps In Reserve)**: 4+ = Easy, 3 = Good, 2 = Good, 1 = Hard, 0 = Maxed Out
 - **Form Rating**: clean, some_breakdown, ugly
 - **Discomfort**: Optional pain/discomfort logging by body part
 
@@ -461,8 +461,8 @@ NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 
-# AI Coaching (Elite tier)
-ANTHROPIC_API_KEY=
+# AI Coaching (Elite tier) - uses xAI Grok
+XAI_API_KEY=
 
 # Payments
 STRIPE_SECRET_KEY=
@@ -484,7 +484,7 @@ NEXT_PUBLIC_TURNSTILE_SITE_KEY=
 
 ## Important Warnings
 
-1. **Never expose server-side keys**: `SUPABASE_SERVICE_ROLE_KEY`, `STRIPE_SECRET_KEY`, and `ANTHROPIC_API_KEY` are server-only
+1. **Never expose server-side keys**: `SUPABASE_SERVICE_ROLE_KEY`, `STRIPE_SECRET_KEY`, and `XAI_API_KEY` are server-only
 
 2. **Weight units**: Always store in kg, convert only for display
 
@@ -596,7 +596,7 @@ the references live, are the numbers numbers.
 
 | Module | Purpose |
 |---|---|
-| `simulation/sessionDriver.ts` | Headless user. Composes production functions only. |
+| `simulation/sessionDriver.ts` | Headless user. Composes production functions only — including `completeSession` (real finish flow) and the shared delete+renumber operation. |
 | `simulation/fakeSupabase.ts` | In-memory client. **Throws on anything it doesn't understand** — a silent `[]` would make the harness report fictional bugs. Enforces no constraints/RLS. |
 | `simulation/persona.ts` / `personas.ts` | The `PerformanceOutcome` contract and seven personas. |
 | `simulation/rng.ts` | Seeded RNG. Nothing may call `Math.random()`. |
@@ -617,6 +617,15 @@ Rules:
 5. GUARDRAILs are warnings. Promoting one to a CONTRACT is Josh's call.
 6. A failing INVARIANT/CONTRACT is reported as a bug with its reproducing seed;
    the engine is NOT patched in the same change as harness work.
+7. Every operation the driver exposes must be the one the APP calls, not a
+   local composition of smaller ones. Sessions finish through
+   `submitFinishOptimistic`; deletions go through `planSetDeletion` +
+   `persistSetDeletion`, the same pair the workout page uses. A driver that
+   assembles its own version of a multi-step operation quietly tests different
+   semantics from the app, which makes its findings fiction.
+8. Simulated sessions must BELONG to a mesocycle. `runPostSessionMesoUpdates`
+   short-circuits on a null `mesocycle_id`, so unlinked sessions silently skip
+   the week advance, the weekly fatigue log and the deload check.
 
 Open findings live in `docs/SIMULATION_FINDING_*.md`. Known defects are pinned
 with `it.failing` in `simulation/__tests__/scenarios.test.ts`, so they go red

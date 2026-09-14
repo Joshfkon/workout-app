@@ -54,7 +54,7 @@ This matters because:
 The only way to calibrate is to occasionally experience true failure.`,
     },
     {
-      heading: 'How HyperTracker Calibrates You',
+      heading: 'How HyperTrack Calibrates You',
       content: `We prescribe AMRAP (As Many Reps As Possible) sets on safe exercises - machines, cables, isolation work.
 
 When you do an AMRAP, we compare your actual max reps to what your recent RIR reports predicted. If you've been reporting "RIR 3" at 8 reps, you implied you could do 11 reps. If the AMRAP shows you can do 14, you've been sandbagging.
@@ -76,17 +76,17 @@ Stay at 2+ RIR always. A torn pec or herniated disc isn't worth that last rep. T
     },
     {
       heading: 'What "Hard" Should Feel Like',
-      content: `RIR 2-3 should feel like work:
+      content: `RIR 2 or 3 should feel like work:
 - Your last 2-3 reps are noticeably slower than your first
 - You're bracing harder, grip is tightening
 - You might make a face or grunt
 - You could do more, but it would be a genuine fight
 
-If every rep feels the same and you're breathing normally at the end, you're probably at RIR 4-5, not RIR 2.`,
+If every rep feels the same and you're breathing normally at the end, you're probably at RIR 4-5, not RIR 2 or 3.`,
     },
     {
       heading: 'Signs You\'re Sandbagging',
-      content: `- Weights haven't increased in 6+ weeks but you report RIR 2-3
+      content: `- Weights haven't increased in 6+ weeks but you report RIR 2 or 3
 - You consistently hit the top of your rep range
 - Your AMRAP results are 3+ reps higher than predicted
 - You never feel particularly tired after training
@@ -209,7 +209,7 @@ Improve movement quality - better mind-muscle connection, fuller range of motion
       content: `The app tracks your performance and recommends weight increases when you:
 
 - Hit the top of your rep range for 2-3 sessions
-- Report moderate RIR (2-3) consistently
+- Report moderate RIR (2 or 3) consistently
 - Maintain good form throughout
 
 Don't rush it. Premature weight increases lead to grinding, form breakdown, and plateaus.`,

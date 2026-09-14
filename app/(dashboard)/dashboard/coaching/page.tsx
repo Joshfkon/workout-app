@@ -1,11 +1,14 @@
 'use client';
 
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { LoadingAnimation } from '@/components/ui';
 
 // Redirect to combined Analytics page (Strength tab)
 export default function CoachingPage() {
+  useDocumentTitle('Coaching');
   const router = useRouter();
 
   useEffect(() => {

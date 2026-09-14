@@ -1,5 +1,7 @@
 'use client';
 
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+
 /**
  * /dashboard/mesocycle/plan — the whole training block, read-only.
  *
@@ -480,6 +482,7 @@ function PlanContent() {
 }
 
 export default function MesocyclePlanPage() {
+  useDocumentTitle('Mesocycle Plan');
   return (
     <Suspense fallback={<PlanSkeleton />}>
       <PlanContent />

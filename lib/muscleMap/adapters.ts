@@ -42,12 +42,17 @@ export interface MuscleMapDatum {
   status?: RecoveryStatus;
   /** Heat mode: the row's MEV-weighted long-window bucket (volumeHeatmap). */
   heat?: HeatLevel;
+  /** Highlight mode: the muscle is loaded as a stabilizer, not a mover. */
+  stabilizer?: boolean;
 }
 
 export type MuscleMapData = Partial<Record<MuscleId, MuscleMapDatum>>;
 
 /** Secondary muscles render at this fill opacity in highlight mode. */
 export const SECONDARY_HIGHLIGHT_EMPHASIS = 0.4;
+
+/** Stabilizers render fainter than secondaries — isometric support, not movers. */
+export const STABILIZER_HIGHLIGHT_EMPHASIS = 0.2;
 
 /**
  * Volume page: coarse rows paint all their standard children; a rendered fine
@@ -123,13 +128,16 @@ export function heatmapRowsToMapData(rows: VolumeHeatmapRow[]): MuscleMapData {
 
 /**
  * Exercise detail: primary muscle at full emphasis, secondaries at
- * SECONDARY_HIGHLIGHT_EMPHASIS. Tokens come straight off the exercise record
- * (legacy / standard / detailed, any casing) and go through the canonical
- * resolver. Primary is applied last so a muscle that is both stays primary.
+ * SECONDARY_HIGHLIGHT_EMPHASIS, stabilizers at STABILIZER_HIGHLIGHT_EMPHASIS.
+ * Tokens come straight off the exercise record (legacy / standard / detailed,
+ * any casing) and go through the canonical resolver. Stabilizers are applied
+ * first and primary last, so a muscle carrying multiple tags keeps its
+ * strongest (mover) emphasis.
  */
 export function exerciseHighlightData(
   primaryMuscle: string | null | undefined,
-  secondaryMuscles: readonly string[] | null | undefined
+  secondaryMuscles: readonly string[] | null | undefined,
+  stabilizers: readonly string[] | null | undefined = []
 ): MuscleMapData {
   const out: MuscleMapData = {};
   // A regionless coarse id ('traps', 'calves') owns no artwork path of its
@@ -140,6 +148,11 @@ export function exerciseHighlightData(
       out[member] = datum;
     }
   };
+  for (const stabilizer of stabilizers ?? []) {
+    for (const std of resolveMuscleToStandard(stabilizer)) {
+      paint(std, { value: STABILIZER_HIGHLIGHT_EMPHASIS, stabilizer: true });
+    }
+  }
   for (const secondary of secondaryMuscles ?? []) {
     for (const std of resolveMuscleToStandard(secondary)) {
       paint(std, { value: SECONDARY_HIGHLIGHT_EMPHASIS });

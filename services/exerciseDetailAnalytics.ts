@@ -13,7 +13,7 @@
  * the e1RM path for bodyweight movements.
  */
 
-import { estimateE1RM, sumDisplayVolume } from '@/lib/utils';
+import { estimateE1RM, sumDisplayVolume, parseLocalDate } from '@/lib/utils';
 import { getSetDuration, type ModalitySource } from '@/services/shared/setModality';
 import { rpeToRir } from '@/types/schema';
 
@@ -141,7 +141,7 @@ export function setE1RM(set: ExerciseDetailSet): number {
 
 /**
  * Effort text color for a set, following the app's RIR convention
- * (see RIRSelector): 2-3 RIR green "good", 1 RIR amber "hard",
+ * (see RIRSelector): 2 or 3 RIR green "good", 1 RIR amber "hard",
  * 0 RIR orange "maxed", 4+ RIR red "too easy / junk".
  */
 export function effortColorClass(rpe: number | null): string {
@@ -341,7 +341,7 @@ export function buildE1RMTrend(
 
 /** Local-time Monday of the week containing `d`, as YYYY-MM-DD. */
 function weekStartOf(iso: string): { key: string; label: string } {
-  const d = new Date(iso);
+  const d = parseLocalDate(iso);
   const monday = new Date(d.getFullYear(), d.getMonth(), d.getDate());
   const daysSinceMonday = (monday.getDay() + 6) % 7;
   monday.setDate(monday.getDate() - daysSinceMonday);

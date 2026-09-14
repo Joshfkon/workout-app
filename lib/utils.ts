@@ -37,22 +37,30 @@ export function getLocalDateString(date: Date = clockNow()): string {
 }
 
 /**
+ * Parse a date-only string (YYYY-MM-DD) as a local date, not UTC.
+ * 
+ * `new Date('2024-01-15')` parses as UTC midnight (2024-01-15T00:00:00Z), which
+ * is 2024-01-14 19:00 local in US Eastern. When that's compared against a local
+ * date range, entries near day boundaries land in the wrong bucket.
+ * 
+ * This helper parses YYYY-MM-DD as local midnight instead, matching how range
+ * bounds are built. Used for filtering weigh-ins, exercise history, etc.
+ */
+export function parseLocalDate(dateStr: string): Date {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    // If it's not a date-only string, fall back to Date constructor
+    return new Date(dateStr);
+  }
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day); // month is 0-indexed
+}
+
+/**
  * Format a date to a readable string
  * Handles date strings in YYYY-MM-DD format by parsing as local date (not UTC)
  */
 export function formatDate(date: string | Date, options?: Intl.DateTimeFormatOptions): string {
-  let d: Date;
-  if (typeof date === 'string') {
-    // If it's a date string in YYYY-MM-DD format, parse it as local date to avoid timezone issues
-    if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      const [year, month, day] = date.split('-').map(Number);
-      d = new Date(year, month - 1, day); // month is 0-indexed
-    } else {
-      d = new Date(date);
-    }
-  } else {
-    d = date;
-  }
+  const d = typeof date === 'string' ? parseLocalDate(date) : date;
   return d.toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
@@ -283,6 +291,14 @@ export function convertWeightForDisplay(weightKg: number, unit: 'kg' | 'lb', dec
 }
 
 /**
+ * Format estimated weights (e1RM, projections) with one decimal place,
+ * no plate rounding. Estimates are not prescribed loads.
+ */
+export function formatEstimateWeight(weightKg: number, unit: 'kg' | 'lb'): string {
+  return `${convertWeightForDisplay(weightKg, unit, 1).toFixed(1)} ${unit === 'kg' ? 'kg' : 'lbs'}`;
+}
+
+/**
  * Session/tonnage volume in the DISPLAY unit, computed natively (Phase 3):
  * each set's load converts to the display unit FIRST (recovering the exact
  * value the user typed, e.g. 72.57 kg → 160.0 lb), THEN multiplies and sums.
@@ -500,6 +516,35 @@ export const STANDARD_PLATES = {
   kg: [25, 20, 15, 10, 5, 2.5, 1.25],
   lb: [45, 35, 25, 10, 5, 2.5],
 } as const;
+
+/**
+ * Selectable "smallest plate pair I own" options (weight per plate, per side).
+ * A pair of the smallest plate sets the total-weight increment: one plate per
+ * side, so increment = 2 × plate (1.25lb plates → 2.5lb jumps).
+ */
+export const SMALLEST_PLATE_OPTIONS = {
+  kg: [0.5, 1.25, 2.5],
+  lb: [1.25, 2.5, 5],
+} as const;
+
+/** Default smallest plate — matches the smallest STANDARD_PLATES entry. */
+export const DEFAULT_SMALLEST_PLATE = {
+  kg: 1.25,
+  lb: 2.5,
+} as const;
+
+/**
+ * Plate set for a gym whose smallest plate pair is `smallestPlate`: the
+ * standard set with anything smaller removed, plus the smallest plate itself
+ * when it sits below the standard range (e.g. 1.25lb micro plates).
+ */
+export function getAvailablePlates(unit: 'kg' | 'lb', smallestPlate?: number): number[] {
+  const standard: number[] = [...STANDARD_PLATES[unit]];
+  if (smallestPlate === undefined || smallestPlate <= 0) return standard;
+  const plates = standard.filter((plate) => plate >= smallestPlate);
+  if (!plates.includes(smallestPlate)) plates.push(smallestPlate);
+  return plates;
+}
 
 /**
  * Common barbell types with their weights

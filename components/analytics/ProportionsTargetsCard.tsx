@@ -29,7 +29,7 @@ import {
   AccordionContent,
 } from '@/components/ui';
 import { BenchmarkBar } from './ProgressVisualization';
-import { formatMeasurementValue, formatHeight } from '@/lib/utils';
+import { formatMeasurementValue, formatHeight, parseLocalDate } from '@/lib/utils';
 import { getNaturalFFMILimit } from '@/services/bodyCompEngine';
 import type {
   BodyCompositionTarget,
@@ -361,13 +361,13 @@ function WeightProjectionSection({
     if (weightHistory.length === 0) return [];
 
     const weeklyData: Array<{ week: number; actual: number | null; projected: number | null }> = [];
-    const startDate = new Date(weightHistory[0].date);
+    const startDate = parseLocalDate(weightHistory[0].date);
     const startWeight = convertWeight(weightHistory[0].weightKg);
     const endWeight = convertWeight(weightHistory[weightHistory.length - 1].weightKg);
     const weeksOfData = Math.max(
       1,
       Math.ceil(
-        (new Date(weightHistory[weightHistory.length - 1].date).getTime() - startDate.getTime()) /
+        (parseLocalDate(weightHistory[weightHistory.length - 1].date).getTime() - startDate.getTime()) /
           (7 * 24 * 60 * 60 * 1000)
       )
     );
@@ -381,7 +381,7 @@ function WeightProjectionSection({
         weekEnd.setDate(weekEnd.getDate() + 7);
 
         const weekWeighIns = weightHistory.filter((w) => {
-          const date = new Date(w.date);
+          const date = parseLocalDate(w.date);
           return date >= weekStart && date < weekEnd;
         });
 

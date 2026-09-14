@@ -7,6 +7,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
+import { updateOnboardingStep } from '@/lib/onboarding/onboardingProgress';
 import {
   validateUsername,
   generateUsernameSuggestions,
@@ -193,12 +194,22 @@ function ProfileSetupContent() {
       return;
     }
 
+    // Track progress
+    await updateOnboardingStep(supabase, user.id, 'profile');
+
     // Navigate to next step (Enhanced Athlete Mode, right after
     // training experience)
     router.push(`/onboarding/enhanced?session=${sessionId}`);
   };
 
   const handleSkip = async () => {
+    // Track progress even when skipping
+    const supabase = createUntypedClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      await updateOnboardingStep(supabase, user.id, 'profile');
+    }
+    
     // Navigate without updating profile
     router.push(`/onboarding/enhanced?session=${sessionId}`);
   };

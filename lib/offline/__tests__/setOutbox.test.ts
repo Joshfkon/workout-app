@@ -486,6 +486,72 @@ describe('setOutbox', () => {
     });
   });
 
+  describe('block-order replay (performed-order / drag persistence fallback)', () => {
+    // exercise_blocks."order" is UNIQUE per session, so the workout page
+    // queues a failed order save as park-then-final per-block patches (see
+    // persistBlockOrder). The flush replays entries one row at a time in
+    // enqueue order — these tests pin that the sequence stays collision-free
+    // against a constraint-enforcing stub, and that a newer queued reorder
+    // replaces the older one instead of stacking.
+    function makeOrderConstraintSupabase(initialOrders: Record<string, number>) {
+      const orders = { ...initialOrders };
+      const violations: string[] = [];
+      const client: OutboxSupabase = {
+        from: () => ({
+          upsert: () => Promise.resolve({ error: null }),
+          update: (row: Record<string, unknown>) => ({
+            eq: (_column: string, id: string) => {
+              const next = row.order as number;
+              const taken = Object.entries(orders).some(([bid, o]) => bid !== id && o === next);
+              if (taken) {
+                violations.push(`${id}->${next}`);
+                return Promise.resolve({
+                  error: { message: 'duplicate key value violates unique constraint', code: '23505' },
+                });
+              }
+              orders[id] = next;
+              return Promise.resolve({ error: null });
+            },
+          }),
+        }),
+      };
+      return { client, orders, violations };
+    }
+
+    const enqueueOrder = async (ids: string[]) => {
+      for (let i = 0; i < ids.length; i++) {
+        await enqueueRowUpdate(`block-order:park:${ids[i]}`, 'exercise_blocks', ids[i], {
+          order: i + 1001,
+        });
+      }
+      for (let i = 0; i < ids.length; i++) {
+        await enqueueRowUpdate(`block-order:write:${ids[i]}`, 'exercise_blocks', ids[i], {
+          order: i + 1,
+        });
+      }
+    };
+
+    it('replays park-then-final entries without unique-order collisions', async () => {
+      await enqueueOrder(['b3', 'b1', 'b2']); // performed order: b3 first
+      const db = makeOrderConstraintSupabase({ b1: 1, b2: 2, b3: 3 });
+      const result = await flushSetOutbox(db.client);
+      expect(db.violations).toEqual([]);
+      expect(result.failedIds).toEqual([]);
+      expect(db.orders).toEqual({ b3: 1, b1: 2, b2: 3 });
+      expect(await outboxCount()).toBe(0);
+    });
+
+    it('a newer queued reorder replaces the older one (stable entry ids)', async () => {
+      await enqueueOrder(['b2', 'b1']);
+      await enqueueOrder(['b1', 'b2']); // user reordered again while offline
+      expect(await outboxCount()).toBe(4); // replaced, not stacked
+      const db = makeOrderConstraintSupabase({ b1: 1, b2: 2 });
+      await flushSetOutbox(db.client);
+      expect(db.violations).toEqual([]);
+      expect(db.orders).toEqual({ b1: 1, b2: 2 });
+    });
+  });
+
   describe('withoutOptionalSetLogColumns', () => {
     it('strips the migration-gated columns and leaves the rest untouched', () => {
       const row = { id: 'a', reps: 8, weight_kg: 20, set_role: 'ramp', suggestion_engine_version: 2 };

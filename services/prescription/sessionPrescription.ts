@@ -279,6 +279,7 @@ export function nextSetPrescription(input: NextSetPrescriptionInput): SetRecomme
       rationale: (next?.rationale === 'reduce_load' ? 'reduce_load' : 'maintain') as
         | 'reduce_load'
         | 'maintain',
+      trigger: 'none',
       effortVsTarget: next?.effortVsTarget ?? ('on_target' as const),
     };
   }

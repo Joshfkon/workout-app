@@ -2,6 +2,7 @@ import {
   exerciseHighlightData,
   heatmapRowsToMapData,
   SECONDARY_HIGHLIGHT_EMPHASIS,
+  STABILIZER_HIGHLIGHT_EMPHASIS,
 } from '../adapters';
 import { getEffectiveBand } from '@/services/volumeBands';
 import type { VolumeHeatmapRow } from '@/app/(dashboard)/dashboard/_lib/volumeHeatmap';
@@ -37,6 +38,20 @@ describe('exerciseHighlightData', () => {
   it('ignores unrecognized tokens and handles missing fields', () => {
     expect(exerciseHighlightData('not-a-muscle', undefined)).toEqual({});
     expect(exerciseHighlightData(null, ['also-nope'])).toEqual({});
+  });
+
+  it('bench press: stabilizers painted faint and flagged', () => {
+    const data = exerciseHighlightData('chest', ['triceps'], ['rotator_cuff', 'rear_delts']);
+    expect(data.rotator_cuff).toEqual({ value: STABILIZER_HIGHLIGHT_EMPHASIS, stabilizer: true });
+    expect(data.rear_delts).toEqual({ value: STABILIZER_HIGHLIGHT_EMPHASIS, stabilizer: true });
+    expect(data.chest_upper).toEqual({ value: 1 });
+    expect(data.triceps).toEqual({ value: SECONDARY_HIGHLIGHT_EMPHASIS });
+  });
+
+  it('mover tags win over a stabilizer tag on the same muscle', () => {
+    const data = exerciseHighlightData('erectors', ['forearms'], ['erectors', 'forearms']);
+    expect(data.erectors).toEqual({ value: 1 });
+    expect(data.forearms).toEqual({ value: SECONDARY_HIGHLIGHT_EMPHASIS });
   });
 });
 

@@ -10,9 +10,12 @@
  * set and the request "succeeds" with zero rows — so the form showed
  * "Exercise updated successfully!" while writing nothing (the Glute Drive
  * Machine report). The verified write path (lib/exercises/updateExerciseRow)
- * now detects zero written rows and routes stock rows through the audited
- * update_catalog_exercise RPC (20260727000004): whitelisted columns, old
- * values recorded before the write, applied to the shared catalog row.
+ * now detects zero written rows and routes them through the audited
+ * update_catalog_exercise RPC (20260727000004, widened by 20260903000001 to
+ * cover custom rows created by OTHER users — the "Calf Press on Leg Press"
+ * report, where a mis-tagged foreign custom row was editable by nobody but
+ * its creator): whitelisted columns, old values recorded before the write,
+ * applied to the shared row.
  */
 
 import {
@@ -26,7 +29,7 @@ import { SEED_EXERCISE_TAGS } from '@/services/generated/seedExerciseTags';
 
 const CURRENT_USER = 'user-1';
 
-/** Column whitelist mirrored from 20260727000004_update_catalog_exercise_rpc.sql. */
+/** Column whitelist mirrored from 20260903000001_shared_exercise_editing.sql. */
 const CATALOG_EDITABLE_COLUMNS = new Set([
   'name', 'is_bodyweight', 'bodyweight_type', 'assistance_type', 'equipment',
   'equipment_required', 'movement_pattern', 'primary_muscle',
@@ -55,8 +58,9 @@ interface AuditEntry {
  * - direct UPDATE hits only `is_custom = TRUE AND created_by = auth.uid()`
  *   rows; everything else matches ZERO rows with NO error (exactly what
  *   PostgREST returns) — the old silent-failure mode;
- * - the update_catalog_exercise RPC (when enabled) edits stock rows for
- *   everyone, enforcing the column whitelist and auditing old values first.
+ * - the update_catalog_exercise RPC (when enabled) edits ANY live row for
+ *   everyone (stock or custom, 20260903000001), enforcing the column
+ *   whitelist and auditing old values first.
  */
 function makeFakeDb(rows: FakeExerciseRow[], opts: { withCatalogRpc: boolean } = { withCatalogRpc: true }) {
   const table = rows.map((r) => ({ ...r }));
@@ -97,12 +101,6 @@ function makeFakeDb(rows: FakeExerciseRow[], opts: { withCatalogRpc: boolean } =
             const row = table.find((r) => r.id === id);
             if (!row) {
               return Promise.resolve({ data: null, error: { message: `exercise ${id} does not exist` } });
-            }
-            if (row.is_custom) {
-              return Promise.resolve({
-                data: null,
-                error: { message: `"${row.name}" is a custom exercise — edit it directly` },
-              });
             }
             const old: Record<string, unknown> = {};
             for (const key of Object.keys(patch)) {
@@ -214,6 +212,45 @@ describe('secondary-muscle edit persistence (user-library exercise)', () => {
     const before = computeMuscleRecovery(sessionFor(['hamstrings']), 'quads', now);
     expect(before.dose).toBe(0);
     expect(before.status).toBe('fresh');
+  });
+
+  it("another user's custom row persists through the audited RPC (Calf Press on Leg Press report)", async () => {
+    // The reported row: a custom exercise created by a DIFFERENT account,
+    // mis-tagged primary_muscle = quads, so its sets fed quad readiness
+    // while the calf work went uncounted — and the direct owner-only UPDATE
+    // matched zero rows, leaving nobody but the creator able to fix it.
+    const foreignCalfPress: FakeExerciseRow = {
+      id: 'ex-foreign',
+      name: 'Calf Press on Leg Press',
+      primary_muscle: 'quads',
+      secondary_muscles: [],
+      is_custom: true,
+      created_by: 'user-2',
+    };
+    const { client, reload, audit } = makeFakeDb([foreignCalfPress]);
+
+    const result = await updateExerciseRow(client, 'ex-foreign', {
+      primary_muscle: 'calves',
+    });
+    expect(result).toEqual({ ok: true, outcome: 'updated_catalog' });
+    expect(reload('ex-foreign').primary_muscle).toEqual('calves');
+
+    // The cross-user edit is audited with the previous tag recoverable.
+    expect(audit).toEqual([
+      {
+        exercise_id: 'ex-foreign',
+        edited_by: CURRENT_USER,
+        old_values: { primary_muscle: 'quads' },
+        new_values: { primary_muscle: 'calves' },
+      },
+    ]);
+
+    // And the volume read path moves the credit from quads to calves.
+    const row = reload('ex-foreign');
+    const workingSets = [{ id: 's1', is_warmup: false }, { id: 's2', is_warmup: false }];
+    const stats = computeWeeklyMuscleVolume([{ exercises: row, set_logs: workingSets }]);
+    expect(stats.find((s) => s.muscle === 'quads')).toBeUndefined();
+    expect(stats.find((s) => s.muscle === 'calves')?.sets).toBeCloseTo(workingSets.length);
   });
 
   it('a stock catalog row persists through the audited RPC, with old values recorded', async () => {

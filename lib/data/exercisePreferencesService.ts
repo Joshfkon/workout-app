@@ -24,6 +24,8 @@ import {
   bulkDeleteExercisePreferences,
   bulkUpsertExercisePreferences,
   deleteAllExercisePreferences,
+  toggleExerciseFavorite,
+  fetchFavoriteExerciseIds,
 } from '@/lib/actions/exercise-preferences';
 
 // ============================================
@@ -235,6 +237,60 @@ export async function resetAllPreferences(userId: string): Promise<boolean> {
 }
 
 /**
+ * Toggle favorite status for an exercise
+ */
+export async function toggleFavorite(
+  userId: string,
+  exerciseId: string,
+  isFavorite: boolean
+): Promise<boolean> {
+  try {
+    const { error } = await toggleExerciseFavorite(userId, exerciseId, isFavorite);
+    if (error) {
+      console.error('Failed to toggle exercise favorite:', error);
+      return false;
+    }
+
+    clearPreferencesCache(userId);
+    return true;
+  } catch (err) {
+    console.error('Error toggling exercise favorite:', err);
+    return false;
+  }
+}
+
+/**
+ * Get favorite exercise IDs for a user
+ */
+export async function getFavoriteExerciseIds(
+  userId: string
+): Promise<Set<string>> {
+  try {
+    const { data, error } = await fetchFavoriteExerciseIds(userId);
+    if (error || !data) {
+      console.warn('Failed to fetch favorite exercises:', error);
+      return new Set();
+    }
+    return new Set(data);
+  } catch (err) {
+    console.warn('Error fetching favorite exercises:', err);
+    return new Set();
+  }
+}
+
+/**
+ * Check if an exercise is favorited
+ */
+export async function isFavorite(
+  userId: string,
+  exerciseId: string
+): Promise<boolean> {
+  const prefs = await getUserExercisePreferences(userId);
+  const pref = prefs.get(exerciseId);
+  return pref?.isFavorite ?? false;
+}
+
+/**
  * Get summary counts of preferences.
  * Requires pre-fetched exercise list.
  */
@@ -343,6 +399,7 @@ function mapRowToPreference(row: UserExercisePreferenceRow): UserExercisePrefere
     userId: row.user_id,
     exerciseId: row.exercise_id,
     status: row.status,
+    isFavorite: row.is_favorite ?? false,
     reason: row.reason || undefined,
     reasonNote: row.reason_note || undefined,
     createdAt: new Date(row.created_at),

@@ -3,13 +3,13 @@
 import React, { useState, useEffect, useMemo, memo, useRef, useCallback } from 'react';
 import { Card, Button, ConfirmModal, InfoTooltip } from '@/components/ui';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/Accordion';
-import type { Exercise, ExerciseBlock, SetLog, WeightUnit, SetQuality, SetFeedback, BodyweightData, ExercisePerformanceSnapshot, StandardMuscleGroup, SorenessRating, SetDiscomfort, RepsInTank, SleepQuality } from '@/types/schema';
+import type { Exercise, ExerciseBlock, SetLog, WeightUnit, SetQuality, SetFeedback, BodyweightData, ExercisePerformanceSnapshot, StandardMuscleGroup, SorenessRating, SetDiscomfort, RepsInTank, SleepQuality, SetType } from '@/types/schema';
 import { rpeToRir, rirToRpe } from '@/types/schema';
 import { formatSetHistoryLine } from '@/lib/formatSetHistory';
 import { SorenessChipRow, JointPainPicker } from './FeedbackChips';
 import { filterExercises, dedupeExercisesById } from '@/services/exerciseFilter';
 import { convertWeight, formatMuscleName, formatWeightValue, convertWeightForDisplay, inputWeightToKg, roundToPlateIncrement, sumDisplayVolume } from '@/lib/utils';
-import { recommendSessionStart, estimateRepsForWeight, predictAmrapReps, recommendSeedForSlot, resolveLastRir, prescribe, type SeedRecommendation } from '@/services/setRecommender';
+import { recommendSessionStart, estimateRepsForWeight, fatigueAdjustedE1RM, predictAmrapReps, recommendSeedForSlot, resolveLastRir, prescribe, type SeedRecommendation } from '@/services/setRecommender';
 import {
   nextSetPrescription,
   sessionBestE1RM as sessionBestE1RMKg,
@@ -24,7 +24,7 @@ import {
   resolveProgressionModel,
   recommendRepTotalSessionStart,
 } from '@/services/suggestionEngine/repTotalPolicy';
-import { RAMP_LOAD_FRACTION, WORKING_WEIGHT_CLAMP_FRACTION } from '@/services/suggestionEngine/constants';
+import { RAMP_LOAD_FRACTION, WORKING_WEIGHT_CLAMP_FRACTION, FATIGUE_E1RM_PER_SET, FATIGUE_E1RM_FLOOR } from '@/services/suggestionEngine/constants';
 import { findSimilarExercises, calculateSimilarityScore } from '@/services/exerciseSwapper';
 import { filterExercisesByEquipment } from '@/services/equipmentFilter';
 import { detectPlateau, type PlateauDetectionResult, type PlateauGoal } from '@/services/plateauDetector';
@@ -40,13 +40,14 @@ import { resolveWarmupLoad, type WarmupLoadMode } from '@/services/warmupEngine'
 import { formatSessionTimeOfDay } from '@/services/sessionContext';
 import { formatSleepHours, SLEEP_QUALITY_LABELS } from '@/lib/sleep/formatSleep';
 import { useUserStore } from '@/stores';
+import { useWorkoutStore } from '@/stores/workoutStore';
 import type { AdjustedRIRResult } from '@/services/rpeCalibration';
 import type { ReadinessModulation } from '@/services/fatigueEngine';
 import { lightHaptic } from '@/lib/integrations/notifications';
 // setLogTiming: TEMPORARY latency instrumentation (docs/SET_LOGGING_LATENCY_DIAGNOSIS.md)
 import { beginSetTiming } from '@/lib/debug/setLogTiming';
 import { Input } from '@/components/ui';
-import { IconBone, IconCheck, IconChevronDown, IconCloudPause, IconGripVertical, IconInfoCircle } from '@tabler/icons-react';
+import { IconBarbell, IconBone, IconCheck, IconChevronDown, IconCloudPause, IconGripVertical, IconInfoCircle } from '@tabler/icons-react';
 import { RowOverflowMenu, type RowMenuItem } from './RowOverflowMenu';
 import { StabilizerWarningBanner, type StabilizerWarningView } from './StabilizerWarningBanner';
 import { InlineRestTimerBar } from './InlineRestTimerBar';
@@ -61,11 +62,11 @@ import { useKeyboardInset } from '@/hooks/useKeyboardInset';
 
 const MUSCLE_GROUPS = ['chest', 'back', 'shoulders', 'traps', 'biceps', 'triceps', 'quads', 'hamstrings', 'glutes', 'adductors', 'calves', 'abs', 'erectors'];
 
-// Compact RIR chips for the inline set editor — same buckets as RIRSelector.
-// A stored RIR of 3 (logged as RPE 7) lights up the "2-3" chip.
+// Compact RIR chips for the inline set editor — discrete values for each RIR level.
 const EDIT_RIR_OPTIONS: { value: RepsInTank; label: string }[] = [
   { value: 4, label: '4+' },
-  { value: 2, label: '2-3' },
+  { value: 3, label: '3' },
+  { value: 2, label: '2' },
   { value: 1, label: '1' },
   { value: 0, label: '0' },
 ];
@@ -200,8 +201,6 @@ function getExerciseInjuryRiskFromService(
     risk: worstRisk
   };
 }
-
-type SetType = 'normal' | 'warmup' | 'dropset' | 'myorep' | 'rest_pause';
 
 /**
  * Entered load (kg + display label) from the logger's CURRENT stepper values,
@@ -364,8 +363,9 @@ interface ExerciseCardProps {
   // surfaces an inline note when the joint-stress RIR floor binds (the
   // floor itself never reads this flag; see services/exerciseSafety.ts).
   enhancedAthleteMode?: boolean;
-  // Deload session: the banner holds light instead of prescribing progression,
-  // and the rationale copy says so ("deload — holding light").
+  // Deload session: the banner holds the reduced deload load instead of
+  // prescribing progression, and the rationale copy says so
+  // ("deload — reduced load this session").
   isDeloadSession?: boolean;
   // Start-of-session soreness prompt for this exercise's primary muscle
   // (first exercise per muscle only; parent enforces the once-per-session cap).
@@ -376,6 +376,9 @@ interface ExerciseCardProps {
     answered?: SorenessRating | null;
   } | null;
   onSorenessAnswer?: (muscle: StandardMuscleGroup, rating: SorenessRating) => void;
+  // Recovery status for all involved muscles (primary + secondaries) with recent
+  // training. Shows muscles that are recovering or fatigued.
+  muscleReadiness?: Array<{ muscle: StandardMuscleGroup; displayName: string; status: string }>;
   // Exercise-level pain pattern notice (≥3 flags in 6 weeks): one-time,
   // dismissible, links to the swap picker's Similar tab.
   painNotice?: { joint: string; count: number } | null;
@@ -492,6 +495,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   coldStartSuggestion,
   sorenessPrompt = null,
   onSorenessAnswer,
+  muscleReadiness = [],
   painNotice = null,
   onPainNoticeDismiss,
   stabilizerWarning = null,
@@ -515,7 +519,18 @@ export const ExerciseCard = memo(function ExerciseCard({
 
   const [editingSetId, setEditingSetId] = useState<string | null>(null);
   const [jointPickerSetId, setJointPickerSetId] = useState<string | null>(null);
-  const [completedWarmups, setCompletedWarmups] = useState<Set<number>>(new Set());
+  // Warmup checkmarks live in the workout store (persisted) so switching
+  // exercises, remounting, or reloading never wipes them; they expire only
+  // once ~15 min stale (expireStaleWarmupCompletions). Keyed by block AND
+  // exercise: a mid-workout swap keeps the block id while changing the
+  // exercise, and the replacement's protocol must start unchecked. The
+  // rendered Set is derived below, after warmupRows, so checkmarks recorded
+  // for set numbers a recomputed protocol no longer prescribes are ignored.
+  const warmupStoreKey = `${block.id}:${exercise.id}`;
+  const warmupCompletionTimes = useWorkoutStore((s) => s.warmupCompletions[warmupStoreKey]);
+  const toggleWarmupCompletion = useWorkoutStore((s) => s.toggleWarmupCompletion);
+  const completeAllWarmupsInStore = useWorkoutStore((s) => s.completeAllWarmups);
+  const expireStaleWarmupCompletions = useWorkoutStore((s) => s.expireStaleWarmupCompletions);
   const [editingWarmupId, setEditingWarmupId] = useState<number | null>(null);
   const [customWarmupWeights, setCustomWarmupWeights] = useState<Map<number, number>>(new Map());
   const [warmupWeightInput, setWarmupWeightInput] = useState('');
@@ -550,17 +565,23 @@ export const ExerciseCard = memo(function ExerciseCard({
     }
   }, [showSwapOnMount]);
   
-  // Reset warmup completion state when this exercise becomes active
-  // This ensures warmups are fresh when switching exercises out of order
+  // When this exercise becomes active, EXPIRE stale warmup checkmarks rather
+  // than wiping them: switching exercises and coming back within the ~15 min
+  // warmth window (services/warmupEngine.WARMTH_HALF_LIFE_MINUTES) keeps the
+  // ramp progress; only a block whose freshest checkmark has gone stale
+  // resets, because the muscle has cooled and the ramp is worth redoing.
   const prevIsActiveRef = useRef(isActive);
   useEffect(() => {
-    // Only reset if we just became active (wasn't active before, now is)
-    if (isActive && !prevIsActiveRef.current) {
-      setCompletedWarmups(new Set());
-      setIsWarmupExpanded(true); // Reset to expanded when exercise becomes active
+    if (isActive) {
+      expireStaleWarmupCompletions(warmupStoreKey);
+      // Only re-expand on an inactive -> active transition, preserving the
+      // collapsed-by-default initial mount.
+      if (!prevIsActiveRef.current) {
+        setIsWarmupExpanded(true);
+      }
     }
     prevIsActiveRef.current = isActive;
-  }, [isActive]);
+  }, [isActive, warmupStoreKey, expireStaleWarmupCompletions]);
 
   const [swapMuscleFilter, setSwapMuscleFilter] = useState('');
   const [editWeight, setEditWeight] = useState('');
@@ -578,6 +599,12 @@ export const ExerciseCard = memo(function ExerciseCard({
     currentX: number;
     isSwiping: boolean;
   }>({ setId: null, startX: 0, currentX: 0, isSwiping: false });
+  // Set armed for deletion: the row stays slid open revealing a Delete button
+  // that must be tapped to confirm. Swiping alone never deletes.
+  const [confirmDeleteSetId, setConfirmDeleteSetId] = useState<string | null>(null);
+  // Suppress the click some browsers fire on the row right after a swipe ends,
+  // which would otherwise instantly dismiss the just-revealed Delete button.
+  const justSwipedRef = useRef(false);
 
   // Shared, de-duped candidate pool for BOTH swap tabs. The page feeds
   // availableExercises as blocks.map(b => b.exercise).concat(fullLibrary), so an
@@ -1094,6 +1121,20 @@ export const ExerciseCard = memo(function ExerciseCard({
     isBodyweightExercise,
     unit,
   ]);
+
+  // Store-backed checkmarks resolved against the CURRENT protocol: a
+  // completion recorded for a set number the recomputed protocol no longer
+  // prescribes is ignored rather than inflating the count.
+  const completedWarmups = useMemo(() => {
+    const done = new Set<number>();
+    if (!warmupCompletionTimes) return done;
+    const valid = new Set(warmupRows.rows.map((r) => r.warmup.setNumber));
+    for (const key of Object.keys(warmupCompletionTimes)) {
+      const n = Number(key);
+      if (valid.has(n)) done.add(n);
+    }
+    return done;
+  }, [warmupCompletionTimes, warmupRows]);
 
   // Auto-collapse warmup sets when all are completed
   useEffect(() => {
@@ -1788,6 +1829,10 @@ export const ExerciseCard = memo(function ExerciseCard({
 
   // Swipe to delete handlers
   const handleTouchStart = (setId: string, e: React.TouchEvent) => {
+    // A new touch means any pending after-swipe click has already fired (or never will)
+    justSwipedRef.current = false;
+    // Touching a different row dismisses any armed Delete button
+    setConfirmDeleteSetId(prev => (prev !== null && prev !== setId ? null : prev));
     setSwipeState({
       setId,
       startX: e.touches[0].clientX,
@@ -1816,11 +1861,14 @@ export const ExerciseCard = memo(function ExerciseCard({
     }
     
     const swipeDistance = swipeState.startX - swipeState.currentX;
-    const threshold = 100; // pixels to trigger delete
-    
+    const threshold = 100; // pixels to reveal the Delete button
+
+    justSwipedRef.current = true;
     if (swipeDistance > threshold) {
       if (isCompleted && onSetDelete) {
-        onSetDelete(setId);
+        // Don't delete on swipe alone — arm the row so the revealed Delete
+        // button must be tapped to confirm.
+        setConfirmDeleteSetId(setId);
       } else if (!isCompleted) {
         // Remove pending set by reducing target sets (never below the DB's
         // target_sets >= 1 check constraint)
@@ -1828,18 +1876,31 @@ export const ExerciseCard = memo(function ExerciseCard({
           onTargetSetsChange(Number(block.targetSets) - 1);
         }
       }
+    } else {
+      // Swiping back under the threshold dismisses an armed Delete button
+      setConfirmDeleteSetId(prev => (prev === setId ? null : prev));
     }
-    
+
     setSwipeState({ setId: null, startX: 0, currentX: 0, isSwiping: false });
   };
 
+  const DELETE_REVEAL_PX = 88; // width of the revealed Delete button
+
   const getSwipeTransform = (setId: string) => {
-    if (swipeState.setId !== setId || !swipeState.isSwiping) return {};
-    const diff = Math.min(120, Math.max(0, swipeState.startX - swipeState.currentX));
-    return {
-      transform: `translateX(-${diff}px)`,
-      transition: 'none',
-    };
+    if (swipeState.setId === setId && swipeState.isSwiping) {
+      const diff = Math.min(120, Math.max(0, swipeState.startX - swipeState.currentX));
+      return {
+        transform: `translateX(-${diff}px)`,
+        transition: 'none',
+      };
+    }
+    if (confirmDeleteSetId === setId) {
+      return {
+        transform: `translateX(-${DELETE_REVEAL_PX}px)`,
+        transition: 'transform 0.15s ease-out',
+      };
+    }
+    return { transform: 'translateX(0)', transition: 'transform 0.15s ease-out' };
   };
 
   const updatePendingInput = (index: number, field: 'weight' | 'reps' | 'rpe', value: string) => {
@@ -1991,6 +2052,8 @@ export const ExerciseCard = memo(function ExerciseCard({
     note?: string;
     feedback: SetFeedback;
     bodyweightData?: BodyweightData;
+    setType: SetType;
+    rirExplicitlySelected: boolean;
   }) => {
     if (isCompletingSet || !onSetComplete) return;
     if (isNaN(data.weightKg) || data.weightKg < 0 || data.reps < 1) return;
@@ -2009,7 +2072,7 @@ export const ExerciseCard = memo(function ExerciseCard({
         reps: data.reps,
         rpe: data.rpe,
         note: data.note,
-        setType: 'normal',
+        setType: data.setType,
         feedback: data.feedback,
         bodyweightData: data.bodyweightData,
       });
@@ -2017,9 +2080,10 @@ export const ExerciseCard = memo(function ExerciseCard({
       console.error('Set submission failed:', error);
       // Lock will be released in finally block
     } finally {
-      // Always unlock after async operation completes (success or failure)
-      // Small delay to prevent accidental double-taps on fast networks
-      setTimeout(() => setIsCompletingSet(false), 100);
+      // Unlock immediately after handler completes - optimistic UI is already
+      // applied and the button needs to be ready for the next set ASAP.
+      // The handler's lock duration naturally prevents double-taps.
+      setIsCompletingSet(false);
     }
   };
 
@@ -2141,6 +2205,17 @@ export const ExerciseCard = memo(function ExerciseCard({
     const lastCompleted = completedSets[completedSets.length - 1];
     const explanation: string[] = [];
     let reason: string;
+
+    // Observed RIR for the reason string. Half-step values are real data (the
+    // RIR-2 "good" chip stores RPE 7.5) — show one decimal, not a rounded lie.
+    const fmtRir = (r: number) => (Number.isInteger(r) ? String(r) : r.toFixed(1));
+
+    // Weight delta label for trigger-based reason strings.
+    const deltaLabel = (fromKg: number, toWeightStr: string) => {
+      const delta = parseFloat(toWeightStr) - convertWeightForDisplay(fromKg, unit);
+      return delta > 0 ? `${delta} ${weightLabel}` : '';
+    };
+
     let weight = '';
     let reps = Math.round((block.targetRepRange[0] + block.targetRepRange[1]) / 2);
     // The banner prescribes a rep RANGE, never a copied/predicted single count
@@ -2362,20 +2437,37 @@ export const ExerciseCard = memo(function ExerciseCard({
         explanation.push(
           `At the held load the predicted reps fall below the ${block.targetRepRange[0]}-rep floor of the target range — accumulated fatigue this session has that load running heavy. The load steps down so the target reps stay inside the range: same stimulus at an achievable load, not a max attempt.`
         );
-      } else if (rec.rationale === 'increase_load') {
-        // Like-for-like framing only (INV-4): the number compares this set to
-        // its own position last session, never to the just-completed set.
-        reason = `raising the load — last set was clearly too light${posDelta ? ` (${posDelta})` : ''}`;
-      } else if (rec.rationale === 'reduce_load') {
-        reason = `reducing the load — last set ran harder than the target effort${posDelta ? ` (${posDelta})` : ''}`;
-      } else if (rec.effortVsTarget === 'easier') {
-        // Held the weight, but the logged effort was BELOW target (more reps in
-        // reserve than asked) — say so and aim a little higher, never "matched".
-        reason = 'holding the weight — last set was easier than target, so aim for a rep or two more';
-      } else if (rec.effortVsTarget === 'harder') {
-        reason = 'holding the weight — last set ran a bit harder than target';
       } else {
-        reason = 'holding the weight — your last set matched the target effort';
+        // Each engine trigger gets its own factual string: observed reps/RIR vs
+        // the target, then the load action — no shared "too light/heavy" copy.
+        const lastRir = fmtRir(resolveLastRir(lastSetData, effectiveTargetRir));
+        const deltaText = deltaLabel(lastCompleted.weightKg, weight);
+        const loadUp = deltaText ? `load +${deltaText}` : 'load up';
+        const loadDown = deltaText ? `load -${deltaText}` : 'load down';
+        const hasEffortSignal = lastCompleted.feedback?.repsInTank != null || lastCompleted.rpe != null;
+        if (rec.rationale === 'increase_load') {
+          reason =
+            rec.trigger === 'rep_overshoot'
+              ? `${lastCompleted.reps} reps over ${rangeLabel} target — ${loadUp}`
+              : `${lastCompleted.reps} reps @ ${lastRir} RIR vs ${effectiveTargetRir} target — ${loadUp}`;
+        } else if (rec.rationale === 'reduce_load') {
+          reason =
+            rec.trigger === 'below_rep_min'
+              ? `${lastCompleted.reps} reps under ${rangeLabel} target — ${loadDown}`
+              : `hit ${lastRir} RIR vs ${effectiveTargetRir} target — ${loadDown}`;
+        } else if (lastCompleted.weightKg <= 0 || lastCompleted.reps <= 0) {
+          // Engine guard branch: no usable load/rep reference — no rule matched.
+          reason = 'no load reference — holding targets';
+        } else if (!hasEffortSignal) {
+          // No RIR/RPE logged on the reference set — no effort rule can match.
+          reason = 'no effort logged — holding load';
+        } else if (rec.effortVsTarget === 'easier') {
+          reason = `${lastRir} RIR vs ${effectiveTargetRir} target — holding load, rep estimate raised`;
+        } else if (rec.effortVsTarget === 'harder') {
+          reason = `${lastRir} RIR vs ${effectiveTargetRir} target — holding load, rep estimate lowered`;
+        } else {
+          reason = `${lastRir} RIR matched ${effectiveTargetRir} target — holding load`;
+        }
       }
       if (!rec.positionMatch) {
         explanation.push(
@@ -2478,7 +2570,7 @@ export const ExerciseCard = memo(function ExerciseCard({
 
       if (seed.role === 'ramp') {
         const pct = Math.round(RAMP_LOAD_FRACTION * 100);
-        reason = 'ramp set — light feeder for your working sets';
+        reason = `ramp set — ~${pct}% of today's top working set`;
         explanation.push(
           `This is a ramp/feeder set (~${pct}% of today's top working set), so there's no RIR target and it isn't counted as junk volume.`
         );
@@ -2566,7 +2658,22 @@ export const ExerciseCard = memo(function ExerciseCard({
         );
       } else if (seed.anchorSource === 'last_session' && prevSet) {
         const prevRir = prevSet.rpe != null ? rpeToRir(prevSet.rpe) : null;
-        reason = 'starting from last session';
+        // Same trigger→string mapping as the within-session banner, phrased
+        // against last session's set (the seed's reference).
+        const prevDelta = deltaLabel(prevSet.weightKg, weight);
+        const seedUp = prevDelta ? `load +${prevDelta}` : 'load up';
+        const seedDown = prevDelta ? `load -${prevDelta}` : 'load down';
+        if (seed.trigger === 'rep_overshoot') {
+          reason = `${prevSet.reps} reps over ${rangeLabel} target last session — ${seedUp}`;
+        } else if (seed.trigger === 'top_range_reserve') {
+          reason = `${prevSet.reps} reps @ ${fmtRir(prevRir ?? effectiveTargetRir)} RIR vs ${effectiveTargetRir} target last session — ${seedUp}`;
+        } else if (seed.trigger === 'below_rep_min') {
+          reason = `${prevSet.reps} reps under ${rangeLabel} target last session — ${seedDown}`;
+        } else if (seed.trigger === 'rir_deficit') {
+          reason = `hit ${fmtRir(prevRir ?? effectiveTargetRir)} RIR vs ${effectiveTargetRir} target last session — ${seedDown}`;
+        } else {
+          reason = 'repeating last session';
+        }
         explanation.push(
           `No estimated 1RM on record yet, so the load is anchored to last session: ${displayWeight(prevSet.weightKg, true)} ${weightLabel} × ${prevSet.reps}${prevRir != null ? ` at ${prevRir} RIR` : ''}.`
         );
@@ -2616,7 +2723,7 @@ export const ExerciseCard = memo(function ExerciseCard({
     // progression — and this session is excluded from PRs, e1RM trends and
     // next-week anchoring.
     if (isDeloadSession) {
-      reason = 'deload — holding light';
+      reason = 'deload — reduced load this session';
       explanation.unshift(
         'Deload session: keeping the load easy to shed fatigue. This session is held out of PRs, e1RM trends and next session’s weight suggestion.'
       );
@@ -3344,6 +3451,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                         W{warmup.setNumber}
                       </td>
                       <td className="px-1 py-2 text-center">
+                        <div className="inline-flex items-center justify-center gap-0.5">
                         {isEditingThis ? (
                           <input
                             type="number"
@@ -3371,7 +3479,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                               }
                             }}
                             autoFocus
-                            className="w-full px-1 py-0.5 text-center font-mono text-sm bg-surface-900 border border-amber-500 rounded text-surface-100"
+                            className="w-16 px-1 py-0.5 text-center font-mono text-sm bg-surface-900 border border-amber-500 rounded text-surface-100"
                           />
                         ) : row.editable ? (
                           <button
@@ -3399,6 +3507,24 @@ export const ExerciseCard = memo(function ExerciseCard({
                             {displayWarmupWeight}
                           </span>
                         )}
+                        {/* Plate calculator for this ramp step (same modal the
+                            working-set logger opens, pre-filled with the row's
+                            load). External-load rows with actual weight only —
+                            an empty bar or a bodyweight step has no plates. */}
+                        {onPlateCalculatorOpen &&
+                          !isBodyweightExercise &&
+                          !isEditingThis &&
+                          row.effectiveKg > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => onPlateCalculatorOpen(row.effectiveKg)}
+                              aria-label={`Open plate calculator for warmup set ${warmup.setNumber}`}
+                              className="min-h-[44px] min-w-[40px] -my-2.5 px-1 inline-flex items-center justify-center text-surface-500 hover:text-primary-400 transition-colors"
+                            >
+                              <IconBarbell size={13} aria-hidden="true" />
+                            </button>
+                          )}
+                        </div>
                       </td>
                       <td className="px-1 py-2 text-center font-mono text-surface-300">
                         {warmup.targetReps}
@@ -3416,15 +3542,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                         <button
                           onClick={() => {
                             const wasCompleted = completedWarmups.has(warmup.setNumber);
-                            setCompletedWarmups(prev => {
-                              const next = new Set(prev);
-                              if (next.has(warmup.setNumber)) {
-                                next.delete(warmup.setNumber);
-                              } else {
-                                next.add(warmup.setNumber);
-                              }
-                              return next;
-                            });
+                            toggleWarmupCompletion(warmupStoreKey, warmup.setNumber);
                             if (!wasCompleted && onWarmupComplete) {
                               const restTime = warmup.restSeconds || 45;
                               onWarmupComplete(restTime);
@@ -3477,7 +3595,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                   <tr className="bg-surface-800/30">
                     <td colSpan={6} className="px-3 py-1.5 text-center">
                       <button
-                        onClick={() => setCompletedWarmups(new Set(warmupRows.rows.map(r => r.warmup.setNumber)))}
+                        onClick={() => completeAllWarmupsInStore(warmupStoreKey, warmupRows.rows.map(r => r.warmup.setNumber))}
                         className="text-xs text-surface-500 hover:text-surface-400 transition-colors"
                       >
                         Skip warmup (already warm)
@@ -3545,6 +3663,20 @@ export const ExerciseCard = memo(function ExerciseCard({
           />
         )}
 
+        {/* Muscle readiness status — shows all involved muscles (primary + secondaries)
+            that have recent training and aren't fully recovered. */}
+        {muscleReadiness && muscleReadiness.length > 0 && (
+          <div className="px-3 py-2 text-[13px] text-surface-300 border-l-2 border-surface-700 bg-surface-900/50">
+            <span className="font-medium">Recovery:</span>{' '}
+            {muscleReadiness.map((mr, i) => (
+              <span key={mr.muscle}>
+                {i > 0 && ' · '}
+                {mr.displayName}: <span className={mr.status === 'fatigued' ? 'text-amber-400' : 'text-green-400'}>{mr.status}</span>
+              </span>
+            ))}
+          </div>
+        )}
+
         {/* Completed working sets */}
         {completedSets.map((set, setIndex) => {
           const isDropsetSet = set.setType === 'dropset';
@@ -3580,46 +3712,51 @@ export const ExerciseCard = memo(function ExerciseCard({
           // Editing: standard sets get inline weight/reps inputs + RIR chips
           if (editingSetId === set.id) {
             return (
-              <div key={set.id} className="rounded-lg bg-primary-500/10 px-2 py-1.5">
+              <div key={set.id} className="rounded-lg bg-primary-500/10 px-2 py-1.5 space-y-2">
+                {/* Row 1: Set number + input fields (weight/reps) */}
                 <div className="flex items-center gap-2">
-                <span className="w-6 flex-shrink-0 text-[12px] font-medium text-surface-300 text-center">
-                  {set.setNumber}
-                </span>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  value={editWeight}
-                  onChange={(e) => setEditWeight(e.target.value)}
-                  onFocus={(e) => e.target.select()}
-                  onKeyDown={handleEditKeyDown}
-                  step="0.5"
-                  aria-label="Edit weight"
-                  className="w-20 px-1 py-1.5 bg-surface-900 border border-surface-600 rounded text-center font-mono text-surface-100 text-sm"
-                  autoFocus
-                />
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  value={editReps}
-                  onChange={(e) => setEditReps(e.target.value)}
-                  onFocus={(e) => e.target.select()}
-                  onKeyDown={handleEditKeyDown}
-                  aria-label="Edit reps"
-                  className="w-14 px-1 py-1.5 bg-surface-900 border border-surface-600 rounded text-center font-mono text-surface-100 text-sm"
-                />
-                <div className="ml-auto flex items-center gap-1">
+                  <span className="w-6 flex-shrink-0 text-[12px] font-medium text-surface-300 text-center">
+                    {set.setNumber}
+                  </span>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    value={editWeight}
+                    onChange={(e) => setEditWeight(e.target.value)}
+                    onFocus={(e) => e.target.select()}
+                    onKeyDown={handleEditKeyDown}
+                    step="0.5"
+                    aria-label="Edit weight"
+                    className="flex-1 min-w-0 px-1 py-1.5 bg-surface-900 border border-surface-600 rounded text-center font-mono text-surface-100 text-sm"
+                    autoFocus
+                  />
+                  <span className="text-[11px] text-surface-500">×</span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    value={editReps}
+                    onChange={(e) => setEditReps(e.target.value)}
+                    onFocus={(e) => e.target.select()}
+                    onKeyDown={handleEditKeyDown}
+                    aria-label="Edit reps"
+                    className="w-16 px-1 py-1.5 bg-surface-900 border border-surface-600 rounded text-center font-mono text-surface-100 text-sm"
+                  />
+                </div>
+
+                {/* Row 2: Action buttons (save/cancel/delete) */}
+                <div className="flex items-center justify-end gap-1">
                   <button
                     onClick={saveEdit}
                     aria-label="Save set edit"
-                    className="p-2 text-success-400 hover:bg-success-500/20 rounded-lg"
+                    className="min-h-[44px] min-w-[44px] flex items-center justify-center text-success-400 hover:bg-success-500/20 rounded-lg"
                   >
                     <IconCheck size={16} />
                   </button>
                   <button
                     onClick={cancelEditing}
                     aria-label="Cancel set edit"
-                    className="p-2 text-surface-400 hover:bg-surface-700 rounded-lg"
+                    className="min-h-[44px] min-w-[44px] flex items-center justify-center text-surface-400 hover:bg-surface-700 rounded-lg"
                   >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -3632,7 +3769,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                         onSetDelete(set.id);
                       }}
                       aria-label="Delete set"
-                      className="p-2 text-danger-400 hover:bg-danger-500/10 rounded-lg"
+                      className="min-h-[44px] min-w-[44px] flex items-center justify-center text-danger-400 hover:bg-danger-500/10 rounded-lg"
                     >
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -3640,27 +3777,20 @@ export const ExerciseCard = memo(function ExerciseCard({
                     </button>
                   )}
                 </div>
-                </div>
-                <div className="mt-1.5 flex items-center gap-1.5 pl-8">
+
+                {/* Row 3: RIR chips */}
+                <div className="flex items-center gap-1.5">
                   <span className="text-[11px] font-medium text-surface-400">RIR</span>
                   {EDIT_RIR_OPTIONS.map((option) => {
-                    const isSelected =
-                      editRir === option.value || (option.value === 2 && editRir === 3);
+                    const isSelected = editRir === option.value;
                     return (
                       <button
                         key={option.value}
                         type="button"
-                        onClick={() =>
-                          // The "2-3" bucket is a band: when the set's exact
-                          // value is already 3, tapping it keeps 3 instead of
-                          // silently rewriting the logged effort to 2 / RPE 7.5.
-                          setEditRir(
-                            option.value === 2 && editInitialRirRef.current === 3 ? 3 : option.value
-                          )
-                        }
+                        onClick={() => setEditRir(option.value)}
                         aria-label={`Set RIR to ${option.label}`}
                         aria-pressed={isSelected}
-                        className={`px-2.5 py-1 rounded-full border text-[12px] font-medium transition-colors ${
+                        className={`min-h-[44px] px-2.5 py-2 rounded-full border text-[12px] font-medium transition-colors ${
                           isSelected
                             ? 'bg-primary-500 border-primary-500 text-white'
                             : 'bg-surface-900 border-surface-600 text-surface-300 hover:bg-surface-700'
@@ -3681,13 +3811,48 @@ export const ExerciseCard = memo(function ExerciseCard({
             : displayWeight(set.weightKg, true);
           const rirValue = set.feedback?.repsInTank ?? rpeToRir(set.rpe);
 
+          const isDeleteRevealed =
+            confirmDeleteSetId === set.id ||
+            (swipeState.setId === set.id && swipeState.isSwiping);
+
           return (
             <React.Fragment key={set.id}>
+              <div className="relative overflow-hidden rounded-lg">
+                {isDeleteRevealed && onSetDelete && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setConfirmDeleteSetId(null);
+                      onSetDelete(set.id);
+                    }}
+                    aria-label={`Confirm delete set ${set.setNumber}`}
+                    data-testid={`confirm-delete-set-${set.setNumber}`}
+                    className="absolute inset-y-0 right-0 flex w-[88px] items-center justify-center rounded-r-lg bg-danger-500 text-sm font-semibold text-white"
+                  >
+                    Delete
+                  </button>
+                )}
               <div
                 className={`flex items-center gap-2 px-1 py-2 ${
-                  isDropsetSet ? 'bg-purple-500/5 rounded-lg' : ''
+                  isDeleteRevealed
+                    ? 'bg-surface-900'
+                    : isDropsetSet
+                    ? 'bg-purple-500/5 rounded-lg'
+                    : ''
                 } ${onSetEdit ? 'cursor-pointer hover:bg-surface-800/30 rounded-lg' : ''}`}
-                onClick={() => onSetEdit && startEditing(set)}
+                onClick={() => {
+                  // Ignore the synthetic click some browsers fire after a swipe
+                  if (justSwipedRef.current) {
+                    justSwipedRef.current = false;
+                    return;
+                  }
+                  // Tapping the slid-open row dismisses the Delete button
+                  if (confirmDeleteSetId === set.id) {
+                    setConfirmDeleteSetId(null);
+                    return;
+                  }
+                  if (onSetEdit) startEditing(set);
+                }}
                 onTouchStart={(e) => handleTouchStart(set.id, e)}
                 onTouchMove={handleTouchMove}
                 onTouchEnd={() => handleTouchEnd(set.id, true)}
@@ -3733,7 +3898,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                     }}
                     aria-label={`Log joint pain on set ${set.setNumber}`}
                     data-testid={`set-joint-pain-${set.setNumber}`}
-                    className={`flex-shrink-0 min-w-[32px] min-h-[32px] -my-1 flex items-center justify-center rounded-lg transition-colors ${
+                    className={`flex-shrink-0 min-w-[44px] min-h-[44px] -my-1 flex items-center justify-center rounded-lg transition-colors ${
                       set.feedback?.discomfort
                         ? 'text-danger-400'
                         : 'text-surface-600 hover:text-surface-300'
@@ -3742,6 +3907,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                     <IconBone size={15} />
                   </button>
                 )}
+              </div>
               </div>
 
               {/* Inline joint pain picker for this completed set (two taps) */}
@@ -3763,7 +3929,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                pendingSetsCount === 0 && (!block.dropsetsPerSet || block.dropsetsPerSet === 0) && (
                 <button
                   onClick={() => startDropset(set)}
-                  className="w-full flex items-center justify-center gap-2 py-1.5 text-sm text-purple-400 hover:text-purple-300 hover:bg-purple-500/10 rounded-lg transition-colors"
+                  className="w-full min-h-[44px] flex items-center justify-center gap-2 py-2.5 text-sm text-purple-400 hover:text-purple-300 hover:bg-purple-500/10 rounded-lg transition-colors"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
@@ -3921,19 +4087,30 @@ export const ExerciseCard = memo(function ExerciseCard({
 
             const lastCompleted = completedSets[completedSets.length - 1];
             let maxReps: number | null;
+            let anchorE1RMKgUsed: number;
+            let anchorSourcePhrase: string;
+            let setsDone = 0;
             if (lastCompleted) {
               // Within-session: same capacity anchor as recommendSet —
               // max(session-best e1RM, Epley of the last set at its logged
               // RIR), fatigue-adjusted for sets already done.
+              const lastRir = resolveLastRir(lastCompleted, effectiveTargetRir);
+              setsDone = completedSets.length;
               maxReps = estimateRepsForWeight(enteredKg, {
                 lastWeightKg: lastCompleted.weightKg,
                 lastReps: lastCompleted.reps,
-                lastRir: resolveLastRir(lastCompleted, effectiveTargetRir),
-                setsCompletedThisExercise: completedSets.length,
+                lastRir,
+                setsCompletedThisExercise: setsDone,
                 sessionBestE1RMKg: sessionBestE1RM,
                 targetRepRange: block.targetRepRange,
                 targetRir: 0,
               });
+              // Mirror estimateRepsForWeight's anchor rule so the reasoning
+              // sheet names the exact e1RM the prediction ran on.
+              const lastSetE1RM =
+                lastCompleted.weightKg * (1 + (lastCompleted.reps + Math.max(0, lastRir)) / 30);
+              anchorE1RMKgUsed = Math.max(sessionBestE1RM ?? 0, lastSetE1RM);
+              anchorSourcePhrase = 'from your strongest set logged this session';
             } else {
               // Session start: the same prescription e1RM ladder the seed's
               // rep answer used (seedRepsForWeight) — last-session resolved
@@ -3950,6 +4127,11 @@ export const ExerciseCard = memo(function ExerciseCard({
                     targetRir: 0,
                   })
                 : null;
+              anchorE1RMKgUsed = e1rm ?? 0;
+              anchorSourcePhrase =
+                lastSessionE1RM !== undefined
+                  ? 'from your last session of this exercise'
+                  : coldStartSuggestion?.reason ?? 'an estimate from your training profile';
             }
             if (maxReps == null) return null;
 
@@ -3957,14 +4139,43 @@ export const ExerciseCard = memo(function ExerciseCard({
             // estimate; proxy = no logged working set for THIS exercise)
             // softens the copy and names the source.
             const hasOwnHistory = !!lastCompleted || lastSessionE1RM !== undefined;
+            const predictedRir = maxReps - enteredReps;
+
+            // Plain-language reasoning for the logger's predicted-RIR (i)
+            // sheet: each line states one input layer with its real numbers,
+            // in the order the math applies them (anchor → fatigue → curve →
+            // subtraction), matching the suggestion sheet's copy style.
+            const reasoning: string[] = [
+              `Capacity anchor: ~${displayWeight(anchorE1RMKgUsed, true)} ${weightLabel} estimated 1RM — ${anchorSourcePhrase}.`,
+            ];
+            if (setsDone > 0) {
+              reasoning.push(
+                `Within-session fatigue: after ${setsDone} logged set${setsDone === 1 ? '' : 's'}, usable capacity is de-rated ~${Math.round(FATIGUE_E1RM_PER_SET * 100)}% per set to ~${displayWeight(fatigueAdjustedE1RM(anchorE1RMKgUsed, setsDone), true)} ${weightLabel} (capped at −${Math.round((1 - FATIGUE_E1RM_FLOOR) * 100)}%).`
+              );
+            }
+            reasoning.push(
+              `Rep-max curve (Epley): at ${entered.label}, that capacity predicts about ${maxReps} rep${maxReps === 1 ? '' : 's'} to failure (0 RIR).`
+            );
+            reasoning.push(
+              predictedRir >= 0
+                ? `You've entered ${enteredReps} rep${enteredReps === 1 ? '' : 's'}: ${maxReps} − ${enteredReps} ≈ ${predictedRir} rep${predictedRir === 1 ? '' : 's'} in reserve.`
+                : `You've entered ${enteredReps} rep${enteredReps === 1 ? '' : 's'} — ${Math.abs(predictedRir)} more than the predicted max, so this set is predicted to hit failure before the last rep.`
+            );
+            if (!hasOwnHistory) {
+              reasoning.push(
+                'Nothing logged for this exercise yet, so the anchor is transferred rather than measured — treat this as a rough guide until you log a set here.'
+              );
+            }
+
             return {
-              predictedRir: maxReps - enteredReps,
+              predictedRir,
               weightLabel: entered.label,
               reps: enteredReps,
               softened: !hasOwnHistory,
               sourceLabel: !hasOwnHistory
                 ? coldStartSuggestion?.reason ?? 'estimate from your training profile'
                 : undefined,
+              reasoning,
             };
           })();
 
@@ -4013,6 +4224,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                 targetRir={loggerTargetRir}
                 unit={unit}
                 minIncrementKg={exercise.minWeightIncrementKg}
+                effortCheck={effortCheck}
                 disabled={isCompletingSet}
                 isDurationBased={isDurationBased}
                 exerciseId={exercise.id}

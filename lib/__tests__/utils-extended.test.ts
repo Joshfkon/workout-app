@@ -6,6 +6,7 @@
 import {
   getLocalDateString,
   formatDate,
+  parseLocalDate,
   formatDuration,
   formatWorkoutDuration,
   resolveWorkoutDurationSeconds,
@@ -67,6 +68,55 @@ describe('Date Utilities', () => {
     it('handles start of year correctly', () => {
       const date = new Date(2024, 0, 1); // January 1, 2024
       expect(getLocalDateString(date)).toBe('2024-01-01');
+    });
+  });
+
+  describe('parseLocalDate', () => {
+    it('parses YYYY-MM-DD as local midnight, not UTC', () => {
+      const result = parseLocalDate('2024-01-15');
+      expect(result.getFullYear()).toBe(2024);
+      expect(result.getMonth()).toBe(0); // 0-indexed
+      expect(result.getDate()).toBe(15);
+      expect(result.getHours()).toBe(0); // local midnight
+    });
+
+    it('returns correct day of week for local date', () => {
+      // 2024-01-15 is a Monday locally
+      const result = parseLocalDate('2024-01-15');
+      expect(result.getDay()).toBe(1); // Monday = 1
+    });
+
+    it('handles date-only strings without time zone confusion', () => {
+      // This is the core bug: new Date('2024-01-15') parses as UTC midnight,
+      // which in US Eastern (UTC-5) is 2024-01-14 19:00 local time.
+      // parseLocalDate should give us 2024-01-15 00:00 local time regardless.
+      const result = parseLocalDate('2024-01-15');
+      expect(result.getDate()).toBe(15);
+      expect(result.getHours()).toBe(0);
+    });
+
+    it('falls back to Date constructor for ISO timestamps', () => {
+      const result = parseLocalDate('2024-01-15T12:00:00Z');
+      expect(result).toBeInstanceOf(Date);
+      expect(result.getFullYear()).toBe(2024);
+    });
+
+    it('falls back to Date constructor for other date formats', () => {
+      const result = parseLocalDate('Jan 15, 2024');
+      expect(result).toBeInstanceOf(Date);
+      expect(result.getFullYear()).toBe(2024);
+    });
+
+    it('handles edge cases at month boundaries', () => {
+      const result = parseLocalDate('2024-02-01');
+      expect(result.getMonth()).toBe(1);
+      expect(result.getDate()).toBe(1);
+    });
+
+    it('pads single-digit months and days correctly', () => {
+      const result = parseLocalDate('2024-05-05');
+      expect(result.getMonth()).toBe(4); // May = 4 (0-indexed)
+      expect(result.getDate()).toBe(5);
     });
   });
 

@@ -15,6 +15,7 @@ import {
   bulkSetExerciseStatus,
   resetAllPreferences as resetAllPreferencesService,
   clearPreferencesCache,
+  toggleFavorite as toggleFavoriteService,
 } from '@/lib/data/exercisePreferencesService';
 
 /** Compute summary counts from the preferences map */
@@ -275,6 +276,56 @@ export function useExercisePreferences() {
     setSummary(computeSummaryFromPrefs(prefs));
   }, [userId]);
 
+  /**
+   * Check if an exercise is favorited
+   */
+  const isFavorite = useCallback(
+    (exerciseId: string): boolean => {
+      if (!exerciseId) return false;
+      try {
+        const pref = preferences?.get(exerciseId);
+        return pref?.isFavorite ?? false;
+      } catch {
+        return false;
+      }
+    },
+    [preferences]
+  );
+
+  /**
+   * Toggle favorite status for an exercise
+   */
+  const toggleFavorite = useCallback(
+    async (exerciseId: string): Promise<boolean> => {
+      if (!userId) return false;
+
+      const currentIsFavorite = isFavorite(exerciseId);
+      const success = await toggleFavoriteService(userId, exerciseId, !currentIsFavorite);
+
+      if (success) {
+        // Refresh preferences
+        const prefs = await getUserExercisePreferences(userId);
+        notifyListeners(prefs);
+      }
+
+      return success;
+    },
+    [userId, isFavorite]
+  );
+
+  /**
+   * Get all favorited exercise IDs
+   */
+  const getFavorites = useCallback((): string[] => {
+    const favorites: string[] = [];
+    preferences.forEach((pref) => {
+      if (pref.isFavorite) {
+        favorites.push(pref.exerciseId);
+      }
+    });
+    return favorites;
+  }, [preferences]);
+
   return {
     preferences,
     summary,
@@ -282,6 +333,8 @@ export function useExercisePreferences() {
     getExerciseStatus,
     isArchived,
     isDoNotSuggest,
+    isFavorite,
+    getFavorites,
     setExerciseStatus,
     muteExercise,
     archiveExercise,
@@ -289,5 +342,6 @@ export function useExercisePreferences() {
     bulkSetStatus,
     resetAllPreferences,
     refreshPreferences,
+    toggleFavorite,
   };
 }

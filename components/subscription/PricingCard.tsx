@@ -122,6 +122,13 @@ export function PricingCard({
             : `Upgrade to ${tierData.name}`
           }
         </Button>
+        
+        {/* Billing disclosure for paid tiers */}
+        {tier !== 'free' && !isCurrentPlan && (
+          <p className="text-xs text-surface-500 text-center mt-3 leading-relaxed">
+            ${billingPeriod === 'yearly' ? price.amount : (tierData as typeof TIER_FEATURES.pro).monthlyPrice}{price.period}. Cancel anytime.
+          </p>
+        )}
       </CardContent>
     </Card>
   );

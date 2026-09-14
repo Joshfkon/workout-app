@@ -47,15 +47,18 @@ export function AddPhotoModal({
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isCompressing, setIsCompressing] = useState(false);
+  // Default to camera mode if a ghost is available (for consistent pose overlay)
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   // Tracks whether the user typed a weight, so the prefill never overwrites it.
   const weightTouchedRef = useRef(false);
   // Invalidates in-flight compression when the modal closes or a newer file
   // is chosen, so a stale result can't write itself back into state.
   const acceptGenerationRef = useRef(0);
+  // Track whether weight prefill has been shown to user for confirmation
+  const [showWeightPrefillNotice, setShowWeightPrefillNotice] = useState(false);
 
   // Prefill the weight field from the bodyweight log nearest (at or before)
-  // the chosen photo date.
+  // the chosen photo date, and show a notice when a prefill happens.
   useEffect(() => {
     if (!isOpen) return;
     let cancelled = false;
@@ -74,6 +77,7 @@ export function AddPhotoModal({
         // No log at or before this date — clear any earlier auto-prefill so
         // the photo can't be saved with a weight measured after its date.
         setWeightDisplay('');
+        setShowWeightPrefillNotice(false);
         return;
       }
       const rowUnit: 'kg' | 'lb' = data.unit === 'kg' ? 'kg' : 'lb';
@@ -82,6 +86,7 @@ export function AddPhotoModal({
         display = units === 'lb' ? kgToLbs(display) : lbsToKg(display);
       }
       setWeightDisplay(display.toFixed(1));
+      setShowWeightPrefillNotice(true);
     }
     prefill();
     return () => {
@@ -98,7 +103,17 @@ export function AddPhotoModal({
     setNotes('');
     setError(null);
     weightTouchedRef.current = false;
+    setShowWeightPrefillNotice(false);
+    // Reset to camera mode if a ghost is available
+    setIsCameraOpen(!!ghostUrl);
   };
+
+  // Initialize camera mode when modal opens (if ghost available for pose overlay)
+  useEffect(() => {
+    if (isOpen && ghostUrl && !file) {
+      setIsCameraOpen(true);
+    }
+  }, [isOpen, ghostUrl, file]);
 
   const handleClose = () => {
     if (isSaving) return;
@@ -228,6 +243,21 @@ export function AddPhotoModal({
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title="Add Progress Photo" size="md">
       <div className="space-y-4">
+        {/* Pose guidance banner */}
+        {!file && (
+          <div className="rounded-lg bg-primary-500/10 border border-primary-500/20 p-3">
+            <p className="text-xs font-medium text-primary-300 mb-1">
+              💡 Tips for consistent photos
+            </p>
+            <ul className="text-xs text-surface-300 space-y-0.5 list-disc list-inside">
+              <li>Same lighting, time of day, and location each time</li>
+              <li>Take front, side, and back poses (separate photos)</li>
+              <li>Stand at the same distance from camera</li>
+              <li>Relax your body — no flexing or sucking in</li>
+            </ul>
+          </div>
+        )}
+
         {/* Photo picker */}
         <input
           ref={fileInputRef}
@@ -301,17 +331,25 @@ export function AddPhotoModal({
           onChange={(e) => setPhotoDate(e.target.value)}
         />
         <div className="grid grid-cols-2 gap-3">
-          <Input
-            label={`Weight (${weightUnit})`}
-            type="number"
-            inputMode="decimal"
-            placeholder="Optional"
-            value={weightDisplay}
-            onChange={(e) => {
-              weightTouchedRef.current = true;
-              setWeightDisplay(e.target.value);
-            }}
-          />
+          <div>
+            <Input
+              label={`Weight (${weightUnit})`}
+              type="number"
+              inputMode="decimal"
+              placeholder="Optional"
+              value={weightDisplay}
+              onChange={(e) => {
+                weightTouchedRef.current = true;
+                setWeightDisplay(e.target.value);
+                setShowWeightPrefillNotice(false);
+              }}
+            />
+            {showWeightPrefillNotice && weightDisplay && (
+              <p className="text-xs text-surface-400 mt-1">
+                ✓ Auto-filled from your log
+              </p>
+            )}
+          </div>
           <Input
             label="Body fat %"
             type="number"

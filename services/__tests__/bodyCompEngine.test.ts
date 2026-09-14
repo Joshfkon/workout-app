@@ -565,7 +565,7 @@ describe('generateCoachingRecommendations', () => {
     expect(recommendations.some((r) => r.title.includes('Lean Mass Trending Down'))).toBe(false);
     expect(recommendations.some((r) => r.title.includes('Fat Gain Too Fast'))).toBe(false);
     // Softened instead: an info rec explains WHY there's no advice.
-    const calibrating = recommendations.find((r) => r.title.includes('Calibrating'));
+    const calibrating = recommendations.find((r) => r.title.includes('Building Your Trend'));
     expect(calibrating).toBeDefined();
     expect(calibrating!.type).toBe('info');
   });
@@ -584,7 +584,7 @@ describe('generateCoachingRecommendations', () => {
     });
 
     expect(recommendations.some((r) => r.title.includes('Lean Mass Trending Down'))).toBe(false);
-    const paused = recommendations.find((r) => r.title.includes('Calibrating'));
+    const paused = recommendations.find((r) => r.title.includes('Waiting Out the Water Shift'));
     expect(paused).toBeDefined();
     expect(paused!.message).toMatch(/water/i);
   });
@@ -661,9 +661,9 @@ describe('generateCoachingRecommendations — activePhase scoping', () => {
       { activePhase: bulkPhase }
     );
     expect(recommendations.some((r) => r.title === 'Lean Mass Trending Down During Bulk')).toBe(false);
-    const calibrating = recommendations.find((r) => r.title.includes('Calibrating'));
+    const calibrating = recommendations.find((r) => r.title.includes('Building Your Phase Trend'));
     expect(calibrating).toBeDefined();
-    expect(calibrating!.message).toMatch(/inside the current phase/);
+    expect(calibrating!.message).toMatch(/current phase/);
     expect(calibrating!.evidence).toContain('1 of 3');
   });
 
@@ -678,7 +678,7 @@ describe('generateCoachingRecommendations — activePhase scoping', () => {
       { activePhase: bulkPhase }
     );
     expect(recommendations.some((r) => r.title === 'Lean Mass Trending Down During Bulk')).toBe(false);
-    const paused = recommendations.find((r) => r.title.includes('Calibrating'));
+    const paused = recommendations.find((r) => r.title.includes('Waiting Out the Water Shift'));
     expect(paused).toBeDefined();
     expect(paused!.message).toMatch(/water/i);
   });

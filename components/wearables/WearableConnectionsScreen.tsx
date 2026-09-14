@@ -216,10 +216,24 @@ export function WearableConnectionsScreen() {
     if (!confirm('Are you sure you want to disconnect this device?')) return;
 
     try {
+      // For Fitbit, revoke access tokens at Fitbit BEFORE clearing local credentials
+      if (source === 'fitbit') {
+        const fitbitModule = await getFitbitModule();
+        if (fitbitModule) {
+          const revoked = await fitbitModule.revokeFitbitAccess();
+          if (!revoked) {
+            // Revocation failed - show error and keep connection
+            alert('Failed to disconnect from Fitbit. Please try again.');
+            return;
+          }
+        }
+      }
+
       await disconnectWearable(source);
       await loadConnections();
     } catch (error) {
       console.error('Disconnect failed:', error);
+      alert('Failed to disconnect. Please try again.');
     }
   }
 

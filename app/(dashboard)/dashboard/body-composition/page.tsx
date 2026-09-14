@@ -1,11 +1,14 @@
 'use client';
 
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { LoadingAnimation } from '@/components/ui';
 
 // Redirect to combined Analytics page (Body Composition tab)
 export default function BodyCompositionPage() {
+  useDocumentTitle('Body Composition');
   const router = useRouter();
 
   useEffect(() => {

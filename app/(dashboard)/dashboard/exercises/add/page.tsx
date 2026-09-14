@@ -1,11 +1,14 @@
 'use client';
 
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { CreateCustomExercise } from '@/components/exercises/CreateCustomExercise';
 import { createUntypedClient } from '@/lib/supabase/client';
 
 export default function AddExercisePage() {
+  useDocumentTitle('Add Exercise');
   const router = useRouter();
   const [userId, setUserId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);

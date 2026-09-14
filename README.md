@@ -58,8 +58,11 @@ NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 
-# For AI Coaching feature (Elite tier)
-ANTHROPIC_API_KEY=sk-ant-your-anthropic-api-key
+# For AI Coaching feature (Elite tier) - uses xAI Grok
+XAI_API_KEY=your-xai-api-key
+
+# Note: Other AI features (nutrition, label scanning, progress photos) 
+# may use ANTHROPIC_API_KEY if configured separately
 ```
 
 6. Run database migrations:

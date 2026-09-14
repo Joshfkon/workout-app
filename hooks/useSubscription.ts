@@ -161,15 +161,34 @@ export function useSubscription() {
           return;
         }
 
+        // Parse current_period_end safely - handle both ISO strings and Unix timestamps
+        let currentPeriodEnd: Date | null = null;
+        if (subscriptionData.current_period_end) {
+          const periodEnd = subscriptionData.current_period_end;
+          // If it's a number, check if it's in seconds (< year 2100) or milliseconds
+          if (typeof periodEnd === 'number') {
+            // Unix timestamps in seconds are < 4000000000 (year ~2096)
+            // If larger, it's already in milliseconds
+            currentPeriodEnd = new Date(periodEnd < 4000000000 ? periodEnd * 1000 : periodEnd);
+          } else {
+            // It's a string (ISO format)
+            currentPeriodEnd = new Date(periodEnd);
+          }
+          // Sanity check: if date is > 50 years in future, something's wrong - show null instead
+          const fiftyYearsFromNow = Date.now() + (50 * 365 * 24 * 60 * 60 * 1000);
+          if (currentPeriodEnd.getTime() > fiftyYearsFromNow) {
+            console.warn('Invalid currentPeriodEnd date detected (> 50 years in future):', currentPeriodEnd);
+            currentPeriodEnd = null;
+          }
+        }
+
         notifyListeners({
           tier: subscriptionData.tier as SubscriptionTier || 'free',
           status: subscriptionData.status as SubscriptionStatus || 'trialing',
           isTrialing: isInTrial && subscriptionData.status !== 'active',
           trialDaysRemaining,
           trialEndsAt,
-          currentPeriodEnd: subscriptionData.current_period_end 
-            ? new Date(subscriptionData.current_period_end) 
-            : null,
+          currentPeriodEnd,
           cancelAtPeriodEnd: subscriptionData.cancel_at_period_end || false,
           stripeCustomerId: subscriptionData.stripe_customer_id || null,
           isLoading: false,

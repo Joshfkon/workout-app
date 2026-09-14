@@ -121,3 +121,62 @@ export async function deleteAllExercisePreferences(
 
   return { error };
 }
+
+/**
+ * Toggle favorite status for an exercise
+ */
+export async function toggleExerciseFavorite(
+  userId: string,
+  exerciseId: string,
+  isFavorite: boolean
+): Promise<{ error: { code?: string; message?: string } | null }> {
+  const supabase = await createUntypedServerClient();
+  
+  // First check if a preference exists
+  const { data: existing } = await supabase
+    .from('user_exercise_preferences')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('exercise_id', exerciseId)
+    .single();
+  
+  if (existing) {
+    // Update existing preference
+    const { error } = await supabase
+      .from('user_exercise_preferences')
+      .update({ is_favorite: isFavorite })
+      .eq('user_id', userId)
+      .eq('exercise_id', exerciseId);
+    
+    return { error };
+  } else {
+    // Create new preference with favorite flag
+    const { error } = await supabase
+      .from('user_exercise_preferences')
+      .insert({
+        user_id: userId,
+        exercise_id: exerciseId,
+        status: 'active',
+        is_favorite: isFavorite,
+      });
+    
+    return { error };
+  }
+}
+
+/**
+ * Fetch favorite exercise IDs for a user
+ */
+export async function fetchFavoriteExerciseIds(
+  userId: string
+): Promise<{ data: string[] | null; error: { code?: string; message?: string } | null }> {
+  const supabase = await createUntypedServerClient();
+  const { data, error } = await supabase
+    .from('user_exercise_preferences')
+    .select('exercise_id')
+    .eq('user_id', userId)
+    .eq('is_favorite', true);
+
+  const exerciseIds = data?.map(row => row.exercise_id) ?? null;
+  return { data: exerciseIds, error };
+}

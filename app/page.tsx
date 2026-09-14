@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { isSessionCookieValid } from "@/lib/supabase/sessionCookie";
 import { ThemeToggleCompact } from "@/components/settings/ThemeToggle";
+import { PhoneShowcase } from "@/components/marketing/PhoneShowcase";
 
 export default async function Home({
   searchParams,
@@ -80,7 +81,7 @@ export default async function Home({
         }}
       />
 
-      <div className="relative z-10 flex flex-col items-center justify-center min-h-screen px-4 pt-16">
+      <div className="relative z-10 flex flex-col items-center justify-center min-h-screen px-4 pt-20 md:pt-16">
         {/* Hero content */}
         <div className="text-center max-w-2xl animate-fade-in">
           <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold text-surface-100 mb-6 tracking-tight">
@@ -94,22 +95,28 @@ export default async function Home({
         </div>
 
         {/* CTA buttons */}
-        <div className="flex flex-col sm:flex-row gap-4 animate-slide-up" style={{ animationDelay: '0.1s' }}>
-          {/* P2-5: primary CTA creates an account (new visitors); returning
-              users get an explicit Log in. Previously Get Started pointed at
-              /login and the secondary duplicated the header's Sign Up. */}
-          <Link
-            href="/register"
-            className="btn-primary px-8 py-4 text-lg rounded-xl shadow-lg shadow-primary-500/25 hover:shadow-primary-500/40 transition-all"
-          >
-            Get Started
-          </Link>
-          <Link
-            href="/login"
-            className="btn-secondary px-8 py-4 text-lg rounded-xl border border-surface-700"
-          >
-            Log In
-          </Link>
+        <div className="flex flex-col items-center gap-4 animate-slide-up" style={{ animationDelay: '0.1s' }}>
+          <div className="flex flex-col sm:flex-row gap-4">
+            {/* P2-5: primary CTA creates an account (new visitors); returning
+                users get an explicit Log in. Previously Get Started pointed at
+                /login and the secondary duplicated the header's Sign Up. */}
+            <Link
+              href="/register"
+              className="btn-primary px-8 py-4 text-lg rounded-xl shadow-lg shadow-primary-500/25 hover:shadow-primary-500/40 transition-all"
+            >
+              Start Free Trial
+            </Link>
+            <Link
+              href="/login"
+              className="btn-secondary px-8 py-4 text-lg rounded-xl border border-surface-700"
+            >
+              Log In
+            </Link>
+          </div>
+          {/* Trial disclosure */}
+          <p className="text-sm text-surface-500 text-center max-w-md px-4">
+            14-day free trial. No credit card required. Automatically continues as Free plan—upgrade anytime.
+          </p>
         </div>
 
         {/* Learn More link */}
@@ -129,7 +136,12 @@ export default async function Home({
             </svg>
           </Link>
         </div>
+      </div>
 
+      {/* Phone Showcase Section */}
+      <PhoneShowcase />
+
+      <div className="relative z-10 flex flex-col items-center justify-center px-4">
         {/* Feature highlights - Row 1 */}
         <div className="mt-16 sm:mt-20 grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 max-w-5xl animate-slide-up px-2" style={{ animationDelay: '0.2s' }}>
           <FeatureCard
@@ -195,6 +207,36 @@ export default async function Home({
           />
         </div>
       </div>
+
+      {/* Footer */}
+      <footer className="relative z-10 border-t border-surface-800/50 mt-20">
+        <div className="max-w-5xl mx-auto px-4 py-8">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center flex-shrink-0">
+                <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              </div>
+              <span className="text-sm text-surface-400">© 2026 HyperTrack</span>
+            </div>
+            <div className="flex items-center gap-6 text-sm">
+              <Link href="/privacy" className="text-surface-400 hover:text-surface-200 transition-colors">
+                Privacy
+              </Link>
+              <Link href="/terms" className="text-surface-400 hover:text-surface-200 transition-colors">
+                Terms
+              </Link>
+              <Link href="/support" className="text-surface-400 hover:text-surface-200 transition-colors">
+                Support
+              </Link>
+              <Link href="/pricing" className="text-surface-400 hover:text-surface-200 transition-colors">
+                Pricing
+              </Link>
+            </div>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

@@ -1,5 +1,7 @@
 'use client';
 
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -173,6 +175,7 @@ function RenameButton({ onClick, className }: { onClick: () => void; className?:
 }
 
 export default function MesocyclePage() {
+  useDocumentTitle('Mesocycle');
   const router = useRouter();
   const queryClient = useQueryClient();
   const [mesocycles, setMesocycles] = useState<Mesocycle[]>([]);

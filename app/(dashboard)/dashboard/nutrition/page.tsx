@@ -1,10 +1,13 @@
 'use client';
 
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+
 import { useState, useEffect, useRef, useCallback, useMemo, Suspense } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useQueryClient, useIsRestoring } from '@tanstack/react-query';
 import dynamic from 'next/dynamic';
-import { Card, CardHeader, CardTitle, CardContent, Button, LoadingAnimation, SwipeableRow, ToastContainer, useToasts } from '@/components/ui';
+import { Card, CardHeader, CardTitle, CardContent, Button, LoadingAnimation, SwipeableRow, ToastContainer, useToasts, EmptyState } from '@/components/ui';
+import { Button as StyledButton } from '@/components/ui/Button';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { getLocalUserId } from '@/lib/supabase/authState';
 
@@ -1765,7 +1768,17 @@ function NutritionPageContent() {
             <IconScale size={18} className="text-primary-400" aria-hidden="true" />
             <span className="text-[13px] text-surface-200">Log today&apos;s weight</span>
           </span>
-          <span className="text-[12px] font-semibold text-primary-400">Log</span>
+          <StyledButton
+            variant="primary"
+            size="sm"
+            className="rounded-full px-4 py-1"
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowWeightLog(true);
+            }}
+          >
+            Log
+          </StyledButton>
         </button>
       )}
 
@@ -1845,8 +1858,8 @@ function NutritionPageContent() {
                     {hasEntries
                       ? `${mealFat}g fat · ${mealCarbs}g carbs · ${mealProtein}g protein`
                       : perMealAvailable > 0
-                        ? `~${perMealAvailable.toLocaleString()} calories available`
-                        : 'Nothing logged yet'}
+                        ? `~${perMealAvailable.toLocaleString()} calories remaining for this meal`
+                        : 'Tap Add Food to log your first item'}
                   </p>
                 </div>
                 {hasMenuActions && (
@@ -1932,12 +1945,14 @@ function NutritionPageContent() {
 
               {/* Add Food pill */}
               <div className={`flex justify-end ${hasEntries ? 'mt-2' : 'mt-3'}`}>
-                <button
+                <StyledButton
                   onClick={() => openAddFood(meal.type)}
-                  className="rounded-full bg-primary-600 px-5 py-2 text-[13px] font-semibold text-white hover:bg-primary-500 active:bg-primary-700 transition-colors"
+                  variant="primary"
+                  size="sm"
+                  className="rounded-full px-5"
                 >
                   Add Food
-                </button>
+                </StyledButton>
               </div>
             </div>
           );
@@ -1964,22 +1979,35 @@ function NutritionPageContent() {
             <span className="block text-[12px] text-surface-400 truncate">
               {hasLoggedWeightToday
                 ? `Logged today: ${todayWeightDisplay} ${weightUnit}`
-                : 'A few weigh-ins a week keep your adaptive TDEE accurate'}
+                : 'Weigh in a few times a week to track your trend and keep your adaptive TDEE accurate'}
             </span>
           </span>
         </span>
-        <span className="flex-shrink-0 rounded-full bg-primary-600 px-4 py-1.5 text-[13px] font-semibold text-white">
+        <StyledButton
+          variant="primary"
+          size="sm"
+          className="rounded-full px-4 flex-shrink-0"
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowWeightLog(true);
+          }}
+        >
           {hasLoggedWeightToday ? 'Update' : 'Log'}
-        </span>
+        </StyledButton>
       </button>
 
       {/* Weight Trend */}
       {weightEntries.length === 0 && (
-        <div className="rounded-2xl border border-surface-800 bg-surface-900 p-6 text-center">
-          <p className="text-[13px] text-surface-400">
-            No weight entries yet. Log your first weigh-in to start tracking your trend.
-          </p>
-        </div>
+        <EmptyState
+          icon="⚖️"
+          title="Start tracking your weight"
+          description="Log weigh-ins a few times a week to track your trend and keep your adaptive TDEE accurate. Consistent data helps us calculate your true maintenance calories."
+          action={
+            <Button variant="primary" onClick={() => setShowWeightLog(true)}>
+              Log Your First Weigh-In
+            </Button>
+          }
+        />
       )}
       {weightEntries.length > 0 && (
         <Card>
@@ -2323,6 +2351,7 @@ function NutritionPageContent() {
 // requires a Suspense boundary for the static prerender pass — the fallback
 // matches the page's own loading state so nothing visibly changes.
 export default function NutritionPage() {
+  useDocumentTitle('Nutrition');
   return (
     <Suspense
       fallback={

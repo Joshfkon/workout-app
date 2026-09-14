@@ -1,11 +1,13 @@
 'use client';
 
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+
 import { useState, useEffect, useRef, useMemo, Suspense } from 'react';
 import { useQuery, useQueryClient, useIsRestoring } from '@tanstack/react-query';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Card, CardHeader, CardTitle, CardContent, Button, Badge, FullPageLoading, ErrorRetry } from '@/components/ui';
+import { Card, CardHeader, CardTitle, CardContent, Button, Badge, FullPageLoading, ErrorRetry, PageHeader, LoadingState } from '@/components/ui';
 import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 import { resolveAuthState } from '@/lib/supabase/authState';
 import { useMusclePriorities } from '@/components/settings/MusclePrioritySettings';
@@ -63,6 +65,10 @@ import { BodyHubNudges } from '@/components/body/BodyHubNudges';
 import { MeasurementTrendCard } from '@/components/body/MeasurementTrendCard';
 import type { BodyLogSegment } from '@/components/body/LogBodyDataSheet';
 import { LiftTrendsCard } from '@/components/analytics/LiftTrendsCard';
+import { ProgressPhotosHero } from '@/components/analytics/ProgressPhotosHero';
+import { ComparePhotos } from '@/components/progress-photos/ComparePhotos';
+import { TimelapseModal } from '@/components/progress-photos/TimelapseModal';
+import { AddPhotoModal } from '@/components/progress-photos/AddPhotoModal';
 import {
   computeLiftTrends,
   LIFT_TREND_WINDOW_DAYS,
@@ -274,6 +280,10 @@ function AnalyticsPageContent() {
   // Body hub: unified log sheet + refresh signal for the hub widgets
   const [logSegment, setLogSegment] = useState<BodyLogSegment | null>(null);
   const [bodyRefreshKey, setBodyRefreshKey] = useState(0);
+  // Progress photos modals (for the hero on Body tab)
+  const [isCompareOpen, setIsCompareOpen] = useState(false);
+  const [isTimelapseOpen, setIsTimelapseOpen] = useState(false);
+  const [isAddPhotoOpen, setIsAddPhotoOpen] = useState(false);
 
   // DEXA-anchored body comp trend — the single source for both the trend
   // chart (BodyHubTrends) and the FFMI gauge, so they can never disagree.
@@ -337,6 +347,10 @@ function AnalyticsPageContent() {
   const displayWeight = (kg: number) => {
     const value = units === 'lb' ? kgToLbs(kg) : kg;
     return roundToIncrement(value, 2.5);
+  };
+  const displayWeightString = (kg: number) => {
+    const value = displayWeight(kg);
+    return units === 'lb' ? `${value.toFixed(1)} lbs` : `${value.toFixed(1)} kg`;
   };
   const weightUnit = units === 'lb' ? 'lbs' : 'kg';
 
@@ -1489,13 +1503,11 @@ function AnalyticsPageContent() {
       {/* Header. The page title now matches the "Progress" nav label. The
           range selector renders here only on tabs it actually scopes
           (Training / Wellness); Body and Strength carry no dead control. */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-surface-100">Progress</h1>
-          <p className="text-surface-400">Track your body composition, strength, and training progress</p>
-        </div>
-        {rangeAppliesToTab && <div className="flex gap-2">{timeRangeSelector}</div>}
-      </div>
+      <PageHeader
+        title="Progress"
+        subtitle="Track your body composition, strength, and training progress"
+        actions={rangeAppliesToTab ? <div className="flex gap-2">{timeRangeSelector}</div> : undefined}
+      />
 
       {/* Tab Navigation */}
       <div className="flex gap-1 bg-surface-800/50 p-1 rounded-xl">
@@ -1612,8 +1624,8 @@ function AnalyticsPageContent() {
           {bodyCompLayout.showScanPrompt && (
             <p className="text-xs text-surface-500 text-center">
               {scans.length === 0
-                ? 'Log a DEXA scan to unlock composition trends and the Composition Map.'
-                : 'One more DEXA scan unlocks the Composition Map and scan-to-scan analysis.'}{' '}
+                ? 'Track weight, measurements, and strength now. Log a DEXA scan to add composition trends and the Composition Map.'
+                : 'You can see overall progress. One more scan adds the Composition Map and phase-to-phase analysis.'}{' '}
               <button
                 type="button"
                 onClick={() => setLogSegment('dexa')}
@@ -1648,51 +1660,17 @@ function AnalyticsPageContent() {
             weightHistory={weightHistory}
           />
 
-          {/* Progress Photos */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Recent Progress Photos</CardTitle>
-                <Link href="/dashboard/progress-photos">
-                  <Button variant="ghost" size="sm">
-                    {progressPhotos.length > 0 ? 'View All →' : 'Add Photos →'}
-                  </Button>
-                </Link>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {progressPhotos.length > 0 ? (
-                <div className="grid grid-cols-4 gap-2">
-                  {progressPhotos.slice(0, 4).map((photo) => {
-                    const photoUrl = photoUrls[photo.id];
-                    return (
-                      <Link key={photo.id} href="/dashboard/progress-photos">
-                        <div className="aspect-square rounded-lg overflow-hidden bg-surface-800">
-                          {photoUrl ? (
-                            /* eslint-disable-next-line @next/next/no-img-element */
-                            <img
-                              src={photoUrl}
-                              alt={`Progress ${new Date(photo.photoDate).toLocaleDateString()}`}
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center">
-                              <div className="w-6 h-6 border-2 border-surface-600 border-t-transparent rounded-full animate-spin" />
-                            </div>
-                          )}
-                        </div>
-                      </Link>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p className="text-sm text-surface-500">
-                  No photos yet. Consistent progress photos are one of the best
-                  ways to see change that the scale misses.
-                </p>
-              )}
-            </CardContent>
-          </Card>
+          {/* Progress Photos Hero */}
+          <ProgressPhotosHero
+            photos={progressPhotos}
+            photoUrls={photoUrls}
+            units={units}
+            weightUnit={weightUnit}
+            displayWeight={displayWeightString}
+            onCompare={() => setIsCompareOpen(true)}
+            onTimelapse={() => setIsTimelapseOpen(true)}
+            onAddPhoto={() => setIsAddPhotoOpen(true)}
+          />
 
           {/* The target EDITOR (weight / BF% / FFMI — what the Composition
               Map's goal vector reads). id-anchored so the header "Edit goals"
@@ -1721,13 +1699,21 @@ function AnalyticsPageContent() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                 </svg>
               </div>
-              <h2 className="text-lg font-semibold text-surface-200">No body composition data yet</h2>
+              <h2 className="text-lg font-semibold text-surface-200">Building Your Body Data</h2>
               <p className="text-surface-500 mt-2 max-w-md mx-auto">
-                Add your first DEXA scan to start tracking your body composition.
+                You&apos;re already tracking workouts, weight, and measurements. Add a DEXA scan to see lean vs. fat trends and unlock composition insights.
               </p>
-              <Link href="/dashboard/body-composition/add">
-                <Button className="mt-6">Add DEXA Scan</Button>
-              </Link>
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-6">
+                <Link href="/dashboard/body-composition/add">
+                  <Button>Add DEXA Scan</Button>
+                </Link>
+                <Button
+                  variant="outline"
+                  onClick={() => setLogSegment('weight')}
+                >
+                  Log Weight
+                </Button>
+              </div>
             </Card>
           )}
         </div>
@@ -1753,6 +1739,27 @@ function AnalyticsPageContent() {
               goal={progressionRaw?.goal}
             />
           )}
+
+          {/* Link to detailed Volume tracking */}
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex-1">
+                  <h3 className="text-sm font-semibold text-surface-100 mb-1">
+                    Weekly Volume Tracking
+                  </h3>
+                  <p className="text-xs text-surface-400">
+                    Track sets per muscle group, compare against your volume landmarks (MEV/MAV/MRV), 
+                    and see detailed breakdowns by exercise.
+                  </p>
+                </div>
+                <Link href="/dashboard/volume">
+                  <Button size="sm">View Volume →</Button>
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+
           {strengthProfile ? (
             <>
               {/* Overall Score — rendered exactly ONCE (was duplicated). */}
@@ -1891,17 +1898,17 @@ function AnalyticsPageContent() {
               )}
             </>
           ) : (
-            <Card className="text-center py-12">
-              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-primary-500/20 flex items-center justify-center">
-                <svg className="w-8 h-8 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <Card className="text-center py-6">
+              <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-primary-500/20 flex items-center justify-center">
+                <svg className="w-6 h-6 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                 </svg>
               </div>
-              <h2 className="text-lg font-semibold text-surface-200">Calibrate Your Strength</h2>
-              <p className="text-surface-500 mt-2 max-w-md mx-auto">
-                Test your key lifts to get percentile rankings, identify imbalances, and receive personalized weight recommendations.
+              <h2 className="text-base font-semibold text-surface-200">Calibrate Your Strength</h2>
+              <p className="text-sm text-surface-500 mt-1.5 max-w-md mx-auto">
+                Log a few workouts to see strength trends, percentile rankings, and personalized recommendations.
               </p>
-              <Button className="mt-6" onClick={() => router.push('/onboarding')}>
+              <Button className="mt-4" size="sm" onClick={() => router.push('/onboarding')}>
                 Start Strength Test
               </Button>
             </Card>
@@ -1955,6 +1962,39 @@ function AnalyticsPageContent() {
           onSaved={handleBodyDataSaved}
         />
       )}
+
+      {/* Progress photos modals (accessible from Body tab hero) */}
+      {userId && (
+        <AddPhotoModal
+          isOpen={isAddPhotoOpen}
+          onClose={() => setIsAddPhotoOpen(false)}
+          userId={userId}
+          units={units}
+          weightUnit={weightUnit}
+          ghostUrl={progressPhotos[0] ? photoUrls[progressPhotos[0].id] : undefined}
+          onAdded={() => {
+            setIsAddPhotoOpen(false);
+            // Refresh both the analytics query (for this page's photo list)
+            // and mark the body hub for refresh
+            void queryClient.invalidateQueries({ queryKey: ['analytics'] });
+            setBodyRefreshKey((k) => k + 1);
+          }}
+        />
+      )}
+      <ComparePhotos
+        isOpen={isCompareOpen}
+        onClose={() => setIsCompareOpen(false)}
+        photos={progressPhotos}
+        photoUrls={photoUrls}
+        units={units}
+      />
+      <TimelapseModal
+        isOpen={isTimelapseOpen}
+        onClose={() => setIsTimelapseOpen(false)}
+        photos={progressPhotos}
+        photoUrls={photoUrls}
+        units={units}
+      />
     </div>
   );
 }
@@ -1963,6 +2003,7 @@ function AnalyticsPageContent() {
 // boundary for the static prerender pass — the fallback matches the page's
 // own loading state so nothing visibly changes.
 export default function AnalyticsPage() {
+  useDocumentTitle('Analytics');
   return (
     <Suspense fallback={<FullPageLoading text="Loading your analytics..." type="heartbeat" />}>
       <AnalyticsPageContent />
@@ -1981,7 +2022,7 @@ function MusclePrioritiesDisplay({ userId }: { userId: string }) {
           <CardTitle>Muscle Group Priorities</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="text-center py-4 text-surface-400 text-sm">Loading...</div>
+          <LoadingState label="Loading priorities..." size="sm" />
         </CardContent>
       </Card>
     );

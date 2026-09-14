@@ -1,5 +1,7 @@
 'use client';
 
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+
 /**
  * Recovery debug — calibration view for the recovery models.
  *
@@ -79,6 +81,7 @@ function ReadinessRowView({ label, result }: { label: string; result: MuscleReco
 }
 
 export default function RecoveryDebugPage() {
+  useDocumentTitle('Recovery Debug');
   const { user } = useUserStore();
   // Visual/debug read of the wall clock — allowed per lib/clock rules; this
   // page persists nothing.

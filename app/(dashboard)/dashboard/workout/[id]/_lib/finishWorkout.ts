@@ -60,6 +60,9 @@ import { upsertSessionMuscleFeedback } from './muscleFeedbackWrites';
 import type { SessionMuscleFeedbackEntry } from '@/components/workout/SessionSummary';
 import type { WorkoutSession } from '@/types/schema';
 import { now as clockNow } from '@/lib/clock';
+import { ABANDONED_SESSION_THRESHOLD_MINUTES } from '@/lib/workout/constants';
+
+export { ABANDONED_SESSION_THRESHOLD_MINUTES };
 
 type UntypedSupabase = ReturnType<typeof import('@/lib/supabase/client').createUntypedClient>;
 
@@ -70,6 +73,12 @@ export function sessionFinishEntryId(sessionId: string): string {
 export function sessionClaimEntryId(sessionId: string): string {
   return `claim:${sessionId}`;
 }
+
+// ---------------------------------------------------------------------------
+// Abandoned session detection  
+// ---------------------------------------------------------------------------
+
+// Uses ABANDONED_SESSION_THRESHOLD_MINUTES imported at top of file
 
 // ---------------------------------------------------------------------------
 // Timing
@@ -123,6 +132,13 @@ export interface FinishSummaryData {
    * that don't surface the toggle (leaves the stored flag untouched).
    */
   isDeload?: boolean;
+  /**
+   * ISO timestamp of the last logged set in this workout. Used to detect
+   * abandoned sessions: if the gap between this and "now" is >= the threshold,
+   * the session end time is backdated to this timestamp instead of using the
+   * current time. Omit on legacy callers or sessions with no sets.
+   */
+  lastSetTimestamp?: string;
 }
 
 export interface FinishFlowDeps {
@@ -150,9 +166,20 @@ export interface FinishFlowDeps {
 }
 
 function completionPatch(data: FinishSummaryData): Record<string, unknown> {
+  // Determine the end time: if there's been a long gap since the last set,
+  // use that set's timestamp instead of now (abandoned session).
+  let completedAt = clockNow();
+  if (data.lastSetTimestamp) {
+    const lastSetTime = new Date(data.lastSetTimestamp);
+    const gapMinutes = (completedAt.getTime() - lastSetTime.getTime()) / (1000 * 60);
+    if (gapMinutes >= ABANDONED_SESSION_THRESHOLD_MINUTES) {
+      completedAt = lastSetTime;
+    }
+  }
+
   const patch: Record<string, unknown> = {
     state: 'completed',
-    completed_at: clockNow().toISOString(),
+    completed_at: completedAt.toISOString(),
     session_rpe: data.sessionRpe,
     session_notes: data.notes,
     completion_percent: 100,

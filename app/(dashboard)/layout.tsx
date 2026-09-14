@@ -1,5 +1,6 @@
 import { DashboardLayoutClient } from '@/components/dashboard/DashboardLayoutClient';
 import { QueryProvider } from '@/components/providers/QueryProvider';
+import { OnboardingResumeBanner } from '@/components/onboarding/OnboardingResumeBanner';
 
 export default function DashboardLayout({
   children,
@@ -9,6 +10,7 @@ export default function DashboardLayout({
   return (
     <QueryProvider>
       <DashboardLayoutClient>{children}</DashboardLayoutClient>
+      <OnboardingResumeBanner />
     </QueryProvider>
   );
 }

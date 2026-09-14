@@ -32,7 +32,6 @@ import type { DailyGroupSets } from '@/services/volumeProjection';
 import { MuscleMap } from '@/components/muscleMap/MuscleMap';
 import { readinessRowsToMapData } from '@/lib/muscleMap/adapters';
 import type { MuscleId } from '@/lib/muscleMap/taxonomy';
-import type { BodyView } from '@/lib/muscleMap/paths';
 import type { MuscleRecoveryResult } from '@/services/muscleRecovery';
 import type { SetLog, StandardMuscleGroup } from '@/types/schema';
 import type { ExerciseBlockWithExercise } from '@/app/(dashboard)/dashboard/workout/[id]/_lib/types';
@@ -156,8 +155,8 @@ function barFillPct(sets: number, mrv: number): number {
 }
 
 /**
- * Compact body map for the sheet: one view at a time (sheet height),
- * front/back toggle, plus a Recovery/Volume/Heatmap paint toggle — recovery
+ * Compact body map for the sheet: front and back side by side (like every
+ * other map surface), plus a Recovery/Volume/Heatmap paint toggle — recovery
  * status by default, weekly-volume zones (same colors as the bars below) on
  * demand. Those two paints come from the SAME rows the badges/bars below
  * render (via readinessRowsToMapData — coarse values per group, rendered fine
@@ -170,7 +169,6 @@ function barFillPct(sets: number, mrv: number): number {
  * muscle's own long-window numbers instead of pointing at a different metric.
  */
 function ReadinessMap({ rows, onRevealAll }: { rows: ReadinessRow[]; onRevealAll?: () => void }) {
-  const [view, setView] = useState<BodyView>('front');
   const [mode, setModeState] = useState<ReadinessMapMode>(() => readMapMode());
   const setMode = (value: ReadinessMapMode) => {
     setModeState(value);
@@ -221,33 +219,16 @@ function ReadinessMap({ rows, onRevealAll }: { rows: ReadinessRow[]; onRevealAll
             </button>
           ))}
         </div>
-        <div className="flex gap-1">
-          {(['front', 'back'] as const).map((v) => (
-            <button
-              key={v}
-              onClick={() => setView(v)}
-              className={`px-2.5 py-1 rounded text-[11px] font-medium transition-colors ${
-                view === v
-                  ? 'bg-surface-700 text-surface-100'
-                  : 'text-surface-500 hover:text-surface-300'
-              }`}
-              data-testid={`readiness-map-view-${v}`}
-              aria-pressed={view === v}
-            >
-              {v === 'front' ? 'Front' : 'Back'}
-            </button>
-          ))}
-        </div>
       </div>
       {mode === 'heat' ? (
         // Mounted only while active, so the long-window fetch is lazy and the
         // React Query hook never runs for users who stay on recovery/volume.
-        <CompactVolumeHeatmap view={view} />
+        <CompactVolumeHeatmap />
       ) : (
         <MuscleMap
           data={mapData}
           mode={mode}
-          view={view}
+          view="both"
           onMuscleTap={scrollToRow}
           className="h-44"
           data-testid="readiness-muscle-map"
@@ -285,9 +266,11 @@ function ReadinessChildContent({ child }: { child: ReadinessChild }) {
     >
       <div className="flex items-center gap-3 py-1.5">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-xs text-surface-400 truncate">{child.displayName}</span>
-            <span className="text-[10px] tabular-nums text-surface-500 flex-shrink-0">
+          {/* flex-wrap: same as the coarse row — never truncate the name to fit
+              the band label; wrap the label instead. */}
+          <div className="flex flex-wrap items-center justify-between gap-x-2">
+            <span className="text-xs text-surface-400">{child.displayName}</span>
+            <span className="text-[10px] tabular-nums text-surface-500 flex-shrink-0 ml-auto">
               <span className={zoneTextClass(child.zone, child.sets)} data-testid={`readiness-sets-${child.muscle}`}>{child.sets}</span>
               <span className="text-surface-600"> · {zoneBandLabel(child.band)}</span>
             </span>
@@ -307,9 +290,11 @@ function ReadinessRowContent({ row }: { row: ReadinessRow }) {
   return (
     <div className="flex items-center gap-3 py-2.5">
       <div className="flex-1 min-w-0">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-sm text-surface-100 truncate">{row.displayName}</span>
-          <span className="text-[11px] tabular-nums flex-shrink-0">
+        {/* flex-wrap: on narrow screens the band label drops to its own line
+            instead of shrink-squeezing the muscle name into "Ham…". */}
+        <div className="flex flex-wrap items-center justify-between gap-x-2">
+          <span className="text-sm text-surface-100">{row.displayName}</span>
+          <span className="text-[11px] tabular-nums flex-shrink-0 ml-auto">
             {/* Row-aware color: an in-zone parent with a lagging fine child
                 reads warning, never green. Coarse bands are group landmarks. */}
             <span className={rowTextClass(row)} data-testid={`readiness-sets-${row.muscle}`}>{row.sets}</span>

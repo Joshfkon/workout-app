@@ -251,11 +251,9 @@ export function ExerciseDetailsModal({
   if (!isOpen || !exercise) return null;
 
   const sessionCount = sessions?.length ?? 0;
-  const lastSessionSummary = buildLastSessionSummary(
-    sessions?.[0],
-    unit,
-    getExerciseProp(exercise, 'exerciseType', 'exercise_type') === 'duration_based'
-  );
+  const isDuration =
+    getExerciseProp(exercise, 'exerciseType', 'exercise_type') === 'duration_based';
+  const lastSessionSummary = buildLastSessionSummary(sessions?.[0], unit, isDuration);
 
   return (
     <div
@@ -361,14 +359,16 @@ export function ExerciseDetailsModal({
                     isLoading={historyQuery.isLoading}
                     unit={unit}
                     repTotalMode={repTotalMode}
-                    isDuration={
-                      getExerciseProp(exercise, 'exerciseType', 'exercise_type') ===
-                      'duration_based'
-                    }
+                    isDuration={isDuration}
                   />
                 )}
                 {activeTab === 'charts' && (
-                  <ChartsTab sessions={sessions} unit={unit} repTotalMode={repTotalMode} />
+                  <ChartsTab
+                    sessions={sessions}
+                    unit={unit}
+                    repTotalMode={repTotalMode}
+                    isDuration={isDuration}
+                  />
                 )}
                 {activeTab === 'records' && (
                   <RecordsTab sessions={sessions} unit={unit} repTotalMode={repTotalMode} />

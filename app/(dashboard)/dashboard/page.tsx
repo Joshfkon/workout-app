@@ -11,6 +11,11 @@ import {
   fetchLiftTrends,
   fetchBodyCompGlance,
 } from '@/lib/actions/dashboard';
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = {
+  title: 'Dashboard',
+};
 
 // The page awaits its data BEFORE flushing HTML — deliberately no Suspense
 // boundary. With one, the hero card streams as a hidden segment that the

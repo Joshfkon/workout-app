@@ -1,12 +1,16 @@
 /**
- * Drift guard: the stabilizer seed migration must track
+ * Drift guard: the stock stabilizer seed migrations must track
  * services/shared/stabilizerTags.STABILIZERS_BY_EXERCISE_NAME exactly.
  *
- * SQL cannot import the TypeScript map, so this test parses the migration
+ * SQL cannot import the TypeScript map, so this test parses the migrations
  * (the recoveryMultiplierVocabulary.test.ts pattern) and compares name →
- * stabilizer-array pairs both ways. It also pins the invariants the seed
- * relies on: values restricted to the tracked vocabulary, stock-rows-only
- * scoping, and that unsure exercises stay unseeded rather than guessed.
+ * stabilizer-array pairs both ways. The map is seeded across MULTIPLE
+ * migrations (the original 20260825000002 seed plus each approved audit
+ * addition — migrations are immutable once applied, so additions get new
+ * files); the UNION of their statements must equal the map, and no name may
+ * be seeded twice. It also pins the invariants the seed relies on: values
+ * restricted to the tracked vocabulary, stock-rows-only scoping, and that
+ * unsure exercises stay unseeded rather than guessed.
  */
 
 import * as fs from 'fs';
@@ -20,10 +24,13 @@ import {
 import { SEED_EXERCISE_TAGS } from '@/services/generated/seedExerciseTags';
 
 const MIGRATIONS_DIR = path.join(__dirname, '..', '..', 'supabase', 'migrations');
-const MIGRATION_FILE = '20260825000002_seed_stabilizers.sql';
+const STOCK_SEED_MIGRATIONS = [
+  '20260825000002_seed_stabilizers.sql',
+  '20260913000002_seed_stabilizers_audit_additions.sql',
+];
 
-function readMigration(): string {
-  return fs.readFileSync(path.join(MIGRATIONS_DIR, MIGRATION_FILE), 'utf8');
+function readMigration(file: string): string {
+  return fs.readFileSync(path.join(MIGRATIONS_DIR, file), 'utf8');
 }
 
 /** Parse every seeding UPDATE into { name, stabilizers } pairs. */
@@ -39,18 +46,31 @@ function parseSeededStabilizers(sql: string): Map<string, string[]> {
   return out;
 }
 
-describe('stabilizer seed migration', () => {
-  const sql = readMigration();
-  const seeded = parseSeededStabilizers(sql);
+describe('stabilizer seed migrations', () => {
+  const perFile = STOCK_SEED_MIGRATIONS.map((file) => {
+    const sql = readMigration(file);
+    return { file, sql, seeded: parseSeededStabilizers(sql) };
+  });
+  const seeded = new Map<string, string[]>();
+  for (const { seeded: part } of perFile) {
+    for (const [name, values] of Array.from(part.entries())) seeded.set(name, values);
+  }
 
-  it('matches STABILIZERS_BY_EXERCISE_NAME exactly (both directions)', () => {
+  it('union of all seed migrations matches STABILIZERS_BY_EXERCISE_NAME exactly (both directions)', () => {
     expect(Object.fromEntries(seeded)).toEqual(STABILIZERS_BY_EXERCISE_NAME);
   });
 
-  it('every UPDATE in the file was parsed (no statement shape drift)', () => {
-    const updateCount = (sql.match(/UPDATE exercises SET stabilizers/g) ?? []).length;
-    expect(updateCount).toBe(seeded.size);
-    expect(updateCount).toBeGreaterThan(0);
+  it('no exercise is seeded by more than one migration', () => {
+    const total = perFile.reduce((n, { seeded: part }) => n + part.size, 0);
+    expect(total).toBe(seeded.size);
+  });
+
+  it('every UPDATE in every file was parsed (no statement shape drift)', () => {
+    for (const { file, sql, seeded: part } of perFile) {
+      const updateCount = (sql.match(/UPDATE exercises SET stabilizers/g) ?? []).length;
+      expect({ file, updateCount }).toEqual({ file, updateCount: part.size });
+      expect(part.size).toBeGreaterThan(0);
+    }
   });
 
   it('uses only the tracked stabilizer vocabulary, all valid standard muscles', () => {
@@ -73,8 +93,10 @@ describe('stabilizer seed migration', () => {
   });
 
   it('touches stock rows only and deletes nothing', () => {
-    expect(sql).not.toMatch(/\bDELETE\b/i);
-    expect(sql).not.toMatch(/\bTRUNCATE\b/i);
+    for (const { sql } of perFile) {
+      expect(sql).not.toMatch(/\bDELETE\b/i);
+      expect(sql).not.toMatch(/\bTRUNCATE\b/i);
+    }
     // Every UPDATE is scoped away from user customs (asserted per-statement by
     // the parse regex, which REQUIRES the is_custom guard to match at all).
     expect(seeded.size).toBeGreaterThan(0);

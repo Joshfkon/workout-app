@@ -1,5 +1,7 @@
 'use client';
 
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { invalidateWorkoutDerivedCaches } from '@/lib/query/workoutInvalidation';
@@ -21,9 +23,12 @@ import { beginSetTiming, markSetPhase, schedulePaintMark, endSetTiming } from '@
 import type { SetSyncStatus } from '@/components/workout/ExerciseCard';
 import { InlineHint } from '@/components/ui/FirstTimeHint';
 import { RestTimer, PauseOverlay, RowOverflowMenu, type RowMenuItem } from '@/components/workout';
+import { IdleWorkoutPrompt } from '@/components/workout/IdleWorkoutPrompt';
 import { IconGripVertical, IconInfoCircle, IconMapPin, IconX } from '@tabler/icons-react';
 import { useRestTimer } from '@/hooks/useRestTimer';
+import { useKeyboardOpen } from '@/hooks/useKeyboardOpen';
 import { useEducationStore } from '@/hooks/useEducationPreferences';
+import { useIdleWorkoutPrompt } from '@/hooks/useIdleWorkoutPrompt';
 
 // Dynamic import ExerciseCard (118KB) to reduce initial bundle and improve page load
 const ExerciseCard = dynamic(
@@ -69,6 +74,9 @@ const SessionSummary = dynamic(() => import('@/components/workout').then(m => m.
 });
 const ExerciseDetailsModal = dynamic(() => import('@/components/workout').then(m => m.ExerciseDetailsModal), { ssr: false });
 const PlateCalculatorModal = dynamic(() => import('@/components/workout').then(m => m.PlateCalculatorModal), { ssr: false });
+// PR celebration overlay (confetti + badge) — only ever mounts when a logged
+// set beats the exercise's record, so keep it out of the initial bundle.
+const PRCelebration = dynamic(() => import('@/components/workout').then(m => m.PRCelebration), { ssr: false });
 // Motion capture sheet (experimental, flag-gated) — loaded on demand.
 const MotionCaptureSheet = dynamic(() => import('@/components/motion/MotionCaptureSheet').then(m => m.MotionCaptureSheet), { ssr: false });
 import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaRegionalData, TemporaryInjury, PreWorkoutCheckIn, SetFeedback, Rating, BodyweightData, ExerciseType, StandardMuscleGroup, ExercisePerformanceSnapshot, RepsInTank, SorenessRating, SetDiscomfort, JointPainJoint, SleepLogEntry } from '@/types/schema';
@@ -105,14 +113,15 @@ import { fetchTransferCandidates } from '@/lib/training/transferCandidates';
 import {
   logSet,
   persistSetEdit,
-  persistSetDelete,
   buildSetEditPatch,
-  planBlockRenumber,
-  persistSetRenumber,
+  planSetDeletion,
+  persistSetDeletion,
   nextSetNumberForBlock,
   type SetNumberChange,
 } from '@/lib/training/logSet';
 import { loadWorkoutSession, resolveResumePosition } from './_lib/loadSession';
+import { detectLiveSetPr } from '@/services/livePrDetector';
+import type { PRCelebrationData } from '@/components/workout/PRCelebration';
 import { now as clockNow } from '@/lib/clock';
 import { addExerciseOverride, getSessionFromProgramData, applyExerciseOverrides, type ExerciseOverride } from '@/services/mesocycleHelpers';
 import { computeStapleExerciseIds } from '@/services/exerciseStaples';
@@ -155,6 +164,11 @@ import {
 } from './_lib/durationEstimate';
 import { WorkoutHeader, type ExerciseSegmentStatus } from './_components/WorkoutHeader';
 import { WorkoutVolumeStrip } from './_components/WorkoutVolumeStrip';
+import {
+  buildDeficitSuggestions,
+  type SuggestionBlock,
+} from '@/services/volumeDeficitSuggestions';
+import type { CoarseMuscle } from '@/services/volumeBands';
 import { AddExercisePicker } from './_components/AddExercisePicker';
 import { SaveAsTemplateModal } from './_components/SaveAsTemplateModal';
 import { buildTemplateExercises } from '@/services/templateFromSession';
@@ -163,7 +177,7 @@ import {
   fetchExerciseHistory,
   flattenExerciseHistoryRows,
   generateCoachMessage,
-  HISTORY_SESSIONS_PER_EXERCISE,
+  HISTORY_BLOCK_FETCH_LIMIT,
   type ExerciseHistoryQueryRow,
   type HistoryBlockRow,
   type HistoryScopeOptions,
@@ -228,6 +242,7 @@ import { useSleepForDays } from '@/hooks/useSleepForDays';
 import { sleepDayForSession } from '@/services/sessionContext';
 import { isStaleEmptyAdhocSession, discardStaleSession } from '../_lib/adhocSession';
 import { computeSupersetAdvance } from './_lib/supersetFlow';
+import { moveJustStartedBlock } from './_lib/performedOrder';
 import {
   findStaleTargetBlocks,
   computeRecalcChanges,
@@ -317,28 +332,28 @@ function CancelWorkoutModal({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
           </div>
-          <h3 className="text-lg font-semibold text-surface-100 mb-2">Cancel Workout?</h3>
+          <h3 className="text-lg font-semibold text-surface-100 mb-2">Discard Workout?</h3>
           <p className="text-sm text-surface-400 mb-6">
             {totalCompletedSets > 0
-              ? `You've logged ${totalCompletedSets} set${totalCompletedSets !== 1 ? 's' : ''}. Cancelling will delete all progress and reset this workout.`
-              : 'This will reset the workout so you can start fresh later.'}
+              ? `You've logged ${totalCompletedSets} set${totalCompletedSets !== 1 ? 's' : ''}. Discarding will delete all progress and can't be undone.`
+              : 'This will remove the workout session. You can start fresh later.'}
           </p>
           <div className="flex gap-3">
             <Button
-              variant="ghost"
+              variant="secondary"
               onClick={onKeepGoing}
               disabled={isCancelling}
               className="flex-1"
             >
-              Keep Going
+              Keep training
             </Button>
             <Button
-              variant="outline"
+              variant="danger"
               onClick={onConfirm}
               disabled={isCancelling}
-              className="flex-1 border-danger-500/50 text-danger-400 hover:bg-danger-500/10"
+              className="flex-1"
             >
-              {isCancelling ? 'Cancelling...' : 'Cancel Workout'}
+              {isCancelling ? 'Discarding...' : 'Discard workout'}
             </Button>
           </div>
         </div>
@@ -378,6 +393,7 @@ function buildHistoryScopeOptions(
 }
 
 export default function WorkoutPage() {
+  useDocumentTitle('Workout');
   const params = useParams();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -414,6 +430,10 @@ export default function WorkoutPage() {
 
   // Toast notifications for errors
   const { toasts, dismissToast, showError, showSuccess, addToast } = useToasts();
+
+  // Live PR celebration (confetti overlay) — set when a just-logged set beats
+  // the exercise's record (services/livePrDetector), cleared on dismiss.
+  const [prCelebration, setPrCelebration] = useState<PRCelebrationData | null>(null);
 
   // --- Offline outbox state (P0-2) ---------------------------------------
   // Per-set write status drives the glyphs on completed set rows; outboxSize
@@ -654,6 +674,7 @@ export default function WorkoutPage() {
   const [availableExercises, setAvailableExercises] = useState<AvailableExercise[]>([]);
   const [frequentExerciseIds, setFrequentExerciseIds] = useState<Map<string, number>>(new Map());
   const [lastDoneExercises, setLastDoneExercises] = useState<Map<string, Date>>(new Map());
+  const [favoriteExerciseIds, setFavoriteExerciseIds] = useState<Set<string>>(new Set());
   const [exerciseSearch, setExerciseSearch] = useState('');
   const [selectedMuscle, setSelectedMuscle] = useState<string>('');
   const [isAddingExercise, setIsAddingExercise] = useState(false);
@@ -879,6 +900,20 @@ export default function WorkoutPage() {
     calibrationEngineRef.current = calibrationEngine;
   }, [calibrationEngine]);
 
+  // Idle workout prompt: detect when user has been inactive for 20+ minutes
+  // and show a non-blocking "Still training?" prompt. Uses the same threshold
+  // as abandoned-session backdating at finish (#662).
+  const lastSetTimestamp = completedSets.length > 0
+    ? completedSets.reduce((latest, set) => 
+        set.loggedAt > latest ? set.loggedAt : latest, 
+        completedSets[0].loggedAt
+      )
+    : null;
+  const idlePrompt = useIdleWorkoutPrompt(
+    lastSetTimestamp,
+    phase === 'workout' && !showFinishConfirm
+  );
+
   const currentBlock = blocks[currentBlockIndex];
   const currentExercise = currentBlock?.exercise;
   const currentBlockSets = completedSets.filter(s => s.exerciseBlockId === currentBlock?.id);
@@ -1017,6 +1052,12 @@ export default function WorkoutPage() {
   // Rest timer hook
   const restTimer = useRestTimer(restTimerOptions);
 
+  // While the on-screen keyboard is up, iOS unpins fixed-bottom elements from
+  // the screen edge and lets them float mid-page over content — hide the
+  // bottom chrome stack (rest timer + toast) until it dismisses, like
+  // BottomNavigation does. The remount re-anchors it at the true bottom.
+  const keyboardOpen = useKeyboardOpen();
+
   // Workout timer hook - tracks total workout duration with pause/resume.
   // Anchored at the FIRST LOGGED SET, not session creation: an empty session
   // has no meaningful elapsed time, so until a set lands the timer sits at 0:00
@@ -1030,6 +1071,9 @@ export default function WorkoutPage() {
     sessionId,
     startedAt: timerStartedAt,
   });
+
+  // Helper to get working (non-warmup) sets for a specific block.
+  const getSetsForBlock = (blockId: string) => completedSets.filter(s => s.exerciseBlockId === blockId && !s.isWarmup && s.setType !== 'warmup');
 
   // Clear any stale timer when a DIFFERENT session mounts. Deliberately no
   // unmount cleanup (P0-3): minimizing the workout must leave the persisted
@@ -1373,7 +1417,7 @@ export default function WorkoutPage() {
                       user_id,
                       is_deload
                     ),
-                    set_logs (
+                    set_logs!inner (
                       weight_kg,
                       reps,
                       rpe,
@@ -1393,7 +1437,15 @@ export default function WorkoutPage() {
                   referencedTable: 'exercise_blocks',
                   ascending: false,
                 })
-                .limit(HISTORY_SESSIONS_PER_EXERCISE, { referencedTable: 'exercise_blocks' })
+                // `set_logs!inner`: blocks from sessions where this exercise
+                // was planned but never logged carry no history signal, and
+                // ten of them in a row used to fill the per-exercise window
+                // and flip a well-trained lift into cold-start mode (false
+                // cold start, audit failure mode #2 in per-exercise form).
+                // The fetch limit carries headroom over the window size so
+                // deload / warmup-only blocks — dropped client-side by
+                // selectRecentSignalBlocks — don't starve it either.
+                .limit(HISTORY_BLOCK_FETCH_LIMIT, { referencedTable: 'exercise_blocks' })
             : Promise.resolve({ data: null }),
           // Cross-exercise strength summary for cold-start transfer estimation
           // (never-trained exercises seed from a related exercise's e1RM).
@@ -2033,6 +2085,26 @@ export default function WorkoutPage() {
     loadFrequentExercises();
   }, []);
 
+  // Fetch favorite exercises
+  useEffect(() => {
+    async function loadFavorites() {
+      const supabase = createUntypedClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data } = await supabase
+        .from('user_exercise_preferences')
+        .select('exercise_id')
+        .eq('user_id', user.id)
+        .eq('is_favorite', true);
+
+      if (data) {
+        setFavoriteExerciseIds(new Set(data.map((row: { exercise_id: string }) => row.exercise_id)));
+      }
+    }
+    loadFavorites();
+  }, []);
+
   // Fetch today's nutrition data, daily check-in, and weight for check-in
   useEffect(() => {
     async function loadTodayData() {
@@ -2169,7 +2241,18 @@ export default function WorkoutPage() {
       new Set(
         blocks
           .filter((b) => !skippedBlockIds.has(b.id))
-          .map((b) => resolvePrimaryMuscle(b.exercise?.primaryMuscle))
+          .flatMap((b) => {
+            const muscles: (StandardMuscleGroup | null)[] = [
+              resolvePrimaryMuscle(b.exercise?.primaryMuscle),
+            ];
+            // Include secondary muscles so they can surface on the card when not recovered
+            if (b.exercise?.secondaryMuscles) {
+              muscles.push(
+                ...b.exercise.secondaryMuscles.map((m) => resolvePrimaryMuscle(m))
+              );
+            }
+            return muscles;
+          })
           .filter((m): m is StandardMuscleGroup => m !== null)
       )
     );
@@ -2252,6 +2335,74 @@ export default function WorkoutPage() {
       };
     },
     [firstBlockIdByMuscle, recentMuscleSessions, muscleSorenessAsked]
+  );
+
+  /**
+   * Recovery status for all involved muscles (primary + secondaries) that have
+   * recent training history. Shows muscles that are recovering or fatigued so
+   * secondary muscles surface when they limit the exercise.
+   */
+  const muscleReadinessForBlock = useCallback(
+    (block: ExerciseBlockWithExercise): Array<{ muscle: StandardMuscleGroup; displayName: string; status: string }> => {
+      const involvedMuscles: StandardMuscleGroup[] = [];
+      
+      // Primary muscle
+      const primary = resolvePrimaryMuscle(block.exercise?.primaryMuscle);
+      if (primary) involvedMuscles.push(primary);
+      
+      // Secondary muscles
+      if (block.exercise?.secondaryMuscles) {
+        for (const m of block.exercise.secondaryMuscles) {
+          const resolved = resolvePrimaryMuscle(m);
+          if (resolved) involvedMuscles.push(resolved);
+        }
+      }
+
+      const results: Array<{ muscle: StandardMuscleGroup; displayName: string; status: string }> = [];
+      
+      for (const muscle of involvedMuscles) {
+        // Only show if trained in the last 5 days
+        if (!recentMuscleSessions[muscle]) continue;
+        
+        // Compute recovery status
+        const config = recoveryConfigFor(
+          enhancedAthleteModeActive,
+          recoveryMultipliers,
+          undefined,
+          undefined,
+          {
+            experienceForCapacity: userProfile?.experience,
+            plannedSessionsPerWeekByMuscle,
+          }
+        );
+        const recovery = computeMuscleRecovery(
+          recoveryHistorySessions,
+          muscle,
+          new Date(),
+          config
+        );
+        
+        // Only show muscles that aren't fresh
+        if (recovery.status !== 'fresh') {
+          const statusLabel = recovery.status === 'recovering' ? 'recovered' : 'fatigued';
+          results.push({
+            muscle,
+            displayName: STANDARD_MUSCLE_DISPLAY_NAMES[muscle],
+            status: statusLabel,
+          });
+        }
+      }
+      
+      return results;
+    },
+    [
+      recentMuscleSessions,
+      recoveryHistorySessions,
+      enhancedAthleteModeActive,
+      recoveryMultipliers,
+      userProfile?.experience,
+      plannedSessionsPerWeekByMuscle,
+    ]
   );
 
   const handleSorenessAnswer = useCallback(
@@ -2569,7 +2720,13 @@ export default function WorkoutPage() {
   // duration it would have once the pending selection lands, and the cost of
   // that selection on its own.
   const pickerSessionDuration = useMemo(() => {
-    const addedSeconds = estimatePendingAdditionSeconds(durationBlocks, selectedExercisesToAdd);
+    // Context lets the estimate include the warmup protocol the add path will
+    // actually generate (first exercise per not-yet-warm muscle) — without it
+    // the promised time undershoots the post-add estimate by the warmup bill.
+    const addedSeconds = estimatePendingAdditionSeconds(durationBlocks, selectedExercisesToAdd, {
+      blocks,
+      completedSets,
+    });
     const baseSeconds =
       durationEstimate.remainingSets > 0 || durationEstimate.totalSets > 0
         ? durationEstimate.projectedTotalSeconds
@@ -2580,7 +2737,7 @@ export default function WorkoutPage() {
       totalLabel: formatDurationEstimate(totalSeconds),
       deltaLabel: addedSeconds > 0 ? formatDurationDelta(addedSeconds) : null,
     };
-  }, [durationBlocks, durationEstimate, selectedExercisesToAdd]);
+  }, [durationBlocks, durationEstimate, selectedExercisesToAdd, blocks, completedSets]);
 
   // Rolling-7-day credited sets (history + this session) vs the MEV–MRV band,
   // for the coarse muscles this workout trains. Shares the readiness sheet's
@@ -2593,6 +2750,36 @@ export default function WorkoutPage() {
     // workout itself (blocks + resumed sets) has hydrated.
     liveDataReady: phase !== 'loading',
   });
+
+  // One concrete remedy per muscle the projection leaves under its minimum
+  // (and recovery still allows fixing today): add sets to a direct block, or
+  // add an exercise. Recomputes live, so applying a suggestion makes it
+  // disappear as the projection crosses the band minimum. Only the muscles
+  // this session trains — the same scope as the projection digest.
+  const volumeDeficitSuggestions = useMemo(() => {
+    if (weeklyVolumeLoading) return [];
+    return buildDeficitSuggestions(
+      weeklyVolumeRows
+        .filter((r) => r.trainedThisSession)
+        .map((r) => ({
+          muscle: r.muscle as CoarseMuscle,
+          displayName: r.displayName,
+          projectedSets: r.projectedSets,
+          mev: r.band.mev,
+          projectedUnderMin: r.projectedZone === 'below_mev',
+          deficitLockedIn: r.deficitLockedIn,
+        })),
+      volumeLiveBlocks.map(
+        (b): SuggestionBlock => ({
+          blockId: b.id,
+          exerciseName: b.exercise.name,
+          primaryMuscle: b.exercise.primaryMuscle,
+          secondaryMuscles: b.exercise.secondaryMuscles || [],
+          targetSets: b.targetSets,
+        })
+      )
+    );
+  }, [weeklyVolumeRows, weeklyVolumeLoading, volumeLiveBlocks]);
 
   // ---- Joint pain: pattern notices per exercise ----------------------------
   useEffect(() => {
@@ -2895,12 +3082,16 @@ export default function WorkoutPage() {
       // ignoreDuplicates upsert makes it a no-op instead of a second set.
       const setId = crypto.randomUUID();
 
-      // Let a just-issued delete finish compacting the database first. Its
-      // UPDATEs move rows DOWN, so probing before they land reads a stale
-      // maximum and resolveSetNumber's floor would carry that number forward.
-      // Errors are the delete path's to report; this is only a barrier.
+      // OPTIMIZATION: Don't block on pending deletes. The floor at
+      // localNextSetNumber (in resolveSetNumber, logSet.ts:119) guarantees we
+      // never reuse a number held by a queued set, even if the DB max is
+      // stale. A delete renumber that lands AFTER our probe will move numbers
+      // below ours; a probe that reads BEFORE the renumber finishes gets
+      // floored anyway. The only observable effect is a temporary gap
+      // (set 1, set 3) that compaction fixes on reload. Fire-and-forget so
+      // delete errors are still reported by handleDeleteSet.
       if (pendingSetRenumberRef.current) {
-        try { await pendingSetRenumberRef.current; } catch { /* reported by handleDeleteSet */ }
+        pendingSetRenumberRef.current.catch(() => { /* reported by handleDeleteSet */ });
       }
 
       const blockWorkingSets = completedSets
@@ -2994,32 +3185,72 @@ export default function WorkoutPage() {
         }
       }
 
-      // Joint pain flagged on this set (inline picker or feedback sheet) →
-      // record the event for the deload advisor + exercise pattern detection.
-      // Runs only AFTER the set write settled: a saved set is referenced via
-      // set_log_id; a queued (offline) set isn't in set_logs yet, so the event
-      // omits the FK rather than racing the insert. Best-effort either way —
-      // the discomfort also rides the set's feedback JSONB.
+      // OPTIMIZATION: Defer joint pain event insert to avoid blocking the
+      // critical path. It's already fire-and-forget (void), just move it off
+      // the synchronous execution stack. Capture the discomfort value to
+      // satisfy TypeScript's null checks in the async closure.
       if (data.feedback?.discomfort && session) {
-        void insertJointPainEvent(
-          supabase,
-          {
-            ...eventFromSetDiscomfort({
-              userId: session.userId,
-              sessionId: session.id,
-              exerciseId: currentBlock.exerciseId,
-              setLogId: setRowPersisted ? setId : null,
-              discomfort: data.feedback.discomfort,
-            }),
-            readinessSnapshot: buildReadinessSnapshotNow(),
-          }
-        );
+        const capturedDiscomfort = data.feedback.discomfort;
+        queueMicrotask(() => {
+          insertJointPainEvent(
+            supabase,
+            {
+              ...eventFromSetDiscomfort({
+                userId: session.userId,
+                sessionId: session.id,
+                exerciseId: currentBlock.exerciseId,
+                setLogId: setRowPersisted ? setId : null,
+                discomfort: capturedDiscomfort,
+              }),
+              readinessSnapshot: buildReadinessSnapshotNow(),
+            }
+          );
+        });
       }
 
       // Undo toast (P1-4) — same pattern as nutrition's delete-undo.
       addToast('success', `Set ${nextSetNumber} logged`, 5000, {
         label: 'Undo',
         onClick: () => { void undoLoggedSet(setId, currentBlock.id); },
+      });
+
+      // OPTIMIZATION: Defer PR detection off the critical path. The celebration
+      // can appear a few ms later without impacting the perceived snappiness of
+      // logging the next set. Capture the closure state needed for detection.
+      queueMicrotask(() => {
+        const prHistory = exerciseHistories[currentBlock.exerciseId];
+        const pr = detectLiveSetPr({
+          set: { ...data, setType },
+          priorSessionSets: completedSets.filter((s) => s.exerciseBlockId === currentBlock.id),
+          previousBest: prHistory?.personalRecord ?? null,
+          isDeload: session?.isDeload ?? false,
+          exercise: currentBlock.exercise,
+        });
+        if (pr) {
+          const unitLabel = preferences.units === 'lb' ? 'lbs' : 'kg';
+          const fmtKg = (kg: number) => {
+            const v = convertWeightForDisplay(kg, preferences.units, 1);
+            return `${Number.isInteger(v) ? v.toFixed(0) : v} ${unitLabel}`;
+          };
+          const pct = pr.improvement > 0 ? ` · +${pr.improvement}%` : '';
+          const celebrationByType: Record<typeof pr.type, { title: string; detail: string }> = {
+            e1rm: { title: 'New e1RM PR', detail: `${fmtKg(pr.value)} est. 1RM${pct}` },
+            weight: { title: 'New Weight PR', detail: `${fmtKg(pr.value)}${pct}` },
+            reps: {
+              title: 'New Reps PR',
+              detail: `${pr.value} reps${pr.improvement > 0 ? ` · +${pr.improvement}` : ''}`,
+            },
+            duration: {
+              title: 'New Hold PR',
+              detail: `${pr.value}s${pr.improvement > 0 ? ` · +${pr.improvement}s` : ''}`,
+            },
+          };
+          setPrCelebration({
+            id: setId,
+            exerciseName: currentBlock.exercise.name,
+            ...celebrationByType[pr.type],
+          });
+        }
       });
 
       // Motion capture (experimental): the "Log set" tap ends any running
@@ -3097,130 +3328,156 @@ export default function WorkoutPage() {
       }
       setError(null);
 
-      // Run sanity checks on the completed set
-      if (currentExercise && setType === 'normal') {
-        const setLog = {
-          exerciseName: currentExercise.name,
-          weight: data.weightKg,
-          reps: data.reps,
-          reportedRIR: 10 - data.rpe, // Convert RPE to RIR
-          isWarmup: false,
-          setNumber: currentSetNumber,
-        };
-
-        const checkContext = {
-          workingWeight: currentBlock.targetWeightKg,
-          currentTimestamp: new Date(),
-          previousSets: currentBlockSets.map(s => ({
-            exerciseName: currentExercise.name,
-            weight: s.weightKg,
-            reps: s.reps,
-            reportedRIR: 10 - s.rpe,
-            isWarmup: s.isWarmup,
-            setNumber: s.setNumber,
-          })),
-        };
-
-        const checkResult = checkSetSanity(setLog, checkContext);
-        if (checkResult) {
-          setSanityCheckResult(checkResult);
-        }
-
-        // Check if this is an AMRAP-eligible set (last set on a safe exercise).
-        // rep_total exercises ingest NO calibration input at all (ADD 2):
-        // their reps aren't crisp units, so neither AMRAP results nor
-        // comparison sets from them may move the RPE bias.
-        const repTotalExercise =
-          resolveProgressionModel(
-            (currentExercise as { progressionModel?: 'e1rm' | 'rep_total' | null }).progressionModel,
-            exerciseHistories[currentExercise.id]?.estimableSetCount ?? 0,
-            exerciseHistories[currentExercise.id]?.inestimableSetCount ?? 0
-          ) === 'rep_total';
-        const safetyTier = getFailureSafetyTier(currentExercise.name);
-        const isLastSet = currentSetNumber >= currentBlock.targetSets;
-        const isAmrapEligible =
-          !repTotalExercise && safetyTier === 'push_freely' && isLastSet && data.rpe >= 9.5;
-
-        if (isAmrapEligible) {
-          // Log to calibration engine and check for result
-          // Use actual reported RIR from the set (converted from RPE), not the target RIR
-          const reportedRIR = 10 - data.rpe;
-          const calibResult = calibrationEngineRef.current.addSetLog({
-            exerciseId: currentExercise.id,
-            exerciseName: currentExercise.name,
-            weight: data.weightKg,
-            prescribedReps: { min: currentBlock.targetRepRange[0], max: currentBlock.targetRepRange[1] },
-            actualReps: data.reps,
-            reportedRIR: Math.max(0, Math.round(reportedRIR)), // Ensure RIR is non-negative integer
-            wasAMRAP: true,
-            timestamp: new Date(),
-          });
-
-          if (calibResult) {
-            setCalibrationResult(calibResult);
-
-            // Track calibration for session summary
-            const calibWithMeta = {
-              ...calibResult,
-              exerciseId: currentExercise.id,
-              weightKg: data.weightKg,
-              setLogId: setId,
-            };
-            setSessionCalibrations(prev => [...prev, calibWithMeta]);
-
-            // Persist calibration to database (best-effort: skipped offline —
-            // the local calibration engine still holds the data point).
-            try {
-              markSetPhase('auth_getuser_sent'); // setLogTiming
-              const { data: { user } } = await supabase.auth.getUser();
-              markSetPhase('auth_getuser_done'); // setLogTiming
-              if (user) {
-                supabase.from('amrap_calibrations').insert({
-                  user_id: user.id,
-                  workout_session_id: sessionId,
-                  set_log_id: setId,
-                  exercise_id: currentExercise.id,
-                  exercise_name: calibResult.exerciseName,
-                  weight_kg: data.weightKg,
-                  predicted_max_reps: calibResult.predictedMaxReps,
-                  actual_max_reps: calibResult.actualMaxReps,
-                  bias: calibResult.bias,
-                  bias_interpretation: calibResult.biasInterpretation,
-                  confidence_level: calibResult.confidenceLevel,
-                  data_points: calibResult.dataPoints,
-                  raw_predicted_max_reps: calibResult.rawPredictedMaxReps ?? calibResult.predictedMaxReps,
-                  method: calibResult.method ?? 'fatigue_adjusted_v2',
-                  calibrated_at: calibResult.lastCalibrated.toISOString(),
-                }).then(({ error }: { error: Error | null }) => {
-                  if (error) console.error('Failed to save AMRAP calibration:', error);
-                });
-              }
-            } catch (calibErr) {
-              console.error('Skipping AMRAP calibration persist (offline?):', calibErr);
-            }
+      // OPTIMIZATION: Block reordering can happen immediately in local state for
+      // instant UI response, but the persistence can be deferred off the
+      // critical path.
+      if (setType !== 'warmup' && !isDraggingBlockRef.current) {
+        const isWorkingSet = (s: SetLog) => !s.isWarmup && s.setType !== 'warmup';
+        const hadWorkingSets = completedSets.some(
+          (s) => s.exerciseBlockId === currentBlock.id && isWorkingSet(s)
+        );
+        if (!hadWorkingSets) {
+          const startedBlockIds = new Set(
+            completedSets.filter(isWorkingSet).map((s) => s.exerciseBlockId)
+          );
+          const prevBlocks = blocksRef.current;
+          const reordered = moveJustStartedBlock(prevBlocks, startedBlockIds, currentBlock.id);
+          if (reordered) {
+            setBlocks(reordered);
+            setCurrentBlockIndex((prevIdx) => {
+              const prevId = prevBlocks[prevIdx]?.id;
+              const nextIdx = reordered.findIndex((b) => b.id === prevId);
+              return nextIdx >= 0 ? nextIdx : prevIdx;
+            });
+            // Defer the persistence off the critical path
+            queueMicrotask(() => {
+              persistBlockOrder(reordered);
+            });
           }
         }
-        
-        // Also log non-AMRAP sets for calibration comparison (but don't show result)
-        if (!repTotalExercise && safetyTier === 'push_freely' && !isAmrapEligible && setType === 'normal') {
-          const reportedRIR = 10 - data.rpe;
-          calibrationEngineRef.current.addSetLog({
-            exerciseId: currentExercise.id,
+      }
+
+      // OPTIMIZATION: Defer sanity checks and AMRAP calibration off the critical
+      // path. These are important but don't need to block the next set's UI.
+      // Capture the closure state needed for these checks.
+      queueMicrotask(async () => {
+        if (currentExercise && setType === 'normal') {
+          const setLog = {
             exerciseName: currentExercise.name,
             weight: data.weightKg,
-            prescribedReps: { min: currentBlock.targetRepRange[0], max: currentBlock.targetRepRange[1] },
-            actualReps: data.reps,
-            reportedRIR: Math.max(0, Math.round(reportedRIR)),
-            wasAMRAP: false,
-            timestamp: new Date(),
-          });
-        }
+            reps: data.reps,
+            reportedRIR: 10 - data.rpe,
+            isWarmup: false,
+            setNumber: currentSetNumber,
+          };
 
-        // Clear AMRAP accepted state when last set is completed
-        if (isLastSet) {
-          setAmrapAcceptedBlockId(null);
+          const checkContext = {
+            workingWeight: currentBlock.targetWeightKg,
+            currentTimestamp: new Date(),
+            previousSets: currentBlockSets.map(s => ({
+              exerciseName: currentExercise.name,
+              weight: s.weightKg,
+              reps: s.reps,
+              reportedRIR: 10 - s.rpe,
+              isWarmup: s.isWarmup,
+              setNumber: s.setNumber,
+            })),
+          };
+
+          const checkResult = checkSetSanity(setLog, checkContext);
+          if (checkResult) {
+            setSanityCheckResult(checkResult);
+          }
+
+          // AMRAP calibration processing (deferred except for display updates)
+          const repTotalExercise =
+            resolveProgressionModel(
+              (currentExercise as { progressionModel?: 'e1rm' | 'rep_total' | null }).progressionModel,
+              exerciseHistories[currentExercise.id]?.estimableSetCount ?? 0,
+              exerciseHistories[currentExercise.id]?.inestimableSetCount ?? 0
+            ) === 'rep_total';
+          const safetyTier = getFailureSafetyTier(currentExercise.name);
+          const isLastSet = currentSetNumber >= currentBlock.targetSets;
+          const isAmrapEligible =
+            !repTotalExercise && safetyTier === 'push_freely' && isLastSet && data.rpe >= 9.5;
+
+          if (isAmrapEligible) {
+            const reportedRIR = 10 - data.rpe;
+            const calibResult = calibrationEngineRef.current.addSetLog({
+              exerciseId: currentExercise.id,
+              exerciseName: currentExercise.name,
+              weight: data.weightKg,
+              prescribedReps: { min: currentBlock.targetRepRange[0], max: currentBlock.targetRepRange[1] },
+              actualReps: data.reps,
+              reportedRIR: Math.max(0, Math.round(reportedRIR)),
+              wasAMRAP: true,
+              timestamp: new Date(),
+            });
+
+            if (calibResult) {
+              setCalibrationResult(calibResult);
+
+              const calibWithMeta = {
+                ...calibResult,
+                exerciseId: currentExercise.id,
+                weightKg: data.weightKg,
+                setLogId: setId,
+              };
+              setSessionCalibrations(prev => [...prev, calibWithMeta]);
+
+              // Persist calibration (best-effort, deferred)
+              try {
+                markSetPhase('auth_getuser_sent');
+                const { data: { user } } = await supabase.auth.getUser();
+                markSetPhase('auth_getuser_done');
+                if (user) {
+                  supabase.from('amrap_calibrations').insert({
+                    user_id: user.id,
+                    workout_session_id: sessionId,
+                    set_log_id: setId,
+                    exercise_id: currentExercise.id,
+                    exercise_name: calibResult.exerciseName,
+                    weight_kg: data.weightKg,
+                    predicted_max_reps: calibResult.predictedMaxReps,
+                    actual_max_reps: calibResult.actualMaxReps,
+                    bias: calibResult.bias,
+                    bias_interpretation: calibResult.biasInterpretation,
+                    confidence_level: calibResult.confidenceLevel,
+                    data_points: calibResult.dataPoints,
+                    raw_predicted_max_reps: calibResult.rawPredictedMaxReps ?? calibResult.predictedMaxReps,
+                    method: calibResult.method ?? 'fatigue_adjusted_v2',
+                    calibrated_at: calibResult.lastCalibrated.toISOString(),
+                  }).then(({ error }: { error: Error | null }) => {
+                    if (error) console.error('Failed to save AMRAP calibration:', error);
+                  });
+                }
+              } catch (calibErr) {
+                console.error('Skipping AMRAP calibration persist (offline?):', calibErr);
+              }
+            }
+          }
+          
+          // Non-AMRAP comparison sets for calibration
+          if (!repTotalExercise && safetyTier === 'push_freely' && !isAmrapEligible && setType === 'normal') {
+            const reportedRIR = 10 - data.rpe;
+            calibrationEngineRef.current.addSetLog({
+              exerciseId: currentExercise.id,
+              exerciseName: currentExercise.name,
+              weight: data.weightKg,
+              prescribedReps: { min: currentBlock.targetRepRange[0], max: currentBlock.targetRepRange[1] },
+              actualReps: data.reps,
+              reportedRIR: Math.max(0, Math.round(reportedRIR)),
+              wasAMRAP: false,
+              timestamp: new Date(),
+            });
+          }
+
+          // Clear AMRAP accepted state when last set is completed
+          if (isLastSet) {
+            setAmrapAcceptedBlockId(null);
+          }
         }
-      }
+      });
 
       // Return the set ID for optional feedback
       endSetTiming(); // setLogTiming
@@ -3403,12 +3660,8 @@ export default function WorkoutPage() {
     // this updater yields the same answer.
     let renumberChanges: SetNumberChange[] = [];
     setCompletedSets(prevSets => {
-      const setInPrev = prevSets.find(s => s.id === setId);
-      if (!setInPrev) return prevSets;
-      const plan = planBlockRenumber(
-        prevSets.filter(set => set.id !== setId),
-        setInPrev.exerciseBlockId
-      );
+      const plan = planSetDeletion(prevSets, setId);
+      if (!plan) return prevSets;
       renumberChanges = plan.changes;
       return plan.sets;
     });
@@ -3439,26 +3692,20 @@ export default function WorkoutPage() {
 
     const persist = (async () => {
       try {
-        const supabase = createUntypedClient();
-        const { queued, error: deleteError } = await persistSetDelete({ supabase }, setId);
+        // One operation: the row goes, and the compaction local state just
+        // applied is written with it, so the two numberings stay identical
+        // (B1). The driver calls the same pair, so the harness cannot drift
+        // into its own deletion semantics.
+        const { queued, error: deleteError } = await persistSetDeletion(
+          { supabase: createUntypedClient() },
+          { setId, changes: renumberChanges }
+        );
         if (queued) refreshOutboxCount();
         if (deleteError) {
           console.error('Failed to delete set:', deleteError);
           setError(`Failed to delete set: ${deleteError.message}`);
         } else {
-          // Persist the same compaction the local state just applied, so the
-          // two numberings stay identical (B1). Without this the database keeps
-          // its gaps: the row shown as set 2 stays stored as set 3, and a set
-          // logged offline afterwards can carry a set_number the database still
-          // holds — which the UNIQUE (exercise_block_id, set_number) constraint
-          // refuses, dropping the set after the outbox's retries.
-          const { error: renumberError } = await persistSetRenumber({ supabase }, renumberChanges);
-          if (renumberError) {
-            console.error('Failed to renumber sets after delete:', renumberError);
-            setError(`Failed to renumber sets: ${renumberError.message}`);
-          } else {
-            setError(null);
-          }
+          setError(null);
         }
       } catch (err) {
         console.error('Failed to delete set:', err);
@@ -3479,6 +3726,8 @@ export default function WorkoutPage() {
 
   /** Undo the just-logged set (toast action, P1-4). */
   const undoLoggedSet = async (setId: string, _blockId: string) => {
+    // An undone set's PR celebration is no longer earned — pull it down.
+    setPrCelebration((prev) => (prev?.id === setId ? null : prev));
     // No counter adjustment here: handleDeleteSet already returns the number to
     // the block's dense count. Decrementing again would double-count the undo.
     await handleDeleteSet(setId);
@@ -3927,13 +4176,40 @@ export default function WorkoutPage() {
   // transient unique-constraint collisions mid-update. Each pass fans out in
   // parallel: within a pass the targets are already collision-free, so the cost
   // is two round-trip waves rather than 2n sequential ones.
+  //
+  // Offline posture (same as target-sets patches): a failed or offline save is
+  // queued into the outbox as per-block order patches so the order still lands
+  // when connectivity returns, instead of silently reverting to the last saved
+  // order on reload. The flush replays entries one row at a time, so the queue
+  // carries the same park-then-final dance; entry ids are stable per block, so
+  // a newer offline reorder replaces the queued rows rather than stacking.
   const persistBlockOrder = useCallback((ordered: ExerciseBlockWithExercise[]) => {
     const seq = ++orderSaveSeqRef.current;
     const ids = ordered.map((b) => b.id);
 
+    // The flush applies entries oldest-first; the park loop is enqueued before
+    // the write loop, and for same-millisecond puts the id tie-break also
+    // keeps parks first ('block-order:park:' < 'block-order:write:').
+    const enqueueOrder = async () => {
+      for (let i = 0; i < ids.length; i++) {
+        await enqueueRowUpdate(`block-order:park:${ids[i]}`, 'exercise_blocks', ids[i], {
+          order: i + 1001,
+        });
+      }
+      for (let i = 0; i < ids.length; i++) {
+        await enqueueRowUpdate(`block-order:write:${ids[i]}`, 'exercise_blocks', ids[i], {
+          order: i + 1,
+        });
+      }
+    };
+
     orderSaveChainRef.current = orderSaveChainRef.current.then(async () => {
       if (seq !== orderSaveSeqRef.current) return; // superseded while queued
       try {
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          await enqueueOrder();
+          return;
+        }
         const supabase = createUntypedClient();
         const writePass = async (offset: number) => {
           const results = await Promise.all(
@@ -3946,8 +4222,23 @@ export default function WorkoutPage() {
         };
         await writePass(1001);
         await writePass(1);
+        // Direct write landed: order entries a previous offline save queued
+        // are stale now — drop them so a later flush can't clobber this
+        // newer order with an older one.
+        await Promise.all(
+          ids.flatMap((id) => [
+            removeQueuedSet(`block-order:park:${id}`),
+            removeQueuedSet(`block-order:write:${id}`),
+          ])
+        );
       } catch (err) {
-        console.error('Error saving reorder:', err);
+        console.error('Error saving reorder, queueing for outbox:', err);
+        try {
+          await enqueueOrder();
+        } catch (queueErr) {
+          // Memory-store worst case: the order reverts on the next load.
+          console.error('Error queueing reorder:', queueErr);
+        }
       }
     });
 
@@ -4335,13 +4626,14 @@ export default function WorkoutPage() {
   };
 
   const handleNextExercise = () => {
-    // Advance to the next non-skipped block
-    const nextIndex = blocks.findIndex(
-      (b, i) => i > currentBlockIndex && !skippedBlockIds.has(b.id)
-    );
+    // Advance to the next block with work left. Performed-order moves started
+    // blocks to sit BEFORE the current one, so after a backtrack the pending
+    // blocks can all be at lower indices — search forward first, then wrap.
+    const nextIndex = findNextExerciseIndex();
     if (nextIndex !== -1) {
       setCurrentBlockIndex(nextIndex);
-      setCurrentSetNumber(1);
+      // Resume a partially-done block at its next set, not set 1.
+      setCurrentSetNumber(getSetsForBlock(blocks[nextIndex].id).length + 1);
       // Clear AMRAP accepted state when changing blocks
       setAmrapAcceptedBlockId(null);
       // Keep rest timer running - need rest between sets even when switching exercises
@@ -4743,20 +5035,72 @@ export default function WorkoutPage() {
     });
   };
 
+  // Toggle favorite status for an exercise
+  const toggleFavorite = async (exerciseId: string) => {
+    const supabase = createUntypedClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const isFavorite = favoriteExerciseIds.has(exerciseId);
+    
+    // Check if preference exists
+    const { data: existing } = await supabase
+      .from('user_exercise_preferences')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('exercise_id', exerciseId)
+      .single();
+    
+    if (existing) {
+      // Update existing preference
+      await supabase
+        .from('user_exercise_preferences')
+        .update({ is_favorite: !isFavorite })
+        .eq('user_id', user.id)
+        .eq('exercise_id', exerciseId);
+    } else {
+      // Create new preference
+      await supabase
+        .from('user_exercise_preferences')
+        .insert({
+          user_id: user.id,
+          exercise_id: exerciseId,
+          status: 'active',
+          is_favorite: !isFavorite,
+        });
+    }
+    
+    // Update local state
+    setFavoriteExerciseIds(prev => {
+      const next = new Set(prev);
+      if (isFavorite) {
+        next.delete(exerciseId);
+      } else {
+        next.add(exerciseId);
+      }
+      return next;
+    });
+  };
+
   // Add all selected exercises
   const handleAddSelectedExercises = async () => {
     if (selectedExercisesToAdd.length === 0) return;
     
     setIsAddingExercise(true);
-    
+
     // Add exercises one by one, tracking what's been added so warmup logic
     // doesn't treat every exercise in the batch as the first of its muscle
     const addedSoFar: AvailableExercise[] = [];
     for (const exercise of selectedExercisesToAdd) {
       await handleAddExercise(exercise, addedSoFar);
       addedSoFar.push(exercise);
+      // Drop the landed exercise from the pending selection immediately —
+      // leaving it selected until the whole batch finishes double-counts it
+      // (once as a real block, once as pending), so the picker's total climbs
+      // to nearly 2x mid-batch and snaps back when the modal closes.
+      setSelectedExercisesToAdd((prev) => prev.filter((e) => e.id !== exercise.id));
     }
-    
+
     // Clear selections and close modal
     setSelectedExercisesToAdd([]);
     setShowAddExercise(false);
@@ -5050,13 +5394,19 @@ export default function WorkoutPage() {
     try {
       const supabase = createUntypedClient();
 
-      const { errors } = await cancelWorkoutSession(supabase, {
+      const { ok, errors } = await cancelWorkoutSession(supabase, {
         sessionId: session.id,
         mesocycleId: session.mesocycleId ?? null,
         blockIds: blocks.map(b => b.id),
       });
-      if (errors.length > 0) {
+      if (!ok) {
+        // Don't tear down and navigate away on a failed/timed-out cleanup: a
+        // mesocycle session is deliberately NOT reset to planned in that case
+        // (see cancelWorkoutSession), so leaving would strand it mid-state.
+        // Keep the workout open and let the user retry.
         console.error('Cancel workout cleanup errors:', errors);
+        setError('Failed to cancel workout. Please try again.');
+        return;
       }
 
       // Clear store state and navigate back to dashboard
@@ -5109,6 +5459,14 @@ export default function WorkoutPage() {
     const claimArmed = !session.mesocycleId && !!claimCandidate;
     if (claimArmed) setSubmittedSessionRpe(data.sessionRpe);
 
+    // Find the last logged set's timestamp for abandoned session detection
+    const lastSetTimestamp = completedSets.length > 0
+      ? completedSets.reduce((latest, set) => 
+          set.loggedAt > latest ? set.loggedAt : latest, 
+          completedSets[0].loggedAt
+        )
+      : undefined;
+
     await submitFinishOptimistic(
       {
         supabase: createUntypedClient(),
@@ -5124,7 +5482,11 @@ export default function WorkoutPage() {
         onCompletionSynced: () => void invalidateWorkoutDerivedCaches(queryClient),
       },
       // Persist the same frozen duration the summary is showing.
-      { ...data, durationSeconds: finishSnapshot?.durationSeconds ?? null }
+      { 
+        ...data, 
+        durationSeconds: finishSnapshot?.durationSeconds ?? null,
+        lastSetTimestamp,
+      }
     );
   };
 
@@ -5682,6 +6044,8 @@ export default function WorkoutPage() {
             stapleExerciseIds={stapleExerciseIds}
             frequentExerciseIds={frequentExerciseIds}
             lastDoneExercises={lastDoneExercises}
+            favoriteExerciseIds={favoriteExerciseIds}
+            onToggleFavorite={toggleFavorite}
             selectedExercisesToAdd={selectedExercisesToAdd}
             onToggleExerciseSelection={toggleExerciseSelection}
             isAddingExercise={isAddingExercise}
@@ -5716,13 +6080,28 @@ export default function WorkoutPage() {
     );
   }
 
-  // Helper to get sets for a specific block
-  const getSetsForBlock = (blockId: string) => completedSets.filter(s => s.exerciseBlockId === blockId && !s.isWarmup && s.setType !== 'warmup');
-
-  // Check if a block is complete
+  // Check if a block is complete (getSetsForBlock is declared near the top of
+  // the component)
   const isBlockComplete = (block: ExerciseBlockWithExercise) => {
     const blockSets = getSetsForBlock(block.id);
     return blockSets.length >= block.targetSets;
+  };
+
+  // "Next Exercise →" target: the next block that still has work to do (not
+  // skipped, fewer working sets than target). Performed-order keeps started
+  // blocks BEFORE the current one, so after a backtrack the pending blocks can
+  // all sit at lower indices — search forward from the current block first,
+  // then wrap to the top. -1 when nothing but the current block has work left.
+  const findNextExerciseIndex = (): number => {
+    const hasWorkLeft = (b: ExerciseBlockWithExercise) =>
+      !skippedBlockIds.has(b.id) && !isBlockComplete(b);
+    for (let i = currentBlockIndex + 1; i < blocks.length; i++) {
+      if (hasWorkLeft(blocks[i])) return i;
+    }
+    for (let i = 0; i < currentBlockIndex; i++) {
+      if (hasWorkLeft(blocks[i])) return i;
+    }
+    return -1;
   };
 
   // Calculate overall workout progress (skipped blocks excluded)
@@ -6083,6 +6462,14 @@ export default function WorkoutPage() {
         onMinimize={() => router.push('/dashboard/log')}
       />
 
+      {/* Idle workout prompt: "Still training?" after 20min of inactivity */}
+      {idlePrompt.shouldShowPrompt && (
+        <IdleWorkoutPrompt
+          onDismiss={idlePrompt.dismissPrompt}
+          onFinish={handleWorkoutComplete}
+        />
+      )}
+
       {/* Readiness modulation banner (Phase 1.3): eased targets today, with a
           session-local "Train as planned" override that zeroes the modulation */}
       {baseReadinessModulation?.banner && !readinessBannerDismissed && !readinessOverridden && (
@@ -6111,6 +6498,18 @@ export default function WorkoutPage() {
         rows={weeklyVolumeRows}
         isLoading={weeklyVolumeLoading}
         onOpenDetail={() => setShowMuscleReadinessSheet(true)}
+        suggestions={volumeDeficitSuggestions}
+        onAddSetsToBlock={(blockId, addSets) => {
+          const block = blocks.find((b) => b.id === blockId);
+          if (block) handleTargetSetsChange(blockId, block.targetSets + addSets);
+        }}
+        onAddExerciseForMuscle={(muscle) => {
+          // Land the user in the picker already filtered to the deficit
+          // muscle; a stale search string would override the filter view.
+          setExerciseSearch('');
+          setSelectedMuscleFilter(muscle);
+          handleOpenAddExercise();
+        }}
       />
 
       {/* First workout guidance */}
@@ -6529,6 +6928,7 @@ export default function WorkoutPage() {
                     onSetJointPain={handleSetJointPain}
                     sorenessPrompt={sorenessPromptForBlock(block)}
                     onSorenessAnswer={handleSorenessAnswer}
+                    muscleReadiness={muscleReadinessForBlock(block)}
                     stabilizerWarning={stabilizerWarningsByBlockId.get(block.id) ?? null}
                     onStabilizerWarningDismiss={(muscle) =>
                       handleStabilizerWarningDismiss(block.id, muscle)
@@ -6757,7 +7157,10 @@ export default function WorkoutPage() {
                         >
                           + Add Extra Set
                         </Button>
-                        {blocks.some((b, i) => i > index && !skippedBlockIds.has(b.id)) && (
+                        {/* Same wrap-around search as handleNextExercise: after a
+                            backtrack the pending blocks sit BEFORE this one, so an
+                            index-forward check would hide the button with work left. */}
+                        {findNextExerciseIndex() !== -1 && (
                           <Button variant="secondary" onClick={handleNextExercise}>
                             Next Exercise →
                           </Button>
@@ -6943,8 +7346,11 @@ export default function WorkoutPage() {
           same bottom offset and they overlapped. The in-flow action bar above
           gets matching bottom padding (see restBarVisible / bottomChromeVisible)
           so nothing here covers it. pointer-events pass through the empty gaps
-          so taps land on the exercise list, not an invisible full-width layer. */}
-      {bottomChromeVisible && (
+          so taps land on the exercise list, not an invisible full-width layer.
+          Hidden while the on-screen keyboard is up: iOS detaches fixed-bottom
+          layers from the screen edge then, leaving the timer floating mid-page
+          (see useKeyboardOpen). */}
+      {bottomChromeVisible && !keyboardOpen && (
         <div className="fixed inset-x-3 bottom-3 z-40 max-w-2xl mx-auto flex flex-col items-stretch gap-2 pointer-events-none [&>*]:pointer-events-auto pb-[env(safe-area-inset-bottom)]">
           {sanityCheckResult && (
             <SanityCheckToast
@@ -7018,6 +7424,8 @@ export default function WorkoutPage() {
           stapleExerciseIds={stapleExerciseIds}
           frequentExerciseIds={frequentExerciseIds}
           lastDoneExercises={lastDoneExercises}
+          favoriteExerciseIds={favoriteExerciseIds}
+          onToggleFavorite={toggleFavorite}
           planMuscles={blocks.map((b) => b.exercise.primaryMuscle)}
           selectedExercisesToAdd={selectedExercisesToAdd}
           onToggleExerciseSelection={toggleExerciseSelection}
@@ -7659,6 +8067,10 @@ export default function WorkoutPage() {
 
       {/* Toast Container for notifications */}
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+
+      {/* PR celebration overlay — confetti + badge when a set beats the record.
+          z-[90]: above modals, below toasts so the Undo toast stays tappable. */}
+      <PRCelebration celebration={prCelebration} onDone={() => setPrCelebration(null)} />
 
       {/* Delete Exercise Confirmation Modal (for header row delete button) */}
       <ConfirmModal

@@ -1,5 +1,7 @@
 'use client';
 
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+
 import { useMemo } from 'react';
 import Link from 'next/link';
 import { Card } from '@/components/ui/Card';
@@ -137,6 +139,7 @@ function MuscleOutcomeCard({ outcome }: { outcome: MuscleOutcome }) {
 }
 
 export default function MesocycleReviewPage() {
+  useDocumentTitle('Volume Review');
   const { latestAnalysis, volumeProfile, isLoading } = useAdaptiveVolume();
 
   const formatDateRange = useMemo(() => {

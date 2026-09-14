@@ -1,5 +1,7 @@
 'use client';
 
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+
 import { useState, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/Button';
@@ -26,6 +28,7 @@ const MUSCLE_GROUPS = [
 ];
 
 export default function DiscoverPage() {
+  useDocumentTitle('Discover');
   const [searchQuery, setSearchQuery] = useState('');
   const [shareType, setShareType] = useState<ShareType | 'all'>('all');
   const [difficulty, setDifficulty] = useState<Difficulty | 'all'>('all');

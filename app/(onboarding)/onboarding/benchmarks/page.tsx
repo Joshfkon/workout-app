@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Button, Card, CardContent, CardHeader, CardTitle, Badge } from '@/components/ui';
 import { ContextCard } from '@/components/onboarding/ContextCard';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { updateOnboardingStep } from '@/lib/onboarding/onboardingProgress';
 import { BENCHMARK_LIFTS, type BenchmarkLift } from '@/services/coachingEngine';
 
 function BenchmarkCard({ 
@@ -96,12 +97,18 @@ function BenchmarksContent() {
     
     try {
       const supabase = createUntypedClient();
+      const { data: { user } } = await supabase.auth.getUser();
       
       // Update session with selected benchmarks
       await supabase
         .from('coaching_sessions')
         .update({ selected_benchmarks: selectedBenchmarks })
         .eq('id', sessionId);
+      
+      // Track progress
+      if (user) {
+        await updateOnboardingStep(supabase, user.id, 'benchmarks');
+      }
       
       // Navigate to calibration
       router.push(`/onboarding/calibrate?session=${sessionId}`);

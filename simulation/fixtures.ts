@@ -18,6 +18,7 @@ import { createFakeSupabase, type FakeSupabase } from './fakeSupabase';
 
 export const SIM_USER_ID = 'sim-user';
 export const SIM_SESSION_ID = 'sim-session-0000';
+export const SIM_MESOCYCLE_ID = 'sim-meso';
 
 export const SIM_EXERCISES = [
   {
@@ -85,11 +86,59 @@ export function createSimulationWorld(options: WorldOptions = {}): FakeSupabase 
   fake.db.seed('user_profiles', [{ user_id: userId, goal: 'bulk', experience: 'intermediate' }]);
   fake.db.seed('exercises', SIM_EXERCISES);
 
+  // A mesocycle for the sessions to BELONG to.
+  //
+  // Not decoration: `runPostSessionMesoUpdates` short-circuits on a session
+  // with no `mesocycle_id`, so with the sessions unlinked the week advance,
+  // the weekly fatigue log and the deload-trigger check never run — even once
+  // the harness finishes sessions properly. `current_week` and the fatigue log
+  // are then real outputs a run can be asserted against.
+  fake.db.seed('mesocycles', [
+    {
+      id: SIM_MESOCYCLE_ID,
+      user_id: userId,
+      name: 'Simulation mesocycle',
+      split_type: 'upper_lower',
+      goal: 'hypertrophy',
+      // `state`, not `status`: the production active-mesocycle lookup filters
+      // `.eq('state', 'active')`, so a `status` field leaves this row invisible
+      // to `startSession()` — the fixture would silently fail to represent the
+      // path it exists to represent.
+      state: 'active',
+      // The schema caps total_weeks at 12 AND requires current_week <=
+      // total_weeks. A 24-week row is a world production could never hold, and
+      // on a long run the week advance would have climbed past the cap and
+      // violated that second constraint too. The fake enforces no constraints
+      // (L1), so a fixture that could not exist is exactly what it lets pass.
+      //
+      // 12 is enough for the full sweep: computeCurrentWeekFromSessions clamps
+      // the week at total_weeks, so 78 sessions land on week 12, not week 26.
+      total_weeks: 12,
+      deload_week: 6,
+      days_per_week: 3,
+      current_week: 1,
+      start_date: plannedDate,
+      // WEEKDAY NAMES, not numbers. `getTrainingDays` maps these through
+      // `dayNameToNumber` (DAYS_OF_WEEK.indexOf(name) + 1), so a numeric value
+      // resolves to 0 — a day-of-week that never matches, leaving
+      // `startSession()` returning null on every date and
+      // `advanceToNextTrainingDay()` finding nothing. The row would be visible
+      // to the active-mesocycle lookup and still unusable by the scheduler.
+      preferred_workout_days: ['Monday', 'Wednesday', 'Friday'],
+      // NOT NULL DEFAULT 1 in the schema, and the fake applies no defaults —
+      // `buildTrainingSchedule` reads it, so it has to be here explicitly.
+      sessions_per_day: 1,
+      schedule_mode: 'fixed_days',
+      training_interval_days: null,
+      deleted_at: null,
+    },
+  ]);
+
   fake.db.seed('workout_sessions', [
     {
       id: sessionId,
       user_id: userId,
-      mesocycle_id: null,
+      mesocycle_id: SIM_MESOCYCLE_ID,
       state: 'in_progress',
       planned_date: plannedDate,
       started_at: `${plannedDate}T09:00:00.000Z`,

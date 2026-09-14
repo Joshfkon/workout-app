@@ -68,7 +68,11 @@ import {
   historySetE1RM,
   type AnchorCandidate,
 } from '@/services/suggestionEngine/e1rmAnchor';
-import { HISTORY_SESSIONS_PER_EXERCISE } from '@/services/suggestionEngine/constants';
+import {
+  HISTORY_SESSIONS_PER_EXERCISE,
+  HISTORY_BLOCK_FETCH_LIMIT,
+} from '@/services/suggestionEngine/constants';
+import { selectRecentSignalBlocks } from '@/services/suggestionEngine/historyWindow';
 import { recommendSeedForSlot, type PrevSessionSet } from '@/services/setRecommender';
 import { rpeToRir, toLegacyMuscleGroup } from '@/types/schema';
 import type {
@@ -371,7 +375,7 @@ async function fetchDirectHistoryAnchors(
             completed_at,
             is_deload
           ),
-          set_logs (
+          set_logs!inner (
             weight_kg,
             reps,
             rpe,
@@ -390,13 +394,24 @@ async function fetchDirectHistoryAnchors(
         referencedTable: 'exercise_blocks',
         ascending: false,
       })
-      .limit(HISTORY_SESSIONS_PER_EXERCISE, { referencedTable: 'exercise_blocks' });
+      // `set_logs!inner` + headroom over the window: planned-but-skipped
+      // blocks never reach the client, and deload / warmup-only blocks are
+      // trimmed below instead of spending window slots — same fix as the
+      // workout page's history read (false cold start on skipped exercises).
+      .limit(HISTORY_BLOCK_FETCH_LIMIT, { referencedTable: 'exercise_blocks' });
 
     if (error || !data) return anchors;
 
     // (The generated client types infer to-one embeds as arrays — cast via
     // unknown to the runtime shape, same convention as the workout page.)
-    for (const row of data as unknown as DirectHistoryRow[]) {
+    for (const rawRow of data as unknown as DirectHistoryRow[]) {
+      const row: DirectHistoryRow = {
+        ...rawRow,
+        exercise_blocks: selectRecentSignalBlocks(
+          rawRow.exercise_blocks ?? [],
+          HISTORY_SESSIONS_PER_EXERCISE
+        ),
+      };
       const anchorE1RMKg = bestQualifyingE1RM(anchorCandidatesFromHistoryRow(row));
       if (anchorE1RMKg > 0) {
         anchors.set(row.id, { anchorE1RMKg, ...recentSessionsFromHistoryRow(row) });

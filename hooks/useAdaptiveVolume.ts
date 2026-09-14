@@ -49,15 +49,13 @@ interface UseAdaptiveVolumeResult {
   updateProfile: (updates: Partial<UserVolumeProfile>) => Promise<void>;
 }
 
-/** Stable empty previous-week series (see the getVolumeSummary call site). */
-const EMPTY_PREVIOUS_WEEK: MuscleVolumeData[] = [];
-
 /**
  * Hook for accessing and managing adaptive volume data
  */
 export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
   const [volumeProfile, setVolumeProfile] = useState<UserVolumeProfile | null>(null);
   const [volumeData, setVolumeData] = useState<MuscleVolumeData[]>([]);
+  const [previousWeekData, setPreviousWeekData] = useState<MuscleVolumeData[]>([]);
   const [latestAnalysis, setLatestAnalysis] = useState<MesocycleAnalysis | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -92,9 +90,102 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
       // wrote that table, and stored aggregates would freeze stale-convention
       // (pre-group-cap) numbers over live derivation. Table dropped in
       // 20260730000001 so a future writer can't re-arm the trap.
+      
+      // Helper to process blocks into volume data
+      const processBlocksIntoVolumeData = (
+        blocks: ExerciseBlockFull[],
+        weekStartStr: string
+      ): MuscleVolumeData[] => {
+        if (!blocks || blocks.length === 0) return [];
+
+        // Calculate volume with the SHARED counter (retiring the old
+        // primary-only tally): full credit to each coarse primary muscle,
+        // 0.5x to coarse secondaries, so the learned table relearns on the
+        // same counts every other surface displays. effectiveSets / RIR stay
+        // primary-attributed (they gauge stimulus quality, not volume).
+        const volumeByMuscle = new Map<MuscleGroup, { totalSets: number; effectiveSets: number; weightedSets: number; totalRIR: number; rirCount: number }>();
+        const bump = (muscle: MuscleGroup) => {
+          if (!volumeByMuscle.has(muscle)) {
+            volumeByMuscle.set(muscle, { totalSets: 0, effectiveSets: 0, weightedSets: 0, totalRIR: 0, rirCount: 0 });
+          }
+          return volumeByMuscle.get(muscle)!;
+        };
+
+        blocks.forEach((block: ExerciseBlockFull) => {
+          const exercise = block.exercises;
+          if (!exercise?.primary_muscle) return;
+
+          const workingSets = (block.set_logs || []).filter((s: SetLogRow) => !s.is_warmup);
+          if (workingSets.length === 0) return;
+
+          const effective = workingSets.filter((s: SetLogRow) => {
+            const feedback = s.feedback as { repsInTank?: number; form?: string } | undefined;
+            const rir = feedback?.repsInTank ?? (s.rpe ? 10 - s.rpe : 3);
+            const form = feedback?.form ?? 'clean';
+            return rir <= 3 && (form === 'clean' || form === 'some_breakdown');
+          }).length;
+          const rirValues = workingSets.map((s: SetLogRow) => s.feedback?.repsInTank ?? (s.rpe ? 10 - s.rpe : 2));
+          // RIR-weighted Effective Volume for the same working sets (single
+          // source of truth: services/effectiveVolume). Explicit feedback
+          // RIR only — unknown weighs 1.0 (conservative, warned).
+          const weightedVolume = sumEffectiveVolume(
+            workingSets.map((s: SetLogRow) => rirFromFeedback(s.feedback)),
+            exercise.name ?? exercise.primary_muscle ?? undefined
+          );
+
+          // Primary → coarse credit (weighted split for legacy coarse tags).
+          const primaryCredits = resolvePrimaryMuscleCredits(exercise.primary_muscle);
+          const primaryStd = new Set(primaryCredits.map((c) => c.muscle));
+          const creditedCoarse = new Set<MuscleGroup>();
+          for (const { muscle, weight } of primaryCredits) {
+            const coarse = STANDARD_TO_COARSE[muscle] as MuscleGroup | undefined;
+            if (!coarse) continue;
+            const data = bump(coarse);
+            data.totalSets += workingSets.length * weight;
+            data.effectiveSets += effective * weight;
+            data.weightedSets += weightedVolume * weight;
+            for (const rir of rirValues) { data.totalRIR += rir * weight; data.rirCount += weight; }
+            creditedCoarse.add(coarse);
+          }
+
+          // Secondary → 0.5x coarse credit (volume only), skipping any coarse
+          // group the primary already fed. The weighted Effective Volume gets
+          // the same fractional credit (it is a volume measure, unlike the
+          // primary-attributed stimulus-quality fields).
+          for (const secondary of exercise.secondary_muscles || []) {
+            const standards = resolveMuscleToStandard(secondary);
+            if (standards.length === 0) continue;
+            const per = SECONDARY_MUSCLE_CREDIT / standards.length;
+            for (const std of standards) {
+              if (primaryStd.has(std)) continue;
+              const coarse = STANDARD_TO_COARSE[std] as MuscleGroup | undefined;
+              if (!coarse || creditedCoarse.has(coarse)) continue;
+              const data = bump(coarse);
+              data.totalSets += workingSets.length * per;
+              data.weightedSets += weightedVolume * per;
+            }
+          }
+        });
+
+        return Array.from(volumeByMuscle.entries()).map(([muscle, data]) => ({
+          id: `${muscle}-${weekStartStr}`,
+          muscle,
+          weekNumber: 1,
+          mesocycleId: '',
+          totalSets: Math.round(data.totalSets),
+          workingSets: Math.round(data.totalSets),
+          effectiveSets: Math.round(data.effectiveSets),
+          effectiveVolumeSets: Math.round(data.weightedSets * 10) / 10,
+          totalVolume: 0,
+          averageRIR: data.rirCount > 0 ? data.totalRIR / data.rirCount : 2,
+          averageFormScore: 0.8,
+          exercisePerformance: [],
+        }));
+      };
+
       {
         // Fetch exercise blocks and sets for current week
-        const { data: blocks, error: blocksError } = await supabase
+        const { data: currentBlocks } = await supabase
           .from('exercise_blocks')
           .select(`
             id,
@@ -125,94 +216,59 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
           .lte('workout_sessions.completed_at', weekEndStr)
           .eq('workout_sessions.state', 'completed');
 
-        if (blocks && blocks.length > 0) {
+        const calculatedData = processBlocksIntoVolumeData(
+          currentBlocks as ExerciseBlockFull[] || [],
+          weekStartStr
+        );
+        setVolumeData(calculatedData);
 
-          // Calculate volume with the SHARED counter (retiring the old
-          // primary-only tally): full credit to each coarse primary muscle,
-          // 0.5x to coarse secondaries, so the learned table relearns on the
-          // same counts every other surface displays. effectiveSets / RIR stay
-          // primary-attributed (they gauge stimulus quality, not volume).
-          const volumeByMuscle = new Map<MuscleGroup, { totalSets: number; effectiveSets: number; weightedSets: number; totalRIR: number; rirCount: number }>();
-          const bump = (muscle: MuscleGroup) => {
-            if (!volumeByMuscle.has(muscle)) {
-              volumeByMuscle.set(muscle, { totalSets: 0, effectiveSets: 0, weightedSets: 0, totalRIR: 0, rirCount: 0 });
-            }
-            return volumeByMuscle.get(muscle)!;
-          };
+        // Fetch previous week (days -13 to -7) for week-over-week trend
+        const prevWeekEnd = new Date(weekStart);
+        prevWeekEnd.setDate(prevWeekEnd.getDate() - 1); // Day before current week start
+        prevWeekEnd.setHours(23, 59, 59, 999);
+        const prevWeekEndStr = prevWeekEnd.toISOString();
 
-          blocks.forEach((block: ExerciseBlockFull) => {
-            const exercise = block.exercises;
-            if (!exercise?.primary_muscle) return;
+        const prevWeekStart = new Date(prevWeekEnd);
+        prevWeekStart.setDate(prevWeekStart.getDate() - 6); // 7 days before prevWeekEnd
+        prevWeekStart.setHours(0, 0, 0, 0);
+        const prevWeekStartStr = getLocalDateString(prevWeekStart);
 
-            const workingSets = (block.set_logs || []).filter((s: SetLogRow) => !s.is_warmup);
-            if (workingSets.length === 0) return;
+        const { data: previousBlocks } = await supabase
+          .from('exercise_blocks')
+          .select(`
+            id,
+            exercise_id,
+            exercises!inner (
+              id,
+              name,
+              primary_muscle,
+              secondary_muscles
+            ),
+            workout_sessions!inner (
+              id,
+              completed_at,
+              user_id,
+              state
+            ),
+            set_logs (
+              id,
+              is_warmup,
+              weight_kg,
+              reps,
+              rpe,
+              feedback
+            )
+          `)
+          .eq('workout_sessions.user_id', userId!)
+          .gte('workout_sessions.completed_at', prevWeekStartStr)
+          .lte('workout_sessions.completed_at', prevWeekEndStr)
+          .eq('workout_sessions.state', 'completed');
 
-            const effective = workingSets.filter((s: SetLogRow) => {
-              const feedback = s.feedback as { repsInTank?: number; form?: string } | undefined;
-              const rir = feedback?.repsInTank ?? (s.rpe ? 10 - s.rpe : 3);
-              const form = feedback?.form ?? 'clean';
-              return rir <= 3 && (form === 'clean' || form === 'some_breakdown');
-            }).length;
-            const rirValues = workingSets.map((s: SetLogRow) => s.feedback?.repsInTank ?? (s.rpe ? 10 - s.rpe : 2));
-            // RIR-weighted Effective Volume for the same working sets (single
-            // source of truth: services/effectiveVolume). Explicit feedback
-            // RIR only — unknown weighs 1.0 (conservative, warned).
-            const weightedVolume = sumEffectiveVolume(
-              workingSets.map((s: SetLogRow) => rirFromFeedback(s.feedback)),
-              exercise.name ?? exercise.primary_muscle ?? undefined
-            );
-
-            // Primary → coarse credit (weighted split for legacy coarse tags).
-            const primaryCredits = resolvePrimaryMuscleCredits(exercise.primary_muscle);
-            const primaryStd = new Set(primaryCredits.map((c) => c.muscle));
-            const creditedCoarse = new Set<MuscleGroup>();
-            for (const { muscle, weight } of primaryCredits) {
-              const coarse = STANDARD_TO_COARSE[muscle] as MuscleGroup | undefined;
-              if (!coarse) continue;
-              const data = bump(coarse);
-              data.totalSets += workingSets.length * weight;
-              data.effectiveSets += effective * weight;
-              data.weightedSets += weightedVolume * weight;
-              for (const rir of rirValues) { data.totalRIR += rir * weight; data.rirCount += weight; }
-              creditedCoarse.add(coarse);
-            }
-
-            // Secondary → 0.5x coarse credit (volume only), skipping any coarse
-            // group the primary already fed. The weighted Effective Volume gets
-            // the same fractional credit (it is a volume measure, unlike the
-            // primary-attributed stimulus-quality fields).
-            for (const secondary of exercise.secondary_muscles || []) {
-              const standards = resolveMuscleToStandard(secondary);
-              if (standards.length === 0) continue;
-              const per = SECONDARY_MUSCLE_CREDIT / standards.length;
-              for (const std of standards) {
-                if (primaryStd.has(std)) continue;
-                const coarse = STANDARD_TO_COARSE[std] as MuscleGroup | undefined;
-                if (!coarse || creditedCoarse.has(coarse)) continue;
-                const data = bump(coarse);
-                data.totalSets += workingSets.length * per;
-                data.weightedSets += weightedVolume * per;
-              }
-            }
-          });
-
-          const calculatedData: MuscleVolumeData[] = Array.from(volumeByMuscle.entries()).map(([muscle, data]) => ({
-            id: `${muscle}-${weekStartStr}`,
-            muscle,
-            weekNumber: 1,
-            mesocycleId: '',
-            totalSets: Math.round(data.totalSets),
-            workingSets: Math.round(data.totalSets),
-            effectiveSets: Math.round(data.effectiveSets),
-            effectiveVolumeSets: Math.round(data.weightedSets * 10) / 10,
-            totalVolume: 0,
-            averageRIR: data.rirCount > 0 ? data.totalRIR / data.rirCount : 2,
-            averageFormScore: 0.8,
-            exercisePerformance: [],
-          }));
-
-          setVolumeData(calculatedData);
-        }
+        const prevCalculatedData = processBlocksIntoVolumeData(
+          previousBlocks as ExerciseBlockFull[] || [],
+          prevWeekStartStr
+        );
+        setPreviousWeekData(prevCalculatedData);
       }
     } catch (err: unknown) {
       console.error('Failed to fetch volume data:', getErrorMessage(err));
@@ -380,12 +436,12 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
       }));
     }
 
-    // Previous-week input was only ever fed by the never-written
-    // weekly_muscle_volume table, so it has always been empty in production —
-    // [] preserves behavior (trend reads 'stable'). Deriving last week from
-    // set_logs is a possible follow-up, decided separately.
-    return getVolumeSummary(volumeData, EMPTY_PREVIOUS_WEEK, volumeProfile);
-  }, [volumeProfile, volumeData]);
+    // Derive week-over-week trend from actual set_logs by comparing current
+    // week (days 0–6) against previous week (days −13..−7). Previously this
+    // was always [] because weekly_muscle_volume was never written; now real
+    // data feeds the comparison so trend varies week to week.
+    return getVolumeSummary(volumeData, previousWeekData, volumeProfile);
+  }, [volumeProfile, volumeData, previousWeekData]);
 
   // Calculate fatigue alerts
   const fatigueAlerts = useMemo((): FatigueAlert[] => {

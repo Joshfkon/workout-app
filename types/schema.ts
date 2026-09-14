@@ -2983,20 +2983,20 @@ export interface SessionFormHistory {
 
 /**
  * Convert Reps In Reserve to RPE
- * RIR 4+ = RPE 6, RIR 2-3 = RPE 7.5, RIR 1 = RPE 9, RIR 0 = RPE 10
+ * RIR 4+ = RPE 6, RIR 3 = RPE 7, RIR 2 = RPE 7.5, RIR 1 = RPE 9, RIR 0 = RPE 10
  */
 export function rirToRpe(rir: RepsInTank): number {
   switch (rir) {
     case 4:
       return 6; // 4+ RIR = Easy
     case 2:
-      return 7.5; // 2-3 RIR = Good
+      return 7.5; // 2 RIR = Good
     case 1:
       return 9; // 1 RIR = Hard
     case 0:
       return 10; // 0 RIR = Maxed out
     default:
-      return 10 - rir;
+      return 10 - rir; // 3 RIR = RPE 7
   }
 }
 

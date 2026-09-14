@@ -1,5 +1,7 @@
 'use client';
 
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+
 /**
  * /dashboard/train — the Train tab's dashboard.
  *
@@ -48,6 +50,7 @@ import {
   IconTemplate,
   IconTrendingUp,
 } from '@tabler/icons-react';
+import { Button as StyledButton } from '@/components/ui/Button';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { resolveAuthState } from '@/lib/supabase/authState';
 import { getLocalDateString } from '@/lib/utils';
@@ -246,10 +249,7 @@ function deriveWorkoutTitle(blocks: NonNullable<RecentSessionRow['exercise_block
   return dayName ?? (topMuscles || 'Workout');
 }
 
-const GRADIENT_CTA_CLASS =
-  'py-3 rounded-xl bg-gradient-to-r from-primary-500 to-accent-500 text-white text-[15px] font-semibold hover:opacity-90 transition-opacity disabled:opacity-60';
-const OUTLINE_CTA_CLASS =
-  'py-3 rounded-xl border border-surface-700 text-surface-100 text-[15px] font-semibold hover:bg-surface-800/70 transition-colors disabled:opacity-60';
+// Removed custom gradient/outline classes in favor of Button component variants
 
 const TOOL_PILLS = [
   { name: 'History', href: '/dashboard/history', icon: IconHistory },
@@ -258,6 +258,7 @@ const TOOL_PILLS = [
 ];
 
 export default function TrainPage() {
+  useDocumentTitle('Train');
   const router = useRouter();
   const supabase = createUntypedClient();
   // Week totals come from the shared coarse row model (`tiles`) — the same
@@ -668,25 +669,33 @@ export default function TrainPage() {
     if (!inProgress || isDiscarding) return;
     setIsDiscarding(true);
     setError(null);
-    const { ok, errors } = await cancelWorkoutSession(supabase, {
-      sessionId: inProgress.id,
-      mesocycleId: inProgress.mesocycleId,
-      blockIds: inProgress.blockIds,
-    });
-    if (ok) {
-      // Clear the persisted store too if this session is the one driving the
-      // global resume pill (matches the log page's discard flow).
-      const { activeSession, endSession } = useWorkoutStore.getState();
-      if (activeSession?.id === inProgress.id) {
-        endSession();
+    // try/finally so nothing can leave the modal wedged on "Discarding..."
+    // with both buttons disabled — isDiscarding always resets.
+    try {
+      const { ok, errors } = await cancelWorkoutSession(supabase, {
+        sessionId: inProgress.id,
+        mesocycleId: inProgress.mesocycleId,
+        blockIds: inProgress.blockIds,
+      });
+      if (ok) {
+        // Clear the persisted store too if this session is the one driving the
+        // global resume pill (matches the log page's discard flow).
+        const { activeSession, endSession } = useWorkoutStore.getState();
+        if (activeSession?.id === inProgress.id) {
+          endSession();
+        }
+        setInProgress(null);
+      } else {
+        console.error('Failed to discard workout:', errors);
+        setError('Failed to discard workout. Please try again.');
       }
-      setInProgress(null);
-    } else {
-      console.error('Failed to discard workout:', errors);
+    } catch (err) {
+      console.error('Failed to discard workout:', err);
       setError('Failed to discard workout. Please try again.');
+    } finally {
+      setIsDiscarding(false);
+      setShowDiscardConfirm(false);
     }
-    setIsDiscarding(false);
-    setShowDiscardConfirm(false);
   };
 
   const startedAtLabel = inProgress?.startedAt
@@ -727,7 +736,7 @@ export default function TrainPage() {
         : { text: 'All muscle groups at target', className: 'text-success-400' };
 
   return (
-    <div className="max-w-lg mx-auto space-y-4">
+    <div className="max-w-lg mx-auto px-4 space-y-4">
       {/* Title row: Train + tool pills */}
       <div className="flex items-center gap-2.5">
         <h1 className="text-[28px] leading-none font-bold text-surface-100 flex-shrink-0">
@@ -790,22 +799,27 @@ export default function TrainPage() {
             </h2>
             <p className="text-[13px] text-surface-400 mt-1">{trainingDayMeta}</p>
             <div className="flex gap-2 mt-4">
-              <button
+              <StyledButton
                 onClick={handleStartWorkout}
                 disabled={isStarting}
-                className={`flex-[2] ${GRADIENT_CTA_CLASS}`}
+                variant="primary"
+                className="flex-[2] text-[15px]"
               >
                 {isStarting
                   ? 'Starting...'
                   : inProgress
                     ? 'Continue workout'
                     : 'Start workout'}
-              </button>
+              </StyledButton>
               {/* Read-only look at today's session — starting a workout must
                   never be the only way to find out what's in it. */}
-              <button onClick={() => setShowPreview(true)} className={`flex-1 ${OUTLINE_CTA_CLASS}`}>
+              <StyledButton 
+                onClick={() => setShowPreview(true)} 
+                variant="outline"
+                className="flex-1 text-[15px]"
+              >
                 Preview
-              </button>
+              </StyledButton>
             </div>
           </>
         ) : activeMeso ? (
@@ -819,20 +833,22 @@ export default function TrainPage() {
                 : 'No upcoming workouts scheduled'}
             </p>
             <div className="flex gap-2 mt-4">
-              <button
+              <StyledButton
                 onClick={handleStartWorkout}
                 disabled={isStarting || !nextWorkoutInfo}
-                className={`flex-1 ${OUTLINE_CTA_CLASS}`}
+                variant="secondary"
+                className="flex-1 text-[15px]"
               >
                 {isStarting ? 'Starting...' : 'Train anyway'}
-              </button>
-              <button
+              </StyledButton>
+              <StyledButton
                 onClick={() => setShowPreview(true)}
                 disabled={!nextWorkoutInfo}
-                className={`flex-1 ${GRADIENT_CTA_CLASS}`}
+                variant="outline"
+                className="flex-1 text-[15px]"
               >
                 Preview {nextWorkoutInfo?.dayLabel === 'Tomorrow' ? 'tomorrow' : 'next'}
-              </button>
+              </StyledButton>
             </div>
           </>
         ) : (
@@ -849,9 +865,14 @@ export default function TrainPage() {
               <div className="flex gap-2 mt-4">
                 <Link
                   href="/dashboard/mesocycle/new"
-                  className={`flex-1 text-center ${GRADIENT_CTA_CLASS}`}
+                  className="flex-1"
                 >
-                  Plan a mesocycle
+                  <StyledButton
+                    variant="primary"
+                    className="w-full text-[15px]"
+                  >
+                    Plan a mesocycle
+                  </StyledButton>
                 </Link>
               </div>
             )}
@@ -1081,16 +1102,17 @@ export default function TrainPage() {
           </p>
 
           <div className="space-y-2">
-            <button
+            <StyledButton
               onClick={() => {
                 setShowPreview(false);
                 handleStartWorkout();
               }}
               disabled={isStarting}
-              className={`w-full ${GRADIENT_CTA_CLASS}`}
+              variant="primary"
+              className="w-full text-[15px]"
             >
               {isStarting ? 'Starting...' : todayWorkout ? 'Start workout' : 'Train anyway today'}
-            </button>
+            </StyledButton>
             <Link
               href="/dashboard/mesocycle/plan"
               onClick={() => setShowPreview(false)}
@@ -1192,7 +1214,7 @@ export default function TrainPage() {
               {inProgress.setsDone > 0
                 ? `This will delete the ${inProgress.setsDone} ${
                     inProgress.setsDone === 1 ? 'set' : 'sets'
-                  } you logged. `
+                  } you logged and can't be undone. `
                 : ''}
               {inProgress.mesocycleId
                 ? 'The planned workout stays on your schedule so you can restart it fresh.'
@@ -1204,14 +1226,14 @@ export default function TrainPage() {
                 disabled={isDiscarding}
                 className="flex-1 py-2.5 rounded-lg bg-surface-800 text-surface-200 text-[13px] font-medium hover:bg-surface-700 transition-colors disabled:opacity-60"
               >
-                Keep workout
+                Keep training
               </button>
               <button
                 onClick={handleDiscardWorkout}
                 disabled={isDiscarding}
                 className="flex-1 py-2.5 rounded-lg bg-danger-500 text-white text-[13px] font-medium hover:bg-danger-600 transition-colors disabled:opacity-60"
               >
-                {isDiscarding ? 'Discarding...' : 'Discard'}
+                {isDiscarding ? 'Discarding...' : 'Discard workout'}
               </button>
             </div>
           </div>

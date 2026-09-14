@@ -1,5 +1,7 @@
 'use client';
 
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
@@ -38,6 +40,7 @@ import { analyzeRegionalComposition } from '@/services/regionalAnalysis';
 import { fetchUnavailableEquipment } from '@/lib/actions/equipment';
 
 export default function NewMesocyclePage() {
+  useDocumentTitle('New Mesocycle');
   const router = useRouter();
   const queryClient = useQueryClient();
   const { preferences, isLoading: prefsLoading } = useUserPreferences();

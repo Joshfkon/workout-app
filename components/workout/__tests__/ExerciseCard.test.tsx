@@ -7,9 +7,10 @@
  */
 
 import React from 'react';
-import { render, screen, act, waitFor } from '@testing-library/react';
+import { render, screen, act, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ExerciseCard } from '../ExerciseCard';
+import { useWorkoutStore, WARMUP_COMPLETION_TTL_MS } from '@/stores/workoutStore';
 import type {
   Exercise,
   ExerciseBlock,
@@ -202,6 +203,15 @@ const plateauedSnapshots: ExercisePerformanceSnapshot[] = [
   createSnapshot({ id: 's4', sessionDate: weeksAgo(1) }),
   createSnapshot({ id: 's5', sessionDate: weeksAgo(0) }),
 ];
+
+// Warmup checkmarks live in the persisted workout store keyed by block id;
+// every fixture here uses 'block-1', so clear them between tests or a
+// checkbox clicked in one test bleeds into the next test's (n/m) count.
+beforeEach(() => {
+  act(() => {
+    useWorkoutStore.setState({ warmupCompletions: {} });
+  });
+});
 
 describe('ExerciseCard', () => {
   const defaultProps = {
@@ -1613,8 +1623,8 @@ describe('ExerciseCard', () => {
       );
 
       await user.click(screen.getByText(/Set 1 · 100 kg × 10/));
-      // rpeToRir(8) = 2, so the "2-3" chip starts selected
-      expect(screen.getByRole('button', { name: 'Set RIR to 2-3' })).toHaveAttribute('aria-pressed', 'true');
+      // rpeToRir(8) = 2, so the "2" chip starts selected
+      expect(screen.getByRole('button', { name: 'Set RIR to 2' })).toHaveAttribute('aria-pressed', 'true');
 
       await user.click(screen.getByRole('button', { name: 'Set RIR to 0' }));
       await user.click(screen.getByRole('button', { name: 'Save set edit' }));
@@ -1639,14 +1649,14 @@ describe('ExerciseCard', () => {
       const weightInput = screen.getByLabelText('Edit weight');
       await user.clear(weightInput);
       await user.type(weightInput, '105');
-      // Re-tapping the already-selected bucket is also a no-op for effort
-      await user.click(screen.getByRole('button', { name: 'Set RIR to 2-3' }));
+      // Re-tapping the already-selected chip is also a no-op for effort
+      await user.click(screen.getByRole('button', { name: 'Set RIR to 2' }));
       await user.click(screen.getByRole('button', { name: 'Save set edit' }));
 
       expect(onSetEdit).toHaveBeenCalledWith('set-1', { weightKg: 105, reps: 10, rpe: 8 });
     });
 
-    it('pre-selects the chip from logged feedback (RIR 3 lights up the 2-3 bucket)', async () => {
+    it('pre-selects the chip from logged feedback (RIR 3 has its own discrete chip)', async () => {
       const user = userEvent.setup();
       const onSetEdit = jest.fn();
       const sets = [
@@ -1664,15 +1674,13 @@ describe('ExerciseCard', () => {
       render(<ExerciseCard {...defaultProps} sets={sets} isActive={true} onSetEdit={onSetEdit} />);
 
       await user.click(screen.getByText(/Set 1 · 100 kg × 10/));
-      expect(screen.getByRole('button', { name: 'Set RIR to 2-3' })).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByRole('button', { name: 'Set RIR to 3' })).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByRole('button', { name: 'Set RIR to 2' })).toHaveAttribute('aria-pressed', 'false');
       expect(screen.getByRole('button', { name: 'Set RIR to 4+' })).toHaveAttribute('aria-pressed', 'false');
 
-      // Codex review fix: the 2-3 chip is a band — tapping it (even after
-      // visiting another chip) must preserve the exact stored RIR 3, not
-      // silently rewrite the set to RIR 2 / RPE 7.5.
-      await user.click(screen.getByRole('button', { name: 'Set RIR to 2-3' }));
+      // Tapping a different chip changes the value; tapping the same chip re-selects it
       await user.click(screen.getByRole('button', { name: 'Set RIR to 1' }));
-      await user.click(screen.getByRole('button', { name: 'Set RIR to 2-3' }));
+      await user.click(screen.getByRole('button', { name: 'Set RIR to 3' }));
       await user.click(screen.getByRole('button', { name: 'Save set edit' }));
 
       expect(onSetEdit).toHaveBeenCalledWith('set-1', { weightKg: 100, reps: 10, rpe: 7 });
@@ -1963,6 +1971,61 @@ describe('ExerciseCard', () => {
       await typeWeight(user, '100');
 
       expect(screen.queryByText('Warmup Protocol')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Warmup plate calculator (per-row trigger)', () => {
+    const warmupPlateProps = {
+      ...defaultProps,
+      isActive: true,
+      listIndex: 0,
+      workingWeight: 100,
+      warmupSets: [
+        { setNumber: 1, percentOfWorking: 0, targetReps: 10, purpose: 'Bar warmup', restSeconds: 30 },
+        { setNumber: 2, percentOfWorking: 50, targetReps: 5, purpose: 'Neuro prep', restSeconds: 45 },
+      ],
+    };
+
+    const expandWarmups = async (user: ReturnType<typeof userEvent.setup>) => {
+      await user.click(screen.getByText('Warmup Protocol'));
+    };
+
+    it('opens the calculator pre-filled with the row load in kg', async () => {
+      const user = userEvent.setup();
+      const onPlateCalculatorOpen = jest.fn();
+      render(
+        <ExerciseCard {...warmupPlateProps} onPlateCalculatorOpen={onPlateCalculatorOpen} />
+      );
+
+      await expandWarmups(user);
+      await user.click(
+        screen.getByRole('button', { name: 'Open plate calculator for warmup set 2' })
+      );
+
+      // 50% of the 100 kg working weight
+      expect(onPlateCalculatorOpen).toHaveBeenCalledWith(50);
+    });
+
+    it('offers no plates trigger on a zero-load row (empty bar)', async () => {
+      const user = userEvent.setup();
+      render(<ExerciseCard {...warmupPlateProps} onPlateCalculatorOpen={jest.fn()} />);
+
+      await expandWarmups(user);
+
+      expect(
+        screen.queryByRole('button', { name: 'Open plate calculator for warmup set 1' })
+      ).not.toBeInTheDocument();
+    });
+
+    it('renders no trigger when the page does not wire the calculator', async () => {
+      const user = userEvent.setup();
+      render(<ExerciseCard {...warmupPlateProps} />);
+
+      await expandWarmups(user);
+
+      expect(
+        screen.queryByRole('button', { name: /Open plate calculator/ })
+      ).not.toBeInTheDocument();
     });
   });
 });
@@ -2415,5 +2478,196 @@ describe('timed holds are bodyweight, not zero-load lifts', () => {
     );
 
     expect(screen.getByRole('button', { name: 'Increase weight' })).toBeInTheDocument();
+  });
+});
+
+describe('swipe-to-delete requires tap to confirm', () => {
+  const swipeProps = () => ({
+    exercise: createMockExercise(),
+    block: createMockBlock(),
+    sets: [createMockSetLog({ id: 'set-1', setNumber: 1 })],
+    unit: 'kg' as const,
+    isActive: true,
+    onSetDelete: jest.fn(),
+  });
+
+  /** The completed set line that carries the touch handlers */
+  const getRow = () => screen.getByText(/Set 1 ·/).parentElement as HTMLElement;
+
+  const swipeLeft = (row: HTMLElement, distance: number) => {
+    fireEvent.touchStart(row, { touches: [{ clientX: 300 }] });
+    fireEvent.touchMove(row, { touches: [{ clientX: 300 - distance }] });
+    fireEvent.touchEnd(row);
+  };
+
+  it('does not delete on swipe alone — it reveals a Delete button', () => {
+    const props = swipeProps();
+    render(<ExerciseCard {...props} />);
+
+    swipeLeft(getRow(), 120);
+
+    expect(props.onSetDelete).not.toHaveBeenCalled();
+    expect(screen.getByTestId('confirm-delete-set-1')).toBeInTheDocument();
+  });
+
+  it('deletes only when the revealed Delete button is tapped', () => {
+    const props = swipeProps();
+    render(<ExerciseCard {...props} />);
+
+    swipeLeft(getRow(), 120);
+    fireEvent.click(screen.getByTestId('confirm-delete-set-1'));
+
+    expect(props.onSetDelete).toHaveBeenCalledTimes(1);
+    expect(props.onSetDelete).toHaveBeenCalledWith('set-1');
+  });
+
+  it('tapping the row dismisses the Delete button without deleting', () => {
+    const props = swipeProps();
+    render(<ExerciseCard {...props} />);
+
+    swipeLeft(getRow(), 120);
+    expect(screen.getByTestId('confirm-delete-set-1')).toBeInTheDocument();
+
+    // A real tap = touchstart + touchend (no move) followed by click
+    const row = getRow();
+    fireEvent.touchStart(row, { touches: [{ clientX: 300 }] });
+    fireEvent.touchEnd(row);
+    fireEvent.click(row);
+
+    expect(screen.queryByTestId('confirm-delete-set-1')).not.toBeInTheDocument();
+    expect(props.onSetDelete).not.toHaveBeenCalled();
+  });
+
+  it('a short swipe neither deletes nor reveals the Delete button', () => {
+    const props = swipeProps();
+    render(<ExerciseCard {...props} />);
+
+    swipeLeft(getRow(), 50);
+
+    expect(props.onSetDelete).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('confirm-delete-set-1')).not.toBeInTheDocument();
+  });
+});
+
+describe('warmup checkmark persistence (~15 min warmth window)', () => {
+  const warmupProps = () => ({
+    exercise: createMockExercise(),
+    block: createMockBlock(),
+    sets: [],
+    unit: 'kg' as const,
+    isActive: true,
+    listIndex: 0,
+    workingWeight: 100,
+    warmupSets: [
+      { setNumber: 1, percentOfWorking: 0, targetReps: 10, purpose: 'General warmup', restSeconds: 30 },
+      { setNumber: 2, percentOfWorking: 50, targetReps: 5, purpose: 'Neuro prep', restSeconds: 45 },
+    ],
+  });
+
+  const expandWarmups = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(screen.getByText('Warmup Protocol'));
+  };
+
+  it('keeps checkmarks when switching to another exercise and back', async () => {
+    const user = userEvent.setup();
+    const props = warmupProps();
+    const { rerender } = render(<ExerciseCard {...props} />);
+
+    await expandWarmups(user);
+    await user.click(screen.getByRole('button', { name: 'Complete warmup set 1' }));
+
+    // Switch away (another exercise becomes active) and back
+    rerender(<ExerciseCard {...props} isActive={false} />);
+    rerender(<ExerciseCard {...props} isActive={true} />);
+
+    // Reactivation auto-expands the table; W1 is still checked, W2 is not
+    expect(
+      screen.getByRole('button', { name: 'Mark warmup set 1 incomplete' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Complete warmup set 2' })
+    ).toBeInTheDocument();
+  });
+
+  it('keeps checkmarks across an unmount/remount (page reload) inside the window', async () => {
+    const user = userEvent.setup();
+    const props = warmupProps();
+    const { unmount } = render(<ExerciseCard {...props} />);
+
+    await expandWarmups(user);
+    await user.click(screen.getByRole('button', { name: 'Complete warmup set 2' }));
+    unmount();
+
+    render(<ExerciseCard {...props} />);
+    await expandWarmups(user);
+    expect(
+      screen.getByRole('button', { name: 'Mark warmup set 2 incomplete' })
+    ).toBeInTheDocument();
+  });
+
+  it('resets checkmarks on reactivation once they are older than the window', async () => {
+    const user = userEvent.setup();
+    const props = warmupProps();
+    const { rerender } = render(<ExerciseCard {...props} />);
+
+    await expandWarmups(user);
+    await user.click(screen.getByRole('button', { name: 'Complete warmup set 1' }));
+
+    rerender(<ExerciseCard {...props} isActive={false} />);
+
+    // Backdate the stored checkmark past the 15-minute window
+    const staleIso = new Date(Date.now() - WARMUP_COMPLETION_TTL_MS - 60_000).toISOString();
+    act(() => {
+      useWorkoutStore.setState({
+        warmupCompletions: { 'block-1:exercise-1': { 1: staleIso } },
+      });
+    });
+
+    rerender(<ExerciseCard {...props} isActive={true} />);
+
+    expect(
+      screen.getByRole('button', { name: 'Complete warmup set 1' })
+    ).toBeInTheDocument();
+    expect(useWorkoutStore.getState().warmupCompletions['block-1:exercise-1']).toBeUndefined();
+  });
+
+  it('does not carry checkmarks onto a swapped-in exercise on the same block', async () => {
+    const user = userEvent.setup();
+    const props = warmupProps();
+    const { rerender } = render(<ExerciseCard {...props} />);
+
+    await expandWarmups(user);
+    await user.click(screen.getByRole('button', { name: 'Complete warmup set 1' }));
+
+    // Mid-workout swap: the page keeps the block id and replaces the exercise
+    rerender(
+      <ExerciseCard
+        {...props}
+        exercise={createMockExercise({ id: 'exercise-2', name: 'Incline Press' })}
+      />
+    );
+
+    // The replacement's protocol starts unchecked; the old exercise's
+    // checkmarks stay under their own key (and would restore on swap-back).
+    expect(
+      screen.getByRole('button', { name: 'Complete warmup set 1' })
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Mark warmup set 1 incomplete' })).toBeNull();
+    expect(useWorkoutStore.getState().warmupCompletions['block-1:exercise-1'][1]).toBeDefined();
+  });
+
+  it('persists "Skip warmup (already warm)" across an exercise switch', async () => {
+    const user = userEvent.setup();
+    const props = warmupProps();
+    const { rerender } = render(<ExerciseCard {...props} />);
+
+    await expandWarmups(user);
+    await user.click(screen.getByText('Skip warmup (already warm)'));
+
+    rerender(<ExerciseCard {...props} isActive={false} />);
+    rerender(<ExerciseCard {...props} isActive={true} />);
+
+    // All sets stay checked, so the header shows the full count
+    expect(screen.getByText('(2/2)')).toBeInTheDocument();
   });
 });

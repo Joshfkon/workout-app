@@ -86,6 +86,7 @@ export function recommendDurationSet(
       reps: secMin,
       rir: targetRir,
       rationale: 'maintain',
+      trigger: 'none',
       effortVsTarget: 'on_target',
     };
   }
@@ -112,6 +113,7 @@ export function recommendDurationSet(
         reps: secMin,
         rir: targetRir,
         rationale: 'increase_load',
+        trigger: 'none',
         effortVsTarget: effort,
       };
     }
@@ -123,6 +125,7 @@ export function recommendDurationSet(
         reps: Math.round((secMin + secMax) / 2),
         rir: targetRir,
         rationale: 'reduce_load',
+        trigger: 'none',
         effortVsTarget: effort,
       };
     }
@@ -135,6 +138,7 @@ export function recommendDurationSet(
     reps: heldSeconds,
     rir: targetRir,
     rationale: 'maintain',
+    trigger: 'none',
     effortVsTarget: effort,
   };
 }
@@ -166,6 +170,7 @@ export function recommendDurationSessionStart(
       reps: secMin,
       rir: input.targetRir,
       rationale: 'maintain',
+      trigger: 'none',
       effortVsTarget: 'on_target',
     };
   }
@@ -178,6 +183,7 @@ export function recommendDurationSessionStart(
       reps: secMin,
       rir: input.targetRir,
       rationale: 'increase_load',
+      trigger: 'none',
       effortVsTarget: effortVsTarget(dev),
     };
   }
@@ -191,6 +197,7 @@ export function recommendDurationSessionStart(
       reps: secMax,
       rir: input.targetRir,
       rationale: 'maintain',
+      trigger: 'none',
       effortVsTarget: effortVsTarget(dev),
     };
   }
@@ -200,6 +207,7 @@ export function recommendDurationSessionStart(
     reps: clamp(Math.max(prevSeconds + DURATION_PROGRESSION_STEP_S, prevSeconds), secMin, secMax),
     rir: input.targetRir,
     rationale: 'maintain',
+    trigger: 'none',
     effortVsTarget: effortVsTarget(dev),
   };
 }

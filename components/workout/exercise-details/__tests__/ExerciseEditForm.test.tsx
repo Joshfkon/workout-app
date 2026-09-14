@@ -199,7 +199,7 @@ describe('ExerciseEditForm save reporting', () => {
       await toggleQuadsAndSave(user);
 
       expect(
-        await screen.findByText(/Catalog exercise updated for all users/i)
+        await screen.findByText(/Shared exercise updated for all users/i)
       ).toBeInTheDocument();
 
       // The write went through the audited catalog RPC with the field intact.

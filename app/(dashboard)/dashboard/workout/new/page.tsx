@@ -1,5 +1,7 @@
 'use client';
 
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+
 import React, { useState, useEffect, Suspense, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -22,6 +24,7 @@ import {
   DURATION_MODEL,
   estimateWorkoutDuration,
   formatDurationEstimate,
+  plannedWarmupSetsFor,
   type DurationBlockInput,
 } from '@/services/workoutDurationEstimator';
 import {
@@ -122,12 +125,13 @@ function toDurationInputs(
     const needsWarmup = muscle.length > 0 && !warmedMuscles.has(muscle);
     if (needsWarmup) warmedMuscles.add(muscle);
 
+    const mechanic = isCompound ? ('compound' as const) : ('isolation' as const);
     return {
       id: exercise.id,
       targetSets: plannedSetsFor(isCompound, workoutMinutes),
       restSeconds: getRestPeriod(isCompound, goal, muscle as MuscleGroup),
-      mechanic: isCompound ? 'compound' : 'isolation',
-      warmupSetsRemaining: needsWarmup ? (isCompound ? 3 : 2) : 0,
+      mechanic,
+      warmupSetsRemaining: needsWarmup ? plannedWarmupSetsFor(mechanic) : 0,
     };
   });
 }
@@ -150,7 +154,9 @@ function getMaxExercisesForTime(
         targetSets: 3,
         restSeconds: getRestPeriod(isCompound, goal),
         mechanic: isCompound ? 'compound' : 'isolation',
-        warmupSetsRemaining: includeWarmup ? 3 : 0,
+        warmupSetsRemaining: includeWarmup
+          ? plannedWarmupSetsFor(isCompound ? 'compound' : 'isolation')
+          : 0,
       },
     ]).totalSeconds +
       DURATION_MODEL.transitionSeconds) /
@@ -2444,6 +2450,7 @@ function NewWorkoutContent() {
 }
 
 export default function NewWorkoutPage() {
+  useDocumentTitle('New Workout');
   return (
     <Suspense fallback={
       <div className="flex flex-col items-center justify-center min-h-[400px]">

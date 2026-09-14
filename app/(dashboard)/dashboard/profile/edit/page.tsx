@@ -1,5 +1,7 @@
 'use client';
 
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
@@ -9,6 +11,7 @@ import { Avatar } from '@/components/social/profile';
 import type { UserProfile, ProfileVisibility, TrainingExperience } from '@/types/social';
 
 export default function ProfileEditPage() {
+  useDocumentTitle('Edit Profile');
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);

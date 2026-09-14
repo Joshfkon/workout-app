@@ -183,13 +183,13 @@ export const RPEExplainer = memo(function RPEExplainer({
           >
             {isCorrect ? (
               <p className="text-green-300">
-                <span className="font-semibold">Correct!</span> Training at RIR 2-3 gives you the best balance of stimulus and recovery.
+                <span className="font-semibold">Correct!</span> Training at RIR 2 or 3 gives you the best balance of stimulus and recovery.
                 This is the &ldquo;sweet spot&rdquo; for muscle growth.
               </p>
             ) : (
               <p className="text-surface-300">
                 <span className="font-semibold text-yellow-400">Almost!</span> While that effort level has its place,
-                most training should be at <span className="text-yellow-400">RIR 2-3 (Good)</span> for optimal results.
+                most training should be at <span className="text-yellow-400">RIR 2 or 3 (Good)</span> for optimal results.
               </p>
             )}
           </div>

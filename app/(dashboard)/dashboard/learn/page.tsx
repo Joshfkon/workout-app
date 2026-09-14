@@ -1,5 +1,7 @@
 'use client';
 
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+
 import Link from 'next/link';
 import { Card } from '@/components/ui/Card';
 
@@ -128,6 +130,7 @@ const colorClasses: Record<string, { bg: string; border: string; text: string; g
 };
 
 export default function LearnPage() {
+  useDocumentTitle('Learn');
   return (
     <div className="max-w-4xl mx-auto space-y-8 pb-12">
       {/* Header */}

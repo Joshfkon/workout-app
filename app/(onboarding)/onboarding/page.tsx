@@ -8,6 +8,7 @@ import { ContextCard } from '@/components/onboarding/ContextCard';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { calculateBodyComposition, getFFMIAssessment, getFFMIBracket } from '@/services/coachingEngine';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
+import { updateOnboardingStep } from '@/lib/onboarding/onboardingProgress';
 import type { WeightUnit } from '@/types/schema';
 
 // Unit conversion helpers
@@ -78,6 +79,14 @@ export default function OnboardingBodyCompPage() {
   // Save unit preference and proceed
   const handleUnitsConfirm = async () => {
     await updatePreference('units', selectedUnits);
+    
+    // Track progress
+    const supabase = createUntypedClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      await updateOnboardingStep(supabase, user.id, 'units');
+    }
+    
     setStep('body-comp');
   };
   
@@ -230,6 +239,9 @@ export default function OnboardingBodyCompPage() {
         .from('users')
         .update({ sex, height_cm: height, weight_kg: weight, goal })
         .eq('id', user.id);
+      
+      // Track progress - user completed goal selection
+      await updateOnboardingStep(supabase, user.id, 'goal');
       
       // Navigate to benchmark selection with session ID
       router.push(`/onboarding/benchmarks?session=${session.id}`);
@@ -661,27 +673,41 @@ export default function OnboardingBodyCompPage() {
                       </div>
                     </>
                   ) : (
-                    // Female options (no image yet, but keep text options)
-                    <div className="grid grid-cols-2 gap-2">
-                      {BODY_FAT_OPTIONS.female.map((option) => (
-                        <button
-                          key={option.value}
-                          type="button"
-                          onClick={() => {
-                            setBodyFatPercent(String(option.value));
-                            setShowBodyFatGuide(false);
-                          }}
-                          className={`p-3 rounded-lg text-left transition-all ${
-                            bodyFatPercent === String(option.value)
-                              ? 'bg-primary-500 text-white'
-                              : 'bg-surface-700 hover:bg-surface-600 text-surface-200'
-                          }`}
-                        >
-                          <p className="text-lg font-bold">{option.label}</p>
-                          <p className="text-xs opacity-75">{option.description}</p>
-                        </button>
-                      ))}
-                    </div>
+                    <>
+                      {/* Visual guide image for females */}
+                      <div className="rounded-lg overflow-hidden mb-3 relative">
+                        <Image 
+                          src="/images/body-fat-guide-female.png" 
+                          alt="Female body fat percentage visual guide"
+                          width={600}
+                          height={600}
+                          className="w-full h-auto"
+                          priority
+                        />
+                      </div>
+                      
+                      {/* Clickable options */}
+                      <div className="grid grid-cols-4 gap-2">
+                        {BODY_FAT_OPTIONS.female.map((option) => (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => {
+                              setBodyFatPercent(String(option.value));
+                              setShowBodyFatGuide(false);
+                            }}
+                            className={`p-2 rounded-lg text-center transition-all ${
+                              bodyFatPercent === String(option.value)
+                                ? 'bg-primary-500 text-white'
+                                : 'bg-surface-700 hover:bg-surface-600 text-surface-200'
+                            }`}
+                          >
+                            <p className="text-lg font-bold">{option.label}</p>
+                            <p className="text-xs opacity-75">{option.description}</p>
+                          </button>
+                        ))}
+                      </div>
+                    </>
                   )}
                   
                   <p className="text-xs text-surface-500 mt-3 text-center">
@@ -794,7 +820,15 @@ export default function OnboardingBodyCompPage() {
       <div className="flex justify-end pt-4">
         <Button
           size="lg"
-          onClick={() => setStep('goal')}
+          onClick={async () => {
+            // Track progress - user completed body composition
+            const supabase = createUntypedClient();
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+              await updateOnboardingStep(supabase, user.id, 'body_comp');
+            }
+            setStep('goal');
+          }}
           disabled={!canContinue}
         >
           Continue

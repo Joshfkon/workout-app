@@ -139,19 +139,74 @@ function useComparePair(
   };
 }
 
-/** Resolve the selected pair, defaulting to oldest vs newest. */
+/**
+ * Resolve the selected pair with smarter defaults:
+ * 1. Prefer a recent meaningful comparison (30-90 days) over extreme spans
+ * 2. Prefer same-pose pairs when pose metadata exists
+ * 3. Fall back to oldest vs newest only when no better pair exists
+ */
 function resolvePair(
   chronological: ProgressPhoto[],
   beforeId: string | undefined,
   afterId: string | undefined
 ): { before: ProgressPhoto | null; after: ProgressPhoto | null } {
-  const before =
-    chronological.find((p) => p.id === beforeId) ?? chronological[0] ?? null;
-  const after =
-    chronological.find((p) => p.id === afterId) ??
-    chronological[chronological.length - 1] ??
-    null;
-  return { before, after };
+  // Explicit selection always wins
+  if (beforeId && afterId) {
+    const before = chronological.find((p) => p.id === beforeId) ?? null;
+    const after = chronological.find((p) => p.id === afterId) ?? null;
+    return { before, after };
+  }
+
+  // Need at least 2 photos
+  if (chronological.length < 2) {
+    return { before: null, after: null };
+  }
+
+  // Smart default: find the best comparison pair
+  const latest = chronological[chronological.length - 1];
+  const oldest = chronological[0];
+
+  // Prefer a photo 30-90 days ago (meaningful progress window)
+  const latestDate = new Date(`${latest.photoDate}T00:00:00`).getTime();
+  const idealSpanDays = 60; // ~2 months
+  const minSpanDays = 30;
+  const maxSpanDays = 120;
+  const msPerDay = 86_400_000;
+
+  // Find the photo closest to the ideal span from latest
+  let bestBefore = oldest;
+  let bestScore = Infinity;
+
+  for (const photo of chronological) {
+    if (photo.id === latest.id) continue;
+
+    const photoDate = new Date(`${photo.photoDate}T00:00:00`).getTime();
+    const daysDiff = (latestDate - photoDate) / msPerDay;
+
+    // Skip if too recent (less than 30 days won't show much change)
+    if (daysDiff < minSpanDays) continue;
+
+    // Prefer spans in the sweet spot (30-120 days)
+    let score = Math.abs(daysDiff - idealSpanDays);
+
+    // Strong penalty for extreme multi-year spans when nearer options exist
+    if (daysDiff > maxSpanDays * 3) {
+      score += 1000;
+    }
+
+    // TODO: If pose metadata existed (front/side/back tags), prefer matching poses
+    // This would require a schema change to add pose field to progress_photos
+
+    if (score < bestScore) {
+      bestScore = score;
+      bestBefore = photo;
+    }
+  }
+
+  return {
+    before: beforeId ? chronological.find((p) => p.id === beforeId) ?? bestBefore : bestBefore,
+    after: afterId ? chronological.find((p) => p.id === afterId) ?? latest : latest,
+  };
 }
 
 function PhotoSelect({
@@ -329,8 +384,11 @@ export function ComparePhotos({
           />
         )}
 
+        {/* Delta stats - prominently shown */}
         {deltaCaption && (
-          <p className="text-sm text-center text-surface-300 font-medium">{deltaCaption}</p>
+          <div className="rounded-lg bg-surface-800 border border-surface-700 p-3">
+            <p className="text-sm text-center text-surface-200 font-medium">{deltaCaption}</p>
+          </div>
         )}
 
         <Button

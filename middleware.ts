@@ -16,9 +16,11 @@ export const config = {
      * - twitter-image (Twitter card image)
      * - api/og (OG image API routes)
      * - exercise-demos/ (exercise demo images)
+     * - manifest.json (PWA manifest)
+     * - sw.js (service worker)
      * Feel free to modify this pattern to include more paths.
      */
-    '/((?!_next/static|_next/image|favicon.ico|opengraph-image|twitter-image|api/og|exercise-demos|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|manifest\\.json|sw\\.js|opengraph-image|twitter-image|api/og|exercise-demos|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };
 

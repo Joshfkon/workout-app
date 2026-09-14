@@ -2,6 +2,7 @@
 
 import { Card } from '@/components/ui';
 import Link from 'next/link';
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 
 const features = [
   {
@@ -126,6 +127,8 @@ const comparisonPoints: ComparisonRow[] = [
 ];
 
 export default function AboutPage() {
+  useDocumentTitle('About');
+  
   return (
     <div className="max-w-5xl mx-auto space-y-12 pb-12">
       {/* Hero */}

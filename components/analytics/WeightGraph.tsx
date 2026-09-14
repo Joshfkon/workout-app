@@ -12,7 +12,7 @@ import {
   ReferenceLine,
   ReferenceArea,
 } from 'recharts';
-import { formatDate, formatChartTickDate, dateTickStep, showDateTick } from '@/lib/utils';
+import { formatDate, formatChartTickDate, dateTickStep, showDateTick, parseLocalDate } from '@/lib/utils';
 import { getDisplayWeight } from '@/lib/weightUtils';
 import type { RechartsTooltipProps } from '@/types/database-queries';
 import type { PhaseType } from '@/types/schema';
@@ -90,14 +90,14 @@ export const WeightGraph = memo(function WeightGraph({ weightHistory, preferredU
     cutoffDate.setDate(now.getDate() - TIMEFRAME_DAYS[timeframe]);
 
     const filtered = weightHistory
-      .filter((entry) => new Date(entry.date) >= cutoffDate)
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      .filter((entry) => parseLocalDate(entry.date) >= cutoffDate)
+      .sort((a, b) => parseLocalDate(a.date).getTime() - parseLocalDate(b.date).getTime());
 
     // Include the year in tick labels only when the range crosses a year boundary.
     const spansYear =
       filtered.length > 0 &&
-      new Date(filtered[0].date).getFullYear() !==
-        new Date(filtered[filtered.length - 1].date).getFullYear();
+      parseLocalDate(filtered[0].date).getFullYear() !==
+        parseLocalDate(filtered[filtered.length - 1].date).getFullYear();
 
     return filtered.map((entry) => {
       // Use unified weight utility for consistent validation and conversion
@@ -144,9 +144,9 @@ export const WeightGraph = memo(function WeightGraph({ weightHistory, preferredU
   const trend = useMemo(() => {
     if (chartData.length < 2) return null;
 
-    const t0 = new Date(chartData[0].date).getTime();
+    const t0 = parseLocalDate(chartData[0].date).getTime();
     const points = chartData.map((d) => ({
-      x: (new Date(d.date).getTime() - t0) / (1000 * 60 * 60 * 24),
+      x: (parseLocalDate(d.date).getTime() - t0) / (1000 * 60 * 60 * 24),
       y: d.weight,
     }));
 

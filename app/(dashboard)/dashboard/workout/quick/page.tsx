@@ -1,5 +1,7 @@
 'use client';
 
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+
 /**
  * /dashboard/workout/quick — confirm screen for starting an ad-hoc workout.
  *
@@ -22,6 +24,7 @@ import {
 } from '../_lib/adhocSession';
 
 export default function QuickWorkoutPage() {
+  useDocumentTitle('Quick Workout');
   const router = useRouter();
   const [error, setError] = useState('');
   const [isStarting, setIsStarting] = useState(false);

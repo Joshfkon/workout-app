@@ -53,9 +53,15 @@ function setHistory(historyRows: HistoryRow[], isLoading = false, sessions: Reco
   });
 }
 
-function block(id: string, primaryMuscle: string, secondaryMuscles: string[] = []): ExerciseBlockWithExercise {
+function block(
+  id: string,
+  primaryMuscle: string,
+  secondaryMuscles: string[] = [],
+  targetSets = 0
+): ExerciseBlockWithExercise {
   return {
     id,
+    targetSets,
     exercise: { id: `ex-${id}`, name: `Exercise ${id}`, primaryMuscle, secondaryMuscles },
   } as unknown as ExerciseBlockWithExercise;
 }
@@ -280,6 +286,120 @@ describe('useWorkoutMuscleVolume', () => {
     expect(
       Object.keys(window.localStorage).some((k) => k.startsWith('workout-volume-strip-order:'))
     ).toBe(true);
+  });
+
+  it('projects today’s remaining planned sets on top of the weekly total', () => {
+    setHistory([historyRow('biceps', 6)]);
+    const liveBlocks = [block('b1', 'biceps', [], 4)];
+    const liveSets = [workingSet('b1')];
+
+    const { result } = renderHook(() =>
+      useWorkoutMuscleVolume({ liveBlocks, liveSets, now: NOW })
+    );
+
+    const biceps = result.current.rows.find((r) => r.muscle === 'biceps')!;
+    // 6 history + 1 logged this session; 3 of the 4 planned sets remain.
+    expect(biceps.sets).toBe(7);
+    expect(biceps.plannedSets).toBe(3);
+    expect(biceps.projectedSets).toBe(10);
+    // 10 hits biceps' band minimum exactly — in zone, not under.
+    expect(biceps.projectedZone).toBe('in_zone');
+    expect(biceps.deficitLockedIn).toBe(false);
+  });
+
+  it('a logged set migrates credit from planned into completed — projection stays put', () => {
+    setHistory([]);
+    const liveBlocks = [block('b1', 'biceps', [], 4)];
+
+    const before = renderHook(() =>
+      useWorkoutMuscleVolume({ liveBlocks, liveSets: [], now: NOW })
+    );
+    const bicepsBefore = before.result.current.rows.find((r) => r.muscle === 'biceps')!;
+    expect(bicepsBefore.sets).toBe(0);
+    expect(bicepsBefore.plannedSets).toBe(4);
+    expect(bicepsBefore.projectedSets).toBe(4);
+    before.unmount();
+
+    const after = renderHook(() =>
+      useWorkoutMuscleVolume({ liveBlocks, liveSets: [workingSet('b1')], now: NOW })
+    );
+    const bicepsAfter = after.result.current.rows.find((r) => r.muscle === 'biceps')!;
+    expect(bicepsAfter.sets).toBe(1);
+    expect(bicepsAfter.plannedSets).toBe(3);
+    expect(bicepsAfter.projectedSets).toBe(4);
+  });
+
+  it('a skipped exercise (dropped from liveBlocks) loses its planned contribution', () => {
+    setHistory([]);
+    const withBoth = renderHook(() =>
+      useWorkoutMuscleVolume({
+        liveBlocks: [block('b1', 'quads', [], 4), block('b2', 'hamstrings', [], 3)],
+        liveSets: [],
+        now: NOW,
+      })
+    );
+    expect(
+      withBoth.result.current.rows.find((r) => r.muscle === 'hamstrings')!.plannedSets
+    ).toBe(3);
+    withBoth.unmount();
+
+    // The page filters skipped blocks out of liveBlocks — the projection follows.
+    const afterSkip = renderHook(() =>
+      useWorkoutMuscleVolume({
+        liveBlocks: [block('b1', 'quads', [], 4)],
+        liveSets: [],
+        now: NOW,
+      })
+    );
+    const hamstrings = afterSkip.result.current.rows.find((r) => r.muscle === 'hamstrings')!;
+    expect(hamstrings.plannedSets).toBe(0);
+    expect(hamstrings.projectedSets).toBe(hamstrings.sets);
+  });
+
+  it('locks in a deficit when recovery outruns the rest of the local day', () => {
+    // 22:00 local — 2 hours left in the weekly window's closing day.
+    const lateNow = new Date(2026, 7, 30, 22, 0, 0);
+    // A completed biceps session 6h earlier: readiness ETA far beyond 2h.
+    setHistory([], false, [
+      {
+        performedAt: new Date(lateNow.getTime() - 6 * 60 * 60 * 1000),
+        exercises: [
+          {
+            primaryMuscle: 'biceps',
+            secondaryMuscles: [],
+            sets: Array.from({ length: 6 }, () => ({ repsInTank: 1 })),
+          },
+        ],
+      },
+    ]);
+    // Only 2 planned sets → projected 2, far below biceps' MEV of 10.
+    const { result } = renderHook(() =>
+      useWorkoutMuscleVolume({
+        liveBlocks: [block('b1', 'biceps', [], 2)],
+        liveSets: [],
+        now: lateNow,
+      })
+    );
+
+    const biceps = result.current.rows.find((r) => r.muscle === 'biceps')!;
+    expect(biceps.projectedZone).toBe('below_mev');
+    expect(biceps.readyInHours).toBeGreaterThan(2);
+    expect(biceps.deficitLockedIn).toBe(true);
+  });
+
+  it('an under-minimum projection on a ready muscle is merely under, not locked', () => {
+    setHistory([]);
+    const { result } = renderHook(() =>
+      useWorkoutMuscleVolume({
+        liveBlocks: [block('b1', 'biceps', [], 2)],
+        liveSets: [],
+        now: NOW,
+      })
+    );
+    const biceps = result.current.rows.find((r) => r.muscle === 'biceps')!;
+    expect(biceps.projectedZone).toBe('below_mev');
+    expect(biceps.readyInHours).toBe(0);
+    expect(biceps.deficitLockedIn).toBe(false);
   });
 
   it('does not freeze an order from a still-loading render', () => {
