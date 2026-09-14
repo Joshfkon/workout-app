@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { useUserStore } from '@/stores';
@@ -42,7 +42,7 @@ import {
   type ReadinessTarget,
   type NextReadyTarget,
 } from '@/app/(dashboard)/dashboard/workout/[id]/_lib/readiness';
-import { buildNextDayPreviewRows } from '@/app/(dashboard)/dashboard/workout/[id]/_lib/readinessPreview';
+import { buildFutureReadinessRows } from '@/app/(dashboard)/dashboard/workout/[id]/_lib/readinessPreview';
 
 /**
  * useMuscleReadiness — data hook for the in-workout Muscle Readiness sheet.
@@ -128,11 +128,12 @@ export interface UseMuscleReadinessArgs {
 }
 
 /**
- * The "preview tomorrow" dataset: the same row/target model projected one
- * local day forward (volume decayed by the rolling window, recovery advanced
- * a day, nothing new assumed logged) — see buildNextDayPreviewRows.
+ * A "look ahead" dataset: the same row/target model projected N hours forward
+ * (volume decayed by the rolling window at each crossed local midnight,
+ * recovery advanced by the hour, nothing new assumed logged) — see
+ * buildFutureReadinessRows.
  */
-export interface NextDayPreview {
+export interface ReadinessPreview {
   rows: ReadinessRow[];
   targets: ReadinessTarget[];
   nextUp: NextReadyTarget | null;
@@ -149,8 +150,12 @@ export interface UseMuscleReadinessResult {
    * each expanded row.
    */
   dailyGroupSets: DailyGroupSets;
-  /** Rows/targets projected one local day ahead (the preview toggle's data). */
-  nextDay: NextDayPreview;
+  /**
+   * Build the rows/targets as they would read `hoursAhead` hours from now —
+   * the time slider's data source. Stable identity across renders for a given
+   * dataset; the caller memoizes per slider position.
+   */
+  previewAt: (hoursAhead: number) => ReadinessPreview;
   isLoading: boolean;
   error: string | null;
   /** Re-run the history fetch (error retry). */
@@ -442,29 +447,42 @@ export function useMuscleReadiness({
 
   const { targets, nextUp } = useMemo(() => selectGoodTargets(rows, 3), [rows]);
 
-  // The "preview tomorrow" dataset: same rows, one local day ahead — rolling
-  // volume decayed via the shared projection, recovery re-evaluated at
-  // tomorrow's instant. Soreness overrides are deliberately NOT carried over
-  // (same-day subjective reports — see buildNextDayPreviewRows).
-  const nextDay = useMemo((): NextDayPreview => {
-    const previewRows = buildNextDayPreviewRows(
-      rows,
-      dailyGroupSets,
-      computeDailyStandardSets(datedBlocks, now),
-      recoveryHistory,
-      now,
-      recoveryConfig
-    );
-    const picks = selectGoodTargets(previewRows, 3);
-    return { rows: previewRows, targets: picks.targets, nextUp: picks.nextUp };
-  }, [rows, dailyGroupSets, datedBlocks, recoveryHistory, now, recoveryConfig]);
+  // Per-head (uncapped) buckets for the preview's fine-child projection —
+  // same dated blocks, same canonical per-set credits as the child rows.
+  const dailyStandardSets = useMemo(
+    () => computeDailyStandardSets(datedBlocks, now),
+    [datedBlocks, now]
+  );
+
+  // The time slider's data source: same rows, N hours ahead — rolling volume
+  // decayed via the shared projection at each crossed local midnight, recovery
+  // re-evaluated at the future instant. Soreness overrides are deliberately
+  // NOT carried forward (same-day subjective reports — see
+  // buildFutureReadinessRows). Cheap enough to run per slider step; the
+  // consumer memoizes per position.
+  const previewAt = useCallback(
+    (hoursAhead: number): ReadinessPreview => {
+      const previewRows = buildFutureReadinessRows(
+        rows,
+        dailyGroupSets,
+        dailyStandardSets,
+        recoveryHistory,
+        now,
+        hoursAhead,
+        recoveryConfig
+      );
+      const picks = selectGoodTargets(previewRows, 3);
+      return { rows: previewRows, targets: picks.targets, nextUp: picks.nextUp };
+    },
+    [rows, dailyGroupSets, dailyStandardSets, recoveryHistory, now, recoveryConfig]
+  );
 
   return {
     rows,
     targets,
     nextUp,
     dailyGroupSets,
-    nextDay,
+    previewAt,
     isLoading,
     error,
     refetch,

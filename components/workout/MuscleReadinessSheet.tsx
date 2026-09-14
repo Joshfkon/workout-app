@@ -2,7 +2,8 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { BottomSheet } from './BottomSheet';
-import { useMuscleReadiness, type NextDayPreview } from '@/hooks/useMuscleReadiness';
+import { useMuscleReadiness, type ReadinessPreview } from '@/hooks/useMuscleReadiness';
+import { PREVIEW_MAX_HOURS } from '@/app/(dashboard)/dashboard/workout/[id]/_lib/readinessPreview';
 import { useWearableRecovery } from '@/hooks/useWearableRecovery';
 import {
   type ReadinessRow,
@@ -330,7 +331,7 @@ export function MuscleReadinessContent({
   targets,
   nextUp = null,
   dailyGroupSets,
-  nextDay = null,
+  previewAt = null,
   isLoading,
   collapsible = false,
   loadingTestId = 'readiness-sheet-loading',
@@ -345,11 +346,12 @@ export function MuscleReadinessContent({
    *  rolling-volume decay forecast inside each expanded row. */
   dailyGroupSets?: DailyGroupSets;
   /**
-   * Rows/targets projected one local day ahead (from useMuscleReadiness).
-   * When provided, the strip gets a "Preview tomorrow" toggle that flips the
-   * whole body — strip, map and rows — to the projected next-day state.
+   * Builder for the look-ahead preview (from useMuscleReadiness). When
+   * provided, the strip gets a time slider: dragging it forward re-renders
+   * the whole body — strip, map and rows — as it will read that many hours
+   * from now.
    */
-  nextDay?: NextDayPreview | null;
+  previewAt?: ((hoursAhead: number) => ReadinessPreview) | null;
   isLoading: boolean;
   collapsible?: boolean;
   loadingTestId?: string;
@@ -368,15 +370,23 @@ export function MuscleReadinessContent({
     persistShowAll(persistKey, value);
   };
 
-  // Next-day preview toggle. Deliberately NOT persisted: the view must always
-  // open on today's real numbers — a remembered preview would let projected
-  // values masquerade as current ones on the next open.
-  const [showNextDay, setShowNextDay] = useState(false);
-  const previewing = showNextDay && nextDay !== null && !isLoading;
+  // Look-ahead slider position, in hours (0 = now). Deliberately NOT
+  // persisted: the view must always open on today's real numbers — a
+  // remembered preview would let projected values masquerade as current ones
+  // on the next open.
+  const [hoursAhead, setHoursAhead] = useState(0);
+  const previewing = hoursAhead > 0 && previewAt !== null && !isLoading;
 
-  // Everything below the toggle — strip, map, rows — renders from ONE active
-  // dataset, so the preview can never mix today's numbers with tomorrow's.
-  const active = previewing ? nextDay : { rows, targets, nextUp };
+  // Assembled once per slider position (cheap — pure math over data already
+  // in memory), so dragging re-renders smoothly.
+  const preview = useMemo(
+    () => (previewing && previewAt !== null ? previewAt(hoursAhead) : null),
+    [previewing, previewAt, hoursAhead]
+  );
+
+  // Everything below the slider — strip, map, rows — renders from ONE active
+  // dataset, so the preview can never mix now's numbers with future ones.
+  const active = preview ?? { rows, targets, nextUp };
 
   const visibleRows =
     collapsible && !showAll ? active.rows.slice(0, DEFAULT_ROW_CAP) : active.rows;
@@ -399,9 +409,10 @@ export function MuscleReadinessContent({
       <GoodTargetsStrip
         targets={active.targets}
         nextUp={active.nextUp ?? null}
-        previewing={previewing}
-        showToggle={nextDay !== null && !isLoading}
-        onToggleDay={() => setShowNextDay((v) => !v)}
+        hoursAhead={previewing ? hoursAhead : 0}
+        maxHours={PREVIEW_MAX_HOURS}
+        onHoursAheadChange={setHoursAhead}
+        showSlider={previewAt !== null && !isLoading}
       />
 
       {isLoading ? (
@@ -512,7 +523,7 @@ export function MuscleReadinessSheet({
   // against the same instant (and re-stamped on each fresh open).
   const [now] = useState(() => new Date());
 
-  const { rows, targets, nextUp, dailyGroupSets, nextDay, isLoading } = useMuscleReadiness({
+  const { rows, targets, nextUp, dailyGroupSets, previewAt, isLoading } = useMuscleReadiness({
     liveBlocks,
     liveSets,
     now,
@@ -529,7 +540,7 @@ export function MuscleReadinessSheet({
           targets={targets}
           nextUp={nextUp}
           dailyGroupSets={dailyGroupSets}
-          nextDay={nextDay}
+          previewAt={previewAt}
           isLoading={isLoading}
           collapsible
           wearableNotice={wearableRecovery.reason}

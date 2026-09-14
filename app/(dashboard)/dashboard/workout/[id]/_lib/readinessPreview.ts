@@ -1,7 +1,8 @@
 /**
- * readinessPreview — the "preview tomorrow" projection of the readiness rows:
- * the SAME row model as readiness.ts, one local day ahead. Pure, like its
- * sibling: no React, no store, no Supabase.
+ * readinessPreview — the "look ahead" projection of the readiness rows: the
+ * SAME row model as readiness.ts, evaluated N hours into the future (the
+ * strip's time slider). Pure, like its sibling: no React, no store, no
+ * Supabase.
  */
 
 import {
@@ -10,6 +11,7 @@ import {
   type RecoveryConfig,
   type RecoverySession,
 } from '@/services/muscleRecovery';
+import { localDaysBetween } from '@/lib/date/localDay';
 import { volumeZone } from '../../../_lib/weeklyVolume';
 import {
   projectRollingSets,
@@ -27,80 +29,86 @@ import {
 } from './readiness';
 
 /**
- * The same wall-clock time on the NEXT local calendar day. A calendar-day
- * move, deliberately not +24h — those differ by an hour across a DST change
- * and the volume projection buckets by local calendar day (see lib/clock).
+ * How far the preview slider reaches (3 days). Covers essentially every
+ * recovery window the heuristic produces, and up to three window steps of
+ * rolling-volume decay — well inside the projection horizon.
  */
-export function nextLocalDaySameTime(now: Date): Date {
-  return new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate() + 1,
-    now.getHours(),
-    now.getMinutes(),
-    now.getSeconds(),
-    now.getMilliseconds()
-  );
+export const PREVIEW_MAX_HOURS = 72;
+
+/** The instant `hoursAhead` hours from `now` — exact elapsed time, which is
+ *  what the hour-based recovery heuristic wants. Calendar-day semantics (for
+ *  the volume window) are derived from this instant via localDaysBetween, so
+ *  a DST change shifts the midnight crossing, never the elapsed hours. */
+export function futureInstant(now: Date, hoursAhead: number): Date {
+  return new Date(now.getTime() + hoursAhead * 3600_000);
 }
 
 /**
- * Project today's readiness rows one local day forward — the "preview
- * tomorrow" toggle's data. NOT a parallel model:
+ * Project today's readiness rows `hoursAhead` hours forward — the data behind
+ * the strip's time slider. NOT a parallel model:
  *
  *  - VOLUME is the existing rolling-decay projection (projectRollingSets over
- *    the same per-day buckets the forecast panel renders) at day +1, assuming
- *    nothing new is logged: today's oldest counted day ages out of the 7-day
- *    window. Coarse rows project from the capped group buckets, fine children
- *    from the per-head standard buckets — the same pairing as the live rows.
- *  - RECOVERY is the same pure heuristic re-evaluated at tomorrow's instant
- *    (computeMuscleRecovery takes an injected `now`); history is completed
- *    sessions only, all of which remain valid one day ahead.
+ *    the same per-day buckets the forecast panel renders), assuming nothing
+ *    new is logged. The day offset is how many LOCAL midnights the slider
+ *    position crosses (localDaysBetween), so within today the counts hold
+ *    steady and each crossed midnight ages the oldest counted day out of the
+ *    7-day window. Coarse rows project from the capped group buckets, fine
+ *    children from the per-head standard buckets — the same pairing as the
+ *    live rows.
+ *  - RECOVERY is the same pure heuristic re-evaluated at the future instant
+ *    (computeMuscleRecovery takes an injected `now`), so it advances by the
+ *    hour; history is completed sessions only, all of which remain valid
+ *    ahead of time.
  *
  * Zone, gap, score, lagging-children demotion and ordering all re-derive
  * through the shared rules, so the preview reads exactly like the live view.
+ * At `hoursAhead` 0 the volume reproduces today's row headers exactly
+ * (projection day 0 reconciles by construction).
  *
  * Deliberate divergences from the live rows:
  *  - Soreness overrides do NOT apply — they are same-day subjective reports
- *    ("still sore TODAY"); tomorrow the time model speaks for itself.
+ *    ("still sore TODAY"); ahead of now the time model speaks for itself.
  *  - `exercises` is emptied on rows and children: the drill-down amounts are
- *    today's window shares, and re-attributing tomorrow's decayed totals per
+ *    today's window shares, and re-attributing a future decayed total per
  *    exercise is data we don't compute — so the preview shows no breakdown
  *    rather than a wrong one (the list renders no detail panel for them).
  */
-export function buildNextDayPreviewRows(
+export function buildFutureReadinessRows(
   rows: ReadinessRow[],
   dailyGroupSets: DailyGroupSets,
   dailyStandardSets: DailyStandardSets,
   history: RecoverySession[],
   now: Date,
+  hoursAhead: number,
   config: RecoveryConfig = RECOVERY_CONFIG
 ): ReadinessRow[] {
-  const tomorrow = nextLocalDaySameTime(now);
-  // Rolling total at the end of tomorrow (rounded at emission like the row
-  // headers); an absent bucket means nothing credited in the window → 0.
-  const nextDaySets = (daily: readonly number[] | undefined): number =>
-    daily ? projectRollingSets(daily, 1)[1] : 0;
+  const future = futureInstant(now, hoursAhead);
+  const dayOffset = Math.max(0, localDaysBetween(now, future));
+  // Rolling total at the end of the target local day (rounded at emission
+  // like the row headers); an absent bucket means nothing in the window → 0.
+  const setsAt = (daily: readonly number[] | undefined): number =>
+    daily ? projectRollingSets(daily, dayOffset)[dayOffset] : 0;
 
   const preview = rows.map((row): ReadinessRow => {
-    const sets = nextDaySets(dailyGroupSets[row.muscle]);
+    const sets = setsAt(dailyGroupSets[row.muscle]);
     const zone = volumeZone(sets, row.band);
-    const recovery = coarseRecovery(row.muscle, history, tomorrow, config);
+    const recovery = coarseRecovery(row.muscle, history, future, config);
     const volumeGap = Math.max(0, row.band.mev - sets);
 
     const children: ReadinessChild[] = row.children.map((child) => {
-      const childSets = nextDaySets(dailyStandardSets[child.muscle]);
+      const childSets = setsAt(dailyStandardSets[child.muscle]);
       return {
         ...child,
         sets: childSets,
         zone: volumeZone(childSets, child.band),
         belowMev: childSets < child.band.mev,
         volumeGap: Math.max(0, child.band.mev - childSets),
-        recovery: computeMuscleRecovery(history, child.muscle, tomorrow, config),
+        recovery: computeMuscleRecovery(history, child.muscle, future, config),
         exercises: [],
       };
     });
 
-    // Same divergence rule as buildReadinessRows, over tomorrow's statuses.
+    // Same divergence rule as buildReadinessRows, over the future statuses.
     const autoExpand = children.some(
       (c) =>
         c.recovery.lastTrainedAt !== null &&

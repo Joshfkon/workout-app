@@ -21,7 +21,7 @@ export function TrainReadinessCard() {
   // Stamp the clock once so every muscle is evaluated against the same instant.
   const [now] = useState(() => new Date());
 
-  const { rows, targets, nextUp, dailyGroupSets, nextDay, isLoading } =
+  const { rows, targets, nextUp, dailyGroupSets, previewAt, isLoading } =
     useDashboardMuscleReadiness(now);
   const { state: wearableRecovery } = useWearableRecovery();
 
@@ -36,7 +36,7 @@ export function TrainReadinessCard() {
         targets={targets}
         nextUp={nextUp}
         dailyGroupSets={dailyGroupSets}
-        nextDay={nextDay}
+        previewAt={previewAt}
         isLoading={isLoading}
         collapsible
         loadingTestId="train-readiness-loading"

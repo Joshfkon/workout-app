@@ -1,6 +1,7 @@
 import {
-  buildNextDayPreviewRows,
-  nextLocalDaySameTime,
+  buildFutureReadinessRows,
+  futureInstant,
+  PREVIEW_MAX_HOURS,
 } from '../readinessPreview';
 import { buildReadinessRows, selectGoodTargets, type ReadinessRow } from '../readiness';
 import { computeMuscleRecovery } from '@/services/muscleRecovery';
@@ -8,7 +9,9 @@ import type { RecoverySession } from '@/services/muscleRecovery';
 import type { StandardMuscleGroup } from '@/types/schema';
 import type { MuscleVolumeStats } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 
-const NOW = new Date('2026-07-11T12:00:00.000Z');
+// LOCAL noon, away from day boundaries: +6h stays inside today and +24h
+// crosses exactly one local midnight, in whatever timezone the tests run.
+const NOW = new Date(2026, 6, 11, 12, 0);
 
 const hoursBefore = (base: Date, h: number) => new Date(base.getTime() - h * 3600 * 1000);
 
@@ -36,37 +39,50 @@ function rowFor(rows: ReadinessRow[], muscle: string): ReadinessRow {
   return row;
 }
 
-describe('nextLocalDaySameTime', () => {
-  it('is a calendar-day move preserving wall-clock time', () => {
-    const tomorrow = nextLocalDaySameTime(NOW);
-    expect(tomorrow.getHours()).toBe(NOW.getHours());
-    expect(tomorrow.getMinutes()).toBe(NOW.getMinutes());
-    // One local calendar day forward.
-    const dayMs = 24 * 3600 * 1000;
-    expect(
-      Math.round(
-        (new Date(tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate()).getTime() -
-          new Date(NOW.getFullYear(), NOW.getMonth(), NOW.getDate()).getTime()) /
-          dayMs
-      )
-    ).toBe(1);
+describe('futureInstant', () => {
+  it('is exact elapsed time in hours', () => {
+    expect(futureInstant(NOW, 6).getTime() - NOW.getTime()).toBe(6 * 3600 * 1000);
+    expect(futureInstant(NOW, 0).getTime()).toBe(NOW.getTime());
   });
 });
 
-describe('buildNextDayPreviewRows ("preview tomorrow")', () => {
-  it('ages the oldest counted day out of the rolling window and re-zones', () => {
-    // Biceps at MEV today (10 credited sets), ALL logged on the oldest day
-    // still in the window — tomorrow they age out entirely.
+describe('buildFutureReadinessRows (time slider)', () => {
+  // Biceps at MEV today (10 credited sets), ALL logged on the oldest day
+  // still in the window.
+  const OLDEST_DAY_BUCKETS = { biceps: [0, 0, 0, 0, 0, 0, 10] };
+
+  it('at 0 hours reproduces today\'s volume and recovery', () => {
+    const history = [session(hoursBefore(NOW, 30), 'quads', 8, 0)];
+    const rows = buildReadinessRows([stat('biceps', 10)], history, NOW);
+    const preview = buildFutureReadinessRows(rows, OLDEST_DAY_BUCKETS, {}, history, NOW, 0);
+    expect(rowFor(preview, 'biceps').sets).toBe(rowFor(rows, 'biceps').sets);
+    expect(rowFor(preview, 'quads').recovery.status).toBe(
+      rowFor(rows, 'quads').recovery.status
+    );
+  });
+
+  it('within today (no midnight crossed) volume holds while recovery advances', () => {
+    const history = [session(hoursBefore(NOW, 30), 'quads', 8, 0)];
+    const rows = buildReadinessRows([stat('biceps', 10)], history, NOW);
+    const today = rowFor(rows, 'quads').recovery;
+
+    const preview = buildFutureReadinessRows(rows, OLDEST_DAY_BUCKETS, {}, history, NOW, 6);
+    // NOW is local noon, so +6h is the same local day: nothing ages out even
+    // though every biceps set sits on the window's last counted day.
+    expect(rowFor(preview, 'biceps').sets).toBe(10);
+    // Recovery is hour-granular: 6h closer to ready.
+    expect(rowFor(preview, 'quads').recovery.hoursUntilReady).toBeCloseTo(
+      Math.max(0, today.hoursUntilReady - 6),
+      6
+    );
+  });
+
+  it('each crossed local midnight ages the oldest counted day out of the window', () => {
     const rows = buildReadinessRows([stat('biceps', 10)], [], NOW);
     expect(rowFor(rows, 'biceps').volumeGap).toBe(0);
 
-    const preview = buildNextDayPreviewRows(
-      rows,
-      { biceps: [0, 0, 0, 0, 0, 0, 10] },
-      {},
-      [],
-      NOW
-    );
+    // +24h from local noon crosses exactly one midnight → the oldest bucket drops.
+    const preview = buildFutureReadinessRows(rows, OLDEST_DAY_BUCKETS, {}, [], NOW, 24);
     const biceps = rowFor(preview, 'biceps');
     expect(biceps.sets).toBe(0);
     expect(biceps.zone).toBe('below_mev');
@@ -75,51 +91,44 @@ describe('buildNextDayPreviewRows ("preview tomorrow")', () => {
     expect(biceps.volumeStatus).toBe('low');
   });
 
-  it('keeps volume that is still inside tomorrow\'s window', () => {
+  it('steps down day by day across the slider range', () => {
+    // 4 sets three days ago, 6 sets on the oldest day.
     const rows = buildReadinessRows([stat('biceps', 10)], [], NOW);
-    const preview = buildNextDayPreviewRows(
-      rows,
-      { biceps: [10, 0, 0, 0, 0, 0, 0] }, // all logged today
-      {},
-      [],
-      NOW
-    );
-    expect(rowFor(preview, 'biceps').sets).toBe(10);
-    expect(rowFor(preview, 'biceps').zone).toBe('in_zone');
+    const daily = { biceps: [0, 0, 0, 4, 0, 0, 6] };
+    const at = (h: number) =>
+      rowFor(buildFutureReadinessRows(rows, daily, {}, [], NOW, h), 'biceps').sets;
+    expect(at(0)).toBe(10);
+    expect(at(24)).toBe(4); // oldest day gone
+    expect(at(48)).toBe(4);
+    expect(at(PREVIEW_MAX_HOURS)).toBe(4); // 3-days-ago bucket drops on day +4
   });
 
-  it('re-evaluates recovery at tomorrow\'s instant via the same heuristic', () => {
-    // Quads hammered 30h ago → Fatigued today; tomorrow the SAME pure
-    // heuristic decides, one day later.
+  it('re-evaluates recovery at the future instant via the same heuristic', () => {
     const history = [session(hoursBefore(NOW, 30), 'quads', 8, 0)];
     const rows = buildReadinessRows([], history, NOW);
-    const today = rowFor(rows, 'quads').recovery;
-    expect(today.status).toBe('fatigued');
+    expect(rowFor(rows, 'quads').recovery.status).toBe('fatigued');
 
-    const preview = buildNextDayPreviewRows(rows, {}, {}, history, NOW);
-    const next = rowFor(preview, 'quads').recovery;
-    expect(next.status).toBe(
-      computeMuscleRecovery(history, 'quads', nextLocalDaySameTime(NOW)).status
+    const preview = buildFutureReadinessRows(rows, {}, {}, history, NOW, 30);
+    expect(rowFor(preview, 'quads').recovery.status).toBe(
+      computeMuscleRecovery(history, 'quads', futureInstant(NOW, 30)).status
     );
-    // Strictly closer to ready than today (whatever the window length).
-    expect(next.hoursUntilReady).toBeLessThan(today.hoursUntilReady);
   });
 
-  it('does NOT carry today\'s soreness overrides into tomorrow', () => {
+  it('does NOT carry today\'s soreness overrides forward', () => {
     // Fresh by the time model, forced Fatigued today by the "still sore" chip.
     const history = [session(hoursBefore(NOW, 120), 'hamstrings', 4, 2)];
     const overrides = new Set<StandardMuscleGroup>(['hamstrings']);
     const rows = buildReadinessRows([], history, NOW, undefined, undefined, overrides);
     expect(rowFor(rows, 'hamstrings').recovery.status).toBe('fatigued');
 
-    const preview = buildNextDayPreviewRows(rows, {}, {}, history, NOW);
+    const preview = buildFutureReadinessRows(rows, {}, {}, history, NOW, 24);
     expect(rowFor(preview, 'hamstrings').recovery.status).toBe('fresh');
   });
 
   it('projects fine children from the per-head buckets and recomputes laggingChildren', () => {
-    // Glutes group in zone today AND tomorrow (16 sets logged today); the
+    // Glutes group in zone today AND at +24h (16 sets logged today); the
     // reachable glute_med child is in zone today (5 ≥ MEV 2) but ALL its sets
-    // age out tomorrow → the child lags and demotes the parent.
+    // age out after one midnight → the child lags and demotes the parent.
     const reachable = new Set<StandardMuscleGroup>(['glutes', 'glute_med']);
     const rows = buildReadinessRows(
       [stat('glutes', 16), stat('glute_med', 5)],
@@ -129,12 +138,13 @@ describe('buildNextDayPreviewRows ("preview tomorrow")', () => {
     );
     expect(rowFor(rows, 'glutes').laggingChildren).toBe(false);
 
-    const preview = buildNextDayPreviewRows(
+    const preview = buildFutureReadinessRows(
       rows,
       { glutes: [16, 0, 0, 0, 0, 0, 0] },
       { glute_med: [0, 0, 0, 0, 0, 0, 5] },
       [],
-      NOW
+      NOW,
+      24
     );
     const glutes = rowFor(preview, 'glutes');
     expect(glutes.zone).toBe('in_zone');
@@ -144,7 +154,7 @@ describe('buildNextDayPreviewRows ("preview tomorrow")', () => {
     expect(glutes.laggingChildren).toBe(true);
   });
 
-  it('empties the per-exercise drill-down (today\'s amounts are not tomorrow\'s)', () => {
+  it('empties the per-exercise drill-down (today\'s amounts are not the future\'s)', () => {
     const reachable = new Set<StandardMuscleGroup>(['glutes', 'glute_med']);
     const rows = buildReadinessRows(
       [stat('glutes', 16), stat('glute_med', 5)],
@@ -152,24 +162,25 @@ describe('buildNextDayPreviewRows ("preview tomorrow")', () => {
       NOW,
       reachable
     );
-    const preview = buildNextDayPreviewRows(rows, { glutes: [16, 0, 0, 0, 0, 0, 0] }, {}, [], NOW);
+    const preview = buildFutureReadinessRows(
+      rows,
+      { glutes: [16, 0, 0, 0, 0, 0, 0] },
+      {},
+      [],
+      NOW,
+      24
+    );
     expect(preview.every((r) => r.exercises.length === 0)).toBe(true);
     expect(preview.every((r) => r.children.every((c) => c.exercises.length === 0))).toBe(true);
   });
 
-  it('re-sorts by tomorrow\'s actionability and feeds selectGoodTargets', () => {
-    // Biceps: at MEV today (gap 0), everything aging out tomorrow (gap 10),
-    // Fresh → tomorrow it becomes a top target it wasn't today.
+  it('re-sorts by future actionability and feeds selectGoodTargets', () => {
+    // Biceps: at MEV today (gap 0), everything aging out after one midnight
+    // (gap 10), Fresh → ahead it becomes a top target it isn't now.
     const rows = buildReadinessRows([stat('biceps', 10)], [], NOW);
     expect(selectGoodTargets(rows).targets.every((t) => t.muscle !== 'biceps')).toBe(true);
 
-    const preview = buildNextDayPreviewRows(
-      rows,
-      { biceps: [0, 0, 0, 0, 0, 0, 10] },
-      {},
-      [],
-      NOW
-    );
+    const preview = buildFutureReadinessRows(rows, OLDEST_DAY_BUCKETS, {}, [], NOW, 24);
     expect(rowFor(preview, 'biceps').score).toBeGreaterThan(0);
     const { targets } = selectGoodTargets(preview);
     expect(targets.some((t) => t.muscle === 'biceps')).toBe(true);
