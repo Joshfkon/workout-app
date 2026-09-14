@@ -29,6 +29,7 @@ import { useRecoveryMultipliers } from '@/hooks/useRecoveryMultipliers';
 import { stabilizersForExerciseName } from '@/services/shared/stabilizerTags';
 import {
   computeDailyGroupSets,
+  computeDailyStandardSets,
   type DailyGroupSets,
   type DatedVolumeBlock,
 } from '@/services/volumeProjection';
@@ -41,6 +42,7 @@ import {
   type ReadinessTarget,
   type NextReadyTarget,
 } from '@/app/(dashboard)/dashboard/workout/[id]/_lib/readiness';
+import { buildNextDayPreviewRows } from '@/app/(dashboard)/dashboard/workout/[id]/_lib/readinessPreview';
 
 /**
  * useMuscleReadiness — data hook for the in-workout Muscle Readiness sheet.
@@ -125,6 +127,17 @@ export interface UseMuscleReadinessArgs {
   sorenessOverrides?: ReadonlySet<StandardMuscleGroup>;
 }
 
+/**
+ * The "preview tomorrow" dataset: the same row/target model projected one
+ * local day forward (volume decayed by the rolling window, recovery advanced
+ * a day, nothing new assumed logged) — see buildNextDayPreviewRows.
+ */
+export interface NextDayPreview {
+  rows: ReadinessRow[];
+  targets: ReadinessTarget[];
+  nextUp: NextReadyTarget | null;
+}
+
 export interface UseMuscleReadinessResult {
   rows: ReadinessRow[];
   targets: ReadinessTarget[];
@@ -136,6 +149,8 @@ export interface UseMuscleReadinessResult {
    * each expanded row.
    */
   dailyGroupSets: DailyGroupSets;
+  /** Rows/targets projected one local day ahead (the preview toggle's data). */
+  nextDay: NextDayPreview;
   isLoading: boolean;
   error: string | null;
   /** Re-run the history fetch (error retry). */
@@ -332,11 +347,10 @@ export function useMuscleReadiness({
     return { stats: volumeAccumulatorToStats(acc), reachable: reachableSet };
   }, [historyRows, liveBlocks, liveWorkingSetsByBlock]);
 
-  // Per-day credited group sets for the rolling decay forecast — the same
-  // history + live blocks the stats count, dated: history by its session's
-  // completed_at, live sets as today. Same canonical per-set credit, so the
-  // forecast's day-0 value reconciles with the row headers.
-  const dailyGroupSets = useMemo((): DailyGroupSets => {
+  // Dated blocks for the per-day volume bucketing — the same history + live
+  // blocks the stats count: history by its session's completed_at, live sets
+  // as today. Feeds both the rolling decay forecast and the next-day preview.
+  const datedBlocks = useMemo((): DatedVolumeBlock[] => {
     const dated: DatedVolumeBlock[] = [];
     for (const s of historyRows) {
       for (const ex of s.exercises) {
@@ -358,8 +372,16 @@ export function useMuscleReadiness({
         workingSets: liveWorkingSets.length,
       });
     }
-    return computeDailyGroupSets(dated, now);
+    return dated;
   }, [historyRows, liveBlocks, liveWorkingSetsByBlock, now]);
+
+  // Per-day credited group sets for the rolling decay forecast. Same canonical
+  // per-set credit as the rows, so the forecast's day-0 value reconciles with
+  // the row headers.
+  const dailyGroupSets = useMemo(
+    (): DailyGroupSets => computeDailyGroupSets(datedBlocks, now),
+    [datedBlocks, now]
+  );
 
   // Recovery history is COMPLETED sessions only — the live session is excluded
   // on purpose (see the module doc and `RecoverySession`). It joins this feed
@@ -420,11 +442,29 @@ export function useMuscleReadiness({
 
   const { targets, nextUp } = useMemo(() => selectGoodTargets(rows, 3), [rows]);
 
+  // The "preview tomorrow" dataset: same rows, one local day ahead — rolling
+  // volume decayed via the shared projection, recovery re-evaluated at
+  // tomorrow's instant. Soreness overrides are deliberately NOT carried over
+  // (same-day subjective reports — see buildNextDayPreviewRows).
+  const nextDay = useMemo((): NextDayPreview => {
+    const previewRows = buildNextDayPreviewRows(
+      rows,
+      dailyGroupSets,
+      computeDailyStandardSets(datedBlocks, now),
+      recoveryHistory,
+      now,
+      recoveryConfig
+    );
+    const picks = selectGoodTargets(previewRows, 3);
+    return { rows: previewRows, targets: picks.targets, nextUp: picks.nextUp };
+  }, [rows, dailyGroupSets, datedBlocks, recoveryHistory, now, recoveryConfig]);
+
   return {
     rows,
     targets,
     nextUp,
     dailyGroupSets,
+    nextDay,
     isLoading,
     error,
     refetch,

@@ -10,6 +10,7 @@
 
 import {
   computeDailyGroupSets,
+  computeDailyStandardSets,
   projectRollingSets,
   firstDayBelow,
   ROLLING_WINDOW_DAYS,
@@ -96,6 +97,46 @@ describe('computeDailyGroupSets', () => {
       NOW
     );
     expect(daily.biceps).toEqual([0, 2, 0, 0, 0, 0, 0]);
+  });
+});
+
+describe('computeDailyStandardSets', () => {
+  it('buckets per-head credited sets by local day, indexed by days ago', () => {
+    const daily = computeDailyStandardSets(
+      [block(0, 'biceps', [], 3), block(3, 'biceps', [], 2)],
+      NOW
+    );
+    expect(daily.biceps).toEqual([3, 0, 0, 2, 0, 0, 0]);
+  });
+
+  it('keeps per-head overlap UNCAPPED, unlike the group buckets', () => {
+    // One incline-press set legitimately feeds chest_upper 1.0 AND
+    // chest_lower 0.5 — the per-head counters overlap by design (the cap is a
+    // GROUP concept; see computeDailyGroupSets' cap test above).
+    const daily = computeDailyStandardSets(
+      [block(0, 'chest_upper', ['chest_lower'], 4)],
+      NOW
+    );
+    expect(daily.chest_upper?.[0]).toBe(4);
+    expect(daily.chest_lower?.[0]).toBe(2);
+  });
+
+  it('splits a legacy coarse primary across its standard heads', () => {
+    const daily = computeDailyStandardSets([block(1, 'chest', [], 4)], NOW);
+    expect(daily.chest_upper?.[1]).toBe(2);
+    expect(daily.chest_lower?.[1]).toBe(2);
+  });
+
+  it('applies the same window/date guards as the group bucketing', () => {
+    const daily = computeDailyStandardSets(
+      [
+        block(ROLLING_WINDOW_DAYS, 'biceps', [], 3), // aged out
+        block(0, null, [], 3), // no primary tag
+        block(0, 'biceps', [], 0), // no working sets
+      ],
+      NOW
+    );
+    expect(daily.biceps).toBeUndefined();
   });
 });
 

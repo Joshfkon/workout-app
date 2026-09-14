@@ -35,8 +35,10 @@ import {
 
 export type VolumeStatus = 'low' | 'optimal' | 'high';
 
-/** How "trainable today" each recovery bucket is, for the actionability score. */
-const RECOVERED_FACTOR: Record<MuscleRecoveryResult['status'], number> = {
+/** How "trainable today" each recovery bucket is, for the actionability score.
+ *  Exported for the next-day preview (readinessPreview), which re-derives the
+ *  score over tomorrow's values with the same factor. */
+export const RECOVERED_FACTOR: Record<MuscleRecoveryResult['status'], number> = {
   fresh: 1,
   recovering: 0.6,
   fatigued: 0,
@@ -213,14 +215,17 @@ export function applyFrozenOrder(desired: string[], frozen: string[]): string[] 
   return [...head, ...desired.filter((k) => !inFrozen.has(k))];
 }
 
-function volumeStatusForZone(zone: VolumeZone): VolumeStatus {
+/** Exported for the next-day preview (readinessPreview) — same tri-state rule. */
+export function volumeStatusForZone(zone: VolumeZone): VolumeStatus {
   if (zone === 'below_mev') return 'low';
   if (zone === 'over_mrv') return 'high';
   return 'optimal';
 }
 
-/** Recovery for a coarse group = its least-recovered child (fatigued wins). */
-const RECOVERY_RANK: Record<MuscleRecoveryResult['status'], number> = {
+/** Recovery for a coarse group = its least-recovered child (fatigued wins).
+ *  Exported for the next-day preview (readinessPreview), which applies the
+ *  same divergence auto-expand rule over tomorrow's statuses. */
+export const RECOVERY_RANK: Record<MuscleRecoveryResult['status'], number> = {
   fatigued: 2,
   recovering: 1,
   fresh: 0,

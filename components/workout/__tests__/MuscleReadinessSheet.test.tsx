@@ -315,6 +315,47 @@ describe('MuscleReadinessSheet', () => {
     expect(screen.getByTestId('readiness-map-mode-volume')).toHaveAttribute('aria-pressed', 'true');
   });
 
+  it('the day toggle previews tomorrow\'s projected volume and flips back to today', async () => {
+    // Add a biceps session exactly 6 local days ago — the oldest day still in
+    // the rolling 7-day window, so its volume ages out entirely tomorrow.
+    mockBlocks = [
+      ...mockBlocks,
+      {
+        exercises: { id: 'ex-curl', name: 'Curl', primary_muscle: 'biceps', secondary_muscles: [] },
+        workout_sessions: { id: 's-curl', completed_at: hoursAgo(6 * 24), user_id: 'u1', state: 'completed' },
+        set_logs: Array.from({ length: 4 }, (_, i) => ({ id: `c${i}`, is_warmup: false, rpe: 8, feedback: { repsInTank: 2 } })),
+      },
+    ];
+
+    render(
+      <MuscleReadinessSheet isOpen onClose={jest.fn()} liveBlocks={[]} liveSets={[]} />,
+      { wrapper }
+    );
+
+    await waitFor(() => expect(screen.getByTestId('readiness-show-more')).toBeInTheDocument());
+    await userEvent.click(screen.getByTestId('readiness-show-more'));
+
+    // Today: the 6-day-old curls still count.
+    expect(screen.getByText(/good targets today/i)).toBeInTheDocument();
+    expect(screen.getByTestId('readiness-sets-biceps')).toHaveTextContent('4');
+    expect(screen.queryByTestId('readiness-preview-note')).not.toBeInTheDocument();
+
+    // Preview tomorrow: those sets have aged out of the rolling window.
+    await userEvent.click(screen.getByTestId('readiness-day-toggle'));
+    expect(screen.getByText(/good targets tomorrow/i)).toBeInTheDocument();
+    expect(screen.getByTestId('readiness-preview-note')).toBeInTheDocument();
+    expect(screen.getByTestId('readiness-sets-biceps')).toHaveTextContent('0');
+    // Quads trained 30h ago stay inside tomorrow's window — only the aged-out
+    // day drops, the preview isn't just zeroing everything.
+    expect(screen.getByTestId('readiness-sets-quads')).toHaveTextContent('8');
+
+    // And back to today's real numbers.
+    await userEvent.click(screen.getByTestId('readiness-day-toggle'));
+    expect(screen.getByText(/good targets today/i)).toBeInTheDocument();
+    expect(screen.queryByTestId('readiness-preview-note')).not.toBeInTheDocument();
+    expect(screen.getByTestId('readiness-sets-biceps')).toHaveTextContent('4');
+  });
+
   it('remembers the expanded state across re-mounts within the session', async () => {
     const { unmount } = render(
       <MuscleReadinessSheet isOpen onClose={jest.fn()} liveBlocks={[]} liveSets={[]} />,
