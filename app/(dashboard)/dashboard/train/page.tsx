@@ -86,6 +86,7 @@ import {
 import { BottomSheet } from '@/components/workout/BottomSheet';
 import { SessionExerciseList } from '@/components/mesocycle';
 import { CardioTracker } from '@/components/dashboard/CardioTracker';
+import { NonGymActivityLogger } from '@/components/dashboard/NonGymActivityLogger';
 import { SuggestedWorkoutSheet } from '@/components/workout/SuggestedWorkoutSheet';
 import { Modal } from '@/components/ui/Modal';
 import {
@@ -979,6 +980,16 @@ export default function TrainPage() {
         <div className="rounded-2xl p-4 bg-surface-900 border border-surface-800">
           <h3 className="text-[15px] font-semibold text-surface-100 mb-3">Cardio</h3>
           <CardioTracker userId={userId} />
+        </div>
+      )}
+
+      {/* Non-gym activity log — rides, runs, sports. Feeds the recovery model
+          (synthetic recovery-debt sessions), never weekly volume, so the
+          readiness card above reacts to a hard Sunday ride. */}
+      {userId && (
+        <div className="rounded-2xl p-4 bg-surface-900 border border-surface-800">
+          <h3 className="text-[15px] font-semibold text-surface-100 mb-3">Other activity</h3>
+          <NonGymActivityLogger userId={userId} />
         </div>
       )}
 

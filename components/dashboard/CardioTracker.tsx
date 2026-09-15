@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react';
 import { Button, Input, Select } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { getLocalDateString } from '@/lib/utils';
+import { useInvalidateNonGymActivities } from '@/hooks/useNonGymActivities';
 import type { CardioModality } from '@/lib/nutrition/macroCalculator';
 
 interface CardioTrackerProps {
@@ -68,6 +69,10 @@ export const CardioTracker = memo(function CardioTracker({ userId, prescription 
   const supabaseRef = useRef(createUntypedClient());
   const supabase = supabaseRef.current;
 
+  // cardio_log rows feed the recovery model too (bridged as light non-gym
+  // activity — see services/nonGymActivity), so writes must refresh that feed.
+  const invalidateActivityFatigue = useInvalidateNonGymActivities();
+
   const loadTodayData = useCallback(async () => {
     const today = getLocalDateString();
 
@@ -113,6 +118,7 @@ export const CardioTracker = memo(function CardioTracker({ userId, prescription 
 
       // Reload data
       await loadTodayData();
+      await invalidateActivityFatigue();
       setShowLogForm(false);
       setMinutes('');
       setNotes('');
@@ -122,7 +128,7 @@ export const CardioTracker = memo(function CardioTracker({ userId, prescription 
     } finally {
       setIsLogging(false);
     }
-  }, [minutes, modality, notes, prescription?.modality, supabase, userId, loadTodayData]);
+  }, [minutes, modality, notes, prescription?.modality, supabase, userId, loadTodayData, invalidateActivityFatigue]);
 
   const deleteLog = useCallback(async (id: string) => {
     const { error } = await supabase
@@ -132,8 +138,9 @@ export const CardioTracker = memo(function CardioTracker({ userId, prescription 
 
     if (!error) {
       await loadTodayData();
+      await invalidateActivityFatigue();
     }
-  }, [supabase, loadTodayData]);
+  }, [supabase, loadTodayData, invalidateActivityFatigue]);
 
   const handleMinutesChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setMinutes(e.target.value);
