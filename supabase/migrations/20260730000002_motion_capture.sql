@@ -25,7 +25,7 @@ COMMENT ON COLUMN users.motion_capture_raw_retention IS
 -- One physical machine + seat + phone-mount position. Changing seat height
 -- or mount position invalidates the calibration (new row required).
 CREATE TABLE machine_calibrations (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   exercise_id UUID NOT NULL REFERENCES exercises(id) ON DELETE CASCADE,
 
