@@ -20,8 +20,9 @@
 
 import { now as clockNow } from '@/lib/clock';
 import { localDaysBetween } from '@/lib/date/localDay';
-import { perSetGroupCredits } from '@/services/shared/volumeCredit';
+import { perSetCredits, perSetGroupCredits } from '@/services/shared/volumeCredit';
 import type { CoarseMuscle } from '@/services/volumeBands';
+import type { StandardMuscleGroup } from '@/types/schema';
 
 /** Window length of the rolling weekly-volume count (trailing local days,
  *  including today) — must match WEEKLY_VOLUME_WINDOW_DAYS in the shared
@@ -58,6 +59,36 @@ const ROUNDING_EPSILON = 1e-9;
 const round1 = (value: number): number => Math.round((value + ROUNDING_EPSILON) * 10) / 10;
 
 /**
+ * Credited sets per local day, keyed by STANDARD muscle. Same indexing as
+ * DailyGroupSets. Per-head counters are UNCAPPED and may legitimately overlap
+ * (one incline-press set feeds chest_upper 1.0 AND chest_lower 0.5) — exactly
+ * like the fine-child rows they project, and therefore NOT summable into a
+ * group total (that's what the capped DailyGroupSets is for).
+ */
+export type DailyStandardSets = Partial<Record<StandardMuscleGroup, number[]>>;
+
+/** Shared bucketing skeleton: date guards + days-ago indexing, credits injected. */
+function bucketDailySets<K extends string>(
+  blocks: readonly DatedVolumeBlock[],
+  now: Date,
+  creditsFor: (block: DatedVolumeBlock) => { key: K; credit: number }[]
+): Partial<Record<K, number[]>> {
+  const out: Partial<Record<K, number[]>> = {};
+  for (const block of blocks) {
+    if (!block.completedAt || !block.primaryMuscle || block.workingSets <= 0) continue;
+    const completed = new Date(block.completedAt);
+    if (Number.isNaN(completed.getTime())) continue;
+    const daysAgo = localDaysBetween(completed, now);
+    if (daysAgo < 0 || daysAgo >= ROLLING_WINDOW_DAYS) continue;
+    for (const { key, credit } of creditsFor(block)) {
+      const days = out[key] ?? (out[key] = new Array<number>(ROLLING_WINDOW_DAYS).fill(0));
+      days[daysAgo] += block.workingSets * credit;
+    }
+  }
+  return out;
+}
+
+/**
  * Bucket dated blocks into per-day credited group sets. Uses the SAME capped
  * per-set group credit as the coarse row totals, so summing a muscle's daily
  * buckets reproduces its row header (every set of a block carries the same
@@ -68,22 +99,30 @@ export function computeDailyGroupSets(
   blocks: readonly DatedVolumeBlock[],
   now: Date = clockNow()
 ): DailyGroupSets {
-  const out: DailyGroupSets = {};
-  for (const block of blocks) {
-    if (!block.completedAt || !block.primaryMuscle || block.workingSets <= 0) continue;
-    const completed = new Date(block.completedAt);
-    if (Number.isNaN(completed.getTime())) continue;
-    const daysAgo = localDaysBetween(completed, now);
-    if (daysAgo < 0 || daysAgo >= ROLLING_WINDOW_DAYS) continue;
-    for (const { group, credit } of perSetGroupCredits(
-      block.primaryMuscle,
-      block.secondaryMuscles
-    )) {
-      const days = out[group] ?? (out[group] = new Array<number>(ROLLING_WINDOW_DAYS).fill(0));
-      days[daysAgo] += block.workingSets * credit;
-    }
-  }
-  return out;
+  return bucketDailySets(blocks, now, (block) =>
+    perSetGroupCredits(block.primaryMuscle!, block.secondaryMuscles).map(
+      ({ group, credit }) => ({ key: group, credit })
+    )
+  );
+}
+
+/**
+ * Bucket dated blocks into per-day credited sets per STANDARD muscle — the
+ * per-head (uncapped, overlapping) counterpart of computeDailyGroupSets, via
+ * the same canonical per-set credits the fine-child rows are counted with
+ * (perSetCredits: weighted primary split, 0.5 secondary). Feeds the next-day
+ * volume preview's child rows, so a projected child reconciles with its own
+ * row header at day 0 the way the group buckets reconcile with the coarse one.
+ */
+export function computeDailyStandardSets(
+  blocks: readonly DatedVolumeBlock[],
+  now: Date = clockNow()
+): DailyStandardSets {
+  return bucketDailySets(blocks, now, (block) =>
+    perSetCredits(block.primaryMuscle!, block.secondaryMuscles).map(
+      ({ muscle, credit }) => ({ key: muscle, credit })
+    )
+  );
 }
 
 /**

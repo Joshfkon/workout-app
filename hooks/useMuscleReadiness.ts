@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { useUserStore } from '@/stores';
@@ -29,6 +29,7 @@ import { useRecoveryMultipliers } from '@/hooks/useRecoveryMultipliers';
 import { stabilizersForExerciseName } from '@/services/shared/stabilizerTags';
 import {
   computeDailyGroupSets,
+  computeDailyStandardSets,
   type DailyGroupSets,
   type DatedVolumeBlock,
 } from '@/services/volumeProjection';
@@ -41,6 +42,7 @@ import {
   type ReadinessTarget,
   type NextReadyTarget,
 } from '@/app/(dashboard)/dashboard/workout/[id]/_lib/readiness';
+import { buildFutureReadinessRows } from '@/app/(dashboard)/dashboard/workout/[id]/_lib/readinessPreview';
 
 /**
  * useMuscleReadiness — data hook for the in-workout Muscle Readiness sheet.
@@ -125,6 +127,18 @@ export interface UseMuscleReadinessArgs {
   sorenessOverrides?: ReadonlySet<StandardMuscleGroup>;
 }
 
+/**
+ * A "look ahead" dataset: the same row/target model projected N hours forward
+ * (volume decayed by the rolling window at each crossed local midnight,
+ * recovery advanced by the hour, nothing new assumed logged) — see
+ * buildFutureReadinessRows.
+ */
+export interface ReadinessPreview {
+  rows: ReadinessRow[];
+  targets: ReadinessTarget[];
+  nextUp: NextReadyTarget | null;
+}
+
 export interface UseMuscleReadinessResult {
   rows: ReadinessRow[];
   targets: ReadinessTarget[];
@@ -136,6 +150,12 @@ export interface UseMuscleReadinessResult {
    * each expanded row.
    */
   dailyGroupSets: DailyGroupSets;
+  /**
+   * Build the rows/targets as they would read `hoursAhead` hours from now —
+   * the time slider's data source. Stable identity across renders for a given
+   * dataset; the caller memoizes per slider position.
+   */
+  previewAt: (hoursAhead: number) => ReadinessPreview;
   isLoading: boolean;
   error: string | null;
   /** Re-run the history fetch (error retry). */
@@ -332,11 +352,10 @@ export function useMuscleReadiness({
     return { stats: volumeAccumulatorToStats(acc), reachable: reachableSet };
   }, [historyRows, liveBlocks, liveWorkingSetsByBlock]);
 
-  // Per-day credited group sets for the rolling decay forecast — the same
-  // history + live blocks the stats count, dated: history by its session's
-  // completed_at, live sets as today. Same canonical per-set credit, so the
-  // forecast's day-0 value reconciles with the row headers.
-  const dailyGroupSets = useMemo((): DailyGroupSets => {
+  // Dated blocks for the per-day volume bucketing — the same history + live
+  // blocks the stats count: history by its session's completed_at, live sets
+  // as today. Feeds both the rolling decay forecast and the next-day preview.
+  const datedBlocks = useMemo((): DatedVolumeBlock[] => {
     const dated: DatedVolumeBlock[] = [];
     for (const s of historyRows) {
       for (const ex of s.exercises) {
@@ -358,8 +377,16 @@ export function useMuscleReadiness({
         workingSets: liveWorkingSets.length,
       });
     }
-    return computeDailyGroupSets(dated, now);
+    return dated;
   }, [historyRows, liveBlocks, liveWorkingSetsByBlock, now]);
+
+  // Per-day credited group sets for the rolling decay forecast. Same canonical
+  // per-set credit as the rows, so the forecast's day-0 value reconciles with
+  // the row headers.
+  const dailyGroupSets = useMemo(
+    (): DailyGroupSets => computeDailyGroupSets(datedBlocks, now),
+    [datedBlocks, now]
+  );
 
   // Recovery history is COMPLETED sessions only — the live session is excluded
   // on purpose (see the module doc and `RecoverySession`). It joins this feed
@@ -420,11 +447,42 @@ export function useMuscleReadiness({
 
   const { targets, nextUp } = useMemo(() => selectGoodTargets(rows, 3), [rows]);
 
+  // Per-head (uncapped) buckets for the preview's fine-child projection —
+  // same dated blocks, same canonical per-set credits as the child rows.
+  const dailyStandardSets = useMemo(
+    () => computeDailyStandardSets(datedBlocks, now),
+    [datedBlocks, now]
+  );
+
+  // The time slider's data source: same rows, N hours ahead — rolling volume
+  // decayed via the shared projection at each crossed local midnight, recovery
+  // re-evaluated at the future instant. Soreness overrides are deliberately
+  // NOT carried forward (same-day subjective reports — see
+  // buildFutureReadinessRows). Cheap enough to run per slider step; the
+  // consumer memoizes per position.
+  const previewAt = useCallback(
+    (hoursAhead: number): ReadinessPreview => {
+      const previewRows = buildFutureReadinessRows(
+        rows,
+        dailyGroupSets,
+        dailyStandardSets,
+        recoveryHistory,
+        now,
+        hoursAhead,
+        recoveryConfig
+      );
+      const picks = selectGoodTargets(previewRows, 3);
+      return { rows: previewRows, targets: picks.targets, nextUp: picks.nextUp };
+    },
+    [rows, dailyGroupSets, dailyStandardSets, recoveryHistory, now, recoveryConfig]
+  );
+
   return {
     rows,
     targets,
     nextUp,
     dailyGroupSets,
+    previewAt,
     isLoading,
     error,
     refetch,

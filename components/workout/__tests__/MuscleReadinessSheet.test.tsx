@@ -10,7 +10,7 @@
  *  - a Fresh/under-volume muscle sorts above a Fatigued/under-volume one.
  */
 
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
@@ -313,6 +313,53 @@ describe('MuscleReadinessSheet', () => {
     );
     await waitFor(() => expect(screen.getByTestId('readiness-map')).toBeInTheDocument());
     expect(screen.getByTestId('readiness-map-mode-volume')).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('the time slider previews future volume/recovery and resets back to now', async () => {
+    // Add a biceps session exactly 6 local days ago — the oldest day still in
+    // the rolling 7-day window, so its volume ages out after one midnight.
+    mockBlocks = [
+      ...mockBlocks,
+      {
+        exercises: { id: 'ex-curl', name: 'Curl', primary_muscle: 'biceps', secondary_muscles: [] },
+        workout_sessions: { id: 's-curl', completed_at: hoursAgo(6 * 24), user_id: 'u1', state: 'completed' },
+        set_logs: Array.from({ length: 4 }, (_, i) => ({ id: `c${i}`, is_warmup: false, rpe: 8, feedback: { repsInTank: 2 } })),
+      },
+    ];
+
+    render(
+      <MuscleReadinessSheet isOpen onClose={jest.fn()} liveBlocks={[]} liveSets={[]} />,
+      { wrapper }
+    );
+
+    await waitFor(() => expect(screen.getByTestId('readiness-show-more')).toBeInTheDocument());
+    await userEvent.click(screen.getByTestId('readiness-show-more'));
+
+    // At rest: today's numbers, the 6-day-old curls still count.
+    expect(screen.getByText(/good targets today/i)).toBeInTheDocument();
+    expect(screen.getByTestId('readiness-sets-biceps')).toHaveTextContent('4');
+    expect(screen.queryByTestId('readiness-preview-note')).not.toBeInTheDocument();
+
+    // Drag to +24h: one local midnight crossed → those sets have aged out.
+    fireEvent.change(screen.getByTestId('readiness-time-slider'), { target: { value: '24' } });
+    expect(screen.getByText(/good targets in 1d/i)).toBeInTheDocument();
+    expect(screen.getByTestId('readiness-preview-note')).toBeInTheDocument();
+    expect(screen.getByTestId('readiness-sets-biceps')).toHaveTextContent('0');
+    // Quads trained 30h ago stay inside that window — only the aged-out day
+    // drops, the preview isn't just zeroing everything.
+    expect(screen.getByTestId('readiness-sets-quads')).toHaveTextContent('8');
+
+    // A few hours forward stays within today: volume unchanged (NOW is
+    // mid-day local in the pinned test TZ), header shows the hour offset.
+    fireEvent.change(screen.getByTestId('readiness-time-slider'), { target: { value: '3' } });
+    expect(screen.getByText(/good targets in 3h/i)).toBeInTheDocument();
+    expect(screen.getByTestId('readiness-sets-biceps')).toHaveTextContent('4');
+
+    // "Back to now" resets to today's real numbers.
+    await userEvent.click(screen.getByTestId('readiness-time-reset'));
+    expect(screen.getByText(/good targets today/i)).toBeInTheDocument();
+    expect(screen.queryByTestId('readiness-preview-note')).not.toBeInTheDocument();
+    expect(screen.getByTestId('readiness-sets-biceps')).toHaveTextContent('4');
   });
 
   it('remembers the expanded state across re-mounts within the session', async () => {

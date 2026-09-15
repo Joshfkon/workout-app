@@ -2,15 +2,16 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { BottomSheet } from './BottomSheet';
-import { useMuscleReadiness } from '@/hooks/useMuscleReadiness';
+import { useMuscleReadiness, type ReadinessPreview } from '@/hooks/useMuscleReadiness';
+import { PREVIEW_MAX_HOURS } from '@/app/(dashboard)/dashboard/workout/[id]/_lib/readinessPreview';
 import { useWearableRecovery } from '@/hooks/useWearableRecovery';
 import {
-  formatReadyEta,
   type ReadinessRow,
   type ReadinessChild,
   type ReadinessTarget,
   type NextReadyTarget,
 } from '@/app/(dashboard)/dashboard/workout/[id]/_lib/readiness';
+import { GoodTargetsStrip } from './GoodTargetsStrip';
 import {
   zoneBarClass,
   zoneTextClass,
@@ -330,6 +331,7 @@ export function MuscleReadinessContent({
   targets,
   nextUp = null,
   dailyGroupSets,
+  previewAt = null,
   isLoading,
   collapsible = false,
   loadingTestId = 'readiness-sheet-loading',
@@ -343,6 +345,13 @@ export function MuscleReadinessContent({
   /** Per-day credited group sets (from useMuscleReadiness) — enables the
    *  rolling-volume decay forecast inside each expanded row. */
   dailyGroupSets?: DailyGroupSets;
+  /**
+   * Builder for the look-ahead preview (from useMuscleReadiness). When
+   * provided, the strip gets a time slider: dragging it forward re-renders
+   * the whole body — strip, map and rows — as it will read that many hours
+   * from now.
+   */
+  previewAt?: ((hoursAhead: number) => ReadinessPreview) | null;
   isLoading: boolean;
   collapsible?: boolean;
   loadingTestId?: string;
@@ -361,52 +370,50 @@ export function MuscleReadinessContent({
     persistShowAll(persistKey, value);
   };
 
-  const visibleRows = collapsible && !showAll ? rows.slice(0, DEFAULT_ROW_CAP) : rows;
-  const hiddenCount = rows.length - visibleRows.length;
+  // Look-ahead slider position, in hours (0 = now). Deliberately NOT
+  // persisted: the view must always open on today's real numbers — a
+  // remembered preview would let projected values masquerade as current ones
+  // on the next open.
+  const [hoursAhead, setHoursAhead] = useState(0);
+  const previewing = hoursAhead > 0 && previewAt !== null && !isLoading;
+
+  // Assembled once per slider position (cheap — pure math over data already
+  // in memory), so dragging re-renders smoothly.
+  const preview = useMemo(
+    () => (previewing && previewAt !== null ? previewAt(hoursAhead) : null),
+    [previewing, previewAt, hoursAhead]
+  );
+
+  // Everything below the slider — strip, map, rows — renders from ONE active
+  // dataset, so the preview can never mix now's numbers with future ones.
+  const active = preview ?? { rows, targets, nextUp };
+
+  const visibleRows =
+    collapsible && !showAll ? active.rows.slice(0, DEFAULT_ROW_CAP) : active.rows;
+  const hiddenCount = active.rows.length - visibleRows.length;
 
   // Shared hierarchy expansion (persisted per user; the sheet and the
   // empty-workout inline placement share the 'readiness' surface, like the
   // show-all expander). Divergent parents (autoExpand) self-reveal.
-  const expansion = useMuscleRowExpansion('readiness', rows);
+  const expansion = useMuscleRowExpansion('readiness', active.rows);
   // The map paints from the same rows the list shows: fine-child overrides
   // only for children actually visible (pinned-lagging or expanded).
   const mapRows = useMemo(
-    () => withVisibleChildren(rows, expansion.expanded, pinLaggingChild, expansion.collapsed),
-    [rows, expansion.expanded, expansion.collapsed]
+    () =>
+      withVisibleChildren(active.rows, expansion.expanded, pinLaggingChild, expansion.collapsed),
+    [active.rows, expansion.expanded, expansion.collapsed]
   );
 
   return (
     <>
-      {/* Top strip: the answer at a glance (fine children surface here). This is
-          derived from the SAME rows the badges below show, so a muscle can never
-          appear here as ready-now while its row reads Recovering. */}
-      <div className="mb-2 rounded-lg bg-surface-800/60 px-3 py-2.5">
-        <p className="text-[11px] uppercase tracking-wide text-surface-500">Good targets today</p>
-        <p className="text-sm text-surface-100 mt-0.5" data-testid="readiness-targets">
-          {targets.length > 0 ? (
-            targets.map((t, i) => (
-              <span key={`${t.muscle}-${t.isChild ? 'c' : 'r'}`}>
-                {i > 0 && <span className="text-surface-500">, </span>}
-                {t.tier === 'soon' ? (
-                  // Ready-soon pick: muted + parenthetical ETA, visibly distinct
-                  // from fully-Fresh picks (a legitimate target for a session
-                  // planned a little ahead, not a ready-now recommendation).
-                  <span className="text-surface-400">
-                    {t.displayName}{' '}
-                    <span className="text-surface-500">(ready {formatReadyEta(t.readyInHours)})</span>
-                  </span>
-                ) : (
-                  t.displayName
-                )}
-              </span>
-            ))
-          ) : nextUp ? (
-            `Nothing urgent — lagging muscles are still recovering. Next up: ${nextUp.displayName} in ${formatReadyEta(nextUp.hoursUntilReady)}.`
-          ) : (
-            "You're on top of volume — nothing behind and recovered right now."
-          )}
-        </p>
-      </div>
+      <GoodTargetsStrip
+        targets={active.targets}
+        nextUp={active.nextUp ?? null}
+        hoursAhead={previewing ? hoursAhead : 0}
+        maxHours={PREVIEW_MAX_HOURS}
+        onHoursAheadChange={setHoursAhead}
+        showSlider={previewAt !== null && !isLoading}
+      />
 
       {isLoading ? (
         <div className="py-8 text-center text-sm text-surface-500" data-testid={loadingTestId}>
@@ -414,7 +421,9 @@ export function MuscleReadinessContent({
         </div>
       ) : (
         <>
-          {rows.length > 0 && <ReadinessMap rows={mapRows} onRevealAll={() => setShowAll(true)} />}
+          {active.rows.length > 0 && (
+            <ReadinessMap rows={mapRows} onRevealAll={() => setShowAll(true)} />
+          )}
           <div className="divide-y divide-surface-800/70">
             <MuscleGroupList
               rows={visibleRows}
@@ -469,7 +478,7 @@ export function MuscleReadinessContent({
               +{hiddenCount} more
             </button>
           )}
-          {collapsible && showAll && rows.length > DEFAULT_ROW_CAP && (
+          {collapsible && showAll && active.rows.length > DEFAULT_ROW_CAP && (
             <button
               onClick={() => setShowAll(false)}
               className="mt-2 w-full py-2 text-xs font-medium text-surface-500 hover:text-surface-300"
@@ -514,7 +523,7 @@ export function MuscleReadinessSheet({
   // against the same instant (and re-stamped on each fresh open).
   const [now] = useState(() => new Date());
 
-  const { rows, targets, nextUp, dailyGroupSets, isLoading } = useMuscleReadiness({
+  const { rows, targets, nextUp, dailyGroupSets, previewAt, isLoading } = useMuscleReadiness({
     liveBlocks,
     liveSets,
     now,
@@ -531,6 +540,7 @@ export function MuscleReadinessSheet({
           targets={targets}
           nextUp={nextUp}
           dailyGroupSets={dailyGroupSets}
+          previewAt={previewAt}
           isLoading={isLoading}
           collapsible
           wearableNotice={wearableRecovery.reason}
