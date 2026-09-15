@@ -180,9 +180,14 @@ export function ExerciseEditForm({ exercise, onCancel }: ExerciseEditFormProps) 
         .eq('id', exercise.id)
         .maybeSingle();
       if (data) {
+        // Mirror the RLS write predicate (is_custom AND created_by =
+        // auth.uid()): a custom row with a NULL created_by is never directly
+        // writable, so it saves through the shared catalog RPC and needs the
+        // shared-edit warning like any other user's row.
         const ownRow =
           data.is_custom === true &&
-          (!data.created_by || data.created_by === session?.user?.id);
+          data.created_by != null &&
+          data.created_by === session?.user?.id;
         setIsSharedExercise(!ownRow);
       }
     };

@@ -17,12 +17,14 @@ import type { Exercise } from '@/types/schema';
 // One mutable holder so each test can configure the mock client.
 const mockState: {
   isCustom: boolean;
+  createdBy: string | null;
   updateResult: { data: Array<{ id: string }> | null; error: { message: string } | null };
   rpcResult: { data: unknown; error: { message: string } | null };
   updateCalls: Array<{ table: string; payload: Record<string, unknown> }>;
   rpcCalls: Array<{ fn: string; args: Record<string, unknown> }>;
 } = {
   isCustom: true,
+  createdBy: 'user-1',
   updateResult: { data: [{ id: 'ex-1' }], error: null },
   rpcResult: { data: null, error: null },
   updateCalls: [],
@@ -38,7 +40,10 @@ jest.mock('@/lib/supabase/client', () => ({
       b.eq = jest.fn(chain);
       b.order = jest.fn(chain);
       b.maybeSingle = jest.fn(() =>
-        Promise.resolve({ data: { is_custom: mockState.isCustom }, error: null })
+        Promise.resolve({
+          data: { is_custom: mockState.isCustom, created_by: mockState.createdBy },
+          error: null,
+        })
       );
       b.update = jest.fn((payload: Record<string, unknown>) => {
         mockState.updateCalls.push({ table, payload });
@@ -108,6 +113,7 @@ describe('ExerciseEditForm secondary-muscle taxonomy', () => {
 
   beforeEach(() => {
     mockState.isCustom = true;
+    mockState.createdBy = 'user-1';
     mockState.updateResult = { data: [{ id: 'ex-1' }], error: null };
     mockState.updateCalls = [];
     mockState.rpcCalls = [];
@@ -177,6 +183,7 @@ describe('ExerciseEditForm secondary-muscle taxonomy', () => {
 
 describe('ExerciseEditForm save reporting', () => {
   beforeEach(() => {
+    mockState.createdBy = 'user-1';
     mockState.updateCalls = [];
     mockState.rpcCalls = [];
   });
@@ -261,6 +268,46 @@ describe('ExerciseEditForm save reporting', () => {
     expect(
       error.compareDocumentPosition(nameInput) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
+  });
+
+  it('treats a custom row with no creator as shared: warns up front and saves via the RPC', async () => {
+    // Regression (the "Calf Press on Leg Press" report): a custom row whose
+    // created_by is NULL can never pass the RLS write predicate
+    // (created_by = auth.uid()), so the direct update matches zero rows and
+    // the save goes through the shared catalog RPC. The old ownership check
+    // (`!created_by` = own row) hid the shared-edit warning for exactly the
+    // rows it applies to.
+    mockState.isCustom = true;
+    mockState.createdBy = null;
+    mockState.updateResult = { data: [], error: null }; // RLS: zero rows written
+    mockState.rpcResult = { data: { id: 'ex-1', updated: true }, error: null };
+
+    jest.useFakeTimers();
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    try {
+      render(<ExerciseEditForm exercise={exercise} onCancel={() => {}} />);
+
+      expect(await screen.findByTestId('catalog-exercise-notice')).toBeInTheDocument();
+
+      await toggleQuadsAndSave(user);
+
+      expect(
+        await screen.findByText(/Shared exercise updated for all users/i)
+      ).toBeInTheDocument();
+      expect(mockState.rpcCalls).toHaveLength(1);
+      expect(mockState.rpcCalls[0].fn).toBe('update_catalog_exercise');
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("warns up front on another user's custom row", async () => {
+    mockState.isCustom = true;
+    mockState.createdBy = 'someone-else';
+
+    render(<ExerciseEditForm exercise={exercise} onCancel={() => {}} />);
+
+    expect(await screen.findByTestId('catalog-exercise-notice')).toBeInTheDocument();
   });
 
   it('reports plain success when a custom row saves directly (no RPC involved)', async () => {

@@ -1499,9 +1499,12 @@ export default function ExercisesPage() {
                 {!(
                   editingExercise.is_custom &&
                   // While the session is still resolving, assume a custom row
-                  // is the user's own rather than flashing the notice.
-                  (!editingExercise.created_by ||
-                    currentUserId === null ||
+                  // is the user's own rather than flashing the notice. A row
+                  // with a NULL created_by is shared: the RLS write predicate
+                  // (created_by = auth.uid()) can never match it, so it saves
+                  // through the shared catalog RPC.
+                  editingExercise.created_by != null &&
+                  (currentUserId === null ||
                     editingExercise.created_by === currentUserId)
                 ) && (
                   <div
