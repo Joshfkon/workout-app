@@ -92,6 +92,13 @@ export function useSleepLog(): UseSleepLogResult {
         next.sort((a, b) => b.localDay.localeCompare(a.localDay));
         return next;
       });
+      // Derived windows under the same prefix (useSleepForDays' per-day map,
+      // useSleepHistory's 90-day chart window) can't be patched in place —
+      // mark them stale so the detail page refetches the saved night.
+      await queryClient.invalidateQueries({
+        queryKey: [QUERY_KEY_PREFIX],
+        predicate: (q) => q.queryKey.length > 2,
+      });
     },
     [userId, queryClient]
   );

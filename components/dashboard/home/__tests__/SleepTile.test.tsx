@@ -1,8 +1,9 @@
 /**
  * SleepTile — the home grid's Sleep card: last night's hours + quality dot,
  * the 7-day average line and a trailing-week sparkline; a quiet "Log sleep"
- * affordance when nothing is logged (never a warning nag); tap opens the
- * inline log sheet.
+ * affordance when nothing is logged (never a warning nag). With data the tile
+ * taps through to /dashboard/sleep (graph + averages + trend) and logging is
+ * the "+ log" header action; empty, the whole tile opens the inline log sheet.
  */
 
 import { render, screen } from '@testing-library/react';
@@ -69,10 +70,27 @@ describe('SleepTile', () => {
     expect(screen.getByRole('button').className).not.toContain('warning');
   });
 
-  it('tapping the tile opens the log sheet', async () => {
+  it('with data, the tile links to the sleep detail page', () => {
+    render(<SleepTile sleep={glance()} onLog={() => {}} />);
+    expect(screen.getByRole('link')).toHaveAttribute('href', '/dashboard/sleep');
+  });
+
+  it('with data, the "+ log" header action opens the log sheet without navigating', async () => {
     const user = userEvent.setup();
     const onLog = jest.fn();
     render(<SleepTile sleep={glance()} onLog={onLog} />);
+    await user.click(screen.getByTestId('sleep-log-action'));
+    expect(onLog).toHaveBeenCalledTimes(1);
+  });
+
+  it('empty state: tapping the tile opens the log sheet (no detail link, no + log action)', async () => {
+    const user = userEvent.setup();
+    const onLog = jest.fn();
+    render(
+      <SleepTile sleep={glance({ entries: [], lastNight: null, sevenDayAvgHours: null })} onLog={onLog} />
+    );
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('sleep-log-action')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button'));
     expect(onLog).toHaveBeenCalledTimes(1);
   });

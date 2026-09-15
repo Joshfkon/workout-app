@@ -57,12 +57,15 @@ function SleepSparkline({ values }: { values: number[] }) {
 
 /**
  * Glance Sleep tile: last night's hours + quality dot, the 7-day average and
- * a trailing-week sparkline. Tapping anywhere opens the two-field inline log
- * sheet. Empty state is a quiet "Log sleep" affordance — same neutral border
- * and colors as every other tile, never a warning nag.
+ * a trailing-week sparkline. With data, tapping the tile opens the sleep
+ * detail page (graph + averages + trend) and logging moves to a "+ log"
+ * header action. Empty state is a quiet "Log sleep" affordance where the
+ * whole tile still opens the log sheet — same neutral border and colors as
+ * every other tile, never a warning nag.
  */
 export function SleepTile({ sleep, onLog }: { sleep: SleepGlance; onLog: () => void }) {
   const { entries, lastNight, sevenDayAvgHours } = sleep;
+  const hasData = entries.length > 0;
 
   // Trailing-week values, oldest → newest, for the sparkline.
   const weekValues = useMemo(() => {
@@ -77,7 +80,26 @@ export function SleepTile({ sleep, onLog }: { sleep: SleepGlance; onLog: () => v
   }, [entries]);
 
   return (
-    <MetricTile icon={IconMoon} label="Sleep" onClick={onLog}>
+    <MetricTile
+      icon={IconMoon}
+      label="Sleep"
+      // Tap-through to the detail page once there's anything to chart; the
+      // empty tile keeps the whole surface as the log affordance.
+      href={hasData ? '/dashboard/sleep' : undefined}
+      onClick={hasData ? undefined : onLog}
+      action={
+        hasData ? (
+          <button
+            type="button"
+            onClick={onLog}
+            className="text-xs font-medium text-primary-400 hover:text-primary-300 transition-colors"
+            data-testid="sleep-log-action"
+          >
+            + log
+          </button>
+        ) : undefined
+      }
+    >
       {lastNight ? (
         <div className="text-xl font-semibold text-surface-100 flex items-baseline gap-1.5">
           {formatHours(lastNight.hours)}
