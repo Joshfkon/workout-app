@@ -97,6 +97,31 @@ describe('BodyHubTrends', () => {
     expect(screen.getByRole('button', { name: 'Lean mass' })).toBeInTheDocument();
   });
 
+  it('shows the latest value prominently above the chart, labeled by point kind', async () => {
+    const user = userEvent.setup();
+    renderTrends();
+
+    // Last point is an estimate → "current estimate" with the BF% value.
+    expect(screen.getByText('20')).toBeInTheDocument();
+    expect(screen.getByText(/current estimate · Jun 15/)).toBeInTheDocument();
+
+    // Lean mass metric: same headline pattern, unit-suffixed value.
+    await user.click(screen.getByRole('button', { name: 'Lean mass' }));
+    expect(screen.getByText('65')).toBeInTheDocument();
+    expect(screen.getByText(/current estimate · Jun 15/)).toBeInTheDocument();
+  });
+
+  it('labels the headline "measured (DEXA)" when the newest point is a scan', () => {
+    renderTrends({
+      trend: [
+        trendPoint({ date: '2026-06-01' }),
+        trendPoint({ date: '2026-06-15', kind: 'dexa', bodyFatPercent: 17.8 }),
+      ],
+    });
+    expect(screen.getByText('17.8')).toBeInTheDocument();
+    expect(screen.getByText(/measured \(DEXA\) · Jun 15/)).toBeInTheDocument();
+  });
+
   it('labels the normalized FFMI readout from the trend last point (shared computeFFMI)', async () => {
     const user = userEvent.setup();
     renderTrends();

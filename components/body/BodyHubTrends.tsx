@@ -99,6 +99,35 @@ function toTs(date: string): number {
   return new Date(`${date}T00:00:00`).getTime();
 }
 
+/**
+ * Value of one trend point for a given chart metric. Shared by the chart
+ * rows and the headline readout so the number above the chart is exactly
+ * the number the line ends on.
+ */
+function metricValueOf(
+  point: AnchoredTrendPoint,
+  metric: CompMetric,
+  units: 'lb' | 'kg',
+  heightCm: number | null
+): number | null {
+  switch (metric) {
+    case 'bodyFat':
+      return point.bodyFatPercent;
+    case 'leanMass':
+      return units === 'lb'
+        ? Math.round(kgToLbs(point.leanMassKg) * 10) / 10
+        : point.leanMassKg;
+    case 'ffmi':
+      // Same function as the Analytics gauge — single source of truth.
+      return heightCm
+        ? computeFFMI(point.leanMassKg, point.boneMassKg, heightCm).ffmi
+        : null;
+    case 'map':
+      // The map renders its own component; no time-series rows needed.
+      return null;
+  }
+}
+
 export function BodyHubTrends({
   units,
   heightCm,
@@ -154,27 +183,8 @@ export function BodyHubTrends({
   }, [initialMetric, metricOptions]);
 
   const { rows, gapCount } = useMemo(() => {
-    const valueOf = (point: AnchoredTrendPoint): number | null => {
-      switch (activeMetric) {
-        case 'bodyFat':
-          return point.bodyFatPercent;
-        case 'leanMass':
-          return units === 'lb'
-            ? Math.round(kgToLbs(point.leanMassKg) * 10) / 10
-            : point.leanMassKg;
-        case 'ffmi':
-          // Same function as the Analytics gauge — single source of truth.
-          return heightCm
-            ? computeFFMI(point.leanMassKg, point.boneMassKg, heightCm).ffmi
-            : null;
-        case 'map':
-          // The map renders its own component; no time-series rows needed.
-          return null;
-      }
-    };
-
     const dataRows: ChartRow[] = trend.map((point) => {
-      const value = valueOf(point);
+      const value = metricValueOf(point, activeMetric, units, heightCm);
       return {
         ts: toTs(point.date),
         solid: value,
@@ -200,6 +210,16 @@ export function BodyHubTrends({
       rows: [...dataRows, ...breakers].sort((a, b) => a.ts - b.ts),
       gapCount: gaps.length,
     };
+  }, [trend, activeMetric, units, heightCm]);
+
+  // Headline readout: the trend's newest point for the active metric, so
+  // the current number is readable without eyeballing the line's endpoint.
+  const latest = useMemo(() => {
+    if (trend.length === 0 || activeMetric === 'map') return null;
+    const point = trend[trend.length - 1];
+    const value = metricValueOf(point, activeMetric, units, heightCm);
+    if (value == null) return null;
+    return { value, date: point.date, kind: point.kind };
   }, [trend, activeMetric, units, heightCm]);
 
   // Latest FFMI for the labeled normalized readout under the chart.
@@ -270,6 +290,24 @@ export function BodyHubTrends({
             />
           ) : (
             <>
+              {latest && (
+                <div className="flex items-baseline gap-2 mb-3">
+                  <span className="text-2xl font-semibold text-surface-100">
+                    {latest.value}
+                    <span className="text-sm text-surface-500 font-normal">
+                      {unitSuffix}
+                    </span>
+                  </span>
+                  <span className="text-xs text-surface-500">
+                    {latest.kind === 'dexa' ? 'measured (DEXA)' : 'current estimate'}
+                    {' · '}
+                    {new Date(`${latest.date}T00:00:00`).toLocaleDateString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                    })}
+                  </span>
+                </div>
+              )}
               <div className="h-56">
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={rows}>
