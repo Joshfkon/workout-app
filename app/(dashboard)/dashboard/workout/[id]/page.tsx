@@ -90,6 +90,7 @@ import { getPendingCapture } from '@/lib/motion/pendingCapture';
 import { observationsViewedThisSession } from '@/lib/motion/observationsViewed';
 import { saveMotionCapture, saveRawBufferIfAllowed } from '@/lib/motion/motionPersistence';
 import { useMotionAutoCapture } from '@/components/motion/useMotionAutoCapture';
+import { useVelocityRirProfiles } from '@/hooks/useVelocityRirProfiles';
 import { SetObservationsRow } from '@/components/motion/SetObservationsRow';
 import {
   processMotionSamples,
@@ -880,8 +881,11 @@ export default function WorkoutPage() {
   } | null>(null);
   // Automatic capture: armed while the card is active, started by motion,
   // stopped by the "Log set" tap (or the manual fallback chip). Kept
-  // captures are keyed by set id for the history-row Observations block.
-  const [motionAutoCaptures, setMotionAutoCaptures] = useState<Record<string, CaptureAnalysis>>({});
+  // captures are keyed by set id for the history-row Observations block;
+  // the calibration id keys the velocity → estimated-RIR profile lookup.
+  const [motionAutoCaptures, setMotionAutoCaptures] = useState<
+    Record<string, { analysis: CaptureAnalysis; calibrationId: string | null }>
+  >({});
   // Manual-stop fallback: samples held until the next "Log set" attaches them.
   const heldAutoSamplesRef = useRef<ImuSample[] | null>(null);
   const calibrationEngineRef = useRef<RPECalibrationEngine>(calibrationEngine);
@@ -920,6 +924,13 @@ export default function WorkoutPage() {
 
   // ---- Motion capture: automatic in-workout capture (experimental) ------
   const motionAuto = useMotionAutoCapture(motionCaptureEnabled);
+
+  // Learned failure-velocity profiles (velocity → estimated RIR) for this
+  // user's calibrations. Empty until enough RIR-labeled captures exist.
+  const velocityRirProfiles = useVelocityRirProfiles(
+    session?.userId ?? null,
+    motionCalibrations
+  );
 
   // Re-arm whenever the active exercise changes (interaction with a card).
   useEffect(() => {
@@ -1010,11 +1021,13 @@ export default function WorkoutPage() {
       setTimeout(() => {
         const { samples: trimmed, analysis } = trimCaptureTail(samples);
         if (!shouldKeepAutoCapture(analysis)) return;
-        setMotionAutoCaptures((prev) => ({ ...prev, [setId]: analysis }));
+        const calibrationId =
+          motionCalibrations.find((c) => c.exerciseId === exerciseId)?.id ?? null;
+        setMotionAutoCaptures((prev) => ({ ...prev, [setId]: { analysis, calibrationId } }));
         void persistAutoCapture(setId, exerciseId, trimmed, analysis);
       }, 0);
     },
-    [motionAuto, persistAutoCapture]
+    [motionAuto, persistAutoCapture, motionCalibrations]
   );
 
   // Observations block under a COMPLETED set's history row — hidden until
@@ -1023,17 +1036,21 @@ export default function WorkoutPage() {
   // contaminate it). Nothing renders on the active set card.
   const motionCompletedSetExtra = useCallback(
     (set: SetLog) => {
-      const analysis = motionAutoCaptures[set.id];
-      if (!analysis) return null;
+      const capture = motionAutoCaptures[set.id];
+      if (!capture) return null;
       return (
         <SetObservationsRow
-          analysis={analysis}
+          analysis={capture.analysis}
           hasRir={set.feedback?.repsInTank != null}
           workoutSessionId={session?.id ?? null}
+          mvtProfile={
+            capture.calibrationId ? velocityRirProfiles[capture.calibrationId] ?? null : null
+          }
+          loggedRir={set.feedback?.repsInTank ?? null}
         />
       );
     },
-    [motionAutoCaptures, session]
+    [motionAutoCaptures, session, velocityRirProfiles]
   );
 
   // Memoize rest timer options to prevent hook reinitialization

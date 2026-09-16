@@ -15,12 +15,16 @@
 
 import { useMemo, useState } from 'react';
 import { IconChevronDown, IconChevronRight } from '@tabler/icons-react';
-import type { CaptureAnalysis } from '@/services/shared/motion';
+import type { CaptureAnalysis, MvtProfile } from '@/services/shared/motion';
 import {
   buildObservations,
+  buildVelocityRirLine,
+  captureRepsToVelocityReps,
+  estimateRirFromVelocity,
   NOTHING_NOTABLE_LINE,
   OBSERVATIONS_CONTEXT_LINE,
   THIN_REFERENCE_LINE,
+  VELOCITY_RIR_CONTEXT_LINE,
 } from '@/services/shared/motion';
 import { markObservationsViewed } from '@/lib/motion/observationsViewed';
 
@@ -29,11 +33,32 @@ interface SetObservationsRowProps {
   /** The gate: a RIR value has been entered for this logged set. */
   hasRir: boolean;
   workoutSessionId: string | null;
+  /**
+   * Learned failure-velocity profile for this exercise's calibration
+   * (hooks/useVelocityRirProfiles). Absent → no estimated-RIR line.
+   */
+  mvtProfile?: MvtProfile | null;
+  /** The set's logged RIR, restated beside the estimate. */
+  loggedRir?: number | null;
 }
 
-export function SetObservationsRow({ analysis, hasRir, workoutSessionId }: SetObservationsRowProps) {
+export function SetObservationsRow({
+  analysis,
+  hasRir,
+  workoutSessionId,
+  mvtProfile = null,
+  loggedRir = null,
+}: SetObservationsRowProps) {
   const [expanded, setExpanded] = useState(false);
   const observations = useMemo(() => buildObservations(analysis.reps), [analysis.reps]);
+  const velocityRirLine = useMemo(() => {
+    if (!mvtProfile) return null;
+    const estimate = estimateRirFromVelocity(
+      captureRepsToVelocityReps(analysis.reps),
+      mvtProfile
+    );
+    return estimate ? buildVelocityRirLine(estimate, loggedRir) : null;
+  }, [analysis.reps, mvtProfile, loggedRir]);
 
   if (!hasRir || analysis.reps.length === 0) return null;
 
@@ -70,7 +95,15 @@ export function SetObservationsRow({ analysis, hasRir, workoutSessionId }: SetOb
               </p>
             ))
           )}
+          {velocityRirLine && (
+            <p className="text-[12px] text-surface-300" data-testid="velocity-rir-line">
+              {velocityRirLine}
+            </p>
+          )}
           <p className="text-[11px] text-surface-500">{OBSERVATIONS_CONTEXT_LINE}</p>
+          {velocityRirLine && (
+            <p className="text-[11px] text-surface-500">{VELOCITY_RIR_CONTEXT_LINE}</p>
+          )}
         </div>
       )}
     </div>

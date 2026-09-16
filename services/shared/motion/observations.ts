@@ -14,6 +14,12 @@
  * apart; the only variable that moved is fatigue. With fewer than
  * MIN_REPS_FOR_REFERENCE reps the median is too thin, and every
  * percentage-of-median figure is suppressed (raw values still display).
+ *
+ * The ONE sanctioned cross-session comparison lives in velocityRir.ts
+ * (minimal-velocity-threshold → estimated RIR): it pins every confound this
+ * rule guards against — same MachineCalibration, the user's own RIR labels,
+ * a load-robust threshold — and its docblock says why. Nothing else here
+ * may reach outside the current set.
  */
 
 import type { CaptureRep } from './captureAnalysis';
