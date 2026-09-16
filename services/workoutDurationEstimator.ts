@@ -26,8 +26,9 @@
  * user who chats between sets sees a bigger number than one who supersets
  * through — and both see their own truth rather than a textbook average.
  *
- * The same truth carries ACROSS sessions: each finish persists the pair
- * (observed duration, the model's figure for that span), and the next
+ * The same truth carries ACROSS sessions: each finish persists a pace pair —
+ * active first-to-last-set seconds (pauses and the post-last-set tail
+ * excluded) and the model's figure for that same span — and the next
  * session's estimate is seeded with the median observed/model ratio of recent
  * sessions (`historicalPaceFactor`, passed back in as
  * `options.historicalPaceFactor`). A user who consistently runs the model's
@@ -141,9 +142,10 @@ export interface WorkoutDurationEstimate {
   /**
    * The model's cost of the span the workout timer has measured (logged work
    * plus served gap, minus the anchor set — see `anchorWorkSeconds`). This is
-   * the number `elapsedSeconds` is compared against for pace, and the one to
-   * persist next to the observed duration at finish so future sessions can
-   * seed from the ratio.
+   * the number `elapsedSeconds` is compared against for pace. It is also the
+   * model side of the persisted pace pair — computed there with NO options,
+   * so it covers the logged work alone, matching an observed side cut at the
+   * last logged set.
    */
   completedModelSeconds: number;
 }
@@ -413,9 +415,12 @@ function normalizePriorPace(prior: number | null | undefined): number | null {
 }
 
 export interface HistoricalSessionPace {
-  /** `workout_sessions.duration_seconds` — the observed span. */
-  durationSeconds: number | null;
-  /** `workout_sessions.duration_model_seconds` — the model's figure for it. */
+  /**
+   * `workout_sessions.pace_observed_seconds` — active first-to-last-set span,
+   * pauses and the post-last-set tail excluded.
+   */
+  observedSeconds: number | null;
+  /** `workout_sessions.pace_model_seconds` — the model's figure for that span. */
   modelSeconds: number | null;
 }
 
@@ -429,15 +434,15 @@ export interface HistoricalSessionPace {
 export function historicalPaceFactor(sessions: HistoricalSessionPace[]): number | null {
   const ratios = sessions
     .filter(
-      (s): s is { durationSeconds: number; modelSeconds: number } =>
-        typeof s.durationSeconds === 'number' &&
-        Number.isFinite(s.durationSeconds) &&
-        s.durationSeconds > 0 &&
+      (s): s is { observedSeconds: number; modelSeconds: number } =>
+        typeof s.observedSeconds === 'number' &&
+        Number.isFinite(s.observedSeconds) &&
+        s.observedSeconds > 0 &&
         typeof s.modelSeconds === 'number' &&
         Number.isFinite(s.modelSeconds) &&
         s.modelSeconds >= DURATION_MODEL.minHistoricalPaceModelSeconds
     )
-    .map((s) => s.durationSeconds / s.modelSeconds)
+    .map((s) => s.observedSeconds / s.modelSeconds)
     .sort((a, b) => a - b);
   if (ratios.length === 0) return null;
 

@@ -852,11 +852,15 @@ export default function WorkoutPage() {
   const [finishSnapshot, setFinishSnapshot] = useState<{
     durationSeconds: number;
     /**
-     * The duration model's cost of the same span (completedModelSeconds),
-     * frozen with it. Persisted as duration_model_seconds so future sessions
-     * can seed their estimate from this session's observed/model pace.
+     * The session's pace pair, both sides cut at the LAST logged set —
+     * observed active seconds and the model's cost of the same span.
+     * Persisted so future sessions can seed their estimate from this
+     * session's observed/model pace. Cut there, not at the Finish tap, so
+     * lingering after the last set (or abandoning the session and finishing
+     * later) never counts as training pace.
      */
-    modelSeconds: number;
+    paceObservedSeconds: number;
+    paceModelSeconds: number;
     completedAt: string;
   } | null>(null);
 
@@ -2712,21 +2716,21 @@ export default function WorkoutPage() {
 
       const { data } = await supabase
         .from('workout_sessions')
-        .select('duration_seconds, duration_model_seconds')
+        .select('pace_observed_seconds, pace_model_seconds')
         .eq('user_id', user.id)
         .eq('state', 'completed')
-        .not('duration_model_seconds', 'is', null)
-        .not('duration_seconds', 'is', null)
+        .not('pace_model_seconds', 'is', null)
+        .not('pace_observed_seconds', 'is', null)
         .order('completed_at', { ascending: false })
         .limit(DURATION_MODEL.historicalPaceSessions);
       if (cancelled || !data) return;
 
-      const rows = data as { duration_seconds: number | null; duration_model_seconds: number | null }[];
+      const rows = data as { pace_observed_seconds: number | null; pace_model_seconds: number | null }[];
       setHistoricalPace(
         historicalPaceFactor(
           rows.map((row) => ({
-            durationSeconds: row.duration_seconds,
-            modelSeconds: row.duration_model_seconds,
+            observedSeconds: row.pace_observed_seconds,
+            modelSeconds: row.pace_model_seconds,
           }))
         )
       );
@@ -5437,9 +5441,18 @@ export default function WorkoutPage() {
     // Snapshot the duration ONCE, from the same elapsed value the header timer
     // has been showing (paused time already excluded). Frozen here so the
     // summary never re-derives a live, still-ticking duration.
+    //
+    // The pace pair is cut at the LAST logged set: the wall-clock tail since
+    // that set comes off the observed side (frozen at pausedAtMs if paused),
+    // and the model side is the logged work alone — no served-gap credit. A
+    // pause completed inside that tail makes the subtraction overshoot
+    // (elapsed already excluded it), which under-counts observed and can only
+    // bias the stored pace FASTER, never inflate it.
+    const tailSeconds = secondsSinceLastSet(completedSets, Date.now(), workoutTimer.pausedAtMs);
     setFinishSnapshot({
       durationSeconds: workoutTimer.elapsedSeconds,
-      modelSeconds: durationEstimate.completedModelSeconds,
+      paceObservedSeconds: Math.max(0, Math.round(workoutTimer.elapsedSeconds - tailSeconds)),
+      paceModelSeconds: estimateWorkoutDuration(durationBlocks).completedModelSeconds,
       completedAt: new Date().toISOString(),
     });
     setPhase('summary');
@@ -5540,11 +5553,12 @@ export default function WorkoutPage() {
         onCompletionSynced: () => void invalidateWorkoutDerivedCaches(queryClient),
       },
       // Persist the same frozen duration the summary is showing, plus the
-      // model's figure for that span — the pair seeds future estimates.
+      // last-set-cut pace pair that seeds future estimates.
       {
         ...data,
         durationSeconds: finishSnapshot?.durationSeconds ?? null,
-        durationModelSeconds: finishSnapshot?.modelSeconds ?? null,
+        paceObservedSeconds: finishSnapshot?.paceObservedSeconds ?? null,
+        paceModelSeconds: finishSnapshot?.paceModelSeconds ?? null,
         lastSetTimestamp,
       }
     );

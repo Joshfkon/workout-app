@@ -430,8 +430,8 @@ describe('historical pace seeding', () => {
 });
 
 describe('historicalPaceFactor', () => {
-  const session = (durationSeconds: number | null, modelSeconds: number | null) => ({
-    durationSeconds,
+  const session = (observedSeconds: number | null, modelSeconds: number | null) => ({
+    observedSeconds,
     modelSeconds,
   });
 
