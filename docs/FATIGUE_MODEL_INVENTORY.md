@@ -115,6 +115,14 @@ shared concepts, and the surface it drives.
 - **Where:** `services/wearableRecovery.ts` (`WEARABLE_RECOVERY`, `:22-63`): 14-day median baseline (min 5 samples), HRV −20 % onset / RHR +8 % onset, scale bounds 0.95–1.15, total window-scale cap 1.25; deload evidence after 5 consecutive deviating days (5 pts + 1/day, cap 8).
 - **Drives:** recovery-window scaling (into §3.1) and deload evidence. Global scalar; muscle-agnostic.
 
+### 3.4 Non-gym activity fatigue (rides, runs, sports)
+- **Where:** `services/nonGymActivity.ts` (pure) + `hooks/useNonGymActivities.ts`; injected into the shared recovery feed by `useRecoveryHistory` (`hooks/useMuscleReadiness.ts`). Storage: `non_gym_activities` table; existing `cardio_log` rows are bridged too.
+- **Consumes:** user-logged perceived effort (light/moderate/hard), optional duration, affected muscle regions (`ACTIVITY_MUSCLE_OPTIONS`).
+- **Mechanism:** each activity becomes a SYNTHETIC `RecoverySession` — per affected muscle, `setsByIntensity` {light 1, moderate 3, hard 5} effective sets ({hard: 2} of them at RIR ≤ `hardRirThreshold`), scaled linearly by duration around 60 min (clamped ×0.5–×1.5). §3.1's own dose → window math does the rest; no engine change.
+- **cardio_log bridge:** modality → muscles (`CARDIO_MODALITY_MUSCLES`; `other` maps to nothing), always intensity `light` (the tracker's Zone-2 semantics) — a genuinely hard ride belongs in the activity logger.
+- **Drives:** everything §3.1 drives (readiness sheet, good targets, train-page recovery list, analytics card, next-day preview). **Deliberately NOT** weekly volume (MEV/MRV counting), `weeklyProgressionEngine`, or the prescription path — an activity is recovery debt, never sets. Synthetic sessions are appended to `sessions` only, never `historyRows`.
+- **Known double-count risk (accepted, v1):** a wearable-synced active day (§3.3 global scalar) plus a manual log of the same ride penalizes twice — the wearable signal is global and bounded (≤×1.15), so the overlap whispers rather than shouts.
+
 ## 4. Session-planning and week/block models
 
 ### 4.1 Readiness harness (`fatigueEngine`)

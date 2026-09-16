@@ -154,6 +154,12 @@ const customJestConfig = {
       branches: 50,
       statements: 70,
     },
+    'services/nonGymActivity.ts': {
+      lines: 70,
+      functions: 60,
+      branches: 50,
+      statements: 70,
+    },
     'services/weeklyProgressionEngine.ts': {
       lines: 70,
       functions: 60,

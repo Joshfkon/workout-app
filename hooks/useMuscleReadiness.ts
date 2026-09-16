@@ -35,6 +35,7 @@ import {
 } from '@/services/volumeProjection';
 import { useWearableRecovery } from '@/hooks/useWearableRecovery';
 import { useSleepLog } from '@/hooks/useSleepLog';
+import { useNonGymActivityFatigue } from '@/hooks/useNonGymActivities';
 import {
   buildReadinessRows,
   selectGoodTargets,
@@ -167,6 +168,13 @@ export interface UseMuscleReadinessResult {
  * in-workout readiness sheet, the analytics recovery card and the legacy
  * per-standard-muscle adapter (`useMuscleRecovery`) all read THIS query — one
  * key, one cache — and run the same pure recovery heuristic over its rows.
+ *
+ * `sessions` additionally carries SYNTHETIC sessions from non-gym activities
+ * (and bridged Zone-2 cardio_log entries) — see useNonGymActivityFatigue —
+ * so a Sunday bike ride taxes Monday's readiness like the training it was.
+ * Those synthetics are recovery-only by construction: `historyRows` (the
+ * weekly-volume accumulator input) never includes them, so activities can
+ * never count toward MEV/MRV or progression.
  */
 export function useRecoveryHistory(
   now: Date,
@@ -250,9 +258,11 @@ export function useRecoveryHistory(
 
   const historyRows = useMemo(() => historyQuery.data ?? [], [historyQuery.data]);
 
+  const activityFatigue = useNonGymActivityFatigue(now, enabled);
+
   const sessions = useMemo<RecoverySession[]>(
-    () =>
-      historyRows.map((s) => ({
+    () => [
+      ...historyRows.map((s) => ({
         performedAt: new Date(s.completedAt),
         exercises: s.exercises.map(
           (ex): RecoveryExercise => ({
@@ -263,15 +273,30 @@ export function useRecoveryHistory(
           })
         ),
       })),
-    [historyRows]
+      // Non-gym activity fatigue rides the same feed as training sessions;
+      // computeMuscleRecovery reduces over ALL debts, so order is irrelevant.
+      ...activityFatigue.syntheticSessions,
+    ],
+    [historyRows, activityFatigue.syntheticSessions]
   );
+
+  const refetchHistory = historyQuery.refetch;
+  const refetchActivities = activityFatigue.refetch;
+  const refetch = useCallback(() => {
+    refetchHistory();
+    refetchActivities();
+  }, [refetchHistory, refetchActivities]);
 
   return {
     historyRows,
     sessions,
-    isLoading: historyQuery.isLoading,
-    error: historyQuery.error ? (historyQuery.error as Error).message : null,
-    refetch: historyQuery.refetch,
+    // Both feeds gate loading: rendering readiness before activities arrive
+    // would flash a fresher state than the user's week actually was.
+    isLoading: historyQuery.isLoading || activityFatigue.isLoading,
+    error: historyQuery.error
+      ? (historyQuery.error as Error).message
+      : activityFatigue.error,
+    refetch,
   };
 }
 
