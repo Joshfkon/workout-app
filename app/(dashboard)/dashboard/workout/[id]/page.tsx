@@ -153,9 +153,11 @@ import { SanityCheckToast } from '@/components/workout/SanityCheckToast';
 import { CalibrationResultCard } from '@/components/workout/CalibrationResultCard';
 import { useWorkoutStore } from '@/stores/workoutStore';
 import {
+  DURATION_MODEL,
   estimateWorkoutDuration,
   formatDurationDelta,
   formatDurationEstimate,
+  historicalPaceFactor,
 } from '@/services/workoutDurationEstimator';
 import {
   estimatePendingAdditionSeconds,
@@ -849,6 +851,12 @@ export default function WorkoutPage() {
   // that keeps ticking, and the SAME number is persisted with the completion.
   const [finishSnapshot, setFinishSnapshot] = useState<{
     durationSeconds: number;
+    /**
+     * The duration model's cost of the same span (completedModelSeconds),
+     * frozen with it. Persisted as duration_model_seconds so future sessions
+     * can seed their estimate from this session's observed/model pace.
+     */
+    modelSeconds: number;
     completedAt: string;
   } | null>(null);
 
@@ -2688,6 +2696,46 @@ export default function WorkoutPage() {
     () => toDurationBlocks(blocks, completedSets, skippedBlockIds),
     [blocks, completedSets, skippedBlockIds]
   );
+  // The user's demonstrated pace from recent finished sessions (observed
+  // duration vs the model figure persisted at each finish). Seeds the
+  // estimate so a fresh session opens at this user's reality instead of the
+  // textbook model that live calibration then spends half the workout
+  // walking back. Null until loaded — and stays null for a user with no
+  // usable history, which runs the model unseeded exactly as before.
+  const [historicalPace, setHistoricalPace] = useState<number | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    async function loadHistoricalPace() {
+      const supabase = createUntypedClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || cancelled) return;
+
+      const { data } = await supabase
+        .from('workout_sessions')
+        .select('duration_seconds, duration_model_seconds')
+        .eq('user_id', user.id)
+        .eq('state', 'completed')
+        .not('duration_model_seconds', 'is', null)
+        .not('duration_seconds', 'is', null)
+        .order('completed_at', { ascending: false })
+        .limit(DURATION_MODEL.historicalPaceSessions);
+      if (cancelled || !data) return;
+
+      const rows = data as { duration_seconds: number | null; duration_model_seconds: number | null }[];
+      setHistoricalPace(
+        historicalPaceFactor(
+          rows.map((row) => ({
+            durationSeconds: row.duration_seconds,
+            modelSeconds: row.duration_model_seconds,
+          }))
+        )
+      );
+    }
+    void loadHistoricalPace();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   // Elapsed feeds pace calibration, so the estimate re-derives each tick. It's
   // a handful of arithmetic over the block list — the page already re-renders
   // every second for the timer.
@@ -2705,6 +2753,7 @@ export default function WorkoutPage() {
         Date.now(),
         workoutTimer.pausedAtMs
       ),
+      historicalPaceFactor: historicalPace,
     });
     // Re-derives on each timer tick; while paused the tick stops and
     // pausedAtMs pins the rest measurement, so the estimate holds steady.
@@ -2714,6 +2763,7 @@ export default function WorkoutPage() {
     timerStartedAt,
     workoutTimer.elapsedSeconds,
     workoutTimer.pausedAtMs,
+    historicalPace,
   ]);
 
   // What the add-exercise picker shows while the user browses: the session
@@ -2723,10 +2773,17 @@ export default function WorkoutPage() {
     // Context lets the estimate include the warmup protocol the add path will
     // actually generate (first exercise per not-yet-warm muscle) — without it
     // the promised time undershoots the post-add estimate by the warmup bill.
-    const addedSeconds = estimatePendingAdditionSeconds(durationBlocks, selectedExercisesToAdd, {
-      blocks,
-      completedSets,
-    });
+    // Scaled to the session's current pace factor: the pending-addition diff
+    // is computed on unseeded estimates (pace depends only on already-logged
+    // work, identical in both), so multiplying is exactly what threading the
+    // options through would produce — and keeps "+12 min" in the same units
+    // as the pace-adjusted total it sits next to.
+    const addedSeconds = Math.round(
+      estimatePendingAdditionSeconds(durationBlocks, selectedExercisesToAdd, {
+        blocks,
+        completedSets,
+      }) * durationEstimate.paceFactor
+    );
     const baseSeconds =
       durationEstimate.remainingSets > 0 || durationEstimate.totalSets > 0
         ? durationEstimate.projectedTotalSeconds
@@ -5382,6 +5439,7 @@ export default function WorkoutPage() {
     // summary never re-derives a live, still-ticking duration.
     setFinishSnapshot({
       durationSeconds: workoutTimer.elapsedSeconds,
+      modelSeconds: durationEstimate.completedModelSeconds,
       completedAt: new Date().toISOString(),
     });
     setPhase('summary');
@@ -5481,10 +5539,12 @@ export default function WorkoutPage() {
         // pre-workout snapshot the calendar view has already moved past.
         onCompletionSynced: () => void invalidateWorkoutDerivedCaches(queryClient),
       },
-      // Persist the same frozen duration the summary is showing.
-      { 
-        ...data, 
+      // Persist the same frozen duration the summary is showing, plus the
+      // model's figure for that span — the pair seeds future estimates.
+      {
+        ...data,
         durationSeconds: finishSnapshot?.durationSeconds ?? null,
+        durationModelSeconds: finishSnapshot?.modelSeconds ?? null,
         lastSetTimestamp,
       }
     );
@@ -6125,7 +6185,11 @@ export default function WorkoutPage() {
       ? 'Add exercises to see how long this will take'
       : `Estimated ${durationTotalLabel} total · ${durationEstimate.totalSets} sets across ` +
         `${durationEstimate.exerciseCount} exercise${durationEstimate.exerciseCount === 1 ? '' : 's'}` +
-        (durationEstimate.isCalibrated ? ' · adjusted to your pace today' : '');
+        (!durationEstimate.isCalibrated
+          ? ''
+          : durationEstimate.paceSource === 'live'
+            ? ' · adjusted to your pace today'
+            : ' · based on your pace in recent sessions');
 
   // Header: workout label + per-exercise progress segments (skipped excluded)
   // Derived from activeBlocks (skipped excluded) so it matches the resume

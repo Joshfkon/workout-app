@@ -241,6 +241,19 @@ describe('submitFinishOptimistic', () => {
 
     const finish = (await listOutbox()).find((e) => e.id === sessionFinishEntryId('s1'))!;
     expect(finish.row).not.toHaveProperty('duration_seconds');
+    expect(finish.row).not.toHaveProperty('duration_model_seconds');
+  });
+
+  it('persists the model seconds beside the observed duration', async () => {
+    const { client } = makeGatedSupabase();
+
+    await submitFinishOptimistic(
+      { supabase: client, sessionId: 's1', session: makeSession(), navigate: jest.fn() },
+      { ...SUMMARY_DATA, durationSeconds: 1215, durationModelSeconds: 987.4 }
+    );
+
+    const finish = (await listOutbox()).find((e) => e.id === sessionFinishEntryId('s1'))!;
+    expect(finish.row).toMatchObject({ duration_seconds: 1215, duration_model_seconds: 987 });
   });
 
   it('uses the last set timestamp as end time when the gap is >= 20 minutes', async () => {

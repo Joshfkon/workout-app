@@ -26,6 +26,17 @@
  * user who chats between sets sees a bigger number than one who supersets
  * through — and both see their own truth rather than a textbook average.
  *
+ * The same truth carries ACROSS sessions: each finish persists the pair
+ * (observed duration, the model's figure for that span), and the next
+ * session's estimate is seeded with the median observed/model ratio of recent
+ * sessions (`historicalPaceFactor`, passed back in as
+ * `options.historicalPaceFactor`). A user who consistently runs the model's
+ * numbers at 1.5x sees 1.5x from the first render of a fresh session, instead
+ * of a textbook figure that live calibration spends twenty minutes walking
+ * back. The prior enters as `pacePriorWeightSeconds` of model-time evidence,
+ * so today's observed pace takes over smoothly as the session accumulates —
+ * no cliff at `minSetsForPace`.
+ *
  * Pure: no DB, no clock, no I/O. Callers pass blocks and (optionally) the
  * elapsed time their timer already tracks.
  */
@@ -57,6 +68,18 @@ export const DURATION_MODEL = {
   /** Pace calibration is a correction, not a takeover. */
   minPaceFactor: 0.6,
   maxPaceFactor: 2,
+  /**
+   * Model-seconds of evidence the historical prior counts as. Today's observed
+   * pace overtakes the prior once the session's modelled span outgrows this.
+   */
+  pacePriorWeightSeconds: 600,
+  /**
+   * Finished sessions whose modelled span is shorter than this don't vote on
+   * historical pace — a two-set ratio is noise, not a habit.
+   */
+  minHistoricalPaceModelSeconds: 600,
+  /** How many recent finished sessions the historical pace reads. */
+  historicalPaceSessions: 8,
 } as const;
 
 export interface DurationBlockInput {
@@ -109,7 +132,23 @@ export interface WorkoutDurationEstimate {
   paceFactor: number;
   /** True once observed pace has adjusted the estimate. */
   isCalibrated: boolean;
+  /**
+   * Where the pace factor's evidence comes from: today's logged sets
+   * ('live'), recent finished sessions ('historical', before enough of today
+   * exists), or neither ('model' — the raw textbook numbers).
+   */
+  paceSource: PaceSource;
+  /**
+   * The model's cost of the span the workout timer has measured (logged work
+   * plus served gap, minus the anchor set — see `anchorWorkSeconds`). This is
+   * the number `elapsedSeconds` is compared against for pace, and the one to
+   * persist next to the observed duration at finish so future sessions can
+   * seed from the ratio.
+   */
+  completedModelSeconds: number;
 }
+
+export type PaceSource = 'model' | 'historical' | 'live';
 
 export interface EstimateOptions {
   /**
@@ -131,6 +170,13 @@ export interface EstimateOptions {
    * and still flags them slow once they overstay the prescription.
    */
   secondsSinceLastSet?: number;
+  /**
+   * The user's demonstrated pace from recent finished sessions
+   * (`historicalPaceFactor`). Seeds the estimate before today has produced
+   * any evidence, so a fresh session opens at the user's reality instead of
+   * the textbook model. Omit (or pass null) to run unseeded.
+   */
+  historicalPaceFactor?: number | null;
 }
 
 /** Seconds of actual work for one set of this exercise. */
@@ -323,6 +369,10 @@ function anchorWorkSeconds(active: DurationBlockInput[]): number {
   return 0;
 }
 
+function clampPace(raw: number): number {
+  return Math.min(DURATION_MODEL.maxPaceFactor, Math.max(DURATION_MODEL.minPaceFactor, raw));
+}
+
 /**
  * Observed-vs-modelled pace for the work already done. Returns 1 (no
  * correction) until enough sets are logged for the ratio to mean anything.
@@ -334,8 +384,66 @@ export function computePaceFactor(
 ): number {
   if (completedSets < DURATION_MODEL.minSetsForPace) return 1;
   if (modelSeconds <= 0 || observedSeconds <= 0) return 1;
-  const raw = observedSeconds / modelSeconds;
-  return Math.min(DURATION_MODEL.maxPaceFactor, Math.max(DURATION_MODEL.minPaceFactor, raw));
+  return clampPace(observedSeconds / modelSeconds);
+}
+
+/**
+ * Pace with a historical prior in play: the prior counts as
+ * `pacePriorWeightSeconds` of model time observed at the historical rate, and
+ * today's real observation is pooled with it. Before any evidence exists the
+ * result IS the prior; as the session's modelled span grows, today wins. The
+ * pooling replaces the `minSetsForPace` gate — the prior is the stabilizer
+ * that gate existed to fake.
+ */
+function blendPaceWithPrior(
+  modelSeconds: number,
+  observedSeconds: number,
+  prior: number
+): number {
+  const weight = DURATION_MODEL.pacePriorWeightSeconds;
+  return clampPace(
+    (observedSeconds + prior * weight) / (modelSeconds + weight)
+  );
+}
+
+/** A usable prior, clamped to the same band live calibration honours — or null. */
+function normalizePriorPace(prior: number | null | undefined): number | null {
+  if (typeof prior !== 'number' || !Number.isFinite(prior) || prior <= 0) return null;
+  return clampPace(prior);
+}
+
+export interface HistoricalSessionPace {
+  /** `workout_sessions.duration_seconds` — the observed span. */
+  durationSeconds: number | null;
+  /** `workout_sessions.duration_model_seconds` — the model's figure for it. */
+  modelSeconds: number | null;
+}
+
+/**
+ * The user's demonstrated pace across recent finished sessions: the median
+ * observed/model ratio, clamped to the calibration band. Median, not mean —
+ * one session with a fire alarm in the middle should not tax every future
+ * estimate. Sessions missing either number, or too short to mean anything,
+ * abstain; with no voters the result is null and the caller runs unseeded.
+ */
+export function historicalPaceFactor(sessions: HistoricalSessionPace[]): number | null {
+  const ratios = sessions
+    .filter(
+      (s): s is { durationSeconds: number; modelSeconds: number } =>
+        typeof s.durationSeconds === 'number' &&
+        Number.isFinite(s.durationSeconds) &&
+        s.durationSeconds > 0 &&
+        typeof s.modelSeconds === 'number' &&
+        Number.isFinite(s.modelSeconds) &&
+        s.modelSeconds >= DURATION_MODEL.minHistoricalPaceModelSeconds
+    )
+    .map((s) => s.durationSeconds / s.modelSeconds)
+    .sort((a, b) => a - b);
+  if (ratios.length === 0) return null;
+
+  const mid = Math.floor(ratios.length / 2);
+  const median = ratios.length % 2 === 1 ? ratios[mid] : (ratios[mid - 1] + ratios[mid]) / 2;
+  return clampPace(median);
 }
 
 /**
@@ -385,12 +493,24 @@ export function estimateWorkoutDuration(
   const completedModelSeconds = Math.max(0, consumedSeconds - anchorWorkSeconds(active));
 
   const elapsedSeconds = Math.max(0, options.elapsedSeconds ?? 0);
-  const paceFactor = computePaceFactor(completedModelSeconds, elapsedSeconds, completedSets);
+  const prior = normalizePriorPace(options.historicalPaceFactor);
+  const paceFactor =
+    prior !== null
+      ? blendPaceWithPrior(completedModelSeconds, elapsedSeconds, prior)
+      : computePaceFactor(completedModelSeconds, elapsedSeconds, completedSets);
   const isCalibrated = paceFactor !== 1;
+  const liveEvidence =
+    completedSets >= DURATION_MODEL.minSetsForPace &&
+    elapsedSeconds > 0 &&
+    completedModelSeconds > 0;
+  const paceSource: PaceSource = liveEvidence ? 'live' : prior !== null ? 'historical' : 'model';
 
   const remainingSeconds = Math.round(baseRemainingSeconds * paceFactor);
+  // Before the timer starts, the honest projected total is the whole model at
+  // the seeded pace — otherwise the pill's "left" and the total it sits next
+  // to would disagree by exactly the prior.
   const projectedTotalSeconds =
-    elapsedSeconds > 0 ? elapsedSeconds + remainingSeconds : Math.round(baseTotalSeconds);
+    elapsedSeconds > 0 ? elapsedSeconds + remainingSeconds : Math.round(baseTotalSeconds * paceFactor);
 
   return {
     totalSeconds: Math.round(baseTotalSeconds),
@@ -402,6 +522,8 @@ export function estimateWorkoutDuration(
     exerciseCount: active.length,
     paceFactor,
     isCalibrated,
+    paceSource,
+    completedModelSeconds: Math.round(completedModelSeconds),
   };
 }
 

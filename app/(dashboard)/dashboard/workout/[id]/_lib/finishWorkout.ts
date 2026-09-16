@@ -127,6 +127,13 @@ export interface FinishSummaryData {
    */
   durationSeconds?: number | null;
   /**
+   * The duration model's cost of the same span `durationSeconds` measured
+   * (`WorkoutDurationEstimate.completedModelSeconds`, snapshotted at the same
+   * moment). The stored pair is what seeds the next session's estimate with
+   * the user's observed/model pace. Omit on legacy callers.
+   */
+  durationModelSeconds?: number | null;
+  /**
    * Whether the user marked this as a deload session on the summary screen.
    * Persisted so the deload-exclusion consumers skip it. Omit on legacy callers
    * that don't surface the toggle (leaves the stored flag untouched).
@@ -189,6 +196,12 @@ function completionPatch(data: FinishSummaryData): Record<string, unknown> {
   }
   if (typeof data.durationSeconds === 'number' && Number.isFinite(data.durationSeconds)) {
     patch.duration_seconds = Math.max(0, Math.round(data.durationSeconds));
+  }
+  if (
+    typeof data.durationModelSeconds === 'number' &&
+    Number.isFinite(data.durationModelSeconds)
+  ) {
+    patch.duration_model_seconds = Math.max(0, Math.round(data.durationModelSeconds));
   }
   if (typeof data.isDeload === 'boolean') {
     patch.is_deload = data.isDeload;
