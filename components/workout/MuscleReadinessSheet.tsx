@@ -272,12 +272,12 @@ function ReadinessChildContent({ child }: { child: ReadinessChild }) {
           <div className="flex flex-wrap items-center justify-between gap-x-2">
             <span className="text-xs text-surface-400">{child.displayName}</span>
             <span className="text-[10px] tabular-nums text-surface-500 flex-shrink-0 ml-auto">
-              <span className={zoneTextClass(child.zone, child.sets)} data-testid={`readiness-sets-${child.muscle}`}>{child.sets}</span>
+              <span className={zoneTextClass(child.zone, child.sets, child.band)} data-testid={`readiness-sets-${child.muscle}`}>{child.sets}</span>
               <span className="text-surface-600"> · {zoneBandLabel(child.band)}</span>
             </span>
           </div>
           <div className="mt-1 h-1 rounded-full bg-surface-800 overflow-hidden">
-            <div className={`h-full rounded-full ${zoneBarClass(child.zone, child.sets)}`} style={{ width: `${barFillPct(child.sets, child.band.mrv)}%` }} />
+            <div className={`h-full rounded-full ${zoneBarClass(child.zone, child.sets, child.band)}`} style={{ width: `${barFillPct(child.sets, child.band.mrv)}%` }} />
           </div>
         </div>
         <RecoveryBadge recovery={child.recovery} muscle={child.muscle} />

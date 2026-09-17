@@ -112,15 +112,19 @@ describe('cross-surface parity (one fixture, four surfaces)', () => {
         const source = childByMuscle.get(std) ?? row;
         expect(datum!.zone).toBe(source.zone);
         expect(datum!.value).toBe(source.sets);
-        expect(zoneColorToken(datum!.zone!, datum!.value)).toBe(
-          zoneColorToken(source.zone, source.sets)
+        // The datum carries the source's band, so the in-zone green SHADE
+        // (light near MEV, deep near MRV) matches the bar too.
+        expect(datum!.band).toEqual(source.band);
+        expect(zoneColorToken(datum!.zone!, datum!.value, datum!.band)).toBe(
+          zoneColorToken(source.zone, source.sets, source.band)
         );
       }
     }
   });
 
-  it('biceps mid-band is green on the map AND the bar, via the same zone helper', () => {
-    // 10 sets sits inside the biceps 6–20 band.
+  it('biceps in-band is green on the map AND the bar, via the same zone helper', () => {
+    // 10 sets sits at the floor of the biceps 10–26 band → the LIGHT green
+    // shade (lower third), identically on bar and map.
     const midBand = [block('curl', 'biceps', [], 10, 'Dumbbell Curl')];
     const s = computeWeeklyMuscleVolume(midBand);
     const r = computeReachableMuscles(midBand);
@@ -131,8 +135,11 @@ describe('cross-surface parity (one fixture, four surfaces)', () => {
     const datum = volumeRowsToMapData(rows).biceps!;
     expect(datum.zone).toBe('in_zone');
     // Same helper family, same token: bar green ⇔ map region green.
-    expect(zoneBarClass(bicepsRow.zone, bicepsRow.sets)).toBe('bg-success-500');
-    expect(zoneFillClass(datum.zone!, datum.value)).toBe('fill-success-500');
+    expect(zoneBarClass(bicepsRow.zone, bicepsRow.sets, bicepsRow.band)).toBe('bg-success-300');
+    expect(zoneFillClass(datum.zone!, datum.value, datum.band)).toBe('fill-success-300');
+    // Mid-band and top-of-band deepen through the same shared helper.
+    expect(zoneBarClass('in_zone', 18, bicepsRow.band)).toBe('bg-success-500');
+    expect(zoneBarClass('in_zone', 25, bicepsRow.band)).toBe('bg-success-600');
   });
 
   it('an untrained muscle warns in light red on the map AND the bar, distinct from over-MRV', () => {

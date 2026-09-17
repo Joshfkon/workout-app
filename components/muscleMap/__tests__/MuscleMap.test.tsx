@@ -48,15 +48,22 @@ describe('MuscleMap', () => {
     }
   });
 
-  it('volume mode: zone colors come from the shared helper (light red 0-set, amber low, green in-zone, red over)', () => {
+  it('volume mode: zone colors come from the shared helper (light red 0-set, amber low, shaded greens in-zone, red over)', () => {
     const data: MuscleMapData = {
       quads: { value: 10, zone: 'in_zone' },
       biceps: { value: 2, zone: 'below_mev' },
       chest_upper: { value: 0, zone: 'below_mev' },
       lats: { value: 30, zone: 'over_mrv' },
+      // With a band, the in-zone green shades by position: light near MEV,
+      // deep near MRV — matching the bars (zoneColorToken thirds).
+      hamstrings: { value: 9, zone: 'in_zone', band: { mev: 8, mrv: 20 } },
+      glutes: { value: 19, zone: 'in_zone', band: { mev: 8, mrv: 20 } },
     };
     const { container } = render(<MuscleMap data={data} mode="volume" view="both" />);
+    // No band on the datum → the middle shade (legacy fallback).
     expect(musclePaths(container, 'quads')[0]!.getAttribute('class')).toContain('fill-success-500');
+    expect(musclePaths(container, 'hamstrings')[0]!.getAttribute('class')).toContain('fill-success-300');
+    expect(musclePaths(container, 'glutes')[0]!.getAttribute('class')).toContain('fill-success-600');
     expect(musclePaths(container, 'biceps')[0]!.getAttribute('class')).toContain('fill-warning-500');
     // Zero volume warns in light red, and must NOT reuse the over-MRV red.
     const untrained = musclePaths(container, 'chest_upper')[0]!.getAttribute('class')!;

@@ -30,10 +30,11 @@ describe('RollingVolumeForecast', () => {
       expect(screen.getByTestId(`volume-forecast-bar-biceps-${d}`)).toBeInTheDocument();
     }
 
-    // Today: 12 sets, inside the 10–20 band -> green (shared zone rule).
+    // Today: 12 sets, lower third of the 10–20 band -> light green (shared
+    // shaded zone rule).
     expect(
       screen.getByTestId('volume-forecast-bar-biceps-0').firstChild
-    ).toHaveClass('bg-success-500');
+    ).toHaveClass('bg-success-300');
     // Day +5: only today's 4 sets remain -> below MEV, yellow.
     expect(
       screen.getByTestId('volume-forecast-bar-biceps-5').firstChild

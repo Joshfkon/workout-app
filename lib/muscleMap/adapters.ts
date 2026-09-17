@@ -11,6 +11,7 @@ import { resolveMuscleToStandard } from '@/types/schema';
 import {
   COARSE_CHILDREN,
   type CoarseMuscle,
+  type VolumeBand,
   type VolumeRow,
   type VolumeZone,
 } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
@@ -32,6 +33,12 @@ export interface MuscleMapDatum {
   value: number;
   /** Volume mode: the row's zone, from the shared volumeZone helper. */
   zone?: VolumeZone;
+  /**
+   * Volume mode: the source row's MEV–MRV band, so an in-zone region shades
+   * its green by band position exactly like the bar it mirrors
+   * (zoneColorToken). Absent → the middle shade.
+   */
+  band?: VolumeBand;
   /**
    * Volume mode, coarse-sourced regions only: the source row has a reachable
    * fine child below its own MEV, so its color demotes from success to
@@ -66,10 +73,10 @@ export function volumeRowsToMapData(rows: VolumeRow[]): MuscleMapData {
     const children = COARSE_CHILDREN[row.muscle as CoarseMuscle];
     if (!children) continue;
     for (const std of children) {
-      out[std] = { value: row.sets, zone: row.zone, lagging: row.laggingChildren };
+      out[std] = { value: row.sets, zone: row.zone, band: row.band, lagging: row.laggingChildren };
     }
     for (const child of row.children) {
-      out[child.muscle as MuscleId] = { value: child.sets, zone: child.zone };
+      out[child.muscle as MuscleId] = { value: child.sets, zone: child.zone, band: child.band };
     }
   }
   return out;
@@ -95,12 +102,13 @@ export function readinessRowsToMapData(rows: ReadinessRow[]): MuscleMapData {
   for (const row of rows) {
     const status = row.recovery.lastTrainedAt !== null ? row.recovery.status : undefined;
     for (const std of COARSE_CHILDREN[row.muscle]) {
-      out[std] = { value: row.sets, zone: row.zone, lagging: row.laggingChildren, status };
+      out[std] = { value: row.sets, zone: row.zone, band: row.band, lagging: row.laggingChildren, status };
     }
     for (const child of row.children) {
       out[child.muscle] = {
         value: child.sets,
         zone: child.zone,
+        band: child.band,
         status: child.recovery.lastTrainedAt !== null ? child.recovery.status : undefined,
       };
     }
