@@ -55,6 +55,21 @@ export {
   THIN_REFERENCE_LINE,
   type SetObservations,
 } from './observations';
+export {
+  analysisRepsToVelocityReps,
+  buildMvtProfile,
+  buildVelocityRirLine,
+  captureRepsToVelocityReps,
+  estimateRirFromVelocity,
+  MVT_LABEL_MAX_RIR,
+  MVT_MIN_SETS,
+  VELOCITY_RIR_CONTEXT_LINE,
+  VELOCITY_RIR_ESTIMATE_MAX,
+  type LabeledVelocitySet,
+  type MvtProfile,
+  type VelocityRep,
+  type VelocityRirEstimate,
+} from './velocityRir';
 export { armAngleFromGravity, isQuasiStatic } from './gravity';
 export {
   findGravityRef,

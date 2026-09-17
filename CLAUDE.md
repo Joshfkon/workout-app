@@ -501,6 +501,11 @@ FITBIT_CLIENT_SECRET=
    references a set by id (sets know nothing about motion) and must always
    reference a `MachineCalibration`. Raw IMU buffers are only persisted when
    `users.motion_capture_raw_retention` is on, capped per session.
+   The velocity → estimated-RIR line (`services/shared/motion/velocityRir.ts`,
+   MVT-based) is the ONE sanctioned cross-session comparison, still
+   display-only; its motion⋈set_logs label join lives OUTSIDE the feature
+   dirs in `hooks/useVelocityRirProfiles.ts` — motion modules never touch
+   set tables.
 
 ## Loading States & Data Caching (cached-first)
 

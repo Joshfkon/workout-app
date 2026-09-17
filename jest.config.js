@@ -226,6 +226,12 @@ const customJestConfig = {
       branches: 75,
       statements: 90,
     },
+    'services/shared/motion/velocityRir.ts': {
+      lines: 90,
+      functions: 85,
+      branches: 75,
+      statements: 90,
+    },
     'services/shared/motion/autoGate.ts': {
       lines: 85,
       functions: 80,
