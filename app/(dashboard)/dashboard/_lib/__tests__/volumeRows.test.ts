@@ -12,6 +12,7 @@ import {
   computeReachableMuscles,
   rowColorToken,
   rowBarClass,
+  zoneColorToken,
   COARSE_MUSCLES,
   type MuscleVolumeStats,
   type WeeklyVolumeBlockRow,
@@ -203,7 +204,8 @@ describe('parent color is gated on child states (rowColorToken)', () => {
 
     expect(shoulders.zone).toBe('in_zone');
     expect(shoulders.laggingChildren).toBe(false);
-    expect(rowColorToken(shoulders)).toBe('success');
+    // 15 sets sits in the lower third of the 12–26 band → light green.
+    expect(rowColorToken(shoulders)).toBe('success_low');
   });
 
   it('an UNREACHABLE lagging child does not demote the parent (context rows never nag)', () => {
@@ -214,7 +216,36 @@ describe('parent color is gated on child states (rowColorToken)', () => {
     const calves = buildVolumeRows(stats, reachable).find((r) => r.muscle === 'calves')!;
     expect(calves.zone).toBe('in_zone');
     expect(calves.laggingChildren).toBe(false);
-    expect(rowColorToken(calves)).toBe('success');
+    // 10 sets in the lower third of the 8–20 band → light green, not warning.
+    expect(rowColorToken(calves)).toBe('success_low');
+  });
+});
+
+describe('in-zone green shades by band position (zoneColorToken thirds)', () => {
+  const band = { mev: 8, mrv: 20 }; // span 12 → thirds at 12 and 16
+  it('just clear of MEV reads light green', () => {
+    expect(zoneColorToken('in_zone', 8, band)).toBe('success_low');
+    expect(zoneColorToken('in_zone', 11.9, band)).toBe('success_low');
+  });
+  it('the middle of the band reads the standard green', () => {
+    expect(zoneColorToken('in_zone', 12, band)).toBe('success');
+    expect(zoneColorToken('in_zone', 15.9, band)).toBe('success');
+  });
+  it('the top of the band reads deep green', () => {
+    expect(zoneColorToken('in_zone', 16, band)).toBe('success_high');
+    expect(zoneColorToken('in_zone', 20, band)).toBe('success_high');
+  });
+  it('falls back to the middle shade without a band (legacy callers)', () => {
+    expect(zoneColorToken('in_zone', 10)).toBe('success');
+  });
+  it('a lagging child demotes EVERY green shade to warning', () => {
+    expect(rowColorToken({ zone: 'in_zone', sets: 20, band, laggingChildren: true })).toBe('warning');
+    expect(rowColorToken({ zone: 'in_zone', sets: 8, band, laggingChildren: true })).toBe('warning');
+  });
+  it('shades map to the light→dark bar classes', () => {
+    expect(rowBarClass({ zone: 'in_zone', sets: 9, band })).toBe('bg-success-300');
+    expect(rowBarClass({ zone: 'in_zone', sets: 14, band })).toBe('bg-success-500');
+    expect(rowBarClass({ zone: 'in_zone', sets: 19, band })).toBe('bg-success-600');
   });
 });
 

@@ -112,7 +112,7 @@ export function RollingVolumeForecast({
                 data-testid={`${testIdPrefix}-bar-${muscle}-${d}`}
               >
                 <div
-                  className={`w-full rounded-sm ${sets > 0 ? zoneBarClass(zone, sets) : 'bg-surface-800'}`}
+                  className={`w-full rounded-sm ${sets > 0 ? zoneBarClass(zone, sets, band) : 'bg-surface-800'}`}
                   style={{ height: `${sets > 0 ? heightPct(sets, scaleMax) : 2}%` }}
                 />
               </div>

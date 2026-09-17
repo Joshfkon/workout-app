@@ -300,10 +300,11 @@ describe('MuscleReadinessSheet', () => {
     expect(screen.getByTestId('readiness-map-mode-recovery')).toHaveAttribute('aria-pressed', 'true');
     expect(quadsPath()!.getAttribute('class')).toContain('fill-surface-600');
 
-    // Toggle to volume → quads paint by their weekly-volume zone instead.
+    // Toggle to volume → quads paint by their weekly-volume zone instead
+    // (any zone color, incl. the shaded in-zone greens — 300/500/600).
     await userEvent.click(screen.getByTestId('readiness-map-mode-volume'));
     expect(screen.getByTestId('readiness-map-mode-volume')).toHaveAttribute('aria-pressed', 'true');
-    expect(quadsPath()!.getAttribute('class')).toMatch(/fill-(success|warning|danger)-500/);
+    expect(quadsPath()!.getAttribute('class')).toMatch(/fill-(success|warning|danger)-\d00/);
     unmount();
 
     // Re-open (a fresh lazy mount) → still in volume mode.

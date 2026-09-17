@@ -102,9 +102,11 @@ function presentRegion(mode: MuscleMapMode, datum: MuscleMapDatum | undefined): 
             ? 'untrained this week'
             : 'below volume target';
     // Row-aware fill: a coarse-sourced region with a lagging subdivision
-    // paints warning, matching the demoted bar on the same screen.
+    // paints warning, matching the demoted bar on the same screen. The band
+    // shades an in-zone green by its position (light near MEV, deep near MRV),
+    // again matching the bar.
     return {
-      fillClass: rowFillClass({ zone, sets: datum.value, laggingChildren: datum.lagging }),
+      fillClass: rowFillClass({ zone, sets: datum.value, band: datum.band, laggingChildren: datum.lagging }),
       ariaStatus,
     };
   }

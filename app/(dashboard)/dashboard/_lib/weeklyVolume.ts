@@ -772,51 +772,92 @@ export function volumeZone(sets: number, band: VolumeBand): VolumeZone {
  * 'danger' (over MRV) — too little and too much are opposite problems and must
  * not look alike. Every zone*Class helper below is a pure token→utility lookup
  * over this, so a surface can never disagree on which color a zone gets.
+ *
+ * The in-zone green is SHADED by where the count sits inside the MEV–MRV band
+ * (thirds): 'success_low' (light green, just clear of MEV), 'success' (the
+ * middle of the band) and 'success_high' (deep green, approaching MRV). Same
+ * light→dark direction as the volume heatmap's green ramp (HEAT_FILL_CLASSES),
+ * so "darker green = more volume" reads the same everywhere. All three are
+ * still success semantically — the lagging-child demotion and every
+ * zone-status decision treat them identically. Callers without a band in hand
+ * fall back to the middle shade.
  */
-export type ZoneColorToken = 'success' | 'warning' | 'danger' | 'untrained';
+export type ZoneColorToken =
+  | 'success_low'
+  | 'success'
+  | 'success_high'
+  | 'warning'
+  | 'danger'
+  | 'untrained';
 
-export function zoneColorToken(zone: VolumeZone, sets: number): ZoneColorToken {
+const SUCCESS_TOKENS: ReadonlySet<ZoneColorToken> = new Set<ZoneColorToken>([
+  'success_low',
+  'success',
+  'success_high',
+]);
+
+/** Any of the three green shades — the semantic "in the zone" check. */
+export function isSuccessToken(token: ZoneColorToken): boolean {
+  return SUCCESS_TOKENS.has(token);
+}
+
+export function zoneColorToken(zone: VolumeZone, sets: number, band?: VolumeBand): ZoneColorToken {
   if (zone === 'over_mrv') return 'danger';
-  if (zone === 'in_zone') return 'success';
+  if (zone === 'in_zone') {
+    if (!band || band.mrv <= band.mev) return 'success';
+    const position = (sets - band.mev) / (band.mrv - band.mev);
+    if (position < 1 / 3) return 'success_low';
+    if (position < 2 / 3) return 'success';
+    return 'success_high';
+  }
   return sets <= 0 ? 'untrained' : 'warning';
 }
 
 const ZONE_BAR_CLASSES: Record<ZoneColorToken, string> = {
   danger: 'bg-danger-500',
+  success_low: 'bg-success-300',
   success: 'bg-success-500',
+  success_high: 'bg-success-600',
   warning: 'bg-warning-500',
   untrained: 'bg-danger-300',
 };
 
 // Text sits on a card, so the untrained row uses the 400 weight the other
-// tokens use for text — danger-300 is a fill tone and too pale to read.
+// tokens use for text — danger-300 is a fill tone and too pale to read. The
+// green shades keep the light→dark ramp: 300 / 400 / 600 all clear the
+// contrast bar on the dark surface.
 const ZONE_TEXT_CLASSES: Record<ZoneColorToken, string> = {
   danger: 'text-danger-400',
+  success_low: 'text-success-300',
   success: 'text-success-400',
+  success_high: 'text-success-600',
   warning: 'text-warning-400',
   untrained: 'text-danger-400',
 };
 
 const ZONE_FILL_CLASSES: Record<ZoneColorToken, string> = {
   danger: 'fill-danger-500',
+  success_low: 'fill-success-300',
   success: 'fill-success-500',
+  success_high: 'fill-success-600',
   warning: 'fill-warning-500',
   untrained: 'fill-danger-300',
 };
 
-/** Bar fill colour for a zone. Untrained (0 sets, below MEV) reads light red. */
-export function zoneBarClass(zone: VolumeZone, sets: number): string {
-  return ZONE_BAR_CLASSES[zoneColorToken(zone, sets)];
+/** Bar fill colour for a zone. Untrained (0 sets, below MEV) reads light red.
+ *  Pass the band so an in-zone count shades by its position in it. */
+export function zoneBarClass(zone: VolumeZone, sets: number, band?: VolumeBand): string {
+  return ZONE_BAR_CLASSES[zoneColorToken(zone, sets, band)];
 }
 
 /** Text/emphasis colour matching a zone. */
-export function zoneTextClass(zone: VolumeZone, sets: number): string {
-  return ZONE_TEXT_CLASSES[zoneColorToken(zone, sets)];
+export function zoneTextClass(zone: VolumeZone, sets: number, band?: VolumeBand): string {
+  return ZONE_TEXT_CLASSES[zoneColorToken(zone, sets, band)];
 }
 
 /** SVG fill colour matching a zone — the muscle-map twin of zoneBarClass. */
-export function zoneFillClass(zone: VolumeZone, sets: number): string {
-  return ZONE_FILL_CLASSES[zoneColorToken(zone, sets)];
+export function zoneFillClass(zone: VolumeZone, sets: number, band?: VolumeBand): string {
+  return ZONE_FILL_CLASSES[zoneColorToken(zone, sets, band)];
 }
 
 /**
@@ -828,6 +869,8 @@ export interface RowColorInput {
   zone: VolumeZone;
   sets: number;
   laggingChildren?: boolean;
+  /** MEV–MRV band, when the caller has it — shades the in-zone green. */
+  band?: VolumeBand;
 }
 
 /**
@@ -835,12 +878,13 @@ export interface RowColorInput {
  * fine children include one below its own MEV can never read success — the
  * group aggregate would be advertising "all good" while hiding a lagging
  * subdivision (front delts stuffed by pressing while side delts starve). Such
- * a row demotes to warning. Use these helpers wherever a COARSE row is
- * colorized; children carry laggingChildren: false and pass through unchanged.
+ * a row demotes to warning (from ANY green shade). Use these helpers wherever
+ * a COARSE row is colorized; children carry laggingChildren: false and pass
+ * through unchanged.
  */
 export function rowColorToken(row: RowColorInput): ZoneColorToken {
-  const token = zoneColorToken(row.zone, row.sets);
-  return token === 'success' && row.laggingChildren === true ? 'warning' : token;
+  const token = zoneColorToken(row.zone, row.sets, row.band);
+  return isSuccessToken(token) && row.laggingChildren === true ? 'warning' : token;
 }
 
 /** Row-aware bar fill colour (zoneBarClass + the lagging-child demotion). */
