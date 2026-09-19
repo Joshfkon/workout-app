@@ -253,13 +253,31 @@ describe('WorkoutHeader location chip', () => {
     expect(chip).toHaveAttribute('data-location-set', 'true');
   });
 
-  it('offers to set one when the session has no location', () => {
+  it('offers to set one when the session has no location, flagged amber', () => {
     // Without this the user has no way to notice that every machine lift is
-    // sharing one undifferentiated history.
+    // sharing one undifferentiated history — so the unset state draws the eye.
     renderHeader({ locationName: null });
     const chip = screen.getByTestId('workout-location-chip');
     expect(chip).toHaveTextContent('Set location');
     expect(chip).toHaveAttribute('data-location-set', 'false');
+    expect(chip.className).toContain('text-warning-400');
+  });
+
+  it('lives on the progress row, not the starved meta line beside the timer', () => {
+    // The name column between back/timer/Finish/menu gets ~100px on phones and
+    // truncated gym names to a single letter. The pill shares the progress row
+    // instead, where the full name has room to render.
+    renderHeader({ locationName: 'Planet Fitness' });
+    const chip = screen.getByTestId('workout-location-chip');
+    const row = chip.parentElement!;
+    expect(row).toContainElement(screen.getByTestId('workout-progress-segments'));
+    expect(row).not.toContainElement(screen.getByTestId('workout-timer-pill'));
+    expect(row).not.toHaveTextContent(/exercise \d+ of \d+/);
+  });
+
+  it('still renders when there is no progress to show (0 exercises)', () => {
+    renderHeader({ exerciseTotal: 0, segments: [], locationName: 'Iron Works' });
+    expect(screen.getByTestId('workout-location-chip')).toHaveTextContent('Iron Works');
   });
 
   it('opens the picker when tapped', async () => {
