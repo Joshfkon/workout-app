@@ -134,14 +134,19 @@ export function LegacyHistoryBackfill({ userId }: LegacyHistoryBackfillProps) {
         </p>
       ) : (
         <>
+          {/* Deliberately "all", not "almost all": completed workouts have no
+              per-workout correction flow yet (updateSessionLocation is only
+              reachable from an active session), so a mixed history assigned
+              here cannot be untangled afterwards. */}
           <p className="text-sm text-surface-200" data-testid="legacy-backfill-count">
             <span className="font-semibold">{counts.setCount.toLocaleString('en-US')} sets</span>{' '}
             across{' '}
             <span className="font-semibold">
               {counts.sessionCount.toLocaleString('en-US')} workouts
             </span>{' '}
-            aren&rsquo;t assigned to a gym. If they were all (or almost all) at one gym, assign
-            them to it so other gyms start their own clean history.
+            aren&rsquo;t assigned to a gym. If they were <span className="font-semibold">all</span>{' '}
+            at one gym, assign them to it so other gyms start their own clean history. If they
+            span several gyms, leave them unassigned for now.
           </p>
 
           <div className="space-y-2">
@@ -212,8 +217,9 @@ export function LegacyHistoryBackfill({ userId }: LegacyHistoryBackfillProps) {
                 conservative estimate.
               </p>
               <p className="text-xs text-surface-500">
-                There&rsquo;s no bulk undo — workouts logged at a different gym would need to be
-                corrected individually.
+                This can&rsquo;t be undone, and completed workouts can&rsquo;t be re-assigned
+                afterwards — only continue if this history was genuinely all at{' '}
+                {gyms.find((g) => g.id === selectedGymId)?.name ?? 'this gym'}.
               </p>
               <div className="flex gap-2 justify-end">
                 <Button

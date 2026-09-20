@@ -21,6 +21,22 @@
 -- is live UI state (the workout page re-stamps its sets itself), and
 -- planned/skipped shells have nothing meaningful to file.
 
+-- --------------------------------------------
+-- Narrow the completion trigger to completion-relevant columns
+-- --------------------------------------------
+-- update_session_completion counts non-warmup set ROWS against target_sets;
+-- no set VALUE feeds it. The original trigger fired on every UPDATE, so a
+-- location-only bulk re-stamp (this backfill, or the mid-workout re-stamp in
+-- lib/training/sessionLocation.ts) would run its two aggregate queries and a
+-- session rewrite once per set — thousands of redundant scans for the exact
+-- cohort this backfill serves, enough to threaten the statement timeout.
+-- Completion can only change when a row appears/disappears, moves to another
+-- block, or flips is_warmup — so fire UPDATE only on those columns.
+DROP TRIGGER IF EXISTS update_completion_on_set_log ON set_logs;
+CREATE TRIGGER update_completion_on_set_log
+  AFTER INSERT OR DELETE OR UPDATE OF exercise_block_id, is_warmup ON set_logs
+  FOR EACH ROW EXECUTE FUNCTION update_session_completion();
+
 CREATE OR REPLACE FUNCTION backfill_legacy_location(p_location_id UUID)
 RETURNS jsonb
 LANGUAGE plpgsql

@@ -187,6 +187,11 @@ follow-up to keep this change's blast radius contained:
 - A UI entry point for `mergeAsLocationVariant` (the function + audit action are
   ready; the dedup/merge admin surface that would call them is a separate
   ticket).
+- **Per-completed-workout location correction.** `updateSessionLocation` is
+  only reachable from an active session; a completed workout's location cannot
+  be changed afterwards. Until it can, the legacy backfill's guidance is
+  deliberately restricted to histories entirely from one gym — a mixed history
+  assigned in bulk could not be untangled.
 
 ## Constraints honored
 
