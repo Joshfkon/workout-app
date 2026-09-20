@@ -5,6 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent, Button, Accordion, AccordionI
 import { MUSCLE_GROUPS } from '@/types/schema';
 import { muscleDisplayName } from '@/lib/utils';
 import { GymEquipmentSettings } from '@/components/settings/GymEquipmentSettings';
+import { LegacyHistoryBackfill } from '@/components/settings/LegacyHistoryBackfill';
 import { ExerciseVarietySettings } from '@/components/settings/ExerciseVarietySettings';
 import { MusclePrioritySettings } from '@/components/settings/MusclePrioritySettings';
 import { VolumeLandmarksCard } from '@/components/settings/VolumeLandmarksCard';
@@ -148,6 +149,20 @@ export function TrainingTabPanel({
                 </div>
               </AccordionContent>
             </AccordionItem>
+
+            {/* Legacy history → gym assignment (location-scoped calibration) */}
+            {userId && (
+              <AccordionItem id="history-gym">
+                <AccordionTrigger id="history-gym">
+                  <span className="text-base font-semibold">Past Workouts &amp; Gyms</span>
+                </AccordionTrigger>
+                <AccordionContent id="history-gym">
+                  <div className="pt-2">
+                    <LegacyHistoryBackfill userId={userId} />
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            )}
 
             {/* Exercise Variety */}
             {userId && (

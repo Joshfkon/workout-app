@@ -2851,7 +2851,13 @@ export const ExerciseCard = memo(function ExerciseCard({
       lastSessionVolume != null
         ? ` · ${lastSessionVolume.toLocaleString('en-US')} ${weightLabel} vol`
         : '';
-    return `last session ${line}${volPart}${locationTag}`;
+    // The tag leads the set list instead of trailing the whole line: this
+    // meta line truncates on phones, and the one signal saying WHICH gym's
+    // track these numbers are ("here" vs a softened other-gym estimate) must
+    // never be the part that gets cut off.
+    return locationTag
+      ? `last session${locationTag} — ${line}${volPart}`
+      : `last session ${line}${volPart}`;
   })();
 
   // Tooltip for the progression pace pill: E1RM trend vs expectation, plus
