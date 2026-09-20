@@ -5579,19 +5579,25 @@ export default function WorkoutPage() {
    * and silently skips on a pre-migration database (missing column) or a
    * junk fix. Fire-and-forget: the location change already succeeded and
    * must not appear to fail over metadata.
+   *
+   * The fill-only rule is enforced IN the write (`latitude IS NULL` filter),
+   * not by checking the in-memory list first: this runs inside an onSelect
+   * closure whose `gymLocations` can be a render stale — a gym created in
+   * the picker moments ago isn't in it yet, and a stale-array pre-check
+   * would silently skip exactly the gym that most needs its first fix.
    */
   const stampGymCoordinates = async (locationId: string | null) => {
     if (!locationId || !positionFix) return;
     if (Date.now() - positionFix.takenAt > 10 * 60 * 1000) return;
     if (positionFix.accuracyM > 500) return;
-    const gym = gymLocations.find((l) => l.id === locationId);
-    if (!gym || gym.latitude != null) return;
     const supabase = createUntypedClient();
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('gym_locations')
       .update({ latitude: positionFix.latitude, longitude: positionFix.longitude })
-      .eq('id', locationId);
-    if (!error) {
+      .eq('id', locationId)
+      .is('latitude', null)
+      .select('id');
+    if (!error && (data?.length ?? 0) > 0) {
       setGymLocations((prev) =>
         prev.map((l) =>
           l.id === locationId
@@ -5691,7 +5697,14 @@ export default function WorkoutPage() {
     const supabase = createUntypedClient();
 
     if (target.kind === 'session') {
-      if (locationId === sessionLocationId) return;
+      if (locationId === sessionLocationId) {
+        // Re-picking the current gym is still a confirmation of WHERE the
+        // user is — the most common flow (session defaulted correctly, user
+        // taps to confirm) and, for a gym with no learned coordinates yet,
+        // the only stamp it may ever get.
+        void stampGymCoordinates(locationId);
+        return;
+      }
       const previous = sessionLocationId;
       setSessionLocationId(locationId);
       rescopeHistories(locationId, blockLocations);
