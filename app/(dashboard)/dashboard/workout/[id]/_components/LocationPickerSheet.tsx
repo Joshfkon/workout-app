@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { IconCheck, IconMapPin, IconPlus } from '@tabler/icons-react';
 import { BottomSheet } from '@/components/workout';
+import { formatDistanceM } from '@/services/gymProximity';
 
 /** A training location as the picker needs it. */
 export interface PickerLocation {
@@ -36,6 +37,15 @@ interface LocationPickerSheetProps {
   onSelect: (locationId: string | null) => void;
   /** Creates a location and returns it, so the picker can select it immediately. */
   onCreate: (name: string) => Promise<PickerLocation | null>;
+  /**
+   * Metres from the phone's position fix to each gym with learned
+   * coordinates (services/gymProximity). Absent (no fix, no permission, no
+   * coordinates yet) the list renders exactly as before — proximity is a
+   * convenience, never a gate.
+   */
+  distancesM?: Record<string, number>;
+  /** The gym the phone is probably inside (rankGymsByDistance suggestion). */
+  suggestedId?: string | null;
 }
 
 /**
@@ -62,6 +72,8 @@ export function LocationPickerSheet({
   loggedSetCount,
   onSelect,
   onCreate,
+  distancesM,
+  suggestedId,
 }: LocationPickerSheetProps) {
   const [isAdding, setIsAdding] = useState(false);
   const [newName, setNewName] = useState('');
@@ -102,6 +114,21 @@ export function LocationPickerSheet({
   };
 
   const title = scope.kind === 'session' ? 'Where are you training?' : 'Which machine?';
+
+  // With a position fix, gyms sort nearest-first so the right answer is the
+  // top row; gyms with no learned coordinates keep their original order below
+  // (unknown reads as "unknown", not "far away").
+  const orderedLocations = useMemo(() => {
+    if (!distancesM) return locations;
+    return [...locations].sort((a, b) => {
+      const da = distancesM[a.id];
+      const db = distancesM[b.id];
+      if (da == null && db == null) return 0;
+      if (da == null) return 1;
+      if (db == null) return -1;
+      return da - db;
+    });
+  }, [locations, distancesM]);
 
   const rowClass = (active: boolean) =>
     `w-full flex items-center gap-3 px-3 py-3 rounded-xl border text-left transition-colors ${
@@ -150,8 +177,10 @@ export function LocationPickerSheet({
             </button>
           )}
 
-          {locations.map((location) => {
+          {orderedLocations.map((location) => {
             const active = selectedId === location.id;
+            const distance = distancesM?.[location.id];
+            const suggested = suggestedId === location.id;
             return (
               <button
                 key={location.id}
@@ -160,15 +189,33 @@ export function LocationPickerSheet({
                 className={rowClass(active)}
                 data-testid="location-option"
                 data-location-id={location.id}
+                data-suggested={suggested ? 'true' : undefined}
               >
                 <IconMapPin
                   size={18}
                   className={`flex-shrink-0 ${active ? 'text-primary-400' : 'text-surface-500'}`}
                 />
                 <span className="flex-1 min-w-0">
-                  <span className="block text-sm font-medium truncate">{location.name}</span>
-                  {location.is_default && (
-                    <span className="block text-xs text-surface-500">Default</span>
+                  <span className="flex items-center gap-2 min-w-0">
+                    <span className="text-sm font-medium truncate">{location.name}</span>
+                    {suggested && (
+                      <span
+                        data-testid="location-near-you"
+                        className="flex-shrink-0 rounded-full bg-success-500/15 px-1.5 py-0.5 text-[10px] font-medium text-success-400"
+                      >
+                        Near you
+                      </span>
+                    )}
+                  </span>
+                  {(distance != null || location.is_default) && (
+                    <span className="block text-xs text-surface-500 truncate">
+                      {[
+                        distance != null ? formatDistanceM(distance) : null,
+                        location.is_default ? 'Default' : null,
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </span>
                   )}
                 </span>
                 {active && <IconCheck size={18} className="flex-shrink-0 text-primary-400" />}

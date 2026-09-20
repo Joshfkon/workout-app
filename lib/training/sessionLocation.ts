@@ -50,6 +50,13 @@ function isMissingColumn(error: unknown): boolean {
   return code != null && MISSING_COLUMN_CODES.has(code);
 }
 
+/** Compress a PostgREST/Postgres error into a toast-sized "code: message". */
+function errorDetail(error: unknown): string {
+  const e = error as { code?: string; message?: string } | null;
+  const parts = [e?.code, e?.message].filter((p): p is string => Boolean(p));
+  return (parts.join(': ') || 'unknown error').slice(0, 140);
+}
+
 /**
  * The location a new session should default to: most recently used, else the
  * user's marked default, else their oldest.
@@ -123,6 +130,13 @@ export interface LocationUpdateResult {
    * the caller should say so rather than reporting an ordinary retry.
    */
   rolledBack: boolean;
+  /**
+   * The database's own error (code + message), set only when `ok` is false.
+   * On a phone the console.error below is unreachable, so this is the only
+   * way a failure can name itself — callers should append it to their toast
+   * rather than reporting a bare "try again" nobody can act on.
+   */
+  detail?: string;
 }
 
 const NOOP: LocationUpdateResult = {
@@ -169,7 +183,13 @@ export async function updateSessionLocation(
     await restampQueuedSets(blockIdsToRestamp, previousLocationId);
     if (isMissingColumn(sessionError)) return { ...NOOP, unsupported: true };
     console.error('[sessionLocation] failed to update session location:', sessionError);
-    return { ok: false, restampedSets: 0, unsupported: false, rolledBack: true };
+    return {
+      ok: false,
+      restampedSets: 0,
+      unsupported: false,
+      rolledBack: true,
+      detail: errorDetail(sessionError),
+    };
   }
 
   if (blockIdsToRestamp.length === 0) {
@@ -189,7 +209,13 @@ export async function updateSessionLocation(
       location_id: previousLocationId,
     });
     await restampQueuedSets(blockIdsToRestamp, previousLocationId);
-    return { ok: false, restampedSets: 0, unsupported: false, rolledBack };
+    return {
+      ok: false,
+      restampedSets: 0,
+      unsupported: false,
+      rolledBack,
+      detail: restamp.detail,
+    };
   }
 
   return {
@@ -247,7 +273,13 @@ export async function updateBlockLocation(
     await restampQueuedSets([blockId], previousEffectiveLocationId);
     if (isMissingColumn(blockError)) return { ...NOOP, unsupported: true };
     console.error('[sessionLocation] failed to update block location:', blockError);
-    return { ok: false, restampedSets: 0, unsupported: false, rolledBack: true };
+    return {
+      ok: false,
+      restampedSets: 0,
+      unsupported: false,
+      rolledBack: true,
+      detail: errorDetail(blockError),
+    };
   }
 
   const restamp = await restampSets(supabase, [blockId], effectiveLocationId);
@@ -260,7 +292,13 @@ export async function updateBlockLocation(
       location_id: previousLocationId,
     });
     await restampQueuedSets([blockId], previousEffectiveLocationId);
-    return { ok: false, restampedSets: 0, unsupported: false, rolledBack };
+    return {
+      ok: false,
+      restampedSets: 0,
+      unsupported: false,
+      rolledBack,
+      detail: restamp.detail,
+    };
   }
 
   return {
@@ -282,7 +320,7 @@ async function restampSets(
   supabase: SupabaseClient,
   blockIds: string[],
   locationId: string | null
-): Promise<{ ok: boolean; count: number; unsupported: boolean }> {
+): Promise<{ ok: boolean; count: number; unsupported: boolean; detail?: string }> {
   const { data, error } = await supabase
     .from('set_logs')
     .update({ location_id: locationId })
@@ -292,7 +330,7 @@ async function restampSets(
   if (error) {
     if (isMissingColumn(error)) return { ok: true, count: 0, unsupported: true };
     console.error('[sessionLocation] failed to re-stamp set locations:', error);
-    return { ok: false, count: 0, unsupported: false };
+    return { ok: false, count: 0, unsupported: false, detail: errorDetail(error) };
   }
 
   return { ok: true, count: data?.length ?? 0, unsupported: false };

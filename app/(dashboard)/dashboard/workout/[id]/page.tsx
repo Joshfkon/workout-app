@@ -190,6 +190,8 @@ import {
   type ProgressionScope,
 } from '@/services/progressionScope';
 import { updateBlockLocation, updateSessionLocation } from '@/lib/training/sessionLocation';
+import { getCurrentPositionSafe, type PositionFix } from '@/lib/geo/currentPosition';
+import { rankGymsByDistance } from '@/services/gymProximity';
 import {
   LocationPickerSheet,
   type LocationPickerScope,
@@ -1787,10 +1789,20 @@ export default function WorkoutPage() {
       if (!user) return;
 
       try {
-        const { data: locations, error } = await supabase
+        // Coordinates feed the picker's "Near you" ranking. A database that
+        // predates the geo migration rejects the columns, so retry with the
+        // legacy shape rather than losing the picker's gym list entirely.
+        let { data: locations, error } = await supabase
           .from('gym_locations')
-          .select('id, name, is_default')
+          .select('id, name, is_default, latitude, longitude')
           .eq('user_id', user.id);
+
+        if (error) {
+          ({ data: locations, error } = await supabase
+            .from('gym_locations')
+            .select('id, name, is_default')
+            .eq('user_id', user.id));
+        }
 
         if (!error && locations && locations.length > 0) {
           setGymLocations(locations);
@@ -5545,6 +5557,51 @@ export default function WorkoutPage() {
 
   const sessionLocationName = locationNameById(sessionLocationId);
 
+  // Phone position for the picker's "Near you" ranking. Requested when the
+  // picker first opens — the OS permission prompt then appears in response
+  // to a deliberate user action, not on page load — and kept for the rest of
+  // the page's life. Null (denied, unavailable, indoors with no fix) leaves
+  // the picker exactly as it always was: proximity is a convenience.
+  const [positionFix, setPositionFix] = useState<PositionFix | null>(null);
+  const positionRequestedRef = useRef(false);
+  useEffect(() => {
+    if (!locationPickerTarget || positionRequestedRef.current) return;
+    positionRequestedRef.current = true;
+    void getCurrentPositionSafe().then((fix) => {
+      if (fix) setPositionFix(fix);
+    });
+  }, [locationPickerTarget]);
+
+  /**
+   * Learn a gym's position the first time the user picks it with a usable
+   * fix: they are standing in it, which beats any address form. Only fills a
+   * blank — never rewrites learned coordinates on the strength of one fix —
+   * and silently skips on a pre-migration database (missing column) or a
+   * junk fix. Fire-and-forget: the location change already succeeded and
+   * must not appear to fail over metadata.
+   */
+  const stampGymCoordinates = async (locationId: string | null) => {
+    if (!locationId || !positionFix) return;
+    if (Date.now() - positionFix.takenAt > 10 * 60 * 1000) return;
+    if (positionFix.accuracyM > 500) return;
+    const gym = gymLocations.find((l) => l.id === locationId);
+    if (!gym || gym.latitude != null) return;
+    const supabase = createUntypedClient();
+    const { error } = await supabase
+      .from('gym_locations')
+      .update({ latitude: positionFix.latitude, longitude: positionFix.longitude })
+      .eq('id', locationId);
+    if (!error) {
+      setGymLocations((prev) =>
+        prev.map((l) =>
+          l.id === locationId
+            ? { ...l, latitude: positionFix.latitude, longitude: positionFix.longitude }
+            : l
+        )
+      );
+    }
+  };
+
   /**
    * What to say when a location move fails.
    *
@@ -5554,12 +5611,16 @@ export default function WorkoutPage() {
    * the row moved and its sets did not — the session really is split — and
    * telling the user to just retry would hide it.
    */
-  const locationFailureMessage = (rolledBack: boolean): string => {
+  const locationFailureMessage = (rolledBack: boolean, detail?: string): string => {
+    // `detail` is the database's own error (code: message). Phones have no
+    // reachable console, so appending it here is the only way a failure can
+    // be diagnosed from a screenshot instead of "try again" guesswork.
+    const suffix = detail ? ` (${detail})` : '';
     if (!rolledBack) {
-      return 'Location change failed partway — reopen this workout and set it again to re-file the sets';
+      return `Location change failed partway — reopen this workout and set it again to re-file the sets${suffix}`;
     }
     return isOnline
-      ? 'Could not change the location — nothing was changed, please try again'
+      ? `Could not change the location — nothing was changed, please try again${suffix}`
       : "Can't change location while offline — sets keep logging where they were";
   };
 
@@ -5657,7 +5718,7 @@ export default function WorkoutPage() {
         // under a location the database never accepted.
         setSessionLocationId(previous);
         rescopeHistories(previous, blockLocations);
-        showError(locationFailureMessage(result.rolledBack));
+        showError(locationFailureMessage(result.rolledBack, result.detail));
         return;
       }
       showSuccess(
@@ -5667,6 +5728,9 @@ export default function WorkoutPage() {
             }`
           : 'Workout location cleared'
       );
+      // The user just told us which gym they're standing in — the best
+      // ground truth this gym's coordinates will ever get.
+      void stampGymCoordinates(locationId);
       return;
     }
 
@@ -5694,7 +5758,7 @@ export default function WorkoutPage() {
       showError(
         result.unsupported
           ? 'Per-exercise locations need a database update — nothing was changed'
-          : locationFailureMessage(result.rolledBack)
+          : locationFailureMessage(result.rolledBack, result.detail)
       );
       return;
     }
@@ -7767,6 +7831,13 @@ export default function WorkoutPage() {
           ? completedSets.filter((s) => s.exerciseBlockId === targetBlock.id).length
           : completedSets.filter((s) => !blockLocations[s.exerciseBlockId]).length;
 
+        // "Near you" ranking, session scope only: which GYM you're in is a
+        // geography question; which MACHINE within it is not.
+        const proximity =
+          scope.kind === 'session' && positionFix
+            ? rankGymsByDistance(gymLocations, positionFix)
+            : null;
+
         return (
           <LocationPickerSheet
             isOpen
@@ -7779,6 +7850,8 @@ export default function WorkoutPage() {
             loggedSetCount={loggedSetCount}
             onSelect={(id) => void applyLocationChange(id)}
             onCreate={handleCreateLocation}
+            distancesM={proximity?.distancesM}
+            suggestedId={proximity?.suggestedGymId}
           />
         );
       })()}

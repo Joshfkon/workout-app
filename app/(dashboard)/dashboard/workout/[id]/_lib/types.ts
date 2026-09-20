@@ -31,6 +31,10 @@ export interface GymLocation {
   id: string;
   name: string;
   is_default: boolean;
+  /** Learned position (services/gymProximity); absent pre-migration or until
+   *  the user first picks this gym with a position fix available. */
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 export interface CalibratedLift {
