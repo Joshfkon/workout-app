@@ -1642,6 +1642,56 @@ describe('ExerciseCard', () => {
       expect(screen.getByText(/3 RIR ·/)).toBeInTheDocument();
     });
 
+    it('labels a 0 RIR set "maxed" — never "effective" (full-credit display bucket)', () => {
+      const sets = [
+        createMockSetLog({
+          id: 'set-1',
+          setNumber: 1,
+          weightKg: 100,
+          reps: 9,
+          rpe: 10,
+          quality: 'effective', // stored verdict from the live logging path
+          feedback: { repsInTank: 0, form: 'clean' },
+        }),
+      ];
+
+      render(<ExerciseCard {...defaultProps} sets={sets} isActive={true} />);
+
+      expect(screen.getByText(/0 RIR ·/)).toBeInTheDocument();
+      // The completed-line tag ("maxed" also appears as a RIR chip label, so
+      // target the tag via its credit tooltip)
+      const tag = screen.getByTitle(/full stimulus credit/);
+      expect(tag).toHaveTextContent('maxed');
+      expect(tag).toHaveClass('text-orange-400');
+      expect(screen.queryByText('effective')).not.toBeInTheDocument();
+    });
+
+    it('labels a 3 RIR set "effective" and a 4+ RIR set "easy" (credit-tier buckets)', () => {
+      const sets = [
+        createMockSetLog({
+          id: 'set-1',
+          setNumber: 1,
+          rpe: 7,
+          quality: 'effective',
+          feedback: { repsInTank: 3, form: 'clean' },
+        }),
+        createMockSetLog({
+          id: 'set-2',
+          setNumber: 2,
+          rpe: 6,
+          quality: 'effective',
+          feedback: { repsInTank: 4, form: 'clean' },
+        }),
+      ];
+
+      render(<ExerciseCard {...defaultProps} sets={sets} isActive={true} />);
+
+      expect(screen.getByText('effective')).toBeInTheDocument();
+      // "easy" is also a RIR chip label; the completed-line tag carries the
+      // credit tooltip
+      expect(screen.getByTitle(/4\+ RIR/)).toHaveTextContent('easy');
+    });
+
     it('renders remaining sets as muted target lines', () => {
       render(<ExerciseCard {...defaultProps} isActive={true} />);
 

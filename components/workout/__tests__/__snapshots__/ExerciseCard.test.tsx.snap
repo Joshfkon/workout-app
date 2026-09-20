@@ -1269,11 +1269,13 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
             class="ml-auto flex-shrink-0 text-[11px] text-surface-500"
           >
             3
-             RIR · 
+             RIR ·
+             
             <span
-              class="text-success-400"
+              class="text-surface-400"
+              title="3 RIR — counts as 0.6× toward weekly volume; push closer to failure for full credit"
             >
-              stimulative
+              effective
             </span>
           </span>
         </div>
@@ -1318,9 +1320,11 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
             class="ml-auto flex-shrink-0 text-[11px] text-surface-500"
           >
             2
-             RIR · 
+             RIR ·
+             
             <span
               class="text-success-400"
+              title="1–2 RIR — the target zone; counts as 1× toward weekly volume"
             >
               stimulative
             </span>
