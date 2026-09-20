@@ -184,6 +184,16 @@ describe('updateSessionLocation', () => {
     // The caller must say the session is split, not "please try again".
     expect(result.rolledBack).toBe(false);
   });
+
+  it("carries the database's own error as detail — a phone has no console to read", async () => {
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    const { supabase } = createSupabaseStub(restampFails);
+
+    const result = await updateSessionLocation(supabase, base);
+
+    expect(result.ok).toBe(false);
+    expect(result.detail).toBe('08006: connection failure');
+  });
 });
 
 describe('updateBlockLocation', () => {

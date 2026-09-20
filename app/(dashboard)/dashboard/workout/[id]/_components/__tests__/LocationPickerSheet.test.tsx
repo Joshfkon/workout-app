@@ -141,3 +141,45 @@ describe('LocationPickerSheet — inline creation', () => {
     expect(onCreate).not.toHaveBeenCalled();
   });
 });
+
+describe('LocationPickerSheet — proximity ranking', () => {
+  it('sorts known-distance gyms nearest-first and leaves unknown ones below', () => {
+    renderSheet({
+      locations: [
+        { id: 'loc-main', name: 'Iron Works', is_default: true },
+        { id: 'loc-annex', name: 'Annex', is_default: false },
+        { id: 'loc-mystery', name: 'Mystery Gym', is_default: false },
+      ],
+      // Annex is closer than Iron Works; Mystery Gym has no coordinates.
+      distancesM: { 'loc-main': 5200, 'loc-annex': 80 },
+      suggestedId: 'loc-annex',
+    });
+    const options = screen.getAllByTestId('location-option');
+    expect(options[0]).toHaveTextContent('Annex');
+    expect(options[1]).toHaveTextContent('Iron Works');
+    expect(options[2]).toHaveTextContent('Mystery Gym');
+  });
+
+  it('badges only the suggested gym and shows readable distances', () => {
+    renderSheet({
+      distancesM: { 'loc-main': 5200, 'loc-annex': 80 },
+      suggestedId: 'loc-annex',
+    });
+    const badges = screen.getAllByTestId('location-near-you');
+    expect(badges).toHaveLength(1);
+    expect(badges[0].closest('[data-location-id]')).toHaveAttribute(
+      'data-location-id',
+      'loc-annex'
+    );
+    expect(screen.getByText('~80 m away')).toBeInTheDocument();
+    expect(screen.getByText(/~5\.2 km away · Default/)).toBeInTheDocument();
+  });
+
+  it('renders exactly as before when no proximity data is passed', () => {
+    renderSheet();
+    const options = screen.getAllByTestId('location-option');
+    expect(options[0]).toHaveTextContent('Iron Works');
+    expect(screen.queryByTestId('location-near-you')).not.toBeInTheDocument();
+    expect(screen.queryByText(/away/)).not.toBeInTheDocument();
+  });
+});

@@ -51,6 +51,8 @@
 	<string>HyperTrack reads sleep, heart, and step data to personalize recovery and calorie estimates.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>HyperTrack uses the camera to scan food barcodes for nutrition logging.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>HyperTrack uses your location to suggest which gym you&#8217;re training at, so machine weights stay tracked per gym.</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

@@ -114,6 +114,20 @@ Everything else is a plain `merge`.
   "Machine: {name}"), same sheet with a "Same as workout" row. This replaces
   the duplicate-an-exercise-per-gym workaround at the point where users reach
   for it.
+- **"Near you" suggestion** (session scope only): opening the picker requests
+  a one-shot phone position (`lib/geo/currentPosition.ts`, permission prompted
+  in response to the tap, every failure degrading to an unranked list). Gyms
+  with learned coordinates sort nearest-first with a distance subtitle, and
+  the closest within `NEARBY_GYM_RADIUS_M` (400 m) gets a "Near you" badge
+  (`services/gymProximity.ts`, pure). Coordinates are learned passively: the
+  first time the user picks a gym with a usable fix, that fix is stamped onto
+  the gym (`gym_locations.latitude/longitude`, migration `20260920000002`) —
+  they are standing in it, which beats any address form. Learned coordinates
+  are never overwritten by a later fix.
+- **Failure toasts name the database error.** A location move that fails
+  appends the PostgREST error (`code: message`) to the toast
+  (`LocationUpdateResult.detail`) — on a phone the console.error is
+  unreachable, so the toast is the only diagnosable surface.
 - Both changes **re-stamp already-logged sets** (`lib/training/sessionLocation.ts`)
   and re-scope suggestions in place, so a mid-session correction moves the
   whole session rather than splitting it across two tracks. A session change
