@@ -8,10 +8,10 @@
  *   pill, a compact Finish button, and an overflow menu holding the
  *   secondary actions (Add exercise, collapse-all, injuries, readiness,
  *   plates, deload, save-as-template, Cancel).
- * - progress row: full-width per-exercise progress that can never collide
- *   with the timer/count text (own row). ≤8 exercises render as individual
- *   segments; >8 collapse to a single continuous fill bar (completed/total),
- *   because a dozen tiny dashes aren't readable progress.
+ * - progress row: per-exercise progress that can never collide with the
+ *   timer/count text (own row), plus the location pill. ≤8 exercises render
+ *   as individual segments; >8 collapse to a single continuous fill bar
+ *   (completed/total), because a dozen tiny dashes aren't readable progress.
  *
  * Purely presentational; all state stays in the page. The timer pill toggles
  * pause/resume through the existing `workoutTimer.toggle` — no new
@@ -88,8 +88,8 @@ export interface WorkoutHeaderProps {
    * Name of the gym this session is being logged at, or null when none is set.
    * Machine loads aren't comparable between gyms, so this is the key the
    * session's sets are filed under (see services/progressionScope) — it earns
-   * a permanent spot in the meta line rather than a menu item, because a wrong
-   * location is only noticeable if it's visible.
+   * a permanent, readable pill on the progress row rather than a menu item,
+   * because a wrong location is only noticeable if it's visible.
    */
   locationName: string | null;
   /** Opens the picker that changes where this whole workout is being logged. */
@@ -194,37 +194,6 @@ export function WorkoutHeader({
                 </>
               )}
             </p>
-            <span aria-hidden="true" className="text-[11px] text-surface-600">
-              ·
-            </span>
-            {/* Location chip. Lives in the always-visible meta line rather than
-                behind the menu: a session filed under the wrong gym quietly
-                pollutes every machine lift's history, and the only defense is
-                that the user can see where they are. Also present in the tools
-                menu below at a full-size hit target. */}
-            <button
-              onClick={onOpenLocationPicker}
-              data-testid="workout-location-chip"
-              data-location-set={locationName ? 'true' : 'false'}
-              title={
-                locationName
-                  ? `Training at ${locationName} — tap to change`
-                  : 'No location set — machine lifts share one history until you set it'
-              }
-              aria-label={
-                locationName
-                  ? `Training at ${locationName}. Change workout location.`
-                  : 'Set workout location.'
-              }
-              className={`-my-1.5 flex flex-shrink-0 max-w-[45%] items-center gap-1 rounded-md px-1.5 py-1.5 text-[11px] transition-colors ${
-                locationName
-                  ? 'text-surface-400 hover:bg-surface-800 hover:text-surface-200'
-                  : 'text-surface-500 hover:bg-surface-800 hover:text-surface-300'
-              }`}
-            >
-              <IconMapPin size={12} stroke={2} className="flex-shrink-0" aria-hidden="true" />
-              <span className="truncate">{locationName ?? 'Set location'}</span>
-            </button>
           </div>
         </div>
 
@@ -424,39 +393,73 @@ export function WorkoutHeader({
         </div>
       </div>
 
-      {/* Progress row — its own row so per-exercise progress can never collide
-          with the timer/count text above. ≤8 exercises: individual segments;
-          >8: a single continuous fill bar (completed / total). */}
-      {exerciseTotal > 0 && (
-        useSegments ? (
-          <div
-            data-testid="workout-progress-segments"
-            className="flex items-center gap-1 mt-2"
-            role="img"
-            aria-label={`Progress: ${completedCount} of ${exerciseTotal} exercises complete`}
-          >
-            {segments.map((status, i) => (
-              <span
-                key={i}
-                className={`flex-1 h-1.5 rounded-full ${SEGMENT_CLASS[status]}`}
-              />
-            ))}
-          </div>
-        ) : (
-          <div
-            data-testid="workout-progress-bar"
-            className="mt-2 h-1.5 rounded-full bg-surface-800 overflow-hidden"
-            role="img"
-            aria-label={`Progress: ${completedCount} of ${exerciseTotal} exercises complete`}
-          >
+      {/* Progress + location row — its own row so per-exercise progress can
+          never collide with the timer/count text above. Progress: ≤8 exercises
+          render individual segments, >8 a single continuous fill bar.
+
+          The location pill shares this row instead of squeezing into the meta
+          line above: that column is starved on phones (back button + timer +
+          Finish + menu leave it ~100px), so a gym name there truncated to a
+          single letter. A session filed under the wrong gym quietly pollutes
+          every machine lift's history, and the only defense is that the user
+          can READ where they are — so the pill gets room for the full name,
+          and turns amber when no location is set at all. Also in the tools
+          menu below at a full-size hit target. */}
+      <div className="flex items-center gap-2.5 mt-2">
+        {exerciseTotal > 0 && (
+          useSegments ? (
             <div
-              data-testid="workout-progress-bar-fill"
-              className="h-full rounded-full bg-success-500 transition-[width] duration-300"
-              style={{ width: `${fillPct}%` }}
-            />
-          </div>
-        )
-      )}
+              data-testid="workout-progress-segments"
+              className="flex flex-1 min-w-0 items-center gap-1"
+              role="img"
+              aria-label={`Progress: ${completedCount} of ${exerciseTotal} exercises complete`}
+            >
+              {segments.map((status, i) => (
+                <span
+                  key={i}
+                  className={`flex-1 h-1.5 rounded-full ${SEGMENT_CLASS[status]}`}
+                />
+              ))}
+            </div>
+          ) : (
+            <div
+              data-testid="workout-progress-bar"
+              className="flex-1 min-w-0 h-1.5 rounded-full bg-surface-800 overflow-hidden"
+              role="img"
+              aria-label={`Progress: ${completedCount} of ${exerciseTotal} exercises complete`}
+            >
+              <div
+                data-testid="workout-progress-bar-fill"
+                className="h-full rounded-full bg-success-500 transition-[width] duration-300"
+                style={{ width: `${fillPct}%` }}
+              />
+            </div>
+          )
+        )}
+        <button
+          onClick={onOpenLocationPicker}
+          data-testid="workout-location-chip"
+          data-location-set={locationName ? 'true' : 'false'}
+          title={
+            locationName
+              ? `Training at ${locationName} — tap to change`
+              : 'No location set — machine lifts share one history until you set it'
+          }
+          aria-label={
+            locationName
+              ? `Training at ${locationName}. Change workout location.`
+              : 'Set workout location.'
+          }
+          className={`flex flex-shrink-0 max-w-[65%] items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+            locationName
+              ? 'border-surface-700 bg-surface-800/70 text-surface-300 hover:bg-surface-700 hover:text-surface-100'
+              : 'border-warning-500/50 bg-warning-500/10 text-warning-400 hover:bg-warning-500/20'
+          }`}
+        >
+          <IconMapPin size={13} stroke={2} className="flex-shrink-0" aria-hidden="true" />
+          <span className="truncate">{locationName ?? 'Set location'}</span>
+        </button>
+      </div>
     </div>
   );
 }

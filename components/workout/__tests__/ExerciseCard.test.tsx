@@ -415,6 +415,47 @@ describe('ExerciseCard', () => {
       expect(screen.queryByText('Last Workout')).not.toBeInTheDocument();
     });
 
+    it('leads the meta line with the calibration tag so phone truncation cannot hide it', () => {
+      // The which-gym's-track signal used to trail the whole line, where the
+      // meta line's ellipsis swallowed it exactly when it mattered (a long
+      // set list at an unfamiliar gym). It now sits before the set list.
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          exerciseHistory={{
+            lastWorkoutDate: '2024-01-10',
+            lastWorkoutSets: [{ weightKg: 60, reps: 9, rpe: 8 }],
+            estimatedE1RM: 80,
+            personalRecord: null,
+            totalSessions: 5,
+            progressionScope: 'local',
+            estimatedFromOtherLocation: true,
+          }}
+        />
+      );
+      expect(
+        screen.getByText(/last session · est\. from another gym — 60 kg × 9/)
+      ).toBeInTheDocument();
+    });
+
+    it("tags this gym's own track as here, before the set list", () => {
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          exerciseHistory={{
+            lastWorkoutDate: '2024-01-10',
+            lastWorkoutSets: [{ weightKg: 60, reps: 9, rpe: 8 }],
+            estimatedE1RM: 80,
+            personalRecord: null,
+            totalSessions: 5,
+            progressionScope: 'local',
+            estimatedFromOtherLocation: false,
+          }}
+        />
+      );
+      expect(screen.getByText(/last session · here — 60 kg × 9/)).toBeInTheDocument();
+    });
+
     describe('12-week history sparkline in the expanded detail', () => {
       const daysAgo = (n: number): string => {
         const d = new Date();

@@ -40,6 +40,14 @@ calibration.** A first session at a new implement is a softened starting point
   ambiguous (tie / no data) they stay visible at every location. The count of
   affected sets is logged (`[progressionScope] N null-location set(s)…`).
 
+  Note the failure mode this rule has for a user whose ENTIRE history predates
+  stamping: with no stamped sets to vote, everything is ambiguous, so a
+  brand-new gym shows full unsoftened history — and once stamped sets do
+  accumulate at the new gym, the old history is attributed there permanently
+  (most-used-stamped wins) even though it was logged elsewhere. The remedy is
+  the user-run backfill below ("Assigning legacy history"), which removes the
+  nulls instead of re-guessing them.
+
 ## Volume / analytics
 
 Weekly volume, muscle-group counts, and readiness aggregate **across**
@@ -47,6 +55,25 @@ locations — a calf set is a calf set anywhere (rule 7). This is structural: th
 domain `SetLog` carries no location, so `services/volumeTracker` cannot scope by
 it. Only load progression is scoped. Regression test:
 `services/__tests__/volumeLocationAggregation.test.ts`.
+
+## Assigning legacy history to a gym (backfill)
+
+Settings → Training → **Past Workouts & Gyms**
+(`components/settings/LegacyHistoryBackfill.tsx`) lets the user state, once,
+"all my unassigned history was at gym X":
+
+- `backfill_legacy_location(p_location_id)`
+  (`supabase/migrations/20260920000001_legacy_location_backfill.sql`) stamps
+  the caller's **completed** null-location sessions, then their null sets via
+  the same `COALESCE(block, session)` order as `resolveEffectiveLocation`.
+  One SQL function = one transaction, so history can never be left
+  half-stamped (there is no cross-request transaction over PostgREST).
+  SECURITY INVOKER: RLS applies, plus an explicit ownership check on the
+  target location. In-progress sessions are untouched — their location is
+  live UI state owned by the workout page.
+- `lib/training/legacyLocationBackfill.ts` is the client: a count of what
+  the RPC would touch (drives the confirm dialog) and the RPC call. Both
+  degrade to renderable values on a pre-migration database.
 
 ## Migrating existing duplicates
 
@@ -94,7 +121,9 @@ Everything else is a plain `merge`.
 - The workout card's last-session line tags a `local`-scope exercise with
   `· here` (this gym's own track), `· at {name}` (a pinned machine),
   `· est. from another gym`, or `· est. — first time on {name}` —
-  `components/workout/ExerciseCard.tsx` (rule 11).
+  `components/workout/ExerciseCard.tsx` (rule 11). The tag sits BEFORE the
+  set list (`last session · here — 240 lbs × 20 …`) because the line
+  truncates on phones and the which-track signal must survive that.
 - The AI coach rationale surfaces the "treat as a starting point" note on a
   first session at a new implement (rule 4).
 
@@ -158,6 +187,11 @@ follow-up to keep this change's blast radius contained:
 - A UI entry point for `mergeAsLocationVariant` (the function + audit action are
   ready; the dedup/merge admin surface that would call them is a separate
   ticket).
+- **Per-completed-workout location correction.** `updateSessionLocation` is
+  only reachable from an active session; a completed workout's location cannot
+  be changed afterwards. Until it can, the legacy backfill's guidance is
+  deliberately restricted to histories entirely from one gym — a mixed history
+  assigned in bulk could not be untangled.
 
 ## Constraints honored
 
