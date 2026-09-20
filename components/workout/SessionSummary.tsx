@@ -29,6 +29,11 @@ import {
   sumDisplayVolume,
 } from '@/lib/utils';
 import { e1rmValueFromRpe } from '@/services/shared/e1rm';
+import {
+  displaySetQuality,
+  SET_QUALITY_DISPLAY_META,
+  type SetQualityDisplay,
+} from '@/lib/training/setQualityDisplay';
 import { getCalibrationVerdict, type CalibrationMethod } from '@/services/rpeCalibration';
 import type { ShareExercise, WorkoutShareTextInput } from '@/services/workoutShareText';
 import { ShareWorkoutText } from './ShareWorkoutText';
@@ -47,6 +52,32 @@ export interface SessionMuscleFeedbackEntry {
 }
 
 const DEFAULT_WORKLOAD: WorkloadRating = 1;
+
+/** Breakdown rows ordered by stimulus credit; colors match the set table. */
+const QUALITY_BREAKDOWN_ROWS: ReadonlyArray<{
+  bucket: SetQualityDisplay;
+  name: string;
+  dotClass: string;
+}> = [
+  { bucket: 'stimulative', name: 'Stimulative', dotClass: 'bg-success-500' },
+  { bucket: 'maxed', name: 'Maxed', dotClass: 'bg-orange-500' },
+  { bucket: 'effective', name: 'Effective', dotClass: 'bg-primary-500' },
+  { bucket: 'easy', name: 'Easy', dotClass: 'bg-surface-400' },
+  { bucket: 'junk', name: 'Junk', dotClass: 'bg-surface-500' },
+  { bucket: 'excessive', name: 'Excessive', dotClass: 'bg-danger-500' },
+];
+
+/** Set-table quality cell: text class + short label per display bucket. */
+const QUALITY_CELL: Readonly<
+  Record<SetQualityDisplay, { textClass: string; shortLabel: string }>
+> = {
+  stimulative: { textClass: 'text-success-400', shortLabel: '✓ Stim' },
+  maxed: { textClass: 'text-orange-400', shortLabel: '⚡ Max' },
+  effective: { textClass: 'text-primary-400', shortLabel: '○ Eff' },
+  easy: { textClass: 'text-surface-500', shortLabel: '– Easy' },
+  junk: { textClass: 'text-surface-500', shortLabel: '— Junk' },
+  excessive: { textClass: 'text-danger-400', shortLabel: '⚠ Excess' },
+};
 
 /** Resolve a raw primaryMuscle string (detailed/standard/legacy) to a StandardMuscleGroup. */
 function resolveStandardMuscle(raw: string | undefined): StandardMuscleGroup | null {
@@ -237,23 +268,33 @@ export function SessionSummary({
   // Estimated calories burned
   const caloriesBurned = estimateCaloriesBurned(durationMinutes, totalSets, avgRpe);
 
-  // Set quality breakdown
+  // Set quality breakdown — DISPLAY buckets (RIR-derived via
+  // displaySetQuality), so the breakdown, the per-set table badges and the
+  // effective-volume credit tiers all tell the same story.
   const qualityBreakdown = workingSets.reduce(
     (acc, set) => {
-      acc[set.quality] = (acc[set.quality] || 0) + 1;
+      const bucket = displaySetQuality({
+        quality: set.quality,
+        rir: set.feedback?.repsInTank,
+        rpe: set.rpe,
+      });
+      acc[bucket] = (acc[bucket] || 0) + 1;
       return acc;
     },
-    {} as Record<string, number>
+    {} as Partial<Record<SetQualityDisplay, number>>
   );
 
-  // Calculate quality score (0-100)
+  // Calculate quality score (0-100). Maxed scores like stimulative: it earns
+  // the same 1.0× volume credit, so the score must not read as a discount.
   const qualityScore = useMemo(() => {
     if (totalSets === 0) return 0;
-    const stimulative = qualityBreakdown.stimulative || 0;
+    const stimulative = (qualityBreakdown.stimulative || 0) + (qualityBreakdown.maxed || 0);
     const effective = qualityBreakdown.effective || 0;
+    const easy = qualityBreakdown.easy || 0;
     const junk = qualityBreakdown.junk || 0;
-    // Stimulative = 100pts, Effective = 75pts, Junk = 25pts, Excessive = 0pts
-    const score = (stimulative * 100 + effective * 75 + junk * 25) / totalSets;
+    // Stimulative/Maxed = 100pts, Effective = 75pts, Easy = 40pts,
+    // Junk = 25pts, Excessive = 0pts
+    const score = (stimulative * 100 + effective * 75 + easy * 40 + junk * 25) / totalSets;
     return Math.round(score);
   }, [totalSets, qualityBreakdown]);
 
@@ -1134,45 +1175,27 @@ export function SessionSummary({
               </div>
             </div>
 
-            {/* Quality breakdown */}
+            {/* Quality breakdown — one row per display bucket, ordered by
+                stimulus credit (see lib/training/setQualityDisplay) */}
             <div className="flex-1 space-y-2">
               <p className="text-sm font-medium text-surface-200 mb-2">Set Quality Breakdown</p>
-              {qualityBreakdown.stimulative > 0 && (
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-success-500" />
-                  <span className="text-sm text-surface-300">{qualityBreakdown.stimulative} Stimulative</span>
-                  <span className="text-xs text-surface-500 ml-auto">
-                    {Math.round((qualityBreakdown.stimulative / totalSets) * 100)}%
-                  </span>
-                </div>
-              )}
-              {qualityBreakdown.effective > 0 && (
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-primary-500" />
-                  <span className="text-sm text-surface-300">{qualityBreakdown.effective} Effective</span>
-                  <span className="text-xs text-surface-500 ml-auto">
-                    {Math.round((qualityBreakdown.effective / totalSets) * 100)}%
-                  </span>
-                </div>
-              )}
-              {qualityBreakdown.junk > 0 && (
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-surface-500" />
-                  <span className="text-sm text-surface-300">{qualityBreakdown.junk} Junk</span>
-                  <span className="text-xs text-surface-500 ml-auto">
-                    {Math.round((qualityBreakdown.junk / totalSets) * 100)}%
-                  </span>
-                </div>
-              )}
-              {qualityBreakdown.excessive > 0 && (
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-danger-500" />
-                  <span className="text-sm text-surface-300">{qualityBreakdown.excessive} Excessive</span>
-                  <span className="text-xs text-surface-500 ml-auto">
-                    {Math.round((qualityBreakdown.excessive / totalSets) * 100)}%
-                  </span>
-                </div>
-              )}
+              {QUALITY_BREAKDOWN_ROWS.map(({ bucket, name, dotClass }) => {
+                const count = qualityBreakdown[bucket] || 0;
+                if (count === 0) return null;
+                return (
+                  <div
+                    key={bucket}
+                    className="flex items-center gap-2"
+                    title={SET_QUALITY_DISPLAY_META[bucket].description}
+                  >
+                    <div className={`w-3 h-3 rounded-full ${dotClass}`} />
+                    <span className="text-sm text-surface-300">{count} {name}</span>
+                    <span className="text-xs text-surface-500 ml-auto">
+                      {Math.round((count / totalSets) * 100)}%
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </Card>
@@ -1419,12 +1442,19 @@ export function SessionSummary({
                                   </td>
                                 </tr>
                               )}
-                              {exercise.sets.map((set, idx) => (
+                              {exercise.sets.map((set, idx) => {
+                                const bucket = displaySetQuality({
+                                  quality: set.quality,
+                                  rir: set.feedback?.repsInTank,
+                                  rpe: set.rpe,
+                                });
+                                return (
                                 <tr
                                   key={set.id}
                                   className={`border-t border-surface-800 ${
-                                    set.quality === 'stimulative' ? 'bg-success-500/5' :
-                                    set.quality === 'excessive' ? 'bg-danger-500/5' : ''
+                                    bucket === 'stimulative' ? 'bg-success-500/5' :
+                                    bucket === 'maxed' ? 'bg-orange-500/5' :
+                                    bucket === 'excessive' ? 'bg-danger-500/5' : ''
                                   }`}
                                 >
                                   <td className="px-2 py-1.5 text-surface-400">{idx + 1}</td>
@@ -1445,20 +1475,16 @@ export function SessionSummary({
                                     </span>
                                   </td>
                                   <td className="px-2 py-1.5 text-right">
-                                    <span className={`text-xs ${
-                                      set.quality === 'stimulative' ? 'text-success-400' :
-                                      set.quality === 'effective' ? 'text-primary-400' :
-                                      set.quality === 'junk' ? 'text-surface-500' :
-                                      'text-danger-400'
-                                    }`}>
-                                      {set.quality === 'stimulative' ? '✓ Stim' :
-                                       set.quality === 'effective' ? '○ Eff' :
-                                       set.quality === 'junk' ? '— Junk' :
-                                       '⚠ Excess'}
+                                    <span
+                                      className={`text-xs ${QUALITY_CELL[bucket].textClass}`}
+                                      title={SET_QUALITY_DISPLAY_META[bucket].description}
+                                    >
+                                      {QUALITY_CELL[bucket].shortLabel}
                                     </span>
                                   </td>
                                 </tr>
-                              ))}
+                                );
+                              })}
                             </tbody>
                           </table>
                         </div>

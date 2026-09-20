@@ -3,8 +3,13 @@
 import React, { useState, useEffect, useMemo, memo, useRef, useCallback } from 'react';
 import { Card, Button, ConfirmModal, InfoTooltip } from '@/components/ui';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/Accordion';
-import type { Exercise, ExerciseBlock, SetLog, WeightUnit, SetQuality, SetFeedback, BodyweightData, ExercisePerformanceSnapshot, StandardMuscleGroup, SorenessRating, SetDiscomfort, RepsInTank, SleepQuality, SetType } from '@/types/schema';
+import type { Exercise, ExerciseBlock, SetLog, WeightUnit, SetFeedback, BodyweightData, ExercisePerformanceSnapshot, StandardMuscleGroup, SorenessRating, SetDiscomfort, RepsInTank, SleepQuality, SetType } from '@/types/schema';
 import { rpeToRir, rirToRpe } from '@/types/schema';
+import {
+  displaySetQuality,
+  SET_QUALITY_DISPLAY_META,
+  type SetQualityDisplay,
+} from '@/lib/training/setQualityDisplay';
 import { formatSetHistoryLine } from '@/lib/formatSetHistory';
 import { SorenessChipRow, JointPainPicker } from './FeedbackChips';
 import { filterExercises, dedupeExercisesById } from '@/services/exerciseFilter';
@@ -2174,11 +2179,14 @@ export const ExerciseCard = memo(function ExerciseCard({
   };
 
   // Text color for the completed-line quality tag (mockup grammar):
-  // stimulative=success, effective=neutral, junk=warning, excessive=danger.
-  const qualityTextClass = (quality: SetQuality) => {
+  // stimulative=success, maxed=orange (full credit, hot), effective=neutral,
+  // easy=muted, junk=warning, excessive=danger.
+  const qualityTextClass = (quality: SetQualityDisplay) => {
     switch (quality) {
       case 'stimulative': return 'text-success-400';
+      case 'maxed': return 'text-orange-400';
       case 'effective': return 'text-surface-400';
+      case 'easy': return 'text-surface-500';
       case 'junk': return 'text-warning-400';
       case 'excessive': return 'text-danger-400';
       default: return 'text-surface-500';
@@ -3816,6 +3824,13 @@ export const ExerciseCard = memo(function ExerciseCard({
             ? displayWeight(set.bodyweightData.effectiveLoadKg, true)
             : displayWeight(set.weightKg, true);
           const rirValue = set.feedback?.repsInTank ?? rpeToRir(set.rpe);
+          // Display bucket mirrors the effective-volume credit tiers (0 RIR =
+          // "maxed", full credit) rather than the stored quality verdict.
+          const qualityDisplay = displaySetQuality({
+            quality: set.quality,
+            rir: set.feedback?.repsInTank,
+            rpe: set.rpe,
+          });
 
           const isDeleteRevealed =
             confirmDeleteSetId === set.id ||
@@ -3893,7 +3908,13 @@ export const ExerciseCard = memo(function ExerciseCard({
                   {setSyncStatus?.[set.id] === 'queued' && (
                     <span className="text-warning-400 mr-1.5">queued</span>
                   )}
-                  {rirValue} RIR · <span className={qualityTextClass(set.quality)}>{set.quality}</span>
+                  {rirValue} RIR ·{' '}
+                  <span
+                    className={qualityTextClass(qualityDisplay)}
+                    title={SET_QUALITY_DISPLAY_META[qualityDisplay].description}
+                  >
+                    {SET_QUALITY_DISPLAY_META[qualityDisplay].label}
+                  </span>
                 </span>
                 {onSetJointPain && (
                   <button
