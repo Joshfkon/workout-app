@@ -77,6 +77,15 @@ export default function PrivacyPolicyPage() {
               permission.
             </p>
 
+            <SubHeading>Location (optional)</SubHeading>
+            <p>
+              If you grant location permission, we use your approximate location only to suggest which
+              gym you are training at when you use the machine weight location picker. This helps keep
+              machine weight records organized by gym. We do not track your location in the background,
+              sell location data, or use it for any purpose other than gym suggestions. If you deny
+              permission, the location picker still works—it just won&rsquo;t sort gyms by proximity.
+            </p>
+
             <SubHeading>Social information (optional)</SubHeading>
             <p>
               If you use social features, we collect your profile (username, avatar, bio) and the
