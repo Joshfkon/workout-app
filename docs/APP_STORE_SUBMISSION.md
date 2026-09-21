@@ -25,7 +25,7 @@ and used for **App Functionality** (plus the specific purposes noted).
 | **Sensitive Info (health/medical)** | Yes* | Optional medication note (e.g., GLP-1) used to tailor protein targets | App Functionality |
 | **Usage Data** | No | No analytics/tracking SDK is currently integrated | — |
 | **Diagnostics** | No | No crash/perf reporting SDK is currently integrated | — |
-| **Location** | No | App does not request location | — |
+| **Location → Coarse location** | Yes | Approximate location (when granted) to suggest which gym you are training at | App Functionality |
 | **Financial Info (payment card)** | No | Card data is collected by Stripe on the web, never by the app | — |
 
 \* Apple's questionnaire groups some of this under "Health & Fitness." Declare the
@@ -59,7 +59,13 @@ Notes:
 - **No `NSHealthUpdateUsageDescription` needed** — the HealthKit integration is
   read-only (`lib/integrations/healthkit.ts`, `write: []`). Add it only if you
   later write data back to Health.
-- **No location string** — the app does not use location.
+- **`NSLocationWhenInUseUsageDescription` already present** — the app uses
+  approximate location to suggest which gym you're training at
+  (`lib/geo/currentPosition.ts` → `services/gymProximity.ts`). The permission
+  request is optional and denied gracefully (picker still works unsorted).
+  **Android equivalent:** When `npx cap add android` is run, add
+  `ACCESS_COARSE_LOCATION` and `ACCESS_FINE_LOCATION` to
+  `android/app/src/main/AndroidManifest.xml`.
 - The deep-link URL scheme (`hypertrack`) still needs the `CFBundleURLTypes`
   block from `CAPACITOR_MIGRATION.md` (Phase 5).
 
