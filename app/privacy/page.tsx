@@ -7,7 +7,7 @@ export const metadata: Metadata = {
 };
 
 // Update this whenever the policy changes.
-const LAST_UPDATED = 'June 29, 2026';
+const LAST_UPDATED = 'September 22, 2026';
 const CONTACT_EMAIL = 'privacy@hypertrack.app';
 
 export default function PrivacyPolicyPage() {
@@ -124,10 +124,13 @@ export default function PrivacyPolicyPage() {
 
           <Section title="3. AI Processing">
             <p>
-              Certain features (such as AI coaching notes, exercise generation, and program design)
-              send relevant data — for example, your training history, body-composition context, and
-              goals — to our AI provider, Anthropic, to generate responses. This data is processed to
-              provide the feature and is not used by us to train AI models. AI-generated guidance is
+              Certain features use artificial intelligence to generate personalized insights and
+              content. When you use AI coaching features (such as AI coaching notes and in-workout
+              coaching), relevant data — for example, your training history, body-composition context,
+              and goals — may be sent to xAI (Grok) to generate responses. Other AI features (such as
+              nutrition estimates, food-label help, progress-photo estimates, exercise generation, and
+              program design) may send relevant data to Anthropic. This data is processed to provide
+              the feature and is not used by us to train AI models. AI-generated guidance is
               informational and is not medical advice.
             </p>
           </Section>
@@ -140,7 +143,8 @@ export default function PrivacyPolicyPage() {
             <ul className="list-disc pl-6 space-y-1.5">
               <li><strong>Supabase</strong> — database, authentication, and file storage;</li>
               <li><strong>Stripe</strong> — subscription payments (web only);</li>
-              <li><strong>Anthropic</strong> — AI coaching and generation features;</li>
+              <li><strong>Anthropic</strong> — AI features such as nutrition estimates, food-label help, progress-photo estimates, and exercise generation;</li>
+              <li><strong>xAI</strong> — AI coaching features you choose to use;</li>
               <li><strong>Fitbit, Apple HealthKit, Google Fit</strong> — wearable integrations you choose to connect;</li>
               <li><strong>Food databases</strong> (such as USDA FoodData Central, Open Food Facts, and FatSecret) — to look up nutrition information for foods you search.</li>
             </ul>

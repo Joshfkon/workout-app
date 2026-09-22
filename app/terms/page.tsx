@@ -7,7 +7,7 @@ export const metadata: Metadata = {
 };
 
 // Update this whenever the terms change.
-const LAST_UPDATED = 'June 29, 2026';
+const LAST_UPDATED = 'September 22, 2026';
 const CONTACT_EMAIL = 'support@hypertrack.app';
 
 export default function TermsOfServicePage() {
@@ -133,7 +133,7 @@ export default function TermsOfServicePage() {
           <Section title="9. Third-Party Services">
             <p>
               The Service integrates with third-party providers (such as Supabase, Stripe, Anthropic,
-              Fitbit, Apple Health, Google Fit, and nutrition databases). Your use of those
+              xAI, Fitbit, Apple Health, Google Fit, and nutrition databases). Your use of those
               integrations may be subject to the third party&rsquo;s own terms, and we are not
               responsible for third-party services.
             </p>
