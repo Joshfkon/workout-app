@@ -10,7 +10,7 @@ import { useWearableRecovery } from '@/hooks/useWearableRecovery';
  * read-only readiness body as the in-workout Muscle Readiness sheet and the
  * empty-workout inline placement: good-targets strip, body map with the
  * Recovery/Volume paint toggle, and per-muscle volume bars + recovery badges
- * (6-row cap with a "+N more" expander, shared across surfaces).
+ * (every coarse group listed, no cap — shared across surfaces).
  *
  * No live session here, so it reads through `useDashboardMuscleReadiness` —
  * the same fetch and query key as the sheet, so opening a workout later hits a
@@ -38,7 +38,6 @@ export function TrainReadinessCard() {
         dailyGroupSets={dailyGroupSets}
         previewAt={previewAt}
         isLoading={isLoading}
-        collapsible
         loadingTestId="train-readiness-loading"
         wearableNotice={wearableRecovery.reason}
       />

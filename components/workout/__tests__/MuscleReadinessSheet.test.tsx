@@ -135,11 +135,10 @@ describe('MuscleReadinessSheet', () => {
 
     // Sheet is present.
     expect(await screen.findByTestId('readiness-sheet')).toBeInTheDocument();
-    // Coarse rows appear after the mocked history resolves (cap shows top 6).
-    await waitFor(() => expect(screen.getByTestId('readiness-show-more')).toBeInTheDocument());
-    // Reveal all coarse rows (fatigued quads sits below the cap).
-    await userEvent.click(screen.getByTestId('readiness-show-more'));
-    expect(screen.getByTestId('readiness-row-quads')).toBeInTheDocument();
+    // Every coarse row appears once the mocked history resolves — including
+    // fatigued quads at the bottom, with no "+N more" cap.
+    await waitFor(() => expect(screen.getByTestId('readiness-row-quads')).toBeInTheDocument());
+    expect(screen.queryByTestId('readiness-show-more')).not.toBeInTheDocument();
 
     // Dismiss.
     await userEvent.click(screen.getByLabelText('Close'));
@@ -152,8 +151,7 @@ describe('MuscleReadinessSheet', () => {
       { wrapper }
     );
 
-    await waitFor(() => expect(screen.getByTestId('readiness-show-more')).toBeInTheDocument());
-    await userEvent.click(screen.getByTestId('readiness-show-more'));
+    await waitFor(() => expect(screen.getByTestId('readiness-row-biceps')).toBeInTheDocument());
 
     // Quads were maxed 30h ago → Fatigued; calves untrained → no recent data.
     // Both under MEV, so the never-trained calves still ranks above quads.
@@ -183,10 +181,6 @@ describe('MuscleReadinessSheet', () => {
       <MuscleReadinessSheet isOpen onClose={jest.fn()} liveBlocks={[block]} liveSets={sets} />
     );
 
-    // Reveal every row so the assertions don't depend on where calves ranks.
-    await waitFor(() => expect(screen.getByTestId('readiness-show-more')).toBeInTheDocument());
-    await userEvent.click(screen.getByTestId('readiness-show-more'));
-
     // Weekly volume counts the live sets straight away…
     await waitFor(() => expect(screen.getByTestId('readiness-sets-calves')).toHaveTextContent('3'));
     // …while recovery keeps reading off completed sessions only: the workout is
@@ -206,7 +200,7 @@ describe('MuscleReadinessSheet', () => {
     expect(strip).not.toHaveTextContent('Quads');
   });
 
-  it('renders every coarse group, caps at 6 with "+N more", and keeps a Fatigued muscle reachable at the bottom', async () => {
+  it('renders every coarse group uncapped and keeps a Fatigued muscle reachable at the bottom', async () => {
     // Glutes hammered ~20h ago (yesterday) → Fatigued; nothing else trained.
     mockBlocks = [
       {
@@ -221,14 +215,9 @@ describe('MuscleReadinessSheet', () => {
       { wrapper }
     );
 
-    // Cap: exactly 6 coarse rows visible before expanding, with a "+N more".
-    await waitFor(() => expect(screen.getByTestId('readiness-show-more')).toBeInTheDocument());
-    expect(muscleRows(container).length).toBe(6);
-    // 14 coarse groups total → 8 hidden behind the expander.
-    expect(screen.getByTestId('readiness-show-more')).toHaveTextContent('+8 more');
-
-    // Expanding reveals the full list inline.
-    await userEvent.click(screen.getByTestId('readiness-show-more'));
+    // All 14 coarse groups render up front — no "+N more" expander.
+    await waitFor(() => expect(muscleRows(container).length).toBe(14));
+    expect(screen.queryByTestId('readiness-show-more')).not.toBeInTheDocument();
     const order = muscleRows(container);
     expect(order.length).toBe(14);
 
@@ -257,9 +246,7 @@ describe('MuscleReadinessSheet', () => {
       { wrapper }
     );
 
-    // Reveal all rows (trained muscles sink toward the bottom of the sort).
-    await waitFor(() => expect(screen.getByTestId('readiness-show-more')).toBeInTheDocument());
-    await userEvent.click(screen.getByTestId('readiness-show-more'));
+    await waitFor(() => expect(screen.getByTestId('readiness-row-quads')).toBeInTheDocument());
 
     // Sources stay hidden until the row is expanded.
     expect(screen.queryByTestId('readiness-sources-chest')).not.toBeInTheDocument();
@@ -333,8 +320,7 @@ describe('MuscleReadinessSheet', () => {
       { wrapper }
     );
 
-    await waitFor(() => expect(screen.getByTestId('readiness-show-more')).toBeInTheDocument());
-    await userEvent.click(screen.getByTestId('readiness-show-more'));
+    await waitFor(() => expect(screen.getByTestId('readiness-row-biceps')).toBeInTheDocument());
 
     // At rest: today's numbers, the 6-day-old curls still count.
     expect(screen.getByText(/good targets today/i)).toBeInTheDocument();
@@ -363,22 +349,4 @@ describe('MuscleReadinessSheet', () => {
     expect(screen.getByTestId('readiness-sets-biceps')).toHaveTextContent('4');
   });
 
-  it('remembers the expanded state across re-mounts within the session', async () => {
-    const { unmount } = render(
-      <MuscleReadinessSheet isOpen onClose={jest.fn()} liveBlocks={[]} liveSets={[]} />,
-      { wrapper }
-    );
-    await waitFor(() => expect(screen.getByTestId('readiness-show-more')).toBeInTheDocument());
-    await userEvent.click(screen.getByTestId('readiness-show-more'));
-    expect(screen.getByTestId('readiness-show-less')).toBeInTheDocument();
-    unmount();
-
-    // Re-open (a fresh lazy mount) → still expanded, no "+N more" to re-tap.
-    render(
-      <MuscleReadinessSheet isOpen onClose={jest.fn()} liveBlocks={[]} liveSets={[]} />,
-      { wrapper }
-    );
-    await waitFor(() => expect(screen.getByTestId('readiness-show-less')).toBeInTheDocument());
-    expect(screen.queryByTestId('readiness-show-more')).not.toBeInTheDocument();
-  });
 });

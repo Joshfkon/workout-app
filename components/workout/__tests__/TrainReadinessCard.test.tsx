@@ -95,12 +95,12 @@ describe('TrainReadinessCard', () => {
     expect(screen.getByTestId('readiness-map-mode-volume')).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByTestId('readiness-targets')).not.toHaveTextContent('Quads');
 
-    // 6 coarse rows visible, the rest behind "+N more" (14 coarse groups total).
+    // All 14 coarse groups visible — no "+N more" cap.
     const rowIds = Array.from(document.querySelectorAll('[data-testid^="readiness-row-"]'))
       .map((el) => (el.getAttribute('data-testid') || '').replace('readiness-row-', ''))
       .filter((id) => !id.startsWith('toggle-'));
-    expect(rowIds.length).toBe(6);
-    expect(screen.getByTestId('readiness-show-more')).toHaveTextContent('+8 more');
+    expect(rowIds.length).toBe(14);
+    expect(screen.queryByTestId('readiness-show-more')).not.toBeInTheDocument();
   });
 
   it('switches the map paint to weekly-volume zones on toggle', async () => {
