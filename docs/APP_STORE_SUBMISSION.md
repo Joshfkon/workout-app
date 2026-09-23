@@ -50,15 +50,18 @@ permission is requested without its usage string.
 <key>NSCameraUsageDescription</key>
 <string>HyperTrack uses the camera to scan food barcodes so you can quickly log nutrition.</string>
 
-<!-- Apple Health (read-only: steps, active energy, workouts, heart rate) -->
+<!-- Apple Health (read-only: steps, active energy, sleep, heart rate) -->
 <key>NSHealthShareUsageDescription</key>
-<string>HyperTrack reads your steps, active energy, workouts, and heart-rate data from Apple Health to improve recovery and calorie estimates.</string>
+<string>HyperTrack reads your sleep, steps, active energy, and heart-rate data from Apple Health to improve recovery and calorie estimates.</string>
 ```
 
 Notes:
 - **No `NSHealthUpdateUsageDescription` needed** — the HealthKit integration is
   read-only (`lib/integrations/healthkit.ts`, `write: []`). Add it only if you
   later write data back to Health.
+- The default HealthKit permission request covers sleep, steps, active energy (calories), 
+  and heart-rate data (HRV and resting HR). Workouts are NOT requested by default — 
+  they're only available if callers explicitly pass `workouts` in the permissions array.
 - **`NSLocationWhenInUseUsageDescription` already present** — the app uses
   approximate location to suggest which gym you're training at
   (`lib/geo/currentPosition.ts` → `services/gymProximity.ts`). The permission
