@@ -36,7 +36,7 @@ HealthKit read access requires `NSHealthShareUsageDescription`. Add to
 
 ```xml
 <key>NSHealthShareUsageDescription</key>
-<string>HyperTrack reads sleep, heart, and step data to personalize recovery and calorie estimates.</string>
+<string>HyperTrack reads your sleep, steps, active energy, and heart-rate data from Apple Health to improve recovery and calorie estimates.</string>
 ```
 
 We request **no write access**, so `NSHealthUpdateUsageDescription` is not
