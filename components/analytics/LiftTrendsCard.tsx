@@ -8,6 +8,7 @@ import {
   type LiftTrend,
   type LiftTrendsSummary,
 } from '@/app/(dashboard)/dashboard/_lib/liftTrends';
+import { UNASSIGNED_TRACK_KEY } from '@/services/locationTracks';
 
 interface LiftTrendsCardProps {
   summary: LiftTrendsSummary;
@@ -92,6 +93,12 @@ export function LiftTrendsCard({ summary, units }: LiftTrendsCardProps) {
         <p className="text-xs text-surface-500 mt-1">
           Top-set E1RM trend per lift over the last {weeks} weeks · {aggregateParts.join(' · ')}
         </p>
+        {summary.lifts.some((l) => l.locationLabel) && (
+          <p className="text-xs text-surface-500 mt-1">
+            Machine lifts trained at more than one gym are trended per gym — machines read
+            differently.
+          </p>
+        )}
       </CardHeader>
       <CardContent>
         {summary.lifts.length === 0 ? (
@@ -108,13 +115,26 @@ export function LiftTrendsCard({ summary, units }: LiftTrendsCardProps) {
           <div className="space-y-2">
             {summary.lifts.map((lift) => (
               <Link
-                key={lift.exerciseId}
-                href={`/dashboard/history?exercise=${lift.exerciseId}`}
+                // seriesKey is absent on summaries cached before per-gym trends.
+                key={lift.seriesKey ?? lift.exerciseId}
+                href={
+                  lift.locationLabel
+                    ? `/dashboard/history?exercise=${lift.exerciseId}&gym=${lift.locationId ?? UNASSIGNED_TRACK_KEY}`
+                    : `/dashboard/history?exercise=${lift.exerciseId}`
+                }
                 className="flex items-center gap-3 p-3 -mx-1 rounded-lg hover:bg-surface-800/50 transition-colors"
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-medium text-surface-200 truncate">{lift.name}</p>
+                    {lift.locationLabel && (
+                      <span
+                        className="text-xs text-surface-500 truncate"
+                        data-testid="lift-trend-gym"
+                      >
+                        · {lift.locationLabel}
+                      </span>
+                    )}
                     {lift.lowConfidence ? (
                       <Badge size="sm" variant="default">Calibrating</Badge>
                     ) : (

@@ -31,13 +31,16 @@ interface SessionOverrides {
   bestE1RM?: number;
   totalVolume?: number;
   sets?: { weightKg: number; reps: number; rpe: number | null; setType?: string }[];
+  locationId?: string | null;
+  locationName?: string | null;
 }
 
 const detailSession = (date: string, overrides: SessionOverrides = {}) => ({
   sessionId: `session-${date}`,
   date,
   isDeload: overrides.isDeload ?? false,
-  locationName: null,
+  locationId: overrides.locationId ?? null,
+  locationName: overrides.locationName ?? null,
   sets: overrides.sets ?? [{ weightKg: 100, reps: 8, rpe: 8, setType: 'normal' }],
   bestE1RM: overrides.bestE1RM ?? 100,
   topSet: null,
@@ -133,5 +136,63 @@ describe('ExerciseHistorySparkline', () => {
       <ExerciseHistorySparkline exerciseId="exercise-1" metric="e1rm" unit="kg" />
     );
     expect(container).toBeEmptyDOMElement();
+  });
+
+  describe('per-gym tracks (machine lifts)', () => {
+    const home = { locationId: 'home', locationName: 'Home Gym' };
+    const pf = { locationId: 'pf', locationName: 'Planet Fitness' };
+    const mixed = () => [
+      detailSession(daysAgo(3), { ...pf, bestE1RM: 70 }),
+      detailSession(daysAgo(10), { ...home, bestE1RM: 110 }),
+      detailSession(daysAgo(20), { ...pf, bestE1RM: 65 }),
+      detailSession(daysAgo(30), { ...home, bestE1RM: 105 }),
+    ];
+
+    it('plots only the current gym for a local-scope exercise', () => {
+      mockDetailHistoryData = mixed();
+      render(
+        <ExerciseHistorySparkline
+          exerciseId="exercise-1"
+          metric="e1rm"
+          unit="kg"
+          scope="local"
+          currentLocationId="pf"
+        />
+      );
+      expect(screen.getByText(/est\. 1RM · 2 sessions/)).toBeInTheDocument();
+      expect(screen.getByTestId('history-sparkline-gym')).toHaveTextContent('Planet Fitness');
+      // 65 → 70 within Planet Fitness: a rise, not the −40 a mixed line shows.
+      expect(screen.getByTestId('history-sparkline-delta')).toHaveTextContent('+5');
+    });
+
+    it('follows the gym you are at, not just the most recent one', () => {
+      mockDetailHistoryData = mixed();
+      render(
+        <ExerciseHistorySparkline
+          exerciseId="exercise-1"
+          metric="e1rm"
+          unit="kg"
+          scope="local"
+          currentLocationId="home"
+        />
+      );
+      expect(screen.getByTestId('history-sparkline-gym')).toHaveTextContent('Home Gym');
+      expect(screen.getByTestId('history-sparkline-delta')).toHaveTextContent('+5');
+    });
+
+    it('keeps one combined line for global-scope (free-weight) exercises', () => {
+      mockDetailHistoryData = mixed();
+      render(
+        <ExerciseHistorySparkline
+          exerciseId="exercise-1"
+          metric="e1rm"
+          unit="kg"
+          scope="global"
+          currentLocationId="pf"
+        />
+      );
+      expect(screen.getByText(/est\. 1RM · 4 sessions/)).toBeInTheDocument();
+      expect(screen.queryByTestId('history-sparkline-gym')).not.toBeInTheDocument();
+    });
   });
 });

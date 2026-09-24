@@ -7100,6 +7100,10 @@ export default function WorkoutPage() {
                         ? locationNameById(blockLocations[block.id] ?? null)
                         : null
                     }
+                    currentLocationId={resolveEffectiveLocation(
+                      blockLocations[block.id],
+                      sessionLocationId
+                    )}
                     userGoal={userGoal}
                     onRepRangeChange={(range) => handleRepRangeChange(block.id, range)}
                     isAmrapSuggested={
@@ -8133,6 +8137,11 @@ export default function WorkoutPage() {
             unit={preferences.units}
             positionLabel={detailsPositionLabel}
             setCountLabel={detailsSetCountLabel}
+            currentLocationId={
+              detailsBlock
+                ? resolveEffectiveLocation(blockLocations[detailsBlock.id], sessionLocationId)
+                : sessionLocationId
+            }
           />
         );
       })()}

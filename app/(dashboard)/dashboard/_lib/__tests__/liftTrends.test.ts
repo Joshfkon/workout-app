@@ -294,3 +294,72 @@ describe('marked boundary on an inestimable session', () => {
     expect(lift.weeklyChangePct).toBeGreaterThan(0);
   });
 });
+
+describe('computeLiftTrends — per-gym machine lifts', () => {
+  const legCurl = { id: 'ex-curl', name: 'Seated Leg Curl', equipment_required: ['leg_curl'] };
+  const at = (
+    row: LiftTrendSessionRow,
+    locationId: string | null,
+    name: string | null
+  ): LiftTrendSessionRow => ({
+    ...row,
+    location_id: locationId,
+    gym_locations: name ? { name } : null,
+  });
+
+  // Home machine reads heavy (~80 kg), Planet Fitness light (~60 kg); both
+  // rising within their own gym, alternating week to week.
+  const alternating = [
+    at(session('h1', '2026-06-01T10:00:00Z', legCurl, 80, 10), 'home', 'Home Gym'),
+    at(session('p1', '2026-06-04T10:00:00Z', legCurl, 58, 10), 'pf', 'Planet Fitness'),
+    at(session('h2', '2026-06-08T10:00:00Z', legCurl, 82.5, 10), 'home', 'Home Gym'),
+    at(session('p2', '2026-06-11T10:00:00Z', legCurl, 60, 10), 'pf', 'Planet Fitness'),
+    at(session('h3', '2026-06-15T10:00:00Z', legCurl, 85, 10), 'home', 'Home Gym'),
+    at(session('p3', '2026-06-18T10:00:00Z', legCurl, 62, 10), 'pf', 'Planet Fitness'),
+  ];
+
+  it('trends a machine lift separately at each gym', () => {
+    const summary = computeLiftTrends(alternating, 'bulk', new Date('2026-06-19'));
+
+    expect(summary.lifts).toHaveLength(2);
+    const byGym = Object.fromEntries(summary.lifts.map((l) => [l.locationLabel, l]));
+    expect(byGym['Home Gym']).toMatchObject({ direction: 'rising', locationId: 'home', sessionCount: 3 });
+    expect(byGym['Planet Fitness']).toMatchObject({ direction: 'rising', locationId: 'pf', sessionCount: 3 });
+    expect(new Set(summary.lifts.map((l) => l.seriesKey)).size).toBe(2);
+  });
+
+  it('keeps one combined trend when the machine lift was used at one gym only', () => {
+    const summary = computeLiftTrends(
+      alternating.filter((s) => s.location_id === 'home'),
+      'bulk',
+      new Date('2026-06-19')
+    );
+    expect(summary.lifts).toHaveLength(1);
+    expect(summary.lifts[0]).toMatchObject({ locationLabel: null, seriesKey: 'ex-curl' });
+  });
+
+  it('never splits a free-weight lift by gym', () => {
+    const rows = [
+      at(session('a', '2026-06-01T10:00:00Z', bench, 80, 8), 'home', 'Home Gym'),
+      at(session('b', '2026-06-08T10:00:00Z', bench, 82.5, 8), 'pf', 'Planet Fitness'),
+      at(session('c', '2026-06-15T10:00:00Z', bench, 85, 8), 'home', 'Home Gym'),
+    ];
+    const summary = computeLiftTrends(rows, 'bulk', new Date('2026-06-16'));
+    expect(summary.lifts).toHaveLength(1);
+    expect(summary.lifts[0]).toMatchObject({ locationLabel: null, sessionCount: 3 });
+  });
+
+  it('files unrecorded-gym sessions on their own track, not the busiest gym', () => {
+    const rows = [
+      at(session('l1', '2026-05-01T10:00:00Z', legCurl, 80, 10), null, null),
+      at(session('l2', '2026-05-08T10:00:00Z', legCurl, 81, 10), null, null),
+      at(session('l3', '2026-05-15T10:00:00Z', legCurl, 82, 10), null, null),
+      ...alternating.filter((s) => s.location_id === 'pf'),
+    ];
+    const summary = computeLiftTrends(rows, 'bulk', new Date('2026-06-19'));
+    expect(summary.lifts.map((l) => l.locationLabel).sort()).toEqual([
+      'No gym recorded',
+      'Planet Fitness',
+    ]);
+  });
+});

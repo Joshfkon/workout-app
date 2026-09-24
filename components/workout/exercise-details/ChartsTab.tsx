@@ -11,11 +11,14 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  Legend,
 } from 'recharts';
 import { SegmentedControl } from '../SegmentedControl';
 import { convertWeight, parseLocalDate } from '@/lib/utils';
+import type { LocationTrack } from '@/services/locationTracks';
 import {
   buildE1RMTrend,
+  buildE1RMTrendByTrack,
   buildWeeklyVolume,
   isNormalDetailSet,
   type ExerciseDetailSession,
@@ -33,7 +36,16 @@ interface ChartsTabProps {
    * progression-model default.
    */
   isDuration?: boolean;
+  /**
+   * Set when a machine lift is viewed across all gyms: the e1RM chart draws
+   * one line per gym instead of one line zig-zagging between machines that
+   * read differently.
+   */
+  gymTracks?: LocationTrack[];
 }
+
+/** Per-gym line colors (first = the primary series color used elsewhere). */
+const GYM_COLORS = ['#8b5cf6', '#f59e0b', '#10b981', '#ec4899', '#3b82f6', '#9ca3af'];
 
 /** Which number the trend chart plots. Both are switchable on any exercise;
  * the exercise's progression model only picks the default. */
@@ -57,7 +69,13 @@ const TOOLTIP_STYLE = {
   color: '#f3f4f6',
 } as const;
 
-export function ChartsTab({ sessions, unit, repTotalMode = false, isDuration = false }: ChartsTabProps) {
+export function ChartsTab({
+  sessions,
+  unit,
+  repTotalMode = false,
+  isDuration = false,
+  gymTracks,
+}: ChartsTabProps) {
   const [range, setRange] = useState<TrendRange>('all');
   // Default to the exercise's progression metric; the toggle lets the user
   // view the other one as reference. Duration-based movements get no toggle:
@@ -97,6 +115,19 @@ export function ChartsTab({ sessions, unit, repTotalMode = false, isDuration = f
       deloadE1rm: p.deloadE1rm === null ? null : Math.round(convertWeight(p.deloadE1rm, 'kg', unit)),
     }));
   }, [metric, sessions, range, unit]);
+
+  // All-gyms view of a machine lift: one series per gym, deloads left out.
+  const trendByGym = useMemo(() => {
+    if (metric !== 'e1rm' || !sessions || !gymTracks) return null;
+    return buildE1RMTrendByTrack(sessions, range, new Date()).map((row) => {
+      const out: Record<string, string | number | null> = { label: row.label };
+      for (const t of gymTracks) {
+        const v = row[t.key];
+        out[t.key] = typeof v === 'number' ? Math.round(convertWeight(v, 'kg', unit)) : null;
+      }
+      return out;
+    });
+  }, [metric, sessions, range, unit, gymTracks]);
 
   const weeklyVolume = useMemo(() => {
     if (!sessions) return [];
@@ -181,6 +212,51 @@ export function ChartsTab({ sessions, unit, repTotalMode = false, isDuration = f
           ) : (
             <p className="text-surface-500 text-sm py-8 text-center">
               No sessions in this range
+            </p>
+          )
+        ) : trendByGym && gymTracks ? (
+          trendByGym.length >= 1 ? (
+            <>
+              <div className="h-48" data-testid="exercise-detail-e1rm-by-gym">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={trendByGym}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                    <XAxis dataKey="label" stroke="#9ca3af" fontSize={11} tick={{ fill: '#9ca3af' }} />
+                    <YAxis
+                      stroke="#9ca3af"
+                      fontSize={11}
+                      tick={{ fill: '#9ca3af' }}
+                      domain={['dataMin - 5', 'dataMax + 5']}
+                      width={40}
+                    />
+                    <Tooltip
+                      contentStyle={TOOLTIP_STYLE}
+                      formatter={(value: number, name: string) => [`${value} ${unit}`, name]}
+                    />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    {gymTracks.map((t, i) => (
+                      <Line
+                        key={t.key}
+                        type="monotone"
+                        dataKey={t.key}
+                        name={t.label}
+                        stroke={GYM_COLORS[i % GYM_COLORS.length]}
+                        strokeWidth={2}
+                        dot={{ r: 3, fill: GYM_COLORS[i % GYM_COLORS.length] }}
+                        connectNulls
+                      />
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+              <p className="text-[11px] text-surface-500 mt-1.5">
+                One line per gym — machines read differently, so compare within a line, not across.
+                Deload sessions excluded.
+              </p>
+            </>
+          ) : (
+            <p className="text-surface-500 text-sm py-6 text-center">
+              No non-deload sessions in this range
             </p>
           )
         ) : trendPointCount >= 1 ? (

@@ -16,6 +16,7 @@
 import { estimateE1RM, sumDisplayVolume, parseLocalDate } from '@/lib/utils';
 import { getSetDuration, type ModalitySource } from '@/services/shared/setModality';
 import { rpeToRir } from '@/types/schema';
+import { buildLocationTracks, trackKeyFor, type LocationTrack } from '@/services/locationTracks';
 
 /** Modality source asserted by the sparkline's 'duration' metric. */
 const DURATION_MODALITY: ModalitySource = { exerciseType: 'duration_based' };
@@ -51,9 +52,12 @@ export interface ExerciseDetailSessionInput {
   date: string;
   isDeload: boolean;
   /**
-   * Gym/location tag. The schema has no location column on sessions yet —
-   * this stays null until that feature lands, and the UI hides the tag.
+   * Where this exercise was performed (block override, else session gym);
+   * null = legacy / not recorded. Machine lifts split their charts on it
+   * (services/locationTracks).
    */
+  locationId?: string | null;
+  /** Display name of `locationId`; null when unknown. */
   locationName?: string | null;
   /** Working sets only (warmups filtered out upstream), in logged order. */
   sets: ExerciseDetailSet[];
@@ -63,6 +67,8 @@ export interface ExerciseDetailSession {
   sessionId: string;
   date: string;
   isDeload: boolean;
+  /** Absent on entries persisted before location was fetched (= unknown). */
+  locationId?: string | null;
   locationName: string | null;
   sets: ExerciseDetailSet[];
   /** Best single-set e1RM in the session (kg). */
@@ -179,6 +185,7 @@ export function summarizeSession(input: ExerciseDetailSessionInput): ExerciseDet
     sessionId: input.sessionId,
     date: input.date,
     isDeload: input.isDeload,
+    locationId: input.locationId ?? null,
     locationName: input.locationName ?? null,
     sets: input.sets,
     bestE1RM,
@@ -192,6 +199,32 @@ export function summarizeSessions(inputs: ExerciseDetailSessionInput[]): Exercis
   return inputs
     .map(summarizeSession)
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+}
+
+// === Per-gym tracks ===
+
+/**
+ * The gyms this exercise's sessions happened at, most recently used first,
+ * named from the sessions themselves. Callers decide whether to split at all
+ * (locationTracks.shouldSplitByLocation — machine lifts only).
+ */
+export function buildSessionLocationTracks(
+  sessions: readonly ExerciseDetailSession[]
+): LocationTrack[] {
+  const names: Record<string, string> = {};
+  for (const s of sessions) {
+    if (s.locationId && s.locationName) names[s.locationId] = s.locationName;
+  }
+  return buildLocationTracks(sessions, (s) => s.locationId, (s) => s.date, names);
+}
+
+/** Sessions on one gym track; `null` = every gym. */
+export function filterSessionsByTrack(
+  sessions: ExerciseDetailSession[],
+  trackKey: string | null
+): ExerciseDetailSession[] {
+  if (trackKey === null) return sessions;
+  return sessions.filter((s) => trackKeyFor(s.locationId) === trackKey);
 }
 
 // === Tab behavior ===
@@ -314,6 +347,12 @@ function shortDateLabel(iso: string): string {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+function trendCutoff(range: TrendRange, now: Date): number | null {
+  return range === '3m' ? now.getTime() - 90 * DAY_MS :
+    range === '1y' ? now.getTime() - 365 * DAY_MS :
+    null;
+}
+
 /**
  * e1RM trend points, oldest first. Deload sessions are excluded from the
  * trend line (`e1rm: null`) but surfaced as muted dots via `deloadE1rm`.
@@ -323,10 +362,7 @@ export function buildE1RMTrend(
   range: TrendRange,
   now: Date
 ): E1RMTrendPoint[] {
-  const cutoff =
-    range === '3m' ? now.getTime() - 90 * DAY_MS :
-    range === '1y' ? now.getTime() - 365 * DAY_MS :
-    null;
+  const cutoff = trendCutoff(range, now);
 
   return [...sessions]
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
@@ -336,6 +372,40 @@ export function buildE1RMTrend(
       label: shortDateLabel(s.date),
       e1rm: s.isDeload ? null : s.bestE1RM,
       deloadE1rm: s.isDeload ? s.bestE1RM : null,
+    }));
+}
+
+export interface E1RMTrendByTrackRow {
+  date: string;
+  label: string;
+  /** Best e1RM (kg) per track key for this session; absent = not trained there. */
+  [trackKey: string]: number | string | null;
+}
+
+/**
+ * The all-gyms view of the e1RM trend for a machine lift: one row per
+ * non-deload session, carrying its value under its own gym's track key, so a
+ * chart can draw one line per gym instead of one line zig-zagging between
+ * machines that read differently. Oldest first.
+ */
+export function buildE1RMTrendByTrack(
+  sessions: ExerciseDetailSession[],
+  range: TrendRange,
+  now: Date
+): E1RMTrendByTrackRow[] {
+  const cutoff = trendCutoff(range, now);
+  return [...sessions]
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    .filter(
+      (s) =>
+        !s.isDeload &&
+        s.bestE1RM > 0 &&
+        (cutoff === null || new Date(s.date).getTime() >= cutoff)
+    )
+    .map((s) => ({
+      date: s.date,
+      label: shortDateLabel(s.date),
+      [trackKeyFor(s.locationId)]: s.bestE1RM,
     }));
 }
 

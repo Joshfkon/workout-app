@@ -14,6 +14,11 @@ interface RecordsTabProps {
   unit: 'kg' | 'lb';
   /** rep_total exercise: no e1RM record; best session rep total instead. */
   repTotalMode?: boolean;
+  /**
+   * Machine lift viewed across all gyms: the records below mix machines that
+   * read differently, so say so and point at the per-gym view.
+   */
+  mixedGyms?: boolean;
 }
 
 function StatCard({
@@ -34,7 +39,7 @@ function StatCard({
   );
 }
 
-export function RecordsTab({ sessions, unit, repTotalMode = false }: RecordsTabProps) {
+export function RecordsTab({ sessions, unit, repTotalMode = false, mixedGyms = false }: RecordsTabProps) {
   // rep_total headline record: the biggest session rep total (non-deload).
   const bestSessionReps = useMemo(() => {
     if (!repTotalMode || !sessions) return null;
@@ -84,6 +89,12 @@ export function RecordsTab({ sessions, unit, repTotalMode = false }: RecordsTabP
 
   return (
     <div className="space-y-5" data-testid="exercise-detail-records">
+      {mixedGyms && (
+        <p className="text-xs text-warning-400" data-testid="records-mixed-gyms">
+          These records combine machines from different gyms, which read differently.
+          Pick a gym above for like-for-like records.
+        </p>
+      )}
       {/* Headline records */}
       <div className="grid grid-cols-2 gap-2">
         {/* rep_total: no e1RM record exists — the headline is the best
