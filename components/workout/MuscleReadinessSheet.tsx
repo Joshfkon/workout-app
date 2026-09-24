@@ -37,17 +37,6 @@ import type { MuscleRecoveryResult } from '@/services/muscleRecovery';
 import type { SetLog, StandardMuscleGroup } from '@/types/schema';
 import type { ExerciseBlockWithExercise } from '@/app/(dashboard)/dashboard/workout/[id]/_lib/types';
 
-/** Default number of coarse rows shown before the "+N more" expander. */
-const DEFAULT_ROW_CAP = 6;
-
-/**
- * Expander state is remembered per browser session so a user who expands the
- * full list once doesn't have to re-expand it every time the sheet re-mounts
- * (it's lazy-mounted on each open) or the empty-workout inline placement
- * re-renders. Both surfaces share the key so "show me everything" carries over.
- */
-const SHOW_ALL_STORAGE_KEY = 'hypertrack:readiness-show-all';
-
 /**
  * Map paint mode (recovery vs volume vs long-window heatmap) shares the same
  * per-session persistence (and both surfaces share the key) so the choice
@@ -64,24 +53,6 @@ const READINESS_MAP_MODES: { id: ReadinessMapMode; label: string }[] = [
   { id: 'volume', label: 'Volume' },
   { id: 'heat', label: 'Heatmap' },
 ];
-
-function readShowAll(key: string): boolean {
-  if (typeof window === 'undefined') return false;
-  try {
-    return window.sessionStorage.getItem(key) === '1';
-  } catch {
-    return false;
-  }
-}
-
-function persistShowAll(key: string, value: boolean): void {
-  if (typeof window === 'undefined') return;
-  try {
-    window.sessionStorage.setItem(key, value ? '1' : '0');
-  } catch {
-    /* sessionStorage unavailable (private mode / SSR) — degrade to in-memory. */
-  }
-}
 
 function readMapMode(): ReadinessMapMode {
   if (typeof window === 'undefined') return 'recovery';
@@ -169,7 +140,7 @@ function barFillPct(sets: number, mrv: number): number {
  * week's volume while the heatmap paints a longer window, so a tap shows the
  * muscle's own long-window numbers instead of pointing at a different metric.
  */
-function ReadinessMap({ rows, onRevealAll }: { rows: ReadinessRow[]; onRevealAll?: () => void }) {
+function ReadinessMap({ rows }: { rows: ReadinessRow[] }) {
   const [mode, setModeState] = useState<ReadinessMapMode>(() => readMapMode());
   const setMode = (value: ReadinessMapMode) => {
     setModeState(value);
@@ -184,18 +155,9 @@ function ReadinessMap({ rows, onRevealAll }: { rows: ReadinessRow[]; onRevealAll
     (muscle: MuscleId) => {
       const target = renderedChildMuscles.has(muscle) ? muscle : STANDARD_TO_COARSE[muscle];
       const selector = `[data-testid="readiness-row-${target}"]`;
-      const el = document.querySelector(selector);
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        return;
-      }
-      // Row hidden behind the "+N more" cap — reveal, then scroll next frame.
-      onRevealAll?.();
-      requestAnimationFrame(() => {
-        document.querySelector(selector)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      });
+      document.querySelector(selector)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     },
-    [renderedChildMuscles, onRevealAll]
+    [renderedChildMuscles]
   );
 
   return (
@@ -322,9 +284,8 @@ const pinLaggingChild = (child: ReadinessChild) => child.belowMev && child.reach
  * `useMuscleReadiness`) so both surfaces render identical UI off the same data
  * path.
  *
- * `collapsible` shows a 6-row cap with a "+N more" / "Show less" toggle so
- * fatigued muscles that sink to the bottom stay reachable; the toggle state is
- * remembered per session (see SHOW_ALL_STORAGE_KEY).
+ * Every coarse row always renders — no "+N more" cap — so fatigued muscles
+ * that sink to the bottom are never hidden.
  */
 export function MuscleReadinessContent({
   rows,
@@ -333,10 +294,8 @@ export function MuscleReadinessContent({
   dailyGroupSets,
   previewAt = null,
   isLoading,
-  collapsible = false,
   loadingTestId = 'readiness-sheet-loading',
   showFootnote = true,
-  persistKey = SHOW_ALL_STORAGE_KEY,
   wearableNotice = null,
 }: {
   rows: ReadinessRow[];
@@ -353,10 +312,8 @@ export function MuscleReadinessContent({
    */
   previewAt?: ((hoursAhead: number) => ReadinessPreview) | null;
   isLoading: boolean;
-  collapsible?: boolean;
   loadingTestId?: string;
   showFootnote?: boolean;
-  persistKey?: string;
   /**
    * Quiet one-liner when the wearable HRV/RHR modifier is stretching
    * recovery windows (e.g. "Recovery slowed — HRV below your baseline.").
@@ -364,12 +321,6 @@ export function MuscleReadinessContent({
    */
   wearableNotice?: string | null;
 }) {
-  const [showAll, setShowAllState] = useState(() => readShowAll(persistKey));
-  const setShowAll = (value: boolean) => {
-    setShowAllState(value);
-    persistShowAll(persistKey, value);
-  };
-
   // Look-ahead slider position, in hours (0 = now). Deliberately NOT
   // persisted: the view must always open on today's real numbers — a
   // remembered preview would let projected values masquerade as current ones
@@ -388,13 +339,8 @@ export function MuscleReadinessContent({
   // dataset, so the preview can never mix now's numbers with future ones.
   const active = preview ?? { rows, targets, nextUp };
 
-  const visibleRows =
-    collapsible && !showAll ? active.rows.slice(0, DEFAULT_ROW_CAP) : active.rows;
-  const hiddenCount = active.rows.length - visibleRows.length;
-
   // Shared hierarchy expansion (persisted per user; the sheet and the
-  // empty-workout inline placement share the 'readiness' surface, like the
-  // show-all expander). Divergent parents (autoExpand) self-reveal.
+  // empty-workout inline placement share the 'readiness' surface). Divergent parents (autoExpand) self-reveal.
   const expansion = useMuscleRowExpansion('readiness', active.rows);
   // The map paints from the same rows the list shows: fine-child overrides
   // only for children actually visible (pinned-lagging or expanded).
@@ -422,11 +368,11 @@ export function MuscleReadinessContent({
       ) : (
         <>
           {active.rows.length > 0 && (
-            <ReadinessMap rows={mapRows} onRevealAll={() => setShowAll(true)} />
+            <ReadinessMap rows={mapRows} />
           )}
           <div className="divide-y divide-surface-800/70">
             <MuscleGroupList
-              rows={visibleRows}
+              rows={active.rows}
               expansion={expansion}
               renderRow={(row) => <ReadinessRowContent row={row} />}
               renderChild={(child) => <ReadinessChildContent child={child} />}
@@ -469,24 +415,6 @@ export function MuscleReadinessContent({
               childrenClassName="border-l border-surface-800/80 ml-5 mb-1 pl-2"
             />
           </div>
-          {collapsible && hiddenCount > 0 && (
-            <button
-              onClick={() => setShowAll(true)}
-              className="mt-2 w-full py-2 text-xs font-medium text-primary-400 hover:text-primary-300"
-              data-testid="readiness-show-more"
-            >
-              +{hiddenCount} more
-            </button>
-          )}
-          {collapsible && showAll && active.rows.length > DEFAULT_ROW_CAP && (
-            <button
-              onClick={() => setShowAll(false)}
-              className="mt-2 w-full py-2 text-xs font-medium text-surface-500 hover:text-surface-300"
-              data-testid="readiness-show-less"
-            >
-              Show less
-            </button>
-          )}
         </>
       )}
 
@@ -542,7 +470,6 @@ export function MuscleReadinessSheet({
           dailyGroupSets={dailyGroupSets}
           previewAt={previewAt}
           isLoading={isLoading}
-          collapsible
           wearableNotice={wearableRecovery.reason}
         />
       </div>

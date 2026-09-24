@@ -13,7 +13,7 @@ import type { AvailableExercise } from '@/app/(dashboard)/dashboard/workout/[id]
  * EmptyWorkoutReadiness — the inline readiness placement shown on the active
  * workout screen while it has ZERO exercises. It renders the same read-only
  * "good targets + per-muscle rows" body as the Muscle Readiness sheet (all
- * coarse groups, 6-row cap with a "+N more" expander), off the SAME data path
+ * coarse groups, all listed), off the SAME data path
  * (`useMuscleReadiness`), plus the empty
  * state's Quick Add chips re-ordered by readiness score (recovered + behind on
  * volume first) instead of raw frequency.
@@ -111,7 +111,6 @@ export function EmptyWorkoutReadiness({
             dailyGroupSets={dailyGroupSets}
             previewAt={previewAt}
             isLoading={isLoading}
-            collapsible
             loadingTestId="readiness-inline-loading"
             wearableNotice={wearableRecovery.reason}
           />

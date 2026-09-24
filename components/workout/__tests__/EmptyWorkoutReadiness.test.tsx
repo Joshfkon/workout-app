@@ -121,7 +121,7 @@ describe('EmptyWorkoutReadiness', () => {
     expect(screen.getByTestId('readiness-targets').textContent).toBeTruthy();
   });
 
-  it('caps the inline list at 6 rows with a "+N more" expander that reveals all coarse groups', async () => {
+  it('lists every coarse group inline with no "+N more" cap', async () => {
     render(
       <EmptyWorkoutReadiness quickAddExercises={[]} onAddExercise={jest.fn()} />,
       { wrapper }
@@ -137,13 +137,9 @@ describe('EmptyWorkoutReadiness', () => {
         .map((el) => (el.getAttribute('data-testid') || '').replace('readiness-row-', ''))
         .filter((id) => !id.startsWith('toggle-'));
 
-    // 6 coarse rows visible, the rest behind "+N more" (14 coarse groups total).
-    await waitFor(() => expect(rowIds().length).toBe(6));
-    expect(screen.getByTestId('readiness-show-more')).toHaveTextContent('+8 more');
-
-    // Expanding reveals the full list inline.
-    await userEvent.click(screen.getByTestId('readiness-show-more'));
+    // All 14 coarse groups visible up front — no expander.
     await waitFor(() => expect(rowIds().length).toBe(14));
+    expect(screen.queryByTestId('readiness-show-more')).not.toBeInTheDocument();
 
     // Fatigued quads (trained 30h ago) is present at the bottom, not vanished.
     const order = rowIds();
