@@ -15,7 +15,7 @@ import {
 } from 'recharts';
 import { SegmentedControl } from '../SegmentedControl';
 import { convertWeight, parseLocalDate } from '@/lib/utils';
-import type { LocationTrack } from '@/services/locationTracks';
+import { trackKeyFor, type LocationTrack } from '@/services/locationTracks';
 import {
   buildE1RMTrend,
   buildE1RMTrendByTrack,
@@ -99,12 +99,22 @@ export function ChartsTab({
       .filter((sn) => !sn.isDeload && (!cutoff || parseLocalDate(sn.date) >= cutoff))
       .slice()
       .reverse()
-      .map((sn) => ({
-        label: parseLocalDate(sn.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      .map((sn) => {
         // Straight sets only — same rule the rep_total policy grades.
-        total: sn.sets.filter(isNormalDetailSet).reduce((sum, st) => sum + st.reps, 0),
-      }));
-  }, [metric, sessions, range]);
+        const total = sn.sets.filter(isNormalDetailSet).reduce((sum, st) => sum + st.reps, 0);
+        const row: Record<string, string | number | null> = {
+          label: parseLocalDate(sn.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          total,
+        };
+        // All-gyms view of a machine lift: each session also sits under its
+        // own gym's key so the chart draws one line per gym, like the e1RM view.
+        if (gymTracks) {
+          const own = trackKeyFor(sn.locationId);
+          for (const t of gymTracks) row[t.key] = t.key === own ? total : null;
+        }
+        return row;
+      });
+  }, [metric, sessions, range, gymTracks]);
 
   // Lazy-computed: this component only mounts on first visit to the tab.
   const trendData = useMemo(() => {
@@ -196,16 +206,37 @@ export function ChartsTab({
                   />
                   <Tooltip
                     contentStyle={TOOLTIP_STYLE}
-                    formatter={(value: number) => [`${value} reps`, 'Session total']}
+                    formatter={(value: number, name: string) => [
+                      `${value} reps`,
+                      gymTracks ? name : 'Session total',
+                    ]}
                   />
-                  <Line
-                    type="monotone"
-                    dataKey="total"
-                    stroke="#8b5cf6"
-                    strokeWidth={2}
-                    dot={{ r: 3, fill: '#8b5cf6' }}
-                    activeDot={{ r: 5, fill: '#a78bfa' }}
-                  />
+                  {gymTracks ? (
+                    <>
+                      <Legend wrapperStyle={{ fontSize: 11 }} />
+                      {gymTracks.map((t, i) => (
+                        <Line
+                          key={t.key}
+                          type="monotone"
+                          dataKey={t.key}
+                          name={t.label}
+                          stroke={GYM_COLORS[i % GYM_COLORS.length]}
+                          strokeWidth={2}
+                          dot={{ r: 3, fill: GYM_COLORS[i % GYM_COLORS.length] }}
+                          connectNulls
+                        />
+                      ))}
+                    </>
+                  ) : (
+                    <Line
+                      type="monotone"
+                      dataKey="total"
+                      stroke="#8b5cf6"
+                      strokeWidth={2}
+                      dot={{ r: 3, fill: '#8b5cf6' }}
+                      activeDot={{ r: 5, fill: '#a78bfa' }}
+                    />
+                  )}
                 </LineChart>
               </ResponsiveContainer>
             </div>
