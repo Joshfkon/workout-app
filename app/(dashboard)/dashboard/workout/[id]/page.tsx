@@ -8,7 +8,7 @@ import { invalidateWorkoutDerivedCaches } from '@/lib/query/workoutInvalidation'
 import { createPortal } from 'react-dom';
 import dynamic from 'next/dynamic';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { Card, Button, Badge, Input, LoadingAnimation, SkeletonExercise, ConfirmModal, ToastContainer, useToasts } from '@/components/ui';
+import { Card, Button, Badge, Input, LoadingAnimation, SkeletonExercise, ConfirmModal, SwipeableRow, ToastContainer, useToasts } from '@/components/ui';
 import {
   enqueueRowUpdate,
   flushSetOutbox,
@@ -4557,9 +4557,14 @@ export default function WorkoutPage() {
 
       // Update local state - remove the block and update set logs
       setBlocks(prevBlocks => {
+        const deletedIndex = prevBlocks.findIndex(b => b.id === blockId);
         const newBlocks = prevBlocks.filter(b => b.id !== blockId);
-        // Adjust current block index if needed
-        if (currentBlockIndex >= newBlocks.length) {
+        // Keep the current block pointing at the same exercise: deleting an
+        // earlier block (e.g. a swiped-away up-next row after a reorder)
+        // shifts everything after it down by one.
+        if (deletedIndex !== -1 && deletedIndex < currentBlockIndex) {
+          setCurrentBlockIndex(currentBlockIndex - 1);
+        } else if (currentBlockIndex >= newBlocks.length) {
           setCurrentBlockIndex(Math.max(0, newBlocks.length - 1));
         }
         return newBlocks;
@@ -7295,10 +7300,8 @@ export default function WorkoutPage() {
 
               if (isSkipped) {
                 return (
-                  <div
-                    key={block.id}
-                    className="flex items-center gap-3 bg-surface-800/30 rounded-lg px-3 py-2.5 opacity-60"
-                  >
+                  <SwipeableRow key={block.id} onDelete={() => handleExerciseDelete(block.id)}>
+                  <div className="flex items-center gap-3 bg-surface-800/30 rounded-lg px-3 py-2.5 opacity-60">
                     <span className="text-[13px] text-surface-400 line-through truncate flex-1">
                       {block.exercise.name}
                     </span>
@@ -7309,18 +7312,32 @@ export default function WorkoutPage() {
                     >
                       Undo
                     </button>
+                    <button
+                      onClick={() => setDeleteConfirmBlock({ id: block.id, name: block.exercise.name })}
+                      className="text-[11px] font-medium text-surface-500 hover:text-danger-400 transition-colors flex-shrink-0"
+                    >
+                      Remove
+                    </button>
                   </div>
+                  </SwipeableRow>
                 );
               }
 
+              // Swipe left to reveal delete. The reorder transform and
+              // data-block-index live on the outer wrapper so drag-to-reorder
+              // still measures and moves the whole row.
               return (
                 <div
                   key={block.id}
                   data-block-index={index}
                   style={{ transform: translateY ? `translateY(${translateY}px)` : undefined }}
-                  className={`flex items-center gap-3 bg-surface-800/50 rounded-lg px-3 py-2.5 transition-transform duration-200 ease-out cursor-pointer hover:bg-surface-800 ${
+                  className={`transition-transform duration-200 ease-out ${
                     isBeingDragged ? 'opacity-0 pointer-events-none' : ''
                   }`}
+                >
+                <SwipeableRow onDelete={() => handleExerciseDelete(block.id)}>
+                <div
+                  className="flex items-center gap-3 bg-surface-800/50 rounded-lg px-3 py-2.5 cursor-pointer hover:bg-surface-800"
                   onClick={(e) => {
                     if (isDraggingBlock) return;
                     const target = e.target as HTMLElement;
@@ -7341,6 +7358,14 @@ export default function WorkoutPage() {
                     title="Skip this exercise today"
                   >
                     Skip today
+                  </button>
+                  <button
+                    onClick={() => setDeleteConfirmBlock({ id: block.id, name: block.exercise.name })}
+                    className="text-surface-500 hover:text-danger-400 transition-colors p-1 -m-1 flex-shrink-0"
+                    title="Remove from this workout"
+                    aria-label={`Remove ${block.exercise.name} from this workout`}
+                  >
+                    <IconX size={16} stroke={2} />
                   </button>
                   {/* Drag handle - hold to reorder (wired to the existing block drag state) */}
                   <div
@@ -7368,6 +7393,8 @@ export default function WorkoutPage() {
                   >
                     <IconGripVertical size={16} stroke={2} />
                   </div>
+                </div>
+                </SwipeableRow>
                 </div>
               );
             })}
@@ -8202,7 +8229,11 @@ export default function WorkoutPage() {
           }
         }}
         title="Remove Exercise"
-        message={deleteConfirmBlock ? `Remove "${deleteConfirmBlock.name}" from this workout? This will delete any logged sets for this exercise.` : ''}
+        message={deleteConfirmBlock
+          ? completedSets.some(s => s.exerciseBlockId === deleteConfirmBlock.id)
+            ? `Remove "${deleteConfirmBlock.name}" from this workout? This will delete any logged sets for this exercise.`
+            : `Remove "${deleteConfirmBlock.name}" from this workout?`
+          : ''}
         confirmText="Remove"
         cancelText="Keep"
         variant="danger"
