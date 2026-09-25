@@ -7308,6 +7308,12 @@ export default function WorkoutPage() {
                     >
                       Undo
                     </button>
+                    <button
+                      onClick={() => setDeleteConfirmBlock({ id: block.id, name: block.exercise.name })}
+                      className="text-[11px] font-medium text-surface-500 hover:text-danger-400 transition-colors flex-shrink-0"
+                    >
+                      Remove
+                    </button>
                   </div>
                   </SwipeableRow>
                 );
@@ -7348,6 +7354,14 @@ export default function WorkoutPage() {
                     title="Skip this exercise today"
                   >
                     Skip today
+                  </button>
+                  <button
+                    onClick={() => setDeleteConfirmBlock({ id: block.id, name: block.exercise.name })}
+                    className="text-surface-500 hover:text-danger-400 transition-colors p-1 -m-1 flex-shrink-0"
+                    title="Remove from this workout"
+                    aria-label={`Remove ${block.exercise.name} from this workout`}
+                  >
+                    <IconX size={16} stroke={2} />
                   </button>
                   {/* Drag handle - hold to reorder (wired to the existing block drag state) */}
                   <div
@@ -8206,7 +8220,11 @@ export default function WorkoutPage() {
           }
         }}
         title="Remove Exercise"
-        message={deleteConfirmBlock ? `Remove "${deleteConfirmBlock.name}" from this workout? This will delete any logged sets for this exercise.` : ''}
+        message={deleteConfirmBlock
+          ? completedSets.some(s => s.exerciseBlockId === deleteConfirmBlock.id)
+            ? `Remove "${deleteConfirmBlock.name}" from this workout? This will delete any logged sets for this exercise.`
+            : `Remove "${deleteConfirmBlock.name}" from this workout?`
+          : ''}
         confirmText="Remove"
         cancelText="Keep"
         variant="danger"
