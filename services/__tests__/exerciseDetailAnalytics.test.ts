@@ -18,8 +18,12 @@ import {
   effortColorClass,
   setRir,
   setE1RM,
+  buildSessionLocationTracks,
+  filterSessionsByTrack,
+  buildE1RMTrendByTrack,
   type ExerciseDetailSessionInput,
 } from '../exerciseDetailAnalytics';
+import { UNASSIGNED_TRACK_KEY } from '../locationTracks';
 import { estimateE1RM } from '@/lib/utils';
 
 function makeSession(
@@ -29,6 +33,7 @@ function makeSession(
     sessionId: overrides.sessionId ?? `session-${overrides.date}`,
     date: overrides.date,
     isDeload: overrides.isDeload ?? false,
+    locationId: overrides.locationId,
     locationName: overrides.locationName,
     sets: overrides.sets ?? [],
   };
@@ -472,5 +477,39 @@ describe('buildSessionSparkline', () => {
 
     const points = buildSessionSparkline(sessions, 'e1rm', 'kg', NOW, 7);
     expect(points.map((p) => p.date)).toEqual(['2026-06-14T10:00:00Z']);
+  });
+});
+
+describe('per-gym tracks', () => {
+  const set = (weightKg: number, reps: number) => ({ weightKg, reps, rpe: 8 });
+  const sessions = summarizeSessions([
+    makeSession({ date: '2026-09-20T10:00:00Z', locationId: 'pf', locationName: 'Planet Fitness', sets: [set(60, 6)] }),
+    makeSession({ date: '2026-09-10T10:00:00Z', locationId: 'home', locationName: 'Home Gym', sets: [set(80, 10)] }),
+    makeSession({ date: '2026-09-01T10:00:00Z', locationId: 'home', locationName: 'Home Gym', sets: [set(78, 10)] }),
+    makeSession({ date: '2026-06-01T10:00:00Z', locationId: null, sets: [set(75, 10)] }),
+    makeSession({ date: '2026-09-15T10:00:00Z', locationId: 'home', locationName: 'Home Gym', isDeload: true, sets: [set(50, 10)] }),
+  ]);
+
+  it('names tracks from the sessions, latest gym first', () => {
+    expect(buildSessionLocationTracks(sessions).map((t) => [t.key, t.label, t.count])).toEqual([
+      ['pf', 'Planet Fitness', 1],
+      ['home', 'Home Gym', 3],
+      [UNASSIGNED_TRACK_KEY, 'No gym recorded', 1],
+    ]);
+  });
+
+  it('filters to one gym, or passes everything through for null', () => {
+    expect(filterSessionsByTrack(sessions, 'home')).toHaveLength(3);
+    expect(filterSessionsByTrack(sessions, UNASSIGNED_TRACK_KEY)).toHaveLength(1);
+    expect(filterSessionsByTrack(sessions, null)).toBe(sessions);
+  });
+
+  it('puts each session on its own gym series, deloads excluded, oldest first', () => {
+    const rows = buildE1RMTrendByTrack(sessions, 'all', new Date('2026-09-24T00:00:00Z'));
+    expect(rows).toHaveLength(4);
+    expect(rows[0][UNASSIGNED_TRACK_KEY]).toBeGreaterThan(0);
+    expect(rows[3].pf).toBeGreaterThan(0);
+    expect(rows[3].home).toBeUndefined();
+    expect(rows.filter((r) => typeof r.home === 'number')).toHaveLength(2);
   });
 });

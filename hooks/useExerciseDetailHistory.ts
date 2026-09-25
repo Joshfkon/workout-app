@@ -19,6 +19,7 @@ import {
   type ExerciseDetailSession,
   type ExerciseDetailSessionInput,
 } from '@/services/exerciseDetailAnalytics';
+import { resolveEffectiveLocation } from '@/services/progressionScope';
 
 export const exerciseDetailHistoryKey = (exerciseId: string) =>
   ['history', 'exerciseDetail', exerciseId] as const;
@@ -38,16 +39,23 @@ interface RawSetLog {
   } | null;
 }
 
+interface RawGymJoin {
+  name: string | null;
+}
+
 interface RawSessionJoin {
   id: string;
   completed_at: string | null;
   is_deload: boolean | null;
-  /** Not in the schema yet — tolerated so a future location tag just works. */
-  location_name?: string | null;
+  location_id?: string | null;
+  gym_locations?: RawGymJoin | null;
 }
 
 interface RawBlockRow {
   id: string;
+  /** Per-exercise location override (null = follows the session). */
+  location_id?: string | null;
+  gym_locations?: RawGymJoin | null;
   workout_sessions: RawSessionJoin | null;
   set_logs: RawSetLog[] | null;
 }
@@ -64,12 +72,16 @@ async function fetchExerciseDetailHistory(
     .select(
       `
       id,
+      location_id,
+      gym_locations ( name ),
       workout_sessions!inner (
         id,
         completed_at,
         state,
         user_id,
-        is_deload
+        is_deload,
+        location_id,
+        gym_locations ( name )
       ),
       set_logs (
         weight_kg,
@@ -117,6 +129,14 @@ async function fetchExerciseDetailHistory(
             : undefined,
       }));
 
+    // Where THIS exercise was performed: the block's override, else the
+    // session's gym — the same order as progressionScope.resolveEffectiveLocation,
+    // which is also the order sets are stamped in.
+    const locationId = resolveEffectiveLocation(block.location_id, session.location_id);
+    const locationName = block.location_id
+      ? block.gym_locations?.name ?? null
+      : session.gym_locations?.name ?? null;
+
     const existing = bySession.get(session.id);
     if (existing) {
       existing.sets.push(...sets);
@@ -125,7 +145,8 @@ async function fetchExerciseDetailHistory(
         sessionId: session.id,
         date: session.completed_at,
         isDeload: session.is_deload === true,
-        locationName: session.location_name ?? null,
+        locationId,
+        locationName,
         sets,
       });
     }

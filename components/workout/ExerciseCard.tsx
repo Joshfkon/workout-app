@@ -341,6 +341,10 @@ interface ExerciseCardProps {
   // override, so the last-session line can say "at Annex" instead of the
   // session-relative "here", which would be wrong.
   locationOverrideName?: string | null;
+  // Where this exercise is being performed (block override, else the
+  // session's gym). Machine lifts' history sparkline plots only this gym's
+  // track, so another gym's machine never draws as a regression.
+  currentLocationId?: string | null;
   // Diet phase for plateau detection: gains expected on a bulk, holding
   // strength counts as progress on a cut
   userGoal?: PlateauGoal;
@@ -490,6 +494,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   progressionHealthSessions,
   equipmentBoundaries,
   locationOverrideName,
+  currentLocationId,
   userGoal,
   onRepRangeChange,
   isAmrapSuggested = false,
@@ -3345,6 +3350,8 @@ export const ExerciseCard = memo(function ExerciseCard({
                   exerciseId={exercise.id}
                   metric={isDurationBased ? 'duration' : repTotalMode ? 'volume' : 'e1rm'}
                   unit={unit}
+                  scope={exerciseHistory.progressionScope}
+                  currentLocationId={currentLocationId}
                 />
               )}
             </div>
@@ -5027,6 +5034,7 @@ export const ExerciseCard = memo(function ExerciseCard({
     // Pinning this exercise to a different machine rewrites the last-session
     // line's calibration tag, so it has to re-render.
     prevProps.locationOverrideName === nextProps.locationOverrideName &&
+    prevProps.currentLocationId === nextProps.currentLocationId &&
     prevProps.userGoal === nextProps.userGoal &&
     prevProps.isAmrapSuggested === nextProps.isAmrapSuggested &&
     prevProps.userBodyweightKg === nextProps.userBodyweightKg &&

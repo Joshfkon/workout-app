@@ -229,8 +229,9 @@ export function MetricTileGrid({
           <div className="flex gap-1 mt-2" aria-hidden="true">
             {liftTrends.lifts.map((lift) => (
               <div
-                key={lift.exerciseId}
-                title={`${lift.name}: ${lift.lowConfidence ? 'rebuilding (low confidence)' : lift.direction}`}
+                // seriesKey is absent on summaries cached before per-gym trends.
+                key={lift.seriesKey ?? lift.exerciseId}
+                title={`${lift.name}${lift.locationLabel ? ` (${lift.locationLabel})` : ''}: ${lift.lowConfidence ? 'rebuilding (low confidence)' : lift.direction}`}
                 className={`h-1.5 flex-1 rounded-full ${
                   lift.lowConfidence
                     ? 'bg-surface-700'

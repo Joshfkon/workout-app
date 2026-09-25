@@ -10,18 +10,26 @@
  * .buildSessionSparkline). While the first-ever fetch is in flight — or when
  * the window holds fewer than two sessions — the component renders nothing:
  * one point isn't a trend, and the compact panel gets no spinner.
+ *
+ * Machine lifts (progression scope `local`) trained at more than one gym plot
+ * only the gym you're at — a lighter-reading machine elsewhere would otherwise
+ * draw as a regression (services/locationTracks).
  */
 
 import { useMemo } from 'react';
 import { useExerciseDetailHistory } from '@/hooks/useExerciseDetailHistory';
 import {
+  buildSessionLocationTracks,
   buildSessionSparkline,
+  filterSessionsByTrack,
   SPARKLINE_WINDOW_DAYS,
   type SparklineMetric,
 } from '@/services/exerciseDetailAnalytics';
 import { formatWeightValue } from '@/lib/utils';
 import { now as clockNow } from '@/lib/clock';
 import type { WeightUnit } from '@/types/schema';
+import type { ProgressionScope } from '@/services/progressionScope';
+import { defaultTrackKey, shouldSplitByLocation } from '@/services/locationTracks';
 
 const METRIC_LABELS: Record<SparklineMetric, string> = {
   e1rm: 'est. 1RM',
@@ -34,19 +42,39 @@ interface ExerciseHistorySparklineProps {
   /** Which per-session number to plot — follows the progression model. */
   metric: SparklineMetric;
   unit: WeightUnit;
+  /** The exercise's progression scope; `local` splits the line per gym. */
+  scope?: ProgressionScope;
+  /**
+   * Where the exercise is being performed now (block override, else session
+   * gym). Undefined = unknown, and the most recently used gym is shown.
+   */
+  currentLocationId?: string | null;
 }
 
 export function ExerciseHistorySparkline({
   exerciseId,
   metric,
   unit,
+  scope,
+  currentLocationId,
 }: ExerciseHistorySparklineProps) {
   const query = useExerciseDetailHistory(exerciseId, true);
 
-  const points = useMemo(
-    () => buildSessionSparkline(query.data ?? [], metric, unit, clockNow()),
-    [query.data, metric, unit]
-  );
+  const { points, gymLabel } = useMemo(() => {
+    const sessions = query.data ?? [];
+    const tracks = buildSessionLocationTracks(sessions);
+    const split = shouldSplitByLocation(scope, tracks);
+    const trackKey = split ? defaultTrackKey(tracks, currentLocationId) : null;
+    return {
+      points: buildSessionSparkline(
+        filterSessionsByTrack(sessions, trackKey),
+        metric,
+        unit,
+        clockNow()
+      ),
+      gymLabel: split ? tracks.find((t) => t.key === trackKey)?.label ?? null : null,
+    };
+  }, [query.data, metric, unit, scope, currentLocationId]);
 
   if (points.length < 2) return null;
 
@@ -91,6 +119,9 @@ export function ExerciseHistorySparkline({
         </span>
         <span className="text-xs text-surface-500">
           {METRIC_LABELS[metric]} · {points.length} sessions
+          {gymLabel && (
+            <span data-testid="history-sparkline-gym"> · {gymLabel}</span>
+          )}
         </span>
       </div>
       <svg

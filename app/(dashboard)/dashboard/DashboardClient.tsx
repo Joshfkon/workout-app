@@ -21,7 +21,12 @@ import {
   weeklyVolumeWindowStartISO,
   type MuscleVolumeStats,
 } from './_lib/weeklyVolume';
-import { computeLiftTrends, LIFT_TREND_WINDOW_DAYS, type LiftTrendsSummary } from './_lib/liftTrends';
+import {
+  computeLiftTrends,
+  LIFT_TREND_SESSION_SELECT,
+  LIFT_TREND_WINDOW_DAYS,
+  type LiftTrendsSummary,
+} from './_lib/liftTrends';
 import type { BodyCompGlance } from '@/lib/actions/dashboard';
 import { computeWeightRate } from './_lib/weightRate';
 import { computeWeekSessions } from './_lib/weekSessions';
@@ -940,8 +945,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
 
           // Lift-trend history (12 weeks) for the "Lifts" glance tile
           supabase.from('workout_sessions')
-            .select(`id, completed_at,
-              exercise_blocks (exercises (id, name), set_logs (weight_kg, reps, is_warmup))`)
+            .select(LIFT_TREND_SESSION_SELECT)
             .eq('user_id', user.id)
             .eq('state', 'completed')
             .gte('completed_at', new Date(today.getTime() - LIFT_TREND_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString())

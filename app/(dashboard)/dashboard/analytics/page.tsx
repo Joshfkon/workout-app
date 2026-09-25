@@ -72,6 +72,7 @@ import { AddPhotoModal } from '@/components/progress-photos/AddPhotoModal';
 import {
   computeLiftTrends,
   LIFT_TREND_WINDOW_DAYS,
+  LIFT_TREND_SESSION_SELECT,
   type LiftTrendsSummary,
 } from '@/app/(dashboard)/dashboard/_lib/liftTrends';
 import { listOutbox } from '@/lib/offline/setOutbox';
@@ -556,8 +557,7 @@ function AnalyticsPageContent() {
         const [{ data: sessions }, { data: goalRow }, { data: activeMesos }] = await Promise.all([
           supabase
             .from('workout_sessions')
-            .select(`id, completed_at,
-              exercise_blocks (equipment_changed, exercises (id, name, exercise_type), set_logs (weight_kg, reps, rpe, is_warmup))`)
+            .select(LIFT_TREND_SESSION_SELECT)
             .eq('user_id', userId)
             .eq('state', 'completed')
             .gte('completed_at', since.toISOString())

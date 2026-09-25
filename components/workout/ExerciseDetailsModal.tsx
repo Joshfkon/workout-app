@@ -13,6 +13,11 @@
  *
  * Data derivations are pure and live in `services/exerciseDetailAnalytics.ts`;
  * the fetch lives in `hooks/useExerciseDetailHistory.ts`.
+ *
+ * Machine lifts trained at more than one gym get a gym selector above the
+ * tabs (services/locationTracks): History/Charts/Records read one gym's track
+ * so records and trends compare like with like. "All gyms" keeps the combined
+ * list, and its chart draws one line per gym.
  */
 
 import { useState, useEffect, useMemo } from 'react';
@@ -24,7 +29,14 @@ import { resolveProgressionModel } from '@/services/suggestionEngine/repTotalPol
 import { isNormalDetailSet } from '@/services/exerciseDetailAnalytics';
 import { estimateE1RMFromRpe } from '@/services/shared/e1rm';
 import { HISTORY_SESSIONS_PER_EXERCISE } from '@/services/suggestionEngine/constants';
-import { resolveDefaultTab, type ExerciseDetailTab } from '@/services/exerciseDetailAnalytics';
+import {
+  buildSessionLocationTracks,
+  filterSessionsByTrack,
+  resolveDefaultTab,
+  type ExerciseDetailTab,
+} from '@/services/exerciseDetailAnalytics';
+import { deriveProgressionScope } from '@/services/progressionScope';
+import { defaultTrackKey, shouldSplitByLocation } from '@/services/locationTracks';
 import { getFailureSafetyTier, getTierDisplayInfo } from '@/services/exerciseSafety';
 import { convertWeightForDisplay } from '@/lib/utils';
 import { getExerciseProp, getTierBadgeClasses } from './exercise-details/helpers';
@@ -47,7 +59,15 @@ interface ExerciseDetailsModalProps {
    */
   positionLabel?: string;
   setCountLabel?: string;
+  /**
+   * Where the exercise is being performed now, when opened from a workout —
+   * the gym selector opens on it. Undefined = most recently used gym.
+   */
+  currentLocationId?: string | null;
 }
+
+/** Selector value for the combined view. */
+const ALL_GYMS = '__all__';
 
 const TABS: { id: ExerciseDetailTab; label: string }[] = [
   { id: 'about', label: 'About' },
@@ -191,6 +211,7 @@ export function ExerciseDetailsModal({
   unit = 'kg',
   positionLabel,
   setCountLabel,
+  currentLocationId,
 }: ExerciseDetailsModalProps) {
   const { inset: keyboardInset, scrollContainerRef } =
     useKeyboardInset<HTMLDivElement>(isOpen);
@@ -231,10 +252,43 @@ export function ExerciseDetailsModal({
     return resolveProgressionModel(explicit, estimable, inestimable) === 'rep_total';
   }, [exercise, sessions]);
 
+  // Per-gym tracks — machine lifts only. `selectedTrack` null = not chosen
+  // yet (resolved to the current / latest gym below).
+  const [selectedTrack, setSelectedTrack] = useState<string | null>(null);
+  const scope = useMemo(
+    () =>
+      exercise
+        ? deriveProgressionScope({
+            equipmentRequired: getExerciseProp(exercise, 'equipmentRequired', 'equipment_required'),
+            isBodyweight: getExerciseProp(exercise, 'isBodyweight', 'is_bodyweight'),
+            name: exercise.name,
+            scopeOverride: getExerciseProp(
+              exercise,
+              'progressionScopeOverride',
+              'progression_scope_override'
+            ),
+          })
+        : 'global',
+    [exercise]
+  );
+  const tracks = useMemo(() => buildSessionLocationTracks(sessions ?? []), [sessions]);
+  const splitByGym = shouldSplitByLocation(scope, tracks);
+  const activeTrack = splitByGym
+    ? selectedTrack ?? defaultTrackKey(tracks, currentLocationId) ?? ALL_GYMS
+    : ALL_GYMS;
+  const viewSessions = useMemo(
+    () =>
+      sessions === undefined
+        ? undefined
+        : filterSessionsByTrack(sessions, activeTrack === ALL_GYMS ? null : activeTrack),
+    [sessions, activeTrack]
+  );
+
   // Reset per exercise / per open.
   useEffect(() => {
     setActiveTab(null);
     setIsEditing(false);
+    setSelectedTrack(null);
   }, [exerciseId, isOpen]);
 
   // Resolve the default tab once we know whether history exists: a familiar
@@ -340,6 +394,36 @@ export function ExerciseDetailsModal({
                 })}
               </div>
 
+              {splitByGym && activeTab !== 'about' && activeTab !== null && (
+                <div
+                  className="flex gap-1.5 overflow-x-auto pt-3 -mx-1 px-1"
+                  role="radiogroup"
+                  aria-label="Gym"
+                  data-testid="exercise-detail-gym-selector"
+                >
+                  {[...tracks.map((t) => ({ key: t.key, label: t.label })), { key: ALL_GYMS, label: 'All gyms' }].map(
+                    (opt) => {
+                      const isSelected = activeTrack === opt.key;
+                      return (
+                        <button
+                          key={opt.key}
+                          role="radio"
+                          aria-checked={isSelected}
+                          onClick={() => setSelectedTrack(opt.key)}
+                          className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                            isSelected
+                              ? 'bg-primary-500/20 text-primary-300'
+                              : 'bg-surface-800 text-surface-400 hover:text-surface-200'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      );
+                    }
+                  )}
+                </div>
+              )}
+
               {/* Tab content — only the active tab mounts, so Charts/Records
                   derive their data lazily on first visit. */}
               <div className="pt-4" key={exercise.id}>
@@ -355,7 +439,7 @@ export function ExerciseDetailsModal({
                 )}
                 {activeTab === 'history' && (
                   <HistoryTab
-                    sessions={sessions}
+                    sessions={viewSessions}
                     isLoading={historyQuery.isLoading}
                     unit={unit}
                     repTotalMode={repTotalMode}
@@ -364,14 +448,20 @@ export function ExerciseDetailsModal({
                 )}
                 {activeTab === 'charts' && (
                   <ChartsTab
-                    sessions={sessions}
+                    sessions={viewSessions}
                     unit={unit}
+                    gymTracks={splitByGym && activeTrack === ALL_GYMS ? tracks : undefined}
                     repTotalMode={repTotalMode}
                     isDuration={isDuration}
                   />
                 )}
                 {activeTab === 'records' && (
-                  <RecordsTab sessions={sessions} unit={unit} repTotalMode={repTotalMode} />
+                  <RecordsTab
+                    sessions={viewSessions}
+                    unit={unit}
+                    repTotalMode={repTotalMode}
+                    mixedGyms={splitByGym && activeTrack === ALL_GYMS}
+                  />
                 )}
               </div>
             </>

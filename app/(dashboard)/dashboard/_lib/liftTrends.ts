@@ -7,7 +7,12 @@
  * (same pattern as weeklyVolume.ts) — the tile's aggregate and the detail
  * view are both derived from this one function so they can never disagree.
  * Pure: no React, no Supabase client — callers pass the queried session
- * rows in.
+ * rows in, selected with LIFT_TREND_SESSION_SELECT.
+ *
+ * Machine lifts (progression scope `local`) trained at more than one gym in
+ * the window are trended PER GYM (services/locationTracks): machines read
+ * differently, and a single fitted line across them turns a gym switch into
+ * a fake regression or a fake "equipment change".
  */
 
 import { getLocalDateString } from '@/lib/utils';
@@ -19,6 +24,12 @@ import {
   type PlateauGoal,
 } from '@/services/plateauDetector';
 import type { ExercisePerformanceSnapshot } from '@/types/schema';
+import { deriveProgressionScope, resolveEffectiveLocation } from '@/services/progressionScope';
+import {
+  locationIdForTrack as locationIdFromTrack,
+  trackKeyFor,
+  trackLabel,
+} from '@/services/locationTracks';
 
 export type LiftDirection = 'rising' | 'flat' | 'down';
 
@@ -32,7 +43,19 @@ export interface LiftTrendPoint {
 
 export interface LiftTrend {
   exerciseId: string;
+  /**
+   * Unique per row: the exercise id, suffixed with the gym track when this
+   * lift is split by gym. Use as the React key.
+   */
+  seriesKey: string;
   name: string;
+  /**
+   * Gym this trend is computed within, when the lift is split by gym (machine
+   * lift trained at 2+ gyms in the window); null for a single combined trend.
+   */
+  locationId: string | null;
+  /** Display name for `locationId`; null when not split. */
+  locationLabel: string | null;
   direction: LiftDirection;
   /** Weekly E1RM change as % of current E1RM (regression slope). */
   weeklyChangePct: number;
@@ -83,12 +106,34 @@ export interface LiftTrendsSummary {
   windowDays: number;
 }
 
+/**
+ * The ONE select every caller must use, so the home tile, the dashboard's
+ * client refresh and the Progress tab compute over identical data.
+ */
+export const LIFT_TREND_SESSION_SELECT = `id, completed_at, location_id, gym_locations (name),
+  exercise_blocks (equipment_changed, location_id, gym_locations (name),
+    exercises (id, name, exercise_type, equipment_required, is_bodyweight, progression_scope_override),
+    set_logs (weight_kg, reps, rpe, is_warmup))`;
+
 /** Completed-session row shape expected from the workout_sessions query. */
 export interface LiftTrendSessionRow {
   id: string;
   completed_at: string | null;
+  /** Gym the session happened at (null = legacy / not recorded). */
+  location_id?: string | null;
+  gym_locations?: { name: string | null } | null;
   exercise_blocks: {
-    exercises: { id: string; name: string; exercise_type?: string | null } | null;
+    exercises: {
+      id: string;
+      name: string;
+      exercise_type?: string | null;
+      equipment_required?: string[] | null;
+      is_bodyweight?: boolean | null;
+      progression_scope_override?: 'global' | 'local' | null;
+    } | null;
+    /** Per-exercise location override (null = follows the session). */
+    location_id?: string | null;
+    gym_locations?: { name: string | null } | null;
     /** User marked this session's equipment as different (segment boundary). */
     equipment_changed?: boolean | null;
     set_logs: {
@@ -113,6 +158,23 @@ export const LIFT_TREND_WINDOW_DAYS = 84;
 /** Weekly E1RM change (%/wk) within ±this band counts as "flat". */
 const FLAT_BAND_PCT = 0.15;
 
+interface SeriesAccumulator {
+  trackKey: string;
+  label: string | null;
+  snapshots: ExercisePerformanceSnapshot[];
+  /** User-marked "different equipment" session dates on this track. */
+  boundaries: string[];
+}
+
+interface TrendSeries {
+  exerciseId: string;
+  seriesKey: string;
+  locationId: string | null;
+  locationLabel: string | null;
+  snapshots: ExercisePerformanceSnapshot[];
+  boundaries: string[];
+}
+
 export interface ComputeLiftTrendsOptions {
   /**
    * Start date (YYYY-MM-DD or ISO) of the active program/mesocycle. Lifts
@@ -133,12 +195,26 @@ export function computeLiftTrends(
   referenceDate: Date = new Date(),
   options: ComputeLiftTrendsOptions = {}
 ): LiftTrendsSummary {
-  const snapshotsByExercise = new Map<string, ExercisePerformanceSnapshot[]>();
+  // Collected per (exercise, gym track). Free-weight lifts use one track
+  // (GLOBAL_TRACK) whatever the gym; machine lifts one per gym. Whether a
+  // machine lift is actually SPLIT is decided after collection — only when it
+  // was trained at more than one gym in the window.
+  const GLOBAL_TRACK = '*';
+  const tracksByExercise = new Map<string, Map<string, SeriesAccumulator>>();
   const nameByExercise = new Map<string, string>();
-  // User-marked "different equipment" sessions per exercise — permanent
-  // segment boundaries for the robust trend (heuristic detection remains the
-  // backstop for unmarked changes).
-  const equipmentBoundariesByExercise = new Map<string, string[]>();
+  const trackFor = (exerciseId: string, trackKey: string, label: string | null) => {
+    let tracks = tracksByExercise.get(exerciseId);
+    if (!tracks) {
+      tracks = new Map();
+      tracksByExercise.set(exerciseId, tracks);
+    }
+    let acc = tracks.get(trackKey);
+    if (!acc) {
+      acc = { trackKey, label, snapshots: [], boundaries: [] };
+      tracks.set(trackKey, acc);
+    }
+    return acc;
+  };
 
   for (const session of sessions) {
     if (!session.completed_at || !session.exercise_blocks) continue;
@@ -150,15 +226,32 @@ export function computeLiftTrends(
       // Duration exercises store seconds in reps — an "E1RM trend" over hold
       // times is fiction, so timed work never feeds the lift-trend tile.
       if (exercise.exercise_type === 'duration_based') continue;
+      const isLocal =
+        deriveProgressionScope({
+          equipmentRequired: exercise.equipment_required,
+          isBodyweight: exercise.is_bodyweight,
+          name: exercise.name,
+          scopeOverride: exercise.progression_scope_override ?? null,
+        }) === 'local';
+      // Where this exercise was performed: block override, else session gym.
+      const locationId = resolveEffectiveLocation(block.location_id, session.location_id);
+      const locationName = block.location_id
+        ? block.gym_locations?.name
+        : session.gym_locations?.name;
+      const track = isLocal
+        ? trackFor(
+            exercise.id,
+            trackKeyFor(locationId),
+            trackLabel(locationId, locationId && locationName ? { [locationId]: locationName } : {})
+          )
+        : trackFor(exercise.id, GLOBAL_TRACK, null);
       // Record explicit equipment markers BEFORE any estimability skips: a
       // marked session whose sets are outside the estimator's domain (e.g. a
       // 20-rep day) contributes no e1RM point, but its boundary must still
       // segment the trend — computeTrend anchors at the first point at/after
       // the boundary date, so the boundary works without a point on it.
       if (block.equipment_changed) {
-        const boundaries = equipmentBoundariesByExercise.get(exercise.id) ?? [];
-        boundaries.push(sessionDate);
-        equipmentBoundariesByExercise.set(exercise.id, boundaries);
+        track.boundaries.push(sessionDate);
       }
       const workingSets = (block.set_logs || []).filter(
         (s) => !s.is_warmup && (s.weight_kg ?? 0) > 0 && (s.reps ?? 0) > 0
@@ -189,8 +282,7 @@ export function computeLiftTrends(
       if (topE1RM <= 0) continue;
 
       nameByExercise.set(exercise.id, exercise.name);
-      const list = snapshotsByExercise.get(exercise.id) ?? [];
-      list.push({
+      track.snapshots.push({
         id: `${session.id}-${exercise.id}`,
         userId: '',
         exerciseId: exercise.id,
@@ -201,19 +293,52 @@ export function computeLiftTrends(
         totalWorkingSets: workingSets.length,
         estimatedE1RM: topE1RM,
       });
-      snapshotsByExercise.set(exercise.id, list);
     }
   }
 
+  // Flatten to trend series: one per exercise, except a machine lift trained
+  // at 2+ gyms, which gets one per gym. Tracks that collected only boundary
+  // markers (no estimable sets) carry no series of their own.
+  const series: TrendSeries[] = [];
+  for (const [exerciseId, tracks] of Array.from(tracksByExercise.entries())) {
+    const withData = Array.from(tracks.values()).filter((t) => t.snapshots.length > 0);
+    if (withData.length === 0) continue;
+    if (withData.length > 1) {
+      for (const t of withData) {
+        series.push({
+          exerciseId,
+          seriesKey: `${exerciseId}@${t.trackKey}`,
+          locationId: t.trackKey === GLOBAL_TRACK ? null : locationIdFromTrack(t.trackKey),
+          locationLabel: t.label,
+          snapshots: t.snapshots,
+          boundaries: t.boundaries,
+        });
+      }
+    } else {
+      // A marker recorded at a gym with no estimable sets in the window
+      // belongs to that gym's machine, not this one — only this track's count.
+      series.push({
+        exerciseId,
+        seriesKey: exerciseId,
+        locationId: null,
+        locationLabel: null,
+        snapshots: withData[0].snapshots,
+        boundaries: withData[0].boundaries,
+      });
+    }
+  }
+  const seriesByKey = new Map(series.map((s) => [s.seriesKey, s]));
+  const snapshotsBySeries = new Map(series.map((s) => [s.seriesKey, s.snapshots]));
+
   // Lifts seen in the window without enough sessions to fit a trend at all
   // (typical right after a program switch introduces new exercises).
-  const insufficientData = Array.from(snapshotsByExercise.values()).filter(
+  const insufficientData = Array.from(snapshotsBySeries.values()).filter(
     (snapshots) => snapshots.length < MIN_SESSIONS_FOR_TREND
   ).length;
 
   // The user's main lifts: most sessions first (ties broken by heavier E1RM),
   // classified only with enough history to fit a trend.
-  const ranked = Array.from(snapshotsByExercise.entries())
+  const ranked = Array.from(snapshotsBySeries.entries())
     .filter(([, snapshots]) => snapshots.length >= MIN_SESSIONS_FOR_TREND)
     .sort((a, b) => {
       const bySessions = b[1].length - a[1].length;
@@ -235,8 +360,13 @@ export function computeLiftTrends(
   const lifts: LiftTrend[] = [];
   let stalled: { name: string; weeks: number } | null = null;
 
-  for (const [exerciseId, snapshots] of ranked) {
-    const knownDiscontinuities = equipmentBoundariesByExercise.get(exerciseId);
+  for (const [seriesKey, snapshots] of ranked) {
+    const meta = seriesByKey.get(seriesKey) as TrendSeries;
+    const exerciseId = meta.exerciseId;
+    const knownDiscontinuities = meta.boundaries.length > 0 ? meta.boundaries : undefined;
+    const displayName = meta.locationLabel
+      ? `${nameByExercise.get(exerciseId) ?? 'Exercise'} (${meta.locationLabel})`
+      : nameByExercise.get(exerciseId) ?? 'Exercise';
     const trend = analyzeExerciseTrend(snapshots, goal, { knownDiscontinuities });
     const sorted = [...snapshots].sort((a, b) => a.sessionDate.localeCompare(b.sessionDate));
     const currentE1RM = sorted[sorted.length - 1].estimatedE1RM;
@@ -273,7 +403,10 @@ export function computeLiftTrends(
 
     lifts.push({
       exerciseId,
+      seriesKey,
       name: nameByExercise.get(exerciseId) ?? 'Exercise',
+      locationId: meta.locationId,
+      locationLabel: meta.locationLabel,
       direction,
       weeklyChangePct,
       currentE1RMKg: Math.round(currentE1RM * 10) / 10,
@@ -301,7 +434,7 @@ export function computeLiftTrends(
       if (plateau.isPlateaued) {
         const weeks = Math.max(1, Math.round(plateau.weeksSinceProgress));
         if (!stalled || weeks > stalled.weeks) {
-          stalled = { name: nameByExercise.get(exerciseId) ?? 'Exercise', weeks };
+          stalled = { name: displayName, weeks };
         }
       }
     }

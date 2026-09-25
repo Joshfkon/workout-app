@@ -16,11 +16,24 @@ import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 // re-blocking on the full-screen loader. Edits/deletes write through the cache.
 // v2: evicts entries poisoned by the old queryFn, which cached an EMPTY page
 // for 24h whenever the network getUser() round trip failed on a cold reload.
-const HISTORY_FIRST_PAGE_KEY = ['history', 'sessions', 'page0', 'v2'] as const;
+// v3: rows now carry the session's gym; older entries would render every
+// workout as "No gym recorded" until the refetch landed.
+const HISTORY_FIRST_PAGE_KEY = ['history', 'sessions', 'page0', 'v3'] as const;
+const HISTORY_GYMS_KEY = ['history', 'gymLocations'] as const;
 import { formatWeight, formatEstimateWeight, convertWeight, convertWeightForDisplay, inputWeightToKg, getLocalDateString, muscleDisplayName } from '@/lib/utils';
 import { e1rmValueFromRpe } from '@/services/shared/e1rm';
 import { computeTrend } from '@/services/shared/trend';
 import { createRepeatSession } from '@/lib/training/repeatWorkout';
+import { updateSessionLocation } from '@/lib/training/sessionLocation';
+import { invalidateWorkoutDerivedCaches } from '@/lib/query/workoutInvalidation';
+import { deriveProgressionScope, resolveEffectiveLocation } from '@/services/progressionScope';
+import {
+  buildLocationTracks,
+  defaultTrackKey,
+  shouldSplitByLocation,
+  trackKeyFor,
+  type LocationTrack,
+} from '@/services/locationTracks';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import HistoryCalendar from './_components/HistoryCalendar';
 import nextDynamic from 'next/dynamic';
@@ -58,6 +71,14 @@ interface WorkoutHistory {
   session_notes: string | null;
   pump_rating: number | null;
   is_deload: boolean;
+  /** Gym the session was logged at (null = not recorded). */
+  location_id: string | null;
+  location_name: string | null;
+  /**
+   * Blocks that follow the session's gym (no per-exercise override) — the
+   * ones whose sets move when the session's gym is corrected.
+   */
+  followBlockIds: string[];
   exercises: ExerciseDetail[];
   totalSets: number;
   totalVolume: number;
@@ -109,6 +130,11 @@ function transformSessions(data: any[]): WorkoutHistory[] {
       session_notes: workout.session_notes,
       pump_rating: workout.pump_rating,
       is_deload: workout.is_deload ?? false,
+      location_id: workout.location_id ?? null,
+      location_name: workout.gym_locations?.name ?? null,
+      followBlockIds: (workout.exercise_blocks || [])
+        .filter((block: any) => !block.location_id)
+        .map((block: any) => block.id),
       exercises,
       totalSets,
       totalVolume,
@@ -175,7 +201,17 @@ interface ExerciseHistoryData {
   longestHoldSeconds: number;
   totalSetsAllTime: number;
   progressPercent: number;
+  /**
+   * Machine lift trained at 2+ gyms: the gyms to choose between. Everything
+   * above is computed within `gymKey`'s track (or across all when it is
+   * ALL_GYMS). Absent when the history isn't split.
+   */
+  gymTracks?: LocationTrack[];
+  gymKey?: string;
 }
+
+/** gymKey value for the combined (every gym) view. */
+const ALL_GYMS = 'all';
 
 // Parse a YYYY-MM-DD key as a LOCAL date. new Date('YYYY-MM-DD') parses as
 // UTC midnight, which renders as the previous day in timezones west of UTC.
@@ -188,6 +224,7 @@ function HistoryPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const exerciseIdParam = searchParams.get('exercise');
+  const gymParam = searchParams.get('gym');
 
   const queryClient = useQueryClient();
 
@@ -532,6 +569,72 @@ function HistoryPageContent() {
     }
   };
 
+  // The user's gyms, for correcting which gym a past workout was logged at.
+  const gymsQuery = useQuery({
+    queryKey: HISTORY_GYMS_KEY,
+    queryFn: async () => {
+      const supabase = createUntypedClient();
+      const userId = await getLocalUserId(supabase);
+      if (!userId) return [] as { id: string; name: string }[];
+      const { data, error } = await supabase
+        .from('gym_locations')
+        .select('id, name')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as { id: string; name: string }[];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+  const gyms = gymsQuery.data ?? [];
+  const [changingGymId, setChangingGymId] = useState<string | null>(null);
+
+  // Re-file a past workout at a different gym. Machine loads are tracked per
+  // gym, so a session filed at the wrong one skews that gym's suggestions,
+  // trend and records. Moves the session and re-stamps the sets of every
+  // exercise that followed the session's gym; exercises pinned to their own
+  // machine keep their pin (same rule as the mid-workout gym change).
+  const handleChangeSessionGym = async (workout: WorkoutHistory, locationId: string | null) => {
+    if (locationId === workout.location_id) return;
+    const previous = { location_id: workout.location_id, location_name: workout.location_name };
+    const nextName = locationId ? gyms.find((g) => g.id === locationId)?.name ?? null : null;
+    // Patch both sources the cards render from: the paginated list (and its
+    // cache) and the calendar's selected-day fetch.
+    const patch = (fields: Pick<WorkoutHistory, 'location_id' | 'location_name'>) => {
+      const apply = (list: WorkoutHistory[]) =>
+        list.map(w => (w.id === workout.id ? { ...w, ...fields } : w));
+      mutateWorkouts(apply);
+      setDayWorkouts(prev => (prev ? apply(prev) : prev));
+    };
+    setChangingGymId(workout.id);
+    patch({ location_id: locationId, location_name: nextName });
+    try {
+      const result = await updateSessionLocation(createUntypedClient(), {
+        sessionId: workout.id,
+        locationId,
+        previousLocationId: workout.location_id,
+        blockIdsToRestamp: workout.followBlockIds,
+      });
+      if (!result.ok) {
+        patch(previous);
+        setActionError(
+          result.rolledBack
+            ? `Couldn't change the gym${result.detail ? ` (${result.detail})` : ''}. Nothing was changed.`
+            : `Changing the gym failed partway${result.detail ? ` (${result.detail})` : ''} — some sets may still be filed at the old gym. Try again.`
+        );
+        return;
+      }
+      // Per-exercise charts, lift trends and suggestions read the location.
+      void invalidateWorkoutDerivedCaches(queryClient);
+    } catch (err) {
+      console.error('Failed to change workout gym:', err);
+      patch(previous);
+      setActionError('Failed to change the gym. Please try again.');
+    } finally {
+      setChangingGymId(null);
+    }
+  };
+
   const handleRepeatWorkout = async (workout: WorkoutHistory) => {
     if (workout.exercises.length === 0) {
       setActionError('This workout has no exercises to repeat.');
@@ -574,7 +677,12 @@ function HistoryPageContent() {
     exerciseId: string,
     exerciseName: string,
     primaryMuscle: string,
-    isDuration = false
+    isDuration = false,
+    /**
+     * Gym track to show for a machine lift trained at several gyms (a
+     * locationTracks key, or ALL_GYMS). Undefined = the most recently used gym.
+     */
+    requestedGymKey?: string
   ) => {
     setLoadingExercise(true);
     try {
@@ -583,19 +691,25 @@ function HistoryPageContent() {
       
       if (!user) return;
 
-      // Fetch all exercise blocks for this exercise
-      const { data: blocks } = await supabase
+      // Fetch all exercise blocks for this exercise, plus what decides whether
+      // its history is per-gym (machine lifts) or one line (free weights).
+      const [{ data: allBlocks }, { data: exerciseRow }] = await Promise.all([
+        supabase
         .from('exercise_blocks')
         .select(`
           id,
           workout_session_id,
           equipment_changed,
+          location_id,
+          gym_locations ( name ),
           workout_sessions!inner (
             id,
             completed_at,
             state,
             user_id,
-            is_deload
+            is_deload,
+            location_id,
+            gym_locations ( name )
           ),
           set_logs (
             id,
@@ -612,7 +726,52 @@ function HistoryPageContent() {
         // Deload sessions are held light on purpose — exclude them so a light
         // week doesn't read as an e1RM regression / PR in the trend.
         .eq('workout_sessions.is_deload', false)
-        .order('workout_sessions(completed_at)', { ascending: true });
+        .order('workout_sessions(completed_at)', { ascending: true }),
+        supabase
+          .from('exercises')
+          .select('name, equipment_required, is_bodyweight, progression_scope_override')
+          .eq('id', exerciseId)
+          .maybeSingle(),
+      ]);
+
+      // Machine lifts trained at more than one gym are read one gym at a time:
+      // machines read differently, so a combined line and combined records
+      // turn a gym switch into a fake regression. Where each block happened:
+      // its own override, else the session's gym (resolveEffectiveLocation).
+      const blockLocation = (block: any): string | null =>
+        resolveEffectiveLocation(block.location_id, block.workout_sessions?.location_id);
+      const gymNames: Record<string, string> = {};
+      for (const block of (allBlocks ?? []) as any[]) {
+        const name = block.location_id
+          ? block.gym_locations?.name
+          : block.workout_sessions?.gym_locations?.name;
+        const loc = blockLocation(block);
+        if (loc && name) gymNames[loc] = name;
+      }
+      const scope = deriveProgressionScope({
+        equipmentRequired: exerciseRow?.equipment_required,
+        isBodyweight: exerciseRow?.is_bodyweight,
+        name: exerciseRow?.name ?? exerciseName,
+        scopeOverride: exerciseRow?.progression_scope_override ?? null,
+      });
+      const gymTracks = buildLocationTracks(
+        ((allBlocks ?? []) as any[]).filter((b) => b.workout_sessions?.completed_at),
+        blockLocation,
+        (b) => b.workout_sessions.completed_at as string,
+        gymNames
+      );
+      const splitByGym = shouldSplitByLocation(scope, gymTracks);
+      const gymKey = !splitByGym
+        ? undefined
+        : requestedGymKey === ALL_GYMS ||
+            (requestedGymKey && gymTracks.some((t) => t.key === requestedGymKey))
+          ? requestedGymKey
+          : defaultTrackKey(gymTracks) ?? undefined;
+      const blocks =
+        gymKey && gymKey !== ALL_GYMS
+          ? ((allBlocks ?? []) as any[]).filter((b) => trackKeyFor(blockLocation(b)) === gymKey)
+          : allBlocks;
+      const gymFields = splitByGym ? { gymTracks, gymKey } : {};
 
       if (!blocks || blocks.length === 0) {
         setSelectedExercise({
@@ -629,6 +788,7 @@ function HistoryPageContent() {
           longestHoldSeconds: 0,
           totalSetsAllTime: 0,
           progressPercent: 0,
+          ...gymFields,
         });
         return;
       }
@@ -822,6 +982,7 @@ function HistoryPageContent() {
         longestHoldSeconds,
         totalSetsAllTime,
         progressPercent,
+        ...gymFields,
       });
     } catch (err) {
       console.error('Failed to fetch exercise history:', err);
@@ -849,7 +1010,8 @@ function HistoryPageContent() {
         selectedExercise.exerciseId,
         selectedExercise.exerciseName,
         selectedExercise.primaryMuscle,
-        selectedExercise.isDuration
+        selectedExercise.isDuration,
+        selectedExercise.gymKey
       );
     } catch (err) {
       console.error('Failed to update equipment-change marker:', err);
@@ -870,10 +1032,13 @@ function HistoryPageContent() {
           session_notes,
           pump_rating,
           is_deload,
+          location_id,
+          gym_locations ( name ),
           exercise_blocks (
             id,
             order,
             exercise_id,
+            location_id,
             exercises (
               id,
               name,
@@ -989,7 +1154,9 @@ function HistoryPageContent() {
             exercise.id,
             exercise.name,
             exercise.primary_muscle,
-            exercise.exercise_type === 'duration_based'
+            exercise.exercise_type === 'duration_based',
+            // Lift Trends links a per-gym trend with its gym.
+            gymParam ?? undefined
           );
         }
       } catch (err) {
@@ -998,7 +1165,7 @@ function HistoryPageContent() {
     }
     
     autoFetchExercise();
-  }, [exerciseIdParam, autoFetchedExercise, isLoading]);
+  }, [exerciseIdParam, gymParam, autoFetchedExercise, isLoading]);
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -1066,6 +1233,47 @@ function HistoryPageContent() {
 
           {/* Modal content */}
           <div className="p-4 overflow-y-auto max-h-[calc(90vh-80px)]">
+            {selectedExercise.gymTracks && (
+              <div className="mb-4" data-testid="history-exercise-gym-selector">
+                <div className="flex gap-1.5 overflow-x-auto" role="radiogroup" aria-label="Gym">
+                  {[
+                    ...selectedExercise.gymTracks.map((t) => ({ key: t.key, label: t.label })),
+                    { key: ALL_GYMS, label: 'All gyms' },
+                  ].map((opt) => {
+                    const isSelected = selectedExercise.gymKey === opt.key;
+                    return (
+                      <button
+                        key={opt.key}
+                        role="radio"
+                        aria-checked={isSelected}
+                        disabled={loadingExercise}
+                        onClick={() =>
+                          fetchExerciseHistory(
+                            selectedExercise.exerciseId,
+                            selectedExercise.exerciseName,
+                            selectedExercise.primaryMuscle,
+                            selectedExercise.isDuration,
+                            opt.key
+                          )
+                        }
+                        className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                          isSelected
+                            ? 'bg-primary-500/20 text-primary-300'
+                            : 'bg-surface-800 text-surface-400 hover:text-surface-200'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-surface-500 mt-2">
+                  {selectedExercise.gymKey === ALL_GYMS
+                    ? 'Combining gyms mixes machines that read differently — the trend and records below are not like-for-like.'
+                    : 'Machine lift: trend and records are for this gym only. Machines at other gyms read differently.'}
+                </p>
+              </div>
+            )}
             {loadingExercise ? (
               <div className="flex items-center justify-center py-12">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
@@ -1625,6 +1833,38 @@ function HistoryPageContent() {
                     </div>
                   </div>
                 </Link>
+                )}
+
+                {/* Gym — outside the link. Correctable after the fact: machine
+                    loads are tracked per gym, so a workout filed at the wrong
+                    gym skews that gym's numbers. */}
+                {workout.state === 'completed' && !isSelectMode && gyms.length > 0 && (
+                  <div className="px-4 sm:px-6 pb-3 -mt-2 flex items-center gap-2 text-sm text-surface-400">
+                    <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    <label className="sr-only" htmlFor={`gym-${workout.id}`}>Gym</label>
+                    <select
+                      id={`gym-${workout.id}`}
+                      data-testid="history-session-gym"
+                      value={workout.location_id ?? ''}
+                      disabled={changingGymId === workout.id}
+                      onChange={(e) => handleChangeSessionGym(workout, e.target.value || null)}
+                      className="bg-transparent text-surface-300 hover:text-surface-100 rounded py-1 pr-6 focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:opacity-60"
+                    >
+                      {!workout.location_id && <option value="">No gym recorded</option>}
+                      {workout.location_id && !gyms.some((g) => g.id === workout.location_id) && (
+                        <option value={workout.location_id}>{workout.location_name ?? 'Unknown gym'}</option>
+                      )}
+                      {gyms.map((g) => (
+                        <option key={g.id} value={g.id}>{g.name}</option>
+                      ))}
+                    </select>
+                    {changingGymId === workout.id && (
+                      <div className="w-3.5 h-3.5 border-2 border-primary-400 border-t-transparent rounded-full animate-spin" />
+                    )}
+                  </div>
                 )}
 
                 {/* Exercise summary - outside the link */}
