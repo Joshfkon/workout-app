@@ -67,7 +67,8 @@ export interface WorkoutHeaderProps {
   /** session.startedAt — elapsed time renders only when the session has started */
   startedAt: string | null;
   /**
-   * Whether the workout timer has its anchor (the first set has been logged).
+   * Whether the workout timer has its anchor (the first set has been logged
+   * or the first warmup checked off).
    * Until then the pill is a muted, non-interactive "starts with first set"
    * hint — there is no elapsed time to show or pause.
    */

@@ -799,6 +799,55 @@ describe('warmup completions (persisted checkmarks)', () => {
   });
 });
 
+describe('warmup clock start', () => {
+  beforeEach(() => {
+    act(() => {
+      useWorkoutStore.setState({ warmupClockStart: null });
+    });
+  });
+
+  it('stamps once per session — later warmups never move the clock', () => {
+    act(() => {
+      useWorkoutStore.getState().markWarmupClockStart('session-1');
+    });
+    const first = useWorkoutStore.getState().warmupClockStart;
+    expect(first?.sessionId).toBe('session-1');
+    expect(Number.isNaN(Date.parse(first!.at))).toBe(false);
+
+    act(() => {
+      useWorkoutStore.setState({
+        warmupClockStart: { sessionId: 'session-1', at: '2026-01-01T10:00:00.000Z' },
+      });
+      useWorkoutStore.getState().markWarmupClockStart('session-1');
+    });
+    expect(useWorkoutStore.getState().warmupClockStart?.at).toBe('2026-01-01T10:00:00.000Z');
+  });
+
+  it('a new session overwrites the previous session stamp', () => {
+    act(() => {
+      useWorkoutStore.setState({
+        warmupClockStart: { sessionId: 'session-1', at: '2026-01-01T10:00:00.000Z' },
+      });
+      useWorkoutStore.getState().markWarmupClockStart('session-2');
+    });
+    const stamp = useWorkoutStore.getState().warmupClockStart;
+    expect(stamp?.sessionId).toBe('session-2');
+    expect(stamp?.at).not.toBe('2026-01-01T10:00:00.000Z');
+  });
+
+  it('is not cleared when warmup checkmarks expire', () => {
+    const staleIso = new Date(Date.now() - WARMUP_COMPLETION_TTL_MS - 60_000).toISOString();
+    act(() => {
+      useWorkoutStore.setState({
+        warmupCompletions: { 'block-1': { 1: staleIso } },
+        warmupClockStart: { sessionId: 'session-1', at: staleIso },
+      });
+      useWorkoutStore.getState().expireStaleWarmupCompletions('block-1');
+    });
+    expect(useWorkoutStore.getState().warmupClockStart?.at).toBe(staleIso);
+  });
+});
+
 describe('subjective feedback (additive fields)', () => {
   beforeEach(() => {
     useWorkoutStore.getState().endSession();

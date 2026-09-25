@@ -15,6 +15,7 @@ import {
   elapsedFromAnchor,
   firstLoggedSetTime,
   normalizeStoredState,
+  workoutClockAnchor,
 } from '../useWorkoutTimer';
 
 describe('firstLoggedSetTime', () => {
@@ -35,6 +36,33 @@ describe('firstLoggedSetTime', () => {
   it('ignores unparseable timestamps', () => {
     const valid = '2026-01-01T10:00:00.000Z';
     expect(firstLoggedSetTime([{ loggedAt: 'nonsense' }, { loggedAt: valid }])).toBe(valid);
+  });
+});
+
+describe('workoutClockAnchor', () => {
+  const warmup = '2026-01-01T09:50:00.000Z';
+  const firstSet = '2026-01-01T10:00:00.000Z';
+
+  it('is null when nothing — warmup or set — has happened', () => {
+    expect(workoutClockAnchor([], null)).toBeNull();
+  });
+
+  it('starts at the first warmup before any set is logged', () => {
+    expect(workoutClockAnchor([], warmup)).toBe(warmup);
+  });
+
+  it('keeps the warmup anchor once working sets land after it', () => {
+    expect(workoutClockAnchor([{ loggedAt: firstSet }], warmup)).toBe(warmup);
+  });
+
+  it('uses the first set when it predates the warmup', () => {
+    // e.g. warmups ticked on a later exercise after sets were already logged
+    const lateWarmup = '2026-01-01T10:20:00.000Z';
+    expect(workoutClockAnchor([{ loggedAt: firstSet }], lateWarmup)).toBe(firstSet);
+  });
+
+  it('falls back to the first set without a warmup', () => {
+    expect(workoutClockAnchor([{ loggedAt: firstSet }], null)).toBe(firstSet);
   });
 });
 

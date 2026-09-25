@@ -40,7 +40,7 @@ const ExerciseCard = dynamic(
     )
   }
 );
-import { useWorkoutTimer, firstLoggedSetTime } from '@/hooks/useWorkoutTimer';
+import { useWorkoutTimer, workoutClockAnchor } from '@/hooks/useWorkoutTimer';
 
 // Dynamic imports for components not needed on initial render
 const WarmupProtocol = dynamic(() => import('@/components/workout').then(m => m.WarmupProtocol), { ssr: false });
@@ -418,6 +418,10 @@ export default function WorkoutPage() {
   const stabilizerWarningsState = useWorkoutStore((state) => state.stabilizerWarnings);
   const recordStabilizerWarningShown = useWorkoutStore((state) => state.recordStabilizerWarningShown);
   const recordStabilizerWarningResponse = useWorkoutStore((state) => state.recordStabilizerWarningResponse);
+  const warmupClockStartedAt = useWorkoutStore((state) =>
+    state.warmupClockStart?.sessionId === sessionId ? state.warmupClockStart.at : null
+  );
+  const markWarmupClockStart = useWorkoutStore((state) => state.markWarmupClockStart);
 
   // Recovery model inputs for the soreness-answer learning step: the shared
   // completed-session history (same React Query cache as the readiness sheet)
@@ -1078,13 +1082,14 @@ export default function WorkoutPage() {
   const keyboardOpen = useKeyboardOpen();
 
   // Workout timer hook - tracks total workout duration with pause/resume.
-  // Anchored at the FIRST LOGGED SET, not session creation: an empty session
-  // has no meaningful elapsed time, so until a set lands the timer sits at 0:00
-  // and a finish snapshots 0 duration. (Repro from the wild: a session left
-  // open on the add-exercise bug reopened later reading 1:20:00 with no sets.)
+  // Anchored at the FIRST LOGGED SET or FIRST CHECKED WARMUP, whichever came
+  // first — not session creation: an empty session has no meaningful elapsed
+  // time, so until the user does something the timer sits at 0:00 and a
+  // finish snapshots 0 duration. (Repro from the wild: a session left open on
+  // the add-exercise bug reopened later reading 1:20:00 with no sets.)
   const timerStartedAt = useMemo(
-    () => firstLoggedSetTime(completedSets),
-    [completedSets]
+    () => workoutClockAnchor(completedSets, warmupClockStartedAt),
+    [completedSets, warmupClockStartedAt]
   );
   const workoutTimer = useWorkoutTimer({
     sessionId,
@@ -7011,6 +7016,8 @@ export default function WorkoutPage() {
                       // Warmup motion must not fuse into the next working
                       // set's capture: discard anything captured and re-arm.
                       discardMotionCapture();
+                      // The first warmup starts the workout clock.
+                      markWarmupClockStart(sessionId);
                       setRestTimerDuration(restSeconds);
                       setRestAdjustmentNote(null); // warmup rest is never effort-modulated
                       setShowRestTimer(true);
