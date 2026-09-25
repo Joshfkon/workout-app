@@ -158,8 +158,9 @@ export function SwipeableRow({ children, onDelete, deleteLabel = 'Delete' }: Swi
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
         onMouseDown={handleMouseDown}
-        onClick={(e) => {
-          // If swiped open, close on tap
+        onClickCapture={(e) => {
+          // If swiped open, close on tap. Capture phase so the tap doesn't
+          // also reach a clickable child (e.g. a row that navigates on tap).
           if (translateX < 0) {
             e.preventDefault();
             e.stopPropagation();
