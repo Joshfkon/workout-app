@@ -76,6 +76,14 @@ interface WorkoutState {
   // (WARMUP_COMPLETION_TTL_MS), never navigation.
   warmupCompletions: Record<string, Record<number, string>>;
 
+  // When the first warmup set of a session was checked off — a workout-clock
+  // anchor alongside the first logged set (see hooks/useWorkoutTimer
+  // `workoutClockAnchor`). Deliberately separate from warmupCompletions: those
+  // expire after WARMUP_COMPLETION_TTL_MS or get unchecked, and the clock must
+  // never jump backwards when they do. Keyed by session id so a new session
+  // simply overwrites it — no clearing needed.
+  warmupClockStart: { sessionId: string; at: string } | null;
+
   // Actions
   startSession: (session: WorkoutSession, blocks: ExerciseBlock[], exercises: Exercise[]) => void;
   endSession: () => void;
@@ -119,6 +127,8 @@ interface WorkoutState {
    * than WARMUP_COMPLETION_TTL_MS; fresher checkmarks are left untouched.
    */
   expireStaleWarmupCompletions: (key: string) => void;
+  /** Stamp the session's warmup clock start. Write-once per session. */
+  markWarmupClockStart: (sessionId: string) => void;
 
   // Timer
   startRestTimer: (seconds: number) => void;
@@ -151,8 +161,9 @@ export const useWorkoutStore = create<WorkoutState>()(
       muscleSorenessAsked: {},
       stabilizerWarnings: {},
       warmupCompletions: {},
+      warmupClockStart: null,
 
-      startSession: (session, blocks, exercises) => {
+      startSession:(session, blocks, exercises) => {
         const exerciseRecord: Record<string, Exercise> = {};
         exercises.forEach((ex) => { exerciseRecord[ex.id] = ex; });
 
@@ -353,6 +364,11 @@ export const useWorkoutStore = create<WorkoutState>()(
         set({ warmupCompletions: next });
       },
 
+      markWarmupClockStart: (sessionId) => {
+        if (!sessionId || get().warmupClockStart?.sessionId === sessionId) return;
+        set({ warmupClockStart: { sessionId, at: now().toISOString() } });
+      },
+
       startRestTimer: (seconds) => {
         set({ restTimerEnd: Date.now() + seconds * 1000 });
       },
@@ -426,6 +442,9 @@ export const useWorkoutStore = create<WorkoutState>()(
         // Warmup checkmarks survive reloads; staleness is judged from their
         // timestamps on the next activation, not from the reload itself.
         warmupCompletions: state.warmupCompletions,
+        // The workout clock's warmup anchor must survive reloads exactly like
+        // the logged sets it sits beside.
+        warmupClockStart: state.warmupClockStart,
       }),
       // Migrate stale persisted shapes forward. A pre-versioned (version 0)
       // payload predates restTimerEnd persistence; default it so old data

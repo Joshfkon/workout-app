@@ -63,6 +63,22 @@ export function firstLoggedSetTime(
 }
 
 /**
+ * The workout clock's anchor: the earlier of the first logged set and the
+ * moment the first warmup set was checked off. Warmups aren't logged sets, but
+ * they are training time — a lifter who spends ten minutes ramping up should
+ * see those ten minutes on the clock, not a 0:00 that only starts at the first
+ * working set. Still null for a session where nothing has been done yet.
+ */
+export function workoutClockAnchor(
+  sets: ReadonlyArray<{ loggedAt?: string | null }>,
+  warmupStartedAt: string | null
+): string | null {
+  return firstLoggedSetTime(
+    warmupStartedAt ? [...sets, { loggedAt: warmupStartedAt }] : sets
+  );
+}
+
+/**
  * Interpret whatever is in storage as pause bookkeeping. Read-time only —
  * this never writes back; a legacy record is re-persisted in the new shape
  * the next time pause/resume runs.
@@ -117,7 +133,7 @@ export function normalizeStoredState(
 
 interface UseWorkoutTimerOptions {
   sessionId: string;
-  startedAt: string | null; // loggedAt of the first logged set
+  startedAt: string | null; // first logged set or first warmup (workoutClockAnchor)
 }
 
 export function useWorkoutTimer({ sessionId, startedAt }: UseWorkoutTimerOptions) {
