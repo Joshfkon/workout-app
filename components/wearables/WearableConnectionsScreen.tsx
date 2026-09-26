@@ -89,6 +89,7 @@ export function WearableConnectionsScreen() {
   const [connections, setConnections] = useState<WearableConnection[]>([]);
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState<WearableSource | null>(null);
+  const [healthKitDenied, setHealthKitDenied] = useState(false);
   const [availability, setAvailability] = useState<Record<WearableSource, boolean>>({
     apple_healthkit: false,
     google_fit: false,
@@ -134,8 +135,26 @@ export function WearableConnectionsScreen() {
     return connections.find((c) => c.source === source);
   }
 
+  async function openAppSettings() {
+    // Only works on native platforms
+    const { Capacitor } = await import('@/lib/integrations/capacitor-stub');
+    if (!Capacitor.isNativePlatform()) return;
+
+    // iOS: Use app-settings: URL scheme to open app's Settings page
+    // Android: Would use a different approach, but this is iOS-specific for HealthKit
+    if (Capacitor.getPlatform() === 'ios') {
+      const { Browser } = await import('@capacitor/browser');
+      try {
+        await Browser.open({ url: 'app-settings:' });
+      } catch (error) {
+        console.warn('Failed to open Settings:', error);
+      }
+    }
+  }
+
   async function handleConnect(source: WearableSource) {
     setConnecting(source);
+    setHealthKitDenied(false); // Reset denial state on retry
 
     try {
       switch (source) {
@@ -165,6 +184,9 @@ export function WearableConnectionsScreen() {
             } catch (error) {
               console.debug('[WearableConnections] initial HealthKit sync skipped:', error);
             }
+          } else {
+            // Permission denied or failed - show helpful state
+            setHealthKitDenied(true);
           }
           break;
         }
@@ -339,6 +361,44 @@ export function WearableConnectionsScreen() {
                 </Button>
               </div>
             ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Apple Health Permission Denied State */}
+      {healthKitDenied && availability.apple_healthkit && (
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex flex-col gap-4">
+              <div className="flex items-start gap-4">
+                <div className="text-3xl shrink-0">⚠️</div>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-surface-200 mb-2">
+                    Apple Health Access Required
+                  </h3>
+                  <p className="text-sm text-surface-400 mb-4">
+                    HyperTrack reads your sleep, steps, active energy, and heart-rate data from
+                    Apple Health to improve recovery and calorie estimates.
+                  </p>
+                  <div className="flex flex-wrap gap-3">
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={openAppSettings}
+                    >
+                      Open Settings
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setHealthKitDenied(false)}
+                    >
+                      Dismiss
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
           </CardContent>
         </Card>
       )}
