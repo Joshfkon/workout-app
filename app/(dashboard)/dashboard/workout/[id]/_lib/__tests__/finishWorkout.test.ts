@@ -241,6 +241,38 @@ describe('submitFinishOptimistic', () => {
 
     const finish = (await listOutbox()).find((e) => e.id === sessionFinishEntryId('s1'))!;
     expect(finish.row).not.toHaveProperty('duration_seconds');
+    expect(finish.row).not.toHaveProperty('pace_observed_seconds');
+    expect(finish.row).not.toHaveProperty('pace_model_seconds');
+  });
+
+  it('persists the pace pair when both sides are present', async () => {
+    const { client } = makeGatedSupabase();
+
+    await submitFinishOptimistic(
+      { supabase: client, sessionId: 's1', session: makeSession(), navigate: jest.fn() },
+      { ...SUMMARY_DATA, durationSeconds: 1215, paceObservedSeconds: 1100.6, paceModelSeconds: 987.4 }
+    );
+
+    const finish = (await listOutbox()).find((e) => e.id === sessionFinishEntryId('s1'))!;
+    expect(finish.row).toMatchObject({
+      duration_seconds: 1215,
+      pace_observed_seconds: 1101,
+      pace_model_seconds: 987,
+    });
+  });
+
+  it('drops a half pace pair — one side cannot seed a ratio', async () => {
+    const { client } = makeGatedSupabase();
+
+    await submitFinishOptimistic(
+      { supabase: client, sessionId: 's1', session: makeSession(), navigate: jest.fn() },
+      { ...SUMMARY_DATA, durationSeconds: 1215, paceModelSeconds: 987 }
+    );
+
+    const finish = (await listOutbox()).find((e) => e.id === sessionFinishEntryId('s1'))!;
+    expect(finish.row).toMatchObject({ duration_seconds: 1215 });
+    expect(finish.row).not.toHaveProperty('pace_observed_seconds');
+    expect(finish.row).not.toHaveProperty('pace_model_seconds');
   });
 
   it('uses the last set timestamp as end time when the gap is >= 20 minutes', async () => {
