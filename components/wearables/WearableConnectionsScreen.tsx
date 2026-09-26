@@ -8,6 +8,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import { IconAlertTriangle } from '@tabler/icons-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import type { WearableSource, WearableConnection } from '@/types/wearable';
@@ -140,12 +141,12 @@ export function WearableConnectionsScreen() {
     const { Capacitor } = await import('@/lib/integrations/capacitor-stub');
     if (!Capacitor.isNativePlatform()) return;
 
-    // iOS: Use app-settings: URL scheme to open app's Settings page
-    // Android: Would use a different approach, but this is iOS-specific for HealthKit
+    // iOS: Navigate to app-settings: URL scheme, which Capacitor's iOS webview
+    // navigation handler forwards to UIApplication.open. Browser.open would
+    // crash because SFSafariViewController only accepts http/https URLs.
     if (Capacitor.getPlatform() === 'ios') {
-      const { Browser } = await import('@capacitor/browser');
       try {
-        await Browser.open({ url: 'app-settings:' });
+        window.location.href = 'app-settings:';
       } catch (error) {
         console.warn('Failed to open Settings:', error);
       }
@@ -369,33 +370,33 @@ export function WearableConnectionsScreen() {
       {healthKitDenied && availability.apple_healthkit && (
         <Card>
           <CardContent className="p-6">
-            <div className="flex flex-col gap-4">
-              <div className="flex items-start gap-4">
-                <div className="text-3xl shrink-0">⚠️</div>
-                <div className="flex-1">
-                  <h3 className="font-semibold text-surface-200 mb-2">
-                    Apple Health Access Required
-                  </h3>
-                  <p className="text-sm text-surface-400 mb-4">
-                    HyperTrack reads your sleep, steps, active energy, and heart-rate data from
-                    Apple Health to improve recovery and calorie estimates.
-                  </p>
-                  <div className="flex flex-wrap gap-3">
-                    <Button
-                      variant="default"
-                      size="sm"
-                      onClick={openAppSettings}
-                    >
-                      Open Settings
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setHealthKitDenied(false)}
-                    >
-                      Dismiss
-                    </Button>
-                  </div>
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 shrink-0 rounded-xl bg-danger-500/15 flex items-center justify-center">
+                <IconAlertTriangle size={24} className="text-danger-400" aria-hidden="true" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-semibold text-surface-200 mb-2">
+                  Apple Health Access Required
+                </h3>
+                <p className="text-sm text-surface-400 mb-4">
+                  HyperTrack reads your sleep, steps, active energy, and heart-rate data from
+                  Apple Health to improve recovery and calorie estimates.
+                </p>
+                <div className="flex flex-wrap gap-3">
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={openAppSettings}
+                  >
+                    Open Settings
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setHealthKitDenied(false)}
+                  >
+                    Dismiss
+                  </Button>
                 </div>
               </div>
             </div>
