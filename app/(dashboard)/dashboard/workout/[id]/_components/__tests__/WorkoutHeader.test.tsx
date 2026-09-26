@@ -104,7 +104,7 @@ describe('WorkoutHeader timer pill', () => {
     });
     expect(screen.queryByTestId('workout-timer-pill')).not.toBeInTheDocument();
     const idle = screen.getByTestId('workout-timer-pill-idle');
-    expect(idle).toHaveTextContent('starts with first set');
+    expect(idle).toHaveTextContent('starts with warmup or set');
     expect(idle).not.toHaveTextContent('0:00');
     // Not a button and no pause icon — nothing to pause yet.
     expect(idle.tagName).not.toBe('BUTTON');

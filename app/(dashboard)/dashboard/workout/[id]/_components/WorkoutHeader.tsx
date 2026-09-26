@@ -198,7 +198,7 @@ export function WorkoutHeader({
           </div>
         </div>
 
-        {/* Timer pill — before the first set logs there is no elapsed time,
+        {/* Timer pill — before the first warmup/set there is no elapsed time,
             so render a muted non-interactive hint instead of "⏸ 0:00" (no
             pause affordance for a timer that isn't running). Once set 1 lands
             it becomes the tappable pause/resume pill, ≥44pt hit area; paused
@@ -207,10 +207,10 @@ export function WorkoutHeader({
           <div
             data-testid="workout-timer-pill-idle"
             className="inline-flex items-center gap-1.5 flex-shrink-0 min-h-[44px] px-3 rounded-full border border-surface-800 bg-surface-900/60 text-xs font-medium text-surface-500"
-            title="Timer starts with your first set"
+            title="Timer starts with your first warmup or working set"
           >
             <IconClock size={16} stroke={2} />
-            <span>starts with first set</span>
+            <span>starts with warmup or set</span>
           </div>
         )}
         {startedAt && timerStarted && (
