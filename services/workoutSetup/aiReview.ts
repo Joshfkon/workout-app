@@ -207,32 +207,42 @@ function validateSuggestion(
     severity: s.severity === 'warn' ? 'warn' : 'info',
   };
 
-  switch (type) {
-    case 'swap': {
-      const allowed = entry.swapCandidates.some((c) => c.exerciseId === s.replacementExerciseId);
-      if (!allowed) return { why: `swap to ${String(s.replacementExerciseId)} not in swapCandidates` };
-      out.replacementExerciseId = s.replacementExerciseId as string;
-      break;
-    }
-    case 'reorder':
-      if (!isInt(s.newOrder) || s.newOrder < 1 || s.newOrder > payload.plan.length) {
-        return { why: `newOrder ${String(s.newOrder)} out of range` };
+  const why = applyTypeFields(out, s, entry, payload.plan.length);
+  return why ? { why } : { suggestion: out };
+}
+
+/** Validate + copy the type-specific field onto `out`; returns why it fails, or null. */
+function applyTypeFields(
+  out: ReviewSuggestion,
+  s: Record<string, unknown>,
+  entry: ReviewPlanEntry,
+  planLength: number
+): string | null {
+  switch (out.type) {
+    case 'swap':
+      if (!entry.swapCandidates.some((c) => c.exerciseId === s.replacementExerciseId)) {
+        return `swap to ${String(s.replacementExerciseId)} not in swapCandidates`;
       }
-      if (s.newOrder === entry.order) return { why: 'reorder to the same position' };
+      out.replacementExerciseId = s.replacementExerciseId as string;
+      return null;
+    case 'reorder':
+      if (!isInt(s.newOrder) || s.newOrder < 1 || s.newOrder > planLength) {
+        return `newOrder ${String(s.newOrder)} out of range`;
+      }
+      if (s.newOrder === entry.order) return 'reorder to the same position';
       out.newOrder = s.newOrder;
-      break;
+      return null;
     case 'adjust_sets':
       if (!isInt(s.newSets) || s.newSets < SETUP_CONFIG.minSetsPerItem || s.newSets > SETUP_CONFIG.maxSetsPerItem) {
-        return { why: `newSets ${String(s.newSets)} out of range` };
+        return `newSets ${String(s.newSets)} out of range`;
       }
-      if (s.newSets === entry.sets) return { why: 'adjust_sets to the same count' };
+      if (s.newSets === entry.sets) return 'adjust_sets to the same count';
       out.newSets = s.newSets;
-      break;
+      return null;
     case 'remove':
     case 'flag':
-      break;
+      return null;
   }
-  return { suggestion: out };
 }
 
 /**

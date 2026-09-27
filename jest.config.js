@@ -316,6 +316,12 @@ const customJestConfig = {
       branches: 50,
       statements: 70,
     },
+    'services/workoutSetup/aiReview.ts': {
+      lines: 70,
+      functions: 60,
+      branches: 50,
+      statements: 70,
+    },
     'services/compositionSpace.ts': {
       lines: 70,
       functions: 60,

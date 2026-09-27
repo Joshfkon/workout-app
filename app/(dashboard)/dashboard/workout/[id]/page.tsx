@@ -9,6 +9,7 @@ import { createPortal } from 'react-dom';
 import dynamic from 'next/dynamic';
 import type { StartPlanPayload } from '@/components/workout/setup/WorkoutSetupFlow';
 import { setupExerciseToAvailable } from './_lib/setup/toAvailableExercise';
+import { enqueuePlanReviewDecisions } from './_lib/setup/planReviewWrites';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Card, Button, Badge, Input, LoadingAnimation, SkeletonExercise, ConfirmModal, SwipeableRow, ToastContainer, useToasts } from '@/components/ui';
 import {
@@ -5178,8 +5179,19 @@ export default function WorkoutPage() {
 
   // Setup flow Start: create the plan's blocks in order through the normal
   // add path (weight estimate + warmups), with the draft's own targets.
-  const handleStartPlan = async ({ items, exercisesById }: StartPlanPayload) => {
+  const handleStartPlan = async ({ items, exercisesById, reviewDecisions }: StartPlanPayload) => {
     const addedSoFar: AvailableExercise[] = [];
+    // AI review accept/dismiss log — recorded once the session has blocks
+    // (best-effort, via the outbox; never blocks the start).
+    const recordReviewDecisions = () => {
+      if (session?.userId && reviewDecisions.length > 0) {
+        void enqueuePlanReviewDecisions(createUntypedClient(), {
+          userId: session.userId,
+          sessionId,
+          decisions: reviewDecisions,
+        });
+      }
+    };
     for (const item of items) {
       const ex = exercisesById.get(item.exerciseId);
       if (!ex) continue;
@@ -5192,6 +5204,7 @@ export default function WorkoutPage() {
         reason: item.reason,
       });
       if (!ok) {
+        if (addedSoFar.length > 0) recordReviewDecisions();
         return {
           ok: false,
           error:
@@ -5202,6 +5215,7 @@ export default function WorkoutPage() {
       }
       addedSoFar.push(available);
     }
+    recordReviewDecisions();
     return { ok: true };
   };
 
