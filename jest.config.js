@@ -292,6 +292,30 @@ const customJestConfig = {
       branches: 50,
       statements: 70,
     },
+    'services/workoutSetup/draftPlan.ts': {
+      lines: 70,
+      functions: 60,
+      branches: 50,
+      statements: 70,
+    },
+    'services/workoutSetup/planProjection.ts': {
+      lines: 70,
+      functions: 60,
+      branches: 50,
+      statements: 70,
+    },
+    'services/workoutSetup/planEdits.ts': {
+      lines: 70,
+      functions: 60,
+      branches: 50,
+      statements: 70,
+    },
+    'services/workoutSetup/swapRanking.ts': {
+      lines: 70,
+      functions: 60,
+      branches: 50,
+      statements: 70,
+    },
     'services/compositionSpace.ts': {
       lines: 70,
       functions: 60,

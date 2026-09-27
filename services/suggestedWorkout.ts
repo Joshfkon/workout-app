@@ -174,8 +174,10 @@ export function maxExercisesForDuration(minutes: number): number {
   return 7;
 }
 
-/** Rep range from library defaults, else the compound/isolation convention. */
-function repRangeFor(exercise: SuggestedExerciseInput): [number, number] {
+/** Rep range from library defaults, else the compound/isolation convention.
+ *  Exported for the workout-setup draft builder, so both planners prescribe
+ *  identical rep targets for the same exercise. */
+export function repRangeFor(exercise: SuggestedExerciseInput): [number, number] {
   const range = exercise.defaultRepRange;
   if (range && range.length >= 2) return [range[0], range[1]];
   return exercise.mechanic === 'compound' ? [6, 10] : [10, 15];
@@ -187,7 +189,7 @@ function repRangeFor(exercise: SuggestedExerciseInput): [number, number] {
  * connective tissue and stays at natural values regardless of Enhanced
  * Athlete Mode (see services/exerciseSafety.ts).
  */
-function targetRirFor(exercise: SuggestedExerciseInput, baseRir: number): number {
+export function targetRirFor(exercise: SuggestedExerciseInput, baseRir: number): number {
   return Math.max(baseRir, getRIRFloor(exercise.name));
 }
 
@@ -218,9 +220,29 @@ function rankMuscles(muscles: SuggestedMuscleInput[], injuredMuscles: string[]):
 }
 
 /**
- * Candidate exercises for a standard muscle, best first: recently used, then
- * staples, then compounds before isolations, then tier, then name (stable).
+ * The shared exercise-preference order: recently used, then staples, then
+ * compounds before isolations, then tier, then name (stable). Exported so the
+ * workout-setup draft builder ranks candidates by the same rule.
  */
+export function compareExerciseCandidates(
+  a: Pick<SuggestedExerciseInput, 'id' | 'name' | 'tier' | 'mechanic'>,
+  b: Pick<SuggestedExerciseInput, 'id' | 'name' | 'tier' | 'mechanic'>,
+  recentIds: ReadonlySet<string>,
+  stapleIds: ReadonlySet<string>
+): number {
+  const recentDiff = (recentIds.has(a.id) ? 0 : 1) - (recentIds.has(b.id) ? 0 : 1);
+  if (recentDiff !== 0) return recentDiff;
+  const stapleDiff = (stapleIds.has(a.id) ? 0 : 1) - (stapleIds.has(b.id) ? 0 : 1);
+  if (stapleDiff !== 0) return stapleDiff;
+  const mechanicDiff =
+    (a.mechanic === 'compound' ? 0 : 1) - (b.mechanic === 'compound' ? 0 : 1);
+  if (mechanicDiff !== 0) return mechanicDiff;
+  const tierDiff = tierRank(a.tier) - tierRank(b.tier);
+  if (tierDiff !== 0) return tierDiff;
+  return a.name.localeCompare(b.name);
+}
+
+/** Candidate exercises for a standard muscle, best first (compareExerciseCandidates). */
 function candidatesForMuscle(
   muscle: StandardMuscleGroup,
   exercises: SuggestedExerciseInput[],
@@ -229,18 +251,7 @@ function candidatesForMuscle(
 ): SuggestedExerciseInput[] {
   return exercises
     .filter((ex) => ex.primaryMuscle && resolveMuscleToStandard(ex.primaryMuscle).includes(muscle))
-    .sort((a, b) => {
-      const recentDiff = (recentIds.has(a.id) ? 0 : 1) - (recentIds.has(b.id) ? 0 : 1);
-      if (recentDiff !== 0) return recentDiff;
-      const stapleDiff = (stapleIds.has(a.id) ? 0 : 1) - (stapleIds.has(b.id) ? 0 : 1);
-      if (stapleDiff !== 0) return stapleDiff;
-      const mechanicDiff =
-        (a.mechanic === 'compound' ? 0 : 1) - (b.mechanic === 'compound' ? 0 : 1);
-      if (mechanicDiff !== 0) return mechanicDiff;
-      const tierDiff = tierRank(a.tier) - tierRank(b.tier);
-      if (tierDiff !== 0) return tierDiff;
-      return a.name.localeCompare(b.name);
-    });
+    .sort((a, b) => compareExerciseCandidates(a, b, recentIds, stapleIds));
 }
 
 function reasonForPick(muscle: RankedMuscle): string {

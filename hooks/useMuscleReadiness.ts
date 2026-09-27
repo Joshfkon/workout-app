@@ -21,7 +21,11 @@ import { resolveMuscleToStandard } from '@/types/schema';
 import { rirFromFeedback, sumEffectiveVolume } from '@/services/effectiveVolume';
 import {
   computeSleepWindowMultiplier,
+  computeStabilizerRecovery,
   recoveryConfigFor,
+  stabilizerTrackedMuscles,
+  type MuscleRecoveryResult,
+  type RecoveryConfig,
   type RecoverySession,
   type RecoveryExercise,
 } from '@/services/muscleRecovery';
@@ -158,6 +162,14 @@ export interface UseMuscleReadinessResult {
    * dataset; the caller memoizes per slider position.
    */
   previewAt: (hoursAhead: number) => ReadinessPreview;
+  /**
+   * Stabilizer-channel recovery (grip / lower back / rotator cuff / rear
+   * delts) over the same history and config as the rows — what the
+   * in-workout stabilizer warning reads. Not shown on the sheet.
+   */
+  stabilizerRecovery: Partial<Record<StandardMuscleGroup, MuscleRecoveryResult>>;
+  /** The recovery config the rows were computed with. */
+  recoveryConfig: RecoveryConfig;
   isLoading: boolean;
   error: string | null;
   /** Re-run the history fetch (error retry). */
@@ -514,12 +526,22 @@ export function useMuscleReadiness({
     [rows, dailyGroupSets, dailyStandardSets, recoveryHistory, now, recoveryConfig]
   );
 
+  const stabilizerRecovery = useMemo(() => {
+    const out: Partial<Record<StandardMuscleGroup, MuscleRecoveryResult>> = {};
+    for (const muscle of stabilizerTrackedMuscles(recoveryConfig)) {
+      out[muscle] = computeStabilizerRecovery(recoveryHistory, muscle, now, recoveryConfig);
+    }
+    return out;
+  }, [recoveryHistory, now, recoveryConfig]);
+
   return {
     rows,
     targets,
     nextUp,
     dailyGroupSets,
     previewAt,
+    stabilizerRecovery,
+    recoveryConfig,
     isLoading,
     error,
     refetch,

@@ -19,6 +19,17 @@
  *     original position. Every comparison is total, so the same input always
  *     produces the same output.
  *
+ * Opt-in refinements (off unless the caller supplies the data / option, so
+ * existing callers keep their exact output):
+ *  5. STABILIZER STACKING: when items carry `stabilizers` tags, a candidate
+ *     that shares a grip (forearms) or lower-back (erectors) stabilizer tag
+ *     with the previous pick pays a penalty worth one full muscle overlap PER
+ *     shared tag — no back-to-back deadlift → barbell row when anything else
+ *     can sit between them. (The compound-first rule stays hard, so a session
+ *     of nothing but grip-heavy compounds still has to stack some.)
+ *  6. `preferLargerGroups`: among equal penalties, the exercise whose primary
+ *     group is larger (GROUP_SIZE_ORDER) goes first — before credit mass.
+ *
  * This is a ONE-SHOT action: it returns a new ordering and owns nothing else.
  * Persisting it, previewing it, and preserving the user's later manual drags
  * are the caller's concern.
@@ -43,6 +54,60 @@ export interface OrderableExercise {
   mechanic?: 'compound' | 'isolation' | string | null;
   /** exercises.movement_pattern — fallback classification + grip semantics. */
   movementPattern?: string | null;
+  /**
+   * exercises.stabilizers — enables the stabilizer-stacking penalty (rule 5).
+   * Omitted (undefined) on every item → rule 5 is off.
+   */
+  stabilizers?: string[] | null;
+}
+
+export interface AutoArrangeOptions {
+  /** Rule 6: larger primary groups first among equal-penalty candidates. */
+  preferLargerGroups?: boolean;
+}
+
+/**
+ * Coarse groups from largest to smallest (systemic cost / muscle mass) — the
+ * "larger groups first" order. Unlisted/untagged groups rank last.
+ */
+export const GROUP_SIZE_ORDER: readonly CoarseMuscle[] = [
+  'quads',
+  'back',
+  'chest',
+  'hamstrings',
+  'glutes',
+  'shoulders',
+  'adductors',
+  'erectors',
+  'triceps',
+  'biceps',
+  'traps',
+  'calves',
+  'abs',
+  'forearms',
+];
+
+/** Stabilizer tags whose back-to-back loading rule 5 penalizes. */
+const STACKING_STABILIZERS = ['forearms', 'erectors'] as const;
+
+/** Penalty per stacking stabilizer shared with the previous pick — the
+ *  weight of one full per-set muscle overlap. */
+const STABILIZER_STACK_PENALTY = 1;
+
+function groupSizeRank(ex: OrderableExercise): number {
+  const group = primaryCoarseGroup(ex);
+  const idx = group ? GROUP_SIZE_ORDER.indexOf(group) : -1;
+  return idx === -1 ? GROUP_SIZE_ORDER.length : idx;
+}
+
+function stackingTags(ex: OrderableExercise): Set<string> {
+  const tags = new Set<string>();
+  for (const tag of ex.stabilizers ?? []) {
+    for (const stack of STACKING_STABILIZERS) {
+      if (tag === stack) tags.add(stack);
+    }
+  }
+  return tags;
 }
 
 /** Movement patterns that read as multi-joint when `mechanic` is missing
@@ -153,7 +218,8 @@ const PREVIOUS_2_WEIGHT = 0.5;
  */
 export function autoArrangeExercises<T>(
   items: readonly T[],
-  getMeta: (item: T) => OrderableExercise
+  getMeta: (item: T) => OrderableExercise,
+  options: AutoArrangeOptions = {}
 ): T[] {
   interface Candidate {
     item: T;
@@ -164,6 +230,8 @@ export function autoArrangeExercises<T>(
     compound: boolean;
     gripIntensive: boolean;
     gripDependent: boolean;
+    sizeRank: number;
+    stacking: Set<string>;
   }
 
   const remaining: Candidate[] = items.map((item, originalIndex) => {
@@ -178,14 +246,26 @@ export function autoArrangeExercises<T>(
       compound: isCompoundExercise(meta),
       gripIntensive: isGripIntensiveExercise(meta),
       gripDependent: isGripDependentExercise(meta),
+      sizeRank: groupSizeRank(meta),
+      stacking: stackingTags(meta),
     };
   });
+
+  const stackPenalty = (a: Candidate, b: Candidate | undefined): number => {
+    if (!b) return 0;
+    let shared = 0;
+    a.stacking.forEach((tag) => {
+      if (b.stacking.has(tag)) shared += 1;
+    });
+    return shared * STABILIZER_STACK_PENALTY;
+  };
 
   const result: Candidate[] = [];
 
   // Total tie-break: bigger load first, then name, then original position —
   // the final comparison makes every ordering decision deterministic.
   const tieBreak = (a: Candidate, b: Candidate): number => {
+    if (options.preferLargerGroups && a.sizeRank !== b.sizeRank) return a.sizeRank - b.sizeRank;
     if (a.mass !== b.mass) return b.mass - a.mass;
     if (a.meta.name !== b.meta.name) return a.meta.name < b.meta.name ? -1 : 1;
     return a.originalIndex - b.originalIndex;
@@ -209,14 +289,30 @@ export function autoArrangeExercises<T>(
     const prev2 = result[result.length - 2];
     let best: Candidate | null = null;
     let bestPenalty = Infinity;
+    // Most-constrained first (rule 5): among equal penalties, place the lift
+    // that shares stacking stabilizers with the most still-unplaced lifts
+    // while there is still something to put between them. All zero when no
+    // item carries stabilizer tags, so this never changes a legacy ordering.
+    const conflicts = new Map<Candidate, number>();
+    for (const candidate of pool) {
+      let n = 0;
+      for (const other of remaining) {
+        if (other !== candidate && stackPenalty(candidate, other) > 0) n += 1;
+      }
+      conflicts.set(candidate, n);
+    }
+    const preferred = (a: Candidate, b: Candidate): number =>
+      conflicts.get(b)! - conflicts.get(a)! || tieBreak(a, b);
+
     for (const candidate of pool) {
       const penalty =
         (prev1 ? muscleOverlap(candidate.vector, prev1.vector) : 0) +
-        (prev2 ? muscleOverlap(candidate.vector, prev2.vector) * PREVIOUS_2_WEIGHT : 0);
+        (prev2 ? muscleOverlap(candidate.vector, prev2.vector) * PREVIOUS_2_WEIGHT : 0) +
+        stackPenalty(candidate, prev1);
       if (
         best === null ||
         penalty < bestPenalty - 1e-9 ||
-        (Math.abs(penalty - bestPenalty) <= 1e-9 && tieBreak(candidate, best) < 0)
+        (Math.abs(penalty - bestPenalty) <= 1e-9 && preferred(candidate, best) < 0)
       ) {
         best = candidate;
         bestPenalty = penalty;
