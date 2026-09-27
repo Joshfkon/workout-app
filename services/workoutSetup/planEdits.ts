@@ -76,7 +76,9 @@ export function applyPlanEdit(items: readonly PlanItem[], edit: PlanEdit): PlanI
  * Stable hash of the plan's reviewable content (exercise, sets, order, reps).
  * AI review results are cached against it; any edit changes it.
  */
-export function planHash(items: readonly PlanItem[]): string {
+export function planHash(
+  items: readonly Pick<PlanItem, 'itemId' | 'exerciseId' | 'sets' | 'repRange'>[]
+): string {
   const canonical = items
     .map((i) => `${i.itemId}:${i.exerciseId}:${i.sets}:${i.repRange[0]}-${i.repRange[1]}`)
     .join('|');

@@ -43,11 +43,16 @@ jest.mock('@/lib/supabase/client', () => ({
   }),
 }));
 jest.mock('@/stores', () => ({ useUserStore: () => ({ user: { id: 'u1' } }) }));
+jest.mock('@/lib/actions/workoutPlanReview', () => ({
+  reviewWorkoutPlan: jest.fn(async () => ({ ok: false, error: 'not in tests' })),
+}));
 jest.mock('@/hooks/useAuthUser', () => ({
   useAuthUser: () => ({ user: { id: 'u1' }, isLoading: false, error: null }),
 }));
 
 import { WorkoutSetupFlow, type StartPlanPayload } from '../WorkoutSetupFlow';
+import type { ReviewPayload } from '@/services/workoutSetup/aiReview';
+import type { ReviewRequester } from '../usePlanReview';
 
 const catalogRow = (
   id: string,
@@ -244,5 +249,110 @@ describe('WorkoutSetupFlow', () => {
     await user.click(screen.getByTestId('setup-chip-back'));
     expect(screen.getByTestId('setup-build-plan')).toBeDisabled();
     await act(async () => {});
+  });
+});
+
+describe('WorkoutSetupFlow — AI review', () => {
+  async function toEditor(requester: ReviewRequester, extra: Partial<React.ComponentProps<typeof WorkoutSetupFlow>> = {}) {
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    const utils = renderFlow({ reviewRequester: requester, ...extra });
+    await waitForPreselection();
+    await user.click(screen.getByTestId('setup-build-plan'));
+    return { user, ...utils };
+  }
+
+  it('shows suggestions inline with a summary; accepting applies through the edit path', async () => {
+    let sent: ReviewPayload | null = null;
+    const requester: ReviewRequester = async (payload) => {
+      sent = payload;
+      // The first item that has alternatives outside the plan.
+      const first = payload.plan.find((p) => p.swapCandidates.length > 0)!;
+      return {
+        ok: true,
+        review: {
+          summary: 'One change worth making.',
+          suggestions: [
+            { id: 'sw', type: 'swap', itemId: first.itemId, replacementExerciseId: first.swapCandidates[0].exerciseId, reason: 'Fresher option', severity: 'info' },
+            { id: 'fl', type: 'flag', itemId: payload.plan[payload.plan.length - 1].itemId, reason: 'Keep form strict', severity: 'warn' },
+          ],
+        },
+      };
+    };
+    const { user, onStart } = await toEditor(requester);
+    await user.click(screen.getByTestId('setup-review'));
+    expect(await screen.findByTestId('setup-review-banner')).toHaveTextContent('One change worth making.');
+    const target = sent!.plan.find((p) => p.swapCandidates.length > 0)!;
+    const row = () => screen.getByTestId(`setup-row-${target.itemId}`);
+    expect(within(row()).getByTestId('setup-suggestion-sw')).toBeInTheDocument();
+
+    const replacement = target.swapCandidates[0].name;
+    const setsBefore = within(row()).getByTestId(/^setup-sets-item/).textContent;
+    const orderBefore = screen.getAllByTestId(/^setup-row-/).map((r) => r.getAttribute('data-testid'));
+    await user.click(screen.getByTestId('setup-suggestion-accept-sw'));
+    const rowAfter = row();
+    // Swapped in place: same slot, same order.
+    expect(screen.getAllByTestId(/^setup-row-/).map((r) => r.getAttribute('data-testid'))).toEqual(orderBefore);
+    expect(rowAfter).toHaveTextContent(replacement);
+    expect(within(rowAfter).getByTestId(/^setup-sets-item/).textContent).toBe(setsBefore);
+    expect(screen.queryByTestId('setup-suggestion-sw')).not.toBeInTheDocument();
+    // The other suggestion is still actionable.
+    expect(screen.getByTestId('setup-suggestion-fl')).toBeInTheDocument();
+
+    await user.click(screen.getByTestId('setup-start'));
+    await waitFor(() => expect(onStart).toHaveBeenCalled());
+    const { reviewDecisions } = onStart.mock.calls[0][0];
+    expect(reviewDecisions.map((d) => [d.suggestionId, d.decision, d.applied])).toEqual([
+      ['sw', 'accepted', true],
+      ['fl', 'ignored', false],
+    ]);
+    expect(reviewDecisions[0]).toMatchObject({ type: 'swap', reason: 'Fresher option' });
+  });
+
+  it('"Looks good." when the review returns no suggestions', async () => {
+    const { user } = await toEditor(async () => ({ ok: true, review: { summary: '', suggestions: [] } }));
+    await user.click(screen.getByTestId('setup-review'));
+    expect(await screen.findByTestId('setup-review-banner')).toHaveTextContent('Looks good.');
+  });
+
+  it('Accept all / Dismiss all record every decision', async () => {
+    const requester: ReviewRequester = async (payload) => ({
+      ok: true,
+      review: {
+        summary: '',
+        suggestions: payload.plan.slice(0, 2).map((p, i) => ({ id: `s${i}`, type: 'adjust_sets' as const, itemId: p.itemId, newSets: p.sets === 2 ? 3 : 2, reason: 'time', severity: 'info' as const })),
+      },
+    });
+    const { user, onStart } = await toEditor(requester);
+    await user.click(screen.getByTestId('setup-review'));
+    await screen.findByTestId('setup-review-banner');
+    const duration = screen.getByTestId('setup-duration').textContent;
+    await user.click(screen.getByTestId('setup-review-accept-all'));
+    expect(screen.queryByTestId(/^setup-suggestion-s/)).not.toBeInTheDocument();
+    expect(screen.getByTestId('setup-duration').textContent).not.toBe(duration);
+    await user.click(screen.getByTestId('setup-start'));
+    await waitFor(() => expect(onStart).toHaveBeenCalled());
+    expect(onStart.mock.calls[0][0].reviewDecisions.map((d) => d.decision)).toEqual(['accepted', 'accepted']);
+  });
+
+  it('a failed review never blocks Start and shows "Review unavailable"', async () => {
+    const { user, onStart } = await toEditor(async () => ({ ok: false, error: 'boom' }));
+    await user.click(screen.getByTestId('setup-review'));
+    expect(await screen.findByText('Review unavailable, try again.')).toBeInTheDocument();
+    expect(screen.queryByTestId('setup-review-banner')).not.toBeInTheDocument();
+    await user.click(screen.getByTestId('setup-start'));
+    await waitFor(() => expect(onStart).toHaveBeenCalled());
+  });
+
+  it('a user edit hides a shown review (stale)', async () => {
+    const requester: ReviewRequester = async (payload) => ({
+      ok: true,
+      review: { summary: 'x', suggestions: [{ id: 'f', type: 'flag', itemId: payload.plan[0].itemId, reason: 'r', severity: 'info' }] },
+    });
+    const { user } = await toEditor(requester);
+    await user.click(screen.getByTestId('setup-review'));
+    await screen.findByTestId('setup-review-banner');
+    const itemId = screen.getAllByTestId(/^setup-row-/)[0].getAttribute('data-testid')!.replace('setup-row-', '');
+    await user.click(screen.getByTestId(`setup-sets-inc-${itemId}`));
+    expect(screen.queryByTestId('setup-review-banner')).not.toBeInTheDocument();
   });
 });

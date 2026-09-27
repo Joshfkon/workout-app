@@ -16,7 +16,16 @@ import { useRecentSessionSummaries, useSetupCatalog } from '@/hooks/useWorkoutSe
 import { now as clockNow } from '@/lib/clock';
 import type { CoarseMuscle } from '@/services/volumeBands';
 import { buildDraftPlan, makePlanItem, nextItemId } from '@/services/workoutSetup/draftPlan';
-import { applyPlanEdit, type PlanEdit } from '@/services/workoutSetup/planEdits';
+import { applyPlanEdit, planHash, type PlanEdit } from '@/services/workoutSetup/planEdits';
+import {
+  acceptAllOrder,
+  buildReviewPayload,
+  decisionFor,
+  suggestionToEdit,
+  type ReviewDecision,
+  type ReviewSuggestion,
+} from '@/services/workoutSetup/aiReview';
+import { swapCandidatesForReview } from '@/services/workoutSetup/swapRanking';
 import {
   estimatePlanMinutes,
   planWarnings,
@@ -34,6 +43,8 @@ import {
 } from '@/app/(dashboard)/dashboard/workout/[id]/_lib/setup/targetPicker';
 import { TargetPicker } from './TargetPicker';
 import { DraftPlanEditor } from './DraftPlanEditor';
+import { usePlanReview, type ReviewRequester } from './usePlanReview';
+import { ReviewBanner, ReviewButton, SuggestionCard } from './PlanReviewUI';
 
 const BUDGET_STORAGE_KEY = 'hypertrack:setup-time-budget';
 const DAY_MS = 86_400_000;
@@ -60,6 +71,8 @@ function storeBudget(minutes: number | null) {
 export interface StartPlanPayload {
   items: PlanItem[];
   exercisesById: ReadonlyMap<string, SetupExercise>;
+  /** Every AI suggestion shown this setup and what the user did with it. */
+  reviewDecisions: ReviewDecision[];
 }
 
 export interface WorkoutSetupFlowProps {
@@ -81,6 +94,8 @@ export interface WorkoutSetupFlowProps {
   disabled?: boolean;
   /** Rendered under the picker only (not in the editor). */
   pickStepExtras?: React.ReactNode;
+  /** Test seam for the review request (defaults to the Grok server action). */
+  reviewRequester?: ReviewRequester;
 }
 
 export function WorkoutSetupFlow({
@@ -93,6 +108,7 @@ export function WorkoutSetupFlow({
   onStart,
   disabled = false,
   pickStepExtras,
+  reviewRequester,
 }: WorkoutSetupFlowProps) {
   const [now] = useState(() => clockNow());
   const readiness = useMuscleReadiness({ liveBlocks: EMPTY, liveSets: EMPTY, now, enabled: true });
@@ -160,6 +176,7 @@ export function WorkoutSetupFlow({
   }, []);
 
   // ---- Step 2: the draft ---------------------------------------------------
+  const clearShownReviewRef = useRef<() => void>(() => {});
   const [items, setItems] = useState<PlanItem[]>([]);
   const [planGroups, setPlanGroups] = useState<CoarseMuscle[]>([]);
   const [trimmedSets, setTrimmedSets] = useState(0);
@@ -183,6 +200,7 @@ export function WorkoutSetupFlow({
       setUnfilledGroups(result.unfilledGroups);
       setPlanGroups(groups);
       setStep('edit');
+      clearShownReviewRef.current();
     },
     [groupStates, catalog, recentExerciseIds, unavailableEquipmentIds, unavailableExerciseIds, stabilizerLoad, timeBudget]
   );
@@ -200,11 +218,17 @@ export function WorkoutSetupFlow({
       setUnfilledGroups([]);
       setPlanGroups(dominantGroups(session));
       setStep('edit');
+      clearShownReviewRef.current();
     },
     [exercisesById]
   );
 
-  const edit = useCallback((e: PlanEdit) => setItems((prev) => applyPlanEdit(prev, e)), []);
+  // A user edit makes any shown review stale: hide it (a fresh prefetch
+  // re-arms off the new plan). Accepted suggestions go through `accept`.
+  const edit = useCallback((e: PlanEdit) => {
+    setItems((prev) => applyPlanEdit(prev, e));
+    clearShownReviewRef.current();
+  }, []);
 
   // Adds from the page's picker are queued and applied once the catalog has
   // them — a custom exercise created mid-pick lands after a catalog refetch.
@@ -226,6 +250,7 @@ export function WorkoutSetupFlow({
       return next;
     });
     setPendingAdds((prev) => prev.filter((id) => !ready.includes(id)));
+    clearShownReviewRef.current();
   }, [pendingAdds, exercisesById]);
 
   // Live footer — every edit re-derives from `items` through the shared models.
@@ -255,6 +280,96 @@ export function WorkoutSetupFlow({
     [exercisesById, catalog, unavailableEquipmentIds, unavailableExerciseIds, recentlyDoneIds, usageCounts, items]
   );
 
+  // ---- Step 3: optional AI review -----------------------------------------
+  const hash = useMemo(() => planHash(items), [items]);
+  const buildPayload = useCallback(() => {
+    const cutoff = now.getTime() - SETUP_CONFIG.swapRecentDays * DAY_MS;
+    return buildReviewPayload({
+      items,
+      exercisesById,
+      swapCandidatesFor: (item) => {
+        const current = exercisesById.get(item.exerciseId);
+        return current
+          ? swapCandidatesForReview(current, catalog, {
+              unavailableEquipmentIds,
+              unavailableExerciseIds,
+              recentlyDoneIds,
+              usageCounts,
+              excludeIds: new Set(items.map((i) => i.exerciseId)),
+            })
+          : [];
+      },
+      projection,
+      selectedGroups: planGroups,
+      stabilizerLoad,
+      timeBudgetMin: timeBudget,
+      estimatedDurationMin: estimatedMinutes,
+      recentSessions: recentSessions
+        .filter((s) => new Date(s.completedAt).getTime() >= cutoff)
+        .slice(0, 5)
+        .map((s) => ({
+          daysAgo: Math.max(0, Math.floor((now.getTime() - new Date(s.completedAt).getTime()) / DAY_MS)),
+          exercises: s.exercises.map((e) => e.name),
+          groups: dominantGroups(s),
+        })),
+    });
+  }, [items, exercisesById, catalog, unavailableEquipmentIds, unavailableExerciseIds, recentlyDoneIds, usageCounts, projection, planGroups, stabilizerLoad, timeBudget, estimatedMinutes, recentSessions, now]);
+
+  const review = usePlanReview(hash, buildPayload, {
+    enabled: step === 'edit' && items.length > 0,
+    requester: reviewRequester,
+  });
+  const { clear: clearReview, noteAcceptedEdit } = review;
+  clearShownReviewRef.current = clearReview;
+
+  const [decisions, setDecisions] = useState<ReviewDecision[]>([]);
+  const shownHash = useMemo(
+    () => (review.shown ? planHashOfPayload(review.shown.payload) : ''),
+    [review.shown]
+  );
+  const decided = useMemo(
+    () => new Set(decisions.filter((d) => d.planHash === shownHash).map((d) => d.suggestionId)),
+    [decisions, shownHash]
+  );
+  const pending = useMemo(
+    () => (review.shown ? review.shown.review.suggestions.filter((s) => !decided.has(s.id)) : []),
+    [review.shown, decided]
+  );
+
+  const accept = useCallback(
+    (batch: ReviewSuggestion[]) => {
+      if (!review.shown) return;
+      const { payload } = review.shown;
+      // Computed from the current plan (not inside a state updater, which
+      // React may run lazily or twice) so the decision log is exact.
+      const records: ReviewDecision[] = [];
+      let next = items;
+      for (const sug of acceptAllOrder(batch)) {
+        const e = suggestionToEdit(sug, next, exercisesById, payload);
+        if (e) next = applyPlanEdit(next, e);
+        records.push(decisionFor(sug, payload, shownHash, 'accepted', e !== null));
+      }
+      if (next !== items) {
+        // Same edit path as manual changes, but no automatic re-review.
+        noteAcceptedEdit();
+        setItems(next);
+      }
+      setDecisions((prev) => [...prev, ...records]);
+    },
+    [review.shown, items, exercisesById, shownHash, noteAcceptedEdit]
+  );
+  const dismiss = useCallback(
+    (batch: ReviewSuggestion[]) => {
+      if (!review.shown) return;
+      const { payload } = review.shown;
+      setDecisions((prev) => [
+        ...prev,
+        ...batch.map((s) => decisionFor(s, payload, shownHash, 'dismissed', false)),
+      ]);
+    },
+    [review.shown, shownHash]
+  );
+
   const [isStarting, setIsStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const start = useCallback(async () => {
@@ -265,12 +380,17 @@ export function WorkoutSetupFlow({
     }
     setIsStarting(true);
     try {
-      const result = await onStart({ items, exercisesById });
+      // Suggestions still on screen at Start were seen but not acted on.
+      const ignored =
+        review.shown
+          ? pending.map((s) => decisionFor(s, review.shown!.payload, shownHash, 'ignored', false))
+          : [];
+      const result = await onStart({ items, exercisesById, reviewDecisions: [...decisions, ...ignored] });
       if (!result.ok) setStartError(result.error ?? 'Could not start the workout. Try again.');
     } finally {
       setIsStarting(false);
     }
-  }, [items, exercisesById, onStart]);
+  }, [items, exercisesById, onStart, review.shown, pending, shownHash, decisions]);
 
   if (step === 'edit') {
     return (
@@ -290,6 +410,33 @@ export function WorkoutSetupFlow({
         onStart={start}
         isStarting={isStarting || disabled}
         startError={startError}
+        secondaryAction={
+          <ReviewButton status={review.status} onReview={() => void review.review()} disabled={items.length === 0} />
+        }
+        banner={
+          review.status === 'ready' && review.shown ? (
+            <ReviewBanner
+              summary={review.shown.review.summary}
+              pendingCount={pending.length}
+              totalCount={review.shown.review.suggestions.length}
+              onAcceptAll={() => accept(pending)}
+              onDismissAll={() => dismiss(pending)}
+            />
+          ) : null
+        }
+        renderRowExtra={(item) =>
+          pending
+            .filter((s) => s.itemId === item.itemId)
+            .map((s) => (
+              <SuggestionCard
+                key={s.id}
+                suggestion={s}
+                exercisesById={exercisesById}
+                onAccept={() => accept([s])}
+                onDismiss={() => dismiss([s])}
+              />
+            ))
+        }
       />
     );
   }
@@ -319,3 +466,8 @@ export function WorkoutSetupFlow({
 }
 
 const EMPTY: never[] = [];
+
+/** Hash of the plan a review payload describes (its decisions key). */
+function planHashOfPayload(payload: { plan: { itemId: string; exerciseId: string; sets: number; repRange: [number, number] }[] }): string {
+  return planHash(payload.plan);
+}
