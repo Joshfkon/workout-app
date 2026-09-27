@@ -384,6 +384,13 @@ export const REST_EXTEND_HARD_S = 30;
  */
 export const REST_EXTEND_FAILURE_S = 60;
 
+/**
+ * Calibrated true-RIR ceiling for the rest timer's "at/near failure" step.
+ * Absolute, matching sanityChecks / muscleRecovery (RIR ≤ 1); a set past the
+ * relative deadband but above this gets the hard step instead.
+ */
+export const NEAR_FAILURE_TRUE_RIR = 1;
+
 /** Ceiling on any prescribed rest — matches the DB CHECK bound (0–600). */
 export const REST_MAX_S = 600;
 
