@@ -34,7 +34,9 @@ export function useKnownMuscles(
     [now]
   );
 
-  const query = useQuery<Set<StandardMuscleGroup>>({
+  // The cached value is a plain array: this key is persisted to IndexedDB
+  // through JSON, which would flatten a Set to {}.
+  const query = useQuery<StandardMuscleGroup[]>({
     queryKey: ['muscle-readiness-history', userId, 'known', windowStart],
     enabled: enabled && !!userId,
     staleTime: 5 * 60_000,
@@ -66,9 +68,13 @@ export function useKnownMuscles(
             ]
           : []
       );
-      return knownMusclesFromExercises(worked);
+      return Array.from(knownMusclesFromExercises(worked));
     },
   });
 
-  return { knownMuscles: query.data, isLoading: query.isLoading };
+  const knownMuscles = useMemo(
+    () => (Array.isArray(query.data) ? new Set(query.data) : undefined),
+    [query.data]
+  );
+  return { knownMuscles, isLoading: query.isLoading };
 }

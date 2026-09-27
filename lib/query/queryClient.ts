@@ -33,6 +33,12 @@ export const PERSISTED_QUERY_PREFIXES = [
   'settings',       // user settings/preferences row
   'blood-pressure', // daily BP readings — history is immutable-in-practice
   'phases',         // training phase spans — low-frequency, drive the Body verdict
+  // Completed-session feed behind readiness / the workout setup picker (and
+  // the 28-day known-muscles lookback). Invalidated on every workout finish
+  // (WORKOUT_DERIVED_QUERY_PREFIXES); persisted so a same-day relaunch with
+  // no signal still pre-selects targets. Keys are local-day anchored, so a
+  // snapshot never outlives its day. Values must stay JSON-plain.
+  'muscle-readiness-history',
 ] as const;
 
 export function shouldPersistQueryKey(queryKey: readonly unknown[]): boolean {
