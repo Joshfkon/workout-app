@@ -21,7 +21,11 @@ import { resolveMuscleToStandard } from '@/types/schema';
 import { rirFromFeedback, sumEffectiveVolume } from '@/services/effectiveVolume';
 import {
   computeSleepWindowMultiplier,
+  computeStabilizerRecovery,
   recoveryConfigFor,
+  stabilizerTrackedMuscles,
+  type MuscleRecoveryResult,
+  type RecoveryConfig,
   type RecoverySession,
   type RecoveryExercise,
 } from '@/services/muscleRecovery';
@@ -43,6 +47,7 @@ import {
   type ReadinessTarget,
   type NextReadyTarget,
 } from '@/app/(dashboard)/dashboard/workout/[id]/_lib/readiness';
+import { useKnownMuscles } from '@/hooks/useKnownMuscles';
 import { buildFutureReadinessRows } from '@/app/(dashboard)/dashboard/workout/[id]/_lib/readinessPreview';
 
 /**
@@ -157,6 +162,14 @@ export interface UseMuscleReadinessResult {
    * dataset; the caller memoizes per slider position.
    */
   previewAt: (hoursAhead: number) => ReadinessPreview;
+  /**
+   * Stabilizer-channel recovery (grip / lower back / rotator cuff / rear
+   * delts) over the same history and config as the rows — what the
+   * in-workout stabilizer warning reads. Not shown on the sheet.
+   */
+  stabilizerRecovery: Partial<Record<StandardMuscleGroup, MuscleRecoveryResult>>;
+  /** The recovery config the rows were computed with. */
+  recoveryConfig: RecoveryConfig;
   isLoading: boolean;
   error: string | null;
   /** Re-run the history fetch (error retry). */
@@ -308,7 +321,17 @@ export function useMuscleReadiness({
   sorenessOverrides,
 }: UseMuscleReadinessArgs): UseMuscleReadinessResult {
   const { user: storeUser } = useUserStore();
-  const { historyRows, sessions, isLoading, error, refetch } = useRecoveryHistory(now, enabled);
+  const {
+    historyRows,
+    sessions,
+    isLoading: historyLoading,
+    error,
+    refetch,
+  } = useRecoveryHistory(now, enabled);
+  const { knownMuscles, isLoading: knownLoading } = useKnownMuscles(now, enabled);
+  // Gate on the known-muscles lookback too: rendering before it lands would
+  // flash every group untrained this week as "No recent data".
+  const isLoading = historyLoading || knownLoading;
   const { multipliers } = useRecoveryMultipliers();
   const { state: wearableRecovery } = useWearableRecovery();
 
@@ -465,9 +488,10 @@ export function useMuscleReadiness({
         reachable,
         recoveryConfig,
         sorenessOverrides,
-        enhancedAthleteMode ? 'enhanced' : 'standard'
+        enhancedAthleteMode ? 'enhanced' : 'standard',
+        knownMuscles
       ),
-    [stats, recoveryHistory, now, reachable, recoveryConfig, sorenessOverrides]
+    [stats, recoveryHistory, now, reachable, recoveryConfig, sorenessOverrides, knownMuscles]
   );
 
   const { targets, nextUp } = useMemo(() => selectGoodTargets(rows, 3), [rows]);
@@ -502,12 +526,22 @@ export function useMuscleReadiness({
     [rows, dailyGroupSets, dailyStandardSets, recoveryHistory, now, recoveryConfig]
   );
 
+  const stabilizerRecovery = useMemo(() => {
+    const out: Partial<Record<StandardMuscleGroup, MuscleRecoveryResult>> = {};
+    for (const muscle of stabilizerTrackedMuscles(recoveryConfig)) {
+      out[muscle] = computeStabilizerRecovery(recoveryHistory, muscle, now, recoveryConfig);
+    }
+    return out;
+  }, [recoveryHistory, now, recoveryConfig]);
+
   return {
     rows,
     targets,
     nextUp,
     dailyGroupSets,
     previewAt,
+    stabilizerRecovery,
+    recoveryConfig,
     isLoading,
     error,
     refetch,

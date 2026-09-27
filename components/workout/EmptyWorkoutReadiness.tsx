@@ -6,6 +6,7 @@ import { useMuscleReadiness } from '@/hooks/useMuscleReadiness';
 import { useWearableRecovery } from '@/hooks/useWearableRecovery';
 import { resolvePrimaryMuscleCredits } from '@/services/volumeTracker';
 import { COARSE_CHILDREN, type CoarseMuscle } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
+import { READINESS_FACTOR } from '@/app/(dashboard)/dashboard/workout/[id]/_lib/readiness';
 import type { StandardMuscleGroup } from '@/types/schema';
 import type { AvailableExercise } from '@/app/(dashboard)/dashboard/workout/[id]/_lib/types';
 
@@ -61,7 +62,10 @@ export function EmptyWorkoutReadiness({
         map[child] = Math.max(map[child] ?? 0, row.score);
       }
       for (const child of row.children) {
-        map[child.muscle] = Math.max(map[child.muscle] ?? 0, child.volumeGap);
+        // Same factor as the row score, so an unknown (no-evidence) or
+        // fatigued head never lifts its chip on volume gap alone.
+        const childScore = child.volumeGap * READINESS_FACTOR[child.readiness];
+        map[child.muscle] = Math.max(map[child.muscle] ?? 0, childScore);
       }
     }
     return map;

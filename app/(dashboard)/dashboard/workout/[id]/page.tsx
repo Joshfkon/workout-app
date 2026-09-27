@@ -7,6 +7,9 @@ import { useQueryClient } from '@tanstack/react-query';
 import { invalidateWorkoutDerivedCaches } from '@/lib/query/workoutInvalidation';
 import { createPortal } from 'react-dom';
 import dynamic from 'next/dynamic';
+import type { StartPlanPayload } from '@/components/workout/setup/WorkoutSetupFlow';
+import { setupExerciseToAvailable } from './_lib/setup/toAvailableExercise';
+import { enqueuePlanReviewDecisions } from './_lib/setup/planReviewWrites';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Card, Button, Badge, Input, LoadingAnimation, SkeletonExercise, ConfirmModal, SwipeableRow, ToastContainer, useToasts } from '@/components/ui';
 import {
@@ -54,6 +57,7 @@ const MuscleReadinessSheet = dynamic(() => import('@/components/workout/MuscleRe
 // Lazy so the hook + assembly stay out of the workout screen's initial bundle;
 // it only mounts while the workout is empty, then unmounts once a block exists.
 const EmptyWorkoutReadiness = dynamic(() => import('@/components/workout/EmptyWorkoutReadiness').then(m => m.EmptyWorkoutReadiness), { ssr: false });
+const WorkoutSetupFlow = dynamic(() => import('@/components/workout/setup/WorkoutSetupFlow').then(m => m.WorkoutSetupFlow), { ssr: false });
 // The summary chunk loads over the network the first time the user finishes
 // a workout — without a loading fallback the screen renders BLANK until it
 // arrives (looks frozen on a slow connection), so show a matching skeleton.
@@ -698,6 +702,9 @@ export default function WorkoutPage() {
   }, []);
   const [showMuscleDropdown, setShowMuscleDropdown] = useState(false);
   const [selectedExercisesToAdd, setSelectedExercisesToAdd] = useState<AvailableExercise[]>([]);
+  // Setup flow: when set, the add-exercise picker adds to the draft PLAN
+  // (via this callback) instead of inserting blocks into the session.
+  const planAddRef = useRef<((exerciseIds: string[]) => void) | null>(null);
   const [exerciseSortOption, setExerciseSortOption] = useState<'frequency' | 'name' | 'recent'>('frequency');
   const [showSortDropdown, setShowSortDropdown] = useState(false);
   // When false, the picker collapses the long tail of rarely-used exercises
@@ -4773,16 +4780,11 @@ export default function WorkoutPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, blocks.length, availableExercises.length]);
 
-  // Most-used exercises (last 90 days) for the empty-state quick-add chips
-  const quickAddExercises = useMemo(() => {
-    if (availableExercises.length === 0 || frequentExerciseIds.size === 0) return [];
-    const byId = new Map(availableExercises.map((ex) => [ex.id, ex]));
-    return Array.from(frequentExerciseIds.entries())
-      .sort((a, b) => b[1] - a[1])
-      .map(([id]) => byId.get(id))
-      .filter((ex): ex is AvailableExercise => Boolean(ex))
-      .slice(0, 8);
-  }, [availableExercises, frequentExerciseIds]);
+  // Setup flow reads the location's per-exercise blocklist as an array.
+  const setupUnavailableExerciseIds = useMemo(
+    () => Array.from(unavailableExerciseIds),
+    [unavailableExerciseIds]
+  );
 
   const handleOpenAddExercise = () => {
     setShowAddExercise(true);
@@ -4802,10 +4804,19 @@ export default function WorkoutPage() {
   // `addedEarlierInBatch` carries exercises already added by a multi-add loop
   // (select-multiple modal, copy-last-workout) — `blocks` in this closure is
   // stale for the whole batch, so warmup logic must also consider them.
+  // `plan` (setup flow Start) supplies the draft's own targets; every other
+  // caller gets the mid-workout defaults. Resolves true once the block landed.
   const handleAddExercise = async (
     exercise: AvailableExercise,
-    addedEarlierInBatch: AvailableExercise[] = []
-  ) => {
+    addedEarlierInBatch: AvailableExercise[] = [],
+    plan?: {
+      targetSets: number;
+      targetRepRange: [number, number];
+      targetRir: number;
+      targetRestSeconds: number;
+      reason?: string;
+    }
+  ): Promise<boolean> => {
     setIsAddingExercise(true);
     setError(null);
 
@@ -4814,8 +4825,9 @@ export default function WorkoutPage() {
       const isCompound = exercise.mechanic === 'compound';
 
       // Use exercise's configured defaults, with sensible fallbacks based on mechanic type
-      const exerciseRepRange = exercise.default_rep_range || (isCompound ? [6, 10] : [10, 15]) as [number, number];
-      const exerciseRir = exercise.default_rir ?? 2;
+      const exerciseRepRange =
+        plan?.targetRepRange ?? exercise.default_rep_range ?? ((isCompound ? [6, 10] : [10, 15]) as [number, number]);
+      const exerciseRir = plan?.targetRir ?? exercise.default_rir ?? 2;
 
       // Get weight recommendation for the new exercise. Duration exercises
       // (seconds in the reps field) never get an e1RM/bodyweight-heuristic
@@ -4991,12 +5003,17 @@ export default function WorkoutPage() {
           workout_session_id: sessionId,
           exercise_id: exercise.id,
           order: newOrder,
-          target_sets: isCompound ? 4 : 3,
+          target_sets: plan?.targetSets ?? (isCompound ? 4 : 3),
           target_rep_range: exerciseRepRange,
           target_rir: exerciseRir,
           target_weight_kg: suggestedWeight,
-          target_rest_seconds: isCompound ? 180 : 90,
-          suggestion_reason: suggestedWeight > 0 ? `Added mid-workout • Suggested ${formatWeight(suggestedWeight, preferences.units)}` : 'Added mid-workout',
+          target_rest_seconds: plan?.targetRestSeconds ?? (isCompound ? 180 : 90),
+          suggestion_reason: [
+            plan ? (plan.reason ? `Planned • ${plan.reason}` : 'Planned') : 'Added mid-workout',
+            suggestedWeight > 0 ? `Suggested ${formatWeight(suggestedWeight, preferences.units)}` : null,
+          ]
+            .filter(Boolean)
+            .join(' • '),
           warmup_protocol: { sets: warmupSets },
         })
         .select()
@@ -5054,9 +5071,11 @@ export default function WorkoutPage() {
       // Navigate to the new exercise and reset set number to 1 (new block has no sets)
       setCurrentBlockIndex(blocks.length);
       setCurrentSetNumber(1);
+      return true;
     } catch (err) {
       console.error('Failed to add exercise:', err);
       setError(err instanceof Error ? err.message : 'Failed to add exercise');
+      return false;
     } finally {
       setIsAddingExercise(false);
     }
@@ -5124,6 +5143,14 @@ export default function WorkoutPage() {
   // Add all selected exercises
   const handleAddSelectedExercises = async () => {
     if (selectedExercisesToAdd.length === 0) return;
+
+    // Setup flow: the picker is choosing for the draft plan, not the session.
+    if (planAddRef.current) {
+      planAddRef.current(selectedExercisesToAdd.map((e) => e.id));
+      planAddRef.current = null;
+      handleCloseAddExerciseModal();
+      return;
+    }
     
     setIsAddingExercise(true);
 
@@ -5148,6 +5175,48 @@ export default function WorkoutPage() {
     setSelectedEquipmentGroups([]);
     setExerciseSearch('');
     setIsAddingExercise(false);
+  };
+
+  // Setup flow Start: create the plan's blocks in order through the normal
+  // add path (weight estimate + warmups), with the draft's own targets.
+  const handleStartPlan = async ({ items, exercisesById, reviewDecisions }: StartPlanPayload) => {
+    const addedSoFar: AvailableExercise[] = [];
+    // AI review accept/dismiss log — recorded once the session has blocks
+    // (best-effort, via the outbox; never blocks the start).
+    const recordReviewDecisions = () => {
+      if (session?.userId && reviewDecisions.length > 0) {
+        void enqueuePlanReviewDecisions(createUntypedClient(), {
+          userId: session.userId,
+          sessionId,
+          decisions: reviewDecisions,
+        });
+      }
+    };
+    for (const item of items) {
+      const ex = exercisesById.get(item.exerciseId);
+      if (!ex) continue;
+      const available = setupExerciseToAvailable(ex);
+      const ok = await handleAddExercise(available, addedSoFar, {
+        targetSets: item.sets,
+        targetRepRange: item.repRange,
+        targetRir: item.targetRir,
+        targetRestSeconds: item.restSeconds,
+        reason: item.reason,
+      });
+      if (!ok) {
+        if (addedSoFar.length > 0) recordReviewDecisions();
+        return {
+          ok: false,
+          error:
+            addedSoFar.length === 0
+              ? 'Could not start — check your connection and try again.'
+              : `Started with ${addedSoFar.length} of ${items.length} exercises — add the rest from the list.`,
+        };
+      }
+      addedSoFar.push(available);
+    }
+    recordReviewDecisions();
+    return { ok: true };
   };
 
   // Empty-state shortcut: copy the exercises from the user's most recent
@@ -5221,6 +5290,7 @@ export default function WorkoutPage() {
 
   // Close modal and clear selections
   const handleCloseAddExerciseModal = () => {
+    planAddRef.current = null;
     setShowAddExercise(false);
     setShowMuscleDropdown(false);
     setSelectedExercisesToAdd([]);
@@ -5282,6 +5352,18 @@ export default function WorkoutPage() {
           setAutoAdjustMessage(`✓ Swapped ${swappedOut} → ${newExercise.name}`);
           setTimeout(() => setAutoAdjustMessage(null), 5000);
         }
+        return;
+      }
+
+      // Setup flow picking for the draft plan: hand the new exercise to the
+      // plan (after the setup catalog refetches it) instead of the session.
+      if (planAddRef.current) {
+        const addToPlan = planAddRef.current;
+        planAddRef.current = null;
+        await queryClient.invalidateQueries({ queryKey: ['exercises', 'setup-catalog'] });
+        addToPlan([newExercise.id]);
+        setShowCustomExercise(false);
+        handleCloseAddExerciseModal();
         return;
       }
 
@@ -6077,39 +6159,45 @@ export default function WorkoutPage() {
           </div>
         </div>
 
-        {/* Primary action: add exercises */}
-        <button
-          onClick={handleOpenAddExercise}
+        {/* Setup flow: pick targets → auto-built draft → Start. "Build
+            manually" keeps the original add-exercises path. */}
+        <WorkoutSetupFlow
+          sessionId={sessionId}
+          unavailableEquipmentIds={locationUnavailableEquipmentIds}
+          unavailableExerciseIds={setupUnavailableExerciseIds}
+          usageCounts={frequentExerciseIds}
+          onBuildManually={handleOpenAddExercise}
+          onRequestAddToPlan={(add) => {
+            planAddRef.current = add;
+            setShowAddExercise(true);
+            setShowAllExercises(false);
+            fetchExercises();
+          }}
+          onStart={handleStartPlan}
           disabled={isAddingExercise || isCopyingLastWorkout}
-          className="mt-6 w-full py-4 rounded-2xl bg-gradient-to-r from-purple-500 to-indigo-600 text-white text-lg font-semibold shadow-lg shadow-purple-500/25 hover:from-purple-400 hover:to-indigo-500 active:scale-[0.99] disabled:opacity-60 transition-all flex items-center justify-center gap-2.5"
-        >
-          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-          </svg>
-          Add exercises
-        </button>
+          pickStepExtras={
+            <>
+              {/* Inline readiness detail (map, zones, forecast), collapsed. */}
+              <EmptyWorkoutReadiness
+                quickAddExercises={[]}
+                onAddExercise={handleAddExercise}
+                disabled={isAddingExercise || isCopyingLastWorkout}
+              />
 
-        {/* Inline readiness (between Add exercises and Quick Add) + the Quick
-            Add chips re-ordered by readiness. Same read-only data path as the
-            header's readiness sheet; collapses back to the icon-only entry
-            point once the first exercise is added (this branch unmounts). */}
-        <EmptyWorkoutReadiness
-          quickAddExercises={quickAddExercises}
-          onAddExercise={handleAddExercise}
-          disabled={isAddingExercise || isCopyingLastWorkout}
+              {/* Alternative: copy the previous workout wholesale */}
+              <button
+                onClick={handleCopyLastWorkout}
+                disabled={isAddingExercise || isCopyingLastWorkout}
+                className="mt-10 mx-auto flex items-center gap-2 text-surface-400 hover:text-surface-200 font-medium disabled:opacity-50 transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                {isCopyingLastWorkout ? 'Copying last workout…' : 'Copy last workout instead'}
+              </button>
+            </>
+          }
         />
-
-        {/* Alternative: copy the previous workout wholesale */}
-        <button
-          onClick={handleCopyLastWorkout}
-          disabled={isAddingExercise || isCopyingLastWorkout}
-          className="mt-10 mx-auto flex items-center gap-2 text-surface-400 hover:text-surface-200 font-medium disabled:opacity-50 transition-colors"
-        >
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
-          {isCopyingLastWorkout ? 'Copying last workout…' : 'Copy last workout instead'}
-        </button>
 
         {/* Destructive escape hatch pinned to the bottom */}
         <button

@@ -27,7 +27,8 @@ export type OutboxTable =
   | 'session_muscle_feedback'
   | 'exercise_blocks'
   | 'motion_captures'
-  | 'stabilizer_warning_events';
+  | 'stabilizer_warning_events'
+  | 'workout_plan_review_events';
 
 export interface OutboxEntry {
   /**
@@ -69,6 +70,9 @@ const UPSERT_OPTIONS: Record<OutboxTable, { onConflict: string; ignoreDuplicates
   // and the user's response lands later as an op:'update' patch. Overwrite on
   // conflict (not ignore) so a re-enqueued shown-row refreshes its ratios.
   stabilizer_warning_events: { onConflict: 'id', ignoreDuplicates: false },
+  // Plan review decisions are written once, at Start, with client-generated
+  // ids; a retry after a lost ack must not duplicate a decision.
+  workout_plan_review_events: { onConflict: 'id', ignoreDuplicates: true },
 };
 
 interface OutboxDriver {

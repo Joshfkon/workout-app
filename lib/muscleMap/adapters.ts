@@ -90,7 +90,7 @@ export function volumeRowsToMapData(rows: VolumeRow[]): MuscleMapData {
  * Recovery: coarse rows paint their children with the row's recovery status
  * (already worst-of-children per buildReadinessRows, i.e. exactly what the
  * row's badge shows); rendered fine children override with their own status.
- * Muscles with no recovery estimate (never trained in the window — the
+ * Muscles with readiness `unknown` (no evidence at all — the
  * "No recent data" badge) get no `status` so they render in the neutral base
  * tone.
  *
@@ -100,7 +100,7 @@ export function volumeRowsToMapData(rows: VolumeRow[]): MuscleMapData {
 export function readinessRowsToMapData(rows: ReadinessRow[]): MuscleMapData {
   const out: MuscleMapData = {};
   for (const row of rows) {
-    const status = row.recovery.lastTrainedAt !== null ? row.recovery.status : undefined;
+    const status = row.readiness !== 'unknown' ? row.recovery.status : undefined;
     for (const std of COARSE_CHILDREN[row.muscle]) {
       out[std] = { value: row.sets, zone: row.zone, band: row.band, lagging: row.laggingChildren, status };
     }
@@ -109,7 +109,7 @@ export function readinessRowsToMapData(rows: ReadinessRow[]): MuscleMapData {
         value: child.sets,
         zone: child.zone,
         band: child.band,
-        status: child.recovery.lastTrainedAt !== null ? child.recovery.status : undefined,
+        status: child.readiness !== 'unknown' ? child.recovery.status : undefined,
       };
     }
   }

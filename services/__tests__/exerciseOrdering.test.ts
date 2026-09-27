@@ -140,3 +140,33 @@ describe('orderChanged', () => {
     expect(orderChanged(a, [BENCH, ROW], (i) => i.id)).toBe(false);
   });
 });
+
+describe('autoArrangeExercises — opt-in setup-flow refinements', () => {
+  const meta = (
+    id: string,
+    primaryMuscle: string,
+    stabilizers?: string[],
+    secondaryMuscles: string[] = []
+  ) => ({ id, name: id, primaryMuscle, secondaryMuscles, mechanic: 'compound' as const, stabilizers });
+
+  it('keeps two grip + lower-back heavy lifts apart when something can go between', () => {
+    const items = [
+      meta('deadlift', 'hamstrings', ['erectors', 'forearms']),
+      meta('row', 'back', ['erectors', 'forearms']),
+      meta('bench', 'chest', []),
+    ];
+    const order = autoArrangeExercises(items, (m) => m).map((m) => m.id);
+    expect(Math.abs(order.indexOf('deadlift') - order.indexOf('row'))).toBe(2);
+  });
+
+  it('is a no-op for callers that pass no stabilizer tags or options', () => {
+    const items = [meta('deadlift', 'hamstrings'), meta('row', 'back'), meta('bench', 'chest')];
+    const withTags = items.map((m) => ({ ...m, stabilizers: undefined }));
+    expect(autoArrangeExercises(items, (m) => m)).toEqual(autoArrangeExercises(withTags, (m) => m));
+  });
+
+  it('preferLargerGroups opens with the larger group on a tie', () => {
+    const items = [meta('curl-ish', 'biceps'), meta('squat-ish', 'quads')];
+    expect(autoArrangeExercises(items, (m) => m, { preferLargerGroups: true })[0].id).toBe('squat-ish');
+  });
+});

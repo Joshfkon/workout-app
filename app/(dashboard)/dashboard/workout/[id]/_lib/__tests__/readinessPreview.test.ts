@@ -177,12 +177,26 @@ describe('buildFutureReadinessRows (time slider)', () => {
   it('re-sorts by future actionability and feeds selectGoodTargets', () => {
     // Biceps: at MEV today (gap 0), everything aging out after one midnight
     // (gap 10), Fresh → ahead it becomes a top target it isn't now.
-    const rows = buildReadinessRows([stat('biceps', 10)], [], NOW);
+    // Biceps is a known muscle (trained within the lookback) — an unknown one
+    // is never a target, now or ahead.
+    const known = new Set<StandardMuscleGroup>(['biceps']);
+    const rows = buildReadinessRows([stat('biceps', 10)], [], NOW, undefined, undefined, undefined, undefined, known);
     expect(selectGoodTargets(rows).targets.every((t) => t.muscle !== 'biceps')).toBe(true);
 
     const preview = buildFutureReadinessRows(rows, OLDEST_DAY_BUCKETS, {}, [], NOW, 24);
     expect(rowFor(preview, 'biceps').score).toBeGreaterThan(0);
     const { targets } = selectGoodTargets(preview);
     expect(targets.some((t) => t.muscle === 'biceps')).toBe(true);
+  });
+});
+
+describe('buildFutureReadinessRows — unknown readiness', () => {
+  it('an unknown group stays unknown ahead and is never a future target', () => {
+    const rows = buildReadinessRows([], [], NOW);
+    expect(rowFor(rows, 'forearms').readiness).toBe('unknown');
+    const preview = buildFutureReadinessRows(rows, {}, {}, [], NOW, 48);
+    expect(rowFor(preview, 'forearms').readiness).toBe('unknown');
+    expect(rowFor(preview, 'forearms').score).toBe(0);
+    expect(selectGoodTargets(preview).targets).toHaveLength(0);
   });
 });

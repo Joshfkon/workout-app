@@ -35,14 +35,26 @@ import {
 
 export type VolumeStatus = 'low' | 'optimal' | 'high';
 
-/** How "trainable today" each recovery bucket is, for the actionability score.
- *  Exported for the next-day preview (readinessPreview), which re-derives the
- *  score over tomorrow's values with the same factor. */
-export const RECOVERED_FACTOR: Record<MuscleRecoveryResult['status'], number> = {
-  fresh: 1,
-  recovering: 0.6,
-  fatigued: 0,
-};
+// The readiness-status layer (the explicit `unknown` status, its ranking tier
+// and scoring factors) lives in ./readinessStatus; re-exported here so callers
+// keep one import site for the readiness model.
+export {
+  KNOWN_MUSCLE_LOOKBACK_DAYS,
+  READINESS_FACTOR,
+  RECOVERED_FACTOR,
+  knownMusclesFromExercises,
+  readinessTier,
+  resolveReadinessStatus,
+  type ReadinessStatus,
+} from './readinessStatus';
+import {
+  READINESS_FACTOR,
+  readinessTier,
+  resolveReadinessStatus,
+  type ReadinessStatus,
+} from './readinessStatus';
+
+
 
 /** A fine child of a coarse readiness row. Visibility is the shared list
  *  component's concern — reachable lagging children pin open, the rest
@@ -62,6 +74,8 @@ export interface ReadinessChild {
    */
   reachable: boolean;
   recovery: MuscleRecoveryResult;
+  /** Recovery status, or `unknown` when there is no evidence at all. */
+  readiness: ReadinessStatus;
   /**
    * Which exercises fed this muscle's weekly count and how many credited
    * (fractional-credit) sets each contributed, biggest first — the
@@ -88,6 +102,8 @@ export interface ReadinessRow {
   /** Legacy tri-state kept for the bar colour fallback. */
   volumeStatus: VolumeStatus;
   recovery: MuscleRecoveryResult;
+  /** Recovery status, or `unknown` when no member has any evidence. */
+  readiness: ReadinessStatus;
   /** Actionability score — higher = better target today. */
   score: number;
   /** Whether the row has ≥1 reachable fine child (gates the chevron). */
@@ -302,14 +318,12 @@ export function coarseRecovery(
 }
 
 /**
- * Actionability sort: the best candidates (behind on volume AND recovered)
- * float to the top; Fatigued muscles sink to the bottom regardless of how far
- * behind they are; within ties, the bigger volume gap wins.
+ * Actionability sort: by {@link readinessTier} (fresh-with-deficit > fresh >
+ * unknown > recovering > fatigued), then score, then the bigger volume gap.
  */
 export function compareByActionability(a: ReadinessRow, b: ReadinessRow): number {
-  const aFatigued = a.recovery.status === 'fatigued' ? 1 : 0;
-  const bFatigued = b.recovery.status === 'fatigued' ? 1 : 0;
-  if (aFatigued !== bFatigued) return aFatigued - bFatigued;
+  const tier = readinessTier(a.readiness, a.volumeGap) - readinessTier(b.readiness, b.volumeGap);
+  if (tier !== 0) return tier;
   if (b.score !== a.score) return b.score - a.score;
   if (b.volumeGap !== a.volumeGap) return b.volumeGap - a.volumeGap;
   return a.displayName.localeCompare(b.displayName);
@@ -318,8 +332,9 @@ export function compareByActionability(a: ReadinessRow, b: ReadinessRow): number
 /**
  * Build one coarse row per muscle group, sorted by actionability, each carrying
  * ALL its reachable fine children (with per-child recovery) plus the divergence
- * autoExpand flag. Untrained groups (0 sets) are included on purpose — they're
- * the strongest targets.
+ * autoExpand flag. Untrained groups (0 sets) are included — a known-but-idle
+ * group is a strong target, while a group with no evidence at all reads
+ * `unknown` and ranks below Fresh (see readinessTier).
  *
  * @param stats     shared per-muscle credited stats (DB + live session)
  * @param history   sessions for the recovery heuristic (incl. live)
@@ -327,6 +342,8 @@ export function compareByActionability(a: ReadinessRow, b: ReadinessRow): number
  * @param reachable muscles the user's exercises can feed (gates fine children)
  * @param config    recovery heuristic config
  * @param sorenessOverrides muscles reported "still sore" today — forced Fatigued
+ * @param knownMuscles muscles credited in the longer lookback
+ *        ({@link KNOWN_MUSCLE_LOOKBACK_DAYS}); omitted → window-only evidence
  */
 export function buildReadinessRows(
   stats: MuscleVolumeStats[],
@@ -335,7 +352,8 @@ export function buildReadinessRows(
   reachable?: Set<StandardMuscleGroup>,
   config: RecoveryConfig = RECOVERY_CONFIG,
   sorenessOverrides?: ReadonlySet<StandardMuscleGroup>,
-  recoveryProfile?: RecoveryProfile
+  recoveryProfile?: RecoveryProfile,
+  knownMuscles?: ReadonlySet<StandardMuscleGroup>
 ): ReadinessRow[] {
   const volumeRows = buildVolumeRows(stats, reachable, { recoveryProfile });
 
@@ -343,7 +361,12 @@ export function buildReadinessRows(
     const coarse = vr.muscle as CoarseMuscle;
     const recovery = coarseRecovery(coarse, history, now, config, sorenessOverrides);
     const volumeGap = Math.max(0, vr.band.mev - vr.sets);
-    const score = volumeGap * RECOVERED_FACTOR[recovery.status];
+    const readiness = resolveReadinessStatus(
+      recovery,
+      COARSE_CHILDREN[coarse],
+      knownMuscles
+    );
+    const score = volumeGap * READINESS_FACTOR[readiness];
 
     const children: ReadinessChild[] = vr.children.map((child) => {
       const childRecovery = applySorenessOverride(
@@ -360,6 +383,11 @@ export function buildReadinessRows(
         volumeGap: Math.max(0, child.band.mev - child.sets),
         reachable: child.reachable,
         recovery: childRecovery,
+        readiness: resolveReadinessStatus(
+          childRecovery,
+          [child.muscle as StandardMuscleGroup],
+          knownMuscles
+        ),
         exercises: child.exercises,
       };
     });
@@ -385,6 +413,7 @@ export function buildReadinessRows(
       volumeGap,
       volumeStatus: volumeStatusForZone(vr.zone),
       recovery,
+      readiness,
       score,
       expandable: vr.expandable,
       children,
@@ -403,6 +432,7 @@ interface TargetCandidate {
   isChild: boolean;
   volumeGap: number;
   recovery: MuscleRecoveryResult;
+  readiness: ReadinessStatus;
 }
 
 /**
@@ -421,6 +451,7 @@ function flattenCandidates(rows: ReadinessRow[]): TargetCandidate[] {
       isChild: false,
       volumeGap: row.volumeGap,
       recovery: row.recovery,
+      readiness: row.readiness,
     });
     for (const child of row.children) {
       if (!child.reachable) continue;
@@ -430,6 +461,7 @@ function flattenCandidates(rows: ReadinessRow[]): TargetCandidate[] {
         isChild: true,
         volumeGap: child.volumeGap,
         recovery: child.recovery,
+        readiness: child.readiness,
       });
     }
   }
@@ -442,6 +474,7 @@ function flattenCandidates(rows: ReadinessRow[]): TargetCandidate[] {
  * status) the per-muscle badges show, so the two can never disagree.
  *
  * Eligibility:
+ *  - Never an `unknown` muscle (no history in the known-muscles lookback).
  *  - 'ready' tier: status Fresh AND behind on volume (below MEV). This is the
  *    fix for the reported bug — a muscle whose row reads "Recovering" is no
  *    longer presented as a ready-now target.
@@ -457,7 +490,11 @@ export function selectGoodTargets(
   n = 3,
   readySoonHours: number = READY_SOON_HOURS
 ): GoodTargets {
-  const lagging = flattenCandidates(rows).filter((c) => c.volumeGap > 0);
+  // Unknown muscles (no evidence the user trains them) are never targets —
+  // a zero-history group's "gap" is missing data, not a deficit.
+  const lagging = flattenCandidates(rows).filter(
+    (c) => c.volumeGap > 0 && c.readiness !== 'unknown'
+  );
 
   // Ready now: Fresh AND behind on volume. Ranked by volume gap (bigger first).
   const ready: ReadinessTarget[] = lagging
