@@ -21,7 +21,7 @@ import {
 import {
   coarseRecovery,
   compareByActionability,
-  RECOVERED_FACTOR,
+  READINESS_FACTOR,
   RECOVERY_RANK,
   volumeStatusForZone,
   type ReadinessChild,
@@ -94,16 +94,21 @@ export function buildFutureReadinessRows(
     const zone = volumeZone(sets, row.band);
     const recovery = coarseRecovery(row.muscle, history, future, config);
     const volumeGap = Math.max(0, row.band.mev - sets);
+    const readiness = row.readiness === 'unknown' ? 'unknown' : recovery.status;
 
     const children: ReadinessChild[] = row.children.map((child) => {
       const childSets = setsAt(dailyStandardSets[child.muscle]);
+      const childRecovery = computeMuscleRecovery(history, child.muscle, future, config);
       return {
         ...child,
         sets: childSets,
         zone: volumeZone(childSets, child.band),
         belowMev: childSets < child.band.mev,
         volumeGap: Math.max(0, child.band.mev - childSets),
-        recovery: computeMuscleRecovery(history, child.muscle, future, config),
+        recovery: childRecovery,
+        // Evidence can only age forward (history is fixed, volume decays), so
+        // an unknown muscle stays unknown; a known one reads its future status.
+        readiness: child.readiness === 'unknown' ? 'unknown' : childRecovery.status,
         exercises: [],
       };
     });
@@ -124,7 +129,8 @@ export function buildFutureReadinessRows(
       volumeGap,
       volumeStatus: volumeStatusForZone(zone),
       recovery,
-      score: volumeGap * RECOVERED_FACTOR[recovery.status],
+      readiness,
+      score: volumeGap * READINESS_FACTOR[readiness],
       children,
       exercises: [],
       autoExpand,

@@ -92,6 +92,14 @@ beforeEach(() => {
       workout_sessions: { id: 's1', completed_at: hoursAgo(30), user_id: 'u1', state: 'completed' },
       set_logs: Array.from({ length: 8 }, (_, i) => ({ id: `sl${i}`, is_warmup: false, rpe: 10, feedback: { repsInTank: 0 } })),
     },
+    // Calves trained ~3 weeks ago: known (so not "unknown"), long recovered,
+    // and well under MEV → a strong, evidence-backed target. (The mocked
+    // builder ignores date filters, so this row also reaches the 7-day feed.)
+    {
+      exercises: { id: 'ex-raise', name: 'Calf Raise', primary_muscle: 'calves', secondary_muscles: [] },
+      workout_sessions: { id: 's0', completed_at: hoursAgo(24 * 20), user_id: 'u1', state: 'completed' },
+      set_logs: Array.from({ length: 2 }, (_, i) => ({ id: `sc${i}`, is_warmup: false, rpe: 8, feedback: { repsInTank: 2 } })),
+    },
   ];
 });
 

@@ -43,6 +43,7 @@ import {
   type ReadinessTarget,
   type NextReadyTarget,
 } from '@/app/(dashboard)/dashboard/workout/[id]/_lib/readiness';
+import { useKnownMuscles } from '@/hooks/useKnownMuscles';
 import { buildFutureReadinessRows } from '@/app/(dashboard)/dashboard/workout/[id]/_lib/readinessPreview';
 
 /**
@@ -308,7 +309,17 @@ export function useMuscleReadiness({
   sorenessOverrides,
 }: UseMuscleReadinessArgs): UseMuscleReadinessResult {
   const { user: storeUser } = useUserStore();
-  const { historyRows, sessions, isLoading, error, refetch } = useRecoveryHistory(now, enabled);
+  const {
+    historyRows,
+    sessions,
+    isLoading: historyLoading,
+    error,
+    refetch,
+  } = useRecoveryHistory(now, enabled);
+  const { knownMuscles, isLoading: knownLoading } = useKnownMuscles(now, enabled);
+  // Gate on the known-muscles lookback too: rendering before it lands would
+  // flash every group untrained this week as "No recent data".
+  const isLoading = historyLoading || knownLoading;
   const { multipliers } = useRecoveryMultipliers();
   const { state: wearableRecovery } = useWearableRecovery();
 
@@ -465,9 +476,10 @@ export function useMuscleReadiness({
         reachable,
         recoveryConfig,
         sorenessOverrides,
-        enhancedAthleteMode ? 'enhanced' : 'standard'
+        enhancedAthleteMode ? 'enhanced' : 'standard',
+        knownMuscles
       ),
-    [stats, recoveryHistory, now, reachable, recoveryConfig, sorenessOverrides]
+    [stats, recoveryHistory, now, reachable, recoveryConfig, sorenessOverrides, knownMuscles]
   );
 
   const { targets, nextUp } = useMemo(() => selectGoodTargets(rows, 3), [rows]);

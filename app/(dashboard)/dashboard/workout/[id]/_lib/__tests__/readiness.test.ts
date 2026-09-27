@@ -11,10 +11,13 @@ import {
 } from '../readiness';
 import { computeMuscleRecovery } from '@/services/muscleRecovery';
 import type { MuscleRecoveryResult, RecoverySession } from '@/services/muscleRecovery';
-import type { StandardMuscleGroup } from '@/types/schema';
+import { STANDARD_MUSCLE_GROUPS, type StandardMuscleGroup } from '@/types/schema';
 import { COARSE_MUSCLES, type MuscleVolumeStats } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 
 const NOW = new Date('2026-07-11T12:00:00.000Z');
+
+/** A user who trains every muscle — just not in this week's window. */
+const ALL_KNOWN: ReadonlySet<StandardMuscleGroup> = new Set(STANDARD_MUSCLE_GROUPS);
 
 function stat(muscle: string, sets: number): MuscleVolumeStats {
   return { muscle, sets, effectiveSets: sets, unratedSets: 0, directSets: sets, indirectSets: 0, directEffectiveSets: sets, indirectEffectiveSets: 0, target: 0, status: 'optimal', exercises: [{ id: muscle, name: `${muscle} ex`, performedSets: sets, sets, effective: sets, direct: sets, indirect: 0, directEffective: sets, indirectEffective: 0 }] };
@@ -222,7 +225,9 @@ describe('a trained member always outranks a never-trained one', () => {
   it('still reports no data when NO member has been trained', () => {
     const triceps = rowFor(buildReadinessRows([], [], NOW, HEADS), 'triceps');
     expect(triceps.recovery.lastTrainedAt).toBeNull();
+    // The recovery heuristic itself still says fresh; readiness says unknown.
     expect(triceps.recovery.status).toBe('fresh');
+    expect(triceps.readiness).toBe('unknown');
   });
 
   it('a fatigued member still wins over a fresher, more recently trained one', () => {
@@ -319,7 +324,8 @@ const hoursBefore = (base: Date, h: number) => new Date(base.getTime() - h * 360
 
 describe('selectGoodTargets', () => {
   it('returns up to N Fresh, under-volume targets (coarse + fine children)', () => {
-    const { targets } = selectGoodTargets(buildReadinessRows([], [], NOW), 3);
+    const rows = buildReadinessRows([], [], NOW, undefined, undefined, undefined, undefined, ALL_KNOWN);
+    const { targets } = selectGoodTargets(rows, 3);
     expect(targets).toHaveLength(3);
     targets.forEach((t) => {
       expect(t.score).toBeGreaterThan(0);
@@ -331,7 +337,8 @@ describe('selectGoodTargets', () => {
     // Every coarse group at/above MEV so no coarse candidates remain; only the
     // reachable, untrained fine child glute_med lags → it is the top target.
     const reachable = new Set<StandardMuscleGroup>(['glutes', 'glute_med']);
-    const { targets } = selectGoodTargets(buildReadinessRows(ALL_AT_MEV, [], NOW, reachable), 3);
+    const rows = buildReadinessRows(ALL_AT_MEV, [], NOW, reachable, undefined, undefined, undefined, ALL_KNOWN);
+    const { targets } = selectGoodTargets(rows, 3);
     expect(targets.some((t) => t.muscle === 'glute_med' && t.isChild)).toBe(true);
   });
 

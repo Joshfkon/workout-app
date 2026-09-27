@@ -10,6 +10,7 @@ import {
   type ReadinessChild,
   type ReadinessTarget,
   type NextReadyTarget,
+  type ReadinessStatus,
 } from '@/app/(dashboard)/dashboard/workout/[id]/_lib/readiness';
 import { GoodTargetsStrip } from './GoodTargetsStrip';
 import {
@@ -201,10 +202,18 @@ function ReadinessMap({ rows }: { rows: ReadinessRow[] }) {
   );
 }
 
-function RecoveryBadge({ recovery, muscle }: { recovery: MuscleRecoveryResult; muscle: string }) {
-  // Never trained in the window → no recovery estimate, just a neutral "no
-  // recent data" chip (the volume bar still shows the 0-set target).
-  const noData = recovery.lastTrainedAt === null;
+function RecoveryBadge({
+  recovery,
+  readiness,
+  muscle,
+}: {
+  recovery: MuscleRecoveryResult;
+  readiness: ReadinessStatus;
+  muscle: string;
+}) {
+  // No evidence at all (readiness `unknown`) → no recovery estimate, just a
+  // neutral "no recent data" chip (the volume bar still shows the 0-set target).
+  const noData = readiness === 'unknown';
   const badge = noData ? NO_DATA_BADGE : RECOVERY_BADGE[recovery.status];
   const readyIn = noData || recovery.status === 'fresh' ? '' : formatReadyIn(recovery.hoursUntilReady);
   return (
@@ -242,7 +251,7 @@ function ReadinessChildContent({ child }: { child: ReadinessChild }) {
             <div className={`h-full rounded-full ${zoneBarClass(child.zone, child.sets, child.band)}`} style={{ width: `${barFillPct(child.sets, child.band.mrv)}%` }} />
           </div>
         </div>
-        <RecoveryBadge recovery={child.recovery} muscle={child.muscle} />
+        <RecoveryBadge recovery={child.recovery} readiness={child.readiness} muscle={child.muscle} />
       </div>
     </SourcesDisclosure>
   );
@@ -268,7 +277,7 @@ function ReadinessRowContent({ row }: { row: ReadinessRow }) {
           <div className={`h-full rounded-full ${rowBarClass(row)}`} style={{ width: `${barFillPct(row.sets, row.band.mrv)}%` }} />
         </div>
       </div>
-      <RecoveryBadge recovery={row.recovery} muscle={row.muscle} />
+      <RecoveryBadge recovery={row.recovery} readiness={row.readiness} muscle={row.muscle} />
     </div>
   );
 }
