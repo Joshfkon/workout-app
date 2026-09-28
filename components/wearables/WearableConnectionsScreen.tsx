@@ -384,7 +384,7 @@ export function WearableConnectionsScreen() {
                 </p>
                 <div className="flex flex-wrap gap-3">
                   <Button
-                    variant="default"
+                    variant="primary"
                     size="sm"
                     onClick={openAppSettings}
                   >
