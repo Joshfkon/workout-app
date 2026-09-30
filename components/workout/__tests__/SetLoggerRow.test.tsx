@@ -13,6 +13,13 @@ import userEvent from '@testing-library/user-event';
 import { SetLoggerRow } from '../SetLoggerRow';
 import { SELECTOR_CHIP_BASE, SELECTOR_CHIP_IDLE } from '../selectorChips';
 
+// Mock the notifications module
+jest.mock('@/lib/integrations/notifications', () => ({
+  lightHaptic: jest.fn(() => Promise.resolve()),
+}));
+
+import { lightHaptic } from '@/lib/integrations/notifications';
+
 // Map the geometry utility classes to real CSS so parity can be asserted via
 // computed styles (jsdom applies stylesheet rules in getComputedStyle).
 beforeAll(() => {
@@ -450,5 +457,68 @@ describe('SetLoggerRow duration exercises with no load', () => {
   it('still requires a load on non-duration exercises', () => {
     render(<SetLoggerRow {...defaultProps} weight="0" reps="8" />);
     expect(screen.getByRole('button', { name: /Log set/i })).toBeDisabled();
+  });
+});
+
+describe('SetLoggerRow haptic feedback', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('triggers light haptic when a set is logged', async () => {
+    const user = userEvent.setup();
+    const onLog = jest.fn();
+    render(<SetLoggerRow {...defaultProps} onLog={onLog} />);
+
+    await user.click(screen.getByRole('button', { name: 'Log set' }));
+
+    expect(onLog).toHaveBeenCalledTimes(1);
+    expect(lightHaptic).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not trigger haptic when Log set button is disabled', async () => {
+    const user = userEvent.setup();
+    const onLog = jest.fn();
+    render(<SetLoggerRow {...defaultProps} weight="0" reps="8" onLog={onLog} />);
+
+    const logButton = screen.getByRole('button', { name: /Log set/i });
+    expect(logButton).toBeDisabled();
+
+    // Attempt to click (won't work because disabled)
+    await user.click(logButton);
+
+    expect(onLog).not.toHaveBeenCalled();
+    expect(lightHaptic).not.toHaveBeenCalled();
+  });
+
+  it('does not trigger haptic when interacting with weight/reps steppers', async () => {
+    const user = userEvent.setup();
+    const onWeightChange = jest.fn();
+    const onRepsChange = jest.fn();
+    render(
+      <SetLoggerRow
+        {...defaultProps}
+        onWeightChange={onWeightChange}
+        onRepsChange={onRepsChange}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Increase weight' }));
+    await user.click(screen.getByRole('button', { name: 'Decrease weight' }));
+    await user.click(screen.getByRole('button', { name: 'Increase reps' }));
+    await user.click(screen.getByRole('button', { name: 'Decrease reps' }));
+
+    expect(onWeightChange).toHaveBeenCalledTimes(2);
+    expect(onRepsChange).toHaveBeenCalledTimes(2);
+    expect(lightHaptic).not.toHaveBeenCalled();
+  });
+
+  it('does not trigger haptic when opening feedback sheet', async () => {
+    const user = userEvent.setup();
+    render(<SetLoggerRow {...defaultProps} />);
+
+    await user.click(screen.getByRole('button', { name: 'Add set feedback' }));
+
+    expect(lightHaptic).not.toHaveBeenCalled();
   });
 });

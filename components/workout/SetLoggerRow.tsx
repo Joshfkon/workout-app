@@ -36,6 +36,7 @@ import {
   inputWeightToKg,
   roundToIncrement,
 } from '@/lib/utils';
+import { lightHaptic } from '@/lib/integrations/notifications';
 
 type WeightMode = 'bodyweight' | 'weighted' | 'assisted';
 
@@ -358,6 +359,9 @@ export function SetLoggerRow({
       setType: selectedSetType,
       rirExplicitlySelected: rirTouched,
     });
+
+    // Light haptic feedback on set complete (native only)
+    void lightHaptic();
 
     // Reset per-set feedback for the next set.
     setForm(null);
