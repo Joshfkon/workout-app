@@ -170,7 +170,7 @@ Four, mutually inconsistent:
 
 | Site | Definition | Type |
 |---|---|---|
-| Rest prescription (`restPrescription.ts:88`) | `actualRIR − targetRIR ≤ −2` (note copy: "at/near failure") | **relative** |
+| Rest prescription (`restPrescription.ts`) | `actualRIR − targetRIR ≤ −2` **and** calibrated true RIR (`logged − calibrationShift`) `≤ 1` (note copy: "at/near failure"); relative-only hits get the +30 s hard step | **relative + absolute** (updated: a 2-RIR set vs a readiness-eased 4 target no longer reads "near failure") |
 | Sanity checks (`sanityChecks.ts:252`) | `reportedRIR ≤ 1` | absolute |
 | Muscle recovery `hardRirThreshold` (`muscleRecovery.ts:123`) | `RIR ≤ 1` | absolute |
 | Fatigue budget recovery bump (`fatigueBudgetEngine.ts:171`) | `rirTarget ≤ 1` | absolute (on *target*, not actual) |
