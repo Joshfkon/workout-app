@@ -10,6 +10,11 @@ jest.mock('../ShareWorkoutText', () => ({
   ShareWorkoutText: () => null,
 }));
 
+jest.mock('@/lib/integrations/notifications', () => ({
+  successHaptic: jest.fn(() => Promise.resolve()),
+}));
+import { successHaptic } from '@/lib/integrations/notifications';
+
 /**
  * Post-workout finish restructure:
  *  - Layer 1 (finish card, !readOnly): one compact input screen — stat strip,
@@ -70,6 +75,10 @@ const finishSession = () =>
   });
 
 describe('SessionSummary — finish card (layer 1)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   it('is a single input screen: no analytics sections, no pump question, collapsed notes', () => {
     const { blocks, sets } = makeFixture();
     render(
@@ -242,6 +251,45 @@ describe('SessionSummary — finish card (layer 1)', () => {
     );
 
     expect(document.body.textContent).not.toMatch(/glute_med/i);
+  });
+
+  it('triggers success haptic when Save & Finish is clicked', async () => {
+    const user = userEvent.setup();
+    const onSubmit = jest.fn();
+    const { blocks, sets } = makeFixture();
+    render(
+      <SessionSummary
+        session={finishSession()}
+        exerciseBlocks={blocks}
+        allSets={sets}
+        onSubmit={onSubmit}
+        durationSeconds={3600}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: /Save & Finish/i }));
+    expect(successHaptic).toHaveBeenCalledTimes(1);
+    expect(onSubmit).toHaveBeenCalled();
+  });
+
+  it('triggers success haptic when View full report is clicked', async () => {
+    const user = userEvent.setup();
+    const onSaveAndViewReport = jest.fn();
+    const { blocks, sets } = makeFixture();
+    render(
+      <SessionSummary
+        session={finishSession()}
+        exerciseBlocks={blocks}
+        allSets={sets}
+        onSubmit={() => {}}
+        onSaveAndViewReport={onSaveAndViewReport}
+        durationSeconds={3600}
+      />
+    );
+
+    await user.click(screen.getByText(/View full report/i));
+    expect(successHaptic).toHaveBeenCalledTimes(1);
+    expect(onSaveAndViewReport).toHaveBeenCalled();
   });
 });
 

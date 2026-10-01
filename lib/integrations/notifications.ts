@@ -230,3 +230,17 @@ export async function lightHaptic(): Promise<void> {
     navigator.vibrate(15);
   }
 }
+
+/**
+ * A single success-style haptic notification — e.g. when finishing a workout.
+ * Native only (uses NotificationType.Success); no-op on web/PWA. Best-effort.
+ */
+export async function successHaptic(): Promise<void> {
+  if (isNativePlatform()) {
+    try {
+      await Haptics.notification({ type: NotificationType.Success });
+    } catch (error) {
+      console.warn('[Notifications] Success haptic failed:', error);
+    }
+  }
+}
