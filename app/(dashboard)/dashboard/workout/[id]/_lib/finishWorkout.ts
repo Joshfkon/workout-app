@@ -127,6 +127,19 @@ export interface FinishSummaryData {
    */
   durationSeconds?: number | null;
   /**
+   * The session's pace pair, both sides frozen at the LAST logged set: active
+   * seconds from the first logged set to the last (pauses excluded — same
+   * clock as `durationSeconds`, minus the tail between the last set and the
+   * Finish tap), and the duration model's cost of that same span
+   * (`WorkoutDurationEstimate.completedModelSeconds`). Cut at the last set so
+   * lingering on the summary — or abandoning the session and finishing it
+   * hours later — cannot masquerade as training pace. The stored pair seeds
+   * future sessions' estimates with the observed/model ratio. Omit on legacy
+   * callers; only a complete pair is persisted.
+   */
+  paceObservedSeconds?: number | null;
+  paceModelSeconds?: number | null;
+  /**
    * Whether the user marked this as a deload session on the summary screen.
    * Persisted so the deload-exclusion consumers skip it. Omit on legacy callers
    * that don't surface the toggle (leaves the stored flag untouched).
@@ -189,6 +202,16 @@ function completionPatch(data: FinishSummaryData): Record<string, unknown> {
   }
   if (typeof data.durationSeconds === 'number' && Number.isFinite(data.durationSeconds)) {
     patch.duration_seconds = Math.max(0, Math.round(data.durationSeconds));
+  }
+  // The pace pair is only meaningful together — half of it can't seed a ratio.
+  if (
+    typeof data.paceObservedSeconds === 'number' &&
+    Number.isFinite(data.paceObservedSeconds) &&
+    typeof data.paceModelSeconds === 'number' &&
+    Number.isFinite(data.paceModelSeconds)
+  ) {
+    patch.pace_observed_seconds = Math.max(0, Math.round(data.paceObservedSeconds));
+    patch.pace_model_seconds = Math.max(0, Math.round(data.paceModelSeconds));
   }
   if (typeof data.isDeload === 'boolean') {
     patch.is_deload = data.isDeload;
