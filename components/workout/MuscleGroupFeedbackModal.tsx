@@ -24,6 +24,7 @@ import type {
   WorkloadRating,
 } from '@/types/schema';
 import { PUMP_CHIPS, WORKLOAD_CHIPS } from './FeedbackChips';
+import { successHaptic } from '@/lib/integrations/notifications';
 
 export type MuscleFeedbackRatings = Partial<
   Record<StandardMuscleGroup, { pump?: PumpRating0to3; workload?: WorkloadRating }>
@@ -74,6 +75,11 @@ export function MuscleGroupFeedbackModal({
     partial: { pump?: PumpRating0to3; workload?: WorkloadRating }
   ) => {
     setRatings((prev) => ({ ...prev, [muscle]: { ...prev[muscle], ...partial } }));
+  };
+
+  const handleConfirm = () => {
+    void successHaptic();
+    onConfirm(ratings);
   };
 
   return (
@@ -148,7 +154,7 @@ export function MuscleGroupFeedbackModal({
           <Button
             variant="primary"
             className="flex-1"
-            onClick={() => onConfirm(ratings)}
+            onClick={handleConfirm}
             data-testid="muscle-feedback-finish"
           >
             Finish

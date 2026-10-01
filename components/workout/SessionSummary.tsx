@@ -37,6 +37,7 @@ import {
 import { getCalibrationVerdict, type CalibrationMethod } from '@/services/rpeCalibration';
 import type { ShareExercise, WorkoutShareTextInput } from '@/services/workoutShareText';
 import { ShareWorkoutText } from './ShareWorkoutText';
+import { successHaptic } from '@/lib/integrations/notifications';
 
 /**
  * Per-muscle end-of-session feedback. Captured in the finish popup
@@ -726,6 +727,7 @@ export function SessionSummary({
 
   const handleSubmit = () => {
     if (onSubmit && !submitting) {
+      void successHaptic();
       setSubmitting(true);
       onSubmit(buildSubmitData());
     }
@@ -733,6 +735,7 @@ export function SessionSummary({
 
   const handleSaveAndViewReport = () => {
     if (onSaveAndViewReport && !submitting) {
+      void successHaptic();
       setSubmitting(true);
       onSaveAndViewReport(buildSubmitData());
     }

@@ -2,6 +2,11 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MuscleGroupFeedbackModal } from '../MuscleGroupFeedbackModal';
 
+jest.mock('@/lib/integrations/notifications', () => ({
+  successHaptic: jest.fn(() => Promise.resolve()),
+}));
+import { successHaptic } from '@/lib/integrations/notifications';
+
 /**
  * The "Finish Workout?" popup: asks pump + workload once per muscle group
  * trained (replacing the old per-exercise chip rows), doubles as the finish
@@ -130,5 +135,37 @@ describe('MuscleGroupFeedbackModal', () => {
     // Seeded answer rides through confirm even with no new taps.
     await user.click(screen.getByTestId('muscle-feedback-finish'));
     expect(onConfirm).toHaveBeenCalledWith({ quads: { pump: 2 } });
+  });
+
+  it('triggers success haptic when finishing', async () => {
+    const user = userEvent.setup();
+    const onConfirm = jest.fn();
+    render(
+      <MuscleGroupFeedbackModal
+        {...baseProps}
+        onConfirm={onConfirm}
+        muscles={['chest_upper']}
+      />
+    );
+
+    await user.click(screen.getByTestId('muscle-feedback-finish'));
+    expect(successHaptic).toHaveBeenCalledTimes(1);
+    expect(onConfirm).toHaveBeenCalled();
+  });
+
+  it('does not trigger success haptic on Keep Training', async () => {
+    const user = userEvent.setup();
+    const onClose = jest.fn();
+    render(
+      <MuscleGroupFeedbackModal
+        {...baseProps}
+        onClose={onClose}
+        muscles={['chest_upper']}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: /Keep Training/i }));
+    expect(successHaptic).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalled();
   });
 });
