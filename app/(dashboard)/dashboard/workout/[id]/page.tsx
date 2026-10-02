@@ -32,6 +32,7 @@ import { useRestTimer } from '@/hooks/useRestTimer';
 import { useKeyboardOpen } from '@/hooks/useKeyboardOpen';
 import { useEducationStore } from '@/hooks/useEducationPreferences';
 import { useIdleWorkoutPrompt } from '@/hooks/useIdleWorkoutPrompt';
+import { useScreenWakeLock } from '@/hooks/useScreenWakeLock';
 
 // Dynamic import ExerciseCard (118KB) to reduce initial bundle and improve page load
 const ExerciseCard = dynamic(
@@ -930,6 +931,10 @@ export default function WorkoutPage() {
     lastSetTimestamp,
     phase === 'workout' && !showFinishConfirm
   );
+
+  // Screen wake lock: keep the screen awake during active workout sessions
+  // (released automatically when phase changes from 'workout' or on unmount)
+  useScreenWakeLock(phase === 'workout');
 
   const currentBlock = blocks[currentBlockIndex];
   const currentExercise = currentBlock?.exercise;
