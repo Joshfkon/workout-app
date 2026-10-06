@@ -77,6 +77,7 @@ import { useWorkoutStore } from '@/stores/workoutStore';
 import { useMuscleRecovery } from '@/hooks/useMuscleRecovery';
 import { useWeeklyVolume } from '@/hooks/useWeeklyVolume';
 import { useMuscleProgression } from '@/hooks/useMuscleProgression';
+import { fetchActiveMesocycle, type ActiveMesocycleRow } from '@/lib/training/fetchActiveMesocycle';
 import {
   QuickLogRow,
   SectionLabel,
@@ -125,25 +126,6 @@ interface InProgressSummary {
   setsDone: number;
   /** exercise_block ids, needed by the discard path. */
   blockIds: string[];
-}
-
-/** Active mesocycle row: display fields + what the start/preview paths need. */
-interface ActiveMesocycleRow {
-  id: string;
-  name: string;
-  current_week: number;
-  total_weeks: number;
-  deload_week: number;
-  split_type: string;
-  days_per_week: number;
-  preferred_workout_days: WorkoutDay[] | null;
-  /** Schedule shape: fixed weekdays, or every-N-days from start_date. */
-  schedule_mode?: ScheduleMode | null;
-  training_interval_days?: number | null;
-  sessions_per_day?: number | null;
-  start_date?: string | null;
-  program_data: unknown;
-  exercise_overrides?: ExerciseOverride[];
 }
 
 interface RecentWorkout {
@@ -320,15 +302,8 @@ export default function TrainPage() {
             .eq('planned_date', today)
             .eq('state', 'in_progress')
             .limit(1),
-          supabase
-            .from('mesocycles')
-            .select(
-              'id, name, current_week, total_weeks, deload_week, split_type, days_per_week, preferred_workout_days, schedule_mode, training_interval_days, sessions_per_day, start_date, program_data, exercise_overrides, generated_with_enhanced_mode'
-            )
-            .eq('user_id', user.id)
-            .eq('state', 'active')
-            .order('created_at', { ascending: false })
-            .limit(1),
+          // Use shared helper to fetch active mesocycle (same logic as Home)
+          fetchActiveMesocycle(supabase, user.id),
           supabase
             .from('workout_sessions')
             .select(
@@ -362,7 +337,7 @@ export default function TrainPage() {
           });
         }
 
-        const meso = (mesoRes.data?.[0] ?? null) as ActiveMesocycleRow | null;
+        const meso = mesoRes;
         setActiveMeso(meso);
 
         setRecentWorkouts(
