@@ -18,14 +18,14 @@
 
 import { isNativePlatform } from './capacitor-stub';
 
-// Capacitor App Review plugin - optional, use try-catch for web builds
-let AppReview: any;
+// Capacitor In-App Review plugin - optional, use try-catch for web builds
+let InAppReview: any;
 
 try {
-  AppReview = require('@capacitor-community/app-review').AppReview;
+  InAppReview = require('@capacitor-community/in-app-review').InAppReview;
 } catch (e) {
   // Plugin not installed - provide no-op fallback
-  AppReview = {
+  InAppReview = {
     requestReview: async () => {},
   };
 }
@@ -192,7 +192,7 @@ export async function requestReviewAfterWorkout(): Promise<void> {
 
   // Request the native review prompt
   try {
-    await AppReview.requestReview();
+    await InAppReview.requestReview();
     
     // Record that we prompted (regardless of whether Apple actually showed it)
     setLastPromptTimestamp(Date.now());

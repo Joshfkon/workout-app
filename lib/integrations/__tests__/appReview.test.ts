@@ -14,15 +14,15 @@ jest.mock('../capacitor-stub', () => ({
   isNativePlatform: jest.fn(),
 }));
 
-// Mock the app-review plugin
-jest.mock('@capacitor-community/app-review', () => ({
-  AppReview: {
+// Mock the in-app-review plugin
+jest.mock('@capacitor-community/in-app-review', () => ({
+  InAppReview: {
     requestReview: jest.fn(),
   },
 }));
 
 import { isNativePlatform } from '../capacitor-stub';
-import { AppReview } from '@capacitor-community/app-review';
+import { InAppReview } from '@capacitor-community/in-app-review';
 
 const {
   getFinishedWorkoutCount,
@@ -37,13 +37,13 @@ const {
 
 describe('appReview', () => {
   let mockIsNativePlatform: jest.MockedFunction<typeof isNativePlatform>;
-  let mockRequestReview: jest.MockedFunction<typeof AppReview.requestReview>;
+  let mockRequestReview: jest.MockedFunction<typeof InAppReview.requestReview>;
   let localStorageMock: Record<string, string>;
 
   beforeEach(() => {
     // Reset mocks
     mockIsNativePlatform = isNativePlatform as jest.MockedFunction<typeof isNativePlatform>;
-    mockRequestReview = AppReview.requestReview as jest.MockedFunction<typeof AppReview.requestReview>;
+    mockRequestReview = InAppReview.requestReview as jest.MockedFunction<typeof InAppReview.requestReview>;
     mockIsNativePlatform.mockReturnValue(true); // Default to native platform
     mockRequestReview.mockResolvedValue(undefined);
 
