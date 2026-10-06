@@ -217,3 +217,58 @@ describe('TodayHeroCard — next-up recommendation', () => {
     expect(screen.getByText('Chest & Back')).toBeInTheDocument();
   });
 });
+
+describe('TodayHeroCard — start workout handler (bugfix)', () => {
+  it('calls onStartWorkout when Start workout is clicked on a scheduled workout', async () => {
+    const onStartWorkout = jest.fn();
+    const user = userEvent.setup();
+    
+    render(
+      <TodayHeroCard
+        workout={null}
+        scheduled={{ dayName: 'Shoulders & Arms', muscles: ['shoulders', 'biceps', 'triceps'] }}
+        hasPlan
+        mesocycleName="Arnold"
+        eyebrowContext="Arnold wk 5"
+        onStartWorkout={onStartWorkout}
+      />
+    );
+
+    const button = screen.getByRole('button', { name: 'Start workout' });
+    await user.click(button);
+    
+    expect(onStartWorkout).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows Starting... and disables button while starting', () => {
+    const onStartWorkout = jest.fn();
+    
+    render(
+      <TodayHeroCard
+        workout={null}
+        scheduled={{ dayName: 'Shoulders & Arms', muscles: ['shoulders', 'biceps', 'triceps'] }}
+        hasPlan
+        mesocycleName="Arnold"
+        onStartWorkout={onStartWorkout}
+        isStarting
+      />
+    );
+
+    const button = screen.getByRole('button', { name: 'Starting...' });
+    expect(button).toBeDisabled();
+  });
+
+  it('disables button when no onStartWorkout handler is provided', () => {
+    render(
+      <TodayHeroCard
+        workout={null}
+        scheduled={{ dayName: 'Shoulders & Arms', muscles: ['shoulders', 'biceps', 'triceps'] }}
+        hasPlan
+        mesocycleName="Arnold"
+      />
+    );
+
+    const button = screen.getByRole('button', { name: 'Start workout' });
+    expect(button).toBeDisabled();
+  });
+});
