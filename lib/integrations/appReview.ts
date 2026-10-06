@@ -40,15 +40,42 @@ const WORKOUTS_BEFORE_FIRST_PROMPT = 3;
 const COOLDOWN_DAYS = 90;
 const PROMPT_DELAY_MS = 500;
 
+// Capacitor App plugin for version info - optional, use try-catch for web builds
+let CapacitorApp: any;
+
+try {
+  CapacitorApp = require('@capacitor/app').App;
+} catch (e) {
+  // Plugin not installed - provide no-op fallback
+  CapacitorApp = {
+    getInfo: async () => null,
+  };
+}
+
+// Cache the app version so we don't repeatedly call the native API
+let cachedAppVersion: string | null = null;
+
 /**
- * Get the current app version. Returns empty string if unavailable (web).
+ * Get the current app version from the native app. Returns empty string if unavailable (web).
+ * On native, reads from @capacitor/app App.getInfo() and caches the result.
  */
-function getAppVersion(): string {
-  if (typeof window === 'undefined') return '';
-  // In a real Capacitor app, you might get this from @capacitor/app or package.json
-  // For now, use a simple version string. This could be enhanced to read from
-  // the native app info if needed.
-  return '1.0.0'; // TODO: Could read from capacitor App.getInfo() if needed
+async function getAppVersion(): Promise<string> {
+  // Return cached version if available
+  if (cachedAppVersion !== null) return cachedAppVersion;
+  
+  if (!isNativePlatform()) {
+    cachedAppVersion = '';
+    return '';
+  }
+
+  try {
+    const info = await CapacitorApp.getInfo();
+    cachedAppVersion = info?.version || '';
+    return cachedAppVersion;
+  } catch {
+    cachedAppVersion = '';
+    return '';
+  }
 }
 
 /**
@@ -136,7 +163,7 @@ function setLastPromptVersion(version: string): void {
  * 3. Cooldown period (90 days since last prompt)
  * 4. App version change (not again for the same version)
  */
-export function shouldRequestReview(): boolean {
+export async function shouldRequestReview(): Promise<boolean> {
   // Only on native iOS
   if (!isNativePlatform()) return false;
 
@@ -156,7 +183,7 @@ export function shouldRequestReview(): boolean {
   if (daysSinceLastPrompt < COOLDOWN_DAYS) return false;
 
   // Check if app version has changed since last prompt
-  const currentVersion = getAppVersion();
+  const currentVersion = await getAppVersion();
   const lastVersion = getLastPromptVersion();
   
   // If we've already prompted for this version, don't prompt again
@@ -182,7 +209,7 @@ export async function requestReviewAfterWorkout(): Promise<void> {
   const newCount = incrementFinishedWorkoutCount();
 
   // Check if we should request
-  if (!shouldRequestReview()) {
+  if (!(await shouldRequestReview())) {
     return;
   }
 
@@ -196,7 +223,8 @@ export async function requestReviewAfterWorkout(): Promise<void> {
     
     // Record that we prompted (regardless of whether Apple actually showed it)
     setLastPromptTimestamp(Date.now());
-    setLastPromptVersion(getAppVersion());
+    const version = await getAppVersion();
+    setLastPromptVersion(version);
   } catch (error) {
     // Plugin unavailable or request failed - silent no-op
     console.debug('[AppReview] Request failed (expected on web):', error);
