@@ -24,7 +24,6 @@ import {
   requestMotionPermission,
   startMotionRecorder,
   tapLatencyMs,
-  TAP_LATENCY_WARN_MS,
   type MotionRecorderHandle,
 } from '@/lib/motion/deviceMotionRecorder';
 import { captureToCsv, downloadTextFile } from '@/lib/motion/csv';
@@ -312,30 +311,12 @@ export function CalibrationWizard({ userId, exercises, onSaved, onClose }: Calib
           <div className="space-y-3" data-testid="calibration-review">
             {/* The sweep ALWAYS shows its analysis — reps, velocity, chart,
                 tier — whether or not it qualifies as a calibration. */}
-            <CaptureAnalysisView analysis={analysis} />
-
-            {/* Debug strip: sensor staleness at the STOP tap + raw export —
-                a rejection message alone can't explain a bad sweep. */}
-            <div className="flex items-center justify-between gap-2 text-xs text-surface-500">
-              <span data-testid="calibration-stop-latency">
-                Sensor latency at Stop:{' '}
-                {stopLatencyMs === null ? 'n/a' : `${Math.round(stopLatencyMs)} ms`}
-                {stopLatencyMs !== null && stopLatencyMs > TAP_LATENCY_WARN_MS && (
-                  <span className="text-warning-400">
-                    {' '}
-                    — stale (&gt;{TAP_LATENCY_WARN_MS} ms; sensor delivery is lagging taps)
-                  </span>
-                )}
-              </span>
-              <button
-                type="button"
-                onClick={downloadSweepCsv}
-                className="text-primary-400 hover:text-primary-300 whitespace-nowrap"
-                data-testid="calibration-download-csv"
-              >
-                Download raw sweep (CSV)
-              </button>
-            </div>
+            <CaptureAnalysisView
+              analysis={analysis}
+              stopLatencyMs={stopLatencyMs}
+              onDownloadCsv={downloadSweepCsv}
+              downloadLabel="Download raw sweep (CSV)"
+            />
 
             {eligibility.eligible ? (
               <>

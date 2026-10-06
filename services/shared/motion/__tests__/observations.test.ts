@@ -102,7 +102,7 @@ describe('buildObservations', () => {
 
     const [romLine, velLine, turnLine, dwellLine] = obs.lines;
     expect(romLine).toMatch(/^Reps 10-12 traveled 74% of your set median\.$/);
-    expect(velLine).toMatch(/^Mean concentric velocity fell 50% from rep 1 to rep 12\.$/);
+    expect(velLine).toMatch(/^Mean concentric velocity fell 50% from rep 1 \(fastest\) to rep 12\.$/);
     expect(turnLine).toMatch(/^Reps 9-12 showed \d\.\dx the bottom-turnaround acceleration of reps 1-4\.$/);
     expect(dwellLine).toMatch(/^Bottom dwell dropped from 340 ms on rep 2 to 90 ms on rep 11\.$/);
 

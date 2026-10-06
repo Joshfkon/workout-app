@@ -56,6 +56,18 @@ export {
   type SetObservations,
 } from './observations';
 export {
+  assessCaptureQuality,
+  buildSetCallouts,
+  computeVelocityLoss,
+  SET_SUMMARY_CONFIG,
+  velocityZone,
+  type CaptureQualityIssue,
+  type RepVelocity,
+  type SetCallout,
+  type VelocityLossSummary,
+  type VelocityZone,
+} from './setSummary';
+export {
   analysisRepsToVelocityReps,
   buildMvtProfile,
   buildVelocityRirLine,

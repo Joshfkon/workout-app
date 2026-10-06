@@ -23,6 +23,7 @@
  */
 
 import type { CaptureRep } from './captureAnalysis';
+import { computeVelocityLoss } from './setSummary';
 
 /** Below this many reps, the set median is too thin to compare against. */
 export const MIN_REPS_FOR_REFERENCE = 4;
@@ -106,16 +107,16 @@ export function buildObservations(reps: CaptureRep[]): SetObservations {
     }
   }
 
-  // --- Mean concentric velocity, first rep → last rep ---------------------
-  const first = reps[0];
-  const last = reps[reps.length - 1];
-  if (first.meanWConcentric > 0) {
-    const dropPct = Math.round(
-      (1 - last.meanWConcentric / first.meanWConcentric) * 100
-    );
-    if (dropPct >= VELOCITY_LINE_MIN_DROP_PCT) {
+  // --- Mean concentric velocity, fastest rep → last rep -------------------
+  // Same baseline as the review header (setSummary.computeVelocityLoss).
+  const velocity = computeVelocityLoss(reps);
+  if (velocity.loss !== null && velocity.bestIndex !== null) {
+    const dropPct = Math.round(velocity.loss * 100);
+    const lastValid = velocity.perRep.filter((p) => !p.excluded).pop();
+    if (dropPct >= VELOCITY_LINE_MIN_DROP_PCT && lastValid) {
       lines.push(
-        `Mean concentric velocity fell ${dropPct}% from rep 1 to rep ${reps.length}.`
+        `Mean concentric velocity fell ${dropPct}% from rep ${velocity.bestIndex + 1} ` +
+          `(fastest) to rep ${lastValid.index + 1}.`
       );
     }
   }
