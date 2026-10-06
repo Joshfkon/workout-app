@@ -87,6 +87,7 @@ const MotionCaptureSheet = dynamic(() => import('@/components/motion/MotionCaptu
 import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaRegionalData, TemporaryInjury, PreWorkoutCheckIn, SetFeedback, Rating, BodyweightData, ExerciseType, StandardMuscleGroup, ExercisePerformanceSnapshot, RepsInTank, SorenessRating, SetDiscomfort, JointPainJoint, SleepLogEntry } from '@/types/schema';
 import type { SessionMuscleFeedbackEntry, SessionSummarySubmitData } from '@/components/workout/SessionSummary';
 import { MuscleGroupFeedbackModal, type MuscleFeedbackRatings } from '@/components/workout/MuscleGroupFeedbackModal';
+import { requestReviewAfterWorkout } from '@/lib/integrations/appReview';
 import type { MuscleSorenessRatings } from '@/components/workout/ReadinessCheckIn';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { getLocalUserId } from '@/lib/supabase/authState';
@@ -5618,6 +5619,8 @@ export default function WorkoutPage() {
 
   const finishToDashboard = () => {
     endWorkoutSession();
+    // Request App Store review after successful workout save (iOS only, with cooldown)
+    void requestReviewAfterWorkout();
     router.push('/dashboard');
   };
 
@@ -5630,6 +5633,8 @@ export default function WorkoutPage() {
     isDeload: boolean;
   }) => {
     endWorkoutSession();
+    // Request App Store review after successful workout save (iOS only, with cooldown)
+    void requestReviewAfterWorkout();
     setSession((prev) =>
       prev
         ? {
