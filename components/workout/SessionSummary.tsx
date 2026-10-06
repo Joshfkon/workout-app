@@ -38,6 +38,7 @@ import { getCalibrationVerdict, type CalibrationMethod } from '@/services/rpeCal
 import type { ShareExercise, WorkoutShareTextInput } from '@/services/workoutShareText';
 import { ShareWorkoutText } from './ShareWorkoutText';
 import { successHaptic } from '@/lib/integrations/notifications';
+import { requestReviewAfterWorkout } from '@/lib/integrations/appReview';
 
 /**
  * Per-muscle end-of-session feedback. Captured in the finish popup
@@ -730,6 +731,8 @@ export function SessionSummary({
       void successHaptic();
       setSubmitting(true);
       onSubmit(buildSubmitData());
+      // Request App Store review after successful workout save (iOS only, with cooldown)
+      void requestReviewAfterWorkout();
     }
   };
 
@@ -738,6 +741,8 @@ export function SessionSummary({
       void successHaptic();
       setSubmitting(true);
       onSaveAndViewReport(buildSubmitData());
+      // Request App Store review after successful workout save (iOS only, with cooldown)
+      void requestReviewAfterWorkout();
     }
   };
 
