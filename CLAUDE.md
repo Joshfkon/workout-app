@@ -506,6 +506,23 @@ FITBIT_CLIENT_SECRET=
    display-only; its motion⋈set_logs label join lives OUTSIDE the feature
    dirs in `hooks/useVelocityRirProfiles.ts` — motion modules never touch
    set tables.
+   In-workout capture is an explicit Start/Stop on the active set row
+   (`components/motion/useMotionSetCapture.ts`, pure half in
+   `services/shared/motion/manualCapture.ts`). Two sanctioned couplings,
+   both user-mediated or display-only:
+   - **Rep prefill.** Stop prefills the active rep FIELD (or offers the
+     count when the lifter already typed one). The typed number is what
+     gets logged; motion never writes a set.
+   - **Recommendation line.** `services/setRecommendationLine.ts` (outside
+     the feature dirs) phrases the prescription engine's own next-set /
+     next-session output as one action. Velocity loss arrives as plain
+     numbers and may only (a) supply the "why" and (b) turn an engine "add
+     weight" into "hold" when it says the set was much harder than the
+     logged RIR. It never adds load, and it changes nothing the engine
+     stores or the banner prescribes.
+   Every capture is confidence-gated first (`captureGating.ts`); a
+   low-confidence capture shows no velocity figures and no recommendation.
+   All thresholds: `MOTION_SET_CONFIG` (`services/shared/motion/motionSetConfig.ts`).
 
 ## Loading States & Data Caching (cached-first)
 

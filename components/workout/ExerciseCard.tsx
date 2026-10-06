@@ -62,6 +62,8 @@ import { SegmentedControl } from './SegmentedControl';
 import { SetLoggerRow } from './SetLoggerRow';
 import { ExerciseHistorySparkline } from './ExerciseHistorySparkline';
 import { SuggestionBanner } from './SuggestionBanner';
+import { composeSetRecommendation, type SetRecommendationLine } from '@/services/setRecommendationLine';
+import { MOTION_SET_CONFIG } from '@/services/shared/motion/motionSetConfig';
 import { BottomSheet } from './BottomSheet';
 import { useKeyboardInset } from '@/hooks/useKeyboardInset';
 
@@ -363,6 +365,35 @@ interface ExerciseCardProps {
    * active set card. Must be referentially stable (the card is memoized).
    */
   completedSetExtra?: (set: SetLog) => React.ReactNode;
+  /**
+   * Motion capture (experimental): the Start/Stop control, rendered under
+   * the active set's logger row.
+   */
+  motionCaptureSlot?: React.ReactNode;
+  /**
+   * Identity of the slot's visible state (e.g. "recording:7"). The slot is a
+   * fresh element every page render, so the memo comparator keys on this
+   * instead of the node.
+   */
+  motionCaptureSlotKey?: string;
+  /**
+   * Sensor-counted reps from the last capture Stop (`nonce` changes per
+   * capture). Prefills the active rep field unless the lifter already typed
+   * one — then it is offered instead. The field stays editable and the
+   * typed number is what gets logged.
+   */
+  motionRepPrefill?: { nonce: number; reps: number } | null;
+  /**
+   * Motion evidence for the most recent completed set. Drives the one-line
+   * recommendation at the top of the sets area; the load/reps in it always
+   * come from the prescription engine.
+   */
+  motionSetEvidence?: {
+    setId: string;
+    confidence: 'ok' | 'low';
+    loss: number | null;
+    unclearLine: string | null;
+  } | null;
   // Reports the active set's live suggestion (the SuggestionBanner values,
   // e.g. "60 kg × 7") so the page's sticky rest bar shows the same target
   // instead of the block's stale planned weight. Called with null when no
@@ -490,6 +521,9 @@ export const ExerciseCard = memo(function ExerciseCard({
   readinessModulation,
   setSyncStatus,
   completedSetExtra,
+  motionCaptureSlot,
+  motionRepPrefill = null,
+  motionSetEvidence = null,
   performanceSnapshots,
   progressionHealthSessions,
   equipmentBoundaries,
@@ -1578,6 +1612,38 @@ export const ExerciseCard = memo(function ExerciseCard({
       repsCalcTimeoutsRef.current.clear();
     };
   }, []);
+
+  // Motion capture: sensor-counted reps from a capture Stop. An untouched
+  // rep field is prefilled (and becomes user-owned, so no recompute
+  // overwrites it); a field the lifter already typed is left alone and the
+  // count is offered instead. Duration exercises carry seconds — skipped.
+  const [sensorRepOffer, setSensorRepOffer] = useState<number | null>(null);
+  const applySensorReps = useCallback((reps: number) => {
+    const pendingTimeout = repsCalcTimeoutsRef.current.get(0);
+    if (pendingTimeout) {
+      clearTimeout(pendingTimeout);
+      repsCalcTimeoutsRef.current.delete(0);
+    }
+    manualEditsRef.current.set(0, { ...(manualEditsRef.current.get(0) ?? {}), reps: true });
+    setPendingInputs((prev) =>
+      prev.length > 0 ? [{ ...prev[0], reps: String(reps) }, ...prev.slice(1)] : prev
+    );
+    setSensorRepOffer(null);
+  }, []);
+  useEffect(() => {
+    if (!motionRepPrefill || exercise.exerciseType === 'duration_based') return;
+    if (manualEditsRef.current.get(0)?.reps) {
+      setSensorRepOffer(motionRepPrefill.reps);
+    } else {
+      applySensorReps(motionRepPrefill.reps);
+    }
+    // Keyed on the nonce: each Stop is one prefill.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [motionRepPrefill?.nonce]);
+  // An offer belongs to the set being logged; logging retires it.
+  useEffect(() => {
+    setSensorRepOffer(null);
+  }, [completedSets.length]);
 
   // Recalculate pending inputs based on the last completed set
   const recalculatePendingInputs = useCallback(() => {
@@ -2766,6 +2832,85 @@ export const ExerciseCard = memo(function ExerciseCard({
     return { weight, reps: String(reps), repsLabel, reason, explanation, showRir, role };
   };
 
+  // Motion capture: ONE recommendation line for the most recent completed
+  // set (services/setRecommendationLine). The load and reps are the
+  // prescription engine's — the active banner's numbers for the next set,
+  // recommendSessionStart off today's sets after the last planned set.
+  // Velocity only supplies the "why" and the conservative hold tiebreak.
+  // No line when the engine has nothing to offer (bodyweight, duration,
+  // rep-total next session, no prescribed load) — see motionRecommendation
+  // below returning null.
+  const motionRecommendation: SetRecommendationLine | null = (() => {
+    const last = completedSets[completedSets.length - 1];
+    if (!motionSetEvidence || !last || motionSetEvidence.setId !== last.id) return null;
+    const velocity = {
+      confidence: motionSetEvidence.confidence,
+      loss: motionSetEvidence.loss,
+      unclearLine: motionSetEvidence.unclearLine,
+    };
+    if (velocity.confidence === 'low') {
+      return { kind: 'unclear', text: velocity.unclearLine ?? 'Capture unclear. Logged reps used.' };
+    }
+    if (isDurationBased || isBodyweightExercise || last.weightKg <= 0) return null;
+
+    let engine: { weightKg: number; reps: number; effortVsTarget: 'easier' | 'on_target' | 'harder' };
+    let scope: 'next_set' | 'next_session';
+    if (pendingSetsCount > 0) {
+      // The exact numbers the next-set banner shows (incl. deload / pain
+      // overrides), graded by the engine's own effort reading.
+      const suggestion = buildSuggestionInfo(isAmrapSuggested && pendingSetsCount === 1);
+      const shown = parseFloat(suggestion.weight);
+      const reps = parseInt(suggestion.reps, 10);
+      if (!Number.isFinite(shown) || shown <= 0 || !Number.isFinite(reps)) return null;
+      engine = {
+        weightKg: inputWeightToKg(shown, unit),
+        reps,
+        effortVsTarget: recommendNext(last).effortVsTarget,
+      };
+      scope = 'next_set';
+    } else {
+      if (repTotalMode) return null;
+      const rec = recommendSessionStart({
+        prevWeightKg: last.weightKg,
+        prevReps: last.reps,
+        prevRir: resolveLastRir(last, effectiveTargetRir),
+        targetRepRange: block.targetRepRange,
+        targetRir: effectiveTargetRir,
+        minIncrementKg: exercise.minWeightIncrementKg,
+        availableIncrementsKg: exercise.availableIncrementsKg ?? undefined,
+        prevSessionSets: toPrevSessionSets(completedSets),
+        priorSessionSets: toPrevSessionSets(previousSets),
+      });
+      if (!(rec.weightKg > 0)) return null;
+      engine = { weightKg: rec.weightKg, reps: rec.reps, effortVsTarget: rec.effortVsTarget };
+      scope = 'next_session';
+    }
+
+    const loggedRir =
+      last.feedback?.repsInTank != null
+        ? last.feedback.repsInTank
+        : last.rpe != null
+          ? Math.max(0, rpeToRir(last.rpe))
+          : null;
+    const unitShort = unit === 'lb' ? 'lb' : 'kg';
+    return composeSetRecommendation({
+      scope,
+      engine,
+      lastWeightKg: last.weightKg,
+      repRange: block.targetRepRange,
+      loggedRir,
+      targetRir: effectiveTargetRir,
+      formBrokeDown: last.feedback?.form === 'ugly',
+      velocity,
+      thresholds: {
+        higherEffortLossAbove: MOTION_SET_CONFIG.recommendation.higherEffortLossAbove,
+        higherEffortMinLoggedRir: MOTION_SET_CONFIG.recommendation.higherEffortMinLoggedRir,
+        lowLossBelow: MOTION_SET_CONFIG.summary.zones.hardFrom,
+      },
+      formatWeight: (kg) => `${displayWeight(kg)} ${unitShort}`,
+    });
+  })();
+
   // Report the active set's live suggestion to the parent (the page's sticky
   // rest bar renders it as "next · 60 kg × 7"). Mirrors the SuggestionBanner
   // conditions/values exactly so the two surfaces can't disagree. Runs after
@@ -3698,6 +3843,27 @@ export const ExerciseCard = memo(function ExerciseCard({
           </div>
         )}
 
+        {/* Motion capture: one recommendation for the last captured set */}
+        {motionRecommendation?.kind === 'unclear' && (
+          <p
+            className="px-3 py-2 text-xs text-surface-400 border-l-2 border-surface-700"
+            data-testid="motion-capture-unclear"
+          >
+            {motionRecommendation.text}
+          </p>
+        )}
+        {motionRecommendation?.kind === 'recommendation' && (
+          <div
+            className="px-3 py-2.5 rounded-lg bg-primary-500/10 border border-primary-500/20"
+            data-testid="motion-recommendation"
+          >
+            <p className="text-sm font-medium text-surface-100">{motionRecommendation.headline}</p>
+            {motionRecommendation.why && (
+              <p className="mt-0.5 text-xs text-surface-400">{motionRecommendation.why}</p>
+            )}
+          </div>
+        )}
+
         {/* Completed working sets */}
         {completedSets.map((set, setIndex) => {
           const isDropsetSet = set.setType === 'dropset';
@@ -4277,6 +4443,33 @@ export const ExerciseCard = memo(function ExerciseCard({
                     : undefined
                 }
               />
+              {sensorRepOffer !== null && (
+                <div
+                  className="flex items-center justify-between gap-2 px-1 text-xs text-surface-300"
+                  data-testid="motion-rep-offer"
+                >
+                  <span>Sensor counted {sensorRepOffer}. Use this?</span>
+                  <span className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => applySensorReps(sensorRepOffer)}
+                      className="font-medium text-primary-400 hover:text-primary-300"
+                      data-testid="motion-rep-offer-use"
+                    >
+                      Use {sensorRepOffer}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSensorRepOffer(null)}
+                      className="text-surface-500 hover:text-surface-300"
+                      aria-label="Keep my rep count"
+                    >
+                      Keep mine
+                    </button>
+                  </span>
+                </div>
+              )}
+              {motionCaptureSlot}
             </div>
           );
         })()}
@@ -5057,6 +5250,17 @@ export const ExerciseCard = memo(function ExerciseCard({
     // its own sets changes saved/saving/queued.
     prevProps.sets.every(
       (s) => prevProps.setSyncStatus?.[s.id] === nextProps.setSyncStatus?.[s.id]
-    )
+    ) &&
+    // Motion capture: captures land a tick AFTER the set is logged, so the
+    // history-row extra and the recommendation evidence must be compared
+    // (both are memoized in the page). The Start/Stop slot compares by key.
+    prevProps.completedSetExtra === nextProps.completedSetExtra &&
+    (prevProps.motionCaptureSlot == null) === (nextProps.motionCaptureSlot == null) &&
+    prevProps.motionCaptureSlotKey === nextProps.motionCaptureSlotKey &&
+    prevProps.motionRepPrefill?.nonce === nextProps.motionRepPrefill?.nonce &&
+    prevProps.motionSetEvidence?.setId === nextProps.motionSetEvidence?.setId &&
+    prevProps.motionSetEvidence?.confidence === nextProps.motionSetEvidence?.confidence &&
+    prevProps.motionSetEvidence?.loss === nextProps.motionSetEvidence?.loss &&
+    prevProps.motionSetEvidence?.unclearLine === nextProps.motionSetEvidence?.unclearLine
   );
 });

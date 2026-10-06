@@ -3,9 +3,9 @@ import {
   assessCaptureQuality,
   buildSetCallouts,
   computeVelocityLoss,
-  SET_SUMMARY_CONFIG,
   velocityZone,
 } from '../setSummary';
+import { MOTION_SET_CONFIG } from '../motionSetConfig';
 
 function mkRep(
   index: number,
@@ -77,7 +77,7 @@ describe('computeVelocityLoss', () => {
 
 describe('velocityZone', () => {
   it('maps loss to the configured zones', () => {
-    const { hardFrom, nearFailureAbove } = SET_SUMMARY_CONFIG.zones;
+    const { hardFrom, nearFailureAbove } = MOTION_SET_CONFIG.summary.zones;
     expect(velocityZone(hardFrom - 0.01)).toBe('fresh');
     expect(velocityZone(hardFrom)).toBe('hard');
     expect(velocityZone(nearFailureAbove)).toBe('hard');
@@ -118,7 +118,7 @@ describe('buildSetCallouts', () => {
       mkRep(3, { meanW: 0.4 }),
     ];
     const out = buildSetCallouts(busy);
-    expect(out.length).toBeLessThanOrEqual(SET_SUMMARY_CONFIG.callouts.max);
+    expect(out.length).toBeLessThanOrEqual(MOTION_SET_CONFIG.callouts.max);
     expect(out.map((c) => c.kind)).toEqual(['sharp-drop', 'slow-eccentric', 'long-pause']);
   });
 

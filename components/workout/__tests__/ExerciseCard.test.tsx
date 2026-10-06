@@ -2762,3 +2762,88 @@ describe('warmup checkmark persistence (~15 min warmth window)', () => {
     expect(screen.getByText('(2/2)')).toBeInTheDocument();
   });
 });
+
+describe('ExerciseCard — motion capture integration', () => {
+  const base = {
+    exercise: createMockExercise(),
+    block: createMockBlock(),
+    unit: 'kg' as const,
+    isActive: true,
+    onSetComplete: jest.fn().mockResolvedValue('id'),
+  };
+  const logged = [createMockSetLog({ id: 'set-1', setNumber: 1, weightKg: 100, reps: 10, rpe: 8 })];
+
+  it('prefills an untouched rep field with the sensor count', async () => {
+    const { rerender } = render(<ExerciseCard {...base} sets={logged} />);
+    expect(screen.getByRole('button', { name: /^Reps: 9 reps/ })).toBeInTheDocument();
+    rerender(<ExerciseCard {...base} sets={logged} motionRepPrefill={{ nonce: 1, reps: 11 }} />);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /^Reps: 11 reps/ })).toBeInTheDocument()
+    );
+    expect(screen.queryByTestId('motion-rep-offer')).not.toBeInTheDocument();
+  });
+
+  it('offers instead of overwriting a rep count the lifter already set', async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(<ExerciseCard {...base} sets={logged} />);
+    await user.click(screen.getByRole('button', { name: 'Increase reps' })); // 9 → 10, user-owned
+    rerender(<ExerciseCard {...base} sets={logged} motionRepPrefill={{ nonce: 2, reps: 12 }} />);
+    expect(await screen.findByTestId('motion-rep-offer')).toHaveTextContent(
+      'Sensor counted 12. Use this?'
+    );
+    expect(screen.getByRole('button', { name: /^Reps: 10 reps/ })).toBeInTheDocument();
+    await user.click(screen.getByTestId('motion-rep-offer-use'));
+    expect(screen.getByRole('button', { name: /^Reps: 12 reps/ })).toBeInTheDocument();
+  });
+
+  it('renders the Start/Stop slot under the active logger row', () => {
+    render(<ExerciseCard {...base} sets={logged} motionCaptureSlot={<button>Start capture</button>} />);
+    expect(screen.getByRole('button', { name: 'Start capture' })).toBeInTheDocument();
+  });
+
+  it('shows one engine-sourced recommendation with a velocity reason', () => {
+    render(
+      <ExerciseCard
+        {...base}
+        sets={logged}
+        motionSetEvidence={{ setId: 'set-1', confidence: 'ok', loss: 0.44, unclearLine: null }}
+      />
+    );
+    const rec = screen.getByTestId('motion-recommendation');
+    // Same load the next-set banner prescribes (100 kg × 9 @ 2 RIR here).
+    expect(rec).toHaveTextContent('Next set: stay at 100 kg, aim for 9–12 reps.');
+    expect(rec).toHaveTextContent('Why: velocity dropped 44% — you were close to your target effort.');
+    expect(screen.queryByText(/measurements, not errors/)).not.toBeInTheDocument();
+  });
+
+  it('recommends for next session after the last planned set', () => {
+    render(
+      <ExerciseCard
+        {...base}
+        block={createMockBlock({ targetSets: 1 })}
+        sets={logged}
+        motionSetEvidence={{ setId: 'set-1', confidence: 'ok', loss: 0.3, unclearLine: null }}
+      />
+    );
+    expect(screen.getByTestId('motion-recommendation')).toHaveTextContent(/^Next session: /);
+  });
+
+  it('low confidence shows only the unclear line — no recommendation', () => {
+    render(
+      <ExerciseCard
+        {...base}
+        sets={logged}
+        motionSetEvidence={{
+          setId: 'set-1',
+          confidence: 'low',
+          loss: 0.6,
+          unclearLine: 'Capture unclear: sensor counted 14 reps, you logged 10. Logged reps used.',
+        }}
+      />
+    );
+    expect(screen.getByTestId('motion-capture-unclear')).toHaveTextContent(
+      'Capture unclear: sensor counted 14 reps, you logged 10. Logged reps used.'
+    );
+    expect(screen.queryByTestId('motion-recommendation')).not.toBeInTheDocument();
+  });
+});

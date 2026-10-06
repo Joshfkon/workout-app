@@ -8,8 +8,8 @@
  * (the w(t) chart) and "Capture diagnostics" (sensor quality, notes, raw
  * CSV export) sections.
  *
- * Thresholds live in SET_SUMMARY_CONFIG (services/shared/motion/
- * setSummary.ts). Display-only — this consumes services/shared/motion
+ * Thresholds live in MOTION_SET_CONFIG (services/shared/motion/
+ * motionSetConfig.ts). Display-only — this consumes services/shared/motion
  * output and feeds nothing back anywhere.
  */
 
@@ -20,16 +20,24 @@ import {
   IconChevronDown,
   IconChevronRight,
 } from '@tabler/icons-react';
-import type { CaptureAnalysis, CaptureRep, VelocityZone } from '@/services/shared/motion';
+import type {
+  CaptureAnalysis,
+  CaptureGating,
+  CaptureRep,
+  VelocityZone,
+} from '@/services/shared/motion';
 import {
   assessCaptureQuality,
   buildObservations,
   buildSetCallouts,
+  captureUnclearLine,
   computeVelocityLoss,
+  describeGating,
+  gateCapture,
   GRAVITY_ROM_SUPPRESS_BELOW_DEG,
   LOW_CONFIDENCE_PC1_SHARE,
   RAD_TO_DEG,
-  SET_SUMMARY_CONFIG,
+  MOTION_SET_CONFIG,
   velocityZone,
 } from '@/services/shared/motion';
 import { TAP_LATENCY_WARN_MS } from '@/lib/motion/deviceMotionRecorder';
@@ -66,6 +74,11 @@ export interface CaptureAnalysisViewProps {
   stopLatencyFallback?: string;
   onDownloadCsv?: () => void;
   downloadLabel?: string;
+  /**
+   * Confidence gating (captureGating). Pass it when the logged rep count is
+   * known; otherwise the view gates without one (pauses / short travel).
+   */
+  gating?: CaptureGating;
 }
 
 export function CaptureAnalysisView({
@@ -74,8 +87,14 @@ export function CaptureAnalysisView({
   stopLatencyFallback = 'n/a',
   onDownloadCsv,
   downloadLabel = 'Download raw capture (CSV)',
+  gating: gatingProp,
 }: CaptureAnalysisViewProps) {
-  const { reps } = analysis;
+  // Everything below reads the GATED reps: the longest continuous block,
+  // short-travel movements removed. A low-confidence capture shows no
+  // velocity figures at all — only why.
+  const gating = useMemo(() => gatingProp ?? gateCapture(analysis), [gatingProp, analysis]);
+  const reps = gating.reps;
+  const low = gating.confidence === 'low';
   const velocity = useMemo(() => computeVelocityLoss(reps), [reps]);
   const callouts = useMemo(() => buildSetCallouts(reps, velocity), [reps, velocity]);
   const issues = useMemo(
@@ -83,6 +102,7 @@ export function CaptureAnalysisView({
     [analysis, stopLatencyMs]
   );
   const medianComparisons = useMemo(() => buildObservations(reps), [reps]);
+  const gatingNote = describeGating(gating);
 
   const [repDetectionOpen, setRepDetectionOpen] = useState(false);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
@@ -104,13 +124,20 @@ export function CaptureAnalysisView({
     <div className="space-y-4 min-w-0" data-testid="motion-analysis-view">
       <SummaryHeader
         repCount={reps.length}
-        loss={velocity.loss}
-        zone={velocity.zone}
+        loss={low ? null : velocity.loss}
+        zone={low ? null : velocity.zone}
         issues={issues}
         onBadgeClick={openDiagnostics}
       />
 
-      {reps.length > 0 ? (
+      {low ? (
+        <p
+          className="text-sm text-surface-300 pl-3 border-l-2 border-surface-600"
+          data-testid="motion-capture-unclear-detail"
+        >
+          {captureUnclearLine(gating)}
+        </p>
+      ) : reps.length > 0 ? (
         <>
           <VelocityBars perRep={velocity.perRep} />
           {velocity.excludedIndices.length > 0 && (
@@ -135,7 +162,7 @@ export function CaptureAnalysisView({
             </ul>
           )}
 
-          <RepTable analysis={analysis} perRep={velocity.perRep} />
+          <RepTable analysis={analysis} reps={reps} perRep={velocity.perRep} />
 
           {analysis.romSuppressed && (
             <p className="text-xs text-surface-500">
@@ -171,8 +198,9 @@ export function CaptureAnalysisView({
             stopLatencyFallback={stopLatencyFallback}
             onDownloadCsv={onDownloadCsv}
             downloadLabel={downloadLabel}
+            gatingNote={gatingNote}
             medianLines={
-              medianComparisons.referenceTooThin || medianComparisons.nothingNotable
+              low || medianComparisons.referenceTooThin || medianComparisons.nothingNotable
                 ? []
                 : medianComparisons.lines
             }
@@ -213,7 +241,7 @@ function SummaryHeader({
             className={`text-sm font-medium ${ZONE_TEXT[zone]}`}
             data-testid="motion-summary-status"
           >
-            {SET_SUMMARY_CONFIG.zoneLabels[zone]}
+            {MOTION_SET_CONFIG.summary.zoneLabels[zone]}
           </span>
         ) : (
           <span />
@@ -304,9 +332,11 @@ function VelocityBars({ perRep }: { perRep: ReturnType<typeof computeVelocityLos
 
 function RepTable({
   analysis,
+  reps,
   perRep,
 }: {
   analysis: CaptureAnalysis;
+  reps: CaptureRep[];
   perRep: ReturnType<typeof computeVelocityLoss>['perRep'];
 }) {
   const [expanded, setExpanded] = useState<number | null>(null);
@@ -325,7 +355,7 @@ function RepTable({
           <th className="w-[20%] py-1 text-right font-medium">ROM</th>
         </tr>
       </thead>
-      {analysis.reps.map((rep, i) => {
+      {reps.map((rep, i) => {
         const v = perRep[i];
         const isOpen = expanded === rep.index;
         const toggle = () => setExpanded(isOpen ? null : rep.index);
@@ -463,6 +493,7 @@ function Diagnostics({
   onDownloadCsv,
   downloadLabel,
   medianLines,
+  gatingNote,
 }: {
   analysis: CaptureAnalysis;
   stopLatencyMs: number | null;
@@ -470,6 +501,7 @@ function Diagnostics({
   onDownloadCsv?: () => void;
   downloadLabel: string;
   medianLines: string[];
+  gatingNote: string | null;
 }) {
   const tier = TIER_LABEL[analysis.tier];
   return (
@@ -525,6 +557,11 @@ function Diagnostics({
         <p className="text-xs text-surface-500" data-testid="motion-gravity-rom-suppressed">
           The rotation axis is within {GRAVITY_ROM_SUPPRESS_BELOW_DEG}° of vertical, so the
           accelerometer cross-check can&apos;t resolve this rotation — gravity ROM is hidden.
+        </p>
+      )}
+      {gatingNote && (
+        <p className="text-xs text-surface-500" data-testid="motion-gating-note">
+          {gatingNote}
         </p>
       )}
       {analysis.unpairedHalfReps > 0 && (

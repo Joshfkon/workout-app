@@ -38,15 +38,7 @@ export {
   type GravityRomStatus,
   type HalfRep,
 } from './captureAnalysis';
-export {
-  AutoCaptureGate,
-  AUTO_GATE_DEFAULTS,
-  MIN_AUTO_CAPTURE_REPS,
-  shouldKeepAutoCapture,
-  trimCaptureTail,
-  type AutoGateOptions,
-  type AutoGateState,
-} from './autoGate';
+export { trimCaptureTail } from './autoGate';
 export {
   buildObservations,
   MIN_REPS_FOR_REFERENCE,
@@ -59,7 +51,6 @@ export {
   assessCaptureQuality,
   buildSetCallouts,
   computeVelocityLoss,
-  SET_SUMMARY_CONFIG,
   velocityZone,
   type CaptureQualityIssue,
   type RepVelocity,
@@ -67,6 +58,22 @@ export {
   type VelocityLossSummary,
   type VelocityZone,
 } from './setSummary';
+export { MOTION_SET_CONFIG } from './motionSetConfig';
+export {
+  finishManualCapture,
+  isMountedNow,
+  liveRepCount,
+  ManualCaptureClock,
+  type FinishedCapture,
+} from './manualCapture';
+export {
+  captureUnclearLine,
+  describeGating,
+  gateCapture,
+  splitAtPauses,
+  type CaptureConfidence,
+  type CaptureGating,
+} from './captureGating';
 export {
   analysisRepsToVelocityReps,
   buildMvtProfile,

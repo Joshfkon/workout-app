@@ -10,33 +10,9 @@
  */
 
 import type { CaptureAnalysis, CaptureRep } from './captureAnalysis';
+import { MOTION_SET_CONFIG, type VelocityZone } from './motionSetConfig';
 
-export type VelocityZone = 'fresh' | 'hard' | 'near-failure';
-
-/** Every threshold the set summary uses, in one place. */
-export const SET_SUMMARY_CONFIG = {
-  /** Below this many reps the velocity-loss headline is hidden. */
-  minRepsForLoss: 3,
-  /** Loss zones (fraction of best-rep velocity lost). < hardFrom → fresh. */
-  zones: {
-    hardFrom: 0.2,
-    nearFailureAbove: 0.4,
-  },
-  zoneLabels: {
-    fresh: 'Plenty left',
-    hard: 'Getting hard',
-    'near-failure': 'Near failure',
-  } as Record<VelocityZone, string>,
-  callouts: {
-    max: 3,
-    /** Last rep's relative velocity below this → sharp-drop callout. */
-    sharpDropBelowRelative: 0.6,
-    /** Bottom dwell above this (ms) → pause callout. */
-    longPauseAboveMs: 150,
-    /** Eccentric duration above this multiple of the set median → callout. */
-    slowEccentricRatio: 1.4,
-  },
-} as const;
+export type { VelocityZone };
 
 export interface RepVelocity {
   /** 0-based rep index (CaptureRep.index). */
@@ -66,7 +42,7 @@ const isValidW = (w: number | null | undefined): w is number =>
   typeof w === 'number' && Number.isFinite(w) && w > 0;
 
 export function velocityZone(loss: number): VelocityZone {
-  const { hardFrom, nearFailureAbove } = SET_SUMMARY_CONFIG.zones;
+  const { hardFrom, nearFailureAbove } = MOTION_SET_CONFIG.summary.zones;
   if (loss > nearFailureAbove) return 'near-failure';
   if (loss >= hardFrom) return 'hard';
   return 'fresh';
@@ -95,7 +71,7 @@ export function computeVelocityLoss(reps: VelocityInput[]): VelocityLossSummary 
   const validReps = perRep.filter((p) => !p.excluded);
   const last = validReps[validReps.length - 1];
   const showLoss =
-    reps.length >= SET_SUMMARY_CONFIG.minRepsForLoss && bestW !== null && last?.meanW != null;
+    reps.length >= MOTION_SET_CONFIG.summary.minRepsForLoss && bestW !== null && last?.meanW != null;
   const loss = showLoss ? Math.max(0, (bestW - last.meanW!) / bestW) : null;
 
   return {
@@ -128,7 +104,7 @@ export function buildSetCallouts(
   reps: CaptureRep[],
   velocity: VelocityLossSummary = computeVelocityLoss(reps)
 ): SetCallout[] {
-  const cfg = SET_SUMMARY_CONFIG.callouts;
+  const cfg = MOTION_SET_CONFIG.callouts;
   const out: SetCallout[] = [];
   if (reps.length === 0) return out;
 
@@ -146,7 +122,7 @@ export function buildSetCallouts(
   }
 
   // Slow eccentric: biggest outlier vs the set median.
-  if (reps.length >= SET_SUMMARY_CONFIG.minRepsForLoss) {
+  if (reps.length >= MOTION_SET_CONFIG.summary.minRepsForLoss) {
     const med = median(reps.map((r) => r.eccentricMs));
     if (med > 0) {
       const outlier = reps
