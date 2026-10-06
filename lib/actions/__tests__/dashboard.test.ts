@@ -40,21 +40,60 @@ describe('fetchMesocycleData', () => {
       sessions_per_day: 1,
       state: 'active',
       is_active: true,
-      workout_sessions: [
-        { id: 'sess-1', planned_date: '2026-10-06', state: 'planned', completed_at: null }
-      ],
+      deload_week: 4,
+      program_data: null,
+      exercise_overrides: null,
+      generated_with_enhanced_mode: false,
     };
+
+    const mockSelect = jest.fn();
+    const mockEq = jest.fn();
+    const mockOrder = jest.fn();
+    const mockLimit = jest.fn();
+    const mockMaybeSingle = jest.fn();
+
+    // First call: mesocycle query
+    mockSelect.mockReturnValueOnce({
+      eq: mockEq,
+    });
+    mockEq.mockReturnValueOnce({
+      eq: jest.fn().mockReturnValueOnce({
+        order: mockOrder,
+      }),
+    });
+    mockOrder.mockReturnValueOnce({
+      limit: mockLimit,
+    });
+    mockLimit.mockReturnValueOnce({
+      maybeSingle: mockMaybeSingle,
+    });
+    mockMaybeSingle.mockResolvedValueOnce({
+      data: mockMesocycle,
+      error: null,
+    });
+
+    // Second call: sessions query
+    mockSelect.mockReturnValueOnce({
+      eq: jest.fn().mockResolvedValueOnce({
+        data: [{ id: 'sess-1', planned_date: '2026-10-06', state: 'planned', completed_at: null }],
+        error: null,
+      }),
+    });
+
+    // Third call: exercise_blocks query for today's workout
+    mockSelect.mockReturnValueOnce({
+      eq: jest.fn().mockResolvedValueOnce({
+        data: [
+          { id: 'block-1', target_sets: 3, set_logs: [] },
+          { id: 'block-2', target_sets: 3, set_logs: [] },
+        ],
+        error: null,
+      }),
+    });
 
     const mockSupabase = {
       from: jest.fn().mockReturnValue({
-        select: jest.fn().mockReturnValue({
-          eq: jest.fn().mockReturnValue({
-            order: jest.fn().mockResolvedValue({
-              data: [mockMesocycle],
-              error: null,
-            }),
-          }),
-        }),
+        select: mockSelect,
       }),
     };
 
@@ -68,18 +107,39 @@ describe('fetchMesocycleData', () => {
   });
 
   it('selects current_week from the database', async () => {
+    const mockSelect = jest.fn().mockReturnThis();
+    const mockEq = jest.fn().mockReturnThis();
+    const mockOrder = jest.fn().mockReturnThis();
+    const mockLimit = jest.fn().mockReturnThis();
+    const mockMaybeSingle = jest.fn().mockResolvedValue({
+      data: null,
+      error: null,
+    });
+
     const mockSupabase = {
       from: jest.fn().mockReturnValue({
-        select: jest.fn().mockReturnValue({
-          eq: jest.fn().mockReturnValue({
-            order: jest.fn().mockResolvedValue({
-              data: [],
-              error: null,
-            }),
-          }),
-        }),
+        select: mockSelect,
+        eq: mockEq,
+        order: mockOrder,
+        limit: mockLimit,
+        maybeSingle: mockMaybeSingle,
       }),
     };
+
+    // Setup the chain
+    mockSelect.mockReturnValue({
+      eq: mockEq,
+    });
+    mockEq.mockReturnValue({
+      eq: mockEq,
+      order: mockOrder,
+    });
+    mockOrder.mockReturnValue({
+      limit: mockLimit,
+    });
+    mockLimit.mockReturnValue({
+      maybeSingle: mockMaybeSingle,
+    });
 
     mockCreateClient.mockResolvedValue(mockSupabase);
 
@@ -87,23 +147,44 @@ describe('fetchMesocycleData', () => {
 
     // Verify the select includes current_week
     expect(mockSupabase.from).toHaveBeenCalledWith('mesocycles');
-    const selectArg = mockSupabase.from().select.mock.calls[0][0];
+    const selectArg = mockSelect.mock.calls[0][0];
     expect(selectArg).toContain('current_week');
   });
 
   it('returns null when no active mesocycle exists', async () => {
+    const mockSelect = jest.fn().mockReturnThis();
+    const mockEq = jest.fn().mockReturnThis();
+    const mockOrder = jest.fn().mockReturnThis();
+    const mockLimit = jest.fn().mockReturnThis();
+    const mockMaybeSingle = jest.fn().mockResolvedValue({
+      data: null,
+      error: null,
+    });
+
     const mockSupabase = {
       from: jest.fn().mockReturnValue({
-        select: jest.fn().mockReturnValue({
-          eq: jest.fn().mockReturnValue({
-            order: jest.fn().mockResolvedValue({
-              data: [],
-              error: null,
-            }),
-          }),
-        }),
+        select: mockSelect,
+        eq: mockEq,
+        order: mockOrder,
+        limit: mockLimit,
+        maybeSingle: mockMaybeSingle,
       }),
     };
+
+    // Setup the chain
+    mockSelect.mockReturnValue({
+      eq: mockEq,
+    });
+    mockEq.mockReturnValue({
+      eq: mockEq,
+      order: mockOrder,
+    });
+    mockOrder.mockReturnValue({
+      limit: mockLimit,
+    });
+    mockLimit.mockReturnValue({
+      maybeSingle: mockMaybeSingle,
+    });
 
     mockCreateClient.mockResolvedValue(mockSupabase);
 
