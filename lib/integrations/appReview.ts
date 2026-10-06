@@ -254,6 +254,7 @@ export const testHelpers = {
   incrementFinishedWorkoutCount,
   setLastPromptTimestamp,
   setLastPromptVersion,
+  resetAppVersionCache: () => { cachedAppVersion = null; },
   WORKOUTS_BEFORE_FIRST_PROMPT,
   COOLDOWN_DAYS,
 };

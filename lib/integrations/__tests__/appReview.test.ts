@@ -39,6 +39,7 @@ const {
   incrementFinishedWorkoutCount,
   setLastPromptTimestamp,
   setLastPromptVersion,
+  resetAppVersionCache,
   WORKOUTS_BEFORE_FIRST_PROMPT,
   COOLDOWN_DAYS,
 } = testHelpers;
@@ -57,6 +58,9 @@ describe('appReview', () => {
     mockIsNativePlatform.mockReturnValue(true); // Default to native platform
     mockRequestReview.mockResolvedValue(undefined);
     mockGetInfo.mockResolvedValue({ name: 'HyperTrack', id: 'app.hypertrack.workout', build: '1', version: '1.0.0' });
+    
+    // Reset app version cache
+    resetAppVersionCache();
 
     // Mock localStorage
     localStorageMock = {};
@@ -193,15 +197,19 @@ describe('appReview', () => {
       jest.useFakeTimers();
 
       // First two workouts
-      await requestReviewAfterWorkout();
-      await requestReviewAfterWorkout();
+      let promise = requestReviewAfterWorkout();
+      await jest.runAllTimersAsync();
+      await promise;
+      
+      promise = requestReviewAfterWorkout();
+      await jest.runAllTimersAsync();
+      await promise;
+      
       expect(mockRequestReview).not.toHaveBeenCalled();
 
       // Third workout - should prompt
-      const promise = requestReviewAfterWorkout();
-      
-      // Fast-forward through the delay
-      jest.advanceTimersByTime(500);
+      promise = requestReviewAfterWorkout();
+      await jest.runAllTimersAsync();
       await promise;
 
       expect(getFinishedWorkoutCount()).toBe(3);
@@ -220,7 +228,7 @@ describe('appReview', () => {
       // Reach threshold
       for (let i = 0; i < WORKOUTS_BEFORE_FIRST_PROMPT; i++) {
         const promise = requestReviewAfterWorkout();
-        jest.advanceTimersByTime(500);
+        await jest.runAllTimersAsync();
         await promise;
       }
 
@@ -237,16 +245,20 @@ describe('appReview', () => {
       // Reach threshold and prompt
       for (let i = 0; i < WORKOUTS_BEFORE_FIRST_PROMPT; i++) {
         const promise = requestReviewAfterWorkout();
-        jest.advanceTimersByTime(500);
+        await jest.runAllTimersAsync();
         await promise;
       }
       expect(mockRequestReview).toHaveBeenCalledTimes(1);
 
       // More workouts within cooldown
       mockRequestReview.mockClear();
-      await requestReviewAfterWorkout();
-      await requestReviewAfterWorkout();
-      jest.advanceTimersByTime(500);
+      let promise = requestReviewAfterWorkout();
+      await jest.runAllTimersAsync();
+      await promise;
+      
+      promise = requestReviewAfterWorkout();
+      await jest.runAllTimersAsync();
+      await promise;
 
       expect(mockRequestReview).not.toHaveBeenCalled();
 
@@ -256,19 +268,14 @@ describe('appReview', () => {
     it('handles plugin failure gracefully', async () => {
       mockIsNativePlatform.mockReturnValue(true);
       mockRequestReview.mockRejectedValue(new Error('Plugin not available'));
-      jest.useFakeTimers();
 
       // Reach threshold
       for (let i = 0; i < WORKOUTS_BEFORE_FIRST_PROMPT; i++) {
         incrementFinishedWorkoutCount();
       }
 
-      // Should not throw
-      const promise = requestReviewAfterWorkout();
-      jest.advanceTimersByTime(500);
-      await expect(promise).resolves.not.toThrow();
-
-      jest.useRealTimers();
+      // Should not throw (error is caught and logged)
+      await expect(requestReviewAfterWorkout()).resolves.toBeUndefined();
     });
   });
 
@@ -294,14 +301,14 @@ describe('appReview', () => {
   });
 
   describe('edge cases', () => {
-    it('handles missing localStorage gracefully', () => {
+    it('handles missing localStorage gracefully', async () => {
       // Override to throw
       global.Storage.prototype.getItem = jest.fn(() => {
         throw new Error('Storage unavailable');
       });
 
       expect(getFinishedWorkoutCount()).toBe(0);
-      expect(shouldRequestReview()).toBe(false);
+      expect(await shouldRequestReview()).toBe(false);
     });
 
     it('handles corrupted counter value', () => {
@@ -318,20 +325,24 @@ describe('appReview', () => {
   describe('workout completion scenarios', () => {
     it('counts each successful save', async () => {
       mockIsNativePlatform.mockReturnValue(true);
+      jest.useFakeTimers();
       expect(getFinishedWorkoutCount()).toBe(0);
 
       // First save
-      await requestReviewAfterWorkout();
+      let promise = requestReviewAfterWorkout();
+      await jest.runAllTimersAsync();
+      await promise;
       expect(getFinishedWorkoutCount()).toBe(1);
 
       // Second save
-      await requestReviewAfterWorkout();
+      promise = requestReviewAfterWorkout();
+      await jest.runAllTimersAsync();
+      await promise;
       expect(getFinishedWorkoutCount()).toBe(2);
 
       // Third save - should prompt
-      jest.useFakeTimers();
-      const promise = requestReviewAfterWorkout();
-      jest.advanceTimersByTime(500);
+      promise = requestReviewAfterWorkout();
+      await jest.runAllTimersAsync();
       await promise;
       
       expect(getFinishedWorkoutCount()).toBe(3);
@@ -344,6 +355,7 @@ describe('appReview', () => {
       // The counter only increments when requestReviewAfterWorkout() is explicitly called
       // This happens in finishToDashboard and finishToReport, which are only called
       // after submitFinishOptimistic successfully queues the save locally
+      jest.useFakeTimers();
       
       expect(getFinishedWorkoutCount()).toBe(0);
       
@@ -352,8 +364,12 @@ describe('appReview', () => {
       expect(getFinishedWorkoutCount()).toBe(0);
       
       // Simulate successful save: finishToDashboard calls requestReviewAfterWorkout
-      await requestReviewAfterWorkout();
+      const promise = requestReviewAfterWorkout();
+      await jest.runAllTimersAsync();
+      await promise;
       expect(getFinishedWorkoutCount()).toBe(1);
+      
+      jest.useRealTimers();
     });
 
     it('handles native version check correctly', async () => {
@@ -364,7 +380,7 @@ describe('appReview', () => {
       // First prompt at version 2.0.0
       for (let i = 0; i < WORKOUTS_BEFORE_FIRST_PROMPT; i++) {
         const promise = requestReviewAfterWorkout();
-        jest.advanceTimersByTime(500);
+        await jest.runAllTimersAsync();
         await promise;
       }
       expect(mockRequestReview).toHaveBeenCalledTimes(1);
@@ -372,31 +388,18 @@ describe('appReview', () => {
       mockRequestReview.mockClear();
 
       // More workouts, still v2.0.0, within cooldown - no prompt
-      await requestReviewAfterWorkout();
-      jest.advanceTimersByTime(500);
+      let promise = requestReviewAfterWorkout();
+      await jest.runAllTimersAsync();
+      await promise;
       expect(mockRequestReview).not.toHaveBeenCalled();
 
       // Fast-forward 91 days, still v2.0.0 - no prompt (same version)
-      const ninetyOneDays = 91 * 24 * 60 * 60 * 1000;
-      jest.advanceTimersByTime(ninetyOneDays);
-      await requestReviewAfterWorkout();
-      jest.advanceTimersByTime(500);
-      expect(mockRequestReview).not.toHaveBeenCalled();
-
-      // Upgrade to v2.1.0, past cooldown - should prompt
-      mockGetInfo.mockResolvedValue({ name: 'HyperTrack', id: 'app.hypertrack.workout', build: '6', version: '2.1.0' });
-      // Clear the cache so it re-reads the version
-      (await import('../appReview')).testHelpers;
-      // Force cache reset by importing fresh
-      jest.resetModules();
-      const { requestReviewAfterWorkout: freshRequest } = await import('../appReview');
-      
-      const promise = freshRequest();
-      jest.advanceTimersByTime(500);
+      const ninetyOneDaysAgo = Date.now() - (91 * 24 * 60 * 60 * 1000);
+      setLastPromptTimestamp(ninetyOneDaysAgo);
+      promise = requestReviewAfterWorkout();
+      await jest.runAllTimersAsync();
       await promise;
-      
-      // Note: This may not increment mockRequestReview due to module reset
-      // The important thing is the version logic is tested above
+      expect(mockRequestReview).not.toHaveBeenCalled();
       
       jest.useRealTimers();
     });
@@ -409,7 +412,7 @@ describe('appReview', () => {
       // Should still work, just with empty version
       for (let i = 0; i < WORKOUTS_BEFORE_FIRST_PROMPT; i++) {
         const promise = requestReviewAfterWorkout();
-        jest.advanceTimersByTime(500);
+        await jest.runAllTimersAsync();
         await promise;
       }
       
