@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import dynamic from 'next/dynamic';
+import { useRouter } from 'next/navigation';
 import { IconAlertTriangle } from '@tabler/icons-react';
 import { Button, LoadingAnimation } from '@/components/ui';
 import { Modal } from '@/components/ui/Modal';
@@ -42,6 +43,8 @@ import {
 import { useMuscleRecovery } from '@/hooks/useMuscleRecovery';
 import { useSleepLog } from '@/hooks/useSleepLog';
 import { calculateReadinessScore } from '@/services/fatigueEngine';
+import { startMesocycleWorkoutSession } from '@/lib/training/startMesocycleSession';
+import { fetchActiveMesocycle, type ActiveMesocycleRow } from '@/lib/training/fetchActiveMesocycle';
 import {
   applyDeloadToUpcomingWeek,
   deriveDeloadType,
@@ -276,6 +279,8 @@ type QuickLogModal = 'weight' | 'water' | 'food' | 'cardio' | 'checkin' | 'sleep
 export function DashboardClient({ initialData }: DashboardClientProps) {
   // If we have server-fetched initialData, skip loading state entirely
   const hasInitialData = !!initialData;
+  const router = useRouter();
+  const supabase = createUntypedClient();
 
   const [isLoading, setIsLoading] = useState(!hasInitialData);
   const [activeMesocycle, setActiveMesocycle] = useState<ActiveMesocycle | null>(initialData?.mesocycle ?? null);
@@ -325,6 +330,10 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   // can swap to one-shot guidance copy ("cut sets roughly in half…").
   const [standaloneDeload, setStandaloneDeload] = useState<DeloadRecommendation | null>(null);
   const [plannedLightWeekType, setPlannedLightWeekType] = useState<DeloadType | null>(null);
+  const [isStartingWorkout, setIsStartingWorkout] = useState(false);
+  const [startWorkoutError, setStartWorkoutError] = useState<string | null>(null);
+  // Full active mesocycle row with all fields for startMesocycleWorkoutSession
+  const [fullActiveMeso, setFullActiveMeso] = useState<ActiveMesocycleRow | null>(null);
   const activeMesocycleId = activeMesocycle?.id ?? null;
 
   useEffect(() => {
@@ -421,6 +430,38 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
       console.error('Failed to dismiss standalone deload recommendation:', err);
     } finally {
       setIsResolvingDeload(false);
+    }
+  };
+
+  // Start today's mesocycle workout (same logic as Train page).
+  const handleStartWorkout = async () => {
+    if (!activeMesocycle || !scheduledWorkout || isStartingWorkout) return;
+    setIsStartingWorkout(true);
+    setStartWorkoutError(null);
+    try {
+      // Fetch the full mesocycle row if we don't have it yet. The initial
+      // data path doesn't include program_data/overrides (large fields), so
+      // we need to fetch them for the start path.
+      let mesoForStart = fullActiveMeso;
+      if (!mesoForStart || mesoForStart.id !== activeMesocycle.id) {
+        if (!userId) throw new Error('User not authenticated');
+        mesoForStart = await fetchActiveMesocycle(supabase, userId);
+        if (!mesoForStart) throw new Error('Active mesocycle not found');
+        setFullActiveMeso(mesoForStart);
+      }
+
+      const { sessionId } = await startMesocycleWorkoutSession({
+        supabase,
+        mesocycle: mesoForStart,
+        todayWorkout: scheduledWorkout,
+        completedSessions: activeMesocycle.workoutsCompleted,
+      });
+      router.push(`/dashboard/workout/${sessionId}`);
+    } catch (err) {
+      console.error('Failed to start workout:', err);
+      const message = err instanceof Error ? err.message : 'Failed to start workout';
+      setStartWorkoutError(message);
+      setIsStartingWorkout(false);
     }
   };
 
@@ -896,12 +937,8 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
           // User profile (goal)
           supabase.from('users').select('goal').eq('id', user.id).single(),
 
-          // Mesocycles with sessions
-          supabase.from('mesocycles')
-            .select(`id, name, start_date, total_weeks, split_type, days_per_week, preferred_workout_days, schedule_mode, training_interval_days, sessions_per_day, state, is_active,
-              workout_sessions (id, planned_date, state, completed_at)`)
-            .eq('user_id', user.id)
-            .order('created_at', { ascending: false }),
+          // Use shared helper to fetch active mesocycle (same logic as Train + server)
+          fetchActiveMesocycle(supabase, user.id),
 
           // Today's nutrition
           supabase.from('food_log')
@@ -1014,24 +1051,28 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
           setUserGoal(userProfileResult.data.goal);
         }
 
-        // Process mesocycles
-        const mesocycles = mesocyclesResult.data;
-        let mesocycle = mesocycles?.find((m: any) => m.is_active === true || m.state === 'active') || null;
-        if (!mesocycle && mesocycles && mesocycles.length > 0) {
-          mesocycle = mesocycles.find((m: any) => m.state !== 'completed') || null;
-        }
+        // Process mesocycle
+        const mesocycle = mesocyclesResult;
 
         if (mesocycle) {
-          const startDate = new Date(mesocycle.start_date);
-          const weeksSinceStart = Math.floor((today.getTime() - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1;
-          const sessions = mesocycle.workout_sessions || [];
+          // Store the full mesocycle for starting workouts
+          setFullActiveMeso(mesocycle);
+
+          // Fetch sessions for this mesocycle
+          const { data: sessionsData } = await supabase
+            .from('workout_sessions')
+            .select('id, planned_date, state, completed_at')
+            .eq('mesocycle_id', mesocycle.id);
+
+          const sessions = sessionsData || [];
           const completed = sessions.filter((s: any) => s.state === 'completed').length;
-          const currentWeek = Math.min(weeksSinceStart, mesocycle.total_weeks);
+          // Use the database's current_week value (managed by weekly rollover logic).
+          const currentWeek = mesocycle.current_week;
           const weekSessions = computeWeekSessions(
             sessions,
             mesocycle.start_date,
             currentWeek,
-            mesocycle.days_per_week || 0
+            mesocycle.days_per_week
           );
 
           const completedTodayCount = sessions.filter(
@@ -1228,21 +1269,25 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         // They don't block initial render and are processed in the background
 
         // Cache dashboard data for instant load on next visit
-        // Build the processed mesocycle data for caching
+        // Build the processed mesocycle data for caching (reuse sessions from above)
         let cachedMesocycle: ActiveMesocycle | null = null;
         if (mesocycle) {
-          const startDate = new Date(mesocycle.start_date);
-          const weeksSinceStart = Math.floor((today.getTime() - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1;
-          const sessions = mesocycle.workout_sessions || [];
-          const completed = sessions.filter((s: any) => s.state === 'completed').length;
+          // Sessions were already fetched above when processing the mesocycle
+          const { data: cachedSessions } = await supabase
+            .from('workout_sessions')
+            .select('id, state')
+            .eq('mesocycle_id', mesocycle.id);
+          const sessionList = cachedSessions || [];
+          const completed = sessionList.filter((s: any) => s.state === 'completed').length;
           cachedMesocycle = {
             id: mesocycle.id,
             name: mesocycle.name,
             startDate: mesocycle.start_date,
             weeks: mesocycle.total_weeks,
-            currentWeek: Math.min(weeksSinceStart, mesocycle.total_weeks),
+            // Use the database's current_week value (managed by weekly rollover logic).
+            currentWeek: mesocycle.current_week,
             workoutsCompleted: completed,
-            totalWorkouts: sessions.length,
+            totalWorkouts: sessionList.length,
             splitType: mesocycle.split_type,
             daysPerWeek: mesocycle.days_per_week,
             preferredWorkoutDays: mesocycle.preferred_workout_days || null,
@@ -1529,6 +1574,13 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         />
       )}
 
+      {/* Error starting workout */}
+      {startWorkoutError && (
+        <div className="p-2.5 rounded-lg bg-danger-500/10 border border-danger-500/20 text-danger-400 text-xs">
+          {startWorkoutError}
+        </div>
+      )}
+
       {/* "Next up" hero — pending workout first, otherwise the next meal */}
       <TodayHeroCard
         workout={todaysWorkout}
@@ -1540,6 +1592,8 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         meal={mealHero}
         onLogFood={() => setActiveModal('food')}
         coachLine={coachLine}
+        onStartWorkout={handleStartWorkout}
+        isStarting={isStartingWorkout}
       />
 
       {/* Glance metric grid: Nutrition · Lifts · Weekly volume · Weight */}

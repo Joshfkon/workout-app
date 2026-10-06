@@ -248,6 +248,7 @@ interface BuilderState {
   select?: string;
   payload?: Row | Row[];
   filters: Filter[];
+  orFilters?: Filter[];
   order?: { path: string; ascending: boolean };
   limit?: number;
   countMode?: 'exact';
@@ -287,6 +288,38 @@ class Builder implements PromiseLike<{ data: unknown; error: unknown; count?: nu
   lte(path: string, value: unknown) { return this.filter('lte', path, value); }
   gt(path: string, value: unknown) { return this.filter('gt', path, value); }
   lt(path: string, value: unknown) { return this.filter('lt', path, value); }
+  
+  /**
+   * OR filter: 'is_active.eq.true,state.eq.active' means (is_active=true OR state='active').
+   * This is a simplified implementation that only handles the pattern used by the training code.
+   */
+  or(conditions: string) {
+    // Parse conditions like 'is_active.eq.true,state.eq.active'
+    const parts = conditions.split(',');
+    const orFilters: Filter[] = [];
+    
+    for (const part of parts) {
+      const segments = part.trim().split('.');
+      if (segments.length < 3) continue;
+      
+      const path = segments[0];
+      const op = segments[1] as FilterOp;
+      const value = segments.slice(2).join('.'); // Handle values with dots
+      
+      // Convert string values
+      let parsedValue: unknown = value;
+      if (value === 'true') parsedValue = true;
+      else if (value === 'false') parsedValue = false;
+      else if (value === 'null') parsedValue = null;
+      else if (!isNaN(Number(value))) parsedValue = Number(value);
+      
+      orFilters.push({ op, path, value: parsedValue });
+    }
+    
+    // Add an OR filter marker
+    return this.clone({ orFilters });
+  }
+  
   not(path: string, op: string, value: unknown) {
     if (op !== 'is') unsupported(`not(${op})`);
     return this.filter('not_is', path, value);
@@ -389,7 +422,7 @@ class Builder implements PromiseLike<{ data: unknown; error: unknown; count?: nu
   }
 
   private async runSelect() {
-    const { table, select = '*', filters, order, limit, countMode, headOnly } = this.state;
+    const { table, select = '*', filters, orFilters, order, limit, countMode, headOnly } = this.state;
     const fields = parseSelect(select);
     this.validateEmbeds(table, fields);
 
@@ -399,7 +432,14 @@ class Builder implements PromiseLike<{ data: unknown; error: unknown; count?: nu
     for (const f of fields) {
       if (f.inner) rows = rows.filter((r) => r[f.name] != null);
     }
+    
+    // Apply AND filters
     for (const f of filters) rows = rows.filter((r) => matches(r, f));
+    
+    // Apply OR filters (if any)
+    if (orFilters && orFilters.length > 0) {
+      rows = rows.filter((r) => orFilters.some((f) => matches(r, f)));
+    }
 
     if (order) {
       // Embedded ordering arrives as `workout_sessions(completed_at)`.
@@ -465,11 +505,13 @@ class Builder implements PromiseLike<{ data: unknown; error: unknown; count?: nu
   }
 
   private async runUpdate() {
-    const { table, payload, filters, returning, select } = this.state;
+    const { table, payload, filters, orFilters, returning, select } = this.state;
     const patch = payload as Row;
     const touched: Row[] = [];
     for (const row of this.db.rows(table)) {
-      if (filters.every((f) => matches(row, f))) {
+      const matchesAnd = filters.every((f) => matches(row, f));
+      const matchesOr = !orFilters || orFilters.length === 0 || orFilters.some((f) => matches(row, f));
+      if (matchesAnd && matchesOr) {
         Object.assign(row, patch);
         touched.push(row);
       }

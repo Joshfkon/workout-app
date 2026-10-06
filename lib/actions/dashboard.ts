@@ -103,27 +103,23 @@ export async function fetchMesocycleData(userId: string): Promise<{
   const today = new Date();
   const todayStr = getLocalDateString(today);
 
-  const { data: mesocycles } = await supabase
-    .from('mesocycles')
-    .select(`id, name, start_date, total_weeks, split_type, days_per_week, preferred_workout_days, schedule_mode, training_interval_days, sessions_per_day, state, is_active,
-      workout_sessions (id, planned_date, state, completed_at)`)
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false });
-
-  let mesocycle = mesocycles?.find((m: any) => m.is_active === true || m.state === 'active') || null;
-  if (!mesocycle && mesocycles && mesocycles.length > 0) {
-    mesocycle = mesocycles.find((m: any) => m.state !== 'completed') || null;
-  }
+  // Use the shared fetch to get the same mesocycle Train would select
+  const { fetchActiveMesocycle } = await import('@/lib/training/fetchActiveMesocycle');
+  const mesocycle = await fetchActiveMesocycle(supabase, userId);
 
   if (!mesocycle) {
     return { mesocycle: null, todaysWorkout: null };
   }
 
-  const startDate = new Date(mesocycle.start_date);
-  const weeksSinceStart = Math.floor((today.getTime() - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1;
-  const sessions = mesocycle.workout_sessions || [];
-  const completed = sessions.filter((s: any) => s.state === 'completed').length;
-  const completedTodayCount = sessions.filter(
+  // Fetch sessions for this mesocycle
+  const { data: sessions } = await supabase
+    .from('workout_sessions')
+    .select('id, planned_date, state, completed_at')
+    .eq('mesocycle_id', mesocycle.id);
+
+  const sessionList = sessions || [];
+  const completed = sessionList.filter((s: any) => s.state === 'completed').length;
+  const completedTodayCount = sessionList.filter(
     (s: any) => s.state === 'completed' && s.planned_date === todayStr
   ).length;
   // How many sessions the calendar puts on today (0 rest day, 2 two-a-day).
@@ -132,12 +128,13 @@ export async function fetchMesocycleData(userId: string): Promise<{
     today
   ).length;
 
-  const currentWeek = Math.min(weeksSinceStart, mesocycle.total_weeks);
+  // Use the database's current_week value (managed by weekly rollover logic).
+  const currentWeek = mesocycle.current_week;
   const weekSessions = computeWeekSessions(
-    sessions,
+    sessionList,
     mesocycle.start_date,
     currentWeek,
-    mesocycle.days_per_week || 0
+    mesocycle.days_per_week
   );
 
   const dashboardMesocycle: DashboardMesocycle = {
@@ -147,7 +144,7 @@ export async function fetchMesocycleData(userId: string): Promise<{
     weeks: mesocycle.total_weeks,
     currentWeek,
     workoutsCompleted: completed,
-    totalWorkouts: sessions.length,
+    totalWorkouts: sessionList.length,
     splitType: mesocycle.split_type,
     daysPerWeek: mesocycle.days_per_week,
     preferredWorkoutDays: mesocycle.preferred_workout_days || null,
@@ -164,10 +161,10 @@ export async function fetchMesocycleData(userId: string): Promise<{
   // only fronts the hero once every session scheduled today is done —
   // otherwise the day's next session should show as up next instead.
   const todaySession =
-    sessions.find((s: any) => s.state === 'in_progress') ??
-    sessions.find((s: any) => s.planned_date === todayStr && s.state === 'planned') ??
+    sessionList.find((s: any) => s.state === 'in_progress') ??
+    sessionList.find((s: any) => s.planned_date === todayStr && s.state === 'planned') ??
     (completedTodayCount >= scheduledTodayCount
-      ? sessions.find((s: any) => s.planned_date === todayStr)
+      ? sessionList.find((s: any) => s.planned_date === todayStr)
       : undefined);
 
   let todaysWorkout: TodaysWorkoutData | null = null;

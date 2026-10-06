@@ -157,6 +157,9 @@ export function buildMesocycleRow(
  * swallowed: pressing on would leave two rows with `state: 'active'`, and
  * every "the active mesocycle" read in the app assumes there is exactly one.
  *
+ * Deactivates ANY row with is_active=true OR state='active' to handle
+ * inconsistent data (e.g., a row with is_active=true but state='planned').
+ *
  * `describeInsertFailure` lets the UI keep its migration-aware error text
  * (see mesocycle/_lib/mesocycleErrors) without this module depending on it.
  */
@@ -169,7 +172,7 @@ export async function createMesocycle(
     .from('mesocycles')
     .update({ state: 'completed', is_active: false })
     .eq('user_id', input.userId)
-    .eq('state', 'active');
+    .or('is_active.eq.true,state.eq.active');
 
   if (deactivateError) {
     throw new Error(

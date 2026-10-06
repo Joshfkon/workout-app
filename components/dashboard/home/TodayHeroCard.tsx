@@ -53,6 +53,10 @@ interface TodayHeroCardProps {
    * the muscle focus list). Pure derivation upstream — never an AI API call.
    */
   coachLine?: string | null;
+  /** Starts today's mesocycle workout (creates session and navigates). */
+  onStartWorkout?: () => void;
+  /** True while starting a workout. */
+  isStarting?: boolean;
 }
 
 /**
@@ -142,6 +146,8 @@ export function TodayHeroCard({
   meal,
   onLogFood,
   coachLine,
+  onStartWorkout,
+  isStarting = false,
 }: TodayHeroCardProps) {
   // Pending workout — the primary recommendation when the user hasn't trained yet.
   if (workout && workout.state !== 'completed') {
@@ -188,23 +194,26 @@ export function TodayHeroCard({
   if (!workout && scheduled) {
     return (
       <div>
-        <Link href="/dashboard/mesocycle" className="block">
-          <div className="rounded-2xl p-5 border bg-primary-500/10 border-primary-500/20 hover:bg-primary-500/15 transition-colors">
-            <HeroShell
-              eyebrow={`Next up${eyebrowContext ? ` · ${eyebrowContext}` : ''}`}
-              eyebrowClass="text-primary-400"
-              title={scheduled.dayName}
-              meta={workoutMeta ?? null}
-              cta={
-                <div className="w-full py-3 rounded-xl text-center text-[15px] font-semibold text-white bg-gradient-to-r from-primary-500 to-primary-600">
-                  Start workout
-                </div>
-              }
-            >
-              {coachLine && <CoachLine text={coachLine} />}
-            </HeroShell>
-          </div>
-        </Link>
+        <div className="rounded-2xl p-5 border bg-primary-500/10 border-primary-500/20">
+          <HeroShell
+            eyebrow={`Next up${eyebrowContext ? ` · ${eyebrowContext}` : ''}`}
+            eyebrowClass="text-primary-400"
+            title={scheduled.dayName}
+            meta={workoutMeta ?? null}
+            cta={
+              <button
+                type="button"
+                onClick={onStartWorkout}
+                disabled={isStarting || !onStartWorkout}
+                className="w-full py-3 rounded-xl text-center text-[15px] font-semibold text-white bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-400 hover:to-primary-500 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {isStarting ? 'Starting...' : 'Start workout'}
+              </button>
+            }
+          >
+            {coachLine && <CoachLine text={coachLine} />}
+          </HeroShell>
+        </div>
         <MoreOptionsLink showPlanLink={hasPlan} />
       </div>
     );
