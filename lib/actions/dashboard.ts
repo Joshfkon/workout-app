@@ -105,10 +105,10 @@ export async function fetchMesocycleData(userId: string): Promise<{
 
   const { data: mesocycles } = await supabase
     .from('mesocycles')
-    .select(`id, name, start_date, total_weeks, split_type, days_per_week, preferred_workout_days, schedule_mode, training_interval_days, sessions_per_day, state, is_active,
+    .select(`id, name, start_date, current_week, total_weeks, split_type, days_per_week, preferred_workout_days, schedule_mode, training_interval_days, sessions_per_day, state, is_active,
       workout_sessions (id, planned_date, state, completed_at)`)
     .eq('user_id', userId)
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false});
 
   let mesocycle = mesocycles?.find((m: any) => m.is_active === true || m.state === 'active') || null;
   if (!mesocycle && mesocycles && mesocycles.length > 0) {
@@ -119,8 +119,6 @@ export async function fetchMesocycleData(userId: string): Promise<{
     return { mesocycle: null, todaysWorkout: null };
   }
 
-  const startDate = new Date(mesocycle.start_date);
-  const weeksSinceStart = Math.floor((today.getTime() - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1;
   const sessions = mesocycle.workout_sessions || [];
   const completed = sessions.filter((s: any) => s.state === 'completed').length;
   const completedTodayCount = sessions.filter(
@@ -132,7 +130,9 @@ export async function fetchMesocycleData(userId: string): Promise<{
     today
   ).length;
 
-  const currentWeek = Math.min(weeksSinceStart, mesocycle.total_weeks);
+  // Use the database's current_week value (managed by weekly rollover logic),
+  // not a naive date calculation — the Train page does the same.
+  const currentWeek = mesocycle.current_week ?? 1;
   const weekSessions = computeWeekSessions(
     sessions,
     mesocycle.start_date,
