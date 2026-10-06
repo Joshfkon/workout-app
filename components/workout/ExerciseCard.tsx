@@ -52,7 +52,7 @@ import { lightHaptic } from '@/lib/integrations/notifications';
 // setLogTiming: TEMPORARY latency instrumentation (docs/SET_LOGGING_LATENCY_DIAGNOSIS.md)
 import { beginSetTiming } from '@/lib/debug/setLogTiming';
 import { Input } from '@/components/ui';
-import { IconBarbell, IconBone, IconCheck, IconChevronDown, IconCloudPause, IconGripVertical, IconInfoCircle } from '@tabler/icons-react';
+import { IconActivity, IconBarbell, IconBone, IconCheck, IconChevronDown, IconCloudPause, IconGripVertical, IconInfoCircle } from '@tabler/icons-react';
 import { RowOverflowMenu, type RowMenuItem } from './RowOverflowMenu';
 import { StabilizerWarningBanner, type StabilizerWarningView } from './StabilizerWarningBanner';
 import { InlineRestTimerBar } from './InlineRestTimerBar';
@@ -62,7 +62,7 @@ import { SegmentedControl } from './SegmentedControl';
 import { SetLoggerRow } from './SetLoggerRow';
 import { ExerciseHistorySparkline } from './ExerciseHistorySparkline';
 import { SuggestionBanner } from './SuggestionBanner';
-import { composeSetRecommendation, type SetRecommendationLine } from '@/services/setRecommendationLine';
+import { composeNextSetCall, loggedEffortVerdict, type NextSetCall } from '@/services/setRecommendationLine';
 import { MOTION_SET_CONFIG } from '@/services/shared/motion/motionSetConfig';
 import { BottomSheet } from './BottomSheet';
 import { useKeyboardInset } from '@/hooks/useKeyboardInset';
@@ -384,16 +384,22 @@ interface ExerciseCardProps {
    */
   motionRepPrefill?: { nonce: number; reps: number } | null;
   /**
-   * Motion evidence for the most recent completed set. Drives the one-line
-   * recommendation at the top of the sets area; the load/reps in it always
-   * come from the prescription engine.
+   * Motion capture per completed set id: the row's sensor-icon tint and the
+   * optional muted cue line (top coach cue, severity ≥ 2 only). Memoized
+   * per block by the page.
    */
-  motionSetEvidence?: {
+  motionSets?: Record<string, { tone: 'ok' | 'low' | 'raw'; cue: string | null }>;
+  /**
+   * Coach read of the MOST RECENT completed set: merged into the banner
+   * ("{verdict} → W × R"); the effort finding may hold an engine "add".
+   */
+  motionLatest?: {
     setId: string;
-    confidence: 'ok' | 'low';
-    loss: number | null;
-    unclearLine: string | null;
+    verdictShort: string | null;
+    effort: { zone: 'easy' | 'moderate' | 'hard' | 'near-failure'; disagreement: 'more_than_logged' | 'harder_than_logged' | null } | null;
   } | null;
+  /** Full coach feedback sheet for a set (opened from its sensor icon / cue line). */
+  renderMotionSheet?: (args: { setId: string; nextSetCall: string | null; onClose: () => void }) => React.ReactNode;
   // Reports the active set's live suggestion (the SuggestionBanner values,
   // e.g. "60 kg × 7") so the page's sticky rest bar shows the same target
   // instead of the block's stale planned weight. Called with null when no
@@ -523,7 +529,9 @@ export const ExerciseCard = memo(function ExerciseCard({
   completedSetExtra,
   motionCaptureSlot,
   motionRepPrefill = null,
-  motionSetEvidence = null,
+  motionSets,
+  motionLatest = null,
+  renderMotionSheet,
   performanceSnapshots,
   progressionHealthSessions,
   equipmentBoundaries,
@@ -1618,6 +1626,8 @@ export const ExerciseCard = memo(function ExerciseCard({
   // overwrites it); a field the lifter already typed is left alone and the
   // count is offered instead. Duration exercises carry seconds — skipped.
   const [sensorRepOffer, setSensorRepOffer] = useState<number | null>(null);
+  // Coach feedback sheet for a completed set (sensor icon / cue line).
+  const [motionSheetSetId, setMotionSheetSetId] = useState<string | null>(null);
   const applySensorReps = useCallback((reps: number) => {
     const pendingTimeout = repsCalcTimeoutsRef.current.get(0);
     if (pendingTimeout) {
@@ -2832,84 +2842,86 @@ export const ExerciseCard = memo(function ExerciseCard({
     return { weight, reps: String(reps), repsLabel, reason, explanation, showRir, role };
   };
 
-  // Motion capture: ONE recommendation line for the most recent completed
-  // set (services/setRecommendationLine). The load and reps are the
-  // prescription engine's — the active banner's numbers for the next set,
-  // recommendSessionStart off today's sets after the last planned set.
-  // Velocity only supplies the "why" and the conservative hold tiebreak.
-  // No line when the engine has nothing to offer (bodyweight, duration,
-  // rep-total next session, no prescribed load) — see motionRecommendation
-  // below returning null.
-  const motionRecommendation: SetRecommendationLine | null = (() => {
-    const last = completedSets[completedSets.length - 1];
-    if (!motionSetEvidence || !last || motionSetEvidence.setId !== last.id) return null;
-    const velocity = {
-      confidence: motionSetEvidence.confidence,
-      loss: motionSetEvidence.loss,
-      unclearLine: motionSetEvidence.unclearLine,
-    };
-    if (velocity.confidence === 'low') {
-      return { kind: 'unclear', text: velocity.unclearLine ?? 'Capture unclear. Logged reps used.' };
-    }
-    if (isDurationBased || isBodyweightExercise || last.weightKg <= 0) return null;
-
-    let engine: { weightKg: number; reps: number; effortVsTarget: 'easier' | 'on_target' | 'harder' };
-    let scope: 'next_set' | 'next_session';
+  // The MOST RECENT completed set's next-set call (services/
+  // setRecommendationLine). Load and reps are the prescription engine's —
+  // the active banner's numbers for the next set, recommendSessionStart off
+  // today's sets after the last planned set. The coach effort finding only
+  // (a) supplies the banner verdict and (b) may hold an engine "add" when
+  // velocity says the set was far harder than logged. Null where the engine
+  // has nothing to offer (bodyweight, duration, rep-total next session, no
+  // prescribed load).
+  const lastCompletedSet = completedSets[completedSets.length - 1];
+  const latestMotion =
+    motionLatest && lastCompletedSet && motionLatest.setId === lastCompletedSet.id ? motionLatest : null;
+  const latestEngine = (() => {
+    const last = lastCompletedSet;
+    if (!last || isDurationBased || isBodyweightExercise || last.weightKg <= 0) return null;
     if (pendingSetsCount > 0) {
-      // The exact numbers the next-set banner shows (incl. deload / pain
-      // overrides), graded by the engine's own effort reading.
       const suggestion = buildSuggestionInfo(isAmrapSuggested && pendingSetsCount === 1);
       const shown = parseFloat(suggestion.weight);
       const reps = parseInt(suggestion.reps, 10);
       if (!Number.isFinite(shown) || shown <= 0 || !Number.isFinite(reps)) return null;
-      engine = {
-        weightKg: inputWeightToKg(shown, unit),
-        reps,
-        effortVsTarget: recommendNext(last).effortVsTarget,
+      return {
+        scope: 'next_set' as const,
+        engine: {
+          weightKg: inputWeightToKg(shown, unit),
+          reps,
+          effortVsTarget: recommendNext(last).effortVsTarget,
+        },
       };
-      scope = 'next_set';
-    } else {
-      if (repTotalMode) return null;
-      const rec = recommendSessionStart({
-        prevWeightKg: last.weightKg,
-        prevReps: last.reps,
-        prevRir: resolveLastRir(last, effectiveTargetRir),
-        targetRepRange: block.targetRepRange,
-        targetRir: effectiveTargetRir,
-        minIncrementKg: exercise.minWeightIncrementKg,
-        availableIncrementsKg: exercise.availableIncrementsKg ?? undefined,
-        prevSessionSets: toPrevSessionSets(completedSets),
-        priorSessionSets: toPrevSessionSets(previousSets),
-      });
-      if (!(rec.weightKg > 0)) return null;
-      engine = { weightKg: rec.weightKg, reps: rec.reps, effortVsTarget: rec.effortVsTarget };
-      scope = 'next_session';
     }
-
-    const loggedRir =
-      last.feedback?.repsInTank != null
-        ? last.feedback.repsInTank
-        : last.rpe != null
-          ? Math.max(0, rpeToRir(last.rpe))
-          : null;
-    const unitShort = unit === 'lb' ? 'lb' : 'kg';
-    return composeSetRecommendation({
-      scope,
-      engine,
-      lastWeightKg: last.weightKg,
-      repRange: block.targetRepRange,
-      loggedRir,
+    if (repTotalMode) return null;
+    const rec = recommendSessionStart({
+      prevWeightKg: last.weightKg,
+      prevReps: last.reps,
+      prevRir: resolveLastRir(last, effectiveTargetRir),
+      targetRepRange: block.targetRepRange,
       targetRir: effectiveTargetRir,
-      formBrokeDown: last.feedback?.form === 'ugly',
-      velocity,
-      thresholds: {
-        higherEffortLossAbove: MOTION_SET_CONFIG.recommendation.higherEffortLossAbove,
-        higherEffortMinLoggedRir: MOTION_SET_CONFIG.recommendation.higherEffortMinLoggedRir,
-        lowLossBelow: MOTION_SET_CONFIG.summary.zones.hardFrom,
-      },
-      formatWeight: (kg) => `${displayWeight(kg)} ${unitShort}`,
+      minIncrementKg: exercise.minWeightIncrementKg,
+      availableIncrementsKg: exercise.availableIncrementsKg ?? undefined,
+      prevSessionSets: toPrevSessionSets(completedSets),
+      priorSessionSets: toPrevSessionSets(previousSets),
     });
+    if (!(rec.weightKg > 0)) return null;
+    return {
+      scope: 'next_session' as const,
+      engine: { weightKg: rec.weightKg, reps: rec.reps, effortVsTarget: rec.effortVsTarget },
+    };
   })();
+  const latestCall: NextSetCall | null =
+    latestEngine && lastCompletedSet
+      ? composeNextSetCall({
+          ...latestEngine,
+          lastWeightKg: lastCompletedSet.weightKg,
+          repRange: block.targetRepRange,
+          loggedRir:
+            lastCompletedSet.feedback?.repsInTank != null
+              ? lastCompletedSet.feedback.repsInTank
+              : lastCompletedSet.rpe != null
+                ? Math.max(0, rpeToRir(lastCompletedSet.rpe))
+                : null,
+          formBrokeDown: lastCompletedSet.feedback?.form === 'ugly',
+          effort: latestMotion?.effort ?? null,
+          higherEffortMinLoggedRir: MOTION_SET_CONFIG.recommendation.higherEffortMinLoggedRir,
+          formatWeight: (kg) => `${displayWeight(kg)} ${unit === 'lb' ? 'lb' : 'kg'}`,
+        })
+      : null;
+  // The banner is the ONE home of the next-set call: "{verdict} → W × R".
+  const bannerVerdict = !lastCompletedSet
+    ? null
+    : latestMotion?.verdictShort ??
+      (latestEngine ? loggedEffortVerdict(latestEngine.engine.effortVsTarget) : null);
+  // A velocity hold must not leave the engine's heavier load in an
+  // untouched weight field under a banner that says "hold".
+  const heldLoadKg = latestCall?.heldByVelocity && pendingSetsCount > 0 ? latestCall.weightKg : null;
+  useEffect(() => {
+    if (heldLoadKg === null || manualEditsRef.current.get(0)?.weight) return;
+    const shown = String(displayWeight(heldLoadKg));
+    setPendingInputs((prev) =>
+      prev.length > 0 && prev[0].weight !== shown ? [{ ...prev[0], weight: shown }, ...prev.slice(1)] : prev
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [heldLoadKg, lastCompletedSet?.id]);
 
   // Report the active set's live suggestion to the parent (the page's sticky
   // rest bar renders it as "next · 60 kg × 7"). Mirrors the SuggestionBanner
@@ -3843,27 +3855,6 @@ export const ExerciseCard = memo(function ExerciseCard({
           </div>
         )}
 
-        {/* Motion capture: one recommendation for the last captured set */}
-        {motionRecommendation?.kind === 'unclear' && (
-          <p
-            className="px-3 py-2 text-xs text-surface-400 border-l-2 border-surface-700"
-            data-testid="motion-capture-unclear"
-          >
-            {motionRecommendation.text}
-          </p>
-        )}
-        {motionRecommendation?.kind === 'recommendation' && (
-          <div
-            className="px-3 py-2.5 rounded-lg bg-primary-500/10 border border-primary-500/20"
-            data-testid="motion-recommendation"
-          >
-            <p className="text-sm font-medium text-surface-100">{motionRecommendation.headline}</p>
-            {motionRecommendation.why && (
-              <p className="mt-0.5 text-xs text-surface-400">{motionRecommendation.why}</p>
-            )}
-          </div>
-        )}
-
         {/* Completed working sets */}
         {completedSets.map((set, setIndex) => {
           const isDropsetSet = set.setType === 'dropset';
@@ -4081,14 +4072,45 @@ export const ExerciseCard = memo(function ExerciseCard({
                   {setSyncStatus?.[set.id] === 'queued' && (
                     <span className="text-warning-400 mr-1.5">queued</span>
                   )}
-                  {rirValue} RIR ·{' '}
-                  <span
-                    className={qualityTextClass(qualityDisplay)}
-                    title={SET_QUALITY_DISPLAY_META[qualityDisplay].description}
-                  >
-                    {SET_QUALITY_DISPLAY_META[qualityDisplay].label}
-                  </span>
+                  {rirValue} RIR
+                  {/* "stimulative" is the expected case — only say otherwise. */}
+                  {qualityDisplay !== 'stimulative' && (
+                    <>
+                      {' · '}
+                      <span
+                        className={qualityTextClass(qualityDisplay)}
+                        title={SET_QUALITY_DISPLAY_META[qualityDisplay].description}
+                      >
+                        {SET_QUALITY_DISPLAY_META[qualityDisplay].label}
+                      </span>
+                    </>
+                  )}
                 </span>
+                {motionSets?.[set.id] && renderMotionSheet && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMotionSheetSetId(set.id);
+                    }}
+                    aria-label={`Coach feedback for set ${set.setNumber}${
+                      motionSets[set.id].tone === 'low' ? ' (capture unclear)' : ''
+                    }`}
+                    data-testid={`set-motion-icon-${set.setNumber}`}
+                    data-tone={motionSets[set.id].tone}
+                    // 44px tap target that overlaps the row's padding instead
+                    // of stretching the row: a capture adds no height.
+                    className={`flex-shrink-0 min-w-[36px] min-h-[44px] -my-3 flex items-center justify-center rounded-lg ${
+                      motionSets[set.id].tone === 'ok'
+                        ? 'text-success-400'
+                        : motionSets[set.id].tone === 'low'
+                          ? 'text-warning-400'
+                          : 'text-surface-500'
+                    }`}
+                  >
+                    <IconActivity size={15} />
+                  </button>
+                )}
                 {onSetJointPain && (
                   <button
                     type="button"
@@ -4121,7 +4143,21 @@ export const ExerciseCard = memo(function ExerciseCard({
                 />
               )}
 
-              {/* Per-set extra (e.g. motion Observations) under the history row */}
+              {/* Motion: the top coach cue, only when it matters (severity ≥ 2). */}
+              {motionSets?.[set.id]?.cue && renderMotionSheet && (
+                <button
+                  type="button"
+                  onClick={() => setMotionSheetSetId(set.id)}
+                  className="-mt-1.5 block w-full pl-7 pr-2 pb-1 text-left"
+                  data-testid={`set-motion-cue-${set.setNumber}`}
+                >
+                  <span className="block max-w-[45ch] truncate text-[11px] leading-4 text-surface-500">
+                    {motionSets[set.id].cue}
+                  </span>
+                </button>
+              )}
+
+              {/* Per-set extra under the history row */}
               {completedSetExtra?.(set)}
 
               {/* Add Dropset affordance after the final completed set */}
@@ -4140,6 +4176,13 @@ export const ExerciseCard = memo(function ExerciseCard({
             </React.Fragment>
           );
         })}
+
+        {motionSheetSetId &&
+          renderMotionSheet?.({
+            setId: motionSheetSetId,
+            nextSetCall: motionSheetSetId === lastCompletedSet?.id ? latestCall?.call ?? null : null,
+            onClose: () => setMotionSheetSetId(null),
+          })}
 
         {/* Auto-triggered Dropset Prompt */}
         {isActive && pendingDropset && (
@@ -4382,8 +4425,17 @@ export const ExerciseCard = memo(function ExerciseCard({
           return (
             <div className="space-y-2 pt-1">
               <SuggestionBanner
-                weightLabel={bannerWeight}
-                repsLabel={`${suggestion.repsLabel || '—'}${isDurationBased ? 's' : ''}`}
+                weightLabel={
+                  latestCall?.heldByVelocity
+                    ? `${displayWeight(latestCall.weightKg)} ${weightLabel}`
+                    : bannerWeight
+                }
+                repsLabel={
+                  latestCall?.heldByVelocity
+                    ? latestCall.repsLabel
+                    : `${suggestion.repsLabel || '—'}${isDurationBased ? 's' : ''}`
+                }
+                verdict={bannerVerdict}
                 rir={Math.max(0, Math.min(3, loggerTargetRir))}
                 showRir={suggestion.showRir}
                 roleTag={suggestion.role === 'ramp' ? 'ramp' : null}
@@ -5258,9 +5310,11 @@ export const ExerciseCard = memo(function ExerciseCard({
     (prevProps.motionCaptureSlot == null) === (nextProps.motionCaptureSlot == null) &&
     prevProps.motionCaptureSlotKey === nextProps.motionCaptureSlotKey &&
     prevProps.motionRepPrefill?.nonce === nextProps.motionRepPrefill?.nonce &&
-    prevProps.motionSetEvidence?.setId === nextProps.motionSetEvidence?.setId &&
-    prevProps.motionSetEvidence?.confidence === nextProps.motionSetEvidence?.confidence &&
-    prevProps.motionSetEvidence?.loss === nextProps.motionSetEvidence?.loss &&
-    prevProps.motionSetEvidence?.unclearLine === nextProps.motionSetEvidence?.unclearLine
+    prevProps.motionSets === nextProps.motionSets &&
+    prevProps.motionLatest?.setId === nextProps.motionLatest?.setId &&
+    prevProps.motionLatest?.verdictShort === nextProps.motionLatest?.verdictShort &&
+    prevProps.motionLatest?.effort?.zone === nextProps.motionLatest?.effort?.zone &&
+    prevProps.motionLatest?.effort?.disagreement === nextProps.motionLatest?.effort?.disagreement &&
+    prevProps.renderMotionSheet === nextProps.renderMotionSheet
   );
 });

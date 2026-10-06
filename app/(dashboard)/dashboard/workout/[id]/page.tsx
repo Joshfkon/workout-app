@@ -97,13 +97,21 @@ import { saveMotionCapture, saveRawBufferIfAllowed } from '@/lib/motion/motionPe
 import { useMotionSetCapture, type StoppedCapture } from '@/components/motion/useMotionSetCapture';
 import { MotionCaptureControl } from '@/components/motion/MotionCaptureControl';
 import { useVelocityRirProfiles } from '@/hooks/useVelocityRirProfiles';
-import { SetMotionDetails } from '@/components/motion/SetMotionDetails';
+import { MotionCoachSheet, type MotionSheetCapture } from '@/components/motion/MotionCoachSheet';
+import { useMotionCaptureHistory } from '@/hooks/useMotionCaptureHistory';
 import {
-  captureUnclearLine,
-  computeVelocityLoss,
-  gateCapture,
+  buildCoachFeedback,
+  buildVelocityRirLine,
+  CLEANING_VERSION,
+  describeCleaning,
+  estimateRirFromVelocity,
+  pausePointForPattern,
   processMotionSamples,
+  rowCue,
   type CaptureAnalysis,
+  type CleanedCapture,
+  type CoachContext,
+  type CoachFeedback,
 } from '@/services/shared/motion';
 import {
   MOTION_PROVENANCE,
@@ -901,7 +909,7 @@ export default function WorkoutPage() {
   // history-row Details; the calibration id keys the velocity → estimated-
   // RIR profile lookup.
   const [motionAutoCaptures, setMotionAutoCaptures] = useState<
-    Record<string, { analysis: CaptureAnalysis; calibrationId: string | null }>
+    Record<string, MotionSheetCapture & { calibrationId: string | null }>
   >({});
   const pendingMotionRef = useRef<{ blockId: string; exerciseId: string; capture: StoppedCapture } | null>(null);
   // Rest started by a capture Stop: when the set is then logged, the
@@ -976,7 +984,13 @@ export default function WorkoutPage() {
   // for the exercise (the persisted schema does); without one the capture
   // stays in-memory for this session's Observations display only.
   const persistAutoCapture = useCallback(
-    async (setId: string, exerciseId: string, samples: ImuSample[], analysis: CaptureAnalysis) => {
+    async (
+      setId: string,
+      exerciseId: string,
+      samples: ImuSample[],
+      analysis: CaptureAnalysis,
+      cleaned: CleanedCapture
+    ) => {
       try {
         const calibration = motionCalibrations.find((c) => c.exerciseId === exerciseId);
         if (!calibration || !session) return;
@@ -1010,6 +1024,9 @@ export default function WorkoutPage() {
               bottomDwellMs: r.bottomDwellMs,
               turnaroundPeakAccel_radps2: r.turnaroundPeakAccelRadps2,
             })),
+            // The cleaned snapshot lets a reload coach this set without raw.
+            cleaningVersion: CLEANING_VERSION,
+            cleaned,
           },
           priorObservationsViewedThisSession: observationsViewedThisSession(session.id),
           provenance: MOTION_PROVENANCE,
@@ -1057,67 +1074,142 @@ export default function WorkoutPage() {
       setMotionRepPrefill(null);
       if (!pending || pending.exerciseId !== exerciseId) return;
       const { capture } = pending;
-      if (capture.gating.reps.length === 0) return;
+      if (capture.cleaned.reps.length === 0) return;
+      const cleaningLog = describeCleaning(capture.cleaned);
+      if (cleaningLog.length > 0) console.info('[motion] rep cleaning:', cleaningLog);
       setTimeout(() => {
         const calibrationId =
           motionCalibrations.find((c) => c.exerciseId === exerciseId)?.id ?? null;
         setMotionAutoCaptures((prev) => ({
           ...prev,
-          [setId]: { analysis: capture.analysis, calibrationId },
+          [setId]: { analysis: capture.analysis, cleaned: capture.cleaned, metrics: null, calibrationId },
         }));
-        void persistAutoCapture(setId, exerciseId, capture.samples, capture.analysis);
+        void persistAutoCapture(setId, exerciseId, capture.samples, capture.analysis, capture.cleaned);
       }, 0);
     },
     [motionCapture, persistAutoCapture, motionCalibrations]
   );
 
-  // Per-block evidence for the card's recommendation line: the block's most
-  // recent working set, gated against its LOGGED rep count.
-  const motionEvidenceByBlock = useMemo(() => {
-    const out: Record<
-      string,
-      { setId: string; confidence: 'ok' | 'low'; loss: number | null; unclearLine: string | null }
-    > = {};
-    const lastByBlock: Record<string, SetLog> = {};
+  // Captures this page doesn't hold in memory: this session's persisted
+  // ones (after a reload — reprocessed from raw, restored from the cleaning
+  // snapshot, or legacy/uncoached) and last session's clean reps.
+  const motionHistory = useMotionCaptureHistory({
+    enabled: motionCaptureEnabled,
+    userId: session?.userId ?? null,
+    sessionId: session?.id ?? null,
+    sessionStartedAt: session?.startedAt ?? null,
+    setIds: useMemo(
+      () => completedSets.filter((s) => !s.isWarmup && s.setType !== 'warmup').map((s) => s.id),
+      [completedSets]
+    ),
+    calibrationIds: useMemo(() => motionCalibrations.map((c) => c.id), [motionCalibrations]),
+  });
+  const allMotionCaptures = useMemo(() => {
+    const out: Record<string, MotionSheetCapture & { calibrationId: string | null }> = {};
+    for (const [setId, c] of Object.entries(motionHistory.bySetId)) {
+      out[setId] = { analysis: c.analysis, cleaned: c.cleaned, metrics: c.metrics, calibrationId: c.calibrationId };
+    }
+    return { ...out, ...motionAutoCaptures };
+  }, [motionHistory.bySetId, motionAutoCaptures]);
+
+  // Coach feedback per logged working set. Gated on a logged RIR (the RIR
+  // is the label for the velocity → RIR fit; showing metrics before it is
+  // entered contaminates it). History: the previous captured set of the
+  // same exercise this session, else the same set number last session —
+  // the coach itself requires the same load.
+  const motionCoach = useMemo(() => {
+    const out: Record<string, { feedback: CoachFeedback | null; context: CoachContext }> = {};
+    const prevByBlock: Record<string, { weightKg: number; reps: Array<{ n: number; meanW: number }> }> = {};
     for (const set of completedSets) {
       if (set.isWarmup || set.setType === 'warmup') continue;
-      lastByBlock[set.exerciseBlockId] = set;
-    }
-    for (const [blockId, set] of Object.entries(lastByBlock)) {
-      const capture = motionAutoCaptures[set.id];
-      if (!capture) continue;
-      const gating = gateCapture(capture.analysis, set.reps);
-      out[blockId] = {
-        setId: set.id,
-        confidence: gating.confidence,
-        loss: computeVelocityLoss(gating.reps).loss,
-        unclearLine: captureUnclearLine(gating),
+      const capture = allMotionCaptures[set.id];
+      if (!capture || set.feedback?.repsInTank == null) continue;
+      const block = blocks.find((b) => b.id === set.exerciseBlockId);
+      const prev = prevByBlock[set.exerciseBlockId];
+      const lastSession = capture.calibrationId
+        ? motionHistory.lastSession[capture.calibrationId]?.find((h) => h.setNumber === set.setNumber)
+        : undefined;
+      const context: CoachContext = {
+        loggedReps: set.reps,
+        loggedRir: set.feedback.repsInTank,
+        weightKg: set.weightKg,
+        pausePoint: pausePointForPattern(block?.exercise?.movementPattern),
+        history: prev
+          ? { source: 'last set', ...prev }
+          : lastSession
+            ? { source: 'last session', weightKg: lastSession.weightKg, reps: lastSession.reps }
+            : null,
       };
+      out[set.id] = { feedback: capture.cleaned ? buildCoachFeedback(capture.cleaned, context) : null, context };
+      if (capture.cleaned && out[set.id].feedback?.confidence.confidence === 'ok') {
+        prevByBlock[set.exerciseBlockId] = {
+          weightKg: set.weightKg,
+          reps: capture.cleaned.reps.map((r) => ({ n: r.n, meanW: r.meanW })),
+        };
+      }
     }
     return out;
-  }, [completedSets, motionAutoCaptures]);
+  }, [completedSets, allMotionCaptures, blocks, motionHistory.lastSession]);
 
-  // Rep-level Details under a COMPLETED set's history row — hidden until
-  // the set is logged AND a RIR value exists (logged RIR is the label for
-  // the velocity → RIR fit; metrics shown first would contaminate it).
-  const motionCompletedSetExtra = useCallback(
-    (set: SetLog) => {
-      const capture = motionAutoCaptures[set.id];
-      if (!capture) return null;
+  // Card props, memoized per block so unrelated cards don't re-render.
+  const motionCardProps = useMemo(() => {
+    const sets: Record<string, Record<string, { tone: 'ok' | 'low' | 'raw'; cue: string | null }>> = {};
+    type Effort = NonNullable<CoachFeedback['effort']>;
+    const latest: Record<
+      string,
+      { setId: string; verdictShort: string | null; effort: Pick<Effort, 'zone' | 'disagreement'> | null }
+    > = {};
+    for (const set of completedSets) {
+      const c = motionCoach[set.id];
+      if (!c) continue;
+      const tone = !c.feedback ? 'raw' : c.feedback.confidence.confidence === 'ok' ? 'ok' : 'low';
+      (sets[set.exerciseBlockId] ??= {})[set.id] = { tone, cue: rowCue(c.feedback) };
+    }
+    for (const set of completedSets) {
+      if (set.isWarmup || set.setType === 'warmup') continue;
+      const fb = motionCoach[set.id]?.feedback;
+      // Last working set of the block wins (completedSets is in log order).
+      latest[set.exerciseBlockId] = {
+        setId: set.id,
+        verdictShort: fb?.verdictShort ?? null,
+        effort: fb?.effort ? { zone: fb.effort.zone, disagreement: fb.effort.disagreement } : null,
+      };
+    }
+    return { sets, latest };
+  }, [completedSets, motionCoach]);
+
+  // The coach sheet for one set (opened from the row's sensor icon / cue).
+  const renderMotionSheet = useCallback(
+    ({ setId, nextSetCall, onClose }: { setId: string; nextSetCall: string | null; onClose: () => void }) => {
+      const set = completedSets.find((s) => s.id === setId);
+      const capture = allMotionCaptures[setId];
+      const coach = motionCoach[setId];
+      if (!set || !capture || !coach) return null;
+      const block = blocks.find((b) => b.id === set.exerciseBlockId);
+      const profile = capture.calibrationId ? velocityRirProfiles[capture.calibrationId] : undefined;
+      const estimate =
+        profile && capture.cleaned
+          ? estimateRirFromVelocity(
+              capture.cleaned.reps.map((r) => ({ index: r.n - 1, meanConcentricW: r.meanW })),
+              profile
+            )
+          : null;
+      const weightLabel = `${convertWeightForDisplay(set.weightKg, preferences.units)} ${preferences.units}`;
       return (
-        <SetMotionDetails
-          analysis={capture.analysis}
-          loggedReps={set.reps}
-          hasRir={set.feedback?.repsInTank != null}
+        <MotionCoachSheet
+          title={`Set ${set.setNumber} · ${weightLabel} × ${set.reps}`}
+          exerciseName={block?.exercise?.name ?? 'this exercise'}
+          capture={capture}
+          coachContext={coach.context}
+          nextSetCall={nextSetCall}
+          loggedWeightLabel={weightLabel}
           workoutSessionId={session?.id ?? null}
-          mvtProfile={
-            capture.calibrationId ? velocityRirProfiles[capture.calibrationId] ?? null : null
-          }
-          loggedRir={set.feedback?.repsInTank ?? null}
+          velocityRirLine={estimate ? buildVelocityRirLine(estimate, set.feedback?.repsInTank ?? null) : null}
+          onClose={onClose}
         />
       );
     },
-    [motionAutoCaptures, session, velocityRirProfiles]
+    [completedSets, allMotionCaptures, motionCoach, blocks, velocityRirProfiles, preferences.units, session?.id]
   );
 
   // Memoize rest timer options to prevent hook reinitialization
@@ -1144,7 +1236,7 @@ export default function WorkoutPage() {
   const handleMotionStopped = (capture: StoppedCapture) => {
     const block = currentBlock;
     if (!block) return;
-    const reps = capture.gating.reps.length;
+    const reps = capture.cleaned.reps.length;
     if (reps === 0) {
       pendingMotionRef.current = null;
       showInfo('No reps detected — capture discarded.', 3000);
@@ -7333,7 +7425,6 @@ export default function WorkoutPage() {
                       setShowPlateCalculator(true);
                     }}
                     setSyncStatus={setSync}
-                    completedSetExtra={motionCaptureEnabled ? motionCompletedSetExtra : undefined}
                     // Motion capture (experimental): explicit Start/Stop on
                     // the active set, sensor rep prefill, and the evidence
                     // behind the card's one-line recommendation.
@@ -7361,9 +7452,9 @@ export default function WorkoutPage() {
                     motionRepPrefill={
                       motionRepPrefill?.blockId === block.id ? motionRepPrefill : null
                     }
-                    motionSetEvidence={
-                      motionCaptureEnabled ? motionEvidenceByBlock[block.id] ?? null : null
-                    }
+                    motionSets={motionCaptureEnabled ? motionCardProps.sets[block.id] : undefined}
+                    motionLatest={motionCaptureEnabled ? motionCardProps.latest[block.id] ?? null : null}
+                    renderMotionSheet={motionCaptureEnabled ? renderMotionSheet : undefined}
                   />
 
                   {motionCaptureEnabled && isCurrent && (

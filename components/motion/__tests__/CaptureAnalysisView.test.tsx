@@ -1,110 +1,77 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { CaptureAnalysis, CaptureRep } from '@/services/shared/motion';
+import { cleanCapture } from '@/services/shared/motion';
+import {
+  analysisFromColumns,
+  SETUP_STROKE_CAPTURE,
+} from '@/services/shared/motion/__tests__/fixtures/realCaptures';
 import { CaptureAnalysisView } from '../CaptureAnalysisView';
 
-const MEAN_W = [0.64, 0.69, 0.75, 0.69, 0.69, 0.64, 0.67, 0.62, 0.55, 0.42];
-
-function mkRep(index: number, meanW: number): CaptureRep {
-  return {
-    index,
-    concentric: { dir: 1, startIdx: 0, endIdx: 0, durationMs: 1000, romDeg: 70, peakW: 1, meanW, romGravityDeg: null },
-    eccentric: { dir: -1, startIdx: 0, endIdx: 0, durationMs: 1000, romDeg: 70, peakW: 1, meanW, romGravityDeg: null },
-    concentricMs: 1000,
-    eccentricMs: 1040,
-    peakW: meanW * 1.6,
-    meanWConcentric: meanW,
-    romConcentricDeg: 72,
-    romEccentricDeg: 72,
-    romGravityDeg: null,
-    bottomDwellMs: index === 0 ? null : 100,
-    turnaroundPeakAccelRadps2: index === 0 ? null : 3,
-  };
-}
-
-function mkAnalysis(overrides: Partial<CaptureAnalysis> = {}): CaptureAnalysis {
-  return {
-    sampleRateHz: 60,
-    droppedFrames: 0,
-    durationMs: 30000,
-    stillness: {} as CaptureAnalysis['stillness'],
-    tier: 'mounted',
-    axis: { x: 1, y: 0, z: 0 },
-    pc1VarianceShare: 0.95,
-    pc1Pc2Ratio: 20,
-    lowConfidence: false,
-    pc1GravityAngleDeg: 80,
-    gravityRomStatus: 'ok',
-    romSuppressed: false,
-    tMs: [],
-    w: [],
-    halfReps: [],
-    reps: MEAN_W.map((w, i) => mkRep(i, w)),
-    unpairedHalfReps: 0,
-    ...overrides,
-  };
-}
+const analysis = () => analysisFromColumns(SETUP_STROKE_CAPTURE);
 
 describe('CaptureAnalysisView', () => {
-  it('leads with reps, velocity loss vs the fastest rep, and the zone phrase', () => {
-    render(<CaptureAnalysisView analysis={mkAnalysis()} />);
-    expect(screen.getByTestId('motion-summary-line')).toHaveTextContent('10 reps · 44% velocity loss');
-    expect(screen.getByTestId('motion-summary-status')).toHaveTextContent('Near failure');
-    expect(screen.getByTestId('motion-quality-badge')).toHaveTextContent('Clean capture');
-    expect(screen.getByTestId('motion-callouts')).toHaveTextContent(
-      'Rep 10 slowed sharply — likely close to failure.'
-    );
+  it('leads with the coach, on clean reps: 8 reps, 0% loss — not 56%', () => {
+    render(<CaptureAnalysisView analysis={analysis()} coachContext={{ loggedReps: 8 }} />);
+    expect(screen.getByTestId('coach-verdict')).toHaveTextContent('Steady set — you had more in the tank.');
+    expect(screen.getAllByTestId('coach-cue')[0]).toHaveTextContent(/^Rep 3 took 2\.3 seconds to lower/);
+    expect(screen.getByTestId('motion-summary-line')).toHaveTextContent('8 reps · 0% velocity loss');
+    expect(screen.getByTestId('motion-summary-status')).toHaveTextContent('Easy');
     expect(screen.queryByText(/measurements, not errors/)).toBeNull();
   });
 
-  it('hides the loss headline under 3 reps', () => {
-    render(<CaptureAnalysisView analysis={mkAnalysis({ reps: [mkRep(0, 0.7), mkRep(1, 0.6)] })} />);
-    expect(screen.getByTestId('motion-summary-line')).toHaveTextContent(/^2 reps$/);
-    expect(screen.queryByTestId('motion-summary-status')).toBeNull();
-  });
-
-  it('shows only Rep | Tempo | Velocity | ROM, with detail on tap', async () => {
+  it('shows only Rep | Tempo | Velocity | ROM, renumbered after cleaning, detail on tap', async () => {
     const user = userEvent.setup();
-    render(<CaptureAnalysisView analysis={mkAnalysis()} />);
+    render(<CaptureAnalysisView analysis={analysis()} />);
     const table = screen.getByTestId('motion-analysis-rep-table');
-    const headers = within(table).getAllByRole('columnheader').map((h) => h.textContent);
-    expect(headers).toEqual(['Rep', 'Tempo', 'Velocity', 'ROM']);
-    const row3 = screen.getByTestId('motion-rep-row-3');
-    expect(row3).toHaveTextContent('1.0↑ 1.0↓');
-    expect(row3).toHaveTextContent('100%');
-    expect(row3).not.toHaveTextContent('rad/s');
-
-    await user.click(row3);
-    const detail = screen.getByTestId('motion-rep-detail-3');
-    expect(detail).toHaveTextContent('Mean ω43°/s'); // 0.75 rad/s
-    expect(detail).toHaveTextContent('Peak ω');
-    expect(detail).toHaveTextContent('Dwell');
-    expect(detail).toHaveTextContent('ROM (gravity)');
+    expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual([
+      'Rep',
+      'Tempo',
+      'Velocity',
+      'ROM',
+    ]);
+    // Clean rep 1 is detected rep 2 (the setup stroke is gone) and is the baseline.
+    const row1 = screen.getByTestId('motion-rep-row-1');
+    expect(row1).toHaveTextContent('1.2↑ 1.1↓');
+    expect(row1).toHaveTextContent('100%');
+    await user.click(row1);
+    expect(screen.getByTestId('motion-rep-detail-1')).toHaveTextContent('Mean ω32°/s'); // 0.56 rad/s
   });
 
-  it('keeps diagnostics collapsed; the warning badge names the problem and opens them', async () => {
+  it('logs the rejected setup stroke in diagnostics', async () => {
     const user = userEvent.setup();
-    const onDownloadCsv = jest.fn();
-    render(
-      <CaptureAnalysisView
-        analysis={mkAnalysis({ droppedFrames: 2, tier: 'handheld' })}
-        stopLatencyMs={42}
-        onDownloadCsv={onDownloadCsv}
-      />
+    render(<CaptureAnalysisView analysis={analysis()} />);
+    await user.click(screen.getByTestId('motion-diagnostics-toggle'));
+    expect(screen.getByTestId('motion-cleaning-log')).toHaveTextContent(
+      'Detected rep 1 set aside as setup motion: lifted in 0.47 s (typical 1.02 s)'
     );
-    expect(screen.queryByTestId('motion-download-csv')).toBeNull();
-    const badge = screen.getByTestId('motion-quality-badge');
-    expect(badge).toHaveTextContent('2 dropped samples +1');
-
-    Element.prototype.scrollIntoView = jest.fn();
-    await user.click(badge);
-    expect(screen.getByTestId('motion-stop-latency')).toHaveTextContent('42 ms');
-    await user.click(screen.getByTestId('motion-download-csv'));
-    expect(onDownloadCsv).toHaveBeenCalled();
   });
 
-  it('keeps the rep-detection chart collapsed by default', () => {
-    render(<CaptureAnalysisView analysis={mkAnalysis()} />);
-    expect(screen.getByTestId('motion-rep-detection-toggle')).toHaveAttribute('aria-expanded', 'false');
+  it('low confidence: the reason, no velocity bars, no cues', () => {
+    render(<CaptureAnalysisView analysis={analysis()} coachContext={{ loggedReps: 12 }} />);
+    expect(screen.getByTestId('coach-unclear')).toHaveTextContent(
+      'Capture unclear: The sensor counted 8 reps but you logged 12.'
+    );
+    expect(screen.queryByTestId('motion-velocity-bars')).toBeNull();
+    expect(screen.queryByTestId('coach-cue')).toBeNull();
+    expect(screen.getByTestId('motion-summary-line')).toHaveTextContent(/^8 reps$/);
+  });
+
+  it('multi-axis motion reads in plain language; the PC1 detail stays in diagnostics', async () => {
+    const user = userEvent.setup();
+    render(<CaptureAnalysisView analysis={analysisFromColumns(SETUP_STROKE_CAPTURE, 0.6)} />);
+    expect(screen.getByTestId('motion-multi-axis-note')).toHaveTextContent(
+      'The sensor picked up movement in more than one direction, so these numbers are rough.'
+    );
+    expect(screen.queryByText(/single-DOF/)).toBeNull();
+    await user.click(screen.getByTestId('motion-diagnostics-toggle'));
+    expect(screen.getByTestId('motion-pc1-technical')).toHaveTextContent(/below 80%, the motion is not single-DOF/);
+  });
+
+  it('works from a cleaning snapshot alone (no raw: no chart, no sensor badge)', () => {
+    const cleaned = cleanCapture(analysis());
+    render(<CaptureAnalysisView analysis={null} cleaned={cleaned} />);
+    expect(screen.getByTestId('motion-summary-line')).toHaveTextContent('8 reps');
+    expect(screen.queryByTestId('motion-rep-detection')).toBeNull();
+    expect(screen.queryByTestId('motion-quality-badge')).toBeNull();
   });
 });

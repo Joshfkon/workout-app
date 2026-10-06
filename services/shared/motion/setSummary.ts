@@ -1,154 +1,90 @@
 /**
- * Set summary for the capture review: velocity loss against the FASTEST rep,
- * per-rep relative velocity, short plain-language callouts, and a capture
- * quality verdict. Pure — the review panel renders what this returns.
+ * Set summary: velocity loss on the CLEAN reps and a capture-quality
+ * verdict. Pure — the coach layer and the review panel read what this
+ * returns. Thresholds: MOTION_SET_CONFIG (motionSetConfig.ts).
  *
- * Velocity-loss baseline: the fastest rep by mean concentric velocity, not
- * rep 1 (standard VBT practice — rep 1 is often slower while the lifter
- * settles in). Reps with a missing / non-positive mean velocity are
- * excluded from the baseline and flagged.
+ * Velocity-loss baseline (supersedes "fastest rep"): the faster of the
+ * first two clean reps; the end point is the MEAN of the last two clean
+ * reps, so one sloppy final rep can't dominate. Loss is floored at 0 — a
+ * set that ends faster than it started lost nothing.
  */
 
-import type { CaptureAnalysis, CaptureRep } from './captureAnalysis';
-import { MOTION_SET_CONFIG, type VelocityZone } from './motionSetConfig';
+import type { CaptureAnalysis } from './captureAnalysis';
+import { MOTION_SET_CONFIG, type EffortZone } from './motionSetConfig';
 
-export type { VelocityZone };
+export type { EffortZone };
 
 export interface RepVelocity {
-  /** 0-based rep index (CaptureRep.index). */
-  index: number;
+  /** 1-based clean rep number. */
+  n: number;
   meanW: number | null;
-  /** meanW / best meanW; null when the rep was excluded. */
+  /** meanW / baseline; null when the rep had no measurable velocity. */
   relative: number | null;
   excluded: boolean;
 }
 
 export interface VelocityLossSummary {
   repCount: number;
-  /** 0-based index of the fastest valid rep; null when no rep is valid. */
-  bestIndex: number | null;
-  bestMeanW: number | null;
-  /** (best - last) / best, last = last valid rep. Null when hidden. */
+  /** Clean rep number the baseline came from (1 or 2); null = no baseline. */
+  baselineRep: number | null;
+  baselineW: number | null;
+  /** Mean of the last two clean reps' mean ω. */
+  endW: number | null;
+  /** (baseline − end) / baseline, floored at 0; null when hidden. */
   loss: number | null;
-  zone: VelocityZone | null;
+  zone: EffortZone | null;
   perRep: RepVelocity[];
-  /** 0-based indices excluded from the baseline (missing / ≤ 0 mean ω). */
-  excludedIndices: number[];
+  /** Rep numbers with missing / non-positive velocity (excluded). */
+  excludedReps: number[];
 }
 
-type VelocityInput = Pick<CaptureRep, 'index' | 'meanWConcentric'>;
+type VelocityInput = { n: number; meanW: number };
 
 const isValidW = (w: number | null | undefined): w is number =>
   typeof w === 'number' && Number.isFinite(w) && w > 0;
 
-export function velocityZone(loss: number): VelocityZone {
-  const { hardFrom, nearFailureAbove } = MOTION_SET_CONFIG.summary.zones;
-  if (loss > nearFailureAbove) return 'near-failure';
-  if (loss >= hardFrom) return 'hard';
-  return 'fresh';
+export function effortZone(loss: number): EffortZone {
+  const z = MOTION_SET_CONFIG.coach.effortZones;
+  if (loss < z.easyBelow) return 'easy';
+  if (loss < z.moderateBelow) return 'moderate';
+  if (loss <= z.hardUpTo) return 'hard';
+  return 'near-failure';
 }
 
 export function computeVelocityLoss(reps: VelocityInput[]): VelocityLossSummary {
-  let best: VelocityInput | null = null;
-  for (const r of reps) {
-    if (isValidW(r.meanWConcentric) && (!best || r.meanWConcentric > best.meanWConcentric)) {
-      best = r;
-    }
-  }
-  const bestW = best ? best.meanWConcentric : null;
+  const valid = reps.filter((r) => isValidW(r.meanW));
+  const firstTwo = valid.slice(0, 2);
+  const base = firstTwo.reduce<VelocityInput | null>(
+    (best, r) => (!best || r.meanW > best.meanW ? r : best),
+    null
+  );
+  const lastTwo = valid.slice(-2);
+  const endW = lastTwo.length > 0 ? lastTwo.reduce((a, r) => a + r.meanW, 0) / lastTwo.length : null;
 
   const perRep: RepVelocity[] = reps.map((r) => {
-    const valid = isValidW(r.meanWConcentric);
+    const ok = isValidW(r.meanW);
     return {
-      index: r.index,
-      meanW: valid ? r.meanWConcentric : null,
-      relative: valid && bestW ? r.meanWConcentric / bestW : null,
-      excluded: !valid,
+      n: r.n,
+      meanW: ok ? r.meanW : null,
+      relative: ok && base ? r.meanW / base.meanW : null,
+      excluded: !ok,
     };
   });
-  const excludedIndices = perRep.filter((p) => p.excluded).map((p) => p.index);
 
-  const validReps = perRep.filter((p) => !p.excluded);
-  const last = validReps[validReps.length - 1];
-  const showLoss =
-    reps.length >= MOTION_SET_CONFIG.summary.minRepsForLoss && bestW !== null && last?.meanW != null;
-  const loss = showLoss ? Math.max(0, (bestW - last.meanW!) / bestW) : null;
+  const show =
+    valid.length >= MOTION_SET_CONFIG.coach.minRepsForLoss && base !== null && endW !== null;
+  const loss = show ? Math.max(0, (base!.meanW - endW!) / base!.meanW) : null;
 
   return {
     repCount: reps.length,
-    bestIndex: best ? best.index : null,
-    bestMeanW: bestW,
+    baselineRep: base?.n ?? null,
+    baselineW: base?.meanW ?? null,
+    endW,
     loss,
-    zone: loss === null ? null : velocityZone(loss),
+    zone: loss === null ? null : effortZone(loss),
     perRep,
-    excludedIndices,
+    excludedReps: perRep.filter((p) => p.excluded).map((p) => p.n),
   };
-}
-
-function median(xs: number[]): number {
-  const s = [...xs].sort((a, b) => a - b);
-  const mid = Math.floor(s.length / 2);
-  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
-}
-
-export interface SetCallout {
-  kind: 'sharp-drop' | 'slow-eccentric' | 'long-pause';
-  text: string;
-}
-
-/**
- * At most `callouts.max` short lines, in priority order: sharp drop on the
- * last rep, slowest eccentric outlier, longest pause. One line per kind.
- */
-export function buildSetCallouts(
-  reps: CaptureRep[],
-  velocity: VelocityLossSummary = computeVelocityLoss(reps)
-): SetCallout[] {
-  const cfg = MOTION_SET_CONFIG.callouts;
-  const out: SetCallout[] = [];
-  if (reps.length === 0) return out;
-
-  // Sharp drop: the last rep (only when it has a measured velocity).
-  const lastRel = velocity.perRep[velocity.perRep.length - 1];
-  if (
-    velocity.loss !== null &&
-    lastRel.relative !== null &&
-    lastRel.relative < cfg.sharpDropBelowRelative
-  ) {
-    out.push({
-      kind: 'sharp-drop',
-      text: `Rep ${lastRel.index + 1} slowed sharply — likely close to failure.`,
-    });
-  }
-
-  // Slow eccentric: biggest outlier vs the set median.
-  if (reps.length >= MOTION_SET_CONFIG.summary.minRepsForLoss) {
-    const med = median(reps.map((r) => r.eccentricMs));
-    if (med > 0) {
-      const outlier = reps
-        .filter((r) => r.eccentricMs > med * cfg.slowEccentricRatio)
-        .sort((a, b) => b.eccentricMs - a.eccentricMs)[0];
-      if (outlier) {
-        out.push({
-          kind: 'slow-eccentric',
-          text: `Rep ${outlier.index + 1} lowered noticeably slower.`,
-        });
-      }
-    }
-  }
-
-  // Long pause: the longest bottom dwell over threshold.
-  const pause = reps
-    .filter((r) => r.bottomDwellMs !== null && r.bottomDwellMs > cfg.longPauseAboveMs)
-    .sort((a, b) => (b.bottomDwellMs ?? 0) - (a.bottomDwellMs ?? 0))[0];
-  if (pause) {
-    out.push({
-      kind: 'long-pause',
-      text: `Paused ${Math.round((pause.bottomDwellMs ?? 0) / 10) * 10} ms before rep ${pause.index + 1}.`,
-    });
-  }
-
-  return out.slice(0, cfg.max);
 }
 
 export interface CaptureQualityIssue {
@@ -158,13 +94,13 @@ export interface CaptureQualityIssue {
 }
 
 /**
- * Capture-quality checks for the review badge. `stopLatencyMs` /
- * `latencyWarnMs` are optional — the stop-tap latency lives with the
- * recorder, not the analysis.
+ * Capture-quality checks for the review badge. `pc1Share` should be the
+ * post-cleaning share when known; `stopLatencyMs` / `latencyWarnMs` are
+ * optional — the stop-tap latency lives with the recorder.
  */
 export function assessCaptureQuality(
-  analysis: Pick<CaptureAnalysis, 'droppedFrames' | 'tier' | 'lowConfidence'>,
-  opts: { stopLatencyMs?: number | null; latencyWarnMs?: number } = {}
+  analysis: Pick<CaptureAnalysis, 'droppedFrames' | 'tier' | 'pc1VarianceShare'>,
+  opts: { pc1Share?: number | null; stopLatencyMs?: number | null; latencyWarnMs?: number } = {}
 ): CaptureQualityIssue[] {
   const issues: CaptureQualityIssue[] = [];
   if (analysis.droppedFrames > 0) {
@@ -179,8 +115,9 @@ export function assessCaptureQuality(
       label: analysis.tier === 'handheld' ? 'Phone not mounted' : 'No still reference',
     });
   }
-  if (analysis.lowConfidence) {
-    issues.push({ key: 'pc1', label: 'Motion not single-axis' });
+  const pc1 = opts.pc1Share ?? analysis.pc1VarianceShare;
+  if (pc1 < MOTION_SET_CONFIG.gating.minPc1Share) {
+    issues.push({ key: 'pc1', label: 'Motion in more than one direction' });
   }
   if (
     opts.stopLatencyMs != null &&

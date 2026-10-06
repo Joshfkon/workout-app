@@ -15,7 +15,7 @@ import type { ImuSample } from '@/types/motion';
 import { norm } from './vec3';
 import { trimCaptureTail } from './autoGate';
 import type { CaptureAnalysis } from './captureAnalysis';
-import { gateCapture, type CaptureGating } from './captureGating';
+import { cleanCapture, type CleanedCapture } from './captureGating';
 import { MOTION_SET_CONFIG } from './motionSetConfig';
 
 /** True when the trailing mountedHoldMs of samples are all near-still. */
@@ -57,14 +57,14 @@ export class ManualCaptureClock {
 export function liveRepCount(samples: ImuSample[]): number {
   if (samples.length < 30) return 0;
   const { analysis } = trimCaptureTail(samples);
-  return gateCapture(analysis).reps.length;
+  return cleanCapture(analysis).reps.length;
 }
 
 export interface FinishedCapture {
   samples: ImuSample[];
   analysis: CaptureAnalysis;
-  /** Gated without logged reps — the logged-count check runs at attach. */
-  gating: CaptureGating;
+  /** Cleaned reps (artifacts removed). Confidence vs logged reps runs at attach. */
+  cleaned: CleanedCapture;
   /** Sensor-clock time the set really ended (last counted rep, else last motion). */
   endTMs: number | null;
 }
@@ -81,12 +81,13 @@ export function finishManualCapture(
   const cut =
     lastMotionTMs !== null ? samples.filter((s) => s.tMs <= lastMotionTMs + 500) : samples;
   const { samples: trimmed, analysis } = trimCaptureTail(cut);
-  const gating = gateCapture(analysis);
-  const lastRep = gating.reps[gating.reps.length - 1];
-  const endIdx = lastRep?.eccentric?.endIdx;
+  const cleaned = cleanCapture(analysis, trimmed);
+  const lastRep = cleaned.reps[cleaned.reps.length - 1];
+  const endIdx =
+    lastRep !== undefined ? analysis.reps[lastRep.detectedIndex]?.eccentric?.endIdx : undefined;
   const endTMs =
     endIdx !== undefined && analysis.tMs[endIdx] !== undefined
       ? analysis.tMs[endIdx]
       : lastMotionTMs;
-  return { samples: trimmed, analysis, gating, endTMs };
+  return { samples: trimmed, analysis, cleaned, endTMs };
 }

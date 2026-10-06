@@ -1,10 +1,10 @@
 /**
  * Every threshold the in-workout motion set flow uses — manual capture,
- * confidence gating, the set summary, callouts, and the recommendation
- * tiebreak — in one place. Change numbers here, not at call sites.
+ * rep cleaning, confidence gating, coach findings, and the next-set call —
+ * in one place. Change numbers here, not at call sites.
  */
 
-export type VelocityZone = 'fresh' | 'hard' | 'near-failure';
+export type EffortZone = 'easy' | 'moderate' | 'hard' | 'near-failure';
 
 export const MOTION_SET_CONFIG = {
   capture: {
@@ -20,49 +20,61 @@ export const MOTION_SET_CONFIG = {
     /** Sensor considered disconnected when no sample arrived this long. */
     sensorStaleMs: 1_500,
   },
+  cleaning: {
+    /**
+     * A detected rep is a setup / re-rack artifact when, against the median
+     * of ALL detected reps: concentric or eccentric duration is under
+     * minDurationFraction of median, OR peak ω is over maxPeakRatio × median,
+     * OR ROM is under minRomFraction of median.
+     */
+    minDurationFraction: 0.5,
+    maxPeakRatio: 1.8,
+    minRomFraction: 0.5,
+  },
   gating: {
     /** Inter-rep pause longer than this = setup/rest: split there. */
     splitPauseMs: 5_000,
-    /** A rep travelling under this fraction of the median ROM is a partial. */
-    partialRepMaxRomFraction: 0.5,
-    /** More than this share of short-travel movements → low confidence. */
-    lowConfidencePartialShare: 0.25,
-    /** Detected vs logged reps: low confidence when |diff| > abs OR > frac. */
+    /** More than this share of detected reps rejected → low confidence. */
+    lowConfidenceRejectedShare: 0.25,
+    /** Clean reps vs logged reps: low confidence when |diff| > abs OR > frac. */
     repMismatchMaxAbs: 2,
     repMismatchMaxFraction: 0.15,
+    /** PC1 variance share (after cleaning) below this → low confidence. */
+    minPc1Share: 0.8,
   },
-  summary: {
-    /** Below this many reps the velocity-loss headline is hidden. */
+  coach: {
+    /** Velocity loss needs at least this many clean reps. */
     minRepsForLoss: 3,
-    /** Loss zones (fraction of best-rep velocity lost). < hardFrom → fresh. */
-    zones: {
-      hardFrom: 0.2,
-      nearFailureAbove: 0.4,
+    /** Velocity-loss zones: < easyBelow easy, < moderateBelow moderate, ≤ hardUpTo hard, else near failure. */
+    effortZones: { easyBelow: 0.15, moderateBelow: 0.3, hardUpTo: 0.45 },
+    /** Logged-RIR cross-check against the velocity zone. */
+    rirDisagreement: {
+      /** Easy/moderate velocity but logged RIR ≤ this → "had more than you logged". */
+      easyButLoggedAtMost: 1,
+      /** Hard/near-failure velocity but logged RIR ≥ this → "harder than you logged". */
+      hardButLoggedAtLeast: 3,
     },
-    zoneLabels: {
-      fresh: 'Plenty left',
-      hard: 'Getting hard',
-      'near-failure': 'Near failure',
-    } as Record<VelocityZone, string>,
-  },
-  callouts: {
-    max: 3,
-    /** Last rep's relative velocity below this → sharp-drop callout. */
-    sharpDropBelowRelative: 0.6,
-    /** Bottom dwell above this (ms) → pause callout. */
-    longPauseAboveMs: 150,
-    /** Eccentric duration above this multiple of the set median → callout. */
-    slowEccentricRatio: 1.4,
+    pausing: { dwellAboveMs: 1_500, minReps: 2 },
+    eccentric: { inconsistentRatio: 1.6, droppingBelowMs: 600 },
+    romShortening: { lastVsFirstThirdDropAbove: 0.08 },
+    grind: { lastConcentricRatio: 1.4 },
+    consistency: { maxVelocityCv: 0.1 },
+    history: { meaningfulChange: 0.1, sameLoadToleranceKg: 0.5 },
+    /** Cues shown in the coach output. */
+    maxCues: 2,
+    /** The set row's muted second line shows the top cue only at/above this. */
+    rowCueMinSeverity: 2,
   },
   recommendation: {
     /**
-     * Tiebreak: velocity loss above this while the logged RIR is at least
-     * minLoggedRir → effort looked higher than logged; an engine "add
-     * weight" is shown as "hold weight" instead. 0.5 sits between the two
-     * reference cases: 44% at 2 RIR reads as on-target, 55% at 2 RIR as
-     * harder than logged.
+     * Tiebreak: velocity in the near-failure zone while the logged RIR is at
+     * least this → effort looked higher than logged; an engine "add weight"
+     * is shown as "hold weight" instead. Velocity never adds load.
      */
-    higherEffortLossAbove: 0.5,
     higherEffortMinLoggedRir: 2,
+  },
+  llm: {
+    /** Optional LLM phrasing falls back to the template after this long. */
+    timeoutMs: 3_000,
   },
 } as const;

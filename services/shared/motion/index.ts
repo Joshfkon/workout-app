@@ -40,23 +40,13 @@ export {
 } from './captureAnalysis';
 export { trimCaptureTail } from './autoGate';
 export {
-  buildObservations,
-  MIN_REPS_FOR_REFERENCE,
-  NOTHING_NOTABLE_LINE,
-  OBSERVATIONS_CONTEXT_LINE,
-  THIN_REFERENCE_LINE,
-  type SetObservations,
-} from './observations';
-export {
   assessCaptureQuality,
-  buildSetCallouts,
   computeVelocityLoss,
-  velocityZone,
+  effortZone,
   type CaptureQualityIssue,
+  type EffortZone,
   type RepVelocity,
-  type SetCallout,
   type VelocityLossSummary,
-  type VelocityZone,
 } from './setSummary';
 export { MOTION_SET_CONFIG } from './motionSetConfig';
 export {
@@ -67,13 +57,33 @@ export {
   type FinishedCapture,
 } from './manualCapture';
 export {
+  assessConfidence,
   captureUnclearLine,
-  describeGating,
-  gateCapture,
+  cleanCapture,
+  CLEANING_VERSION,
+  describeCleaning,
+  MULTI_AXIS_REASON,
   splitAtPauses,
   type CaptureConfidence,
-  type CaptureGating,
+  type CleanedCapture,
+  type CleanRep,
+  type ConfidenceResult,
+  type RejectedRep,
 } from './captureGating';
+export {
+  buildCoachFeedback,
+  buildCoachFindings,
+  pausePointForPattern,
+  repList,
+  rowCue,
+  type CoachContext,
+  type CoachEffort,
+  type CoachFeedback,
+  type CoachFinding,
+  type CoachFindingType,
+  type CoachHistory,
+  type PausePoint,
+} from './coachFeedback';
 export {
   analysisRepsToVelocityReps,
   buildMvtProfile,

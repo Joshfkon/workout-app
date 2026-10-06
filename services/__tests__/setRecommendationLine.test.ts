@@ -1,86 +1,68 @@
-import { composeSetRecommendation, type SetRecommendationInput } from '../setRecommendationLine';
+import { composeNextSetCall, loggedEffortVerdict, type NextSetCallInput } from '../setRecommendationLine';
 
 const LB = 0.45359237;
 const lb = (kg: number) => `${Math.round(kg / LB)} lb`;
 
-const base = (over: Partial<SetRecommendationInput> = {}): SetRecommendationInput => ({
+const base = (over: Partial<NextSetCallInput> = {}): NextSetCallInput => ({
   scope: 'next_set',
   engine: { weightKg: 90 * LB, reps: 13, effortVsTarget: 'on_target' },
   lastWeightKg: 90 * LB,
   repRange: [12, 15],
   loggedRir: 2,
-  targetRir: 2,
   formBrokeDown: false,
-  velocity: { confidence: 'ok', loss: 0.44, unclearLine: null },
-  thresholds: { higherEffortLossAbove: 0.5, higherEffortMinLoggedRir: 2, lowLossBelow: 0.2 },
+  effort: { zone: 'moderate', disagreement: null },
+  higherEffortMinLoggedRir: 2,
   formatWeight: lb,
   ...over,
 });
 
-describe('composeSetRecommendation', () => {
-  it('phrases a hold with velocity as the supporting reason', () => {
-    const r = composeSetRecommendation(base());
-    expect(r).toEqual({
-      kind: 'recommendation',
-      action: 'keep',
-      headline: 'Next set: stay at 90 lb, aim for 13–15 reps.',
-      why: 'Why: velocity dropped 44% — you were close to your target effort.',
-      heldByVelocity: false,
-    });
+describe('composeNextSetCall', () => {
+  it('phrases the engine hold / add / drop as an action', () => {
+    expect(composeNextSetCall(base()).call).toBe('Next set: hold 90 lb × 13–15.');
+    expect(
+      composeNextSetCall(base({ engine: { weightKg: 95 * LB, reps: 12, effortVsTarget: 'easier' } })).call
+    ).toBe('Next set: add 5 lb (95 lb × 12–15).');
+    expect(
+      composeNextSetCall(base({ engine: { weightKg: 80 * LB, reps: 12, effortVsTarget: 'harder' } })).call
+    ).toBe('Next set: drop 10 lb (80 lb × 12–15).');
   });
 
-  it('phrases add / reduce with the engine numbers', () => {
-    const add = composeSetRecommendation(
-      base({ engine: { weightKg: 95 * LB, reps: 12, effortVsTarget: 'easier' }, velocity: null, loggedRir: 4 })
+  it('a hold with room left says to push closer to failure', () => {
+    expect(composeNextSetCall(base({ effort: { zone: 'easy', disagreement: null } })).call).toBe(
+      'Next set: hold 90 lb, push closer to failure (13–15 reps).'
     );
-    expect(add).toMatchObject({ action: 'add', headline: 'Next set: add 5 lb (95 lb), aim for 12–15 reps.' });
-    expect(add.kind === 'recommendation' && add.why).toBe('Why: you logged 4 RIR against a 2 RIR target.');
-
-    const reduce = composeSetRecommendation(
-      base({ engine: { weightKg: 85 * LB, reps: 12, effortVsTarget: 'harder' } })
+    // Without a capture, the engine's own "easier" read does the same.
+    expect(composeNextSetCall(base({ effort: null, engine: { weightKg: 90 * LB, reps: 13, effortVsTarget: 'easier' } })).call).toBe(
+      'Next set: hold 90 lb, push closer to failure (13–15 reps).'
     );
-    expect(reduce).toMatchObject({ action: 'reduce', headline: 'Next set: drop to 85 lb, aim for 12–15 reps.' });
   });
 
-  it('recommends for next session on the last planned set', () => {
-    const r = composeSetRecommendation(
-      base({ scope: 'next_session', engine: { weightKg: 95 * LB, reps: 12, effortVsTarget: 'easier' }, loggedRir: 3, velocity: { confidence: 'ok', loss: 0.25, unclearLine: null } })
-    );
-    expect(r).toMatchObject({ action: 'add', headline: 'Next session: try 95 lb × 12–15.' });
+  it('next session after the last planned set', () => {
+    expect(
+      composeNextSetCall(base({ scope: 'next_session', engine: { weightKg: 95 * LB, reps: 12, effortVsTarget: 'easier' } })).call
+    ).toBe('Next session: add 5 lb (95 lb × 12–15).');
   });
 
-  it('velocity tiebreak: logged 2 RIR but 55% loss holds an engine add', () => {
-    const r = composeSetRecommendation(
-      base({
-        engine: { weightKg: 95 * LB, reps: 12, effortVsTarget: 'on_target' },
-        velocity: { confidence: 'ok', loss: 0.55, unclearLine: null },
-      })
+  it('near-failure velocity at logged 2+ RIR holds an engine add; never adds', () => {
+    const held = composeNextSetCall(
+      base({ engine: { weightKg: 95 * LB, reps: 12, effortVsTarget: 'on_target' }, effort: { zone: 'near-failure', disagreement: 'harder_than_logged' } })
     );
-    expect(r).toEqual({
-      kind: 'recommendation',
-      action: 'keep',
-      headline: 'Next set: stay at 90 lb, aim for 12–15 reps.',
-      why: 'Why: velocity dropped 55%. Effort looked higher than logged — hold weight.',
-      heldByVelocity: true,
-    });
-  });
+    expect(held).toMatchObject({ action: 'keep', heldByVelocity: true, repsLabel: '12–15' });
+    expect(held.call).toBe('Next set: hold 90 lb — your speed says that was harder than the 2 RIR you logged.');
+    expect(lb(held.weightKg)).toBe('90 lb');
 
-  it('velocity never adds load or overrides a hold / reduce', () => {
-    const fast = composeSetRecommendation(
-      base({ loggedRir: 0, engine: { weightKg: 85 * LB, reps: 12, effortVsTarget: 'harder' }, velocity: { confidence: 'ok', loss: 0.05, unclearLine: null } })
+    const fastButReduce = composeNextSetCall(
+      base({ loggedRir: 0, engine: { weightKg: 85 * LB, reps: 12, effortVsTarget: 'harder' }, effort: { zone: 'easy', disagreement: 'more_than_logged' } })
     );
-    expect(fast).toMatchObject({ action: 'reduce' });
-    expect(fast.kind === 'recommendation' && fast.why).toBe('Why: you logged 0 RIR, though velocity held up (5% loss).');
-  });
-
-  it('low confidence: only the unclear line, no recommendation', () => {
-    const r = composeSetRecommendation(
-      base({ velocity: { confidence: 'low', loss: 0.6, unclearLine: 'Capture unclear: paused 18.7 s mid-capture. Logged reps used.' } })
-    );
-    expect(r).toEqual({ kind: 'unclear', text: 'Capture unclear: paused 18.7 s mid-capture. Logged reps used.' });
+    expect(fastButReduce.action).toBe('reduce');
   });
 
   it('stop on logged form breakdown', () => {
-    expect(composeSetRecommendation(base({ formBrokeDown: true }))).toMatchObject({ action: 'stop' });
+    expect(composeNextSetCall(base({ formBrokeDown: true })).action).toBe('stop');
   });
+});
+
+it('loggedEffortVerdict reads the engine effort grade', () => {
+  expect(loggedEffortVerdict('on_target')).toBe('On target');
+  expect(loggedEffortVerdict('harder')).toBe('Harder than target');
 });

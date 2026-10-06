@@ -59,7 +59,7 @@ describe('finishManualCapture', () => {
     expect(clock.shouldAutoStop(6)).toBe(true);
 
     const done = finishManualCapture(all, clock.lastMotion());
-    expect(done.gating.reps).toHaveLength(6);
+    expect(done.cleaned.reps).toHaveLength(6);
     expect(done.endTMs).not.toBeNull();
     // The set ended within a rep-rest of the last motion, ~12 s before "now".
     expect(lastT + 12_000 - done.endTMs!).toBeGreaterThan(11_000);
@@ -68,6 +68,6 @@ describe('finishManualCapture', () => {
 
   it('reports zero reps for a capture with no movement', () => {
     const done = finishManualCapture(still(0, 3000));
-    expect(done.gating.reps).toHaveLength(0);
+    expect(done.cleaned.reps).toHaveLength(0);
   });
 });

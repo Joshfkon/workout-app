@@ -118,6 +118,17 @@ export function compactSamples(samples: ImuSample[]): Array<{
   }));
 }
 
+/** Inverse of compactSamples (raw buffers read back for reprocessing). */
+export function decompactSamples(
+  rows: Array<{ t: number; g: [number, number, number]; a: [number, number, number] }>
+): ImuSample[] {
+  return rows.map((r) => ({
+    tMs: r.t,
+    gyro: { x: r.g[0], y: r.g[1], z: r.g[2] },
+    accel: { x: r.a[0], y: r.a[1], z: r.a[2] },
+  }));
+}
+
 export interface RawBufferSaveResult {
   status: 'saved' | 'session-cap-reached' | 'failed';
   /** Raw buffers now stored for this workout session (when known). */

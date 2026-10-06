@@ -508,21 +508,32 @@ FITBIT_CLIENT_SECRET=
    set tables.
    In-workout capture is an explicit Start/Stop on the active set row
    (`components/motion/useMotionSetCapture.ts`, pure half in
-   `services/shared/motion/manualCapture.ts`). Two sanctioned couplings,
-   both user-mediated or display-only:
+   `services/shared/motion/manualCapture.ts`). Every capture is CLEANED
+   before anything reads it (`captureGating.ts`: pause split, setup /
+   re-rack artifact rejection vs the median of all detected reps, PC1
+   recomputed over clean reps) and confidence-gated; a low-confidence
+   capture yields no velocity claims and no technique cues.
+   **Coach feedback** (`coachFeedback.ts`) replaces the old Observations:
+   deterministic findings, each carrying the reps/numbers that triggered
+   it — no finding, no sentence (a test checks every number in every cue
+   comes from its evidence). Optional LLM phrasing
+   (`NEXT_PUBLIC_MOTION_COACH_LLM`, off by default) only rewords findings
+   and is discarded if it adds any number. Sanctioned couplings:
    - **Rep prefill.** Stop prefills the active rep FIELD (or offers the
-     count when the lifter already typed one). The typed number is what
-     gets logged; motion never writes a set.
-   - **Recommendation line.** `services/setRecommendationLine.ts` (outside
-     the feature dirs) phrases the prescription engine's own next-set /
-     next-session output as one action. Velocity loss arrives as plain
-     numbers and may only (a) supply the "why" and (b) turn an engine "add
-     weight" into "hold" when it says the set was much harder than the
-     logged RIR. It never adds load, and it changes nothing the engine
-     stores or the banner prescribes.
-   Every capture is confidence-gated first (`captureGating.ts`); a
-   low-confidence capture shows no velocity figures and no recommendation.
-   All thresholds: `MOTION_SET_CONFIG` (`services/shared/motion/motionSetConfig.ts`).
+     count). The typed number is what gets logged; motion never writes a set.
+   - **Next-set call.** `services/setRecommendationLine.ts` (outside the
+     feature dirs) phrases the prescription engine's own output; the
+     SuggestionBanner is its single home ("{verdict} → W × R"). The effort
+     finding may only turn an engine "add" into "hold" (near-failure
+     velocity vs logged RIR ≥ 2) — never adds load.
+   - **Cross-session.** Besides velocityRir, the coach's "vs last set / last
+     session" finding compares mean ω at the same rep number, same
+     calibration, same load only. The set_logs join for it lives in
+     `hooks/useMotionCaptureHistory.ts`, outside the feature dirs.
+   Persisted captures carry a cleaning snapshot (`analysis_metrics.cleaned`,
+   `cleaningVersion`); older captures are reprocessed from raw if it exists,
+   otherwise shown uncoached. All thresholds: `MOTION_SET_CONFIG`
+   (`services/shared/motion/motionSetConfig.ts`).
 
 ## Loading States & Data Caching (cached-first)
 
