@@ -42,29 +42,33 @@ export interface ActiveMesocycleRow {
  * Fetch the active mesocycle for a user with all fields required for starting
  * workouts. Returns null if no active mesocycle exists.
  *
- * Selection: state='active' only, newest first. This matches Train's logic.
- * No fallback to is_active or non-completed mesocycles — if there's no active
- * one, both pages should agree there's no plan.
+ * Selection rule: Among rows where is_active=true OR state='active', pick the
+ * most recently created. This handles users with inconsistent rows (e.g., a
+ * newer mesocycle with is_active=true but state='planned', and an older one
+ * with state='active'). The newest by created_at is what the user most recently
+ * made current, matching their mental model.
+ *
+ * No user should have multiple current mesocycles (createMesocycle deactivates
+ * old ones), but if they do, this picks their most recent intent.
  */
 export async function fetchActiveMesocycle(
   supabase: SupabaseClient,
   userId: string
 ): Promise<ActiveMesocycleRow | null> {
-  const { data, error } = await supabase
+  const { data: rows, error } = await supabase
     .from('mesocycles')
     .select(
-      'id, name, current_week, total_weeks, deload_week, split_type, days_per_week, preferred_workout_days, schedule_mode, training_interval_days, sessions_per_day, start_date, program_data, exercise_overrides, generated_with_enhanced_mode'
+      'id, name, current_week, total_weeks, deload_week, split_type, days_per_week, preferred_workout_days, schedule_mode, training_interval_days, sessions_per_day, start_date, program_data, exercise_overrides, generated_with_enhanced_mode, created_at'
     )
     .eq('user_id', userId)
-    .eq('state', 'active')
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .or('is_active.eq.true,state.eq.active')
+    .order('created_at', { ascending: false });
 
   if (error) {
     console.error('Failed to fetch active mesocycle:', error);
     return null;
   }
 
-  return data as ActiveMesocycleRow | null;
+  // Pick the newest among candidates
+  return (rows?.[0] as ActiveMesocycleRow | undefined) ?? null;
 }

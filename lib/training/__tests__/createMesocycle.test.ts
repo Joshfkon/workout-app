@@ -36,7 +36,7 @@ function stubClient(opts: {
       return {
         update: () => ({
           eq: () => ({
-            eq: async () => {
+            or: async () => {
               calls.push(`deactivate:${table}`);
               return { error: opts.deactivateError ?? null };
             },
