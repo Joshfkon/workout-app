@@ -220,7 +220,7 @@ const customJestConfig = {
       branches: 65,
       statements: 80,
     },
-    'services/shared/motion/observations.ts': {
+    'services/shared/motion/setSummary.ts': {
       lines: 90,
       functions: 85,
       branches: 75,
