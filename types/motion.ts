@@ -14,6 +14,8 @@
 // the angle math is meaningless without the pivot axis and mount radius.
 // ============================================================
 
+import type { CleanedCapture } from '@/services/shared/motion/captureGating';
+
 export interface Vec3 {
   x: number;
   y: number;
@@ -132,6 +134,13 @@ export interface CaptureAnalysisMetrics {
   /** Acute PC1-to-gravity angle, degrees; null when no gravity reference. */
   pc1GravityAngleDeg: number | null;
   reps: CaptureAnalysisRepMetrics[];
+  /**
+   * Rep-cleaning snapshot (services/shared/motion/captureGating). Present
+   * from cleaningVersion 2 on; captures without it predate rep cleaning and
+   * are only coached if their raw buffer can be reprocessed.
+   */
+  cleaningVersion?: number;
+  cleaned?: CleanedCapture;
 }
 
 /**

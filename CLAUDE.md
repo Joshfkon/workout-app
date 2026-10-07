@@ -506,6 +506,39 @@ FITBIT_CLIENT_SECRET=
    display-only; its motion⋈set_logs label join lives OUTSIDE the feature
    dirs in `hooks/useVelocityRirProfiles.ts` — motion modules never touch
    set tables.
+   In-workout capture is an explicit Start/Stop on the active set row
+   (`components/motion/useMotionSetCapture.ts`, pure half in
+   `services/shared/motion/manualCapture.ts`). Every capture is CLEANED
+   before anything reads it (`captureGating.ts`: pause split, setup /
+   re-rack artifact rejection vs the median of all detected reps, PC1
+   recomputed over clean reps) and confidence-gated; a low-confidence
+   capture yields no velocity claims and no technique cues.
+   **Coach feedback** (`coachFeedback.ts`) replaces the old Observations:
+   deterministic findings, each carrying the reps/numbers that triggered
+   it — no finding, no sentence (a test checks every number in every cue
+   comes from its evidence). Optional LLM phrasing
+   (`NEXT_PUBLIC_MOTION_COACH_LLM`, off by default) only rewords findings
+   and is discarded if it adds any number. Sanctioned couplings:
+   - **Rep prefill.** Stop prefills the active rep FIELD (or offers the
+     count). The typed number is what gets logged; motion never writes a set.
+   - **Next-set call.** `services/setRecommendationLine.ts` (outside the
+     feature dirs) phrases the prescription engine's own output; the
+     SuggestionBanner is its single home ("{verdict} → W × R"). The effort
+     finding may only turn an engine "add" into "hold" (near-failure
+     velocity vs logged RIR ≥ 2) — never adds load.
+   - **Cross-session.** Besides velocityRir, the coach's "vs last session"
+     finding compares mean ω at the same rep number and set number, same
+     calibration, same load only. (No in-session "vs last set": fatigue
+     alone makes the next set slower.) The set_logs join for it lives in
+     `hooks/useMotionCaptureHistory.ts`, outside the feature dirs.
+   Persisted captures carry a cleaning snapshot (`analysis_metrics.cleaned`,
+   `cleaningVersion`); older captures are reprocessed from raw if it exists,
+   otherwise shown uncoached. Coaching waits for a logged effort (RIR chip
+   or RPE). A >5 s pause splits the capture; the split costs confidence
+   only if the kept block disagrees with (or can't be checked against) the
+   logged rep count. Where a pause sits comes from `exercises.pause_point`,
+   else movement pattern, else "between reps". All thresholds: `MOTION_SET_CONFIG`
+   (`services/shared/motion/motionSetConfig.ts`).
 
 ## Loading States & Data Caching (cached-first)
 

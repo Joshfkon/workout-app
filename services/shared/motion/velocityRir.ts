@@ -15,16 +15,16 @@
  *      many more reps were available.
  *   3. The result is shown as a descriptive line next to the logged RIR.
  *
- * REFERENCE DISCIPLINE — deliberate amendment: unlike observations.ts
- * (within-set median only), this module compares against CROSS-SESSION
+ * REFERENCE DISCIPLINE — deliberate amendment: unlike the within-set
+ * coach findings, this module compares against CROSS-SESSION
  * history. That is sound only because every confound the within-set rule
  * guards against is pinned here by construction: same MachineCalibration
  * (same machine, seat, mount), the user's own labels only, angular velocity
  * from the same pipeline, and MVT itself is load-robust. Nothing else in
  * the motion feature may compare across sessions.
  *
- * FRAMING: same rules as observations.ts — describe, never judge. The
- * estimate is a measurement-derived guess shown beside what the user felt,
+ * FRAMING: describe, never judge (banned-language guard: coachFeedback
+ * tests). The estimate is a measurement-derived guess shown beside what the user felt,
  * never a verdict on their honesty or effort. When the data can't support
  * an estimate (thin history, inconsistent failure velocities, a flat set
  * that never approached the threshold), this module returns null rather
@@ -39,9 +39,11 @@
 import type { CaptureAnalysisRepMetrics } from '@/types/motion';
 import type { CaptureRep } from './captureAnalysis';
 import { LOW_CONFIDENCE_PC1_SHARE } from './captureAnalysis';
-import { MIN_REPS_FOR_REFERENCE } from './observations';
 
 /** Sets logged at or below this RIR may teach the failure velocity. */
+/** Below this many reps a set is too short to estimate from. */
+const MIN_REPS_FOR_REFERENCE = 4;
+
 export const MVT_LABEL_MAX_RIR = 1;
 
 /** Minimum qualifying labeled sets before an MVT exists at all. */

@@ -83,7 +83,6 @@ const PlateCalculatorModal = dynamic(() => import('@/components/workout').then(m
 // set beats the exercise's record, so keep it out of the initial bundle.
 const PRCelebration = dynamic(() => import('@/components/workout').then(m => m.PRCelebration), { ssr: false });
 // Motion capture sheet (experimental, flag-gated) — loaded on demand.
-const MotionCaptureSheet = dynamic(() => import('@/components/motion/MotionCaptureSheet').then(m => m.MotionCaptureSheet), { ssr: false });
 import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaRegionalData, TemporaryInjury, PreWorkoutCheckIn, SetFeedback, Rating, BodyweightData, ExerciseType, StandardMuscleGroup, ExercisePerformanceSnapshot, RepsInTank, SorenessRating, SetDiscomfort, JointPainJoint, SleepLogEntry } from '@/types/schema';
 import type { SessionMuscleFeedbackEntry, SessionSummarySubmitData } from '@/components/workout/SessionSummary';
 import { MuscleGroupFeedbackModal, type MuscleFeedbackRatings } from '@/components/workout/MuscleGroupFeedbackModal';
@@ -92,17 +91,26 @@ import type { MuscleSorenessRatings } from '@/components/workout/ReadinessCheckI
 import { createUntypedClient } from '@/lib/supabase/client';
 import { getLocalUserId } from '@/lib/supabase/authState';
 import { listCalibrations } from '@/lib/motion/calibrations';
-import { getPendingCapture } from '@/lib/motion/pendingCapture';
 import { observationsViewedThisSession } from '@/lib/motion/observationsViewed';
 import { saveMotionCapture, saveRawBufferIfAllowed } from '@/lib/motion/motionPersistence';
-import { useMotionAutoCapture } from '@/components/motion/useMotionAutoCapture';
+import { useMotionSetCapture, type StoppedCapture } from '@/components/motion/useMotionSetCapture';
+import { MotionCaptureControl } from '@/components/motion/MotionCaptureControl';
 import { useVelocityRirProfiles } from '@/hooks/useVelocityRirProfiles';
-import { SetObservationsRow } from '@/components/motion/SetObservationsRow';
+import { MotionCoachSheet, type MotionSheetCapture } from '@/components/motion/MotionCoachSheet';
+import { useMotionCaptureHistory } from '@/hooks/useMotionCaptureHistory';
 import {
+  buildCoachFeedback,
+  buildVelocityRirLine,
+  CLEANING_VERSION,
+  describeCleaning,
+  estimateRirFromVelocity,
+  pausePointForPattern,
   processMotionSamples,
-  shouldKeepAutoCapture,
-  trimCaptureTail,
+  rowCue,
   type CaptureAnalysis,
+  type CleanedCapture,
+  type CoachContext,
+  type CoachFeedback,
 } from '@/services/shared/motion';
 import {
   MOTION_PROVENANCE,
@@ -442,7 +450,7 @@ export default function WorkoutPage() {
   const { plannedSessionsPerWeekByMuscle } = usePlannedFrequency();
 
   // Toast notifications for errors
-  const { toasts, dismissToast, showError, showSuccess, addToast } = useToasts();
+  const { toasts, dismissToast, showError, showSuccess, showInfo, addToast } = useToasts();
 
   // Live PR celebration (confetti overlay) — set when a just-logged set beats
   // the exercise's record (services/livePrDetector), cleared on dismiss.
@@ -884,25 +892,31 @@ export default function WorkoutPage() {
   // Enhanced Athlete Mode (users.enhanced_athlete_mode): raises the sandbagging
   // threshold and drives the connective-tissue cap note on exercise cards.
   const [enhancedAthleteModeActive, setEnhancedAthleteModeActive] = useState(false);
-  // Motion capture (experimental, users.motion_capture_enabled): a "Record
-  // motion" affordance on the current exercise card opens the capture sheet
-  // for exercises that have a machine calibration. Display-only telemetry.
+  // Motion capture (experimental, users.motion_capture_enabled): explicit
+  // Start/Stop on the active set row. Calibrations key persistence and the
+  // velocity profiles; calibrating a machine lives on the motion page.
   const [motionCaptureEnabled, setMotionCaptureEnabled] = useState(false);
   const [motionRawRetention, setMotionRawRetention] = useState(false);
   const [motionCalibrations, setMotionCalibrations] = useState<MachineCalibration[]>([]);
-  const [motionSheetBlock, setMotionSheetBlock] = useState<{
-    blockId: string;
-    exerciseId: string;
-  } | null>(null);
-  // Automatic capture: armed while the card is active, started by motion,
-  // stopped by the "Log set" tap (or the manual fallback chip). Kept
-  // captures are keyed by set id for the history-row Observations block;
-  // the calibration id keys the velocity → estimated-RIR profile lookup.
+  // Manual Start/Stop capture on the active set row. A stopped capture is
+  // held (pendingMotionRef) until "Log set" attaches it to the logged set;
+  // kept captures are keyed by set id for the recommendation line and the
+  // history-row Details; the calibration id keys the velocity → estimated-
+  // RIR profile lookup.
   const [motionAutoCaptures, setMotionAutoCaptures] = useState<
-    Record<string, { analysis: CaptureAnalysis; calibrationId: string | null }>
+    Record<string, MotionSheetCapture & { calibrationId: string | null }>
   >({});
-  // Manual-stop fallback: samples held until the next "Log set" attaches them.
-  const heldAutoSamplesRef = useRef<ImuSample[] | null>(null);
+  const pendingMotionRef = useRef<{ blockId: string; exerciseId: string; capture: StoppedCapture } | null>(null);
+  // Rest started by a capture Stop: when the set is then logged, the
+  // effort-modulated rest re-times from the set's real end instead of
+  // restarting from zero.
+  const motionRestRef = useRef<{ blockId: string; endedAtMs: number } | null>(null);
+  const [motionRepPrefill, setMotionRepPrefill] = useState<
+    { blockId: string; nonce: number; reps: number } | null
+  >(null);
+  // Set below, once the rest timer exists; the capture hook calls it on the
+  // safety auto-stop.
+  const motionStoppedRef = useRef<(capture: StoppedCapture) => void>(() => {});
   const calibrationEngineRef = useRef<RPECalibrationEngine>(calibrationEngine);
   const [amrapSuggestion, setAmrapSuggestion] = useState<{
     exerciseName: string;
@@ -941,8 +955,10 @@ export default function WorkoutPage() {
   const currentExercise = currentBlock?.exercise;
   const currentBlockSets = completedSets.filter(s => s.exerciseBlockId === currentBlock?.id);
 
-  // ---- Motion capture: automatic in-workout capture (experimental) ------
-  const motionAuto = useMotionAutoCapture(motionCaptureEnabled);
+  // ---- Motion capture: manual Start/Stop in-workout capture (experimental)
+  const motionCapture = useMotionSetCapture(motionCaptureEnabled, (capture) =>
+    motionStoppedRef.current(capture)
+  );
 
   // Learned failure-velocity profiles (velocity → estimated RIR) for this
   // user's calibrations. Empty until enough RIR-labeled captures exist.
@@ -951,9 +967,11 @@ export default function WorkoutPage() {
     motionCalibrations
   );
 
-  // Re-arm whenever the active exercise changes (interaction with a card).
+  // Moving to another exercise abandons an in-flight or unattached capture.
   useEffect(() => {
-    motionAuto.rearm();
+    motionCapture.cancel();
+    pendingMotionRef.current = null;
+    setMotionRepPrefill(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentBlockIndex]);
 
@@ -961,7 +979,13 @@ export default function WorkoutPage() {
   // for the exercise (the persisted schema does); without one the capture
   // stays in-memory for this session's Observations display only.
   const persistAutoCapture = useCallback(
-    async (setId: string, exerciseId: string, samples: ImuSample[], analysis: CaptureAnalysis) => {
+    async (
+      setId: string,
+      exerciseId: string,
+      samples: ImuSample[],
+      analysis: CaptureAnalysis,
+      cleaned: CleanedCapture
+    ) => {
       try {
         const calibration = motionCalibrations.find((c) => c.exerciseId === exerciseId);
         if (!calibration || !session) return;
@@ -995,6 +1019,9 @@ export default function WorkoutPage() {
               bottomDwellMs: r.bottomDwellMs,
               turnaroundPeakAccel_radps2: r.turnaroundPeakAccelRadps2,
             })),
+            // The cleaned snapshot lets a reload coach this set without raw.
+            cleaningVersion: CLEANING_VERSION,
+            cleaned,
           },
           priorObservationsViewedThisSession: observationsViewedThisSession(session.id),
           provenance: MOTION_PROVENANCE,
@@ -1019,57 +1046,165 @@ export default function WorkoutPage() {
     [motionCalibrations, session, motionRawRetention]
   );
 
-  // Discard whatever the gate collected (and any held fallback samples)
-  // and re-arm. Used by the warmup paths: a capturing gate can't re-arm on
-  // its own, so warmup motion left uncollected would otherwise fuse into
-  // the next working set's capture.
+  // Abandon any recording and any stopped-but-unattached capture. Used by
+  // the warmup paths: warmup motion must never attach to a working set.
   const discardMotionCapture = useCallback(() => {
-    motionAuto.stopAndCollect();
-    heldAutoSamplesRef.current = null;
-  }, [motionAuto]);
+    motionCapture.cancel();
+    pendingMotionRef.current = null;
+    motionRestRef.current = null;
+  }, [motionCapture]);
 
-  // "Log set" ends the capture (or picks up one stopped via the manual
-  // fallback chip). Deferred a tick so the analysis never adds latency to
-  // the set-log tap. Captures under 3 reps are discarded silently —
-  // warmups, seat adjustments, and re-racking all generate motion.
+  // "Log set" attaches the stopped capture to the logged set (stopping a
+  // still-running one first). Saved whatever its confidence — gating only
+  // decides what is SHOWN, against the logged rep count, at render.
+  // Deferred a tick so persistence never adds latency to the set-log tap.
   const collectMotionForSet = useCallback(
     (setId: string, exerciseId: string) => {
-      const samples = heldAutoSamplesRef.current ?? motionAuto.stopAndCollect();
-      heldAutoSamplesRef.current = null;
-      if (!samples || samples.length < 60) return;
+      let pending = pendingMotionRef.current;
+      pendingMotionRef.current = null;
+      if (motionCapture.status === 'recording') {
+        const capture = motionCapture.stop();
+        if (capture) pending = { blockId: '', exerciseId, capture };
+      }
+      setMotionRepPrefill(null);
+      if (!pending || pending.exerciseId !== exerciseId) return;
+      const { capture } = pending;
+      if (capture.cleaned.reps.length === 0) return;
+      const cleaningLog = describeCleaning(capture.cleaned);
+      if (cleaningLog.length > 0) {
+        // eslint-disable-next-line no-console -- deliberate: rep cleaning logs what it set aside and why
+        console.info('[motion] rep cleaning:', cleaningLog);
+      }
       setTimeout(() => {
-        const { samples: trimmed, analysis } = trimCaptureTail(samples);
-        if (!shouldKeepAutoCapture(analysis)) return;
         const calibrationId =
           motionCalibrations.find((c) => c.exerciseId === exerciseId)?.id ?? null;
-        setMotionAutoCaptures((prev) => ({ ...prev, [setId]: { analysis, calibrationId } }));
-        void persistAutoCapture(setId, exerciseId, trimmed, analysis);
+        setMotionAutoCaptures((prev) => ({
+          ...prev,
+          [setId]: { analysis: capture.analysis, cleaned: capture.cleaned, metrics: null, calibrationId },
+        }));
+        void persistAutoCapture(setId, exerciseId, capture.samples, capture.analysis, capture.cleaned);
       }, 0);
     },
-    [motionAuto, persistAutoCapture, motionCalibrations]
+    [motionCapture, persistAutoCapture, motionCalibrations]
   );
 
-  // Observations block under a COMPLETED set's history row — hidden until
-  // the set is logged AND a RIR value exists (logged RIR is the label for
-  // a future velocity-loss → RIR fit; metrics shown first would
-  // contaminate it). Nothing renders on the active set card.
-  const motionCompletedSetExtra = useCallback(
-    (set: SetLog) => {
-      const capture = motionAutoCaptures[set.id];
-      if (!capture) return null;
+  // Captures this page doesn't hold in memory: this session's persisted
+  // ones (after a reload — reprocessed from raw, restored from the cleaning
+  // snapshot, or legacy/uncoached) and last session's clean reps.
+  const motionHistory = useMotionCaptureHistory({
+    enabled: motionCaptureEnabled,
+    userId: session?.userId ?? null,
+    sessionId: session?.id ?? null,
+    sessionStartedAt: session?.startedAt ?? null,
+    setIds: useMemo(
+      () => completedSets.filter((s) => !s.isWarmup && s.setType !== 'warmup').map((s) => s.id),
+      [completedSets]
+    ),
+    calibrationIds: useMemo(() => motionCalibrations.map((c) => c.id), [motionCalibrations]),
+  });
+  const allMotionCaptures = useMemo(() => {
+    const out: Record<string, MotionSheetCapture & { calibrationId: string | null }> = {};
+    for (const [setId, c] of Object.entries(motionHistory.bySetId)) {
+      out[setId] = { analysis: c.analysis, cleaned: c.cleaned, metrics: c.metrics, calibrationId: c.calibrationId };
+    }
+    return { ...out, ...motionAutoCaptures };
+  }, [motionHistory.bySetId, motionAutoCaptures]);
+
+  // Coach feedback per logged working set. Gated on a logged effort — RIR
+  // chip or RPE (logged effort is the label for the velocity → RIR fit;
+  // showing metrics before it is entered contaminates it). History: the
+  // same set number last session (same calibration; the coach itself
+  // requires the same load). In-session "vs last set" is deliberately not
+  // used — fatigue alone makes the next set slower.
+  const motionCoach = useMemo(() => {
+    const out: Record<string, { feedback: CoachFeedback | null; context: CoachContext }> = {};
+    for (const set of completedSets) {
+      if (set.isWarmup || set.setType === 'warmup') continue;
+      const capture = allMotionCaptures[set.id];
+      const loggedRir =
+        set.feedback?.repsInTank != null
+          ? set.feedback.repsInTank
+          : set.rpe != null
+            ? Math.max(0, rpeToRir(set.rpe))
+            : null;
+      if (!capture || loggedRir === null) continue;
+      const block = blocks.find((b) => b.id === set.exerciseBlockId);
+      const lastSession = capture.calibrationId
+        ? motionHistory.lastSession[capture.calibrationId]?.find((h) => h.setNumber === set.setNumber)
+        : undefined;
+      const context: CoachContext = {
+        loggedReps: set.reps,
+        loggedRir,
+        weightKg: set.weightKg,
+        pausePoint: pausePointForPattern(block?.exercise?.movementPattern, block?.exercise?.pausePoint),
+        history: lastSession
+          ? { source: 'last session', weightKg: lastSession.weightKg, reps: lastSession.reps }
+          : null,
+      };
+      out[set.id] = { feedback: capture.cleaned ? buildCoachFeedback(capture.cleaned, context) : null, context };
+    }
+    return out;
+  }, [completedSets, allMotionCaptures, blocks, motionHistory.lastSession]);
+
+  // Card props, memoized per block so unrelated cards don't re-render.
+  const motionCardProps = useMemo(() => {
+    const sets: Record<string, Record<string, { tone: 'ok' | 'low' | 'raw'; cue: string | null }>> = {};
+    type Effort = NonNullable<CoachFeedback['effort']>;
+    const latest: Record<
+      string,
+      { setId: string; verdictShort: string | null; effort: Pick<Effort, 'zone' | 'disagreement'> | null }
+    > = {};
+    for (const set of completedSets) {
+      const c = motionCoach[set.id];
+      if (!c) continue;
+      const tone = !c.feedback ? 'raw' : c.feedback.confidence.confidence === 'ok' ? 'ok' : 'low';
+      (sets[set.exerciseBlockId] ??= {})[set.id] = { tone, cue: rowCue(c.feedback) };
+    }
+    for (const set of completedSets) {
+      if (set.isWarmup || set.setType === 'warmup') continue;
+      const fb = motionCoach[set.id]?.feedback;
+      // Last working set of the block wins (completedSets is in log order).
+      latest[set.exerciseBlockId] = {
+        setId: set.id,
+        verdictShort: fb?.verdictShort ?? null,
+        effort: fb?.effort ? { zone: fb.effort.zone, disagreement: fb.effort.disagreement } : null,
+      };
+    }
+    return { sets, latest };
+  }, [completedSets, motionCoach]);
+
+  // The coach sheet for one set (opened from the row's sensor icon / cue).
+  const renderMotionSheet = useCallback(
+    ({ setId, nextSetCall, onClose }: { setId: string; nextSetCall: string | null; onClose: () => void }) => {
+      const set = completedSets.find((s) => s.id === setId);
+      const capture = allMotionCaptures[setId];
+      const coach = motionCoach[setId];
+      if (!set || !capture || !coach) return null;
+      const block = blocks.find((b) => b.id === set.exerciseBlockId);
+      const profile = capture.calibrationId ? velocityRirProfiles[capture.calibrationId] : undefined;
+      const estimate =
+        profile && capture.cleaned
+          ? estimateRirFromVelocity(
+              capture.cleaned.reps.map((r) => ({ index: r.n - 1, meanConcentricW: r.meanW })),
+              profile
+            )
+          : null;
+      const weightLabel = `${convertWeightForDisplay(set.weightKg, preferences.units)} ${preferences.units}`;
       return (
-        <SetObservationsRow
-          analysis={capture.analysis}
-          hasRir={set.feedback?.repsInTank != null}
+        <MotionCoachSheet
+          title={`Set ${set.setNumber} · ${weightLabel} × ${set.reps}`}
+          exerciseName={block?.exercise?.name ?? 'this exercise'}
+          capture={capture}
+          coachContext={coach.context}
+          nextSetCall={nextSetCall}
+          loggedWeightLabel={weightLabel}
           workoutSessionId={session?.id ?? null}
-          mvtProfile={
-            capture.calibrationId ? velocityRirProfiles[capture.calibrationId] ?? null : null
-          }
-          loggedRir={set.feedback?.repsInTank ?? null}
+          velocityRirLine={estimate ? buildVelocityRirLine(estimate, coach.context.loggedRir) : null}
+          onClose={onClose}
         />
       );
     },
-    [motionAutoCaptures, session, velocityRirProfiles]
+    [completedSets, allMotionCaptures, motionCoach, blocks, velocityRirProfiles, preferences.units, session?.id]
   );
 
   // Memoize rest timer options to prevent hook reinitialization
@@ -1087,6 +1222,33 @@ export default function WorkoutPage() {
 
   // Rest timer hook
   const restTimer = useRestTimer(restTimerOptions);
+
+  // Capture Stop (manual or the safety auto-stop): prefill reps and start
+  // the rest timer NOW, backdated to the set's real end — the lifter
+  // doesn't have to confirm the set first. Zero counted reps → discard.
+  // Dropset and superset blocks have their own rest choreography, so their
+  // rest still starts from "Log set".
+  const handleMotionStopped = (capture: StoppedCapture) => {
+    const block = currentBlock;
+    if (!block) return;
+    const reps = capture.cleaned.reps.length;
+    if (reps === 0) {
+      pendingMotionRef.current = null;
+      showInfo('No reps detected — capture discarded.', 3000);
+      return;
+    }
+    pendingMotionRef.current = { blockId: block.id, exerciseId: block.exerciseId, capture };
+    setMotionRepPrefill({ blockId: block.id, nonce: Date.now(), reps });
+    if ((block.dropsetsPerSet ?? 0) > 0 || block.supersetGroupId) return;
+    const base = block.targetRestSeconds ?? 180;
+    const elapsedS = capture.endedAgoMs / 1000;
+    setShowRestTimer(true);
+    setRestTimerDuration(null);
+    setRestAdjustmentNote(null);
+    restTimer.start(Math.max(1, Math.round(base - elapsedS)), { totalSeconds: base });
+    motionRestRef.current = { blockId: block.id, endedAtMs: Date.now() - capture.endedAgoMs };
+  };
+  motionStoppedRef.current = handleMotionStopped;
 
   // While the on-screen keyboard is up, iOS unpins fixed-bottom elements from
   // the screen edge and lets them float mid-page over content — hide the
@@ -3108,7 +3270,18 @@ export default function WorkoutPage() {
       setShowRestTimer(true);
       setRestTimerDuration(null);
       setRestAdjustmentNote(restRx.note);
-      restTimer.start(restRx.seconds);
+      // A capture Stop already started this rest at the set's real end:
+      // re-time it to the effort-modulated duration, keeping elapsed time.
+      const motionRest = motionRestRef.current;
+      motionRestRef.current = null;
+      if (motionRest && motionRest.blockId === currentBlock.id && restTimer.isRunning) {
+        const elapsedS = (Date.now() - motionRest.endedAtMs) / 1000;
+        restTimer.start(Math.max(1, Math.round(restRx.seconds - elapsedS)), {
+          totalSeconds: restRx.seconds,
+        });
+      } else {
+        restTimer.start(restRx.seconds);
+      }
     };
 
     // Offline-first persistence (P0-2): the set id is generated CLIENT-side
@@ -7100,14 +7273,7 @@ export default function WorkoutPage() {
                         </div>
                       ) : null;
                     })()}
-                    <div
-                      className="space-y-3"
-                      // Motion capture: any interaction with the active card
-                      // resets the 3-minute auto-disarm clock.
-                      onPointerDownCapture={
-                        motionCaptureEnabled && isCurrent ? motionAuto.rearm : undefined
-                      }
-                    >
+                    <div className="space-y-3">
                     <ExerciseCard
                     exercise={block.exercise}
                     block={block}
@@ -7258,52 +7424,37 @@ export default function WorkoutPage() {
                       setShowPlateCalculator(true);
                     }}
                     setSyncStatus={setSync}
-                    completedSetExtra={motionCaptureEnabled ? motionCompletedSetExtra : undefined}
+                    // Motion capture (experimental): explicit Start/Stop on
+                    // the active set, sensor rep prefill, and the evidence
+                    // behind the card's one-line recommendation.
+                    motionCaptureSlot={
+                      motionCaptureEnabled && isCurrent ? (
+                        <MotionCaptureControl
+                          status={motionCapture.status}
+                          liveReps={motionCapture.liveReps}
+                          onEnable={() => void motionCapture.enableFromGesture()}
+                          onStart={motionCapture.start}
+                          onStop={() => {
+                            const capture = motionCapture.stop();
+                            // Via the ref: the memoized card may hold an
+                            // older render's slot element.
+                            if (capture) motionStoppedRef.current(capture);
+                          }}
+                        />
+                      ) : undefined
+                    }
+                    motionCaptureSlotKey={
+                      motionCaptureEnabled && isCurrent
+                        ? `${motionCapture.status}:${motionCapture.liveReps}`
+                        : undefined
+                    }
+                    motionRepPrefill={
+                      motionRepPrefill?.blockId === block.id ? motionRepPrefill : null
+                    }
+                    motionSets={motionCaptureEnabled ? motionCardProps.sets[block.id] : undefined}
+                    motionLatest={motionCaptureEnabled ? motionCardProps.latest[block.id] ?? null : null}
+                    renderMotionSheet={motionCaptureEnabled ? renderMotionSheet : undefined}
                   />
-
-                  {/* Motion capture (experimental): auto-capture status for
-                      the current exercise. Captures start themselves on
-                      motion and end on "Log set"; the chips cover the two
-                      cases needing a tap (iOS permission, manual stop). */}
-                  {motionCaptureEnabled && isCurrent && motionAuto.status === 'needs-permission' && (
-                    <button
-                      type="button"
-                      onClick={() => void motionAuto.enableFromGesture()}
-                      className="w-full py-2 px-3 rounded-lg border border-primary-500/40 text-xs text-primary-400 hover:border-primary-400 transition-colors"
-                      data-testid="motion-enable-button"
-                    >
-                      ◉ Enable motion capture for this session
-                    </button>
-                  )}
-                  {motionCaptureEnabled && isCurrent && motionAuto.status === 'capturing' && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        // Manual fallback: hold the capture for the next
-                        // "Log set" tap instead of recording the reach for
-                        // the phone as post-set motion.
-                        heldAutoSamplesRef.current = motionAuto.stopAndCollect();
-                      }}
-                      className="w-full py-2 px-3 rounded-lg border border-danger-500/40 text-xs text-danger-400 hover:border-danger-400 transition-colors"
-                      data-testid="motion-manual-stop-button"
-                    >
-                      ● Capturing — tap to stop now (or just log the set)
-                    </button>
-                  )}
-                  {motionCaptureEnabled && isCurrent && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setMotionSheetBlock({ blockId: block.id, exerciseId: block.exerciseId })
-                      }
-                      className="w-full py-2 px-3 rounded-lg border border-surface-700 text-xs text-surface-400 hover:text-surface-200 hover:border-surface-500 transition-colors"
-                      data-testid="motion-record-button"
-                    >
-                      {getPendingCapture()?.exerciseId === block.exerciseId
-                        ? '● Motion capture waiting for review'
-                        : '◉ Record motion manually'}
-                    </button>
-                  )}
 
                   {/* Rest timer renders as a fixed bottom bar at page level (P0-5) */}
 
@@ -8004,21 +8155,6 @@ export default function WorkoutPage() {
           />
         );
       })()}
-
-      {/* Motion capture sheet (experimental, flag-gated). Closing mid-review
-          keeps the capture in memory; the card button offers to resume. */}
-      {motionSheetBlock && session && (
-        <MotionCaptureSheet
-          isOpen
-          onClose={() => setMotionSheetBlock(null)}
-          userId={session.userId}
-          rawRetentionEnabled={motionRawRetention}
-          calibrations={motionCalibrations}
-          exerciseNames={Object.fromEntries(blocks.map((b) => [b.exerciseId, b.exercise.name]))}
-          exerciseId={motionSheetBlock.exerciseId}
-          blockId={motionSheetBlock.blockId}
-        />
-      )}
 
       {/* Page-level Swap Modal for injury-related swaps */}
       {showPageLevelSwapModal && swapTargetBlockId && (() => {

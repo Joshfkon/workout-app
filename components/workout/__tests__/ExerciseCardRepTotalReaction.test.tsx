@@ -12,7 +12,7 @@
  */
 
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { ExerciseCard } from '../ExerciseCard';
 import type { Exercise, ExerciseBlock, SetLog } from '@/types/schema';
 
@@ -96,8 +96,8 @@ const props = {
   previousSets,
 };
 
-/** The "N kg × R @ E RIR" claim the suggestion banner renders. */
-const prescriptionText = () => screen.getByText(/82\.5 kg × \d+ @ \d+ RIR/).textContent ?? '';
+/** The "N kg × R" claim the suggestion banner renders ("{verdict} → N kg × R"). */
+const prescriptionText = () => screen.getByText(/^82\.5 kg × \d+$/).textContent ?? '';
 
 describe('rep_total prescription reacts to a set logged in the SAME mounted card', () => {
   it('updates the next-set prescription on set-log without a remount', () => {
@@ -105,7 +105,7 @@ describe('rep_total prescription reacts to a set logged in the SAME mounted card
 
     // After set 1 (on plan) the ask for set 2 is the plan's 9.
     const afterSet1 = prescriptionText();
-    expect(afterSet1).toMatch(/82\.5 kg × 9 @ 2 RIR/);
+    expect(afterSet1).toBe('82.5 kg × 9');
 
     // Log set 2 — 2 reps short, a full rep hotter than target. This is the
     // ONLY change: same component instance, same props otherwise. Before the
@@ -116,13 +116,15 @@ describe('rep_total prescription reacts to a set logged in the SAME mounted card
     expect(afterSet2).not.toBe(afterSet1);
     // Set 2 showed 7 reps with 1 left = 8 in the tank, so 6 at the 2-RIR
     // target. The LOAD is held — reps absorb the decline.
-    expect(afterSet2).toMatch(/82\.5 kg × 6 @ 2 RIR/);
+    expect(afterSet2).toBe('82.5 kg × 6');
   });
 
   it('says why the ask moved instead of shrinking it silently', () => {
     render(<ExerciseCard {...props} sets={[SET_1, SHORT_HOT_SET_2]} />);
     // The banner must name the trim — a target that quietly drops is the same
-    // class of silent failure as one that quietly refuses to.
+    // class of silent failure as one that quietly refuses to. With a verdict
+    // on the strip, the reason lives behind its ⓘ.
+    fireEvent.click(screen.getByRole('button', { name: 'How this suggestion works' }));
     expect(screen.getByText(/came in under/i)).toBeInTheDocument();
   });
 

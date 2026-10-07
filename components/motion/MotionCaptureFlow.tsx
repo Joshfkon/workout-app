@@ -25,7 +25,6 @@ import {
   requestMotionPermission,
   startMotionRecorder,
   tapLatencyMs,
-  TAP_LATENCY_WARN_MS,
   type MotionRecorderHandle,
 } from '@/lib/motion/deviceMotionRecorder';
 import { captureToCsv, downloadTextFile } from '@/lib/motion/csv';
@@ -416,33 +415,13 @@ export function MotionCaptureFlow({
           <CardTitle>Review capture</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <CaptureAnalysisView analysis={analysis} />
-
-          <div className="flex items-center justify-between gap-2 text-xs text-surface-500">
-            <span data-testid="motion-stop-latency">
-              {stopTapLatencyMs !== null ? (
-                <>
-                  Sensor latency at stop tap: {Math.round(stopTapLatencyMs)} ms
-                  {stopTapLatencyMs > TAP_LATENCY_WARN_MS && (
-                    <span className="text-warning-400">
-                      {' '}
-                      — stale (&gt;{TAP_LATENCY_WARN_MS} ms; sensor delivery is lagging taps)
-                    </span>
-                  )}
-                </>
-              ) : (
-                'Auto-stopped after rest'
-              )}
-            </span>
-            <button
-              type="button"
-              onClick={downloadCsv}
-              className="text-primary-400 hover:text-primary-300 whitespace-nowrap"
-              data-testid="motion-download-csv"
-            >
-              Download raw capture (CSV)
-            </button>
-          </div>
+          <CaptureAnalysisView
+            analysis={analysis}
+            stopLatencyMs={stopTapLatencyMs}
+            stopLatencyFallback="none (auto-stopped after rest)"
+            onDownloadCsv={downloadCsv}
+            downloadLabel="Download raw capture (CSV)"
+          />
 
           {saveState === 'idle' || saveState === 'saving' ? (
             <>

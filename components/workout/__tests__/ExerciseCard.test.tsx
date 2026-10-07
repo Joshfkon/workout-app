@@ -802,8 +802,8 @@ describe('ExerciseCard', () => {
         />
       );
 
-      // Prefill is 100 kg × 9; no warning initially.
-      expect(screen.getByText(/100 kg × 9 @ 2 RIR/)).toBeInTheDocument();
+      // Prefill is 100 kg × 9 (banner: "On target → 100 kg × 9"); no warning initially.
+      expect(screen.getByText(/^100 kg × 9$/)).toBeInTheDocument();
       expect(screen.queryByTestId('effort-warning')).not.toBeInTheDocument();
 
       // Step reps 9 → 12 (rep-max at this weight) → predicted RIR 0.
@@ -819,7 +819,7 @@ describe('ExerciseCard', () => {
       });
       // The suggestion copy stays mounted (it reserves the banner's height so
       // the flip can't shift the steppers below) but is hidden from AT.
-      expect(screen.getByText(/100 kg × 9 @ 2 RIR/).closest('p')).toHaveAttribute(
+      expect(screen.getByText(/^100 kg × 9$/).closest('p')).toHaveAttribute(
         'aria-hidden',
         'true'
       );
@@ -829,7 +829,7 @@ describe('ExerciseCard', () => {
       await waitFor(() => {
         expect(screen.queryByTestId('effort-warning')).not.toBeInTheDocument();
       });
-      expect(screen.getByText(/100 kg × 9 @ 2 RIR/).closest('p')).toHaveAttribute(
+      expect(screen.getByText(/^100 kg × 9$/).closest('p')).toHaveAttribute(
         'aria-hidden',
         'false'
       );
@@ -1056,7 +1056,7 @@ describe('ExerciseCard', () => {
         />
       );
 
-      expect(screen.getByText(/100 kg × 9 @ 2 RIR/)).toBeInTheDocument();
+      expect(screen.getByText(/^100 kg × 9$/)).toBeInTheDocument();
 
       // Type a completely different weight into the logger input
       await user.click(screen.getByRole('button', { name: /Weight: 100 kg/ }));
@@ -1069,7 +1069,7 @@ describe('ExerciseCard', () => {
       // entered-weight copy exists only as the banner's invisible height
       // sizer (layout stability), hidden from AT, with no warning exposed.
       expect(weightInput).toHaveValue(999);
-      expect(screen.getByText(/100 kg × 9 @ 2 RIR/).closest('p')).toHaveAttribute(
+      expect(screen.getByText(/^100 kg × 9$/).closest('p')).toHaveAttribute(
         'aria-hidden',
         'false'
       );
@@ -1617,9 +1617,19 @@ describe('ExerciseCard', () => {
       render(<ExerciseCard {...defaultProps} sets={sets} isActive={true} />);
 
       expect(screen.getByText(/Set 1 · 100 kg × 10/)).toBeInTheDocument();
-      // rpeToRir(8) = 2
-      expect(screen.getByText(/2 RIR ·/)).toBeInTheDocument();
-      expect(screen.getByText('stimulative')).toBeInTheDocument();
+      // rpeToRir(8) = 2. "stimulative" is the expected case, so it is not
+      // printed — only other buckets are.
+      expect(screen.getByText(/^2 RIR$/)).toBeInTheDocument();
+      expect(screen.queryByText('stimulative')).not.toBeInTheDocument();
+    });
+
+    it('prints the quality bucket when it is not the expected "stimulative"', () => {
+      const sets = [
+        createMockSetLog({ id: 'set-1', setNumber: 1, weightKg: 100, reps: 10, rpe: 6, quality: 'effective' }),
+      ];
+      render(<ExerciseCard {...defaultProps} sets={sets} isActive={true} />);
+      const label = screen.getByTitle(/^4\+ RIR — counts as 0\.25×/);
+      expect(label).toHaveTextContent('easy');
     });
 
     it('shows the logged RIR from feedback, not the RPE-derived value', () => {
@@ -2760,5 +2770,107 @@ describe('warmup checkmark persistence (~15 min warmth window)', () => {
 
     // All sets stay checked, so the header shows the full count
     expect(screen.getByText('(2/2)')).toBeInTheDocument();
+  });
+});
+
+describe('ExerciseCard — motion capture integration', () => {
+  const base = {
+    exercise: createMockExercise(),
+    block: createMockBlock(),
+    unit: 'kg' as const,
+    isActive: true,
+    onSetComplete: jest.fn().mockResolvedValue('id'),
+  };
+  const logged = [createMockSetLog({ id: 'set-1', setNumber: 1, weightKg: 100, reps: 10, rpe: 8 })];
+
+  it('prefills an untouched rep field with the sensor count', async () => {
+    const { rerender } = render(<ExerciseCard {...base} sets={logged} />);
+    expect(screen.getByRole('button', { name: /^Reps: 9 reps/ })).toBeInTheDocument();
+    rerender(<ExerciseCard {...base} sets={logged} motionRepPrefill={{ nonce: 1, reps: 11 }} />);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /^Reps: 11 reps/ })).toBeInTheDocument()
+    );
+    expect(screen.queryByTestId('motion-rep-offer')).not.toBeInTheDocument();
+  });
+
+  it('offers instead of overwriting a rep count the lifter already set', async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(<ExerciseCard {...base} sets={logged} />);
+    await user.click(screen.getByRole('button', { name: 'Increase reps' })); // 9 → 10, user-owned
+    rerender(<ExerciseCard {...base} sets={logged} motionRepPrefill={{ nonce: 2, reps: 12 }} />);
+    expect(await screen.findByTestId('motion-rep-offer')).toHaveTextContent(
+      'Sensor counted 12. Use this?'
+    );
+    expect(screen.getByRole('button', { name: /^Reps: 10 reps/ })).toBeInTheDocument();
+    await user.click(screen.getByTestId('motion-rep-offer-use'));
+    expect(screen.getByRole('button', { name: /^Reps: 12 reps/ })).toBeInTheDocument();
+  });
+
+  it('renders the Start/Stop slot under the active logger row', () => {
+    render(<ExerciseCard {...base} sets={logged} motionCaptureSlot={<button>Start capture</button>} />);
+    expect(screen.getByRole('button', { name: 'Start capture' })).toBeInTheDocument();
+  });
+
+  it('merges the coach verdict into the banner — the one home of the next-set call', () => {
+    render(
+      <ExerciseCard
+        {...base}
+        sets={logged}
+        motionLatest={{ setId: 'set-1', verdictShort: 'Steady set, more in the tank', effort: { zone: 'easy', disagreement: null } }}
+      />
+    );
+    expect(screen.getByTestId('suggestion-verdict')).toHaveTextContent('Steady set, more in the tank → 100 kg × 9');
+    // The old inline reasoning moved behind the ⓘ.
+    expect(screen.queryByText(/matched .* target/i)).not.toBeInTheDocument();
+    expect(screen.queryByTestId('motion-recommendation')).not.toBeInTheDocument();
+  });
+
+  it('without a capture the banner verdict is the logged-effort read', () => {
+    render(<ExerciseCard {...base} sets={logged} />);
+    expect(screen.getByTestId('suggestion-verdict')).toHaveTextContent(/^On target → 100 kg × 9/);
+  });
+
+  it('near-failure velocity at logged 4 RIR holds an engine "add" in the banner and the prefill', async () => {
+    const easySet = [createMockSetLog({ id: 'set-1', setNumber: 1, weightKg: 100, reps: 10, rpe: 6 })];
+    const { rerender } = render(<ExerciseCard {...base} sets={easySet} />);
+    const engineWeight = screen.getByTestId('suggestion-verdict').textContent ?? '';
+    // The engine adds load off a 4-RIR set.
+    expect(Number(engineWeight.match(/→ ([\d.]+) kg/)?.[1])).toBeGreaterThan(100);
+    rerender(
+      <ExerciseCard
+        {...base}
+        sets={easySet}
+        motionLatest={{ setId: 'set-1', verdictShort: 'Harder than logged', effort: { zone: 'near-failure', disagreement: 'harder_than_logged' } }}
+      />
+    );
+    expect(screen.getByTestId('suggestion-verdict')).toHaveTextContent(/^Harder than logged → 100 kg × /);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /^Weight: 100 kg/ })).toBeInTheDocument()
+    );
+  });
+
+  it('set row: sensor icon tinted by confidence, cue line only when given, sheet with the next-set call', async () => {
+    const user = userEvent.setup();
+    const renderMotionSheet = jest.fn(({ nextSetCall }: { nextSetCall: string | null }) => (
+      <div data-testid="sheet">{nextSetCall}</div>
+    ));
+    render(
+      <ExerciseCard
+        {...base}
+        sets={logged}
+        motionSets={{ 'set-1': { tone: 'low', cue: 'Resting 1.7+ s at the bottom' } }}
+        renderMotionSheet={renderMotionSheet}
+      />
+    );
+    expect(screen.getByTestId('set-motion-icon-1')).toHaveAttribute('data-tone', 'low');
+    expect(screen.getByTestId('set-motion-cue-1')).toHaveTextContent('Resting 1.7+ s at the bottom');
+    await user.click(screen.getByTestId('set-motion-cue-1'));
+    expect(screen.getByTestId('sheet')).toHaveTextContent(/^Next set: hold 100 kg × 9–12\.$/);
+  });
+
+  it('no capture → no icon, no cue line (one-line row)', () => {
+    render(<ExerciseCard {...base} sets={logged} renderMotionSheet={() => null} />);
+    expect(screen.queryByTestId('set-motion-icon-1')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('set-motion-cue-1')).not.toBeInTheDocument();
   });
 });

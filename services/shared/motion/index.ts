@@ -38,23 +38,52 @@ export {
   type GravityRomStatus,
   type HalfRep,
 } from './captureAnalysis';
+export { trimCaptureTail } from './autoGate';
 export {
-  AutoCaptureGate,
-  AUTO_GATE_DEFAULTS,
-  MIN_AUTO_CAPTURE_REPS,
-  shouldKeepAutoCapture,
-  trimCaptureTail,
-  type AutoGateOptions,
-  type AutoGateState,
-} from './autoGate';
+  assessCaptureQuality,
+  computeVelocityLoss,
+  effortZone,
+  type CaptureQualityIssue,
+  type EffortZone,
+  type RepVelocity,
+  type VelocityLossSummary,
+} from './setSummary';
+export { MOTION_SET_CONFIG } from './motionSetConfig';
 export {
-  buildObservations,
-  MIN_REPS_FOR_REFERENCE,
-  NOTHING_NOTABLE_LINE,
-  OBSERVATIONS_CONTEXT_LINE,
-  THIN_REFERENCE_LINE,
-  type SetObservations,
-} from './observations';
+  finishManualCapture,
+  isMountedNow,
+  liveRepCount,
+  ManualCaptureClock,
+  type FinishedCapture,
+} from './manualCapture';
+export {
+  assessConfidence,
+  captureUnclearLine,
+  cleanCapture,
+  CLEANING_VERSION,
+  describeCleaning,
+  MULTI_AXIS_REASON,
+  splitAtPauses,
+  type CaptureConfidence,
+  type CleanedCapture,
+  type CleanRep,
+  type ConfidenceResult,
+  type RejectedRep,
+} from './captureGating';
+export {
+  buildCoachFeedback,
+  buildCoachFindings,
+  pausePointForPattern,
+  repList,
+  rowCue,
+  type CoachContext,
+  type CoachEffort,
+  type CoachFeedback,
+  type CoachFinding,
+  type CoachFindingType,
+  type CoachHistory,
+  type PausePoint,
+} from './coachFeedback';
 export {
   analysisRepsToVelocityReps,
   buildMvtProfile,

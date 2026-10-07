@@ -52,7 +52,7 @@ import { lightHaptic } from '@/lib/integrations/notifications';
 // setLogTiming: TEMPORARY latency instrumentation (docs/SET_LOGGING_LATENCY_DIAGNOSIS.md)
 import { beginSetTiming } from '@/lib/debug/setLogTiming';
 import { Input } from '@/components/ui';
-import { IconBarbell, IconBone, IconCheck, IconChevronDown, IconCloudPause, IconGripVertical, IconInfoCircle } from '@tabler/icons-react';
+import { IconActivity, IconBarbell, IconBone, IconCheck, IconChevronDown, IconCloudPause, IconGripVertical, IconInfoCircle } from '@tabler/icons-react';
 import { RowOverflowMenu, type RowMenuItem } from './RowOverflowMenu';
 import { StabilizerWarningBanner, type StabilizerWarningView } from './StabilizerWarningBanner';
 import { InlineRestTimerBar } from './InlineRestTimerBar';
@@ -62,6 +62,8 @@ import { SegmentedControl } from './SegmentedControl';
 import { SetLoggerRow } from './SetLoggerRow';
 import { ExerciseHistorySparkline } from './ExerciseHistorySparkline';
 import { SuggestionBanner } from './SuggestionBanner';
+import { composeNextSetCall, loggedEffortVerdict, type NextSetCall } from '@/services/setRecommendationLine';
+import { MOTION_SET_CONFIG } from '@/services/shared/motion/motionSetConfig';
 import { BottomSheet } from './BottomSheet';
 import { useKeyboardInset } from '@/hooks/useKeyboardInset';
 
@@ -363,6 +365,41 @@ interface ExerciseCardProps {
    * active set card. Must be referentially stable (the card is memoized).
    */
   completedSetExtra?: (set: SetLog) => React.ReactNode;
+  /**
+   * Motion capture (experimental): the Start/Stop control, rendered under
+   * the active set's logger row.
+   */
+  motionCaptureSlot?: React.ReactNode;
+  /**
+   * Identity of the slot's visible state (e.g. "recording:7"). The slot is a
+   * fresh element every page render, so the memo comparator keys on this
+   * instead of the node.
+   */
+  motionCaptureSlotKey?: string;
+  /**
+   * Sensor-counted reps from the last capture Stop (`nonce` changes per
+   * capture). Prefills the active rep field unless the lifter already typed
+   * one — then it is offered instead. The field stays editable and the
+   * typed number is what gets logged.
+   */
+  motionRepPrefill?: { nonce: number; reps: number } | null;
+  /**
+   * Motion capture per completed set id: the row's sensor-icon tint and the
+   * optional muted cue line (top coach cue, severity ≥ 2 only). Memoized
+   * per block by the page.
+   */
+  motionSets?: Record<string, { tone: 'ok' | 'low' | 'raw'; cue: string | null }>;
+  /**
+   * Coach read of the MOST RECENT completed set: merged into the banner
+   * ("{verdict} → W × R"); the effort finding may hold an engine "add".
+   */
+  motionLatest?: {
+    setId: string;
+    verdictShort: string | null;
+    effort: { zone: 'easy' | 'moderate' | 'hard' | 'near-failure'; disagreement: 'more_than_logged' | 'harder_than_logged' | null } | null;
+  } | null;
+  /** Full coach feedback sheet for a set (opened from its sensor icon / cue line). */
+  renderMotionSheet?: (args: { setId: string; nextSetCall: string | null; onClose: () => void }) => React.ReactNode;
   // Reports the active set's live suggestion (the SuggestionBanner values,
   // e.g. "60 kg × 7") so the page's sticky rest bar shows the same target
   // instead of the block's stale planned weight. Called with null when no
@@ -490,6 +527,11 @@ export const ExerciseCard = memo(function ExerciseCard({
   readinessModulation,
   setSyncStatus,
   completedSetExtra,
+  motionCaptureSlot,
+  motionRepPrefill = null,
+  motionSets,
+  motionLatest = null,
+  renderMotionSheet,
   performanceSnapshots,
   progressionHealthSessions,
   equipmentBoundaries,
@@ -1578,6 +1620,40 @@ export const ExerciseCard = memo(function ExerciseCard({
       repsCalcTimeoutsRef.current.clear();
     };
   }, []);
+
+  // Motion capture: sensor-counted reps from a capture Stop. An untouched
+  // rep field is prefilled (and becomes user-owned, so no recompute
+  // overwrites it); a field the lifter already typed is left alone and the
+  // count is offered instead. Duration exercises carry seconds — skipped.
+  const [sensorRepOffer, setSensorRepOffer] = useState<number | null>(null);
+  // Coach feedback sheet for a completed set (sensor icon / cue line).
+  const [motionSheetSetId, setMotionSheetSetId] = useState<string | null>(null);
+  const applySensorReps = useCallback((reps: number) => {
+    const pendingTimeout = repsCalcTimeoutsRef.current.get(0);
+    if (pendingTimeout) {
+      clearTimeout(pendingTimeout);
+      repsCalcTimeoutsRef.current.delete(0);
+    }
+    manualEditsRef.current.set(0, { ...(manualEditsRef.current.get(0) ?? {}), reps: true });
+    setPendingInputs((prev) =>
+      prev.length > 0 ? [{ ...prev[0], reps: String(reps) }, ...prev.slice(1)] : prev
+    );
+    setSensorRepOffer(null);
+  }, []);
+  useEffect(() => {
+    if (!motionRepPrefill || exercise.exerciseType === 'duration_based') return;
+    if (manualEditsRef.current.get(0)?.reps) {
+      setSensorRepOffer(motionRepPrefill.reps);
+    } else {
+      applySensorReps(motionRepPrefill.reps);
+    }
+    // Keyed on the nonce: each Stop is one prefill.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [motionRepPrefill?.nonce]);
+  // An offer belongs to the set being logged; logging retires it.
+  useEffect(() => {
+    setSensorRepOffer(null);
+  }, [completedSets.length]);
 
   // Recalculate pending inputs based on the last completed set
   const recalculatePendingInputs = useCallback(() => {
@@ -2766,6 +2842,87 @@ export const ExerciseCard = memo(function ExerciseCard({
     return { weight, reps: String(reps), repsLabel, reason, explanation, showRir, role };
   };
 
+  // The MOST RECENT completed set's next-set call (services/
+  // setRecommendationLine). Load and reps are the prescription engine's —
+  // the active banner's numbers for the next set, recommendSessionStart off
+  // today's sets after the last planned set. The coach effort finding only
+  // (a) supplies the banner verdict and (b) may hold an engine "add" when
+  // velocity says the set was far harder than logged. Null where the engine
+  // has nothing to offer (bodyweight, duration, rep-total next session, no
+  // prescribed load).
+  const lastCompletedSet = completedSets[completedSets.length - 1];
+  const latestMotion =
+    motionLatest && lastCompletedSet && motionLatest.setId === lastCompletedSet.id ? motionLatest : null;
+  const latestEngine = (() => {
+    const last = lastCompletedSet;
+    if (!last || isDurationBased || isBodyweightExercise || last.weightKg <= 0) return null;
+    if (pendingSetsCount > 0) {
+      const suggestion = buildSuggestionInfo(isAmrapSuggested && pendingSetsCount === 1);
+      const shown = parseFloat(suggestion.weight);
+      const reps = parseInt(suggestion.reps, 10);
+      if (!Number.isFinite(shown) || shown <= 0 || !Number.isFinite(reps)) return null;
+      return {
+        scope: 'next_set' as const,
+        engine: {
+          weightKg: inputWeightToKg(shown, unit),
+          reps,
+          effortVsTarget: recommendNext(last).effortVsTarget,
+        },
+      };
+    }
+    if (repTotalMode) return null;
+    const rec = recommendSessionStart({
+      prevWeightKg: last.weightKg,
+      prevReps: last.reps,
+      prevRir: resolveLastRir(last, effectiveTargetRir),
+      targetRepRange: block.targetRepRange,
+      targetRir: effectiveTargetRir,
+      minIncrementKg: exercise.minWeightIncrementKg,
+      availableIncrementsKg: exercise.availableIncrementsKg ?? undefined,
+      prevSessionSets: toPrevSessionSets(completedSets),
+      priorSessionSets: toPrevSessionSets(previousSets),
+    });
+    if (!(rec.weightKg > 0)) return null;
+    return {
+      scope: 'next_session' as const,
+      engine: { weightKg: rec.weightKg, reps: rec.reps, effortVsTarget: rec.effortVsTarget },
+    };
+  })();
+  const latestCall: NextSetCall | null =
+    latestEngine && lastCompletedSet
+      ? composeNextSetCall({
+          ...latestEngine,
+          lastWeightKg: lastCompletedSet.weightKg,
+          repRange: block.targetRepRange,
+          loggedRir:
+            lastCompletedSet.feedback?.repsInTank != null
+              ? lastCompletedSet.feedback.repsInTank
+              : lastCompletedSet.rpe != null
+                ? Math.max(0, rpeToRir(lastCompletedSet.rpe))
+                : null,
+          formBrokeDown: lastCompletedSet.feedback?.form === 'ugly',
+          effort: latestMotion?.effort ?? null,
+          higherEffortMinLoggedRir: MOTION_SET_CONFIG.recommendation.higherEffortMinLoggedRir,
+          formatWeight: (kg) => `${displayWeight(kg)} ${unit === 'lb' ? 'lb' : 'kg'}`,
+        })
+      : null;
+  // The banner is the ONE home of the next-set call: "{verdict} → W × R".
+  const bannerVerdict = !lastCompletedSet
+    ? null
+    : latestMotion?.verdictShort ??
+      (latestEngine ? loggedEffortVerdict(latestEngine.engine.effortVsTarget) : null);
+  // A velocity hold must not leave the engine's heavier load in an
+  // untouched weight field under a banner that says "hold".
+  const heldLoadKg = latestCall?.heldByVelocity && pendingSetsCount > 0 ? latestCall.weightKg : null;
+  useEffect(() => {
+    if (heldLoadKg === null || manualEditsRef.current.get(0)?.weight) return;
+    const shown = String(displayWeight(heldLoadKg));
+    setPendingInputs((prev) =>
+      prev.length > 0 && prev[0].weight !== shown ? [{ ...prev[0], weight: shown }, ...prev.slice(1)] : prev
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [heldLoadKg, lastCompletedSet?.id]);
+
   // Report the active set's live suggestion to the parent (the page's sticky
   // rest bar renders it as "next · 60 kg × 7"). Mirrors the SuggestionBanner
   // conditions/values exactly so the two surfaces can't disagree. Runs after
@@ -3915,14 +4072,45 @@ export const ExerciseCard = memo(function ExerciseCard({
                   {setSyncStatus?.[set.id] === 'queued' && (
                     <span className="text-warning-400 mr-1.5">queued</span>
                   )}
-                  {rirValue} RIR ·{' '}
-                  <span
-                    className={qualityTextClass(qualityDisplay)}
-                    title={SET_QUALITY_DISPLAY_META[qualityDisplay].description}
-                  >
-                    {SET_QUALITY_DISPLAY_META[qualityDisplay].label}
-                  </span>
+                  {rirValue} RIR
+                  {/* "stimulative" is the expected case — only say otherwise. */}
+                  {qualityDisplay !== 'stimulative' && (
+                    <>
+                      {' · '}
+                      <span
+                        className={qualityTextClass(qualityDisplay)}
+                        title={SET_QUALITY_DISPLAY_META[qualityDisplay].description}
+                      >
+                        {SET_QUALITY_DISPLAY_META[qualityDisplay].label}
+                      </span>
+                    </>
+                  )}
                 </span>
+                {motionSets?.[set.id] && renderMotionSheet && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMotionSheetSetId(set.id);
+                    }}
+                    aria-label={`Coach feedback for set ${set.setNumber}${
+                      motionSets[set.id].tone === 'low' ? ' (capture unclear)' : ''
+                    }`}
+                    data-testid={`set-motion-icon-${set.setNumber}`}
+                    data-tone={motionSets[set.id].tone}
+                    // 44px tap target that overlaps the row's padding instead
+                    // of stretching the row: a capture adds no height.
+                    className={`flex-shrink-0 min-w-[36px] min-h-[44px] -my-3 flex items-center justify-center rounded-lg ${
+                      motionSets[set.id].tone === 'ok'
+                        ? 'text-success-400'
+                        : motionSets[set.id].tone === 'low'
+                          ? 'text-warning-400'
+                          : 'text-surface-500'
+                    }`}
+                  >
+                    <IconActivity size={15} />
+                  </button>
+                )}
                 {onSetJointPain && (
                   <button
                     type="button"
@@ -3955,7 +4143,21 @@ export const ExerciseCard = memo(function ExerciseCard({
                 />
               )}
 
-              {/* Per-set extra (e.g. motion Observations) under the history row */}
+              {/* Motion: the top coach cue, only when it matters (severity ≥ 2). */}
+              {motionSets?.[set.id]?.cue && renderMotionSheet && (
+                <button
+                  type="button"
+                  onClick={() => setMotionSheetSetId(set.id)}
+                  className="-mt-1.5 block w-full pl-7 pr-2 pb-1 text-left"
+                  data-testid={`set-motion-cue-${set.setNumber}`}
+                >
+                  <span className="block max-w-[45ch] truncate text-[11px] leading-4 text-surface-500">
+                    {motionSets[set.id].cue}
+                  </span>
+                </button>
+              )}
+
+              {/* Per-set extra under the history row */}
               {completedSetExtra?.(set)}
 
               {/* Add Dropset affordance after the final completed set */}
@@ -3974,6 +4176,13 @@ export const ExerciseCard = memo(function ExerciseCard({
             </React.Fragment>
           );
         })}
+
+        {motionSheetSetId &&
+          renderMotionSheet?.({
+            setId: motionSheetSetId,
+            nextSetCall: motionSheetSetId === lastCompletedSet?.id ? latestCall?.call ?? null : null,
+            onClose: () => setMotionSheetSetId(null),
+          })}
 
         {/* Auto-triggered Dropset Prompt */}
         {isActive && pendingDropset && (
@@ -4216,8 +4425,17 @@ export const ExerciseCard = memo(function ExerciseCard({
           return (
             <div className="space-y-2 pt-1">
               <SuggestionBanner
-                weightLabel={bannerWeight}
-                repsLabel={`${suggestion.repsLabel || '—'}${isDurationBased ? 's' : ''}`}
+                weightLabel={
+                  latestCall?.heldByVelocity
+                    ? `${displayWeight(latestCall.weightKg)} ${weightLabel}`
+                    : bannerWeight
+                }
+                repsLabel={
+                  latestCall?.heldByVelocity
+                    ? latestCall.repsLabel
+                    : `${suggestion.repsLabel || '—'}${isDurationBased ? 's' : ''}`
+                }
+                verdict={bannerVerdict}
                 rir={Math.max(0, Math.min(3, loggerTargetRir))}
                 showRir={suggestion.showRir}
                 roleTag={suggestion.role === 'ramp' ? 'ramp' : null}
@@ -4277,6 +4495,33 @@ export const ExerciseCard = memo(function ExerciseCard({
                     : undefined
                 }
               />
+              {sensorRepOffer !== null && (
+                <div
+                  className="flex items-center justify-between gap-2 px-1 text-xs text-surface-300"
+                  data-testid="motion-rep-offer"
+                >
+                  <span>Sensor counted {sensorRepOffer}. Use this?</span>
+                  <span className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => applySensorReps(sensorRepOffer)}
+                      className="font-medium text-primary-400 hover:text-primary-300"
+                      data-testid="motion-rep-offer-use"
+                    >
+                      Use {sensorRepOffer}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSensorRepOffer(null)}
+                      className="text-surface-500 hover:text-surface-300"
+                      aria-label="Keep my rep count"
+                    >
+                      Keep mine
+                    </button>
+                  </span>
+                </div>
+              )}
+              {motionCaptureSlot}
             </div>
           );
         })()}
@@ -5057,6 +5302,19 @@ export const ExerciseCard = memo(function ExerciseCard({
     // its own sets changes saved/saving/queued.
     prevProps.sets.every(
       (s) => prevProps.setSyncStatus?.[s.id] === nextProps.setSyncStatus?.[s.id]
-    )
+    ) &&
+    // Motion capture: captures land a tick AFTER the set is logged, so the
+    // history-row extra and the recommendation evidence must be compared
+    // (both are memoized in the page). The Start/Stop slot compares by key.
+    prevProps.completedSetExtra === nextProps.completedSetExtra &&
+    (prevProps.motionCaptureSlot == null) === (nextProps.motionCaptureSlot == null) &&
+    prevProps.motionCaptureSlotKey === nextProps.motionCaptureSlotKey &&
+    prevProps.motionRepPrefill?.nonce === nextProps.motionRepPrefill?.nonce &&
+    prevProps.motionSets === nextProps.motionSets &&
+    prevProps.motionLatest?.setId === nextProps.motionLatest?.setId &&
+    prevProps.motionLatest?.verdictShort === nextProps.motionLatest?.verdictShort &&
+    prevProps.motionLatest?.effort?.zone === nextProps.motionLatest?.effort?.zone &&
+    prevProps.motionLatest?.effort?.disagreement === nextProps.motionLatest?.effort?.disagreement &&
+    prevProps.renderMotionSheet === nextProps.renderMotionSheet
   );
 });

@@ -1,181 +1,264 @@
 'use client';
 
 /**
- * Shared display for a capture analysis (used by both the in-workout
- * capture review and the calibration wizard): header strip, the w(t)
- * chart, the per-rep metric table, and the post-set Observations block.
+ * Shared display for a capture (the in-workout capture review, the
+ * calibration wizard, and the Details section of a set's coach sheet).
+ * Reads top-down: coach feedback (verdict + up to two cues), the rep count
+ * and velocity loss with a capture-quality badge, per-rep velocity bars, a
+ * tap-to-expand rep table, then collapsed "Rep detection" (the w(t) chart)
+ * and "Capture diagnostics" (sensor quality, the rep-cleaning log, the
+ * technical PC1 note, raw CSV export).
  *
- * FRAMING: this panel DESCRIBES what the sensor measured. It never judges
- * reps — no dismissive or judgmental labels ever attach to a rep; the
- * user interprets, the app reports (see services/shared/motion/
- * observations.ts and its banned-language test).
+ * Everything reads the CLEANED capture (captureGating): setup / re-rack
+ * artifacts are gone before any figure is computed. A low-confidence
+ * capture shows why — and no velocity claims, no technique cues.
  *
- * Display-only — this consumes services/shared/motion output and feeds
- * nothing back anywhere.
+ * `analysis` may be null for a capture restored from its persisted
+ * cleaning snapshot (no raw samples): then there is no chart and no
+ * sensor-level diagnostics, but the reps and the coach still work.
+ *
+ * Display-only — consumes services/shared/motion output, feeds nothing.
  */
 
-import { useMemo } from 'react';
-import type { CaptureAnalysis } from '@/services/shared/motion';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { IconAlertTriangle, IconCheck } from '@tabler/icons-react';
+import type { CaptureAnalysis, CleanedCapture, CoachContext, EffortZone } from '@/services/shared/motion';
 import {
-  buildObservations,
-  GRAVITY_ROM_SUPPRESS_BELOW_DEG,
-  LOW_CONFIDENCE_PC1_SHARE,
-  NOTHING_NOTABLE_LINE,
-  OBSERVATIONS_CONTEXT_LINE,
-  THIN_REFERENCE_LINE,
+  assessCaptureQuality,
+  buildCoachFeedback,
+  cleanCapture,
+  computeVelocityLoss,
+  MOTION_SET_CONFIG,
+  MULTI_AXIS_REASON,
 } from '@/services/shared/motion';
+import { TAP_LATENCY_WARN_MS } from '@/lib/motion/deviceMotionRecorder';
 import { CaptureChart } from './CaptureChart';
+import {
+  CoachBlock,
+  coachTemplateText,
+  Collapsible,
+  Diagnostics,
+  RepTable,
+  VelocityBars,
+  ZONE_LABEL,
+  ZONE_TEXT,
+} from './CaptureParts';
 
-const TIER_LABEL: Record<CaptureAnalysis['tier'], { text: string; className: string }> = {
-  mounted: { text: 'mounted', className: 'text-success-400' },
-  handheld: { text: 'hand-held', className: 'text-warning-400' },
-  none: { text: 'no still ref', className: 'text-danger-400' },
-};
+export interface CaptureAnalysisViewProps {
+  analysis: CaptureAnalysis | null;
+  /** Defaults to cleanCapture(analysis) (no PC1 recompute without samples). */
+  cleaned?: CleanedCapture;
+  /** Logged set context for the coach (rep count / RIR cross-checks, history). */
+  coachContext?: Partial<CoachContext>;
+  /** The coach block at the top; the set sheet renders its own above Details. */
+  showCoach?: boolean;
+  /** Sensor latency at the stop tap, ms; null when unknown / no tap. */
+  stopLatencyMs?: number | null;
+  /** Shown instead of a latency figure when stopLatencyMs is null. */
+  stopLatencyFallback?: string;
+  onDownloadCsv?: () => void;
+  downloadLabel?: string;
+}
 
-export function CaptureAnalysisView({ analysis }: { analysis: CaptureAnalysis }) {
-  const tier = TIER_LABEL[analysis.tier];
-  // The gravity cross-check column only appears when the rotation axis is
-  // far enough from vertical for the accelerometer to see the rotation.
+export function CaptureAnalysisView({
+  analysis,
+  cleaned: cleanedProp,
+  coachContext,
+  showCoach = true,
+  stopLatencyMs = null,
+  stopLatencyFallback = 'n/a',
+  onDownloadCsv,
+  downloadLabel = 'Download raw capture (CSV)',
+}: CaptureAnalysisViewProps) {
+  const cleaned = useMemo(
+    () => cleanedProp ?? (analysis ? cleanCapture(analysis) : null),
+    [cleanedProp, analysis]
+  );
+  const feedback = useMemo(
+    () =>
+      cleaned
+        ? buildCoachFeedback(cleaned, {
+            loggedReps: null,
+            loggedRir: null,
+            weightKg: null,
+            pausePoint: null,
+            history: null,
+            ...coachContext,
+          })
+        : null,
+    [cleaned, coachContext]
+  );
+  const velocity = useMemo(() => (cleaned ? computeVelocityLoss(cleaned.reps) : null), [cleaned]);
+  const pc1 = cleaned ? cleaned.pc1ShareClean ?? cleaned.pc1ShareRaw : 1;
+  const issues = useMemo(
+    () =>
+      analysis
+        ? assessCaptureQuality(analysis, {
+            pc1Share: pc1,
+            stopLatencyMs,
+            latencyWarnMs: TAP_LATENCY_WARN_MS,
+          })
+        : null,
+    [analysis, pc1, stopLatencyMs]
+  );
+
+  const [repDetectionOpen, setRepDetectionOpen] = useState(false);
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  const [scrollToDiagnostics, setScrollToDiagnostics] = useState(false);
+  const diagnosticsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!scrollToDiagnostics) return;
+    diagnosticsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setScrollToDiagnostics(false);
+  }, [scrollToDiagnostics]);
+
+  if (!cleaned || !feedback || !velocity) return null;
+  const low = feedback.confidence.confidence === 'low';
+  const reps = cleaned.reps;
   const showGravity =
-    analysis.gravityRomStatus === 'ok' || analysis.gravityRomStatus === 'low-confidence';
-  const observations = useMemo(() => buildObservations(analysis.reps), [analysis.reps]);
+    analysis?.gravityRomStatus === 'ok' || analysis?.gravityRomStatus === 'low-confidence';
 
   return (
-    <div className="space-y-3" data-testid="motion-analysis-view">
-      {/* Header strip */}
-      <div className="grid grid-cols-4 gap-2 text-center" data-testid="motion-analysis-header">
-        <div className="p-2 rounded-lg bg-surface-900/60">
-          <p className="text-[10px] uppercase tracking-wide text-surface-500">Sample rate</p>
-          <p className="text-sm font-semibold text-surface-200">{analysis.sampleRateHz.toFixed(1)} Hz</p>
-        </div>
-        <div className="p-2 rounded-lg bg-surface-900/60">
-          <p className="text-[10px] uppercase tracking-wide text-surface-500">Dropped</p>
-          <p className={`text-sm font-semibold ${analysis.droppedFrames > 0 ? 'text-warning-400' : 'text-surface-200'}`}>
-            {analysis.droppedFrames}
-          </p>
-        </div>
-        <div className="p-2 rounded-lg bg-surface-900/60">
-          <p className="text-[10px] uppercase tracking-wide text-surface-500">Stillness</p>
-          <p className={`text-sm font-semibold ${tier.className}`}>{tier.text}</p>
-        </div>
-        <div className="p-2 rounded-lg bg-surface-900/60">
-          <p className="text-[10px] uppercase tracking-wide text-surface-500">PC1 share</p>
-          <p className={`text-sm font-semibold ${analysis.lowConfidence ? 'text-warning-400' : 'text-surface-200'}`}>
-            {(analysis.pc1VarianceShare * 100).toFixed(0)}%
-          </p>
-        </div>
-      </div>
+    <div className="space-y-4 min-w-0" data-testid="motion-analysis-view">
+      {showCoach && <CoachBlock feedback={feedback} text={coachTemplateText(feedback, null)} />}
 
-      {analysis.lowConfidence && (
-        <div className="p-3 rounded-lg bg-warning-500/10 border border-warning-500/20">
-          <p className="text-xs text-warning-400">
-            Motion is not single-DOF (PC1 variance share below{' '}
-            {LOW_CONFIDENCE_PC1_SHARE * 100}%) — treat this capture as low-confidence.
-          </p>
-        </div>
-      )}
+      <SummaryHeader
+        repCount={reps.length}
+        loss={low ? null : velocity.loss}
+        zone={low ? null : velocity.zone}
+        issues={issues}
+        onBadgeClick={() => {
+          setDiagnosticsOpen(true);
+          setScrollToDiagnostics(true);
+        }}
+      />
 
-      <CaptureChart analysis={analysis} />
-
-      {/* Per-rep table */}
-      {analysis.reps.length > 0 ? (
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs" data-testid="motion-analysis-rep-table">
-            <thead>
-              <tr className="text-surface-500 text-left">
-                <th className="py-1 pr-2 font-medium">Rep</th>
-                <th className="py-1 pr-2 font-medium">Conc (s)</th>
-                <th className="py-1 pr-2 font-medium">Ecc (s)</th>
-                <th className="py-1 pr-2 font-medium">Peak ω</th>
-                <th className="py-1 pr-2 font-medium">Mean ω</th>
-                <th className="py-1 pr-2 font-medium">ROM</th>
-                {showGravity && (
-                  <th className="py-1 pr-2 font-medium">
-                    ROM (gravity)
-                    {analysis.gravityRomStatus === 'low-confidence' && (
-                      <span className="ml-1 font-normal text-surface-500">low conf.</span>
-                    )}
-                  </th>
-                )}
-                <th className="py-1 pr-2 font-medium">Dwell</th>
-                <th className="py-1 font-medium">Turn accel</th>
-              </tr>
-            </thead>
-            <tbody>
-              {analysis.reps.map((rep) => (
-                <tr key={rep.index} className="text-surface-300">
-                  <td className="py-1.5 pr-2">{rep.index + 1}</td>
-                  <td className="py-1.5 pr-2">{(rep.concentricMs / 1000).toFixed(2)}</td>
-                  <td className="py-1.5 pr-2">{(rep.eccentricMs / 1000).toFixed(2)}</td>
-                  <td className="py-1.5 pr-2 whitespace-nowrap">{rep.peakW.toFixed(2)} rad/s</td>
-                  <td className="py-1.5 pr-2 whitespace-nowrap">{rep.meanWConcentric.toFixed(2)} rad/s</td>
-                  <td className="py-1.5 pr-2">
-                    {analysis.romSuppressed ? '—' : `${rep.romConcentricDeg.toFixed(0)}°`}
-                  </td>
-                  {showGravity && (
-                    <td className="py-1.5 pr-2">
-                      {rep.romGravityDeg === null ? '—' : `${rep.romGravityDeg.toFixed(0)}°`}
-                    </td>
-                  )}
-                  <td className="py-1.5 pr-2 whitespace-nowrap">
-                    {rep.bottomDwellMs === null ? '—' : `${Math.round(rep.bottomDwellMs / 10) * 10} ms`}
-                  </td>
-                  <td className="py-1.5 whitespace-nowrap">
-                    {rep.turnaroundPeakAccelRadps2 === null
-                      ? '—'
-                      : `${rep.turnaroundPeakAccelRadps2.toFixed(1)} rad/s²`}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <p className="text-sm text-surface-400">No reps detected in this capture.</p>
-      )}
-
-      {analysis.gravityRomStatus === 'suppressed' && (
-        <p className="text-xs text-surface-500" data-testid="motion-gravity-rom-suppressed">
-          The rotation axis is within {GRAVITY_ROM_SUPPRESS_BELOW_DEG}° of vertical, so the
-          accelerometer cross-check can&apos;t resolve this rotation — the gravity ROM column is
-          hidden.
-        </p>
-      )}
-      {analysis.romSuppressed && (
-        <p className="text-xs text-surface-500">
-          No still reference anywhere in the capture, so absolute ROM is suppressed — rep count,
-          tempo, and velocity are unaffected. If the phone was hand-held, that is expected.
-        </p>
-      )}
-      {analysis.unpairedHalfReps > 0 && (
-        <p className="text-xs text-surface-500">
-          {analysis.unpairedHalfReps} movement phase{analysis.unpairedHalfReps === 1 ? '' : 's'}{' '}
-          didn&apos;t pair into a rep.
+      {/* Plain-language version; the technical PC1 note lives in diagnostics. */}
+      {pc1 < MOTION_SET_CONFIG.gating.minPc1Share && (
+        <p className="text-xs text-warning-400" data-testid="motion-multi-axis-note">
+          {MULTI_AXIS_REASON[0].toUpperCase() + MULTI_AXIS_REASON.slice(1)}.
         </p>
       )}
 
-      {/* Observations: descriptive only, within-set median reference. */}
-      {analysis.reps.length > 0 && (
-        <div className="space-y-1.5" data-testid="motion-observations">
-          <p className="text-xs font-medium uppercase tracking-wide text-surface-500">
-            Observations
-          </p>
-          {observations.referenceTooThin ? (
-            <p className="text-sm text-surface-300">{THIN_REFERENCE_LINE}</p>
-          ) : observations.nothingNotable ? (
-            <p className="text-sm text-surface-300">{NOTHING_NOTABLE_LINE}</p>
-          ) : (
-            observations.lines.map((line) => (
-              <p key={line} className="text-sm text-surface-300">
-                {line}
-              </p>
-            ))
+      {reps.length > 0 ? (
+        <>
+          {!low && <VelocityBars perRep={velocity.perRep} />}
+          <RepTable
+            reps={reps}
+            perRep={low ? null : velocity.perRep}
+            romSuppressed={analysis?.romSuppressed ?? false}
+            gravityLabel={
+              showGravity
+                ? analysis?.gravityRomStatus === 'low-confidence'
+                  ? 'ROM (gravity, low conf.)'
+                  : 'ROM (gravity)'
+                : null
+            }
+          />
+          {analysis?.romSuppressed && (
+            <p className="text-xs text-surface-500">
+              No still reference anywhere in the capture, so absolute ROM is suppressed — rep
+              count, tempo, and velocity are unaffected. If the phone was hand-held, that is
+              expected.
+            </p>
           )}
-          <p className="text-xs text-surface-500" data-testid="motion-observations-context">
-            {OBSERVATIONS_CONTEXT_LINE}
-          </p>
-        </div>
+        </>
+      ) : (
+        <p className="text-sm text-surface-400">No working reps detected in this capture.</p>
       )}
+
+      {analysis && (
+        <Collapsible
+          title="Rep detection"
+          open={repDetectionOpen}
+          onToggle={() => setRepDetectionOpen((o) => !o)}
+          testId="motion-rep-detection"
+        >
+          <CaptureChart analysis={analysis} />
+        </Collapsible>
+      )}
+
+      <div ref={diagnosticsRef}>
+        <Collapsible
+          title="Capture diagnostics"
+          open={diagnosticsOpen}
+          onToggle={() => setDiagnosticsOpen((o) => !o)}
+          testId="motion-diagnostics"
+        >
+          <Diagnostics
+            analysis={analysis}
+            cleaned={cleaned}
+            stopLatencyMs={stopLatencyMs}
+            stopLatencyFallback={stopLatencyFallback}
+            onDownloadCsv={onDownloadCsv}
+            downloadLabel={downloadLabel}
+          />
+        </Collapsible>
+      </div>
+    </div>
+  );
+}
+
+function SummaryHeader({
+  repCount,
+  loss,
+  zone,
+  issues,
+  onBadgeClick,
+}: {
+  repCount: number;
+  loss: number | null;
+  zone: EffortZone | null;
+  /** null = no sensor-level data (restored from a snapshot): no badge. */
+  issues: ReturnType<typeof assessCaptureQuality> | null;
+  onBadgeClick: () => void;
+}) {
+  const clean = issues !== null && issues.length === 0;
+  return (
+    <div className="space-y-1.5" data-testid="motion-analysis-header">
+      <p className="text-lg font-semibold text-surface-100" data-testid="motion-summary-line">
+        {repCount} rep{repCount === 1 ? '' : 's'}
+        {loss !== null && <> · {Math.round(loss * 100)}% velocity loss</>}
+      </p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {zone ? (
+          <span className={`text-sm font-medium ${ZONE_TEXT[zone]}`} data-testid="motion-summary-status">
+            {ZONE_LABEL[zone]}
+          </span>
+        ) : (
+          <span />
+        )}
+        {issues !== null && (
+          <button
+            type="button"
+            onClick={onBadgeClick}
+            className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${
+              clean
+                ? 'bg-success-500/10 text-success-400'
+                : 'bg-warning-500/10 text-warning-400 border border-warning-500/20'
+            }`}
+            data-testid="motion-quality-badge"
+            aria-label={
+              clean
+                ? 'Clean capture — show capture diagnostics'
+                : `Capture warning: ${issues.map((i) => i.label).join(', ')} — show capture diagnostics`
+            }
+          >
+            {clean ? (
+              <>
+                <IconCheck size={14} aria-hidden /> Clean capture
+              </>
+            ) : (
+              <>
+                <IconAlertTriangle size={14} aria-hidden />
+                {issues[0].label}
+                {issues.length > 1 && ` +${issues.length - 1}`}
+              </>
+            )}
+          </button>
+        )}
+      </div>
     </div>
   );
 }

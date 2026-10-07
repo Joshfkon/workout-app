@@ -75,8 +75,16 @@ export function tapLatencyMs(recorder: MotionRecorderHandle): number | null {
  * channel (some Android WebViews emit partial events) are skipped — the
  * pipeline's dt-gap accounting reports them as dropped samples.
  */
-export function startMotionRecorder(onSample?: (s: ImuSample) => void): MotionRecorderHandle {
+export function startMotionRecorder(
+  onSample?: (s: ImuSample) => void,
+  opts: { retainSamples?: boolean } = {}
+): MotionRecorderHandle {
+  // retainSamples: false → stream-only (the caller keeps what it needs);
+  // a long-lived monitor must not accumulate a whole workout of samples.
+  const retain = opts.retainSamples !== false;
   const samples: ImuSample[] = [];
+  let lastTMs: number | null = null;
+  let count = 0;
 
   const handler = (e: DeviceMotionEvent) => {
     const rr = e.rotationRate;
@@ -94,7 +102,9 @@ export function startMotionRecorder(onSample?: (s: ImuSample) => void): MotionRe
       },
       accel: { x: acc.x, y: acc.y, z: acc.z },
     };
-    samples.push(sample);
+    if (retain) samples.push(sample);
+    lastTMs = sample.tMs;
+    count++;
     onSample?.(sample);
   };
 
@@ -108,8 +118,8 @@ export function startMotionRecorder(onSample?: (s: ImuSample) => void): MotionRe
       }
       return samples;
     },
-    sampleCount: () => samples.length,
-    lastSampleTMs: () => (samples.length > 0 ? samples[samples.length - 1].tMs : null),
+    sampleCount: () => count,
+    lastSampleTMs: () => lastTMs,
   };
 }
 

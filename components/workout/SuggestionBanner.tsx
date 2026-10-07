@@ -57,6 +57,12 @@ interface SuggestionBannerProps {
   effortCheck?: EffortCheck | null;
   /** Advances when a set is logged — resets the per-set warning state. */
   setKey?: number | string;
+  /**
+   * Verdict on the most recent completed set (coach / logged effort). When
+   * present the strip reads "{verdict} → {weight} × {reps}" and the
+   * one-line reason moves to the top of the ⓘ sheet.
+   */
+  verdict?: string | null;
 }
 
 /**
@@ -80,6 +86,7 @@ export function SuggestionBanner({
   explanation,
   effortCheck = null,
   setKey,
+  verdict = null,
 }: SuggestionBannerProps) {
   const [showInfo, setShowInfo] = useState(false);
   const [warningActive, setWarningActive] = useState(false);
@@ -146,16 +153,22 @@ export function SuggestionBanner({
           aria-hidden={showWarning}
           aria-live="polite"
         >
-          <span className="font-medium">
-            {weightLabel} × {repsLabel}
-            {showRir ? ` @ ${rir} RIR` : ''}
-          </span>
+          {verdict ? (
+            <span data-testid="suggestion-verdict">
+              {verdict} → <span className="font-medium">{weightLabel} × {repsLabel}</span>
+            </span>
+          ) : (
+            <span className="font-medium">
+              {weightLabel} × {repsLabel}
+              {showRir ? ` @ ${rir} RIR` : ''}
+            </span>
+          )}
           {roleTag ? (
             <span className="ml-1.5 rounded bg-primary-500/20 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-primary-300">
               {roleTag}
             </span>
           ) : null}
-          {reason ? <span> — {reason}</span> : null}
+          {reason && !verdict ? <span> — {reason}</span> : null}
         </p>
         {effortCheck != null && (
           <p
@@ -188,7 +201,10 @@ export function SuggestionBanner({
         title="How this suggestion works"
       >
         <ul className="space-y-2.5">
-          {explanation.map((line, i) => (
+          {(verdict && reason
+            ? [`${weightLabel} × ${repsLabel}${showRir ? ` @ ${rir} RIR` : ''} — ${reason}.`, ...explanation]
+            : explanation
+          ).map((line, i) => (
             <li key={i} className="flex items-start gap-2 text-[13px] text-surface-300">
               <span className="mt-1.5 w-1 h-1 rounded-full bg-primary-400 flex-shrink-0" aria-hidden="true" />
               {line}
