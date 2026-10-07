@@ -153,6 +153,7 @@
     overflow-x: hidden;
     overflow-x: clip;
     overscroll-behavior-x: none;
+    overscroll-behavior-y: none;
   }
 
   body {
@@ -164,6 +165,7 @@
     overflow-x: hidden;
     overflow-x: clip;
     overscroll-behavior-x: none;
+    overscroll-behavior-y: none;
   }
 
   /* Prevent zoom on input focus (iOS) */
