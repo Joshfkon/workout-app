@@ -526,13 +526,18 @@ FITBIT_CLIENT_SECRET=
      SuggestionBanner is its single home ("{verdict} → W × R"). The effort
      finding may only turn an engine "add" into "hold" (near-failure
      velocity vs logged RIR ≥ 2) — never adds load.
-   - **Cross-session.** Besides velocityRir, the coach's "vs last set / last
-     session" finding compares mean ω at the same rep number, same
-     calibration, same load only. The set_logs join for it lives in
+   - **Cross-session.** Besides velocityRir, the coach's "vs last session"
+     finding compares mean ω at the same rep number and set number, same
+     calibration, same load only. (No in-session "vs last set": fatigue
+     alone makes the next set slower.) The set_logs join for it lives in
      `hooks/useMotionCaptureHistory.ts`, outside the feature dirs.
    Persisted captures carry a cleaning snapshot (`analysis_metrics.cleaned`,
    `cleaningVersion`); older captures are reprocessed from raw if it exists,
-   otherwise shown uncoached. All thresholds: `MOTION_SET_CONFIG`
+   otherwise shown uncoached. Coaching waits for a logged effort (RIR chip
+   or RPE). A >5 s pause splits the capture; the split costs confidence
+   only if the kept block disagrees with (or can't be checked against) the
+   logged rep count. Where a pause sits comes from `exercises.pause_point`,
+   else movement pattern, else "between reps". All thresholds: `MOTION_SET_CONFIG`
    (`services/shared/motion/motionSetConfig.ts`).
 
 ## Loading States & Data Caching (cached-first)

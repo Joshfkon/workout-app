@@ -194,6 +194,12 @@ describe('pausePointForPattern', () => {
     expect(pausePointForPattern('isolation')).toBeNull();
     expect(pausePointForPattern(undefined)).toBeNull();
   });
+
+  it('an explicit exercises.pause_point wins over the pattern', () => {
+    expect(pausePointForPattern('isolation', 'bottom')).toBe('bottom'); // e.g. leg extension
+    expect(pausePointForPattern('isolation', 'top')).toBe('top'); // e.g. tricep pushdown
+    expect(pausePointForPattern('vertical_pull', null)).toBe('top');
+  });
 });
 
 it('no UI source string in the motion feature carries banned language', () => {

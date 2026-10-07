@@ -34,10 +34,16 @@ export type PausePoint = 'bottom' | 'top' | null;
  * Where the measured pause sits. The pipeline measures the pause BEFORE
  * each concentric, i.e. at the start position of the lift. For presses,
  * squats, hinges and lunges that is the bottom; for vertical pulls it is
- * the top (arms overhead). Rows, isolation work and anything unknown have
- * no reliable top/bottom → "between reps".
+ * the top (arms overhead). An explicit exercises.pause_point wins; rows,
+ * flys and anything else unknown have no reliable top/bottom →
+ * "between reps".
  */
-export function pausePointForPattern(pattern: string | null | undefined): PausePoint {
+export function pausePointForPattern(
+  pattern: string | null | undefined,
+  /** exercises.pause_point — wins when set. */
+  explicit: PausePoint | undefined = null
+): PausePoint {
+  if (explicit === 'top' || explicit === 'bottom') return explicit;
   switch (pattern) {
     case 'squat':
     case 'hip_hinge':

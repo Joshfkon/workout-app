@@ -83,7 +83,6 @@ const PlateCalculatorModal = dynamic(() => import('@/components/workout').then(m
 // set beats the exercise's record, so keep it out of the initial bundle.
 const PRCelebration = dynamic(() => import('@/components/workout').then(m => m.PRCelebration), { ssr: false });
 // Motion capture sheet (experimental, flag-gated) — loaded on demand.
-const MotionCaptureSheet = dynamic(() => import('@/components/motion/MotionCaptureSheet').then(m => m.MotionCaptureSheet), { ssr: false });
 import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaRegionalData, TemporaryInjury, PreWorkoutCheckIn, SetFeedback, Rating, BodyweightData, ExerciseType, StandardMuscleGroup, ExercisePerformanceSnapshot, RepsInTank, SorenessRating, SetDiscomfort, JointPainJoint, SleepLogEntry } from '@/types/schema';
 import type { SessionMuscleFeedbackEntry, SessionSummarySubmitData } from '@/components/workout/SessionSummary';
 import { MuscleGroupFeedbackModal, type MuscleFeedbackRatings } from '@/components/workout/MuscleGroupFeedbackModal';
@@ -91,7 +90,6 @@ import type { MuscleSorenessRatings } from '@/components/workout/ReadinessCheckI
 import { createUntypedClient } from '@/lib/supabase/client';
 import { getLocalUserId } from '@/lib/supabase/authState';
 import { listCalibrations } from '@/lib/motion/calibrations';
-import { getPendingCapture } from '@/lib/motion/pendingCapture';
 import { observationsViewedThisSession } from '@/lib/motion/observationsViewed';
 import { saveMotionCapture, saveRawBufferIfAllowed } from '@/lib/motion/motionPersistence';
 import { useMotionSetCapture, type StoppedCapture } from '@/components/motion/useMotionSetCapture';
@@ -893,16 +891,12 @@ export default function WorkoutPage() {
   // Enhanced Athlete Mode (users.enhanced_athlete_mode): raises the sandbagging
   // threshold and drives the connective-tissue cap note on exercise cards.
   const [enhancedAthleteModeActive, setEnhancedAthleteModeActive] = useState(false);
-  // Motion capture (experimental, users.motion_capture_enabled): a "Record
-  // motion" affordance on the current exercise card opens the capture sheet
-  // for exercises that have a machine calibration. Display-only telemetry.
+  // Motion capture (experimental, users.motion_capture_enabled): explicit
+  // Start/Stop on the active set row. Calibrations key persistence and the
+  // velocity profiles; calibrating a machine lives on the motion page.
   const [motionCaptureEnabled, setMotionCaptureEnabled] = useState(false);
   const [motionRawRetention, setMotionRawRetention] = useState(false);
   const [motionCalibrations, setMotionCalibrations] = useState<MachineCalibration[]>([]);
-  const [motionSheetBlock, setMotionSheetBlock] = useState<{
-    blockId: string;
-    exerciseId: string;
-  } | null>(null);
   // Manual Start/Stop capture on the active set row. A stopped capture is
   // held (pendingMotionRef) until "Log set" attaches it to the logged set;
   // kept captures are keyed by set id for the recommendation line and the
@@ -1076,7 +1070,10 @@ export default function WorkoutPage() {
       const { capture } = pending;
       if (capture.cleaned.reps.length === 0) return;
       const cleaningLog = describeCleaning(capture.cleaned);
-      if (cleaningLog.length > 0) console.info('[motion] rep cleaning:', cleaningLog);
+      if (cleaningLog.length > 0) {
+        // eslint-disable-next-line no-console -- deliberate: rep cleaning logs what it set aside and why
+        console.info('[motion] rep cleaning:', cleaningLog);
+      }
       setTimeout(() => {
         const calibrationId =
           motionCalibrations.find((c) => c.exerciseId === exerciseId)?.id ?? null;
@@ -1112,41 +1109,38 @@ export default function WorkoutPage() {
     return { ...out, ...motionAutoCaptures };
   }, [motionHistory.bySetId, motionAutoCaptures]);
 
-  // Coach feedback per logged working set. Gated on a logged RIR (the RIR
-  // is the label for the velocity → RIR fit; showing metrics before it is
-  // entered contaminates it). History: the previous captured set of the
-  // same exercise this session, else the same set number last session —
-  // the coach itself requires the same load.
+  // Coach feedback per logged working set. Gated on a logged effort — RIR
+  // chip or RPE (logged effort is the label for the velocity → RIR fit;
+  // showing metrics before it is entered contaminates it). History: the
+  // same set number last session (same calibration; the coach itself
+  // requires the same load). In-session "vs last set" is deliberately not
+  // used — fatigue alone makes the next set slower.
   const motionCoach = useMemo(() => {
     const out: Record<string, { feedback: CoachFeedback | null; context: CoachContext }> = {};
-    const prevByBlock: Record<string, { weightKg: number; reps: Array<{ n: number; meanW: number }> }> = {};
     for (const set of completedSets) {
       if (set.isWarmup || set.setType === 'warmup') continue;
       const capture = allMotionCaptures[set.id];
-      if (!capture || set.feedback?.repsInTank == null) continue;
+      const loggedRir =
+        set.feedback?.repsInTank != null
+          ? set.feedback.repsInTank
+          : set.rpe != null
+            ? Math.max(0, rpeToRir(set.rpe))
+            : null;
+      if (!capture || loggedRir === null) continue;
       const block = blocks.find((b) => b.id === set.exerciseBlockId);
-      const prev = prevByBlock[set.exerciseBlockId];
       const lastSession = capture.calibrationId
         ? motionHistory.lastSession[capture.calibrationId]?.find((h) => h.setNumber === set.setNumber)
         : undefined;
       const context: CoachContext = {
         loggedReps: set.reps,
-        loggedRir: set.feedback.repsInTank,
+        loggedRir,
         weightKg: set.weightKg,
-        pausePoint: pausePointForPattern(block?.exercise?.movementPattern),
-        history: prev
-          ? { source: 'last set', ...prev }
-          : lastSession
-            ? { source: 'last session', weightKg: lastSession.weightKg, reps: lastSession.reps }
-            : null,
+        pausePoint: pausePointForPattern(block?.exercise?.movementPattern, block?.exercise?.pausePoint),
+        history: lastSession
+          ? { source: 'last session', weightKg: lastSession.weightKg, reps: lastSession.reps }
+          : null,
       };
       out[set.id] = { feedback: capture.cleaned ? buildCoachFeedback(capture.cleaned, context) : null, context };
-      if (capture.cleaned && out[set.id].feedback?.confidence.confidence === 'ok') {
-        prevByBlock[set.exerciseBlockId] = {
-          weightKg: set.weightKg,
-          reps: capture.cleaned.reps.map((r) => ({ n: r.n, meanW: r.meanW })),
-        };
-      }
     }
     return out;
   }, [completedSets, allMotionCaptures, blocks, motionHistory.lastSession]);
@@ -1204,7 +1198,7 @@ export default function WorkoutPage() {
           nextSetCall={nextSetCall}
           loggedWeightLabel={weightLabel}
           workoutSessionId={session?.id ?? null}
-          velocityRirLine={estimate ? buildVelocityRirLine(estimate, set.feedback?.repsInTank ?? null) : null}
+          velocityRirLine={estimate ? buildVelocityRirLine(estimate, coach.context.loggedRir) : null}
           onClose={onClose}
         />
       );
@@ -7457,21 +7451,6 @@ export default function WorkoutPage() {
                     renderMotionSheet={motionCaptureEnabled ? renderMotionSheet : undefined}
                   />
 
-                  {motionCaptureEnabled && isCurrent && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setMotionSheetBlock({ blockId: block.id, exerciseId: block.exerciseId })
-                      }
-                      className="w-full py-2 px-3 rounded-lg border border-surface-700 text-xs text-surface-400 hover:text-surface-200 hover:border-surface-500 transition-colors"
-                      data-testid="motion-record-button"
-                    >
-                      {getPendingCapture()?.exerciseId === block.exerciseId
-                        ? '● Motion capture waiting for review'
-                        : '◉ Record motion manually'}
-                    </button>
-                  )}
-
                   {/* Rest timer renders as a fixed bottom bar at page level (P0-5) */}
 
                   {/* AMRAP Suggestion Banner - positioned below sets for better visibility when keyboard is up */}
@@ -8171,21 +8150,6 @@ export default function WorkoutPage() {
           />
         );
       })()}
-
-      {/* Motion capture sheet (experimental, flag-gated). Closing mid-review
-          keeps the capture in memory; the card button offers to resume. */}
-      {motionSheetBlock && session && (
-        <MotionCaptureSheet
-          isOpen
-          onClose={() => setMotionSheetBlock(null)}
-          userId={session.userId}
-          rawRetentionEnabled={motionRawRetention}
-          calibrations={motionCalibrations}
-          exerciseNames={Object.fromEntries(blocks.map((b) => [b.exerciseId, b.exercise.name]))}
-          exerciseId={motionSheetBlock.exerciseId}
-          blockId={motionSheetBlock.blockId}
-        />
-      )}
 
       {/* Page-level Swap Modal for injury-related swaps */}
       {showPageLevelSwapModal && swapTargetBlockId && (() => {

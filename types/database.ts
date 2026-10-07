@@ -203,6 +203,7 @@ export interface Database {
           common_mistakes: string[];
           setup_note: string;
           movement_pattern: string;
+          pause_point: 'top' | 'bottom' | null;
           rom_demands: string[];
           equipment_required: string[];
           equipment_class: string | null;
@@ -227,6 +228,7 @@ export interface Database {
           common_mistakes?: string[];
           setup_note?: string;
           movement_pattern?: string;
+          pause_point?: 'top' | 'bottom' | null;
           rom_demands?: string[];
           equipment_required?: string[];
           equipment_class?: string | null;
@@ -251,6 +253,7 @@ export interface Database {
           common_mistakes?: string[];
           setup_note?: string;
           movement_pattern?: string;
+          pause_point?: 'top' | 'bottom' | null;
           rom_demands?: string[];
           equipment_required?: string[];
           equipment_class?: string | null;

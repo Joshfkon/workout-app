@@ -80,6 +80,8 @@ export interface LoadedExerciseRow {
   common_mistakes: string[] | null;
   setup_note: string | null;
   movement_pattern: string | null;
+  /** exercises.pause_point — start of the concentric (motion coach). */
+  pause_point?: string | null;
   rom_demands: string[] | null;
   equipment_required: string[] | null;
   equipment: string | null;
@@ -204,6 +206,7 @@ export function mapLoadedExerciseRow(row: LoadedExerciseRow): LoadedExercise {
     commonMistakes: row.common_mistakes || [],
     setupNote: row.setup_note || '',
     movementPattern: row.movement_pattern || '',
+    pausePoint: row.pause_point === 'top' || row.pause_point === 'bottom' ? row.pause_point : null,
     romDemands: row.rom_demands || [],
     equipmentRequired: row.equipment_required || [],
     equipment: row.equipment || (row.equipment_required?.[0] || 'barbell'),

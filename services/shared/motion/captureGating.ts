@@ -4,7 +4,9 @@
  * decides which detected reps are real working reps.
  *
  *   1. SPLIT at any inter-rep pause > splitPauseMs (setup, re-rack, rest)
- *      and keep only the longest continuous block.
+ *      and keep only the longest continuous block. The split alone costs
+ *      confidence only when the kept block can't be checked against (or
+ *      disagrees with) the logged rep count.
  *   2. REJECT setup / re-rack artifacts, judged against the median of ALL
  *      detected reps: concentric or eccentric duration < minDurationFraction
  *      of median, peak ω > maxPeakRatio × median, or ROM < minRomFraction of
@@ -243,13 +245,19 @@ export function assessConfidence(
   const reasons: string[] = [];
   const counted = cleaned.reps.length;
 
-  if (loggedReps !== null && loggedReps > 0) {
+  const hasLogged = loggedReps !== null && loggedReps > 0;
+  let countMatches = false;
+  if (hasLogged) {
     const diff = Math.abs(counted - loggedReps);
-    if (diff > g.repMismatchMaxAbs || diff > loggedReps * g.repMismatchMaxFraction) {
+    countMatches = !(diff > g.repMismatchMaxAbs || diff > loggedReps * g.repMismatchMaxFraction);
+    if (!countMatches) {
       reasons.push(`the sensor counted ${counted} reps but you logged ${loggedReps}`);
     }
   }
-  if (cleaned.splitPauseMs !== null) {
+  // A long pause split the capture. If the kept block agrees with the
+  // logged count, the split found the set (rest-pause, a mid-set re-seat):
+  // confident. With no logged count to check against, it stays unclear.
+  if (cleaned.splitPauseMs !== null && !countMatches) {
     reasons.push(`there was a ${(cleaned.splitPauseMs / 1000).toFixed(0)}-second stop mid-set`);
   }
   const detectedInBlock = cleaned.rawRepCount - cleaned.outsideBlockCount;

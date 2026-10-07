@@ -150,23 +150,37 @@ describe('regression: 18,710 ms gap, 20 detected vs 15 logged', () => {
     ...Array.from({ length: 15 }, () => rep()),
   ]);
 
-  it('splits at the pause, keeps 15, and is low confidence', () => {
+  it('splits at the pause and keeps the 15-rep block', () => {
     expect(analysis.reps).toHaveLength(20);
     const cleaned = cleanCapture(analysis);
     expect(cleaned.reps).toHaveLength(15);
     expect(cleaned.splitPauseMs).toBeGreaterThan(18_000);
-    const conf = assessConfidence(cleaned, 15);
+  });
+
+  it('is confident when the kept block matches the logged count (split found the set)', () => {
+    expect(assessConfidence(cleanCapture(analysis), 15).confidence).toBe('ok');
+  });
+
+  it('stays unclear when there is no logged count to check the split against', () => {
+    const conf = assessConfidence(cleanCapture(analysis), null);
     expect(conf.confidence).toBe('low');
     expect(captureUnclearLine(conf)).toBe('Capture unclear: There was a 19-second stop mid-set.');
   });
 
-  it('never reports the pause as a dwell, and says nothing about technique', () => {
+  it('a split block that disagrees with the log is unclear for the count, not the pause', () => {
+    expect(assessConfidence(cleanCapture(analysis), 20).reasons).toEqual([
+      'the sensor counted 15 reps but you logged 20',
+      'there was a 19-second stop mid-set',
+    ]);
+  });
+
+  it('never reports the pause as a dwell — the coached set starts after it', () => {
     const cleaned = cleanCapture(analysis);
     for (const r of cleaned.reps) expect(r.dwellMs ?? 0).toBeLessThan(5_000);
     const fb = buildCoachFeedback(cleaned, { loggedReps: 15, loggedRir: 2, weightKg: 40, pausePoint: 'bottom' });
-    expect(fb.cues).toEqual([]);
-    expect(fb.verdict).toBeNull();
-    expect(JSON.stringify(fb)).not.toMatch(/18\s?\d{3}\s?ms|18710/);
+    expect(fb.confidence.confidence).toBe('ok');
+    expect(fb.cues.some((c) => c.type === 'pausing')).toBe(false);
+    expect(JSON.stringify(fb)).not.toMatch(/18\s?\d{3}|18\.7|19-second/);
   });
 
   it('flags the count mismatch when there is no pause to split on', () => {

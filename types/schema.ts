@@ -459,6 +459,13 @@ export interface Exercise {
   movementPattern: string;
 
   /**
+   * Where a between-rep pause sits (exercises.pause_point): the start of the
+   * concentric. Null/absent = ambiguous; the motion coach falls back to
+   * movementPattern, then "between reps".
+   */
+  pausePoint?: 'top' | 'bottom' | null;
+
+  /**
    * ROM / joint-position demand tags (exercises.rom_demands) for the warmup
    * engine — loaded end-ranges and rotational demands generic muscle warmth
    * does not prepare. Absent/empty on rows classified before the column
