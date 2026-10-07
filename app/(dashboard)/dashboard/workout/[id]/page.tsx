@@ -122,6 +122,7 @@ import {
 import { generateWarmupProtocol, isMuscleWarmedUp } from '@/services/progressionEngine';
 import { evaluateWarmupReadiness } from '@/services/warmupEngine';
 import { MUSCLE_GROUPS, muscleMatchesGroup, rirToRpe, rpeToRir, STANDARD_MUSCLE_DISPLAY_NAMES } from '@/types/schema';
+import { getSetReps, formatSetCount } from '@/services/shared/setModality';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { quickWeightEstimate, quickWeightEstimateWithCalibration, type WorkingWeightRecommendation, type TransferCandidate } from '@/services/weightEstimationEngine';
 import { fetchTransferCandidates } from '@/lib/training/transferCandidates';
@@ -1133,7 +1134,7 @@ export default function WorkoutPage() {
         ? motionHistory.lastSession[capture.calibrationId]?.find((h) => h.setNumber === set.setNumber)
         : undefined;
       const context: CoachContext = {
-        loggedReps: set.reps,
+        loggedReps: getSetReps(set, block?.exercise) ?? 0,
         loggedRir,
         weightKg: set.weightKg,
         pausePoint: pausePointForPattern(block?.exercise?.movementPattern, block?.exercise?.pausePoint),
@@ -1192,7 +1193,7 @@ export default function WorkoutPage() {
       const weightLabel = `${convertWeightForDisplay(set.weightKg, preferences.units)} ${preferences.units}`;
       return (
         <MotionCoachSheet
-          title={`Set ${set.setNumber} · ${weightLabel} × ${set.reps}`}
+          title={`Set ${set.setNumber} · ${weightLabel} × ${formatSetCount(set, block?.exercise)}`}
           exerciseName={block?.exercise?.name ?? 'this exercise'}
           capture={capture}
           coachContext={coach.context}
@@ -2135,7 +2136,8 @@ export default function WorkoutPage() {
           const exercise = block?.exercises as any;
           if (!exercise) continue;
           const counts = estimability.get(exercise.id) ?? { est: 0, inest: 0 };
-          if (estimateE1RMFromRpe(log.weight_kg, log.reps, log.rpe)) counts.est++;
+          const logReps = getSetReps(log, exercise);
+          if (logReps && estimateE1RMFromRpe(log.weight_kg, logReps, log.rpe)) counts.est++;
           else counts.inest++;
           estimability.set(exercise.id, counts);
         }
@@ -2160,6 +2162,8 @@ export default function WorkoutPage() {
           const reportedRIR = Math.max(0, Math.round(10 - log.rpe));
           const wasAMRAP = log.rpe >= 9.5 && getFailureSafetyTier(exercise.name) === 'push_freely';
 
+          const actualReps = getSetReps(log, exercise);
+          if (!actualReps) continue;
           calibrationLogs.push({
             exerciseId: exercise.id,
             exerciseName: exercise.name,
@@ -2168,7 +2172,7 @@ export default function WorkoutPage() {
               min: block.target_rep_range?.[0] || 0,
               max: block.target_rep_range?.[1] || null,
             },
-            actualReps: log.reps,
+            actualReps,
             reportedRIR,
             wasAMRAP,
             timestamp: new Date(log.logged_at),
@@ -3597,7 +3601,7 @@ export default function WorkoutPage() {
             previousSets: currentBlockSets.map(s => ({
               exerciseName: currentExercise.name,
               weight: s.weightKg,
-              reps: s.reps,
+              reps: getSetReps(s, currentExercise) ?? 0,
               reportedRIR: 10 - s.rpe,
               isWarmup: s.isWarmup,
               setNumber: s.setNumber,
@@ -6212,12 +6216,13 @@ export default function WorkoutPage() {
     
     // Build exercise histories for PR detection in summary
     const exerciseHistoriesForSummary = Object.entries(exerciseHistories).reduce((acc, [exerciseId, history]) => {
+      const exercise = blocks.find(b => b.exerciseId === exerciseId)?.exercise;
       acc[exerciseId] = {
         exerciseId,
-        exerciseName: blocks.find(b => b.exerciseId === exerciseId)?.exercise?.name || 'Exercise',
+        exerciseName: exercise?.name || 'Exercise',
         previousBest: history.personalRecord ? {
           weight: history.personalRecord.weightKg,
-          reps: history.personalRecord.reps,
+          reps: getSetReps(history.personalRecord, exercise) ?? history.personalRecord.reps,
           e1rm: history.personalRecord.e1rm,
         } : undefined,
       };
