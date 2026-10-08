@@ -99,7 +99,8 @@ export interface StartableMesocycle {
   deload_week: number;
   days_per_week: number;
   program_data: unknown;
-  exercise_overrides?: ExerciseOverride[];
+  /** Raw jsonb from mesocycles (fetchActiveMesocycle); cast on use below. */
+  exercise_overrides?: ExerciseOverride[] | unknown[] | null;
   /**
    * Enhanced Athlete Mode at (re)generation time. In-flight weekly
    * progression follows THIS tag, not the live profile flag — so choosing
