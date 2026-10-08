@@ -6312,7 +6312,7 @@ export default function WorkoutPage() {
     return (
       <div className="max-w-2xl mx-auto flex flex-col min-h-[calc(100vh-9rem)] pb-8">
         {/* Header: back chevron + title/timer on the left, Finish on the right */}
-        <div className="sticky top-0 z-10 bg-surface-950 py-4 -mx-4 px-4 will-change-transform [transform:translateZ(0)]">
+        <div className="sticky top-0 z-10 bg-surface-950 py-4 -mx-4 px-4">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-1 min-w-0">
               <button

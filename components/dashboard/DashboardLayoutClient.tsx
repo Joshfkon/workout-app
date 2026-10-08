@@ -13,6 +13,7 @@ import { ResumeWorkoutBanner } from '@/components/workout';
 import { flushSetOutbox } from '@/lib/offline/setOutbox';
 import { useWeeklyVolume } from '@/hooks/useWeeklyVolume';
 import { useHealthKitForegroundSync } from '@/hooks/useHealthKitSync';
+import { isActiveWorkoutRoute } from './isActiveWorkoutRoute';
 
 interface DashboardLayoutClientProps {
   children: React.ReactNode;
@@ -61,7 +62,7 @@ export function DashboardLayoutClient({ children }: DashboardLayoutClientProps) 
   };
 
   // Hide the app header on active workout pages (they have their own back button)
-  const isWorkoutPage = pathname?.includes('/dashboard/workout/');
+  const hideAppHeader = isActiveWorkoutRoute(pathname);
 
   return (
     // overflow-x-clip, NOT -hidden: hidden makes this div a scroll container,
@@ -73,7 +74,7 @@ export function DashboardLayoutClient({ children }: DashboardLayoutClientProps) 
       {/* Main content */}
       <div className="lg:pl-64">
         {/* Top header - hidden on workout pages to avoid two sticky headers at top-0 */}
-        {!isWorkoutPage && (
+        {!hideAppHeader && (
           <header className="sticky top-0 z-30 flex items-center h-16 px-4 bg-surface-950/80 backdrop-blur-lg border-b border-surface-800 lg:px-6">
           {/* Spacer for mobile menu button */}
           <div className="w-10 lg:hidden" />

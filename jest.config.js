@@ -40,7 +40,6 @@ const customJestConfig = {
     '/.claude/worktrees/',
     '/fix-suggestion-engine/',
     '/simulation/cli/',
-    '/e2e/',
   ],
   collectCoverageFrom: [
     'lib/utils.ts',
