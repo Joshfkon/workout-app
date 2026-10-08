@@ -38,6 +38,7 @@ import {
   getNextWorkoutForDate,
   resolveScheduledSlots,
   type ScheduleMode,
+  type TodayWorkout,
   type TrainingSchedule,
 } from '@/lib/training/trainingSchedule';
 import { useMuscleRecovery } from '@/hooks/useMuscleRecovery';
@@ -180,15 +181,9 @@ interface ActiveMesocycle {
   weekSessionsTotal?: number;
 }
 
-interface ScheduledWorkout {
-  dayName: string;
-  muscles: string[];
-  dayNumber: number;
-  /** 1-based position within today (2 = the PM session of a two-a-day date). */
-  sessionOfDay?: number;
-  /** Sessions the schedule puts on today (1 or 2). */
-  sessionsScheduledToday?: number;
-}
+// The schedule's own type: always produced by getNextWorkoutForDate, and
+// handed straight to startMesocycleWorkoutSession as its todayWorkout.
+type ScheduledWorkout = TodayWorkout;
 
 /** Resolve the calendar for a dashboard mesocycle summary (camelCase fields). */
 function scheduleFor(mesocycle: ActiveMesocycle): TrainingSchedule {

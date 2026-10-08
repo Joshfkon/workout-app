@@ -70,8 +70,9 @@ async function getAppVersion(): Promise<string> {
 
   try {
     const info = await CapacitorApp.getInfo();
-    cachedAppVersion = info?.version || '';
-    return cachedAppVersion;
+    const version = info?.version || '';
+    cachedAppVersion = version;
+    return version;
   } catch {
     cachedAppVersion = '';
     return '';
