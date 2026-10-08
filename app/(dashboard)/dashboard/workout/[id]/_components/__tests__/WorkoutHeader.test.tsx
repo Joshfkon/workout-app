@@ -309,3 +309,42 @@ describe('WorkoutHeader location chip', () => {
     expect(onCloseToolsMenu).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('WorkoutHeader iOS Safari jitter fixes', () => {
+  it('has no backdrop-blur class on root element', () => {
+    renderHeader();
+    const header = screen.getByTestId('workout-header');
+    expect(header.className).not.toContain('backdrop-blur');
+  });
+
+  it('has no transform or will-change-transform on root element', () => {
+    renderHeader();
+    const header = screen.getByTestId('workout-header');
+    expect(header.className).not.toContain('will-change-transform');
+    expect(header.className).not.toContain('[transform:translateZ(0)]');
+    expect(header.className).not.toContain('transform');
+  });
+
+  it('calls onCloseToolsMenu when clicking the tools menu backdrop', async () => {
+    const user = userEvent.setup();
+    const onCloseToolsMenu = jest.fn();
+    renderHeader({ showToolsMenu: true, onCloseToolsMenu });
+
+    const header = screen.getByTestId('workout-header');
+    const backdrop = header.querySelector('.fixed.inset-0');
+    expect(backdrop).toBeInTheDocument();
+
+    if (backdrop) {
+      await user.click(backdrop);
+    }
+
+    expect(onCloseToolsMenu).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not render tools menu backdrop when showToolsMenu is false', () => {
+    renderHeader({ showToolsMenu: false });
+    const header = screen.getByTestId('workout-header');
+    const backdrop = header.querySelector('.fixed.inset-0');
+    expect(backdrop).not.toBeInTheDocument();
+  });
+});

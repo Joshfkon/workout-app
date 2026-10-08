@@ -19,6 +19,7 @@ import {
   IconLogout,
 } from '@tabler/icons-react';
 import { cn } from '@/lib/utils';
+import { isActiveWorkoutRoute } from './isActiveWorkoutRoute';
 
 interface SidebarNavItem {
   name: string;
@@ -105,13 +106,15 @@ export function Sidebar({ onSignOut, volumeGoalsMet = false }: SidebarProps) {
         />
       )}
 
-      {/* Mobile menu button */}
-      <button
-        onClick={() => setSidebarOpen(true)}
-        className="fixed top-4 left-4 z-30 p-2 lg:hidden text-surface-400 hover:text-surface-200 bg-surface-900/80 backdrop-blur-lg rounded-lg"
-      >
-        <IconMenu2 size={24} stroke={2} aria-hidden="true" />
-      </button>
+      {/* Mobile menu button - hidden on workout pages (WorkoutHeader has its own back button) */}
+      {!isActiveWorkoutRoute(pathname) && (
+        <button
+          onClick={() => setSidebarOpen(true)}
+          className="fixed top-4 left-4 z-30 p-2 lg:hidden text-surface-400 hover:text-surface-200 bg-surface-900/80 backdrop-blur-lg rounded-lg"
+        >
+          <IconMenu2 size={24} stroke={2} aria-hidden="true" />
+        </button>
+      )}
 
       {/* Sidebar */}
       <aside
