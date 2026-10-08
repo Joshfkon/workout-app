@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { Sidebar } from './Sidebar';
@@ -20,6 +20,7 @@ interface DashboardLayoutClientProps {
 
 export function DashboardLayoutClient({ children }: DashboardLayoutClientProps) {
   const router = useRouter();
+  const pathname = usePathname();
 
   // Weekly volume coverage for the Train tab indicator: lit when every
   // muscle group has hit at least MEV this week. Fetched once here so the
@@ -59,6 +60,9 @@ export function DashboardLayoutClient({ children }: DashboardLayoutClientProps) 
     router.refresh();
   };
 
+  // Hide the app header on active workout pages (they have their own back button)
+  const isWorkoutPage = pathname?.includes('/dashboard/workout/');
+
   return (
     // overflow-x-clip, NOT -hidden: hidden makes this div a scroll container,
     // which kills the sticky header below and makes iOS unpin the fixed
@@ -68,8 +72,9 @@ export function DashboardLayoutClient({ children }: DashboardLayoutClientProps) 
 
       {/* Main content */}
       <div className="lg:pl-64">
-        {/* Top header */}
-        <header className="sticky top-0 z-30 flex items-center h-16 px-4 bg-surface-950/80 backdrop-blur-lg border-b border-surface-800 lg:px-6">
+        {/* Top header - hidden on workout pages to avoid two sticky headers at top-0 */}
+        {!isWorkoutPage && (
+          <header className="sticky top-0 z-30 flex items-center h-16 px-4 bg-surface-950/80 backdrop-blur-lg border-b border-surface-800 lg:px-6">
           {/* Spacer for mobile menu button */}
           <div className="w-10 lg:hidden" />
 
@@ -103,6 +108,7 @@ export function DashboardLayoutClient({ children }: DashboardLayoutClientProps) 
             <SignOutButton showOnMobile />
           </div>
         </header>
+        )}
 
         {/* Page content */}
         <main className="p-4 pb-[calc(5rem+env(safe-area-inset-bottom))] lg:p-6 lg:pb-6 overflow-x-clip">{children}</main>

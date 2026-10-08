@@ -164,7 +164,9 @@ export function WorkoutHeader({
 
   return (
     // z-30: must sit above ExerciseCard's sticky header (z-10) and its menus (z-20) so the overflow menu isn't clipped
-    <div className="sticky top-0 z-30 bg-surface-950/95 backdrop-blur py-3 -mx-4 px-4">
+    // Solid background (not backdrop-filter) on touch devices to prevent jitter during Safari toolbar animation.
+    // will-change: transform promotes to own compositing layer for smoother scrolling on iOS.
+    <div className="sticky top-0 z-30 bg-surface-950 py-3 -mx-4 px-4 will-change-transform [transform:translateZ(0)]">
       {/* Top row: back · name + count · timer pill · Finish · menu */}
       <div className="flex items-center gap-2.5">
         {/* Minimize (back) — leaves the session running and returns to Train */}
@@ -179,9 +181,9 @@ export function WorkoutHeader({
 
         {/* Left: name + position meta */}
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-surface-100 truncate">{workoutName}</p>
-          <div className="flex items-center gap-1 min-w-0">
-            <p className="text-[11px] text-surface-500 truncate">
+          <p className="text-sm font-medium text-surface-100 truncate leading-5">{workoutName}</p>
+          <div className="flex items-center gap-1 min-w-0 h-[17px]">
+            <p className="text-[11px] text-surface-500 truncate tabular-nums leading-[17px]">
               exercise {exerciseNumber} of {exerciseTotal}
               {remainingDurationLabel && (
                 <>
