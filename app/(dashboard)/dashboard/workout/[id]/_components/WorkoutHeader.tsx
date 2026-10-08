@@ -166,7 +166,10 @@ export function WorkoutHeader({
     // z-30: must sit above ExerciseCard's sticky header (z-10) and its menus (z-20) so the overflow menu isn't clipped
     // Solid background (not backdrop-filter) on touch devices to prevent jitter during Safari toolbar animation.
     // will-change: transform promotes to own compositing layer for smoother scrolling on iOS.
-    <div className="sticky top-0 z-30 bg-surface-950 py-3 -mx-4 px-4 will-change-transform [transform:translateZ(0)]">
+    <div
+      data-testid="workout-header"
+      className="sticky top-0 z-30 bg-surface-950 py-3 -mx-4 px-4 will-change-transform [transform:translateZ(0)]"
+    >
       {/* Top row: back · name + count · timer pill · Finish · menu */}
       <div className="flex items-center gap-2.5">
         {/* Minimize (back) — leaves the session running and returns to Train */}
