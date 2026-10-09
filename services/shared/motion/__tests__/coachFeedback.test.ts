@@ -199,6 +199,23 @@ describe('findings', () => {
       expect(byType(at(sameSpeed, 180), 'history_first_rep')).toBeUndefined();
     });
 
+    it('compares only against a last-session capture that passes the same confidence gate', () => {
+      const meanW = [0.62, 0.61, 0.6, 0.6, 0.58, 0.57, 0.55, 0.54, 0.54, 0.54];
+      const withSnapshot = (loggedReps: number, pc1 = 0.95) => ({
+        ...lastSession(meanW, 180),
+        loggedReps,
+        cleaned: cleanCapture(analysisFromColumns(even(10, { meanW }), pc1)),
+      });
+      const historyTypes = (h: ReturnType<typeof withSnapshot>) =>
+        at(h).filter((f) => f.type.startsWith('history')).map((f) => f.type);
+
+      expect(historyTypes(withSnapshot(10))).toContain('history_effort');
+      // Sensor counted 10, logged 14: that capture is unclear — no comparison.
+      expect(historyTypes(withSnapshot(14))).toEqual([]);
+      // Multi-axis capture last session: same.
+      expect(historyTypes(withSnapshot(10, 0.6))).toEqual([]);
+    });
+
     it('never fires without a last-session capture', () => {
       const fs = find(today, { history: null, weightKg: 190 * LB, loggedReps: 8, formatWeight: lb });
       expect(fs.some((f) => f.type.startsWith('history'))).toBe(false);

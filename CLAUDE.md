@@ -531,7 +531,7 @@ FITBIT_CLIENT_SECRET=
      at the same load only; at ANY load, how much each set slowed
      (velocity loss is relative to the set's own first reps); and, only at
      a heavier load and only in that direction, whether the opening reps
-     held their speed. (No in-session "vs last set": fatigue alone makes
+     held their speed. The earlier capture must pass the same confidence gate as today's. (No in-session "vs last set": fatigue alone makes
      the next set slower.) The set_logs join for it lives in
      `hooks/useMotionCaptureHistory.ts`, outside the feature dirs.
    Persisted captures carry a cleaning snapshot (`analysis_metrics.cleaned`,

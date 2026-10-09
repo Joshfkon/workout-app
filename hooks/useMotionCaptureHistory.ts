@@ -47,6 +47,8 @@ export interface LastSessionSetVelocity {
   /** The logged set row; resolve its count with getSetReps (seconds for duration exercises). */
   loggedSet: RepsCarrier;
   reps: Array<{ n: number; meanW: number }>;
+  /** The full cleaning snapshot, so the coach can confidence-gate it like today's capture. */
+  cleaned: CleanedCapture;
 }
 
 type RawRow = { t: number; g: [number, number, number]; a: [number, number, number] };
@@ -155,6 +157,7 @@ async function fetchLastSession(
       weightKg: Number(set.weight_kg),
       loggedSet: set,
       reps: r.analysis_metrics!.cleaned!.reps.map((rep) => ({ n: rep.n, meanW: rep.meanW })),
+      cleaned: r.analysis_metrics!.cleaned!,
     });
   }
   return out;

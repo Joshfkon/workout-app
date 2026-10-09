@@ -1145,6 +1145,7 @@ export default function WorkoutPage() {
               reps: lastSession.reps,
               setNumber: lastSession.setNumber,
               loggedReps: getSetReps(lastSession.loggedSet, block?.exercise),
+              cleaned: lastSession.cleaned,
             }
           : null,
         formatWeight: (kg) => `${convertWeightForDisplay(kg, preferences.units)} ${preferences.units}`,

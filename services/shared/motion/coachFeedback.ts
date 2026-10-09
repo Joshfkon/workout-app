@@ -91,6 +91,13 @@ export interface CoachHistory {
   /** That set's number and logged reps (for "set 2 … at 180 lb × 15"). */
   setNumber?: number | null;
   loggedReps?: number | null;
+  /**
+   * That capture's full cleaning snapshot. When present it is confidence-
+   * gated exactly like today's capture (against its own logged reps), and a
+   * low-confidence capture yields no history comparison at all. Callers
+   * passing only `reps` vouch for it themselves.
+   */
+  cleaned?: CleanedCapture | null;
 }
 
 export interface CoachContext {
@@ -429,7 +436,15 @@ const PRIORITY: CoachFindingType[] = [
   'consistency',
 ];
 
-export function buildCoachFindings(reps: CleanRep[], ctx: CoachContext): { effort: CoachEffort | null; findings: CoachFinding[] } {
+/** A history capture the gate would call unclear is not compared against. */
+function usableHistory(ctx: CoachContext): CoachContext {
+  const h = ctx.history;
+  if (!h?.cleaned) return ctx;
+  return assessConfidence(h.cleaned, h.loggedReps ?? null).confidence === 'ok' ? ctx : { ...ctx, history: null };
+}
+
+export function buildCoachFindings(reps: CleanRep[], context: CoachContext): { effort: CoachEffort | null; findings: CoachFinding[] } {
+  const ctx = usableHistory(context);
   const eff = effortFinding(reps, ctx.loggedRir);
   const rom = romFinding(reps);
   const findings = [
