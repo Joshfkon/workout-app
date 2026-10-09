@@ -66,7 +66,9 @@ export type CoachFindingType =
   | 'rom_shortening'
   | 'grind'
   | 'consistency'
-  | 'history';
+  | 'history'
+  | 'history_effort'
+  | 'history_first_rep';
 
 export interface CoachFinding {
   type: CoachFindingType;
@@ -86,6 +88,16 @@ export interface CoachHistory {
   weightKg: number;
   /** Clean reps of that capture (rep number + mean ω). */
   reps: Array<{ n: number; meanW: number }>;
+  /** That set's number and logged reps (for "set 2 … at 180 lb × 15"). */
+  setNumber?: number | null;
+  loggedReps?: number | null;
+  /**
+   * That capture's full cleaning snapshot. When present it is confidence-
+   * gated exactly like today's capture (against its own logged reps), and a
+   * low-confidence capture yields no history comparison at all. Callers
+   * passing only `reps` vouch for it themselves.
+   */
+  cleaned?: CleanedCapture | null;
 }
 
 export interface CoachContext {
@@ -95,6 +107,8 @@ export interface CoachContext {
   weightKg: number | null;
   pausePoint: PausePoint;
   history?: CoachHistory | null;
+  /** kg → display weight ("190 lb"); defaults to kg. Only used in history cues. */
+  formatWeight?: (kg: number) => string;
 }
 
 export interface CoachEffort {
@@ -341,6 +355,74 @@ function historyFinding(reps: CleanRep[], ctx: CoachContext): CoachFinding | nul
   };
 }
 
+const defaultFormatWeight = (kg: number) => `${Math.round(kg * 10) / 10} kg`;
+
+/**
+ * VS LAST SESSION, any load: compare how much each set SLOWED (velocity
+ * loss is relative to the set's own first reps, so it survives a load
+ * change). "Last session set 2 slowed 18% at 180 lb × 15; today slowed
+ * 31% at 190 lb × 11."
+ */
+function historyEffortFinding(reps: CleanRep[], ctx: CoachContext): CoachFinding | null {
+  const h = ctx.history;
+  const c = MOTION_SET_CONFIG.coach.history;
+  if (!h || h.source !== 'last session' || ctx.weightKg === null) return null;
+  const today = computeVelocityLoss(reps).loss;
+  const last = computeVelocityLoss(h.reps).loss;
+  if (today === null || last === null) return null;
+  if (Math.abs(today - last) < c.effortChangeMinPts) return null;
+  const fmt = ctx.formatWeight ?? defaultFormatWeight;
+  const lastW = fmt(h.weightKg);
+  const todayW = fmt(ctx.weightKg);
+  const lastSet = h.setNumber ? `set ${h.setNumber} ` : '';
+  const lastLoad = h.loggedReps ? `${lastW} × ${h.loggedReps}` : lastW;
+  const todayLoad = ctx.loggedReps ? `${todayW} × ${ctx.loggedReps}` : todayW;
+  const less = today < last;
+  return {
+    type: 'history_effort',
+    severity: 1,
+    positive: less && ctx.weightKg >= h.weightKg - c.sameLoadToleranceKg,
+    evidence: {
+      lastSessionLossPct: pct(last),
+      todayLossPct: pct(today),
+      lastSetNumber: h.setNumber ?? null,
+      lastLoad,
+      todayLoad,
+    },
+    cue: `Last session ${lastSet}slowed ${pct(last)}% at ${lastLoad}; today slowed ${pct(today)}% at ${todayLoad}.`,
+    short: `Slowed ${pct(today)}% vs ${pct(last)}% last session`,
+  };
+}
+
+/**
+ * VS LAST SESSION, heavier today: opening speed held at the heavier load.
+ * Only ever reported in that direction — slower at a heavier load is
+ * expected and says nothing. Uses each set's baseline (faster of its first
+ * two clean reps), the same anchor as velocity loss.
+ */
+function historyFirstRepFinding(reps: CleanRep[], ctx: CoachContext): CoachFinding | null {
+  const h = ctx.history;
+  const c = MOTION_SET_CONFIG.coach.history;
+  if (!h || h.source !== 'last session' || ctx.weightKg === null) return null;
+  if (ctx.weightKg <= h.weightKg + c.sameLoadToleranceKg) return null;
+  const today = computeVelocityLoss(reps).baselineW;
+  const last = computeVelocityLoss(h.reps).baselineW;
+  if (today === null || last === null) return null;
+  if (today < last * (1 - c.firstRepSameSpeedTolerance)) return null;
+  const fmt = ctx.formatWeight ?? defaultFormatWeight;
+  const todayW = fmt(ctx.weightKg);
+  const lastW = fmt(h.weightKg);
+  const faster = today > last * (1 + c.firstRepSameSpeedTolerance);
+  return {
+    type: 'history_first_rep',
+    severity: 1,
+    positive: true,
+    evidence: { todayWeight: todayW, lastWeight: lastW, direction: faster ? 'faster' : 'as fast' },
+    cue: `Your first reps moved ${faster ? 'faster' : 'as fast'} at ${todayW} as they did at ${lastW} last session.`,
+    short: `First reps ${faster ? 'faster' : 'as fast'} at ${todayW}`,
+  };
+}
+
 /** Tiebreak order within a severity: technique first, praise last. */
 const PRIORITY: CoachFindingType[] = [
   'eccentric_dropping',
@@ -349,10 +431,20 @@ const PRIORITY: CoachFindingType[] = [
   'grind',
   'eccentric_inconsistent',
   'history',
+  'history_effort',
+  'history_first_rep',
   'consistency',
 ];
 
-export function buildCoachFindings(reps: CleanRep[], ctx: CoachContext): { effort: CoachEffort | null; findings: CoachFinding[] } {
+/** A history capture the gate would call unclear is not compared against. */
+function usableHistory(ctx: CoachContext): CoachContext {
+  const h = ctx.history;
+  if (!h?.cleaned) return ctx;
+  return assessConfidence(h.cleaned, h.loggedReps ?? null).confidence === 'ok' ? ctx : { ...ctx, history: null };
+}
+
+export function buildCoachFindings(reps: CleanRep[], context: CoachContext): { effort: CoachEffort | null; findings: CoachFinding[] } {
+  const ctx = usableHistory(context);
   const eff = effortFinding(reps, ctx.loggedRir);
   const rom = romFinding(reps);
   const findings = [
@@ -363,6 +455,8 @@ export function buildCoachFindings(reps: CleanRep[], ctx: CoachContext): { effor
     grindFinding(reps),
     consistencyFinding(reps, rom !== null),
     historyFinding(reps, ctx),
+    historyEffortFinding(reps, ctx),
+    historyFirstRepFinding(reps, ctx),
   ].filter((f): f is CoachFinding => f !== null);
   return { effort: eff?.effort ?? null, findings };
 }

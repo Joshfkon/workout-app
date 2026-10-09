@@ -55,6 +55,8 @@ function expectGrounded(f: CoachFinding) {
   const allowed = new Set<string>();
   const add = (v: unknown) => {
     if (typeof v === 'number') allowed.add(String(v));
+    // Text evidence ("180 lb × 15") grounds the numbers it contains.
+    if (typeof v === 'string') (v.match(/\d+(\.\d+)?/g) ?? []).forEach((n) => allowed.add(n));
     if (Array.isArray(v)) v.forEach(add);
   };
   Object.values(f.evidence).forEach(add);
@@ -158,12 +160,82 @@ describe('findings', () => {
     expect(byType(find(even(8), { history: close }), 'history')).toBeUndefined();
   });
 
+  describe('VS LAST SESSION at a different weight', () => {
+    const LB = 0.45359237;
+    const lb = (kg: number) => `${Math.round(kg / LB)} lb`;
+    // Today: 190 lb × 8, fading from 0.6 to 0.4 rad/s (≈ 33% loss).
+    const today = even(8, { meanW: [0.6, 0.6, 0.58, 0.55, 0.52, 0.48, 0.42, 0.38] });
+    const lastSession = (meanW: number[], weightLb: number) => ({
+      source: 'last session' as const,
+      weightKg: weightLb * LB,
+      reps: meanW.map((w, i) => ({ n: i + 1, meanW: w })),
+      setNumber: 2,
+      loggedReps: meanW.length,
+    });
+    const at = (history: ReturnType<typeof lastSession>, weightLb = 190) =>
+      find(today, { history, weightKg: weightLb * LB, loggedReps: 8, formatWeight: lb });
+
+    it('compares how much each set slowed, across weights', () => {
+      // Last session 180 lb × 10, slowed only ~13%.
+      const last = lastSession([0.62, 0.61, 0.6, 0.6, 0.58, 0.57, 0.55, 0.54, 0.54, 0.54], 180);
+      const f = byType(at(last), 'history_effort')!;
+      expect(f.cue).toBe('Last session set 2 slowed 13% at 180 lb × 10; today slowed 33% at 190 lb × 8.');
+      expect(f.positive).toBe(false);
+    });
+
+    it('stays quiet when the slow-down is within 10 points', () => {
+      const last = lastSession([0.6, 0.6, 0.58, 0.55, 0.52, 0.5, 0.45, 0.42], 180);
+      expect(byType(at(last), 'history_effort')).toBeUndefined();
+    });
+
+    it('notes opening speed held at a heavier weight — and only in that direction', () => {
+      const sameSpeed = lastSession([0.6, 0.59, 0.57, 0.55, 0.53, 0.5, 0.47, 0.44], 180);
+      expect(byType(at(sameSpeed), 'history_first_rep')!.cue).toBe(
+        'Your first reps moved as fast at 190 lb as they did at 180 lb last session.'
+      );
+      const slowerToday = lastSession([0.7, 0.69, 0.66, 0.63, 0.6, 0.57, 0.53, 0.5], 180);
+      expect(byType(at(slowerToday), 'history_first_rep')).toBeUndefined(); // expected at a heavier load
+      // Same or lighter weight: no "first reps" claim (the rep-by-rep finding covers same weight).
+      expect(byType(at(sameSpeed, 180), 'history_first_rep')).toBeUndefined();
+    });
+
+    it('compares only against a last-session capture that passes the same confidence gate', () => {
+      const meanW = [0.62, 0.61, 0.6, 0.6, 0.58, 0.57, 0.55, 0.54, 0.54, 0.54];
+      const withSnapshot = (loggedReps: number, pc1 = 0.95) => ({
+        ...lastSession(meanW, 180),
+        loggedReps,
+        cleaned: cleanCapture(analysisFromColumns(even(10, { meanW }), pc1)),
+      });
+      const historyTypes = (h: ReturnType<typeof withSnapshot>) =>
+        at(h).filter((f) => f.type.startsWith('history')).map((f) => f.type);
+
+      expect(historyTypes(withSnapshot(10))).toContain('history_effort');
+      // Sensor counted 10, logged 14: that capture is unclear — no comparison.
+      expect(historyTypes(withSnapshot(14))).toEqual([]);
+      // Multi-axis capture last session: same.
+      expect(historyTypes(withSnapshot(10, 0.6))).toEqual([]);
+    });
+
+    it('never fires without a last-session capture', () => {
+      const fs = find(today, { history: null, weightKg: 190 * LB, loggedReps: 8, formatWeight: lb });
+      expect(fs.some((f) => f.type.startsWith('history'))).toBe(false);
+    });
+  });
+
   it('every number in every sentence comes from its evidence', () => {
     const scenarios: Array<[RepColumns, Partial<CoachContext>]> = [
       [SETUP_STROKE_CAPTURE, { loggedRir: 0 }],
       [even(9, { dwellMs: [null, 400, 400, 400, 2100, 400, 1700, 400, 2400], romDeg: [62, 61, 60, 60, 59, 58, 54, 53, 52], concS: [1, 1, 1, 1, 1, 1, 1, 1, 1.6] }), { loggedRir: 3 }],
       [even(8, { eccS: Array(8).fill(0.55), meanW: [0.8, 0.78, 0.75, 0.7, 0.66, 0.62, 0.4, 0.4] }), {}],
       [even(8), { history: { source: 'last session', weightKg: 40, reps: [1, 2, 3, 4, 5, 6, 7, 8].map((n) => ({ n, meanW: 0.7 })) } }],
+      [
+        even(8, { meanW: [0.6, 0.6, 0.58, 0.55, 0.52, 0.48, 0.42, 0.38] }),
+        {
+          weightKg: 45,
+          loggedReps: 8,
+          history: { source: 'last session', weightKg: 40, setNumber: 2, loggedReps: 10, reps: [0.6, 0.6, 0.6, 0.6, 0.59, 0.58, 0.57, 0.56, 0.55, 0.55].map((meanW, i) => ({ n: i + 1, meanW })) },
+        },
+      ],
     ];
     for (const [cols, c] of scenarios) {
       const fs = buildCoachFindings(cleanFrom(cols).reps, ctx(c)).findings;

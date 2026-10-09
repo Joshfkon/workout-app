@@ -1139,13 +1139,21 @@ export default function WorkoutPage() {
         weightKg: set.weightKg,
         pausePoint: pausePointForPattern(block?.exercise?.movementPattern, block?.exercise?.pausePoint),
         history: lastSession
-          ? { source: 'last session', weightKg: lastSession.weightKg, reps: lastSession.reps }
+          ? {
+              source: 'last session',
+              weightKg: lastSession.weightKg,
+              reps: lastSession.reps,
+              setNumber: lastSession.setNumber,
+              loggedReps: getSetReps(lastSession.loggedSet, block?.exercise),
+              cleaned: lastSession.cleaned,
+            }
           : null,
+        formatWeight: (kg) => `${convertWeightForDisplay(kg, preferences.units)} ${preferences.units}`,
       };
       out[set.id] = { feedback: capture.cleaned ? buildCoachFeedback(capture.cleaned, context) : null, context };
     }
     return out;
-  }, [completedSets, allMotionCaptures, blocks, motionHistory.lastSession]);
+  }, [completedSets, allMotionCaptures, blocks, motionHistory.lastSession, preferences.units]);
 
   // Card props, memoized per block so unrelated cards don't re-render.
   const motionCardProps = useMemo(() => {

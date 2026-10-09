@@ -59,7 +59,18 @@ export const MOTION_SET_CONFIG = {
     romShortening: { lastVsFirstThirdDropAbove: 0.08 },
     grind: { lastConcentricRatio: 1.4 },
     consistency: { maxVelocityCv: 0.1 },
-    history: { meaningfulChange: 0.1, sameLoadToleranceKg: 0.5 },
+    history: {
+      /** Same-load, rep-by-rep speed change worth mentioning. */
+      meaningfulChange: 0.1,
+      sameLoadToleranceKg: 0.5,
+      /** Speed-drop difference vs last session worth mentioning (percentage points, any load). */
+      effortChangeMinPts: 0.1,
+      /**
+       * First-rep speed at a HEAVIER load counts as "as fast as last time"
+       * within this fraction (only ever reported in that direction).
+       */
+      firstRepSameSpeedTolerance: 0.03,
+    },
     /** Cues shown in the coach output. */
     maxCues: 2,
     /** The set row's muted second line shows the top cue only at/above this. */

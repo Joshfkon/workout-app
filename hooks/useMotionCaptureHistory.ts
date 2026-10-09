@@ -23,6 +23,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { decompactSamples } from '@/lib/motion/motionPersistence';
 import type { CaptureAnalysisMetrics } from '@/types/motion';
+import type { RepsCarrier } from '@/services/shared/setModality';
 import {
   cleanCapture,
   CLEANING_VERSION,
@@ -43,7 +44,11 @@ export interface LoadedSetCapture {
 export interface LastSessionSetVelocity {
   setNumber: number;
   weightKg: number;
+  /** The logged set row; resolve its count with getSetReps (seconds for duration exercises). */
+  loggedSet: RepsCarrier;
   reps: Array<{ n: number; meanW: number }>;
+  /** The full cleaning snapshot, so the coach can confidence-gate it like today's capture. */
+  cleaned: CleanedCapture;
 }
 
 type RawRow = { t: number; g: [number, number, number]; a: [number, number, number] };
@@ -132,10 +137,10 @@ async function fetchLastSession(
 
   const { data: sets } = await supabase
     .from('set_logs')
-    .select('id, set_number, weight_kg')
+    .select('id, set_number, weight_kg, reps')
     .in('id', rows.map((r) => r.set_id));
   const setById = new Map(
-    ((sets ?? []) as Array<{ id: string; set_number: number; weight_kg: number }>).map((s) => [s.id, s])
+    ((sets ?? []) as Array<{ id: string; set_number: number; weight_kg: number; reps: number }>).map((s) => [s.id, s])
   );
 
   // Most recent calendar day per calibration = "last session".
@@ -150,7 +155,9 @@ async function fetchLastSession(
     (out[r.calibration_id] ??= []).push({
       setNumber: set.set_number,
       weightKg: Number(set.weight_kg),
+      loggedSet: set,
       reps: r.analysis_metrics!.cleaned!.reps.map((rep) => ({ n: rep.n, meanW: rep.meanW })),
+      cleaned: r.analysis_metrics!.cleaned!,
     });
   }
   return out;
