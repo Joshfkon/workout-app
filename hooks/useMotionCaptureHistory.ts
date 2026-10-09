@@ -43,6 +43,7 @@ export interface LoadedSetCapture {
 export interface LastSessionSetVelocity {
   setNumber: number;
   weightKg: number;
+  loggedReps: number | null;
   reps: Array<{ n: number; meanW: number }>;
 }
 
@@ -132,10 +133,10 @@ async function fetchLastSession(
 
   const { data: sets } = await supabase
     .from('set_logs')
-    .select('id, set_number, weight_kg')
+    .select('id, set_number, weight_kg, reps')
     .in('id', rows.map((r) => r.set_id));
   const setById = new Map(
-    ((sets ?? []) as Array<{ id: string; set_number: number; weight_kg: number }>).map((s) => [s.id, s])
+    ((sets ?? []) as Array<{ id: string; set_number: number; weight_kg: number; reps: number | null }>).map((s) => [s.id, s])
   );
 
   // Most recent calendar day per calibration = "last session".
@@ -150,6 +151,7 @@ async function fetchLastSession(
     (out[r.calibration_id] ??= []).push({
       setNumber: set.set_number,
       weightKg: Number(set.weight_kg),
+      loggedReps: set.reps ?? null,
       reps: r.analysis_metrics!.cleaned!.reps.map((rep) => ({ n: rep.n, meanW: rep.meanW })),
     });
   }
