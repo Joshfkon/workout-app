@@ -58,6 +58,69 @@ describe('prescribeRestSeconds', () => {
     expect(rx.note).toMatch(/failure/);
   });
 
+  describe('near failure is absolute, on calibrated true RIR', () => {
+    it('2 RIR against a readiness-eased 4-RIR target is hard, not near failure', () => {
+      // The live report: past the relative deadband, but 2 reps in reserve.
+      const rx = prescribeRestSeconds({ baseSeconds: 120, lastSetRir: 2, targetRir: 4 });
+      expect(rx.adjustmentSeconds).toBe(REST_EXTEND_HARD_S);
+      expect(rx.note).toMatch(/hotter than target/);
+      expect(rx.note).not.toMatch(/failure/);
+    });
+
+    it('2 RIR logged under a +2 calibration shift reads ≈ 0 true RIR → failure step, explained', () => {
+      const rx = prescribeRestSeconds({
+        baseSeconds: 120,
+        lastSetRir: 2,
+        targetRir: 4,
+        calibrationShiftRir: 2,
+      });
+      expect(rx.adjustmentSeconds).toBe(REST_EXTEND_FAILURE_S);
+      expect(rx.note).toBe(
+        `+${REST_EXTEND_FAILURE_S}s — logged 2 RIR, calibrated ≈ 0: at/near failure`
+      );
+    });
+
+    it('a +1 calibration shift is not enough to call 3 logged RIR near failure', () => {
+      const rx = prescribeRestSeconds({
+        baseSeconds: 120,
+        lastSetRir: 3,
+        targetRir: 5,
+        calibrationShiftRir: 1,
+      });
+      expect(rx.adjustmentSeconds).toBe(REST_EXTEND_HARD_S);
+    });
+
+    it('a negative shift (sandbagger) can demote a logged-0 set out of the failure step', () => {
+      // Shift −1 (block target 3 served as 2): logging 0 reads true ≈ 1 →
+      // still near failure.
+      const atEdge = prescribeRestSeconds({
+        baseSeconds: 120,
+        lastSetRir: 0,
+        targetRir: 2,
+        calibrationShiftRir: -1,
+      });
+      expect(atEdge.adjustmentSeconds).toBe(REST_EXTEND_FAILURE_S);
+      // Shift −2: logging 0 reads true ≈ 2 → hard step only.
+      const demoted = prescribeRestSeconds({
+        baseSeconds: 120,
+        lastSetRir: 0,
+        targetRir: 2,
+        calibrationShiftRir: -2,
+      });
+      expect(demoted.adjustmentSeconds).toBe(REST_EXTEND_HARD_S);
+    });
+
+    it('calibration never promotes a set that was not past the relative deadband', () => {
+      const rx = prescribeRestSeconds({
+        baseSeconds: 120,
+        lastSetRir: 3,
+        targetRir: 4,
+        calibrationShiftRir: 2,
+      });
+      expect(rx.adjustmentSeconds).toBe(REST_EXTEND_HARD_S);
+    });
+  });
+
   it('caps at the DB bound', () => {
     const rx = prescribeRestSeconds({ baseSeconds: 590, lastSetRir: 0, targetRir: 2 });
     expect(rx.seconds).toBe(REST_MAX_S);
