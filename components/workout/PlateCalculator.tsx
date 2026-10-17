@@ -47,6 +47,11 @@ interface PlateCalculatorProps {
   startingWeightKg?: number;
   /** Callback when starting weight changes */
   onStartingWeightChange?: (weightKg: number | undefined) => void;
+  /**
+   * Equipment mode to open in, from the exercise's equipment class. A saved
+   * starting weight still forces machine mode.
+   */
+  defaultEquipmentMode?: 'barbell' | 'machine';
 }
 
 /**
@@ -63,6 +68,7 @@ export const PlateCalculator = memo(function PlateCalculator({
   compact = false,
   startingWeightKg: initialStartingWeightKg,
   onStartingWeightChange,
+  defaultEquipmentMode = 'barbell',
 }: PlateCalculatorProps) {
   const initialDisplayWeight = unit === 'lb'
     ? formatWeightValue(initialWeightKg, 'lb')
@@ -72,9 +78,10 @@ export const PlateCalculator = memo(function PlateCalculator({
   const [barbellType, setBarbellType] = useState<BarbellType>('olympic');
   // Explicit equipment mode so a plate-loaded machine works even with a 0
   // (or empty) base weight — machine mode is never inferred from the input.
-  // A saved per-exercise starting weight opens the calculator in machine mode.
+  // A saved per-exercise starting weight opens the calculator in machine mode;
+  // otherwise the exercise's own equipment decides.
   const [equipmentMode, setEquipmentMode] = useState<'barbell' | 'machine'>(
-    initialStartingWeightKg !== undefined ? 'machine' : 'barbell'
+    initialStartingWeightKg !== undefined ? 'machine' : defaultEquipmentMode
   );
   const [startingWeight, setStartingWeight] = useState<string>(
     initialStartingWeightKg !== undefined

@@ -820,6 +820,8 @@ export default function WorkoutPage() {
   const [showToolsMenu, setShowToolsMenu] = useState(false);
   const [showPlateCalculator, setShowPlateCalculator] = useState(false);
   const [plateCalculatorWeight, setPlateCalculatorWeight] = useState<number | undefined>(undefined);
+  // Block the calculator was opened from (null = header tools menu → current block).
+  const [plateCalculatorBlockId, setPlateCalculatorBlockId] = useState<string | null>(null);
   // "Save as template" (header ⋮): captures this session's exercises as a
   // reusable workout_template. Purely additive — no session state changes.
   const [showSaveTemplateModal, setShowSaveTemplateModal] = useState(false);
@@ -6680,6 +6682,7 @@ export default function WorkoutPage() {
       onSelect: () => {
         const initial = block.targetWeightKg > 0 ? block.targetWeightKg : undefined;
         setPlateCalculatorWeight(initial);
+        setPlateCalculatorBlockId(block.id);
         setShowPlateCalculator(true);
       },
     });
@@ -6838,7 +6841,7 @@ export default function WorkoutPage() {
         onOpenInjuryModal={() => setShowInjuryModal(true)}
         onOpenReadinessModal={() => setShowReadinessModal(true)}
         onOpenMuscleReadiness={() => setShowMuscleReadinessSheet(true)}
-        onOpenPlateCalculator={() => setShowPlateCalculator(true)}
+        onOpenPlateCalculator={() => { setPlateCalculatorBlockId(null); setShowPlateCalculator(true); }}
         locationName={sessionLocationName}
         onOpenLocationPicker={() => setLocationPickerTarget({ kind: 'session' })}
         isDeload={session?.isDeload ?? false}
@@ -7434,6 +7437,7 @@ export default function WorkoutPage() {
                     }}
                     onPlateCalculatorOpen={(initialWeightKg) => {
                       setPlateCalculatorWeight(initialWeightKg);
+                      setPlateCalculatorBlockId(block.id);
                       setShowPlateCalculator(true);
                     }}
                     setSyncStatus={setSync}
@@ -8109,15 +8113,23 @@ export default function WorkoutPage() {
       )}
 
       {/* Plate Calculator Modal */}
-      <PlateCalculatorModal
-        isOpen={showPlateCalculator}
-        onClose={() => {
-          setShowPlateCalculator(false);
-          setPlateCalculatorWeight(undefined);
-        }}
-        initialWeightKg={plateCalculatorWeight ?? currentBlock?.targetWeightKg}
-        exerciseId={currentExercise?.id}
-      />
+      {(() => {
+        const plateBlock =
+          (plateCalculatorBlockId && blocks.find((b) => b.id === plateCalculatorBlockId)) || currentBlock;
+        return (
+          <PlateCalculatorModal
+            isOpen={showPlateCalculator}
+            onClose={() => {
+              setShowPlateCalculator(false);
+              setPlateCalculatorWeight(undefined);
+              setPlateCalculatorBlockId(null);
+            }}
+            initialWeightKg={plateCalculatorWeight ?? plateBlock?.targetWeightKg}
+            exerciseId={plateBlock?.exercise?.id}
+            exercise={plateBlock?.exercise}
+          />
+        );
+      })()}
 
       {/* Training-location picker — the same sheet for "which gym is this
           workout at" and "which machine is this one exercise on", because

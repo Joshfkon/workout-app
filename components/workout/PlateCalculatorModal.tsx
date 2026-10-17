@@ -5,7 +5,27 @@ import { Modal } from '@/components/ui/Modal';
 import { PlateCalculator } from './PlateCalculator';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { loadMachineStartingWeight, saveMachineStartingWeight } from '@/lib/actions/exercise-settings';
+import { deriveEquipmentClass, type EquipmentClassInput } from '@/services/equipmentClass';
 import type { WeightUnit } from '@/types/schema';
+
+/**
+ * Which calculator mode an exercise opens in. Anything that isn't a free bar
+ * (plate/pin machines, Smith, cable) loads onto a base weight, not a 45lb bar.
+ */
+export function plateCalculatorModeFor(
+  exercise: EquipmentClassInput | null | undefined
+): 'barbell' | 'machine' {
+  if (!exercise) return 'barbell';
+  switch (deriveEquipmentClass(exercise)) {
+    case 'machine_plate_loaded':
+    case 'machine_pin_loaded':
+    case 'smith':
+    case 'cable':
+      return 'machine';
+    default:
+      return 'barbell';
+  }
+}
 
 interface PlateCalculatorModalProps {
   /** Whether the modal is open */
@@ -18,6 +38,8 @@ interface PlateCalculatorModalProps {
   unit?: WeightUnit;
   /** Exercise ID to save/load starting weight for */
   exerciseId?: string;
+  /** The exercise the calculator was opened for; picks barbell vs machine mode */
+  exercise?: EquipmentClassInput | null;
 }
 
 /**
@@ -30,6 +52,7 @@ export const PlateCalculatorModal = memo(function PlateCalculatorModal({
   initialWeightKg,
   unit: unitOverride,
   exerciseId,
+  exercise,
 }: PlateCalculatorModalProps) {
   const { preferences } = useUserPreferences();
   const unit = unitOverride ?? preferences.units;
@@ -76,6 +99,8 @@ export const PlateCalculatorModal = memo(function PlateCalculatorModal({
         <div className="p-4 text-center text-surface-400">Loading...</div>
       ) : (
         <PlateCalculator
+          key={exerciseId ?? 'none'}
+          defaultEquipmentMode={plateCalculatorModeFor(exercise)}
           initialWeightKg={initialWeightKg}
           unit={unit}
           startingWeightKg={startingWeightKg}

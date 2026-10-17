@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { PlateCalculator } from '../PlateCalculator';
+import { plateCalculatorModeFor } from '../PlateCalculatorModal';
 
 describe('PlateCalculator equipment modes', () => {
   it('defaults to barbell mode and includes the bar weight', async () => {
@@ -166,5 +167,22 @@ describe('PlateCalculator weight increment setting', () => {
     );
     expect(screen.getByRole('button', { name: '±1kg 0.5kg plates' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '±5kg 2.5kg plates' })).toBeInTheDocument();
+  });
+});
+
+describe('PlateCalculator default equipment from the exercise', () => {
+  it('opens in machine mode when the exercise is a machine', () => {
+    render(<PlateCalculator unit="lb" defaultEquipmentMode="machine" />);
+    expect(screen.getByRole('button', { name: 'Machine (no bar)' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByText('Barbell Type')).not.toBeInTheDocument();
+  });
+
+  it('maps exercise equipment to a calculator mode', () => {
+    expect(plateCalculatorModeFor({ name: 'Leg Press', equipmentRequired: ['machine'] })).toBe('machine');
+    expect(plateCalculatorModeFor({ name: 'Chest Press (Machine)', equipmentRequired: [] })).toBe('machine');
+    expect(plateCalculatorModeFor({ name: 'Smith Machine Squat', equipmentRequired: [] })).toBe('machine');
+    expect(plateCalculatorModeFor({ name: 'Barbell Bench Press', equipmentRequired: ['barbell'] })).toBe('barbell');
+    expect(plateCalculatorModeFor({ name: 'Hack Squat', equipmentClass: 'machine_plate_loaded' })).toBe('machine');
+    expect(plateCalculatorModeFor(undefined)).toBe('barbell');
   });
 });
