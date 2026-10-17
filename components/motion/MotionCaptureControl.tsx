@@ -65,7 +65,7 @@ export function MotionCaptureControl({
     <button
       type="button"
       onClick={onStart}
-      className="w-full py-2.5 px-3 rounded-lg border border-primary-500/50 text-sm font-medium text-primary-300 hover:border-primary-400 transition-colors"
+      className="w-full py-2.5 px-3 rounded-lg bg-success-600 text-sm font-semibold text-white hover:bg-success-700 transition-colors"
       data-testid="motion-start-button"
     >
       Start capture
