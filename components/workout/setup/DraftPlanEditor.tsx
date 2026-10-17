@@ -5,7 +5,7 @@ import { Reorder, useDragControls } from 'framer-motion';
 import { BottomSheet } from '../BottomSheet';
 import type { PlanEdit } from '@/services/workoutSetup/planEdits';
 import type { GroupProjection, PlanWarning } from '@/services/workoutSetup/planProjection';
-import type { SwapCandidate } from '@/services/workoutSetup/swapRanking';
+import type { SwapCandidate, SwapSearchResult } from '@/services/workoutSetup/swapRanking';
 import type { PlanItem, SetupExercise } from '@/services/workoutSetup/types';
 import { SETUP_CONFIG } from '@/services/workoutSetup/config';
 
@@ -21,7 +21,8 @@ export interface DraftPlanEditorProps {
   /** Selected groups with no usable exercise at this gym. */
   unfilledGroups: string[];
   onEdit: (edit: PlanEdit) => void;
-  rankSwaps: (item: PlanItem) => SwapCandidate[];
+  /** Swap sheet results for a free-text query ('' = ranked recommendations). */
+  searchSwaps: (item: PlanItem, query: string) => SwapSearchResult;
   onAddExercise: () => void;
   onBack: () => void;
   onStart: () => void;
@@ -151,56 +152,100 @@ function PlanRow({
   );
 }
 
+function SwapOption({ candidate: c, onPick }: { candidate: SwapCandidate; onPick: (exercise: SetupExercise) => void }) {
+  return (
+    <li>
+      <button
+        type="button"
+        disabled={!c.equipmentAvailable}
+        onClick={() => onPick(c.exercise)}
+        className="flex w-full items-center justify-between gap-3 py-3 text-left disabled:opacity-40"
+        data-testid={`setup-swap-option-${c.exercise.id}`}
+      >
+        <span className="min-w-0">
+          <span className="block truncate text-sm text-surface-100">{c.exercise.name}</span>
+          <span className="block text-xs text-surface-500">
+            {[
+              !c.equipmentAvailable && 'Equipment unavailable',
+              c.doneRecently && 'Done this week',
+              c.usageCount > 0 && `Used ${c.usageCount}×`,
+            ]
+              .filter(Boolean)
+              .join(' · ') || muscleLabel(c.exercise.primaryMuscle)}
+          </span>
+        </span>
+        {c.exercise.tier && (
+          <span className="flex-shrink-0 rounded bg-surface-800 px-1.5 py-0.5 text-[10px] text-surface-400">
+            {c.exercise.tier}
+          </span>
+        )}
+      </button>
+    </li>
+  );
+}
+
 function SwapSheet({
   item,
   current,
-  candidates,
+  query,
+  onQueryChange,
+  results,
   onPick,
   onClose,
 }: {
   item: PlanItem | null;
   current: SetupExercise | undefined;
-  candidates: SwapCandidate[];
+  query: string;
+  onQueryChange: (query: string) => void;
+  results: SwapSearchResult;
   onPick: (exercise: SetupExercise) => void;
   onClose: () => void;
 }) {
+  const searching = query.trim().length > 0;
+  const { matches, otherMatches } = results;
   return (
     <BottomSheet isOpen={item !== null} onClose={onClose} title={current ? `Swap ${current.name}` : 'Swap'}>
       <div className="px-4 pb-4" data-testid="setup-swap-sheet">
-        {candidates.length === 0 ? (
-          <p className="py-6 text-center text-sm text-surface-400">No alternatives for this muscle in your library.</p>
+        <div className="pb-2">
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => onQueryChange(e.target.value)}
+            placeholder="Search all exercises"
+            aria-label="Search exercises"
+            autoComplete="off"
+            enterKeyHint="search"
+            className="w-full rounded-lg border border-surface-700 bg-surface-800 px-3 py-2.5 text-base text-surface-100 placeholder:text-surface-500 focus:border-primary-500 focus:outline-none"
+            data-testid="setup-swap-search"
+          />
+        </div>
+        {matches.length === 0 && otherMatches.length === 0 ? (
+          <p className="py-6 text-center text-sm text-surface-400">
+            {searching ? `No exercises match “${query.trim()}”.` : 'No alternatives for this muscle in your library.'}
+          </p>
         ) : (
-          <ul className="divide-y divide-surface-800">
-            {candidates.map((c) => (
-              <li key={c.exercise.id}>
-                <button
-                  type="button"
-                  disabled={!c.equipmentAvailable}
-                  onClick={() => onPick(c.exercise)}
-                  className="flex w-full items-center justify-between gap-3 py-3 text-left disabled:opacity-40"
-                  data-testid={`setup-swap-option-${c.exercise.id}`}
-                >
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm text-surface-100">{c.exercise.name}</span>
-                    <span className="block text-xs text-surface-500">
-                      {[
-                        !c.equipmentAvailable && 'Equipment unavailable',
-                        c.doneRecently && 'Done this week',
-                        c.usageCount > 0 && `Used ${c.usageCount}×`,
-                      ]
-                        .filter(Boolean)
-                        .join(' · ') || muscleLabel(c.exercise.primaryMuscle)}
-                    </span>
-                  </span>
-                  {c.exercise.tier && (
-                    <span className="flex-shrink-0 rounded bg-surface-800 px-1.5 py-0.5 text-[10px] text-surface-400">
-                      {c.exercise.tier}
-                    </span>
-                  )}
-                </button>
-              </li>
-            ))}
-          </ul>
+          <>
+            {searching && matches.length > 0 && otherMatches.length > 0 && (
+              <p className="pt-2 text-[11px] font-medium uppercase tracking-wide text-surface-500">Same muscle</p>
+            )}
+            <ul className="divide-y divide-surface-800">
+              {matches.map((c) => (
+                <SwapOption key={c.exercise.id} candidate={c} onPick={onPick} />
+              ))}
+            </ul>
+            {otherMatches.length > 0 && (
+              <>
+                <p className="pt-4 text-[11px] font-medium uppercase tracking-wide text-surface-500" data-testid="setup-swap-other-heading">
+                  Other exercises
+                </p>
+                <ul className="divide-y divide-surface-800">
+                  {otherMatches.map((c) => (
+                    <SwapOption key={c.exercise.id} candidate={c} onPick={onPick} />
+                  ))}
+                </ul>
+              </>
+            )}
+          </>
         )}
       </div>
     </BottomSheet>
@@ -237,7 +282,7 @@ export function DraftPlanEditor({
   trimmedSets,
   unfilledGroups,
   onEdit,
-  rankSwaps,
+  searchSwaps,
   onAddExercise,
   onBack,
   onStart,
@@ -248,6 +293,7 @@ export function DraftPlanEditor({
   banner,
 }: DraftPlanEditorProps) {
   const [swapItemId, setSwapItemId] = useState<string | null>(null);
+  const [swapQuery, setSwapQuery] = useState('');
   const swapItem = items.find((i) => i.itemId === swapItemId) ?? null;
   const selectedRows = projection.filter((r) => r.selected);
   const overBudget = timeBudget != null && estimatedMinutes > timeBudget;
@@ -287,7 +333,10 @@ export function DraftPlanEditor({
               index={index}
               exercise={exercisesById.get(item.exerciseId)}
               onEdit={onEdit}
-              onSwap={() => setSwapItemId(item.itemId)}
+              onSwap={() => {
+                setSwapQuery('');
+                setSwapItemId(item.itemId);
+              }}
               extra={renderRowExtra?.(item)}
             />
           ))}
@@ -348,7 +397,9 @@ export function DraftPlanEditor({
       <SwapSheet
         item={swapItem}
         current={swapItem ? exercisesById.get(swapItem.exerciseId) : undefined}
-        candidates={swapItem ? rankSwaps(swapItem) : []}
+        query={swapQuery}
+        onQueryChange={setSwapQuery}
+        results={swapItem ? searchSwaps(swapItem, swapQuery) : { matches: [], otherMatches: [] }}
         onPick={(exercise) => {
           if (swapItem) onEdit({ type: 'swap', itemId: swapItem.itemId, exercise });
           setSwapItemId(null);

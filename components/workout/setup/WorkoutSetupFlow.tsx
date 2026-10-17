@@ -31,7 +31,7 @@ import {
   planWarnings,
   projectPlanVolume,
 } from '@/services/workoutSetup/planProjection';
-import { rankSwapCandidates } from '@/services/workoutSetup/swapRanking';
+import { searchSwapCandidates, type SwapSearchResult } from '@/services/workoutSetup/swapRanking';
 import { SETUP_CONFIG } from '@/services/workoutSetup/config';
 import type { PlanItem, RecentSessionSummary, SetupExercise } from '@/services/workoutSetup/types';
 import {
@@ -265,11 +265,11 @@ export function WorkoutSetupFlow({
     [items, exercisesById, projection, estimatedMinutes, timeBudget, stabilizerLoad]
   );
 
-  const rankSwaps = useCallback(
-    (item: PlanItem) => {
+  const searchSwaps = useCallback(
+    (item: PlanItem, query: string): SwapSearchResult => {
       const current = exercisesById.get(item.exerciseId);
-      if (!current) return [];
-      return rankSwapCandidates(current, catalog, {
+      if (!current) return { matches: [], otherMatches: [] };
+      return searchSwapCandidates(current, catalog, query, {
         unavailableEquipmentIds,
         unavailableExerciseIds,
         recentlyDoneIds,
@@ -404,7 +404,7 @@ export function WorkoutSetupFlow({
         trimmedSets={trimmedSets}
         unfilledGroups={unfilledGroups.map((g) => groupStates.find((s) => s.group === g)?.displayName ?? g)}
         onEdit={edit}
-        rankSwaps={rankSwaps}
+        searchSwaps={searchSwaps}
         onAddExercise={() => onRequestAddToPlan(addToPlan)}
         onBack={() => setStep('pick')}
         onStart={start}
