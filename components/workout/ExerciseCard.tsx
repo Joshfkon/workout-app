@@ -63,11 +63,28 @@ import { SetLoggerRow } from './SetLoggerRow';
 import { ExerciseHistorySparkline } from './ExerciseHistorySparkline';
 import { SuggestionBanner } from './SuggestionBanner';
 import { composeNextSetCall, loggedEffortVerdict, type NextSetCall } from '@/services/setRecommendationLine';
-import { MOTION_SET_CONFIG } from '@/services/shared/motion/motionSetConfig';
+import { MOTION_SET_CONFIG, type EffortZone } from '@/services/shared/motion/motionSetConfig';
+import { velocityTargetFit, type VelocityTargetFit } from '@/services/shared/motion/setSummary';
 import { BottomSheet } from './BottomSheet';
 import { useKeyboardInset } from '@/hooks/useKeyboardInset';
 
 const MUSCLE_GROUPS = ['chest', 'back', 'shoulders', 'traps', 'biceps', 'triceps', 'quads', 'hamstrings', 'glutes', 'adductors', 'calves', 'abs', 'erectors'];
+
+// Logged-set tint from motion capture: velocity loss vs the target RIR.
+const MOTION_FIT_TEXT: Record<VelocityTargetFit, string> = {
+  'on-target': 'text-success-400',
+  easier: 'text-surface-400',
+  harder: 'text-warning-400',
+};
+const MOTION_FIT_BAR: Record<Exclude<VelocityTargetFit, 'easier'>, string> = {
+  'on-target': 'bg-success-400',
+  harder: 'bg-warning-400',
+};
+const MOTION_FIT_LABEL: Record<VelocityTargetFit, string> = {
+  'on-target': 'slowed about as much as the target',
+  easier: 'slowed less than the target',
+  harder: 'slowed more than the target',
+};
 
 // Compact RIR chips for the inline set editor — discrete values for each RIR level.
 const EDIT_RIR_OPTIONS: { value: RepsInTank; label: string }[] = [
@@ -389,7 +406,7 @@ interface ExerciseCardProps {
    * optional muted cue line (top coach cue, severity ≥ 2 only). Memoized
    * per block by the page.
    */
-  motionSets?: Record<string, { tone: 'ok' | 'low' | 'raw'; cue: string | null }>;
+  motionSets?: Record<string, { tone: 'ok' | 'low' | 'raw'; cue: string | null; zone?: EffortZone | null }>;
   /**
    * Coach read of the MOST RECENT completed set: merged into the banner
    * ("{verdict} → W × R"); the effort finding may hold an engine "add".
@@ -3997,6 +4014,15 @@ export const ExerciseCard = memo(function ExerciseCard({
             rpe: set.rpe,
           });
 
+          // Motion: how much the set slowed vs what its target RIR asks
+          // (velocityTargetFit). Normal working sets only — drop / myo /
+          // rest-pause sets are meant to go past the target.
+          const motionZone = motionSets?.[set.id]?.zone ?? null;
+          const motionFit =
+            motionZone && (!set.setType || set.setType === 'normal')
+              ? velocityTargetFit(motionZone, effectiveTargetRir)
+              : null;
+
           const isDeleteRevealed =
             confirmDeleteSetId === set.id ||
             (swipeState.setId === set.id && swipeState.isSwiping);
@@ -4004,6 +4030,13 @@ export const ExerciseCard = memo(function ExerciseCard({
           return (
             <React.Fragment key={set.id}>
               <div className="relative overflow-hidden rounded-lg">
+                {motionFit && motionFit !== 'easier' && !isDeleteRevealed && (
+                  <span
+                    aria-hidden="true"
+                    data-testid={`set-motion-fit-bar-${set.setNumber}`}
+                    className={`absolute left-0 inset-y-1.5 w-0.5 rounded-full ${MOTION_FIT_BAR[motionFit]}`}
+                  />
+                )}
                 {isDeleteRevealed && onSetDelete && (
                   <button
                     type="button"
@@ -4095,17 +4128,24 @@ export const ExerciseCard = memo(function ExerciseCard({
                       setMotionSheetSetId(set.id);
                     }}
                     aria-label={`Coach feedback for set ${set.setNumber}${
-                      motionSets[set.id].tone === 'low' ? ' (capture unclear)' : ''
+                      motionSets[set.id].tone === 'low'
+                        ? ' (capture unclear)'
+                        : motionFit
+                          ? ` (${MOTION_FIT_LABEL[motionFit]})`
+                          : ''
                     }`}
                     data-testid={`set-motion-icon-${set.setNumber}`}
                     data-tone={motionSets[set.id].tone}
+                    data-fit={motionFit ?? undefined}
                     // 44px tap target that overlaps the row's padding instead
                     // of stretching the row: a capture adds no height.
+                    // Amber means "slowed more than the target", so an unclear
+                    // capture is muted rather than amber.
                     className={`flex-shrink-0 min-w-[36px] min-h-[44px] -my-3 flex items-center justify-center rounded-lg ${
-                      motionSets[set.id].tone === 'ok'
-                        ? 'text-success-400'
-                        : motionSets[set.id].tone === 'low'
-                          ? 'text-warning-400'
+                      motionFit
+                        ? MOTION_FIT_TEXT[motionFit]
+                        : motionSets[set.id].tone === 'raw'
+                          ? 'text-surface-600'
                           : 'text-surface-500'
                     }`}
                   >

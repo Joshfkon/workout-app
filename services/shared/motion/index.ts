@@ -43,10 +43,12 @@ export {
   assessCaptureQuality,
   computeVelocityLoss,
   effortZone,
+  velocityTargetFit,
   type CaptureQualityIssue,
   type EffortZone,
   type RepVelocity,
   type VelocityLossSummary,
+  type VelocityTargetFit,
 } from './setSummary';
 export { MOTION_SET_CONFIG } from './motionSetConfig';
 export {

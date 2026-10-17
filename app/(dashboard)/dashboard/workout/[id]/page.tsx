@@ -112,6 +112,7 @@ import {
   type CleanedCapture,
   type CoachContext,
   type CoachFeedback,
+  type EffortZone,
 } from '@/services/shared/motion';
 import {
   MOTION_PROVENANCE,
@@ -1163,7 +1164,10 @@ export default function WorkoutPage() {
 
   // Card props, memoized per block so unrelated cards don't re-render.
   const motionCardProps = useMemo(() => {
-    const sets: Record<string, Record<string, { tone: 'ok' | 'low' | 'raw'; cue: string | null }>> = {};
+    const sets: Record<
+      string,
+      Record<string, { tone: 'ok' | 'low' | 'raw'; cue: string | null; zone: EffortZone | null }>
+    > = {};
     type Effort = NonNullable<CoachFeedback['effort']>;
     const latest: Record<
       string,
@@ -1173,7 +1177,9 @@ export default function WorkoutPage() {
       const c = motionCoach[set.id];
       if (!c) continue;
       const tone = !c.feedback ? 'raw' : c.feedback.confidence.confidence === 'ok' ? 'ok' : 'low';
-      (sets[set.exerciseBlockId] ??= {})[set.id] = { tone, cue: rowCue(c.feedback) };
+      // effort is null on a low-confidence capture, so no zone, no tint.
+      const zone = tone === 'ok' ? c.feedback?.effort?.zone ?? null : null;
+      (sets[set.exerciseBlockId] ??= {})[set.id] = { tone, cue: rowCue(c.feedback), zone };
     }
     for (const set of completedSets) {
       if (set.isWarmup || set.setType === 'warmup') continue;

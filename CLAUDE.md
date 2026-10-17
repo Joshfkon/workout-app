@@ -532,6 +532,11 @@ FITBIT_CLIENT_SECRET=
      excludes the set from MVT labels (`useVelocityRirProfiles`), (b)
      gives the coach no logged RIR to cross-check, and (c) is dropped by
      any RIR edit (`buildSetEditPatch`).
+   - **Set-row tint.** A logged normal working set's sensor icon (and a
+     thin left bar) is tinted by `velocityTargetFit(zone, targetRir)`:
+     green when the velocity loss matches what the target RIR implies,
+     amber when it slowed more, neutral when less or when the capture is
+     low-confidence. Relative to the target, never an absolute "good".
    - **Next-set call.** `services/setRecommendationLine.ts` (outside the
      feature dirs) phrases the prescription engine's own output; the
      SuggestionBanner is its single home ("{verdict} → W × R"). The effort

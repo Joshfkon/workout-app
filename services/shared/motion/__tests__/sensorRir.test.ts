@@ -1,6 +1,7 @@
 import { CLEANING_VERSION, type CleanedCapture, type CleanRep } from '../captureGating';
 import { MOTION_SET_CONFIG } from '../motionSetConfig';
 import { estimateSetRir } from '../sensorRir';
+import { velocityTargetFit } from '../setSummary';
 import type { MvtProfile } from '../velocityRir';
 
 function rep(n: number, meanW: number): CleanRep {
@@ -82,5 +83,16 @@ describe('estimateSetRir', () => {
 
   it('too few reps for a velocity loss → nothing', () => {
     expect(estimateSetRir(cleaned([1, 0.6]), null)).toBeNull();
+  });
+});
+
+describe('velocityTargetFit', () => {
+  it('reads the zone against the target RIR, not as an absolute', () => {
+    expect(velocityTargetFit('hard', 2)).toBe('on-target');
+    expect(velocityTargetFit('moderate', 2)).toBe('on-target');
+    expect(velocityTargetFit('easy', 2)).toBe('easier');
+    expect(velocityTargetFit('near-failure', 3)).toBe('harder');
+    expect(velocityTargetFit('near-failure', 0)).toBe('on-target');
+    expect(velocityTargetFit('hard', 4)).toBe('harder');
   });
 });
