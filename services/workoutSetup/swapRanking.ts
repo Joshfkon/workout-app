@@ -39,6 +39,19 @@ export interface SwapCandidate {
 const TIER_RANK: Record<string, number> = { S: 0, A: 1, B: 2, C: 3, D: 4, F: 5 };
 const tierRank = (tier: string | null) => TIER_RANK[(tier ?? 'C').toUpperCase()] ?? 3;
 
+function candidateBuilder(ctx: SwapRankingContext): (ex: SetupExercise) => SwapCandidate {
+  const blocked = new Set(ctx.unavailableExerciseIds ?? []);
+  const unavailable = [...(ctx.unavailableEquipmentIds ?? [])];
+  return (ex) => ({
+    exercise: ex,
+    equipmentAvailable:
+      !blocked.has(ex.id) &&
+      (unavailable.length === 0 || checkExerciseEquipment(ex, unavailable).available),
+    doneRecently: ctx.recentlyDoneIds?.has(ex.id) ?? false,
+    usageCount: ctx.usageCounts?.get(ex.id) ?? 0,
+  });
+}
+
 export function rankSwapCandidates(
   current: SetupExercise,
   catalog: readonly SetupExercise[],
@@ -46,8 +59,7 @@ export function rankSwapCandidates(
 ): SwapCandidate[] {
   const targets = new Set(primaryStandards(current));
   if (targets.size === 0) return [];
-  const blocked = new Set(ctx.unavailableExerciseIds ?? []);
-  const unavailable = [...(ctx.unavailableEquipmentIds ?? [])];
+  const toCandidate = candidateBuilder(ctx);
 
   return catalog
     .filter(
@@ -56,14 +68,7 @@ export function rankSwapCandidates(
         !(ctx.excludeIds?.has(ex.id) ?? false) &&
         primaryStandards(ex).some((m) => targets.has(m))
     )
-    .map((ex) => ({
-      exercise: ex,
-      equipmentAvailable:
-        !blocked.has(ex.id) &&
-        (unavailable.length === 0 || checkExerciseEquipment(ex, unavailable).available),
-      doneRecently: ctx.recentlyDoneIds?.has(ex.id) ?? false,
-      usageCount: ctx.usageCounts?.get(ex.id) ?? 0,
-    }))
+    .map(toCandidate)
     .sort((a, b) => {
       if (a.equipmentAvailable !== b.equipmentAvailable) return a.equipmentAvailable ? -1 : 1;
       if (a.doneRecently !== b.doneRecently) return a.doneRecently ? 1 : -1;
@@ -91,4 +96,65 @@ export function swapCandidatesForReview(
     .filter((c) => c.equipmentAvailable)
     .slice(0, limit)
     .map((c) => c.exercise);
+}
+
+export interface SwapSearchResult {
+  /** Same-muscle candidates matching the query, in the sheet's ranking. */
+  matches: SwapCandidate[];
+  /**
+   * The rest of the catalog matching the query — an explicit user override,
+   * so the same-muscle rule doesn't apply. Available first, then most used,
+   * then name.
+   */
+  otherMatches: SwapCandidate[];
+}
+
+function searchTokens(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+/** Every query token must prefix some word of the name or primary muscle. */
+function matchesQuery(ex: SetupExercise, queryTokens: readonly string[]): boolean {
+  const words = searchTokens(`${ex.name} ${ex.primaryMuscle.replace(/_/g, ' ')}`);
+  return queryTokens.every((q) => words.some((w) => w.startsWith(q)));
+}
+
+/**
+ * Free-text search for the swap sheet. An empty query is just the ranked
+ * recommendations; otherwise same-muscle matches keep their ranking and any
+ * other catalog exercise matching the query follows.
+ */
+export function searchSwapCandidates(
+  current: SetupExercise,
+  catalog: readonly SetupExercise[],
+  query: string,
+  ctx: SwapRankingContext = {}
+): SwapSearchResult {
+  const ranked = rankSwapCandidates(current, catalog, ctx);
+  const tokens = searchTokens(query);
+  if (tokens.length === 0) return { matches: ranked, otherMatches: [] };
+
+  const rankedIds = new Set(ranked.map((c) => c.exercise.id));
+  const toCandidate = candidateBuilder(ctx);
+
+  const otherMatches = catalog
+    .filter(
+      (ex) =>
+        ex.id !== current.id &&
+        !rankedIds.has(ex.id) &&
+        !(ctx.excludeIds?.has(ex.id) ?? false) &&
+        matchesQuery(ex, tokens)
+    )
+    .map(toCandidate)
+    .sort((a, b) => {
+      if (a.equipmentAvailable !== b.equipmentAvailable) return a.equipmentAvailable ? -1 : 1;
+      if (a.usageCount !== b.usageCount) return b.usageCount - a.usageCount;
+      return a.exercise.name.localeCompare(b.exercise.name);
+    });
+
+  return { matches: ranked.filter((c) => matchesQuery(c.exercise, tokens)), otherMatches };
 }

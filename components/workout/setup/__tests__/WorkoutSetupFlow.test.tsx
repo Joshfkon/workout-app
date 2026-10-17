@@ -212,6 +212,26 @@ describe('WorkoutSetupFlow', () => {
     expect(screen.getAllByTestId(/^setup-row-/)[0]).toHaveAttribute('data-testid', `setup-row-${itemId}`);
   });
 
+  it('search in the swap sheet reaches exercises outside the recommendations', async () => {
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    renderFlow();
+    await waitForPreselection();
+    await user.click(screen.getByTestId('setup-chip-back')); // chest only
+    await user.click(screen.getByTestId('setup-build-plan'));
+
+    const itemId = screen.getAllByTestId(/^setup-row-/)[0].getAttribute('data-testid')!.replace('setup-row-', '');
+    await user.click(screen.getByTestId(`setup-swap-${itemId}`));
+    const sheet = await screen.findByTestId('setup-swap-sheet');
+    expect(within(sheet).queryByTestId('setup-swap-option-pulldown')).not.toBeInTheDocument();
+
+    await user.type(within(sheet).getByTestId('setup-swap-search'), 'pull');
+    expect(within(sheet).getByTestId('setup-swap-other-heading')).toBeInTheDocument();
+    await user.click(within(sheet).getByTestId('setup-swap-option-pulldown'));
+
+    const row = screen.getByTestId(`setup-row-${itemId}`);
+    expect(row).toHaveTextContent('Lat Pulldown');
+  });
+
   it('with the network off, Start keeps the plan and explains', async () => {
     const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
     const { onStart } = renderFlow();
