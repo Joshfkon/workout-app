@@ -521,6 +521,17 @@ FITBIT_CLIENT_SECRET=
    and is discarded if it adds any number. Sanctioned couplings:
    - **Rep prefill.** Stop prefills the active rep FIELD (or offers the
      count). The typed number is what gets logged; motion never writes a set.
+   - **RIR prefill.** Stop also preselects the active RIR CHIP from
+     `estimateSetRir` (`services/shared/motion/sensorRir.ts`): the learned
+     MVT profile when usable (its refusal is respected), else the
+     velocity-loss zone via `MOTION_SET_CONFIG.coach.zoneRir`;
+     low-confidence captures give nothing. A chip the lifter already
+     tapped is never overwritten (offered instead). This is the one path
+     by which motion reaches a logged effort, so it is contained: an
+     untouched prefill logs `feedback.rirSource = 'sensor'`, which (a)
+     excludes the set from MVT labels (`useVelocityRirProfiles`), (b)
+     gives the coach no logged RIR to cross-check, and (c) is dropped by
+     any RIR edit (`buildSetEditPatch`).
    - **Next-set call.** `services/setRecommendationLine.ts` (outside the
      feature dirs) phrases the prescription engine's own output; the
      SuggestionBanner is its single home ("{verdict} → W × R"). The effort

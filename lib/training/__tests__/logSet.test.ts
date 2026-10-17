@@ -369,6 +369,16 @@ describe('buildSetEditPatch', () => {
     expect(feedback?.repsInTank).toBe(2);
   });
 
+  it('an edited RIR drops the sensor-prefill tag (it is the lifter’s own now)', () => {
+    const existing = {
+      feedback: { repsInTank: 2, form: 'clean', rirSource: 'sensor' },
+    } as unknown as Parameters<typeof buildSetEditPatch>[0];
+    const chip = buildSetEditPatch(existing, { weightKg: 100, reps: 8, rpe: 9, repsInTank: 1 });
+    expect(chip.feedback).toEqual({ repsInTank: 1, form: 'clean' });
+    const viaRpe = buildSetEditPatch(existing, { weightKg: 100, reps: 8, rpe: 10 });
+    expect(viaRpe.feedback).toEqual({ repsInTank: 0, form: 'clean' });
+  });
+
   it('resyncs RIR from RPE only when the two actually disagree', () => {
     const { feedback } = buildSetEditPatch(withFeedback(4), {
       weightKg: 100, reps: 8, rpe: 10,

@@ -380,9 +380,10 @@ interface ExerciseCardProps {
    * Sensor-counted reps from the last capture Stop (`nonce` changes per
    * capture). Prefills the active rep field unless the lifter already typed
    * one — then it is offered instead. The field stays editable and the
-   * typed number is what gets logged.
+   * typed number is what gets logged. `rir` (when the capture supports an
+   * estimate) preselects the RIR chip the same way — see SetLoggerRow.
    */
-  motionRepPrefill?: { nonce: number; reps: number } | null;
+  motionRepPrefill?: { nonce: number; reps: number; rir?: RepsInTank | null } | null;
   /**
    * Motion capture per completed set id: the row's sensor-icon tint and the
    * optional muted cue line (top coach cue, severity ≥ 2 only). Memoized
@@ -4484,6 +4485,11 @@ export const ExerciseCard = memo(function ExerciseCard({
                 weightMode={weightMode}
                 userBodyweightKg={userBodyweightKg}
                 onLog={completeLoggedSet}
+                sensorRirPrefill={
+                  motionRepPrefill?.rir != null
+                    ? { nonce: motionRepPrefill.nonce, rir: motionRepPrefill.rir }
+                    : null
+                }
                 onPlateCalculatorOpen={
                   onPlateCalculatorOpen && !isBodyweightExercise
                     ? () => {

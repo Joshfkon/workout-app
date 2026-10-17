@@ -96,6 +96,13 @@ interface SetLoggerRowProps {
    * discoverable trigger at the point of use.
    */
   onPlateCalculatorOpen?: () => void;
+  /**
+   * RIR estimated from the motion capture at Stop (`nonce` changes per
+   * capture). Preselects that chip unless the lifter already tapped one —
+   * then it is offered instead. Logged untouched, the set's feedback carries
+   * rirSource 'sensor'; any chip tap makes the RIR the lifter's own.
+   */
+  sensorRirPrefill?: { nonce: number; rir: RepsInTank } | null;
 }
 
 /** Clamp a prescribed RIR to the 0-4 chip range. */
@@ -175,9 +182,13 @@ export function SetLoggerRow({
   effortCheck = null,
   onLog,
   onPlateCalculatorOpen,
+  sensorRirPrefill = null,
 }: SetLoggerRowProps) {
   const [selectedRir, setSelectedRir] = useState<RepsInTank>(() => clampToChip(targetRir));
   const [rirTouched, setRirTouched] = useState(false);
+  // The selected chip is the sensor's untouched estimate.
+  const [rirFromSensor, setRirFromSensor] = useState(false);
+  const [sensorRirOffer, setSensorRirOffer] = useState<RepsInTank | null>(null);
   const [selectedSetType, setSelectedSetType] = useState<SetType>('normal');
   const [editingField, setEditingField] = useState<'weight' | 'reps' | null>(null);
   const [showFeedbackSheet, setShowFeedbackSheet] = useState(false);
@@ -189,11 +200,36 @@ export function SetLoggerRow({
   const [note, setNote] = useState('');
   const noteInputId = useId();
 
-  // Re-sync the default chip when the set advances or the prescription changes.
+  // Re-sync the default chip when the set advances or the prescription
+  // changes — but a prescription change mid-set doesn't overwrite a sensor
+  // estimate for the set just performed.
+  const syncedSetNumberRef = useRef(setNumber);
   useEffect(() => {
+    const newSet = syncedSetNumberRef.current !== setNumber;
+    syncedSetNumberRef.current = setNumber;
+    if (newSet) {
+      setRirFromSensor(false);
+      setSensorRirOffer(null);
+    } else if (rirFromSensor) {
+      return;
+    }
     setSelectedRir(clampToChip(targetRir));
     setRirTouched(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setNumber, targetRir]);
+
+  // Sensor RIR prefill: one per capture Stop (keyed on the nonce).
+  useEffect(() => {
+    if (!sensorRirPrefill) return;
+    if (rirTouched) {
+      setSensorRirOffer(sensorRirPrefill.rir === selectedRir ? null : sensorRirPrefill.rir);
+      return;
+    }
+    setSelectedRir(sensorRirPrefill.rir);
+    setRirFromSensor(true);
+    setSensorRirOffer(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sensorRirPrefill?.nonce]);
 
   // Clear per-set feedback when the set advances.
   useEffect(() => {
@@ -307,6 +343,7 @@ export function SetLoggerRow({
       repsInTank: selectedRir,
       form: form ?? 'clean',
       discomfort,
+      ...(rirFromSensor ? { rirSource: 'sensor' as const } : {}),
     };
     const rpe = rirToRpe(selectedRir);
 
@@ -676,6 +713,8 @@ export function SetLoggerRow({
             onClick={() => {
               setSelectedRir(chip);
               setRirTouched(true);
+              setRirFromSensor(false);
+              setSensorRirOffer(null);
             }}
             disabled={disabled}
             aria-label={`${RIR_CHIP_TEXT[chip]} reps in reserve (${RIR_LABELS[chip]})`}
@@ -732,6 +771,44 @@ export function SetLoggerRow({
           )}
         </button>
       </div>
+
+      {/* Sensor RIR: a note on a prefilled chip, or an offer when the lifter
+          had already picked one. */}
+      {rirFromSensor && (
+        <p className="pl-1 text-[11px] text-surface-500" data-testid="sensor-rir-note">
+          {RIR_CHIP_TEXT[selectedRir]} RIR estimated from bar speed · tap a chip to change
+        </p>
+      )}
+      {sensorRirOffer !== null && (
+        <div
+          className="flex items-center justify-between gap-2 px-1 text-xs text-surface-300"
+          data-testid="sensor-rir-offer"
+        >
+          <span>Bar speed suggests {RIR_CHIP_TEXT[sensorRirOffer]} RIR.</span>
+          <span className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedRir(sensorRirOffer);
+                setRirFromSensor(true);
+                setSensorRirOffer(null);
+              }}
+              className="font-medium text-primary-400 hover:text-primary-300"
+              data-testid="sensor-rir-offer-use"
+            >
+              Use {RIR_CHIP_TEXT[sensorRirOffer]}
+            </button>
+            <button
+              type="button"
+              onClick={() => setSensorRirOffer(null)}
+              className="text-surface-500 hover:text-surface-300"
+              aria-label="Keep my RIR"
+            >
+              Keep mine
+            </button>
+          </span>
+        </div>
+      )}
 
       {/* Row 3: one-tap log */}
       <button

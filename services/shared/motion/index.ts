@@ -99,6 +99,11 @@ export {
   type VelocityRep,
   type VelocityRirEstimate,
 } from './velocityRir';
+export {
+  estimateSetRir,
+  type SensorRirEstimate,
+  type SensorRirSource,
+} from './sensorRir';
 export { armAngleFromGravity, isQuasiStatic } from './gravity';
 export {
   findGravityRef,

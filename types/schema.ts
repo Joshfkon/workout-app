@@ -87,6 +87,14 @@ export interface SetFeedback {
   form: FormRating;
   /** Optional discomfort logged during the set */
   discomfort?: SetDiscomfort;
+  /**
+   * 'sensor' when repsInTank is the motion-capture prefill, logged without
+   * the lifter touching a chip. Such a set is never a label for the
+   * velocity → RIR fit (it would learn from its own output), and the
+   * motion coach doesn't cross-check it against velocity. Absent = the
+   * lifter's own pick. Dropped whenever the RIR is edited.
+   */
+  rirSource?: 'sensor';
 }
 
 /** Type of progression applied to an exercise */

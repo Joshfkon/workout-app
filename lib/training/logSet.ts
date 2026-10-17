@@ -231,16 +231,18 @@ export function buildSetEditPatch(
   const { quality } = classifySetQuality({ rpe: data.rpe });
   const bodyweightData = data.bodyweightData || existing?.bodyweightData;
 
+  // A changed RIR is the lifter's own, never the sensor prefill any more.
+  const withRir = (repsInTank: RepsInTank): SetFeedback => {
+    const { rirSource: _sensor, ...rest } = existing!.feedback!;
+    return { ...rest, repsInTank };
+  };
   const feedback: SetFeedback | undefined =
     data.repsInTank !== undefined
       ? existing?.feedback && existing.feedback.repsInTank !== data.repsInTank
-        ? { ...existing.feedback, repsInTank: data.repsInTank }
+        ? withRir(data.repsInTank)
         : undefined
       : existing?.feedback && rirToRpe(existing.feedback.repsInTank) !== data.rpe
-        ? {
-            ...existing.feedback,
-            repsInTank: Math.max(0, Math.min(4, Math.round(10 - data.rpe))) as RepsInTank,
-          }
+        ? withRir(Math.max(0, Math.min(4, Math.round(10 - data.rpe))) as RepsInTank)
         : undefined;
 
   const patch: Record<string, unknown> = {
