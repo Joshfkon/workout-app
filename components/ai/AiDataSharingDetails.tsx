@@ -16,8 +16,9 @@ export function AiDataSharingDetails() {
       <ul className="space-y-2">
         <li>
           <span className="font-medium text-surface-100">xAI (Grok)</span>: AI coach chat, workout
-          coach notes and plan reviews. Sends your training history, body stats, goals and the
-          messages you write.
+          coach notes and plan reviews. Sends your training history, age, sex, height, weight,
+          body-composition results, goals, any injuries you&apos;ve logged, and the messages you
+          write.
         </li>
         <li>
           <span className="font-medium text-surface-100">Anthropic (Claude)</span>: meal
