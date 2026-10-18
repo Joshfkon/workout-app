@@ -15,6 +15,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@/lib/supabase/server';
+import { AI_CONSENT_REQUIRED_MESSAGE, hasAiDataSharingConsent } from '@/lib/ai/consent';
 import {
   evaluateAtwater,
   atwaterWarningMessage,
@@ -90,6 +91,9 @@ export async function scanLabelWithAi(
   } = await supabase.auth.getUser();
   if (!user) {
     return { ok: false, error: 'Sign in to use the AI label scan' };
+  }
+  if (!(await hasAiDataSharingConsent(user.id))) {
+    return { ok: false, error: AI_CONSENT_REQUIRED_MESSAGE };
   }
 
   if (!ALLOWED_MEDIA_TYPES.includes(mediaType as AllowedMediaType)) {

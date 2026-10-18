@@ -14,6 +14,7 @@ import { flushSetOutbox } from '@/lib/offline/setOutbox';
 import { useWeeklyVolume } from '@/hooks/useWeeklyVolume';
 import { useHealthKitForegroundSync } from '@/hooks/useHealthKitSync';
 import { isActiveWorkoutRoute } from './isActiveWorkoutRoute';
+import { AiConsentPrompt } from '@/components/ai/AiConsentPrompt';
 
 interface DashboardLayoutClientProps {
   children: React.ReactNode;
@@ -120,6 +121,9 @@ export function DashboardLayoutClient({ children }: DashboardLayoutClientProps) 
 
       {/* Resume workout banner - shows when there's an active workout */}
       <ResumeWorkoutBanner />
+
+      {/* One-time third-party AI data sharing consent (never mid-workout) */}
+      <AiConsentPrompt suppressed={hideAppHeader} />
     </div>
   );
 }

@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>HyperTrack</title>
+  <!--
+    Bundled inside the iOS/Android app (capacitor.config.ts → server.errorPath).
+    The app loads https://hypertrack.app; when that fails (no connection,
+    server down) Capacitor shows this page instead of a blank screen.
+    Self-contained on purpose: no network, no external CSS/JS/fonts.
+  -->
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: #0a0a0a; color: #e5e5e5; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", Roboto, sans-serif;
+      display: flex; align-items: center; justify-content: center;
+      padding: calc(24px + env(safe-area-inset-top)) 24px calc(24px + env(safe-area-inset-bottom));
+      text-align: center;
+      -webkit-user-select: none; user-select: none;
+    }
+    main { max-width: 320px; }
+    .logo {
+      width: 56px; height: 56px; margin: 0 auto 24px; border-radius: 14px;
+      background: linear-gradient(135deg, #0ea5e9, #d946ef);
+      display: flex; align-items: center; justify-content: center;
+    }
+    h1 { font-size: 20px; font-weight: 700; margin: 0 0 8px; color: #fafafa; }
+    p { font-size: 15px; line-height: 1.5; margin: 0 0 28px; color: #a3a3a3; }
+    button {
+      appearance: none; border: 0; border-radius: 12px; padding: 14px 28px; min-width: 180px;
+      font: inherit; font-size: 16px; font-weight: 600; color: #fff; background: #0ea5e9;
+    }
+    button:active { opacity: 0.8; }
+    button:disabled { opacity: 0.6; }
+    .hint { margin-top: 16px; font-size: 13px; color: #737373; min-height: 1.2em; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="logo" aria-hidden="true">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+    </div>
+    <h1>You're offline</h1>
+    <p>HyperTrack needs an internet connection. Sets you already logged are saved on this device and will sync when you reconnect.</p>
+    <button id="retry" type="button">Try again</button>
+    <div class="hint" id="hint" role="status"></div>
+  </main>
+  <script>
+    (function () {
+      // Keep in sync with capacitor.config.ts → server.url.
+      var APP_URL = 'https://hypertrack.app';
+
+      // The native splash is configured not to auto-hide (the web app hides
+      // it once it paints). This page has to hide it itself, or a cold start
+      // with no connection would sit on the splash forever.
+      function hideSplash() {
+        try {
+          var plugins = window.Capacitor && window.Capacitor.Plugins;
+          if (plugins && plugins.SplashScreen) plugins.SplashScreen.hide();
+        } catch (e) { /* not running in the native shell */ }
+      }
+      hideSplash();
+      document.addEventListener('DOMContentLoaded', hideSplash);
+
+      var button = document.getElementById('retry');
+      var hint = document.getElementById('hint');
+
+      function retry() {
+        if (navigator.onLine === false) {
+          hint.textContent = 'Still no connection. Check Wi-Fi or mobile data.';
+          return;
+        }
+        button.disabled = true;
+        hint.textContent = 'Reconnecting…';
+        window.location.replace(APP_URL);
+      }
+
+      button.addEventListener('click', retry);
+      // Reconnect on its own as soon as the device comes back online.
+      window.addEventListener('online', retry);
+    })();
+  </script>
+</body>
+</html>

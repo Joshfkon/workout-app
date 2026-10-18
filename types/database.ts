@@ -27,6 +27,8 @@ export interface Database {
           enhanced_athlete_mode: boolean;
           motion_capture_enabled: boolean;
           motion_capture_raw_retention: boolean;
+          ai_data_sharing_consent: boolean | null;
+          ai_data_sharing_consent_at: string | null;
         };
         Insert: {
           id: string;
@@ -39,6 +41,8 @@ export interface Database {
           enhanced_athlete_mode?: boolean;
           motion_capture_enabled?: boolean;
           motion_capture_raw_retention?: boolean;
+          ai_data_sharing_consent?: boolean | null;
+          ai_data_sharing_consent_at?: string | null;
         };
         Update: {
           id?: string;
@@ -51,6 +55,8 @@ export interface Database {
           enhanced_athlete_mode?: boolean;
           motion_capture_enabled?: boolean;
           motion_capture_raw_retention?: boolean;
+          ai_data_sharing_consent?: boolean | null;
+          ai_data_sharing_consent_at?: string | null;
         };
         Relationships: [];
       };

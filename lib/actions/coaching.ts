@@ -11,8 +11,10 @@ import OpenAI from 'openai';
 import { createClient } from '@/lib/supabase/server';
 import { buildCoachingContext } from '@/lib/data/coachingContext';
 import { formatCoachingContext } from '@/services/coachingContextService';
+import { AI_CONSENT_REQUIRED_MESSAGE, hasAiDataSharingConsent } from '@/lib/ai/consent';
 import {
   AuthenticationError,
+  AuthorizationError,
   ServerError,
   NotFoundError,
   getErrorMessage,
@@ -74,6 +76,10 @@ export async function sendCoachingMessage(
     if (!user) {
       console.error('[AI Coach] No authenticated user');
       throw new AuthenticationError('Please sign in to use AI coaching.');
+    }
+
+    if (!(await hasAiDataSharingConsent(user.id))) {
+      throw new AuthorizationError(AI_CONSENT_REQUIRED_MESSAGE);
     }
 
     // Check for API key
@@ -399,6 +405,18 @@ export async function generateWorkoutCoachNotes(
     // Check for API key first
     const apiKey = process.env.XAI_API_KEY;
     if (!apiKey) {
+      return {
+        notes: generateFallbackNotes(input),
+        generated: false,
+      };
+    }
+
+    // No personal data goes to xAI without the user's explicit consent.
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user || !(await hasAiDataSharingConsent(user.id))) {
       return {
         notes: generateFallbackNotes(input),
         generated: false,

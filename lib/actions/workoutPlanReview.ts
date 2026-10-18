@@ -12,6 +12,7 @@
 
 import OpenAI from 'openai';
 import { createClient } from '@/lib/supabase/server';
+import { AI_CONSENT_REQUIRED_MESSAGE, hasAiDataSharingConsent } from '@/lib/ai/consent';
 import {
   REVIEW_RESPONSE_SCHEMA_HINT,
   REVIEW_SYSTEM_PROMPT,
@@ -43,6 +44,9 @@ export async function reviewWorkoutPlan(payload: ReviewPayload): Promise<PlanRev
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) return { ok: false, error: 'not signed in' };
+    if (!(await hasAiDataSharingConsent(user.id))) {
+      return { ok: false, error: AI_CONSENT_REQUIRED_MESSAGE };
+    }
 
     const apiKey = process.env.XAI_API_KEY;
     if (!apiKey) return { ok: false, error: 'review not configured' };

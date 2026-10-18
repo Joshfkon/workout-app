@@ -15,6 +15,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { createUntypedServerClient } from '@/lib/supabase/server';
+import { AI_CONSENT_REQUIRED_MESSAGE, hasAiDataSharingConsent } from '@/lib/ai/consent';
 
 export interface BfEstimateSuccess {
   ok: true;
@@ -211,6 +212,9 @@ export async function estimateBodyFatFromPhoto(
   } = await supabase.auth.getUser();
   if (!user) {
     return { ok: false, error: 'Sign in to use body fat estimation' };
+  }
+  if (!(await hasAiDataSharingConsent(user.id))) {
+    return { ok: false, error: AI_CONSENT_REQUIRED_MESSAGE };
   }
 
   if (!ALLOWED_MEDIA_TYPES.includes(mediaType as AllowedMediaType)) {
