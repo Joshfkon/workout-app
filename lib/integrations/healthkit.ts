@@ -149,7 +149,7 @@ class HealthKitService {
     }
 
     try {
-      const plugin = await this.getPlugin();
+      const plugin = this.getPlugin();
       if (!plugin) return false;
 
       const result = await plugin.isAvailable();
@@ -176,7 +176,7 @@ class HealthKitService {
     }
 
     try {
-      const plugin = await this.getPlugin();
+      const plugin = this.getPlugin();
       if (!plugin) {
         return { granted: false, reason: 'plugin_not_available' };
       }
@@ -196,7 +196,7 @@ class HealthKitService {
 
   /** Daily step totals per local day (HealthKit day buckets are device-local). */
   async getSteps(startDate: Date, endDate: Date): Promise<StepData[]> {
-    const plugin = await this.getPlugin();
+    const plugin = this.getPlugin();
     if (!plugin) return [];
 
     try {
@@ -224,7 +224,7 @@ class HealthKitService {
 
   /** Get hourly step breakdown for a specific date. */
   async getHourlySteps(date: Date): Promise<number[]> {
-    const plugin = await this.getPlugin();
+    const plugin = this.getPlugin();
     if (!plugin) return new Array(24).fill(0);
 
     try {
@@ -257,7 +257,7 @@ class HealthKitService {
 
   /** Daily active energy (kcal) per local day. */
   async getActiveEnergy(startDate: Date, endDate: Date): Promise<EnergyData[]> {
-    const plugin = await this.getPlugin();
+    const plugin = this.getPlugin();
     if (!plugin) return [];
 
     try {
@@ -289,7 +289,7 @@ class HealthKitService {
    * source dedupe.
    */
   async getSleepSamples(startDate: Date, endDate: Date): Promise<SleepSampleInput[]> {
-    const plugin = await this.getPlugin();
+    const plugin = this.getPlugin();
     if (!plugin) return [];
 
     try {
@@ -339,7 +339,7 @@ class HealthKitService {
    * mean: a single artifact reading shouldn't drag a day's value.
    */
   async getDailyHrv(startDate: Date, endDate: Date): Promise<DailyMetricSample[]> {
-    const plugin = await this.getPlugin();
+    const plugin = this.getPlugin();
     if (!plugin) return [];
 
     try {
@@ -386,7 +386,7 @@ class HealthKitService {
 
   /** Get workouts for a date range. */
   async getWorkouts(startDate: Date, endDate: Date): Promise<WearableWorkoutData[]> {
-    const plugin = await this.getPlugin();
+    const plugin = this.getPlugin();
     if (!plugin) return [];
 
     try {
@@ -427,7 +427,7 @@ class HealthKitService {
     startDate: Date,
     endDate: Date
   ): Promise<DailyMetricSample[]> {
-    const plugin = await this.getPlugin();
+    const plugin = this.getPlugin();
     if (!plugin) return [];
 
     try {
@@ -452,7 +452,15 @@ class HealthKitService {
     }
   }
 
-  private async getPlugin(): Promise<HealthPlugin | null> {
+  /**
+   * Synchronous on purpose — never `async`, and callers must never `await`
+   * the result. Capacitor plugin proxies answer EVERY property, including
+   * `then`, so a proxy returned from an async function (or awaited) is
+   * treated as a thenable and the promise never settles: every HealthKit
+   * call hung, the Activity card never offered Apple Health, and the
+   * foreground sync never ran.
+   */
+  private getPlugin(): HealthPlugin | null {
     if (this.plugin) return this.plugin;
 
     // Only attempt to load plugin on native iOS
