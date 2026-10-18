@@ -6,6 +6,7 @@ import {
   estimateWorkoutDuration,
   formatDurationDelta,
   formatDurationEstimate,
+  historicalPaceFactor,
   plannedWarmupSetsFor,
   toPlannedBlocks,
   type DurationBlockInput,
@@ -351,6 +352,120 @@ describe('estimateWorkoutDuration', () => {
     const blocks = [block({ id: 'a' }), block({ id: 'b' })];
     const estimate = estimateWorkoutDuration(blocks);
     expect(estimate.projectedTotalSeconds).toBe(estimate.totalSeconds);
+  });
+
+  it('exposes the model cost of the measured span', () => {
+    // 4 of 8 sets logged: 3 x (rest + work) once the anchor set is dropped.
+    const estimate = estimateWorkoutDuration([
+      block({ id: 'a', targetSets: 8, completedSets: 4, restSeconds: 120 }),
+    ]);
+    expect(estimate.completedModelSeconds).toBe(3 * (120 + 45));
+    expect(estimateWorkoutDuration([block({ id: 'a' })]).completedModelSeconds).toBe(0);
+  });
+});
+
+describe('historical pace seeding', () => {
+  const fresh = [block({ id: 'a' }), block({ id: 'b' })];
+
+  it('opens a fresh session at the historical pace, both halves agreeing', () => {
+    const unseeded = estimateWorkoutDuration(fresh);
+    const seeded = estimateWorkoutDuration(fresh, { historicalPaceFactor: 1.5 });
+    expect(seeded.paceFactor).toBe(1.5);
+    expect(seeded.paceSource).toBe('historical');
+    expect(seeded.isCalibrated).toBe(true);
+    expect(seeded.remainingSeconds).toBe(Math.round(unseeded.totalSeconds * 1.5));
+    // The projected total scales WITH the remaining readout — "1h 15m left"
+    // must not sit beside a "50 min total".
+    expect(seeded.projectedTotalSeconds).toBe(seeded.remainingSeconds);
+    // The pure-model total stays what planning surfaces expect.
+    expect(seeded.totalSeconds).toBe(unseeded.totalSeconds);
+  });
+
+  it('ignores an unusable prior', () => {
+    for (const prior of [null, undefined, 0, -1, Number.NaN]) {
+      const estimate = estimateWorkoutDuration(fresh, { historicalPaceFactor: prior });
+      expect(estimate.paceFactor).toBe(1);
+      expect(estimate.paceSource).toBe('model');
+    }
+  });
+
+  it('clamps the prior to the calibration band', () => {
+    expect(estimateWorkoutDuration(fresh, { historicalPaceFactor: 5 }).paceFactor).toBe(
+      DURATION_MODEL.maxPaceFactor
+    );
+    expect(estimateWorkoutDuration(fresh, { historicalPaceFactor: 0.1 }).paceFactor).toBe(
+      DURATION_MODEL.minPaceFactor
+    );
+  });
+
+  it('pools the prior with live observation instead of switching on a cliff', () => {
+    // 4 of 8 sets logged exactly on model: 495s observed against 495s modelled.
+    const blocks = [block({ id: 'a', targetSets: 8, completedSets: 4, restSeconds: 120 })];
+    const observed = 3 * (120 + 45);
+    const estimate = estimateWorkoutDuration(blocks, {
+      elapsedSeconds: observed,
+      historicalPaceFactor: 2,
+    });
+    // Prior counts as pacePriorWeightSeconds of model time at 2x.
+    const weight = DURATION_MODEL.pacePriorWeightSeconds;
+    expect(estimate.paceFactor).toBeCloseTo((observed + 2 * weight) / (observed + weight), 5);
+    expect(estimate.paceFactor).toBeGreaterThan(1);
+    expect(estimate.paceFactor).toBeLessThan(2);
+    expect(estimate.paceSource).toBe('live');
+  });
+
+  it('lets today win over the prior as evidence accumulates', () => {
+    const early = [block({ id: 'a', targetSets: 20, completedSets: 4, restSeconds: 120 })];
+    const late = [block({ id: 'a', targetSets: 20, completedSets: 18, restSeconds: 120 })];
+    const onModel = (blocks: DurationBlockInput[]) => {
+      const model = estimateWorkoutDuration(blocks).completedModelSeconds;
+      return estimateWorkoutDuration(blocks, {
+        elapsedSeconds: model,
+        historicalPaceFactor: 2,
+      }).paceFactor;
+    };
+    // Both pulled above 1 by the prior, but the deeper session trusts today more.
+    expect(onModel(late)).toBeLessThan(onModel(early));
+  });
+});
+
+describe('historicalPaceFactor', () => {
+  const session = (observedSeconds: number | null, modelSeconds: number | null) => ({
+    observedSeconds,
+    modelSeconds,
+  });
+
+  it('returns null with nothing usable to read', () => {
+    expect(historicalPaceFactor([])).toBeNull();
+    expect(historicalPaceFactor([session(null, 3000), session(3000, null)])).toBeNull();
+    // Sessions too short to vote abstain entirely.
+    expect(
+      historicalPaceFactor([session(400, DURATION_MODEL.minHistoricalPaceModelSeconds - 1)])
+    ).toBeNull();
+  });
+
+  it('takes the median so one disrupted session cannot tax every estimate', () => {
+    const factor = historicalPaceFactor([
+      session(3000, 3000), // 1.0
+      session(3300, 3000), // 1.1
+      session(9000, 3000), // 3.0 — fire alarm mid-session
+    ]);
+    expect(factor).toBeCloseTo(1.1, 5);
+  });
+
+  it('averages the middle pair on an even count', () => {
+    const factor = historicalPaceFactor([
+      session(3000, 3000), // 1.0
+      session(3600, 3000), // 1.2
+      session(4200, 3000), // 1.4
+      session(6000, 3000), // 2.0
+    ]);
+    expect(factor).toBeCloseTo(1.3, 5);
+  });
+
+  it('clamps to the calibration band', () => {
+    expect(historicalPaceFactor([session(9000, 3000)])).toBe(DURATION_MODEL.maxPaceFactor);
+    expect(historicalPaceFactor([session(600, 3000)])).toBe(DURATION_MODEL.minPaceFactor);
   });
 });
 
