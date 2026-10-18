@@ -15,18 +15,29 @@ type IOSConfig = NonNullable<CapacitorConfig['ios']> & {
 const config: CapacitorConfig & { ios?: IOSConfig } = {
   appId: 'app.hypertrack.workout',
   appName: 'HyperTrack',
-  webDir: 'out',
+  // Bundled into the app. The app itself loads server.url; this folder only
+  // carries the offline page shown when that fails (server.errorPath).
+  webDir: 'native-shell',
 
   // Point to hosted app (production URL)
   // For local development, comment out server block or use livereload
   server: {
-    url: process.env.NEXT_PUBLIC_APP_URL || 'https://hypertrack.app',
+    // Must be the CANONICAL host: hypertrack.app 308-redirects to www, and
+    // Capacitor hands any navigation to a different host to Safari — the
+    // app would open the browser instead of showing the site.
+    url: process.env.NEXT_PUBLIC_APP_URL || 'https://www.hypertrack.app',
     cleartext: false,
+    // Shown instead of a blank screen when server.url can't load (no
+    // connection, server down). Self-contained; retries server.url.
+    errorPath: 'offline.html',
   },
 
   // iOS specific configuration
   ios: {
     contentInset: 'automatic',
+    // Native view behind the webview; shows in the inset areas (e.g. under
+    // the bundled offline page). Matches the app's dark surface.
+    backgroundColor: '#0a0a0a',
     allowsLinkPreview: false,
     scheme: 'HyperTrack',
     // Play the tapped YouTube embed inline in WKWebView instead of forcing
@@ -57,9 +68,6 @@ const config: CapacitorConfig & { ios?: IOSConfig } = {
     StatusBar: {
       style: 'DARK',
       backgroundColor: '#0a0a0a',
-    },
-    PushNotifications: {
-      presentationOptions: ['badge', 'sound', 'alert'],
     },
     Keyboard: {
       // Let the webview resize itself when the keyboard opens (plugin

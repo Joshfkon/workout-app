@@ -5,6 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent, Select, Input, Button } from 
 import { ThemeToggle } from '@/components/settings/ThemeToggle';
 import { EnhancedAthleteModeCard } from '@/components/settings/EnhancedAthleteModeCard';
 import { MotionCaptureLabCard } from '@/components/settings/MotionCaptureLabCard';
+import { AiDataSharingCard } from '@/components/settings/AiDataSharingCard';
 
 interface ProfileTabPanelProps {
   // Profile fields
@@ -246,6 +247,9 @@ export function ProfileTabPanel({
 
       {/* Motion Capture (experimental) — off by default, persists on toggle */}
       <MotionCaptureLabCard />
+
+      {/* AI Features — third-party AI data sharing consent, persists on toggle */}
+      <AiDataSharingCard />
 
       {/* Sticky Save Button with unsaved indicator */}
       <div className="sticky bottom-4 z-10">

@@ -12,6 +12,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@/lib/supabase/server';
+import { AI_CONSENT_REQUIRED_MESSAGE, hasAiDataSharingConsent } from '@/lib/ai/consent';
 
 export interface ParsedMealItem {
   /** Food name, title case, e.g. "Greek yogurt" */
@@ -79,6 +80,9 @@ export async function parseMealDescription(description: string): Promise<ParseMe
   } = await supabase.auth.getUser();
   if (!user) {
     return { ok: false, error: 'Sign in to use meal parsing' };
+  }
+  if (!(await hasAiDataSharingConsent(user.id))) {
+    return { ok: false, error: AI_CONSENT_REQUIRED_MESSAGE };
   }
 
   const text = description.trim();

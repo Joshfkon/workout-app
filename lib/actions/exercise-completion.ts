@@ -8,6 +8,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@/lib/supabase/server';
+import { hasAiDataSharingConsent } from '@/lib/ai/consent';
 import type { BasicExerciseInput, CompletedExerciseData } from '@/lib/exercises/types';
 import type { Database } from '@/types/database';
 import {
@@ -99,6 +100,15 @@ export async function completeExerciseWithAI(
     } = await supabase.auth.getUser();
     if (!user) {
       return { success: false, error: 'Unauthorized' };
+    }
+
+    // No exercise data goes to Anthropic without the user's explicit
+    // consent: fall back to equipment defaults, as when no API key is set.
+    if (!(await hasAiDataSharingConsent(user.id))) {
+      return {
+        success: true,
+        data: getDefaultsByEquipment(input),
+      };
     }
 
     // Check usage limits. Exhausted quota must not block creating the

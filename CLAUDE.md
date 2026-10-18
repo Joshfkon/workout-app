@@ -608,11 +608,11 @@ GitHub Actions workflow (`.github/workflows/test.yml`):
 
 The app supports iOS and Android via Capacitor:
 - **App ID**: `app.hypertrack.workout`
-- **Web Dir**: `out` (static export)
+- **Web Dir**: `native-shell` (only the bundled offline page, `server.errorPath`; the app loads the production URL)
 - **Production URL**: `https://hypertrack.app`
 
 ### Native Features
-- Push notifications
+- Offline fallback page bundled in the app (`native-shell/offline.html`)
 - Status bar customization
 - Splash screen with dark theme (#0a0a0a)
 - Deep linking via custom scheme `HyperTrack://`

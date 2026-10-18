@@ -127,7 +127,7 @@ export default function PrivacyPolicyPage() {
               Certain features use artificial intelligence to generate personalized insights and
               content. When you use AI coaching features (such as AI coaching notes and in-workout
               coaching), relevant data — for example, your training history, body-composition context,
-              and goals — may be sent to xAI (Grok) to generate responses. Other AI features (such as
+              goals, and any injuries you have logged — may be sent to xAI (Grok) to generate responses. Other AI features (such as
               nutrition estimates, food-label help, progress-photo estimates, exercise generation, and
               program design) may send relevant data to Anthropic. This data is processed to provide
               the feature and is not used by us to train AI models. AI-generated guidance is

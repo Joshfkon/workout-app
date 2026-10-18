@@ -9,6 +9,7 @@
 
 import OpenAI from 'openai';
 import { createClient } from '@/lib/supabase/server';
+import { hasAiDataSharingConsent } from '@/lib/ai/consent';
 import {
   COACH_PHRASING_SYSTEM_PROMPT,
   validateCoachPhrasing,
@@ -33,6 +34,7 @@ export async function phraseCoachFeedback(
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) return { ok: false };
+    if (!(await hasAiDataSharingConsent(user.id))) return { ok: false };
 
     const apiKey = process.env.XAI_API_KEY;
     if (!apiKey) return { ok: false };
