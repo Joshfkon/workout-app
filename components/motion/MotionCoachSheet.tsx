@@ -5,7 +5,9 @@
  * (opened from the set row's sensor icon or cue line):
  *
  *   verdict · up to 2 cues · next-set call (latest set only)
- *   ▸ Details — rep table, chart, diagnostics (collapsed)
+ *   rep count + velocity loss, per-rep velocity bars, rep table — shown
+ *   straight away (no Details expander); the w(t) chart and diagnostics
+ *   stay collapsed inside the analysis view.
  *
  * Sources: a live / reprocessed capture (full analysis), a capture restored
  * from its cleaning snapshot (no chart), or a capture that predates rep
@@ -13,7 +15,7 @@
  * its stored per-rep numbers, so old-pipeline observations never resurface.
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import type { CaptureAnalysisMetrics } from '@/types/motion';
 import type { CaptureAnalysis, CleanedCapture, CoachContext } from '@/services/shared/motion';
 import { buildCoachFeedback, RAD_TO_DEG } from '@/services/shared/motion';
@@ -21,7 +23,7 @@ import { BottomSheet } from '@/components/workout/BottomSheet';
 import { buildCoachPhrasingPayload } from '@/lib/motion/coachPhrasing';
 import { markObservationsViewed } from '@/lib/motion/observationsViewed';
 import { CaptureAnalysisView } from './CaptureAnalysisView';
-import { CoachBlock, coachTemplateText, Collapsible } from './CaptureParts';
+import { CoachBlock, coachTemplateText } from './CaptureParts';
 import { useCoachPhrasing } from './useCoachPhrasing';
 
 export interface MotionSheetCapture {
@@ -57,7 +59,12 @@ export function MotionCoachSheet({
   velocityRirLine = null,
   onClose,
 }: MotionCoachSheetProps) {
-  const [detailsOpen, setDetailsOpen] = useState(false);
+  // The per-rep numbers are visible as soon as the sheet opens, so opening
+  // it is what sets the label-contamination flag (formerly: expanding
+  // Details). Later sets this session are excluded from the MVT labels.
+  useEffect(() => {
+    if (workoutSessionId) markObservationsViewed(workoutSessionId);
+  }, [workoutSessionId]);
   const feedback = useMemo(
     () => (capture.cleaned ? buildCoachFeedback(capture.cleaned, coachContext) : null),
     [capture.cleaned, coachContext]
@@ -92,18 +99,7 @@ export function MotionCoachSheet({
           </div>
         )}
 
-        <Collapsible
-          title="Details"
-          open={detailsOpen}
-          onToggle={() =>
-            setDetailsOpen((o) => {
-              // Same label-contamination flag the old Observations expander set.
-              if (!o && workoutSessionId) markObservationsViewed(workoutSessionId);
-              return !o;
-            })
-          }
-          testId="motion-sheet-details"
-        >
+        <div className="space-y-4" data-testid="motion-sheet-details">
           {velocityRirLine && feedback?.confidence.confidence === 'ok' && (
             <p className="text-xs text-surface-400" data-testid="velocity-rir-line">
               {velocityRirLine}
@@ -119,7 +115,7 @@ export function MotionCoachSheet({
           ) : capture.metrics ? (
             <LegacyMetrics metrics={capture.metrics} />
           ) : null}
-        </Collapsible>
+        </div>
       </div>
     </BottomSheet>
   );

@@ -16,7 +16,9 @@
  *  - captures flagged prior_observations_viewed_this_session are excluded —
  *    metrics seen before RIR entry can anchor the label;
  *  - the label is feedback.repsInTank; sets without structured feedback
- *    don't qualify.
+ *    don't qualify;
+ *  - a set logged with the untouched sensor RIR prefill
+ *    (feedback.rirSource 'sensor') doesn't qualify either.
  */
 
 import { useMemo } from 'react';
@@ -41,8 +43,12 @@ interface CaptureRow {
   analysis_metrics: CaptureAnalysisMetrics | null;
 }
 
-/** set_logs.feedback round-trips as jsonb or a JSON string; accept both. */
-function parseLoggedRir(feedback: unknown): number | null {
+/**
+ * set_logs.feedback round-trips as jsonb or a JSON string; accept both.
+ * An untouched sensor prefill (rirSource 'sensor') is not a label: the
+ * profile would be learning from its own estimate.
+ */
+export function parseLoggedRir(feedback: unknown): number | null {
   let parsed: unknown = feedback;
   if (typeof feedback === 'string') {
     try {
@@ -51,7 +57,9 @@ function parseLoggedRir(feedback: unknown): number | null {
       return null;
     }
   }
-  const rir = (parsed as Partial<SetFeedback> | null)?.repsInTank;
+  const fb = parsed as Partial<SetFeedback> | null;
+  if (fb?.rirSource === 'sensor') return null;
+  const rir = fb?.repsInTank;
   return typeof rir === 'number' ? rir : null;
 }
 

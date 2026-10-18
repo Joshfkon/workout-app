@@ -51,6 +51,23 @@ export function effortZone(loss: number): EffortZone {
   return 'near-failure';
 }
 
+export type VelocityTargetFit = 'on-target' | 'easier' | 'harder';
+
+/**
+ * How the set's velocity loss compares with what its target RIR implies
+ * (zoneRir ± targetFitTolerance) — the logged set row's tint. Relative to
+ * the target on purpose: 40% loss is right for a 2-RIR set and too much
+ * for a 4-RIR one. Display-only; the target is passed in, never read from
+ * the prescription engine here.
+ */
+export function velocityTargetFit(zone: EffortZone, targetRir: number): VelocityTargetFit {
+  const { zoneRir, targetFitTolerance } = MOTION_SET_CONFIG.coach;
+  const diff = zoneRir[zone] - targetRir;
+  if (diff > targetFitTolerance) return 'easier';
+  if (diff < -targetFitTolerance) return 'harder';
+  return 'on-target';
+}
+
 export function computeVelocityLoss(reps: VelocityInput[]): VelocityLossSummary {
   const valid = reps.filter((r) => isValidW(r.meanW));
   const firstTwo = valid.slice(0, 2);

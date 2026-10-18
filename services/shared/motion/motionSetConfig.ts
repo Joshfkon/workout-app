@@ -47,6 +47,19 @@ export const MOTION_SET_CONFIG = {
     minRepsForLoss: 3,
     /** Velocity-loss zones: < easyBelow easy, < moderateBelow moderate, ≤ hardUpTo hard, else near failure. */
     effortZones: { easyBelow: 0.15, moderateBelow: 0.3, hardUpTo: 0.45 },
+    /**
+     * Fallback RIR prefill per velocity-loss zone, used only when there is
+     * no usable learned failure-velocity (MVT) profile for the machine.
+     * Chosen so the coach's own cross-check below can never flag a
+     * prefilled value. Near failure maps to 1, not 0: velocity loss alone
+     * can't tell "one left" from "none left".
+     */
+    zoneRir: { easy: 4, moderate: 3, hard: 2, 'near-failure': 1 },
+    /**
+     * The set row's tint: the zone's RIR within this many reps of the set's
+     * target RIR reads as "slowed about as much as the target asks".
+     */
+    targetFitTolerance: 1,
     /** Logged-RIR cross-check against the velocity zone. */
     rirDisagreement: {
       /** Easy/moderate velocity but logged RIR ≤ this → "had more than you logged". */

@@ -19,7 +19,7 @@ const props = {
 };
 
 describe('MotionCoachSheet', () => {
-  it('verdict, up to two cues, the next-set call — details collapsed', () => {
+  it('verdict, up to two cues, the next-set call — and the rep detail without a tap', () => {
     const analysis = analysisFromColumns(SETUP_STROKE_CAPTURE);
     render(
       <MotionCoachSheet
@@ -31,8 +31,8 @@ describe('MotionCoachSheet', () => {
     expect(screen.getByTestId('coach-verdict')).toHaveTextContent('Steady set — you had more in the tank.');
     expect(screen.getAllByTestId('coach-cue')).toHaveLength(2);
     expect(screen.getByTestId('coach-next-set')).toHaveTextContent('Next set: add 5 lb (95 lb × 12–13).');
-    expect(screen.getByTestId('motion-sheet-details-toggle')).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.queryByTestId('motion-analysis-rep-table')).toBeNull();
+    expect(screen.queryByTestId('motion-sheet-details-toggle')).toBeNull();
+    expect(screen.getByTestId('motion-analysis-header')).toBeInTheDocument();
   });
 
   it('a pre-cleaning capture without raw gets no coach feedback, only its stored numbers', () => {
@@ -53,7 +53,6 @@ describe('MotionCoachSheet', () => {
     );
     expect(screen.getByTestId('motion-legacy-capture')).toBeInTheDocument();
     expect(screen.queryByTestId('coach-verdict')).toBeNull();
-    fireEvent.click(screen.getByTestId('motion-sheet-details-toggle'));
     expect(screen.getByTestId('motion-legacy-metrics')).toHaveTextContent('34°/s');
   });
 

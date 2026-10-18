@@ -43,10 +43,12 @@ export {
   assessCaptureQuality,
   computeVelocityLoss,
   effortZone,
+  velocityTargetFit,
   type CaptureQualityIssue,
   type EffortZone,
   type RepVelocity,
   type VelocityLossSummary,
+  type VelocityTargetFit,
 } from './setSummary';
 export { MOTION_SET_CONFIG } from './motionSetConfig';
 export {
@@ -99,6 +101,11 @@ export {
   type VelocityRep,
   type VelocityRirEstimate,
 } from './velocityRir';
+export {
+  estimateSetRir,
+  type SensorRirEstimate,
+  type SensorRirSource,
+} from './sensorRir';
 export { armAngleFromGravity, isQuasiStatic } from './gravity';
 export {
   findGravityRef,
