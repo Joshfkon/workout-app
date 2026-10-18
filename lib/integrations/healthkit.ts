@@ -5,13 +5,20 @@
  * bridge. Provides daily steps, active energy, workouts, sleep samples, and
  * daily HRV (SDNN) / resting heart rate.
  *
- * Web-bundle safety: the plugin is loaded through a Function-constructed
- * dynamic import so webpack never sees (or bundles) the dependency — web/PWA
- * builds contain zero HealthKit code and every entry point returns empty data
- * off-iOS. Nothing is ever written to HealthKit (write permissions are never
- * requested).
+ * Web-bundle safety: the plugin is reached through `registerPlugin('Health')`
+ * from @capacitor/core (already in the bundle) — a proxy to the native
+ * plugin's bridge name. Nothing from the `@capgo/capacitor-health` package is
+ * imported, so web/PWA builds contain zero HealthKit code, and every entry
+ * point returns empty data off-iOS. Nothing is ever written to HealthKit
+ * (write permissions are never requested).
+ *
+ * Not a runtime `import()` of the package name: the native app loads the
+ * site from its server URL, where a bare specifier like
+ * '@capgo/capacitor-health' cannot resolve, so that import always failed and
+ * Apple Health was never offered.
  */
 
+import { registerPlugin } from '@capacitor/core';
 import { Capacitor } from './capacitor-stub';
 import type {
   StepData,
@@ -100,6 +107,9 @@ interface HealthPlugin {
 
 /** Kept in one place so the bundle-safety test can assert on it. */
 export const HEALTHKIT_PLUGIN_PACKAGE = '@capgo/capacitor-health';
+
+/** The plugin's native bridge name (its Swift `jsName`). */
+export const HEALTHKIT_PLUGIN_JS_NAME = 'Health';
 
 /**
  * The read types this app ever requests — sleep, HRV, resting HR, steps,
@@ -451,11 +461,9 @@ class HealthKitService {
     }
 
     try {
-      // Use Function constructor to hide the import from webpack's static
-      // analysis so the native plugin never enters the web bundle.
-      const importFn = new Function('modulePath', 'return import(modulePath)');
-      const healthModule = await importFn(HEALTHKIT_PLUGIN_PACKAGE);
-      this.plugin = healthModule.Health as HealthPlugin;
+      // Proxy to the native plugin by bridge name; no plugin package code is
+      // bundled. Calls fail cleanly if the native side isn't registered.
+      this.plugin = registerPlugin<HealthPlugin>(HEALTHKIT_PLUGIN_JS_NAME);
       return this.plugin;
     } catch (error) {
       console.warn('HealthKit plugin not available:', error);
