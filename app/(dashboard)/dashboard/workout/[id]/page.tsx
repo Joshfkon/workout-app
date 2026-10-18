@@ -104,6 +104,7 @@ import {
   CLEANING_VERSION,
   describeCleaning,
   estimateRirFromVelocity,
+  estimateSetRir,
   pausePointForPattern,
   processMotionSamples,
   rowCue,
@@ -111,6 +112,7 @@ import {
   type CleanedCapture,
   type CoachContext,
   type CoachFeedback,
+  type EffortZone,
 } from '@/services/shared/motion';
 import {
   MOTION_PROVENANCE,
@@ -914,8 +916,10 @@ export default function WorkoutPage() {
   // effort-modulated rest re-times from the set's real end instead of
   // restarting from zero.
   const motionRestRef = useRef<{ blockId: string; endedAtMs: number } | null>(null);
+  // Stop prefills the rep field and, when the capture supports one, the RIR
+  // chip (estimateSetRir). Both are prefills: the lifter's values get logged.
   const [motionRepPrefill, setMotionRepPrefill] = useState<
-    { blockId: string; nonce: number; reps: number } | null
+    { blockId: string; nonce: number; reps: number; rir: RepsInTank | null } | null
   >(null);
   // Set below, once the rest timer exists; the capture hook calls it on the
   // safety auto-stop.
@@ -1131,13 +1135,16 @@ export default function WorkoutPage() {
             ? Math.max(0, rpeToRir(set.rpe))
             : null;
       if (!capture || loggedRir === null) continue;
+      // An untouched sensor RIR prefill IS the velocity reading: crossing it
+      // against velocity would only ever agree, so the coach gets no RIR.
+      const coachRir = set.feedback?.rirSource === 'sensor' ? null : loggedRir;
       const block = blocks.find((b) => b.id === set.exerciseBlockId);
       const lastSession = capture.calibrationId
         ? motionHistory.lastSession[capture.calibrationId]?.find((h) => h.setNumber === set.setNumber)
         : undefined;
       const context: CoachContext = {
         loggedReps: getSetReps(set, block?.exercise) ?? 0,
-        loggedRir,
+        loggedRir: coachRir,
         weightKg: set.weightKg,
         pausePoint: pausePointForPattern(block?.exercise?.movementPattern, block?.exercise?.pausePoint),
         history: lastSession
@@ -1159,7 +1166,10 @@ export default function WorkoutPage() {
 
   // Card props, memoized per block so unrelated cards don't re-render.
   const motionCardProps = useMemo(() => {
-    const sets: Record<string, Record<string, { tone: 'ok' | 'low' | 'raw'; cue: string | null }>> = {};
+    const sets: Record<
+      string,
+      Record<string, { tone: 'ok' | 'low' | 'raw'; cue: string | null; zone: EffortZone | null }>
+    > = {};
     type Effort = NonNullable<CoachFeedback['effort']>;
     const latest: Record<
       string,
@@ -1169,7 +1179,9 @@ export default function WorkoutPage() {
       const c = motionCoach[set.id];
       if (!c) continue;
       const tone = !c.feedback ? 'raw' : c.feedback.confidence.confidence === 'ok' ? 'ok' : 'low';
-      (sets[set.exerciseBlockId] ??= {})[set.id] = { tone, cue: rowCue(c.feedback) };
+      // effort is null on a low-confidence capture, so no zone, no tint.
+      const zone = tone === 'ok' ? c.feedback?.effort?.zone ?? null : null;
+      (sets[set.exerciseBlockId] ??= {})[set.id] = { tone, cue: rowCue(c.feedback), zone };
     }
     for (const set of completedSets) {
       if (set.isWarmup || set.setType === 'warmup') continue;
@@ -1234,8 +1246,9 @@ export default function WorkoutPage() {
   // Rest timer hook
   const restTimer = useRestTimer(restTimerOptions);
 
-  // Capture Stop (manual or the safety auto-stop): prefill reps and start
-  // the rest timer NOW, backdated to the set's real end — the lifter
+  // Capture Stop (manual or the safety auto-stop): prefill reps (and the
+  // RIR chip, when the capture supports an estimate) and start the rest
+  // timer NOW, backdated to the set's real end — the lifter
   // doesn't have to confirm the set first. Zero counted reps → discard.
   // Dropset and superset blocks have their own rest choreography, so their
   // rest still starts from "Log set".
@@ -1249,7 +1262,12 @@ export default function WorkoutPage() {
       return;
     }
     pendingMotionRef.current = { blockId: block.id, exerciseId: block.exerciseId, capture };
-    setMotionRepPrefill({ blockId: block.id, nonce: Date.now(), reps });
+    const calibrationId = motionCalibrations.find((c) => c.exerciseId === block.exerciseId)?.id;
+    const rirEstimate = estimateSetRir(
+      capture.cleaned,
+      calibrationId ? velocityRirProfiles[calibrationId] ?? null : null
+    );
+    setMotionRepPrefill({ blockId: block.id, nonce: Date.now(), reps, rir: rirEstimate?.rir ?? null });
     if ((block.dropsetsPerSet ?? 0) > 0 || block.supersetGroupId) return;
     const base = block.targetRestSeconds ?? 180;
     const elapsedS = capture.endedAgoMs / 1000;

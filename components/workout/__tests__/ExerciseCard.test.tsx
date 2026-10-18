@@ -2868,6 +2868,41 @@ describe('ExerciseCard — motion capture integration', () => {
     expect(screen.getByTestId('sheet')).toHaveTextContent(/^Next set: hold 100 kg × 9–12\.$/);
   });
 
+  it('set row tint: velocity loss vs the target RIR (2 here); unclear captures are muted', () => {
+    const renderMotionSheet = () => null;
+    const row = (zone: 'easy' | 'hard' | 'near-failure' | null, tone: 'ok' | 'low' = 'ok') =>
+      ({ 'set-1': { tone, cue: null, zone } });
+    const { rerender } = render(
+      <ExerciseCard {...base} sets={logged} motionSets={row('hard')} renderMotionSheet={renderMotionSheet} />
+    );
+    expect(screen.getByTestId('set-motion-icon-1')).toHaveAttribute('data-fit', 'on-target');
+    expect(screen.getByTestId('set-motion-icon-1')).toHaveClass('text-success-400');
+    expect(screen.getByTestId('set-motion-fit-bar-1')).toHaveClass('bg-success-400');
+    expect(screen.getByTestId('set-motion-icon-1')).toHaveAccessibleName(
+      'Coach feedback for set 1 (slowed about as much as the target)'
+    );
+
+    rerender(<ExerciseCard {...base} sets={logged} motionSets={row('easy')} renderMotionSheet={renderMotionSheet} />);
+    expect(screen.getByTestId('set-motion-icon-1')).toHaveAttribute('data-fit', 'easier');
+    expect(screen.queryByTestId('set-motion-fit-bar-1')).not.toBeInTheDocument();
+
+    rerender(
+      <ExerciseCard
+        {...base}
+        block={createMockBlock({ targetRir: 4 })}
+        sets={logged}
+        motionSets={row('near-failure')}
+        renderMotionSheet={renderMotionSheet}
+      />
+    );
+    expect(screen.getByTestId('set-motion-fit-bar-1')).toHaveClass('bg-warning-400');
+
+    rerender(<ExerciseCard {...base} sets={logged} motionSets={row(null, 'low')} renderMotionSheet={renderMotionSheet} />);
+    expect(screen.getByTestId('set-motion-icon-1')).not.toHaveAttribute('data-fit');
+    expect(screen.getByTestId('set-motion-icon-1')).toHaveClass('text-surface-500');
+    expect(screen.queryByTestId('set-motion-fit-bar-1')).not.toBeInTheDocument();
+  });
+
   it('no capture → no icon, no cue line (one-line row)', () => {
     render(<ExerciseCard {...base} sets={logged} renderMotionSheet={() => null} />);
     expect(screen.queryByTestId('set-motion-icon-1')).not.toBeInTheDocument();
