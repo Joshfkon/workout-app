@@ -56,9 +56,10 @@ permission is requested without its usage string.
 ```
 
 Notes:
-- **No `NSHealthUpdateUsageDescription` needed** — the HealthKit integration is
-  read-only (`lib/integrations/healthkit.ts`, `write: []`). Add it only if you
-  later write data back to Health.
+- **`NSHealthUpdateUsageDescription` is required** even though the HealthKit
+  integration is read-only (`write: []`): the plugin links the write APIs, and
+  App Store Connect rejects the upload without it. The string says the app
+  never writes to Health.
 - The default HealthKit permission request covers sleep, steps, active energy (calories), 
   and heart-rate data (HRV and resting HR). Workouts are NOT requested by default — 
   they're only available if callers explicitly pass `workouts` in the permissions array.

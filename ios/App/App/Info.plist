@@ -68,6 +68,10 @@
 	<true/>
 	<key>NSHealthShareUsageDescription</key>
 	<string>HyperTrack reads your sleep, steps, active energy, and heart-rate data from Apple Health to improve recovery and calorie estimates.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>HyperTrack does not write data to Apple Health. It only reads sleep, steps, active energy and heart-rate data.</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>NSCameraUsageDescription</key>
 	<string>HyperTrack uses the camera to scan food barcodes for nutrition logging.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
