@@ -86,7 +86,16 @@ const WEARABLE_OPTIONS: WearableOption[] = [
   },
 ];
 
-export function WearableConnectionsScreen() {
+interface WearableConnectionsScreenProps {
+  /**
+   * Called after a connect or disconnect finishes and the list has been
+   * reloaded, so a parent showing connection state (the dashboard
+   * ActivityCard) can refresh instead of waiting for a remount.
+   */
+  onConnectionsChange?: (connections: WearableConnection[]) => void;
+}
+
+export function WearableConnectionsScreen({ onConnectionsChange }: WearableConnectionsScreenProps = {}) {
   const [connections, setConnections] = useState<WearableConnection[]>([]);
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState<WearableSource | null>(null);
@@ -105,15 +114,22 @@ export function WearableConnectionsScreen() {
     checkAvailability();
   }, []);
 
-  async function loadConnections() {
+  async function loadConnections(): Promise<WearableConnection[] | null> {
     try {
       const data = await getWearableConnections();
       setConnections(data);
+      return data;
     } catch (error) {
       console.error('Failed to load connections:', error);
+      return null;
     } finally {
       setLoading(false);
     }
+  }
+
+  async function reloadAndNotify() {
+    const data = await loadConnections();
+    if (data) onConnectionsChange?.(data);
   }
 
   async function checkAvailability() {
@@ -227,7 +243,7 @@ export function WearableConnectionsScreen() {
         }
       }
 
-      await loadConnections();
+      await reloadAndNotify();
     } catch (error) {
       console.error('Connection failed:', error);
     } finally {
@@ -253,7 +269,7 @@ export function WearableConnectionsScreen() {
       }
 
       await disconnectWearable(source);
-      await loadConnections();
+      await reloadAndNotify();
     } catch (error) {
       console.error('Disconnect failed:', error);
       alert('Failed to disconnect. Please try again.');

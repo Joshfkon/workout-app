@@ -58,12 +58,14 @@ export const ActivityCard = memo(function ActivityCard({ userId }: ActivityCardP
     };
   }, []);
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (options: { force?: boolean } = {}) => {
     const today = getLocalDateString();
 
-    // Check sessionStorage cache first
+    // Check sessionStorage cache first (skipped, and cleared, when forced —
+    // e.g. right after a wearable connects, when the cached copy is stale)
     try {
-      const cached = sessionStorage.getItem(ACTIVITY_CACHE_KEY);
+      if (options.force) sessionStorage.removeItem(ACTIVITY_CACHE_KEY);
+      const cached = options.force ? null : sessionStorage.getItem(ACTIVITY_CACHE_KEY);
       if (cached) {
         const parsed: CachedActivityData = JSON.parse(cached);
         const isValid =
@@ -145,7 +147,16 @@ export const ActivityCard = memo(function ActivityCard({ userId }: ActivityCardP
   }, [steps]);
 
   const handleOpenConnectModal = useCallback(() => setShowConnectModal(true), []);
-  const handleCloseConnectModal = useCallback(() => setShowConnectModal(false), []);
+  // A connect/disconnect inside the modal changes what this card shows, so
+  // reload past the session cache both when it happens and when the modal
+  // closes (the first HealthKit sync may finish just after the connect).
+  const refreshAfterConnectionChange = useCallback(() => {
+    void loadData({ force: true });
+  }, [loadData]);
+  const handleCloseConnectModal = useCallback(() => {
+    setShowConnectModal(false);
+    void loadData({ force: true });
+  }, [loadData]);
   const handleOpenSettingsModal = useCallback(() => setShowSettingsModal(true), []);
   const handleCloseSettingsModal = useCallback(() => setShowSettingsModal(false), []);
   const handleOpenManualInput = useCallback(() => setShowManualInput(true), []);
@@ -370,7 +381,7 @@ export const ActivityCard = memo(function ActivityCard({ userId }: ActivityCardP
         title="Connect Wearable"
         size="lg"
       >
-        <WearableConnectionsScreen />
+        <WearableConnectionsScreen onConnectionsChange={refreshAfterConnectionChange} />
       </Modal>
 
       {/* Settings Modal */}

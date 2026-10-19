@@ -16,6 +16,10 @@ jest.mock('@/lib/integrations/healthkit', () => ({
   requestHealthKitPermissions: jest.fn(),
 }));
 
+jest.mock('@/lib/integrations/healthkit-sync', () => ({
+  runHealthKitSync: jest.fn().mockResolvedValue({ status: 'synced' }),
+}));
+
 jest.mock('@/lib/integrations/capacitor-stub', () => ({
   Capacitor: {
     isNativePlatform: jest.fn(),
@@ -206,5 +210,51 @@ describe('WearableConnectionsScreen - Apple Health Permission Denied', () => {
     expect(screen.queryByText('⌚')).not.toBeInTheDocument(); // Apple Health icon
     expect(screen.getByText('💪')).toBeInTheDocument(); // Fitbit icon
     expect(screen.getByText('🏃')).toBeInTheDocument(); // Garmin icon
+  });
+});
+
+describe('WearableConnectionsScreen - connection change callback', () => {
+  const user = userEvent.setup();
+
+  it('reports the reloaded connections after Apple Health connects', async () => {
+    const { Capacitor } = await import('@/lib/integrations/capacitor-stub');
+    (Capacitor.isNativePlatform as jest.Mock).mockReturnValue(true);
+    (Capacitor.getPlatform as jest.Mock).mockReturnValue('ios');
+
+    const { isHealthKitAvailable, requestHealthKitPermissions } = await import(
+      '@/lib/integrations/healthkit'
+    );
+    (isHealthKitAvailable as jest.Mock).mockResolvedValue(true);
+    (requestHealthKitPermissions as jest.Mock).mockResolvedValue({
+      granted: true,
+      permissions: ['steps', 'sleep'],
+    });
+
+    const connected = [
+      { id: 'c1', source: 'apple_healthkit', isConnected: true, deviceName: 'Apple Health' },
+    ];
+    (wearableActions.getWearableConnections as jest.Mock)
+      .mockResolvedValueOnce([])
+      .mockResolvedValue(connected);
+    (wearableActions.upsertWearableConnection as jest.Mock).mockResolvedValue({ success: true });
+
+    const onConnectionsChange = jest.fn();
+    render(<WearableConnectionsScreen onConnectionsChange={onConnectionsChange} />);
+
+    await waitFor(() => {
+      expect(screen.queryByText(/loading/i)).not.toBeInTheDocument();
+    });
+    // Mounting alone is not a change.
+    expect(onConnectionsChange).not.toHaveBeenCalled();
+
+    const connectButtons = screen.getAllByRole('button', { name: /connect/i });
+    await user.click(connectButtons[0]);
+
+    await waitFor(() => {
+      expect(onConnectionsChange).toHaveBeenCalledWith(connected);
+    });
+    expect(wearableActions.upsertWearableConnection).toHaveBeenCalledWith(
+      expect.objectContaining({ source: 'apple_healthkit' })
+    );
   });
 });
