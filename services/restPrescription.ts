@@ -14,12 +14,21 @@
  *    to DEFAULT_REST_SECONDS LOUDLY (the fallback is named in the note —
  *    never a silent `?? 180`).
  *  - The last set's resolved RIR vs the effective target:
- *      dev ≤ −DEADBAND_RIR  → +REST_EXTEND_FAILURE_S (at/past the failure
- *                             deadband: the base rest was priced for a
- *                             submaximal set);
+ *      dev ≤ −DEADBAND_RIR AND estimated true RIR ≤ NEAR_FAILURE_TRUE_RIR
+ *                           → +REST_EXTEND_FAILURE_S (at/near failure: the
+ *                             base rest was priced for a submaximal set);
  *      dev ≤ −1             → +REST_EXTEND_HARD_S (a full rep hotter than
  *                             target; the half-chip tolerance (RPE-7.5 chip
  *                             → RIR 2.5) is deliberately NOT an extension).
+ *    "Near failure" is ABSOLUTE here, on the calibrated estimate of true RIR
+ *    (logged RIR minus the calibration shift). The relative deadband alone
+ *    mislabelled sets: a 2-RIR set against a target the readiness check-in
+ *    eased to 4 is two reps past the plan, not near failure. The calibration
+ *    shift IS applied, because it encodes how far this user's logged RIR
+ *    runs from reality on this lift (a user whose "2 RIR" measures ≈ 0 did
+ *    train near failure). Readiness easing is NOT a shift — it changes
+ *    today's ask, not what the logged number means. See
+ *    docs/FATIGUE_MODEL_INVENTORY.md §C.
  *  - An EASIER-than-target set never shortens rest: the lever for a too-easy
  *    set is load (the suggestion engine's job), not rushed recovery — and
  *    cutting rest degrades the very next-set quality the engine grades.
@@ -35,6 +44,7 @@
 
 import {
   DEFAULT_REST_SECONDS,
+  NEAR_FAILURE_TRUE_RIR,
   REST_EXTEND_FAILURE_S,
   REST_EXTEND_HARD_S,
   REST_MAX_S,
@@ -58,6 +68,14 @@ export interface RestPrescriptionInput {
    * target".
    */
   targetRir: number;
+  /**
+   * How far RPE calibration moved this block's target RIR
+   * (`getAdjustedRIR(...).prescribedRIR − block.targetRir`; 0 / omitted when
+   * there is no calibration adjustment). Positive = the user's logged RIR
+   * overstates their reserve, so the target was raised to compensate.
+   * Readiness modulation must NOT be folded in here.
+   */
+  calibrationShiftRir?: number;
 }
 
 export interface RestPrescription {
@@ -87,10 +105,17 @@ export function prescribeRestSeconds(input: RestPrescriptionInput): RestPrescrip
   // and the prescription banner can never describe one set two ways.
   let adjustmentSeconds = 0;
   const effort = gradeEffort(input.lastSetRir, input.targetRir);
-  if (effort) {
-    if (effort.pastDeadband) {
+  if (effort && input.lastSetRir !== undefined) {
+    const loggedRir = Math.max(0, input.lastSetRir);
+    const shift = Number.isFinite(input.calibrationShiftRir) ? input.calibrationShiftRir! : 0;
+    const trueRir = Math.max(0, loggedRir - shift);
+    if (effort.pastDeadband && trueRir <= NEAR_FAILURE_TRUE_RIR) {
       adjustmentSeconds = REST_EXTEND_FAILURE_S;
-      notes.push(`+${REST_EXTEND_FAILURE_S}s — last set at/near failure`);
+      notes.push(
+        shift !== 0
+          ? `+${REST_EXTEND_FAILURE_S}s — logged ${fmtRir(loggedRir)} RIR, calibrated ≈ ${fmtRir(trueRir)}: at/near failure`
+          : `+${REST_EXTEND_FAILURE_S}s — last set at/near failure`
+      );
     } else if (effort.hotterThanTarget) {
       adjustmentSeconds = REST_EXTEND_HARD_S;
       notes.push(`+${REST_EXTEND_HARD_S}s — last set ran hotter than target`);
@@ -103,4 +128,8 @@ export function prescribeRestSeconds(input: RestPrescriptionInput): RestPrescrip
     adjustmentSeconds,
     note: notes.length > 0 ? notes.join(' · ') : null,
   };
+}
+
+function fmtRir(rir: number): string {
+  return String(Math.round(rir * 10) / 10);
 }
