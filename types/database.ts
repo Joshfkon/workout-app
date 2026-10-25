@@ -360,6 +360,8 @@ export interface Database {
           session_notes: string | null;
           completion_percent: number;
           duration_seconds: number | null;
+          pace_observed_seconds: number | null;
+          pace_model_seconds: number | null;
           auto_discarded_at: string | null;
           origin: 'scheduled' | 'empty' | 'ai_suggested' | 'repeat' | null;
           is_deload: boolean;
@@ -378,6 +380,8 @@ export interface Database {
           session_notes?: string | null;
           completion_percent?: number;
           duration_seconds?: number | null;
+          pace_observed_seconds?: number | null;
+          pace_model_seconds?: number | null;
           auto_discarded_at?: string | null;
           origin?: 'scheduled' | 'empty' | 'ai_suggested' | 'repeat' | null;
           is_deload?: boolean;
@@ -396,6 +400,8 @@ export interface Database {
           session_notes?: string | null;
           completion_percent?: number;
           duration_seconds?: number | null;
+          pace_observed_seconds?: number | null;
+          pace_model_seconds?: number | null;
           auto_discarded_at?: string | null;
           origin?: 'scheduled' | 'empty' | 'ai_suggested' | 'repeat' | null;
           is_deload?: boolean;
