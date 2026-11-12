@@ -8,6 +8,9 @@ type CookieToSet = { name: string; value: string; options?: CookieOptions };
 
 // Public routes that don't require auth - checked before any auth validation
 const PUBLIC_ROUTES = ['/', '/login', '/register', '/learn', '/privacy', '/terms', '/support', '/pricing', '/auth/callback', '/forgot-password', '/reset-password', '/verify-code', '/opengraph-image', '/twitter-image', '/api/og',
+  // Claude connector (MCP): bearer-token auth, never a session cookie. The
+  // consent page signs the user in itself rather than being bounced to /login.
+  '/mcp', '/.well-known', '/oauth/consent',
   // Stripe calls this with no session cookie. Without it here the request was
   // redirected to /login and never reached the handler, which authenticates
   // the caller itself by verifying the Stripe signature on the raw body.

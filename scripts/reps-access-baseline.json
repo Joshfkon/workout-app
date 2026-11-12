@@ -36,6 +36,7 @@
   "lib/formatSetHistory.ts": 7,
   "lib/integrations/hyper-tracker-calories.ts": 3,
   "lib/integrations/workout-calories.ts": 1,
+  "lib/mcp/tools.ts": 1,
   "lib/migrations/migrateBodyweightSets.ts": 1,
   "lib/motion/coachPhrasing.ts": 1,
   "lib/motion/csv.ts": 2,

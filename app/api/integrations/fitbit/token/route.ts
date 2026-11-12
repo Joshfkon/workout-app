@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
     // Persist tokens to wearable_connections for ownership verification
     const { error: upsertError } = await supabase
       .from('wearable_connections')
-      // @ts-ignore - Supabase type generation issue with wearable_connections table
+      // Cast: wearable_connections is missing from the generated types.
       .upsert({
         user_id: user.id,
         source: 'fitbit' as const,
@@ -101,7 +101,7 @@ export async function POST(request: NextRequest) {
         is_connected: true,
         permissions: tokens.scope ? tokens.scope.split(' ') : [],
         last_sync_at: new Date().toISOString(),
-      }, {
+      } as never, {
         onConflict: 'user_id,source',
       });
 
