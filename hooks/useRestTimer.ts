@@ -39,6 +39,21 @@ interface TimerState {
   isRunning: boolean;
 }
 
+/**
+ * Drop any persisted rest countdown and its pending native notification.
+ * For code that ends a workout WITHOUT the workout page mounted (discarding
+ * from the resume pill or the Train page), where no hook instance exists to
+ * call dismiss(). A workout that is over has no next set to be called back to.
+ */
+export function clearPersistedRestTimer(): void {
+  try {
+    localStorage.removeItem(TIMER_STORAGE_KEY);
+  } catch {
+    // Storage unavailable: nothing persisted to clear.
+  }
+  void cancelRestCompleteNotification();
+}
+
 interface UseRestTimerOptions {
   defaultSeconds?: number;
   autoStart?: boolean;

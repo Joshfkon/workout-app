@@ -1377,6 +1377,15 @@ export default function WorkoutPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]); // Only depend on sessionId, not restTimer to avoid loops
 
+  // A finished workout has no next set. Without this, the rest countdown
+  // started by the LAST logged set kept running, and its native "Rest
+  // Complete — back to your set!" notification fired after the workout was
+  // over. Covers the finish flow and opening an already-completed session.
+  useEffect(() => {
+    if (phase === 'summary') restTimer.dismiss();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]); // restTimer.dismiss changes identity; phase is the trigger
+
   // If the hook restored a running countdown (minimize -> resume, or app
   // relaunch), surface the sticky timer bar again (P0-3/P0-5).
   useEffect(() => {
@@ -6017,7 +6026,9 @@ export default function WorkoutPage() {
         return;
       }
 
-      // Clear store state and navigate back to dashboard
+      // Clear store state and navigate back to dashboard. A cancelled
+      // workout must not leave a rest countdown (or its notification) behind.
+      restTimer.dismiss();
       endWorkoutSession();
       router.push('/dashboard');
     } catch (err) {

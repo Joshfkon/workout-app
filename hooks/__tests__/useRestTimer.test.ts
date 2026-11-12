@@ -4,7 +4,7 @@
  */
 
 import { renderHook, act, waitFor } from '@testing-library/react';
-import { useRestTimer } from '../useRestTimer';
+import { useRestTimer, clearPersistedRestTimer } from '../useRestTimer';
 
 // Mock localStorage
 const localStorageMock = (() => {
@@ -534,6 +534,24 @@ describe('useRestTimer', () => {
       // Should be finished
       expect(result.current.seconds).toBe(0);
       expect(result.current.isFinished).toBe(true);
+    });
+  });
+
+  describe('clearPersistedRestTimer', () => {
+    it('removes a running countdown so a finished workout cannot resume it', () => {
+      const { result, unmount } = renderHook(() => useRestTimer({ defaultSeconds: 60 }));
+      act(() => {
+        result.current.start(60);
+      });
+      expect(localStorageMock.getItem('workout_rest_timer')).not.toBeNull();
+      unmount();
+
+      clearPersistedRestTimer();
+
+      expect(localStorageMock.getItem('workout_rest_timer')).toBeNull();
+      // A fresh mount (next workout) starts idle rather than mid-countdown.
+      const next = renderHook(() => useRestTimer({ defaultSeconds: 60 }));
+      expect(next.result.current.isRunning).toBe(false);
     });
   });
 });
