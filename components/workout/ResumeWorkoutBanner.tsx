@@ -7,6 +7,7 @@ import { useIsOverlayOpen } from '@/hooks/useOverlayRegistry';
 import { Button } from '@/components/ui';
 import { deriveWorkoutLabel, formatDistanceToNow, formatDuration } from '@/lib/utils';
 import { discardWorkoutSession } from '@/lib/actions/workout-session';
+import { clearPersistedRestTimer } from '@/hooks/useRestTimer';
 
 /** Matches hooks/useRestTimer's persisted shape. */
 const TIMER_STORAGE_KEY = 'workout_rest_timer';
@@ -141,6 +142,7 @@ export function ResumeWorkoutBanner() {
       }
 
       // Only clear local state after successful DB cleanup
+      clearPersistedRestTimer();
       endSession();
       setShowDiscardConfirm(false);
     } catch (err) {

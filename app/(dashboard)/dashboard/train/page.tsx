@@ -90,6 +90,7 @@ import { CardioTracker } from '@/components/dashboard/CardioTracker';
 import { NonGymActivityLogger } from '@/components/dashboard/NonGymActivityLogger';
 import { SuggestedWorkoutSheet } from '@/components/workout/SuggestedWorkoutSheet';
 import { Modal } from '@/components/ui/Modal';
+import { clearPersistedRestTimer } from '@/hooks/useRestTimer';
 import {
   STANDARD_MUSCLE_DISPLAY_NAMES,
   resolveMuscleToStandard,
@@ -658,6 +659,7 @@ export default function TrainPage() {
         // global resume pill (matches the log page's discard flow).
         const { activeSession, endSession } = useWorkoutStore.getState();
         if (activeSession?.id === inProgress.id) {
+          clearPersistedRestTimer();
           endSession();
         }
         setInProgress(null);
