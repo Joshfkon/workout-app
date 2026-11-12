@@ -99,15 +99,17 @@ function CompleteContent() {
       const userSex = (userData?.sex as 'male' | 'female') || 'male';
       setSex(userSex);
       
-      // Get user preferences for units
+      // Unit preference lives in users.preferences.units (there is no
+      // user_preferences table).
       const { data: prefsData } = await supabase
-        .from('user_preferences')
-        .select('units')
-        .eq('user_id', user.id)
+        .from('users')
+        .select('preferences')
+        .eq('id', user.id)
         .single();
-      
-      if (prefsData?.units) {
-        setUnits(prefsData.units as WeightUnit);
+
+      const preferredUnits = (prefsData?.preferences as { units?: string } | null)?.units;
+      if (preferredUnits === 'kg' || preferredUnits === 'lb') {
+        setUnits(preferredUnits);
       }
       
       // Get calibrated lifts

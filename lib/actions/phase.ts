@@ -18,7 +18,14 @@
  * recalculates nutrition_targets to match the new phase.
  */
 
+import { cookies } from 'next/headers';
 import { createUntypedServerClient } from '@/lib/supabase/server';
+import { now as clockNow } from '@/lib/clock';
+import {
+  USER_TIME_ZONE_COOKIE,
+  resolveUserDay,
+  type UserDay,
+} from '@/components/providers/userTimeZone';
 import {
   fetchTrainingPhases,
   insertTrainingPhase,
@@ -59,6 +66,22 @@ export interface UpdatePhaseResult {
   activeMesocycle?: { id: string; name: string | null };
 }
 
+/**
+ * "Today" for the signed-in user. A server action runs in the host's zone
+ * (usually UTC); the dashboard shell stores the device zone in a cookie so a
+ * phase switch is dated on the user's own calendar day. Falls back to the
+ * runtime day when the cookie is absent.
+ */
+function getUserDay(): UserDay {
+  let zone: string | undefined;
+  try {
+    zone = cookies().get(USER_TIME_ZONE_COOKIE)?.value;
+  } catch {
+    // Outside a request scope (tests / scripts): runtime day.
+  }
+  return resolveUserDay(zone, clockNow());
+}
+
 const CUT_GOALS: NutritionGoal[] = ['aggressive_cut', 'moderate_cut', 'slow_cut'];
 const BULK_GOALS: NutritionGoal[] = ['slow_bulk', 'moderate_bulk', 'aggressive_bulk'];
 
@@ -92,11 +115,14 @@ async function getCurrentWeightKg(
       .order('logged_at', { ascending: false })
       .limit(1)
       .maybeSingle(),
-    supabase.from('user_preferences').select('weight_unit').eq('user_id', userId).maybeSingle(),
+    // Unit preference lives in users.preferences.units — there is no
+    // user_preferences table (that read always failed → 'lb').
+    supabase.from('users').select('preferences').eq('id', userId).maybeSingle(),
   ]);
 
   if (latest?.weight) {
-    const unit = latest.unit || prefs?.weight_unit || 'lb';
+    const storedUnit = (prefs?.preferences as { units?: string } | null)?.units;
+    const unit = latest.unit || (storedUnit === 'kg' ? 'kg' : 'lb');
     return unit === 'kg' ? latest.weight : lbsToKg(latest.weight);
   }
 
@@ -126,7 +152,9 @@ async function recordPhaseChange(
 ): Promise<void> {
   if (previousPhase === nextPhase) return;
   try {
-    const today = new Date().toISOString().slice(0, 10);
+    // The USER's calendar day (timezone cookie; runtime day without it) —
+    // a UTC day stamped an evening switch in the US as tomorrow.
+    const today = getUserDay().day;
     const { count, error: countError } = await supabase
       .from('phase_history')
       .select('id', { count: 'exact', head: true })
@@ -169,7 +197,8 @@ async function syncTrainingPhaseSpans(
 ): Promise<void> {
   try {
     const phases = await fetchTrainingPhases(supabase, userId);
-    const plan = planPhaseSwitch(phases, nextPhase);
+    // Dated on the user's calendar day, like phase_history above.
+    const plan = planPhaseSwitch(phases, nextPhase, getUserDay().date);
     if (plan.noop) return;
     if (plan.retype) {
       await updateTrainingPhaseSpan(supabase, plan.retype.id, {

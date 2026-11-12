@@ -371,7 +371,18 @@ export default function NewMesocyclePage() {
         userExperience
       );
       setWorkoutTemplates(templates);
-      
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [daysPerWeek, plannedSessionsPerWeek, effectiveSessionsPerDay, userGoal, userExperience, heightCm, latestDexa, useAiRecommendation,
+      userAge, sleepQuality, stressLevel, trainingAge, availableEquipment, injuryHistory, sessionDurationMinutes, unavailableEquipmentIds, enhancedAthleteMode]);
+
+  // Generate the full program. Kept separate from the effect above because it
+  // also depends on the chosen block length: that effect RESETS totalWeeks to
+  // the recommended default, so it must not re-run when the slider moves.
+  // The chosen length drives generation — the program has exactly totalWeeks
+  // weeks and its last one is the deload this page promises.
+  useEffect(() => {
+    if (useAiRecommendation) {
       // Analyze regional data for lagging areas (if available)
       let laggingAreas: string[] = [];
       if (latestDexa?.regionalData && latestDexa.leanMassKg) {
@@ -381,15 +392,14 @@ export default function NewMesocyclePage() {
         );
         laggingAreas = regionalAnalysis.laggingAreas;
       }
-      
-      // Generate full program with extended profile and lagging areas
+
       // Uses the full-featured generator with fatigue tracking, SFR, and mesocycle weeks
-      const program = generateFullMesocycleWithFatigue(plannedSessionsPerWeek, extendedProfile, sessionDurationMinutes, laggingAreas, unavailableEquipmentIds, effectiveSessionsPerDay);
+      const program = generateFullMesocycleWithFatigue(plannedSessionsPerWeek, extendedProfile, sessionDurationMinutes, laggingAreas, unavailableEquipmentIds, effectiveSessionsPerDay, totalWeeks);
       setFullProgram(program);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [daysPerWeek, plannedSessionsPerWeek, effectiveSessionsPerDay, userGoal, userExperience, heightCm, latestDexa, useAiRecommendation,
-      userAge, sleepQuality, stressLevel, trainingAge, availableEquipment, injuryHistory, sessionDurationMinutes, unavailableEquipmentIds, enhancedAthleteMode]);
+      userAge, sleepQuality, stressLevel, trainingAge, availableEquipment, injuryHistory, sessionDurationMinutes, unavailableEquipmentIds, enhancedAthleteMode, totalWeeks]);
 
   // Generate default name
   useEffect(() => {

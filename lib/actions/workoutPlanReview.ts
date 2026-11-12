@@ -13,6 +13,7 @@
 import OpenAI from 'openai';
 import { createClient } from '@/lib/supabase/server';
 import { AI_CONSENT_REQUIRED_MESSAGE, hasAiDataSharingConsent } from '@/lib/ai/consent';
+import { AI_RATE_LIMIT_MESSAGE, consumeAiQuota } from '@/lib/ai/rateLimit';
 import {
   REVIEW_RESPONSE_SCHEMA_HINT,
   REVIEW_SYSTEM_PROMPT,
@@ -50,6 +51,10 @@ export async function reviewWorkoutPlan(payload: ReviewPayload): Promise<PlanRev
 
     const apiKey = process.env.XAI_API_KEY;
     if (!apiKey) return { ok: false, error: 'review not configured' };
+
+    if (!(await consumeAiQuota(supabase, 'plan_review'))) {
+      return { ok: false, error: AI_RATE_LIMIT_MESSAGE };
+    }
 
     const client = new OpenAI({
       apiKey,

@@ -8,6 +8,7 @@ import { formatRelativeTime, getProfileUrl, getReactionEmoji } from '@/lib/socia
 import { formatWeight } from '@/lib/utils';
 import { ReactionBar } from './ReactionBar';
 import { CommentSection } from './CommentSection';
+import { ContentActionsMenu } from '@/components/social/moderation';
 import type { ActivityWithProfile, WorkoutCompletedData, PersonalRecordData, StreakMilestoneData } from '@/types/social';
 
 // A single workout longer than this is almost certainly a session that was left
@@ -105,6 +106,13 @@ function ActivityCardComponent({
               {formatRelativeTime(activity.created_at)}
             </p>
           </div>
+
+          <ContentActionsMenu
+            targetType="activity"
+            targetId={activity.id}
+            targetUserId={activity.user_id}
+            targetUsername={user_profile.username}
+          />
         </div>
       </div>
 

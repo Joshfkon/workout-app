@@ -17,9 +17,17 @@ import {
   logSet,
   persistSetEdit,
   persistSetDelete,
+  persistSetDeletion,
+  setEditEntryId,
   type SetWriteClient,
 } from '@/lib/training/logSet';
-import { __setDriverForTests, listOutbox, type OutboxEntry } from '@/lib/offline/setOutbox';
+import {
+  __setDriverForTests,
+  listOutbox,
+  getQueuedEntry,
+  enqueueSetInsert,
+  type OutboxEntry,
+} from '@/lib/offline/setOutbox';
 import { resetClock, setClock } from '@/lib/clock';
 import { createTestClock } from '@/test-utils/clock';
 import type { SetLog } from '@/types/schema';
@@ -43,9 +51,13 @@ function stubClient(opts: {
   insertError?: { message: string; code?: string } | null;
   /** Errors to return in sequence from insert (for the migration-retry path). */
   insertErrors?: ({ message: string; code?: string } | null)[];
-  updateError?: { message: string } | null;
-  deleteError?: { message: string } | null;
+  updateError?: { message: string; code?: string } | null;
+  deleteError?: { message: string; code?: string } | null;
   probeThrows?: boolean;
+  /** The numbering probe never answers (dead connection). */
+  probeHangs?: boolean;
+  /** Runs while the insert is on the wire, before it resolves. */
+  duringInsert?: () => Promise<void> | void;
 } = {}) {
   const calls: string[] = [];
   const inserted: Record<string, unknown>[] = [];
@@ -63,6 +75,7 @@ function stubClient(opts: {
                   single: async () => {
                     calls.push('probe');
                     if (opts.probeThrows) throw new Error('network down');
+                    if (opts.probeHangs) return new Promise<never>(() => {});
                     return { data: opts.maxSetNumber == null ? null : { set_number: opts.maxSetNumber } };
                   },
                 }),
@@ -73,6 +86,7 @@ function stubClient(opts: {
         insert: async (row: Record<string, unknown>) => {
           calls.push(`insert:${table}`);
           inserted.push(row);
+          if (opts.duringInsert) await opts.duringInsert();
           const error = errors ? errors.shift() ?? null : opts.insertError ?? null;
           return { error };
         },
@@ -269,6 +283,121 @@ describe('logSet — online', () => {
   });
 });
 
+describe('logSet — write-ahead', () => {
+  it('the set is in the outbox BEFORE the insert is sent, and leaves it when the insert lands', async () => {
+    let queuedDuringInsert: string[] = [];
+    const { client } = stubClient({
+      duringInsert: async () => {
+        queuedDuringInsert = (await listOutbox()).map((e) => e.id);
+      },
+    });
+
+    const result = await logSet({ supabase: client }, { ...baseInput, setId: 's1' });
+
+    expect(queuedDuringInsert).toEqual(['s1']); // durable while the request is on the wire
+    expect(result.status).toBe('saved');
+    expect(await listOutbox()).toHaveLength(0);
+  });
+
+  it('applies optimistic state and enqueues before the insert, in that order', async () => {
+    const order: string[] = [];
+    const { client, calls } = stubClient();
+    await logSet(
+      {
+        supabase: client,
+        applyOptimistic: () => order.push('optimistic'),
+        onPhase: (phase) => order.push(phase),
+      },
+      { ...baseInput, setId: 's1' }
+    );
+    expect(calls).toEqual(['probe', 'insert:set_logs']);
+    expect(order.indexOf('optimistic')).toBeLessThan(order.indexOf('t2_outbox_enqueued'));
+    expect(order.indexOf('t2_outbox_enqueued')).toBeLessThan(order.indexOf('t3_insert_sent'));
+  });
+
+  it('a numbering probe that never answers does not hold the set hostage', async () => {
+    const applied: number[] = [];
+    const { client, inserted } = stubClient({ probeHangs: true });
+    const result = await logSet(
+      { supabase: client, probeTimeoutMs: 20, applyOptimistic: (s) => applied.push(s.setNumber) },
+      { ...baseInput, setId: 's1' }
+    );
+    expect(applied).toEqual([3]); // local numbering
+    expect(inserted[0].set_number).toBe(3);
+    expect(result.status).toBe('saved');
+  });
+
+  it.each([
+    ['a 503 from a proxy', { message: '<html>503 Service Unavailable</html>' }],
+    ['an expired token', { message: 'JWT expired', code: 'PGRST301' }],
+    ['a statement timeout', { message: 'canceling statement', code: '57014' }],
+  ])('%s keeps the set queued — it is not rolled back', async (_label, insertError) => {
+    const rolledBack: string[] = [];
+    const { client } = stubClient({ insertError });
+    const result = await logSet(
+      { supabase: client, rollbackOptimistic: (s) => rolledBack.push(s.id) },
+      { ...baseInput, setId: 's1' }
+    );
+    expect(result.status).toBe('queued');
+    expect(rolledBack).toEqual([]);
+    expect((await listOutbox()).map((e) => e.id)).toEqual(['s1']);
+  });
+
+  it('an edit made while the insert is on the wire is not lost when the insert lands', async () => {
+    const { client } = stubClient({
+      duringInsert: async () => {
+        await persistSetEdit({ supabase: client }, { setId: 's1', patch: { weight_kg: 90 } });
+      },
+    });
+    const states: string[] = [];
+    const result = await logSet(
+      { supabase: client, onSyncState: (_id, s) => states.push(s) },
+      { ...baseInput, setId: 's1' }
+    );
+
+    // The insert carried 100; the edit is still queued (dirty) and the flush
+    // will UPDATE the row with it.
+    expect(result.status).toBe('queued');
+    expect(states).toEqual(['saving', 'queued']);
+    expect(await getQueuedEntry('s1')).toMatchObject({ dirty: true, row: { weight_kg: 90 } });
+  });
+
+  it('colliding with its own row (a flush delivered the entry first) is success, not a rejection', async () => {
+    const rolledBack: string[] = [];
+    const { client } = stubClient({
+      insertError: {
+        message: 'duplicate key value violates unique constraint "set_logs_pkey"',
+        code: '23505',
+      },
+    });
+    const result = await logSet(
+      { supabase: client, rollbackOptimistic: (s) => rolledBack.push(s.id) },
+      { ...baseInput, setId: 's1' }
+    );
+    expect(result.status).toBe('saved');
+    expect(rolledBack).toEqual([]);
+    expect(await listOutbox()).toHaveLength(0);
+  });
+
+  it('a delete issued while the insert is on the wire waits for it, then removes the row', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const { client, calls } = stubClient({ duringInsert: () => gate });
+
+    const logging = logSet({ supabase: client }, { ...baseInput, setId: 's1' });
+    await new Promise((r) => setTimeout(r, 10)); // insert is now on the wire
+    const deleting = persistSetDelete({ supabase: client }, 's1');
+    await new Promise((r) => setTimeout(r, 10));
+    expect(calls).toEqual(['probe', 'insert:set_logs']); // delete has not jumped the queue
+
+    release();
+    await logging;
+    await deleting;
+    expect(calls).toEqual(['probe', 'insert:set_logs', 'delete:set_logs']);
+    expect(await listOutbox()).toHaveLength(0);
+  });
+});
+
 describe('logSet — rejection', () => {
   it('rolls the optimistic set back and reports the error', async () => {
     const rolledBack: string[] = [];
@@ -424,7 +553,7 @@ describe('persistSetEdit', () => {
   });
 
   it('does not stamp edited_at when the edit itself failed', async () => {
-    const { client, calls } = stubClient({ updateError: { message: 'nope' } });
+    const { client, calls } = stubClient({ updateError: { message: 'nope', code: '42501' } });
     const result = await persistSetEdit({ supabase: client }, { setId: 's1', patch: { reps: 9 } });
 
     expect(result.error?.message).toBe('nope');
@@ -432,15 +561,146 @@ describe('persistSetEdit', () => {
   });
 });
 
+describe('persistSetEdit — a synced set edited without connectivity', () => {
+  it('offline: queues the edit as an update of the row', async () => {
+    const { client, calls } = stubClient();
+    const result = await persistSetEdit(
+      { supabase: client, online: false },
+      { setId: 's1', patch: { weight_kg: 90 } }
+    );
+    expect(result).toEqual({ queued: true });
+    expect(calls).toEqual([]);
+    expect((await listOutbox())[0]).toMatchObject({
+      id: setEditEntryId('s1'),
+      table: 'set_logs',
+      op: 'update',
+      matchId: 's1',
+      row: { weight_kg: 90 },
+    });
+  });
+
+  it('a connection that dies mid-edit queues the edit instead of erroring', async () => {
+    const { client } = stubClient({ updateError: { message: 'Load failed' } });
+    const result = await persistSetEdit({ supabase: client }, { setId: 's1', patch: { reps: 9 } });
+    expect(result).toEqual({ queued: true });
+    expect((await listOutbox())[0].row).toEqual({ reps: 9 });
+  });
+
+  it('a later edit merges into the queued one rather than racing it', async () => {
+    const { client, calls } = stubClient();
+    await persistSetEdit({ supabase: client, online: false }, { setId: 's1', patch: { reps: 9, rpe: 8 } });
+    // Back online, but the first edit has not flushed yet.
+    const result = await persistSetEdit({ supabase: client }, { setId: 's1', patch: { reps: 10 } });
+
+    expect(result).toEqual({ queued: true });
+    expect(calls).toEqual([]); // no direct write that the older queued patch could later overwrite
+    const entries = await listOutbox();
+    expect(entries).toHaveLength(1);
+    expect(entries[0].row).toEqual({ reps: 10, rpe: 8 });
+  });
+
+  it('stampEdited:false skips the edited_at stamp (feedback added afterwards is not a correction)', async () => {
+    const { client, calls } = stubClient();
+    await persistSetEdit(
+      { supabase: client },
+      { setId: 's1', patch: { feedback: '{}' }, stampEdited: false }
+    );
+    expect(calls).toEqual(['update:set_logs:feedback']);
+  });
+});
+
+describe('persistSetDeletion — offline', () => {
+  it('queues the delete and then the renumbering behind it, in order', async () => {
+    const { client, calls } = stubClient();
+    const result = await persistSetDeletion(
+      { supabase: client, online: false },
+      { setId: 's1', changes: [{ id: 's2', setNumber: 1 }, { id: 's3', setNumber: 2 }] }
+    );
+
+    expect(result).toEqual({ queued: true });
+    expect(calls).toEqual([]);
+    const entries = await listOutbox();
+    expect(entries.map((e) => [e.id, e.op, e.row])).toEqual([
+      ['s1', 'delete', {}],
+      [setEditEntryId('s2'), 'update', { set_number: 1 }],
+      [setEditEntryId('s3'), 'update', { set_number: 2 }],
+    ]);
+  });
+
+  it('a queued set that must move is patched in the queue and sent AFTER the delete that frees its slot', async () => {
+    await enqueueSetInsert('s3', { id: 's3', set_number: 3 });
+    const { client } = stubClient();
+
+    await persistSetDeletion(
+      { supabase: client, online: false },
+      { setId: 's2', changes: [{ id: 's3', setNumber: 2 }] }
+    );
+
+    const entries = await listOutbox();
+    expect(entries.map((e) => e.id)).toEqual(['s2', 's3']);
+    expect(entries[1].row.set_number).toBe(2);
+  });
+
+  it('online with nothing queued: deletes, then renumbers directly', async () => {
+    const { client, calls } = stubClient();
+    const result = await persistSetDeletion(
+      { supabase: client },
+      { setId: 's1', changes: [{ id: 's2', setNumber: 1 }] }
+    );
+    expect(result).toEqual({ queued: false });
+    expect(calls).toEqual(['delete:set_logs', 'update:set_logs:set_number']);
+    expect(await listOutbox()).toHaveLength(0);
+  });
+});
+
 describe('persistSetDelete', () => {
-  it('drops a still-queued set from the outbox without touching the network', async () => {
+  it('deletes a still-queued set for real — "queued" does not mean it never reached the server', async () => {
     const driver = memoryDriver();
     __setDriverForTests(driver);
     await driver.put({ id: 's1', table: 'set_logs', row: { id: 's1' }, enqueuedAt: 1, attempts: 0 });
 
     const { client, calls } = stubClient();
     expect(await persistSetDelete({ supabase: client }, 's1')).toEqual({ queued: true });
+    // The insert may have landed with its ack lost: the row is deleted, not
+    // just forgotten. Deleting a row that never arrived matches nothing.
+    expect(calls).toEqual(['delete:set_logs']);
+    expect(await listOutbox()).toHaveLength(0);
+  });
+
+  it('offline: a queued set is replaced by its own tombstone, so the flush deletes the row', async () => {
+    await enqueueSetInsert('s1', { id: 's1', reps: 8 });
+    const { client, calls } = stubClient();
+
+    const result = await persistSetDelete({ supabase: client, online: false }, 's1');
+
+    expect(result).toEqual({ queued: true, pending: true });
     expect(calls).toEqual([]);
+    const entries = await listOutbox();
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({ id: 's1', table: 'set_logs', op: 'delete', matchId: 's1' });
+  });
+
+  it('offline: deleting a SYNCED set queues the delete instead of failing', async () => {
+    const { client, calls } = stubClient();
+    const result = await persistSetDelete({ supabase: client, online: false }, 's1');
+    expect(result).toEqual({ queued: true, pending: true });
+    expect(calls).toEqual([]);
+    expect((await listOutbox())[0]).toMatchObject({ op: 'delete', matchId: 's1' });
+  });
+
+  it('a delete that cannot be delivered (connection died) is queued, not reported as an error', async () => {
+    const { client } = stubClient({ deleteError: { message: 'Failed to fetch' } });
+    const result = await persistSetDelete({ supabase: client }, 's1');
+    expect(result.error).toBeUndefined();
+    expect(result.pending).toBe(true);
+    expect((await listOutbox())[0]).toMatchObject({ op: 'delete', matchId: 's1' });
+  });
+
+  it('drops a queued edit of the set being deleted', async () => {
+    const { client } = stubClient();
+    await persistSetEdit({ supabase: client, online: false }, { setId: 's1', patch: { reps: 9 } });
+    expect(await getQueuedEntry(setEditEntryId('s1'))).toBeDefined();
+    await persistSetDelete({ supabase: client }, 's1');
     expect(await listOutbox()).toHaveLength(0);
   });
 
@@ -451,7 +711,7 @@ describe('persistSetDelete', () => {
   });
 
   it('surfaces a delete error', async () => {
-    const { client } = stubClient({ deleteError: { message: 'denied' } });
+    const { client } = stubClient({ deleteError: { message: 'denied', code: '42501' } });
     const result = await persistSetDelete({ supabase: client }, 's1');
     expect(result.error?.message).toBe('denied');
   });

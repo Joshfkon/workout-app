@@ -569,9 +569,12 @@ export function computeSleepWindowMultiplier(
   now: Date,
   config: RecoveryConfig = RECOVERY_CONFIG
 ): number {
-  const cutoff = localDayString(
-    new Date(now.getTime() - config.sleepLookbackDays * 24 * MS_PER_HOUR)
-  );
+  // Calendar-day step, not −24h × n: across a DST change those differ by an
+  // hour and a `now` just after local midnight lands on the wrong local day
+  // (see deloadEngine.computeSleepDebtSignal). The lookback is whole days.
+  const cutoffDate = new Date(now);
+  cutoffDate.setDate(cutoffDate.getDate() - Math.round(config.sleepLookbackDays));
+  const cutoff = localDayString(cutoffDate);
   const today = localDayString(now);
   const recent = nights
     .filter(

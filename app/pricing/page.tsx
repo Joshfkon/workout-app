@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Card, CardContent, Badge } from '@/components/ui';
 import { TIER_FEATURES } from '@/lib/stripe';
 import { PublicAppShell } from '@/components/marketing/PublicAppShell';
+import { NativeAppRedirect } from '../_components/NativeAppRedirect';
 
 export default function PublicPricingPage() {
   const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'yearly'>('yearly');
@@ -15,7 +16,11 @@ export default function PublicPricingPage() {
   const eliteMonthly = TIER_FEATURES.elite.monthlyPrice;
   const eliteYearly = TIER_FEATURES.elite.yearlyPrice;
 
+  // Web-only page: inside the native app no Stripe prices or purchase calls
+  // to action may be shown (App Store 3.1.1), so it redirects into the app
+  // (/dashboard, which sends signed-out users to /login).
   return (
+    <NativeAppRedirect to="/dashboard">
     <PublicAppShell>
       <div className="max-w-5xl mx-auto px-4 py-16">
         <div className="space-y-8">
@@ -206,6 +211,7 @@ export default function PublicPricingPage() {
         </div>
       </div>
     </PublicAppShell>
+    </NativeAppRedirect>
   );
 }
 

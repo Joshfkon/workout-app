@@ -15,7 +15,13 @@ import {
   removeQueuedSet,
   flushSetOutbox,
   isNetworkError,
+  isPermanentRejection,
   isMissingColumnError,
+  enqueueRowDelete,
+  getQueuedEntry,
+  unparkOutboxEntries,
+  removeQueuedEntryIfUnchanged,
+  trackDirectWrite,
   withoutOptionalSetLogColumns,
   type OutboxEntry,
   type OutboxSupabase,
@@ -151,13 +157,98 @@ describe('setOutbox', () => {
       expect(await outboxCount()).toBe(0);
     });
 
-    it('drops a server-rejected entry after 5 attempts instead of wedging the queue', async () => {
-      await enqueueSetInsert('a', { id: 'a' });
+    it('drops a server-rejected NON-critical entry after 5 rejections instead of retrying forever', async () => {
+      await enqueueRowUpdate('block-target-sets:b1', 'exercise_blocks', 'b1', { target_sets: 3 });
       for (let attempt = 1; attempt <= 5; attempt++) {
         const { client } = makeSupabase([{ error: RLS_ERROR }]);
         await flushSetOutbox(client);
       }
       expect(await outboxCount()).toBe(0);
+    });
+
+    it('NEVER drops a server-rejected set: after 5 rejections it is parked, kept and reported', async () => {
+      await enqueueSetInsert('a', { id: 'a', reps: 8 });
+      let last = await flushSetOutbox(makeSupabase([{ error: RLS_ERROR }]).client);
+      for (let attempt = 2; attempt <= 5; attempt++) {
+        last = await flushSetOutbox(makeSupabase([{ error: RLS_ERROR }]).client);
+      }
+      expect(last.rejectedIds).toEqual(['a']);
+      expect(last.parkedIds).toEqual(['a']);
+      const [entry] = await listOutbox();
+      expect(entry).toMatchObject({ id: 'a', parked: true, rejections: 5, row: { id: 'a', reps: 8 } });
+      expect(entry.lastError).toContain('42501');
+
+      // A parked entry is skipped by ordinary flushes — no request, still there.
+      const idle = makeSupabase([{ error: null }]);
+      const result = await flushSetOutbox(idle.client);
+      expect(idle.calls).toHaveLength(0);
+      expect(result.flushedIds).toEqual([]);
+      expect(await outboxCount()).toBe(1);
+
+      // …and goes out again once released (page load / reconnect / Retry).
+      expect(await unparkOutboxEntries()).toBe(1);
+      const retry = await flushSetOutbox(idle.client);
+      expect(retry.flushedIds).toEqual(['a']);
+      expect(await outboxCount()).toBe(0);
+    });
+
+    it('a rejected finish-workout entry is parked, not dropped', async () => {
+      await enqueueRowUpdate('finish:s1', 'workout_sessions', 's1', { state: 'completed' });
+      for (let attempt = 1; attempt <= 6; attempt++) {
+        await flushSetOutbox(makeSupabase([{ error: { message: 'check violated', code: '23514' } }]).client);
+      }
+      const [entry] = await listOutbox();
+      expect(entry).toMatchObject({ id: 'finish:s1', parked: true });
+    });
+
+    it.each([
+      ['502 HTML body from a proxy', { message: '<html><body>502 Bad Gateway</body></html>' }],
+      ['expired JWT', { message: 'JWT expired', code: 'PGRST301' }],
+      ['statement timeout', { message: 'canceling statement due to statement timeout', code: '57014' }],
+      ['too many connections', { message: 'sorry, too many clients already', code: '53300' }],
+      ['PostgREST lost its database connection', { message: 'Could not connect', code: 'PGRST000' }],
+    ])('keeps a queued set through %s, however many times it happens', async (_label, error) => {
+      await enqueueSetInsert('a', { id: 'a' });
+      await enqueueSetInsert('b', { id: 'b' });
+      for (let attempt = 1; attempt <= 12; attempt++) {
+        const { client, calls } = makeSupabase([{ error }]);
+        const result = await flushSetOutbox(client);
+        expect(result.rejectedIds).toEqual([]); // not a refusal
+        expect(result.failedIds).toEqual(['a']);
+        expect(calls).toHaveLength(1); // stopped — no hammering the rest of the queue
+      }
+      const entries = await listOutbox();
+      expect(entries.map((e) => e.id)).toEqual(['a', 'b']);
+      expect(entries[0].parked).toBeFalsy();
+
+      const ok = await flushSetOutbox(makeSupabase([{ error: null }]).client);
+      expect(ok.flushedIds).toEqual(['a', 'b']);
+    });
+
+    it('does not resurrect an entry that was removed while its write was failing', async () => {
+      await enqueueSetInsert('a', { id: 'a' });
+      const { client } = makeSupabase([{ error: NETWORK_ERROR, delayMs: 30 }]);
+      const flushing = flushSetOutbox(client);
+      await new Promise((r) => setTimeout(r, 5));
+      await removeQueuedSet('a'); // user deleted the set mid-flight
+      await flushing;
+      expect(await outboxCount()).toBe(0);
+    });
+
+    it('leaves an entry alone while its direct (write-ahead) insert is on the wire', async () => {
+      await enqueueSetInsert('a', { id: 'a' });
+      let settle!: () => void;
+      const direct = trackDirectWrite('a', new Promise<void>((resolve) => { settle = resolve; }));
+      const { client, calls } = makeSupabase([{ error: null }]);
+
+      await flushSetOutbox(client);
+      expect(calls).toHaveLength(0);
+      expect(await outboxCount()).toBe(1);
+
+      settle();
+      await direct;
+      await flushSetOutbox(client);
+      expect(calls).toHaveLength(1);
     });
 
     it('server rejection does not block later entries', async () => {
@@ -441,6 +532,227 @@ describe('setOutbox', () => {
       expect(await outboxCount()).toBe(2);
       expect(await outboxCount('set_logs')).toBe(1);
       expect(await outboxCount('workout_sessions')).toBe(1);
+    });
+  });
+
+  describe('edit / delete of a set that may already have landed', () => {
+    /** Server with real rows, the (block, set_number) unique constraint, and lost acks. */
+    function makeSetServer() {
+      const rows = new Map<string, Record<string, unknown>>();
+      const log: string[] = [];
+      let dropNextResponses = 0;
+      const respond = (error: { message: string; code?: string } | null = null) => {
+        if (!error && dropNextResponses > 0) {
+          dropNextResponses -= 1;
+          return Promise.resolve({ error: { message: 'TypeError: Failed to fetch' } });
+        }
+        return Promise.resolve({ error });
+      };
+      const collides = (id: string, row: Record<string, unknown>) =>
+        Array.from(rows.entries()).some(
+          ([otherId, other]) =>
+            otherId !== id &&
+            other.exercise_block_id === row.exercise_block_id &&
+            other.set_number === row.set_number
+        );
+      const UNIQUE = {
+        message:
+          'duplicate key value violates unique constraint "set_logs_exercise_block_id_set_number_key"',
+        code: '23505',
+      };
+      const client = {
+        from: () => ({
+          upsert: (row: Record<string, unknown>) => {
+            const id = row.id as string;
+            if (rows.has(id)) { log.push(`upsert-ignored:${id}`); return respond(); }
+            if (collides(id, row)) { log.push(`upsert-refused:${id}`); return respond(UNIQUE); }
+            rows.set(id, { ...row });
+            log.push(`insert:${id}`);
+            return respond();
+          },
+          update: (patch: Record<string, unknown>) => ({
+            eq: (_c: string, id: string) => {
+              const existing = rows.get(id);
+              if (!existing) { log.push(`update-miss:${id}`); return respond(); }
+              const next = { ...existing, ...patch };
+              if (collides(id, next)) { log.push(`update-refused:${id}`); return respond(UNIQUE); }
+              rows.set(id, next);
+              log.push(`update:${id}`);
+              return respond();
+            },
+          }),
+          delete: () => ({
+            eq: (_c: string, id: string) => {
+              log.push(`delete:${id}`);
+              rows.delete(id);
+              return respond();
+            },
+          }),
+          select: () => ({
+            eq: (_c: string, blockId: string) => ({
+              order: () => ({
+                limit: () => {
+                  const max = Math.max(
+                    0,
+                    ...Array.from(rows.values())
+                      .filter((r) => r.exercise_block_id === blockId)
+                      .map((r) => r.set_number as number)
+                  );
+                  return Promise.resolve({ data: max ? [{ set_number: max }] : [], error: null });
+                },
+              }),
+            }),
+          }),
+        }),
+      };
+      return {
+        client: client as unknown as OutboxSupabase,
+        rows,
+        log,
+        dropResponses: (n: number) => { dropNextResponses = n; },
+      };
+    }
+
+    it('an edit made after a lost-ack insert reaches the server (not swallowed by ignoreDuplicates)', async () => {
+      const server = makeSetServer();
+      await enqueueSetInsert('a', { id: 'a', exercise_block_id: 'b1', set_number: 1, weight_kg: 100 });
+      server.dropResponses(1);
+      await flushSetOutbox(server.client); // lands, ack lost — still queued
+      expect(server.rows.get('a')?.weight_kg).toBe(100);
+      expect(await outboxCount()).toBe(1);
+
+      await updateQueuedSet('a', { weight_kg: 90 }); // user corrects 100 -> 90
+      expect((await getQueuedEntry('a'))?.dirty).toBe(true);
+
+      const result = await flushSetOutbox(server.client);
+      expect(result.flushedIds).toEqual(['a']);
+      expect(server.rows.get('a')?.weight_kg).toBe(90);
+      expect(await outboxCount()).toBe(0);
+    });
+
+    it('a delete made after a lost-ack insert removes the server row (tombstone replaces the insert)', async () => {
+      const server = makeSetServer();
+      await enqueueSetInsert('a', { id: 'a', exercise_block_id: 'b1', set_number: 1 });
+      server.dropResponses(1);
+      await flushSetOutbox(server.client);
+      expect(server.rows.has('a')).toBe(true);
+
+      await enqueueRowDelete('a', 'set_logs', 'a'); // same id: replaces the queued insert
+      expect(await outboxCount()).toBe(1);
+      const result = await flushSetOutbox(server.client);
+      expect(result.flushedIds).toEqual(['a']);
+      expect(server.rows.has('a')).toBe(false);
+      expect(await outboxCount()).toBe(0);
+    });
+
+    it('a delete that replaces an insert mid-flight is kept and then served', async () => {
+      await enqueueSetInsert('a', { id: 'a' });
+      const { client } = makeSupabase([{ error: null, delayMs: 30 }]);
+      const flushing = flushSetOutbox(client);
+      await new Promise((r) => setTimeout(r, 5));
+      await enqueueRowDelete('a', 'set_logs', 'a');
+      await flushing;
+      expect((await getQueuedEntry('a'))?.op).toBe('delete'); // survived the post-write cleanup
+    });
+
+    it('a queued delete is not patchable, and a patched parked entry is released', async () => {
+      await enqueueRowDelete('a', 'set_logs', 'a');
+      expect(await updateQueuedSet('a', { reps: 5 })).toBe(false);
+      await removeQueuedSet('a');
+
+      await enqueueSetInsert('b', { id: 'b', reps: 9999 });
+      for (let i = 0; i < 5; i++) {
+        await flushSetOutbox(makeSupabase([{ error: { message: 'reps check', code: '23514' } }]).client);
+      }
+      expect((await getQueuedEntry('b'))?.parked).toBe(true);
+      await updateQueuedSet('b', { reps: 12 }); // the fix
+      expect(await getQueuedEntry('b')).toMatchObject({ parked: false, rejections: 0 });
+    });
+
+    it('a queued set whose number the server already holds takes the next free number instead of being lost', async () => {
+      const server = makeSetServer();
+      server.rows.set('x', { id: 'x', exercise_block_id: 'b1', set_number: 3 });
+      await enqueueSetInsert('a', { id: 'a', exercise_block_id: 'b1', set_number: 3, reps: 8 });
+
+      const result = await flushSetOutbox(server.client);
+      expect(result.flushedIds).toEqual(['a']);
+      expect(result.rejectedIds).toEqual([]);
+      expect(server.rows.get('a')).toMatchObject({ set_number: 4, reps: 8 });
+      expect(await outboxCount()).toBe(0);
+    });
+
+    it('a stale queued renumber is dropped, but the edit travelling with it still lands', async () => {
+      const server = makeSetServer();
+      server.rows.set('x', { id: 'x', exercise_block_id: 'b1', set_number: 1 });
+      server.rows.set('y', { id: 'y', exercise_block_id: 'b1', set_number: 2, weight_kg: 100 });
+      server.rows.set('z', { id: 'z', exercise_block_id: 'b1', set_number: 3 });
+      await enqueueRowUpdate('set-edit:y', 'set_logs', 'y', { set_number: 1, weight_kg: 95 });
+      await enqueueRowUpdate('set-edit:z', 'set_logs', 'z', { set_number: 1 });
+
+      const result = await flushSetOutbox(server.client);
+      expect(result.rejectedIds).toEqual([]);
+      expect(server.rows.get('y')).toMatchObject({ set_number: 2, weight_kg: 95 });
+      expect(server.rows.get('z')).toMatchObject({ set_number: 3 });
+      expect(await outboxCount()).toBe(0);
+    });
+
+    it('removeQueuedEntryIfUnchanged only removes the exact payload', async () => {
+      await enqueueSetInsert('a', { id: 'a', reps: 8 });
+      expect(await removeQueuedEntryIfUnchanged('a', { id: 'a', reps: 9 })).toBe('kept');
+      expect(await removeQueuedEntryIfUnchanged('a', { id: 'a', reps: 8 })).toBe('removed');
+      expect(await removeQueuedEntryIfUnchanged('a', { id: 'a', reps: 8 })).toBe('absent');
+    });
+
+    it('entries enqueued in the same millisecond keep their enqueue order', async () => {
+      jest.useFakeTimers({ now: 5000 });
+      try {
+        // ids chosen so that id order is the REVERSE of enqueue order
+        await enqueueRowDelete('z', 'set_logs', 'z');
+        await enqueueRowUpdate('set-edit:m', 'set_logs', 'm', { set_number: 1 });
+        await enqueueRowUpdate('set-edit:a', 'set_logs', 'a', { set_number: 2 });
+      } finally {
+        jest.useRealTimers();
+      }
+      expect((await listOutbox()).map((e) => e.id)).toEqual(['z', 'set-edit:m', 'set-edit:a']);
+    });
+
+    it('restamp moves a patched entry (and motion captures that reference it) to the back', async () => {
+      jest.useFakeTimers({ now: 1000 });
+      try {
+        await enqueueSetInsert('set-3', { id: 'set-3', set_number: 3 });
+        await enqueueRowUpsert('cap-1', 'motion_captures', { id: 'cap-1', set_id: 'set-3' });
+        jest.setSystemTime(2000);
+        await enqueueRowDelete('set-1', 'set_logs', 'set-1');
+        await updateQueuedSet('set-3', { set_number: 2 }, { restamp: true });
+      } finally {
+        jest.useRealTimers();
+      }
+      expect((await listOutbox()).map((e) => e.id)).toEqual(['set-1', 'set-3', 'cap-1']);
+    });
+  });
+
+  describe('isPermanentRejection', () => {
+    it.each([
+      [{ message: 'unique', code: '23505' }, true],
+      [{ message: 'check', code: '23514' }, true],
+      [{ message: 'fk', code: '23503' }, true],
+      [{ message: 'rls', code: '42501' }, true],
+      [{ message: 'bad input', code: '22P02' }, true],
+      [{ message: 'no column', code: 'PGRST204' }, true],
+      [{ message: 'JWT expired', code: 'PGRST301' }, false],
+      [{ message: 'connection', code: 'PGRST002' }, false],
+      [{ message: 'timeout', code: '57014' }, false],
+      [{ message: 'too many clients', code: '53300' }, false],
+      [{ message: 'could not serialize', code: '40001' }, false],
+      [{ message: '<html>503</html>' }, false],
+      [{ message: 'Failed to fetch' }, false],
+    ])('%j -> %s', (error, expected) => {
+      expect(isPermanentRejection(error)).toBe(expected);
+    });
+
+    it('handles null/undefined', () => {
+      expect(isPermanentRejection(null)).toBe(false);
+      expect(isPermanentRejection(undefined)).toBe(false);
     });
   });
 

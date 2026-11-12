@@ -2,6 +2,9 @@
 
 import { useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
+import { purgeUserCaches } from '@/lib/query/clientCachePurge';
+import { writeUserTimeZoneCookie } from '@/components/providers/userTimeZone';
 import Link from 'next/link';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { Sidebar } from './Sidebar';
@@ -9,8 +12,11 @@ import { BottomNavigation } from './BottomNavigation';
 import { SubscriptionBadge } from './SubscriptionBadge';
 import { SignOutButton } from './SignOutButton';
 import { ThemeToggleCompact } from '@/components/settings/ThemeToggle';
-import { ResumeWorkoutBanner } from '@/components/workout';
-import { flushSetOutbox } from '@/lib/offline/setOutbox';
+// Direct file import, NOT the '@/components/workout' barrel: the barrel
+// re-exports ExerciseCard / SessionSummary and friends, which would ride into
+// the dashboard shell's bundle on every route.
+import { ResumeWorkoutBanner } from '@/components/workout/ResumeWorkoutBanner';
+import { flushSetOutbox, unparkOutboxEntries } from '@/lib/offline/setOutbox';
 import { useWeeklyVolume } from '@/hooks/useWeeklyVolume';
 import { useHealthKitForegroundSync } from '@/hooks/useHealthKitSync';
 import { isActiveWorkoutRoute } from './isActiveWorkoutRoute';
@@ -23,6 +29,20 @@ interface DashboardLayoutClientProps {
 export function DashboardLayoutClient({ children }: DashboardLayoutClientProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const queryClient = useQueryClient();
+
+  // Tell the server which timezone "today" is in. Server components / actions
+  // run in the host's zone, so without this the dashboard's server-rendered
+  // day (calories, weigh-in, scheduled workout) is the host's day. Re-checked
+  // on foreground so a traveller's zone change is picked up.
+  useEffect(() => {
+    writeUserTimeZoneCookie();
+    const onVisible = () => {
+      if (!document.hidden) writeUserTimeZoneCookie();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, []);
 
   // Weekly volume coverage for the Train tab indicator: lit when every
   // muscle group has hit at least MEV this week. Fetched once here so the
@@ -42,7 +62,11 @@ export function DashboardLayoutClient({ children }: DashboardLayoutClientProps) 
   useEffect(() => {
     const flush = () => {
       const supabase = createUntypedClient();
-      void flushSetOutbox(supabase).then(() =>
+      // Parked (repeatedly refused) writes get another chance on reconnect.
+      void unparkOutboxEntries()
+        .catch(() => 0)
+        .then(() => flushSetOutbox(supabase))
+        .then(() =>
         // Dynamic so the finish flow (and the deload engine behind it) stays
         // out of the dashboard shell's initial bundle.
         import('@/app/(dashboard)/dashboard/workout/[id]/_lib/finishWorkout')
@@ -58,6 +82,9 @@ export function DashboardLayoutClient({ children }: DashboardLayoutClientProps) 
   const handleSignOut = async () => {
     const supabase = createUntypedClient();
     await supabase.auth.signOut();
+    // Leave nothing of this user's data behind for the next sign-in on this
+    // browser (query cache, SW Cache Storage, localStorage snapshots, store).
+    await purgeUserCaches(queryClient);
     router.push('/login');
     router.refresh();
   };

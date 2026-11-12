@@ -335,6 +335,37 @@ function weightForRepsCappedAnchor(e1rm: number, reps: number, rir: number): num
   return e1rm / (1 + eff / 30);
 }
 
+/**
+ * Session-start pricing of a stored CANONICAL anchor (services/shared/e1rm —
+ * Brzycki, weight × 36 / (37 − effectiveReps), clamped at 12 effective reps):
+ * the load at which `reps` @ `rir` is expected off that anchor.
+ *
+ * A stored anchor has to be inverted with the formula that built it. Inverse
+ * Epley does not round-trip a Brzycki anchor, and below 10 effective reps it
+ * prices LOW: 100 × 5 @1 builds 116.1 and Epley hands back 96.8, so a set
+ * that hit its target seeded 2.5 kg lighter next session. There the anchor is
+ * a true point estimate and Brzycki returns exactly 100.
+ *
+ * The two curves cross at 10 effective reps. ABOVE the crossover (10 < eff ≤
+ * 12 — the common 8–12 @2 range) the legacy Epley divisor is kept ON PURPOSE:
+ * anchors there are largely FLOORS (any set past 12 effective reps is valued
+ * at the cap), so the exact inverse returns the heaviest load ever taken past
+ * the cap and a lifter progressing normally is told to step back an
+ * increment (the pinned staple baseline: 100 → 97.5; 100 × 9 @2 → 95).
+ * Epley's +2.9% at the cap is what offsets that deflation today. Unifying the
+ * two is the "Phase 4 single-anchor work" the canonical module refers to and
+ * is a prescription-policy decision, not a formula fix.
+ *
+ * So: the higher of the two inverses — exact below the crossover, unchanged
+ * above it, continuous at it.
+ */
+function weightForRepsCanonicalAnchor(e1rm: number, reps: number, rir: number): number {
+  const eff = Math.min(reps + Math.max(0, rir), E1RM_HIGH_CONFIDENCE_MAX_EFFECTIVE_REPS);
+  const canonical = (e1rm * (37 - eff)) / 36;
+  const legacy = e1rm / (1 + eff / 30);
+  return Math.max(canonical, legacy);
+}
+
 // ============================================
 // SESSION-TO-SESSION BUMP GATING (all working sets)
 // ============================================
@@ -509,8 +540,8 @@ export interface PositionMatchedTarget {
    * Which progression was applied to the matched set:
    *  - 'add_rep'  — one more rep at the same load (positional set had target
    *    reserve, room existed);
-   *  - 'add_load' — one increment up, one rep traded (positional set was at
-   *    the rep ceiling with target reserve);
+   *  - 'add_load' — one increment up, reps reset to the range floor
+   *    (positional set was at the rep ceiling with target reserve);
    *  - 'hold'     — matched verbatim (positional set was taken harder than
    *    target: repeating it at better effort IS the progression).
    */
@@ -550,7 +581,7 @@ export interface PositionMatchInput {
  * Target = the positional set, plus the smallest meaningful progression:
  *  - positional set at/above target reserve (within the half-chip effort
  *    tolerance) → one more rep at the same load; at the rep ceiling → one
- *    increment up, one rep traded;
+ *    increment up, reps reset to the range floor;
  *  - positional set harder than target → held VERBATIM. It was already past
  *    the prescribed effort; asking for one more rep would demand exceeding
  *    failure (the fixture's set 4: 182.5×7 @0 must re-prescribe ×7, never 8).
@@ -640,9 +671,18 @@ export function matchPositionTarget(input: PositionMatchInput): PositionMatchedT
     // through to the anchor path rather than trading from an out-of-range
     // count (Codex review: a 15-rep set against 8-12 must not seed ×14).
     if (ref.reps > ceiling) return null;
+    // Double progression: the load steps by exactly ONE smallest increment
+    // (the minimum step that exists, so there is nothing further to clamp
+    // against MAX_STEP_PCT) and the rep target RESETS to the range floor —
+    // the same rule recommendSessionStart applies on an earned bump. The old
+    // "trade one rep" form asked 12.5 × 13 off a 10 × 14 dumbbell set (a 25%
+    // load jump the engine's own curve prices at ~5 reps). Within a session
+    // the finalize pipeline may still re-solve the reps UP at the new load
+    // when the floor does not express measurable progress over the matched
+    // set (progressionLever 'reps').
     return {
       weightKg: ref.weightKg + inc,
-      reps: Math.max(repMin, ref.reps - 1),
+      reps: repMin,
       progression: 'add_load',
       ...provenance,
     };
@@ -993,17 +1033,35 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
       0,
       out.positionMatch ? Math.min(out.positionMatch.prevRir ?? out.rir, out.rir) : out.rir
     );
-    const underCapAt = (weightKg: number, reps: number, rirOverride?: number): boolean => {
+    // Just-missed-set ceiling (simulation Finding 001). The set just logged
+    // TODAY ended at or below the target RIR: the lifter had no reserve
+    // beyond the target at `lastReps`, so at the same or a heavier load the
+    // next set cannot hold MORE reps at that effort — one more set of
+    // fatigue only lowers it. The e1RM-space cap above cannot see this: its
+    // pool keeps an earlier, stronger set as the ceiling (85×10 @2 let
+    // 80×10 through straight after 80×9 @1), and in the canonical flat
+    // region every count at one load measures the same value. This is a
+    // rep-space statement about ONE load family, so it is checked directly.
+    // Only today's observation counts — never a session-start replay, nor a
+    // later pending slot priced off last session's reference set.
+    const loggedToday = input.sessionObservedSets ? observed.length >= 1 : n >= 1;
+    const lastSetHadNoSpareReserve = loggedToday && safeRir <= targetRir;
+    const underJustMissedCeiling = (weightKg: number, reps: number): boolean =>
+      !lastSetHadNoSpareReserve || weightKg < lastWeightKg || reps <= lastReps;
+    const underE1RMCapAt = (weightKg: number, reps: number, rirOverride?: number): boolean => {
       if (capE1RM == null) return true;
       const implied = impliedE1RMFloor(weightKg, reps, rirOverride ?? askedRir);
       // No implied value (invalid inputs) → nothing measurable to cap.
       return implied == null || implied <= capE1RM * (1 + SESSION_CAPACITY_TOLERANCE);
     };
+    // Every candidate the stages below consider must clear BOTH ceilings.
+    const underCapAt = (weightKg: number, reps: number, rirOverride?: number): boolean =>
+      underJustMissedCeiling(weightKg, reps) && underE1RMCapAt(weightKg, reps, rirOverride);
     const underCap = (reps: number): boolean => underCapAt(out.weightKg, reps);
 
     if (capE1RM != null) {
       let reps = out.reps;
-      while (reps > 1 && !underCap(reps)) reps -= 1;
+      while (reps > 1 && !underE1RMCapAt(out.weightKg, reps)) reps -= 1;
       if (reps !== out.reps) {
         out.reps = reps;
         out.sessionCapacityClamped = true;
@@ -1090,6 +1148,18 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
           }
         }
       }
+    }
+
+    // ---- Just-missed-set ceiling (simulation Finding 001) ----
+    // Runs AFTER the load lever, which has already refused every candidate
+    // that breaks the ceiling: an ask still above it here is the branch's
+    // own number (a positional add_rep at the load that just topped out).
+    // Trim the reps to what the lifter just demonstrated — fatigue owns the
+    // set, exactly as when the e1RM cap trims.
+    const { weightKg: askedWeightKg, reps: askedReps } = out;
+    if (askedWeightKg > 0 && !underJustMissedCeiling(askedWeightKg, askedReps)) {
+      out.reps = Math.max(1, lastReps);
+      out.sessionCapacityClamped = true;
     }
 
     // ---- Monotonicity floor (2026-07-29 step 2) ----
@@ -1869,11 +1939,12 @@ function workingWeightFromAnchor(
 ): { weightKg: number; clamped: boolean; binder: SeedClampBinder; preClampKg: number } {
   const [repMin, repMax] = targetRepRange;
   const mid = Math.round((repMin + repMax) / 2);
-  // anchorE1RMKg is a CANONICAL (capped) estimate — price within its domain
-  // (see weightForRepsCappedAnchor). For ranges whose mid + RIR exceed the
+  // anchorE1RMKg is a CANONICAL (capped Brzycki) estimate — priced within its
+  // domain, and with its own formula wherever that is a true point estimate
+  // (see weightForRepsCanonicalAnchor). For ranges whose mid + RIR exceed the
   // cap this raises the pick to the eff-12 load; the downstream honest-reps
   // below-floor warning then surfaces the range-vs-anchor tension.
-  const raw = weightForRepsCappedAnchor(anchorE1RMKg, mid, targetRir);
+  const raw = weightForRepsCanonicalAnchor(anchorE1RMKg, mid, targetRir);
 
   let bounded = raw;
   let binder: SeedClampBinder = 'none';

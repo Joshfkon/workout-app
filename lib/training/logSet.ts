@@ -31,11 +31,19 @@ import { inferSetRole, sessionTopSetWeightKg } from '@/services/suggestionEngine
 import { SUGGESTION_ENGINE_VERSION } from '@/services/suggestionEngine/constants';
 import {
   enqueueSetInsert,
+  enqueueRowUpdate,
+  enqueueRowDelete,
+  getQueuedEntry,
   updateQueuedSet,
   removeQueuedSet,
-  isNetworkError,
+  removeQueuedEntryIfUnchanged,
+  isPermanentRejection,
   isMissingColumnError,
   withoutOptionalSetLogColumns,
+  withTimeout,
+  OP_TIMEOUT_MS,
+  trackDirectWrite,
+  directWriteInFlight,
 } from '@/lib/offline/setOutbox';
 import { now as clockNow } from '@/lib/clock';
 
@@ -357,6 +365,45 @@ export function planSetDeletion(sets: SetLog[], setId: string): SetDeletionPlan 
 // Persistence
 // ---------------------------------------------------------------------------
 
+/**
+ * Outbox entry id for a queued EDIT of a set whose row is already on the
+ * server (the set's own id is reserved for its queued insert / delete).
+ */
+export function setEditEntryId(setId: string): string {
+  return `set-edit:${setId}`;
+}
+
+/**
+ * How long logging a set may wait on the numbering probe. The probe only
+ * matters when another tab/device logged to the same block; local numbering
+ * is correct otherwise, so on a slow connection it is not worth holding the
+ * set out of local state — and out of the durable queue — for.
+ */
+export const SET_NUMBER_PROBE_TIMEOUT_MS = 1500;
+
+/**
+ * False only when the platform positively reports no connectivity. A runtime
+ * with no `navigator`, or one whose `navigator.onLine` is undefined (Node),
+ * is treated as online.
+ */
+function knownOffline(): boolean {
+  return typeof navigator !== 'undefined' && navigator.onLine === false;
+}
+
+type WriteError = { message: string; code?: string };
+
+/** Run a direct write with the outbox's timeout; a thrown failure becomes an error value. */
+async function directWrite(
+  op: () => PromiseLike<{ error: WriteError | null }>
+): Promise<WriteError | null> {
+  try {
+    const { error } = await withTimeout(op(), OP_TIMEOUT_MS);
+    return error ?? null;
+  } catch (e) {
+    return { message: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 /** Highest existing working-set number for a block, or null when unknown. */
 export async function probeMaxSetNumber(
   supabase: SetWriteClient,
@@ -397,6 +444,8 @@ export interface LogSetDeps {
   onSyncState?: (setId: string, state: SetSyncState) => void;
   /** Instrumentation hook (setLogTiming marks). Never affects behaviour. */
   onPhase?: (phase: LogSetPhase) => void;
+  /** Cap on the numbering probe. Defaults to SET_NUMBER_PROBE_TIMEOUT_MS. */
+  probeTimeoutMs?: number;
 }
 
 export interface LogSetInput extends Omit<BuildSetLogInput, 'setId' | 'setNumber' | 'loggedAt'> {
@@ -421,14 +470,41 @@ function defaultOnline(): boolean {
   return typeof navigator === 'undefined' ? true : navigator.onLine;
 }
 
+/** The numbering probe, capped: a slow answer is treated as no answer. */
+async function probeMaxSetNumberWithin(
+  supabase: SetWriteClient,
+  exerciseBlockId: string,
+  timeoutMs: number
+): Promise<number | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), timeoutMs);
+  });
+  try {
+    return await Promise.race([probeMaxSetNumber(supabase, exerciseBlockId), timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 /**
  * Log one working set: resolve its number, build it, apply it optimistically,
- * then persist it (or queue it when offline).
+ * make it durable, then persist it.
+ *
+ * WRITE-AHEAD. The row goes into the outbox BEFORE the network insert and is
+ * taken out again when the insert succeeds. A set therefore exists in durable
+ * local storage from a few milliseconds after the tap, whatever happens to
+ * the request — a webview killed mid-insert on one bar of signal reopens with
+ * the set still queued. The only wait before that point is the numbering
+ * probe, which is capped (`SET_NUMBER_PROBE_TIMEOUT_MS`).
  *
  * `status`:
  *   'saved'    — the row is in the database.
  *   'queued'   — the row is durably in the outbox and will flush later. The
  *                optimistic state STAYS; this is a success for the caller.
+ *                Any failure that is not the server refusing the row —
+ *                connectivity, a timeout, a 5xx, an expired token — lands
+ *                here, never in 'rejected'.
  *   'rejected' — the server refused the row. The optimistic state has already
  *                been rolled back via `rollbackOptimistic`.
  */
@@ -443,7 +519,11 @@ export async function logSet(deps: LogSetDeps, input: LogSetInput): Promise<LogS
     deps.onPhase?.('probe_sent');
     setNumber = resolveSetNumber(
       input.localNextSetNumber,
-      await probeMaxSetNumber(supabase, input.exerciseBlockId)
+      await probeMaxSetNumberWithin(
+        supabase,
+        input.exerciseBlockId,
+        deps.probeTimeoutMs ?? SET_NUMBER_PROBE_TIMEOUT_MS
+      )
     );
     deps.onPhase?.('probe_done');
   }
@@ -454,49 +534,104 @@ export async function logSet(deps: LogSetDeps, input: LogSetInput): Promise<LogS
   deps.onSyncState?.(setId, 'saving');
   deps.onPhase?.('t1_local_commit');
 
-  if (!online) {
+  // Durability first. If the outbox itself is unusable (broken IndexedDB) an
+  // online set still goes straight to the server; an offline one has nowhere
+  // to live and is reported as not saved rather than shown as if it were.
+  let enqueued = true;
+  let enqueueError: unknown = null;
+  try {
     await enqueueSetInsert(setId, row);
     deps.onPhase?.('t2_outbox_enqueued');
+  } catch (e) {
+    enqueued = false;
+    enqueueError = e;
+  }
+  const notStored = (): LogSetResult => {
+    deps.rollbackOptimistic?.(set);
+    return {
+      status: 'rejected',
+      set,
+      error: {
+        message:
+          enqueueError instanceof Error
+            ? `Could not store the set on this device: ${enqueueError.message}`
+            : 'Could not store the set on this device',
+      },
+    };
+  };
+
+  if (!online) {
+    if (!enqueued) return notStored();
     deps.onSyncState?.(setId, 'queued');
     return { status: 'queued', set, row };
   }
 
-  let insertError: { message: string; code?: string } | null = null;
   deps.onPhase?.('t3_insert_sent');
-  try {
-    const result = await supabase.from('set_logs').insert(row);
-    insertError = result.error;
+  // Registered as in flight so (a) the outbox flush does not send the same
+  // row in parallel and (b) a delete of this set waits for the insert to
+  // settle — otherwise the delete could reach the server BEFORE the insert it
+  // is meant to undo, and the set would come back.
+  const attempt = (async (): Promise<WriteError | null> => {
+    let error = await directWrite(() => supabase.from('set_logs').insert(row));
     // Schema-cache column miss (a migration not yet applied to this database):
     // drop the optional columns and retry once, so migration lag can't block
     // set logging mid-workout.
-    if (insertError && isMissingColumnError(insertError)) {
-      const retry = await supabase.from('set_logs').insert(withoutOptionalSetLogColumns(row));
-      insertError = retry.error;
+    if (error && isMissingColumnError(error)) {
+      error = await directWrite(() =>
+        supabase.from('set_logs').insert(withoutOptionalSetLogColumns(row))
+      );
     }
-  } catch (e) {
-    insertError = { message: e instanceof Error ? e.message : String(e) };
-  }
+    return error;
+  })();
+  const insertError = await trackDirectWrite(setId, attempt);
   deps.onPhase?.('t4_insert_done');
 
-  if (insertError && isNetworkError(insertError)) {
-    // Connectivity died mid-write: queue it and keep the optimistic state.
-    await enqueueSetInsert(setId, row);
-    deps.onPhase?.('t2_outbox_enqueued');
-    deps.onSyncState?.(setId, 'queued');
-    return { status: 'queued', set, row };
+  // The write-ahead entry can be delivered by an outbox flush (5 s poll, the
+  // dashboard's reconnect flush, a motion-capture save) while this insert is
+  // still on the wire. The insert then collides with its OWN row — which is
+  // the set being saved, not the server refusing it.
+  let landed = !insertError;
+  if (insertError?.code === '23505') {
+    landed =
+      /pkey|\(id\)/i.test(insertError.message ?? '') ||
+      (enqueued && !(await getQueuedEntry(setId)));
   }
 
-  if (insertError) {
+  if (landed) {
+    // Take the entry back out — unless it changed while the insert was in
+    // flight (an edit patched it): that newer write still has to go out.
+    const left = enqueued ? await removeQueuedEntryIfUnchanged(setId, row) : 'absent';
+    if (left === 'kept') {
+      deps.onSyncState?.(setId, 'queued');
+      return { status: 'queued', set, row };
+    }
+    deps.onSyncState?.(setId, 'saved');
+    return { status: 'saved', set, row };
+  }
+
+  if (insertError && isPermanentRejection(insertError)) {
+    if (enqueued) await removeQueuedSet(setId);
     deps.rollbackOptimistic?.(set);
     return { status: 'rejected', set, error: insertError };
   }
 
-  deps.onSyncState?.(setId, 'saved');
-  return { status: 'saved', set, row };
+  // Connectivity died mid-write, the request timed out, the server is having
+  // a moment: the row is already queued — keep the optimistic state.
+  if (!enqueued) {
+    try {
+      await enqueueSetInsert(setId, row);
+      deps.onPhase?.('t2_outbox_enqueued');
+    } catch (e) {
+      enqueueError = e;
+      return notStored();
+    }
+  }
+  deps.onSyncState?.(setId, 'queued');
+  return { status: 'queued', set, row };
 }
 
 export interface EditSetResult {
-  /** True when the edit was merged into a still-queued insert instead of sent. */
+  /** True when the edit is waiting in the outbox instead of having been sent. */
   queued: boolean;
   error?: { message: string };
 }
@@ -504,29 +639,55 @@ export interface EditSetResult {
 /**
  * Persist an edit to an already-logged set.
  *
- * A set that never left the outbox is patched in place (edit-before-sync), so
- * the eventual insert carries the edited values rather than the original ones
- * followed by an update that may never land.
+ * Where the edit goes depends on where the set is:
+ *
+ *  - its INSERT is still queued → the queue entry is patched (and marked
+ *    dirty, so the flush also UPDATEs the row in case the insert had already
+ *    landed with the old values);
+ *  - an earlier EDIT of it is still queued → merged into that entry, so a
+ *    stale queued patch can never overwrite a newer direct write;
+ *  - otherwise → sent. If it cannot be delivered right now (offline, timeout,
+ *    5xx, expired token) it is QUEUED rather than dropped: local state has
+ *    already changed and must not silently diverge from the server. Only a
+ *    real server refusal comes back as `error`.
  *
  * The `edited_at` stamp is a SEPARATE statement, matching production: it is
  * dormant until the migration adding the column is applied, and a failure to
  * stamp must not fail the edit. (Audit finding B4 notes the non-atomicity —
  * a lost stamp means the stale-target recalc prompt is skipped. Preserved
- * as-is here; fixing it is its own change.)
+ * as-is here; fixing it is its own change.) A queued edit is not stamped.
  */
 export async function persistSetEdit(
-  deps: { supabase: SetWriteClient },
-  args: { setId: string; patch: Record<string, unknown>; editedAt?: string }
+  deps: { supabase: SetWriteClient; online?: boolean },
+  args: {
+    setId: string;
+    patch: Record<string, unknown>;
+    editedAt?: string;
+    /** False for writes that are not a correction of the set (feedback added afterwards). */
+    stampEdited?: boolean;
+  }
 ): Promise<EditSetResult> {
   const { supabase } = deps;
 
   if (await updateQueuedSet(args.setId, args.patch)) {
     return { queued: true };
   }
+  const editEntryId = setEditEntryId(args.setId);
+  if (await updateQueuedSet(editEntryId, args.patch, { restamp: true })) {
+    return { queued: true };
+  }
 
-  const { error } = await supabase.from('set_logs').update(args.patch).eq('id', args.setId);
+  const online = deps.online ?? !knownOffline();
+  const error = online
+    ? await directWrite(() => supabase.from('set_logs').update(args.patch).eq('id', args.setId))
+    : null;
+  if (!online || (error && !isPermanentRejection(error))) {
+    await enqueueRowUpdate(editEntryId, 'set_logs', args.setId, args.patch);
+    return { queued: true };
+  }
   if (error) return { queued: false, error };
 
+  if (args.stampEdited === false) return { queued: false };
   const editedAt = args.editedAt ?? clockNow().toISOString();
   try {
     await supabase.from('set_logs').update({ edited_at: editedAt }).eq('id', args.setId);
@@ -537,18 +698,80 @@ export async function persistSetEdit(
 }
 
 /**
- * Delete a logged set. A set still in the outbox is simply dropped from the
- * queue; anything else is a HARD delete — `set_logs` has no soft-delete column
- * and never has (audit finding H3), so callers must not assume one.
+ * Delete a logged set. This is a HARD delete — `set_logs` has no soft-delete
+ * column and never has (audit finding H3), so callers must not assume one.
+ *
+ * A set whose insert is still in the outbox is NOT simply forgotten: "queued"
+ * does not mean "never reached the server" — the insert may have landed with
+ * its ack lost, or be on the wire right now. Its queue entry is replaced by a
+ * tombstone (a queued delete under the same id), so the row is removed for
+ * real whichever side of the wire it is on. Deleting a row that never arrived
+ * matches nothing and costs nothing.
+ *
+ * A delete that cannot be delivered right now is queued the same way instead
+ * of being dropped with an error.
+ *
+ * `queued`  — the set's insert was still in the outbox, or the delete itself
+ *             is now waiting there.
+ * `pending` — the delete has NOT been applied on the server yet. Renumbering
+ *             that depends on the vacated slot must wait behind it.
  */
 export async function persistSetDelete(
-  deps: { supabase: SetWriteClient },
+  deps: { supabase: SetWriteClient; online?: boolean },
   setId: string
-): Promise<{ queued: boolean; error?: { message: string } }> {
-  if (await removeQueuedSet(setId)) return { queued: true };
+): Promise<{ queued: boolean; pending?: boolean; error?: { message: string } }> {
+  const inFlight = directWriteInFlight(setId);
+  if (inFlight) await inFlight.catch(() => undefined);
 
-  const { error } = await deps.supabase.from('set_logs').delete().eq('id', setId);
-  return { queued: false, ...(error ? { error } : {}) };
+  const entry = await getQueuedEntry(setId);
+  const wasQueued = !!entry && entry.op !== 'delete';
+  // A queued edit of a set that is going away is moot.
+  await removeQueuedSet(setEditEntryId(setId));
+  if (wasQueued) await enqueueRowDelete(setId, 'set_logs', setId);
+
+  const online = deps.online ?? !knownOffline();
+  if (!online) {
+    if (!wasQueued) await enqueueRowDelete(setId, 'set_logs', setId);
+    return { queued: true, pending: true };
+  }
+
+  const error = await directWrite(() => deps.supabase.from('set_logs').delete().eq('id', setId));
+  if (!error) {
+    await removeQueuedSet(setId); // the tombstone, if any, has been served
+    return { queued: wasQueued };
+  }
+  if (isPermanentRejection(error)) {
+    return { queued: wasQueued, error };
+  }
+  if (!wasQueued) await enqueueRowDelete(setId, 'set_logs', setId);
+  return { queued: true, pending: true };
+}
+
+/**
+ * Persist a deletion: remove the row, then write the compaction it implies.
+ *
+ * The ordering is the point of having one function for it — the renumbering
+ * moves rows DOWN into the slot the delete just vacated, so it cannot run
+ * first. A caller that composes `persistSetDelete` and `persistSetRenumber`
+ * itself can get that wrong, or skip the second half entirely, which is the
+ * shape B1 had. Both the workout page and the headless driver go through here.
+ *
+ * `changes` comes from `planSetDeletion`. A delete that fails skips the
+ * renumbering: compacting around a row that is still there would collide. A
+ * delete that is QUEUED queues the renumbering behind it, for the same reason.
+ */
+export async function persistSetDeletion(
+  deps: { supabase: SetWriteClient; online?: boolean },
+  args: { setId: string; changes: SetNumberChange[] }
+): Promise<{ queued: boolean; error?: { message: string } }> {
+  const deleted = await persistSetDelete(deps, args.setId);
+  if (deleted.error) return { queued: deleted.queued, error: deleted.error };
+
+  const renumber = await persistSetRenumber(deps, args.changes, { queueOnly: deleted.pending });
+  return {
+    queued: deleted.queued || !!renumber.queued,
+    ...(renumber.error ? { error: renumber.error } : {}),
+  };
 }
 
 /**
@@ -561,58 +784,57 @@ export async function persistSetDelete(
  *    stored as set 3 — until the session was reloaded;
  *  - a set logged OFFLINE afterwards took its number from local state, so it
  *    could carry a `set_number` the database still had, and the flush hit
- *    `UNIQUE (exercise_block_id, set_number)`. The outbox's `ignoreDuplicates`
- *    is keyed on `id` and does not cover that, so the write was refused,
- *    retried, and finally dropped: a logged set silently lost.
+ *    `UNIQUE (exercise_block_id, set_number)`.
  *
  * The fix is to make the two sides agree, not to tolerate the disagreement —
  * so this writes the new numbers rather than teaching the insert path to route
  * around them.
  *
  * A set still sitting in the outbox is patched IN THE QUEUE: its row has not
- * reached the database, so an UPDATE would match nothing and the eventual
- * insert would carry the stale number.
+ * (necessarily) reached the database, so an UPDATE would match nothing and the
+ * eventual insert would carry the stale number.
  *
  * `changes` must arrive in ascending-new-number order (`planBlockRenumber`
  * guarantees it) or an update will collide with a row that has not moved yet.
+ * That order has to survive queueing too: once ONE move goes through the
+ * outbox — because its set is queued, because the delete it follows is
+ * queued (`queueOnly`), or because connectivity dropped mid-way — every later
+ * move is queued behind it rather than sent directly ahead of it.
  */
-/**
- * Persist a deletion: remove the row, then write the compaction it implies.
- *
- * The ordering is the point of having one function for it — the renumbering
- * moves rows DOWN into the slot the delete just vacated, so it cannot run
- * first. A caller that composes `persistSetDelete` and `persistSetRenumber`
- * itself can get that wrong, or skip the second half entirely, which is the
- * shape B1 had. Both the workout page and the headless driver go through here.
- *
- * `changes` comes from `planSetDeletion`. A delete that fails skips the
- * renumbering: compacting around a row that is still there would collide.
- */
-export async function persistSetDeletion(
-  deps: { supabase: SetWriteClient },
-  args: { setId: string; changes: SetNumberChange[] }
-): Promise<{ queued: boolean; error?: { message: string } }> {
-  const deleted = await persistSetDelete(deps, args.setId);
-  if (deleted.error) return deleted;
-
-  const { error } = await persistSetRenumber(deps, args.changes);
-  return { queued: deleted.queued, ...(error ? { error } : {}) };
-}
-
 export async function persistSetRenumber(
-  deps: { supabase: SetWriteClient },
-  changes: SetNumberChange[]
-): Promise<{ error?: { message: string } }> {
+  deps: { supabase: SetWriteClient; online?: boolean },
+  changes: SetNumberChange[],
+  opts?: { queueOnly?: boolean }
+): Promise<{ queued?: boolean; error?: { message: string } }> {
+  let queueOnly = (opts?.queueOnly ?? false) || !(deps.online ?? !knownOffline());
+  let queued = false;
+
   for (const change of changes) {
-    if (await updateQueuedSet(change.id, { set_number: change.setNumber })) continue;
-    const { error } = await deps.supabase
-      .from('set_logs')
-      .update({ set_number: change.setNumber })
-      .eq('id', change.id);
-    // Stop at the first failure: the remaining moves assume this one landed,
-    // and pressing on would write numbers that collide. The caller surfaces
-    // the error; a reload re-reads the authoritative numbering.
-    if (error) return { error };
+    const patch = { set_number: change.setNumber };
+    const editEntryId = setEditEntryId(change.id);
+    if (
+      (await updateQueuedSet(change.id, patch, { restamp: true })) ||
+      (await updateQueuedSet(editEntryId, patch, { restamp: true }))
+    ) {
+      queued = true;
+      queueOnly = true;
+      continue;
+    }
+
+    if (!queueOnly) {
+      const error = await directWrite(() =>
+        deps.supabase.from('set_logs').update(patch).eq('id', change.id)
+      );
+      if (!error) continue;
+      // Stop at a real refusal: the remaining moves assume this one landed,
+      // and pressing on would write numbers that collide. The caller surfaces
+      // the error; a reload re-reads the authoritative numbering.
+      if (isPermanentRejection(error)) return { ...(queued ? { queued } : {}), error };
+      queueOnly = true;
+    }
+
+    await enqueueRowUpdate(editEntryId, 'set_logs', change.id, patch);
+    queued = true;
   }
-  return {};
+  return queued ? { queued } : {};
 }

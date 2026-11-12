@@ -11,6 +11,26 @@
  */
 
 import { searchFoods, getFoodDetails, type FoodSearchResult } from '@/services/usdaService';
+import { createClient } from '@/lib/supabase/server';
+
+/** Longest search string forwarded to USDA. */
+const MAX_QUERY_LENGTH = 200;
+
+/**
+ * Server actions are public HTTP endpoints. Without this check anyone could
+ * use these as an open proxy onto the app's USDA API quota.
+ */
+async function isSignedIn(): Promise<boolean> {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    return !!user;
+  } catch {
+    return false;
+  }
+}
 
 interface CacheEntry<T> {
   value: T;
@@ -49,6 +69,8 @@ export async function searchFoodsAction(query: string): Promise<{
 }> {
   const key = query.trim().toLowerCase();
   if (!key) return { foods: [], error: 'Please enter a search query' };
+  if (key.length > MAX_QUERY_LENGTH) return { foods: [], error: 'Search query is too long' };
+  if (!(await isSignedIn())) return { foods: [], error: 'Sign in to search foods' };
 
   const cached = getCached(searchCache, key);
   if (cached) return cached;
@@ -68,6 +90,11 @@ export async function getFoodDetailsAction(foodId: string): Promise<{
   food?: FoodSearchResult;
   error?: string;
 }> {
+  if (typeof foodId !== 'string' || !foodId || foodId.length > 64) {
+    return { error: 'Invalid food id' };
+  }
+  if (!(await isSignedIn())) return { error: 'Sign in to view food details' };
+
   const cached = getCached(detailsCache, foodId);
   if (cached) return cached;
 

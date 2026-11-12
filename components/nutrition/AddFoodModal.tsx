@@ -9,6 +9,7 @@ import { Select } from '@/components/ui/Select';
 import type { FoodSearchResult, FoodSearchResultWithServings } from '@/services/usdaService';
 import { searchFoodsAction, getFoodDetailsAction } from '@/lib/actions/food-search';
 import { lookupBarcode as lookupBarcodeOFF } from '@/services/openFoodFactsService';
+import { lookupBarcodeUsdaAction } from '@/lib/actions/nutrition';
 import dynamic from 'next/dynamic';
 import { ServingAmountEditor, type ServingAmountValue } from './ServingAmountEditor';
 import { FoodEmojiAvatar } from './FoodEmoji';
@@ -563,7 +564,8 @@ export function AddFoodModal({
     setIsLookingUpBarcode(true);
 
     try {
-      const result = await lookupBarcodeOFF(barcode);
+      // USDA fallback goes through a server action so it uses the real API key.
+      const result = await lookupBarcodeOFF(barcode, { usdaLookup: lookupBarcodeUsdaAction });
       if (!result.found || !result.product) {
         setBarcodeError(result.error || 'Product not found.');
         setNotFoundBarcode(barcode);

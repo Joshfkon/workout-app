@@ -26,6 +26,8 @@ export interface FoodSearchResult {
   brandName?: string;
   dataSource?: 'usda' | 'fatsecret' | 'nutritionix';
   servings?: ParsedServing[];
+  /** Weight (g, or ml for liquids) of `servingSize` when known. */
+  servingGrams?: number;
 }
 
 // Extended version with serving options (returned by getFoodDetails)
@@ -43,6 +45,7 @@ interface USDAFood {
   servingSize?: number;
   servingSizeUnit?: string;
   householdServingFullText?: string;
+  gtinUpc?: string;
   foodNutrients: Array<{
     nutrientId: number;
     nutrientName: string;
@@ -99,14 +102,116 @@ const NUTRIENT_IDS = {
   SODIUM: 1093,        // Sodium
 };
 
-function extractNutrient(nutrients: USDAFood['foodNutrients'], nutrientId: number): number {
-  const nutrient = nutrients.find(n => n.nutrientId === nutrientId);
-  return nutrient ? Math.round(nutrient.value * 10) / 10 : 0;
+// Foundation foods often omit 1008 and report Atwater energy instead.
+const ENERGY_NUTRIENT_IDS = [NUTRIENT_IDS.CALORIES, 2047, 2048];
+
+export interface Per100Nutrition {
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
 }
 
-function extractNutrientFromDetail(nutrients: USDAFoodDetailResponse['foodNutrients'], nutrientId: number): number {
-  const nutrient = nutrients.find(n => n.nutrient?.id === nutrientId);
-  return nutrient ? Math.round(nutrient.amount * 10) / 10 : 0;
+/**
+ * Per-100g nutrition from a list of (nutrientId, value) pairs, or null when
+ * the food carries no usable nutrition at all. A missing energy value is
+ * derived from the macros (4/4/9) rather than silently becoming 0 kcal; a
+ * food with neither energy nor macros is "no data", not a 0-calorie food.
+ */
+export function resolvePer100Nutrition(
+  nutrients: Array<{ id: number | undefined; value: number | undefined }>
+): Per100Nutrition | null {
+  const find = (id: number): number | undefined => {
+    const hit = nutrients.find((n) => n.id === id);
+    return hit && typeof hit.value === 'number' && Number.isFinite(hit.value) ? hit.value : undefined;
+  };
+
+  let energy: number | undefined;
+  for (const id of ENERGY_NUTRIENT_IDS) {
+    energy = find(id);
+    if (energy !== undefined) break;
+  }
+  const protein = find(NUTRIENT_IDS.PROTEIN);
+  const carbs = find(NUTRIENT_IDS.CARBS);
+  const fat = find(NUTRIENT_IDS.FAT);
+
+  if (energy === undefined) {
+    if (protein === undefined && carbs === undefined && fat === undefined) return null;
+    energy = (protein ?? 0) * 4 + (carbs ?? 0) * 4 + (fat ?? 0) * 9;
+  }
+
+  return {
+    calories: energy,
+    protein: protein ?? 0,
+    carbs: carbs ?? 0,
+    fat: fat ?? 0,
+  };
+}
+
+/**
+ * The serving a search hit should be presented with.
+ *
+ * USDA search results report nutrients per 100 g (per 100 ml for liquids),
+ * NOT per label serving. When the label serving has a known weight/volume we
+ * return it with the factor that scales the per-100 values onto it; when it
+ * doesn't (household text only, or an unknown unit) the food is presented
+ * weight-anchored as "100g" so the text and the numbers always agree.
+ */
+export function resolveUsdaServing(food: {
+  servingSize?: number;
+  servingSizeUnit?: string;
+}): { servingSize: string; factor: number; grams: number } {
+  const size = typeof food.servingSize === 'number' ? food.servingSize : NaN;
+  const unit = (food.servingSizeUnit || '').trim().toLowerCase();
+  if (Number.isFinite(size) && size > 0) {
+    if (unit === 'g' || unit === 'grm' || unit === 'gram' || unit === 'grams') {
+      return { servingSize: `${size}g`, factor: size / 100, grams: size };
+    }
+    if (unit === 'ml' || unit === 'mlt' || unit === 'milliliter' || unit === 'milliliters') {
+      return { servingSize: `${size}ml`, factor: size / 100, grams: size };
+    }
+  }
+  return { servingSize: '100g', factor: 1, grams: 100 };
+}
+
+/** GTIN/UPC equality ignoring non-digits and zero padding (UPC-A vs EAN-13 vs GTIN-14). */
+export function gtinMatches(a: string | undefined | null, b: string | undefined | null): boolean {
+  const norm = (v: string | undefined | null) => (v || '').replace(/\D/g, '').replace(/^0+/, '');
+  const na = norm(a);
+  const nb = norm(b);
+  return na.length >= 6 && na === nb;
+}
+
+const round1 = (n: number) => Math.round(n * 10) / 10;
+
+/** Map a USDA search hit to a per-serving result, or null when it has no nutrition data. */
+function mapSearchFood(food: USDAFood): FoodSearchResult | null {
+  const per100 = resolvePer100Nutrition(
+    (food.foodNutrients || []).map((n) => ({ id: n.nutrientId, value: n.value }))
+  );
+  if (!per100) return null;
+
+  const serving = resolveUsdaServing(food);
+
+  // Build display name with brand if available
+  let displayName = food.description;
+  if (food.brandOwner || food.brandName) {
+    displayName = `${food.description} (${food.brandOwner || food.brandName})`;
+  }
+
+  return {
+    name: displayName,
+    servingSize: serving.servingSize,
+    servingQty: 1,
+    calories: Math.round(per100.calories * serving.factor),
+    protein: round1(per100.protein * serving.factor),
+    carbs: round1(per100.carbs * serving.factor),
+    fat: round1(per100.fat * serving.factor),
+    foodId: food.fdcId.toString(),
+    brandName: food.brandOwner || food.brandName,
+    dataSource: 'usda' as const,
+    servingGrams: serving.grams,
+  };
 }
 
 /**
@@ -165,39 +270,15 @@ export async function searchFoods(query: string): Promise<{
       return { foods: [], error: 'No foods found matching your search' };
     }
 
-    const foods: FoodSearchResult[] = data.foods.map((food) => {
-      const calories = extractNutrient(food.foodNutrients, NUTRIENT_IDS.CALORIES);
-      const protein = extractNutrient(food.foodNutrients, NUTRIENT_IDS.PROTEIN);
-      const carbs = extractNutrient(food.foodNutrients, NUTRIENT_IDS.CARBS);
-      const fat = extractNutrient(food.foodNutrients, NUTRIENT_IDS.FAT);
+    // Search hits are per 100 g; mapSearchFood scales them onto the label
+    // serving and drops hits that carry no nutrition data at all.
+    const foods: FoodSearchResult[] = data.foods
+      .map(mapSearchFood)
+      .filter((food): food is FoodSearchResult => food !== null);
 
-      // Determine serving size
-      let servingSize = '100g';
-      if (food.servingSize && food.servingSizeUnit) {
-        servingSize = `${food.servingSize}${food.servingSizeUnit}`;
-      } else if (food.householdServingFullText) {
-        servingSize = food.householdServingFullText;
-      }
-
-      // Build display name with brand if available
-      let displayName = food.description;
-      if (food.brandOwner || food.brandName) {
-        displayName = `${food.description} (${food.brandOwner || food.brandName})`;
-      }
-
-      return {
-        name: displayName,
-        servingSize,
-        servingQty: 1,
-        calories: Math.round(calories),
-        protein,
-        carbs,
-        fat,
-        foodId: food.fdcId.toString(),
-        brandName: food.brandOwner || food.brandName,
-        dataSource: 'usda' as const,
-      };
-    });
+    if (foods.length === 0) {
+      return { foods: [], error: 'No foods found matching your search' };
+    }
 
     return { foods };
   } catch (error) {
@@ -240,10 +321,17 @@ export async function getFoodDetails(foodId: string): Promise<{
 
     const food: USDAFoodDetailResponse = await response.json();
 
-    const calories = extractNutrientFromDetail(food.foodNutrients, NUTRIENT_IDS.CALORIES);
-    const protein = extractNutrientFromDetail(food.foodNutrients, NUTRIENT_IDS.PROTEIN);
-    const carbs = extractNutrientFromDetail(food.foodNutrients, NUTRIENT_IDS.CARBS);
-    const fat = extractNutrientFromDetail(food.foodNutrients, NUTRIENT_IDS.FAT);
+    const per100 = resolvePer100Nutrition(
+      (food.foodNutrients || []).map((n) => ({ id: n.nutrient?.id, value: n.amount }))
+    );
+    if (!per100) {
+      // No energy and no macros: not a 0-calorie food, just no data.
+      return { error: 'No nutrition data available for this food' };
+    }
+    const calories = round1(per100.calories);
+    const protein = round1(per100.protein);
+    const carbs = round1(per100.carbs);
+    const fat = round1(per100.fat);
 
     // Build serving options from food portions
     const servings: ParsedServing[] = [];
@@ -283,13 +371,26 @@ export async function getFoodDetails(foodId: string): Promise<{
       });
     }
 
-    // Default serving size
-    let servingSize = '100g';
-    if (food.servingSize && food.servingSizeUnit) {
-      servingSize = `${food.servingSize}${food.servingSizeUnit}`;
-    } else if (food.householdServingFullText) {
-      servingSize = food.householdServingFullText;
+    // The label serving (branded foods have no foodPortions) as an option.
+    const labelServing = resolveUsdaServing(food);
+    if (labelServing.servingSize !== '100g') {
+      const household = food.householdServingFullText?.trim();
+      const description = household
+        ? `${household} (${labelServing.servingSize})`
+        : labelServing.servingSize;
+      if (!servings.some((s) => s.description === description)) {
+        servings.push({
+          description,
+          calories: Math.round(calories * labelServing.factor),
+          protein: round1(protein * labelServing.factor),
+          carbs: round1(carbs * labelServing.factor),
+          fat: round1(fat * labelServing.factor),
+        });
+      }
     }
+
+    // The top-level macros below are per 100 g, so the serving text is too.
+    const servingSize = '100g';
 
     let displayName = food.description;
     if (food.brandOwner || food.brandName) {
@@ -321,7 +422,8 @@ export async function getFoodDetails(foodId: string): Promise<{
 
 /**
  * Lookup food by barcode/UPC using USDA API
- * Note: USDA has limited barcode data - will search by GTIN/UPC
+ * Note: USDA has limited barcode data - will search by GTIN/UPC.
+ * The result is PER SERVING (`servingSize` / `servingGrams`), like searchFoods.
  */
 export async function lookupBarcode(barcode: string): Promise<{
   food?: FoodSearchResult;
@@ -360,37 +462,19 @@ export async function lookupBarcode(barcode: string): Promise<{
       return { error: 'Product not found. Try searching by name.' };
     }
 
-    // Return the first match
-    const food = data.foods[0];
-    const calories = extractNutrient(food.foodNutrients, NUTRIENT_IDS.CALORIES);
-    const protein = extractNutrient(food.foodNutrients, NUTRIENT_IDS.PROTEIN);
-    const carbs = extractNutrient(food.foodNutrients, NUTRIENT_IDS.CARBS);
-    const fat = extractNutrient(food.foodNutrients, NUTRIENT_IDS.FAT);
-
-    let servingSize = '100g';
-    if (food.servingSize && food.servingSizeUnit) {
-      servingSize = `${food.servingSize}${food.servingSizeUnit}`;
+    // The search is full-text, so the first hit is not necessarily this
+    // product: only accept a hit whose GTIN/UPC actually is the scanned code.
+    const match = data.foods.find((f) => gtinMatches(f.gtinUpc, barcode));
+    if (!match) {
+      return { error: 'Product not found. Try searching by name.' };
     }
 
-    let displayName = food.description;
-    if (food.brandOwner || food.brandName) {
-      displayName = `${food.description} (${food.brandOwner || food.brandName})`;
+    const food = mapSearchFood(match);
+    if (!food) {
+      return { error: 'Product has no nutrition data. Try searching by name.' };
     }
 
-    return {
-      food: {
-        name: displayName,
-        servingSize,
-        servingQty: 1,
-        calories: Math.round(calories),
-        protein,
-        carbs,
-        fat,
-        foodId: food.fdcId.toString(),
-        brandName: food.brandOwner || food.brandName,
-        dataSource: 'usda',
-      },
-    };
+    return { food };
   } catch (error) {
     console.error('USDA barcode error:', error);
     return {

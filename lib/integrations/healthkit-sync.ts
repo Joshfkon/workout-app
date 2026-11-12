@@ -19,6 +19,8 @@
 
 import {
   isHealthKitAvailable,
+  healthKitNeedsAuthorizationRequest,
+  requestHealthKitPermissions,
   fetchHealthKitSleepSamples,
   fetchHealthKitDailyHrv,
   fetchHealthKitDailyRestingHeartRate,
@@ -65,7 +67,12 @@ export function planSyncWindow(
 
 export interface HealthKitSyncOutcome {
   status: 'synced' | 'skipped';
-  reason?: 'not_available' | 'not_connected' | 'throttled' | 'error';
+  reason?:
+    | 'not_available'
+    | 'not_connected'
+    | 'needs_authorization'
+    | 'throttled'
+    | 'error';
   sleepDays?: number;
   wellnessDays?: number;
   activityDays?: number;
@@ -75,6 +82,13 @@ export interface HealthKitSyncOutcome {
 export interface HealthKitSyncDeps {
   isAvailable: typeof isHealthKitAvailable;
   getContext: () => Promise<HealthKitSyncContext>;
+  /** Would requesting authorization show the Health sheet on this install? */
+  needsAuthorization: () => Promise<boolean>;
+  /** Present the Health sheet. Resolves true when the flow completed. */
+  requestAuthorization: () => Promise<boolean>;
+  /** Has this install already auto-presented the sheet once? */
+  hasAutoRequested: () => boolean;
+  markAutoRequested: () => void;
   fetchSleep: typeof fetchHealthKitSleepSamples;
   fetchHrv: typeof fetchHealthKitDailyHrv;
   fetchRhr: typeof fetchHealthKitDailyRestingHeartRate;
@@ -87,9 +101,37 @@ export interface HealthKitSyncDeps {
   now: () => Date;
 }
 
+/**
+ * Per-install marker: the sync has already put the Health permission sheet up
+ * once on this install. Lives in the web view's localStorage, which is wiped
+ * with the app — exactly the lifetime of the HealthKit authorization itself.
+ */
+export const HEALTHKIT_AUTO_AUTH_KEY = 'hypertrack:healthkit-auto-auth-requested';
+
+function hasAutoRequestedAuthorization(): boolean {
+  try {
+    return window.localStorage.getItem(HEALTHKIT_AUTO_AUTH_KEY) === '1';
+  } catch {
+    // Storage unavailable: claim "already asked" so we can never loop.
+    return true;
+  }
+}
+
+function markAutoRequestedAuthorization(): void {
+  try {
+    window.localStorage.setItem(HEALTHKIT_AUTO_AUTH_KEY, '1');
+  } catch {
+    // Best effort — iOS itself never shows the sheet twice for decided types.
+  }
+}
+
 const defaultDeps: HealthKitSyncDeps = {
   isAvailable: isHealthKitAvailable,
   getContext: getHealthKitSyncContext,
+  needsAuthorization: healthKitNeedsAuthorizationRequest,
+  requestAuthorization: async () => (await requestHealthKitPermissions()).granted,
+  hasAutoRequested: hasAutoRequestedAuthorization,
+  markAutoRequested: markAutoRequestedAuthorization,
   fetchSleep: fetchHealthKitSleepSamples,
   fetchHrv: fetchHealthKitDailyHrv,
   fetchRhr: fetchHealthKitDailyRestingHeartRate,
@@ -126,6 +168,22 @@ export async function runHealthKitSync(
     const context = await deps.getContext();
     if (!context.connected) {
       return { status: 'skipped', reason: 'not_connected' };
+    }
+
+    // The account is connected, but HealthKit authorization is per install.
+    // After a reinstall or on another iPhone this install has never been
+    // asked, and every query below would quietly return nothing — "connected"
+    // with no steps. Present the sheet ONCE per install so connecting really
+    // is a one-time act; after that (allowed or declined) iOS reports the
+    // types as decided and this branch is never taken again.
+    if (await deps.needsAuthorization()) {
+      if (deps.hasAutoRequested()) {
+        return { status: 'skipped', reason: 'needs_authorization' };
+      }
+      deps.markAutoRequested();
+      if (!(await deps.requestAuthorization())) {
+        return { status: 'skipped', reason: 'needs_authorization' };
+      }
     }
 
     lastSyncStartedAt = now.getTime();

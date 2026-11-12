@@ -324,6 +324,12 @@ const GUARDRAILS = {
   MIN_CALORIES_FEMALE: 1200,
 };
 
+/** The calculator's calorie floors, exported so manual entry can warn against the same numbers. */
+export const MIN_CALORIE_FLOORS = {
+  male: GUARDRAILS.MIN_CALORIES_MALE,
+  female: GUARDRAILS.MIN_CALORIES_FEMALE,
+} as const;
+
 // Peptide multipliers adjusted to 1.05-1.10 range
 // Evidence supports elevated protein needs on GLP-1s due to accelerated lean mass loss
 // Clamp still prevents runaway values

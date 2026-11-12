@@ -22,6 +22,7 @@ import {
   ScoreBreakdownCard,
 } from '@/components/analytics';
 import { useBestLifts } from '@/hooks/useBestLifts';
+import { parseLocalDate } from '@/lib/utils';
 import {
   formatMeasurement,
   formatMeasurementValue,
@@ -654,7 +655,7 @@ export function BodyMeasurements({
 
             {lastMeasurement && (
               <p className="text-[10px] text-surface-600 pt-1">
-                Compared to {new Date(lastMeasurement.logged_at).toLocaleDateString()}
+                Compared to {parseLocalDate(lastMeasurement.logged_at).toLocaleDateString()}
               </p>
             )}
 

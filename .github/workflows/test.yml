@@ -26,10 +26,19 @@ jobs:
       - name: Check raw .reps read ratchet
         run: npm run check:reps-access
 
-      - name: Run unit tests
-        run: npm test
+      - name: Type-check
+        run: npm run type-check
 
-      - name: Check coverage thresholds
+      - name: Lint
+        run: npm run lint
+
+      # One Jest run: the coverage run executes every test AND enforces the
+      # thresholds in jest.config.js, so a separate plain `npm test` only
+      # doubled the suite time.
+      # NOTE: `next build` is intentionally not run here: it needs the
+      # NEXT_PUBLIC_SUPABASE_* / Stripe env vars, which are not configured as
+      # repository secrets. Vercel's own build covers it per deployment.
+      - name: Run unit tests with coverage thresholds
         run: npm run test:coverage -- --ci
 
       # Fast simulation suite: all deterministic regression scenarios plus

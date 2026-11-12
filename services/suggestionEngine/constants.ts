@@ -76,8 +76,16 @@
  *       never truncated below the floor while the load holds. Sub-floor
  *       counts survive only when no achievable load within the reduction
  *       cap reaches the floor.
+ *  v10 = review fixes (2026-11-12): (a) just-missed-set ceiling — after a
+ *       set logged today at or below the target RIR, no prescription at or
+ *       above that load may ask for more reps than it achieved (simulation
+ *       Finding 001; the load lever refuses such candidates, a positional
+ *       ask is trimmed); (b) position-match `add_load` resets reps to the
+ *       range floor instead of trading one rep; (c) below 10 effective
+ *       reps the session-start seed inverts the canonical (Brzycki) anchor
+ *       with Brzycki instead of pricing it low through inverse Epley.
  */
-export const SUGGESTION_ENGINE_VERSION = 9;
+export const SUGGESTION_ENGINE_VERSION = 10;
 
 // ============================================================
 // SET ROLES (Phase 2)

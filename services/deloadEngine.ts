@@ -133,9 +133,12 @@ export function computeSleepDebtSignal(
   now: Date
 ): SleepDebtSignal {
   const today = localDayString(now);
-  const cutoff = localDayString(
-    new Date(now.getTime() - (SLEEP_DEBT_WINDOW_DAYS - 1) * 24 * 60 * 60 * 1000)
-  );
+  // A day cutoff is a CALENDAR-day step, not −24h × n: across a DST change
+  // those differ by an hour, and a `now` just after local midnight would land
+  // on the wrong local day (the window would silently gain or lose a night).
+  const cutoffDate = new Date(now);
+  cutoffDate.setDate(cutoffDate.getDate() - (SLEEP_DEBT_WINDOW_DAYS - 1));
+  const cutoff = localDayString(cutoffDate);
   // One entry per local day by construction (sleep_log unique constraint);
   // dedupe defensively anyway so a bad feed can't double-count a night.
   const byDay = new Map<string, number>();

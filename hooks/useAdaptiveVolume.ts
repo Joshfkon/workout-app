@@ -5,7 +5,12 @@ import { createUntypedClient } from '@/lib/supabase/client';
 import { getErrorMessage } from '@/lib/errors';
 import { useUserStore } from '@/stores';
 import { useAuthUser } from '@/hooks/useAuthUser';
-import { getLocalDateString } from '@/lib/utils';
+import { now as clockNow } from '@/lib/clock';
+import {
+  adaptiveVolumeWindows,
+  adaptiveVolumeWindowIndex,
+  setRirOrFallback,
+} from '@/src/lib/training/adaptiveVolumeWindows';
 import {
   type UserVolumeProfile,
   type MuscleVolumeData,
@@ -56,6 +61,8 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
   const [volumeProfile, setVolumeProfile] = useState<UserVolumeProfile | null>(null);
   const [volumeData, setVolumeData] = useState<MuscleVolumeData[]>([]);
   const [previousWeekData, setPreviousWeekData] = useState<MuscleVolumeData[]>([]);
+  // The week before `previousWeekData` — only the fatigue monitor reads it.
+  const [earlierWeekData, setEarlierWeekData] = useState<MuscleVolumeData[]>([]);
   const [latestAnalysis, setLatestAnalysis] = useState<MesocycleAnalysis | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -74,16 +81,14 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
     try {
       const supabase = createUntypedClient();
 
-      // Calculate rolling 7-day period (last 7 days including today)
-      const now = new Date();
-      const weekStart = new Date(now);
-      weekStart.setDate(weekStart.getDate() - 6); // 7 days ago (including today = 6 days back)
-      weekStart.setHours(0, 0, 0, 0);
-      const weekStartStr = getLocalDateString(weekStart);
-
-      const weekEnd = new Date(now);
-      weekEnd.setHours(23, 59, 59, 999);
-      const weekEndStr = weekEnd.toISOString();
+      // Three consecutive rolling 7-local-day windows, newest first: this
+      // week (the last 7 days including today), the week before, and the week
+      // before that. Bounds are local-midnight INSTANTS — completed_at is a
+      // timestamptz, and a bare local date would be read as midnight UTC (see
+      // adaptiveVolumeWindows). "Now" comes from the app clock.
+      const windows = adaptiveVolumeWindows(clockNow());
+      const [currentWindow, previousWindow, earlierWindow] = windows;
+      const oldestWindow = windows[windows.length - 1];
 
       // ALWAYS derive from set_logs. The weekly_muscle_volume stored-rows
       // fast-path (current + previous week) is gone: no production code ever
@@ -120,11 +125,11 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
 
           const effective = workingSets.filter((s: SetLogRow) => {
             const feedback = s.feedback as { repsInTank?: number; form?: string } | undefined;
-            const rir = feedback?.repsInTank ?? (s.rpe ? 10 - s.rpe : 3);
+            const rir = setRirOrFallback(s, 3);
             const form = feedback?.form ?? 'clean';
             return rir <= 3 && (form === 'clean' || form === 'some_breakdown');
           }).length;
-          const rirValues = workingSets.map((s: SetLogRow) => s.feedback?.repsInTank ?? (s.rpe ? 10 - s.rpe : 2));
+          const rirValues = workingSets.map((s: SetLogRow) => setRirOrFallback(s, 2));
           // RIR-weighted Effective Volume for the same working sets (single
           // source of truth: services/effectiveVolume). Explicit feedback
           // RIR only — unknown weighs 1.0 (conservative, warned).
@@ -184,8 +189,10 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
       };
 
       {
-        // Fetch exercise blocks and sets for current week
-        const { data: currentBlocks } = await supabase
+        // ONE fetch for all three windows, bucketed by the session's
+        // completed_at. The windows tile exactly (half-open, calendar-day
+        // steps), so a session lands in exactly one week.
+        const { data: blocks } = await supabase
           .from('exercise_blocks')
           .select(`
             id,
@@ -212,63 +219,27 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
             )
           `)
           .eq('workout_sessions.user_id', userId!)
-          .gte('workout_sessions.completed_at', weekStartStr)
-          .lte('workout_sessions.completed_at', weekEndStr)
+          .gte('workout_sessions.completed_at', oldestWindow.startISO)
+          .lt('workout_sessions.completed_at', currentWindow.endISO)
           .eq('workout_sessions.state', 'completed');
 
-        const calculatedData = processBlocksIntoVolumeData(
-          currentBlocks as ExerciseBlockFull[] || [],
-          weekStartStr
+        const blocksByWindow: ExerciseBlockFull[][] = windows.map(() => []);
+        for (const block of (blocks as ExerciseBlockFull[] | null) ?? []) {
+          const completedAt = (
+            block.workout_sessions as { completed_at?: string | null } | null | undefined
+          )?.completed_at;
+          const index = adaptiveVolumeWindowIndex(completedAt, windows);
+          if (index >= 0) blocksByWindow[index].push(block);
+        }
+
+        setVolumeData(processBlocksIntoVolumeData(blocksByWindow[0], currentWindow.startDay));
+        // Week-over-week trend + fatigue history.
+        setPreviousWeekData(
+          processBlocksIntoVolumeData(blocksByWindow[1], previousWindow.startDay)
         );
-        setVolumeData(calculatedData);
-
-        // Fetch previous week (days -13 to -7) for week-over-week trend
-        const prevWeekEnd = new Date(weekStart);
-        prevWeekEnd.setDate(prevWeekEnd.getDate() - 1); // Day before current week start
-        prevWeekEnd.setHours(23, 59, 59, 999);
-        const prevWeekEndStr = prevWeekEnd.toISOString();
-
-        const prevWeekStart = new Date(prevWeekEnd);
-        prevWeekStart.setDate(prevWeekStart.getDate() - 6); // 7 days before prevWeekEnd
-        prevWeekStart.setHours(0, 0, 0, 0);
-        const prevWeekStartStr = getLocalDateString(prevWeekStart);
-
-        const { data: previousBlocks } = await supabase
-          .from('exercise_blocks')
-          .select(`
-            id,
-            exercise_id,
-            exercises!inner (
-              id,
-              name,
-              primary_muscle,
-              secondary_muscles
-            ),
-            workout_sessions!inner (
-              id,
-              completed_at,
-              user_id,
-              state
-            ),
-            set_logs (
-              id,
-              is_warmup,
-              weight_kg,
-              reps,
-              rpe,
-              feedback
-            )
-          `)
-          .eq('workout_sessions.user_id', userId!)
-          .gte('workout_sessions.completed_at', prevWeekStartStr)
-          .lte('workout_sessions.completed_at', prevWeekEndStr)
-          .eq('workout_sessions.state', 'completed');
-
-        const prevCalculatedData = processBlocksIntoVolumeData(
-          previousBlocks as ExerciseBlockFull[] || [],
-          prevWeekStartStr
+        setEarlierWeekData(
+          processBlocksIntoVolumeData(blocksByWindow[2], earlierWindow.startDay)
         );
-        setPreviousWeekData(prevCalculatedData);
       }
     } catch (err: unknown) {
       console.error('Failed to fetch volume data:', getErrorMessage(err));
@@ -405,7 +376,7 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
           is_enhanced: profile.isEnhanced,
           training_age: profile.trainingAge,
           counter_version: VOLUME_COUNTER_VERSION,
-          updated_at: new Date().toISOString(),
+          updated_at: clockNow().toISOString(),
         });
     } catch (err: unknown) {
       console.error('Failed to save volume profile:', getErrorMessage(err));
@@ -416,7 +387,7 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
   const updateProfile = useCallback(async (updates: Partial<UserVolumeProfile>) => {
     if (!volumeProfile) return;
 
-    const updated = { ...volumeProfile, ...updates, updatedAt: new Date() };
+    const updated = { ...volumeProfile, ...updates, updatedAt: clockNow() };
     setVolumeProfile(updated);
     await saveProfile(updated);
   }, [volumeProfile]);
@@ -447,10 +418,15 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
   const fatigueAlerts = useMemo((): FatigueAlert[] => {
     if (!volumeProfile || volumeData.length === 0) return [];
 
-    // Get recent data (last 3 weeks would come from historical data)
-    // For now, use current week data
-    return assessCurrentFatigueStatus(volumeData, volumeProfile);
-  }, [volumeProfile, volumeData]);
+    // The monitor compares weeks: it groups by muscle IN THE ORDER GIVEN and
+    // skips any muscle with fewer than two entries. Handing it the current
+    // week alone (as this did) meant every muscle had exactly one entry and
+    // no alert could ever fire. Oldest week first, current week last.
+    return assessCurrentFatigueStatus(
+      [...earlierWeekData, ...previousWeekData, ...volumeData],
+      volumeProfile
+    );
+  }, [volumeProfile, volumeData, previousWeekData, earlierWeekData]);
 
   // Load data on mount - only when user is available
   useEffect(() => {

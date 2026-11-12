@@ -37,6 +37,7 @@ import {
   type VolumeBand,
 } from '@/services/volumeBands';
 import { rollingWindowStartISO } from '@/lib/date/localDay';
+import { now as clockNow } from '@/lib/clock';
 import { rirFromFeedback, summarizeEffectiveVolume } from '@/services/effectiveVolume';
 
 /**
@@ -52,7 +53,7 @@ import { rirFromFeedback, summarizeEffectiveVolume } from '@/services/effectiveV
 export const WEEKLY_VOLUME_WINDOW_DAYS = 7;
 
 /** ISO lower bound for the weekly-volume DB range filter. Pass `now` in tests. */
-export function weeklyVolumeWindowStartISO(now: Date = new Date()): string {
+export function weeklyVolumeWindowStartISO(now: Date = clockNow()): string {
   return rollingWindowStartISO(WEEKLY_VOLUME_WINDOW_DAYS, now);
 }
 

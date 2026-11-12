@@ -52,7 +52,7 @@ import { lightHaptic } from '@/lib/integrations/notifications';
 // setLogTiming: TEMPORARY latency instrumentation (docs/SET_LOGGING_LATENCY_DIAGNOSIS.md)
 import { beginSetTiming } from '@/lib/debug/setLogTiming';
 import { Input } from '@/components/ui';
-import { IconActivity, IconBarbell, IconBone, IconCheck, IconChevronDown, IconCloudPause, IconGripVertical, IconInfoCircle } from '@tabler/icons-react';
+import { IconActivity, IconAlertTriangle, IconBarbell, IconBone, IconCheck, IconChevronDown, IconCloudPause, IconGripVertical, IconInfoCircle } from '@tabler/icons-react';
 import { RowOverflowMenu, type RowMenuItem } from './RowOverflowMenu';
 import { StabilizerWarningBanner, type StabilizerWarningView } from './StabilizerWarningBanner';
 import { InlineRestTimerBar } from './InlineRestTimerBar';
@@ -495,7 +495,12 @@ export interface ColdStartSuggestion {
 }
 
 /** Write status of a logged set (offline outbox, P0-2). */
-export type SetSyncStatus = 'saving' | 'saved' | 'queued';
+/**
+ * 'failed' = the server refused the write and the outbox parked it: the set
+ * is still on this phone, but it is NOT on the server and will not get there
+ * by waiting. Never rendered as saved.
+ */
+export type SetSyncStatus = 'saving' | 'saved' | 'queued' | 'failed';
 
 // PERFORMANCE: Memoized component to prevent unnecessary re-renders
 export const ExerciseCard = memo(function ExerciseCard({
@@ -613,6 +618,10 @@ export const ExerciseCard = memo(function ExerciseCard({
   const [swapTab, setSwapTab] = useState<'similar' | 'browse'>('similar');
   const [swapSearch, setSwapSearch] = useState('');
   const [isCompletingSet, setIsCompletingSet] = useState(false); // Prevent double-clicks
+  // Synchronous twin of isCompletingSet, shared by every path that logs a set
+  // (normal, auto dropset prompt, manual dropset): state only flips on the
+  // next render, a ref flips now.
+  const setLogLockRef = useRef(false);
   const [dropsetMode, setDropsetMode] = useState<{ parentSetId: string; parentWeight: number } | null>(null);
   // Plateau suggestions bottom sheet (opened from the header pill)
   const [showPlateauSheet, setShowPlateauSheet] = useState(false);
@@ -822,7 +831,8 @@ export const ExerciseCard = memo(function ExerciseCard({
   // RPE→RIR adapter for the recommender's AMRAP prediction.
   const amrapReps = (last: { reps: number; rpe?: number }) =>
     predictAmrapReps(
-      { reps: last.reps, rir: last.rpe != null ? Math.max(0, 10 - last.rpe) : undefined },
+      // Single RPE→RIR conversion app-wide (rpeToRir), not a linear 10 − rpe.
+      { reps: last.reps, rir: last.rpe != null ? Math.max(0, rpeToRir(last.rpe)) : undefined },
       block.targetRepRange
     );
 
@@ -2159,11 +2169,12 @@ export const ExerciseCard = memo(function ExerciseCard({
     setType: SetType;
     rirExplicitlySelected: boolean;
   }) => {
-    if (isCompletingSet || !onSetComplete) return;
+    if (isCompletingSet || setLogLockRef.current || !onSetComplete) return;
     if (isNaN(data.weightKg) || data.weightKg < 0 || data.reps < 1) return;
     beginSetTiming(); // setLogTiming: t0 = the log tap (TEMPORARY, see lib/debug/setLogTiming.ts)
 
     // Lock to prevent double-clicks
+    setLogLockRef.current = true;
     setIsCompletingSet(true);
 
     // Subtle haptic tick the moment a set is committed (native; no-op on web/iOS WKWebView).
@@ -2187,8 +2198,34 @@ export const ExerciseCard = memo(function ExerciseCard({
       // Unlock immediately after handler completes - optimistic UI is already
       // applied and the button needs to be ready for the next set ASAP.
       // The handler's lock duration naturally prevents double-taps.
+      setLogLockRef.current = false;
       setIsCompletingSet(false);
     }
+  };
+
+  // Dropsets log through the same in-flight lock as a normal set. They used to
+  // call onSetComplete directly, so a double tap sent two writes carrying the
+  // same set number — the second was refused online and silently lost offline.
+  // The lock is a ref: both taps of a double tap run before React re-renders,
+  // so a state flag alone would still read "unlocked" for the second one.
+  const logDropsetSet = (data: {
+    weightKg: number;
+    reps: number;
+    rpe: number;
+    parentSetId: string;
+  }): boolean => {
+    if (setLogLockRef.current || !onSetComplete) return false;
+    setLogLockRef.current = true;
+    void (async () => {
+      try {
+        await onSetComplete({ ...data, setType: 'dropset' });
+      } catch (error) {
+        console.error('Dropset submission failed:', error);
+      } finally {
+        setLogLockRef.current = false;
+      }
+    })();
+    return true;
   };
 
 
@@ -4091,6 +4128,13 @@ export const ExerciseCard = memo(function ExerciseCard({
                     role="status"
                     aria-label="Queued — will sync when online"
                   />
+                ) : setSyncStatus?.[set.id] === 'failed' ? (
+                  <IconAlertTriangle
+                    size={16}
+                    className="text-danger-400 flex-shrink-0"
+                    role="status"
+                    aria-label="Not saved to your account — kept on this phone"
+                  />
                 ) : (
                   <IconCheck size={16} className="text-success-400 flex-shrink-0" aria-hidden="true" />
                 )}
@@ -4105,6 +4149,9 @@ export const ExerciseCard = memo(function ExerciseCard({
                 <span className="ml-auto flex-shrink-0 text-[11px] text-surface-500">
                   {setSyncStatus?.[set.id] === 'queued' && (
                     <span className="text-warning-400 mr-1.5">queued</span>
+                  )}
+                  {setSyncStatus?.[set.id] === 'failed' && (
+                    <span className="text-danger-400 mr-1.5">not synced</span>
                   )}
                   {rirValue} RIR
                   {/* "stimulative" is the expected case — only say otherwise. */}
@@ -4235,15 +4282,12 @@ export const ExerciseCard = memo(function ExerciseCard({
             unit={unit}
             exerciseEquipment={exercise.equipmentRequired}
             onComplete={(data) => {
-              if (onSetComplete) {
-                onSetComplete({
-                  weightKg: data.weightKg,
-                  reps: data.reps,
-                  rpe: data.rpe,
-                  setType: 'dropset',
-                  parentSetId: pendingDropset.parentSetId,
-                });
-              }
+              logDropsetSet({
+                weightKg: data.weightKg,
+                reps: data.reps,
+                rpe: data.rpe,
+                parentSetId: pendingDropset.parentSetId,
+              });
             }}
             onCancel={() => onDropsetCancel?.()}
           />
@@ -4299,14 +4343,13 @@ export const ExerciseCard = memo(function ExerciseCard({
 
                   if (weight > 0 && reps > 0 && onSetComplete) {
                     const weightKg = inputWeightToKg(weight, unit);
-                    onSetComplete({
+                    const started = logDropsetSet({
                       weightKg,
                       reps,
                       rpe,
-                      setType: 'dropset',
                       parentSetId: dropsetMode.parentSetId,
                     });
-                    setDropsetMode(null);
+                    if (started) setDropsetMode(null);
                   }
                 }}
                 aria-label="Log dropset"

@@ -44,6 +44,10 @@ function makeDeps(overrides: Partial<HealthKitSyncDeps> = {}) {
   const deps: HealthKitSyncDeps = {
     isAvailable: async () => true,
     getContext: async () => ({ connected: true, anchors: {} }),
+    needsAuthorization: async () => false,
+    requestAuthorization: async () => true,
+    hasAutoRequested: () => false,
+    markAutoRequested: () => {},
     fetchSleep: async (start, end) => {
       calls.sleepWindows.push({ start, end });
       return [
@@ -195,5 +199,79 @@ describe('runHealthKitSync', () => {
       status: 'skipped',
       reason: 'error',
     });
+  });
+});
+
+describe('per-install authorization (connected account, unasked device)', () => {
+  it('does not touch the permission sheet when this install is already decided', async () => {
+    const requestAuthorization = jest.fn(async () => true);
+    const { deps } = makeDeps({ needsAuthorization: async () => false, requestAuthorization });
+
+    const outcome = await runHealthKitSync({ force: true }, deps);
+
+    expect(outcome.status).toBe('synced');
+    expect(requestAuthorization).not.toHaveBeenCalled();
+  });
+
+  it('asks once on an install that was never asked, then syncs', async () => {
+    const requestAuthorization = jest.fn(async () => true);
+    const markAutoRequested = jest.fn();
+    const { deps, calls } = makeDeps({
+      needsAuthorization: async () => true,
+      hasAutoRequested: () => false,
+      markAutoRequested,
+      requestAuthorization,
+    });
+
+    const outcome = await runHealthKitSync({ force: true }, deps);
+
+    expect(markAutoRequested).toHaveBeenCalledTimes(1);
+    expect(requestAuthorization).toHaveBeenCalledTimes(1);
+    expect(outcome.status).toBe('synced');
+    expect(calls.savedActivity).toHaveLength(1);
+  });
+
+  it('never asks a second time on the same install', async () => {
+    const requestAuthorization = jest.fn(async () => true);
+    const { deps, calls } = makeDeps({
+      needsAuthorization: async () => true,
+      hasAutoRequested: () => true,
+      requestAuthorization,
+    });
+
+    expect(await runHealthKitSync({ force: true }, deps)).toEqual({
+      status: 'skipped',
+      reason: 'needs_authorization',
+    });
+    expect(requestAuthorization).not.toHaveBeenCalled();
+    expect(calls.savedActivity).toHaveLength(0);
+  });
+
+  it('never asks when the account is not connected', async () => {
+    const needsAuthorization = jest.fn(async () => true);
+    const requestAuthorization = jest.fn(async () => true);
+    const { deps } = makeDeps({
+      getContext: async () => ({ connected: false, anchors: {} }),
+      needsAuthorization,
+      requestAuthorization,
+    });
+
+    await runHealthKitSync({ force: true }, deps);
+
+    expect(needsAuthorization).not.toHaveBeenCalled();
+    expect(requestAuthorization).not.toHaveBeenCalled();
+  });
+
+  it('skips without writing when the sheet flow fails', async () => {
+    const { deps, calls } = makeDeps({
+      needsAuthorization: async () => true,
+      requestAuthorization: async () => false,
+    });
+
+    expect(await runHealthKitSync({ force: true }, deps)).toEqual({
+      status: 'skipped',
+      reason: 'needs_authorization',
+    });
+    expect(calls.savedAnchors).toHaveLength(0);
   });
 });

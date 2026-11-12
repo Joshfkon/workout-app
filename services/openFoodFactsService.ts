@@ -4,24 +4,26 @@
 import { lookupBarcode as lookupBarcodeUSDA } from './usdaService';
 
 /**
- * Parse gram weight from a serving size string
- * Examples: "30g" -> 30, "100g" -> 100, "1 cup (240g)" -> 240, "2 oz" -> 56.7
+ * Parse gram weight from a serving size string, or null when the text carries
+ * no weight ("240ml", "1 bar", "1 cup").
+ * Examples: "30g" -> 30, "1 cup (240g)" -> 240, "2 oz" -> 56.7, "1 bar" -> null
  */
-function parseGramsFromServingSize(servingSize: string): number {
+export function parseGramsFromServingSize(servingSize: string): number | null {
   // Try to find grams pattern like "30g" or "(240g)"
-  const gramsMatch = servingSize.match(/(\d+(?:\.\d+)?)\s*g(?:rams?)?/i);
+  const gramsMatch = servingSize.match(/(\d+(?:\.\d+)?)\s*g(?:r|rams?)?\b/i);
   if (gramsMatch) {
-    return parseFloat(gramsMatch[1]);
+    const grams = parseFloat(gramsMatch[1]);
+    if (grams > 0) return grams;
   }
 
-  // Try to find ounces and convert
-  const ozMatch = servingSize.match(/(\d+(?:\.\d+)?)\s*oz/i);
-  if (ozMatch) {
-    return parseFloat(ozMatch[1]) * 28.3495;
+  // Try to find ounces and convert (not fluid ounces — that is a volume)
+  const ozMatch = servingSize.match(/(\d+(?:\.\d+)?)\s*oz\b/i);
+  if (ozMatch && !/fl\.?\s*oz/i.test(servingSize)) {
+    const oz = parseFloat(ozMatch[1]);
+    if (oz > 0) return oz * 28.3495;
   }
 
-  // Default to 100g if can't parse
-  return 100;
+  return null;
 }
 
 export interface OpenFoodFactsProduct {
@@ -83,13 +85,39 @@ export function extractNutritionPerServing(
 
   const fiber = pick('fiber');
 
+  const protein = pick('proteins');
+  const carbs = pick('carbohydrates');
+  const fat = pick('fat');
+
+  // No energy field at all: derive it from the macros (4/4/9) rather than
+  // reporting a 0-kcal food. (hasNutritionData() is the guard for products
+  // with neither energy nor macros.)
+  if (calories === undefined && (protein !== undefined || carbs !== undefined || fat !== undefined)) {
+    calories = (protein ?? 0) * 4 + (carbs ?? 0) * 4 + (fat ?? 0) * 9;
+  }
+
   return {
     calories: Math.round(calories ?? 0),
-    protein: Math.round((pick('proteins') ?? 0) * 10) / 10,
-    carbs: Math.round((pick('carbohydrates') ?? 0) * 10) / 10,
-    fat: Math.round((pick('fat') ?? 0) * 10) / 10,
+    protein: Math.round((protein ?? 0) * 10) / 10,
+    carbs: Math.round((carbs ?? 0) * 10) / 10,
+    fat: Math.round((fat ?? 0) * 10) / 10,
     fiber: fiber !== undefined && fiber > 0 ? Math.round(fiber * 10) / 10 : undefined,
   };
+}
+
+const NUTRITION_BASE_KEYS = ['energy-kcal', 'energy', 'proteins', 'carbohydrates', 'fat'];
+
+/**
+ * True when the product reports energy or at least one macro. A product with
+ * none of them has NO nutrition data — it must not be returned as a "found"
+ * food with 0 kcal / 0 g (an explicit 0, e.g. water, still counts as data).
+ */
+export function hasNutritionData(nutriments: Record<string, number | string | undefined>): boolean {
+  return NUTRITION_BASE_KEYS.some(
+    (key) =>
+      toFiniteNumber(nutriments[`${key}_serving`]) !== undefined ||
+      toFiniteNumber(nutriments[`${key}_100g`]) !== undefined
+  );
 }
 
 /**
@@ -102,8 +130,76 @@ export function resolveServingQuantity(product: {
 }): number {
   const quantity = toFiniteNumber(product.serving_quantity);
   if (quantity !== undefined && quantity > 0) return quantity;
-  if (product.serving_size) return parseGramsFromServingSize(product.serving_size);
+  if (product.serving_size) return parseGramsFromServingSize(product.serving_size) ?? 100;
   return 100;
+}
+
+export interface ResolvedServing {
+  /** Serving text shown to the user; always agrees with the returned macros. */
+  servingSize: string;
+  /** Weight of that serving in grams (ml for liquids). */
+  servingQuantity: number;
+  nutrition: ExtractedNutrition;
+}
+
+/**
+ * Resolve the serving a product is presented with, keeping the serving TEXT
+ * and the macros on the same basis.
+ *
+ * - Serving weight known (numeric `serving_quantity`, or grams/oz in the
+ *   text): the label serving, with per-serving nutrition.
+ * - Serving weight unknown ("1 bar", "1 cup") but the product has `_100g`
+ *   data: presented weight-anchored as "100g". Keeping "1 bar" while scaling
+ *   the per-100 g values by an assumed 100 g would log 100 g as one bar.
+ * - Serving weight unknown and only `_serving` data: the label serving with
+ *   its per-serving values (the weight stays a 100 g placeholder).
+ */
+export function resolveProductServing(product: {
+  serving_quantity?: number | string;
+  serving_size?: string;
+  nutriments?: Record<string, number | string | undefined>;
+}): ResolvedServing {
+  const nutriments = product.nutriments || {};
+  const quantity = toFiniteNumber(product.serving_quantity);
+  const knownGrams =
+    quantity !== undefined && quantity > 0
+      ? quantity
+      : product.serving_size
+        ? parseGramsFromServingSize(product.serving_size)
+        : null;
+
+  if (knownGrams != null) {
+    return {
+      servingSize: product.serving_size || `${knownGrams}g`,
+      servingQuantity: knownGrams,
+      nutrition: extractNutritionPerServing(nutriments, knownGrams),
+    };
+  }
+
+  const per100Only: Record<string, number | string | undefined> = {};
+  let hasPer100 = false;
+  for (const [key, value] of Object.entries(nutriments)) {
+    if (key.endsWith('_100g')) {
+      per100Only[key] = value;
+      if (NUTRITION_BASE_KEYS.some((base) => key === `${base}_100g`) && toFiniteNumber(value) !== undefined) {
+        hasPer100 = true;
+      }
+    }
+  }
+
+  if (hasPer100) {
+    return {
+      servingSize: '100g',
+      servingQuantity: 100,
+      nutrition: extractNutritionPerServing(per100Only, 100),
+    };
+  }
+
+  return {
+    servingSize: product.serving_size || '1 serving',
+    servingQuantity: 100,
+    nutrition: extractNutritionPerServing(nutriments, 100),
+  };
 }
 
 export interface BarcodeSearchResult {
@@ -124,6 +220,30 @@ export interface BarcodeSearchResult {
   error?: string;
 }
 
+/** The USDA fallback: resolves a barcode to a PER-SERVING food. */
+export type UsdaBarcodeLookup = (barcode: string) => Promise<{
+  food?: {
+    name: string;
+    brandName?: string;
+    servingSize: string;
+    servingGrams?: number;
+    calories: number;
+    protein: number;
+    carbs: number;
+    fat: number;
+  };
+  error?: string;
+}>;
+
+export interface BarcodeLookupOptions {
+  /**
+   * Override the USDA fallback. Called from the browser the default runs
+   * without the server-only USDA_API_KEY (i.e. on the shared DEMO_KEY), so
+   * client callers should pass a server action that proxies the lookup.
+   */
+  usdaLookup?: UsdaBarcodeLookup;
+}
+
 // Session cache: product data is static, so repeat scans of the same barcode
 // (or re-opening the scanner) skip the OFF/USDA round trips entirely.
 const barcodeCache = new Map<string, { result: BarcodeSearchResult; expiresAt: number }>();
@@ -136,7 +256,10 @@ const NOT_FOUND_TTL_MS = 30 * 1000;
  * Look up a food product by its barcode
  * Tries Open Food Facts first (better international coverage), then falls back to USDA
  */
-export async function lookupBarcode(barcode: string): Promise<BarcodeSearchResult> {
+export async function lookupBarcode(
+  barcode: string,
+  options: BarcodeLookupOptions = {}
+): Promise<BarcodeSearchResult> {
   // Clean the barcode - remove any non-numeric characters
   const cleanBarcode = barcode.replace(/\D/g, '');
 
@@ -149,7 +272,7 @@ export async function lookupBarcode(barcode: string): Promise<BarcodeSearchResul
     return cached.result;
   }
 
-  const result = await lookupBarcodeUncached(cleanBarcode);
+  const result = await lookupBarcodeUncached(cleanBarcode, options.usdaLookup ?? lookupBarcodeUSDA);
   barcodeCache.set(cleanBarcode, {
     result,
     expiresAt: Date.now() + (result.found ? FOUND_TTL_MS : NOT_FOUND_TTL_MS),
@@ -157,7 +280,10 @@ export async function lookupBarcode(barcode: string): Promise<BarcodeSearchResul
   return result;
 }
 
-async function lookupBarcodeUncached(cleanBarcode: string): Promise<BarcodeSearchResult> {
+async function lookupBarcodeUncached(
+  cleanBarcode: string,
+  usdaLookup: UsdaBarcodeLookup
+): Promise<BarcodeSearchResult> {
 
   let offError: string | undefined;
   let usdaError: string | undefined;
@@ -175,13 +301,16 @@ async function lookupBarcodeUncached(cleanBarcode: string): Promise<BarcodeSearc
 
   // Fall back to USDA if not found in Open Food Facts
   try {
-    const usdaResult = await lookupBarcodeUSDA(cleanBarcode);
+    const usdaResult = await usdaLookup(cleanBarcode);
 
     if (usdaResult.food) {
-      // USDA returns nutrition per 100g, but servingSize may differ
-      // Parse the actual gram weight and scale nutrition accordingly
-      const servingGrams = parseGramsFromServingSize(usdaResult.food.servingSize);
-      const scaleFactor = servingGrams / 100;
+      // The USDA lookup already returns per-serving values on a serving whose
+      // text and weight agree (it falls back to "100g" when the label serving
+      // has no usable weight), and only for a product whose GTIN matches.
+      const servingGrams =
+        usdaResult.food.servingGrams ??
+        parseGramsFromServingSize(usdaResult.food.servingSize) ??
+        100;
 
       return {
         found: true,
@@ -190,11 +319,10 @@ async function lookupBarcodeUncached(cleanBarcode: string): Promise<BarcodeSearc
           brand: usdaResult.food.brandName,
           servingSize: usdaResult.food.servingSize,
           servingQuantity: servingGrams,
-          // Scale nutrition from per-100g to per-serving
-          calories: Math.round(usdaResult.food.calories * scaleFactor),
-          protein: Math.round(usdaResult.food.protein * scaleFactor * 10) / 10,
-          carbs: Math.round(usdaResult.food.carbs * scaleFactor * 10) / 10,
-          fat: Math.round(usdaResult.food.fat * scaleFactor * 10) / 10,
+          calories: usdaResult.food.calories,
+          protein: usdaResult.food.protein,
+          carbs: usdaResult.food.carbs,
+          fat: usdaResult.food.fat,
           barcode: cleanBarcode,
         },
       };
@@ -241,11 +369,15 @@ async function lookupBarcodeOpenFoodFacts(cleanBarcode: string): Promise<Barcode
     const product: OpenFoodFactsProduct = data.product;
     const nutriments = product.nutriments || {};
 
-    const servingQuantity = resolveServingQuantity(product);
-    const { calories, protein, carbs, fat, fiber } = extractNutritionPerServing(
-      nutriments,
-      servingQuantity
-    );
+    // A product page with no nutrition facts is not a usable food: report it
+    // as not found (so the USDA fallback / "create custom food" path runs)
+    // instead of a "found" 0-kcal item.
+    if (!hasNutritionData(nutriments)) {
+      return { found: false, error: 'Product has no nutrition data' };
+    }
+
+    const { servingSize, servingQuantity, nutrition } = resolveProductServing(product);
+    const { calories, protein, carbs, fat, fiber } = nutrition;
 
     // Build product name
     let name = product.product_name || 'Unknown Product';
@@ -258,7 +390,7 @@ async function lookupBarcodeOpenFoodFacts(cleanBarcode: string): Promise<Barcode
       product: {
         name: name.trim(),
         brand: product.brands,
-        servingSize: product.serving_size || `${servingQuantity}g`,
+        servingSize,
         servingQuantity,
         calories,
         protein,
@@ -296,11 +428,9 @@ export async function searchOpenFoodFacts(query: string, limit: number = 10): Pr
 
     for (const product of data.products || []) {
       const nutriments = product.nutriments || {};
-      const servingQuantity = resolveServingQuantity(product);
-      const { calories, protein, carbs, fat } = extractNutritionPerServing(
-        nutriments,
-        servingQuantity
-      );
+      if (!hasNutritionData(nutriments)) continue; // no data ≠ 0 kcal
+      const { servingSize, servingQuantity, nutrition } = resolveProductServing(product);
+      const { calories, protein, carbs, fat } = nutrition;
 
       let name = product.product_name || 'Unknown Product';
       if (product.brands && !name.toLowerCase().includes(product.brands.toLowerCase())) {
@@ -310,7 +440,7 @@ export async function searchOpenFoodFacts(query: string, limit: number = 10): Pr
       products.push({
         name: name.trim(),
         brand: product.brands,
-        servingSize: product.serving_size || `${servingQuantity}g`,
+        servingSize,
         servingQuantity,
         calories,
         protein,

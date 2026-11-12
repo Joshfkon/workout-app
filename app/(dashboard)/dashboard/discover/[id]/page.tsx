@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Avatar } from '@/components/social/profile/Avatar';
 import { SaveWorkoutButton } from '@/components/social/sharing/SaveWorkoutButton';
+import { ContentActionsMenu } from '@/components/social/moderation';
 import { copySharedWorkout } from '@/lib/workout-sharing';
 import { formatDistanceToNow, formatWeight } from '@/lib/utils';
 import { useUserStore } from '@/stores';
@@ -321,7 +322,7 @@ export default function SharedWorkoutDetailPage() {
                 size="md"
               />
             </Link>
-            <div>
+            <div className="flex-1 min-w-0">
               <Link
                 href={`/dashboard/profile/${workout.user_profile.username}`}
                 className="font-medium text-surface-100 hover:text-primary-400"
@@ -332,6 +333,13 @@ export default function SharedWorkoutDetailPage() {
                 @{workout.user_profile.username} &middot; {formatDistanceToNow(workout.created_at)}
               </p>
             </div>
+            <ContentActionsMenu
+              targetType="shared_workout"
+              targetId={workout.id}
+              targetUserId={workout.user_id}
+              targetUsername={workout.user_profile.username}
+              onBlocked={() => router.back()}
+            />
           </div>
 
           {/* Title */}

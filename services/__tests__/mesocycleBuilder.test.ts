@@ -260,6 +260,36 @@ describe('mesocycleBuilder', () => {
   });
 
   describe('buildPeriodizationPlan', () => {
+    it('follows a chosen block length instead of the recovery default', () => {
+      const profile = createProfile();
+      const recoveryFactors = calculateRecoveryFactors(profile);
+      const plan = buildPeriodizationPlan(profile, recoveryFactors, 4);
+      expect(plan.mesocycleWeeks).toBe(4);
+      expect(plan.deloadFrequency).toBe(3);
+      expect(plan.weeklyProgression).toHaveLength(4);
+      expect(plan.weeklyProgression[3].volumeModifier).toBe(0.5); // deload last
+    });
+
+    it.each([3, 4, 5, 6, 7, 8])(
+      'block periodization reaches its peak phase with %i training weeks',
+      (trainingWeeks) => {
+        const profile = createProfile({ experience: 'advanced', trainingAge: 6 });
+        const recoveryFactors = calculateRecoveryFactors(profile);
+        const plan = buildPeriodizationPlan(profile, recoveryFactors, trainingWeeks + 1);
+        expect(plan.model).toBe('block');
+        const training = plan.weeklyProgression.slice(0, trainingWeeks);
+        const phases = training.map((w) => w.focus.split(' ')[0]);
+        expect(phases).toContain('Hypertrophy');
+        expect(phases).toContain('Strength');
+        expect(phases[trainingWeeks - 1]).toBe('Peaking');
+        // Every training week has finite, positive modifiers.
+        for (const w of training) {
+          expect(w.intensityModifier).toBeGreaterThan(0);
+          expect(Number.isFinite(w.intensityModifier)).toBe(true);
+        }
+      }
+    );
+
     it('uses linear periodization for novices', () => {
       const profile = createProfile({ experience: 'novice', trainingAge: 0.5 });
       const recoveryFactors: RecoveryFactors = {
@@ -272,7 +302,9 @@ describe('mesocycleBuilder', () => {
       const plan = buildPeriodizationPlan(profile, recoveryFactors);
 
       expect(plan.model).toBe('linear');
-      expect(plan.deloadStrategy).toBe('reactive');
+      // One rule with deloadEngine.getDeloadStrategy: novices get scheduled
+      // (proactive) deloads; only advanced lifters self-regulate.
+      expect(plan.deloadStrategy).toBe('proactive');
     });
 
     it('uses daily undulating for intermediate bulking', () => {

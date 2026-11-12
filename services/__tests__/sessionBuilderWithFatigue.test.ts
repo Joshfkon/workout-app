@@ -493,6 +493,29 @@ describe('sessionBuilderWithFatigue', () => {
   describe('generateFullMesocycleWithFatigue', () => {
     const profile = createProfile();
 
+    it.each([4, 5, 6, 7, 8])(
+      'generates exactly the chosen %i weeks with the deload last',
+      (totalWeeks) => {
+        const program = generateFullMesocycleWithFatigue(4, profile, 60, undefined, [], 1, totalWeeks);
+        const weeks = program.mesocycleWeeks!;
+        expect(weeks).toHaveLength(totalWeeks);
+        expect(weeks.map((w) => w.weekNumber)).toEqual(
+          Array.from({ length: totalWeeks }, (_, i) => i + 1)
+        );
+        // Only the final week is a deload — the one the create page promises.
+        expect(weeks.filter((w) => w.isDeload).map((w) => w.weekNumber)).toEqual([totalWeeks]);
+        expect(weeks[totalWeeks - 1].volumeModifier).toBe(0.5);
+        expect(program.periodization.mesocycleWeeks).toBe(totalWeeks);
+      }
+    );
+
+    it('falls back to the recovery-derived length when no length is chosen', () => {
+      const program = generateFullMesocycleWithFatigue(4, profile, 60);
+      expect(program.mesocycleWeeks).toHaveLength(
+        program.recoveryProfile.deloadFrequencyWeeks + 1
+      );
+    });
+
     it('generates a complete mesocycle', () => {
       const program = generateFullMesocycleWithFatigue(4, profile, 60);
 

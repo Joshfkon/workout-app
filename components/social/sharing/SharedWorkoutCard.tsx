@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { Card } from '@/components/ui/Card';
 import { Avatar } from '@/components/social/profile/Avatar';
 import { SaveWorkoutButton } from './SaveWorkoutButton';
+import { ContentActionsMenu } from '@/components/social/moderation';
+import { useBlockedUsers } from '@/hooks/useBlockedUsers';
 import { formatDistanceToNow } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 import type { SharedWorkoutWithProfile, Difficulty } from '@/types/social';
@@ -31,6 +33,11 @@ export function SharedWorkoutCard({
   showFullDetails = false,
 }: SharedWorkoutCardProps) {
   const [isExpanded, setIsExpanded] = useState(showFullDetails);
+  const { isBlocked } = useBlockedUsers();
+
+  // Workouts shared by someone the viewer has blocked are hidden everywhere
+  // this card is used (discover, profile, saved lists).
+  if (isBlocked(workout.user_id)) return null;
 
   const exerciseCount = workout.workout_data?.exercises?.length || 0;
   const totalSets = workout.workout_data?.total_sets || 0;
@@ -75,6 +82,12 @@ export function SharedWorkoutCard({
             <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-surface-800 text-surface-400 capitalize">
               {workout.share_type.replace('_', ' ')}
             </span>
+            <ContentActionsMenu
+              targetType="shared_workout"
+              targetId={workout.id}
+              targetUserId={workout.user_id}
+              targetUsername={workout.user_profile.username}
+            />
           </div>
         </div>
 

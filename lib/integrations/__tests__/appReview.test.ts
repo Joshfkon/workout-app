@@ -406,7 +406,7 @@ describe('appReview', () => {
 
     it('handles missing version info gracefully', async () => {
       mockIsNativePlatform.mockReturnValue(true);
-      mockGetInfo.mockResolvedValue(null);
+      mockGetInfo.mockResolvedValue(null as never);
       jest.useFakeTimers();
 
       // Should still work, just with empty version

@@ -19,8 +19,11 @@ import {
   listOutbox,
   outboxCount,
   removeQueuedSet,
+  unparkOutboxEntries,
   updateQueuedSet,
+  type OutboxEntry,
 } from '@/lib/offline/setOutbox';
+import { mergeOutboxIntoSets, setIdForOutboxEntry } from './_lib/outboxMerge';
 // setLogTiming: TEMPORARY latency instrumentation (docs/SET_LOGGING_LATENCY_DIAGNOSIS.md)
 import { beginSetTiming, markSetPhase, schedulePaintMark, endSetTiming } from '@/lib/debug/setLogTiming';
 import type { SetSyncStatus } from '@/components/workout/ExerciseCard';
@@ -465,31 +468,59 @@ export default function WorkoutPage() {
   const [setSync, setSetSync] = useState<Record<string, SetSyncStatus>>({});
   const [isOnline, setIsOnline] = useState(true);
   const [outboxSize, setOutboxSize] = useState(0);
+  // Queued set writes the SERVER refused and the outbox has parked: still on
+  // this phone, not on the server, and not going to get there by waiting.
+  const [failedSyncCount, setFailedSyncCount] = useState(0);
+
+  // Banner copy says "N sets queued" — count queued set INSERTS only, not
+  // queued finish/feedback entries left over from a previously finished
+  // offline workout, nor queued edits/deletes of sets that are already synced.
+  const applyOutboxCounts = useCallback((entries: OutboxEntry[]) => {
+    const setEntries = entries.filter((e) => e.table === 'set_logs');
+    setOutboxSize(
+      setEntries.filter((e) => (e.op ?? 'insert') === 'insert' && !e.parked).length
+    );
+    setFailedSyncCount(setEntries.filter((e) => e.parked).length);
+  }, []);
 
   const refreshOutboxCount = useCallback(() => {
-    // Banner copy says "N sets queued" — don't count queued finish/feedback
-    // entries left over from a previously finished offline workout.
-    void outboxCount('set_logs').then(setOutboxSize).catch(() => {});
-  }, []);
+    void listOutbox().then(applyOutboxCounts).catch(() => {});
+  }, [applyOutboxCounts]);
 
   // Derive per-set statuses from the outbox itself. This is the source of
   // truth no matter WHICH listener's flush drained the queue (the dashboard
-  // layout also flushes on 'online'): id in outbox -> queued; a set we marked
-  // queued that left the outbox -> saved. 'saving' entries with an in-flight
-  // insert are left for that insert's continuation to settle.
+  // layout also flushes on 'online'): a set with a write waiting in the
+  // outbox -> queued; one whose write the server refused (parked) -> failed;
+  // a set we marked queued/failed that left the outbox -> saved. That last
+  // step is honest because the flush never throws a set_logs entry away: an
+  // entry leaves the queue only by being written (or by the user deleting the
+  // set). 'saving' entries with an in-flight insert are left for that
+  // insert's continuation to settle — with write-ahead they ARE in the outbox
+  // while the insert is on the wire, and must not flash "queued".
   const reconcileSetSync = useCallback(async () => {
     try {
       const entries = await listOutbox();
-      const queuedIds = new Set(entries.map(e => e.id));
-      setOutboxSize(entries.filter(e => e.table === 'set_logs').length);
+      applyOutboxCounts(entries);
+      const pending = new Map<string, SetSyncStatus>();
+      for (const entry of entries) {
+        if (entry.op === 'delete') continue;
+        const setId = setIdForOutboxEntry(entry);
+        if (!setId) continue;
+        if (entry.parked) pending.set(setId, 'failed');
+        else if (!pending.has(setId)) pending.set(setId, 'queued');
+      }
       setSetSync(prev => {
         let changed = false;
         const next = { ...prev };
-        for (const [id, status] of Object.entries(prev)) {
-          if (queuedIds.has(id) && status !== 'queued') {
-            next[id] = 'queued';
+        for (const [id, status] of Array.from(pending.entries())) {
+          if (prev[id] === 'saving') continue;
+          if (prev[id] !== status) {
+            next[id] = status;
             changed = true;
-          } else if (!queuedIds.has(id) && status === 'queued') {
+          }
+        }
+        for (const [id, status] of Object.entries(prev)) {
+          if (!pending.has(id) && (status === 'queued' || status === 'failed')) {
             next[id] = 'saved';
             changed = true;
           }
@@ -499,7 +530,7 @@ export default function WorkoutPage() {
     } catch {
       // Outbox unavailable — leave statuses as they are.
     }
-  }, []);
+  }, [applyOutboxCounts]);
 
   // A queued target-sets patch the server REJECTED (RLS/constraint — the
   // write reached the database and was refused, not a connectivity blip)
@@ -551,12 +582,18 @@ export default function WorkoutPage() {
         void reconcileRejectedTargetSets(result.rejectedIds);
       });
     };
+    // Parked writes (refused by the server) are not retried by the poll, but
+    // a fresh page load or a reconnect is a reason to ask again — the refusal
+    // may have been a signed-out session or a migration that has since landed.
+    const flushIncludingParked = () => {
+      void unparkOutboxEntries().catch(() => 0).then(flush);
+    };
 
-    const handleOnline = () => { setIsOnline(true); flush(); };
+    const handleOnline = () => { setIsOnline(true); flushIncludingParked(); };
     const handleOffline = () => { setIsOnline(false); void reconcileSetSync(); };
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
-    if (typeof navigator === 'undefined' || navigator.onLine) flush();
+    if (typeof navigator === 'undefined' || navigator.onLine) flushIncludingParked();
 
     const poll = setInterval(() => {
       void reconcileSetSync();
@@ -572,6 +609,18 @@ export default function WorkoutPage() {
     };
   }, [refreshOutboxCount, reconcileSetSync, reconcileRejectedTargetSets]);
 
+  /** "Retry" on the could-not-sync banner: put refused writes back in line. */
+  const retryFailedSync = useCallback(() => {
+    void unparkOutboxEntries()
+      .catch(() => 0)
+      .then(() => flushSetOutbox(createUntypedClient()))
+      .then((result) => {
+        void reconcileSetSync();
+        void reconcileRejectedTargetSets(result.rejectedIds);
+      })
+      .catch(() => {});
+  }, [reconcileSetSync, reconcileRejectedTargetSets]);
+
   // Delete confirmation modal state for header row delete button
   const [deleteConfirmBlock, setDeleteConfirmBlock] = useState<{ id: string; name: string } | null>(null);
 
@@ -582,6 +631,15 @@ export default function WorkoutPage() {
   const [blocks, setBlocks] = useState<ExerciseBlockWithExercise[]>([]);
   const [currentBlockIndex, setCurrentBlockIndex] = useState(0);
   const [completedSets, setCompletedSets] = useState<SetLog[]>([]);
+  // The sets as of the latest render — and, between a handler's state update
+  // and the render that applies it, as of that update (handlers that change
+  // the list write it here too). Anything that must be computed NOW from the
+  // current sets and then handed to an async write reads this: a value
+  // captured inside a `setCompletedSets` updater is not available until React
+  // runs the updater, which on this page (re-rendered every second by the
+  // workout/rest timers) is normally the NEXT render, not the current line.
+  const completedSetsRef = useRef<SetLog[]>(completedSets);
+  completedSetsRef.current = completedSets;
   const [currentSetNumber, setCurrentSetNumber] = useState(1);
   // An in-flight delete's renumbering UPDATEs, if any. A set logged while they
   // are still on the wire would probe max(set_number) and see the PRE-compaction
@@ -1506,17 +1564,41 @@ export default function WorkoutPage() {
         // headless driver reads a session back exactly the way the UI does
         // (same rows, same ordering, same mapping). What stays here is the
         // routing/auto-discard choreography and the React state it drives.
+        //
+        // Writes still waiting in the offline outbox (sets logged with no
+        // signal, then the app was killed) are not in the database yet. Give
+        // them a moment to flush so the read below sees them, then overlay
+        // whatever is STILL queued onto what was read — otherwise the
+        // reopened workout shows "Set 1" for a block with three sets on this
+        // phone, the user re-logs them, and the flush makes duplicates. The
+        // snapshot is taken before the read so a set that flushes while the
+        // read is in flight is covered by one side or the other.
+        if (typeof navigator === 'undefined' || navigator.onLine) {
+          await Promise.race([
+            flushSetOutbox(supabase).catch(() => null),
+            new Promise((resolve) => setTimeout(resolve, 4000)),
+          ]);
+        }
+        const queuedAtLoad = await listOutbox().catch(() => [] as OutboxEntry[]);
+
         const loaded = await loadWorkoutSession(supabase, sessionId);
         if (!loaded) throw new Error('Workout session not found');
 
         const {
           session: transformedSession,
           blocks: transformedBlocks,
-          sets: transformedSets,
+          sets: loadedSets,
           skippedBlockIds: skippedIds,
           locationId: loadedLocationId,
           raw: sessionData,
         } = loaded;
+
+        const outboxMerge = mergeOutboxIntoSets(
+          loadedSets,
+          queuedAtLoad,
+          new Set(transformedBlocks.map((b) => b.id))
+        );
+        const transformedSets = outboxMerge.sets;
 
         // The location this session was started at — stamped on new sets and
         // used to scope local-scope exercise history for calibration. `null`
@@ -1571,7 +1653,16 @@ export default function WorkoutPage() {
         setSkippedBlockIds(skippedIds);
 
         if (transformedSets.length > 0) {
+          completedSetsRef.current = transformedSets;
           setCompletedSets(transformedSets);
+        }
+        if (outboxMerge.queuedIds.length > 0 || outboxMerge.failedIds.length > 0) {
+          setSetSync((prev) => {
+            const next = { ...prev };
+            for (const id of outboxMerge.queuedIds) next[id] = 'queued';
+            for (const id of outboxMerge.failedIds) next[id] = 'failed';
+            return next;
+          });
         }
 
         // Where a resumed session picks up (pure; skipped blocks are never the
@@ -3357,6 +3448,7 @@ export default function WorkoutPage() {
           onPhase: markSetPhase,
           applyOptimistic: (set) => {
             nextSetNumber = set.setNumber;
+            completedSetsRef.current = [...completedSetsRef.current, set];
             setCompletedSets((prevSets) => [...prevSets, set]);
             setCurrentSetNumber(set.setNumber + 1);
             logSetToStore(currentBlock.id, set);
@@ -3364,6 +3456,7 @@ export default function WorkoutPage() {
             schedulePaintMark();
           },
           rollbackOptimistic: (set) => {
+            completedSetsRef.current = completedSetsRef.current.filter((s) => s.id !== set.id);
             setCompletedSets((prevSets) => prevSets.filter((s) => s.id !== set.id));
             setCurrentSetNumber(set.setNumber);
             deleteSetFromStore(currentBlock.id, set.id);
@@ -3384,7 +3477,7 @@ export default function WorkoutPage() {
           // Set 3"). The number that reaches the DATABASE is derived from what
           // is actually logged, which is dense by construction (B1's
           // compaction) and therefore self-correcting.
-          localNextSetNumber: nextSetNumberForBlock(completedSets, currentBlock.id),
+          localNextSetNumber: nextSetNumberForBlock(completedSetsRef.current, currentBlock.id),
           weightKg: data.weightKg,
           reps: data.reps,
           rpe: data.rpe,
@@ -3766,30 +3859,37 @@ export default function WorkoutPage() {
     // an inline ternary here previously collapsed RIR 3 to RPE 10)
     const rpe = rirToRpe(feedback.repsInTank);
 
-    // Queued-but-unsynced set (P0-2): patch the outbox row instead of the DB.
-    const patchedQueued = await updateQueuedSet(setId, {
-      feedback: JSON.stringify(feedback),
-      quality,
-      quality_reason: qualityReason,
-      rpe,
-    });
-
-    if (!patchedQueued) {
-      // Update database
-      const { error } = await supabase
-        .from('set_logs')
-        .update({
-          feedback: JSON.stringify(feedback),
-          quality,
-          quality_reason: qualityReason,
-          rpe,
-        })
-        .eq('id', setId);
-
+    // Same write path as an edit (lib/training/logSet): a set still in the
+    // outbox is patched there, and a write that cannot be delivered right now
+    // is queued instead of lost. Only a real server refusal is an error — and
+    // it is SAID, not just logged: a silently dropped RIR/form change looks
+    // exactly like a saved one.
+    let patchedQueued = false;
+    try {
+      const { queued, error } = await persistSetEdit(
+        { supabase },
+        {
+          setId,
+          patch: {
+            feedback: JSON.stringify(feedback),
+            quality,
+            quality_reason: qualityReason,
+            rpe,
+          },
+          stampEdited: false,
+        }
+      );
       if (error) {
         console.error('Failed to update set feedback:', error);
+        showError('Could not save that change to the set — please try again');
         return;
       }
+      patchedQueued = queued;
+      if (queued) void reconcileSetSync();
+    } catch (err) {
+      console.error('Failed to update set feedback:', err);
+      showError('Could not save that change to the set — please try again');
+      return;
     }
 
     // Update local state
@@ -3882,15 +3982,18 @@ export default function WorkoutPage() {
     }
 
     try {
-      const { error: updateError } = await persistSetEdit(
+      // An edit that cannot be delivered right now (offline, timeout, 5xx) is
+      // queued by persistSetEdit, so local state and the server converge when
+      // connectivity returns. `updateError` is only ever a real refusal.
+      const { queued, error: updateError } = await persistSetEdit(
         { supabase: createUntypedClient() },
         { setId, patch }
       );
+      if (queued) void reconcileSetSync();
       if (updateError) {
         console.error('Failed to update set:', updateError);
         setError(`Failed to update set: ${updateError.message}`);
-        // Revert local state on error - refetch from database
-        // For now, just show error; user can refresh if needed
+        showError('Could not save the edit — the set on the server is unchanged');
       } else {
         setError(null);
       }
@@ -3902,21 +4005,23 @@ export default function WorkoutPage() {
 
   const handleDeleteSet = async (setId: string) => {
     // Find the set before deleting to get the blockId for store sync
-    const setToDelete = completedSets.find(s => s.id === setId);
+    const setToDelete = completedSetsRef.current.find(s => s.id === setId);
 
-    // Remove from local state using functional update to avoid stale closure.
-    // The renumbering PLAN is captured here too: the same compaction has to be
-    // written to the database (B1), and deriving it from a second read of
-    // `completedSets` would risk disagreeing with what local state actually
-    // became. Computing the plan is pure, so a StrictMode double-invoke of
-    // this updater yields the same answer.
-    let renumberChanges: SetNumberChange[] = [];
-    setCompletedSets(prevSets => {
-      const plan = planSetDeletion(prevSets, setId);
-      if (!plan) return prevSets;
-      renumberChanges = plan.changes;
-      return plan.sets;
-    });
+    // The renumbering PLAN has to exist NOW, because persistSetDeletion below
+    // is handed its `changes` synchronously: the same compaction local state
+    // applies must be written to the database (B1). It used to be captured
+    // inside the `setCompletedSets` updater — but React only runs an updater
+    // eagerly when the component has no other pending work, and this page
+    // re-renders every second (workout + rest timers), so the updater usually
+    // ran at the NEXT render, after `changes` had already been read as []. The
+    // database kept its gap (1,3) while the screen showed 1,2. So the plan is
+    // computed here from the current sets, outside the updater. The updater
+    // re-plans from `prevSets` (pure, same answer) so a state update queued
+    // just before this one is still respected.
+    const deletionPlan = planSetDeletion(completedSetsRef.current, setId);
+    const renumberChanges: SetNumberChange[] = deletionPlan?.changes ?? [];
+    if (deletionPlan) completedSetsRef.current = deletionPlan.sets;
+    setCompletedSets(prevSets => planSetDeletion(prevSets, setId)?.sets ?? prevSets);
 
     // Sync to store for resume functionality
     if (setToDelete) {
@@ -3936,7 +4041,7 @@ export default function WorkoutPage() {
     if (setToDelete && setToDelete.exerciseBlockId === currentBlock?.id) {
       setCurrentSetNumber(
         nextSetNumberForBlock(
-          completedSets.filter(s => s.id !== setId),
+          deletionPlan?.sets ?? completedSets.filter(s => s.id !== setId),
           setToDelete.exerciseBlockId
         )
       );
@@ -3952,7 +4057,7 @@ export default function WorkoutPage() {
           { supabase: createUntypedClient() },
           { setId, changes: renumberChanges }
         );
-        if (queued) refreshOutboxCount();
+        if (queued) void reconcileSetSync();
         if (deleteError) {
           console.error('Failed to delete set:', deleteError);
           setError(`Failed to delete set: ${deleteError.message}`);
@@ -4658,7 +4763,22 @@ export default function WorkoutPage() {
 
   const handleExerciseSwap = async (blockId: string, newExercise: Exercise) => {
     // Capture original exercise info before swap for override tracking
-    const originalBlock = blocks.find(b => b.id === blockId);
+    const originalBlock = blocksRef.current.find(b => b.id === blockId);
+    // Sets already logged against this block were performed on the ORIGINAL
+    // exercise. Re-pointing the block at the replacement would re-file them
+    // (history, e1RM, PRs) under an exercise the lifter never did them on.
+    const loggedSets = completedSetsRef.current.filter(s => s.exerciseBlockId === blockId);
+
+    // Put the block back on its original exercise (in-place path only — the
+    // new-block path changes local state only after its insert succeeded).
+    const rollbackInPlace = () => {
+      if (!originalBlock) return;
+      setBlocks(prevBlocks => prevBlocks.map(block =>
+        block.id === blockId
+          ? { ...block, exerciseId: originalBlock.exerciseId, exercise: originalBlock.exercise }
+          : block
+      ));
+    };
 
     try {
       const supabase = createUntypedClient();
@@ -4669,38 +4789,142 @@ export default function WorkoutPage() {
         .select('*')
         .eq('id', newExercise.id)
         .single();
-      
+
       if (fetchError || !fullExerciseData) {
         console.error('Failed to fetch exercise data:', fetchError);
-        // Fall back to the passed exercise data
-        setBlocks(prevBlocks => prevBlocks.map(block => 
-          block.id === blockId 
-            ? { ...block, exerciseId: newExercise.id, exercise: newExercise }
-            : block
-        ));
-      } else {
-        // Create complete exercise object with all fields — the same mapping
-        // the session load uses, so bodyweight metadata survives the swap.
-        const completeExercise = mapLoadedExerciseRow(fullExerciseData as LoadedExerciseRow);
+      }
+      // Create complete exercise object with all fields — the same mapping
+      // the session load uses, so bodyweight metadata survives the swap. Falls
+      // back to the passed exercise data when the fetch failed.
+      const replacement: Exercise =
+        fetchError || !fullExerciseData
+          ? newExercise
+          : mapLoadedExerciseRow(fullExerciseData as LoadedExerciseRow);
 
-        // Update local state with complete exercise data
+      let swapped = false;
+
+      if (originalBlock && loggedSets.length > 0) {
+        // The block has history: leave it (and its sets) on the original
+        // exercise and give the replacement a block of its own for the sets
+        // still owed.
+        const loggedWorking = loggedSets.filter(
+          (s) => !s.isWarmup && s.setType !== 'warmup'
+        ).length;
+        const remainingSets = Math.min(10, Math.max(1, originalBlock.targetSets - loggedWorking));
+
+        // Get max order from database to avoid duplicate key error
+        const { data: maxOrderResult } = await supabase
+          .from('exercise_blocks')
+          .select('order')
+          .eq('workout_session_id', sessionId)
+          .order('order', { ascending: false })
+          .limit(1)
+          .single();
+
+        const { data: newBlockRow, error: blockError } = await supabase
+          .from('exercise_blocks')
+          .insert({
+            workout_session_id: sessionId,
+            exercise_id: newExercise.id,
+            order: (maxOrderResult?.order || 0) + 1,
+            target_sets: remainingSets,
+            target_rep_range: originalBlock.targetRepRange,
+            target_rir: originalBlock.targetRir,
+            target_weight_kg: originalBlock.targetWeightKg,
+            target_rest_seconds: originalBlock.targetRestSeconds,
+            suggestion_reason: `Swapped from ${originalBlock.exercise.name}`,
+            // The muscle is already warm from the sets logged on the original.
+            warmup_protocol: { sets: [] },
+          })
+          .select()
+          .single();
+
+        if (blockError || !newBlockRow) {
+          // Nothing changed locally, so there is nothing to roll back.
+          console.error('Failed to swap exercise:', blockError);
+          setError(`Failed to swap exercise: ${blockError?.message ?? 'no block returned'}`);
+          showError('Could not swap the exercise — please try again');
+          return;
+        }
+
+        const newBlock: ExerciseBlockWithExercise = {
+          id: newBlockRow.id,
+          workoutSessionId: newBlockRow.workout_session_id,
+          exerciseId: newBlockRow.exercise_id,
+          order: newBlockRow.order,
+          supersetGroupId: null,
+          supersetOrder: null,
+          targetSets: newBlockRow.target_sets,
+          targetRepRange: newBlockRow.target_rep_range,
+          targetRir: newBlockRow.target_rir,
+          targetWeightKg: originalBlock.targetWeightKg,
+          targetRestSeconds: newBlockRow.target_rest_seconds,
+          progressionType: null,
+          suggestionReason: newBlockRow.suggestion_reason,
+          warmupProtocol: [],
+          note: null,
+          dropsetsPerSet: newBlockRow.dropsets_per_set ?? 0,
+          dropPercentage: newBlockRow.drop_percentage ?? 0.25,
+          exercise: replacement,
+        };
+
+        // The original block is done at the sets actually logged on it, so it
+        // reads complete instead of forever owing sets that moved to the
+        // replacement. (With only warmups logged there is no valid smaller
+        // target — the DB range is 1..10 — so it is left as planned.)
+        const originalTarget =
+          loggedWorking > 0 && loggedWorking < originalBlock.targetSets
+            ? loggedWorking
+            : originalBlock.targetSets;
+        if (originalTarget !== originalBlock.targetSets) {
+          const { error: shrinkError } = await supabase
+            .from('exercise_blocks')
+            .update({ target_sets: originalTarget })
+            .eq('id', blockId);
+          if (shrinkError) console.error('Failed to close out swapped block:', shrinkError);
+        }
+
+        // Replacement sits directly after the exercise it replaces.
+        const withNewBlock = (list: ExerciseBlockWithExercise[]) => {
+          const at = list.findIndex(b => b.id === blockId);
+          const next = list.map(b => (b.id === blockId ? { ...b, targetSets: originalTarget } : b));
+          next.splice(at === -1 ? next.length : at + 1, 0, newBlock);
+          return next;
+        };
+        const reordered = withNewBlock(blocksRef.current);
+        setBlocks(withNewBlock);
+        setCurrentBlockIndex(reordered.findIndex(b => b.id === newBlock.id));
+        setCurrentSetNumber(1);
+        setPendingDropset(prev => (prev?.blockId === blockId ? null : prev));
+        void persistBlockOrder(reordered);
+        swapped = true;
+      } else {
+        // No sets logged: re-point the block in place (optimistic, rolled
+        // back if the write does not land — otherwise later sets would be
+        // shown under the new exercise but stored under the old one).
         setBlocks(prevBlocks => prevBlocks.map(block =>
           block.id === blockId
-            ? { ...block, exerciseId: completeExercise.id!, exercise: completeExercise }
+            ? { ...block, exerciseId: replacement.id!, exercise: replacement }
             : block
         ));
+
+        // Update in database
+        const { error: updateError } = await supabase
+          .from('exercise_blocks')
+          .update({ exercise_id: newExercise.id })
+          .eq('id', blockId);
+
+        if (updateError) {
+          console.error('Failed to swap exercise:', updateError);
+          rollbackInPlace();
+          setError(`Failed to swap exercise: ${updateError.message}`);
+          showError('Could not swap the exercise — please try again');
+        } else {
+          swapped = true;
+        }
       }
 
-      // Update in database
-      const { error: updateError } = await supabase
-        .from('exercise_blocks')
-        .update({ exercise_id: newExercise.id })
-        .eq('id', blockId);
-
-      if (updateError) {
-        console.error('Failed to swap exercise:', updateError);
-        setError(`Failed to swap exercise: ${updateError.message}`);
-      } else {
+      if (swapped) {
         setError(null);
 
         // Save exercise override to mesocycle for future sessions
@@ -4735,7 +4959,9 @@ export default function WorkoutPage() {
       }
     } catch (err) {
       console.error('Failed to swap exercise:', err);
+      if (loggedSets.length === 0) rollbackInPlace();
       setError(err instanceof Error ? err.message : 'Failed to swap exercise');
+      showError('Could not swap the exercise — please try again');
     }
   };
 
@@ -4773,21 +4999,53 @@ export default function WorkoutPage() {
         return;
       }
 
-      // Update local state - remove the block and update set logs
-      setBlocks(prevBlocks => {
-        const deletedIndex = prevBlocks.findIndex(b => b.id === blockId);
-        const newBlocks = prevBlocks.filter(b => b.id !== blockId);
-        // Keep the current block pointing at the same exercise: deleting an
-        // earlier block (e.g. a swiped-away up-next row after a reorder)
-        // shifts everything after it down by one.
-        if (deletedIndex !== -1 && deletedIndex < currentBlockIndex) {
-          setCurrentBlockIndex(currentBlockIndex - 1);
-        } else if (currentBlockIndex >= newBlocks.length) {
-          setCurrentBlockIndex(Math.max(0, newBlocks.length - 1));
+      // The block's sets go with it — everywhere they live, not just in
+      // React state. A set still waiting in the outbox would otherwise flush
+      // against a block that no longer exists (and be refused), and the
+      // persisted store's copy keeps the resume pill counting sets that are
+      // gone.
+      const removedSets = completedSetsRef.current.filter(s => s.exerciseBlockId === blockId);
+      for (const removed of removedSets) {
+        deleteSetFromStore(blockId, removed.id);
+      }
+      try {
+        const queuedEntries = await listOutbox();
+        for (const entry of queuedEntries) {
+          if (entry.table !== 'set_logs') continue;
+          const belongsToBlock =
+            entry.row?.exercise_block_id === blockId ||
+            removedSets.some(s => s.id === setIdForOutboxEntry(entry));
+          if (belongsToBlock) await removeQueuedSet(entry.id);
         }
-        return newBlocks;
+      } catch {
+        // Outbox unavailable — nothing queued to clean up.
+      }
+      setSetSync(prev => {
+        if (!removedSets.some(s => s.id in prev)) return prev;
+        const next = { ...prev };
+        for (const removed of removedSets) delete next[removed.id];
+        return next;
+      });
+      refreshOutboxCount();
+
+      // Update local state - remove the block and update set logs. The index
+      // fix-up is computed from the blocks as they are NOW (blocksRef) and
+      // applied through a functional update, not from the `currentBlockIndex`
+      // this handler closed over before its awaits — and not from inside the
+      // setBlocks updater, where a state setter does not belong.
+      const deletedIndex = blocksRef.current.findIndex(b => b.id === blockId);
+      const remainingCount = blocksRef.current.filter(b => b.id !== blockId).length;
+      setBlocks(prevBlocks => prevBlocks.filter(b => b.id !== blockId));
+      // Keep the current block pointing at the same exercise: deleting an
+      // earlier block (e.g. a swiped-away up-next row after a reorder)
+      // shifts everything after it down by one.
+      setCurrentBlockIndex(prevIndex => {
+        if (deletedIndex !== -1 && deletedIndex < prevIndex) return prevIndex - 1;
+        if (prevIndex >= remainingCount) return Math.max(0, remainingCount - 1);
+        return prevIndex;
       });
 
+      completedSetsRef.current = completedSetsRef.current.filter(s => s.exerciseBlockId !== blockId);
       setCompletedSets(prevSets => prevSets.filter(s => s.exerciseBlockId !== blockId));
       setError(null);
       showSuccess(`${exerciseName} removed from workout`);
@@ -4815,11 +5073,14 @@ export default function WorkoutPage() {
       
       if (areSupersetted) {
         // Remove superset - clear both blocks' superset fields
-        await supabase
+        const { error: unlinkError } = await supabase
           .from('exercise_blocks')
           .update({ superset_group_id: null, superset_order: null })
           .in('id', [block1.id, block2.id]);
-        
+        // Local state follows the database, not the tap: showing a change
+        // the server does not have means it silently reverts on reload.
+        if (unlinkError) throw unlinkError;
+
         // Update local state
         setBlocks(prevBlocks => prevBlocks.map(b => 
           b.id === block1.id || b.id === block2.id
@@ -4830,16 +5091,26 @@ export default function WorkoutPage() {
         // Create superset - generate a new group ID
         const newGroupId = crypto.randomUUID();
         
-        await supabase
+        const { error: firstError } = await supabase
           .from('exercise_blocks')
           .update({ superset_group_id: newGroupId, superset_order: 1 })
           .eq('id', block1.id);
-        
-        await supabase
+        if (firstError) throw firstError;
+
+        const { error: secondError } = await supabase
           .from('exercise_blocks')
           .update({ superset_group_id: newGroupId, superset_order: 2 })
           .eq('id', block2.id);
-        
+        if (secondError) {
+          // Half a superset is worse than none: undo the first half
+          // (best-effort) so the pair is not left one-sided in the database.
+          await supabase
+            .from('exercise_blocks')
+            .update({ superset_group_id: null, superset_order: null })
+            .eq('id', block1.id);
+          throw secondError;
+        }
+
         // Update local state
         setBlocks(prevBlocks => prevBlocks.map(b => {
           if (b.id === block1.id) return { ...b, supersetGroupId: newGroupId, supersetOrder: 1 };
@@ -4850,6 +5121,11 @@ export default function WorkoutPage() {
     } catch (err) {
       console.error('Failed to toggle superset:', err);
       setError('Failed to toggle superset');
+      showError(
+        areSupersetted
+          ? 'Could not unlink the superset — please try again'
+          : 'Could not create the superset — please try again'
+      );
     }
   };
 
@@ -6794,6 +7070,31 @@ export default function WorkoutPage() {
             You&rsquo;re offline — sets are saved on this phone and will sync automatically.
             {outboxSize > 0 && ` ${outboxSize} set${outboxSize !== 1 ? 's' : ''} queued.`}
           </span>
+        </div>
+      )}
+
+      {/* Could-not-sync banner: writes the server REFUSED. They are still on
+          this phone (never dropped), but waiting will not deliver them — say
+          so instead of showing them as saved. */}
+      {failedSyncCount > 0 && (
+        <div
+          className="flex items-center gap-2.5 rounded-xl border border-danger-500/45 bg-danger-500/10 px-4 py-2.5 text-[13px] text-danger-400"
+          role="alert"
+          data-testid="sync-failed-banner"
+        >
+          <span aria-hidden="true">⚠</span>
+          <span className="flex-1">
+            {failedSyncCount} set change{failedSyncCount !== 1 ? 's' : ''} couldn&rsquo;t be saved to
+            your account. {failedSyncCount !== 1 ? 'They are' : 'It is'} kept on this phone — edit
+            the marked set or retry.
+          </span>
+          <button
+            type="button"
+            onClick={retryFailedSync}
+            className="flex-shrink-0 rounded-lg border border-danger-500/45 px-2.5 py-1 font-medium"
+          >
+            Retry
+          </button>
         </div>
       )}
 

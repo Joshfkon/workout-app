@@ -1,7 +1,16 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
-import { getLocalDateString } from '@/lib/utils';
+import { now as clockNow } from '@/lib/clock';
+import { addLocalDays } from '@/lib/date/localDay';
+import { resolveLocalDate } from '@/lib/nutrition/localDate';
+import {
+  resolveFormulaProfile,
+  type FormulaProfile,
+  type MacroSettingsProfileRow,
+  type UserProfileRow,
+} from '@/lib/nutrition/formulaProfile';
+import { decideAdaptiveSync } from '@/lib/nutrition/adaptiveSyncPolicy';
 import {
   calculateAdaptiveTDEE,
   getFormulaTDEE,
@@ -55,12 +64,51 @@ export interface TDEEData {
   };
 }
 
+type MacroSettingsRow = MacroSettingsProfileRow & {
+  goal?: string | null;
+  peptide?: string | null;
+  target_weight_change_per_week?: number | null;
+  auto_update_enabled?: boolean | null;
+};
+
 /**
- * Get the user's adaptive TDEE estimate along with predictions
+ * Load the stats behind the formula TDEE from where they actually live:
+ * `macro_settings` (macro calculator inputs) and the `users` profile row.
+ * (`user_preferences` — read here historically — is not a real table.)
+ */
+async function loadFormulaProfile(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  todayStr: string
+): Promise<{ profile: FormulaProfile; macroSettings: MacroSettingsRow | null }> {
+  const [{ data: macroSettings }, { data: userRow }] = await Promise.all([
+    supabase.from('macro_settings').select('*').eq('user_id', userId).maybeSingle() as unknown as Promise<{
+      data: MacroSettingsRow | null;
+    }>,
+    // select('*'): `age` / `birth_date` / `weight_kg` are not all present in
+    // every environment, and naming a missing column fails the whole query.
+    supabase.from('users').select('*').eq('id', userId).maybeSingle() as unknown as Promise<{
+      data: UserProfileRow | null;
+    }>,
+  ]);
+
+  return {
+    profile: resolveFormulaProfile({ macroSettings, userRow, today: todayStr }),
+    macroSettings: macroSettings ?? null,
+  };
+}
+
+/**
+ * Get the user's adaptive TDEE estimate along with predictions.
+ *
+ * `localDate` is the caller's local calendar day (YYYY-MM-DD). Server actions
+ * run in the host's time zone, so without it "today" is the server's day and
+ * a weigh-in logged on the user's morning can fall outside the window.
  */
 export async function getAdaptiveTDEE(
   targetCalories?: number,
-  predictionDays: number[] = [7, 14, 28, 56]
+  predictionDays: number[] = [7, 14, 28, 56],
+  localDate?: string
 ): Promise<TDEEData | null> {
   const supabase = await createClient();
 
@@ -72,23 +120,10 @@ export async function getAdaptiveTDEE(
     return null;
   }
 
+  const todayStr = resolveLocalDate(localDate);
+
   // Get user stats for formula-based TDEE
-  const { data: userPrefs } = await supabase
-    .from('user_preferences')
-    .select('*')
-    .eq('user_id', user.id)
-    .single() as {
-      data: {
-        height_cm?: number;
-        age?: number;
-        sex?: 'male' | 'female';
-        body_fat_percent?: number;
-        activity_level?: 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active' | 'athlete';
-        workouts_per_week?: number;
-        avg_workout_minutes?: number;
-        workout_intensity?: 'light' | 'moderate' | 'intense';
-      } | null;
-    };
+  const { profile } = await loadFormulaProfile(supabase, user.id, todayStr);
 
   // Get nutrition targets
   const { data: nutritionTargets } = await supabase
@@ -99,24 +134,20 @@ export async function getAdaptiveTDEE(
       data: { calories?: number } | null;
     };
 
-  // Fall back to the latest DEXA scan's body fat % when no manual value is set.
-  // Manual user_preferences.body_fat_percent stays the priority; DEXA is fallback only.
-  let dexaBodyFatPercent: number | null = null;
-  if (userPrefs?.body_fat_percent == null) {
-    const { data: latestDexa } = await supabase
-      .from('dexa_scans')
-      .select('body_fat_percent')
-      .eq('user_id', user.id)
-      .order('scan_date', { ascending: false })
-      .limit(1)
-      .maybeSingle() as {
-        data: { body_fat_percent?: number } | null;
-      };
-    dexaBodyFatPercent = latestDexa?.body_fat_percent ?? null;
-  }
+  // Body fat % comes from the latest DEXA scan when there is one.
+  const { data: latestDexa } = await supabase
+    .from('dexa_scans')
+    .select('body_fat_percent')
+    .eq('user_id', user.id)
+    .order('scan_date', { ascending: false })
+    .limit(1)
+    .maybeSingle() as {
+      data: { body_fat_percent?: number } | null;
+    };
+  const dexaBodyFatPercent: number | null = latestDexa?.body_fat_percent ?? null;
 
   // Try to get enhanced data points (includes steps and workout calories)
-  const enhancedDataPoints = await getEnhancedDailyDataPoints(35);
+  const enhancedDataPoints = await getEnhancedDailyDataPoints(35, todayStr);
   
   // Get current weight from enhanced data points or fall back to weight_log
   let currentWeight: number | null = null;
@@ -126,13 +157,11 @@ export async function getAdaptiveTDEE(
     currentWeight = latestPoint.weight;
   } else {
     // Fall back to weight_log if no enhanced data
-    const thirtyFiveDaysAgo = new Date();
-    thirtyFiveDaysAgo.setDate(thirtyFiveDaysAgo.getDate() - 35);
     const { data: weightLogs } = await supabase
       .from('weight_log')
       .select('logged_at, weight, unit')
       .eq('user_id', user.id)
-      .gte('logged_at', getLocalDateString(thirtyFiveDaysAgo))
+      .gte('logged_at', addLocalDays(todayStr, -35))
       .order('logged_at', { ascending: false })
       .limit(1) as {
         data: Array<{ logged_at: string; weight: number; unit?: string | null }> | null;
@@ -213,11 +242,12 @@ export async function getAdaptiveTDEE(
 
   // Calculate formula-based TDEE as fallback/comparison
   const userStats: UserStats = {
-    weightKg: currentWeight ? currentWeight / 2.20462 : 80, // Convert lbs to kg
-    heightCm: userPrefs?.height_cm || 175,
-    age: userPrefs?.age || 30,
-    sex: userPrefs?.sex || 'male',
-    bodyFatPercent: userPrefs?.body_fat_percent ?? dexaBodyFatPercent ?? undefined,
+    // Convert lbs to kg; with no weigh-in yet, fall back to the profile weight.
+    weightKg: currentWeight ? currentWeight / 2.20462 : profile.profileWeightKg ?? 80,
+    heightCm: profile.heightCm,
+    age: profile.age,
+    sex: profile.sex,
+    bodyFatPercent: dexaBodyFatPercent ?? undefined,
   };
 
   // Steps-informed PRIOR (double-count firewall): a trailing 14-day average
@@ -228,9 +258,7 @@ export async function getAdaptiveTDEE(
   // automatically as observed data accumulates.
   const STEP_PRIOR_WINDOW_DAYS = 14;
   const STEP_PRIOR_MIN_DAYS = 5;
-  const stepWindowCutoff = getLocalDateString(
-    new Date(Date.now() - STEP_PRIOR_WINDOW_DAYS * 86_400_000)
-  );
+  const stepWindowCutoff = addLocalDays(todayStr, -STEP_PRIOR_WINDOW_DAYS);
   const stepDays = enhancedDataPoints.filter(
     (dp) => dp.date >= stepWindowCutoff && dp.steps > 0
   );
@@ -240,10 +268,10 @@ export async function getAdaptiveTDEE(
       : null;
 
   const activityConfig: ActivityConfig = {
-    activityLevel: userPrefs?.activity_level || 'moderate',
-    workoutsPerWeek: userPrefs?.workouts_per_week || 4,
-    avgWorkoutMinutes: userPrefs?.avg_workout_minutes || 60,
-    workoutIntensity: userPrefs?.workout_intensity || 'moderate',
+    activityLevel: profile.activityLevel,
+    workoutsPerWeek: profile.workoutsPerWeek,
+    avgWorkoutMinutes: profile.avgWorkoutMinutes,
+    workoutIntensity: profile.workoutIntensity,
     avgDailySteps,
   };
 
@@ -255,9 +283,7 @@ export async function getAdaptiveTDEE(
   // bracketing weigh-ins over ≥5-day intervals is enough. It always returns a
   // number (formula on day zero) and blends smoothly toward measured reality.
   const intervalWindowDays = 35;
-  const intervalCutoff = new Date();
-  intervalCutoff.setDate(intervalCutoff.getDate() - intervalWindowDays);
-  const intervalCutoffStr = getLocalDateString(intervalCutoff);
+  const intervalCutoffStr = addLocalDays(todayStr, -intervalWindowDays);
 
   // All logged intake days (every day with food, regardless of a weigh-in).
   const { data: foodRows } = await supabase
@@ -314,7 +340,8 @@ export async function getAdaptiveTDEE(
   }
 
   const intervalEstimate = estimateIntervalTDEE({
-    now: new Date(),
+    // The user's local day, so a weigh-in logged "today" is inside the window.
+    now: todayStr,
     weighIns,
     intakeDays,
     formulaTDEE: formulaEstimate.estimatedTDEE,
@@ -336,7 +363,7 @@ export async function getAdaptiveTDEE(
     windowDays: intervalWindowDays,
     // Confidence → prediction band width: more confident = tighter range.
     standardError: Math.max(50, Math.min(300, 300 - (intervalEstimate.confidenceScore / 100) * 250)),
-    lastUpdated: new Date(),
+    lastUpdated: clockNow(),
     source: intervalEstimate.source === 'formula' ? 'formula' : 'blended',
     estimateHistory: [],
     currentWeight: intervalEstimate.currentWeight || currentWeight || formulaEstimate.currentWeight,
@@ -410,7 +437,7 @@ export async function saveTDEEEstimate(estimate: TDEEEstimate | EnhancedTDEEEsti
       window_days: estimate.windowDays,
       source: estimate.source,
       estimate_history: estimate.estimateHistory,
-      updated_at: new Date().toISOString(),
+      updated_at: clockNow().toISOString(),
       // Enhanced-specific fields (will be null for basic estimates)
       ...(isEnhanced ? {
         base_burn_rate: estimate.baseBurnRate,
@@ -495,8 +522,14 @@ export interface SyncResult {
  * Sync adaptive TDEE with nutrition targets.
  * Recalculates macros using personalized TDEE when confidence is stable.
  * Returns info about whether targets were updated.
+ *
+ * Targets are only rewritten for users who opted in to automatic updates: a
+ * `macro_settings` row (saved by the macro calculator) with
+ * `auto_update_enabled` true. Hand-entered targets are never overwritten, and
+ * the recalculation keeps the user's own goal and target rate — see
+ * `decideAdaptiveSync`.
  */
-export async function syncAdaptiveTDEEWithTargets(): Promise<SyncResult | null> {
+export async function syncAdaptiveTDEEWithTargets(localDate?: string): Promise<SyncResult | null> {
   const supabase = await createClient();
 
   const {
@@ -507,8 +540,10 @@ export async function syncAdaptiveTDEEWithTargets(): Promise<SyncResult | null> 
     return null;
   }
 
+  const todayStr = resolveLocalDate(localDate);
+
   // Get the adaptive TDEE data
-  const tdeeData = await getAdaptiveTDEE();
+  const tdeeData = await getAdaptiveTDEE(undefined, undefined, todayStr);
   if (!tdeeData) {
     return null;
   }
@@ -518,143 +553,111 @@ export async function syncAdaptiveTDEEWithTargets(): Promise<SyncResult | null> 
     .from('nutrition_targets')
     .select('calories, protein, carbs, fat')
     .eq('user_id', user.id)
-    .single() as {
+    .maybeSingle() as {
       data: { calories: number; protein: number; carbs: number; fat: number } | null;
     };
 
   const previousCalories = currentTargets?.calories || null;
 
-  // Only auto-sync when adaptive estimate is stable or stabilizing
-  if (!tdeeData.adaptiveEstimate || tdeeData.adaptiveEstimate.confidence === 'unstable') {
+  const { profile, macroSettings } = await loadFormulaProfile(supabase, user.id, todayStr);
+
+  const adaptiveTDEE = tdeeData.adaptiveEstimate?.estimatedTDEE ?? 0;
+  const currentTDEE = tdeeData.formulaEstimate.estimatedTDEE;
+  const confidence = tdeeData.adaptiveEstimate?.confidence ?? null;
+
+  const decision = decideAdaptiveSync({
+    confidence,
+    adaptiveTDEE,
+    formulaTDEE: currentTDEE,
+    macroSettings,
+  });
+
+  if (!decision.sync) {
+    const notReady = decision.reason === 'unstable' || decision.reason === 'stabilizing';
     return {
       synced: false,
       previousCalories,
       newCalories: null,
-      tdeeSource: 'formula',
-      confidence: tdeeData.adaptiveEstimate?.confidence || 'unstable',
-      message: 'Not enough data yet. Keep logging to unlock personalized targets.',
+      tdeeSource: notReady ? 'formula' : 'adaptive',
+      confidence: confidence ?? 'unstable',
+      message: decision.message,
     };
   }
 
-  // Check if adaptive TDEE differs significantly from current targets
-  const adaptiveTDEE = tdeeData.adaptiveEstimate.estimatedTDEE;
-  const currentTDEE = tdeeData.formulaEstimate.estimatedTDEE;
   const difference = Math.abs(adaptiveTDEE - currentTDEE);
 
-  // If using stable estimate and it differs by more than 50 cal, update targets
-  if (tdeeData.adaptiveEstimate.confidence === 'stable' && difference > 50) {
-    // Get user preferences for macro calculation
-    const { data: userPrefs } = await supabase
-      .from('user_preferences')
-      .select('*')
-      .eq('user_id', user.id)
-      .single() as {
-        data: {
-          height_cm?: number;
-          age?: number;
-          sex?: 'male' | 'female';
-          body_fat_percent?: number;
-          activity_level?: 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active' | 'athlete';
-          workouts_per_week?: number;
-          avg_workout_minutes?: number;
-          workout_intensity?: 'light' | 'moderate' | 'intense';
-        } | null;
-      };
-
-    // Get macro settings for goal
-    const { data: macroSettings } = await supabase
-      .from('macro_settings')
-      .select('goal, peptide')
-      .eq('user_id', user.id)
-      .single() as {
-        data: { goal?: string; peptide?: string } | null;
-      };
-
-    // Fall back to the latest DEXA scan's body fat % when no manual value is set.
-    // Manual user_preferences.body_fat_percent stays the priority; DEXA is fallback only.
-    let dexaBodyFatPercent: number | null = null;
-    if (userPrefs?.body_fat_percent == null) {
-      const { data: latestDexa } = await supabase
-        .from('dexa_scans')
-        .select('body_fat_percent')
-        .eq('user_id', user.id)
-        .order('scan_date', { ascending: false })
-        .limit(1)
-        .maybeSingle() as {
-          data: { body_fat_percent?: number } | null;
-        };
-      dexaBodyFatPercent = latestDexa?.body_fat_percent ?? null;
-    }
-
-    // Import and use calculateMacros with adaptive TDEE
-    const { calculateMacros } = await import('@/lib/nutrition/macroCalculator');
-
-    const stats: UserStats = {
-      weightKg: tdeeData.currentWeight ? tdeeData.currentWeight / 2.20462 : 80,
-      heightCm: userPrefs?.height_cm || 175,
-      age: userPrefs?.age || 30,
-      sex: userPrefs?.sex || 'male',
-      bodyFatPercent: userPrefs?.body_fat_percent ?? dexaBodyFatPercent ?? undefined,
+  // Body fat % comes from the latest DEXA scan when there is one.
+  const { data: latestDexa } = await supabase
+    .from('dexa_scans')
+    .select('body_fat_percent')
+    .eq('user_id', user.id)
+    .order('scan_date', { ascending: false })
+    .limit(1)
+    .maybeSingle() as {
+      data: { body_fat_percent?: number } | null;
     };
 
-    const activity: ActivityConfig = {
-      activityLevel: userPrefs?.activity_level || 'moderate',
-      workoutsPerWeek: userPrefs?.workouts_per_week || 4,
-      avgWorkoutMinutes: userPrefs?.avg_workout_minutes || 60,
-      workoutIntensity: userPrefs?.workout_intensity || 'moderate',
-    };
+  // Import and use calculateMacros with adaptive TDEE
+  const { calculateMacros } = await import('@/lib/nutrition/macroCalculator');
 
-    const goalConfig = {
-      goal: (macroSettings?.goal || 'maintain') as 'aggressive_cut' | 'moderate_cut' | 'slow_cut' | 'maintain' | 'slow_bulk' | 'moderate_bulk' | 'aggressive_bulk',
-      peptide: (macroSettings?.peptide || 'none') as 'none' | 'semaglutide' | 'tirzepatide' | 'retatrutide' | 'liraglutide' | 'tesofensine' | 'gh_peptides',
-    };
+  const stats: UserStats = {
+    weightKg: tdeeData.currentWeight ? tdeeData.currentWeight / 2.20462 : profile.profileWeightKg ?? 80,
+    heightCm: profile.heightCm,
+    age: profile.age,
+    sex: profile.sex,
+    bodyFatPercent: latestDexa?.body_fat_percent ?? undefined,
+  };
 
-    // Calculate new macros using adaptive TDEE
-    const newMacros = calculateMacros(stats, activity, goalConfig, adaptiveTDEE);
+  const activity: ActivityConfig = {
+    activityLevel: profile.activityLevel,
+    workoutsPerWeek: profile.workoutsPerWeek,
+    avgWorkoutMinutes: profile.avgWorkoutMinutes,
+    workoutIntensity: profile.workoutIntensity,
+  };
 
-    // Update nutrition targets - use type assertion since nutrition_targets typing is strict
-    await (supabase.from('nutrition_targets') as ReturnType<typeof supabase.from>)
-      .upsert({
-        user_id: user.id,
-        calories: newMacros.calories,
-        protein: newMacros.protein,
-        carbs: newMacros.carbs,
-        fat: newMacros.fat,
-        updated_at: new Date().toISOString(),
-      }, {
-        onConflict: 'user_id',
-      });
+  // The user's own goal and target rate — never a silent 'maintain'.
+  const goalConfig = {
+    goal: (macroSettings?.goal || 'maintain') as 'aggressive_cut' | 'moderate_cut' | 'slow_cut' | 'maintain' | 'slow_bulk' | 'moderate_bulk' | 'aggressive_bulk',
+    targetWeightChangePerWeek: macroSettings?.target_weight_change_per_week ?? undefined,
+    peptide: (macroSettings?.peptide || 'none') as 'none' | 'semaglutide' | 'tirzepatide' | 'retatrutide' | 'liraglutide' | 'tesofensine' | 'gh_peptides',
+  };
 
-    const direction = adaptiveTDEE > currentTDEE ? 'higher' : 'lower';
-    return {
-      synced: true,
-      previousCalories,
-      newCalories: newMacros.calories,
-      tdeeSource: 'adaptive',
-      confidence: 'stable',
-      message: `Your metabolism is ${Math.abs(difference)} cal/day ${direction} than estimated. Targets updated!`,
-    };
-  }
+  // Calculate new macros using adaptive TDEE
+  const newMacros = calculateMacros(stats, activity, goalConfig, adaptiveTDEE);
 
-  // Stabilizing but not yet stable enough to auto-update
-  if (tdeeData.adaptiveEstimate.confidence === 'stabilizing') {
+  // Update nutrition targets - use type assertion since nutrition_targets typing is strict
+  const { error: writeError } = await (supabase.from('nutrition_targets') as ReturnType<typeof supabase.from>)
+    .upsert({
+      user_id: user.id,
+      calories: newMacros.calories,
+      protein: newMacros.protein,
+      carbs: newMacros.carbs,
+      fat: newMacros.fat,
+      updated_at: clockNow().toISOString(),
+    }, {
+      onConflict: 'user_id',
+    });
+
+  if (writeError) {
+    console.error('[syncAdaptiveTDEEWithTargets] Failed to update targets:', writeError);
     return {
       synced: false,
       previousCalories,
       newCalories: null,
-      tdeeSource: 'formula',
-      confidence: 'stabilizing',
-      message: 'Your estimate is stabilizing. A few more days of data needed.',
+      tdeeSource: 'adaptive',
+      confidence: 'stable',
+      message: 'Could not update your targets. Please try again.',
     };
   }
 
+  const direction = adaptiveTDEE > currentTDEE ? 'higher' : 'lower';
   return {
-    synced: false,
+    synced: true,
     previousCalories,
-    newCalories: null,
+    newCalories: newMacros.calories,
     tdeeSource: 'adaptive',
-    confidence: tdeeData.adaptiveEstimate.confidence,
-    message: 'Targets are already up to date.',
+    confidence: 'stable',
+    message: `Your metabolism is ${Math.round(difference)} cal/day ${direction} than estimated. Targets updated!`,
   };
 }
 
@@ -662,12 +665,12 @@ export async function syncAdaptiveTDEEWithTargets(): Promise<SyncResult | null> 
  * Recalculate and sync TDEE after new weight is logged.
  * Call this from the weight logging flow.
  */
-export async function onWeightLoggedRecalculateTDEE(): Promise<{
+export async function onWeightLoggedRecalculateTDEE(localDate?: string): Promise<{
   estimate: TDEEEstimate | EnhancedTDEEEstimate | null;
   syncResult: SyncResult | null;
 }> {
   // Get fresh TDEE calculation
-  const tdeeData = await getAdaptiveTDEE();
+  const tdeeData = await getAdaptiveTDEE(undefined, undefined, localDate);
 
   if (!tdeeData) {
     return { estimate: null, syncResult: null };
@@ -679,7 +682,7 @@ export async function onWeightLoggedRecalculateTDEE(): Promise<{
   }
 
   // Try to sync with targets
-  const syncResult = await syncAdaptiveTDEEWithTargets();
+  const syncResult = await syncAdaptiveTDEEWithTargets(localDate);
 
   return {
     estimate: tdeeData.adaptiveEstimate,

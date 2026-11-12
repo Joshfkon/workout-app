@@ -47,7 +47,6 @@
   "lib/training/transferCandidates.ts": 1,
   "lib/training/weeklyRollover.ts": 1,
   "lib/validation.ts": 2,
-  "services/bodyweightService.ts": 12,
   "services/deloadEngine.ts": 2,
   "services/exerciseDetailAnalytics.ts": 8,
   "services/importExport.ts": 1,

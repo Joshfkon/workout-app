@@ -10,6 +10,7 @@ import {
   fetchWeeklyMuscleVolume,
   fetchLiftTrends,
   fetchBodyCompGlance,
+  fetchDashboardDateKey,
 } from '@/lib/actions/dashboard';
 import type { Metadata } from 'next';
 
@@ -34,7 +35,28 @@ export default async function DashboardPage() {
     redirect('/login');
   }
 
-  // Fetch critical data in parallel on the server
+  // Fetch critical data in parallel on the server. A failed query throws
+  // (it used to render as "0 calories / no program"); in that case ship NO
+  // initialData so the client runs its own full fetch instead of trusting a
+  // half-empty server snapshot.
+  let serverData;
+  try {
+    serverData = await Promise.all([
+      fetchMesocycleData(user.id),
+      fetchNutritionData(user.id),
+      fetchWeightData(user.id),
+      fetchUserGoal(user.id),
+      fetchCompletedWorkoutsCount(user.id),
+      fetchWeeklyMuscleVolume(user.id),
+      fetchLiftTrends(user.id),
+      fetchBodyCompGlance(user.id),
+      fetchDashboardDateKey(),
+    ]);
+  } catch (error) {
+    console.error('[dashboard] server fetch failed; falling back to client fetch:', error);
+    return <DashboardClient />;
+  }
+
   const [
     mesocycleData,
     nutritionData,
@@ -44,22 +66,18 @@ export default async function DashboardPage() {
     muscleVolume,
     liftTrends,
     bodyCompGlance,
-  ] = await Promise.all([
-    fetchMesocycleData(user.id),
-    fetchNutritionData(user.id),
-    fetchWeightData(user.id),
-    fetchUserGoal(user.id),
-    fetchCompletedWorkoutsCount(user.id),
-    fetchWeeklyMuscleVolume(user.id),
-    fetchLiftTrends(user.id),
-    fetchBodyCompGlance(user.id),
-  ]);
+    serverDateKey,
+  ] = serverData;
 
   // Pass server-fetched data to client component as initial props
   return (
     <DashboardClient
       initialData={{
         userId: user.id,
+        // The calendar day the daily data below was computed for (the user's
+        // zone when the timezone cookie is present, else the host's). The
+        // client refetches when this isn't its own local day.
+        dateKey: serverDateKey,
         mesocycle: mesocycleData.mesocycle,
         todaysWorkout: mesocycleData.todaysWorkout,
         nutritionTotals: nutritionData.totals,

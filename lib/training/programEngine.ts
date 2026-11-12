@@ -41,9 +41,18 @@ import type { MuscleGroup } from '@/types/schema';
 import { muscleMatchesGroup } from '@/types/schema';
 import { fiberTypeForMuscle } from '@/services/repRangeEngine';
 import {
+  checkDeloadTriggers as runDeloadTriggers,
   computeSleepDebtSignal,
+  getDeloadStrategy,
   SLEEP_DEBT_WINDOW_DAYS,
 } from '@/services/deloadEngine';
+import type {
+  Experience as SchemaExperience,
+  ExtendedUserProfile,
+  PeriodizationPlan as SchemaPeriodizationPlan,
+  Rating,
+  WeeklyPerformanceData,
+} from '@/types/schema';
 import {
   EXERCISE_DATABASE,
   STRENGTH_STANDARDS,
@@ -130,6 +139,52 @@ function getFFMIBracket(ffmi: number): FFMIBracket {
  * thread a client in don't have to spell out the ReturnType.
  */
 export type EngineClient = ReturnType<typeof createUntypedClient>;
+
+/**
+ * How many of a block's weekly fatigue logs the deload check reads. Covers a
+ * whole block (the length slider tops out at 8) so the scheduled deload week
+ * is still in view when the overdue-for-deload trigger measures from it.
+ */
+const MESOCYCLE_FATIGUE_LOG_LOOKBACK = 12;
+
+function clampFatigueRating(value: number | null | undefined, fallback: Rating): Rating {
+  if (value == null || !Number.isFinite(value)) return fallback;
+  return Math.max(1, Math.min(5, Math.round(value))) as Rating;
+}
+
+/**
+ * Map a mesocycle's weekly_fatigue_logs rows (any order) onto the pure deload
+ * engine's WeeklyPerformanceData, oldest week first — the in-mesocycle twin of
+ * standaloneDeload.buildStandalonePerformance. A missing rating reads as the
+ * neutral 3. The block's `deloadWeek` is flagged so the engine's
+ * time-since-last-deload clock resets on it. Pure; never mutates `rows`.
+ */
+export function buildMesocyclePerformance(
+  rows: Pick<
+    WeeklyFatigueLogRow,
+    | 'week_number'
+    | 'perceived_fatigue'
+    | 'sleep_quality'
+    | 'motivation_level'
+    | 'missed_reps'
+    | 'joint_pain'
+    | 'strength_decline'
+  >[],
+  deloadWeek?: number | null
+): WeeklyPerformanceData[] {
+  return [...rows]
+    .sort((a, b) => a.week_number - b.week_number)
+    .map((row) => ({
+      weekNumber: row.week_number,
+      missedReps: row.missed_reps ?? 0,
+      perceivedFatigue: clampFatigueRating(row.perceived_fatigue, 3),
+      sleepQuality: clampFatigueRating(row.sleep_quality, 3),
+      motivationLevel: clampFatigueRating(row.motivation_level, 3),
+      jointPain: !!row.joint_pain,
+      strengthDecline: !!row.strength_decline,
+      isDeload: deloadWeek != null && row.week_number === deloadWeek,
+    }));
+}
 
 export class ProgramEngine {
   private userId: string;
@@ -1028,7 +1083,9 @@ export class ProgramEngine {
       mesocycleWeeks,
       weeklyProgression,
       deloadFrequency,
-      deloadStrategy: profile.experience === 'novice' ? 'reactive' : 'proactive'
+      // One rule (services/deloadEngine.getDeloadStrategy): scheduled
+      // deloads for everyone except advanced lifters, who self-regulate.
+      deloadStrategy: getDeloadStrategy(profile.experience as SchemaExperience)
     };
   }
   
@@ -1212,7 +1269,8 @@ export class ProgramEngine {
       'shoulders', 'biceps', 'triceps', 'calves', 'abs'
     ];
     
-    const orderedMuscles = template.targetMuscles.sort((a, b) =>
+    // Copy before sorting — never reorder the caller's template in place.
+    const orderedMuscles = [...template.targetMuscles].sort((a, b) =>
       muscleOrder.indexOf(a) - muscleOrder.indexOf(b)
     );
     
@@ -1400,160 +1458,128 @@ export class ProgramEngine {
     ];
   }
   
-  // ---- Today's Workout ----
-  
-  async getTodayWorkout(mesocycleId: string): Promise<DetailedSession | null> {
-    const { data: mesocycle } = await this.supabase
-      .from('mesocycles')
-      .select('*')
-      .eq('id', mesocycleId)
-      .single();
-    
-    if (!mesocycle || mesocycle.state !== 'active') return null;
-    
-    const today = clockNow();
-    const dayOfWeek = today.getDay() || 7; // 1-7, Monday = 1
-    
-    const program = mesocycle.program_data as FullProgramRecommendation;
-    if (!program) return null;
-    
-    const trainingDayMaps: Record<number, number[]> = {
-      2: [1, 4],
-      3: [1, 3, 5],
-      4: [1, 2, 4, 5],
-      5: [1, 2, 3, 5, 6],
-      6: [1, 2, 3, 4, 5, 6],
-    };
-    
-    const trainingDays = trainingDayMaps[mesocycle.days_per_week] || trainingDayMaps[4];
-    const dayIndex = trainingDays.indexOf(dayOfWeek);
-    
-    if (dayIndex === -1) return null; // Rest day
-    
-    const currentWeek = program.mesocycleWeeks[mesocycle.current_week - 1];
-    if (!currentWeek) return null;
-    
-    const sessionIndex = dayIndex % currentWeek.sessions.length;
-    return currentWeek.sessions[sessionIndex];
-  }
-  
   // ---- Deload Detection ----
   
   async checkDeloadTriggers(mesocycleId: string): Promise<DeloadTriggers> {
     const profile = this.getUserProfile();
-    
+    const none: DeloadTriggers = { shouldDeload: false, reasons: [], suggestedDeloadType: 'volume' };
+
     const { data: logs } = await this.supabase
       .from('weekly_fatigue_logs')
       .select('*')
       .eq('mesocycle_id', mesocycleId)
       .order('week_number', { ascending: false })
-      .limit(3);
-    
-    if (!logs || logs.length < 2) {
-      return { shouldDeload: false, reasons: [], suggestedDeloadType: 'volume' };
-    }
-    
-    const recent = logs as WeeklyFatigueLogRow[];
-    const lastWeek = recent[0];
-    const previousWeek = recent[1];
-    
-    const reasons: string[] = [];
-    let shouldDeload = false;
-    let suggestedDeloadType: 'volume' | 'intensity' | 'full' = 'volume';
-    
-    if ((lastWeek.perceived_fatigue || 0) >= 4 && (previousWeek.perceived_fatigue || 0) >= 3) {
-      reasons.push('Perceived fatigue elevated for 2+ weeks');
-      shouldDeload = true;
-    }
-    
-    if (lastWeek.strength_decline || lastWeek.missed_reps > 5) {
-      reasons.push('Strength regression or significant missed reps');
-      shouldDeload = true;
-      suggestedDeloadType = 'intensity';
-    }
-    
-    if ((lastWeek.sleep_quality || 3) <= 2 && (previousWeek.sleep_quality || 3) <= 2) {
-      reasons.push('Poor sleep for 2+ weeks');
-      shouldDeload = true;
-      suggestedDeloadType = 'full';
-    }
-    
-    if ((lastWeek.motivation_level || 3) <= 2 && (previousWeek.motivation_level || 3) <= 3) {
-      reasons.push('Declining motivation - possible overreaching');
-      shouldDeload = true;
-    }
-    
-    if (lastWeek.joint_pain) {
-      reasons.push('Joint pain reported');
-      shouldDeload = true;
-      suggestedDeloadType = 'intensity';
+      .limit(MESOCYCLE_FATIGUE_LOG_LOOKBACK);
+
+    if (!logs || logs.length < 2) return none;
+
+    // The block's deload week resets the time-since-last-deload clock.
+    // Best-effort: without it the backup trigger measures from block start.
+    let deloadWeek: number | null = null;
+    try {
+      const { data: meso } = await this.supabase
+        .from('mesocycles')
+        .select('deload_week')
+        .eq('id', mesocycleId)
+        .maybeSingle();
+      deloadWeek = (meso as { deload_week: number | null } | null)?.deload_week ?? null;
+    } catch {
+      // Unknown deload week — the other triggers stand on their own.
     }
 
-    if (profile.experience === 'novice' && reasons.length < 2) {
-      shouldDeload = false;
-    }
+    const performance = buildMesocyclePerformance(logs as WeeklyFatigueLogRow[], deloadWeek);
+    const lastWeek = performance[performance.length - 1];
+
+    // ONE trigger implementation: the same pure engine the standalone
+    // (no-mesocycle) path runs — services/deloadEngine.checkDeloadTriggers.
+    // This method used to carry its own copy, and the two had drifted: the
+    // experience gate was inverted (here a novice needed two triggers and an
+    // advanced lifter one; the engine deloads a novice on one and asks an
+    // advanced lifter for two), and the overdue-for-deload backup trigger was
+    // missing. The engine's behaviour is now the only behaviour.
+    const deloadFrequency = this.calculateRecoveryFactors().deloadFrequencyWeeks;
+    const engineProfile = {
+      age: profile.age,
+      experience: profile.experience,
+      goal: profile.goal,
+      sleepQuality: profile.sleepQuality,
+      stressLevel: profile.stressLevel,
+      availableEquipment: [],
+      injuryHistory: [],
+      trainingAge: profile.trainingAge,
+      heightCm: null,
+      latestDexa: null,
+    } as unknown as ExtendedUserProfile;
+    const periodization = {
+      model: 'linear',
+      mesocycleWeeks: deloadFrequency + 1,
+      weeklyProgression: [],
+      deloadFrequency,
+      deloadStrategy: getDeloadStrategy(profile.experience as SchemaExperience),
+    } as SchemaPeriodizationPlan;
+
+    const triggers = runDeloadTriggers(performance, engineProfile, periodization);
+    if (!triggers.shouldDeload) return triggers as DeloadTriggers;
 
     // Signal 7: chronic short sleep (sleep_log 7-day average). A contributing
-    // evidence line only — appended after the trigger/experience logic so it
-    // labels the recommendation ("Averaging 5.9h sleep over the last week")
-    // but can never trip a deload on its own.
-    if (shouldDeload) {
-      try {
-        const now = clockNow();
-        const cutoff = new Date(now);
-        cutoff.setDate(cutoff.getDate() - (SLEEP_DEBT_WINDOW_DAYS - 1));
-        const { data: sleepRows } = await this.supabase
-          .from('sleep_log')
-          .select('local_day, hours')
-          .eq('user_id', this.userId)
-          .gte('local_day', getLocalDateString(cutoff));
-        const sleep = computeSleepDebtSignal(
-          ((sleepRows ?? []) as { local_day: string; hours: number }[]).map((row) => ({
-            localDay: row.local_day,
-            hours: Number(row.hours),
-          })),
-          now
-        );
-        if (sleep.evidence) reasons.push(sleep.evidence);
-      } catch {
-        // Sleep evidence is best-effort — never block the deload check on it.
-      }
+    // evidence line only — it labels the recommendation ("Averaging 5.9h
+    // sleep over the last week") but can never trip a deload on its own, so
+    // it is only fetched once a deload has already fired.
+    try {
+      const now = clockNow();
+      const cutoff = new Date(now);
+      cutoff.setDate(cutoff.getDate() - (SLEEP_DEBT_WINDOW_DAYS - 1));
+      const { data: sleepRows } = await this.supabase
+        .from('sleep_log')
+        .select('local_day, hours')
+        .eq('user_id', this.userId)
+        .gte('local_day', getLocalDateString(cutoff));
+      const sleep = computeSleepDebtSignal(
+        ((sleepRows ?? []) as { local_day: string; hours: number }[]).map((row) => ({
+          localDay: row.local_day,
+          hours: Number(row.hours),
+        })),
+        now
+      );
+      lastWeek.sleepDebtScore = sleep.score;
+      lastWeek.sleepDebtEvidence = sleep.evidence;
+    } catch {
+      // Sleep evidence is best-effort — never block the deload check on it.
     }
 
     // Supporting signal only: a sustained HRV/RHR deviation streak from Apple
     // Health is named in the evidence when a deload already fired, but never
     // triggers one on its own. Missing wellness data is normal — skip quietly.
-    if (shouldDeload) {
-      try {
-        const { computeWearableRecoveryState } = await import(
-          '@/services/wearableRecovery'
-        );
-        const today = getLocalDateString();
-        const { data: wellnessRows } = await this.supabase
-          .from('daily_wellness_metrics')
-          .select('date, hrv_sdnn_ms, resting_hr_bpm')
-          .eq('user_id', this.userId)
-          .order('date', { ascending: false })
-          .limit(35);
-        if (wellnessRows && wellnessRows.length > 0) {
-          const history = (wellnessRows as {
-            date: string;
-            hrv_sdnn_ms: number | null;
-            resting_hr_bpm: number | null;
-          }[]).map((row) => ({
-            date: row.date,
-            hrvSdnnMs: row.hrv_sdnn_ms,
-            restingHrBpm: row.resting_hr_bpm,
-          }));
-          const state = computeWearableRecoveryState(history, today);
-          if (state.deloadEvidence) reasons.push(state.deloadEvidence);
-        }
-      } catch {
-        // Wellness metrics unavailable — the other triggers stand on their own.
+    try {
+      const { computeWearableRecoveryState } = await import(
+        '@/services/wearableRecovery'
+      );
+      const today = getLocalDateString();
+      const { data: wellnessRows } = await this.supabase
+        .from('daily_wellness_metrics')
+        .select('date, hrv_sdnn_ms, resting_hr_bpm')
+        .eq('user_id', this.userId)
+        .order('date', { ascending: false })
+        .limit(35);
+      if (wellnessRows && wellnessRows.length > 0) {
+        const history = (wellnessRows as {
+          date: string;
+          hrv_sdnn_ms: number | null;
+          resting_hr_bpm: number | null;
+        }[]).map((row) => ({
+          date: row.date,
+          hrvSdnnMs: row.hrv_sdnn_ms,
+          restingHrBpm: row.resting_hr_bpm,
+        }));
+        const state = computeWearableRecoveryState(history, today);
+        lastWeek.wearableDeviationDays = state.consecutiveDeviationDays;
       }
+    } catch {
+      // Wellness metrics unavailable — the other triggers stand on their own.
     }
 
-    return { shouldDeload, reasons, suggestedDeloadType };
+    // Same decision, now with the evidence lines the engine appends.
+    return runDeloadTriggers(performance, engineProfile, periodization) as DeloadTriggers;
   }
   
   // ---- Record Workout Results ----
@@ -1565,14 +1591,19 @@ export class ProgramEngine {
   ): Promise<void> {
     const completedSets = sets.filter(s => s.completed && s.reps >= 1 && s.reps <= 12);
     let estimated1RM: number | null = null;
+    // The set the estimate came from — the calibration row must store ITS
+    // weight/reps/RPE, not set 1's (set 1's numbers next to the best set's
+    // e1RM is a row that describes no set anyone performed).
+    let bestSet: (typeof completedSets)[number] | null = null;
     
-    if (completedSets.length > 0) {
-      // 0 = no estimate; with no positive estimate the session stores NULL,
-      // never a fabricated 0.
-      const estimates = completedSets
-        .map(s => estimate1RM(s.weight, s.reps, s.rpe))
-        .filter(v => v > 0);
-      estimated1RM = estimates.length > 0 ? Math.max(...estimates) : null;
+    // 0 = no estimate; with no positive estimate the session stores NULL,
+    // never a fabricated 0.
+    for (const set of completedSets) {
+      const estimate = estimate1RM(set.weight, set.reps, set.rpe);
+      if (estimate > 0 && (estimated1RM === null || estimate > estimated1RM)) {
+        estimated1RM = estimate;
+        bestSet = set;
+      }
     }
     
     await this.supabase.from('exercise_history').insert({
@@ -1585,15 +1616,15 @@ export class ProgramEngine {
     });
     
     // Update calibration if this is a new PR
-    if (estimated1RM) {
+    if (estimated1RM && bestSet) {
       const existing = this.calibrations.get(exerciseName);
       if (!existing || estimated1RM > existing.estimated_1rm_kg * 0.98) {
         await this.supabase.from('strength_calibrations').upsert({
           user_id: this.userId,
           exercise_name: exerciseName,
-          tested_weight_kg: completedSets[0].weight,
-          tested_reps: completedSets[0].reps,
-          tested_rpe: completedSets[0].rpe,
+          tested_weight_kg: bestSet.weight,
+          tested_reps: bestSet.reps,
+          tested_rpe: bestSet.rpe,
           estimated_1rm_kg: estimated1RM,
           confidence: 'high',
           source: 'workout',

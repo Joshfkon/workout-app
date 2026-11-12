@@ -7,12 +7,22 @@
  * degrade to null quickly rather than block the location picker — the picker
  * renders identically without a fix, just unsorted.
  *
- * Works in the browser/PWA directly. In the Capacitor apps the WebView
- * forwards to the native prompt, which requires the platform permission
- * entries (ios/App/App/Info.plist NSLocationWhenInUseUsageDescription,
- * android ACCESS_COARSE/FINE_LOCATION) added alongside this module.
+ * Two transports:
+ *  - Browser/PWA: navigator.geolocation.
+ *  - Native app (Capacitor): the @capacitor/geolocation plugin. The app's
+ *    WKWebView loads a remote origin, so navigator.geolocation there shows the
+ *    iOS prompt AND a second website-style prompt ("www.hypertrack.app would
+ *    like to use your location") that WebKit does not remember across
+ *    launches. The plugin talks to CoreLocation directly: one iOS prompt,
+ *    once, remembered by the OS. Needs ios/App/App/Info.plist
+ *    NSLocationWhenInUseUsageDescription.
+ *
+ * An installed app binary that predates the plugin (the site deploys ahead of
+ * the App Store build) reports the plugin as unavailable and keeps using
+ * navigator.geolocation, so nothing regresses in between.
  */
 
+import { Capacitor } from '@capacitor/core';
 import type { GeoPoint } from '@/services/gymProximity';
 
 export interface PositionFix extends GeoPoint {
@@ -20,6 +30,49 @@ export interface PositionFix extends GeoPoint {
   accuracyM: number;
   /** When the fix was taken (ms epoch), for staleness checks by the caller. */
   takenAt: number;
+}
+
+const GEOLOCATION_PLUGIN = 'Geolocation';
+
+/** True when the native shell has the Geolocation plugin compiled in. */
+function hasNativeGeolocation(): boolean {
+  try {
+    return Capacitor.isNativePlatform() && Capacitor.isPluginAvailable(GEOLOCATION_PLUGIN);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Native path. Asks for the OS permission only when it has never been
+ * decided ('prompt'); a prior denial resolves null without re-asking (iOS
+ * would not show the dialog again anyway).
+ */
+async function getNativePosition(timeoutMs: number): Promise<PositionFix | null> {
+  const { Geolocation } = await import('@capacitor/geolocation');
+
+  let status = await Geolocation.checkPermissions();
+  const granted = () =>
+    status.location === 'granted' || status.coarseLocation === 'granted';
+  if (!granted()) {
+    const undecided =
+      status.location === 'prompt' || status.location === 'prompt-with-rationale';
+    if (!undecided) return null;
+    status = await Geolocation.requestPermissions();
+    if (!granted()) return null;
+  }
+
+  const pos = await Geolocation.getCurrentPosition({
+    enableHighAccuracy: false,
+    timeout: timeoutMs,
+    maximumAge: 120000,
+  });
+  return {
+    latitude: pos.coords.latitude,
+    longitude: pos.coords.longitude,
+    accuracyM: pos.coords.accuracy,
+    takenAt: Date.now(),
+  };
 }
 
 /**
@@ -40,6 +93,14 @@ export function getCurrentPositionSafe(timeoutMs = 8000): Promise<PositionFix | 
     };
 
     try {
+      if (hasNativeGeolocation()) {
+        // No outer timer here: the first call may be sitting on the iOS
+        // permission dialog, which the user can take as long as they like to
+        // answer. The plugin's own `timeout` bounds the fix itself.
+        getNativePosition(timeoutMs).then(settle, () => settle(null));
+        return;
+      }
+
       if (typeof navigator === 'undefined' || !navigator.geolocation) {
         settle(null);
         return;

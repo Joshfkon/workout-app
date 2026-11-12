@@ -13,6 +13,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@/lib/supabase/server';
 import { AI_CONSENT_REQUIRED_MESSAGE, hasAiDataSharingConsent } from '@/lib/ai/consent';
+import { AI_RATE_LIMIT_MESSAGE, consumeAiQuota } from '@/lib/ai/rateLimit';
 
 export interface ParsedMealItem {
   /** Food name, title case, e.g. "Greek yogurt" */
@@ -96,6 +97,10 @@ export async function parseMealDescription(description: string): Promise<ParseMe
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     return { ok: false, error: 'Meal parsing is not configured' };
+  }
+
+  if (!(await consumeAiQuota(supabase, 'meal_parse'))) {
+    return { ok: false, error: AI_RATE_LIMIT_MESSAGE };
   }
 
   try {

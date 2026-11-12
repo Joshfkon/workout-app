@@ -1,7 +1,14 @@
 'use server';
 
+import { cookies } from 'next/headers';
 import { createUntypedServerClient } from '@/lib/supabase/server';
 import { getLocalDateString } from '@/lib/utils';
+import { now as clockNow } from '@/lib/clock';
+import {
+  USER_TIME_ZONE_COOKIE,
+  resolveUserDay,
+  type UserDay,
+} from '@/components/providers/userTimeZone';
 import { buildPersonalizedBodyCompTrend } from '@/lib/body-composition/trendBuilder';
 import { localDay, rollingWindowStart } from '@/lib/date/localDay';
 import { analyzeBodyCompTrend, computeFFMI } from '@/services/bodyCompEngine';
@@ -93,6 +100,46 @@ export interface BodyCompGlance {
 }
 
 /**
+ * "Today" for the signed-in user. Server code runs in the HOST's timezone
+ * (usually UTC), so the runtime day is tomorrow for a US user every evening;
+ * the dashboard shell stores the device zone in a cookie and every
+ * day-scoped fetch below resolves the day from it. Without the cookie (very
+ * first visit) this is the runtime day, and the client — which compares
+ * `fetchDashboardDateKey()` against its own local day — refetches.
+ */
+async function getUserDay(): Promise<UserDay> {
+  let zone: string | undefined;
+  try {
+    zone = cookies().get(USER_TIME_ZONE_COOKIE)?.value;
+  } catch {
+    // Outside a request scope (tests / scripts): runtime day.
+  }
+  return resolveUserDay(zone, clockNow());
+}
+
+/**
+ * The calendar day the day-scoped dashboard fetches (workout, nutrition,
+ * weigh-in) were computed for. Shipped in initialData so the client can tell
+ * a render for the wrong day from a current one.
+ */
+export async function fetchDashboardDateKey(): Promise<string> {
+  return (await getUserDay()).day;
+}
+
+/**
+ * Fail loudly instead of treating a failed query as "no rows". A swallowed
+ * error rendered as 0 calories / no weigh-in / no program and looked like
+ * real data; throwing lets the page fall back to the client fetch.
+ */
+function rows<T>(result: { data: T | null; error: unknown }, what: string): T | null {
+  if (result.error) {
+    const message = (result.error as { message?: string }).message ?? String(result.error);
+    throw new Error(`[dashboard] ${what} failed: ${message}`);
+  }
+  return result.data;
+}
+
+/**
  * Fetch active mesocycle and today's workout for the dashboard
  */
 export async function fetchMesocycleData(userId: string): Promise<{
@@ -100,8 +147,7 @@ export async function fetchMesocycleData(userId: string): Promise<{
   todaysWorkout: TodaysWorkoutData | null;
 }> {
   const supabase = await createUntypedServerClient();
-  const today = new Date();
-  const todayStr = getLocalDateString(today);
+  const { day: todayStr, date: today } = await getUserDay();
 
   // Use the shared fetch to get the same mesocycle Train would select
   const { fetchActiveMesocycle } = await import('@/lib/training/fetchActiveMesocycle');
@@ -112,10 +158,13 @@ export async function fetchMesocycleData(userId: string): Promise<{
   }
 
   // Fetch sessions for this mesocycle
-  const { data: sessions } = await supabase
-    .from('workout_sessions')
-    .select('id, planned_date, state, completed_at')
-    .eq('mesocycle_id', mesocycle.id);
+  const sessions = rows<any[]>(
+    await supabase
+      .from('workout_sessions')
+      .select('id, planned_date, state, completed_at')
+      .eq('mesocycle_id', mesocycle.id),
+    'mesocycle sessions'
+  );
 
   const sessionList = sessions || [];
   const completed = sessionList.filter((s: any) => s.state === 'completed').length;
@@ -169,10 +218,13 @@ export async function fetchMesocycleData(userId: string): Promise<{
 
   let todaysWorkout: TodaysWorkoutData | null = null;
   if (todaySession) {
-    const { data: blocksWithSets } = await supabase
-      .from('exercise_blocks')
-      .select(`id, target_sets, set_logs!left(id, is_warmup)`)
-      .eq('workout_session_id', todaySession.id);
+    const blocksWithSets = rows<any[]>(
+      await supabase
+        .from('exercise_blocks')
+        .select(`id, target_sets, set_logs!left(id, is_warmup)`)
+        .eq('workout_session_id', todaySession.id),
+      "today's workout blocks"
+    );
 
     const blocks = blocksWithSets || [];
     const completedSets = blocks.reduce((sum: number, b: any) => {
@@ -198,7 +250,7 @@ export async function fetchMesocycleData(userId: string): Promise<{
  */
 export async function fetchNutritionData(userId: string): Promise<NutritionData> {
   const supabase = await createUntypedServerClient();
-  const todayStr = getLocalDateString();
+  const { day: todayStr } = await getUserDay();
 
   const [nutritionResult, targetsResult] = await Promise.all([
     supabase
@@ -213,7 +265,7 @@ export async function fetchNutritionData(userId: string): Promise<NutritionData>
       .maybeSingle(),
   ]);
 
-  const totals = nutritionResult.data?.reduce(
+  const totals = rows<any[]>(nutritionResult, "today's food log")?.reduce(
     (acc: any, entry: any) => ({
       calories: acc.calories + (entry.calories || 0),
       protein: acc.protein + (entry.protein || 0),
@@ -234,8 +286,7 @@ export async function fetchNutritionData(userId: string): Promise<NutritionData>
  */
 export async function fetchWeightData(userId: string): Promise<WeightData> {
   const supabase = await createUntypedServerClient();
-  const today = new Date();
-  const todayStr = getLocalDateString(today);
+  const { day: todayStr, date: today } = await getUserDay();
   const ninetyDaysAgo = new Date(today);
   ninetyDaysAgo.setDate(today.getDate() - 90);
 
@@ -252,20 +303,21 @@ export async function fetchWeightData(userId: string): Promise<WeightData> {
       .eq('user_id', userId)
       .gte('logged_at', getLocalDateString(ninetyDaysAgo))
       .order('logged_at', { ascending: true }),
-    supabase
-      .from('user_preferences')
-      .select('weight_unit')
-      .eq('user_id', userId)
-      .single(),
+    // The unit preference lives in users.preferences.units (there is no
+    // user_preferences table — that read always failed and fell back to lb).
+    supabase.from('users').select('preferences').eq('id', userId).maybeSingle(),
   ]);
 
-  const preferredUnit = (prefsResult.data?.weight_unit as 'lb' | 'kg') || 'lb';
+  const storedUnit = (prefsResult.data?.preferences as { units?: string } | null)?.units;
+  const preferredUnit: 'lb' | 'kg' = storedUnit === 'kg' ? 'kg' : 'lb';
+  const todaysRow = rows<any>(weightResult, "today's weigh-in");
+  const history = rows<any[]>(weightHistoryResult, 'weight history');
 
   return {
-    todaysWeight: weightResult.data
-      ? { weight: weightResult.data.weight, unit: weightResult.data.unit || preferredUnit }
+    todaysWeight: todaysRow
+      ? { weight: todaysRow.weight, unit: todaysRow.unit || preferredUnit }
       : null,
-    weightHistory: (weightHistoryResult.data || []).map((w: any) => ({
+    weightHistory: (history || []).map((w: any) => ({
       date: w.logged_at,
       weight: w.weight,
       unit: w.unit || preferredUnit,
@@ -311,7 +363,7 @@ export async function fetchBodyCompGlance(userId: string): Promise<BodyCompGlanc
       .maybeSingle(),
   ]);
 
-  const scans = scansRes.data ?? [];
+  const scans = rows<any[]>(scansRes, 'DEXA scans') ?? [];
   const heightCm = profileRes.data?.height_cm ? Number(profileRes.data.height_cm) : null;
   if (!getBodyCompLayout(scans.length).showHomeCard || !heightCm) return null;
 
@@ -357,11 +409,10 @@ export async function fetchBodyCompGlance(userId: string): Promise<BodyCompGlanc
  */
 export async function fetchUserGoal(userId: string): Promise<string> {
   const supabase = await createUntypedServerClient();
-  const { data } = await supabase
-    .from('users')
-    .select('goal')
-    .eq('id', userId)
-    .single();
+  const data = rows<any>(
+    await supabase.from('users').select('goal').eq('id', userId).maybeSingle(),
+    'user goal'
+  );
   return data?.goal || 'maintain';
 }
 
@@ -370,11 +421,12 @@ export async function fetchUserGoal(userId: string): Promise<string> {
  */
 export async function fetchCompletedWorkoutsCount(userId: string): Promise<number> {
   const supabase = await createUntypedServerClient();
-  const { count } = await supabase
+  const { count, error } = await supabase
     .from('workout_sessions')
     .select('*', { count: 'exact', head: true })
     .eq('user_id', userId)
     .eq('state', 'completed');
+  rows({ data: null, error }, 'completed workout count');
   return count || 0;
 }
 
@@ -386,10 +438,11 @@ export async function fetchCompletedWorkoutsCount(userId: string): Promise<numbe
  */
 export async function fetchLiftTrends(userId: string): Promise<LiftTrendsSummary> {
   const supabase = await createUntypedServerClient();
-  const since = new Date();
+  const nowInstant = clockNow();
+  const since = new Date(nowInstant);
   since.setDate(since.getDate() - LIFT_TREND_WINDOW_DAYS);
 
-  const [{ data: sessions }, { data: profile }, { data: activeMesos }] = await Promise.all([
+  const [sessionsResult, { data: profile }, { data: activeMesos }] = await Promise.all([
     supabase
       .from('workout_sessions')
       .select(LIFT_TREND_SESSION_SELECT)
@@ -409,10 +462,12 @@ export async function fetchLiftTrends(userId: string): Promise<LiftTrendsSummary
       .limit(1),
   ]);
 
+  const sessions = rows<any[]>(sessionsResult, 'lift trend sessions');
+
   return computeLiftTrends(
     (sessions as any) || [],
     (profile?.goal as PlateauGoal | null) ?? undefined,
-    new Date(),
+    nowInstant,
     { programStartDate: activeMesos?.[0]?.start_date ?? null }
   );
 }
@@ -437,15 +492,19 @@ export async function fetchWeeklyMuscleVolume(userId: string): Promise<WeeklyMus
   const supabase = await createUntypedServerClient();
   // Shared local-day-anchored window (see weeklyVolumeWindowStartISO) so this
   // server first-paint value matches the client fast-path and the volume page.
-  const weekStartIso = weeklyVolumeWindowStartISO();
+  // Anchored on the USER's calendar day (see getUserDay), not the host's.
+  const weekStartIso = weeklyVolumeWindowStartISO((await getUserDay()).date);
 
-  const { data } = await supabase
-    .from('exercise_blocks')
-    .select(`id, exercises (id, name, primary_muscle, secondary_muscles), set_logs (id, is_warmup, feedback),
-      workout_sessions!inner (user_id, completed_at, state)`)
-    .eq('workout_sessions.user_id', userId)
-    .eq('workout_sessions.state', 'completed')
-    .gte('workout_sessions.completed_at', weekStartIso);
+  const data = rows<any[]>(
+    await supabase
+      .from('exercise_blocks')
+      .select(`id, exercises (id, name, primary_muscle, secondary_muscles), set_logs (id, is_warmup, feedback),
+        workout_sessions!inner (user_id, completed_at, state)`)
+      .eq('workout_sessions.user_id', userId)
+      .eq('workout_sessions.state', 'completed')
+      .gte('workout_sessions.completed_at', weekStartIso),
+    'weekly volume'
+  );
 
   const blocks = (data as any) || [];
   return {

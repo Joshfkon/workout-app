@@ -7,10 +7,14 @@ import type { PluginListenerHandle } from '@capacitor/core';
 import { Button, LoadingAnimation } from '@/components/ui';
 import { lookupBarcode, type BarcodeSearchResult } from '@/services/openFoodFactsService';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { lookupBarcodeUsdaAction } from '@/lib/actions/nutrition';
 
 // ML Kit barcode scanning (native only) - loaded via dynamic import so the
 // plugin never ends up in web bundles that don't need it.
 type MLKitBarcodeModule = typeof import('@capacitor-mlkit/barcode-scanning');
+
+/** The ML Kit plugin's native bridge name. */
+const MLKIT_PLUGIN_NAME = 'BarcodeScanner';
 
 /** Ignore repeat decodes of the same barcode within this window (ms). */
 const SCAN_DEBOUNCE_MS = 3000;
@@ -443,7 +447,7 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
       // Mode 2: Look up barcode in public databases
       setDebugInfo(`Looking up in databases: ${barcode}...`);
 
-      const result = await lookupBarcode(barcode);
+      const result = await lookupBarcode(barcode, { usdaLookup: lookupBarcodeUsdaAction });
 
       if (!isMountedRef.current) {
         return;
@@ -529,6 +533,16 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
   };
 
   const startNativeScanner = async (): Promise<void> => {
+    // The ML Kit plugin ships as CocoaPods only, and the iOS project links
+    // its plugins through Swift Package Manager, so today's iOS binary does
+    // not contain it. Ask the bridge instead of calling into a plugin that
+    // isn't there; the web scanner works in the WKWebView (Capacitor grants
+    // the web-view camera request, leaving only the one-time iOS prompt).
+    if (!Capacitor.isPluginAvailable(MLKIT_PLUGIN_NAME)) {
+      await startWebScanner();
+      return;
+    }
+
     setDebugInfo('Starting native ML Kit scanner...');
 
     let mlkit: MLKitBarcodeModule;
@@ -702,9 +716,22 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
         }
       );
 
-      if (isMountedRef.current) {
-        setDebugInfo('Camera ready. Point at barcode.');
+      // start() can resolve AFTER the sheet was closed (e.g. the user backed
+      // out while the camera permission prompt was up). The unmount cleanup
+      // already ran and its stop() was rejected because the scanner wasn't
+      // running yet, so nothing else will ever stop this stream — do it here
+      // or the camera stays live with the scanner gone.
+      if (!isMountedRef.current || scannerRef.current !== html5QrCode) {
+        if (scannerRef.current === html5QrCode) scannerRef.current = null;
+        try {
+          await html5QrCode.stop();
+        } catch {
+          // Already stopped
+        }
+        return;
       }
+
+      setDebugInfo('Camera ready. Point at barcode.');
 
       // Tune the running track: continuous autofocus + modest zoom.
       // html5-qrcode doesn't expose the MediaStreamTrack, so grab it from

@@ -243,6 +243,33 @@ function PercentileBar({ percentile, label, showValue = true }: { percentile: nu
 // transient verify failure), which drives the retryable error state instead.
 const AUTH_REQUIRED = { authRequired: true } as const;
 
+/**
+ * Read every row of a query, newest first, in PostgREST-sized pages.
+ *
+ * A plain select is capped by the API's max-rows (1000 by default) with no
+ * error, so a long range silently lost rows — and with ascending order it
+ * lost the newest ones. `buildPage` must order DESCENDING (with a unique
+ * tiebreak if the sort column isn't unique) and apply `.range(from, to)`.
+ * Returns null when the first page fails (callers treat that as "leave the
+ * chart as it is"); the page cap bounds a pathological history, and because
+ * the order is newest-first anything cut is the oldest data.
+ */
+const WELLNESS_PAGE_SIZE = 1000;
+const WELLNESS_MAX_PAGES = 10;
+async function fetchAllRowsNewestFirst(
+  buildPage: (from: number, to: number) => PromiseLike<{ data: any[] | null; error: unknown }>
+): Promise<any[] | null> {
+  const all: any[] = [];
+  for (let page = 0; page < WELLNESS_MAX_PAGES; page++) {
+    const from = page * WELLNESS_PAGE_SIZE;
+    const { data, error } = await buildPage(from, from + WELLNESS_PAGE_SIZE - 1);
+    if (error || !data) return page === 0 ? null : all;
+    all.push(...data);
+    if (data.length < WELLNESS_PAGE_SIZE) break;
+  }
+  return all;
+}
+
 function AnalyticsPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -362,19 +389,23 @@ function AnalyticsPageContent() {
       
       const supabase = createUntypedClient();
       const urls: Record<string, string> = {};
-      
-      for (const photo of progressPhotos) {
-        if (!photo.photoUrl) continue;
-        
-        const { data } = await supabase.storage
-          .from('progress-photos')
-          .createSignedUrl(photo.photoUrl, 3600);
-        
-        if (data?.signedUrl) {
-          urls[photo.id] = data.signedUrl;
-        }
+
+      // One batched request instead of a sequential round trip per photo.
+      const withPath = progressPhotos.filter((photo) => !!photo.photoUrl);
+      if (withPath.length === 0) return;
+      const { data } = await supabase.storage
+        .from('progress-photos')
+        .createSignedUrls(withPath.map((photo) => photo.photoUrl), 3600);
+
+      const signedByPath = new Map<string, string>();
+      for (const entry of (data ?? []) as { path?: string | null; signedUrl?: string | null }[]) {
+        if (entry.path && entry.signedUrl) signedByPath.set(entry.path, entry.signedUrl);
       }
-      
+      for (const photo of withPath) {
+        const signed = signedByPath.get(photo.photoUrl as string);
+        if (signed) urls[photo.id] = signed;
+      }
+
       setPhotoUrls(urls);
     }
     
@@ -407,7 +438,7 @@ function AnalyticsPageContent() {
           .from('users')
           .select('height_cm, goal, experience, target_body_fat_percent, target_weight_kg, sex')
           .eq('id', user.id)
-          .single(),
+          .maybeSingle(),
         supabase
           .from('dexa_scans')
           .select('*')
@@ -427,6 +458,13 @@ function AnalyticsPageContent() {
           .order('created_at', { ascending: false })
           .limit(1),
       ]);
+      // A failed read must fail the query (→ the retryable error state below),
+      // never be cached — and persisted — as "no DEXA scans / no photos".
+      // The coaching-session read stays best-effort: it only feeds the
+      // optional calibration card.
+      for (const result of [profileResult, scanResult, photoResult]) {
+        if (result.error) throw result.error;
+      }
       return {
         userId: user.id,
         profile: profileResult.data,
@@ -875,13 +913,43 @@ function AnalyticsPageContent() {
       const startDateStr = getLocalDateString(startDate);
 
       try {
-        // Fetch hydration data
-        const { data: hydrationLogs } = await supabase
-          .from('hydration_log')
-          .select('logged_at, amount_ml')
-          .eq('user_id', userId)
-          .gte('logged_at', startDateStr)
-          .order('logged_at', { ascending: true });
+        // The three reads are independent — run them together. Each is paged
+        // newest-first (see fetchAllRowsNewestFirst): a single ascending
+        // select was silently capped at 1000 rows, so on the 6m / 1y / all
+        // ranges the NEWEST days were the ones dropped.
+        const [hydrationLogs, cardioLogs, checkIns] = await Promise.all([
+          fetchAllRowsNewestFirst((from, to) =>
+            supabase
+              .from('hydration_log')
+              .select('logged_at, amount_ml')
+              .eq('user_id', userId)
+              .gte('logged_at', startDateStr)
+              // No `id` tiebreak here: hydration_log has no migration in the
+              // repo, so its key column can't be assumed.
+              .order('logged_at', { ascending: false })
+              .range(from, to)
+          ),
+          fetchAllRowsNewestFirst((from, to) =>
+            supabase
+              .from('cardio_log')
+              .select('logged_at, minutes, modality')
+              .eq('user_id', userId)
+              .gte('logged_at', startDateStr)
+              .order('logged_at', { ascending: false })
+              .order('id', { ascending: false })
+              .range(from, to)
+          ),
+          fetchAllRowsNewestFirst((from, to) =>
+            supabase
+              .from('daily_check_ins')
+              .select('date, sleep_hours, sleep_quality, energy_level, mood_rating, focus_rating, libido_rating, stress_level, soreness_level, hunger_level')
+              .eq('user_id', userId)
+              .gte('date', startDateStr)
+              .order('date', { ascending: false })
+              .range(from, to)
+          ),
+        ]);
+        if (cancelled) return;
 
         if (hydrationLogs) {
           // Group by date and sum amounts
@@ -898,14 +966,6 @@ function AnalyticsPageContent() {
 
           setHydrationData(hydrationArray);
         }
-
-        // Fetch cardio data
-        const { data: cardioLogs } = await supabase
-          .from('cardio_log')
-          .select('logged_at, minutes, modality')
-          .eq('user_id', userId)
-          .gte('logged_at', startDateStr)
-          .order('logged_at', { ascending: true });
 
         if (cardioLogs) {
           // Group by date and sum minutes, also track modality breakdown
@@ -934,16 +994,9 @@ function AnalyticsPageContent() {
           setCardioData(cardioArray);
         }
 
-        // Fetch daily check-in data
-        const { data: checkIns } = await supabase
-          .from('daily_check_ins')
-          .select('date, sleep_hours, sleep_quality, energy_level, mood_rating, focus_rating, libido_rating, stress_level, soreness_level, hunger_level')
-          .eq('user_id', userId)
-          .gte('date', startDateStr)
-          .order('date', { ascending: true });
-
         if (checkIns) {
-          const transformed = checkIns.map((ci: any) => ({
+          // Charts read oldest → newest.
+          const transformed = [...checkIns].reverse().map((ci: any) => ({
             date: ci.date,
             sleepHours: ci.sleep_hours,
             sleepQuality: ci.sleep_quality,
@@ -962,7 +1015,9 @@ function AnalyticsPageContent() {
       }
     }
 
+    let cancelled = false;
     fetchWellnessData();
+    return () => { cancelled = true; };
   }, [userId, timeRange]);
 
   // Fetch workout data for the Strength tab's plateau alerts and

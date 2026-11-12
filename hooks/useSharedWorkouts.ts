@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuthUser } from '@/hooks/useAuthUser';
 import { fetchUserProfiles } from '@/lib/profiles';
+import { loadBlockedUserIds, toPostgrestInList } from '@/lib/moderation';
 import type { SharedWorkoutWithProfile, ShareType, Difficulty } from '@/types/social';
 
 interface UseSharedWorkoutsOptions {
@@ -56,6 +57,15 @@ export function useSharedWorkouts(options: UseSharedWorkoutsOptions = {}): UseSh
         .from('shared_workouts' as never)
         .select('*')
         .eq('is_public', true);
+
+      // Leave out authors this user has blocked, in the query, so pages
+      // don't come up short after card-level filtering.
+      if (user?.id) {
+        const blocked = await loadBlockedUserIds(supabase as never, user.id);
+        if (blocked.size > 0) {
+          query = query.not('user_id', 'in', toPostgrestInList(blocked));
+        }
+      }
 
       // Apply filters
       if (shareType !== 'all') {

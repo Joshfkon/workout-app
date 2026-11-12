@@ -865,3 +865,26 @@ describe('calculateFatigueScore with sleepDebtScore', () => {
     expect(calculateFatigueScore(huge) - calculateFatigueScore(base)).toBe(SLEEP_DEBT_MAX_SCORE);
   });
 });
+
+describe('computeSleepDebtSignal — the window is calendar days, not −24h steps', () => {
+  // US spring-forward: 2026-03-08 is a 23-hour local day. Just after local
+  // midnight on Mar 9, "6 × 24h ago" is 23:30 on Mar 2 — one local day too
+  // early — so the 7-day window silently took in an 8th night. (Only bites in
+  // a DST-observing zone; elsewhere both forms agree and this still passes.)
+  const justAfterMidnight = new Date(2026, 2, 9, 0, 30);
+
+  it('ignores a night logged the day before the 7-local-day window opens', () => {
+    const signal = computeSleepDebtSignal(
+      [
+        { localDay: '2026-03-02', hours: 0 }, // 8 local days back — outside
+        { localDay: '2026-03-03', hours: 7 }, // first day of the window
+        { localDay: '2026-03-06', hours: 7 },
+        { localDay: '2026-03-09', hours: 7 },
+      ],
+      justAfterMidnight
+    );
+    expect(signal.avgHours).toBe(7);
+    expect(signal.score).toBe(0);
+    expect(signal.evidence).toBeNull();
+  });
+});

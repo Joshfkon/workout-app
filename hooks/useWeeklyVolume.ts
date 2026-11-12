@@ -113,7 +113,12 @@ export function useWeeklyVolume(options: UseWeeklyVolumeOptions = {}) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const { getVolumeLandmarks } = useUserStore();
+  const getVolumeLandmarks = useUserStore((state) => state.getVolumeLandmarks);
+  // `getVolumeLandmarks` is a stable function that reads the store's user at
+  // call time, so it can't be the memo dependency on its own: the derivation
+  // below must re-run when the user (experience, custom landmarks, Enhanced
+  // Athlete Mode) is hydrated or edited.
+  const storeUser = useUserStore((state) => state.user);
 
   // The window lower bound is the SHARED local-day-anchored one: a bare
   // `YYYY-MM-DD` string compared against a timestamptz would be read as UTC
@@ -185,7 +190,8 @@ export function useWeeklyVolume(options: UseWeeklyVolumeOptions = {}) {
 
   const { volumeData, rows, tiles } = useMemo(
     () => deriveWeeklyVolume(blocks, getVolumeLandmarks),
-    [blocks, getVolumeLandmarks]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [blocks, getVolumeLandmarks, storeUser]
   );
 
   return {

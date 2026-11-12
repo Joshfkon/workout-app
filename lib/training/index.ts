@@ -3,7 +3,6 @@ export { ProgramEngine, calculateBodyComposition, estimate1RM, calculateWorkingW
 export { CoachingService } from './coachingService';
 export {
   getWeightRecommendationsForWorkout,
-  getTodayMesocycleWorkout,
   checkShouldDeload,
   recordWorkoutExerciseHistory,
   getUserRecoveryFactors,

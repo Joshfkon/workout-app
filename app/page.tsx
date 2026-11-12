@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { isSessionCookieValid } from "@/lib/supabase/sessionCookie";
 import { ThemeToggleCompact } from "@/components/settings/ThemeToggle";
 import { PhoneShowcase } from "@/components/marketing/PhoneShowcase";
+import { NativeAppRedirect } from "./_components/NativeAppRedirect";
 
 export default async function Home({
   searchParams,
@@ -36,7 +37,10 @@ export default async function Home({
   if (user) {
     redirect("/dashboard/log");
   }
+  // Inside the native app a signed-out user goes straight to /login: the
+  // marketing page (and its pricing link) is web-only.
   return (
+    <NativeAppRedirect to="/login">
     <div className="min-h-screen bg-surface-950 relative overflow-hidden">
       {/* Top navigation - fixed height to prevent overlap */}
       <nav className="fixed top-0 left-0 right-0 z-20 flex items-center justify-between px-4 py-3 md:px-6 md:py-4 bg-surface-950/80 backdrop-blur-sm border-b border-surface-800/50">
@@ -238,6 +242,7 @@ export default async function Home({
         </div>
       </footer>
     </div>
+    </NativeAppRedirect>
   );
 }
 

@@ -8,6 +8,7 @@
  */
 
 import { createUntypedServerClient } from '@/lib/supabase/server';
+import { lookupBarcode as lookupBarcodeUSDA, type FoodSearchResult } from '@/services/usdaService';
 import { calculateMacros, type Goal, type ActivityLevel, type Peptide, type UserStats, type ActivityConfig, type GoalConfig } from '@/lib/nutrition/macroCalculator';
 
 // Note: Food search functions (searchFoods, getFoodDetails, FoodSearchResult) live in
@@ -240,5 +241,66 @@ export async function getMacroSettings(): Promise<MacroSettings | null> {
   } catch (error) {
     console.error('[getMacroSettings] Error:', error);
     return null;
+  }
+}
+
+/**
+ * Mark the user's targets as hand-set (or not): turns `auto_update_enabled`
+ * on the existing `macro_settings` row off/on. Called when targets are saved
+ * manually so the adaptive TDEE sync never overwrites them; applying the
+ * macro calculator turns it back on (saveMacroSettings). A user with no
+ * `macro_settings` row is already never auto-updated, so this is a no-op.
+ */
+export async function setMacroAutoUpdateEnabled(
+  enabled: boolean
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = await createUntypedServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      return { success: false, error: 'Not authenticated' };
+    }
+
+    const { error } = await supabase
+      .from('macro_settings')
+      .update({ auto_update_enabled: enabled, updated_at: new Date().toISOString() })
+      .eq('user_id', user.id);
+
+    if (error) {
+      console.error('[setMacroAutoUpdateEnabled] Error:', error);
+      return { success: false, error: error.message };
+    }
+    return { success: true };
+  } catch (error) {
+    console.error('[setMacroAutoUpdateEnabled] Error:', error);
+    return { success: false, error: 'Failed to update settings' };
+  }
+}
+
+/**
+ * USDA barcode fallback, run on the server so it uses the real
+ * USDA_API_KEY (the browser only ever has the shared, rate-limited DEMO_KEY).
+ * Pass as `usdaLookup` to openFoodFactsService.lookupBarcode.
+ */
+export async function lookupBarcodeUsdaAction(
+  barcode: string
+): Promise<{ food?: FoodSearchResult; error?: string }> {
+  try {
+    const supabase = await createUntypedServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return { error: 'Not authenticated' };
+    }
+
+    const clean = String(barcode ?? '').replace(/\D/g, '');
+    if (clean.length < 8 || clean.length > 14) {
+      return { error: 'Invalid barcode' };
+    }
+
+    return await lookupBarcodeUSDA(clean);
+  } catch (error) {
+    console.error('[lookupBarcodeUsdaAction] Error:', error);
+    return { error: 'Barcode lookup failed. Try searching by name.' };
   }
 }

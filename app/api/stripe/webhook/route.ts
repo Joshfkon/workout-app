@@ -37,6 +37,20 @@ async function fetchAuthoritativeSubscription(
   }
 }
 
+/**
+ * supabase-js does not throw on a failed write — it returns `{ error }`. Every
+ * write below goes through this so a failure propagates to the POST handler,
+ * which releases the idempotency claim and returns 500. Stripe then retries,
+ * instead of the event being marked processed with the row left stale.
+ */
+function throwOnError(result: { error: unknown }, what: string): void {
+  if (result.error) {
+    const detail =
+      (result.error as { message?: string }).message ?? JSON.stringify(result.error);
+    throw new Error(`${what} failed: ${detail}`);
+  }
+}
+
 async function handleSubscriptionChange(subscription: Stripe.Subscription) {
   const supabase = await getSupabaseAdmin();
 
@@ -45,11 +59,12 @@ async function handleSubscriptionChange(subscription: Stripe.Subscription) {
   const tier = getTierFromPriceId(priceId);
 
   // Find user by customer ID
-  const { data: existingSub } = await supabase
+  const { data: existingSub, error: existingSubError } = await supabase
     .from('subscriptions')
     .select('user_id, is_lifetime, promo_code_id')
     .eq('stripe_customer_id', customerId)
-    .single();
+    .maybeSingle();
+  throwOnError({ error: existingSubError }, 'Subscription lookup by customer');
 
   if (!existingSub) {
     // Try to find by metadata
@@ -60,20 +75,24 @@ async function handleSubscriptionChange(subscription: Stripe.Subscription) {
     }
 
     // Check if user has an existing subscription (e.g., from promo code)
-    const { data: userExistingSub } = await supabase
+    const { data: userExistingSub, error: userExistingSubError } = await supabase
       .from('subscriptions')
       .select('is_lifetime, promo_code_id, tier')
       .eq('user_id', userId)
-      .single();
+      .maybeSingle();
+    throwOnError({ error: userExistingSubError }, 'Subscription lookup by user');
 
     // Don't overwrite lifetime promo code subscriptions
     if (userExistingSub?.is_lifetime && userExistingSub?.promo_code_id) {
       console.log('Skipping subscription update - user has lifetime promo code subscription:', userId);
       // Only update the stripe_customer_id so we can track it, but keep their tier/status
-      await supabase
-        .from('subscriptions')
-        .update({ stripe_customer_id: customerId })
-        .eq('user_id', userId);
+      throwOnError(
+        await supabase
+          .from('subscriptions')
+          .update({ stripe_customer_id: customerId })
+          .eq('user_id', userId),
+        'Subscription customer-id update'
+      );
       return;
     }
 
@@ -83,7 +102,7 @@ async function handleSubscriptionChange(subscription: Stripe.Subscription) {
     const periodEnd = subAny.current_period_end as number | undefined;
 
     // Create subscription record
-    await supabase
+    const upsertResult = await supabase
       .from('subscriptions')
       .upsert({
         user_id: userId,
@@ -101,6 +120,7 @@ async function handleSubscriptionChange(subscription: Stripe.Subscription) {
       }, {
         onConflict: 'user_id',
       });
+    throwOnError(upsertResult, 'Subscription upsert');
   } else {
     // Don't overwrite lifetime promo code subscriptions
     if (existingSub.is_lifetime && existingSub.promo_code_id) {
@@ -114,7 +134,7 @@ async function handleSubscriptionChange(subscription: Stripe.Subscription) {
     const periodEnd = subAny.current_period_end as number | undefined;
 
     // Update existing subscription
-    await supabase
+    const updateResult = await supabase
       .from('subscriptions')
       .update({
         stripe_subscription_id: subscription.id,
@@ -129,6 +149,7 @@ async function handleSubscriptionChange(subscription: Stripe.Subscription) {
         cancel_at_period_end: subscription.cancel_at_period_end,
       })
       .eq('stripe_customer_id', customerId);
+    throwOnError(updateResult, 'Subscription update');
   }
 }
 
@@ -137,11 +158,23 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
   const customerId = subscription.customer as string;
 
   // Check if this is a lifetime promo code subscription - don't downgrade those
-  const { data: existingSub } = await supabase
+  const { data: existingSub, error: existingSubError } = await supabase
     .from('subscriptions')
-    .select('is_lifetime, promo_code_id')
+    .select('is_lifetime, promo_code_id, stripe_subscription_id')
     .eq('stripe_customer_id', customerId)
-    .single();
+    .maybeSingle();
+  throwOnError({ error: existingSubError }, 'Subscription lookup by customer');
+
+  // A customer can (historically) hold two subscriptions. Only the one the
+  // row tracks may downgrade it; the end of some other subscription must not
+  // set a still-paying customer to free.
+  if (
+    existingSub?.stripe_subscription_id &&
+    existingSub.stripe_subscription_id !== subscription.id
+  ) {
+    console.log('Skipping subscription deletion - not the subscription on record');
+    return;
+  }
 
   if (existingSub?.is_lifetime && existingSub?.promo_code_id) {
     console.log('Skipping subscription deletion - user has lifetime promo code subscription');
@@ -149,13 +182,16 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
   }
 
   // Update to canceled status but keep the record
-  await supabase
-    .from('subscriptions')
-    .update({
-      status: 'canceled',
-      tier: 'free',
-    })
-    .eq('stripe_customer_id', customerId);
+  throwOnError(
+    await supabase
+      .from('subscriptions')
+      .update({
+        status: 'canceled',
+        tier: 'free',
+      })
+      .eq('stripe_customer_id', customerId),
+    'Subscription cancel update'
+  );
 }
 
 async function handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
@@ -163,12 +199,15 @@ async function handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
   const customerId = invoice.customer as string;
   
   // Update status to past_due
-  await supabase
-    .from('subscriptions')
-    .update({
-      status: 'past_due',
-    })
-    .eq('stripe_customer_id', customerId);
+  throwOnError(
+    await supabase
+      .from('subscriptions')
+      .update({
+        status: 'past_due',
+      })
+      .eq('stripe_customer_id', customerId),
+    'Subscription past_due update'
+  );
 }
 
 export async function POST(request: NextRequest) {

@@ -23,7 +23,7 @@ describe('AboutTab', () => {
       progressionEase: 4,
     },
     createdAt: new Date().toISOString(),
-  };
+  } as unknown as Exercise;
 
   it('renders muscle credits list with primary and secondary muscles', () => {
     render(<AboutTab exercise={baseExercise} sessionCount={0} />);
@@ -64,7 +64,7 @@ describe('AboutTab', () => {
   it('does not render credits list when no muscles are specified', () => {
     const noMusclesExercise: Exercise = {
       ...baseExercise,
-      primaryMuscle: null,
+      primaryMuscle: null as unknown as Exercise['primaryMuscle'],
       secondaryMuscles: [],
     };
     

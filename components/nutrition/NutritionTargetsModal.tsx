@@ -5,6 +5,7 @@ import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import type { NutritionTargets, MealNames } from '@/types/nutrition';
+import { lowCalorieTargetWarning } from '@/lib/nutrition/calorieTargetWarning';
 
 const DEFAULT_MEAL_NAMES: Record<string, string> = {
   breakfast: 'Breakfast',
@@ -25,6 +26,8 @@ interface NutritionTargetsModalProps {
     meal_names?: MealNames;
   }) => Promise<void>;
   existingTargets?: NutritionTargets;
+  /** Used only to pick the floor for the low-calorie warning. */
+  sex?: 'male' | 'female' | null;
 }
 
 export function NutritionTargetsModal({
@@ -32,6 +35,7 @@ export function NutritionTargetsModal({
   onClose,
   onSave,
   existingTargets,
+  sex,
 }: NutritionTargetsModalProps) {
   const [calories, setCalories] = useState(existingTargets?.calories?.toString() || '');
   const [protein, setProtein] = useState(existingTargets?.protein?.toString() || '');
@@ -47,6 +51,9 @@ export function NutritionTargetsModal({
   const [showMealNames, setShowMealNames] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  // A warning, not a block: the user can still save a very low target.
+  const lowCalorieWarning = lowCalorieTargetWarning(parseFloat(calories), sex);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -155,6 +162,11 @@ export function NutritionTargetsModal({
               <p className="mt-1 text-xs text-surface-500">
                 Daily calorie target
               </p>
+              {lowCalorieWarning && (
+                <p role="alert" data-testid="low-calorie-warning" className="mt-1 text-xs text-warning-400">
+                  {lowCalorieWarning}
+                </p>
+              )}
             </div>
 
             <div>

@@ -8,6 +8,10 @@ import { LoadingState, PageHeader } from '@/components/ui';
 import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 
 const SETTINGS_KEY = ['settings', 'user'] as const;
+// Kept as '*': two columns this page reads/writes (`age`, `training_age`) are
+// not created by any migration in the repo, so naming them explicitly would
+// turn schema drift into a hard load failure (PostgREST 42703).
+const SETTINGS_USER_SELECT = '*';
 import { DEFAULT_VOLUME_LANDMARKS } from '@/types/schema';
 import {
   migrateStoredLandmarks,
@@ -17,6 +21,7 @@ import {
 } from '@/lib/migrations/volume-landmarks';
 import type { Goal, Experience, WeightUnit, Equipment, MuscleGroup, Rating } from '@/types/schema';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { refreshUserStore } from '@/components/providers/UserStoreHydrator';
 import { getDisplayWeight, validateWeightEntry } from '@/lib/weightUtils';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { updateTrainingPhase, type TrainingPhase } from '@/lib/actions/phase';
@@ -152,15 +157,24 @@ export default function SettingsPage() {
       const supabase = createUntypedClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return null;
-      const { data } = await supabase.from('users').select('*').eq('id', user.id).single();
-      const { data: latestWeightLog } = await supabase
-        .from('weight_log')
-        .select('weight, unit, logged_at')
-        .eq('user_id', user.id)
-        .order('logged_at', { ascending: false })
-        .limit(1)
-        .single();
-      return { userId: user.id, userRow: data, latestWeightLog };
+      // A failed read must FAIL the query, not be cached as "this user has no
+      // row": the form then showed defaults, and Save upserted those defaults
+      // over the real goal / experience / landmarks / equipment / injuries
+      // (and dropped every preferences key it didn't know about). maybeSingle
+      // so a genuinely missing row / empty weight log is null, not an error.
+      const [userResult, weightResult] = await Promise.all([
+        supabase.from('users').select(SETTINGS_USER_SELECT).eq('id', user.id).maybeSingle(),
+        supabase
+          .from('weight_log')
+          .select('weight, unit, logged_at')
+          .eq('user_id', user.id)
+          .order('logged_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ]);
+      if (userResult.error) throw userResult.error;
+      if (weightResult.error) throw weightResult.error;
+      return { userId: user.id, userRow: userResult.data, latestWeightLog: weightResult.data };
     },
     staleTime: 1000 * 60,
     gcTime: IMMUTABLE_GC_TIME,
@@ -352,7 +366,19 @@ export default function SettingsPage() {
     };
   }, [loadSettings]);
 
+  // Save is only allowed once the user's row has actually been read. Without
+  // it the form holds defaults, and the whole-row upsert below would overwrite
+  // real settings with them.
+  const settingsLoaded = !!settingsQuery.data && !settingsQuery.isPlaceholderData;
+
   const handleSave = async () => {
+    if (!settingsLoaded) {
+      setSaveMessage({
+        type: 'error',
+        text: "Your settings haven't loaded yet, so nothing was saved. Check your connection and try again.",
+      });
+      return;
+    }
     setIsSaving(true);
     setSaveMessage(null);
 
@@ -376,9 +402,7 @@ export default function SettingsPage() {
         weightToSave = units === 'lb' ? lbsToKg(weightVal) : weightVal;
       }
       
-      const { error } = await supabase
-        .from('users')
-        .upsert({
+      const savedRow = {
           id: user.id,
           email: user.email,
           goal,
@@ -414,8 +438,9 @@ export default function SettingsPage() {
           training_age: trainingAge ? parseFloat(trainingAge) : 0,
           available_equipment: availableEquipment,
           injury_history: injuryHistory,
-        });
-      
+      };
+      const { error } = await supabase.from('users').upsert(savedRow);
+
       // Update global preferences so header toggle stays in sync
       if (!error) {
         updatePreference('units', units);
@@ -442,6 +467,10 @@ export default function SettingsPage() {
           successText = 'Settings saved, but nutrition targets could not be synced to the new goal.';
         }
       }
+
+      // Keep the user store (units, experience, custom landmarks — read all
+      // over the app) in step with what was just saved.
+      void refreshUserStore(user.id);
 
       setSaveMessage({ type: 'success', text: successText });
       setHasUnsavedChanges(false);
@@ -480,10 +509,34 @@ export default function SettingsPage() {
 
   // Full-screen loader only on first-ever load with an empty cache. A revisit
   // (warm cache) or reload (IndexedDB restore) renders settings immediately.
-  if (isLoading && !settingsQuery.data && !isRestoring) {
+  if (isLoading && !settingsQuery.data && !isRestoring && !settingsQuery.isError) {
     return (
       <div className="max-w-2xl mx-auto py-20" data-testid="settings-full-loading">
         <LoadingState label="Loading settings..." size="lg" />
+      </div>
+    );
+  }
+
+  // The row could not be read and there is no cached copy: show that, with a
+  // retry, instead of a form full of defaults that Save would write back.
+  if (settingsQuery.isError && !settingsQuery.data) {
+    return (
+      <div className="max-w-2xl mx-auto space-y-6" data-testid="settings-load-error">
+        <PageHeader title="Settings" subtitle="Customize your training preferences and account" />
+        <div className="p-4 rounded-lg bg-danger-500/10 border border-danger-500/20 text-danger-400">
+          <p className="text-sm">
+            We couldn&apos;t load your settings. Nothing has been changed — check your connection
+            and try again.
+          </p>
+          <button
+            type="button"
+            onClick={() => void settingsQuery.refetch()}
+            disabled={settingsQuery.isFetching}
+            className="mt-3 px-4 py-2 rounded-lg bg-surface-800 text-surface-100 text-sm font-medium hover:bg-surface-700 disabled:opacity-50"
+          >
+            {settingsQuery.isFetching ? 'Retrying…' : 'Try again'}
+          </button>
+        </div>
       </div>
     );
   }

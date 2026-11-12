@@ -1,7 +1,9 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { purgeUserCaches } from '@/lib/query/clientCachePurge';
 
 interface SignOutButtonProps {
   className?: string;
@@ -10,10 +12,14 @@ interface SignOutButtonProps {
 
 export function SignOutButton({ className, showOnMobile = false }: SignOutButtonProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   const handleSignOut = async () => {
     const supabase = createUntypedClient();
     await supabase.auth.signOut();
+    // Leave nothing of this user's data behind for the next sign-in on this
+    // browser (query cache, SW Cache Storage, localStorage snapshots, store).
+    await purgeUserCaches(queryClient);
     router.push('/login');
     router.refresh();
   };

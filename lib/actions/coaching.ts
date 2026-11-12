@@ -12,15 +12,27 @@ import { createClient } from '@/lib/supabase/server';
 import { buildCoachingContext } from '@/lib/data/coachingContext';
 import { formatCoachingContext } from '@/services/coachingContextService';
 import { AI_CONSENT_REQUIRED_MESSAGE, hasAiDataSharingConsent } from '@/lib/ai/consent';
+import { AI_RATE_LIMIT_MESSAGE, consumeAiQuota } from '@/lib/ai/rateLimit';
+import { TIER_REQUIRED_MESSAGES, userHasFeatureAccess } from '@/lib/subscription/requireTier';
 import {
   AuthenticationError,
   AuthorizationError,
   ServerError,
   NotFoundError,
+  ValidationError,
   getErrorMessage,
 } from '@/lib/errors';
 import type { CoachingMessage, CoachingResponse } from '@/types/coaching';
 import type { Database, Json } from '@/types/database';
+
+/** Longest single message the coach accepts (characters). */
+const MAX_COACH_MESSAGE_LENGTH = 4000;
+/**
+ * How many of the most recent conversation messages are re-sent to the model.
+ * Without a cap every turn re-sends the whole conversation, so cost per
+ * message grows without bound.
+ */
+const MAX_COACH_HISTORY_MESSAGES = 20;
 
 // System prompt for AI coaching
 const SYSTEM_PROMPT = `You are an AI strength and physique coach embedded in a training app. You have access to this user's actual data — use it. Never give generic advice when their specific numbers tell a clearer story.
@@ -78,8 +90,27 @@ export async function sendCoachingMessage(
       throw new AuthenticationError('Please sign in to use AI coaching.');
     }
 
+    // Same gate the AI Coach page applies (canAccess('ai-coaching')), enforced
+    // here because a server action can be called without the page.
+    if (!(await userHasFeatureAccess(user.id, 'ai-coaching'))) {
+      throw new AuthorizationError(
+        TIER_REQUIRED_MESSAGES['ai-coaching'] ?? 'AI Coach is not included in your plan.'
+      );
+    }
+
     if (!(await hasAiDataSharingConsent(user.id))) {
       throw new AuthorizationError(AI_CONSENT_REQUIRED_MESSAGE);
+    }
+
+    if (typeof message !== 'string' || !message.trim()) {
+      throw new ValidationError('Empty coaching message', {
+        userMessage: 'Type a message first.',
+      });
+    }
+    if (message.length > MAX_COACH_MESSAGE_LENGTH) {
+      throw new ValidationError('Coaching message too long', {
+        userMessage: `Keep your message under ${MAX_COACH_MESSAGE_LENGTH} characters.`,
+      });
     }
 
     // Check for API key
@@ -87,6 +118,10 @@ export async function sendCoachingMessage(
     if (!apiKey) {
       console.error('[AI Coach] XAI_API_KEY is not set');
       throw new ServerError('AI coaching is not configured. Please contact support.', 500);
+    }
+
+    if (!(await consumeAiQuota(supabase, 'coach_chat'))) {
+      throw new AuthorizationError(AI_RATE_LIMIT_MESSAGE);
     }
 
     // Build coaching context
@@ -146,8 +181,10 @@ export async function sendCoachingMessage(
     content: SYSTEM_PROMPT,
   });
 
-  // Add conversation history (without duplicating context for each message)
-  for (const msg of messages) {
+  // Add conversation history (without duplicating context for each message).
+  // Only the most recent turns go to the model; the stored conversation keeps
+  // everything.
+  for (const msg of messages.slice(-MAX_COACH_HISTORY_MESSAGES)) {
     if (msg.role === 'user') {
       // For user messages, only include the actual message content
       apiMessages.push({
@@ -417,6 +454,14 @@ export async function generateWorkoutCoachNotes(
       data: { user },
     } = await supabase.auth.getUser();
     if (!user || !(await hasAiDataSharingConsent(user.id))) {
+      return {
+        notes: generateFallbackNotes(input),
+        generated: false,
+      };
+    }
+
+    // Over the daily cap: same graceful fallback as "AI unavailable".
+    if (!(await consumeAiQuota(supabase, 'workout_coach_notes'))) {
       return {
         notes: generateFallbackNotes(input),
         generated: false,

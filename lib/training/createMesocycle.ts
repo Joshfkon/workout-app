@@ -88,6 +88,61 @@ export interface CreateMesocycleResult {
 }
 
 /**
+ * Fit a generated program to the block length the user chose.
+ *
+ * Session generation reads `program_data.mesocycleWeeks[week - 1]`, so the row's
+ * `deload_week` is only true if THAT week is the program's deload. A program
+ * generated longer than the chosen length used to be stored whole: an N-week
+ * block then served program week N (a near-peak training week) as its promised
+ * "deload", and ended without one. Here the first N−1 training weeks are kept
+ * and the program's deload week becomes week N.
+ *
+ * A program SHORTER than the choice cannot be extended here (that needs the
+ * generator — pass `totalWeeks` to `generateFullMesocycleWithFatigue`); it is
+ * returned unchanged and `reconcileMesocycleWeeks` clamps the row to it.
+ * Pure — never mutates its input.
+ */
+export function fitProgramToTotalWeeks(
+  fullProgram: FullProgramRecommendation | null,
+  totalWeeks: number
+): FullProgramRecommendation | null {
+  const weeks = fullProgram?.mesocycleWeeks;
+  if (!fullProgram || !weeks || weeks.length === 0) return fullProgram;
+  if (!Number.isInteger(totalWeeks) || totalWeeks < 2 || totalWeeks >= weeks.length) {
+    return fullProgram;
+  }
+
+  const deloadWeek = weeks.find((w) => w.isDeload) ?? weeks[weeks.length - 1];
+  const trainingWeeks = weeks.filter((w) => w !== deloadWeek).slice(0, totalWeeks - 1);
+  const fittedWeeks = [
+    ...trainingWeeks,
+    { ...deloadWeek, weekNumber: totalWeeks, isDeload: true },
+  ];
+
+  const progression = fullProgram.periodization?.weeklyProgression;
+  const fittedProgression =
+    progression && progression.length === weeks.length
+      ? [
+          ...progression.slice(0, totalWeeks - 1),
+          { ...progression[progression.length - 1], week: totalWeeks },
+        ]
+      : progression;
+
+  return {
+    ...fullProgram,
+    mesocycleWeeks: fittedWeeks,
+    periodization: fullProgram.periodization
+      ? {
+          ...fullProgram.periodization,
+          mesocycleWeeks: totalWeeks,
+          deloadFrequency: totalWeeks - 1,
+          weeklyProgression: fittedProgression,
+        }
+      : fullProgram.periodization,
+  };
+}
+
+/**
  * Reconcile the requested block length against the program actually generated.
  *
  * A program with fewer weeks than requested would leave `current_week` able to
@@ -180,8 +235,11 @@ export async function createMesocycle(
     );
   }
 
-  const weeks = reconcileMesocycleWeeks(input.totalWeeks, input.fullProgram);
-  const row = buildMesocycleRow(input, weeks);
+  // The stored program must agree with the stored length: fit it first, then
+  // reconcile whatever mismatch is left (a too-short program still wins).
+  const fullProgram = fitProgramToTotalWeeks(input.fullProgram, input.totalWeeks);
+  const weeks = reconcileMesocycleWeeks(input.totalWeeks, fullProgram);
+  const row = buildMesocycleRow({ ...input, fullProgram }, weeks);
 
   const { data: mesocycle, error: insertError } = await supabase
     .from('mesocycles')

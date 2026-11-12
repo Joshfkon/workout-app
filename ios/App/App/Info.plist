@@ -73,9 +73,11 @@
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>NSCameraUsageDescription</key>
-	<string>HyperTrack uses the camera to scan food barcodes for nutrition logging.</string>
+	<string>HyperTrack uses the camera to scan food barcodes and nutrition labels, and to take progress photos.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>HyperTrack uses your location to suggest which gym you&#8217;re training at, so machine weights stay tracked per gym.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>HyperTrack uses your location to suggest which gym you&#8217;re training at, so machine weights stay tracked per gym. Location is only read while you are using the app.</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

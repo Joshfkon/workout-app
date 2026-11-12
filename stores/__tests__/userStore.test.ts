@@ -418,3 +418,50 @@ describe('userStore', () => {
     });
   });
 });
+
+describe('userFromRow (users row → store user)', () => {
+  const { userFromRow } = require('../userStore') as typeof import('../userStore');
+
+  it('maps the real users row, including the DB preference key names', () => {
+    const user = userFromRow({
+      id: 'u1',
+      email: 'a@example.com',
+      created_at: '2026-01-01T00:00:00Z',
+      goal: 'cut',
+      experience: 'advanced',
+      enhanced_athlete_mode: true,
+      preferences: { units: 'kg', restTimer: 120, showFormCues: false, landmarkVersion: 2 },
+      volume_landmarks: { chest: { mev: 8, mav: 14, mrv: 22 } },
+    });
+    expect(user.id).toBe('u1');
+    expect(user.goal).toBe('cut');
+    expect(user.experience).toBe('advanced');
+    expect(user.enhancedAthleteMode).toBe(true);
+    expect(user.preferences.units).toBe('kg');
+    expect(user.preferences.restTimerDefault).toBe(120);
+    expect(user.preferences.showFormCues).toBe(false);
+    expect(user.preferences.showWarmupSuggestions).toBe(true);
+    // Unknown preference keys ride along (readLandmarkVersion reads one).
+    expect((user.preferences as unknown as Record<string, unknown>).landmarkVersion).toBe(2);
+    expect(user.volumeLandmarks.chest).toEqual({ mev: 8, mav: 14, mrv: 22 });
+  });
+
+  it('falls back to the same defaults as useUserPreferences for a sparse row', () => {
+    const user = userFromRow({ id: 'u2', preferences: null, volume_landmarks: null });
+    expect(user.goal).toBe('maintenance');
+    expect(user.experience).toBe('intermediate');
+    expect(user.enhancedAthleteMode).toBe(false);
+    expect(user.preferences.units).toBe('lb');
+    expect(user.preferences.restTimerDefault).toBe(180);
+    expect(user.volumeLandmarks).toEqual({});
+  });
+
+  it('feeds the store so consumers stop reading defaults', () => {
+    useUserStore.getState().setUser(
+      userFromRow({ id: 'u3', experience: 'novice', preferences: { units: 'kg' } })
+    );
+    expect(useUserStore.getState().user?.id).toBe('u3');
+    expect(useUserStore.getState().getPreference('units')).toBe('kg');
+    useUserStore.getState().setUser(null);
+  });
+});

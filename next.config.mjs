@@ -46,6 +46,27 @@ const nextConfig = {
     optimizePackageImports: ['recharts', 'framer-motion', '@supabase/supabase-js', 'zustand'],
   },
 
+  // Baseline security headers on every response. Deliberately conservative:
+  // there is NO script/connect/img CSP here — the app talks to Supabase,
+  // Stripe and AI providers and runs inside the Capacitor web view, and a
+  // restrictive CSP would need testing against all of those first.
+  // frame-ancestors only stops OTHER sites framing the app (clickjacking); the
+  // Capacitor web view loads the site as a top-level page, so it is unaffected.
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          { key: 'Strict-Transport-Security', value: 'max-age=31536000' },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          { key: 'Content-Security-Policy', value: "frame-ancestors 'self'" },
+          { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+        ],
+      },
+    ];
+  },
+
   // Capacitor notes:
   // - When ready for Capacitor, you may want to add `output: 'export'` for static builds
   // - However, this app uses API routes and server actions, so you'll likely want to:

@@ -31,6 +31,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { getLocalUserId } from '@/lib/supabase/authState';
 import { getLocalDateString } from '@/lib/utils';
+import { unitsFromUserPreferences } from '@/lib/nutrition/formulaProfile';
 import { bootMark } from '@/lib/perf/bootTrace';
 import {
   getWorkoutForDate,
@@ -190,10 +191,12 @@ async function fetchLogHomeData(): Promise<LogHomeData | null> {
       .eq('user_id', userId)
       .order('logged_at', { ascending: false })
       .limit(1),
+    // Unit preference lives in users.preferences.units (there is no
+    // user_preferences table).
     supabase
-      .from('user_preferences')
-      .select('weight_unit')
-      .eq('user_id', userId)
+      .from('users')
+      .select('preferences')
+      .eq('id', userId)
       .maybeSingle(),
     fetchEatingWindow(supabase, userId),
   ]);
@@ -254,8 +257,9 @@ async function fetchLogHomeData(): Promise<LogHomeData | null> {
   const sumOf = (key: 'calories' | 'protein' | 'carbs' | 'fat') =>
     Math.round(foodRows.reduce((sum, r) => sum + (r[key] || 0), 0));
 
-  const preferredUnit =
-    ((prefsRes.data as { weight_unit: string | null } | null)?.weight_unit as 'lb' | 'kg') || 'lb';
+  const preferredUnit = unitsFromUserPreferences(
+    (prefsRes.data as { preferences?: unknown } | null)?.preferences
+  );
   const lastWeightRow = (lastWeightRes.data?.[0] ?? null) as {
     logged_at: string;
     weight: number;

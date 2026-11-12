@@ -132,6 +132,22 @@ export interface DailyMetricSample {
 
 const SAMPLE_READ_LIMIT = 2000;
 
+/**
+ * Local midnight of the day containing `date`.
+ *
+ * Every per-day aggregate query must start here. The plugin buckets by local
+ * day but only counts samples that START inside [startDate, endDate], so a
+ * window opening mid-afternoon returns that first day as "steps since
+ * mid-afternoon". The anchored sync opens its window 36h behind the last
+ * pull — almost never at midnight — and upserts by day, so the partial
+ * bucket overwrote the day's correct total with a smaller one on every sync.
+ */
+export function startOfLocalDay(date: Date): Date {
+  const start = new Date(date);
+  start.setHours(0, 0, 0, 0);
+  return start;
+}
+
 // === SERVICE ===
 
 /**
@@ -194,6 +210,36 @@ class HealthKitService {
     }
   }
 
+  /**
+   * True when THIS install has never shown the Health permission sheet for
+   * one of our read types — i.e. calling requestPermissions() now would
+   * actually present it.
+   *
+   * HealthKit authorization lives on the device, per install; the "connected"
+   * flag lives on the account. After a reinstall, or on a second iPhone, the
+   * account still says connected while HealthKit silently returns nothing.
+   * This is the only signal that tells those apart: the plugin's
+   * checkAuthorization maps HealthKit's getRequestStatusForAuthorization, so
+   * `readDenied` means "should request" (never asked), NOT "user said no" —
+   * a type the user declined reports as already-decided and is never
+   * re-requested. Any failure answers false: never prompt on a guess.
+   */
+  async needsAuthorizationRequest(): Promise<boolean> {
+    const plugin = this.getPlugin();
+    if (!plugin) return false;
+
+    try {
+      const status = await plugin.checkAuthorization({
+        read: HEALTHKIT_READ_TYPES,
+        write: [],
+      });
+      return Array.isArray(status.readDenied) && status.readDenied.length > 0;
+    } catch (error) {
+      console.warn('HealthKit authorization check failed:', error);
+      return false;
+    }
+  }
+
   /** Daily step totals per local day (HealthKit day buckets are device-local). */
   async getSteps(startDate: Date, endDate: Date): Promise<StepData[]> {
     const plugin = this.getPlugin();
@@ -202,7 +248,7 @@ class HealthKitService {
     try {
       const { samples } = await plugin.queryAggregated({
         dataType: 'steps',
-        startDate: startDate.toISOString(),
+        startDate: startOfLocalDay(startDate).toISOString(),
         endDate: endDate.toISOString(),
         bucket: 'day',
         aggregation: 'sum',
@@ -263,7 +309,7 @@ class HealthKitService {
     try {
       const { samples } = await plugin.queryAggregated({
         dataType: 'calories',
-        startDate: startDate.toISOString(),
+        startDate: startOfLocalDay(startDate).toISOString(),
         endDate: endDate.toISOString(),
         bucket: 'day',
         aggregation: 'sum',
@@ -433,7 +479,7 @@ class HealthKitService {
     try {
       const { samples } = await plugin.queryAggregated({
         dataType,
-        startDate: startDate.toISOString(),
+        startDate: startOfLocalDay(startDate).toISOString(),
         endDate: endDate.toISOString(),
         bucket: 'day',
         aggregation: 'average',
@@ -528,6 +574,10 @@ export async function requestHealthKitPermissions(
   permissions?: WearablePermission[]
 ): Promise<PermissionResult> {
   return healthKitService.requestPermissions(permissions);
+}
+
+export async function healthKitNeedsAuthorizationRequest(): Promise<boolean> {
+  return healthKitService.needsAuthorizationRequest();
 }
 
 export async function fetchHealthKitSteps(

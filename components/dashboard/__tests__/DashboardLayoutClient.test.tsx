@@ -1,5 +1,11 @@
-import { render, screen } from '@testing-library/react';
+import { render as rtlRender, screen } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { DashboardLayoutClient } from '../DashboardLayoutClient';
+
+// The shell reads the app's QueryClient (sign-out purges it), so render it
+// under a provider the way app/(dashboard)/layout.tsx does.
+const render = (ui: React.ReactElement) =>
+  rtlRender(<QueryClientProvider client={new QueryClient()}>{ui}</QueryClientProvider>);
 
 // Mock next/navigation
 jest.mock('next/navigation', () => ({
@@ -28,7 +34,7 @@ jest.mock('../BottomNavigation', () => ({
   BottomNavigation: () => <div data-testid="bottom-nav">BottomNav</div>,
 }));
 
-jest.mock('@/components/workout', () => ({
+jest.mock('@/components/workout/ResumeWorkoutBanner', () => ({
   ResumeWorkoutBanner: () => <div data-testid="resume-banner">ResumeBanner</div>,
 }));
 
@@ -45,6 +51,7 @@ jest.mock('@/hooks/useHealthKitSync', () => ({
 
 jest.mock('@/lib/offline/setOutbox', () => ({
   flushSetOutbox: jest.fn(() => Promise.resolve()),
+  unparkOutboxEntries: jest.fn(() => Promise.resolve(0)),
 }));
 
 describe('DashboardLayoutClient', () => {

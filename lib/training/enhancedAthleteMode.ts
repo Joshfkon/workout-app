@@ -203,7 +203,11 @@ export async function regenerateRemainingWeeksForEnhancedMode(
     // Keep the stored two-a-day cadence: without it a 8-14-session block
     // regenerates as once daily and the recovery model sees rest days
     // between sessions that actually share a calendar day.
-    mesocycle.sessions_per_day ?? 1
+    mesocycle.sessions_per_day ?? 1,
+    // Keep the block's stored length: total_weeks / deload_week are not
+    // rewritten below, so the regenerated program must still put its deload
+    // on the same week.
+    mesocycle.total_weeks ?? undefined
   );
 
   // Mid-week? Carry the in-flight week's plan over so prescriptions the user

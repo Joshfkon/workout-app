@@ -121,7 +121,37 @@ export function useBestLifts(userId: string): UseBestLiftsReturn {
       // Note: set_logs -> exercise_blocks -> workout_sessions (for user_id) -> exercises (for name)
       // Must use !inner joins to properly scope to user's completed sessions
       // Updated: Properly scoped through workout_sessions to ensure user-specific data
-      const { data: setLogs, error: setLogsError } = await supabase
+      //
+      // Preferred source: the heaviest set at each rep count per key exercise
+      // across the WHOLE history (migration 20261112000041). The best-e1RM set
+      // is always among those, so the result no longer depends on how many
+      // sets were logged since. Until that migration is applied — or if the
+      // call fails — fall back to the windowed read below (latest 500 sets of
+      // any exercise), which can miss an older best.
+      let candidateLogs: unknown[] | null = null;
+      try {
+        const { data: candidates, error: candidatesError } = await supabase.rpc(
+          'get_my_best_lift_candidate_sets',
+          { p_exercise_names: keyExercises }
+        );
+        if (!candidatesError && Array.isArray(candidates)) {
+          candidateLogs = candidates.map(
+            (row: { exercise_name: string; weight_kg: number | string; reps: number; logged_at: string }) => ({
+              id: '',
+              weight_kg: Number(row.weight_kg),
+              reps: Number(row.reps),
+              logged_at: row.logged_at,
+              exercise_block: { exercise: { name: row.exercise_name }, workout_sessions: null },
+            })
+          );
+        }
+      } catch {
+        /* RPC unavailable — use the windowed read */
+      }
+
+      const { data: setLogs, error: setLogsError } = candidateLogs
+        ? { data: candidateLogs, error: null }
+        : await supabase
         .from('set_logs')
         .select(`
           id,

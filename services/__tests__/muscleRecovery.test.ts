@@ -669,3 +669,15 @@ describe('sleep multiplier applied to recovery windows', () => {
     );
   });
 });
+
+describe('computeSleepWindowMultiplier — the lookback is calendar days, not −24h steps', () => {
+  it('a night 3 local days back stays outside a 2-day lookback across spring-forward', () => {
+    // 2026-03-08 is a 23-hour local day in DST-observing US zones: just after
+    // midnight on Mar 9, "48h ago" is 23:30 on Mar 6 — a day too early — which
+    // let a stale short night stretch every recovery window. (In a zone with
+    // no DST both forms agree and this still passes.)
+    const justAfterMidnight = new Date(2026, 2, 9, 0, 30);
+    const nights: SleepNight[] = [{ localDay: '2026-03-06', hours: 3, quality: 'poor' }];
+    expect(computeSleepWindowMultiplier(nights, justAfterMidnight)).toBe(1);
+  });
+});

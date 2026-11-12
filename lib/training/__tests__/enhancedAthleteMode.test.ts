@@ -143,10 +143,15 @@ describe('regenerateRemainingWeeksForEnhancedMode', () => {
     }
     expect(someHigher).toBe(true);
 
-    // Accumulation runs one week longer before deload.
-    expect(enhancedProgram.mesocycleWeeks!.length).toBe(
-      naturalProgram.mesocycleWeeks!.length + 1
-    );
+    // total_weeks / deload_week stay as the user set them (they are not
+    // rewritten by the toggle), so BOTH regenerated programs keep the block's
+    // stored length and put their deload on its last week. The +1
+    // accumulation week applies only to newly created blocks.
+    const storedWeeks = makeMesocycle().total_weeks;
+    for (const program of [naturalProgram, enhancedProgram]) {
+      expect(program.mesocycleWeeks!.length).toBe(storedWeeks);
+      expect(program.mesocycleWeeks![storedWeeks - 1].isDeload).toBe(true);
+    }
   });
 
   it('toggling OFF clamps volume back to natural-MRV territory', async () => {
