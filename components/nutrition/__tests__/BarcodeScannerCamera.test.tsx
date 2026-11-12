@@ -4,8 +4,7 @@
  * prompt): the unmount cleanup's stop() is rejected because nothing is
  * running yet, so the stream has to be stopped when start() finally resolves.
  */
-import { render, screen, act } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { render, act, waitFor } from '@testing-library/react';
 
 const mockStart = jest.fn();
 const mockStop = jest.fn();
@@ -75,12 +74,19 @@ beforeEach(() => {
   });
 });
 
+// The scanner starts the camera on mount; no tap is needed.
 async function openCamera() {
-  const user = userEvent.setup();
-  await user.click(screen.getByRole('button', { name: /camera|scan/i }));
+  await waitFor(() => expect(mockStart).toHaveBeenCalledTimes(1));
 }
 
 describe('BarcodeScanner camera lifecycle', () => {
+  it('opens the camera automatically when the scanner is shown', async () => {
+    deferredStart();
+    render(<BarcodeScanner onClose={jest.fn()} onProductFound={jest.fn()} />);
+
+    await waitFor(() => expect(mockStart).toHaveBeenCalledTimes(1));
+  });
+
   it('stops the stream when start() resolves after the scanner was closed', async () => {
     const finishStart = deferredStart();
     const { unmount } = render(<BarcodeScanner onClose={jest.fn()} onProductFound={jest.fn()} />);

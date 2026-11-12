@@ -883,6 +883,18 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
     }
   };
 
+  // Opening the scanner IS the request to scan: start the camera straight
+  // away instead of making the user tap "Start Camera Scanner" every time.
+  // The button stays as the fallback after an error or a manual stop.
+  const autoStartedRef = useRef(false);
+  useEffect(() => {
+    if (autoStartedRef.current) return;
+    autoStartedRef.current = true;
+    void startScanner();
+    // Mount-only: startScanner is recreated every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleManualLookup = () => {
     if (!manualBarcode.trim()) return;
     processBarcode(manualBarcode.trim());
