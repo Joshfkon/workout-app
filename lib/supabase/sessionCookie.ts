@@ -89,3 +89,36 @@ export function isSessionCookieValid(cookies: SimpleCookie[], nowMs: number = Da
     return false;
   }
 }
+
+/**
+ * True when the session cookie's access token was issued to a third-party
+ * OAuth client (the Claude connector), i.e. its JWT payload carries a
+ * `client_id` claim. First-party sign-ins never have one.
+ *
+ * Such a token is meant for the read-only /mcp tools only. Nothing legitimate
+ * ever puts it in a browser session cookie; someone doing so is trying to use
+ * a connector token to drive the app's own (write-capable) server actions.
+ * Fails open to false on anything unparseable: the token is still verified by
+ * Supabase downstream, and the database rejects connector-token writes itself.
+ */
+export function isOAuthClientSessionCookie(cookies: SimpleCookie[]): boolean {
+  try {
+    const raw = readAuthTokenRaw(cookies);
+    if (!raw) return false;
+
+    const decoded = raw.startsWith(BASE64_PREFIX)
+      ? base64UrlDecode(raw.slice(BASE64_PREFIX.length))
+      : raw;
+
+    const token = decoded.match(/"access_token":\s*"([^"]+)"/)?.[1];
+    if (!token) return false;
+
+    const payloadSegment = token.split('.')[1];
+    if (!payloadSegment) return false;
+
+    const clientId = base64UrlDecode(payloadSegment).match(/"client_id":\s*"([^"]*)"/)?.[1];
+    return typeof clientId === 'string' && clientId.length > 0;
+  } catch {
+    return false;
+  }
+}

@@ -1,7 +1,7 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 import type { CookieOptions } from '@supabase/ssr';
-import { isSessionCookieValid, hasAuthTokenCookie } from './sessionCookie';
+import { isSessionCookieValid, hasAuthTokenCookie, isOAuthClientSessionCookie } from './sessionCookie';
 import { isRetryableAuthError } from './authState';
 
 type CookieToSet = { name: string; value: string; options?: CookieOptions };
@@ -42,6 +42,16 @@ function hasValidSessionCookie(request: NextRequest): boolean {
 
 export async function updateSession(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
+
+  // A Claude-connector (OAuth client) token is for the read-only /mcp tools.
+  // It must never work as a browser session, where server actions and API
+  // routes can write (some with the service role). Checked before the public
+  // fast path because server actions can be posted to public pages too.
+  if (isOAuthClientSessionCookie(request.cookies.getAll())) {
+    return new NextResponse('This sign-in is read-only and cannot be used in the app.', {
+      status: 403,
+    });
+  }
 
   // Fast path: public routes don't need any auth check
   if (isPublicRoute(pathname)) {

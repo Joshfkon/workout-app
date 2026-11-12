@@ -615,6 +615,15 @@ user's own data. Add `https://www.hypertrack.app/mcp` as a custom connector.
 - **Shaping** (`lib/mcp/summaries.ts`): pure, tested helpers. Report logged
   loads with `formatLoad` (exact), never `formatWeight` (rounds to 2.5), and
   never print a duration exercise's `reps` (seconds) as a rep count.
+- **Read-only is enforced below the tools.** A connected app holds a real
+  user access token and could call the Data API directly, so
+  `20261113000001_oauth_client_read_only.sql` rejects every non-GET Data API
+  request and every Storage write from a token with a `client_id` claim
+  (OAuth-client tokens have one; first-party sign-ins do not), and the
+  middleware returns 403 for such a token presented as a session cookie.
+  Apply that migration BEFORE enabling the OAuth server. A write tool would
+  have to go through a deliberate, narrow server-side path, not a relaxed
+  policy.
 - `/mcp`, `/.well-known` and `/oauth/consent` are public routes in
   `lib/supabase/middleware.ts`: the connector authenticates with a bearer
   token, never a session cookie.

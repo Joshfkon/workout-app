@@ -1,4 +1,9 @@
-import { isSessionCookieValid, hasAuthTokenCookie, type SimpleCookie } from '../sessionCookie';
+import {
+  isSessionCookieValid,
+  hasAuthTokenCookie,
+  isOAuthClientSessionCookie,
+  type SimpleCookie,
+} from '../sessionCookie';
 
 const NOW = 1_000_000_000_000; // fixed "now" in ms
 const nowSec = NOW / 1000;
@@ -78,5 +83,44 @@ describe('hasAuthTokenCookie', () => {
   it('returns false when there is no auth-token cookie', () => {
     expect(hasAuthTokenCookie([cookie('session-id', 'x')])).toBe(false);
     expect(hasAuthTokenCookie([])).toBe(false);
+  });
+});
+
+describe('isOAuthClientSessionCookie', () => {
+  const jwt = (payload: object) => `h.${btoa(JSON.stringify(payload)).replace(/=+$/, '')}.sig`;
+
+  it('is true when the access token carries a client_id claim', () => {
+    const value = encodeSession({
+      access_token: jwt({ sub: 'u1', role: 'authenticated', client_id: '9a8b7c6d' }),
+      expires_at: nowSec + 3600,
+    });
+    expect(isOAuthClientSessionCookie([cookie('sb-abcdef-auth-token', value)])).toBe(true);
+  });
+
+  it('is true for a chunked cookie too', () => {
+    const value = encodeSession({
+      access_token: jwt({ sub: 'u1', client_id: 'c1', pad: 'x'.repeat(300) }),
+      expires_at: nowSec + 3600,
+    });
+    const mid = Math.floor(value.length / 2);
+    expect(
+      isOAuthClientSessionCookie([
+        cookie('sb-abcdef-auth-token.0', value.slice(0, mid)),
+        cookie('sb-abcdef-auth-token.1', value.slice(mid)),
+      ])
+    ).toBe(true);
+  });
+
+  it('is false for a first-party token, an empty client_id, and no cookie', () => {
+    const firstParty = encodeSession({ access_token: jwt({ sub: 'u1', role: 'authenticated' }), expires_at: nowSec + 3600 });
+    const empty = encodeSession({ access_token: jwt({ sub: 'u1', client_id: '' }), expires_at: nowSec + 3600 });
+    expect(isOAuthClientSessionCookie([cookie('sb-abcdef-auth-token', firstParty)])).toBe(false);
+    expect(isOAuthClientSessionCookie([cookie('sb-abcdef-auth-token', empty)])).toBe(false);
+    expect(isOAuthClientSessionCookie([])).toBe(false);
+  });
+
+  it('is false for malformed values rather than throwing', () => {
+    expect(isOAuthClientSessionCookie([cookie('sb-abcdef-auth-token', 'base64-%%%not-base64')])).toBe(false);
+    expect(isOAuthClientSessionCookie([cookie('sb-abcdef-auth-token', encodeSession({ access_token: 'opaque' }))])).toBe(false);
   });
 });

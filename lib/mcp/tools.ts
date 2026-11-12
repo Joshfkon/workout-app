@@ -48,6 +48,13 @@ import {
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
+/**
+ * Most recent completed sessions containing a matching exercise that
+ * exercise_history reads. Comfortably above the 20 sessions a caller can ask
+ * for, with room for several same-named variants.
+ */
+const HISTORY_SESSION_WINDOW = 120;
+
 /** A problem the user can act on; its message is shown as-is. */
 class UserError extends Error {}
 
@@ -349,25 +356,36 @@ export function registerTools(server: McpServer) {
       const exact = matches.filter((m) => m.name.toLowerCase() === wanted);
       const candidates = exact.length > 0 ? exact : matches;
 
-      const blocks = rows<{
-        exercise_id: string;
-        workout_sessions: { completed_at: string | null; planned_date: string };
-        set_logs: SetRow[] | null;
+      // Query from the session side so the newest-first order and the limit
+      // apply to SESSIONS. Limiting unordered blocks first could drop the most
+      // recent sessions for anyone with a long history.
+      const sessionRows = rows<{
+        completed_at: string | null;
+        planned_date: string;
+        exercise_blocks: Array<{ exercise_id: string; set_logs: SetRow[] | null }> | null;
       }>(
         await c.sb
-          .from('exercise_blocks')
+          .from('workout_sessions')
           .select(
-            'exercise_id, workout_sessions!inner(completed_at, planned_date, user_id, state), ' +
-              'set_logs(set_number, weight_kg, reps, rpe, is_warmup, set_type)'
+            'completed_at, planned_date, ' +
+              'exercise_blocks!inner(exercise_id, set_logs(set_number, weight_kg, reps, rpe, is_warmup, set_type))'
           )
+          .eq('user_id', c.userId)
+          .eq('state', 'completed')
           .in(
-            'exercise_id',
+            'exercise_blocks.exercise_id',
             candidates.map((m) => m.id)
           )
-          .eq('workout_sessions.user_id', c.userId)
-          .eq('workout_sessions.state', 'completed')
-          .limit(400),
+          .order('completed_at', { ascending: false })
+          .limit(HISTORY_SESSION_WINDOW),
         'exercise history'
+      );
+      const blocks = sessionRows.flatMap((session) =>
+        (session.exercise_blocks ?? []).map((b) => ({
+          exercise_id: b.exercise_id,
+          workout_sessions: { completed_at: session.completed_at, planned_date: session.planned_date },
+          set_logs: b.set_logs,
+        }))
       );
 
       // Of the name matches, report the one this user has actually trained most.
