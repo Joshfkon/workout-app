@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { takePostLoginPath } from '@/lib/mcp/postLoginPath';
 import { Button, Input, Card } from '@/components/ui';
 import { createClient } from '@/lib/supabase/client';
 
@@ -131,6 +132,12 @@ export default function LoginPage() {
           sessionStorage.removeItem('ht-pending-confirmation-email');
         } catch {
           // Storage unavailable — nothing to clean up.
+        }
+        // Return to a pending Claude-connector consent request, if any.
+        const returnPath = takePostLoginPath();
+        if (returnPath) {
+          window.location.href = returnPath;
+          return;
         }
         router.push('/dashboard/train');
         router.refresh();

@@ -5282,6 +5282,21 @@ export default function WorkoutPage() {
     [unavailableExerciseIds]
   );
 
+  // Empty-workout screen: building by hand is the default; the target-picker
+  // plan builder is one tap away for sessions where it's wanted.
+  const [emptySetupMode, setEmptySetupMode] = useState<'manual' | 'plan'>('manual');
+
+  // Most-used exercises (last 90 days) for the empty-state quick-add chips
+  const quickAddExercises = useMemo(() => {
+    if (availableExercises.length === 0 || frequentExerciseIds.size === 0) return [];
+    const byId = new Map(availableExercises.map((ex) => [ex.id, ex]));
+    return Array.from(frequentExerciseIds.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([id]) => byId.get(id))
+      .filter((ex): ex is AvailableExercise => Boolean(ex))
+      .slice(0, 8);
+  }, [availableExercises, frequentExerciseIds]);
+
   const handleOpenAddExercise = () => {
     setShowAddExercise(true);
     setShowAllExercises(false);
@@ -6662,45 +6677,96 @@ export default function WorkoutPage() {
           </div>
         </div>
 
-        {/* Setup flow: pick targets → auto-built draft → Start. "Build
-            manually" keeps the original add-exercises path. */}
-        <WorkoutSetupFlow
-          sessionId={sessionId}
-          unavailableEquipmentIds={locationUnavailableEquipmentIds}
-          unavailableExerciseIds={setupUnavailableExerciseIds}
-          usageCounts={frequentExerciseIds}
-          onBuildManually={handleOpenAddExercise}
-          onRequestAddToPlan={(add) => {
-            planAddRef.current = add;
-            setShowAddExercise(true);
-            setShowAllExercises(false);
-            fetchExercises();
-          }}
-          onStart={handleStartPlan}
-          disabled={isAddingExercise || isCopyingLastWorkout}
-          pickStepExtras={
-            <>
-              {/* Inline readiness detail (map, zones, forecast), collapsed. */}
-              <EmptyWorkoutReadiness
-                quickAddExercises={[]}
-                onAddExercise={handleAddExercise}
-                disabled={isAddingExercise || isCopyingLastWorkout}
-              />
+        {emptySetupMode === 'manual' ? (
+          <>
+            {/* Default: build the workout by hand. */}
+            <button
+              onClick={handleOpenAddExercise}
+              disabled={isAddingExercise || isCopyingLastWorkout}
+              className="mt-6 w-full py-4 rounded-2xl bg-gradient-to-r from-purple-500 to-indigo-600 text-white text-lg font-semibold shadow-lg shadow-purple-500/25 hover:from-purple-400 hover:to-indigo-500 active:scale-[0.99] disabled:opacity-60 transition-all flex items-center justify-center gap-2.5"
+              data-testid="empty-add-exercises"
+            >
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+              Add exercises
+            </button>
 
-              {/* Alternative: copy the previous workout wholesale */}
-              <button
-                onClick={handleCopyLastWorkout}
-                disabled={isAddingExercise || isCopyingLastWorkout}
-                className="mt-10 mx-auto flex items-center gap-2 text-surface-400 hover:text-surface-200 font-medium disabled:opacity-50 transition-colors"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                {isCopyingLastWorkout ? 'Copying last workout…' : 'Copy last workout instead'}
-              </button>
-            </>
-          }
-        />
+            {/* Optional: the target picker -> auto-built draft flow. */}
+            <button
+              onClick={() => setEmptySetupMode('plan')}
+              disabled={isAddingExercise || isCopyingLastWorkout}
+              className="mt-2 w-full py-2 text-sm font-medium text-surface-400 hover:text-surface-200 disabled:opacity-50 transition-colors"
+              data-testid="empty-build-plan"
+            >
+              Build a plan for me instead
+            </button>
+
+            {/* Inline readiness + Quick Add chips ordered by readiness. */}
+            <EmptyWorkoutReadiness
+              quickAddExercises={quickAddExercises}
+              onAddExercise={handleAddExercise}
+              disabled={isAddingExercise || isCopyingLastWorkout}
+            />
+
+            {/* Alternative: copy the previous workout wholesale */}
+            <button
+              onClick={handleCopyLastWorkout}
+              disabled={isAddingExercise || isCopyingLastWorkout}
+              className="mt-10 mx-auto flex items-center gap-2 text-surface-400 hover:text-surface-200 font-medium disabled:opacity-50 transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              {isCopyingLastWorkout ? 'Copying last workout…' : 'Copy last workout instead'}
+            </button>
+          </>
+        ) : (
+          <>
+            {/* Setup flow: pick targets → auto-built draft → Start. "Build
+                manually" keeps the original add-exercises path. */}
+            <WorkoutSetupFlow
+              sessionId={sessionId}
+              unavailableEquipmentIds={locationUnavailableEquipmentIds}
+              unavailableExerciseIds={setupUnavailableExerciseIds}
+              usageCounts={frequentExerciseIds}
+              onBuildManually={() => {
+                setEmptySetupMode('manual');
+                handleOpenAddExercise();
+              }}
+              onRequestAddToPlan={(add) => {
+                planAddRef.current = add;
+                setShowAddExercise(true);
+                setShowAllExercises(false);
+                fetchExercises();
+              }}
+              onStart={handleStartPlan}
+              disabled={isAddingExercise || isCopyingLastWorkout}
+              pickStepExtras={
+                <>
+                  {/* Inline readiness detail (map, zones, forecast), collapsed. */}
+                  <EmptyWorkoutReadiness
+                    quickAddExercises={[]}
+                    onAddExercise={handleAddExercise}
+                    disabled={isAddingExercise || isCopyingLastWorkout}
+                  />
+
+                  {/* Alternative: copy the previous workout wholesale */}
+                  <button
+                    onClick={handleCopyLastWorkout}
+                    disabled={isAddingExercise || isCopyingLastWorkout}
+                    className="mt-10 mx-auto flex items-center gap-2 text-surface-400 hover:text-surface-200 font-medium disabled:opacity-50 transition-colors"
+                  >
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    {isCopyingLastWorkout ? 'Copying last workout…' : 'Copy last workout instead'}
+                  </button>
+                </>
+              }
+            />
+          </>
+        )}
 
         {/* Destructive escape hatch pinned to the bottom */}
         <button

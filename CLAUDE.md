@@ -598,6 +598,36 @@ blocking spinners.
   a page's loading testid appears on an SPA revisit; per-surface specs live in
   `ux-audit/verify/`.
 
+## Claude Connector (MCP)
+
+`/mcp` is a read-only MCP server so Claude can answer questions from a
+user's own data. Add `https://www.hypertrack.app/mcp` as a custom connector.
+
+- **Auth**: Supabase Auth is the OAuth 2.1 server (must be enabled on the
+  project, with authorization path `/oauth/consent` and dynamic client
+  registration). `lib/mcp/auth.ts` verifies the bearer token;
+  `app/.well-known/oauth-protected-resource/*` advertises the issuer;
+  `app/oauth/consent/page.tsx` is the approve/deny screen.
+- **Tools** (`lib/mcp/tools.ts`): every call builds a Supabase client from the
+  caller's token, so RLS scopes it to their rows; each query also filters by
+  user id. All tools are read-only. Add write tools only deliberately, with
+  `readOnlyHint: false` and the consent copy updated to match.
+- **Shaping** (`lib/mcp/summaries.ts`): pure, tested helpers. Report logged
+  loads with `formatLoad` (exact), never `formatWeight` (rounds to 2.5), and
+  never print a duration exercise's `reps` (seconds) as a rep count.
+- **Read-only is enforced below the tools.** A connected app holds a real
+  user access token and could call the Data API directly, so
+  `20261113000001_oauth_client_read_only.sql` rejects every non-GET Data API
+  request and every Storage write from a token with a `client_id` claim
+  (OAuth-client tokens have one; first-party sign-ins do not), and the
+  middleware returns 403 for such a token presented as a session cookie.
+  Apply that migration BEFORE enabling the OAuth server. A write tool would
+  have to go through a deliberate, narrow server-side path, not a relaxed
+  policy.
+- `/mcp`, `/.well-known` and `/oauth/consent` are public routes in
+  `lib/supabase/middleware.ts`: the connector authenticates with a bearer
+  token, never a session cookie.
+
 ## CI/CD
 
 GitHub Actions workflow (`.github/workflows/test.yml`):

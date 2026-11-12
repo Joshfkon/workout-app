@@ -146,7 +146,7 @@ export function ProfilePromptModal({
 
     if (needsProfile) {
       // Create new profile
-      // @ts-expect-error - user_profiles table not in generated types yet
+      // Cast: user_profiles is missing from the generated types.
       const { error } = await supabase.from('user_profiles').insert({
         user_id: user.id,
         username: normalizeUsername(username),
@@ -154,7 +154,7 @@ export function ProfilePromptModal({
         profile_visibility: 'public',
         show_workouts: true,
         show_stats: true,
-      });
+      } as never);
 
       if (error) {
         if (error.code === '23505') {
