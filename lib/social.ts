@@ -284,3 +284,34 @@ export function generateAnonymousUsername(): string {
 export function isAnonymousUsername(username: string): boolean {
   return /^Lifter_[a-z0-9]{5}$/i.test(username);
 }
+
+/**
+ * Keyset cursor for the activity feed. `created_at` alone is not unique
+ * (several activities can share a timestamp), so paging with only
+ * `created_at < cursor` silently drops the rows that tie with the last one
+ * on the previous page. The id breaks the tie.
+ */
+export interface FeedCursor {
+  createdAt: string;
+  id: string;
+}
+
+/**
+ * PostgREST `or` filter selecting rows strictly after `cursor` in
+ * (created_at DESC, id DESC) order. Values are double-quoted because
+ * timestamps contain reserved characters (`.`, `:`, `+`).
+ */
+export function feedCursorFilter(cursor: FeedCursor): string {
+  const ts = `"${cursor.createdAt}"`;
+  return `created_at.lt.${ts},and(created_at.eq.${ts},id.lt."${cursor.id}")`;
+}
+
+/**
+ * Reaction count after the viewer's reaction changes. Removing a reaction
+ * that was never set (or re-setting one that already was) leaves the count
+ * alone, and the count never goes below zero.
+ */
+export function nextReactionCount(current: number, wasReacted: boolean, isReacted: boolean): number {
+  if (wasReacted === isReacted) return current;
+  return Math.max(0, current + (isReacted ? 1 : -1));
+}

@@ -133,7 +133,7 @@ export function LabelScanner({ onClose, onParsed }: LabelScannerProps) {
   // Capture
   // ---------------------------------------------------------------------------
 
-  const startCamera = async () => {
+  const startCamera = async (options: { auto?: boolean } = {}) => {
     setError(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia(CAMERA_CONSTRAINTS);
@@ -157,6 +157,9 @@ export function LabelScanner({ onClose, onParsed }: LabelScannerProps) {
       }
     } catch (err) {
       const isPermission = err instanceof Error && /permission|notallowed/i.test(`${err.name} ${err.message}`);
+      // An automatic start on a device with no camera just leaves the
+      // "Open Camera / take a photo" choices showing, without an error.
+      if (options.auto && !isPermission) return;
       setError(
         isPermission
           ? 'Camera permission denied — you can take a photo instead.'
@@ -164,6 +167,17 @@ export function LabelScanner({ onClose, onParsed }: LabelScannerProps) {
       );
     }
   };
+
+  // Opening the label scanner IS the request to scan: open the camera straight
+  // away instead of making the user tap "Open Camera" every time.
+  const autoStartedRef = useRef(false);
+  useEffect(() => {
+    if (autoStartedRef.current) return;
+    autoStartedRef.current = true;
+    void startCamera({ auto: true });
+    // Mount-only: startCamera is recreated every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Attach the stream once the <video> is mounted (stage switch re-renders).
   useEffect(() => {
@@ -389,7 +403,7 @@ export function LabelScanner({ onClose, onParsed }: LabelScannerProps) {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
             </div>
-            <Button onClick={startCamera} variant="primary" size="lg" data-testid="label-open-camera">
+            <Button onClick={() => { void startCamera(); }} variant="primary" size="lg" data-testid="label-open-camera">
               Open Camera
             </Button>
             <Button

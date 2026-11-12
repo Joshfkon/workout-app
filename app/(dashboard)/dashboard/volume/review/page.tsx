@@ -6,6 +6,7 @@ import { useMemo } from 'react';
 import Link from 'next/link';
 import { Card } from '@/components/ui/Card';
 import { useAdaptiveVolume } from '@/hooks/useAdaptiveVolume';
+import { parseLocalDate } from '@/lib/utils';
 import type { MuscleOutcome, VolumeVerdict, ProgressionTrend } from '@/src/lib/training/adaptive-volume';
 import type { MuscleGroup } from '@/types/schema';
 
@@ -144,8 +145,10 @@ export default function MesocycleReviewPage() {
 
   const formatDateRange = useMemo(() => {
     if (!latestAnalysis) return '';
-    const start = new Date(latestAnalysis.startDate);
-    const end = new Date(latestAnalysis.endDate);
+    // Date-only values are LOCAL calendar days (new Date() would read them as
+    // UTC midnight → the previous day west of UTC); timestamps pass through.
+    const start = parseLocalDate(latestAnalysis.startDate);
+    const end = parseLocalDate(latestAnalysis.endDate);
     const options: Intl.DateTimeFormatOptions = { month: 'long', day: 'numeric' };
     return `${start.toLocaleDateString('en-US', options)} - ${end.toLocaleDateString('en-US', options)}`;
   }, [latestAnalysis]);

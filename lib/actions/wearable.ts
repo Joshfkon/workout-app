@@ -9,7 +9,6 @@
 
 import { createUntypedServerClient } from '@/lib/supabase/server';
 import { validateWeightEntry } from '@/lib/weightUtils';
-import { getLocalDateString } from '@/lib/utils';
 import type {
   WearableSource,
   WearableConnection,
@@ -23,6 +22,9 @@ import type {
   ActivitySettingsRow,
 } from '@/types/wearable';
 import { getActivityLevelFromSteps } from '@/types/wearable';
+import { sumSessionExpenditure } from '@/lib/nutrition/workoutExpenditure';
+import { resolveLocalDate } from '@/lib/nutrition/localDate';
+import { addLocalDays } from '@/lib/date/localDay';
 
 // === WEARABLE CONNECTIONS ===
 
@@ -289,6 +291,17 @@ export async function saveDailyActivityData(
   const stepExpenditure = Math.round(input.steps.total * caloriesPerStep);
   const activityLevel = getActivityLevelFromSteps(input.steps.total);
 
+  // A step entry must never wipe workout calories already recorded for the
+  // day: `workout_expenditure` is deliberately left OUT of the upsert (the
+  // column default covers a brand-new row) and the total keeps including it.
+  const { data: existing } = await supabase
+    .from('daily_activity_data')
+    .select('workout_expenditure')
+    .eq('user_id', user.id)
+    .eq('date', input.date)
+    .maybeSingle();
+  const existingWorkoutExpenditure = Number(existing?.workout_expenditure) || 0;
+
   const { data, error } = await supabase
     .from('daily_activity_data')
     .upsert(
@@ -304,8 +317,7 @@ export async function saveDailyActivityData(
           ? input.steps.source
           : null,
         step_expenditure: stepExpenditure,
-        workout_expenditure: 0, // Will be updated separately
-        total_activity_expenditure: stepExpenditure,
+        total_activity_expenditure: stepExpenditure + existingWorkoutExpenditure,
         activity_level: activityLevel,
       },
       {
@@ -323,12 +335,35 @@ export async function saveDailyActivityData(
   return { success: true, id: data.id };
 }
 
+/** Per-session details recorded alongside a day's workout expenditure. */
+export interface WorkoutExpenditureSession {
+  workoutSessionId: string;
+  startTime: string;
+  endTime: string;
+  durationMinutes: number;
+  muscleGroups: string[];
+  totalSets: number;
+  totalVolume: number;
+  averageRestSeconds: number;
+}
+
 /**
- * Update workout expenditure for a day (called after workout completion)
+ * Record workout expenditure for a day (called after workout completion).
+ *
+ * - Creates the `daily_activity_data` row when the day has none (a plain
+ *   UPDATE matched 0 rows and silently dropped the calories).
+ * - With `session`, the calories are stored per workout session in
+ *   `app_workout_activity` and the day's `workout_expenditure` is the SUM of
+ *   its sessions, so a two-a-day accumulates and re-saving the same session
+ *   replaces only its own contribution (idempotent on retry).
+ * - Without `session` (or if the per-session ledger is unavailable) the day
+ *   keeps the larger of the stored and the new value, so a later session can
+ *   never erase an earlier one.
  */
 export async function updateWorkoutExpenditure(
   date: string,
-  workoutExpenditure: number
+  workoutExpenditure: number,
+  session?: WorkoutExpenditureSession
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = await createUntypedServerClient();
 
@@ -337,25 +372,70 @@ export async function updateWorkoutExpenditure(
   } = await supabase.auth.getUser();
   if (!user) return { success: false, error: 'Not authenticated' };
 
-  // Get current data
-  const { data: current } = await supabase
+  const sessionCalories = Math.max(0, Math.round(Number(workoutExpenditure) || 0));
+
+  // Get (or create) the day's row.
+  let { data: current } = await supabase
     .from('daily_activity_data')
-    .select('step_expenditure')
+    .select('id, step_expenditure, workout_expenditure')
     .eq('user_id', user.id)
     .eq('date', date)
-    .single();
+    .maybeSingle();
 
-  const stepExpenditure = current?.step_expenditure || 0;
-  const totalExpenditure = stepExpenditure + workoutExpenditure;
+  if (!current) {
+    const { data: created, error: insertError } = await supabase
+      .from('daily_activity_data')
+      .insert({ user_id: user.id, date })
+      .select('id, step_expenditure, workout_expenditure')
+      .single();
+
+    if (insertError || !created) {
+      // Lost a race with a concurrent step sync that created the row.
+      const { data: retry } = await supabase
+        .from('daily_activity_data')
+        .select('id, step_expenditure, workout_expenditure')
+        .eq('user_id', user.id)
+        .eq('date', date)
+        .maybeSingle();
+      if (!retry) {
+        console.error('Failed to create daily activity row:', insertError);
+        return {
+          success: false,
+          error: insertError?.message || 'Failed to create daily activity row',
+        };
+      }
+      current = retry;
+    } else {
+      current = created;
+    }
+  }
+
+  const storedWorkoutExpenditure = Number(current.workout_expenditure) || 0;
+  let dayWorkoutExpenditure: number | null = null;
+
+  if (session) {
+    dayWorkoutExpenditure = await recordSessionExpenditure(
+      supabase,
+      user.id,
+      current.id,
+      session,
+      sessionCalories
+    );
+  }
+  if (dayWorkoutExpenditure === null) {
+    dayWorkoutExpenditure = Math.max(storedWorkoutExpenditure, sessionCalories);
+  }
+
+  const stepExpenditure = Number(current.step_expenditure) || 0;
 
   const { error } = await supabase
     .from('daily_activity_data')
     .update({
-      workout_expenditure: workoutExpenditure,
-      total_activity_expenditure: totalExpenditure,
+      workout_expenditure: dayWorkoutExpenditure,
+      total_activity_expenditure: stepExpenditure + dayWorkoutExpenditure,
     })
-    .eq('user_id', user.id)
-    .eq('date', date);
+    .eq('id', current.id)
+    .eq('user_id', user.id);
 
   if (error) {
     console.error('Failed to update workout expenditure:', error);
@@ -363,6 +443,66 @@ export async function updateWorkoutExpenditure(
   }
 
   return { success: true };
+}
+
+/**
+ * Upsert one session's row in `app_workout_activity` and return the day's
+ * summed workout calories, or null when the ledger can't be used.
+ */
+async function recordSessionExpenditure(
+  supabase: Awaited<ReturnType<typeof createUntypedServerClient>>,
+  userId: string,
+  dailyActivityId: string,
+  session: WorkoutExpenditureSession,
+  sessionCalories: number
+): Promise<number | null> {
+  const row = {
+    user_id: userId,
+    daily_activity_id: dailyActivityId,
+    workout_session_id: session.workoutSessionId,
+    start_time: session.startTime,
+    end_time: session.endTime,
+    duration_minutes: Math.max(0, Math.round(session.durationMinutes) || 0),
+    muscle_groups: session.muscleGroups,
+    total_sets: session.totalSets,
+    total_volume: session.totalVolume,
+    average_rest_seconds: Math.max(0, Math.round(session.averageRestSeconds) || 0),
+    estimated_calories: sessionCalories,
+  };
+
+  const { data: existingRows, error: lookupError } = await supabase
+    .from('app_workout_activity')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('workout_session_id', session.workoutSessionId);
+
+  if (lookupError) {
+    console.error('Failed to read app_workout_activity:', lookupError);
+    return null;
+  }
+
+  const existingId = existingRows?.[0]?.id as string | undefined;
+  const { error: writeError } = existingId
+    ? await supabase.from('app_workout_activity').update(row).eq('id', existingId)
+    : await supabase.from('app_workout_activity').insert(row);
+
+  if (writeError) {
+    console.error('Failed to write app_workout_activity:', writeError);
+    return null;
+  }
+
+  const { data: dayRows, error: sumError } = await supabase
+    .from('app_workout_activity')
+    .select('workout_session_id, estimated_calories')
+    .eq('user_id', userId)
+    .eq('daily_activity_id', dailyActivityId);
+
+  if (sumError || !dayRows) {
+    console.error('Failed to sum app_workout_activity:', sumError);
+    return null;
+  }
+
+  return sumSessionExpenditure(dayRows);
 }
 
 // === ACTIVITY SETTINGS ===
@@ -444,7 +584,9 @@ export async function saveActivitySettings(
  * Get enhanced daily data points for TDEE calculation
  */
 export async function getEnhancedDailyDataPoints(
-  windowDays: number = 28
+  windowDays: number = 28,
+  /** The caller's local calendar day (YYYY-MM-DD); defaults to the server's. */
+  localDate?: string
 ): Promise<
   Array<{
     date: string;
@@ -464,9 +606,7 @@ export async function getEnhancedDailyDataPoints(
   } = await supabase.auth.getUser();
   if (!user) return [];
 
-  const cutoffDate = new Date();
-  cutoffDate.setDate(cutoffDate.getDate() - windowDays);
-  const cutoffStr = getLocalDateString(cutoffDate);
+  const cutoffStr = addLocalDays(resolveLocalDate(localDate), -windowDays);
 
   // Get weight log data (with unit for conversion)
   const { data: weightData } = await supabase

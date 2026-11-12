@@ -40,6 +40,71 @@ interface UserState {
   signOut: () => void;
 }
 
+/** The `users` columns the store is built from (see {@link userFromRow}). */
+export const USER_STORE_ROW_SELECT =
+  'id, email, created_at, goal, experience, enhanced_athlete_mode, preferences, volume_landmarks';
+
+export interface UserStoreRow {
+  id: string;
+  email?: string | null;
+  created_at?: string | null;
+  goal?: string | null;
+  experience?: string | null;
+  enhanced_athlete_mode?: boolean | null;
+  preferences?: unknown;
+  volume_landmarks?: unknown;
+}
+
+/**
+ * Map a `users` row onto the store's `User`.
+ *
+ * `users.preferences` is free-form JSONB written by Settings /
+ * useUserPreferences under its own key names (notably `restTimer`, not
+ * `restTimerDefault`), so every field is read defensively and falls back to
+ * the same defaults those writers use — `units` defaults to 'lb', matching
+ * `useUserPreferences`, so the two sources can never disagree for a user who
+ * hasn't chosen. Custom volume landmarks are kept only when the row has some;
+ * an empty object means "use the experience defaults".
+ */
+export function userFromRow(row: UserStoreRow): User {
+  const prefs =
+    row.preferences && typeof row.preferences === 'object'
+      ? (row.preferences as Record<string, unknown>)
+      : {};
+  const experience: Experience =
+    row.experience === 'novice' || row.experience === 'advanced' ? row.experience : 'intermediate';
+  const landmarks =
+    row.volume_landmarks && typeof row.volume_landmarks === 'object'
+      ? (row.volume_landmarks as Record<string, VolumeLandmarks>)
+      : {};
+  const bool = (value: unknown, fallback: boolean) =>
+    typeof value === 'boolean' ? value : fallback;
+
+  return {
+    id: row.id,
+    email: row.email ?? '',
+    createdAt: row.created_at ?? '',
+    goal: ((row.goal as Goal | null) ?? 'maintenance') as Goal,
+    experience,
+    enhancedAthleteMode: row.enhanced_athlete_mode === true,
+    preferences: {
+      // Unknown keys (theme, landmarkVersion, body-hub settings, …) ride
+      // along untouched; readLandmarkVersion() reads one of them.
+      ...(prefs as Partial<UserPreferences>),
+      units: prefs.units === 'kg' ? 'kg' : 'lb',
+      restTimerDefault:
+        typeof prefs.restTimer === 'number' && prefs.restTimer > 0
+          ? prefs.restTimer
+          : DEFAULT_USER_PREFERENCES.restTimerDefault,
+      showFormCues: bool(prefs.showFormCues, true),
+      showWarmupSuggestions: bool(prefs.showWarmupSuggestions, true),
+      prioritizeHypertrophy: bool(prefs.prioritizeHypertrophy, true),
+      skipPreWorkoutCheckIn: bool(prefs.skipPreWorkoutCheckIn, false),
+    },
+    volumeLandmarks: landmarks,
+  };
+}
+
 export const useUserStore = create<UserState>()(
   persist(
     (set, get) => ({
@@ -149,6 +214,12 @@ export const useUserStore = create<UserState>()(
     {
       name: 'user-storage',
       version: 1,
+      // The persisted user is applied AFTER mount (UserStoreHydrator calls
+      // persist.rehydrate()), not at module load: localStorage is read
+      // synchronously on the client only, so auto-hydrating made the first
+      // client render differ from the server HTML (hydration mismatch) for
+      // every component that renders a store-derived value.
+      skipHydration: true,
       partialize: (state) => ({
         user: state.user,
       }),

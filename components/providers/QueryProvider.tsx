@@ -17,7 +17,8 @@ import { useState, useEffect, useRef } from 'react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { makeQueryClient } from '@/lib/query/queryClient';
-import { buildPersistOptions, clearPersistedQueryCache } from '@/lib/query/idbPersister';
+import { buildPersistOptions } from '@/lib/query/idbPersister';
+import { purgeUserCaches } from '@/lib/query/clientCachePurge';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { getLocalUserId } from '@/lib/supabase/authState';
 
@@ -27,12 +28,16 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(() => makeQueryClient());
   const [persistOptions] = useState(() => buildPersistOptions());
 
-  // Purge the cache (memory + persisted IndexedDB) whenever the signed-in
-  // identity changes — sign-out, or user B signing in after user A on a shared
-  // browser. The persisted query keys aren't user-scoped, so without this a new
-  // user could rehydrate the previous user's private data (food logs, workouts,
+  // Purge every browser-side cache of the user's data (React Query memory +
+  // IndexedDB, the service worker's Cache Storage, user-scoped localStorage,
+  // the persisted user store) whenever the signed-in identity changes —
+  // sign-out, or user B signing in after user A on a shared browser. The
+  // persisted query keys aren't user-scoped, so without this a new user could
+  // rehydrate the previous user's private data (food logs, workouts,
   // DEXA/profile) — worse with the long staleTime on immutable-in-practice
-  // queries, which wouldn't refetch it away.
+  // queries, which wouldn't refetch it away. An identity change this provider
+  // was NOT mounted for (session expired while the app was closed) is covered
+  // by the owner check in lib/query/idbPersister + ensureCacheOwner.
   const lastUserIdRef = useRef<string | null | undefined>(undefined);
   useEffect(() => {
     const supabase = createUntypedClient();
@@ -44,11 +49,14 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
       lastUserIdRef.current = userId;
     });
     const { data: sub } = supabase.auth.onAuthStateChange(
-      (_event: string, session: { user?: { id?: string } | null } | null) => {
+      (event: string, session: { user?: { id?: string } | null } | null) => {
       const nextUserId = session?.user?.id ?? null;
-      if (lastUserIdRef.current !== undefined && lastUserIdRef.current !== nextUserId) {
-        queryClient.clear();
-        void clearPersistedQueryCache();
+      // SIGNED_OUT always purges, even if it lands before the seed above
+      // resolved (the ref is still `undefined` for the first few ms).
+      const identityChanged =
+        lastUserIdRef.current !== undefined && lastUserIdRef.current !== nextUserId;
+      if (event === 'SIGNED_OUT' || identityChanged) {
+        void purgeUserCaches(queryClient);
       }
       lastUserIdRef.current = nextUserId;
     });

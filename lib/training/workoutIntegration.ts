@@ -8,7 +8,7 @@
 // a headless/simulated run — drive the engine against that database instead.
 // See the ProgramEngine constructor for why this seam has to exist.
 //
-// NOTE for anyone extending this module: of the six exports below, only
+// NOTE for anyone extending this module: of the five exports below, only
 // checkShouldDeload currently has a caller (lib/training/deloadRecommendation).
 // The rest are unreferenced, and the tables two of them write —
 // exercise_history and strength_calibrations — consequently have no live
@@ -46,23 +46,6 @@ export async function getWeightRecommendationsForWorkout(
   }
 
   return recommendations;
-}
-
-/**
- * Get today's workout from an active mesocycle using the ProgramEngine.
- */
-export async function getTodayMesocycleWorkout(
-  userId: string,
-  mesocycleId: string,
-  supabase?: EngineClient
-) {
-  try {
-    const engine = await ProgramEngine.create(userId, supabase);
-    return engine.getTodayWorkout(mesocycleId);
-  } catch (error) {
-    console.error('[getTodayMesocycleWorkout] Failed to get workout from ProgramEngine:', error);
-    return null;
-  }
 }
 
 /**

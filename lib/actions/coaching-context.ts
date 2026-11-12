@@ -125,12 +125,9 @@ export async function fetchCoachingContextData(): Promise<RawCoachingData | null
       .eq('user_id', authUser.id)
       .order('tested_at', { ascending: false });
 
-    // Get user preferences/goals
-    const { data: prefsData } = await supabase
-      .from('user_preferences')
-      .select('*')
-      .eq('user_id', authUser.id)
-      .single();
+    // User preferences/goals live in the users.preferences JSON (already
+    // loaded with the profile row above) — there is no user_preferences table.
+    const prefsData = (user as { preferences?: unknown }).preferences ?? null;
 
     // Get recent lift performance (last 30 days)
     const thirtyDaysAgo = new Date();

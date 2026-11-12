@@ -15,6 +15,7 @@ import {
   ComposedChart,
 } from 'recharts';
 import type { RegressionAnalysis, RegressionDataPoint } from '@/lib/nutrition/adaptive-tdee';
+import { parseLocalDate } from '@/lib/utils';
 
 interface TDEERegressionGraphProps {
   regressionAnalysis: RegressionAnalysis;
@@ -29,7 +30,9 @@ export function TDEERegressionGraph({ regressionAnalysis }: TDEERegressionGraphP
     return dataPoints.map((point) => ({
       ...point,
       // Format date for display
-      displayDate: new Date(point.date).toLocaleDateString('en-US', {
+      // point.date is a YYYY-MM-DD day: parse it as LOCAL (new Date() would
+      // read it as UTC midnight and show the previous day in US time zones).
+      displayDate: parseLocalDate(point.date).toLocaleDateString('en-US', {
         month: 'short',
         day: 'numeric',
       }),

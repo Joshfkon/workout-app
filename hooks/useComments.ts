@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { createClient } from '@/lib/supabase/client';
+import { createClient, createUntypedClient } from '@/lib/supabase/client';
 import { useAuthUser } from '@/hooks/useAuthUser';
 import { fetchUserProfiles } from '@/lib/profiles';
+import { loadBlockedUserIds } from '@/lib/moderation';
 import type { ActivityComment } from '@/types/social';
 
 export function useComments() {
@@ -49,12 +50,19 @@ export function useComments() {
         return { data: [], error: null };
       }
 
+      // Hide comments written by users the viewer has blocked. Replies to a
+      // blocked comment go with it (their parent is never added to the tree).
+      const blockedIds = authUser
+        ? await loadBlockedUserIds(supabase, authUser.id)
+        : new Set<string>();
+      const visibleComments = commentsData.filter(c => !blockedIds.has(c.user_id));
+
       // Fetch user profiles for all comment authors
-      const userIds = Array.from(new Set(commentsData.map(c => c.user_id)));
+      const userIds = Array.from(new Set(visibleComments.map(c => c.user_id)));
       const profilesMap = await fetchUserProfiles(supabase, userIds);
 
       // Combine comments with profiles
-      const data = commentsData.map((row) => ({
+      const data = visibleComments.map((row) => ({
         ...row,
         user_profiles: profilesMap.get(row.user_id) || null,
       }));
@@ -126,7 +134,7 @@ export function useComments() {
       const message = err instanceof Error ? err.message : 'Failed to get comments';
       return { data: [], error: message };
     }
-  }, []);
+  }, [authUser]);
 
   const addComment = useCallback(async (activityId: string, content: string, parentCommentId?: string) => {
     setIsLoading(true);
@@ -179,16 +187,19 @@ export function useComments() {
         throw new Error('Must be logged in');
       }
 
-      const supabase = createClient();
+      // Soft delete through the soft_delete_comment RPC (SECURITY DEFINER,
+      // own comments only). A direct UPDATE setting deleted_at is rejected by
+      // RLS: the "View comments" SELECT policy requires deleted_at IS NULL and
+      // Postgres applies it to the updated row as well.
+      const { data: deleted, error: rpcError } = (await createUntypedClient().rpc(
+        'soft_delete_comment',
+        { p_comment_id: commentId }
+      )) as { data: boolean | null; error: Error | null };
 
-      // Soft delete by setting deleted_at
-      const { error: updateError } = await (supabase
-        .from('activity_comments' as never) as ReturnType<typeof supabase.from>)
-        .update({ deleted_at: new Date().toISOString() } as never)
-        .eq('id', commentId)
-        .eq('user_id', authUser.id); // Only allow deleting own comments
-
-      if (updateError) throw updateError;
+      if (rpcError) throw rpcError;
+      if (deleted === false) {
+        throw new Error('Comment not found or already deleted');
+      }
 
       return { success: true };
     } catch (err) {

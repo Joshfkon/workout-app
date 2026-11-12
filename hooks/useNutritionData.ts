@@ -24,6 +24,7 @@ import { getLocalUserId } from '@/lib/supabase/authState';
 import { getLocalDateString } from '@/lib/utils';
 import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 import { getAdaptiveTDEE, type TDEEData } from '@/lib/actions/tdee';
+import { unitsFromUserPreferences } from '@/lib/nutrition/formulaProfile';
 import type {
   FoodLogEntry,
   WeightLogEntry,
@@ -183,7 +184,9 @@ async function fetchNutritionGlobal(): Promise<NutritionGlobalBundle | null> {
       .eq('user_id', userId)
       .eq('state', 'active')
       .maybeSingle(),
-    supabase.from('user_preferences').select('weight_unit').eq('user_id', userId).maybeSingle(),
+    // Unit preference lives in users.preferences.units (there is no
+    // user_preferences table).
+    supabase.from('users').select('preferences').eq('id', userId).maybeSingle(),
     supabase
       .from('user_volume_profiles')
       .select('training_age, is_enhanced')
@@ -234,7 +237,8 @@ async function fetchNutritionGlobal(): Promise<NutritionGlobalBundle | null> {
 
   let tdee: TDEEData | null = null;
   try {
-    tdee = await getAdaptiveTDEE(targetsResult.data?.calories);
+    // Pass the client's local day: the action runs in the server's time zone.
+    tdee = await getAdaptiveTDEE(targetsResult.data?.calories, undefined, getLocalDateString());
   } catch (err) {
     console.error('[Nutrition] Error loading TDEE data:', err);
   }
@@ -260,7 +264,9 @@ async function fetchNutritionGlobal(): Promise<NutritionGlobalBundle | null> {
     })(),
     dexaScans: (dexaResult.data ?? []) as NutritionGlobalBundle['dexaScans'],
     mesocycle: (mesocycleResult.data ?? null) as NutritionGlobalBundle['mesocycle'],
-    prefs: (prefsResult.data ?? null) as NutritionGlobalBundle['prefs'],
+    prefs: prefsResult.data
+      ? { weight_unit: unitsFromUserPreferences((prefsResult.data as { preferences?: unknown }).preferences) }
+      : null,
     volumeProfile: (volumeProfileResult.data ?? null) as NutritionGlobalBundle['volumeProfile'],
     proteinRaw: (proteinResult.data ?? []) as NutritionGlobalBundle['proteinRaw'],
     trainingSetsRaw: (trainingSetsResult.data ?? []) as any[],

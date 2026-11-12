@@ -13,6 +13,7 @@ import { MySharedWorkouts } from '@/components/social/sharing/MySharedWorkouts';
 import { formatSocialCount, getProfileUrl } from '@/lib/social';
 import { formatWeight, calculateStreaks } from '@/lib/utils';
 import { useUserStore } from '@/stores/userStore';
+import { fetchLifetimeSetStats } from './_lib/lifetimeSetStats';
 import type { UserProfile, ProfileStats } from '@/types/social';
 
 export default function MyProfilePage() {
@@ -59,16 +60,12 @@ export default function MyProfilePage() {
         .eq('user_id', authUser.id)
         .eq('state', 'completed') as { data: Array<{ id: string; completed_at: string | null }> | null };
 
-      const { data: setLogs } = await supabase
-        .from('set_logs')
-        .select('weight_kg, reps, exercise_blocks!inner(exercise_id, workout_sessions!inner(user_id))')
-        .eq('exercise_blocks.workout_sessions.user_id', authUser.id)
-        .eq('is_warmup', false) as { data: Array<{ weight_kg: number | null; reps: number | null }> | null };
-
-      // Calculate stats
-      const totalSets = setLogs?.length ?? 0;
-      const totalVolume = setLogs?.reduce((sum, log) =>
-        sum + ((log.weight_kg ?? 0) * (log.reps ?? 0)), 0) ?? 0;
+      // Lifetime set count + volume as one aggregate (was: select every set
+      // ever logged, silently capped at 1000 rows).
+      const { totalSets, totalVolumeKg: totalVolume } = await fetchLifetimeSetStats(
+        supabase,
+        authUser.id
+      );
 
       // Calculate workout streaks from completed workout dates
       const workoutDates = workoutStats

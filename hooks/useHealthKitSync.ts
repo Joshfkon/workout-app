@@ -16,6 +16,12 @@
 import { useEffect } from 'react';
 import { isNativePlatform, getPlatform } from '@/lib/integrations/capacitor-stub';
 
+/**
+ * Fired on `window` after a foreground sync stored new HealthKit data
+ * (`detail` is the HealthKitSyncOutcome). Listeners refetch what they show.
+ */
+export const HEALTHKIT_SYNCED_EVENT = 'healthkit:synced';
+
 export function useHealthKitForegroundSync(): void {
   useEffect(() => {
     if (!isNativePlatform() || getPlatform() !== 'ios') return;
@@ -26,6 +32,16 @@ export function useHealthKitForegroundSync(): void {
     const sync = () => {
       import('@/lib/integrations/healthkit-sync')
         .then((module) => module.runHealthKitSync())
+        .then((outcome) => {
+          // The dashboard cards read their rows on mount, in parallel with
+          // this pull, so they render yesterday's picture of today. Tell them
+          // when fresh rows have landed.
+          if (outcome.status === 'synced' && !disposed) {
+            window.dispatchEvent(
+              new CustomEvent(HEALTHKIT_SYNCED_EVENT, { detail: outcome })
+            );
+          }
+        })
         .catch(() => {
           // Plugin or network unavailable — foreground sync is best-effort.
         });

@@ -193,7 +193,7 @@ describe('matchPositionTarget — progression rule', () => {
     );
   });
 
-  it('trades one increment for a rep at the rep ceiling', () => {
+  it('steps one increment and resets reps to the range floor at the rep ceiling', () => {
     const t = matchPositionTarget({
       ...base,
       prevSessionSets: [
@@ -205,7 +205,7 @@ describe('matchPositionTarget — progression rule', () => {
       position: 0,
     });
     expect(t).toEqual(
-      expect.objectContaining({ weightKg: 195, reps: 11, progression: 'add_load' })
+      expect.objectContaining({ weightKg: 195, reps: 8, progression: 'add_load' })
     );
   });
 

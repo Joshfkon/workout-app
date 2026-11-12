@@ -1,5 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { startMesocycleWorkoutSession, type StartableMesocycle } from '../startMesocycleSession';
+import {
+  startMesocycleWorkoutSession,
+  coldStartTargetWeight,
+  type StartableMesocycle,
+} from '../startMesocycleSession';
 import { quickWeightEstimate } from '@/services/weightEstimationEngine';
 
 /**
@@ -7,8 +11,10 @@ import { quickWeightEstimate } from '@/services/weightEstimationEngine';
  * exercise history (recency-decayed e1RM anchor) BEFORE the
  * quickWeightEstimate transfer/profile ladder, and does NOT multiply the
  * weekly intensityModifier on top (the RIR ramp already drives weekly
- * intensity). A true cold start keeps the estimate × modifier path
- * bit-for-bit.
+ * intensity). A true cold start uses the quickWeightEstimate as-is on
+ * training weeks too — the modifier applies only on a deload week, on both
+ * paths (the builder emits 0.70–1.0 on training weeks, so multiplying it in
+ * under-loaded first sessions by up to 30%).
  */
 
 // ============================================================
@@ -326,7 +332,7 @@ describe('startMesocycleWorkoutSession — direct-history targets (Fix 5)', () =
     expect(bench.target_weight_kg).toBeLessThanOrEqual(110);
   });
 
-  it('a true cold start keeps the quickWeightEstimate × intensityModifier path bit-for-bit', async () => {
+  it('a true cold start uses the quickWeightEstimate without the training-week intensityModifier', async () => {
     const { supabase, queries } = createSupabaseMock(makeResponder(benchHistoryRow));
     await startMesocycleWorkoutSession({
       supabase,
@@ -338,7 +344,7 @@ describe('startMesocycleWorkoutSession — direct-history targets (Fix 5)', () =
     const blocks = insertedBlocks(queries);
     const fly = blocks.find((b) => b.exercise_id === EX_FLY);
 
-    // Exactly what the pre-fix code computed for this exercise.
+    // The estimate itself — NOT × the week's 1.05 modifier.
     const rec = quickWeightEstimate(
       'Cable Fly',
       { min: 10, max: 15 },
@@ -359,7 +365,7 @@ describe('startMesocycleWorkoutSession — direct-history targets (Fix 5)', () =
         },
       }
     );
-    const expected = Math.round((rec.recommendedWeight || 0) * 1.05 * 2) / 2;
+    const expected = Math.round((rec.recommendedWeight || 0) * 2) / 2;
     expect(fly.target_weight_kg).toBe(expected);
     expect(expected).toBeGreaterThan(0);
   });
@@ -395,7 +401,7 @@ describe('startMesocycleWorkoutSession — direct-history targets (Fix 5)', () =
         },
       }
     );
-    expect(bench.target_weight_kg).toBe(Math.round((rec.recommendedWeight || 0) * 1.05 * 2) / 2);
+    expect(bench.target_weight_kg).toBe(Math.round((rec.recommendedWeight || 0) * 2) / 2);
   });
 
   it('a deload week still applies the scheduled reduction to the direct-history target', async () => {
@@ -412,5 +418,53 @@ describe('startMesocycleWorkoutSession — direct-history targets (Fix 5)', () =
     // The deload modifier (0.6) is the lightening mechanism itself — it must
     // still apply to the gated target: 100 × 0.6 = 60.
     expect(bench.target_weight_kg).toBe(60);
+  });
+
+  it('a deload week applies the scheduled reduction to a cold-start target too', async () => {
+    const { supabase, queries } = createSupabaseMock(makeResponder(null));
+    await startMesocycleWorkoutSession({
+      supabase,
+      mesocycle: { ...baseMesocycle, current_week: 3 },
+      todayWorkout: null,
+      completedSessions: 8,
+    });
+
+    const blocks = insertedBlocks(queries);
+    const bench = blocks.find((b) => b.exercise_id === EX_BENCH);
+    const rec = quickWeightEstimate(
+      'Barbell Bench Press',
+      { min: 8, max: 12 },
+      2,
+      80,
+      175,
+      20,
+      'intermediate',
+      undefined,
+      'kg',
+      undefined,
+      {
+        transferCandidates: [],
+        targetMeta: {
+          primaryMuscle: 'chest',
+          movementPattern: 'horizontal_push',
+          equipmentRequired: ['barbell'],
+        },
+      }
+    );
+    expect(bench.target_weight_kg).toBe(Math.round((rec.recommendedWeight || 0) * 0.6 * 2) / 2);
+  });
+});
+
+describe('coldStartTargetWeight', () => {
+  it('block periodization week 1 (×0.733) no longer turns a 60 kg estimate into 44 kg', () => {
+    expect(coldStartTargetWeight(60, { intensityModifier: 0.7333, isDeload: false })).toBe(60);
+  });
+
+  it('a deload week still lightens the estimate', () => {
+    expect(coldStartTargetWeight(60, { intensityModifier: 0.6, isDeload: true })).toBe(36);
+  });
+
+  it('rounds to the nearest 0.5 kg', () => {
+    expect(coldStartTargetWeight(41.3, { intensityModifier: 1, isDeload: false })).toBe(41.5);
   });
 });

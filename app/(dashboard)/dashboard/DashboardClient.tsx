@@ -7,6 +7,7 @@ import { IconAlertTriangle } from '@tabler/icons-react';
 import { Button, LoadingAnimation } from '@/components/ui';
 import { Modal } from '@/components/ui/Modal';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { getLocalUserId } from '@/lib/supabase/authState';
 import { getLocalDateString } from '@/lib/utils';
 import type { FrequentFood, SystemFood, MealType } from '@/types/nutrition';
 import { type MuscleVolumeData } from '@/services/volumeTracker';
@@ -118,9 +119,14 @@ const LogBloodPressureModal = dynamic(
 // the extra chunk and the swap; with weekly volume already in server
 // initialData, the card now paints with the initial HTML.
 
+// Both localStorage snapshots are keyed PER USER (`<prefix>:<userId>`): an
+// unscoped key let the previous account's weight history / calories paint for
+// whoever signed in next on the same browser. Sign-out also removes every key
+// with these prefixes (lib/query/clientCachePurge).
 const WEIGHT_HISTORY_CACHE_KEY = 'weight_history_cache';
 const WEIGHT_HISTORY_CACHE_TTL = 60 * 60 * 1000; // 1 hour
 const DASHBOARD_CACHE_KEY = 'dashboard_data_cache';
+const userCacheKey = (prefix: string, uid: string) => `${prefix}:${uid}`;
 const DASHBOARD_CACHE_TTL = 5 * 60 * 1000; // 5 minutes - short TTL for fresh data
 
 // Type for cached dashboard data
@@ -246,6 +252,13 @@ function inferMealType(now: Date): MealType {
 // Props for server-side initial data
 interface DashboardInitialData {
   userId: string;
+  /**
+   * The calendar day (YYYY-MM-DD) the server computed the daily data for.
+   * When it isn't the device's local day (host in another zone before the
+   * timezone cookie exists, or an offline-fallback copy of an older render)
+   * the client ignores the fast path and refetches for its own day.
+   */
+  dateKey?: string;
   mesocycle: ActiveMesocycle | null;
   todaysWorkout: TodaysWorkout | null;
   nutritionTotals: NutritionTotals;
@@ -479,7 +492,10 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   // The date the server-provided initialData is for. initialData only covers the daily
   // data (workout/nutrition/weight) for the mount date, so its fast path is valid only
   // while dateKey still equals this; after midnight rollover we must do the full fetch.
-  const [initialDateKey] = useState(() => getLocalDateString());
+  // This is the day the SERVER computed it for, not the client's mount day — a
+  // render for the wrong day (see DashboardInitialData.dateKey) must not be
+  // trusted as today's.
+  const [initialDateKey] = useState(() => initialData?.dateKey ?? getLocalDateString());
   useEffect(() => {
     const update = () => {
       const now = new Date();
@@ -715,21 +731,30 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   const [frequentFoods, setFrequentFoods] = useState<FrequentFood[]>([]);
   const [systemFoods, setSystemFoods] = useState<SystemFood[]>([]);
 
-  // Load cached weight history on mount for faster initial render
+  // Load cached weight history on mount for faster initial render.
+  // Skipped when server initialData exists (it is strictly fresher — applying
+  // the snapshot used to override the server's history for up to an hour),
+  // and only ever read from the signed-in user's own key.
   useEffect(() => {
-    try {
-      const cached = localStorage.getItem(WEIGHT_HISTORY_CACHE_KEY);
-      if (cached) {
-        const { data, timestamp } = JSON.parse(cached);
-        // Use cache if still valid (within TTL)
-        if (Date.now() - timestamp < WEIGHT_HISTORY_CACHE_TTL && Array.isArray(data)) {
-          setWeightHistory(data);
+    if (hasInitialData) return;
+    let cancelled = false;
+    void getLocalUserId(createUntypedClient()).then((uid) => {
+      if (!uid || cancelled) return;
+      try {
+        const cached = localStorage.getItem(userCacheKey(WEIGHT_HISTORY_CACHE_KEY, uid));
+        if (cached) {
+          const { data, timestamp } = JSON.parse(cached);
+          // Use cache if still valid (within TTL)
+          if (Date.now() - timestamp < WEIGHT_HISTORY_CACHE_TTL && Array.isArray(data)) {
+            setWeightHistory(data);
+          }
         }
+      } catch (e) {
+        // Ignore cache errors - fresh data will be fetched
       }
-    } catch (e) {
-      // Ignore cache errors - fresh data will be fetched
-    }
-  }, []);
+    });
+    return () => { cancelled = true; };
+  }, [hasInitialData]);
 
   // Load cached dashboard data on mount for instant content display.
   // Skipped entirely when server initialData exists: it is strictly fresher
@@ -738,14 +763,21 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   // (and re-render the SSR'd atrophy card, the LCP element) post-hydration.
   useEffect(() => {
     if (hasInitialData) return;
+    let cancelled = false;
+    void getLocalUserId(createUntypedClient()).then((uid) => {
+    if (!uid || cancelled) return;
     try {
-      const cached = localStorage.getItem(DASHBOARD_CACHE_KEY);
+      const cached = localStorage.getItem(userCacheKey(DASHBOARD_CACHE_KEY, uid));
       if (cached) {
         const data: DashboardCacheData = JSON.parse(cached);
         const todayStr = getLocalDateString();
 
         // Use cache if: within TTL AND same day (nutrition/workout data is day-specific)
-        const isValid = Date.now() - data.timestamp < DASHBOARD_CACHE_TTL && data.dateKey === todayStr;
+        // AND it belongs to the signed-in user.
+        const isValid =
+          Date.now() - data.timestamp < DASHBOARD_CACHE_TTL &&
+          data.dateKey === todayStr &&
+          data.userId === uid;
 
         if (isValid) {
           // Apply cached data immediately - show content without waiting for fetch
@@ -772,14 +804,18 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
     } catch (e) {
       // Ignore cache errors - fresh data will be fetched
     }
+    });
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasInitialData]);
 
   // Helper function to update the dashboard cache after data mutations
   // This prevents stale data from being shown on page reload
   const updateDashboardCache = useCallback((updates: Partial<Pick<DashboardCacheData, 'nutritionTotals' | 'todaysWeight' | 'userGoal' | 'nutritionTargets'>>) => {
+    if (!userId) return;
+    const cacheKey = userCacheKey(DASHBOARD_CACHE_KEY, userId);
     try {
-      const cached = localStorage.getItem(DASHBOARD_CACHE_KEY);
+      const cached = localStorage.getItem(cacheKey);
       if (cached) {
         const data: DashboardCacheData = JSON.parse(cached);
         const todayStr = getLocalDateString();
@@ -790,13 +826,13 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
             ...updates,
             timestamp: Date.now(), // Refresh timestamp so cache stays valid
           };
-          localStorage.setItem(DASHBOARD_CACHE_KEY, JSON.stringify(updatedData));
+          localStorage.setItem(cacheKey, JSON.stringify(updatedData));
         }
       }
     } catch (e) {
       // Ignore cache update errors
     }
-  }, []);
+  }, [userId]);
 
   // Muscles below MEV for the atrophy-risk alert — the coarse below-MEV rows
   // (plus lagging fine children) from the SAME model the bars and glance tile
@@ -923,14 +959,13 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
           mesocyclesResult,
           nutritionResult,
           targetsResult,
-          prefsResult,
           weightResult,
           weightHistoryResult,
           weeklyBlocksResult,
           liftSessionsResult,
         ] = await Promise.all([
-          // User profile (goal)
-          supabase.from('users').select('goal').eq('id', user.id).single(),
+          // User profile (goal + unit preference — users.preferences.units)
+          supabase.from('users').select('goal, preferences').eq('id', user.id).single(),
 
           // Use shared helper to fetch active mesocycle (same logic as Train + server)
           fetchActiveMesocycle(supabase, user.id),
@@ -946,12 +981,6 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
             .select('calories, protein, carbs, fat, cardio_prescription')
             .eq('user_id', user.id)
             .maybeSingle(),
-
-          // User preferences
-          supabase.from('user_preferences')
-            .select('weight_unit')
-            .eq('user_id', user.id)
-            .single(),
 
           // Today's weight
           supabase.from('weight_log')
@@ -983,6 +1012,13 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
             .gte('completed_at', new Date(today.getTime() - LIFT_TREND_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString())
             .order('completed_at', { ascending: true }),
         ]);
+
+        // Unit preference from the real source (users.preferences.units).
+        // There is no user_preferences table; that read always errored, so
+        // this path silently fell back to lb for everyone.
+        const storedUnits = (userProfileResult.data?.preferences as { units?: string } | null)?.units;
+        const preferredUnit: 'lb' | 'kg' | null =
+          storedUnits === 'kg' || storedUnits === 'lb' ? storedUnits : null;
 
         // Deferred queries - load in background, only needed for food logging
         // These don't block initial render
@@ -1194,13 +1230,13 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         }
 
         // Set user's preferred unit first (needed for weight processing)
-        if (prefsResult.data?.weight_unit) {
-          setWeightUnit(prefsResult.data.weight_unit as 'lb' | 'kg');
+        if (preferredUnit) {
+          setWeightUnit(preferredUnit);
         }
 
         // Process weight - use user's preferred unit as default if unit is missing
         if (weightResult.data) {
-          const userPreferredUnit = (prefsResult.data?.weight_unit as 'lb' | 'kg') || 'lb';
+          const userPreferredUnit = preferredUnit || 'lb';
           setTodaysWeight({
             weight: weightResult.data.weight,
             unit: weightResult.data.unit || userPreferredUnit
@@ -1212,7 +1248,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
 
         // Process weight history - simple pass-through, no guessing
         if (weightHistoryResult.data && weightHistoryResult.data.length > 0) {
-          const defaultUnit = (prefsResult.data?.weight_unit as 'lb' | 'kg') || 'lb';
+          const defaultUnit = preferredUnit || 'lb';
 
           const processedHistory = weightHistoryResult.data.map((w: any) => ({
             date: w.logged_at,
@@ -1224,7 +1260,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
 
           // Cache weight history in localStorage for faster subsequent loads
           try {
-            localStorage.setItem(WEIGHT_HISTORY_CACHE_KEY, JSON.stringify({
+            localStorage.setItem(userCacheKey(WEIGHT_HISTORY_CACHE_KEY, user.id), JSON.stringify({
               data: processedHistory,
               timestamp: Date.now(),
             }));
@@ -1308,14 +1344,14 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
             nutritionTargets: targetsResult.data || null,
             todaysWeight: weightResult.data ? {
               weight: weightResult.data.weight,
-              unit: weightResult.data.unit || prefsResult.data?.weight_unit || 'lb'
+              unit: weightResult.data.unit || preferredUnit || 'lb'
             } : null,
-            weightUnit: (prefsResult.data?.weight_unit as 'lb' | 'kg') || 'lb',
+            weightUnit: preferredUnit || 'lb',
             muscleVolume: [], // Volume is computed, skip for cache simplicity
             timestamp: Date.now(),
             dateKey: todayStr,
           };
-          localStorage.setItem(DASHBOARD_CACHE_KEY, JSON.stringify(cacheData));
+          localStorage.setItem(userCacheKey(DASHBOARD_CACHE_KEY, user.id), JSON.stringify(cacheData));
         } catch (e) {
           // Ignore cache write errors
         }
@@ -1417,7 +1453,12 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         next.sort((a, b) => a.date.localeCompare(b.date));
       }
       try {
-        localStorage.setItem(WEIGHT_HISTORY_CACHE_KEY, JSON.stringify({ data: next, timestamp: Date.now() }));
+        if (userId) {
+          localStorage.setItem(
+            userCacheKey(WEIGHT_HISTORY_CACHE_KEY, userId),
+            JSON.stringify({ data: next, timestamp: Date.now() })
+          );
+        }
       } catch (e) {
         // Ignore weight history cache update errors
       }

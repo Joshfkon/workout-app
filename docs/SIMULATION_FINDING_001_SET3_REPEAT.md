@@ -1,8 +1,10 @@
 # Simulation finding 001 — `REGRESSION_SET3_UNATTAINED_TARGET`
 
 **Class:** CONTRACT (hard failure)
-**Status:** OPEN — reported, **not fixed**. Per harness constraint 9, engine
-fixes are separate work from harness work.
+**Status:** FIXED 2026-11-12 on branch `fix/review-findings` (just-missed-set
+ceiling in `services/setRecommender.ts` `finalizeRec`; engine version 10). The
+`it.failing` pin in `scenarios.test.ts` is now a plain `it`. The analysis below
+describes the defect as it was found.
 **Found by:** Phase 3 stochastic sweep, 2026-08.
 **Deterministic reproduction:** `simulation/__tests__/scenarios.test.ts`
 

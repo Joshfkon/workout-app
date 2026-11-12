@@ -177,11 +177,14 @@ export function SleepQuickLog({ onSaved }: SleepQuickLogProps) {
       if (!result.granted) return;
 
       const { upsertWearableConnection } = await import('@/lib/actions/wearable');
-      await upsertWearableConnection({
+      const saved = await upsertWearableConnection({
         source: 'apple_healthkit',
         permissions: ['steps', 'active_energy', 'sleep', 'heart_rate'],
         deviceName: 'Apple Health',
       });
+      // A failed save must not look connected: the next visit would offer
+      // Apple Health again and no sync would ever run.
+      if (!saved?.success) return;
       setHealthKitConnected(true);
 
       const sync = await import('@/lib/integrations/healthkit-sync');

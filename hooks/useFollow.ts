@@ -78,17 +78,24 @@ export function useFollow({
     setIsLoading(true);
     const supabase = createClient();
 
-    // Determine status based on target's profile visibility
-    const status: FollowStatus = targetProfileVisibility === 'private' ? 'pending' : 'accepted';
+    // The database decides the status (trigger enforce_follow_rules: private
+    // profile -> 'pending', otherwise 'accepted', blocked pairs rejected), so
+    // what we send here is only the expected value. Read back what was
+    // actually stored rather than trusting the prop.
+    const requestedStatus: FollowStatus = targetProfileVisibility === 'private' ? 'pending' : 'accepted';
 
-    const { error } = await (supabase
+    const { data: inserted, error } = (await (supabase
       .from('follows' as never) as ReturnType<typeof supabase.from>)
       .insert({
         follower_id: currentUserId,
         following_id: targetUserId,
-        status,
-        accepted_at: status === 'accepted' ? new Date().toISOString() : null,
-      } as never);
+        status: requestedStatus,
+        accepted_at: requestedStatus === 'accepted' ? new Date().toISOString() : null,
+      } as never)
+      .select('status')
+      .single()) as { data: { status: string } | null; error: unknown };
+
+    const status: FollowStatus = (inserted?.status as FollowStatus) ?? requestedStatus;
 
     if (!error) {
       setRelationship((prev) => ({

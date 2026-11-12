@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, Button, Modal, Input } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { deleteAccount } from '@/lib/actions/account';
+import { purgeUserCaches } from '@/lib/query/clientCachePurge';
 
 export function DeleteAccountCard() {
   const [showConfirm, setShowConfirm] = useState(false);
@@ -29,6 +30,8 @@ export function DeleteAccountCard() {
       // Account is gone — clear the now-invalid session and leave the app.
       const supabase = createUntypedClient();
       await supabase.auth.signOut();
+      // Finish clearing this account's cached data before the hard navigation.
+      await purgeUserCaches().catch(() => {});
       window.location.href = '/login';
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete your account.');
@@ -73,8 +76,7 @@ export function DeleteAccountCard() {
             cannot be undone.
           </p>
           <p className="text-xs text-surface-500">
-            If you have a paid subscription, cancel it on the web first — deleting your account here does
-            not automatically cancel web billing.
+            If you have a paid subscription, it is cancelled as part of deleting your account.
           </p>
 
           <div>

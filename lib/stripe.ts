@@ -115,5 +115,13 @@ export const TIER_FEATURES = {
 } as const;
 
 export type SubscriptionTier = keyof typeof TIER_FEATURES;
-export type SubscriptionStatus = 'trialing' | 'active' | 'canceled' | 'past_due' | 'unpaid' | 'incomplete';
+export type SubscriptionStatus =
+  | 'trialing'
+  | 'active'
+  | 'canceled'
+  | 'past_due'
+  | 'unpaid'
+  | 'incomplete'
+  | 'incomplete_expired'
+  | 'paused';
 

@@ -24,6 +24,7 @@ import { MUSCLE_GROUPS } from '@/types/schema';
 import { ENHANCED_MRV_MULTIPLIERS, ENHANCED_MAV_MULTIPLIER, type CoarseMuscle } from '@/services/volumeBands';
 import { estimateE1RM } from '@/lib/utils';
 import { uniformSeriesSlope } from '@/services/shared/trend';
+import { now as clockNow } from '@/lib/clock';
 
 // ============================================
 // TYPE DEFINITIONS
@@ -457,13 +458,13 @@ export function createInitialVolumeProfile(
       estimatedMEV: baseline.mev,
       confidence: 'low',
       dataPoints: 0,
-      lastUpdated: new Date(),
+      lastUpdated: clockNow(),
     };
   }
 
   return {
     userId,
-    updatedAt: new Date(),
+    updatedAt: clockNow(),
     muscleTolerance,
     globalRecoveryMultiplier: 1.0,
     isEnhanced,
@@ -496,7 +497,7 @@ export function setEnhancedStatus(
       ...tolerance,
       estimatedMEV: tolerance.estimatedMEV, // MEV invariant: never scaled
       estimatedMRV: Math.round(tolerance.estimatedMRV * mrvScale),
-      lastUpdated: new Date(),
+      lastUpdated: clockNow(),
     };
   }
 
@@ -504,7 +505,7 @@ export function setEnhancedStatus(
     ...profile,
     isEnhanced,
     muscleTolerance,
-    updatedAt: new Date(),
+    updatedAt: clockNow(),
   };
 }
 
@@ -1260,12 +1261,12 @@ export function updateVolumeProfile(
     current.dataPoints += 1;
     current.confidence = current.dataPoints >= 4 ? 'high' :
                          current.dataPoints >= 2 ? 'medium' : 'low';
-    current.lastUpdated = new Date();
+    current.lastUpdated = clockNow();
 
     updatedProfile.muscleTolerance[muscleGroup] = current;
   }
 
-  updatedProfile.updatedAt = new Date();
+  updatedProfile.updatedAt = clockNow();
   return updatedProfile;
 }
 

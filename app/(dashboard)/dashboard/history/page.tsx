@@ -20,7 +20,7 @@ import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 // workout as "No gym recorded" until the refetch landed.
 const HISTORY_FIRST_PAGE_KEY = ['history', 'sessions', 'page0', 'v3'] as const;
 const HISTORY_GYMS_KEY = ['history', 'gymLocations'] as const;
-import { formatWeight, formatEstimateWeight, convertWeight, convertWeightForDisplay, inputWeightToKg, getLocalDateString, muscleDisplayName } from '@/lib/utils';
+import { formatWeight, formatEstimateWeight, convertWeight, convertWeightForDisplay, inputWeightToKg, getLocalDateString, muscleDisplayName, parseLocalDate } from '@/lib/utils';
 import { e1rmValueFromRpe } from '@/services/shared/e1rm';
 import { computeTrend } from '@/services/shared/trend';
 import { createRepeatSession } from '@/lib/training/repeatWorkout';
@@ -372,6 +372,7 @@ function HistoryPageContent() {
         .eq('id', setId);
       if (error) {
         console.error('Failed to update set:', error);
+        setActionError('Failed to save that set. Please try again.');
         return;
       }
 
@@ -408,6 +409,9 @@ function HistoryPageContent() {
         })
       );
       setEditingSetId(null);
+      // E1RM trends, PRs, weekly volume and readiness are cached from
+      // set_logs — an edited set must refresh them, not just this card.
+      void invalidateWorkoutDerivedCaches(queryClient);
     } finally {
       setSavingSetEdit(false);
     }
@@ -468,22 +472,35 @@ function HistoryPageContent() {
       const workoutIds = Array.from(selectedWorkouts);
 
       // Get all exercise blocks for these workouts
-      const { data: blocks } = await supabase
+      // Every step is checked: an ignored `error` made a failed delete look
+      // successful (the workout vanished from the list and came back later,
+      // or was left half-deleted with no message).
+      const { data: blocks, error: blocksError } = await supabase
         .from('exercise_blocks')
         .select('id')
         .in('workout_session_id', workoutIds);
+      if (blocksError) throw blocksError;
 
       if (blocks && blocks.length > 0) {
         const blockIds = blocks.map((b: { id: string }) => b.id);
         // Delete set_logs for all blocks
-        await supabase.from('set_logs').delete().in('exercise_block_id', blockIds);
+        const { error } = await supabase.from('set_logs').delete().in('exercise_block_id', blockIds);
+        if (error) throw error;
       }
 
       // Delete all exercise_blocks
-      await supabase.from('exercise_blocks').delete().in('workout_session_id', workoutIds);
+      const { error: blockDeleteError } = await supabase
+        .from('exercise_blocks')
+        .delete()
+        .in('workout_session_id', workoutIds);
+      if (blockDeleteError) throw blockDeleteError;
 
       // Delete all workout_sessions
-      await supabase.from('workout_sessions').delete().in('id', workoutIds);
+      const { error: sessionDeleteError } = await supabase
+        .from('workout_sessions')
+        .delete()
+        .in('id', workoutIds);
+      if (sessionDeleteError) throw sessionDeleteError;
 
       // Update local state
       mutateWorkouts(prev => prev.filter(w => !selectedWorkouts.has(w.id)));
@@ -493,6 +510,10 @@ function HistoryPageContent() {
       console.error('Failed to delete workouts:', err);
       setActionError('Failed to delete workouts. Please try again.');
     } finally {
+      // Success or partial failure, the DB changed (or may have): refresh the
+      // list from it and every surface derived from set_logs — analytics,
+      // readiness, exercise charts.
+      void invalidateWorkoutDerivedCaches(queryClient);
       setIsBulkDeleting(false);
     }
   };
@@ -503,24 +524,37 @@ function HistoryPageContent() {
     try {
       const supabase = createUntypedClient();
       
-      const { data: blocks } = await supabase
+      const { data: blocks, error: blocksError } = await supabase
         .from('exercise_blocks')
         .select('id')
         .eq('workout_session_id', workoutId);
-      
+      if (blocksError) throw blocksError;
+
       if (blocks && blocks.length > 0) {
         const blockIds = blocks.map((b: { id: string }) => b.id);
-        await supabase.from('set_logs').delete().in('exercise_block_id', blockIds);
+        const { error } = await supabase.from('set_logs').delete().in('exercise_block_id', blockIds);
+        if (error) throw error;
       }
-      
-      await supabase.from('exercise_blocks').delete().eq('workout_session_id', workoutId);
-      await supabase.from('workout_sessions').delete().eq('id', workoutId);
-      
+
+      const { error: blockDeleteError } = await supabase
+        .from('exercise_blocks')
+        .delete()
+        .eq('workout_session_id', workoutId);
+      if (blockDeleteError) throw blockDeleteError;
+      const { error: sessionDeleteError } = await supabase
+        .from('workout_sessions')
+        .delete()
+        .eq('id', workoutId);
+      if (sessionDeleteError) throw sessionDeleteError;
+
       mutateWorkouts(prev => prev.filter(w => w.id !== workoutId));
     } catch (err) {
       console.error('Failed to delete workout:', err);
       setActionError('Failed to delete workout. Please try again.');
     } finally {
+      // Success or partial failure, the DB changed (or may have): refresh the
+      // list from it and every surface derived from set_logs.
+      void invalidateWorkoutDerivedCaches(queryClient);
       setDeletingId(null);
     }
   };
@@ -1168,7 +1202,10 @@ function HistoryPageContent() {
   }, [exerciseIdParam, gymParam, autoFetchedExercise, isLoading]);
 
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
+    // parseLocalDate: a date-only `planned_date` (YYYY-MM-DD) is a LOCAL
+    // calendar day — `new Date()` reads it as UTC midnight and shows the
+    // previous day west of UTC. Full timestamps pass through unchanged.
+    const date = parseLocalDate(dateString);
     return date.toLocaleDateString('en-US', {
       weekday: 'long',
       year: 'numeric',

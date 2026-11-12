@@ -18,9 +18,8 @@ import type {
   SetLogRow,
 } from '@/types/database-queries';
 
-/** User preferences row from database */
+/** The users.preferences JSON (only the keys read here) */
 interface UserPreferencesRow {
-  user_id: string;
   coaching?: {
     primaryGoal?: string;
   };
@@ -165,14 +164,9 @@ export async function buildCoachingContext(): Promise<CoachingContext | null> {
 
   const calibrations = (calibrationsData as CalibratedLiftRow[] | null) || [];
 
-  // Get user preferences/goals
-  const { data: prefsData } = await supabase
-    .from('user_preferences')
-    .select('*')
-    .eq('user_id', authUser.id)
-    .single();
-
-  const prefs = prefsData as UserPreferencesRow | null;
+  // User preferences/goals live in the users.preferences JSON (already loaded
+  // with the profile row above) — there is no user_preferences table.
+  const prefs = ((user as { preferences?: unknown }).preferences ?? null) as UserPreferencesRow | null;
 
   // Get recent lift performance (last 30 days, top sets only)
   const thirtyDaysAgo = new Date();

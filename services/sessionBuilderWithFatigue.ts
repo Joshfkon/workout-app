@@ -1016,7 +1016,13 @@ export function generateFullMesocycleWithFatigue(
    * sessionsPerDay=2 — the split rotation advances every session while the
    * recovery model sees both sessions landing on the same calendar day.
    */
-  sessionsPerDay: number = 1
+  sessionsPerDay: number = 1,
+  /**
+   * The block length the user chose (training weeks + the final deload
+   * week). Drives how many weeks are generated, so `mesocycleWeeks[N-1]` is
+   * the deload for an N-week block. Omitted → the recovery-derived default.
+   */
+  totalWeeks?: number
 ): FullProgramRecommendation {
   const warnings: string[] = [];
   const programNotes: string[] = [];
@@ -1065,7 +1071,7 @@ export function generateFullMesocycleWithFatigue(
   programNotes.push(`Split: ${split} - ${splitRec.reason}`);
 
   // Step 4: Build periodization plan
-  const periodization = buildPeriodizationPlan(profile, recoveryFactors);
+  const periodization = buildPeriodizationPlan(profile, recoveryFactors, totalWeeks);
   programNotes.push(`Periodization model: ${periodization.model}`);
   programNotes.push(`Mesocycle: ${periodization.mesocycleWeeks} weeks`);
   programNotes.push(`Deload strategy: ${periodization.deloadStrategy}`);

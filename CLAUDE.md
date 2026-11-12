@@ -14,9 +14,9 @@ HyperTrack is a science-based hypertrophy training app with intelligent auto-reg
 - **State Management**: Zustand (with persist middleware)
 - **Charts**: Recharts
 - **Animations**: Framer Motion
-- **AI Coaching**: Anthropic Claude API
+- **AI**: coaching uses xAI Grok (via the `openai` SDK, `lib/actions/coaching.ts`); nutrition, label and progress-photo AI use the Anthropic Claude API (`lib/actions/nutrition-ai.ts`)
 - **Payments**: Stripe
-- **Mobile**: Capacitor (iOS & Android)
+- **Mobile**: Capacitor (iOS only — there is no `android/` project in the repo)
 - **Testing**: Jest 30 + React Testing Library
 
 ## Project Structure
@@ -107,7 +107,6 @@ HyperTrack is a science-based hypertrophy training app with intelligent auto-reg
 /services              # Pure business logic (NO database calls)
   bodyCompEngine.ts    # Body composition analysis (FFMI)
   bodyProportionsAnalytics.ts # Body proportions analysis
-  bodyweightService.ts # Bodyweight exercise handling
   coachingContextService.ts # AI coaching context
   coachingEngine.ts    # AI coaching logic
   deloadEngine.ts      # Deload recommendations
@@ -286,7 +285,7 @@ npx supabase db reset # Reset and reseed database
 # Mobile (Capacitor)
 npm run cap:sync     # Sync web assets to native projects
 npm run cap:ios      # Open iOS project in Xcode
-npm run cap:android  # Open Android project in Android Studio
+npm run cap:android  # Open Android project in Android Studio (no android/ project exists yet — run `npx cap add android` first)
 npm run cap:run:ios  # Build and run on iOS device/simulator
 npm run cap:run:android # Build and run on Android device/emulator
 npm run cap:livereload:ios # Run iOS with live reload
@@ -464,6 +463,9 @@ SUPABASE_SERVICE_ROLE_KEY=
 # AI Coaching (Elite tier) - uses xAI Grok
 XAI_API_KEY=
 
+# Nutrition / label / progress-photo AI - uses Anthropic Claude
+ANTHROPIC_API_KEY=
+
 # Payments
 STRIPE_SECRET_KEY=
 STRIPE_WEBHOOK_SECRET=
@@ -479,7 +481,7 @@ FITBIT_CLIENT_SECRET=
 
 ## Important Warnings
 
-1. **Never expose server-side keys**: `SUPABASE_SERVICE_ROLE_KEY`, `STRIPE_SECRET_KEY`, and `XAI_API_KEY` are server-only
+1. **Never expose server-side keys**: `SUPABASE_SERVICE_ROLE_KEY`, `STRIPE_SECRET_KEY`, `XAI_API_KEY`, and `ANTHROPIC_API_KEY` are server-only
 
 2. **Weight units**: Always store in kg, convert only for display
 
@@ -601,27 +603,27 @@ blocking spinners.
 GitHub Actions workflow (`.github/workflows/test.yml`):
 - Runs on push/PR to main/master
 - Node.js 20
-- Runs `npm test` and coverage checks
+- Runs type-check, lint, one Jest run with coverage thresholds (`npm run test:coverage`), and the fast simulation suite
 - Uploads coverage reports as artifacts
 
 ## Mobile App (Capacitor)
 
-The app supports iOS and Android via Capacitor:
+The app ships on iOS via Capacitor (the `cap:*android` scripts and `@capacitor/android` dependency exist, but there is no `android/` project):
 - **App ID**: `app.hypertrack.workout`
 - **Web Dir**: `native-shell` (only the bundled offline page, `server.errorPath`; the app loads the production URL)
-- **Production URL**: `https://hypertrack.app`
+- **Production URL**: `https://www.hypertrack.app` (the canonical host; `hypertrack.app` 308-redirects to it, and Capacitor hands a cross-host navigation to Safari)
 
 ### Native Features
 - Offline fallback page bundled in the app (`native-shell/offline.html`)
 - Status bar customization
 - Splash screen with dark theme (#0a0a0a)
-- Deep linking via custom scheme `HyperTrack://`
+- `ios.scheme: 'HyperTrack'` is the webview's local URL scheme, not a deep link. The `hypertrack://` URL scheme is registered in `Info.plist`; there are no universal links (no associated domains / AASA)
 
 ### Development Workflow
 1. Make changes to the web app
 2. Build: `npm run build`
 3. Sync: `npm run cap:sync`
-4. Test: `npm run cap:run:ios` or `npm run cap:run:android`
+4. Test: `npm run cap:run:ios`
 5. For live development: `npm run cap:livereload:ios`
 
 ## Simulated-User Testing Harness (`simulation/`)

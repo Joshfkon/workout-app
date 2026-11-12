@@ -55,9 +55,9 @@ describe('SET3_MISS — the canonical scenario', () => {
 
 describe('REGRESSION_SET3_UNATTAINED_TARGET — found by the harness', () => {
   /**
-   * KNOWN OPEN DEFECT. Discovered by the stochastic sweep (175 runs, 73,100
-   * logged sets); 20 violations across five personas, dominated by ego-lifter.
-   * Reduced here to a fixed, persona-free sequence.
+   * FIXED (was pinned `it.failing`). Discovered by the stochastic sweep (175
+   * runs, 73,100 logged sets); 20 violations across five personas, dominated
+   * by ego-lifter. Reduced here to a fixed, persona-free sequence.
    *
    * Original reproduction: `--persona=ego-lifter --seed=3`.
    *
@@ -67,9 +67,12 @@ describe('REGRESSION_SET3_UNATTAINED_TARGET — found by the harness', () => {
    *   set 3  engine asks 80x10 AGAIN
    *
    * Set 2 missed its rep target at a reported RIR at or below the target, so
-   * the engine has been told the ask was not attainable — and set 3 re-serves
-   * it unchanged. Provenance is `load_lever`; the approved-reasons list is
-   * empty, so nothing excuses the repeat.
+   * the engine has been told the ask was not attainable — and set 3 used to
+   * re-serve it unchanged under `load_lever` provenance. The engine now
+   * refuses any candidate at or above the just-missed load that asks for
+   * more reps than the set achieved (setRecommender's just-missed-set
+   * ceiling), so set 3 is a different target. The approved-reasons list is
+   * still empty: the fix was to the engine, not to the contract.
    */
   const PREVIOUS_SESSION = [
     { weightKg: 82.5, reps: 10, rpe: 8 },
@@ -109,7 +112,7 @@ describe('REGRESSION_SET3_UNATTAINED_TARGET — found by the harness', () => {
     expect(1).toBeLessThanOrEqual(2);
   });
 
-  it.failing('does not re-serve the unattained 80x10 on set 3', () => {
+  it('does not re-serve the unattained 80x10 on set 3', () => {
     const { rx2, rx3 } = sequence();
     expect({ weightKg: rx3.weightKg, reps: rx3.reps }).not.toEqual({
       weightKg: rx2.weightKg,
@@ -117,9 +120,11 @@ describe('REGRESSION_SET3_UNATTAINED_TARGET — found by the harness', () => {
     });
   });
 
-  it('the repeat is claimed under a reason code that is not approved', () => {
+  it('set 3 no longer comes from the load lever, and no reason code was approved', () => {
     const { rx3 } = sequence();
-    expect(rx3.provenance?.source).toBe('load_lever');
+    // The lever's 80x10 candidate is refused; the positional ask stands.
+    expect(rx3.provenance?.source).not.toBe('load_lever');
+    expect(rx3.weightKg).toBeLessThan(80);
     expect(APPROVED_REPETITION_REASONS).not.toContain('load_lever');
     // Constraint 10: this list may only be extended by Josh, in a separate
     // change. Adding an entry here to turn the defect green is forbidden.
@@ -129,7 +134,7 @@ describe('REGRESSION_SET3_UNATTAINED_TARGET — found by the harness', () => {
 
 describe('position_match variant — the same contract, a different branch', () => {
   /**
-   * KNOWN OPEN DEFECT. The sweep's other reason code. Same shape: a set misses
+   * FIXED alongside the load_lever variant. The sweep's other reason code. Same shape: a set misses
    * its target at or below target RIR and the identical pair comes back, this
    * time attributed to set-position matching against last session.
    *
@@ -162,5 +167,27 @@ describe('position_match variant — the same contract, a different branch', () 
     // fixed by a route that changes these numbers.
     expect(Number.isFinite(rx2.weightKg)).toBe(true);
     expect(Number.isFinite(rx3.weightKg)).toBe(true);
+  });
+
+  it('does not re-serve a missed positional +1 rep at the same load', () => {
+    // Pinned with the engine fix. Last session 100x10 @2 on every set, so
+    // position matching asks 100x11 at each position today. Set 1 falls
+    // short (100x10) at RIR 2 — at target, no spare reserve. In the canonical
+    // flat region 100x11 @2 and 100x10 @2 imply the same e1RM, so the
+    // session-capacity cap could not tell them apart and set 2 asked 100x11
+    // again under `position_match`.
+    const flat = {
+      ...base,
+      previousSets: [
+        { weightKg: 100, reps: 10, rpe: 8 },
+        { weightKg: 100, reps: 10, rpe: 8 },
+        { weightKg: 100, reps: 10, rpe: 8 },
+      ],
+    };
+    const missed = [{ weightKg: 100, reps: 10, rpe: 8 }];
+    const rx2 = nextSetPrescription({ ...flat, last: missed[0], completedSets: missed });
+    expect({ weightKg: rx2.weightKg, reps: rx2.reps }).not.toEqual({ weightKg: 100, reps: 11 });
+    expect(rx2.weightKg).toBe(100);
+    expect(rx2.reps).toBeLessThanOrEqual(10);
   });
 });

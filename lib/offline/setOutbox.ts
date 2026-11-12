@@ -11,6 +11,12 @@
  * webviews, unit tests) — queued writes then survive only the page's life,
  * which still beats dropping them.
  *
+ * Loss policy: an entry leaves the queue because it was WRITTEN. Failures that
+ * say nothing about the row (no connectivity, timeout, 5xx, expired token)
+ * are retried indefinitely. Only a genuine server refusal (constraint, RLS —
+ * see `isPermanentRejection`) is counted, and even then a logged set or a
+ * finished workout is parked and surfaced, never deleted.
+ *
  * Dedupe strategy: set ids are generated CLIENT-side (crypto.randomUUID)
  * before the first insert attempt, and flushes insert with
  * `ignoreDuplicates` upsert semantics — so a retry after a half-failed
@@ -41,14 +47,48 @@ export interface OutboxEntry {
   /** Table the row belongs to. Entries persisted before this field allowed multiple tables are set_logs. */
   table: OutboxTable;
   /** How to apply the row. Legacy persisted entries lack it — treated as 'insert'. */
-  op?: 'insert' | 'update';
-  /** For op:'update' — the primary-key value the patch applies to. */
+  op?: 'insert' | 'update' | 'delete';
+  /** For op:'update' / 'delete' — the primary-key value the write applies to. */
   matchId?: string;
-  /** Exact row payload (insert/upsert) or patch (update), snake_case column names. */
+  /** Exact row payload (insert/upsert) or patch (update), snake_case column names. Empty for deletes. */
   row: Record<string, unknown>;
   enqueuedAt: number;
+  /** Every failed delivery, whatever the cause. Informational only. */
   attempts: number;
+  /**
+   * How many times the SERVER permanently refused this write (constraint /
+   * RLS / malformed row). Connectivity, auth and 5xx failures never count:
+   * they are retried for as long as it takes.
+   */
+  rejections?: number;
+  /**
+   * Parked: the server refused the write `MAX_REJECTIONS` times and it belongs
+   * to a table whose rows must never be thrown away (a logged set, a finished
+   * workout). It stays in the queue, is skipped by ordinary flushes, and is
+   * surfaced to the user; `unparkOutboxEntries` (page mount / reconnect /
+   * explicit retry) or an edit of the row puts it back in line.
+   */
+  parked?: boolean;
+  /** The last server refusal, for display / diagnosis. */
+  lastError?: string;
+  /**
+   * An insert entry whose row was patched AFTER it was enqueued. The first
+   * attempt may already have landed (ack lost), in which case the
+   * `ignoreDuplicates` re-send is a no-op and the patch would never reach the
+   * server — so a dirty entry is followed by a real UPDATE of the row.
+   */
+  dirty?: boolean;
 }
+
+/** Tables whose queued writes are user data that must never be auto-deleted. */
+const NEVER_DROP_TABLES: ReadonlySet<OutboxTable> = new Set<OutboxTable>([
+  'set_logs',
+  'workout_sessions',
+  'session_muscle_feedback',
+]);
+
+/** Permanent refusals tolerated before an entry is parked (or, for non-critical tables, dropped). */
+const MAX_REJECTIONS = 5;
 
 /** Upsert conflict handling per table (insert entries only). */
 const UPSERT_OPTIONS: Record<OutboxTable, { onConflict: string; ignoreDuplicates: boolean }> = {
@@ -177,6 +217,45 @@ function getDriver(): OutboxDriverImpl {
 export function __setDriverForTests(d: OutboxDriver | null): void {
   driver = d;
   flushInFlight = null;
+  lastEnqueuedAt = 0;
+  directWritesInFlight.clear();
+}
+
+/**
+ * Entries whose write is ALSO being sent directly right now (write-ahead: a
+ * set is queued first, then inserted; the entry is removed when the insert
+ * succeeds). The flush leaves these alone so the same row is not sent twice
+ * in parallel, and a delete of the row can wait for the insert to settle
+ * instead of racing it to the server.
+ */
+const directWritesInFlight = new Map<string, Promise<unknown>>();
+
+/** Register a direct write for a queued entry; cleared when it settles. */
+export function trackDirectWrite<T>(entryId: string, write: Promise<T>): Promise<T> {
+  directWritesInFlight.set(entryId, write);
+  const clear = () => {
+    if (directWritesInFlight.get(entryId) === write) directWritesInFlight.delete(entryId);
+  };
+  write.then(clear, clear);
+  return write;
+}
+
+/** The direct write currently on the wire for this entry, if any. */
+export function directWriteInFlight(entryId: string): Promise<unknown> | undefined {
+  return directWritesInFlight.get(entryId);
+}
+
+/**
+ * Enqueue stamp. The flush replays entries in `enqueuedAt` order and several
+ * callers depend on that order being the order they enqueued in (a delete
+ * before the renumbering it makes room for, park-then-write block orders), so
+ * two entries written in the same millisecond must not tie.
+ */
+let lastEnqueuedAt = 0;
+function nextEnqueuedAt(): number {
+  const t = clockNow().getTime();
+  lastEnqueuedAt = t > lastEnqueuedAt ? t : lastEnqueuedAt + 1;
+  return lastEnqueuedAt;
 }
 
 // ---------------------------------------------------------------------------
@@ -184,7 +263,7 @@ export function __setDriverForTests(d: OutboxDriver | null): void {
 // ---------------------------------------------------------------------------
 
 export async function enqueueSetInsert(id: string, row: Record<string, unknown>): Promise<void> {
-  await getDriver().put({ id, table: 'set_logs', row, enqueuedAt: clockNow().getTime(), attempts: 0 });
+  await getDriver().put({ id, table: 'set_logs', row, enqueuedAt: nextEnqueuedAt(), attempts: 0 });
 }
 
 /** Queue an upsert row for any supported table (idempotent per UPSERT_OPTIONS). */
@@ -193,7 +272,7 @@ export async function enqueueRowUpsert(
   table: OutboxTable,
   row: Record<string, unknown>
 ): Promise<void> {
-  await getDriver().put({ id: entryId, table, op: 'insert', row, enqueuedAt: clockNow().getTime(), attempts: 0 });
+  await getDriver().put({ id: entryId, table, op: 'insert', row, enqueuedAt: nextEnqueuedAt(), attempts: 0 });
 }
 
 /** Queue a patch to a single row (matched on its primary key). Idempotent. */
@@ -209,9 +288,39 @@ export async function enqueueRowUpdate(
     op: 'update',
     matchId,
     row: patch,
-    enqueuedAt: clockNow().getTime(),
+    enqueuedAt: nextEnqueuedAt(),
     attempts: 0,
   });
+}
+
+/**
+ * Queue the deletion of a single row (matched on its primary key). Idempotent:
+ * deleting a row that is already gone — or never arrived — matches nothing.
+ *
+ * Re-using a queued INSERT's entry id replaces that insert with its own
+ * tombstone, which is how a set deleted before it synced is handled: the
+ * insert may already have landed (lost ack) or be on the wire, so "forget the
+ * queue entry" is not enough — the row has to be deleted for real.
+ */
+export async function enqueueRowDelete(
+  entryId: string,
+  table: OutboxTable,
+  matchId: string
+): Promise<void> {
+  await getDriver().put({
+    id: entryId,
+    table,
+    op: 'delete',
+    matchId,
+    row: {},
+    enqueuedAt: nextEnqueuedAt(),
+    attempts: 0,
+  });
+}
+
+/** The queued entry under this id, if any. */
+export async function getQueuedEntry(entryId: string): Promise<OutboxEntry | undefined> {
+  return getDriver().get(entryId);
 }
 
 export async function listOutbox(): Promise<OutboxEntry[]> {
@@ -227,8 +336,10 @@ export async function listOutbox(): Promise<OutboxEntry[]> {
  * queue snapshot the flush that produced it happened to see — and because
  * overlapping flushes share one in-flight promise, that may not be the
  * snapshot containing your entry. An entry that is ABSENT here has left the
- * queue: `doFlush` deletes only after a successful write (or after the
- * 5-attempt give-up, which callers must rule out separately).
+ * queue: `doFlush` deletes only after a successful write — or, for the
+ * non-critical tables only, after the server refused it `MAX_REJECTIONS`
+ * times. set_logs / workout_sessions / session_muscle_feedback entries are
+ * never given up on: a refused one is PARKED and still counts as queued here.
  */
 export async function hasQueuedEntry(entryId: string): Promise<boolean> {
   return (await getDriver().get(entryId)) !== undefined;
@@ -239,13 +350,85 @@ export async function outboxCount(table?: OutboxTable): Promise<number> {
   return table ? all.filter((e) => e.table === table).length : all.length;
 }
 
-/** Merge a patch into a queued row (edit-before-sync). True if it was queued. */
-export async function updateQueuedSet(id: string, patch: Record<string, unknown>): Promise<boolean> {
+/**
+ * Merge a patch into a queued row (edit-before-sync). True if it was queued.
+ *
+ * - A queued DELETE is not patchable (false): the row is going away.
+ * - A patched INSERT is marked `dirty`, so the flush follows it with a real
+ *   UPDATE in case the original insert already landed.
+ * - A parked entry is put back in line: the edit may be exactly what fixes
+ *   the row the server refused.
+ * - `restamp` moves the entry to the BACK of the queue. Renumbering needs it:
+ *   a set_number patch is only valid after the delete that vacated the slot,
+ *   and that delete was enqueued later than the entry being patched. Queued
+ *   motion captures that reference a restamped set are moved behind it so
+ *   their set_id FK still resolves.
+ */
+export async function updateQueuedSet(
+  id: string,
+  patch: Record<string, unknown>,
+  opts?: { restamp?: boolean }
+): Promise<boolean> {
   const d = getDriver();
   const entry = await d.get(id);
-  if (!entry) return false;
-  await d.put({ ...entry, row: { ...entry.row, ...patch } });
+  if (!entry || entry.op === 'delete') return false;
+  const isInsert = (entry.op ?? 'insert') === 'insert';
+  const next: OutboxEntry = { ...entry, row: { ...entry.row, ...patch } };
+  if (isInsert) next.dirty = true;
+  if (entry.parked) {
+    next.parked = false;
+    next.rejections = 0;
+  }
+  if (opts?.restamp) next.enqueuedAt = nextEnqueuedAt();
+  await d.put(next);
+  if (opts?.restamp && isInsert && entry.table === 'set_logs') {
+    for (const other of await d.getAll()) {
+      if (other.table === 'motion_captures' && other.row?.set_id === id) {
+        await d.put({ ...other, enqueuedAt: nextEnqueuedAt() });
+      }
+    }
+  }
   return true;
+}
+
+/**
+ * Remove a queued entry only if it still carries exactly `row` (and has not
+ * been turned into something else — patched, or replaced by a delete).
+ * 'removed' | 'kept' (a newer payload is waiting) | 'absent'.
+ */
+export async function removeQueuedEntryIfUnchanged(
+  id: string,
+  row: Record<string, unknown>
+): Promise<'removed' | 'kept' | 'absent'> {
+  const d = getDriver();
+  const current = await d.get(id);
+  if (!current) return 'absent';
+  if (
+    current.op === 'delete' ||
+    current.dirty ||
+    JSON.stringify(current.row) !== JSON.stringify(row)
+  ) {
+    return 'kept';
+  }
+  await d.delete(id);
+  return 'removed';
+}
+
+/**
+ * Put every parked entry back in line for the next flush. Called when there
+ * is a reason to think the answer may have changed — a fresh page load, a
+ * reconnect (re-authenticated session), an explicit "Retry". Returns how many
+ * were released.
+ */
+export async function unparkOutboxEntries(): Promise<number> {
+  const d = getDriver();
+  let released = 0;
+  for (const entry of await d.getAll()) {
+    if (!entry.parked) continue;
+    await d.put({ ...entry, parked: false, rejections: 0 });
+    released++;
+  }
+  return released;
 }
 
 /** Drop a queued row (delete-before-sync). True if it was queued. */
@@ -274,6 +457,13 @@ export interface OutboxSupabase {
         value: string
       ): PromiseLike<{ error: { message: string; code?: string } | null }>;
     };
+    /** Needed only when a delete entry is queued; the real client always has it. */
+    delete?(): {
+      eq(
+        column: string,
+        value: string
+      ): PromiseLike<{ error: { message: string; code?: string } | null }>;
+    };
   };
 }
 
@@ -283,11 +473,17 @@ export interface FlushResult {
   /**
    * Subset of failedIds the SERVER rejected (RLS, constraint, deleted
    * parent…) — the write reached the database and was refused, as opposed
-   * to a connectivity failure. Entries are still retried up to the attempt
-   * cap, but callers holding optimistic state that assumed the write would
-   * land should reconcile it against the server when an id shows up here.
+   * to a connectivity, auth or 5xx failure. Entries are still retried up to
+   * the rejection cap, but callers holding optimistic state that assumed the
+   * write would land should reconcile it against the server when an id shows
+   * up here.
    */
   rejectedIds: string[];
+  /**
+   * Subset of rejectedIds that hit the rejection cap on THIS flush and were
+   * parked (kept, no longer retried automatically) rather than dropped.
+   */
+  parkedIds: string[];
 }
 
 /** True for connectivity-shaped failures (retry later), false for real rejections. */
@@ -295,6 +491,34 @@ export function isNetworkError(err: { message?: string; code?: string } | null |
   if (!err) return false;
   if (err.code && /^\d/.test(err.code)) return false; // PostgREST/SQLSTATE codes = server answered
   return /fetch|network|load failed|timed? ?out|abort|offline/i.test(err.message ?? '');
+}
+
+/**
+ * True only when the SERVER answered and refused the write in a way that
+ * re-sending the same payload cannot fix: a constraint, RLS/privilege, a
+ * malformed or unknown column. Everything else — no connectivity, a timeout,
+ * a 502/503 HTML body from a proxy, an expired JWT (PGRST301), a statement
+ * timeout (57014), too many connections (53300), a serialization failure —
+ * is TRANSIENT: the entry stays queued and is retried, however long it takes.
+ *
+ * The distinction is the difference between "retry" and "give up", so it errs
+ * toward transient: an unrecognised error is never treated as a rejection.
+ */
+export function isPermanentRejection(
+  err: { message?: string; code?: string } | null | undefined
+): boolean {
+  if (!err) return false;
+  const code = typeof err.code === 'string' ? err.code : '';
+  // SQLSTATE: 22 data exception, 23 integrity constraint, 42 syntax / access
+  // rule (42501 = RLS or missing privilege, 42703 = unknown column).
+  if (/^(22|23|42)[0-9A-Z]{3}$/.test(code)) return true;
+  // A RAISE from a trigger / function.
+  if (code === 'P0001') return true;
+  // PostgREST: PGRST1xx = unparseable/invalid request, PGRST2xx = schema
+  // cache (unknown column/table/relationship). PGRST0xx (connection) and
+  // PGRST3xx (JWT) are transient.
+  if (/^PGRST[12]\d\d$/.test(code)) return true;
+  return false;
 }
 
 /**
@@ -338,9 +562,9 @@ let flushInFlight: Promise<FlushResult> | null = null;
  * (entry retained, retried on the next flush). Late server-side success is
  * harmless — every entry kind is idempotent.
  */
-const OP_TIMEOUT_MS = 10_000;
+export const OP_TIMEOUT_MS = 10_000;
 
-function withTimeout<T>(op: PromiseLike<T>, ms: number): Promise<T> {
+export function withTimeout<T>(op: PromiseLike<T>, ms: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(
       () => reject(new Error(`outbox write timed out after ${ms}ms`)),
@@ -370,69 +594,255 @@ export function flushSetOutbox(
   return flushInFlight;
 }
 
+type OutboxError = { message: string; code?: string };
+
+/** Deliver one entry. Returns the server's error, or null when it landed. */
+async function sendEntry(
+  supabase: OutboxSupabase,
+  entry: OutboxEntry,
+  row: Record<string, unknown>,
+  timeoutMs: number
+): Promise<OutboxError | null> {
+  if (entry.op === 'delete') {
+    const table = supabase.from(entry.table);
+    if (typeof table.delete !== 'function') {
+      // Not a refusal — the entry stays queued for a client that can delete.
+      return { message: 'outbox client cannot delete' };
+    }
+    const { error } = await withTimeout(table.delete().eq('id', entry.matchId ?? entry.id), timeoutMs);
+    return error;
+  }
+
+  if (entry.op === 'update') {
+    const { error } = await withTimeout(
+      supabase.from(entry.table).update(row).eq('id', entry.matchId ?? (row.id as string)),
+      timeoutMs
+    );
+    return error;
+  }
+
+  // Inserts go through ignoreDuplicates/onConflict upsert so a row that
+  // already landed (retry after a lost ack) is a silent no-op, not an error.
+  const upsertOptions = UPSERT_OPTIONS[entry.table] ?? UPSERT_OPTIONS.set_logs;
+  const isSetLog = entry.table === 'set_logs';
+  let { error } = await withTimeout(supabase.from(entry.table).upsert(row, upsertOptions), timeoutMs);
+
+  // Schema-cache column miss (migration lag): drop the optional columns and
+  // retry once so the core write still lands instead of wedging the queue.
+  if (error && isSetLog && isMissingColumnError(error)) {
+    ({ error } = await withTimeout(
+      supabase.from(entry.table).upsert(withoutOptionalSetLogColumns(row), upsertOptions),
+      timeoutMs
+    ));
+  }
+
+  // A row patched after it was enqueued: if the original insert had already
+  // landed, the upsert above just ignored the newer values. Write them.
+  if (!error && isSetLog && entry.dirty && typeof row.id === 'string') {
+    const { id, ...patch } = row;
+    ({ error } = await withTimeout(
+      supabase.from(entry.table).update(patch).eq('id', id as string),
+      timeoutMs
+    ));
+    if (error && isMissingColumnError(error)) {
+      ({ error } = await withTimeout(
+        supabase
+          .from(entry.table)
+          .update(withoutOptionalSetLogColumns(patch))
+          .eq('id', id as string),
+        timeoutMs
+      ));
+    }
+  }
+  return error;
+}
+
+/** `UNIQUE (exercise_block_id, set_number)` refused a set_logs write. */
+function isSetNumberCollision(entry: OutboxEntry, error: OutboxError): boolean {
+  return (
+    entry.table === 'set_logs' &&
+    entry.op !== 'delete' &&
+    error.code === '23505' &&
+    /set_number/i.test(error.message ?? '')
+  );
+}
+
+/** One past the block's highest set_number on the server, or null if unknown. */
+async function probeFreeSetNumber(
+  supabase: OutboxSupabase,
+  blockId: string,
+  timeoutMs: number
+): Promise<number | null> {
+  try {
+    const table = supabase.from('set_logs') as unknown as {
+      select?: (columns: string) => {
+        eq(column: string, value: string): {
+          order(column: string, opts: { ascending: boolean }): {
+            limit(n: number): PromiseLike<{
+              data: Array<{ set_number: number }> | null;
+              error: unknown;
+            }>;
+          };
+        };
+      };
+    };
+    if (typeof table.select !== 'function') return null;
+    const { data, error } = await withTimeout(
+      table
+        .select('set_number')
+        .eq('exercise_block_id', blockId)
+        .order('set_number', { ascending: false })
+        .limit(1),
+      timeoutMs
+    );
+    if (error) return null;
+    const max = data?.[0]?.set_number;
+    return typeof max === 'number' ? max + 1 : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A queued set whose number the server already holds must not be lost over a
+ * NUMBER. The set itself (weight, reps, effort) is the data; its position is
+ * bookkeeping the next session load re-reads. So:
+ *
+ *  - an INSERT takes the next free number on the server and goes again;
+ *  - an UPDATE drops its `set_number` (a renumbering that can no longer be
+ *    applied is stale) and sends whatever else it carries — nothing, if it
+ *    was a pure renumber, in which case the entry is finished.
+ *
+ * Returns the entry to re-send, 'done' when nothing is left to send, or null
+ * when no recovery applies (the caller treats the original error as final).
+ */
+async function recoverSetNumberCollision(
+  supabase: OutboxSupabase,
+  d: OutboxDriver,
+  entry: OutboxEntry,
+  timeoutMs: number
+): Promise<OutboxEntry | 'done' | null> {
+  let row: Record<string, unknown>;
+  if (entry.op === 'update') {
+    const { set_number: _stale, ...rest } = entry.row;
+    row = rest;
+  } else {
+    const blockId = entry.row.exercise_block_id;
+    if (typeof blockId !== 'string') return null;
+    const free = await probeFreeSetNumber(supabase, blockId, timeoutMs);
+    if (free == null || free === entry.row.set_number) return null;
+    row = { ...entry.row, set_number: free };
+  }
+
+  // Only rewrite the payload we actually sent — a patch that arrived while
+  // the write was in flight wins, and goes out on the next flush.
+  const current = await d.get(entry.id);
+  if (!current || current.op !== entry.op || JSON.stringify(current.row) !== JSON.stringify(entry.row)) {
+    return null;
+  }
+  if (entry.op === 'update' && Object.keys(row).length === 0) {
+    await d.delete(entry.id);
+    return 'done';
+  }
+  const next = { ...current, row };
+  await d.put(next);
+  return next;
+}
+
 async function doFlush(supabase: OutboxSupabase, timeoutMs: number): Promise<FlushResult> {
   const d = getDriver();
   const entries = await listOutbox();
   const flushedIds: string[] = [];
   const failedIds: string[] = [];
   const rejectedIds: string[] = [];
+  const parkedIds: string[] = [];
 
-  for (const entry of entries) {
+  /**
+   * Record a failure on the entry AS IT IS NOW. Writing back the snapshot the
+   * flush started with would resurrect an entry removed while the request was
+   * in flight (a deleted set coming back from the dead) and clobber a patch
+   * that landed in the meantime.
+   */
+  const amend = async (id: string, change: (current: OutboxEntry) => OutboxEntry) => {
+    const current = await d.get(id);
+    if (current) await d.put(change(current));
+  };
+
+  for (const queued of entries) {
+    // Parked: refused by the server and waiting for a reason to try again.
+    if (queued.parked) continue;
+    // Being written directly right now (write-ahead) — that write settles it.
+    if (directWritesInFlight.has(queued.id)) continue;
+    let entry = queued;
     try {
-      // Updates patch a single row by primary key; inserts go through
-      // ignoreDuplicates/onConflict upsert so a row that already landed
-      // (retry after a lost ack) is a silent no-op instead of an error.
-      const upsertOptions = UPSERT_OPTIONS[entry.table] ?? UPSERT_OPTIONS.set_logs;
-      const op =
-        entry.op === 'update'
-          ? supabase
-              .from(entry.table)
-              .update(entry.row)
-              .eq('id', entry.matchId ?? (entry.row.id as string))
-          : supabase.from(entry.table).upsert(entry.row, upsertOptions);
-      let { error } = await withTimeout(op, timeoutMs);
+      let error = await sendEntry(supabase, entry, entry.row, timeoutMs);
 
-      // Schema-cache column miss (migration lag): drop the optional columns and
-      // retry once so the core write still lands instead of wedging the queue.
-      if (error && entry.op !== 'update' && entry.table === 'set_logs' && isMissingColumnError(error)) {
-        const retryOp = supabase
-          .from(entry.table)
-          .upsert(withoutOptionalSetLogColumns(entry.row), upsertOptions);
-        ({ error } = await withTimeout(retryOp, timeoutMs));
+      if (error && isSetNumberCollision(entry, error)) {
+        const recovered = await recoverSetNumberCollision(supabase, d, entry, timeoutMs);
+        if (recovered === 'done') {
+          flushedIds.push(entry.id);
+          continue;
+        }
+        if (recovered) {
+          entry = recovered;
+          error = await sendEntry(supabase, entry, entry.row, timeoutMs);
+        }
       }
 
       if (!error) {
         // Delete only the payload we actually sent: a same-id entry may have
-        // been replaced with a newer patch while this write was in flight
-        // (edit-before-sync semantics) — deleting blindly would drop that
-        // newer write. A kept entry goes out on the next flush.
+        // been replaced with a newer patch — or with the row's own delete —
+        // while this write was in flight (edit/delete-before-sync semantics).
+        // Deleting blindly would drop that newer write. A kept entry goes out
+        // on the next flush.
         const current = await d.get(entry.id);
-        if (!current || JSON.stringify(current.row) === JSON.stringify(entry.row)) {
+        if (
+          !current ||
+          ((current.op ?? 'insert') === (entry.op ?? 'insert') &&
+            JSON.stringify(current.row) === JSON.stringify(entry.row))
+        ) {
           await d.delete(entry.id);
         }
         flushedIds.push(entry.id);
-      } else if (isNetworkError(error)) {
-        // Still offline (or flapping) — keep the entry, stop hammering.
-        await d.put({ ...entry, attempts: entry.attempts + 1 });
-        failedIds.push(entry.id);
-        break;
-      } else {
-        // Server rejected the row (RLS, constraint, deleted parent block…).
-        // Retrying forever would wedge the queue: give up after 5 attempts.
-        if (entry.attempts + 1 >= 5) {
+      } else if (isPermanentRejection(error)) {
+        // The server answered and refused the row (RLS, constraint, deleted
+        // parent block…). Retrying forever would wedge nothing — rejections
+        // don't stop the loop — but it is pointless, so cap it. What happens
+        // at the cap depends on what the entry IS: a logged set or a finished
+        // workout is parked (kept, surfaced, retried on demand) and never
+        // thrown away; a cosmetic patch (block order, target sets, a motion
+        // capture) is dropped as before.
+        const rejections = (entry.rejections ?? 0) + 1;
+        const capped = rejections >= MAX_REJECTIONS;
+        if (capped && !NEVER_DROP_TABLES.has(entry.table)) {
           await d.delete(entry.id);
         } else {
-          await d.put({ ...entry, attempts: entry.attempts + 1 });
+          const lastError = [error.code, error.message].filter(Boolean).join(': ');
+          await amend(entry.id, (current) => ({
+            ...current,
+            attempts: current.attempts + 1,
+            rejections,
+            lastError,
+            ...(capped ? { parked: true } : {}),
+          }));
+          if (capped) parkedIds.push(entry.id);
         }
         failedIds.push(entry.id);
         rejectedIds.push(entry.id);
+      } else {
+        // Offline, flapping, a proxy 5xx, an expired token, a database that
+        // is briefly out of connections: nothing about the ROW is wrong.
+        // Keep the entry — for as long as it takes — and stop hammering.
+        await amend(entry.id, (current) => ({ ...current, attempts: current.attempts + 1 }));
+        failedIds.push(entry.id);
+        break;
       }
     } catch (e) {
-      await d.put({ ...entry, attempts: entry.attempts + 1 });
+      await amend(entry.id, (current) => ({ ...current, attempts: current.attempts + 1 }));
       failedIds.push(entry.id);
       if (isNetworkError(e as Error)) break;
     }
   }
 
-  return { flushedIds, failedIds, rejectedIds };
+  return { flushedIds, failedIds, rejectedIds, parkedIds };
 }

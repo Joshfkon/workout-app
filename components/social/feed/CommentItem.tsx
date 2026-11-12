@@ -6,6 +6,8 @@ import { Avatar } from '@/components/social/profile';
 import { formatRelativeTime, getProfileUrl } from '@/lib/social';
 import { CommentInput } from './CommentInput';
 import { Button } from '@/components/ui/Button';
+import { ContentActionsMenu } from '@/components/social/moderation';
+import { useBlockedUsers } from '@/hooks/useBlockedUsers';
 import type { ActivityComment } from '@/types/social';
 
 interface CommentItemProps {
@@ -19,6 +21,7 @@ interface CommentItemProps {
 export function CommentItem({ comment, currentUserId, onReply, onDelete, depth = 0 }: CommentItemProps) {
   const [isReplying, setIsReplying] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const { isBlocked } = useBlockedUsers();
 
   const displayName = comment.user_profile?.display_name || comment.user_profile?.username || 'Unknown';
   const isOwnComment = currentUserId === comment.user_id;
@@ -43,6 +46,9 @@ export function CommentItem({ comment, currentUserId, onReply, onDelete, depth =
     await onDelete(comment.id);
     setIsDeleting(false);
   };
+
+  // Blocking a commenter hides their comment (and its replies) right away.
+  if (isBlocked(comment.user_id)) return null;
 
   return (
     <div className={depth > 0 ? 'ml-6 border-l-2 border-surface-800 pl-4' : ''}>
@@ -90,6 +96,12 @@ export function CommentItem({ comment, currentUserId, onReply, onDelete, depth =
                 )}
               </div>
             </div>
+            <ContentActionsMenu
+              targetType="comment"
+              targetId={comment.id}
+              targetUserId={comment.user_id}
+              targetUsername={comment.user_profile?.username}
+            />
           </div>
 
           {/* Reply input */}

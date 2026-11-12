@@ -36,6 +36,21 @@ const FATIGUE_ACCUMULATION: Record<number, number> = {
 };
 
 /**
+ * Fatigue added by one session at `sessionRpe`. The table covers RPE 5–10;
+ * outside it the value stays MONOTONIC in RPE. (The old `rpe × 1.2` fallback
+ * made an RPE-4 session add 4.8 — more than RPE 6's 4.) Below 5 it tapers
+ * linearly from RPE 5's value to zero; above 10 it holds RPE 10's value. A
+ * missing/non-finite RPE reads as a typical RPE-8 session.
+ */
+function fatigueAccumulationForRpe(sessionRpe: number): number {
+  if (!Number.isFinite(sessionRpe)) return FATIGUE_ACCUMULATION[8];
+  const rounded = Math.round(sessionRpe);
+  if (rounded > 10) return FATIGUE_ACCUMULATION[10];
+  if (rounded < 5) return Math.max(0, sessionRpe) * (FATIGUE_ACCUMULATION[5] / 5);
+  return FATIGUE_ACCUMULATION[rounded];
+}
+
+/**
  * Fatigue multipliers based on movement pattern
  * Heavy compound movements (squats, deadlifts) cause significantly more systemic fatigue
  * than isolation movements (curls, lateral raises)
@@ -288,8 +303,7 @@ export function updateMesocycleFatigue(input: FatigueUpdateInput): number {
   const recovery = daysSinceLastSession * effectiveFatigueRecoveryRate(input.enhancedAthleteMode);
   
   // Accumulation: add based on session RPE
-  const roundedRpe = Math.round(sessionRpe);
-  const accumulation = FATIGUE_ACCUMULATION[roundedRpe] ?? (sessionRpe * 1.2);
+  const accumulation = fatigueAccumulationForRpe(sessionRpe);
 
   // New fatigue score
   const newFatigue = currentFatigue - recovery + accumulation;
@@ -344,8 +358,7 @@ export function updateMesocycleFatigueEnhanced(input: EnhancedFatigueUpdateInput
   const recovery = daysSinceLastSession * effectiveFatigueRecoveryRate(input.enhancedAthleteMode);
 
   // Base accumulation from RPE
-  const roundedRpe = Math.round(sessionRpe);
-  let baseAccumulation = FATIGUE_ACCUMULATION[roundedRpe] ?? (sessionRpe * 1.2);
+  let baseAccumulation = fatigueAccumulationForRpe(sessionRpe);
 
   // If exercise info provided, calculate weighted fatigue based on exercise types
   if (exercises && exercises.length > 0) {
@@ -615,8 +628,10 @@ export function forecastWeeklyFatigue(
     };
   }
 
-  // Simulate week with evenly spaced sessions
-  const daysPerSession = Math.floor(7 / plannedSessions);
+  // Simulate week with evenly spaced sessions. Fractional spacing on
+  // purpose: `floor(7 / n)` is 0 from 8 sessions up (two-a-day blocks plan up
+  // to 14), which forecast a week with no recovery at all.
+  const daysPerSession = 7 / plannedSessions;
   let fatigue = currentFatigue;
 
   for (let i = 0; i < plannedSessions; i++) {
@@ -625,7 +640,7 @@ export function forecastWeeklyFatigue(
     fatigue = Math.max(0, fatigue - recovery);
     
     // Add session fatigue
-    const accumulation = FATIGUE_ACCUMULATION[Math.round(expectedAvgRpe)] ?? 8;
+    const accumulation = fatigueAccumulationForRpe(expectedAvgRpe);
     fatigue = Math.min(100, fatigue + accumulation);
   }
 

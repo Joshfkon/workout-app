@@ -12,7 +12,9 @@ import {
 import type { SetLog } from '@/types/schema';
 
 describe('inWorkoutSignals', () => {
-  const mockSet = (overrides: Partial<SetLog> = {}): SetLog => {
+  // Loosely typed on purpose: the fixtures use legacy snake_case aliases and
+  // partial feedback objects that are not part of the SetLog type.
+  const mockSet = (overrides: Record<string, any> = {}): SetLog => {
     // Handle snake_case to camelCase sync for test convenience
     const weightKg = (overrides as any).weight_kg ?? overrides.weightKg ?? 100;
     const reps = (overrides as any).reps_completed ?? overrides.reps ?? 10;
@@ -42,7 +44,7 @@ describe('inWorkoutSignals', () => {
       qualityReason: null,
       note: '',
       ...overrides,
-    };
+    } as unknown as SetLog;
   };
 
   describe('detectBigDrop', () => {

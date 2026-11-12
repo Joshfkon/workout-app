@@ -10,6 +10,7 @@
 import {
   createMesocycle,
   reconcileMesocycleWeeks,
+  fitProgramToTotalWeeks,
   buildMesocycleRow,
   type CreateMesocycleInput,
   type MesocycleWriteClient,
@@ -210,5 +211,52 @@ describe('createMesocycle', () => {
   it('has a usable default message when no describer is given', async () => {
     const { client } = stubClient({ insertError: { message: 'boom' } });
     await expect(createMesocycle(client, baseInput)).rejects.toThrow(/boom|Failed to create/);
+  });
+});
+
+describe('fitProgramToTotalWeeks — the chosen length owns the deload', () => {
+  // The review's worked example: the generator produced 6 weeks (5 training +
+  // deload) and the user picked 4.
+  const sixWeeks = program([
+    { weekNumber: 1 },
+    { weekNumber: 2 },
+    { weekNumber: 3 },
+    { weekNumber: 4 },
+    { weekNumber: 5 },
+    { weekNumber: 6, isDeload: true },
+  ]);
+
+  it('makes week N the deload when the program is longer than the choice', () => {
+    const fitted = fitProgramToTotalWeeks(sixWeeks, 4)!;
+    expect(fitted.mesocycleWeeks!.map((w) => w.weekNumber)).toEqual([1, 2, 3, 4]);
+    expect(fitted.mesocycleWeeks!.map((w) => !!w.isDeload)).toEqual([false, false, false, true]);
+    expect(fitted.periodization.mesocycleWeeks).toBe(4);
+    expect(reconcileMesocycleWeeks(4, fitted)).toEqual({
+      effectiveTotalWeeks: 4,
+      effectiveDeloadWeek: 4,
+    });
+  });
+
+  it('does not mutate the program it was given', () => {
+    fitProgramToTotalWeeks(sixWeeks, 4);
+    expect(sixWeeks.mesocycleWeeks).toHaveLength(6);
+    expect(sixWeeks.mesocycleWeeks![5].weekNumber).toBe(6);
+  });
+
+  it('leaves a matching or shorter program alone (the generator must extend it)', () => {
+    expect(fitProgramToTotalWeeks(sixWeeks, 6)).toBe(sixWeeks);
+    expect(fitProgramToTotalWeeks(sixWeeks, 8)).toBe(sixWeeks);
+    expect(fitProgramToTotalWeeks(null, 4)).toBeNull();
+  });
+
+  it('createMesocycle stores a program whose deload_week really is a deload', async () => {
+    const { client, inserted } = stubClient();
+    await createMesocycle(client, { ...baseInput, totalWeeks: 4, fullProgram: sixWeeks });
+    const row = inserted()!;
+    expect(row.total_weeks).toBe(4);
+    expect(row.deload_week).toBe(4);
+    const stored = row.program_data as FullProgramRecommendation;
+    expect(stored.mesocycleWeeks).toHaveLength(4);
+    expect(stored.mesocycleWeeks![(row.deload_week as number) - 1].isDeload).toBe(true);
   });
 });

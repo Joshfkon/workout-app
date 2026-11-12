@@ -3,9 +3,23 @@
 import { useState, useMemo } from 'react';
 import { Button } from '@/components/ui';
 import { IconBolt, IconScan, IconPencil } from '@tabler/icons-react';
-import { BarcodeScanner } from './BarcodeScanner';
+import dynamic from 'next/dynamic';
 import type { BarcodeSearchResult } from '@/services/openFoodFactsService';
 import type { FrequentFood, SystemFood, MealType } from '@/types/nutrition';
+
+// html5-qrcode is ~90KB gz and only needed once the Scan mode is opened —
+// load it on demand (same pattern as AddFoodModal) instead of with the logger.
+const BarcodeScanner = dynamic(
+  () => import('./BarcodeScanner').then((m) => m.BarcodeScanner),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex items-center justify-center py-10 text-sm text-surface-400">
+        Loading camera…
+      </div>
+    ),
+  }
+);
 
 // Parse weight from serving_size string like "1 portion (85.048 g)" or "100g"
 function parseServingWeight(servingSize: string | null | undefined): number | null {

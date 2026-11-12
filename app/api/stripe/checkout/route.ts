@@ -2,15 +2,41 @@ import { NextRequest, NextResponse } from 'next/server';
 import { stripe, STRIPE_PRICES, getTierFromPriceId } from '@/lib/stripe';
 import { createClient } from '@supabase/supabase-js';
 
+/**
+ * Resolve what the client asked for to a paid tier. The app sends the tier
+ * NAME ('pro' | 'elite') in `priceId`; a configured Stripe price id is also
+ * accepted. Anything else is rejected — it used to fall through to Elite.
+ */
+function resolveRequestedTier(priceId: unknown): 'pro' | 'elite' | null {
+  if (priceId === 'pro' || priceId === 'elite') return priceId;
+  if (typeof priceId !== 'string' || !priceId) return null;
+  const tier = getTierFromPriceId(priceId);
+  return tier === 'free' ? null : tier;
+}
+
+/** Statuses where Stripe still considers the subscription live. */
+const LIVE_SUBSCRIPTION_STATUSES = ['active', 'trialing', 'past_due', 'unpaid', 'paused'];
+
 export async function POST(request: NextRequest) {
   try {
     const { priceId, billingPeriod } = await request.json();
     
     // Validate input
-    if (!priceId || !['monthly', 'yearly'].includes(billingPeriod)) {
+    const requestedTier = resolveRequestedTier(priceId);
+    if (!requestedTier || !['monthly', 'yearly'].includes(billingPeriod)) {
       return NextResponse.json(
         { error: 'Invalid price or billing period' },
         { status: 400 }
+      );
+    }
+
+    // The price always comes from server config, never from the request.
+    const actualPriceId = STRIPE_PRICES[requestedTier][billingPeriod as 'monthly' | 'yearly'];
+    if (!actualPriceId) {
+      console.error(`Stripe price id for ${requestedTier}/${billingPeriod} is not configured`);
+      return NextResponse.json(
+        { error: 'Server configuration error' },
+        { status: 500 }
       );
     }
     
@@ -54,11 +80,35 @@ export async function POST(request: NextRequest) {
     
     const { data: subscription } = await serviceSupabase
       .from('subscriptions')
-      .select('stripe_customer_id')
+      .select('stripe_customer_id, stripe_subscription_id, status')
       .eq('user_id', user.id)
-      .single();
+      .maybeSingle();
     
     let customerId = subscription?.stripe_customer_id;
+
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+    if (!appUrl) {
+      console.error('NEXT_PUBLIC_APP_URL is not configured');
+      return NextResponse.json(
+        { error: 'Server configuration error' },
+        { status: 500 }
+      );
+    }
+
+    // Already has a live Stripe subscription: a second checkout would create
+    // a second subscription billing in parallel. Send them to the billing
+    // portal instead, where the existing plan can be changed or cancelled.
+    if (
+      customerId &&
+      subscription?.stripe_subscription_id &&
+      LIVE_SUBSCRIPTION_STATUSES.includes(subscription.status)
+    ) {
+      const portal = await stripe.billingPortal.sessions.create({
+        customer: customerId,
+        return_url: `${appUrl}/dashboard/settings`,
+      });
+      return NextResponse.json({ url: portal.url, portal: true });
+    }
     
     if (!customerId) {
       // Create new Stripe customer
@@ -70,46 +120,48 @@ export async function POST(request: NextRequest) {
       });
       customerId = customer.id;
       
-      // Store customer ID
-      await serviceSupabase
-        .from('subscriptions')
-        .upsert({
-          user_id: user.id,
-          stripe_customer_id: customerId,
-          tier: 'free',
-          status: 'incomplete',
-        }, {
-          onConflict: 'user_id',
-        });
+      // Store customer ID. An existing row (e.g. a promo-code subscription
+      // with no Stripe customer yet) keeps its tier and status.
+      const { error: storeError } = subscription
+        ? await serviceSupabase
+            .from('subscriptions')
+            .update({ stripe_customer_id: customerId })
+            .eq('user_id', user.id)
+        : await serviceSupabase
+            .from('subscriptions')
+            .upsert({
+              user_id: user.id,
+              stripe_customer_id: customerId,
+              tier: 'free',
+              status: 'incomplete',
+            }, {
+              onConflict: 'user_id',
+            });
+      if (storeError) {
+        // Without the stored id the webhook cannot match this customer to a
+        // user reliably, and the next checkout would create another customer.
+        console.error('Failed to store Stripe customer id:', storeError);
+        return NextResponse.json(
+          { error: 'Failed to create checkout session' },
+          { status: 500 }
+        );
+      }
     }
-    
-    // Get the correct price ID based on tier and billing period
-    const tier = getTierFromPriceId(priceId);
-    const actualPriceId = tier === 'pro' 
-      ? STRIPE_PRICES.pro[billingPeriod as 'monthly' | 'yearly']
-      : STRIPE_PRICES.elite[billingPeriod as 'monthly' | 'yearly'];
-    
+
     // Create checkout session
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL;
-    if (!appUrl) {
-      console.error('NEXT_PUBLIC_APP_URL is not configured');
-      return NextResponse.json(
-        { error: 'Server configuration error' },
-        { status: 500 }
-      );
-    }
-    
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       mode: 'subscription',
       payment_method_types: ['card'],
       line_items: [
         {
-          price: actualPriceId || priceId,
+          price: actualPriceId,
           quantity: 1,
         },
       ],
-      success_url: `${appUrl}/dashboard/settings?checkout=success`,
+      // The pricing page is the one that reads ?checkout= and shows the
+      // confirmation; settings never did, so the success message was lost.
+      success_url: `${appUrl}/dashboard/pricing?checkout=success`,
       cancel_url: `${appUrl}/dashboard/pricing?checkout=canceled`,
       subscription_data: {
         metadata: {

@@ -9,6 +9,8 @@ import { createClient } from '@/lib/supabase/client';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Avatar } from '@/components/social/profile';
+import { ContentActionsMenu, BlockedUserNotice } from '@/components/social/moderation';
+import { useBlockedUsers } from '@/hooks/useBlockedUsers';
 import { formatSocialCount } from '@/lib/social';
 import { formatWeight } from '@/lib/utils';
 import { useUserStore } from '@/stores/userStore';
@@ -32,6 +34,7 @@ export default function UserProfilePage() {
   const [loading, setLoading] = useState(true);
   const [followLoading, setFollowLoading] = useState(false);
   const [notFoundError, setNotFoundError] = useState(false);
+  const { isBlocked } = useBlockedUsers();
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -205,6 +208,15 @@ export default function UserProfilePage() {
 
   const displayName = profile.display_name || profile.username;
 
+  // A profile the viewer has blocked shows nothing but the way to unblock.
+  if (!isOwnProfile && isBlocked(profile.user_id)) {
+    return (
+      <div className="max-w-2xl mx-auto px-4 py-6">
+        <BlockedUserNotice userId={profile.user_id} username={profile.username} />
+      </div>
+    );
+  }
+
   const renderFollowButton = () => {
     if (isOwnProfile) {
       return (
@@ -296,6 +308,14 @@ export default function UserProfilePage() {
           </div>
 
           {renderFollowButton()}
+          {!isOwnProfile && (
+            <ContentActionsMenu
+              targetType="profile"
+              targetId={profile.user_id}
+              targetUserId={profile.user_id}
+              targetUsername={profile.username}
+            />
+          )}
         </div>
 
         {/* Stats - hidden for private profiles */}

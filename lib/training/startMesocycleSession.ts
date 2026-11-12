@@ -162,6 +162,22 @@ export { getTrainingDays, getWorkoutForDate, getWorkoutForDay, getWorkoutsForDat
  * - Cutting: shorter rest for metabolic demand
  * - Bulking: full rest for maximum performance
  */
+/**
+ * Target weight for a TRUE cold start (no direct history), from the
+ * `quickWeightEstimate` base. The weekly periodization `intensityModifier` is
+ * applied only on a deload week, where it is the lightening mechanism; on
+ * training weeks the estimate stands (the RIR ramp drives intensification, and
+ * the builder's 0.70–1.0 training-week modifiers would under-load a first
+ * session by up to 30%). Rounded to the nearest 0.5 kg. Pure.
+ */
+export function coldStartTargetWeight(
+  baseWeightKg: number,
+  modifiers: { intensityModifier: number; isDeload: boolean }
+): number {
+  const scaled = modifiers.isDeload ? baseWeightKg * modifiers.intensityModifier : baseWeightKg;
+  return Math.round(scaled * 2) / 2;
+}
+
 export function getRestPeriod(isCompound: boolean, goal: Goal, primaryMuscle?: MuscleGroup): number {
   // Ab exercises need shorter rest periods (recover faster); 'obliques'
   // primaries (Pallof press, Russian twist) count as ab work too.
@@ -807,10 +823,13 @@ export async function startMesocycleWorkoutSession(
         );
         const baseWeight = weightRec.recommendedWeight || 0;
 
-        // Apply progressive overload: increase weight based on weekly intensity modifier
-        // intensityModifier typically ranges from 1.0 (week 1) to 1.05-1.10 (later weeks)
-        // Deload weeks have lower modifier (0.85-0.9)
-        targetWeight = Math.round(baseWeight * progressionModifiers.intensityModifier * 2) / 2; // Round to nearest 0.5kg
+        // The weekly intensityModifier is applied ONLY on deload weeks, same
+        // as the direct-history path above. The builder emits 0.70–1.0 on
+        // training weeks (block week 1 ≈ 0.73), not the 1.0–1.10 this code
+        // once assumed: a 60 kg estimate became 44 kg, stacked on the
+        // cold-start RIR headroom and safety margin the estimate already
+        // carries. On a deload week the modifier IS the lightening mechanism.
+        targetWeight = coldStartTargetWeight(baseWeight, progressionModifiers);
       }
 
       // Generate warmup for first exercise of each muscle group
@@ -927,8 +946,8 @@ export async function startMesocycleWorkoutSession(
               }
             );
             const baseWeight = weightRec.recommendedWeight || 0;
-            // Apply progressive overload intensity modifier
-            targetWeight = Math.round(baseWeight * progressionModifiers.intensityModifier * 2) / 2;
+            // Deload weeks only — see coldStartTargetWeight.
+            targetWeight = coldStartTargetWeight(baseWeight, progressionModifiers);
           }
 
           let warmupSets: WarmupSet[] = [];

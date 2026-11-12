@@ -58,6 +58,7 @@ import {
 import { calculateFFMI, getNaturalFFMILimit } from './bodyCompEngine';
 import { estimatePlannedSessionMinutes } from './workoutDurationEstimator';
 import { isMuscleExcludedByInjury } from './shared/injuryExclusion';
+import { getDeloadStrategy as getDeloadStrategyForExperience } from './deloadEngine';
 
 // Re-export: the shared injury exclusion applied by every workout generator.
 export { isMuscleExcludedByInjury } from './shared/injuryExclusion';
@@ -674,7 +675,15 @@ export function recommendSplit(
  */
 export function buildPeriodizationPlan(
   profile: ExtendedUserProfile,
-  recoveryFactors: RecoveryFactors
+  recoveryFactors: RecoveryFactors,
+  /**
+   * The block length the user actually chose (training weeks + the final
+   * deload week). When given it drives the plan, so the last generated week
+   * really is the deload the UI promises and a longer choice is not silently
+   * truncated to the recovery-derived default. Omitted → the recovery
+   * default (`deloadFrequencyWeeks + 1`).
+   */
+  totalWeeks?: number
 ): PeriodizationPlan {
   
   // Select periodization model based on experience and training age
@@ -688,7 +697,12 @@ export function buildPeriodizationPlan(
     model = 'block';
   }
   
-  const deloadFrequency = recoveryFactors.deloadFrequencyWeeks;
+  const chosenWeeks =
+    totalWeeks !== undefined && Number.isFinite(totalWeeks) && totalWeeks >= 2
+      ? Math.round(totalWeeks)
+      : undefined;
+  const deloadFrequency =
+    chosenWeeks !== undefined ? chosenWeeks - 1 : recoveryFactors.deloadFrequencyWeeks;
   const mesocycleWeeks = deloadFrequency + 1;  // Training weeks + deload
 
   const weeklyProgression = buildWeeklyProgression(
@@ -698,8 +712,10 @@ export function buildPeriodizationPlan(
     profile.enhancedAthleteMode
   );
   
-  // Reactive deloads for novices, proactive for everyone else
-  const deloadStrategy: DeloadStrategy = profile.experience === 'novice' ? 'reactive' : 'proactive';
+  // One rule, owned by deloadEngine: scheduled (proactive) deloads for
+  // everyone except advanced lifters, who self-regulate (reactive). This used
+  // to be the inverse of getDeloadStrategy.
+  const deloadStrategy: DeloadStrategy = getDeloadStrategyForExperience(profile.experience);
   
   return {
     model,
@@ -780,9 +796,28 @@ function buildWeeklyProgression(
       
     case 'block':
       // Distinct phases
-      const hypertrophyWeeks = Math.ceil(trainingWeeks * 0.5);
-      const strengthWeeks = Math.ceil(trainingWeeks * 0.35);
-      const peakWeeks = Math.max(1, trainingWeeks - hypertrophyWeeks - strengthWeeks);
+      // The two `ceil`s used to consume every week below 8 training weeks
+      // (5 → 3 + 2), leaving the peak phase unreachable. Reserve the peak
+      // week(s) first whenever there is room for all three phases, then give
+      // strength at least one week, and hypertrophy the rest.
+      const peakWeeks =
+        trainingWeeks >= 3
+          ? Math.max(
+              1,
+              trainingWeeks - Math.ceil(trainingWeeks * 0.5) - Math.ceil(trainingWeeks * 0.35)
+            )
+          : 0;
+      const strengthWeeks =
+        trainingWeeks >= 2
+          ? Math.max(
+              1,
+              Math.min(
+                Math.ceil(trainingWeeks * 0.35),
+                trainingWeeks - Math.ceil(trainingWeeks * 0.5) - peakWeeks
+              )
+            )
+          : 0;
+      const hypertrophyWeeks = trainingWeeks - strengthWeeks - peakWeeks;
       
       for (let i = 1; i <= trainingWeeks; i++) {
         if (i <= hypertrophyWeeks) {
@@ -1474,7 +1509,8 @@ export function buildDetailedSession(
     'biceps', 'triceps', 'calves', 'abs', 'traps'  // Small/isolation last
   ];
   
-  const orderedMuscles = sessionTemplate.targetMuscles.sort((a, b) =>
+  // Copy before sorting — never reorder the caller's template in place.
+  const orderedMuscles = [...sessionTemplate.targetMuscles].sort((a, b) =>
     muscleOrder.indexOf(a) - muscleOrder.indexOf(b)
   );
   

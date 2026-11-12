@@ -6,6 +6,7 @@ import { useState, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/Button';
 import { SharedWorkoutCard } from '@/components/social/sharing/SharedWorkoutCard';
+import { ModerationNotice } from '@/components/social/moderation';
 import { useSharedWorkouts } from '@/hooks/useSharedWorkouts';
 import { copySharedWorkout } from '@/lib/workout-sharing';
 import { cn } from '@/lib/utils';
@@ -312,6 +313,8 @@ export default function DiscoverPage() {
             That&apos;s all the workouts!
           </p>
         )}
+
+        {workouts.length > 0 && <ModerationNotice className="pb-6" />}
       </main>
 
       {/* Copy Modal */}

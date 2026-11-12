@@ -1,9 +1,17 @@
 'use client';
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuthUser } from '@/hooks/useAuthUser';
 import { fetchUserProfiles } from '@/lib/profiles';
+import { feedCursorFilter, nextReactionCount, type FeedCursor } from '@/lib/social';
+import {
+  getBlockedUserIds,
+  getServerBlockedUserIds,
+  loadBlockedUserIds,
+  subscribeBlockedUsers,
+  toPostgrestInList,
+} from '@/lib/moderation';
 import type { ActivityWithProfile, ActivityReaction, ReactionType, ProfileVisibility, ActivityVisibility } from '@/types/social';
 
 interface FeedOptions {
@@ -40,8 +48,16 @@ export function useActivityFeed({ feedType, userId, limit = 20 }: FeedOptions) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
-  const [cursor, setCursor] = useState<string | null>(null);
-  const { user: authUser } = useAuthUser();
+  const [cursor, setCursor] = useState<FeedCursor | null>(null);
+  const { user: authUser, isLoading: isAuthLoading } = useAuthUser();
+  const authUserId = authUser?.id ?? null;
+  // Users the viewer has blocked: excluded in the query (so pages stay full)
+  // and filtered again here so a block hides their posts immediately.
+  const blockedIds = useSyncExternalStore(
+    subscribeBlockedUsers,
+    getBlockedUserIds,
+    getServerBlockedUserIds
+  );
 
   // Monotonic request id. Only the latest in-flight fetch is allowed to commit
   // results, so out-of-order responses and post-unmount responses are ignored.
@@ -74,7 +90,17 @@ export function useActivityFeed({ feedType, userId, limit = 20 }: FeedOptions) {
           created_at
         `)
         .order('created_at', { ascending: false })
+        // Tiebreak so the (created_at, id) cursor below never skips rows
+        // that share a timestamp.
+        .order('id', { ascending: false })
         .limit(limit);
+
+      if (user) {
+        const blocked = await loadBlockedUserIds(supabase, user.id);
+        if (blocked.size > 0) {
+          query = query.not('user_id', 'in', toPostgrestInList(blocked));
+        }
+      }
 
       // Apply filters based on feed type
       if (feedType === 'user' && userId) {
@@ -103,7 +129,7 @@ export function useActivityFeed({ feedType, userId, limit = 20 }: FeedOptions) {
 
       // Cursor pagination
       if (loadMore && cursor) {
-        query = query.lt('created_at', cursor);
+        query = query.or(feedCursorFilter(cursor));
       }
 
       const { data: activitiesData, error: fetchError } = await query as { data: any[] | null; error: any };
@@ -215,12 +241,12 @@ export function useActivityFeed({ feedType, userId, limit = 20 }: FeedOptions) {
           setActivities(transformed);
         }
 
-        setHasMore(data.length === limit);
-        if (data.length > 0) {
-          setCursor(data[data.length - 1].created_at);
-        } else {
-          setHasMore(false);
-        }
+        // Page from the RAW rows, not the profile-filtered ones: a row dropped
+        // for a missing profile must neither end pagination early nor move the
+        // cursor backwards.
+        const lastRow = activitiesData[activitiesData.length - 1];
+        setHasMore(activitiesData.length === limit);
+        setCursor({ createdAt: lastRow.created_at, id: lastRow.id });
       } else {
         // No activities found
         if (!isCurrent()) return;
@@ -243,8 +269,11 @@ export function useActivityFeed({ feedType, userId, limit = 20 }: FeedOptions) {
     }
   }, [feedType, userId, limit, hasMore, cursor, authUser]);
 
-  // Initial load
+  // Initial load. Waits for the session read: before it resolves `authUser`
+  // is null and the "following" feed would fall through to the public feed.
+  // Re-runs when the signed-in user changes.
   useEffect(() => {
+    if (isAuthLoading) return;
     fetchActivities(false);
     // Invalidate any in-flight request on unmount / dependency change so its
     // response is discarded and never sets state on an unmounted component.
@@ -252,7 +281,7 @@ export function useActivityFeed({ feedType, userId, limit = 20 }: FeedOptions) {
       requestIdRef.current++;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [feedType, userId]);
+  }, [feedType, userId, isAuthLoading, authUserId]);
 
   const loadMore = useCallback(() => {
     fetchActivities(true);
@@ -272,15 +301,20 @@ export function useActivityFeed({ feedType, userId, limit = 20 }: FeedOptions) {
         return {
           ...activity,
           user_reaction: reaction,
-          reaction_count: activity.reaction_count + (isReacted ? (wasReacted ? 0 : 1) : -1),
+          reaction_count: nextReactionCount(activity.reaction_count, wasReacted, isReacted),
         };
       }
       return activity;
     }));
   }, []);
 
+  const visibleActivities = useMemo(
+    () => (blockedIds.size === 0 ? activities : activities.filter(a => !blockedIds.has(a.user_id))),
+    [activities, blockedIds]
+  );
+
   return {
-    activities,
+    activities: visibleActivities,
     isLoading,
     error,
     hasMore,

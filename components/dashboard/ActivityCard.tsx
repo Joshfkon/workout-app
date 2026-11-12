@@ -116,6 +116,14 @@ export const ActivityCard = memo(function ActivityCard({ userId }: ActivityCardP
     loadData();
   }, [loadData]);
 
+  // The launch/foreground HealthKit sync finishes after this card's first
+  // read; reload past the session cache when it lands so today's steps show.
+  useEffect(() => {
+    const onSynced = () => void loadData({ force: true });
+    window.addEventListener('healthkit:synced', onSynced);
+    return () => window.removeEventListener('healthkit:synced', onSynced);
+  }, [loadData]);
+
   const hasWearable = connections.length > 0;
   const steps = todayActivity?.steps.total || 0;
   const activityLevel = todayActivity?.calculated.activityLevel || 'sedentary';

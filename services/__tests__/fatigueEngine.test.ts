@@ -595,3 +595,48 @@ describe('applyReadinessModulation', () => {
     expect(applyReadinessModulation(40).suggestSetReduction).toBe(false);
   });
 });
+
+// ============================================
+// REVIEW FINDING 11 — fallback monotonicity and two-a-day forecasting
+// ============================================
+
+describe('session fatigue accumulation is monotonic in RPE', () => {
+  const after = (sessionRpe: number) =>
+    updateMesocycleFatigue({ currentFatigue: 20, sessionRpe, daysSinceLastSession: 0 });
+
+  it('an RPE-4 session adds no more than an RPE-5 one (it used to add more than RPE 6)', () => {
+    // The score is rounded to a whole point, so 1.6 vs 2 can tie.
+    expect(after(4)).toBeLessThanOrEqual(after(5));
+    expect(after(4)).toBeLessThan(after(6));
+  });
+
+  it('never decreases as RPE rises, across and beyond the table', () => {
+    const rpes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+    for (let i = 1; i < rpes.length; i++) {
+      expect(after(rpes[i])).toBeGreaterThanOrEqual(after(rpes[i - 1]));
+    }
+  });
+
+  it('table values are unchanged', () => {
+    expect(after(5) - 20).toBe(2);
+    expect(after(8) - 20).toBe(8);
+    expect(after(10) - 20).toBe(14);
+  });
+});
+
+describe('forecastWeeklyFatigue — more than 7 sessions a week', () => {
+  it('still credits recovery between sessions on a two-a-day (14-session) week', () => {
+    // floor(7 / 14) was 0: fourteen sessions with no recovery at all.
+    const noRecovery = 14 * 6; // 14 sessions × the RPE-7 accumulation
+    const result = forecastWeeklyFatigue(0, 14, 7);
+    expect(result.projectedFatigue).toBeLessThan(Math.min(100, noRecovery));
+  });
+
+  it('spreads the same total recovery however many sessions share the week', () => {
+    // 8 sessions must not forecast worse than 7 by more than the one extra
+    // session's own accumulation.
+    const seven = forecastWeeklyFatigue(0, 7, 6).projectedFatigue;
+    const eight = forecastWeeklyFatigue(0, 8, 6).projectedFatigue;
+    expect(eight - seven).toBeLessThanOrEqual(4);
+  });
+});

@@ -362,7 +362,10 @@ export default function MesocyclePage() {
         newDuration,
         laggingAreas,
         [], // unavailableEquipmentIds - could fetch from gym locations if needed
-        newSessionsPerDay
+        newSessionsPerDay,
+        // Keep the block's stored length so the regenerated program still
+        // puts its deload on the stored deload_week.
+        mesocycle.total_weeks ?? undefined
       );
 
       // Calculate recovery factors

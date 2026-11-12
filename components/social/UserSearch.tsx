@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client';
 import { Input } from '@/components/ui/Input';
 import { ProfileCard } from './profile/ProfileCard';
 import { debounce } from '@/lib/utils';
+import { useBlockedUsers } from '@/hooks/useBlockedUsers';
 import type { UserProfile } from '@/types/social';
 
 interface UserSearchProps {
@@ -19,9 +20,12 @@ export function UserSearch({
   autoFocus = false,
 }: UserSearchProps) {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<UserProfile[]>([]);
+  const [rawResults, setResults] = useState<UserProfile[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+  const { isBlocked } = useBlockedUsers();
+  // Never surface users the viewer has blocked.
+  const results = rawResults.filter((profile) => !isBlocked(profile.user_id));
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const searchUsers = useCallback(

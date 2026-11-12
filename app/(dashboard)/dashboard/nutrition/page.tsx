@@ -56,7 +56,9 @@ import {
 import { useRecentFoods, RECENT_FOODS_KEY } from '@/hooks/useRecentFoods';
 import { nutritionMonthKey } from '@/hooks/useNutritionMonth';
 import { LOG_HOME_QUERY_KEY, type LogHomeData } from '@/hooks/useLogPageData';
-import { recalculateMacrosForWeight } from '@/lib/actions/nutrition';
+import { setMacroAutoUpdateEnabled } from '@/lib/actions/nutrition';
+import { customFoodFieldsFromScan } from '@/lib/nutrition/scannedCustomFood';
+import { addLocalDays } from '@/lib/date/localDay';
 import { getAdaptiveTDEE, onWeightLoggedRecalculateTDEE, resetAndRecalculateTDEE, type TDEEData } from '@/lib/actions/tdee';
 import { TDEEDashboard } from '@/components/nutrition/TDEEDashboard';
 import { computeScanPairPRatios } from '@/services/compositionSpace';
@@ -331,6 +333,33 @@ function NutritionPageContent() {
       setSelectedDate(getLocalDateString());
     }
   }, [isMounted, selectedDate]);
+
+  // Follow the calendar across midnight. The app can sit on this tab
+  // overnight (a resumed PWA / native shell never remounts), and without this
+  // "today" stayed yesterday — breakfast was logged to the previous day. Only
+  // a user who was viewing today is moved; a deliberately chosen past day is
+  // left alone.
+  const knownTodayRef = useRef<string | null>(
+    typeof window === 'undefined' ? null : getLocalDateString()
+  );
+  useEffect(() => {
+    const syncToday = () => {
+      if (document.visibilityState !== 'visible') return;
+      const currentDay = getLocalDateString();
+      const previousDay = knownTodayRef.current;
+      if (previousDay === currentDay) return;
+      knownTodayRef.current = currentDay;
+      setSelectedDate((selected) =>
+        selected === null || selected === previousDay ? currentDay : selected
+      );
+    };
+    document.addEventListener('visibilitychange', syncToday);
+    window.addEventListener('focus', syncToday);
+    return () => {
+      document.removeEventListener('visibilitychange', syncToday);
+      window.removeEventListener('focus', syncToday);
+    };
+  }, []);
 
   const queryClient = useQueryClient();
 
@@ -723,6 +752,43 @@ function NutritionPageContent() {
   }
 
   /**
+   * Insert several entries as ONE multi-row statement, so a batch ("Add all",
+   * saved meal, copy yesterday, parsed items) is all-or-nothing. Separate
+   * inserts under Promise.all could half-succeed: the rows that landed stayed
+   * invisible (state was never updated) and a retry duplicated them.
+   */
+  async function insertFoodEntries(foods: FoodLogInsert[]): Promise<FoodLogEntry[]> {
+    if (foods.length === 0) return [];
+    const userId = await getLocalUserId(supabase);
+    if (!userId) throw new Error('Not signed in');
+    if (!selectedDate) throw new Error('Date not initialized');
+
+    const { data, error } = await supabase.from('food_log').insert(
+      foods.map((food) => ({
+        user_id: userId,
+        logged_at: selectedDate,
+        meal_type: food.meal_type,
+        food_name: food.food_name,
+        serving_size: food.serving_size,
+        servings: food.servings,
+        calories: food.calories,
+        protein: food.protein,
+        carbs: food.carbs,
+        fat: food.fat,
+        source: food.source || 'manual',
+        food_id: food.food_id,
+        nutritionix_id: food.nutritionix_id,
+      }))
+    ).select();
+
+    if (error) {
+      console.error('Error adding foods:', error);
+      throw error;
+    }
+    return (data ?? []) as FoodLogEntry[];
+  }
+
+  /**
    * Apply freshly inserted rows to local state instead of refetching the
    * whole 13-query loadData() tree. Keeps today's list, daily totals, and
    * the frequent-food chips in sync after a save.
@@ -796,7 +862,7 @@ function NutritionPageContent() {
     if (!targetsResult.error) setNutritionTargets(targetsResult.data);
 
     try {
-      const tdee = await getAdaptiveTDEE(targetsResult.data?.calories);
+      const tdee = await getAdaptiveTDEE(targetsResult.data?.calories, undefined, getLocalDateString());
       setTdeeData(tdee);
     } catch (tdeeError) {
       console.error('[Nutrition] Error refreshing TDEE data:', tdeeError);
@@ -849,20 +915,19 @@ function NutritionPageContent() {
         .maybeSingle();
 
       if (!existingFood) {
-        // Calculate per-serving nutrition (divide by servings if > 1)
-        const perServingCalories = Math.round(food.calories / food.servings);
-        const perServingProtein = Math.round((food.protein / food.servings) * 10) / 10;
-        const perServingCarbs = Math.round((food.carbs / food.servings) * 10) / 10;
-        const perServingFat = Math.round((food.fat / food.servings) * 10) / 10;
+        // Store ONE base serving: the macros and the serving text are both
+        // divided by the servings logged, so they describe the same amount
+        // (food.serving_size is the whole logged portion, e.g. "2 serving (60g)").
+        const base = customFoodFieldsFromScan(food);
 
         const { data: customFood, error: customError } = await supabase.from('custom_foods').insert({
           user_id: user.id,
           food_name: food.food_name,
-          serving_size: food.serving_size,
-          calories: perServingCalories,
-          protein: perServingProtein,
-          carbs: perServingCarbs,
-          fat: perServingFat,
+          serving_size: base.serving_size,
+          calories: base.calories,
+          protein: base.protein,
+          carbs: base.carbs,
+          fat: base.fat,
           barcode: food.barcode,
         }).select().single();
 
@@ -892,7 +957,7 @@ function NutritionPageContent() {
   /** "Add all" from a prior meal — one insert per item, one combined undo. */
   async function handleQuickAddManyFoods(foods: FoodLogInsert[]) {
     if (foods.length === 0) return;
-    const inserted = await Promise.all(foods.map((f) => insertFoodEntry(f)));
+    const inserted = await insertFoodEntries(foods);
     applyInsertedEntries(inserted);
     mutateRecentFoodsCache((prev) => [...inserted, ...prev]);
     addToast('success', `Added ${inserted.length} item${inserted.length === 1 ? '' : 's'}`, 6000, {
@@ -915,20 +980,18 @@ function NutritionPageContent() {
 
   /** Describe flow: log all AI-parsed items to the chosen meal in parallel */
   async function handleLogParsedItems(items: ParsedMealItem[], mealType: MealType) {
-    const inserted = await Promise.all(
-      items.map((item) =>
-        insertFoodEntry({
-          food_name: item.name,
-          serving_size: item.quantity || '1 serving',
-          servings: 1,
-          calories: item.calories,
-          protein: item.protein,
-          carbs: item.carbs,
-          fat: item.fat,
-          meal_type: mealType,
-          source: 'manual',
-        })
-      )
+    const inserted = await insertFoodEntries(
+      items.map((item) => ({
+        food_name: item.name,
+        serving_size: item.quantity || '1 serving',
+        servings: 1,
+        calories: item.calories,
+        protein: item.protein,
+        carbs: item.carbs,
+        fat: item.fat,
+        meal_type: mealType,
+        source: 'manual',
+      }))
     );
     applyInsertedEntries(inserted);
   }
@@ -936,20 +999,18 @@ function NutritionPageContent() {
   /** Saved meals: one tap logs every item to the time-appropriate meal */
   async function handleLogSavedMeal(meal: SavedMeal) {
     const targetMeal = getMealTypeForNow();
-    const inserted = await Promise.all(
-      meal.items.map((item) =>
-        insertFoodEntry({
-          food_name: item.name,
-          serving_size: item.serving_size || '1 serving',
-          servings: item.servings || 1,
-          calories: item.calories,
-          protein: item.protein,
-          carbs: item.carbs,
-          fat: item.fat,
-          meal_type: targetMeal,
-          source: 'manual',
-        })
-      )
+    const inserted = await insertFoodEntries(
+      meal.items.map((item) => ({
+        food_name: item.name,
+        serving_size: item.serving_size || '1 serving',
+        servings: item.servings || 1,
+        calories: item.calories,
+        protein: item.protein,
+        carbs: item.carbs,
+        fat: item.fat,
+        meal_type: targetMeal,
+        source: 'manual',
+      }))
     );
     applyInsertedEntries(inserted);
 
@@ -1010,21 +1071,19 @@ function NutritionPageContent() {
     const entries = yesterdayEntries.filter((entry) => entry.meal_type === mealType);
     if (entries.length === 0) return;
 
-    const inserted = await Promise.all(
-      entries.map((entry) =>
-        insertFoodEntry({
-          food_name: entry.food_name,
-          serving_size: entry.serving_size || '1 serving',
-          servings: entry.servings || 1,
-          calories: entry.calories || 0,
-          protein: entry.protein || 0,
-          carbs: entry.carbs || 0,
-          fat: entry.fat || 0,
-          meal_type: mealType,
-          source: entry.source || 'manual',
-          food_id: entry.food_id || undefined,
-        })
-      )
+    const inserted = await insertFoodEntries(
+      entries.map((entry) => ({
+        food_name: entry.food_name,
+        serving_size: entry.serving_size || '1 serving',
+        servings: entry.servings || 1,
+        calories: entry.calories || 0,
+        protein: entry.protein || 0,
+        carbs: entry.carbs || 0,
+        fat: entry.fat || 0,
+        meal_type: mealType,
+        source: entry.source || 'manual',
+        food_id: entry.food_id || undefined,
+      }))
     );
     applyInsertedEntries(inserted);
   }
@@ -1228,17 +1287,10 @@ function NutritionPageContent() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // Get user's unit preference to convert to kg for macro calculation
-    const { data: prefs } = await supabase
-      .from('user_preferences')
-      .select('weight_unit')
-      .eq('user_id', user.id)
-      .single();
-
-    // Default to 'lb' if no preference is set (most common unit)
-    const userUnit = (prefs?.weight_unit as 'lb' | 'kg' | null) || 'lb';
-    const isLbs = userUnit === 'lb';
-    const weightKg = isLbs ? weight * 0.453592 : weight;
+    // The modal collects the weight in the user's preferred unit
+    // (users.preferences.units, loaded into `weightUnit`), so that is the unit
+    // it must be stored with.
+    const isLbs = weightUnit === 'lb';
 
     // First try to update existing entry for today
     const { data: existing, error: selectError } = await supabase
@@ -1298,7 +1350,9 @@ function NutritionPageContent() {
 
     // Auto-recalculate TDEE and sync with targets
     try {
-      const tdeeResult = await onWeightLoggedRecalculateTDEE();
+      // Pass the client's local day: the action runs in the server's time
+      // zone, where "today" can still be yesterday and exclude this weigh-in.
+      const tdeeResult = await onWeightLoggedRecalculateTDEE(getLocalDateString());
       if (tdeeResult.syncResult?.synced && tdeeResult.syncResult.newCalories) {
         setMacroUpdateNotification(
           `Adaptive TDEE updated targets: ${tdeeResult.syncResult.newCalories} cal - ${tdeeResult.syncResult.message}`
@@ -1308,15 +1362,6 @@ function NutritionPageContent() {
         // Show progress message even if not synced
         setMacroUpdateNotification(tdeeResult.syncResult.message);
         setTimeout(() => setMacroUpdateNotification(null), 4000);
-      } else {
-        // Fallback to weight-based recalculation if TDEE not ready
-        const result = await recalculateMacrosForWeight(weightKg);
-        if (result.success && !result.skipped && result.newTargets) {
-          setMacroUpdateNotification(
-            `Macros auto-updated: ${result.newTargets.calories} cal, ${result.newTargets.protein}g protein`
-          );
-          setTimeout(() => setMacroUpdateNotification(null), 5000);
-        }
       }
     } catch (e) {
       console.error('Failed to recalculate TDEE/macros:', e);
@@ -1432,6 +1477,23 @@ function NutritionPageContent() {
     await refreshWeightAndTargets();
   }
 
+  /**
+   * Targets typed in by hand (NutritionTargetsModal). Saving them also turns
+   * off automatic target updates, so the adaptive TDEE sync never replaces
+   * numbers the user chose; applying the macro calculator turns them back on.
+   */
+  async function handleSaveManualTargets(targets: Parameters<typeof handleSaveTargets>[0]) {
+    await handleSaveTargets(targets);
+    try {
+      const result = await setMacroAutoUpdateEnabled(false);
+      if (!result.success) {
+        console.error('Failed to disable automatic target updates:', result.error);
+      }
+    } catch (e) {
+      console.error('Failed to disable automatic target updates:', e);
+    }
+  }
+
   function openAddFood(mealType: MealType, tab: AddFoodTab = 'search') {
     void ensureSystemFoodsLoaded();
     setRecentsEnabled(true); // latch on the recents/meals query
@@ -1513,7 +1575,12 @@ function NutritionPageContent() {
   // Use unified weight utility - all weight operations now use lib/weightUtils.ts
 
   // Calculate 7-day weight average (with unit validation and conversion)
-  const last7Days = weightEntries.slice(0, 7);
+  // The last 7 CALENDAR days (today and the 6 before), not the last 7 entries:
+  // with sparse weigh-ins the latter silently spans weeks.
+  const sevenDayWindowStart = addLocalDays(getLocalDateString(), -6);
+  const last7Days = weightEntries.filter(
+    (e) => typeof e.logged_at === 'string' && e.logged_at.slice(0, 10) >= sevenDayWindowStart
+  );
   const sevenDayAverage =
     last7Days.length > 0
       ? last7Days.reduce((sum, e) => {
@@ -2314,8 +2381,9 @@ function NutritionPageContent() {
       <NutritionTargetsModal
         isOpen={showTargetsModal}
         onClose={() => setShowTargetsModal(false)}
-        onSave={handleSaveTargets}
+        onSave={handleSaveManualTargets}
         existingTargets={nutritionTargets || undefined}
+        sex={userProfile.sex ?? null}
       />
 
       <MacroCalculatorModal

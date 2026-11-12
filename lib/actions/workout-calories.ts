@@ -8,6 +8,10 @@
 import { createUntypedServerClient } from '@/lib/supabase/server';
 import { estimateWorkoutExpenditure } from '@/lib/integrations/workout-calories';
 import { updateWorkoutExpenditure } from './wearable';
+import {
+  resolveWorkoutBodyweightKg,
+  resolveWorkoutBodyFatPercent,
+} from '@/lib/nutrition/workoutExpenditure';
 import type { SetLog } from '@/types/schema';
 import type { ExerciseEntry } from '@/types/schema';
 import type { AppWorkoutActivity } from '@/types/wearable';
@@ -67,34 +71,36 @@ export async function calculateAndSaveWorkoutCalories(
       // Continue with duration-based calculation
     }
 
-    // Get user profile for body fat percentage
-    const { data: userProfile } = await supabase
-      .from('user_profiles')
-      .select('weight_kg, body_fat_percent')
+    // Bodyweight: the user's most recent weigh-in (weight_log stores the value
+    // in the unit the user logged it in), then the profile weight on `users`.
+    const { data: recentWeight } = await supabase
+      .from('weight_log')
+      .select('weight, unit')
       .eq('user_id', user.id)
-      .single();
+      .order('logged_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-    // Get user weight (fallback to user_profiles or weight_log)
-    let userWeightKg = userProfile?.weight_kg || 80; // Default fallback
-    let bodyFatPercent = userProfile?.body_fat_percent || 15; // Default fallback
+    const { data: userRow } = await supabase
+      .from('users')
+      .select('weight_kg')
+      .eq('id', user.id)
+      .maybeSingle();
 
-    // Try to get most recent weight from weight_log if not in profile
-    if (!userWeightKg) {
-      const { data: recentWeight } = await supabase
-        .from('weight_log')
-        .select('weight, unit')
-        .eq('user_id', user.id)
-        .order('logged_at', { ascending: false })
-        .limit(1)
-        .single();
+    const userWeightKg = resolveWorkoutBodyweightKg({
+      latestWeighIn: recentWeight,
+      profileWeightKg: userRow?.weight_kg,
+    });
 
-      if (recentWeight) {
-        // Convert to kg if needed
-        userWeightKg = recentWeight.unit === 'kg' 
-          ? recentWeight.weight 
-          : recentWeight.weight / 2.20462;
-      }
-    }
+    // Body fat: latest DEXA scan when there is one.
+    const { data: latestDexa } = await supabase
+      .from('dexa_scans')
+      .select('body_fat_percent')
+      .eq('user_id', user.id)
+      .order('scan_date', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const bodyFatPercent = resolveWorkoutBodyFatPercent(latestDexa?.body_fat_percent);
 
     // Build exercise map (exercise_block_id -> ExerciseEntry)
     const exerciseMap = new Map<string, ExerciseEntry>();
@@ -176,7 +182,18 @@ export async function calculateAndSaveWorkoutCalories(
     );
 
     // Save to daily_activity_data
-    const result = await updateWorkoutExpenditure(date, estimate.totalEstimate);
+    // Recorded per session so a second session on the same day adds to the
+    // first instead of replacing it.
+    const result = await updateWorkoutExpenditure(date, estimate.totalEstimate, {
+      workoutSessionId: session.id,
+      startTime: session.started_at,
+      endTime: session.completed_at,
+      durationMinutes,
+      muscleGroups,
+      totalSets: workoutActivity.totalSets,
+      totalVolume: workoutActivity.totalVolume,
+      averageRestSeconds: workoutActivity.averageRestSeconds,
+    });
 
     if (!result.success) {
       return { success: false, error: result.error };

@@ -52,8 +52,8 @@ describe('monotonicity floor — restore when possible', () => {
     const rec = recommendSet(base);
     expect(rec.positionMatch?.progression).toBe('add_load');
     expect(rec.weightKg).toBe(102.5);
-    // The raw trade would be 102.5×5 (implied 123.0) against the matched
-    // 100×6 @2 (124.1) — the lever re-solves reps at the traded load to ×6
+    // The raw step is 102.5 × repMin (3, implied 115.3) against the matched
+    // 100×6 @2 (124.1) — the lever re-solves reps at the stepped load to ×6
     // (127.2), a genuine progression, with no guard warning needed.
     expect(rec.reps).toBe(6);
     expect(rec.progressionLever).toBe('reps');
@@ -66,7 +66,7 @@ describe('monotonicity floor — restore when possible', () => {
   it('stands down under an explicit deload/readiness/phase directive', () => {
     const rec = recommendSet({ ...base, regressionDirective: 'deload' });
     expect(rec.weightKg).toBe(102.5);
-    expect(rec.reps).toBe(5); // the un-guarded trade stands
+    expect(rec.reps).toBe(3); // the un-guarded step (reps reset to the floor) stands
     expect(warnings()).not.toContain('monotonicity floor');
   });
 });
@@ -105,8 +105,8 @@ describe('monotonicity floor — log the producing branch when the floor is unre
   });
 
   it('names the position-match branch when its own trade is sub-floor and the cap blocks restore', () => {
-    // Today's set 1 (100×6 @2 → cap 124.1) leaves the branch's 102.5×5 trade
-    // (123.0) uncapped, but blocks restoring ×6 (127.2): the sub-floor number
+    // Today's set 1 (100×6 @2 → cap 124.1) leaves the branch's 102.5×3 step
+    // (115.3) uncapped, but blocks restoring ×6 (127.2): the sub-floor number
     // came from the match branch itself, and the log must say so.
     const rec = recommendSet({
       lastWeightKg: 100,
@@ -128,7 +128,7 @@ describe('monotonicity floor — log the producing branch when the floor is unre
     });
     expect(rec.positionMatch?.progression).toBe('add_load');
     expect(rec.weightKg).toBe(102.5);
-    expect(rec.reps).toBe(5);
+    expect(rec.reps).toBe(3);
     expect(rec.sessionCapacityClamped).toBeUndefined();
     expect(warnings()).toContain('monotonicity floor');
     expect(warnings()).toContain('position_match:add_load');

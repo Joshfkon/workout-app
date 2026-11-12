@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { ThemeToggleCompact } from '@/components/settings/ThemeToggle';
+import { useIsNativePlatform } from '@/hooks/useIsNativePlatform';
 
 interface PublicAppShellProps {
   children: React.ReactNode;
@@ -12,6 +13,8 @@ interface PublicAppShellProps {
 
 export function PublicAppShell({ children, contentClassName }: PublicAppShellProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  // The iOS app must not advertise web purchases (App Store guideline 3.1.1).
+  const isNative = useIsNativePlatform();
 
   return (
     <div className="min-h-screen bg-surface-950 flex flex-col">
@@ -31,9 +34,11 @@ export function PublicAppShell({ children, contentClassName }: PublicAppShellPro
           <Link href="/learn" className="text-sm font-medium text-surface-300 hover:text-surface-100 transition-colors">
             Learn
           </Link>
-          <Link href="/pricing" className="text-sm font-medium text-surface-300 hover:text-surface-100 transition-colors">
-            Pricing
-          </Link>
+          {!isNative && (
+            <Link href="/pricing" className="text-sm font-medium text-surface-300 hover:text-surface-100 transition-colors">
+              Pricing
+            </Link>
+          )}
           <Link href="/support" className="text-sm font-medium text-surface-300 hover:text-surface-100 transition-colors">
             Support
           </Link>
@@ -85,13 +90,15 @@ export function PublicAppShell({ children, contentClassName }: PublicAppShellPro
             >
               Learn
             </Link>
-            <Link
-              href="/pricing"
-              className="block px-3 py-2 text-sm font-medium text-surface-300 hover:text-surface-100 hover:bg-surface-800 rounded-lg transition-colors"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              Pricing
-            </Link>
+            {!isNative && (
+              <Link
+                href="/pricing"
+                className="block px-3 py-2 text-sm font-medium text-surface-300 hover:text-surface-100 hover:bg-surface-800 rounded-lg transition-colors"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                Pricing
+              </Link>
+            )}
             <Link
               href="/support"
               className="block px-3 py-2 text-sm font-medium text-surface-300 hover:text-surface-100 hover:bg-surface-800 rounded-lg transition-colors"
@@ -146,9 +153,11 @@ export function PublicAppShell({ children, contentClassName }: PublicAppShellPro
               <Link href="/support" className="text-surface-400 hover:text-surface-200 transition-colors">
                 Support
               </Link>
-              <Link href="/pricing" className="text-surface-400 hover:text-surface-200 transition-colors">
-                Pricing
-              </Link>
+              {!isNative && (
+                <Link href="/pricing" className="text-surface-400 hover:text-surface-200 transition-colors">
+                  Pricing
+                </Link>
+              )}
             </div>
           </div>
         </div>

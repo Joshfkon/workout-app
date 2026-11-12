@@ -33,6 +33,7 @@ describe('WearableConnectionsScreen - Apple Health Permission Denied', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     (wearableActions.getWearableConnections as jest.Mock).mockResolvedValue([]);
+    (wearableActions.upsertWearableConnection as jest.Mock).mockResolvedValue({ success: true });
   });
 
   it('shows denied state when Apple Health permission is denied on iOS', async () => {
@@ -206,10 +207,20 @@ describe('WearableConnectionsScreen - Apple Health Permission Denied', () => {
     });
 
     // On web, Apple Health connection option should not be available in the available connections list
-    // But Fitbit and Garmin should be available
     expect(screen.queryByText('⌚')).not.toBeInTheDocument(); // Apple Health icon
-    expect(screen.getByText('💪')).toBeInTheDocument(); // Fitbit icon
-    expect(screen.getByText('🏃')).toBeInTheDocument(); // Garmin icon
+  });
+
+  it('never offers Fitbit or Garmin (neither integration works yet)', async () => {
+    const { isHealthKitAvailable } = await import('@/lib/integrations/healthkit');
+    (isHealthKitAvailable as jest.Mock).mockResolvedValue(true);
+
+    render(<WearableConnectionsScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Apple Health')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('Fitbit')).not.toBeInTheDocument();
+    expect(screen.queryByText('Garmin')).not.toBeInTheDocument();
   });
 });
 
@@ -256,5 +267,34 @@ describe('WearableConnectionsScreen - connection change callback', () => {
     expect(wearableActions.upsertWearableConnection).toHaveBeenCalledWith(
       expect.objectContaining({ source: 'apple_healthkit' })
     );
+  });
+
+  it('says so when the connection could not be saved, and does not sync', async () => {
+    const { Capacitor } = await import('@/lib/integrations/capacitor-stub');
+    (Capacitor.isNativePlatform as jest.Mock).mockReturnValue(true);
+    (Capacitor.getPlatform as jest.Mock).mockReturnValue('ios');
+
+    const { isHealthKitAvailable, requestHealthKitPermissions } = await import(
+      '@/lib/integrations/healthkit'
+    );
+    (isHealthKitAvailable as jest.Mock).mockResolvedValue(true);
+    (requestHealthKitPermissions as jest.Mock).mockResolvedValue({ granted: true });
+    (wearableActions.getWearableConnections as jest.Mock).mockResolvedValue([]);
+    (wearableActions.upsertWearableConnection as jest.Mock).mockResolvedValue({
+      success: false,
+      error: 'relation "wearable_connections" does not exist',
+    });
+    const sync = await import('@/lib/integrations/healthkit-sync');
+    (sync.runHealthKitSync as jest.Mock).mockClear();
+
+    render(<WearableConnectionsScreen />);
+    await waitFor(() => {
+      expect(screen.getByText('Apple Health')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getAllByRole('button', { name: /connect/i })[0]);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/couldn't be saved/i);
+    expect(sync.runHealthKitSync).not.toHaveBeenCalled();
   });
 });

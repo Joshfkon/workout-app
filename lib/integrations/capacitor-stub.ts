@@ -88,46 +88,66 @@ export async function closeExternalBrowser(): Promise<void> {
   }
 }
 
+/** Hosts whose https links are this app (universal links, once configured). */
+const APP_LINK_HOSTS = new Set(['hypertrack.app', 'www.hypertrack.app']);
+
 /**
- * Initialize Capacitor app listeners
- * Call this once when the app starts
+ * Turn a URL the OS handed the app into an in-app path, or null when the link
+ * isn't ours.
+ *
+ *   hypertrack://dashboard/history?x=1      -> /dashboard/history?x=1
+ *   hypertrack:///dashboard                  -> /dashboard
+ *   https://www.hypertrack.app/auth/callback?code=… -> /auth/callback?code=…
+ *
+ * A custom-scheme URL parses with its first segment as the HOST
+ * (`hypertrack://auth/callback` is host "auth", path "/callback"), so host and
+ * path are rejoined. The result always starts with exactly one "/" — never
+ * "//", which the browser would read as another origin — so a crafted link
+ * can only ever navigate inside the app's own site.
  */
-export function initializeCapacitorListeners(): void {
-  if (!isNativePlatform()) {
-    return;
+export function resolveDeepLinkPath(rawUrl: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    return null;
   }
 
-  // Handle deep links (OAuth callbacks, etc.)
+  let path: string;
+  if (url.protocol === 'hypertrack:') {
+    path = `${url.hostname}${url.pathname}`;
+  } else if (url.protocol === 'https:' && APP_LINK_HOSTS.has(url.hostname)) {
+    path = url.pathname;
+  } else {
+    return null;
+  }
+
+  const normalized = path.replace(/\\/g, '/').replace(/^\/+/, '');
+  // A bare `hypertrack://` just brings the app forward; don't reload it.
+  if (!normalized && !url.search) return null;
+  return `/${normalized}${url.search}${url.hash}`;
+}
+
+let listenersInitialized = false;
+
+/**
+ * Initialize Capacitor app listeners. Safe to call more than once (the
+ * listeners are registered a single time per page load).
+ */
+export function initializeCapacitorListeners(): void {
+  if (!isNativePlatform() || listenersInitialized) {
+    return;
+  }
+  listenersInitialized = true;
+
+  // Deep links: the hypertrack:// scheme (Info.plist CFBundleURLSchemes) and,
+  // once associated domains are set up, https universal links. The App
+  // plugin holds a launch URL until this listener attaches, so a link that
+  // cold-starts the app is delivered too.
   App.addListener('appUrlOpen', (event: { url: string }) => {
-    const url = new URL(event.url);
-
-    // Handle authentication callbacks
-    if (url.pathname.startsWith('/auth/callback')) {
-      window.location.href = url.pathname + url.search;
-    }
-
-    // Handle Fitbit OAuth callback
-    if (url.pathname.startsWith('/api/integrations/fitbit/callback')) {
-      window.location.href = url.pathname + url.search;
-    }
-
-    // Handle custom scheme links (hypertrack://)
-    if (url.protocol === 'hypertrack:') {
-      const path = url.pathname || url.hostname;
-      if (path) {
-        window.location.href = '/' + path + url.search;
-      }
-    }
-  });
-
-  // Handle app state changes
-  App.addListener('appStateChange', ({ isActive }: { isActive: boolean }) => {
-    if (isActive) {
-      // App came to foreground
-      console.log('[Capacitor] App resumed');
-    } else {
-      // App went to background
-      console.log('[Capacitor] App backgrounded');
+    const path = resolveDeepLinkPath(event.url);
+    if (path) {
+      window.location.href = path;
     }
   });
 

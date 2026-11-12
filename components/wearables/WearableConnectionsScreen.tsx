@@ -100,12 +100,17 @@ export function WearableConnectionsScreen({ onConnectionsChange }: WearableConne
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState<WearableSource | null>(null);
   const [healthKitDenied, setHealthKitDenied] = useState(false);
+  const [connectError, setConnectError] = useState<string | null>(null);
   const [availability, setAvailability] = useState<Record<WearableSource, boolean>>({
     apple_healthkit: false,
     google_fit: false,
-    fitbit: true, // Always available via OAuth
+    // Not offered until they work end to end: the Fitbit OAuth redirect has
+    // no callback page (consent ends in a 404) and Garmin was a "coming
+    // soon" placeholder. An existing connection row still lists (and can be
+    // disconnected) under Connected Devices.
+    fitbit: false,
     samsung_health: false,
-    garmin: true, // Always available via OAuth
+    garmin: false,
     manual: true,
   });
 
@@ -172,6 +177,7 @@ export function WearableConnectionsScreen({ onConnectionsChange }: WearableConne
   async function handleConnect(source: WearableSource) {
     setConnecting(source);
     setHealthKitDenied(false); // Reset denial state on retry
+    setConnectError(null);
 
     try {
       switch (source) {
@@ -188,11 +194,21 @@ export function WearableConnectionsScreen({ onConnectionsChange }: WearableConne
             'heart_rate',
           ]);
           if (result.granted) {
-            await upsertWearableConnection({
+            const saved = await upsertWearableConnection({
               source,
               permissions: result.permissions || ['steps', 'active_energy', 'sleep', 'heart_rate'],
               deviceName: 'Apple Health',
             });
+            if (!saved.success) {
+              // The connection lives on the account. If it didn't save, the
+              // sync sees "not connected" forever and Apple Health is offered
+              // again on every visit — say so instead of failing silently.
+              console.error('Failed to save Apple Health connection:', saved.error);
+              setConnectError(
+                "Apple Health access was granted, but the connection couldn't be saved. Check your internet connection and try again."
+              );
+              break;
+            }
             // Kick off the first anchored pull right away so sleep/steps show
             // up without waiting for the next app foreground.
             try {
@@ -237,8 +253,7 @@ export function WearableConnectionsScreen({ onConnectionsChange }: WearableConne
         }
 
         case 'garmin': {
-          // TODO: Implement Garmin OAuth
-          alert('Garmin integration coming soon!');
+          // Not implemented; never offered (see `availability`).
           break;
         }
       }
@@ -382,6 +397,15 @@ export function WearableConnectionsScreen({ onConnectionsChange }: WearableConne
         </Card>
       )}
 
+      {connectError && (
+        <div
+          role="alert"
+          className="p-3 rounded-lg bg-danger-500/10 border border-danger-500/20 text-sm text-danger-400"
+        >
+          {connectError}
+        </div>
+      )}
+
       {/* Apple Health Permission Denied State */}
       {healthKitDenied && availability.apple_healthkit && (
         <Card>
@@ -426,7 +450,8 @@ export function WearableConnectionsScreen({ onConnectionsChange }: WearableConne
           <CardContent className="p-8 text-center text-surface-500">
             <p>No wearable integrations available on this device.</p>
             <p className="text-sm mt-2">
-              Try accessing from an iOS or Android device with a compatible wearable.
+              Apple Health connects from the HyperTrack iPhone app. You can still enter
+              steps manually.
             </p>
           </CardContent>
         </Card>
