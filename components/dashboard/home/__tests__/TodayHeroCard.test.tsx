@@ -272,3 +272,46 @@ describe('TodayHeroCard — start workout handler (bugfix)', () => {
     expect(button).toBeDisabled();
   });
 });
+
+describe('TodayHeroCard — freestyle training style', () => {
+  it('invites a workout instead of a mesocycle when nothing is logged today', () => {
+    render(<TodayHeroCard workout={null} hasPlan={false} freestyle mesocycleName={null} />);
+
+    expect(screen.getByText('Ready to train?')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /start workout/i })).toHaveAttribute(
+      'href',
+      '/dashboard/train'
+    );
+    expect(screen.queryByText(/no training plan yet/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/plan a mesocycle/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/what's a mesocycle/i)).not.toBeInTheDocument();
+  });
+
+  it("shows today's freestyle workout while it is in progress", () => {
+    render(
+      <TodayHeroCard
+        workout={{ ...baseWorkout, name: "Today's workout", state: 'in_progress', completedSets: 4 }}
+        hasPlan={false}
+        freestyle
+        mesocycleName={null}
+      />
+    );
+
+    expect(screen.getByText('Continue workout')).toBeInTheDocument();
+    expect(screen.queryByText('Ready to train?')).not.toBeInTheDocument();
+  });
+
+  it('suggests the next meal after training, as it does with a plan', () => {
+    render(
+      <TodayHeroCard
+        workout={{ ...baseWorkout, state: 'completed' }}
+        hasPlan={false}
+        freestyle
+        mesocycleName={null}
+        meal={meal}
+      />
+    );
+
+    expect(screen.getByText('Log dinner')).toBeInTheDocument();
+  });
+});

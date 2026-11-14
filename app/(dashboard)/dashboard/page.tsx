@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { DashboardClient } from './DashboardClient';
 import {
   fetchMesocycleData,
+  fetchTrainingStyleData,
   fetchNutritionData,
   fetchWeightData,
   fetchUserGoal,
@@ -51,6 +52,7 @@ export default async function DashboardPage() {
       fetchLiftTrends(user.id),
       fetchBodyCompGlance(user.id),
       fetchDashboardDateKey(),
+      fetchTrainingStyleData(),
     ]);
   } catch (error) {
     console.error('[dashboard] server fetch failed; falling back to client fetch:', error);
@@ -67,6 +69,7 @@ export default async function DashboardPage() {
     liftTrends,
     bodyCompGlance,
     serverDateKey,
+    trainingStyleData,
   ] = serverData;
 
   // Pass server-fetched data to client component as initial props
@@ -80,6 +83,8 @@ export default async function DashboardPage() {
         dateKey: serverDateKey,
         mesocycle: mesocycleData.mesocycle,
         todaysWorkout: mesocycleData.todaysWorkout,
+        trainingStyle: trainingStyleData.trainingStyle,
+        freestyleTodaysWorkout: trainingStyleData.freestyleTodaysWorkout,
         nutritionTotals: nutritionData.totals,
         nutritionTargets: nutritionData.targets,
         todaysWeight: weightData.todaysWeight,

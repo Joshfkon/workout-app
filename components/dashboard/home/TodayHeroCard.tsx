@@ -38,6 +38,12 @@ interface TodayHeroCardProps {
   scheduled?: ScheduledWorkoutSummary | null;
   /** Whether the user has an active mesocycle at all (false = "no plan" state). */
   hasPlan: boolean;
+  /**
+   * Freestyle training style (lib/training/trainingStyle): no plan prompts —
+   * the empty state invites a workout instead of a mesocycle, and the meal
+   * suggestion shows after training like it does with a plan.
+   */
+  freestyle?: boolean;
   /** Name of the active mesocycle, the title fallback when no split day is known. */
   mesocycleName: string | null;
   /** Eyebrow context after "Next up ·", e.g. "Arnold wk 1". */
@@ -133,13 +139,15 @@ function HeroShell({
  * A pending workout wins; otherwise the next meal is suggested (workout done
  * or rest day); then completed-workout / no-plan states. Without a plan the
  * meal hero is skipped so the plan CTA stays reachable (a completed quick
- * workout still shows its done state first). Renders nothing on a rest day
- * with nothing left to log.
+ * workout still shows its done state first) — except in freestyle, where
+ * there is no plan CTA to protect. Renders nothing on a rest day with nothing
+ * left to log.
  */
 export function TodayHeroCard({
   workout,
   scheduled,
   hasPlan,
+  freestyle = false,
   mesocycleName,
   eyebrowContext,
   workoutMeta,
@@ -222,7 +230,7 @@ export function TodayHeroCard({
   // No pending workout (done for the day or rest day) — recommend the next
   // meal. Only within an active plan: without one the "plan a mesocycle" CTA
   // below must stay reachable as the primary hero for new users.
-  if (meal && hasPlan) {
+  if (meal && (hasPlan || freestyle)) {
     return (
       <div className="rounded-2xl p-5 border bg-success-500/10 border-success-500/20">
         <HeroShell
@@ -266,6 +274,27 @@ export function TodayHeroCard({
           />
         </div>
       </Link>
+    );
+  }
+
+  if (freestyle) {
+    return (
+      <div>
+        <div className="relative rounded-2xl p-5 border bg-primary-500/10 border-primary-500/20">
+          <div className="text-[11px] font-semibold tracking-widest uppercase mb-1.5 text-primary-400">
+            Next up
+          </div>
+          <div className="text-2xl font-bold text-surface-100">Ready to train?</div>
+          <p className="text-[13px] text-surface-400 mt-1 mb-4">
+            Start an empty workout, take an AI suggestion, or repeat a previous one.
+          </p>
+          <Link href="/dashboard/train" className="block">
+            <span className="block w-full py-3 rounded-xl text-center text-sm font-semibold text-white bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-400 hover:to-primary-500 transition-colors">
+              Start workout
+            </span>
+          </Link>
+        </div>
+      </div>
     );
   }
 

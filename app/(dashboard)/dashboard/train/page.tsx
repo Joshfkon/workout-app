@@ -91,6 +91,7 @@ import { NonGymActivityLogger } from '@/components/dashboard/NonGymActivityLogge
 import { SuggestedWorkoutSheet } from '@/components/workout/SuggestedWorkoutSheet';
 import { Modal } from '@/components/ui/Modal';
 import { clearPersistedRestTimer } from '@/hooks/useRestTimer';
+import { fetchTrainingStyle } from '@/lib/training/trainingStyle';
 import {
   STANDARD_MUSCLE_DISPLAY_NAMES,
   resolveMuscleToStandard,
@@ -257,6 +258,8 @@ export default function TrainPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [inProgress, setInProgress] = useState<InProgressSummary | null>(null);
   const [activeMeso, setActiveMeso] = useState<ActiveMesocycleRow | null>(null);
+  // Freestyle training style hides the plan card (lib/training/trainingStyle).
+  const [isFreestyle, setIsFreestyle] = useState(false);
   const [recentWorkouts, setRecentWorkouts] = useState<RecentWorkout[]>([]);
   const [sessionsThisWeek, setSessionsThisWeek] = useState(0);
   // Time trained over the same rolling 7 days; avgMin is null until at least
@@ -295,7 +298,7 @@ export default function TrainPage() {
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
         const weekStart = getLocalDateString(sevenDaysAgo);
 
-        const [inProgressRes, mesoRes, recentRes, weekSessionsRes] = await Promise.all([
+        const [inProgressRes, mesoRes, recentRes, weekSessionsRes, styleRes] = await Promise.all([
           supabase
             .from('workout_sessions')
             .select('id, mesocycle_id, started_at, exercise_blocks(id, set_logs(id, is_warmup))')
@@ -320,7 +323,12 @@ export default function TrainPage() {
             .eq('user_id', user.id)
             .eq('state', 'completed')
             .gte('completed_at', weekStart),
+          // Training style (lib/training/trainingStyle): freestyle hides the
+          // plan card. Fetched with the rest so the card never flashes.
+          fetchTrainingStyle(supabase, user.id).catch(() => null),
         ]);
+        const freestyle = styleRes?.style === 'freestyle';
+        setIsFreestyle(freestyle);
 
         const ipRow = inProgressRes.data?.[0];
         if (ipRow) {
@@ -339,7 +347,9 @@ export default function TrainPage() {
         }
 
         const meso = mesoRes;
-        setActiveMeso(meso);
+        // Freestyle treats the plan as absent, so every plan-dependent piece
+        // (week label, session count, preview) falls back to its no-plan form.
+        setActiveMeso(freestyle ? null : meso);
 
         setRecentWorkouts(
           ((recentRes.data ?? []) as RecentSessionRow[]).map((row) => {
@@ -753,7 +763,9 @@ export default function TrainPage() {
         />
       )}
 
-      {/* Mesocycle hero (training day / rest day / no plan) */}
+      {/* Mesocycle hero (training day / rest day / no plan) — hidden in
+          freestyle, where the start options below are the whole page. */}
+      {!isFreestyle && (
       <div className="rounded-2xl p-4 bg-surface-900 border border-surface-800">
         <div className="flex items-center justify-between gap-2">
           <p className="text-[11px] font-semibold tracking-[0.12em] uppercase text-surface-500 truncate">
@@ -857,6 +869,7 @@ export default function TrainPage() {
           </>
         )}
       </div>
+      )}
 
       {/* Start options — always available, with or without a plan, so no
           app state can ever block starting a workout */}

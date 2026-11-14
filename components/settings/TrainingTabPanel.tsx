@@ -9,6 +9,7 @@ import { LegacyHistoryBackfill } from '@/components/settings/LegacyHistoryBackfi
 import { ExerciseVarietySettings } from '@/components/settings/ExerciseVarietySettings';
 import { MusclePrioritySettings } from '@/components/settings/MusclePrioritySettings';
 import { VolumeLandmarksCard } from '@/components/settings/VolumeLandmarksCard';
+import { TrainingStyleCard } from '@/components/settings/TrainingStyleCard';
 
 const ALL_EQUIPMENT: Equipment[] = ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight', 'kettlebell'];
 
@@ -49,6 +50,9 @@ export function TrainingTabPanel({
 }: TrainingTabPanelProps) {
   return (
     <div className="space-y-6">
+      {/* Plan (mesocycles) vs freestyle — saves on tap */}
+      <TrainingStyleCard userId={userId} />
+
       {/* Collapsible sections to reduce scroll cliff */}
       <Card>
         <CardHeader>

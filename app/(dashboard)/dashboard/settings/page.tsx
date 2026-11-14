@@ -402,6 +402,19 @@ export default function SettingsPage() {
         weightToSave = units === 'lb' ? lbsToKg(weightVal) : weightVal;
       }
       
+      // Merge into the preferences stored NOW, not the copy loaded with the
+      // page: keys saved elsewhere since it loaded (the training style card
+      // on this page, the theme, …) must survive this whole-object write.
+      // A failed read falls back to the loaded copy, as before.
+      const { data: storedPrefsRow } = await supabase
+        .from('users')
+        .select('preferences')
+        .eq('id', user.id)
+        .maybeSingle();
+      const basePreferences = ((storedPrefsRow?.preferences as Record<string, unknown> | null) ??
+        (settingsQuery.data?.userRow?.preferences as Record<string, unknown>) ??
+        {}) as Record<string, unknown>;
+
       const savedRow = {
           id: user.id,
           email: user.email,
@@ -410,10 +423,10 @@ export default function SettingsPage() {
           height_cm: heightToSave,
           weight_kg: weightToSave,
           preferences: {
-            // Spread the loaded prefs first so keys managed elsewhere
-            // (theme via useTheme, body-hub reminder settings, …) survive
-            // this whole-object JSONB write.
-            ...((settingsQuery.data?.userRow?.preferences as Record<string, unknown>) ?? {}),
+            // Spread the stored prefs first so keys managed elsewhere
+            // (theme via useTheme, body-hub reminder settings, training
+            // style, …) survive this whole-object JSONB write.
+            ...basePreferences,
             units,
             restTimer,
             showFormCues,

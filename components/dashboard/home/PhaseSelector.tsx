@@ -39,6 +39,12 @@ interface PhaseSelectorProps {
   phase: TrainingPhase;
   /** Called after a successful save so the caller can update state/cache. */
   onPhaseChanged: (phase: TrainingPhase, newTargets?: UpdatePhaseResult['newTargets']) => void;
+  /**
+   * Offer to rebuild an active mesocycle after a phase change. False in the
+   * freestyle training style (lib/training/trainingStyle), where the plan is
+   * hidden and a rebuild prompt would push it back into view.
+   */
+  offerPlanRebuild?: boolean;
 }
 
 /**
@@ -47,7 +53,7 @@ interface PhaseSelectorProps {
  * unified updateTrainingPhase action, which syncs the profile goal, the macro
  * calculator goal, and (optionally) recalculates nutrition targets.
  */
-export function PhaseSelector({ phase, onPhaseChanged }: PhaseSelectorProps) {
+export function PhaseSelector({ phase, onPhaseChanged, offerPlanRebuild = true }: PhaseSelectorProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [isOpen, setIsOpen] = useState(false);
@@ -84,7 +90,7 @@ export function PhaseSelector({ phase, onPhaseChanged }: PhaseSelectorProps) {
       // refetch so the Body tab verdict/banner reflect the new active span.
       void queryClient.invalidateQueries({ queryKey: [PHASES_QUERY_KEY_PREFIX] });
       onPhaseChanged(selected, result.newTargets);
-      if (result.activeMesocycle) {
+      if (result.activeMesocycle && offerPlanRebuild) {
         setStaleMesocycle(result.activeMesocycle);
       } else {
         setIsOpen(false);

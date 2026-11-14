@@ -233,6 +233,12 @@ export interface User {
 export interface UserPreferences {
   /** Weight unit preference */
   units: WeightUnit;
+
+  /**
+   * Plan (mesocycles) or freestyle (lib/training/trainingStyle). Unset =
+   * inferred from how recent workouts were started.
+   */
+  trainingStyle?: 'plan' | 'freestyle';
   
   /** Default rest timer duration in seconds */
   restTimerDefault: number;

@@ -33,6 +33,12 @@ import {
   type LiftTrendsSummary,
 } from '@/app/(dashboard)/dashboard/_lib/liftTrends';
 import { computeWeekSessions } from '@/app/(dashboard)/dashboard/_lib/weekSessions';
+import {
+  fetchTodaysWorkoutAnySource,
+  fetchTrainingStyle,
+  type TodaysWorkoutSummary,
+  type TrainingStyle,
+} from '@/lib/training/trainingStyle';
 import type { PlateauGoal } from '@/services/plateauDetector';
 
 export interface DashboardMesocycle {
@@ -137,6 +143,30 @@ function rows<T>(result: { data: T | null; error: unknown }, what: string): T | 
     throw new Error(`[dashboard] ${what} failed: ${message}`);
   }
   return result.data;
+}
+
+/**
+ * The signed-in user's training style (lib/training/trainingStyle) and, in
+ * freestyle, today's workout whatever started it — Home shows that instead of
+ * the plan's session. Called by the server page and by Home's client
+ * refetch, so both paths agree.
+ */
+export async function fetchTrainingStyleData(): Promise<{
+  trainingStyle: TrainingStyle;
+  freestyleTodaysWorkout: TodaysWorkoutSummary | null;
+}> {
+  const supabase = await createUntypedServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { trainingStyle: 'plan', freestyleTodaysWorkout: null };
+  const { style } = await fetchTrainingStyle(supabase, user.id);
+  if (style !== 'freestyle') return { trainingStyle: style, freestyleTodaysWorkout: null };
+  const { day: todayStr } = await getUserDay();
+  return {
+    trainingStyle: style,
+    freestyleTodaysWorkout: await fetchTodaysWorkoutAnySource(supabase, user.id, todayStr),
+  };
 }
 
 /**

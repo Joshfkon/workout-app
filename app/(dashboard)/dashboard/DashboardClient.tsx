@@ -64,6 +64,8 @@ import { GlanceHeader, TodayHeroCard, MetricTileGrid, QuickLogRow, PhaseSelector
 import { normalizePacingPhase, type EatingWindow } from '@/services/intakePacing';
 import { fetchEatingWindow } from '@/lib/nutrition/eatingWindow';
 import type { TodaysWorkout, GlanceVolumeSummary, GlanceWeightRate, MealHeroSuggestion } from '@/components/dashboard/home';
+import type { TrainingStyle } from '@/lib/training/trainingStyle';
+import { fetchTrainingStyleData } from '@/lib/actions/dashboard';
 import type { TrainingPhase, UpdatePhaseResult } from '@/lib/actions/phase';
 
 // Loading placeholder for lazily-loaded modal content
@@ -261,6 +263,10 @@ interface DashboardInitialData {
   dateKey?: string;
   mesocycle: ActiveMesocycle | null;
   todaysWorkout: TodaysWorkout | null;
+  /** lib/training/trainingStyle — freestyle hides the plan and shows
+   *  freestyleTodaysWorkout (today's workout, whatever started it). */
+  trainingStyle?: TrainingStyle;
+  freestyleTodaysWorkout?: TodaysWorkout | null;
   nutritionTotals: NutritionTotals;
   nutritionTargets: NutritionTargets | null;
   todaysWeight: { weight: number; unit: string } | null;
@@ -305,6 +311,20 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
       initialData.mesocycle.completedTodayCount ?? 0
     );
   });
+  // Freestyle (lib/training/trainingStyle): the plan is hidden everywhere on
+  // Home — no plan card, week label, plan deload card or week-1 banner — and
+  // the hero shows today's workout whatever started it. The mesocycle state
+  // above stays as fetched; only these derived values feed the UI.
+  const [trainingStyle, setTrainingStyle] = useState<TrainingStyle>(
+    initialData?.trainingStyle ?? 'plan'
+  );
+  const [freestyleTodaysWorkout, setFreestyleTodaysWorkout] = useState<TodaysWorkout | null>(
+    initialData?.freestyleTodaysWorkout ?? null
+  );
+  const isFreestyle = trainingStyle === 'freestyle';
+  const planMesocycle = isFreestyle ? null : activeMesocycle;
+  const heroWorkout = isFreestyle ? freestyleTodaysWorkout : todaysWorkout;
+  const heroScheduled = isFreestyle ? null : scheduledWorkout;
   const [nutritionTotals, setNutritionTotals] = useState<NutritionTotals>(initialData?.nutritionTotals ?? { calories: 0, protein: 0, carbs: 0, fat: 0 });
   const [nutritionTargets, setNutritionTargets] = useState<NutritionTargets | null>(initialData?.nutritionTargets ?? null);
   // Seed from server initialData (item 6) so the atrophy card renders in the
@@ -342,7 +362,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   const [startWorkoutError, setStartWorkoutError] = useState<string | null>(null);
   // Full active mesocycle row with all fields for startMesocycleWorkoutSession
   const [fullActiveMeso, setFullActiveMeso] = useState<ActiveMesocycleRow | null>(null);
-  const activeMesocycleId = activeMesocycle?.id ?? null;
+  const activeMesocycleId = planMesocycle?.id ?? null;
 
   useEffect(() => {
     let cancelled = false;
@@ -518,12 +538,12 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
     : '';
 
   // "Wk 1 of 5 · Arnold" context line under the greeting, plus "2/4 sessions".
-  const weekContext = activeMesocycle
-    ? `Wk ${activeMesocycle.currentWeek} of ${activeMesocycle.weeks}${activeMesocycle.splitType ? ` · ${activeMesocycle.splitType}` : ''}`
+  const weekContext = planMesocycle
+    ? `Wk ${planMesocycle.currentWeek} of ${planMesocycle.weeks}${planMesocycle.splitType ? ` · ${planMesocycle.splitType}` : ''}`
     : null;
   const sessionsLabel =
-    activeMesocycle?.weekSessionsDone != null && activeMesocycle.weekSessionsTotal
-      ? `${activeMesocycle.weekSessionsDone}/${activeMesocycle.weekSessionsTotal} sessions`
+    planMesocycle?.weekSessionsDone != null && planMesocycle.weekSessionsTotal
+      ? `${planMesocycle.weekSessionsDone}/${planMesocycle.weekSessionsTotal} sessions`
       : null;
 
   // Today's daily check-in — drives the readiness pill (present) or the compact
@@ -561,7 +581,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   // Small keyed fetch (like the deload recommendation) so neither the server
   // payload nor the cached fast path changes shape. The line itself is pure
   // derivation — never an AI API call.
-  const todaysWorkoutId = todaysWorkout?.id ?? null;
+  const todaysWorkoutId = heroWorkout?.id ?? null;
   const [heroBlocks, setHeroBlocks] = useState<HeroBlockInfo[]>([]);
 
   useEffect(() => {
@@ -610,10 +630,10 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
       const name = standard ? STANDARD_MUSCLE_DISPLAY_NAMES[standard].toLowerCase() : key;
       if (!muscleNames.includes(name)) muscleNames.push(name);
     }
-    const source = muscleNames.length > 0 ? muscleNames : (scheduledWorkout?.muscles ?? []);
+    const source = muscleNames.length > 0 ? muscleNames : (heroScheduled?.muscles ?? []);
     if (source.length > 0) return `Focus today: ${source.slice(0, 4).join(', ')}`;
     return null;
-  }, [heroBlocks, scheduledWorkout]);
+  }, [heroBlocks, heroScheduled]);
 
   // Recovery note for the hero meta line ("all target muscles recovered" /
   // "lats still recovering"), comparing today's target muscles against the
@@ -623,7 +643,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
     const rawTargets =
       heroBlocks.length > 0
         ? heroBlocks.map((b) => b.primaryMuscle).filter((m): m is string => !!m)
-        : scheduledWorkout?.muscles ?? [];
+        : heroScheduled?.muscles ?? [];
     if (rawTargets.length === 0) return null;
     const targets = new Set<StandardMuscleGroup>();
     for (const raw of rawTargets) {
@@ -645,31 +665,31 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
     if (sore.length === 0) return 'all target muscles recovered';
     if (sore.length <= 2) return `${sore.map((m) => m.displayName.toLowerCase()).join(', ')} still recovering`;
     return `${sore.length} target muscles still recovering`;
-  }, [recoveryLoading, heroBlocks, scheduledWorkout, recoveringMuscles]);
+  }, [recoveryLoading, heroBlocks, heroScheduled, recoveringMuscles]);
 
   // Meta line for a ready workout hero: "7 exercises · est. 65 min · all
   // target muscles recovered". Only for the planned state — in-progress
   // sessions fall back to the live set counts inside the card.
   const workoutHeroMeta = useMemo(() => {
-    if (todaysWorkout && todaysWorkout.state !== 'planned') return null;
+    if (heroWorkout && heroWorkout.state !== 'planned') return null;
     const parts: string[] = [];
     if (
-      scheduledWorkout?.sessionsScheduledToday === 2 &&
-      scheduledWorkout.sessionOfDay
+      heroScheduled?.sessionsScheduledToday === 2 &&
+      heroScheduled.sessionOfDay
     ) {
-      parts.push(`session ${scheduledWorkout.sessionOfDay} of 2 today`);
+      parts.push(`session ${heroScheduled.sessionOfDay} of 2 today`);
     }
-    if (todaysWorkout && todaysWorkout.exercises > 0) {
-      parts.push(`${todaysWorkout.exercises} exercises`);
-      parts.push(`est. ${Math.round((10 + todaysWorkout.exercises * 8) / 5) * 5} min`);
+    if (heroWorkout && heroWorkout.exercises > 0) {
+      parts.push(`${heroWorkout.exercises} exercises`);
+      parts.push(`est. ${Math.round((10 + heroWorkout.exercises * 8) / 5) * 5} min`);
     }
     if (heroRecoveryNote) parts.push(heroRecoveryNote);
     return parts.length > 0 ? parts.join(' · ') : null;
-  }, [todaysWorkout, scheduledWorkout, heroRecoveryNote]);
+  }, [heroWorkout, heroScheduled, heroRecoveryNote]);
 
   // "ARNOLD WK 1" eyebrow context for the workout hero.
-  const heroEyebrowContext = activeMesocycle
-    ? `${activeMesocycle.splitType || activeMesocycle.name} wk ${activeMesocycle.currentWeek}`
+  const heroEyebrowContext = planMesocycle
+    ? `${planMesocycle.splitType || planMesocycle.name} wk ${planMesocycle.currentWeek}`
     : null;
 
   // Next-meal hero content — shown when there's no pending workout (done or
@@ -951,6 +971,15 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         ninetyDaysAgo.setDate(today.getDate() - 90);
         // Shared local-day-anchored window (matches the server + volume page).
         const weeklyVolumeStartIso = weeklyVolumeWindowStartISO(today);
+
+        // Training style + freestyle hero workout (same source as the server
+        // page). Independent of the queries below, so it runs alongside them.
+        void fetchTrainingStyleData()
+          .then((style) => {
+            setTrainingStyle(style.trainingStyle);
+            setFreestyleTodaysWorkout(style.freestyleTodaysWorkout);
+          })
+          .catch((error) => console.warn('[dashboard] training style fetch failed:', error));
 
         // OPTIMIZATION: Split queries into critical (blocks render) and deferred (loads in background)
         // Critical queries - needed for initial content display
@@ -1585,8 +1614,8 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   // calm ramp message instead of the full atrophy alert.
   const belowMevCount = glanceVolume?.lowCount ?? musclesBelowMev.length;
   const rampBanner =
-    belowMevCount > 0 && activeMesocycle && activeMesocycle.currentWeek <= 2 ? (
-      <VolumeRampBanner lowCount={belowMevCount} week={activeMesocycle.currentWeek} />
+    belowMevCount > 0 && planMesocycle && planMesocycle.currentWeek <= 2 ? (
+      <VolumeRampBanner lowCount={belowMevCount} week={planMesocycle.currentWeek} />
     ) : null;
 
   const atrophyCard = !rampBanner && musclesBelowMev.length > 0 ? (
@@ -1606,7 +1635,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
           sessionsLabel={sessionsLabel}
           readinessScore={checkInStatus === 'done' ? checkInReadiness : null}
           onReadinessClick={userId ? () => setActiveModal('checkin') : undefined}
-          phaseChip={<PhaseSelector phase={currentPhase} onPhaseChanged={handlePhaseChanged} />}
+          phaseChip={<PhaseSelector phase={currentPhase} onPhaseChanged={handlePhaseChanged} offerPlanRebuild={!isFreestyle} />}
         />
       )}
 
@@ -1619,10 +1648,11 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
 
       {/* "Next up" hero — pending workout first, otherwise the next meal */}
       <TodayHeroCard
-        workout={todaysWorkout}
-        scheduled={scheduledWorkout}
-        hasPlan={!!activeMesocycle}
-        mesocycleName={activeMesocycle?.name ?? null}
+        workout={heroWorkout}
+        scheduled={heroScheduled}
+        hasPlan={!!planMesocycle}
+        freestyle={isFreestyle}
+        mesocycleName={planMesocycle?.name ?? null}
         eyebrowContext={heroEyebrowContext}
         workoutMeta={workoutHeroMeta}
         meal={mealHero}
