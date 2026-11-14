@@ -283,6 +283,7 @@ import { cancelWorkoutSession } from './_lib/cancelWorkout';
 import { sessionIndexFromCompleted } from '@/lib/training/mesocycleProgress';
 import { countCompletedSessions } from '@/lib/training/startMesocycleSession';
 import { matchAdhocToPlannedSession } from '@/lib/training/adhocClaim';
+import { fetchTrainingStyle } from '@/lib/training/trainingStyle';
 import { submitFinishOptimistic, confirmClaimOptimistic, declineClaimOptimistic } from './_lib/finishWorkout';
 import type {
   AvailableExercise,
@@ -5949,6 +5950,10 @@ export default function WorkoutPage() {
           .limit(1);
         const meso = mesoRows?.[0];
         if (!meso) return;
+        // Freestyle users train without their plan (lib/training/trainingStyle):
+        // asking them to count each workout toward it is the plan UI they hid.
+        const { style } = await fetchTrainingStyle(supabase, session.userId);
+        if (style === 'freestyle') return;
 
         const completed = await countCompletedSessions(supabase, meso.id);
         const programSession = getSessionFromProgramData(
