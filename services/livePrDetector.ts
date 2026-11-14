@@ -20,6 +20,14 @@
  *    repeating last session's top weight "beats" it by a milligram and fires
  *    a 0%-improvement weight PR
  *
+ * Weight and reps PRs compare against what was actually LIFTED — the
+ * heaviest weight in history and the most reps at (>= 95% of) it — not
+ * against the best-e1RM set's own weight and reps, which made a weight
+ * already lifted last week (just not on the best-e1RM set) a "New Weight PR".
+ * And a set that an earlier set already matched or beat on BOTH weight and
+ * reps is never a PR of any type, so repeating last week's numbers at a
+ * lower RPE (a higher RPE-based e1RM) is not celebrated either.
+ *
  * One live-specific addition: the baseline is the stored previous best
  * RAISED by the best earlier qualifying set of the current session, so the
  * celebration fires once per new high-water mark instead of on every set
@@ -57,12 +65,61 @@ export interface LivePrDetectionInput {
   set: LivePrSetInput;
   /** Earlier sets logged this session for the SAME exercise block. */
   priorSessionSets: LivePrSetInput[];
-  /** Stored all-time best (reps holds seconds for duration exercises), or
-   *  null when the exercise has no history. */
-  previousBest: { weightKg: number; reps: number; e1rm: number } | null;
+  /** Stored best (reps holds seconds for duration exercises), or null when
+   *  the exercise has no history. Build it with prBaselineFromRecord:
+   *  weightKg/reps are the heaviest weight lifted and the most reps at it,
+   *  e1rm the best estimate; liftedSets are the sets already done. */
+  previousBest: PrBaseline | null;
   isDeload: boolean;
   /** The block's exercise — decides rep vs duration modality. */
   exercise: ModalitySource | null | undefined;
+}
+
+export interface PrBaseline {
+  weightKg: number;
+  reps: number;
+  e1rm: number;
+  /** count = reps, or seconds for duration exercises. */
+  liftedSets?: { weightKg: number; count: number }[];
+}
+
+/** The stored history record, as kept by the workout history read. */
+export interface StoredPersonalRecord {
+  weightKg: number;
+  reps: number;
+  e1rm: number;
+  heaviestWeightKg?: number;
+  repsAtHeaviest?: number;
+  liftedSets?: { weightKg: number; count: number }[];
+}
+
+/**
+ * The PR comparison baseline from a stored record: heaviest weight and most
+ * reps at it when the record carries them (older shapes fall back to the
+ * best-e1RM set's own numbers).
+ */
+export function prBaselineFromRecord(
+  record: StoredPersonalRecord | null | undefined
+): PrBaseline | null {
+  if (!record) return null;
+  return {
+    weightKg: record.heaviestWeightKg ?? record.weightKg,
+    reps: record.repsAtHeaviest ?? record.reps,
+    e1rm: record.e1rm,
+    liftedSets: record.liftedSets,
+  };
+}
+
+/**
+ * True when some earlier set already matched or beat `set` on both weight
+ * (at storage precision) and count (reps, or seconds for duration sets).
+ */
+export function isAlreadyLifted(
+  set: { weightKg: number; count: number },
+  earlier: { weightKg: number; count: number }[]
+): boolean {
+  const weight = storageWeightKg(set.weightKg);
+  return earlier.some((e) => storageWeightKg(e.weightKg) >= weight && e.count >= set.count);
 }
 
 export interface LivePr {
@@ -74,7 +131,7 @@ export interface LivePr {
 }
 
 /** Reps/duration PRs require the weight to be within this fraction of the record weight. */
-const REPS_PR_WEIGHT_TOLERANCE = 0.95;
+export const PR_COMPARABLE_LOAD_FRACTION = 0.95;
 
 const pctImprovement = (value: number, baseline: number): number =>
   baseline > 0 ? Math.round(((value - baseline) / baseline) * 100) : 0;
@@ -129,7 +186,17 @@ export function detectLiveSetPr(input: LivePrDetectionInput): LivePr | null {
 
   const setWeight = weightOf(set);
   const setCount = countOf(set);
-  const atRecordWeight = setWeight >= bestWeight * REPS_PR_WEIGHT_TOLERANCE;
+  const atRecordWeight = setWeight >= bestWeight * PR_COMPARABLE_LOAD_FRACTION;
+
+  // Already lifted — in history, or earlier this session — on both weight and
+  // count: not a record of any kind (e.g. last week's numbers at a lower RPE).
+  const earlier = [
+    ...(previousBest.liftedSets ?? []),
+    ...priorSessionSets
+      .filter((s) => !isWarmupSet(s) && !isUglyForm(s))
+      .map((s) => ({ weightKg: s.weightKg, count: countOf(s) })),
+  ];
+  if (isAlreadyLifted({ weightKg: set.weightKg, count: setCount }, earlier)) return null;
 
   // Duration exercise: the record is max seconds at (>=) weight — never e1RM.
   if (isDuration) {

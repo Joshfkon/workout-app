@@ -141,7 +141,7 @@ import {
   type SetNumberChange,
 } from '@/lib/training/logSet';
 import { loadWorkoutSession, resolveResumePosition } from './_lib/loadSession';
-import { detectLiveSetPr } from '@/services/livePrDetector';
+import { detectLiveSetPr, prBaselineFromRecord } from '@/services/livePrDetector';
 import type { PRCelebrationData } from '@/components/workout/PRCelebration';
 import { now as clockNow } from '@/lib/clock';
 import { addExerciseOverride, getSessionFromProgramData, applyExerciseOverrides, type ExerciseOverride } from '@/services/mesocycleHelpers';
@@ -3576,7 +3576,7 @@ export default function WorkoutPage() {
         const pr = detectLiveSetPr({
           set: { ...data, setType },
           priorSessionSets: completedSets.filter((s) => s.exerciseBlockId === currentBlock.id),
-          previousBest: prHistory?.personalRecord ?? null,
+          previousBest: prBaselineFromRecord(prHistory?.personalRecord),
           isDeload: session?.isDeload ?? false,
           exercise: currentBlock.exercise,
         });
@@ -6547,17 +6547,21 @@ export default function WorkoutPage() {
     // Build exercise histories for PR detection in summary
     const exerciseHistoriesForSummary = Object.entries(exerciseHistories).reduce((acc, [exerciseId, history]) => {
       const exercise = blocks.find(b => b.exerciseId === exerciseId)?.exercise;
+      // Same baseline as the live celebration: heaviest weight lifted, most
+      // reps at it, best e1RM, and the sets already lifted.
+      const baseline = prBaselineFromRecord(history.personalRecord);
       acc[exerciseId] = {
         exerciseId,
         exerciseName: exercise?.name || 'Exercise',
-        previousBest: history.personalRecord ? {
-          weight: history.personalRecord.weightKg,
-          reps: getSetReps(history.personalRecord, exercise) ?? history.personalRecord.reps,
-          e1rm: history.personalRecord.e1rm,
+        previousBest: baseline ? {
+          weight: baseline.weightKg,
+          reps: baseline.reps,
+          e1rm: baseline.e1rm,
+          liftedSets: baseline.liftedSets,
         } : undefined,
       };
       return acc;
-    }, {} as Record<string, { exerciseId: string; exerciseName: string; previousBest?: { weight: number; reps: number; e1rm: number } }>);
+    }, {} as Record<string, { exerciseId: string; exerciseName: string; previousBest?: { weight: number; reps: number; e1rm: number; liftedSets?: { weightKg: number; count: number }[] } }>);
     
     return (
       <div className="py-8">

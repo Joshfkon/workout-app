@@ -29,6 +29,7 @@ import {
   sumDisplayVolume,
 } from '@/lib/utils';
 import { e1rmValueFromRpe } from '@/services/shared/e1rm';
+import { isAlreadyLifted, PR_COMPARABLE_LOAD_FRACTION } from '@/services/livePrDetector';
 import {
   displaySetQuality,
   SET_QUALITY_DISPLAY_META,
@@ -97,6 +98,8 @@ interface ExerciseWithHistory {
     weight: number;
     reps: number;
     e1rm: number;
+    /** Sets already lifted (count = reps, or seconds for duration exercises). */
+    liftedSets?: { weightKg: number; count: number }[];
   };
 }
 
@@ -344,7 +347,15 @@ export function SessionSummary({
       // for performances that never happened. Ugly-form sets can't set a
       // record; each PR's form note describes the set that actually won it.
       const setForm = (s: SetLog): FormRating => s.feedback?.form || 'clean';
-      const eligible = sets.filter((s) => setForm(s) !== 'ugly');
+      // A set an earlier one already matched or beat on BOTH weight and
+      // reps/seconds is not a record of any kind (same rule as the live
+      // celebration, services/livePrDetector).
+      const lifted = history.previousBest.liftedSets ?? [];
+      const eligible = sets.filter(
+        (s) =>
+          setForm(s) !== 'ugly' &&
+          !isAlreadyLifted({ weightKg: s.weightKg, count: s.reps }, lifted)
+      );
       if (eligible.length === 0) return;
 
       // Heaviest set (ties: most reps).
@@ -359,7 +370,7 @@ export function SessionSummary({
       // beaten AT a comparable load — both conditions on the SAME set (reps
       // carry seconds for duration blocks). Ties: heavier load.
       const repsAtLoadSet = eligible
-        .filter((s) => s.weightKg >= history.previousBest!.weight * 0.95)
+        .filter((s) => s.weightKg >= history.previousBest!.weight * PR_COMPARABLE_LOAD_FRACTION)
         .reduce<SetLog | null>(
           (best, s) =>
             !best ||

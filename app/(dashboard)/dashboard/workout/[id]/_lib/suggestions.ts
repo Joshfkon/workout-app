@@ -47,6 +47,7 @@ import type {
   UserProfileForWeights,
 } from './types';
 import { now as clockNow } from '@/lib/clock';
+import { PR_COMPARABLE_LOAD_FRACTION } from '@/services/livePrDetector';
 
 /**
  * THE anchor-pool eligibility predicate — single source of truth, shared by
@@ -220,6 +221,26 @@ function applyLocationScope(
  * ordered most-recent-first. Pure. When `scopeConfig` is provided, the history
  * is first narrowed to the current location's calibration track (rules 4–6).
  */
+/**
+ * Attach the weight/reps PR baselines to the best-e1RM record: the heaviest
+ * weight actually lifted, the most reps/seconds at (>= 95% of) it, and the
+ * sets already lifted. The record's own weightKg/reps stay the best-e1RM set
+ * (what the history UI shows as "PR").
+ */
+function withPrBaseline(
+  record: ExerciseHistoryData['personalRecord'],
+  liftedSets: { weightKg: number; count: number }[]
+): ExerciseHistoryData['personalRecord'] {
+  if (!record || liftedSets.length === 0) return record;
+  const heaviestWeightKg = Math.max(...liftedSets.map((s) => s.weightKg));
+  const repsAtHeaviest = Math.max(
+    ...liftedSets
+      .filter((s) => s.weightKg >= heaviestWeightKg * PR_COMPARABLE_LOAD_FRACTION)
+      .map((s) => s.count)
+  );
+  return { ...record, heaviestWeightKg, repsAtHeaviest, liftedSets };
+}
+
 function computeHistoryFromBlocks(
   historyBlocks: HistoryBlockRow[],
   scopeConfig?: HistoryScopeConfig,
@@ -276,6 +297,12 @@ function computeHistoryFromBlocks(
   // canonical estimate among the newest sessions. The PR is the undecayed
   // best over the whole window, same eligibility.
   const anchorCandidates: AnchorCandidate[] = [];
+  // Every PR-eligible set in the window, as lifted (weight + reps/seconds),
+  // including sets beyond the e1RM domain: what the lifter has already done.
+  // Feeds the weight/reps PR baselines and the "already lifted" guard
+  // (services/livePrDetector) — the best-e1RM set alone is not the heaviest
+  // weight or the most reps, and comparing against it called repeats PRs.
+  const liftedSets: { weightKg: number; count: number }[] = [];
 
   // Normal working sets of a block, ordered by set_number — so previousSets[i]
   // maps to that workout's i-th working set (not a dropset/rest-pause or
@@ -356,6 +383,7 @@ function computeHistoryFromBlocks(
       // that, they must not enter the pool. If a set anchors a prescription,
       // the user must be able to see it in the history card.
       if (!isAnchorEligibleSet(set)) return;
+      liftedSets.push({ weightKg: set.weight_kg, count: set.reps });
       if (isDuration) {
         // Duration PR: heaviest load first, longest hold at that load second.
         // No anchor entries — there is no e1RM curve for a timed set.
@@ -436,7 +464,7 @@ function computeHistoryFromBlocks(
       bestQualifyingE1RM(anchorCandidates),
       estimatedFromOtherLocation
     ),
-    personalRecord,
+    personalRecord: withPrBaseline(personalRecord, liftedSets),
     totalSessions,
     estimableSetCount,
     inestimableSetCount,
