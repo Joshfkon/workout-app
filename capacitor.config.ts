@@ -1,4 +1,5 @@
 import type { CapacitorConfig } from '@capacitor/cli';
+import { KeyboardResize } from '@capacitor/keyboard';
 
 // Capacitor's typed config doesn't expose the WKWebView media flags, so we
 // widen the `ios` block to record `allowsInlineMediaPlayback` explicitly.
@@ -74,7 +75,7 @@ const config: CapacitorConfig & { ios?: IOSConfig } = {
       // default). useKeyboardInset listens to this plugin's show/hide events
       // and only pads modals by whatever the resize didn't absorb, so it
       // stays correct if this mode ever changes.
-      resize: 'native',
+      resize: KeyboardResize.Native,
     },
   },
 };
