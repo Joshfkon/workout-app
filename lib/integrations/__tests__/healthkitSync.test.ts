@@ -1,9 +1,12 @@
 import {
+  authorizeHealthKitAndSync,
   planSyncWindow,
   runHealthKitSync,
   HEALTHKIT_SYNC,
+  HEALTHKIT_SYNCED_EVENT,
   type HealthKitSyncDeps,
 } from '@/lib/integrations/healthkit-sync';
+import { WHILE_OPEN_INTERVAL_MS } from '@/hooks/useHealthKitSync';
 import type { HealthKitDataType } from '@/lib/actions/healthkit';
 
 const NOW = new Date('2026-07-13T09:00:00Z');
@@ -273,5 +276,75 @@ describe('per-install authorization (connected account, unasked device)', () => 
       reason: 'needs_authorization',
     });
     expect(calls.savedAnchors).toHaveLength(0);
+  });
+});
+
+describe('out of the stuck state: Allow access from the Home card', () => {
+  it('asks again on a deliberate tap, even after the one automatic ask, then syncs', async () => {
+    const requestAuthorization = jest.fn(async () => true);
+    let asked = false;
+    const { deps, calls } = makeDeps({
+      // Undecided until the sheet is answered.
+      needsAuthorization: async () => !asked,
+      hasAutoRequested: () => true,
+      requestAuthorization: async () => {
+        asked = true;
+        return requestAuthorization();
+      },
+    });
+
+    // The automatic path is stuck: already asked once, still undecided.
+    expect(await runHealthKitSync({ force: true }, deps)).toEqual({
+      status: 'skipped',
+      reason: 'needs_authorization',
+    });
+
+    const outcome = await authorizeHealthKitAndSync(deps);
+
+    expect(requestAuthorization).toHaveBeenCalledTimes(1);
+    expect(outcome.status).toBe('synced');
+    expect(calls.savedActivity).toHaveLength(1);
+  });
+
+  it('still tries to sync if the permission request throws', async () => {
+    const { deps } = makeDeps({
+      requestAuthorization: async () => {
+        throw new Error('presentation failed');
+      },
+    });
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+    expect((await authorizeHealthKitAndSync(deps)).status).toBe('synced');
+  });
+});
+
+describe('near-live syncing', () => {
+  it('announces a completed sync so views can refetch', async () => {
+    const listener = jest.fn();
+    window.addEventListener(HEALTHKIT_SYNCED_EVENT, listener);
+    const { deps } = makeDeps();
+
+    await runHealthKitSync({ force: true }, deps);
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    window.removeEventListener(HEALTHKIT_SYNCED_EVENT, listener);
+  });
+
+  it('does not announce a skipped sync', async () => {
+    const listener = jest.fn();
+    window.addEventListener(HEALTHKIT_SYNCED_EVENT, listener);
+    const { deps } = makeDeps({ isAvailable: async () => false });
+
+    await runHealthKitSync({ force: true }, deps);
+
+    expect(listener).not.toHaveBeenCalled();
+    window.removeEventListener(HEALTHKIT_SYNCED_EVENT, listener);
+  });
+
+  it('syncs on open at most every 2 minutes, and every 5 while the app is open', () => {
+    expect(HEALTHKIT_SYNC.minIntervalMs).toBe(2 * 60 * 1000);
+    expect(HEALTHKIT_SYNC.whileOpenIntervalMs).toBe(5 * 60 * 1000);
+    // The hook keeps its own literal (bundle safety) — it must match.
+    expect(WHILE_OPEN_INTERVAL_MS).toBe(HEALTHKIT_SYNC.whileOpenIntervalMs);
   });
 });
