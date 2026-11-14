@@ -43,9 +43,26 @@ export const HEALTHKIT_SYNC = {
   lookbackHours: 36,
   /** First-ever sync window — long enough to seed 14-day HRV/RHR baselines. */
   firstSyncDays: 21,
-  /** Foreground syncs closer together than this are skipped (not forced). */
-  minIntervalMs: 15 * 60 * 1000,
+  /**
+   * Foreground syncs closer together than this are skipped (not forced).
+   * Short, so opening the app shows near-live numbers; each pull is anchored
+   * and incremental, so frequent syncs stay cheap.
+   */
+  minIntervalMs: 2 * 60 * 1000,
+  /** While the app stays open and visible, sync again this often. */
+  whileOpenIntervalMs: 5 * 60 * 1000,
 } as const;
+
+/** Window event fired after a sync stores data, so views can refetch. */
+export const HEALTHKIT_SYNCED_EVENT = 'hypertrack:healthkit-synced';
+
+function notifySynced(): void {
+  try {
+    window.dispatchEvent(new CustomEvent(HEALTHKIT_SYNCED_EVENT));
+  } catch {
+    // Not in a browser (tests / server): nothing is listening.
+  }
+}
 
 /**
  * The window to query for one data type given its persisted anchor.
@@ -278,6 +295,7 @@ export async function runHealthKitSync(
       anchorUpdates.push({ dataType: 'active_energy', lastSampleEndAt: nowIso });
     }
     await deps.saveAnchors(anchorUpdates);
+    notifySynced();
 
     return {
       status: 'synced',
@@ -289,4 +307,24 @@ export async function runHealthKitSync(
     console.warn('HealthKit sync failed:', error);
     return { status: 'skipped', reason: 'error' };
   }
+}
+
+/**
+ * Present the Health permission sheet from a deliberate tap, then sync.
+ *
+ * The automatic request in runHealthKitSync fires at most once per install.
+ * If that sheet never actually showed (or was dismissed without a choice),
+ * iOS still reports the types as undecided and every later sync skips with
+ * 'needs_authorization' — silently, so the account looks connected while
+ * nothing arrives. The Home health card offers this as "Allow access".
+ */
+export async function authorizeHealthKitAndSync(
+  deps: HealthKitSyncDeps = defaultDeps
+): Promise<HealthKitSyncOutcome> {
+  try {
+    await deps.requestAuthorization();
+  } catch (error) {
+    console.warn('HealthKit authorization request failed:', error);
+  }
+  return runHealthKitSync({ force: true }, deps);
 }
