@@ -111,12 +111,23 @@ describe('engine regression baseline — staple exercise, recent history', () =>
     // reps fell into the linear-Epley branch at 138.1 and lost.) The ANCHOR
     // still comes from the newest session because the PR's 3-day decay drops
     // it to ~131.3 in the decayed-max comparison.
-    expect(history.personalRecord).toEqual({
+    const { liftedSets, ...record } = history.personalRecord!;
+    expect(record).toEqual({
       weightKg: 97.5,
       reps: 11,
       e1rm: 140.4,
       date: '2026-07-14T10:00:00Z',
+      // Weight/reps PR baselines: heaviest weight lifted and the most reps
+      // at >= 95% of it (97.5 × 11), not the best-e1RM set's own numbers.
+      heaviestWeightKg: 100,
+      repsAtHeaviest: 11,
     });
+    expect(liftedSets).toEqual(
+      expect.arrayContaining([
+        { weightKg: 100, count: 10 },
+        { weightKg: 97.5, count: 11 },
+      ])
+    );
   });
 
   it('session-start seed (working slot, e1RM anchor): holds at 100 kg', () => {

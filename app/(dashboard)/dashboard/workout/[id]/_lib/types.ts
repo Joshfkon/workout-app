@@ -96,7 +96,22 @@ export interface ExerciseHistoryData {
    */
   priorWorkoutSets?: { weightKg: number; reps: number; rpe?: number }[];
   estimatedE1RM: number;
-  personalRecord: { weightKg: number; reps: number; e1rm: number; date: string } | null;
+  /**
+   * Best-e1RM set (weightKg/reps/e1rm — what the history UI shows as "PR"),
+   * plus the weight/reps PR baselines: heaviest weight lifted, most reps at
+   * (>= 95% of) it, and the sets already lifted. Turn it into a comparison
+   * baseline with prBaselineFromRecord (services/livePrDetector).
+   */
+  personalRecord: {
+    weightKg: number;
+    reps: number;
+    e1rm: number;
+    date: string;
+    heaviestWeightKg?: number;
+    repsAtHeaviest?: number;
+    /** count = reps, or seconds for duration exercises. */
+    liftedSets?: { weightKg: number; count: number }[];
+  } | null;
   totalSessions: number;
   /**
    * Estimability of the recent NORMAL working sets under the canonical e1RM
