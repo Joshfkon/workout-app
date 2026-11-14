@@ -213,6 +213,12 @@ import { updateBlockLocation, updateSessionLocation } from '@/lib/training/sessi
 import { getCurrentPositionSafe, type PositionFix } from '@/lib/geo/currentPosition';
 import { rankGymsByDistance } from '@/services/gymProximity';
 import {
+  AUTO_SELECT_MAX_ACCURACY_M,
+  chooseAutoGym,
+  shouldLearnGymPosition,
+} from '@/services/gymAutoSelect';
+import { wasGymChosen } from '@/lib/geo/gymChoice';
+import {
   LocationPickerSheet,
   type LocationPickerScope,
 } from './_components/LocationPickerSheet';
@@ -3562,6 +3568,21 @@ export default function WorkoutPage() {
         });
       }
 
+      // Learn this gym's position from the first set logged with a fresh fix
+      // (services/gymAutoSelect.shouldLearnGymPosition): a gym trained at for
+      // months may have none, and could then never be picked automatically.
+      if (
+        !gymLearnAttemptedRef.current &&
+        positionFix &&
+        Date.now() - positionFix.takenAt <= 10 * 60 * 1000
+      ) {
+        gymLearnAttemptedRef.current = true;
+        const gymId = resolveEffectiveLocation(blockLocations[currentBlock.id], sessionLocationId);
+        if (shouldLearnGymPosition({ gymId, gyms: gymLocations, position: positionFix })) {
+          void stampGymCoordinates(gymId);
+        }
+      }
+
       // Undo toast (P1-4) — same pattern as nutrition's delete-undo.
       addToast('success', `Set ${nextSetNumber} logged`, 5000, {
         label: 'Undo',
@@ -6166,13 +6187,19 @@ export default function WorkoutPage() {
 
   const sessionLocationName = locationNameById(sessionLocationId);
 
-  // Phone position for the picker's "Near you" ranking. Requested when the
-  // picker first opens — the OS permission prompt then appears in response
-  // to a deliberate user action, not on page load — and kept for the rest of
-  // the page's life. Null (denied, unavailable, indoors with no fix) leaves
-  // the picker exactly as it always was: proximity is a convenience.
+  // Phone position: picks the gym automatically when the workout opens
+  // (services/gymAutoSelect), learns gym positions, and ranks the picker's
+  // "Near you" list. Requested once when the workout opens (or when the
+  // picker first opens, whichever comes first) and kept for the page's life.
+  // Null (denied, unavailable, indoors with no fix) changes nothing: the
+  // session keeps its default gym and the picker its plain list.
   const [positionFix, setPositionFix] = useState<PositionFix | null>(null);
   const positionRequestedRef = useRef(false);
+  // The user picked this workout's gym themselves (here or in the
+  // pre-workout sheet): automatic selection never overrides that.
+  const sessionGymChosenRef = useRef(false);
+  const autoGymCheckedRef = useRef(false);
+  const gymLearnAttemptedRef = useRef(false);
   useEffect(() => {
     if (!locationPickerTarget || positionRequestedRef.current) return;
     positionRequestedRef.current = true;
@@ -6195,17 +6222,24 @@ export default function WorkoutPage() {
    * the picker moments ago isn't in it yet, and a stale-array pre-check
    * would silently skip exactly the gym that most needs its first fix.
    */
-  const stampGymCoordinates = async (locationId: string | null) => {
+  const stampGymCoordinates = async (
+    locationId: string | null,
+    options: { overwrite?: boolean } = {}
+  ) => {
     if (!locationId || !positionFix) return;
     if (Date.now() - positionFix.takenAt > 10 * 60 * 1000) return;
     if (positionFix.accuracyM > 500) return;
+    // An explicit pick with an accurate fix may CORRECT a learned position:
+    // automatic selection relies on these coordinates, and a wrong one would
+    // otherwise mis-pick that gym forever.
+    const overwrite = options.overwrite && positionFix.accuracyM <= AUTO_SELECT_MAX_ACCURACY_M;
     const supabase = createUntypedClient();
-    const { data, error } = await supabase
+    let update = supabase
       .from('gym_locations')
       .update({ latitude: positionFix.latitude, longitude: positionFix.longitude })
-      .eq('id', locationId)
-      .is('latitude', null)
-      .select('id');
+      .eq('id', locationId);
+    if (!overwrite) update = update.is('latitude', null);
+    const { data, error } = await update.select('id');
     if (!error && (data?.length ?? 0) > 0) {
       setGymLocations((prev) =>
         prev.map((l) =>
@@ -6288,6 +6322,65 @@ export default function WorkoutPage() {
   };
 
   /**
+   * Move the whole workout to another gym: persist it, move already-logged
+   * sets onto the new track, re-scope suggestions. `manual` is the picker;
+   * `auto` is automatic selection from the phone's position, which offers a
+   * Change button instead of treating the move as ground truth for the gym's
+   * coordinates.
+   */
+  const moveSessionLocation = async (locationId: string | null, source: 'manual' | 'auto') => {
+    const supabase = createUntypedClient();
+    const previous = sessionLocationId;
+    setSessionLocationId(locationId);
+    rescopeHistories(locationId, blockLocations);
+
+    // Blocks pinned to their own machine keep it: "I was at a different gym
+    // than I thought" must not silently un-pin a deliberate choice.
+    const inheritingBlockIds = blocks.filter((b) => !blockLocations[b.id]).map((b) => b.id);
+    const result = await updateSessionLocation(supabase, {
+      sessionId,
+      locationId,
+      previousLocationId: previous,
+      blockIdsToRestamp: inheritingBlockIds,
+    });
+
+    if (result.unsupported) {
+      setSessionLocationId(previous);
+      rescopeHistories(previous, blockLocations);
+      showError('Location tracking needs a database update — nothing was changed');
+      return;
+    }
+    if (!result.ok) {
+      // Reverting matters more than the message: sets logged from here on
+      // read the same state, so an un-reverted UI would keep filing them
+      // under a location the database never accepted.
+      setSessionLocationId(previous);
+      rescopeHistories(previous, blockLocations);
+      showError(locationFailureMessage(result.rolledBack, result.detail));
+      return;
+    }
+    if (source === 'auto') {
+      addToast(
+        'success',
+        `Training at ${locationNameById(locationId) ?? 'this location'} · picked from your location`,
+        6000,
+        { label: 'Change', onClick: () => setLocationPickerTarget({ kind: 'session' }) }
+      );
+      return;
+    }
+    showSuccess(
+      locationId
+        ? `Training at ${locationNameById(locationId) ?? 'this location'}${
+            result.restampedSets > 0 ? ` · ${result.restampedSets} logged sets moved` : ''
+          }`
+        : 'Workout location cleared'
+    );
+    // The user just told us which gym they're standing in — the best
+    // ground truth this gym's coordinates will ever get.
+    void stampGymCoordinates(locationId, { overwrite: true });
+  };
+
+  /**
    * Apply the picker's choice: persist it, move any already-logged sets onto
    * the new track, and re-scope suggestions.
    *
@@ -6306,53 +6399,16 @@ export default function WorkoutPage() {
     const supabase = createUntypedClient();
 
     if (target.kind === 'session') {
+      sessionGymChosenRef.current = true;
       if (locationId === sessionLocationId) {
         // Re-picking the current gym is still a confirmation of WHERE the
         // user is — the most common flow (session defaulted correctly, user
         // taps to confirm) and, for a gym with no learned coordinates yet,
         // the only stamp it may ever get.
-        void stampGymCoordinates(locationId);
+        void stampGymCoordinates(locationId, { overwrite: true });
         return;
       }
-      const previous = sessionLocationId;
-      setSessionLocationId(locationId);
-      rescopeHistories(locationId, blockLocations);
-
-      // Blocks pinned to their own machine keep it: "I was at a different gym
-      // than I thought" must not silently un-pin a deliberate choice.
-      const inheritingBlockIds = blocks.filter((b) => !blockLocations[b.id]).map((b) => b.id);
-      const result = await updateSessionLocation(supabase, {
-        sessionId,
-        locationId,
-        previousLocationId: previous,
-        blockIdsToRestamp: inheritingBlockIds,
-      });
-
-      if (result.unsupported) {
-        setSessionLocationId(previous);
-        rescopeHistories(previous, blockLocations);
-        showError('Location tracking needs a database update — nothing was changed');
-        return;
-      }
-      if (!result.ok) {
-        // Reverting matters more than the message: sets logged from here on
-        // read the same state, so an un-reverted UI would keep filing them
-        // under a location the database never accepted.
-        setSessionLocationId(previous);
-        rescopeHistories(previous, blockLocations);
-        showError(locationFailureMessage(result.rolledBack, result.detail));
-        return;
-      }
-      showSuccess(
-        locationId
-          ? `Training at ${locationNameById(locationId) ?? 'this location'}${
-              result.restampedSets > 0 ? ` · ${result.restampedSets} logged sets moved` : ''
-            }`
-          : 'Workout location cleared'
-      );
-      // The user just told us which gym they're standing in — the best
-      // ground truth this gym's coordinates will ever get.
-      void stampGymCoordinates(locationId);
+      await moveSessionLocation(locationId, 'manual');
       return;
     }
 
@@ -6392,6 +6448,34 @@ export default function WorkoutPage() {
         : `${block.exercise.name} follows the workout location again${movedNote}`
     );
   };
+
+  // Automatic gym selection (services/gymAutoSelect): once per workout, when
+  // it opens. The position fix can take seconds, so the callback reads the
+  // LATEST sets/gym/move function through refs — never values captured when
+  // the request started (a set logged meanwhile must block the move).
+  const autoGymLatestRef = useRef({ completedSets, sessionLocationId, gymLocations, moveSessionLocation });
+  autoGymLatestRef.current = { completedSets, sessionLocationId, gymLocations, moveSessionLocation };
+  useEffect(() => {
+    if (autoGymCheckedRef.current) return;
+    if (phase === 'loading' || phase === 'summary') return;
+    if (!session || session.state === 'completed' || gymLocations.length === 0) return;
+    autoGymCheckedRef.current = true;
+    if (wasGymChosen(sessionId)) sessionGymChosenRef.current = true;
+    positionRequestedRef.current = true;
+    void getCurrentPositionSafe().then((fix) => {
+      if (!fix) return;
+      setPositionFix(fix);
+      const latest = autoGymLatestRef.current;
+      const gymId = chooseAutoGym({
+        gyms: latest.gymLocations,
+        position: fix,
+        currentGymId: latest.sessionLocationId,
+        chosenManually: sessionGymChosenRef.current,
+        hasLoggedSets: latest.completedSets.length > 0,
+      });
+      if (gymId) void latest.moveSessionLocation(gymId, 'auto');
+    });
+  }, [phase, session, gymLocations.length, sessionId]);
 
   /**
    * Create a location from inside the picker and hand it back so the caller can

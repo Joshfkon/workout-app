@@ -59,6 +59,7 @@ import {
   type TrainingLocationRow,
 } from '@/lib/actions/locations';
 import { getOrCreateTodaySession } from '@/app/(dashboard)/dashboard/workout/_lib/adhocSession';
+import { markGymChosen } from '@/lib/geo/gymChoice';
 import { useMuscleRecovery } from '@/hooks/useMuscleRecovery';
 import { useWeeklyVolume } from '@/hooks/useWeeklyVolume';
 import { BottomSheet } from '@/components/workout/BottomSheet';
@@ -144,6 +145,10 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
   // per location id so switching chips doesn't refetch.
   const [locations, setLocations] = useState<TrainingLocationRow[]>([]);
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
+  // True once the user picks (or creates) a gym here rather than keeping the
+  // preselected default — the workout page's automatic gym selection must
+  // not override that choice (lib/geo/gymChoice).
+  const [locationChosen, setLocationChosen] = useState(false);
   const [unavailableByLocation, setUnavailableByLocation] = useState<Record<string, string[]>>({});
 
   const [aiRequested, setAiRequested] = useState(false);
@@ -394,6 +399,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
   const handleSelectLocation = (locationId: string) => {
     if (locationId === selectedLocationId) return;
     setSelectedLocationId(locationId);
+    setLocationChosen(true);
     if (aiPlan) setAiRequested(true);
   };
 
@@ -444,6 +450,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
 
       setLocations((prev) => [...prev, created]);
       setSelectedLocationId(created.id);
+      setLocationChosen(true);
       if (aiPlan) setAiRequested(true);
       setIsAddingLocation(false);
     } catch (err) {
@@ -649,6 +656,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
         touchLocationLastUsed(userId, selectedLocationId).catch(() => {});
       }
 
+      if (locationChosen) markGymChosen(sessionId);
       router.push(`/dashboard/workout/${sessionId}?fromCreate=true`);
     } catch (err) {
       console.error('Failed to start suggested workout:', err);
