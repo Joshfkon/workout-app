@@ -60,7 +60,7 @@ import {
   dismissStandaloneDeloadRecommendation,
   fetchStandaloneDeloadRecommendation,
 } from '@/lib/training/standaloneDeload';
-import { GlanceHeader, TodayHeroCard, MetricTileGrid, QuickLogRow, PhaseSelector, VolumeRampBanner, WaistPaceCheckCard, intakePaceLabel } from '@/components/dashboard/home';
+import { GlanceHeader, TodayHeroCard, MetricTileGrid, QuickLogRow, PhaseSelector, VolumeRampBanner, WaistPaceCheckCard, intakePaceLabel, HealthGlanceCard } from '@/components/dashboard/home';
 import { normalizePacingPhase, type EatingWindow } from '@/services/intakePacing';
 import { fetchEatingWindow } from '@/lib/nutrition/eatingWindow';
 import type { TodaysWorkout, GlanceVolumeSummary, GlanceWeightRate, MealHeroSuggestion } from '@/components/dashboard/home';
@@ -1679,6 +1679,9 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         phase={normalizedGoal}
         eatingWindow={eatingWindow}
       />
+
+      {/* Health: connect Apple Health / a wearable, then sleep · steps · HRV */}
+      {userId && <HealthGlanceCard lastNight={lastNight} />}
 
       {/* Early-week volume ramp insight (links to the volume page) */}
       {rampBanner}
