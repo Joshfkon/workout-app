@@ -30,16 +30,26 @@ interface EmptyWorkoutReadinessProps {
   quickAddExercises: AvailableExercise[];
   onAddExercise: (exercise: AvailableExercise) => void;
   disabled?: boolean;
+  /**
+   * Open the weekly volume + recovery body on mount. The empty workout page
+   * opens it (it's the main content until an exercise is added); the plan
+   * builder keeps it collapsed under its target picker.
+   */
+  defaultExpanded?: boolean;
+  /** Toggle label. */
+  title?: string;
 }
 
 export function EmptyWorkoutReadiness({
   quickAddExercises,
   onAddExercise,
   disabled = false,
+  defaultExpanded = false,
+  title = "Today's readiness",
 }: EmptyWorkoutReadinessProps) {
   // Stamp the clock once so every muscle is evaluated against the same instant.
   const [now] = useState(() => new Date());
-  const [showReadiness, setShowReadiness] = useState(false);
+  const [showReadiness, setShowReadiness] = useState(defaultExpanded);
 
   // Empty workout: no live blocks/sets yet, so readiness is purely history-based.
   // Hierarchy expansion lives inside MuscleReadinessContent (shared
@@ -89,11 +99,14 @@ export function EmptyWorkoutReadiness({
 
   return (
     <>
-      {/* Inline readiness: collapsed by default on empty workouts to avoid
-          taking up too much space. User can expand if they want to see details. */}
+      {/* Inline readiness (weekly volume per muscle + recovery). Collapsible;
+          open on mount only when the caller asks (defaultExpanded). */}
       <div className="mt-8" data-testid="readiness-inline">
         <button
+          type="button"
           onClick={() => setShowReadiness(!showReadiness)}
+          aria-expanded={showReadiness}
+          data-testid="readiness-inline-toggle"
           className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.15em] text-surface-500 hover:text-surface-400 transition-colors mb-3"
         >
           <svg
@@ -105,7 +118,7 @@ export function EmptyWorkoutReadiness({
           >
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
           </svg>
-          Today&apos;s readiness
+          {title}
         </button>
         {showReadiness && (
           <MuscleReadinessContent

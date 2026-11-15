@@ -191,6 +191,8 @@ import {
 } from '@/services/volumeDeficitSuggestions';
 import type { CoarseMuscle } from '@/services/volumeBands';
 import { AddExercisePicker } from './_components/AddExercisePicker';
+import { EmptyWorkoutStart } from './_components/EmptyWorkoutStart';
+import { resolveWorkoutBodyView, type EmptySetupMode } from './_lib/emptyWorkoutView';
 import { SaveAsTemplateModal } from './_components/SaveAsTemplateModal';
 import { buildTemplateExercises } from '@/services/templateFromSession';
 import {
@@ -5304,9 +5306,10 @@ export default function WorkoutPage() {
     [unavailableExerciseIds]
   );
 
-  // Empty-workout screen: building by hand is the default; the target-picker
-  // plan builder is one tap away for sessions where it's wanted.
-  const [emptySetupMode, setEmptySetupMode] = useState<'manual' | 'plan'>('manual');
+  // Empty workout: the normal workout page with the empty-state panel is the
+  // default; the target-picker plan builder is opt-in (_lib/emptyWorkoutView).
+  const [emptySetupMode, setEmptySetupMode] = useState<EmptySetupMode>('manual');
+  const workoutBodyView = resolveWorkoutBodyView(blocks.length, emptySetupMode);
 
   // Most-used exercises (last 90 days) for the empty-state quick-add chips
   const quickAddExercises = useMemo(() => {
@@ -6730,8 +6733,11 @@ export default function WorkoutPage() {
     );
   }
 
-  // Empty workout - show standard header with add button (no extra page)
-  if (!currentBlock || !currentExercise) {
+  // Opt-in plan builder ("Build a plan for me" on the empty workout): the
+  // target picker -> auto-built draft -> Start flow. Its "Build manually"
+  // drops back to the normal workout page below. An empty workout otherwise
+  // renders the normal page with the empty-state panel in the list slot.
+  if (workoutBodyView === 'plan-setup') {
     return (
       <div className="max-w-2xl mx-auto flex flex-col min-h-[calc(100vh-9rem)] pb-8">
         {/* Header: back chevron + title/timer on the left, Finish on the right */}
@@ -6757,7 +6763,7 @@ export default function WorkoutPage() {
                   </svg>
                   <span className="tabular-nums">{workoutTimer.formattedTime}</span>
                   <span className="text-surface-600">·</span>
-                  <span className="truncate">No exercises yet</span>
+                  <span className="truncate">Building a plan</span>
                 </div>
               </div>
             </div>
@@ -6770,96 +6776,45 @@ export default function WorkoutPage() {
           </div>
         </div>
 
-        {emptySetupMode === 'manual' ? (
-          <>
-            {/* Default: build the workout by hand. */}
-            <button
-              onClick={handleOpenAddExercise}
-              disabled={isAddingExercise || isCopyingLastWorkout}
-              className="mt-6 w-full py-4 rounded-2xl bg-gradient-to-r from-purple-500 to-indigo-600 text-white text-lg font-semibold shadow-lg shadow-purple-500/25 hover:from-purple-400 hover:to-indigo-500 active:scale-[0.99] disabled:opacity-60 transition-all flex items-center justify-center gap-2.5"
-              data-testid="empty-add-exercises"
-            >
-              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-              </svg>
-              Add exercises
-            </button>
+        {/* Setup flow: pick targets → auto-built draft → Start. "Build
+            manually" returns to the empty workout page. */}
+        <WorkoutSetupFlow
+          sessionId={sessionId}
+          unavailableEquipmentIds={locationUnavailableEquipmentIds}
+          unavailableExerciseIds={setupUnavailableExerciseIds}
+          usageCounts={frequentExerciseIds}
+          onBuildManually={() => setEmptySetupMode('manual')}
+          onRequestAddToPlan={(add) => {
+            planAddRef.current = add;
+            setShowAddExercise(true);
+            setShowAllExercises(false);
+            fetchExercises();
+          }}
+          onStart={handleStartPlan}
+          disabled={isAddingExercise || isCopyingLastWorkout}
+          pickStepExtras={
+            <>
+              {/* Inline readiness detail (map, zones, forecast), collapsed. */}
+              <EmptyWorkoutReadiness
+                quickAddExercises={[]}
+                onAddExercise={handleAddExercise}
+                disabled={isAddingExercise || isCopyingLastWorkout}
+              />
 
-            {/* Optional: the target picker -> auto-built draft flow. */}
-            <button
-              onClick={() => setEmptySetupMode('plan')}
-              disabled={isAddingExercise || isCopyingLastWorkout}
-              className="mt-2 w-full py-2 text-sm font-medium text-surface-400 hover:text-surface-200 disabled:opacity-50 transition-colors"
-              data-testid="empty-build-plan"
-            >
-              Build a plan for me instead
-            </button>
-
-            {/* Inline readiness + Quick Add chips ordered by readiness. */}
-            <EmptyWorkoutReadiness
-              quickAddExercises={quickAddExercises}
-              onAddExercise={handleAddExercise}
-              disabled={isAddingExercise || isCopyingLastWorkout}
-            />
-
-            {/* Alternative: copy the previous workout wholesale */}
-            <button
-              onClick={handleCopyLastWorkout}
-              disabled={isAddingExercise || isCopyingLastWorkout}
-              className="mt-10 mx-auto flex items-center gap-2 text-surface-400 hover:text-surface-200 font-medium disabled:opacity-50 transition-colors"
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              {isCopyingLastWorkout ? 'Copying last workout…' : 'Copy last workout instead'}
-            </button>
-          </>
-        ) : (
-          <>
-            {/* Setup flow: pick targets → auto-built draft → Start. "Build
-                manually" keeps the original add-exercises path. */}
-            <WorkoutSetupFlow
-              sessionId={sessionId}
-              unavailableEquipmentIds={locationUnavailableEquipmentIds}
-              unavailableExerciseIds={setupUnavailableExerciseIds}
-              usageCounts={frequentExerciseIds}
-              onBuildManually={() => {
-                setEmptySetupMode('manual');
-                handleOpenAddExercise();
-              }}
-              onRequestAddToPlan={(add) => {
-                planAddRef.current = add;
-                setShowAddExercise(true);
-                setShowAllExercises(false);
-                fetchExercises();
-              }}
-              onStart={handleStartPlan}
-              disabled={isAddingExercise || isCopyingLastWorkout}
-              pickStepExtras={
-                <>
-                  {/* Inline readiness detail (map, zones, forecast), collapsed. */}
-                  <EmptyWorkoutReadiness
-                    quickAddExercises={[]}
-                    onAddExercise={handleAddExercise}
-                    disabled={isAddingExercise || isCopyingLastWorkout}
-                  />
-
-                  {/* Alternative: copy the previous workout wholesale */}
-                  <button
-                    onClick={handleCopyLastWorkout}
-                    disabled={isAddingExercise || isCopyingLastWorkout}
-                    className="mt-10 mx-auto flex items-center gap-2 text-surface-400 hover:text-surface-200 font-medium disabled:opacity-50 transition-colors"
-                  >
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                    {isCopyingLastWorkout ? 'Copying last workout…' : 'Copy last workout instead'}
-                  </button>
-                </>
-              }
-            />
-          </>
-        )}
+              {/* Alternative: copy the previous workout wholesale */}
+              <button
+                onClick={handleCopyLastWorkout}
+                disabled={isAddingExercise || isCopyingLastWorkout}
+                className="mt-10 mx-auto flex items-center gap-2 text-surface-400 hover:text-surface-200 font-medium disabled:opacity-50 transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                {isCopyingLastWorkout ? 'Copying last workout…' : 'Copy last workout instead'}
+              </button>
+            </>
+          }
+        />
 
         {/* Destructive escape hatch pinned to the bottom */}
         <button
@@ -7508,6 +7463,28 @@ export default function WorkoutPage() {
             </div>
           )}
         </Card>
+      )}
+
+      {/* Empty workout: the exercise-list slot shows how to start (Add exercise,
+          Quick Add ranked by readiness) and this week's volume + recovery per
+          muscle. Unmounts as soon as the first block lands. */}
+      {workoutBodyView === 'empty' && (
+        <EmptyWorkoutStart
+          onAddExercise={handleOpenAddExercise}
+          onCopyLastWorkout={handleCopyLastWorkout}
+          isCopyingLastWorkout={isCopyingLastWorkout}
+          onBuildPlan={() => setEmptySetupMode('plan')}
+          disabled={isAddingExercise || isCopyingLastWorkout}
+          readiness={
+            <EmptyWorkoutReadiness
+              quickAddExercises={quickAddExercises}
+              onAddExercise={handleAddExercise}
+              disabled={isAddingExercise || isCopyingLastWorkout}
+              defaultExpanded
+              title="This week · volume & recovery"
+            />
+          }
+        />
       )}
 
       {/* All exercises list — tight 7px inter-row gap (adjacent superset
@@ -8204,9 +8181,11 @@ export default function WorkoutPage() {
       {/* Finish workout button at bottom */}
       <Card className="text-center py-6 mt-8">
         <p className={durationEstimate.remainingSets > 0 ? 'text-surface-400' : 'text-surface-400 mb-4'}>
-          {overallProgress >= 100
-            ? '🎉 All exercises complete!'
-            : `${Math.round(overallProgress)}% complete`}
+          {blocks.length === 0
+            ? 'No exercises yet'
+            : overallProgress >= 100
+              ? '🎉 All exercises complete!'
+              : `${Math.round(overallProgress)}% complete`}
         </p>
         {/* The plain-language version of the header pill: what's left, and what
             the whole session comes to. Hidden once there's nothing left to do. */}
@@ -8883,7 +8862,9 @@ export default function WorkoutPage() {
         muscles={finishFeedbackMuscles}
         initialRatings={finishLegacyRatings}
         message={
-          totalCompletedSets < totalPlannedSets
+          totalPlannedSets === 0
+            ? 'No sets have been logged yet. Finish anyway?'
+            : totalCompletedSets < totalPlannedSets
             ? `You've logged ${totalCompletedSets} of ${totalPlannedSets} sets. Remaining sets won't be logged.`
             : `All ${totalPlannedSets} sets logged. Wrap up and rate your session.`
         }
