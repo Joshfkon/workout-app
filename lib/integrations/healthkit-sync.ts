@@ -37,6 +37,7 @@ import {
   type HealthKitSyncContext,
 } from '@/lib/actions/healthkit';
 import { aggregateSleepSamples } from '@/services/healthkitSleep';
+import { HEALTHKIT_SYNCED_EVENT } from './healthkitEvents';
 
 export const HEALTHKIT_SYNC = {
   /** Re-pull this far behind the anchor to absorb late-written samples. */
@@ -54,7 +55,7 @@ export const HEALTHKIT_SYNC = {
 } as const;
 
 /** Window event fired after a sync stores data, so views can refetch. */
-export const HEALTHKIT_SYNCED_EVENT = 'hypertrack:healthkit-synced';
+export { HEALTHKIT_SYNCED_EVENT };
 
 function notifySynced(): void {
   try {
