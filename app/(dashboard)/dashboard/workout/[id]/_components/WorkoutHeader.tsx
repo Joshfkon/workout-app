@@ -186,7 +186,7 @@ export function WorkoutHeader({
           <p className="text-sm font-medium text-surface-100 truncate leading-5">{workoutName}</p>
           <div className="flex items-center gap-1 min-w-0 h-[17px]">
             <p className="text-[11px] text-surface-500 truncate tabular-nums leading-[17px]">
-              exercise {exerciseNumber} of {exerciseTotal}
+              {exerciseTotal > 0 ? `exercise ${exerciseNumber} of ${exerciseTotal}` : 'no exercises yet'}
               {remainingDurationLabel && (
                 <>
                   <span aria-hidden="true"> · </span>
