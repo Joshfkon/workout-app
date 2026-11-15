@@ -6,6 +6,7 @@ import { useState, useEffect, useRef, useCallback, useMemo, Suspense } from 'rea
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useQueryClient, useIsRestoring } from '@tanstack/react-query';
 import dynamic from 'next/dynamic';
+import { Modal } from '@/components/ui/Modal';
 import { Card, CardHeader, CardTitle, CardContent, Button, LoadingAnimation, SwipeableRow, ToastContainer, useToasts, EmptyState } from '@/components/ui';
 import { Button as StyledButton } from '@/components/ui/Button';
 import { createUntypedClient } from '@/lib/supabase/client';
@@ -20,6 +21,7 @@ const MacroCalculatorModal = dynamic(() => import('@/components/nutrition/MacroC
 const CreateCustomFoodModal = dynamic(() => import('@/components/nutrition/CreateCustomFoodModal').then(m => ({ default: m.CreateCustomFoodModal })), { ssr: false });
 const EditFoodModal = dynamic(() => import('@/components/nutrition/EditFoodModal').then(m => ({ default: m.EditFoodModal })), { ssr: false });
 const NutritionTrendGraph = dynamic(() => import('@/components/nutrition/NutritionTrendGraph').then(m => ({ default: m.NutritionTrendGraph })), { ssr: false });
+const ActivitySettingsScreen = dynamic(() => import('@/components/wearables/ActivitySettingsScreen').then(m => ({ default: m.ActivitySettingsScreen })), { ssr: false });
 const DescribeMealModal = dynamic(() => import('@/components/nutrition/DescribeMealModal').then(m => ({ default: m.DescribeMealModal })), { ssr: false });
 const SavedMealsModal = dynamic(() => import('@/components/nutrition/SavedMealsModal').then(m => ({ default: m.SavedMealsModal })), { ssr: false });
 const NutritionCalendarSheet = dynamic(() => import('@/components/nutrition/NutritionCalendarSheet').then(m => ({ default: m.NutritionCalendarSheet })), { ssr: false });
@@ -1520,6 +1522,7 @@ function NutritionPageContent() {
   // lib/nutrition/step-calorie-adjustment.ts. The stored target stays the
   // source of truth for editing; this is the day's effective target.
   const stepAdjustment = useStepCalorieAdjustment(selectedDate, nutritionTargets?.calories);
+  const [showActivitySettings, setShowActivitySettings] = useState(false);
   const effectiveTargets = useMemo<NutritionTargets | null>(
     () =>
       nutritionTargets && stepAdjustment?.adjustment
@@ -1889,8 +1892,28 @@ function NutritionPageContent() {
           >
             <span aria-hidden="true">👟 </span>
             {stepAdjustment.adjustment !== 0
-              ? `Target ${stepAdjustment.adjustedCalories.toLocaleString()} kcal (base ${stepAdjustment.baseCalories.toLocaleString()}). ${stepAdjustment.reason}.`
-              : `${stepAdjustment.reason}.`}
+              ? `Target ${stepAdjustment.adjustedCalories.toLocaleString()} kcal (base ${stepAdjustment.baseCalories.toLocaleString()}). ${stepAdjustment.reason}. `
+              : `${stepAdjustment.reason}. `}
+            <button
+              type="button"
+              onClick={() => setShowActivitySettings(true)}
+              className="text-primary-400 underline-offset-2 hover:underline"
+              data-testid="step-adjustment-settings-link"
+            >
+              Change
+            </button>
+          </p>
+        )}
+        {!isDaySwitching && !stepAdjustment && dailySummary.hasTargets && (
+          <p className="mt-2 px-1 text-xs">
+            <button
+              type="button"
+              onClick={() => setShowActivitySettings(true)}
+              className="text-surface-400 hover:text-primary-400"
+              data-testid="step-adjustment-settings-link"
+            >
+              <span aria-hidden="true">👟 </span>Adjust your target for daily steps
+            </button>
           </p>
         )}
       </div>
@@ -2305,6 +2328,14 @@ function NutritionPageContent() {
       {/* ---- end Insights tab ---- */}
 
       {/* Modals */}
+      <Modal
+        isOpen={showActivitySettings}
+        onClose={() => setShowActivitySettings(false)}
+        title="Activity Settings"
+        size="lg"
+      >
+        {showActivitySettings && <ActivitySettingsScreen />}
+      </Modal>
       <NutritionCalendarSheet
         isOpen={showCalendar}
         onClose={() => setShowCalendar(false)}
