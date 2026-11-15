@@ -7,6 +7,13 @@
  * 1. Fixed target (ignore activity variations)
  * 2. Activity-adjusted (eat more on active days, less on rest days)
  * 3. Deficit-locked (adjust to maintain consistent deficit)
+ *
+ * NOTE: the live "activity_adjusted" target shown on the Eat page and Home
+ * tile is computed by ./step-calorie-adjustment.ts, NOT by this module. This
+ * module's activity path depends on the regression-based EnhancedTDEEEstimate
+ * (which is no longer the app's primary TDEE) and adds workout calories, so
+ * wiring it up would risk double-counting activity already reflected in the
+ * adaptive TDEE. Kept for its analysis/display helpers.
  */
 
 import type {

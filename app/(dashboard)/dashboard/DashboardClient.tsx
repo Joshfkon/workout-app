@@ -63,6 +63,8 @@ import {
 import { GlanceHeader, TodayHeroCard, MetricTileGrid, QuickLogRow, PhaseSelector, VolumeRampBanner, WaistPaceCheckCard, intakePaceLabel, HealthGlanceCard } from '@/components/dashboard/home';
 import { normalizePacingPhase, type EatingWindow } from '@/services/intakePacing';
 import { fetchEatingWindow } from '@/lib/nutrition/eatingWindow';
+import { useStepCalorieAdjustment } from '@/hooks/useStepCalorieAdjustment';
+import { applyAdjustmentToMacros } from '@/lib/nutrition/step-calorie-adjustment';
 import type { TodaysWorkout, GlanceVolumeSummary, GlanceWeightRate, MealHeroSuggestion } from '@/components/dashboard/home';
 import type { TrainingStyle } from '@/lib/training/trainingStyle';
 import { fetchTrainingStyleData } from '@/lib/actions/dashboard';
@@ -692,16 +694,28 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
     ? `${planMesocycle.splitType || planMesocycle.name} wk ${planMesocycle.currentWeek}`
     : null;
 
+  // Same opt-in step-adjusted target the Eat page shows (no-op unless the
+  // user picked "Step-adjusted" in Activity settings). Waits for clientNow so
+  // the pace comparison uses the device's local time.
+  const stepAdjustment = useStepCalorieAdjustment(clientNow ? dateKey : null, nutritionTargets?.calories);
+  const effectiveTargets = useMemo<NutritionTargets | null>(
+    () =>
+      nutritionTargets && stepAdjustment?.adjustment
+        ? applyAdjustmentToMacros(nutritionTargets, stepAdjustment.adjustment)
+        : nutritionTargets,
+    [nutritionTargets, stepAdjustment?.adjustment]
+  );
+
   // Next-meal hero content — shown when there's no pending workout (done or
   // rest day) and meaningful calories remain for the day.
   const mealHero: MealHeroSuggestion | null = useMemo(() => {
-    if (!clientNow || !nutritionTargets) return null;
-    const kcalLeft = Math.round(nutritionTargets.calories - nutritionTotals.calories);
+    if (!clientNow || !effectiveTargets) return null;
+    const kcalLeft = Math.round(effectiveTargets.calories - nutritionTotals.calories);
     if (kcalLeft < 100) return null;
-    const proteinLeft = Math.round(nutritionTargets.protein - nutritionTotals.protein);
+    const proteinLeft = Math.round(effectiveTargets.protein - nutritionTotals.protein);
     const pace = intakePaceLabel(
       nutritionTotals.calories,
-      nutritionTargets.calories,
+      effectiveTargets.calories,
       clientNow,
       normalizePacingPhase(userGoal),
       eatingWindow
@@ -713,7 +727,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         pace === 'behind' ? 'behind pace' : pace === 'ahead' ? 'ahead of pace' : 'on pace'
       }`,
     };
-  }, [clientNow, nutritionTargets, nutritionTotals, userGoal, eatingWindow]);
+  }, [clientNow, effectiveTargets, nutritionTotals, userGoal, eatingWindow]);
 
   // Weekly weight-change rate (regression over the last ~3 weeks) vs the
   // goal-implied target rate, in the preferred display unit. Shared with the
@@ -1665,7 +1679,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
       {/* Glance metric grid: Nutrition · Lifts · Weekly volume · Weight */}
       <MetricTileGrid
         nutritionTotals={nutritionTotals}
-        nutritionTargets={nutritionTargets}
+        nutritionTargets={effectiveTargets}
         liftTrends={liftTrends}
         volume={glanceVolume}
         latestWeight={latestWeight}

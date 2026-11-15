@@ -559,8 +559,8 @@ export async function saveActivitySettings(
     {
       user_id: user.id,
       adjustment_mode: settings.adjustmentMode || 'fixed',
-      max_daily_adjustment: settings.maxDailyAdjustment || 300,
-      target_deficit_cals: settings.targetDeficitCals || 500,
+      max_daily_adjustment: settings.maxDailyAdjustment ?? 300,
+      target_deficit_cals: settings.targetDeficitCals ?? 500,
       use_app_workout_estimates: settings.useAppWorkoutEstimates ?? true,
       use_wearable_workout_calories: settings.useWearableWorkoutCalories ?? false,
       preferred_wearable_source: settings.preferredWearableSource || null,
