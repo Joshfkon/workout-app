@@ -44,6 +44,8 @@ import { StickyMacroBar } from '@/components/nutrition/StickyMacroBar';
 import { NutritionQuickActions } from '@/components/nutrition/NutritionQuickActions';
 import { ShareNutritionText } from '@/components/nutrition/ShareNutritionText';
 import { useDailyNutritionSummary } from '@/hooks/useDailyNutritionSummary';
+import { useStepCalorieAdjustment } from '@/hooks/useStepCalorieAdjustment';
+import { applyAdjustmentToMacros } from '@/lib/nutrition/step-calorie-adjustment';
 import { DEFAULT_EATING_WINDOW, type EatingWindow } from '@/services/intakePacing';
 import {
   useNutritionDay,
@@ -1513,7 +1515,19 @@ function NutritionPageContent() {
 
   // Daily totals + remaining/hit/over verdicts — single source of truth
   // shared by the hero MacroSummaryCard and the sticky bar
-  const dailySummary = useDailyNutritionSummary(foodEntries, nutritionTargets);
+  // Step-adjusted target (opt-in, Activity settings → "Step-adjusted"). Only
+  // the deviation from the user's own step average moves it — see
+  // lib/nutrition/step-calorie-adjustment.ts. The stored target stays the
+  // source of truth for editing; this is the day's effective target.
+  const stepAdjustment = useStepCalorieAdjustment(selectedDate, nutritionTargets?.calories);
+  const effectiveTargets = useMemo<NutritionTargets | null>(
+    () =>
+      nutritionTargets && stepAdjustment?.adjustment
+        ? applyAdjustmentToMacros(nutritionTargets, stepAdjustment.adjustment)
+        : nutritionTargets,
+    [nutritionTargets, stepAdjustment?.adjustment]
+  );
+  const dailySummary = useDailyNutritionSummary(foodEntries, effectiveTargets);
   const dailyTotals = dailySummary.totals;
 
   // Eating window drives the nutrition share's intraday pacing. Read from the
@@ -1547,8 +1561,8 @@ function NutritionPageContent() {
   // "~X calories available" hint on empty meal cards. Split the remaining
   // daily budget across the meal cards that are still empty (not meals_per_day,
   // which can leave an empty card showing nothing once that target is reached).
-  const remainingCalories = nutritionTargets?.calories
-    ? Math.round(nutritionTargets.calories - dailyTotals.calories)
+  const remainingCalories = effectiveTargets?.calories
+    ? Math.round(effectiveTargets.calories - dailyTotals.calories)
     : 0;
   const emptyMealCount = mealGroups.filter((m) => m.entries.length === 0).length;
   const perMealAvailable =
@@ -1746,10 +1760,10 @@ function NutritionPageContent() {
             <ShareNutritionText
               totals={dailyTotals}
               targets={{
-                calories: nutritionTargets?.calories ?? null,
-                protein: nutritionTargets?.protein ?? null,
-                carbs: nutritionTargets?.carbs ?? null,
-                fat: nutritionTargets?.fat ?? null,
+                calories: effectiveTargets?.calories ?? null,
+                protein: effectiveTargets?.protein ?? null,
+                carbs: effectiveTargets?.carbs ?? null,
+                fat: effectiveTargets?.fat ?? null,
               }}
               phase={currentPhase}
               phaseWeek={mesoWeek}
@@ -1862,11 +1876,22 @@ function NutritionPageContent() {
         ) : (
           <MacroSummaryCard
             totals={dailyTotals}
-            targets={nutritionTargets}
+            targets={effectiveTargets}
             mealsRemaining={mealsRemaining}
             onCalculateMacros={() => setShowMacroCalculator(true)}
             onEnterManually={() => setShowTargetsModal(true)}
           />
+        )}
+        {!isDaySwitching && stepAdjustment && (
+          <p
+            className="mt-2 px-1 text-xs text-surface-400"
+            data-testid="step-adjustment-reason"
+          >
+            <span aria-hidden="true">👟 </span>
+            {stepAdjustment.adjustment !== 0
+              ? `Target ${stepAdjustment.adjustedCalories.toLocaleString()} kcal (base ${stepAdjustment.baseCalories.toLocaleString()}). ${stepAdjustment.reason}.`
+              : `${stepAdjustment.reason}.`}
+          </p>
         )}
       </div>
 

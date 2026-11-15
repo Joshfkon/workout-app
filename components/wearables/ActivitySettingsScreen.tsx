@@ -8,6 +8,8 @@
  */
 
 import { useState, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { STEP_ADJUSTMENT_KEY } from '@/hooks/useStepCalorieAdjustment';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -23,7 +25,7 @@ import {
   getActiveWearableConnections,
 } from '@/lib/actions/wearable';
 
-const ADJUSTMENT_MODES: {
+export const ADJUSTMENT_MODES: {
   value: CalorieAdjustmentMode;
   label: string;
   description: string;
@@ -31,20 +33,28 @@ const ADJUSTMENT_MODES: {
   {
     value: 'fixed',
     label: 'Fixed target',
-    description: 'Always eat the same amount',
+    description: 'Your calorie target is the same every day (default).',
   },
   {
     value: 'activity_adjusted',
-    label: 'Activity-adjusted (coming soon)',
+    label: 'Step-adjusted',
     description:
-      'Eat more on active days, less on rest days. Not active yet - requires step data.',
-  },
-  {
-    value: 'deficit_locked',
-    label: 'Deficit-locked',
-    description: 'Adjust to maintain consistent deficit',
+      'Eat a little more when you walk more than usual and a little less when you walk less. ' +
+      'Only the difference from your own recent step average counts — your average activity is ' +
+      'already in your target — so your weekly intake stays on plan. Needs 7+ days of step data.',
   },
 ];
+
+/**
+ * 'deficit_locked' was offered before but never implemented (the target stayed
+ * fixed). It is no longer offered; a stored value keeps behaving as fixed and
+ * is only listed so the radio group still reflects what's saved.
+ */
+const LEGACY_DEFICIT_LOCKED = {
+  value: 'deficit_locked' as CalorieAdjustmentMode,
+  label: 'Deficit-locked (retired)',
+  description: 'No longer available — your target stays fixed. Pick one of the options above.',
+};
 
 export function ActivitySettingsScreen() {
   const [settings, setSettings] = useState<ActivitySettings | null>(null);
@@ -52,6 +62,7 @@ export function ActivitySettingsScreen() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     loadData();
@@ -80,6 +91,8 @@ export function ActivitySettingsScreen() {
       const result = await saveActivitySettings(settings);
       if (result.success) {
         setHasChanges(false);
+        // Eat page / Home tile pick the new mode up immediately.
+        void queryClient.invalidateQueries({ queryKey: STEP_ADJUSTMENT_KEY });
       } else {
         alert('Failed to save settings: ' + result.error);
       }
@@ -116,14 +129,10 @@ export function ActivitySettingsScreen() {
           <CardTitle>Calorie Target Adjustment</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-start gap-2 p-3 rounded-lg bg-surface-800 text-sm text-surface-400">
-            <span>ℹ️</span>
-            <p>
-              Your preference is saved, but automatic calorie adjustment based on daily
-              activity isn&apos;t active yet. Your target stays fixed for now.
-            </p>
-          </div>
-          {ADJUSTMENT_MODES.map((mode) => (
+          {[
+            ...ADJUSTMENT_MODES,
+            ...(settings.adjustmentMode === 'deficit_locked' ? [LEGACY_DEFICIT_LOCKED] : []),
+          ].map((mode) => (
             <label
               key={mode.value}
               className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
@@ -174,36 +183,6 @@ export function ActivitySettingsScreen() {
           </p>
         </CardContent>
       </Card>
-
-      {/* Target Deficit (for deficit-locked mode) */}
-      {settings.adjustmentMode === 'deficit_locked' && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Target Deficit</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex items-center gap-3">
-              <Input
-                type="number"
-                value={settings.targetDeficitCals}
-                onChange={(e) =>
-                  updateSetting('targetDeficitCals', parseInt(e.target.value) || 0)
-                }
-                min={0}
-                max={1500}
-                className="w-24"
-              />
-              <span className="text-surface-400">
-                calories below TDEE
-              </span>
-            </div>
-            <p className="text-sm text-surface-500">
-              Your daily calorie target will adjust to maintain this deficit regardless
-              of activity level.
-            </p>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Workout Calorie Source */}
       <Card>
