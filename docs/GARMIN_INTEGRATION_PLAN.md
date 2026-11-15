@@ -1,8 +1,8 @@
 # Garmin Integration Plan
 
-Status: **plan only, nothing built.** Researched November 2026.
+Status: **plan only, nothing built.** Researched November 2026. Stress added 15 Nov 2026.
 
-Goal: a user taps **Garmin** in the Connect Wearable sheet, signs in to Garmin, and their sleep, daily steps, HRV and resting heart rate appear in HyperTrack. Those are the same four signals Apple Health feeds today, and they should land in the same tables.
+Goal: a user taps **Garmin** in the Connect Wearable sheet, signs in to Garmin, and their sleep, daily steps, HRV, resting heart rate and **stress** appear in HyperTrack. The first four are the signals Apple Health feeds today, and they should land in the same tables. Stress is Garmin-only (§1a).
 
 Everything depends on Garmin approving developer access, so the owner's steps (§6) come first.
 
@@ -85,8 +85,35 @@ All summaries share `summaryId`, `calendarDate`, `startTimeInSeconds` (UTC epoch
 | Resting HR | **Dailies** | `restingHeartRateInBeatsPerMinute` |
 | Sleep | **Sleeps** | `durationInSeconds`, `deepSleepDurationInSeconds`, `lightSleepDurationInSeconds`, `remSleepInSeconds`, `awakeDurationInSeconds`, `overallSleepScore`, `validation` |
 | HRV | **HRV summaries** | `lastNightAvg`, `lastNight5MinHigh` (ms), `hrvValues` |
+| Stress | **Dailies** | `averageStressLevel`, `maxStressLevel`, `stressDurationInSeconds`, `restStressDurationInSeconds`, `lowStressDurationInSeconds`, `mediumStressDurationInSeconds`, `highStressDurationInSeconds` |
 
-Stress, Body Battery, Epochs and Activities are also available. We don't need them for this feature.
+Stress Details (the 3-minute `timeOffsetStressLevelValues` series), Body Battery, Epochs and Activities are also available. We don't need them for this feature: the daily totals above are enough.
+
+### 1a. Stress
+
+**Only Garmin's API has it.** Apple Health has no stress data type, and Garmin Connect doesn't write stress to Apple Health. A user who only syncs Garmin → Apple Health today gets no stress in HyperTrack, and this integration is the only way to add it.
+
+**What the number is.** Garmin's all-day stress is 0–100, derived from heart rate and HRV while the wearer is still. Garmin's bands: 0–25 rest, 26–50 low, 51–75 medium, 76–100 high. A negative value (reported as -1 / -2 in the open-source clients [9]) means too little data or too much motion; treat it as missing, never as 0.
+
+**How we use it: it pre-fills the check-in's stress rating, and adds no new signal.** Readiness already takes a 1–5 `stress_level` from the daily check-in (`daily_check_ins.stress_level` → `services/fatigueEngine.ts` readiness score and `high_stress` warning, `services/deloadEngine.ts` sleep/stress adjustment). Garmin's stress score:
+
+1. **Pre-fills that rating.** The check-in shows the suggested value with "from Garmin: average stress 42". The user can change it, and what they submit is what's logged, the same way the motion sensor pre-fills the RIR chip without logging a set by itself. A rating the user already picked is never overwritten.
+2. **Rates against the user's own normal.** Mapping fixed bands to 1–5 would leave a naturally high-stress-score person stuck on 4. Compare yesterday's `averageStressLevel` with the user's 14-day median (`rollingBaseline`, the same baseline HRV uses) and put it in a 1–5 bucket:
+
+   | vs 14-day median | Rating |
+   |---|---|
+   | ≤ −10 points | 1 |
+   | −10 to −4 | 2 |
+   | within ±3 | 3 |
+   | +4 to +10 | 4 |
+   | > +10, or `highStressDurationInSeconds` ≥ 2 h | 5 |
+
+   Before 14 days of history exist, fall back to Garmin's bands (rest → 1, low → 2, medium → 3 or 4 split at 63, high → 5). The thresholds are a starting point to tune against real data; keep them in one config object.
+3. **Doesn't touch the wearable recovery modifier.** Garmin derives stress from HRV, and `services/wearableRecovery` already reacts to HRV. Feeding stress there as well would count the same evidence twice. Stress reaches readiness only through the check-in rating, which the user confirms.
+
+**Which day.** Use the previous full day's `averageStressLevel` for the morning check-in. Today's value keeps changing as Garmin re-sends dailies, which happens many times a day.
+
+**Display.** On the Home Health card, a Garmin user gets a Stress figure (yesterday's average and its band, e.g. "32 · low") in the HRV tile's detail line, with Garmin attribution (see Terms). Apple-Health-only users see nothing new.
 
 > **HRV is not the same metric.** Garmin's HRV is the overnight **RMSSD** average. Apple Health and our `daily_wellness_metrics.hrv_sdnn_ms` column store **SDNN**.
 > - The two run at different scales, so they must not share a column or a baseline.
@@ -132,11 +159,13 @@ Garmin pushes arrive on the server with no user session. The HealthKit server ac
 | HRV `lastNightAvg` | `daily_wellness_metrics.hrv_rmssd_ms` (**new column**), `source='garmin'` | Not `hrv_sdnn_ms` (see §1). The recovery modifier (`services/wearableRecovery`) has to change so it builds a separate baseline for each metric and uses whichever one exists. |
 | Sleeps total minus awake, in hours | `sleep_log` (`source='garmin'`, `quality='ok'`) | Reuse `selectWritableSleepDays`, so manual entries still win. Key the row by `calendarDate`, which should be the wake-up day; check this against real payloads. |
 | Sleeps `overallSleepScore` | not stored in v1 | A later option is mapping the score to quality: poor <60, ok, good ≥80. |
+| Dailies `averageStressLevel`, `maxStressLevel`, `highStressDurationInSeconds` | `daily_wellness_metrics.stress_avg`, `stress_max`, `stress_high_minutes` (**new columns**), `source='garmin'` | Negative values → NULL. Re-sent dailies upsert the same `(user_id, date, source)` row, so the final value wins. Raw 0–100 is stored; the 1–5 rating is computed when the check-in loads (§1a), never stored. |
 
 3. **Migration (additive):**
    - `daily_wellness_metrics`:
      - Widen `source` CHECK to `('healthkit','garmin')`.
      - Add `hrv_rmssd_ms NUMERIC(6,2)`.
+     - Add `stress_avg SMALLINT CHECK (stress_avg BETWEEN 0 AND 100)`, `stress_max SMALLINT CHECK (stress_max BETWEEN 0 AND 100)`, `stress_high_minutes SMALLINT CHECK (stress_high_minutes >= 0)`.
    - `sleep_log`: widen `source` CHECK to `('manual','healthkit','garmin')`.
    - New `garmin_user_links (garmin_user_id TEXT PRIMARY KEY, user_id UUID UNIQUE)` so webhooks can look up our user.
      - Alternatively, a `provider_user_id` column on the credentials table below.
@@ -222,10 +251,15 @@ The app loads `https://www.hypertrack.app` in a WKWebView, and Capacitor hands n
 - **Home Health card (#780):** drop "coming soon" when the flag is on.
 - **Garmin attribution:** show "Garmin [device]" on each tile and detail view (see the branding terms in §1).
 - **Empty state:** "Data appears after your next watch sync. Recovery insights need about 2 weeks of Garmin data."
+- **Check-in stress pre-fill (§1a):** the daily check-in's stress picker pre-selects the suggested rating with a "from Garmin" note. A user's own tap always wins.
+- **Health card:** Garmin users see yesterday's stress in the HRV tile's detail line.
 
 ### Tests
 
-- Unit-test the mapping functions (Garmin JSON → day rows) against fixture payloads.
+- Unit-test the mapping functions (Garmin JSON → day rows) against fixture payloads, including negative stress values → NULL.
+- Pure `suggestStressRating(history, day)` in `services/`: the baseline buckets, the band fallback under 14 days, the 2-hour high-stress rule, and no suggestion without a reading.
+- Check-in: the pre-fill is selected, a user's own pick is never overwritten, and submitting logs what's shown.
+- `wearableRecovery` ignores stress columns (guards against double counting HRV).
 - Test the writers with both a user client and the admin client.
 - Webhook route tests: wrong secret → 404, unknown user dropped, deregistration of an old grant ignored.
 - PKCE state expiry and replay.
@@ -235,16 +269,18 @@ The app loads `https://www.hypertrack.app` in a WKWebView, and Capacitor hands n
 
 1. **Migration and shared writers.** Refactor HealthKit onto the writers; no behavior change.
 2. **OAuth start, callback, disconnect, and the credentials tables.**
-3. **Webhook** for dailies, sleeps, HRV and deregistration.
+3. **Webhook** for dailies, sleeps, HRV and deregistration. Store stress from dailies in the same step.
 4. **UI behind the flag, plus Garmin attribution.**
-5. **Test on the evaluation keys** with the owner's own watch, then request production.
+5. **Stress pre-fill** in the check-in and the Health card stress line (§1a).
+6. **Test on the evaluation keys** with the owner's own watch, then request production.
 
 ---
 
 ## 4. Out of scope for v1
 
 - Activities and workout import. This uses the Activity API, needs separate dedupe against logged workouts, and has more branding rules.
-- Body Battery, stress, sleep score, Epochs.
+- Body Battery, sleep score, Epochs, the Stress Details 3-minute series.
+- Using stress anywhere other than the check-in pre-fill and the Health card (for example as its own recovery modifier). Revisit only with evidence that it adds something HRV doesn't.
 - Backfill and ping/pull. Revisit if we move to Enterprise.
 - Android-specific handling. The web flow works there.
 
@@ -253,7 +289,7 @@ The app loads `https://www.hypertrack.app` in a WKWebView, and Capacitor hands n
 ## 5. Open questions to settle once we have portal access
 
 - **Webhook signing:** is there a signature header? If not, the secret URL path is our only authentication.
-- **Fields:** exact names and the HRV units. Does `calendarDate` on Sleeps mean the wake-up day?
+- **Fields:** exact names and the HRV units. Does `calendarDate` on Sleeps mean the wake-up day? Are the stress fields (and the negative "not enough data" codes) on Dailies as the open-source clients describe?
 - **Starter limit:** is it really 1,000 users? What does production verification involve, and how long does it take?
 - **Retention after deregistration:** must we delete imported history?
 - **AI terms:** is the AI clause relevant if a later feature passes recovery data to an LLM?
@@ -265,7 +301,7 @@ The app loads `https://www.hypertrack.app` in a WKWebView, and Capacitor hands n
 None of these can be done by a code session.
 
 1. **Apply** to the Garmin Connect Developer Program, Business **Starter**, at developer.garmin.com/gc-developer-program [2]. Use the business entity behind HyperTrack.
-   - Describe the use: show sleep, steps, HRV and resting HR, and use them to adjust training recovery.
+   - Describe the use: show sleep, steps, HRV, resting HR and stress, and use them to adjust training recovery.
    - Data is not resold or shared.
 2. **Accept the Developer Program Agreement** after reading it. Note the branding, AI and fee clauses in §1.
 3. **Create the app** in the Developer Portal once approved:
