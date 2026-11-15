@@ -1,12 +1,13 @@
 'use client';
 
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { useUserStore } from '@/stores';
 import { useAuthUser } from '@/hooks/useAuthUser';
 import { fetchRecentSleep, upsertSleepEntry } from '@/lib/sleep/sleepLog';
 import { getLocalDateString } from '@/lib/utils';
+import { HEALTHKIT_SYNCED_EVENT } from '@/lib/integrations/healthkitEvents';
 import type { SleepLogEntry, SleepQuality } from '@/types/schema';
 
 /**
@@ -55,6 +56,16 @@ export function useSleepLog(): UseSleepLogResult {
       return fetchRecentSleep(supabase, userId!, SLEEP_FETCH_DAYS);
     },
   });
+
+  // A HealthKit sync writes sleep_log rows behind this cache's back (the
+  // query usually ran before the sync finished), so refetch every sleep view
+  // when one lands — otherwise last night stays blank until the cache expires.
+  useEffect(() => {
+    const onSynced = () =>
+      void queryClient.invalidateQueries({ queryKey: [QUERY_KEY_PREFIX] });
+    window.addEventListener(HEALTHKIT_SYNCED_EVENT, onSynced);
+    return () => window.removeEventListener(HEALTHKIT_SYNCED_EVENT, onSynced);
+  }, [queryClient]);
 
   const entries = query.data ?? EMPTY_ENTRIES;
 
