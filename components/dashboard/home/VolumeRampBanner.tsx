@@ -28,12 +28,12 @@ export function VolumeRampBanner({ lowCount, week }: VolumeRampBannerProps) {
       <p className="flex-1 text-[13px] text-surface-300 leading-snug">
         {week <= 1 ? (
           <>
-            <span className="font-semibold text-surface-100">Wk 1 ramp:</span> {muscles} below MEV —
+            <span className="font-semibold text-surface-100">Wk 1 ramp:</span> {muscles} under the weekly minimum —
             expected this early, on track if resolved by wk 2
           </>
         ) : (
           <>
-            <span className="font-semibold text-surface-100">Wk {week}:</span> {muscles} still below MEV —
+            <span className="font-semibold text-surface-100">Wk {week}:</span> {muscles} still under the weekly minimum —
             add sets where you&apos;re short to stay on track
           </>
         )}

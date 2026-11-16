@@ -60,7 +60,7 @@ import {
   dismissStandaloneDeloadRecommendation,
   fetchStandaloneDeloadRecommendation,
 } from '@/lib/training/standaloneDeload';
-import { GlanceHeader, TodayHeroCard, MetricTileGrid, QuickLogRow, PhaseSelector, VolumeRampBanner, WaistPaceCheckCard, intakePaceLabel, HealthGlanceCard } from '@/components/dashboard/home';
+import { GlanceHeader, TodayHeroCard, MetricTileGrid, QuickLogRow, PhaseSelector, VolumeRampBanner, WaistPaceCheckCard, intakePaceLabel, HealthGlanceCard, useHealthGlance } from '@/components/dashboard/home';
 import { normalizePacingPhase, type EatingWindow } from '@/services/intakePacing';
 import { fetchEatingWindow } from '@/lib/nutrition/eatingWindow';
 import { useStepCalorieAdjustment } from '@/hooks/useStepCalorieAdjustment';
@@ -503,6 +503,10 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   // Sleep glance data for the grid's Sleep tile (last night + 7-day average +
   // trailing-week sparkline). Same shared cache the quick-log sheet writes to.
   const { entries: sleepEntries, lastNight, sevenDayAvgHours } = useSleepLog();
+  // With a wearable connected, the Health card shows last night's sleep (and
+  // opens the log from it), so the grid drops its Sleep tile: sleep once.
+  const { data: healthGlance } = useHealthGlance();
+  const healthConnected = !!healthGlance?.sourceName;
 
   // Time-based greeting + date — computed client-side after mount so the server render
   // (possibly a different timezone/hour, or across noon/midnight) doesn't cause a
@@ -1688,14 +1692,16 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         weightRate={weightRate}
         bodyComp={initialData?.bodyCompGlance ?? null}
         sleep={{ entries: sleepEntries, lastNight, sevenDayAvgHours }}
-        onLogSleep={userId ? () => setActiveModal('sleep') : undefined}
+        onLogSleep={userId && !healthConnected ? () => setActiveModal('sleep') : undefined}
         onLogWeight={() => setActiveModal('weight')}
         phase={normalizedGoal}
         eatingWindow={eatingWindow}
       />
 
       {/* Health: connect Apple Health / a wearable, then sleep · steps · HRV */}
-      {userId && <HealthGlanceCard lastNight={lastNight} />}
+      {userId && (
+        <HealthGlanceCard lastNight={lastNight} onLogSleep={() => setActiveModal('sleep')} />
+      )}
 
       {/* Early-week volume ramp insight (links to the volume page) */}
       {rampBanner}

@@ -168,3 +168,31 @@ describe('formatSyncedAgo', () => {
     expect(formatSyncedAgo(null, now)).toBeNull();
   });
 });
+
+describe('HealthGlanceCard — sleep lives here once connected', () => {
+  const user = userEvent.setup();
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (integrations.isHealthKitAvailable as jest.Mock).mockResolvedValue(true);
+    (wearable.getDailyActivityData as jest.Mock).mockResolvedValue(null);
+    (healthkit.getWellnessHistory as jest.Mock).mockResolvedValue([]);
+    (wearable.getActiveWearableConnections as jest.Mock).mockResolvedValue([
+      { id: 'c1', source: 'apple_healthkit', isConnected: true },
+    ]);
+    mockNeedsAuthorization.mockResolvedValue(false);
+  });
+
+  it('opens the sleep log from the Sleep figure, offering "+ log" when last night is missing', async () => {
+    const onLogSleep = jest.fn();
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <HealthGlanceCard lastNight={null} onLogSleep={onLogSleep} />
+      </QueryClientProvider>
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'Log last night’s sleep' }));
+    expect(onLogSleep).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('+ log')).toBeInTheDocument();
+  });
+});

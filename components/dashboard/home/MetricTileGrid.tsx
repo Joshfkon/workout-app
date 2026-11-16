@@ -269,8 +269,8 @@ export function MetricTileGrid({
           </div>
           <div className={`text-[11px] mt-1.5 ${volume.lowCount > 0 ? 'text-warning-400' : 'text-success-400'}`}>
             {volume.lowCount > 0
-              ? `${volume.lowCount} muscle${volume.lowCount === 1 ? '' : 's'} below MEV →`
-              : 'All muscles at MEV'}
+              ? `${volume.lowCount} muscle${volume.lowCount === 1 ? '' : 's'} under weekly minimum →`
+              : 'Every muscle at its weekly minimum'}
           </div>
         </MetricTile>
       )}
