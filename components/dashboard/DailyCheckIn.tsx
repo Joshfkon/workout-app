@@ -1,5 +1,6 @@
 'use client';
 
+import { IconAlertTriangle, IconBarbell, IconBolt, IconBulb, IconCircleCheck, IconFlame, IconMoodNervous, IconMoodSmile, IconMoon, IconRuler, IconTarget, IconToolsKitchen2 } from '@tabler/icons-react';
 import { useState, useEffect, memo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button, Card, Badge } from '@/components/ui';
@@ -66,7 +67,7 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
       // home Sleep card's inline sheet edits.
       id: 'sleep',
       title: 'Sleep',
-      icon: '😴',
+      icon: IconMoon,
       question: 'How did you sleep last night?',
       type: 'sleep' as const,
       value: sleepHours,
@@ -75,7 +76,7 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
     {
       id: 'energy',
       title: 'Energy',
-      icon: '⚡',
+      icon: IconBolt,
       question: "How's your energy level?",
       type: 'rating' as const,
       value: energyLevel,
@@ -85,7 +86,7 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
     {
       id: 'mood',
       title: 'Mood',
-      icon: '🌤️',
+      icon: IconMoodSmile,
       question: "How's your mood today?",
       type: 'rating' as const,
       value: moodRating,
@@ -97,7 +98,7 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
       // readiness check-in and the daily_check_ins.stress_level column.
       id: 'stress',
       title: 'Stress',
-      icon: '😰',
+      icon: IconMoodNervous,
       question: "How's your stress level today?",
       type: 'rating' as const,
       value: stressLevel,
@@ -111,7 +112,7 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
     {
       id: 'focus',
       title: 'Mental Focus',
-      icon: '🎯',
+      icon: IconTarget,
       question: 'How clear is your mental focus?',
       type: 'rating' as const,
       value: focusRating,
@@ -122,7 +123,7 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
     {
       id: 'libido',
       title: 'Libido',
-      icon: '🔥',
+      icon: IconFlame,
       question: 'How would you rate your libido/drive?',
       type: 'rating' as const,
       value: libidoRating,
@@ -133,7 +134,7 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
     {
       id: 'hunger',
       title: 'Satiety',
-      icon: '🍽️',
+      icon: IconToolsKitchen2,
       question: 'How satisfied/full do you feel?',
       type: 'rating' as const,
       value: hungerLevel,
@@ -147,7 +148,7 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
     {
       id: 'soreness',
       title: 'Recovery',
-      icon: '💪',
+      icon: IconBarbell,
       question: 'How recovered do your muscles feel?',
       type: 'rating' as const,
       value: sorenessLevel,
@@ -161,7 +162,7 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
     {
       id: 'waist',
       title: 'Morning Waist',
-      icon: '📏',
+      icon: IconRuler,
       question: 'Morning waist (optional)',
       type: 'waist' as const,
       value: waistInput,
@@ -397,7 +398,7 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
       <Card className="p-4">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <span className="text-lg">✅</span>
+            <IconCircleCheck size={20} className="text-success-400" aria-hidden="true" />
             <h3 className="font-medium text-surface-100">Daily Check-In Complete</h3>
           </div>
           <button 
@@ -411,27 +412,27 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
         {/* Quick stats */}
         <div className="grid grid-cols-5 gap-2 text-center">
           <div className="p-2 bg-surface-800 rounded-lg">
-            <p className="text-lg">😴</p>
+            <IconMoon size={18} className="mx-auto text-surface-400" aria-hidden="true" />
             <p className="text-sm font-medium text-surface-100">{displayData.sleepHours}h</p>
             <p className="text-xs text-surface-500">Sleep</p>
           </div>
           <div className="p-2 bg-surface-800 rounded-lg">
-            <p className="text-lg">⚡</p>
+            <IconBolt size={18} className="mx-auto text-surface-400" aria-hidden="true" />
             <p className="text-sm font-medium text-surface-100">{displayData.energyLevel}/5</p>
             <p className="text-xs text-surface-500">Energy</p>
           </div>
           <div className="p-2 bg-surface-800 rounded-lg">
-            <p className="text-lg">🌤️</p>
+            <IconMoodSmile size={18} className="mx-auto text-surface-400" aria-hidden="true" />
             <p className="text-sm font-medium text-surface-100">{displayData.moodRating}/5</p>
             <p className="text-xs text-surface-500">Mood</p>
           </div>
           <div className="p-2 bg-surface-800 rounded-lg">
-            <p className="text-lg">😰</p>
+            <IconMoodNervous size={18} className="mx-auto text-surface-400" aria-hidden="true" />
             <p className="text-sm font-medium text-surface-100">{displayData.stressLevel}/5</p>
             <p className="text-xs text-surface-500">Stress</p>
           </div>
           <div className="p-2 bg-surface-800 rounded-lg">
-            <p className="text-lg">💪</p>
+            <IconBarbell size={18} className="mx-auto text-surface-400" aria-hidden="true" />
             <p className="text-sm font-medium text-surface-100">{displayData.sorenessLevel}/5</p>
             <p className="text-xs text-surface-500">Recovery</p>
           </div>
@@ -440,7 +441,10 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
         {/* Morning waist (value only — never a day-over-day delta). */}
         {trackWaist && savedWaistCm !== null && (
           <div className="mt-3 flex items-center justify-between px-3 py-2 bg-surface-800 rounded-lg" data-testid="checkin-waist-summary">
-            <span className="text-xs text-surface-400">📏 Morning waist</span>
+            <span className="flex items-center gap-1.5 text-xs text-surface-400">
+              <IconRuler size={14} aria-hidden="true" />
+              Morning waist
+            </span>
             <span className="text-sm font-medium text-surface-100">
               {measurementUnit === 'in' ? cmToIn(savedWaistCm).toFixed(1) : savedWaistCm.toFixed(1)} {measurementUnit}
             </span>
@@ -455,7 +459,11 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
               : 'bg-yellow-500/10 border border-yellow-500/20'
           }`}>
             <div className="flex items-start gap-2">
-              <span className="text-lg">{refeedStatus.level === 'high' ? '⚠️' : '💡'}</span>
+              {refeedStatus.level === 'high' ? (
+                <IconAlertTriangle size={20} className="shrink-0 text-amber-400" aria-hidden="true" />
+              ) : (
+                <IconBulb size={20} className="shrink-0 text-yellow-400" aria-hidden="true" />
+              )}
               <div>
                 <p className={`text-sm font-medium ${refeedStatus.level === 'high' ? 'text-amber-400' : 'text-yellow-400'}`}>
                   {refeedStatus.message}
@@ -474,7 +482,9 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
     <Card className="p-4">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <span className="text-lg">{currentQuestion?.icon}</span>
+          {currentQuestion?.icon && (
+            <currentQuestion.icon size={20} className="text-primary-400" aria-hidden="true" />
+          )}
           <h3 className="font-medium text-surface-100">Daily Check-In</h3>
         </div>
         <Badge variant="default" size="sm">
@@ -561,8 +571,9 @@ export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onCom
           {/* Warning for low cut metrics */}
           {(currentQuestion as any).warning && Number(currentQuestion.value) <= 2 && (
             <div className="p-2 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-              <p className="text-xs text-amber-400">
-                ⚠️ Low {currentQuestion.title.toLowerCase()} can be a sign of diet fatigue
+              <p className="flex items-center gap-1.5 text-xs text-amber-400">
+                <IconAlertTriangle size={14} className="shrink-0" aria-hidden="true" />
+                Low {currentQuestion.title.toLowerCase()} can be a sign of diet fatigue
               </p>
             </div>
           )}

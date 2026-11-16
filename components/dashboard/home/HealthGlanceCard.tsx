@@ -74,13 +74,37 @@ async function loadHealthGlance() {
   };
 }
 
-function Stat({ label, value, detail }: { label: string; value: string; detail?: string | null }) {
-  return (
-    <div className="min-w-0">
+function Stat({
+  label,
+  value,
+  detail,
+  onClick,
+  actionLabel,
+}: {
+  label: string;
+  value: string;
+  detail?: string | null;
+  /** Makes the stat a button (e.g. Sleep opens the sleep log). */
+  onClick?: () => void;
+  actionLabel?: string;
+}) {
+  const body = (
+    <>
       <div className="text-[11px] uppercase tracking-wide text-surface-500">{label}</div>
       <div className="text-lg font-semibold text-surface-100 tabular-nums">{value}</div>
       {detail && <div className="text-[11px] text-surface-500 truncate">{detail}</div>}
-    </div>
+    </>
+  );
+  if (!onClick) return <div className="min-w-0">{body}</div>;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={actionLabel}
+      className="min-w-0 text-left rounded-lg -m-1 p-1 hover:bg-surface-800/60 transition-colors"
+    >
+      {body}
+    </button>
   );
 }
 
@@ -105,15 +129,23 @@ function hrvDetail(data: HealthGlanceData | undefined): string | null {
 function HealthStats({
   data,
   lastNight,
+  onLogSleep,
 }: {
   data: HealthGlanceData | undefined;
   lastNight: SleepLogEntry | null;
+  onLogSleep?: () => void;
 }) {
   const syncedAgo = formatSyncedAgo(data?.lastSyncAt);
   return (
     <>
       <div className="grid grid-cols-3 gap-3">
-        <Stat label="Sleep" value={lastNight ? formatSleepHours(lastNight.hours) : '—'} detail="last night" />
+        <Stat
+          label="Sleep"
+          value={lastNight ? formatSleepHours(lastNight.hours) : '—'}
+          detail={lastNight ? 'last night' : onLogSleep ? '+ log' : 'last night'}
+          onClick={onLogSleep}
+          actionLabel={lastNight ? 'Sleep: open the sleep log' : 'Log last night’s sleep'}
+        />
         <Stat
           label="Steps"
           value={data?.stepsToday != null ? data.stepsToday.toLocaleString() : '—'}
@@ -152,18 +184,33 @@ function PermissionBanner({ isSyncing, onAllow }: { isSyncing: boolean; onAllow:
   );
 }
 
-export function HealthGlanceCard({ lastNight }: { lastNight: SleepLogEntry | null }) {
+/**
+ * The card's data (connection, steps, HRV). Exported so Home can tell whether
+ * a wearable is connected, and then show sleep only here instead of twice.
+ */
+export function useHealthGlance() {
+  return useQuery({
+    queryKey: HEALTH_GLANCE_QUERY_KEY,
+    queryFn: loadHealthGlance,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function HealthGlanceCard({
+  lastNight,
+  onLogSleep,
+}: {
+  lastNight: SleepLogEntry | null;
+  /** Opens the sleep log from the Sleep figure (Home hides its Sleep tile when connected). */
+  onLogSleep?: () => void;
+}) {
   const queryClient = useQueryClient();
   const [showConnect, setShowConnect] = useState(false);
   const [healthKitCapable, setHealthKitCapable] = useState(false);
   const [needsPermission, setNeedsPermission] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
 
-  const { data, isLoading } = useQuery({
-    queryKey: HEALTH_GLANCE_QUERY_KEY,
-    queryFn: loadHealthGlance,
-    staleTime: 5 * 60 * 1000,
-  });
+  const { data, isLoading } = useHealthGlance();
 
   useEffect(() => {
     let cancelled = false;
@@ -288,7 +335,7 @@ export function HealthGlanceCard({ lastNight }: { lastNight: SleepLogEntry | nul
 
         {connected ? (
           <>
-          <HealthStats data={data} lastNight={lastNight} />
+          <HealthStats data={data} lastNight={lastNight} onLogSleep={onLogSleep} />
           </>
         ) : (
           <div className="flex items-center justify-between gap-3">

@@ -17,6 +17,8 @@ const FILES = [
   'components/nutrition/NutritionTrendGraph.tsx',
   'components/dashboard/BodyMeasurements.tsx',
   'components/body/BodyHubTrends.tsx',
+  'components/dashboard/DailyCheckIn.tsx',
+  'components/nutrition/MacroCalculatorModal.tsx',
 ];
 
 // Pictographic emoji (not ✓ ✕ ⚠ arrows or other text symbols).

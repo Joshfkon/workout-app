@@ -1,5 +1,6 @@
 'use client';
 
+import { IconAdjustments, IconAlertTriangle, IconBulb, IconPill, IconRun } from '@tabler/icons-react';
 import { useState, useEffect } from 'react';
 import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
@@ -468,7 +469,8 @@ export function MacroCalculatorModal({
           {peptide !== 'none' && (
             <div className="p-3 bg-warning-500/10 border border-warning-500/20 rounded-lg">
               <p className="text-sm text-warning-300">
-                💊 <strong>Peptide Adjustments:</strong> Protein increased to prevent muscle loss. 
+                <IconPill size={14} className="inline -mt-0.5 mr-1" aria-hidden="true" />
+                <strong>Peptide Adjustments:</strong> Protein increased to prevent muscle loss. 
                 You may tolerate a larger deficit due to reduced appetite.
               </p>
             </div>
@@ -640,7 +642,8 @@ export function MacroCalculatorModal({
             {recommendation.guardrailsApplied && recommendation.guardrailsApplied.length > 0 && (
               <div className="p-3 bg-primary-500/10 border border-primary-500/20 rounded-lg">
                 <p className="text-xs font-medium text-primary-300 mb-2">
-                  ⚙️ Guardrails Applied:
+                  <IconAdjustments size={14} className="inline -mt-0.5 mr-1" aria-hidden="true" />
+                  Guardrails Applied:
                 </p>
                 <ul className="space-y-1">
                   {recommendation.guardrailsApplied.map((guardrail, index) => (
@@ -656,7 +659,8 @@ export function MacroCalculatorModal({
             {recommendation.peptideNotes && (
               <div className="p-3 bg-accent-500/10 border border-accent-500/20 rounded-lg">
                 <p className="text-sm text-accent-300">
-                  💡 <strong>Peptide Tip:</strong> {recommendation.peptideNotes}
+                  <IconBulb size={14} className="inline -mt-0.5 mr-1" aria-hidden="true" />
+                  <strong>Peptide Tip:</strong> {recommendation.peptideNotes}
                 </p>
               </div>
             )}
@@ -665,7 +669,7 @@ export function MacroCalculatorModal({
             {recommendation.cardioPrescription && recommendation.cardioPrescription.needed && (
               <div className="p-4 bg-primary-500/10 border border-primary-500/20 rounded-lg space-y-3">
                 <div className="flex items-start gap-2">
-                  <span className="text-xl">🏃</span>
+                  <IconRun size={20} className="shrink-0 text-primary-400" aria-hidden="true" />
                   <div className="flex-1">
                     <h4 className="text-sm font-semibold text-primary-300 mb-1">
                       Zone 2 Cardio Prescription
@@ -701,7 +705,8 @@ export function MacroCalculatorModal({
                     </div>
                     {recommendation.cardioPrescription.hitCap && (
                       <div className="mt-2 p-2 bg-warning-500/10 border border-warning-500/20 rounded text-xs text-warning-300">
-                        ⚠️ Cardio capped at {recommendation.cardioPrescription.capMinutesPerDay} min/day
+                        <IconAlertTriangle size={12} className="inline -mt-0.5 mr-1" aria-hidden="true" />
+                        Cardio capped at {recommendation.cardioPrescription.capMinutesPerDay} min/day
                       </div>
                     )}
                     <div className="mt-3 p-2 bg-surface-900/50 rounded text-xs text-surface-400">

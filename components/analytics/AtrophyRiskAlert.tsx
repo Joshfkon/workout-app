@@ -63,7 +63,7 @@ export function AtrophyRiskAlert({
       );
     } else {
       suggestions.push(
-        'Add 1-2 direct sets per week for each muscle below MEV',
+        'Add 1-2 direct sets per week for each muscle under its weekly minimum',
         'Consider adding an extra training day or extending current sessions'
       );
     }
@@ -107,7 +107,7 @@ export function AtrophyRiskAlert({
                 {isOnCut ? 'Atrophy Risk' : 'Insufficient Volume'}
               </span>
               <Badge variant={isOnCut ? 'danger' : 'warning'} size="sm">
-                {musclesBelowMev.length} muscle{musclesBelowMev.length > 1 ? 's' : ''} below MEV
+                {musclesBelowMev.length} muscle{musclesBelowMev.length > 1 ? 's' : ''} under weekly minimum
               </Badge>
               <InfoTooltip term="MEV" size="sm" />
             </div>
@@ -225,7 +225,7 @@ export function AtrophyRiskAlert({
               <div className="text-xs text-surface-400">
                 <span className="font-medium text-surface-300">Science note:</span> Research shows that
                 maintaining at least MEV during a caloric deficit is essential for muscle preservation.
-                Dropping below MEV while cutting significantly increases the risk of losing hard-earned muscle mass.
+                Dropping under the weekly minimum while cutting significantly increases the risk of losing hard-earned muscle mass.
               </div>
             </div>
           </div>
@@ -247,7 +247,7 @@ export function AtrophyRiskIndicator({
 
   return (
     <Badge variant={isOnCut ? 'danger' : 'warning'} size="sm">
-      {count} below MEV{isOnCut ? ' (cut)' : ''}
+      {count} under minimum{isOnCut ? ' (cut)' : ''}
     </Badge>
   );
 }
