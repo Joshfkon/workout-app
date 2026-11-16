@@ -76,6 +76,7 @@ import {
 } from '@/lib/utils';
 import { getDisplayWeight, prepareWeightForStorage } from '@/lib/weightUtils';
 import { computeWeightRate } from '@/app/(dashboard)/dashboard/_lib/weightRate';
+import NutritionLoading from './loading';
 import {
   LineChart,
   Line,
@@ -1697,22 +1698,19 @@ function NutritionPageContent() {
     ? getDisplayWeight(todayWeightEntry.weight, (todayWeightEntry as any).unit as 'lb' | 'kg' | null, weightUnit).toFixed(1)
     : null;
 
-  // Full-screen heart is reserved for first-ever load with an empty persisted
+  // The cold-start state is reserved for first-ever load with an empty persisted
   // cache. Date switches (keepPreviousData) and warm reloads (IndexedDB) never
   // reach this — they render chrome + skeletons or cached data instead.
   if (isColdStart) {
     return (
-      <div className="max-w-7xl mx-auto p-4 md:p-6" data-testid="nutrition-full-loading">
-        <div className="flex flex-col items-center justify-center py-20">
-          <LoadingAnimation type="random" size="lg" />
-          <p className="mt-4 text-surface-400">Loading nutrition data...</p>
-        </div>
+      <div className="max-w-7xl mx-auto" data-testid="nutrition-full-loading">
+        <NutritionLoading />
       </div>
     );
   }
 
   return (
-    <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-4" suppressHydrationWarning>
+    <div className="max-w-7xl mx-auto space-y-4" suppressHydrationWarning>
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
 
       {/* Macro Update Notification */}
@@ -1731,7 +1729,7 @@ function NutritionPageContent() {
 
       {/* Header: title left, date nav + settings right */}
       <div className="flex items-center justify-between gap-2">
-        <h1 className="text-[17px] font-medium text-surface-100">Nutrition</h1>
+        <h1 className="text-2xl font-bold text-surface-100">Eat</h1>
         <div className="flex items-center gap-0.5">
           <button
             onClick={() => changeDate(-1)}

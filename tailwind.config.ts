@@ -104,6 +104,8 @@ const config: Config = {
         'slide-down': 'slideDown 0.3s ease-out',
         'scale-in': 'scaleIn 0.2s ease-out',
         'pulse-soft': 'pulseSoft 2s ease-in-out infinite',
+        // Indeterminate bar shown while a tab's page is on its way.
+        'nav-progress': 'navProgress 1s ease-in-out infinite',
       },
       keyframes: {
         fadeIn: {
@@ -121,6 +123,10 @@ const config: Config = {
         scaleIn: {
           '0%': { opacity: '0', transform: 'scale(0.95)' },
           '100%': { opacity: '1', transform: 'scale(1)' },
+        },
+        navProgress: {
+          '0%': { transform: 'translateX(-100%)' },
+          '100%': { transform: 'translateX(300%)' },
         },
         pulseSoft: {
           '0%, 100%': { opacity: '1' },
