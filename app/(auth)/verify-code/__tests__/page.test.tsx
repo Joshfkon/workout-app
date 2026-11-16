@@ -43,7 +43,7 @@ it('recovery code → verifyOtp(recovery) → reset-password', async () => {
   expect(screen.getByRole('status')).toHaveTextContent(/different device/i);
   expect(screen.getByLabelText(/email/i)).toHaveValue('lifter@example.com');
 
-  await user.type(screen.getByLabelText(/6-digit code/i), '123456');
+  await user.type(screen.getByLabelText('Code'), '123456');
   await user.click(screen.getByRole('button', { name: /verify & set new password/i }));
 
   expect(mockVerifyOtp).toHaveBeenCalledWith({
@@ -62,7 +62,7 @@ it('signup code → verifyOtp(signup) → onboarding', async () => {
   render(<VerifyCodePage />);
 
   await user.type(screen.getByLabelText(/email/i), 'new@example.com');
-  await user.type(screen.getByLabelText(/6-digit code/i), '654321');
+  await user.type(screen.getByLabelText('Code'), '654321');
   await user.click(screen.getByRole('button', { name: /confirm account/i }));
 
   expect(mockVerifyOtp).toHaveBeenCalledWith({
@@ -80,7 +80,7 @@ it('expired code surfaces actionable copy instead of a dead end', async () => {
   render(<VerifyCodePage />);
 
   await user.type(screen.getByLabelText(/email/i), 'new@example.com');
-  await user.type(screen.getByLabelText(/6-digit code/i), '000000');
+  await user.type(screen.getByLabelText('Code'), '000000');
   await user.click(screen.getByRole('button', { name: /confirm account/i }));
 
   expect(screen.getByText(/invalid or has expired/i)).toBeInTheDocument();
@@ -94,9 +94,21 @@ it('rejects a malformed code client-side without calling the API', async () => {
   render(<VerifyCodePage />);
 
   await user.type(screen.getByLabelText(/email/i), 'new@example.com');
-  await user.type(screen.getByLabelText(/6-digit code/i), '12ab');
+  await user.type(screen.getByLabelText('Code'), '12ab');
   await user.click(screen.getByRole('button', { name: /confirm account/i }));
 
-  expect(screen.getByText(/enter the 6-digit code/i)).toBeInTheDocument();
+  expect(screen.getByText(/enter the code from the email/i)).toBeInTheDocument();
   expect(mockVerifyOtp).not.toHaveBeenCalled();
+});
+
+it('accepts the 8-digit codes production sends', async () => {
+  const user = userEvent.setup();
+  setSearch('?type=signup');
+  mockVerifyOtp.mockResolvedValue({ error: null });
+  render(<VerifyCodePage />);
+  await user.clear(screen.getByLabelText(/email/i));
+  await user.type(screen.getByLabelText(/email/i), 'a@b.com');
+  await user.type(screen.getByLabelText('Code'), '61522356');
+  await user.click(screen.getByRole('button', { name: /confirm account/i }));
+  expect(mockVerifyOtp).toHaveBeenCalledWith(expect.objectContaining({ token: '61522356' }));
 });

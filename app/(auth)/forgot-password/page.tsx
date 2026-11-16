@@ -74,7 +74,7 @@ export default function ForgotPasswordPage() {
             </p>
             <p className="text-sm text-surface-500">
               Didn&apos;t receive the email? Check your spam folder or try again. Reading the email
-              on a different device? Enter the 6-digit code from it instead of clicking the link.
+              on a different device? Enter the code from it instead of clicking the link.
             </p>
             <div className="space-y-3 pt-2">
               <Link href="/verify-code?type=recovery">
