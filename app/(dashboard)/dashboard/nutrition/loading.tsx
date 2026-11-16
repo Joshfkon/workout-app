@@ -2,12 +2,11 @@ import { SkeletonCard } from '@/components/ui/LoadingAnimation';
 
 export default function NutritionLoading() {
   return (
-    <div className="space-y-4 p-4">
-      {/* Header with date navigation skeleton */}
-      <div className="animate-pulse flex items-center justify-between">
-        <div className="h-8 w-8 bg-surface-700 rounded" />
-        <div className="h-6 bg-surface-700 rounded w-32" />
-        <div className="h-8 w-8 bg-surface-700 rounded" />
+    <div className="space-y-4" aria-busy="true" aria-label="Loading">
+      {/* Header: the real title, date navigation skeleton on the right */}
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-surface-100">Eat</h1>
+        <div className="animate-pulse h-6 bg-surface-700 rounded w-32" />
       </div>
 
       {/* Daily summary skeleton */}

@@ -724,13 +724,11 @@ export default function TrainPage() {
         : { text: 'All muscle groups at target', className: 'text-success-400' };
 
   return (
-    <div className="max-w-lg mx-auto px-4 space-y-4">
-      {/* Title row: Train + tool pills */}
-      <div className="flex items-center gap-2.5">
-        <h1 className="text-[28px] leading-none font-bold text-surface-100 flex-shrink-0">
-          Train
-        </h1>
-        <div className="flex items-center gap-1.5 overflow-x-auto ml-auto">
+    <div className="max-w-lg mx-auto space-y-4">
+      {/* Title, then the tool pills on their own row so none is cut off */}
+      <div className="space-y-3">
+        <h1 className="text-2xl font-bold text-surface-100">Train</h1>
+        <div className="flex items-center gap-1.5 overflow-x-auto">
           {TOOL_PILLS.map((tool) => {
             const ToolIcon = tool.icon;
             return (

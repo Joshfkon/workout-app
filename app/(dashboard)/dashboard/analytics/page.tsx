@@ -1560,7 +1560,6 @@ function AnalyticsPageContent() {
           (Training / Wellness); Body and Strength carry no dead control. */}
       <PageHeader
         title="Progress"
-        subtitle="Track your body composition, strength, and training progress"
         actions={rangeAppliesToTab ? <div className="flex gap-2">{timeRangeSelector}</div> : undefined}
       />
 

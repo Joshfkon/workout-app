@@ -48,7 +48,7 @@ export default function MorePage() {
   useDocumentTitle('More');
   return (
     <div className="space-y-4 animate-fade-in">
-      <h1 className="text-[17px] font-medium text-surface-100">More</h1>
+      <h1 className="text-2xl font-bold text-surface-100">More</h1>
 
       <div className="space-y-2">
         {moreLinks.map((link) => {

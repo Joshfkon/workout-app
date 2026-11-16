@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { Icon as TablerIcon } from '@tabler/icons-react';
@@ -69,14 +70,44 @@ const navItems: NavItem[] = [
   },
 ];
 
+/** Is `pathname` inside `item`'s section? */
+export function isNavItemActive(item: NavItem, pathname: string): boolean {
+  if (item.exact) return pathname === item.href;
+  return (item.matchPaths || [item.href]).some(
+    (path) => pathname === path || pathname.startsWith(path + '/')
+  );
+}
+
+/** Light haptic tick on tap (native only); loaded lazily to keep the nav light. */
+function tapHaptic(): void {
+  import('@/lib/integrations/notifications')
+    .then(({ lightHaptic }) => lightHaptic())
+    .catch(() => {});
+}
+
 interface BottomNavigationProps {
   /** True when every muscle group has reached MEV this week — lights up Train. */
   volumeGoalsMet?: boolean;
 }
 
 export function BottomNavigation({ volumeGoalsMet = false }: BottomNavigationProps) {
-  const pathname = usePathname();
+  const pathname = usePathname() ?? '';
   const keyboardOpen = useKeyboardOpen();
+  // The tab the user just tapped, until its page arrives. Some tabs (Home)
+  // render on the server first, so without this the old tab stays lit for a
+  // second and the tap looks ignored.
+  const [pendingHref, setPendingHref] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPendingHref(null);
+  }, [pathname]);
+
+  // Never leave a tab stuck "pending" if a navigation fails or is cancelled.
+  useEffect(() => {
+    if (!pendingHref) return;
+    const timer = window.setTimeout(() => setPendingHref(null), 10_000);
+    return () => window.clearTimeout(timer);
+  }, [pendingHref]);
 
   // Hide bottom nav only while on the active workout page itself.
   // An in-progress session alone must not hide the nav — the user can
@@ -92,20 +123,35 @@ export function BottomNavigation({ volumeGoalsMet = false }: BottomNavigationPro
   }
 
   return (
+    <>
+    {pendingHref && (
+      <div
+        className="fixed left-0 right-0 z-50 h-0.5 overflow-hidden lg:hidden"
+        style={{ top: 'env(safe-area-inset-top)' }}
+        role="progressbar"
+        aria-label="Loading page"
+        data-testid="tab-nav-progress"
+      >
+        <div className="h-0.5 w-1/3 bg-primary-400 animate-nav-progress" />
+      </div>
+    )}
     <nav className="fixed bottom-0 left-0 right-0 z-40 bg-surface-900 border-t border-surface-800 pb-safe-bottom lg:hidden">
       <div className="flex items-center h-16">
         {navItems.map((item) => {
           const Icon = item.icon;
-          const isActive = item.exact
-            ? pathname === item.href
-            : (item.matchPaths || [item.href]).some(
-                (path) => pathname === path || pathname.startsWith(path + '/')
-              );
+          const isActive = pendingHref
+            ? pendingHref === item.href
+            : isNavItemActive(item, pathname);
 
           return (
             <Link
               key={item.name}
               href={item.href}
+              aria-current={isActive ? 'page' : undefined}
+              onClick={() => {
+                tapHaptic();
+                if (pathname !== item.href) setPendingHref(item.href);
+              }}
               className={cn(
                 'flex flex-col items-center justify-center gap-1 flex-1 h-full transition-colors',
                 isActive ? 'text-primary-400' : 'text-surface-500 hover:text-surface-300'
@@ -127,5 +173,6 @@ export function BottomNavigation({ volumeGoalsMet = false }: BottomNavigationPro
         })}
       </div>
     </nav>
+    </>
   );
 }
