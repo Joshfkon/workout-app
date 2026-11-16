@@ -48,8 +48,11 @@ export default function VerifyCodePage() {
     setError('');
 
     const cleanToken = token.replace(/\s/g, '');
-    if (!/^\d{6}$/.test(cleanToken)) {
-      setError('Enter the 6-digit code from the email.');
+    // The hosted project's code length (Auth → OTP length) can be 6–10
+    // digits; production sends 8. Accept the whole range so a settings
+    // change can never lock people out of confirming again.
+    if (!/^\d{6,10}$/.test(cleanToken)) {
+      setError('Enter the code from the email (numbers only).');
       return;
     }
 
@@ -96,11 +99,11 @@ export default function VerifyCodePage() {
 
   const banner =
     reason === 'cross_device'
-      ? 'Opened the email on a different device? Links only work in the browser that started the process — the 6-digit code from the same email works here.'
+      ? 'Opened the email on a different device? Links only work in the browser that started the process — the code from the same email works here.'
       : reason === 'link_expired'
-        ? 'That link has expired or was already used. If you have a newer email, enter its 6-digit code — or request a fresh one below.'
+        ? 'That link has expired or was already used. If you have a newer email, enter its code — or request a fresh one below.'
         : reason === 'link_failed'
-          ? 'That link didn’t work, but the 6-digit code from the same email will.'
+          ? 'That link didn’t work, but the code from the same email will.'
           : '';
 
   const resendHref = kind === 'recovery' ? '/forgot-password' : '/login';
@@ -127,7 +130,7 @@ export default function VerifyCodePage() {
             {kind === 'recovery' ? 'Enter your reset code' : 'Enter your confirmation code'}
           </h1>
           <p className="text-surface-400 mt-1">
-            The email we sent contains a 6-digit code under the button.
+            The email we sent contains a code under the button.
           </p>
         </div>
 
@@ -149,12 +152,12 @@ export default function VerifyCodePage() {
           />
 
           <Input
-            label="6-digit code"
+            label="Code"
             type="text"
             inputMode="numeric"
             value={token}
             onChange={(e) => setToken(e.target.value)}
-            placeholder="123456"
+            placeholder="12345678"
             required
             autoComplete="one-time-code"
           />

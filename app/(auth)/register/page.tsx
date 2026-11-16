@@ -149,7 +149,7 @@ export default function RegisterPage() {
             </p>
             <p className="text-sm text-surface-500">
               Not there after a couple of minutes? Check your spam folder. You can also enter the
-              6-digit code from the email instead of clicking the link.
+              code from the email instead of clicking the link.
             </p>
             <div className="space-y-3 pt-2">
               <Link href="/verify-code?type=signup">
