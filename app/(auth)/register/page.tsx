@@ -12,7 +12,9 @@ export default function RegisterPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [goal, setGoal] = useState<Goal>('maintenance');
+  // Goal is chosen in onboarding (with an explanation); sign-up sends the
+  // neutral default so the profile row is complete either way.
+  const goal: Goal = 'maintenance';
   const [experience, setExperience] = useState<Experience>('intermediate');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -211,17 +213,6 @@ export default function RegisterPage() {
           />
 
           <Select
-            label="Primary Goal"
-            value={goal}
-            onChange={(e) => setGoal(e.target.value as Goal)}
-            options={[
-              { value: 'bulk', label: 'Build Muscle (Bulk)' },
-              { value: 'maintenance', label: 'Maintain / Recomp' },
-              { value: 'cut', label: 'Lose Fat (Cut)' },
-            ]}
-          />
-
-          <Select
             label="Experience Level"
             value={experience}
             onChange={(e) => setExperience(e.target.value as Experience)}
@@ -230,7 +221,7 @@ export default function RegisterPage() {
               { value: 'intermediate', label: 'Intermediate (1-3 years)' },
               { value: 'advanced', label: 'Advanced (3+ years)' },
             ]}
-            hint="This affects your default volume landmarks"
+            hint="Sets how much training we suggest to start"
           />
 
           {error && (

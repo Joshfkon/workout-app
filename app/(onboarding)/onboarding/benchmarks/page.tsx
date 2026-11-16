@@ -267,6 +267,23 @@ function BenchmarksContent() {
           </svg>
         </Button>
       </div>
+
+      {/* Testing takes about an hour at a gym; most people sign up elsewhere.
+          Starting weights are estimated from the profile without it. */}
+      <div className="rounded-xl border border-surface-800 bg-surface-900 p-4 text-center space-y-2">
+        <p className="text-sm text-surface-300">
+          Not at the gym right now? Skip testing — we&apos;ll estimate your starting weights
+          and fine-tune them from your first workouts.
+        </p>
+        <Button
+          variant="secondary"
+          className="w-full"
+          onClick={() => router.push('/dashboard')}
+          data-testid="skip-benchmarks"
+        >
+          Skip testing and start training
+        </Button>
+      </div>
     </div>
   );
 }

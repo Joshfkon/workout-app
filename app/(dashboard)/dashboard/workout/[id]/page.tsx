@@ -6703,7 +6703,7 @@ export default function WorkoutPage() {
             </>
           ) : (
             <Button variant="outline" onClick={() => setShowShareModal(true)}>
-              Share Workout
+              Post to your feed
             </Button>
           )}
         </div>

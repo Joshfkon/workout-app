@@ -105,7 +105,7 @@ export function MuscleGroupFeedbackModal({
                   <div className="text-[13px] font-medium text-surface-200">
                     {STANDARD_MUSCLE_DISPLAY_NAMES[muscle]}
                   </div>
-                  <div className="flex items-center gap-1.5 overflow-x-auto">
+                  <div className="flex flex-wrap items-center gap-1.5">
                     <span className="text-[12px] text-surface-400 flex-shrink-0 w-[68px]">
                       Pump:
                     </span>
@@ -123,7 +123,7 @@ export function MuscleGroupFeedbackModal({
                       </button>
                     ))}
                   </div>
-                  <div className="flex items-center gap-1.5 overflow-x-auto">
+                  <div className="flex flex-wrap items-center gap-1.5">
                     <span className="text-[12px] text-surface-400 flex-shrink-0 w-[68px]">
                       Workload:
                     </span>

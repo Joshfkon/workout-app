@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useBlockingPromptOpen } from '@/lib/ui/blockingPrompt';
 import { useRouter } from 'next/navigation';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { 
@@ -17,6 +18,8 @@ import {
 export function OnboardingResumeBanner() {
   const router = useRouter();
   const [isVisible, setIsVisible] = useState(false);
+  // Waits while the AI consent dialog is up (one pop-up at a time).
+  const blockingPromptOpen = useBlockingPromptOpen();
   const [isLoading, setIsLoading] = useState(true);
   const [resumeRoute, setResumeRoute] = useState('/onboarding');
   const [currentStep, setCurrentStep] = useState<OnboardingStep | null>(null);
@@ -56,7 +59,7 @@ export function OnboardingResumeBanner() {
     // User can still see banner on next page load if onboarding incomplete
   };
 
-  if (isLoading || !isVisible || isDismissed) {
+  if (isLoading || !isVisible || isDismissed || blockingPromptOpen) {
     return null;
   }
 

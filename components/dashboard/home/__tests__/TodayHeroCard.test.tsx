@@ -2,6 +2,11 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { TodayHeroCard, TodaysWorkout, MealHeroSuggestion } from '../TodayHeroCard';
 
+const mockStart = jest.fn();
+jest.mock('@/hooks/useStartEmptyWorkout', () => ({
+  useStartEmptyWorkout: () => ({ start: mockStart, isStarting: false, error: null }),
+}));
+
 const baseWorkout: TodaysWorkout = {
   id: 'sess-1',
   name: 'Hypertrophy Block',
@@ -138,8 +143,9 @@ describe('TodayHeroCard — next-up recommendation', () => {
       />
     );
 
-    expect(screen.getByText('No training plan yet')).toBeInTheDocument();
-    expect(screen.getByText('Plan a mesocycle')).toBeInTheDocument();
+    expect(screen.getByText('Ready to train?')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Start workout' })).toBeInTheDocument();
+    expect(screen.getByText('Build a program')).toBeInTheDocument();
     expect(screen.queryByText('Log dinner')).not.toBeInTheDocument();
   });
 
@@ -313,5 +319,18 @@ describe('TodayHeroCard — freestyle training style', () => {
     );
 
     expect(screen.getByText('Log dinner')).toBeInTheDocument();
+  });
+});
+
+
+describe('TodayHeroCard — no plan: one tap into a workout', () => {
+  it('Start workout opens an empty workout directly (no confirm screen)', async () => {
+    const user = userEvent.setup();
+    render(
+      <TodayHeroCard workout={null} scheduled={null} hasPlan={false} mesocycleName={null} meal={null} />
+    );
+    await user.click(screen.getByRole('button', { name: 'Start workout' }));
+    expect(mockStart).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('link', { name: /quick workout/i })).not.toBeInTheDocument();
   });
 });

@@ -253,6 +253,15 @@ export default function OnboardingBodyCompPage() {
   };
   
   const canContinue = bodyComp !== null && bodyComp.ffmi > 0;
+
+  // Why Continue is disabled, in words (a dimmed button alone reads as broken).
+  const missingBodyComp: string[] = [];
+  if (!canContinue) {
+    if (!(getHeightCm() > 0)) missingBodyComp.push('height');
+    if (!(useDexa && existingDexa) && !(getWeightKg() > 0)) missingBodyComp.push('weight');
+    const bfValue = useDexa && existingDexa ? existingDexa.body_fat_percent : parseFloat(bodyFatPercent);
+    if (!(bfValue > 0 && bfValue < 100)) missingBodyComp.push('body-fat estimate');
+  }
   
   // Unit selection step
   if (step === 'units') {
@@ -817,7 +826,14 @@ export default function OnboardingBodyCompPage() {
       </div>
       
       {/* Continue button */}
-      <div className="flex justify-end pt-4">
+      <div className="flex flex-col items-end gap-2 pt-4">
+        {missingBodyComp.length > 0 && (
+          <p className="text-xs text-surface-400 text-right" data-testid="body-comp-missing">
+            Add your {missingBodyComp.join(', ').replace(/, ([^,]*)$/, ' and $1')} to continue.
+            {missingBodyComp.includes('body-fat estimate') &&
+              ' Not sure of your body fat? Tap Visual Guide and pick the closest look.'}
+          </p>
+        )}
         <Button
           size="lg"
           onClick={async () => {
