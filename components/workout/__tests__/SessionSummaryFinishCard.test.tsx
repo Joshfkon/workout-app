@@ -113,7 +113,7 @@ describe('SessionSummary — finish card (layer 1)', () => {
     expect(screen.getByRole('switch', { name: /deload/i })).toBeInTheDocument();
     expect(screen.getByText('+ Add note')).toBeInTheDocument();
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Save & Finish/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Done' })).toBeInTheDocument();
   });
 
   it('prefills session RPE from the set-derived average and submits it untouched', async () => {
@@ -130,7 +130,7 @@ describe('SessionSummary — finish card (layer 1)', () => {
       />
     );
 
-    await user.click(screen.getByRole('button', { name: /Save & Finish/i }));
+    await user.click(screen.getByRole('button', { name: 'Done' }));
 
     expect(onSubmit).toHaveBeenCalledTimes(1);
     expect(onSubmit.mock.calls[0][0].sessionRpe).toBe(EXPECTED_PREFILL_RPE);
@@ -151,7 +151,7 @@ describe('SessionSummary — finish card (layer 1)', () => {
     );
 
     await user.click(screen.getByRole('button', { name: '6' }));
-    await user.click(screen.getByRole('button', { name: /Save & Finish/i }));
+    await user.click(screen.getByRole('button', { name: 'Done' }));
 
     expect(onSubmit.mock.calls[0][0].sessionRpe).toBe(6);
   });
@@ -170,7 +170,7 @@ describe('SessionSummary — finish card (layer 1)', () => {
       />
     );
 
-    await user.click(screen.getByRole('button', { name: /Save & Finish/i }));
+    await user.click(screen.getByRole('button', { name: 'Done' }));
 
     const feedback = onSubmit.mock.calls[0][0].muscleFeedback;
     // calves had no logged sets → no feedback entry.
@@ -205,7 +205,7 @@ describe('SessionSummary — finish card (layer 1)', () => {
       />
     );
 
-    await user.click(screen.getByRole('button', { name: /Save & Finish/i }));
+    await user.click(screen.getByRole('button', { name: 'Done' }));
 
     const feedback = onSubmit.mock.calls[0][0].muscleFeedback;
     const byMuscle = Object.fromEntries(
@@ -233,7 +233,7 @@ describe('SessionSummary — finish card (layer 1)', () => {
 
     await user.click(screen.getByText('+ Add note'));
     await user.type(screen.getByRole('textbox'), 'felt strong');
-    await user.click(screen.getByRole('button', { name: /Save & Finish/i }));
+    await user.click(screen.getByRole('button', { name: 'Done' }));
 
     expect(onSubmit.mock.calls[0][0].notes).toBe('felt strong');
   });
@@ -253,7 +253,7 @@ describe('SessionSummary — finish card (layer 1)', () => {
     expect(document.body.textContent).not.toMatch(/glute_med/i);
   });
 
-  it('triggers success haptic when Save & Finish is clicked', async () => {
+  it('triggers success haptic when Done is clicked', async () => {
     const user = userEvent.setup();
     const onSubmit = jest.fn();
     const { blocks, sets } = makeFixture();
@@ -267,7 +267,7 @@ describe('SessionSummary — finish card (layer 1)', () => {
       />
     );
 
-    await user.click(screen.getByRole('button', { name: /Save & Finish/i }));
+    await user.click(screen.getByRole('button', { name: 'Done' }));
     expect(successHaptic).toHaveBeenCalledTimes(1);
     expect(onSubmit).toHaveBeenCalled();
   });
@@ -324,7 +324,7 @@ describe('SessionSummary — full report (layer 2, readOnly)', () => {
     expect(screen.getByText(/Exercise Details/i)).toBeInTheDocument();
 
     // Inputs belong to the finish card, not the report.
-    expect(screen.queryByRole('button', { name: /Save & Finish/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Done' })).not.toBeInTheDocument();
     expect(screen.queryByText(/Workload by muscle/i)).not.toBeInTheDocument();
     // No pump question here either — capture happens per-exercise in-workout.
     expect(document.body.textContent).not.toMatch(/pump/i);

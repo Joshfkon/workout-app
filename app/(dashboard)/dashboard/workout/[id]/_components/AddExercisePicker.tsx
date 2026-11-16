@@ -442,8 +442,12 @@ export function AddExercisePicker({
                 implement is scannable instead of hidden in the name suffix. */}
             <span className="capitalize">{equipmentGroupLabel(exerciseEquipmentGroup(exercise))}</span>
             {exercise.hypertrophy_tier && (
-              <span className="px-1 rounded bg-surface-800 border border-surface-700 text-[10px] font-medium text-surface-300">
-                {exercise.hypertrophy_tier}
+              <span
+                className="px-1 rounded bg-surface-800 border border-surface-700 text-[10px] font-medium text-surface-300"
+                title="Muscle-building rating: S is best, F is weakest"
+                aria-label={`Muscle-building rating ${exercise.hypertrophy_tier} (S best, F weakest)`}
+              >
+                {exercise.hypertrophy_tier}-tier
               </span>
             )}
           </div>

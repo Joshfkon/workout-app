@@ -688,9 +688,11 @@ export function SetLoggerRow({
               ? `Predicted: ${Math.abs(effortCheck.predictedRir)} rep${
                   Math.abs(effortCheck.predictedRir) === 1 ? '' : 's'
                 } past your max`
-              : `Predicted: ~${effortCheck.predictedRir} RIR (${
+              : // A forecast for the entered weight, not the chip below (which is
+                // how the set actually felt) — say so, or the two read as a clash.
+                `At this weight: likely ${
                   RIR_LABELS[clampToChip(effortCheck.predictedRir)]
-                })`}
+                } (~${effortCheck.predictedRir} RIR)`}
             {effortCheck.softened ? ' · rough estimate' : ''}
           </span>
           <button

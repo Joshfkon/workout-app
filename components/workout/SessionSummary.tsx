@@ -837,6 +837,11 @@ export function SessionSummary({
           </div>
           <div className="flex-1 min-w-0">
             <h2 className="text-xl font-bold text-surface-100 leading-tight">Workout Complete!</h2>
+            {onSubmit && (
+              <p className="text-xs text-success-400" data-testid="summary-saved-note">
+                Saved — the questions below are optional.
+              </p>
+            )}
             {personalRecords.length > 0 && (
               <p className="text-xs text-yellow-400">
                 {personalRecords.length} PR{personalRecords.length > 1 ? 's' : ''} — you&apos;re getting stronger 💪
@@ -1001,7 +1006,7 @@ export function SessionSummary({
         )}
 
         <Button onClick={handleSubmit} size="lg" className="w-full" disabled={submitting}>
-          {submitting ? 'Finishing…' : 'Save & Finish'}
+          {submitting ? 'Finishing…' : 'Done'}
         </Button>
 
         {onSaveAndViewReport && (

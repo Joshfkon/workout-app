@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Button, Card, CardContent, CardHeader, CardTitle, Badge } from '@/components/ui';
 import { ContextCard } from '@/components/onboarding/ContextCard';
 import { createUntypedClient } from '@/lib/supabase/client';
-import { updateOnboardingStep } from '@/lib/onboarding/onboardingProgress';
+import { completeOnboarding, updateOnboardingStep } from '@/lib/onboarding/onboardingProgress';
 import { BENCHMARK_LIFTS, type BenchmarkLift } from '@/services/coachingEngine';
 
 function BenchmarkCard({ 
@@ -278,7 +278,18 @@ function BenchmarksContent() {
         <Button
           variant="secondary"
           className="w-full"
-          onClick={() => router.push('/dashboard')}
+          onClick={async () => {
+            // Skipping is a finished setup, not an abandoned one — otherwise
+            // the "Complete your setup" card nags on every screen.
+            try {
+              const supabase = createUntypedClient();
+              const { data: { user } } = await supabase.auth.getUser();
+              if (user) await completeOnboarding(supabase, user.id);
+            } catch {
+              // Best-effort: the worst case is the setup card showing once.
+            }
+            router.push('/dashboard');
+          }}
           data-testid="skip-benchmarks"
         >
           Skip testing and start training

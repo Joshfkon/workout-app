@@ -6041,11 +6041,50 @@ export default function WorkoutPage() {
     // Snapshot the duration ONCE, from the same elapsed value the header timer
     // has been showing (paused time already excluded). Frozen here so the
     // summary never re-derives a live, still-ticking duration.
+    const durationSeconds = workoutTimer.elapsedSeconds;
     setFinishSnapshot({
-      durationSeconds: workoutTimer.elapsedSeconds,
+      durationSeconds,
       completedAt: new Date().toISOString(),
     });
     setPhase('summary');
+
+    // Tapping Finish IS finishing. The summary's questions are optional, so
+    // the workout is saved as completed right now — closing the app or
+    // leaving the summary without "Save & Finish" used to leave it stuck
+    // in_progress (missing from history and progress). "Save & Finish" then
+    // re-submits with the user's answers; the completion write and the
+    // post-finish work are idempotent (see _lib/finishWorkout).
+    if (session && session.state !== 'completed') {
+      const working = completedSets.filter((set) => !set.isWarmup);
+      const avgRpe =
+        working.length > 0 ? working.reduce((sum, set) => sum + set.rpe, 0) / working.length : 0;
+      const lastSetTimestamp =
+        completedSets.length > 0
+          ? completedSets.reduce(
+              (latest, set) => (set.loggedAt > latest ? set.loggedAt : latest),
+              completedSets[0].loggedAt
+            )
+          : undefined;
+      void submitFinishOptimistic(
+        {
+          supabase: createUntypedClient(),
+          sessionId,
+          session,
+          // Stay on the summary; the user can still add answers.
+          navigate: () => {},
+          showClaimPrompt: null,
+          onCompletionSynced: () => void invalidateWorkoutDerivedCaches(queryClient),
+        },
+        {
+          sessionRpe:
+            session.sessionRpe ?? (working.length > 0 ? Math.min(10, Math.max(1, Math.round(avgRpe))) : 7),
+          notes: session.sessionNotes ?? '',
+          muscleFeedback: [],
+          durationSeconds,
+          lastSetTimestamp,
+        }
+      ).catch((err) => console.error('Early finish save failed (Save & Finish will retry):', err));
+    }
   };
 
   const handleCancelWorkout = async () => {

@@ -222,8 +222,8 @@ export function MetricTileGrid({
             </div>
           ) : (
             <div className="text-xl font-semibold text-surface-100">
-              Rebuilding
-              <span className="text-sm text-surface-500 font-normal"> new program</span>
+              Learning
+              <span className="text-sm text-surface-500 font-normal"> your lifts</span>
             </div>
           )}
           <div className="flex gap-1 mt-2" aria-hidden="true">
@@ -243,7 +243,7 @@ export function MetricTileGrid({
           {confidentLifts > 0 && liftParts.length > 0 ? (
             <div className="text-[11px] text-surface-500 mt-1.5 truncate">{liftParts.join(' · ')}</div>
           ) : confidentLifts === 0 ? (
-            <div className="text-[11px] text-surface-500 mt-1.5 truncate">trends rebuild over 2–3 sessions</div>
+            <div className="text-[11px] text-surface-500 mt-1.5 truncate">trends appear after 2–3 sessions</div>
           ) : null}
         </MetricTile>
       )}
