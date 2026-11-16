@@ -34,10 +34,8 @@ const input: Omit<WorkoutShareTextInput, 'cryptic'> = {
 };
 
 async function openModalAndShare(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(screen.getByRole('button', { name: 'Share 📋' }));
-  // Two "Share 📋" buttons exist once the modal is open; the last is the action.
-  const shareButtons = screen.getAllByRole('button', { name: 'Share 📋' });
-  await user.click(shareButtons[shareButtons.length - 1]);
+  await user.click(screen.getByRole('button', { name: 'Copy summary' }));
+  await user.click(screen.getByRole('button', { name: 'Share' }));
 }
 
 describe('ShareWorkoutText', () => {
@@ -53,7 +51,7 @@ describe('ShareWorkoutText', () => {
     const user = userEvent.setup();
     render(<ShareWorkoutText input={input} />);
 
-    await user.click(screen.getByRole('button', { name: 'Share 📋' }));
+    await user.click(screen.getByRole('button', { name: 'Copy summary' }));
 
     expect(screen.getByText(/HyperTrack 💪 Push/)).toBeInTheDocument();
     expect(screen.getByText(/🟩🟪\s+Bench Press 🏆/)).toBeInTheDocument();
@@ -134,7 +132,7 @@ describe('ShareWorkoutText', () => {
     const user = userEvent.setup();
     render(<ShareWorkoutText input={input} />);
 
-    await user.click(screen.getByRole('button', { name: 'Share 📋' }));
+    await user.click(screen.getByRole('button', { name: 'Copy summary' }));
     expect(screen.getByText(/Bench Press/)).toBeInTheDocument();
 
     await user.click(screen.getByRole('switch'));

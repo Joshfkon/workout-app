@@ -4,6 +4,7 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { IconSparkles } from '@tabler/icons-react';
 import { FirstTimeHint } from '@/components/ui';
+import { StartWorkoutButton } from './StartWorkoutButton';
 
 /** Summary of today's workout session shown on the dashboard. */
 export interface TodaysWorkout {
@@ -304,26 +305,22 @@ export function TodayHeroCard({
         <div className="relative rounded-2xl p-5 border bg-primary-500/10 border-primary-500/20">
           <FirstTimeHint
             id="dashboard-mesocycle-intro"
-            title="What's a Mesocycle?"
-            description="A mesocycle is a training block (usually 4-8 weeks) where you progressively challenge your muscles, then take a recovery week. This structured approach is proven to build more muscle than random workouts!"
+            title="Want a program?"
+            description="HyperTrack can build a 4–8 week program (a mesocycle) that adds a little each week, then gives you a recovery week. Or just start a workout — it learns from what you log."
             position="top"
           />
           <div className="text-[11px] font-semibold tracking-widest uppercase mb-1.5 text-primary-400">
             Next up
           </div>
-          <div className="text-2xl font-bold text-surface-100">No training plan yet</div>
+          <div className="text-2xl font-bold text-surface-100">Ready to train?</div>
           <p className="text-[13px] text-surface-400 mt-1 mb-4">
-            Plan a mesocycle for smart progression and volume tracking, or jump straight into a workout.
+            Start a workout and add exercises as you go, or have HyperTrack build you a program.
           </p>
           <div className="flex gap-2">
+            <StartWorkoutButton className="flex-1" />
             <Link href="/dashboard/mesocycle/new" className="flex-1">
-              <span className="block w-full py-3 rounded-xl text-center text-sm font-semibold text-white bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-400 hover:to-primary-500 transition-colors">
-                Plan a mesocycle
-              </span>
-            </Link>
-            <Link href="/dashboard/workout/quick" className="flex-1">
               <span className="block w-full py-3 rounded-xl text-center text-sm font-semibold text-surface-200 bg-surface-800 hover:bg-surface-700 transition-colors">
-                Quick workout
+                Build a program
               </span>
             </Link>
           </div>

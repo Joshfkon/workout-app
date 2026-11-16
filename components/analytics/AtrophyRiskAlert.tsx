@@ -9,16 +9,21 @@ interface AtrophyRiskAlertProps {
   musclesBelowMev: MuscleVolumeData[];
   userGoal: Goal;
   onDismiss?: () => void;
+  /** Count for the badge. Home passes its tile's count (muscle groups) so the
+   *  two never disagree; the detail list can still include lagging sub-muscles. */
+  headlineCount?: number;
 }
 
 export function AtrophyRiskAlert({
   musclesBelowMev,
   userGoal,
   onDismiss,
+  headlineCount,
 }: AtrophyRiskAlertProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
   if (musclesBelowMev.length === 0) return null;
+  const headline = headlineCount ?? musclesBelowMev.length;
 
   const isOnCut = userGoal === 'cut';
   const severityLevel = isOnCut ? 'high' : 'moderate';
@@ -107,7 +112,7 @@ export function AtrophyRiskAlert({
                 {isOnCut ? 'Atrophy Risk' : 'Insufficient Volume'}
               </span>
               <Badge variant={isOnCut ? 'danger' : 'warning'} size="sm">
-                {musclesBelowMev.length} muscle{musclesBelowMev.length > 1 ? 's' : ''} under weekly minimum
+                {headline} muscle{headline > 1 ? 's' : ''} under weekly minimum
               </Badge>
               <InfoTooltip term="MEV" size="sm" />
             </div>

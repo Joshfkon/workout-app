@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback } from 'react';
+import { useBlockingPromptOpen } from '@/lib/ui/blockingPrompt';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { DEFAULT_EDUCATION_PREFERENCES, type EducationPreferences } from '@/types/education';
@@ -153,7 +154,9 @@ export function useFirstTimeHint(hintId: string) {
   const isActive = activeHintId === hintId;
 
   // Only show if: beginner tips on, not dismissed, AND this is the active hint
-  const shouldShow = showBeginnerTips && !isDismissed && isActive;
+  // Wait while a blocking prompt (AI consent) is on screen: one pop-up at a time.
+  const blocked = useBlockingPromptOpen();
+  const shouldShow = showBeginnerTips && !isDismissed && isActive && !blocked;
 
   // Memoize callbacks to prevent useEffect re-runs on every render
   const dismiss = useCallback(() => dismissHintAction(hintId), [dismissHintAction, hintId]);

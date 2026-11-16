@@ -95,7 +95,7 @@ export function GoodTargetsStrip({
           ) : nextUp ? (
             `Nothing urgent — lagging muscles are still recovering. Next up: ${nextUp.displayName} in ${formatReadyEta(nextUp.hoursUntilReady)}.`
           ) : (
-            "You're on top of volume — nothing behind and recovered right now."
+            "Everything is recovered — train whatever you like today."
           )}
         </p>
 

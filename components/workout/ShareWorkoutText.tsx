@@ -1,5 +1,6 @@
 'use client';
 
+import { IconCopy } from '@tabler/icons-react';
 import { useMemo, useState } from 'react';
 import { Button, Modal, ModalFooter, Toggle } from '@/components/ui';
 import { useTextShare } from '@/hooks/useTextShare';
@@ -32,7 +33,8 @@ export function ShareWorkoutText({ input }: ShareWorkoutTextProps) {
   return (
     <>
       <Button variant="outline" onClick={() => setIsOpen(true)}>
-        Share 📋
+        <IconCopy size={16} className="mr-1.5" aria-hidden="true" />
+        Copy summary
       </Button>
 
       <Modal isOpen={isOpen} onClose={() => setIsOpen(false)} title="Share Workout" size="sm">
@@ -54,7 +56,7 @@ export function ShareWorkoutText({ input }: ShareWorkoutTextProps) {
           <Button variant="ghost" onClick={() => setIsOpen(false)}>
             Close
           </Button>
-          <Button onClick={handleShare}>{copied ? '✓ Copied!' : 'Share 📋'}</Button>
+          <Button onClick={handleShare}>{copied ? '✓ Copied!' : 'Share'}</Button>
         </ModalFooter>
       </Modal>
     </>

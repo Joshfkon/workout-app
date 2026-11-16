@@ -9,6 +9,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { setBlockingPromptOpen } from '@/lib/ui/blockingPrompt';
 import { Button, Modal, ModalFooter } from '@/components/ui';
 import { AiDataSharingDetails } from '@/components/ai/AiDataSharingDetails';
 import {
@@ -45,9 +46,16 @@ export function AiConsentPrompt({ suppressed }: { suppressed: boolean }) {
     }
   };
 
+  const isOpen = needsAnswer && !suppressed;
+  // Tips and the setup card wait while this is up (lib/ui/blockingPrompt).
+  useEffect(() => {
+    setBlockingPromptOpen(isOpen);
+    return () => setBlockingPromptOpen(false);
+  }, [isOpen]);
+
   return (
     <Modal
-      isOpen={needsAnswer && !suppressed}
+      isOpen={isOpen}
       // Dismissing without answering just hides it for this visit; it asks
       // again next time since nothing was saved.
       onClose={() => setNeedsAnswer(false)}

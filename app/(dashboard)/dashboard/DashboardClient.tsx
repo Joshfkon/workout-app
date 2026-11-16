@@ -1636,8 +1636,16 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
       <VolumeRampBanner lowCount={belowMevCount} week={planMesocycle.currentWeek} />
     ) : null;
 
-  const atrophyCard = !rampBanner && musclesBelowMev.length > 0 ? (
-    <AtrophyRiskAlert musclesBelowMev={musclesBelowMev} userGoal={normalizedGoal} />
+  // A brand-new account has every muscle "under minimum" — that's not news,
+  // and the tile already shows the count. Hold the alert until there's a few
+  // workouts of history (unknown count = existing user, keep the alert).
+  const isNewTrainee = (initialData?.completedWorkoutsCount ?? Number.POSITIVE_INFINITY) < 3;
+  const atrophyCard = !rampBanner && !isNewTrainee && musclesBelowMev.length > 0 ? (
+    <AtrophyRiskAlert
+      musclesBelowMev={musclesBelowMev}
+      userGoal={normalizedGoal}
+      headlineCount={belowMevCount}
+    />
   ) : null;
 
   const hasInsightCards = !!(checkInPromptCard || deloadCard || atrophyCard);

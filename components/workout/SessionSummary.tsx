@@ -22,7 +22,6 @@ import {
 } from '@/types/schema';
 import { getJointDisplayName } from '@/services/discomfortTracker';
 import {
-  formatWorkoutDuration,
   deriveWorkoutLabel,
   muscleDisplayName,
   resolveWorkoutDurationSeconds,
@@ -47,6 +46,15 @@ import { successHaptic } from '@/lib/integrations/notifications';
  * forwards the answers on submit. `pump` is optional: unanswered muscles
  * submit no pump and the default workload.
  */
+
+/** "<1 min", "26 min", "1h 05m" — a summary tile should never read like a clock. */
+export function formatSummaryDuration(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 60) return '<1 min';
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes} min`;
+  return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, '0')}m`;
+}
+
 export interface SessionMuscleFeedbackEntry {
   muscleGroup: StandardMuscleGroup;
   pump?: PumpRating0to3;
@@ -767,7 +775,7 @@ export function SessionSummary({
         </div>
         <div className="flex-1 px-1">
           <p className="text-lg font-bold text-primary-400 leading-tight">
-            {formatWorkoutDuration(duration)}
+            {formatSummaryDuration(duration)}
           </p>
           <p className="text-[11px] text-surface-500">Duration</p>
         </div>
@@ -1313,7 +1321,7 @@ export function SessionSummary({
             className="w-full flex items-center justify-between mb-3"
           >
             <h3 className="text-sm font-medium text-surface-200 flex items-center gap-2">
-              <span>📋</span> Exercise Details ({exerciseDetails.length})
+              Exercise Details ({exerciseDetails.length})
             </h3>
             <svg
               className={`w-5 h-5 text-surface-400 transition-transform ${showExerciseDetails ? 'rotate-180' : ''}`}
