@@ -89,6 +89,14 @@ export default function RegisterPage() {
         return;
       }
 
+      // An email that's already registered comes back as a "success" with no
+      // identities and no email sent (Supabase hides which emails exist).
+      // Without this the page waits for a code that never arrives.
+      if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+        setError('EMAIL_EXISTS');
+        return;
+      }
+
       // If email confirmation is required
       if (data.user && !data.session) {
         // Hand the email to login/verify-code via sessionStorage, not the
