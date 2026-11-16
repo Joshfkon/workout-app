@@ -1,5 +1,6 @@
 'use client';
 
+import { IconChartBar } from '@tabler/icons-react';
 import { useState, useMemo, memo, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui';
@@ -259,7 +260,7 @@ export function NutritionTrendGraph({ targets }: NutritionTrendGraphProps) {
         <CardContent>
           <div className="text-center py-12">
             <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-surface-800 flex items-center justify-center">
-              <span className="text-4xl" role="img" aria-hidden="true">📊</span>
+              <IconChartBar size={28} className="text-surface-400" aria-hidden="true" />
             </div>
             <h3 className="text-lg font-semibold text-surface-200 mb-2">
               No nutrition data yet

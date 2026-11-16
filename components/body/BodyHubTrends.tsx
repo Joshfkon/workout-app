@@ -246,17 +246,18 @@ export function BodyHubTrends({
       <div id={BODY_COMP_TREND_SECTION_ID} className="scroll-mt-4">
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between gap-2">
+          {/* Title above the switcher on phones, so neither wraps ("BF / %"). */}
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle>
               {activeMetric === 'map' ? 'Composition Map' : 'Body Composition Trend'}
             </CardTitle>
-            <div className="inline-flex bg-surface-800 rounded-lg p-1">
+            <div className="inline-flex self-start sm:self-auto bg-surface-800 rounded-lg p-1">
               {metricOptions.map((option) => (
                 <button
                   key={option.value}
                   type="button"
                   onClick={() => setMetric(option.value)}
-                  className={`px-3 py-1 text-xs font-medium rounded transition-all ${
+                  className={`px-3 py-1 text-xs font-medium rounded whitespace-nowrap transition-all ${
                     activeMetric === option.value
                       ? 'bg-primary-500 text-white shadow-sm'
                       : 'text-surface-400 hover:text-surface-200'
