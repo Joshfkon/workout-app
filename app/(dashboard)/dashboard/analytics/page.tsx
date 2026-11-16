@@ -1,5 +1,6 @@
 'use client';
 
+import { IconActivityHeartbeat, IconAlertTriangle, IconBarbell, IconChartBar } from '@tabler/icons-react';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 
 import { useState, useEffect, useRef, useMemo, Suspense } from 'react';
@@ -1518,9 +1519,9 @@ function AnalyticsPageContent() {
   );
 
   const tabs = [
-    { id: 'body-composition' as TabType, label: 'Body', icon: '📊' },
-    { id: 'strength' as TabType, label: 'Strength', icon: '💪' },
-    { id: 'wellness' as TabType, label: 'Wellness', icon: '💚' },
+    { id: 'body-composition' as TabType, label: 'Body', icon: IconChartBar },
+    { id: 'strength' as TabType, label: 'Strength', icon: IconBarbell },
+    { id: 'wellness' as TabType, label: 'Wellness', icon: IconActivityHeartbeat },
   ];
 
   // The global time-range selector genuinely scopes only the Wellness data
@@ -1576,7 +1577,7 @@ function AnalyticsPageContent() {
                 : 'text-surface-400 hover:text-surface-200 hover:bg-surface-800'
             }`}
           >
-            <span aria-hidden="true">{tab.icon}</span>
+            <tab.icon size={18} stroke={1.75} aria-hidden="true" />
             {/* P1-7: labels always visible — icon-only tabs hid five sections' worth of features */}
             <span className="text-[10px] leading-tight sm:text-sm text-center">{tab.label}</span>
           </button>
@@ -1643,7 +1644,7 @@ function AnalyticsPageContent() {
                       <p className="text-xs text-surface-400 mt-1">{rec.message}</p>
                       {rec.evidence && (
                         <p className="text-[11px] text-surface-500 mt-1.5 flex items-start gap-1">
-                          <span aria-hidden="true">📊</span>
+                          <IconChartBar size={12} className="mt-0.5 shrink-0" aria-hidden="true" />
                           <span>{rec.evidence}</span>
                         </p>
                       )}
@@ -1922,7 +1923,10 @@ function AnalyticsPageContent() {
               {strengthProfile.imbalances.length > 0 && (
                 <Card className="border-warning-500/30">
                   <CardHeader>
-                    <CardTitle>⚠️ Detected Imbalances</CardTitle>
+                    <CardTitle className="flex items-center gap-2">
+                      <IconAlertTriangle size={18} className="text-warning-400" aria-hidden="true" />
+                      Detected Imbalances
+                    </CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-3">

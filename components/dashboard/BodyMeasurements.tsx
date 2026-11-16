@@ -1,5 +1,6 @@
 'use client';
 
+import { IconRuler } from '@tabler/icons-react';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Button, Card, CardHeader, CardTitle, CardContent, Badge } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
@@ -496,7 +497,7 @@ export function BodyMeasurements({
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2">
-            <span>📏</span> Body Measurements
+            <IconRuler size={18} aria-hidden="true" /> Body Measurements
           </CardTitle>
           <div className="flex items-center gap-2">
             {/* Unit toggle */}

@@ -87,16 +87,17 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import {
+  IconBookmarkPlus,
+  IconChartLine,
   IconChevronLeft,
   IconChevronRight,
-  IconSettings,
   IconCopy,
-  IconBookmarkPlus,
   IconDots,
-  IconX,
-  IconToolsKitchen2,
   IconScale,
-  IconChartLine,
+  IconSettings,
+  IconShoe,
+  IconToolsKitchen2,
+  IconX,
 } from '@tabler/icons-react';
 
 type NutritionTab = 'log' | 'weight' | 'insights';
@@ -1888,7 +1889,7 @@ function NutritionPageContent() {
             className="mt-2 px-1 text-xs text-surface-400"
             data-testid="step-adjustment-reason"
           >
-            <span aria-hidden="true">👟 </span>
+            <IconShoe size={14} className="inline -mt-0.5 mr-1" aria-hidden="true" />
             {stepAdjustment.adjustment !== 0
               ? `Target ${stepAdjustment.adjustedCalories.toLocaleString()} kcal (base ${stepAdjustment.baseCalories.toLocaleString()}). ${stepAdjustment.reason}. `
               : `${stepAdjustment.reason}. `}
@@ -1910,7 +1911,8 @@ function NutritionPageContent() {
               className="text-surface-400 hover:text-primary-400"
               data-testid="step-adjustment-settings-link"
             >
-              <span aria-hidden="true">👟 </span>Adjust your target for daily steps
+              <IconShoe size={14} className="inline -mt-0.5 mr-1" aria-hidden="true" />
+              Adjust your target for daily steps
             </button>
           </p>
         )}
@@ -1931,7 +1933,9 @@ function NutritionPageContent() {
             <button
               key={food.food_name}
               onClick={() => handleQuickLogFrequent(food)}
-              className="flex-shrink-0 rounded-full border border-surface-800 bg-surface-900 px-2.5 py-1 text-[11px] text-surface-300 hover:bg-surface-800 transition-colors"
+              title={toTitleCase(food.food_name)}
+              aria-label={`Log ${toTitleCase(food.food_name)}`}
+              className="flex-shrink-0 max-w-[14rem] truncate rounded-full border border-surface-800 bg-surface-900 px-2.5 py-1 text-[11px] text-surface-300 hover:bg-surface-800 transition-colors"
             >
               + {toTitleCase(food.food_name)}
             </button>
@@ -2112,7 +2116,7 @@ function NutritionPageContent() {
       {/* Weight Trend */}
       {weightEntries.length === 0 && (
         <EmptyState
-          icon="⚖️"
+          icon={<IconScale size={28} aria-hidden="true" />}
           title="Start tracking your weight"
           description="Log weigh-ins a few times a week to track your trend and keep your adaptive TDEE accurate. Consistent data helps us calculate your true maintenance calories."
           action={

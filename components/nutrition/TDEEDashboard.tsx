@@ -1,5 +1,6 @@
 'use client';
 
+import { IconChartBar, IconFlame } from '@tabler/icons-react';
 import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
@@ -226,7 +227,7 @@ export function TDEEDashboard({
       <Card className="p-6">
         <div className="text-center space-y-4">
           <div className="w-16 h-16 mx-auto rounded-full bg-surface-800 flex items-center justify-center">
-            <span className="text-3xl">🔥</span>
+            <IconFlame size={28} className="text-orange-400" aria-hidden="true" />
           </div>
           <div>
             <h3 className="text-lg font-semibold text-surface-100">
@@ -251,7 +252,7 @@ export function TDEEDashboard({
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-orange-500/20 to-red-500/20 flex items-center justify-center">
-              <span className="text-xl">🔥</span>
+              <IconFlame size={20} className="text-orange-400" aria-hidden="true" />
             </div>
             <div>
               <h3 className="text-lg font-semibold text-surface-100">Your Metabolism</h3>
@@ -903,7 +904,7 @@ export function TDEEDashboard({
         <Card className="p-4 bg-surface-900/50">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-primary-500/10 flex items-center justify-center">
-              <span className="text-lg">📊</span>
+              <IconChartBar size={18} className="text-primary-400" aria-hidden="true" />
             </div>
             <div className="flex-1">
               <p className="text-sm text-surface-200">Building your personal estimate</p>

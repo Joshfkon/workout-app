@@ -1,5 +1,6 @@
 'use client';
 
+import { IconWalk } from '@tabler/icons-react';
 import { useState, useEffect, memo } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, Button, Input } from '@/components/ui';
 import { saveManualSteps, getStepsForDate } from '@/lib/actions/steps';
@@ -93,7 +94,7 @@ export const StepTracking = memo(function StepTracking({ date, userWeightKg }: S
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <span>👣</span>
+          <IconWalk size={18} aria-hidden="true" />
           <span>Step Tracking</span>
         </CardTitle>
       </CardHeader>
