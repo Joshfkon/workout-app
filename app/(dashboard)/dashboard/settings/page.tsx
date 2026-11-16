@@ -2,7 +2,7 @@
 
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQuery, useQueryClient, useIsRestoring } from '@tanstack/react-query';
 import { LoadingState, PageHeader } from '@/components/ui';
 import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
@@ -106,6 +106,8 @@ export default function SettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  // Set when fresh data loads; the dirty-check effect snapshots on the next render.
+  const snapshotPendingRef = useRef(false);
   // Snapshot of loaded values to detect real changes vs. initial data population
   const [initialValues, setInitialValues] = useState<Record<string, any>>({});
 
@@ -290,37 +292,19 @@ export default function SettingsPage() {
     setIsLoading(false);
     // Reset unsaved changes flag when fresh data loads
     setHasUnsavedChanges(false);
-    // Capture initial values snapshot for dirty detection
-    setInitialValues({
-      goal,
-      experience,
-      heightDisplay,
-      weightDisplay,
-      age,
-      sleepQuality,
-      stressLevel,
-      trainingAge,
-      availableEquipment: JSON.stringify(availableEquipment),
-      injuryHistory: JSON.stringify(injuryHistory),
-      units,
-      restTimer,
-      showFormCues,
-      showWarmupSuggestions,
-      prioritizeHypertrophy,
-      skipPreWorkoutCheckIn,
-      trackWaistInCheckin,
-      showAiCoachNotes,
-      volumeLandmarks: JSON.stringify(volumeLandmarks),
-    });
+    // Snapshot the loaded values on the NEXT render: the setters above haven't
+    // applied yet in this closure, so snapshotting here captured the defaults
+    // and showed "Unsaved changes" the moment Settings opened.
+    snapshotPendingRef.current = true;
   }, [settingsQuery.data]);
 
   // Track changes to mark form as dirty — only when values differ from loaded snapshot
   useEffect(() => {
     // Skip if still loading or no initial snapshot yet
-    if (isLoading || !settingsQuery.data || Object.keys(initialValues).length === 0) {
+    if (isLoading || !settingsQuery.data) {
       return;
     }
-    
+
     // Compare current values to the initial snapshot
     const currentValues = {
       goal,
@@ -344,6 +328,13 @@ export default function SettingsPage() {
       volumeLandmarks: JSON.stringify(volumeLandmarks),
     };
     
+    if (snapshotPendingRef.current || Object.keys(initialValues).length === 0) {
+      snapshotPendingRef.current = false;
+      setInitialValues(currentValues);
+      setHasUnsavedChanges(false);
+      return;
+    }
+
     const isDirty = Object.keys(currentValues).some(
       key => currentValues[key as keyof typeof currentValues] !== initialValues[key as keyof typeof currentValues]
     );

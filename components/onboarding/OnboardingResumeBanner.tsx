@@ -15,6 +15,18 @@ import {
  * Banner that appears on dashboard when onboarding is incomplete
  * Shows user's progress and provides a clear CTA to resume
  */
+const DISMISS_KEY = 'ht-onboarding-banner-dismissed-at';
+const DISMISS_FOR_MS = 7 * 24 * 60 * 60 * 1000;
+
+function wasDismissedRecently(): boolean {
+  try {
+    const at = Number(localStorage.getItem(DISMISS_KEY));
+    return Number.isFinite(at) && at > 0 && Date.now() - at < DISMISS_FOR_MS;
+  } catch {
+    return false;
+  }
+}
+
 export function OnboardingResumeBanner() {
   const router = useRouter();
   const [isVisible, setIsVisible] = useState(false);
@@ -23,7 +35,9 @@ export function OnboardingResumeBanner() {
   const [isLoading, setIsLoading] = useState(true);
   const [resumeRoute, setResumeRoute] = useState('/onboarding');
   const [currentStep, setCurrentStep] = useState<OnboardingStep | null>(null);
-  const [isDismissed, setIsDismissed] = useState(false);
+  // Closing it keeps it closed for a week (it used to return on the very next
+  // page, i.e. on every screen).
+  const [isDismissed, setIsDismissed] = useState(() => wasDismissedRecently());
 
   useEffect(() => {
     async function checkOnboardingStatus() {
@@ -55,8 +69,11 @@ export function OnboardingResumeBanner() {
 
   const handleDismiss = () => {
     setIsDismissed(true);
-    // Note: This is just a UI dismissal, not persistent
-    // User can still see banner on next page load if onboarding incomplete
+    try {
+      localStorage.setItem(DISMISS_KEY, String(Date.now()));
+    } catch {
+      // Storage unavailable: dismissed for this visit only.
+    }
   };
 
   if (isLoading || !isVisible || isDismissed || blockingPromptOpen) {
