@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useBlockingPromptOpen } from '@/lib/ui/blockingPrompt';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { 
   getOnboardingProgress, 
@@ -29,6 +29,9 @@ function wasDismissedRecently(): boolean {
 
 export function OnboardingResumeBanner() {
   const router = useRouter();
+  // Never over a workout: it covered the summary's Done button.
+  const pathname = usePathname() ?? '';
+  const onWorkoutScreen = pathname.startsWith('/dashboard/workout/');
   const [isVisible, setIsVisible] = useState(false);
   // Waits while the AI consent dialog is up (one pop-up at a time).
   const blockingPromptOpen = useBlockingPromptOpen();
@@ -76,7 +79,7 @@ export function OnboardingResumeBanner() {
     }
   };
 
-  if (isLoading || !isVisible || isDismissed || blockingPromptOpen) {
+  if (isLoading || !isVisible || isDismissed || blockingPromptOpen || onWorkoutScreen) {
     return null;
   }
 
