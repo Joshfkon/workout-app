@@ -3340,6 +3340,19 @@ export default function WorkoutPage() {
     [readinessModulation]
   );
 
+  // How far calibration alone moved the block's target (readiness excluded):
+  // the rest timer reads it to estimate TRUE RIR for its near-failure step.
+  const calibrationShiftRirForBlock = useCallback(
+    (block: ExerciseBlockWithExercise): number => {
+      const adjusted = calibrationEngineRef.current.getAdjustedRIR(
+        block.exercise.name,
+        block.targetRir
+      );
+      return adjusted.hasAdjustment ? adjusted.prescribedRIR - block.targetRir : 0;
+    },
+    []
+  );
+
   const handleSetComplete = async (data: {
     weightKg: number;
     reps: number;
@@ -3406,6 +3419,7 @@ export default function WorkoutPage() {
           ? data.feedback?.repsInTank ?? Math.max(0, rpeToRir(data.rpe))
           : undefined,
       targetRir: effectiveTargetRirForBlock(currentBlock),
+      calibrationShiftRir: calibrationShiftRirForBlock(currentBlock),
     });
     const startWorkingRest = () => {
       setShowRestTimer(true);
