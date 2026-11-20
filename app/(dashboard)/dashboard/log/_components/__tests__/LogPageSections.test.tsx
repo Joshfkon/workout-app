@@ -177,7 +177,7 @@ describe('TodaySoFarStrip', () => {
     expect(behinds).toHaveLength(2);
     const classNames = behinds.map((el) => el.className);
     expect(classNames.some((c) => c.includes('text-orange-400'))).toBe(true); // protein warns
-    expect(classNames.some((c) => c.includes('text-surface-500'))).toBe(true); // calories neutral
+    expect(classNames.some((c) => c.includes('text-ink-3'))).toBe(true); // calories neutral
   });
 
   it('suppresses pacing judgment before the eating window (05:30)', () => {

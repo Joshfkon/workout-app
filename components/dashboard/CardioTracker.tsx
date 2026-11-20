@@ -33,7 +33,7 @@ interface CardioLogEntry {
 
 // Memoized options to prevent re-creation on each render
 const CARDIO_OPTIONS = [
-  { value: 'incline_walk', label: 'Incline Walk' },
+  { value: 'incline_walk', label: 'Incline walk' },
   { value: 'bike', label: 'Bike' },
   { value: 'elliptical', label: 'Elliptical' },
   { value: 'rower', label: 'Rower' },
@@ -177,7 +177,7 @@ export const CardioTracker = memo(function CardioTracker({ userId, prescription 
           {/* Info Button */}
           <button
             onClick={toggleInfo}
-            className="absolute -top-1 -right-1 p-1.5 text-surface-400 hover:text-primary-400 hover:bg-surface-800 rounded-full transition-colors"
+            className="absolute -top-1 -right-1 p-1.5 text-ink-2 hover:text-action hover:bg-fill rounded-full transition-colors"
             aria-label={showInfo ? 'Hide details' : 'Show details'}
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -188,66 +188,66 @@ export const CardioTracker = memo(function CardioTracker({ userId, prescription 
           {/* Compact Progress View */}
           <div className="flex items-center gap-3 pr-8">
             <div className="flex-1">
-              <div className="h-2 bg-surface-800 rounded-full overflow-hidden">
+              <div className="h-2 bg-fill rounded-full overflow-hidden">
                 <div
                   className={`h-full transition-all duration-500 ${
                     percentage >= 100
-                      ? 'bg-success-500'
+                      ? 'bg-status-ok'
                       : percentage >= 75
-                      ? 'bg-primary-500'
+                      ? 'bg-action'
                       : percentage >= 50
-                      ? 'bg-warning-500'
-                      : 'bg-danger-500'
+                      ? 'bg-status-warn'
+                      : 'bg-status-bad'
                   }`}
                   style={{ width: `${percentage}%` }}
                 />
               </div>
             </div>
-            <span className="text-xs font-medium text-surface-300 whitespace-nowrap">
+            <span className="text-caption font-medium text-ink-2 whitespace-nowrap">
               {todayTotal}/{targetMinutes} min
             </span>
           </div>
 
           {/* Expandable Details */}
           {showInfo && (
-            <div className="mt-3 p-3 bg-primary-500/10 border border-primary-500/20 rounded-lg">
+            <div className="mt-3 p-3 bg-action/10 border border-action/20 rounded-lg">
               {prescription.summary && (
-                <p className="text-sm text-primary-300 mb-3">
+                <p className="text-body text-action mb-3">
                   {prescription.summary}
                 </p>
               )}
-              <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="grid grid-cols-2 gap-2 text-caption">
                 <div>
-                  <span className="text-surface-400">Target:</span>
-                  <span className="ml-1 font-semibold text-surface-200">
+                  <span className="text-ink-2">Target:</span>
+                  <span className="ml-1 font-semibold text-ink">
                     {prescription.prescribedMinutesPerDay} min/day
                   </span>
                 </div>
                 {prescription.prescribedMinutesPerWeek && (
                   <div>
-                    <span className="text-surface-400">Weekly:</span>
-                    <span className="ml-1 font-semibold text-surface-200">
+                    <span className="text-ink-2">Weekly:</span>
+                    <span className="ml-1 font-semibold text-ink">
                       {prescription.prescribedMinutesPerWeek} min
                     </span>
                   </div>
                 )}
                 {prescription.shortfallKcalPerDay && (
                   <div>
-                    <span className="text-surface-400">Burns:</span>
-                    <span className="ml-1 font-semibold text-surface-200">
+                    <span className="text-ink-2">Burns:</span>
+                    <span className="ml-1 font-semibold text-ink">
                       ~{prescription.shortfallKcalPerDay} kcal/day
                     </span>
                   </div>
                 )}
               </div>
               {prescription.hitCap && prescription.capMinutesPerDay && (
-                <div className="mt-2 p-2 bg-warning-500/10 border border-warning-500/20 rounded text-xs text-warning-300">
+                <div className="mt-2 p-2 bg-status-warn/10 border border-status-warn/20 rounded text-caption text-status-warn">
                   Cardio capped at {prescription.capMinutesPerDay} min/day
                 </div>
               )}
               {prescription.whyCardioNotDiet && (
-                <div className="mt-3 p-2 bg-surface-900/50 rounded text-xs text-surface-400">
-                  <strong className="text-surface-300">Why cardio helps:</strong>{' '}
+                <div className="mt-3 p-2 bg-card/50 rounded text-caption text-ink-2">
+                  <strong className="text-ink-2">Why cardio helps:</strong>{' '}
                   {prescription.whyCardioNotDiet}
                 </div>
               )}
@@ -262,20 +262,20 @@ export const CardioTracker = memo(function CardioTracker({ userId, prescription 
           {todayLogs.map((log) => (
             <div
               key={log.id}
-              className="flex items-center justify-between py-1 px-2 bg-surface-800/30 rounded"
+              className="flex items-center justify-between py-1 px-2 bg-fill/30 rounded"
             >
-              <div className="flex items-center gap-2 text-xs">
-                <span className="font-medium text-surface-200">{log.minutes} min</span>
+              <div className="flex items-center gap-2 text-caption">
+                <span className="font-medium text-ink">{log.minutes} min</span>
                 {log.calories_burned && (
-                  <span className="text-warning-400">{log.calories_burned} cal</span>
+                  <span className="text-status-warn">{log.calories_burned} cal</span>
                 )}
-                <span className="text-surface-500 capitalize">
+                <span className="text-ink-3 capitalize">
                   {log.modality.replace('_', ' ')}
                 </span>
               </div>
               <button
                 onClick={() => deleteLog(log.id)}
-                className="p-0.5 text-surface-600 hover:text-danger-400 transition-colors"
+                className="p-0.5 text-ink-3 hover:text-status-bad transition-colors"
                 aria-label="Delete cardio log"
               >
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -289,10 +289,10 @@ export const CardioTracker = memo(function CardioTracker({ userId, prescription 
 
       {/* Log Form */}
       {showLogForm ? (
-        <div className="space-y-3 p-3 bg-surface-800/50 border border-surface-700 rounded-lg">
+        <div className="space-y-3 p-3 bg-fill/50 border border-sep rounded-lg">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-surface-300 mb-1">
+              <label className="block text-caption font-medium text-ink-2 mb-1">
                 Minutes
               </label>
               <Input
@@ -304,7 +304,7 @@ export const CardioTracker = memo(function CardioTracker({ userId, prescription 
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-surface-300 mb-1">
+              <label className="block text-caption font-medium text-ink-2 mb-1">
                 Type
               </label>
               <Select
@@ -315,12 +315,12 @@ export const CardioTracker = memo(function CardioTracker({ userId, prescription 
             </div>
           </div>
           {minutes && parseInt(minutes) > 0 && (
-            <div className="text-xs text-surface-400">
+            <div className="text-caption text-ink-2">
               Est. ~{estimateCaloriesBurned(parseInt(minutes), modality)} cal burned
             </div>
           )}
           <div>
-            <label className="block text-xs font-medium text-surface-300 mb-1">
+            <label className="block text-caption font-medium text-ink-2 mb-1">
               Notes (optional)
             </label>
             <Input
@@ -338,7 +338,7 @@ export const CardioTracker = memo(function CardioTracker({ userId, prescription 
               size="sm"
               className="flex-1"
             >
-              {isLogging ? 'Logging...' : 'Log Cardio'}
+              {isLogging ? 'Logging...' : 'Log cardio'}
             </Button>
             <Button
               onClick={handleCancelLogForm}
@@ -356,7 +356,7 @@ export const CardioTracker = memo(function CardioTracker({ userId, prescription 
           size="sm"
           className="w-full"
         >
-          + Log Cardio Session
+          + Log cardio session
         </Button>
       )}
     </div>

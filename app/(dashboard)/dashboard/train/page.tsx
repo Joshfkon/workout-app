@@ -108,12 +108,12 @@ const TrainReadinessCard = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="rounded-2xl p-4 bg-surface-900 border border-surface-800">
-        <h3 className="text-[15px] font-semibold text-surface-100 mb-3">Recovery</h3>
+      <div className="rounded-card p-4 bg-card shadow-card">
+        <h3 className="text-headline text-ink mb-3">Recovery</h3>
         <div className="animate-pulse space-y-3">
-          <div className="h-1.5 bg-surface-800 rounded-full" />
-          <div className="h-1.5 bg-surface-800 rounded-full w-2/3" />
-          <div className="h-1.5 bg-surface-800 rounded-full w-1/2" />
+          <div className="h-1.5 bg-fill rounded-full" />
+          <div className="h-1.5 bg-fill rounded-full w-2/3" />
+          <div className="h-1.5 bg-fill rounded-full w-1/2" />
         </div>
       </div>
     ),
@@ -537,7 +537,7 @@ export default function TrainPage() {
   const heroEyebrow = activeMeso
     ? [
         activeMeso.name,
-        `wk ${activeMeso.current_week} of ${activeMeso.total_weeks}`,
+        `week ${activeMeso.current_week} of ${activeMeso.total_weeks}`,
         activeMeso.current_week === activeMeso.deload_week ? 'deload' : null,
         todayWorkout ? 'today' : 'rest day',
       ]
@@ -699,7 +699,7 @@ export default function TrainPage() {
     const tracked = progressionGroups.filter((g) => g.pace !== 'insufficient_data').length;
     const building = progressionGroups.length - tracked;
     if (progressionGroups.length === 0) return 'Complete workouts to build progression history';
-    const weekSuffix = activeMeso ? ` (wk ${activeMeso.current_week})` : '';
+    const weekSuffix = activeMeso ? ` (week ${activeMeso.current_week})` : '';
     return (
       [
         `${tracked} muscle ${tracked === 1 ? 'group' : 'groups'} tracked`,
@@ -711,23 +711,23 @@ export default function TrainPage() {
   }, [progressionLoading, progressionGroups, activeMeso]);
 
   const volumeStatusLine = volumeLoading
-    ? { text: 'Loading...', className: 'text-surface-500' }
+    ? { text: 'Loading...', className: 'text-ink-3' }
     : volumeTiles.totalSets === 0
-      ? { text: 'No sets logged yet this week', className: 'text-surface-500' }
+      ? { text: 'No sets logged yet this week', className: 'text-ink-3' }
       : volumeTiles.lowCount > 0
         ? {
             text: `${volumeTiles.lowCount} muscle ${
               volumeTiles.lowCount === 1 ? 'group' : 'groups'
             } below minimum`,
-            className: 'text-warning-400',
+            className: 'text-status-warn',
           }
-        : { text: 'All muscle groups at target', className: 'text-success-400' };
+        : { text: 'All muscle groups at target', className: 'text-status-ok' };
 
   return (
     <div className="max-w-lg mx-auto space-y-4">
       {/* Title, then the tool pills on their own row so none is cut off */}
       <div className="space-y-3">
-        <h1 className="text-2xl font-bold text-surface-100">Train</h1>
+        <h1 className="text-large-title text-ink">Train</h1>
         <div className="flex items-center gap-1.5 overflow-x-auto">
           {TOOL_PILLS.map((tool) => {
             const ToolIcon = tool.icon;
@@ -735,9 +735,9 @@ export default function TrainPage() {
               <Link
                 key={tool.href}
                 href={tool.href}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-surface-900 border border-surface-800 text-[13px] font-medium text-surface-200 whitespace-nowrap hover:bg-surface-800/70 transition-colors"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-card text-subhead font-medium text-ink whitespace-nowrap hover:bg-fill/70 transition-colors shadow-card"
               >
-                <ToolIcon size={15} className="text-surface-400" aria-hidden="true" />
+                <ToolIcon size={15} className="text-ink-2" aria-hidden="true" />
                 {tool.name}
               </Link>
             );
@@ -746,7 +746,7 @@ export default function TrainPage() {
       </div>
 
       {error && (
-        <div className="p-2.5 rounded-lg bg-danger-500/10 border border-danger-500/20 text-danger-400 text-xs">
+        <div className="p-2.5 rounded-lg bg-status-bad/10 border border-status-bad/20 text-status-bad text-caption">
           {error}
         </div>
       )}
@@ -764,15 +764,15 @@ export default function TrainPage() {
       {/* Mesocycle hero (training day / rest day / no plan) — hidden in
           freestyle, where the start options below are the whole page. */}
       {!isFreestyle && (
-      <div className="rounded-2xl p-4 bg-surface-900 border border-surface-800">
+      <div className="rounded-card p-4 bg-card shadow-card">
         <div className="flex items-center justify-between gap-2">
-          <p className="text-[11px] font-semibold tracking-[0.12em] uppercase text-surface-500 truncate">
+          <p className="text-caption font-semibold text-ink-3 truncate">
             {heroEyebrow}
           </p>
           {activeMeso && (
             <Link
               href="/dashboard/mesocycle"
-              className="flex items-center gap-0.5 text-[13px] font-medium text-primary-400 hover:text-primary-300 transition-colors flex-shrink-0"
+              className="flex items-center gap-0.5 text-subhead font-medium text-action transition-colors flex-shrink-0"
             >
               Plan
               <IconChevronRight size={14} aria-hidden="true" />
@@ -782,16 +782,16 @@ export default function TrainPage() {
 
         {activeMeso && todayWorkout ? (
           <>
-            <h2 className="text-[26px] leading-tight font-bold text-surface-100 mt-1.5">
+            <h2 className="text-title text-ink mt-1.5">
               {todayWorkout.dayName}
             </h2>
-            <p className="text-[13px] text-surface-400 mt-1">{trainingDayMeta}</p>
+            <p className="text-subhead text-ink-2 mt-1">{trainingDayMeta}</p>
             <div className="flex gap-2 mt-4">
               <StyledButton
                 onClick={handleStartWorkout}
                 disabled={isStarting}
                 variant="primary"
-                className="flex-[2] text-[15px]"
+                className="flex-[2] text-body"
               >
                 {isStarting
                   ? 'Starting...'
@@ -804,7 +804,7 @@ export default function TrainPage() {
               <StyledButton 
                 onClick={() => setShowPreview(true)} 
                 variant="outline"
-                className="flex-1 text-[15px]"
+                className="flex-1 text-body"
               >
                 Preview
               </StyledButton>
@@ -812,10 +812,10 @@ export default function TrainPage() {
           </>
         ) : activeMeso ? (
           <>
-            <h2 className="text-[26px] leading-tight font-bold text-surface-100 mt-1.5">
+            <h2 className="text-title text-ink mt-1.5">
               {nextWorkoutInfo ? `Next: ${nextWorkoutInfo.workout.dayName}` : 'Rest day'}
             </h2>
-            <p className="text-[13px] text-surface-400 mt-1">
+            <p className="text-subhead text-ink-2 mt-1">
               {nextWorkoutInfo
                 ? [nextWorkoutInfo.dayLabel, restDayRecoveryNote].filter(Boolean).join(' · ')
                 : 'No upcoming workouts scheduled'}
@@ -825,7 +825,7 @@ export default function TrainPage() {
                 onClick={handleStartWorkout}
                 disabled={isStarting || !nextWorkoutInfo}
                 variant="secondary"
-                className="flex-1 text-[15px]"
+                className="flex-1 text-body"
               >
                 {isStarting ? 'Starting...' : 'Train anyway'}
               </StyledButton>
@@ -833,7 +833,7 @@ export default function TrainPage() {
                 onClick={() => setShowPreview(true)}
                 disabled={!nextWorkoutInfo}
                 variant="outline"
-                className="flex-1 text-[15px]"
+                className="flex-1 text-body"
               >
                 Preview {nextWorkoutInfo?.dayLabel === 'Tomorrow' ? 'tomorrow' : 'next'}
               </StyledButton>
@@ -841,10 +841,10 @@ export default function TrainPage() {
           </>
         ) : (
           <>
-            <h2 className="text-[26px] leading-tight font-bold text-surface-100 mt-1.5">
+            <h2 className="text-title text-ink mt-1.5">
               {isLoading ? 'Loading...' : 'No training plan'}
             </h2>
-            <p className="text-[13px] text-surface-400 mt-1">
+            <p className="text-subhead text-ink-2 mt-1">
               {isLoading
                 ? ' '
                 : 'Plan a mesocycle for smart progression and volume tracking'}
@@ -857,7 +857,7 @@ export default function TrainPage() {
                 >
                   <StyledButton
                     variant="primary"
-                    className="w-full text-[15px]"
+                    className="w-full text-body"
                   >
                     Plan a mesocycle
                   </StyledButton>
@@ -876,11 +876,11 @@ export default function TrainPage() {
 
         <QuickLogRow
           icon={
-            <span className="w-10 h-10 rounded-xl bg-primary-500/15 flex items-center justify-center flex-shrink-0">
+            <span className="w-10 h-10 rounded-xl bg-action/15 flex items-center justify-center flex-shrink-0">
               {isStartingEmpty ? (
-                <IconLoader2 size={22} className="text-primary-400 animate-spin" aria-hidden="true" />
+                <IconLoader2 size={22} className="text-action animate-spin" aria-hidden="true" />
               ) : (
-                <IconPlus size={22} className="text-primary-400" aria-hidden="true" />
+                <IconPlus size={22} className="text-action" aria-hidden="true" />
               )}
             </span>
           }
@@ -892,8 +892,8 @@ export default function TrainPage() {
 
         <QuickLogRow
           icon={
-            <span className="w-10 h-10 rounded-xl bg-accent-500/15 flex items-center justify-center flex-shrink-0">
-              <IconSparkles size={22} className="text-accent-400" aria-hidden="true" />
+            <span className="w-10 h-10 rounded-xl bg-action/15 flex items-center justify-center flex-shrink-0">
+              <IconSparkles size={22} className="text-action" aria-hidden="true" />
             </span>
           }
           title="AI-suggested workout"
@@ -903,8 +903,8 @@ export default function TrainPage() {
 
         <QuickLogRow
           icon={
-            <span className="w-10 h-10 rounded-xl bg-surface-800 flex items-center justify-center flex-shrink-0">
-              <IconRepeat size={22} className="text-surface-200" aria-hidden="true" />
+            <span className="w-10 h-10 rounded-xl bg-fill flex items-center justify-center flex-shrink-0">
+              <IconRepeat size={22} className="text-ink" aria-hidden="true" />
             </span>
           }
           title="Repeat previous workout"
@@ -921,15 +921,15 @@ export default function TrainPage() {
       {/* Week stats: sets · sessions · volume status */}
       <Link
         href="/dashboard/volume"
-        className="w-full flex items-center gap-3 p-4 rounded-2xl bg-surface-900 border border-surface-800 text-left hover:bg-surface-800/70 transition-colors"
+        className="w-full flex items-center gap-3 p-4 rounded-card bg-card text-left hover:bg-fill/70 transition-colors shadow-card"
       >
         <span className="flex-1 min-w-0">
-          <span className="block text-[15px] text-surface-400">
-            <span className="font-semibold text-surface-100">
+          <span className="block text-body text-ink-2">
+            <span className="font-semibold text-ink">
               {volumeLoading ? '—' : volumeTiles.totalSets} sets
             </span>{' '}
             this week ·{' '}
-            <span className="font-semibold text-surface-100">
+            <span className="font-semibold text-ink">
               {isLoading
                 ? '—'
                 : activeMeso
@@ -939,12 +939,12 @@ export default function TrainPage() {
             </span>
           </span>
           {weekTime.avgMin !== null && (
-            <span className="block text-[13px] text-surface-400 mt-0.5">
-              <span className="font-medium text-surface-200">
+            <span className="block text-subhead text-ink-2 mt-0.5">
+              <span className="font-medium text-ink">
                 {formatHoursMinutes(weekTime.totalMin)}
               </span>{' '}
               trained ·{' '}
-              <span className="font-medium text-surface-200">
+              <span className="font-medium text-ink">
                 {Math.round(weekTime.avgMin)} min
               </span>{' '}
               avg workout
@@ -954,7 +954,7 @@ export default function TrainPage() {
             {volumeStatusLine.text}
           </span>
         </span>
-        <IconChevronRight size={16} className="text-surface-500 flex-shrink-0" aria-hidden="true" />
+        <IconChevronRight size={16} className="text-ink-3 flex-shrink-0" aria-hidden="true" />
       </Link>
 
       {/* Recovery: the same readiness body as the in-workout sheet / empty
@@ -965,8 +965,8 @@ export default function TrainPage() {
       {/* Cardio quick-log (moved here from the Progress page's Wellness
           tab). Self-contained: fetches and writes today's cardio_log. */}
       {userId && (
-        <div className="rounded-2xl p-4 bg-surface-900 border border-surface-800">
-          <h3 className="text-[15px] font-semibold text-surface-100 mb-3">Cardio</h3>
+        <div className="rounded-card p-4 bg-card shadow-card">
+          <h3 className="text-headline text-ink mb-3">Cardio</h3>
           <CardioTracker userId={userId} />
         </div>
       )}
@@ -975,8 +975,8 @@ export default function TrainPage() {
           (synthetic recovery-debt sessions), never weekly volume, so the
           readiness card above reacts to a hard Sunday ride. */}
       {userId && (
-        <div className="rounded-2xl p-4 bg-surface-900 border border-surface-800">
-          <h3 className="text-[15px] font-semibold text-surface-100 mb-3">Other activity</h3>
+        <div className="rounded-card p-4 bg-card shadow-card">
+          <h3 className="text-headline text-ink mb-3">Other activity</h3>
           <NonGymActivityLogger userId={userId} />
         </div>
       )}
@@ -985,18 +985,18 @@ export default function TrainPage() {
           per-muscle progression card, not just the top of Progress. */}
       <Link
         href="/dashboard/analytics?tab=strength&section=muscle-progression"
-        className="w-full flex items-center gap-3.5 p-4 rounded-2xl bg-surface-900 border border-surface-800 text-left hover:bg-surface-800/70 transition-colors"
+        className="w-full flex items-center gap-3.5 p-4 rounded-card bg-card text-left hover:bg-fill/70 transition-colors shadow-card"
       >
-        <span className="w-12 h-12 rounded-xl bg-surface-800 flex items-center justify-center flex-shrink-0">
-          <IconTrendingUp size={22} className="text-surface-200" aria-hidden="true" />
+        <span className="w-12 h-12 rounded-xl bg-fill flex items-center justify-center flex-shrink-0">
+          <IconTrendingUp size={22} className="text-ink" aria-hidden="true" />
         </span>
         <span className="flex-1 min-w-0">
-          <span className="block text-[15px] font-semibold text-surface-100">Progression</span>
-          <span className="block text-[13px] text-surface-400 mt-0.5">
+          <span className="block text-body font-semibold text-ink">Progression</span>
+          <span className="block text-subhead text-ink-2 mt-0.5">
             {progressionSubtitle}
           </span>
         </span>
-        <IconChevronRight size={16} className="text-surface-500 flex-shrink-0" aria-hidden="true" />
+        <IconChevronRight size={16} className="text-ink-3 flex-shrink-0" aria-hidden="true" />
       </Link>
 
       {/* Recent workouts */}
@@ -1005,32 +1005,32 @@ export default function TrainPage() {
           <SectionLabel>Recent workouts</SectionLabel>
           <Link
             href="/dashboard/history"
-            className="text-[13px] font-medium text-primary-400 hover:text-primary-300 transition-colors"
+            className="text-subhead font-medium text-action transition-colors"
           >
             View all
           </Link>
         </div>
         {isLoading ? (
-          <div className="p-4 rounded-2xl bg-surface-900 border border-surface-800 text-[13px] text-surface-500">
+          <div className="p-4 rounded-card bg-card text-subhead text-ink-3 shadow-card">
             Loading...
           </div>
         ) : recentWorkouts.length === 0 ? (
-          <div className="p-4 rounded-2xl bg-surface-900 border border-surface-800 text-[13px] text-surface-500">
+          <div className="p-4 rounded-card bg-card text-subhead text-ink-3 shadow-card">
             No completed workouts yet — start one above.
           </div>
         ) : (
-          <div className="space-y-2">
-            {recentWorkouts.slice(0, 3).map((workout) => (
+          <div className="overflow-hidden rounded-card bg-card shadow-card">
+            {recentWorkouts.slice(0, 3).map((workout, i) => (
               <Link
                 key={workout.id}
                 href="/dashboard/history"
-                className="flex items-center gap-3 p-4 rounded-2xl bg-surface-900 border border-surface-800 hover:bg-surface-800/70 transition-colors"
+                className={`flex items-center gap-3 px-4 py-3 active:bg-fill transition-colors ${i > 0 ? 'border-t border-sep ml-4 pl-0' : ''}`}
               >
                 <span className="flex-1 min-w-0">
-                  <span className="block text-[15px] font-semibold text-surface-100 truncate">
+                  <span className="block text-body font-semibold text-ink truncate">
                     {workout.title}
                   </span>
-                  <span className="block text-[13px] text-surface-500 mt-0.5">
+                  <span className="block text-subhead text-ink-3 mt-0.5">
                     {workout.completedAt.toLocaleDateString('en-US', {
                       weekday: 'short',
                       month: 'short',
@@ -1043,7 +1043,7 @@ export default function TrainPage() {
                 </span>
                 <IconChevronRight
                   size={16}
-                  className="text-surface-500 flex-shrink-0"
+                  className="text-ink-3 flex-shrink-0"
                   aria-hidden="true"
                 />
               </Link>
@@ -1065,7 +1065,7 @@ export default function TrainPage() {
       >
         <div className="space-y-3">
           {previewWorkout && (
-            <p className="text-[13px] text-surface-400">
+            <p className="text-subhead text-ink-2">
               {[
                 todayWorkout ? 'Today' : nextWorkoutInfo?.dayLabel,
                 nextProgramSession
@@ -1086,17 +1086,17 @@ export default function TrainPage() {
           {nextProgramSession && nextProgramSession.exercises.length > 0 ? (
             <SessionExerciseList exercises={nextProgramSession.exercises} />
           ) : (
-            <div className="rounded-xl border border-surface-800 bg-surface-950/40 p-3">
-              <p className="text-[13px] text-surface-400">
+            <div className="rounded-card bg-fill/60 p-3">
+              <p className="text-subhead text-ink-2">
                 Exercises are planned when you start. Target muscles:{' '}
-                <span className="text-surface-200">
+                <span className="text-ink">
                   {previewWorkout?.muscles.map(capitalize).join(', ') ?? '—'}
                 </span>
               </p>
             </div>
           )}
 
-          <p className="text-[11px] text-surface-500">
+          <p className="text-caption text-ink-3">
             Weights are suggested from your history once you start.
           </p>
 
@@ -1108,20 +1108,20 @@ export default function TrainPage() {
               }}
               disabled={isStarting}
               variant="primary"
-              className="w-full text-[15px]"
+              className="w-full text-body"
             >
               {isStarting ? 'Starting...' : todayWorkout ? 'Start workout' : 'Train anyway today'}
             </StyledButton>
             <Link
               href="/dashboard/mesocycle/plan"
               onClick={() => setShowPreview(false)}
-              className="block w-full py-2 rounded-lg text-center text-[13px] font-medium text-primary-400 hover:text-primary-300 transition-colors"
+              className="block w-full py-2 rounded-lg text-center text-subhead font-medium text-action transition-colors"
             >
               See the whole plan
             </Link>
             <button
               onClick={() => setShowPreview(false)}
-              className="w-full py-2 rounded-lg text-[13px] text-surface-400 hover:text-surface-200 transition-colors"
+              className="w-full py-2 rounded-lg text-subhead text-ink-2 hover:text-ink transition-colors"
             >
               Close
             </button>
@@ -1145,23 +1145,23 @@ export default function TrainPage() {
         title="Repeat a workout"
       >
         <div className="space-y-3">
-          <p className="text-[13px] text-surface-400">
+          <p className="text-subhead text-ink-2">
             Same exercises as a previous session — targets and weights are
             re-estimated from your recent performance.
           </p>
-          <div className="rounded-xl border border-surface-800 bg-surface-950/40 overflow-hidden">
+          <div className="rounded-card bg-fill/60 overflow-hidden">
             {recentWorkouts.map((workout) => (
               <button
                 key={workout.id}
                 onClick={() => handleRepeatWorkout(workout)}
                 disabled={repeatingId !== null}
-                className="w-full flex items-center gap-2 px-3 py-2.5 border-b border-surface-800/50 last:border-b-0 text-left hover:bg-surface-800/50 transition-colors disabled:opacity-60"
+                className="w-full flex items-center gap-2 px-3 py-2.5 border-b border-sep/50 last:border-b-0 text-left hover:bg-fill/50 transition-colors disabled:opacity-60"
               >
                 <span className="flex-1 min-w-0">
-                  <span className="block text-[13px] text-surface-200 truncate">
+                  <span className="block text-subhead text-ink truncate">
                     {workout.title}
                   </span>
-                  <span className="block text-[11px] text-surface-500 mt-0.5">
+                  <span className="block text-caption text-ink-3 mt-0.5">
                     {workout.completedAt.toLocaleDateString('en-US', {
                       weekday: 'short',
                       month: 'short',
@@ -1177,20 +1177,20 @@ export default function TrainPage() {
                 {repeatingId === workout.id ? (
                   <IconLoader2
                     size={16}
-                    className="text-primary-400 animate-spin flex-shrink-0"
+                    className="text-action animate-spin flex-shrink-0"
                     aria-hidden="true"
                   />
                 ) : (
                   <IconChevronRight
                     size={16}
-                    className="text-surface-500 flex-shrink-0"
+                    className="text-ink-3 flex-shrink-0"
                     aria-hidden="true"
                   />
                 )}
               </button>
             ))}
             {recentWorkouts.length === 0 && (
-              <p className="p-4 text-center text-xs text-surface-500">
+              <p className="p-4 text-center text-caption text-ink-3">
                 No completed workouts yet.
               </p>
             )}
@@ -1198,7 +1198,7 @@ export default function TrainPage() {
           <button
             onClick={() => setShowRepeatSheet(false)}
             disabled={repeatingId !== null}
-            className="w-full py-2 rounded-lg text-[13px] text-surface-400 hover:text-surface-200 transition-colors disabled:opacity-60"
+            className="w-full py-2 rounded-lg text-subhead text-ink-2 hover:text-ink transition-colors disabled:opacity-60"
           >
             Cancel
           </button>
@@ -1209,7 +1209,7 @@ export default function TrainPage() {
       {showDiscardConfirm && inProgress && (
         <Modal isOpen onClose={() => setShowDiscardConfirm(false)} title="Discard workout?">
           <div className="space-y-4">
-            <p className="text-[13px] text-surface-400">
+            <p className="text-subhead text-ink-2">
               {inProgress.setsDone > 0
                 ? `This will delete the ${inProgress.setsDone} ${
                     inProgress.setsDone === 1 ? 'set' : 'sets'
@@ -1220,20 +1220,22 @@ export default function TrainPage() {
                 : 'This removes the workout session entirely.'}
             </p>
             <div className="flex gap-2">
-              <button
+              <StyledButton
+                variant="outline"
                 onClick={() => setShowDiscardConfirm(false)}
                 disabled={isDiscarding}
-                className="flex-1 py-2.5 rounded-lg bg-surface-800 text-surface-200 text-[13px] font-medium hover:bg-surface-700 transition-colors disabled:opacity-60"
+                className="flex-1"
               >
                 Keep training
-              </button>
-              <button
+              </StyledButton>
+              <StyledButton
+                variant="destructive"
                 onClick={handleDiscardWorkout}
                 disabled={isDiscarding}
-                className="flex-1 py-2.5 rounded-lg bg-danger-500 text-white text-[13px] font-medium hover:bg-danger-600 transition-colors disabled:opacity-60"
+                className="flex-1"
               >
                 {isDiscarding ? 'Discarding...' : 'Discard workout'}
-              </button>
+              </StyledButton>
             </div>
           </div>
         </Modal>

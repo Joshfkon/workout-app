@@ -678,8 +678,8 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
           disabled={aiRequested || isStarting}
           className={`px-2.5 py-1.5 rounded-full text-[12px] border transition-colors disabled:opacity-60 ${
             selectedLocationId === loc.id
-              ? 'bg-primary-500/20 border-primary-500 text-primary-300'
-              : 'bg-surface-800 border-transparent text-surface-300 hover:bg-surface-700'
+              ? 'bg-action/20 border-action text-action'
+              : 'bg-fill border-transparent text-ink-2 hover:bg-sep'
           }`}
           aria-pressed={selectedLocationId === loc.id}
         >
@@ -689,7 +689,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
       <button
         onClick={openAddLocation}
         disabled={aiRequested || isStarting}
-        className="p-1.5 rounded-full bg-surface-800 text-surface-400 hover:bg-surface-700 hover:text-surface-200 transition-colors disabled:opacity-60"
+        className="p-1.5 rounded-full bg-fill text-ink-2 hover:bg-sep hover:text-ink transition-colors disabled:opacity-60"
         aria-label="Add training location"
       >
         <IconPlus size={14} aria-hidden="true" />
@@ -703,16 +703,16 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
   // underlying duration/plan state is preserved untouched behind it.
   const addLocationForm = (
     <div className="space-y-4">
-      <p className="text-[13px] text-surface-400">Add a place you train so we can fit the workout to its equipment.</p>
+      <p className="text-subhead text-ink-2">Add a place you train so we can fit the workout to its equipment.</p>
 
       {addLocationError && (
-        <div className="p-2.5 rounded-lg bg-danger-500/10 border border-danger-500/20 text-danger-400 text-xs">
+        <div className="p-2.5 rounded-lg bg-status-bad/10 border border-status-bad/20 text-status-bad text-caption">
           {addLocationError}
         </div>
       )}
 
       <div className="space-y-2">
-        <span className="block text-[12px] font-medium text-surface-300">Start from a preset</span>
+        <span className="block text-caption font-medium text-ink-2">Start from a preset</span>
         <div className="flex gap-1.5 flex-wrap">
           {LOCATION_PRESETS.map((preset) => (
             <button
@@ -721,8 +721,8 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
               onClick={() => pickNewLocationPreset(preset.kind)}
               className={`px-2.5 py-1.5 rounded-full text-[12px] border transition-colors ${
                 newLocationPreset === preset.kind
-                  ? 'bg-primary-500/20 border-primary-500 text-primary-300'
-                  : 'bg-surface-800 border-transparent text-surface-300 hover:bg-surface-700'
+                  ? 'bg-action/20 border-action text-action'
+                  : 'bg-fill border-transparent text-ink-2 hover:bg-sep'
               }`}
             >
               <span aria-hidden="true">{preset.icon}</span> {preset.name}
@@ -733,20 +733,20 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
             onClick={() => setNewLocationPreset('custom')}
             className={`px-2.5 py-1.5 rounded-full text-[12px] border transition-colors ${
               newLocationPreset === 'custom'
-                ? 'bg-primary-500/20 border-primary-500 text-primary-300'
-                : 'bg-surface-800 border-transparent text-surface-300 hover:bg-surface-700'
+                ? 'bg-action/20 border-action text-action'
+                : 'bg-fill border-transparent text-ink-2 hover:bg-sep'
             }`}
           >
             Custom
           </button>
         </div>
-        <p className="text-[11px] text-surface-500">
+        <p className="text-caption text-ink-3">
           Presets pre-fill the equipment checklist (edit it later in Settings). Custom starts with everything available.
         </p>
       </div>
 
       <div className="space-y-1.5">
-        <label htmlFor="new-location-name" className="block text-[12px] font-medium text-surface-300">
+        <label htmlFor="new-location-name" className="block text-caption font-medium text-ink-2">
           Location name
         </label>
         <input
@@ -758,12 +758,12 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
             if (e.key === 'Enter' && newLocationName.trim()) handleSaveNewLocation();
           }}
           placeholder="e.g., Hotel Gym"
-          className="w-full px-3 py-2 rounded-lg bg-surface-800 border border-surface-700 text-[14px] text-surface-100 placeholder:text-surface-500 focus:outline-none focus:border-primary-500"
+          className="w-full px-3 py-2 rounded-lg bg-fill border border-sep text-body text-ink placeholder:text-ink-3 focus:outline-none focus:border-action"
         />
       </div>
 
       <div className="space-y-1.5">
-        <label htmlFor="new-location-dumbbell" className="block text-[12px] font-medium text-surface-300">
+        <label htmlFor="new-location-dumbbell" className="block text-caption font-medium text-ink-2">
           Heaviest dumbbell (kg, optional)
         </label>
         <input
@@ -772,7 +772,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
           value={newDumbbellMax}
           onChange={(e) => setNewDumbbellMax(e.target.value)}
           placeholder="e.g., 25"
-          className="w-full px-3 py-2 rounded-lg bg-surface-800 border border-surface-700 text-[14px] text-surface-100 placeholder:text-surface-500 focus:outline-none focus:border-primary-500"
+          className="w-full px-3 py-2 rounded-lg bg-fill border border-sep text-body text-ink placeholder:text-ink-3 focus:outline-none focus:border-action"
         />
       </div>
 
@@ -781,7 +781,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
           type="button"
           onClick={closeAddLocation}
           disabled={isSavingLocation}
-          className="px-4 py-2 rounded-lg text-[13px] font-medium bg-surface-800 text-surface-300 hover:bg-surface-700 transition-colors disabled:opacity-60"
+          className="px-4 py-2 rounded-lg text-subhead font-medium bg-fill text-ink-2 hover:bg-sep transition-colors disabled:opacity-60"
         >
           Cancel
         </button>
@@ -789,7 +789,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
           type="button"
           onClick={handleSaveNewLocation}
           disabled={!newLocationName.trim() || isSavingLocation}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] font-medium bg-primary-500 text-white hover:bg-primary-400 transition-colors disabled:opacity-60"
+          className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-subhead font-medium bg-action text-on-action hover:bg-action transition-colors disabled:opacity-60"
         >
           {isSavingLocation && <IconLoader2 size={14} className="animate-spin" aria-hidden="true" />}
           Save location
@@ -815,7 +815,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
       ) : (
       <>
       {error && (
-        <div className="mb-3 p-2.5 rounded-lg bg-danger-500/10 border border-danger-500/20 text-danger-400 text-xs">
+        <div className="mb-3 p-2.5 rounded-lg bg-status-bad/10 border border-status-bad/20 text-status-bad text-caption">
           {error}
         </div>
       )}
@@ -823,7 +823,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
       {!aiPlan && (
         <div className="space-y-3">
           {locationChipRow}
-          <p className="text-[13px] text-surface-400">
+          <p className="text-subhead text-ink-2">
             We&apos;ll size the workout to fit your time
             {selectedLocation ? ` and the equipment at ${selectedLocation.name}` : ''}.
           </p>
@@ -838,17 +838,17 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
                 disabled={aiRequested}
                 className={`p-3 rounded-xl text-center border-2 transition-colors disabled:opacity-60 ${
                   aiRequested && aiDuration === mins
-                    ? 'bg-primary-500/20 border-primary-500 text-primary-400'
-                    : 'bg-surface-800 border-transparent text-surface-200 hover:bg-surface-700'
+                    ? 'bg-action/20 border-action text-action'
+                    : 'bg-fill border-transparent text-ink hover:bg-sep'
                 }`}
               >
-                <span className="block text-[15px] font-semibold">{mins}</span>
-                <span className="block text-[11px] text-surface-500">min</span>
+                <span className="block text-body font-semibold">{mins}</span>
+                <span className="block text-caption text-ink-3">min</span>
               </button>
             ))}
           </div>
           {aiRequested && (
-            <p className="flex items-center gap-2 text-[13px] text-surface-400">
+            <p className="flex items-center gap-2 text-subhead text-ink-2">
               <IconLoader2 size={14} className="animate-spin" aria-hidden="true" />
               Building suggestion...
             </p>
@@ -859,14 +859,14 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
       {aiPlan && (
         <div className="space-y-3">
           {locationChipRow}
-          <p className="text-[13px] text-surface-300">{aiPlan.focus}</p>
+          <p className="text-subhead text-ink-2">{aiPlan.focus}</p>
           {aiPlan.isLightSession && aiPlan.exercises.length > 0 && (
-            <p className="text-[11px] text-warning-400">
+            <p className="text-caption text-status-warn">
               Volume guardrail: staying under your weekly recoverable maximum.
             </p>
           )}
           {aiPlan.exercises.length > 0 && (
-            <p className="text-[11px] text-surface-500">
+            <p className="text-caption text-ink-3">
               Sized for ~{aiDuration} minutes
               {substitutionCount > 0 && selectedLocation
                 ? ` · ${substitutionCount} ${
@@ -877,7 +877,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
             </p>
           )}
 
-          <div className="rounded-xl border border-surface-800 bg-surface-950/40 overflow-hidden">
+          <div className="rounded-xl border border-sep bg-canvas/40 overflow-hidden">
             {aiPlan.exercises.map((pick) => {
               const exercise = exerciseById.get(pick.exerciseId);
               if (!exercise) return null;
@@ -887,25 +887,25 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
               return (
                 <div
                   key={pick.exerciseId}
-                  className="px-3 py-2.5 border-b border-surface-800/50 last:border-b-0"
+                  className="px-3 py-2.5 border-b border-sep/50 last:border-b-0"
                 >
                   <div className="flex items-center gap-2">
                     <span className="flex-1 min-w-0">
-                      <span className="block text-[13px] text-surface-200 truncate">
+                      <span className="block text-subhead text-ink truncate">
                         {exercise.name}
                       </span>
-                      <span className="block text-[11px] text-surface-500">
+                      <span className="block text-caption text-ink-3">
                         {STANDARD_MUSCLE_DISPLAY_NAMES[pick.muscle] ?? pick.muscle} · {pick.sets}{' '}
                         {pick.sets === 1 ? 'set' : 'sets'} · {pick.repRange[0]}–{pick.repRange[1]}{' '}
                         reps · {pick.targetRir} RIR
                       </span>
-                      <span className="block text-[11px] text-surface-500">{pick.reason}</span>
+                      <span className="block text-caption text-ink-3">{pick.reason}</span>
                       {sub && (
                         <button
                           onClick={() =>
                             setSwapOptionsFor(showOptions ? null : pick.exerciseId)
                           }
-                          className="mt-0.5 flex items-center gap-1 text-[11px] text-primary-400 hover:text-primary-300 transition-colors"
+                          className="mt-0.5 flex items-center gap-1 text-caption text-action transition-colors"
                         >
                           <IconArrowsExchange size={12} aria-hidden="true" />
                           {activeSub
@@ -916,14 +916,14 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
                         </button>
                       )}
                       {pick.noSubstituteAvailable && (
-                        <span className="mt-0.5 block text-[11px] text-warning-400">
+                        <span className="mt-0.5 block text-caption text-status-warn">
                           No substitute available
                           {selectedLocation ? ` at ${selectedLocation.name}` : ''} — kept so this
                           muscle isn&apos;t dropped.
                         </span>
                       )}
                       {activeSub && (
-                        <span className="block text-[11px] text-surface-600">
+                        <span className="block text-caption text-ink-3">
                           Logs to its own history; first-time weight is seeded from your strength
                           data.
                         </span>
@@ -931,7 +931,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
                     </span>
                     <button
                       onClick={() => handleRemovePick(pick.exerciseId)}
-                      className="p-1.5 rounded-lg text-surface-500 hover:text-surface-300 hover:bg-surface-800 transition-colors flex-shrink-0"
+                      className="p-1.5 rounded-lg text-ink-3 hover:text-ink-2 hover:bg-fill transition-colors flex-shrink-0"
                       aria-label={`Remove ${exercise.name}`}
                     >
                       <IconX size={16} aria-hidden="true" />
@@ -950,7 +950,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
                             <button
                               key={id}
                               onClick={() => handleChooseSwap(pick, id)}
-                              className="w-full text-left px-2.5 py-1.5 rounded-lg bg-surface-800/60 hover:bg-surface-700 text-[12px] text-surface-300 transition-colors"
+                              className="w-full text-left px-2.5 py-1.5 rounded-lg bg-fill/60 hover:bg-sep text-caption text-ink-2 transition-colors"
                             >
                               {isOriginal
                                 ? `Keep ${option.name} anyway (equipment unavailable)`
@@ -964,7 +964,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
               );
             })}
             {aiPlan.exercises.length === 0 && (
-              <p className="p-4 text-center text-xs text-surface-500">
+              <p className="p-4 text-center text-caption text-ink-3">
                 Nothing to suggest right now — a blank workout is always available.
               </p>
             )}
@@ -974,7 +974,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
             <button
               onClick={handleStart}
               disabled={isStarting || aiPlan.exercises.length === 0}
-              className="w-full py-2.5 rounded-lg bg-primary-500 text-white text-[13px] font-medium hover:bg-primary-600 transition-colors disabled:opacity-60"
+              className="w-full py-2.5 rounded-lg bg-action text-on-action text-subhead font-medium hover:bg-action transition-colors disabled:opacity-60"
             >
               {isStarting
                 ? 'Starting...'
@@ -985,14 +985,14 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
             <button
               onClick={() => setAiPlan(null)}
               disabled={isStarting}
-              className="w-full py-2 rounded-lg text-[13px] text-surface-400 hover:text-surface-200 transition-colors disabled:opacity-60"
+              className="w-full py-2 rounded-lg text-subhead text-ink-2 hover:text-ink transition-colors disabled:opacity-60"
             >
               Change duration
             </button>
             <button
               onClick={onClose}
               disabled={isStarting}
-              className="w-full py-2 rounded-lg text-[13px] text-surface-400 hover:text-surface-200 transition-colors disabled:opacity-60"
+              className="w-full py-2 rounded-lg text-subhead text-ink-2 hover:text-ink transition-colors disabled:opacity-60"
             >
               Cancel
             </button>
