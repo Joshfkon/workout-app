@@ -242,6 +242,20 @@ function ScanErrorNotice({
 // Support two modes:
 // 1. onProductFound - scanner looks up barcode and returns full product
 // 2. onScan - scanner just returns the barcode string, parent handles lookup
+/**
+ * html5-qrcode's stop() THROWS synchronously ("Cannot stop, scanner is not
+ * running or paused.") when the camera never started, e.g. camera
+ * unavailable or the user typed the barcode instead. A bare `.catch()` misses
+ * that, and in the unmount cleanup the throw crashed the whole Eat screen.
+ */
+function stopQuietly(scanner: { stop: () => Promise<unknown> }) {
+  try {
+    scanner.stop().catch(() => {});
+  } catch {
+    // Not running: nothing to stop
+  }
+}
+
 type BarcodeScannerProps = {
   onClose: () => void;
   onCreateCustom?: (barcode: string) => void; // Called when user wants to create custom food
@@ -303,7 +317,7 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
       const scanner = scannerRef.current;
       if (scanner) {
         scannerRef.current = null;
-        scanner.stop().catch(() => {});
+        stopQuietly(scanner);
       }
       // Stop native scanner
       document.documentElement.classList.remove('barcode-scanner-active');
