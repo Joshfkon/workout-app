@@ -71,7 +71,7 @@ export function MySharedWorkouts({ userId, limit = 3 }: MySharedWorkoutsProps) {
     return (
       <Card>
         <CardContent className="flex items-center justify-center py-8">
-          <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-primary-500" />
+          <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-action" />
         </CardContent>
       </Card>
     );
@@ -85,10 +85,10 @@ export function MySharedWorkouts({ userId, limit = 3 }: MySharedWorkoutsProps) {
         </CardHeader>
         <CardContent>
           <div className="text-center py-4">
-            <p className="text-surface-400 mb-4">
+            <p className="text-ink-2 mb-4">
               You haven&apos;t shared any workouts yet.
             </p>
-            <p className="text-sm text-surface-500">
+            <p className="text-sm text-ink-3">
               Share your workouts after completing them to help others train better!
             </p>
           </div>
@@ -108,22 +108,22 @@ export function MySharedWorkouts({ userId, limit = 3 }: MySharedWorkoutsProps) {
       <CardContent className="space-y-4">
         {/* Stats row */}
         {stats && (
-          <div className="grid grid-cols-4 gap-2 p-3 bg-surface-800 rounded-lg mb-4">
+          <div className="grid grid-cols-4 gap-2 p-3 bg-fill rounded-lg mb-4">
             <div className="text-center">
-              <p className="text-lg font-bold text-surface-100">{stats.total_shared}</p>
-              <p className="text-xs text-surface-400">Shared</p>
+              <p className="text-lg font-bold text-ink">{stats.total_shared}</p>
+              <p className="text-xs text-ink-2">Shared</p>
             </div>
             <div className="text-center">
-              <p className="text-lg font-bold text-surface-100">{stats.total_views}</p>
-              <p className="text-xs text-surface-400">Views</p>
+              <p className="text-lg font-bold text-ink">{stats.total_views}</p>
+              <p className="text-xs text-ink-2">Views</p>
             </div>
             <div className="text-center">
-              <p className="text-lg font-bold text-surface-100">{stats.total_saves}</p>
-              <p className="text-xs text-surface-400">Saves</p>
+              <p className="text-lg font-bold text-ink">{stats.total_saves}</p>
+              <p className="text-xs text-ink-2">Saves</p>
             </div>
             <div className="text-center">
-              <p className="text-lg font-bold text-surface-100">{stats.total_copies}</p>
-              <p className="text-xs text-surface-400">Copies</p>
+              <p className="text-lg font-bold text-ink">{stats.total_copies}</p>
+              <p className="text-xs text-ink-2">Copies</p>
             </div>
           </div>
         )}
@@ -134,19 +134,19 @@ export function MySharedWorkouts({ userId, limit = 3 }: MySharedWorkoutsProps) {
             <Link
               key={workout.id}
               href={`/dashboard/discover/${workout.id}`}
-              className="block p-3 bg-surface-800/50 hover:bg-surface-800 rounded-lg transition-colors"
+              className="block p-3 bg-fill/50 hover:bg-fill rounded-lg transition-colors"
             >
               <div className="flex items-start justify-between">
                 <div className="min-w-0 flex-1">
-                  <p className="font-medium text-surface-100 truncate">
+                  <p className="font-medium text-ink truncate">
                     {workout.title}
                   </p>
-                  <div className="flex items-center gap-3 mt-1 text-xs text-surface-400">
+                  <div className="flex items-center gap-3 mt-1 text-xs text-ink-2">
                     <span>{formatDistanceToNow(workout.created_at)}</span>
                     <span className="capitalize">{workout.share_type.replace('_', ' ')}</span>
                   </div>
                 </div>
-                <div className="flex items-center gap-3 text-xs text-surface-400 ml-4">
+                <div className="flex items-center gap-3 text-xs text-ink-2 ml-4">
                   <span className="flex items-center gap-1">
                     <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />

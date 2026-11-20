@@ -32,21 +32,8 @@
   --ring: #0ea5e9;
   --radius: 0.5rem;
 
-  /* Surface ramp as RGB channels so Tailwind opacity modifiers (bg-surface-800/50)
-     keep working. Default = dark (current values); these make dark look identical. */
-  --surface-50: 250 250 250;
-  --surface-100: 244 244 245;
-  --surface-200: 228 228 231;
-  --surface-300: 212 212 216;
-  --surface-400: 161 161 170;
-  --surface-500: 113 113 122;
-  --surface-600: 82 82 91;
-  --surface-700: 63 63 70;
-  --surface-800: 39 39 42;
-  --surface-900: 24 24 27;
-  --surface-950: 9 9 11;
 
-  /* Meal-section accent tokens (RGB channels, like the surface ramp).
+  /* Meal-section accent tokens (RGB channels, like the --ht-* tokens).
      400-weight hues on the dark surface; the light theme overrides with
      600-weight so contrast vs the white card stays >= 3:1. Keep in sync with
      MEAL_ACCENTS in lib/nutrition/mealAccents.ts (contrast-tested there). */
@@ -88,9 +75,8 @@
   --ht-shadow-float: 0 8px 30px rgb(0 0 0 / 0.6);
 }
 
-/* Light theme — opt-in via data-theme="light" on <html>. Inverts the surface ramp
-   (high numbers, used as backgrounds, become light; low numbers, used as text,
-   become dark) so existing surface-* classes flip automatically. */
+/* Light theme — opt-in via data-theme="light" on <html>. Redefines the
+   --ht-* design tokens (and the legacy shadcn-style vars) for light surfaces. */
 :root[data-theme="light"] {
   color-scheme: light;
 
@@ -107,17 +93,6 @@
   --border: #e4e4e7;
   --input: #e4e4e7;
 
-  --surface-50: 9 9 11;
-  --surface-100: 24 24 27;
-  --surface-200: 39 39 42;
-  --surface-300: 63 63 70;
-  --surface-400: 113 113 122;
-  --surface-500: 100 116 139;
-  --surface-600: 161 161 170;
-  --surface-700: 212 212 216;
-  --surface-800: 228 228 231;
-  --surface-900: 255 255 255;
-  --surface-950: 248 250 252;
 
   /* Meal accents on light surfaces: 600-weight for >= 3:1 contrast on white. */
   --meal-breakfast: 217 119 6;  /* amber-600 */
@@ -236,50 +211,50 @@
   }
 
   ::-webkit-scrollbar-track {
-    @apply bg-surface-900;
+    @apply bg-card;
   }
 
   ::-webkit-scrollbar-thumb {
-    @apply bg-surface-700 rounded-full;
+    @apply bg-sep rounded-full;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    @apply bg-surface-600;
+    @apply bg-sep;
   }
 }
 
 @layer components {
   .btn {
     @apply inline-flex items-center justify-center rounded-lg font-medium transition-all duration-200;
-    @apply focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-surface-900;
+    @apply focus:outline-none focus:ring-2 focus:ring-action focus:ring-offset-2 focus:ring-offset-card;
     @apply disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
   .btn-primary {
-    @apply btn bg-primary-600 text-white hover:bg-primary-500 active:bg-primary-700;
+    @apply btn bg-action text-on-action hover:brightness-110 active:brightness-95;
   }
 
   .btn-secondary {
-    @apply btn bg-surface-700 text-surface-100 hover:bg-surface-600 active:bg-surface-800;
+    @apply btn bg-fill text-ink hover:brightness-110 active:brightness-95;
   }
 
   .btn-ghost {
-    @apply btn bg-transparent text-surface-300 hover:bg-surface-800 hover:text-surface-100;
+    @apply btn bg-transparent text-ink-2 hover:bg-fill hover:text-ink;
   }
 
   .btn-danger {
-    @apply btn bg-danger-600 text-white hover:bg-danger-500 active:bg-danger-600;
+    @apply btn bg-status-bad-tint text-status-bad hover:brightness-110;
   }
 
   .input-field {
-    @apply w-full rounded-lg bg-surface-800 border border-surface-700 px-4 py-2.5;
-    @apply text-surface-100 placeholder:text-surface-500;
-    @apply focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent;
+    @apply w-full rounded-lg bg-fill border border-sep px-4 py-2.5;
+    @apply text-ink placeholder:text-ink-3;
+    @apply focus:outline-none focus:ring-2 focus:ring-action focus:border-transparent;
     @apply transition-all duration-200;
   }
 
   .card {
-    @apply bg-surface-900 border border-surface-800 rounded-xl;
+    @apply bg-card border border-sep rounded-xl;
   }
 
   .card-elevated {
@@ -288,40 +263,40 @@
 
   /* Volume status colors */
   .volume-below-mev {
-    @apply bg-surface-600 text-surface-300;
+    @apply bg-sep text-ink-2;
   }
 
   .volume-effective {
-    @apply bg-primary-600/20 text-primary-400;
+    @apply bg-action/20 text-action;
   }
 
   .volume-optimal {
-    @apply bg-success-500/20 text-success-400;
+    @apply bg-status-ok/20 text-status-ok;
   }
 
   .volume-approaching-mrv {
-    @apply bg-warning-500/20 text-warning-400;
+    @apply bg-status-warn/20 text-status-warn;
   }
 
   .volume-exceeding-mrv {
-    @apply bg-danger-500/20 text-danger-400;
+    @apply bg-status-bad/20 text-status-bad;
   }
 
   /* Set quality indicators */
   .set-junk {
-    @apply text-surface-500;
+    @apply text-ink-3;
   }
 
   .set-effective {
-    @apply text-primary-400;
+    @apply text-action;
   }
 
   .set-stimulative {
-    @apply text-success-400;
+    @apply text-status-ok;
   }
 
   .set-excessive {
-    @apply text-danger-400;
+    @apply text-status-bad;
   }
 }
 
@@ -449,7 +424,7 @@ body.barcode-scanner-active .barcode-scanner-overlay {
   }
 
   .glass {
-    @apply bg-surface-900/80 backdrop-blur-lg;
+    @apply bg-card/80 backdrop-blur-lg;
   }
 
   .gradient-radial {

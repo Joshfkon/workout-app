@@ -59,7 +59,7 @@ export function CommentSection({ activityId, commentCount, currentUserId, onComm
       <div className="px-4 pb-3">
         <button
           onClick={() => setIsExpanded(true)}
-          className="text-sm text-surface-400 hover:text-surface-200 transition-colors"
+          className="text-sm text-ink-2 hover:text-ink transition-colors"
         >
           Add a comment...
         </button>
@@ -68,13 +68,13 @@ export function CommentSection({ activityId, commentCount, currentUserId, onComm
   }
 
   return (
-    <div className="border-t border-surface-800">
+    <div className="border-t border-sep">
       {/* Toggle button */}
       {!isExpanded && commentCount > 0 && (
         <div className="px-4 py-3">
           <button
             onClick={() => setIsExpanded(true)}
-            className="text-sm text-surface-400 hover:text-surface-200 transition-colors"
+            className="text-sm text-ink-2 hover:text-ink transition-colors"
           >
             View {commentCount} {commentCount === 1 ? 'comment' : 'comments'}
           </button>
@@ -87,7 +87,7 @@ export function CommentSection({ activityId, commentCount, currentUserId, onComm
           {/* Comments list */}
           {isLoading ? (
             <div className="flex justify-center py-4">
-              <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-primary-500" />
+              <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-action" />
             </div>
           ) : comments.length > 0 ? (
             <div className="space-y-4">
@@ -102,7 +102,7 @@ export function CommentSection({ activityId, commentCount, currentUserId, onComm
               ))}
             </div>
           ) : (
-            <p className="text-sm text-surface-400 text-center py-4">No comments yet</p>
+            <p className="text-sm text-ink-2 text-center py-4">No comments yet</p>
           )}
 
           {/* Comment input */}

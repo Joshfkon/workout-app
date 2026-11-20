@@ -277,30 +277,30 @@ export function CreateCustomExercise({
     <div className="max-w-lg mx-auto">
       {/* Secondaries Nudge - Light reminder after basics-only save */}
       {showSecondariesNudge && savedExerciseId && (
-        <div className="mb-6 bg-primary-900/20 border border-primary-700/60 rounded-lg p-4">
+        <div className="mb-6 bg-action/15 border border-action/60 rounded-lg p-4">
           <div className="flex items-start gap-3">
             <div className="flex-shrink-0 mt-0.5">
-              <svg className="w-5 h-5 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-5 h-5 text-action" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
             <div className="flex-1">
-              <h4 className="text-sm font-medium text-primary-200 mb-1">
+              <h4 className="text-sm font-medium text-action mb-1">
                 Exercise Saved
               </h4>
-              <p className="text-sm text-surface-300 mb-3">
+              <p className="text-sm text-ink-2 mb-3">
                 No secondary muscles were added yet. You can refine this later from the exercise library.
               </p>
               <div className="flex gap-3">
                 <button
                   onClick={handleEditExercise}
-                  className="text-sm font-medium text-primary-400 hover:text-primary-300 transition-colors"
+                  className="text-sm font-medium text-action transition-colors"
                 >
                   Edit Exercise
                 </button>
                 <button
                   onClick={handleDismissNudge}
-                  className="text-sm font-medium text-surface-400 hover:text-surface-300 transition-colors"
+                  className="text-sm font-medium text-ink-2 hover:text-ink-2 transition-colors"
                 >
                   Continue
                 </button>
@@ -312,21 +312,21 @@ export function CreateCustomExercise({
 
       {/* Error Display with fallback option */}
       {error && (
-        <div className="mb-6 bg-danger-900/30 border border-danger-700 rounded-lg p-4">
-          <p className="text-danger-300 mb-3">{error}</p>
+        <div className="mb-6 bg-status-bad/15 border border-status-bad rounded-lg p-4">
+          <p className="text-status-bad mb-3">{error}</p>
           {basicInput && phase === 'input' && (
             <div className="flex gap-3">
               <button
                 onClick={() => handleBasicSubmit(basicInput)}
                 disabled={isLoading || isSaving}
-                className="flex-1 px-4 py-2 bg-surface-700 hover:bg-surface-600 text-surface-200 rounded-lg transition-colors disabled:opacity-50"
+                className="flex-1 px-4 py-2 bg-sep hover:bg-sep text-ink rounded-lg transition-colors disabled:opacity-50"
               >
                 Retry AI completion
               </button>
               <button
                 onClick={handleSaveWithBasics}
                 disabled={isLoading || isSaving}
-                className="flex-1 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors disabled:opacity-50"
+                className="flex-1 px-4 py-2 bg-action hover:bg-action text-on-action rounded-lg transition-colors disabled:opacity-50"
               >
                 {isSaving ? 'Saving...' : 'Save with basics only'}
               </button>

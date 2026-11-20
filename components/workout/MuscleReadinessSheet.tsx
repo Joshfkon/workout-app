@@ -102,13 +102,13 @@ interface MuscleReadinessSheetProps {
 }
 
 const RECOVERY_BADGE: Record<MuscleRecoveryResult['status'], { label: string; className: string }> = {
-  fresh: { label: 'Fresh', className: 'bg-success-500/15 text-success-400' },
-  recovering: { label: 'Recovering', className: 'bg-warning-500/15 text-warning-400' },
-  fatigued: { label: 'Fatigued', className: 'bg-surface-700 text-surface-400' },
+  fresh: { label: 'Fresh', className: 'bg-status-ok/15 text-status-ok' },
+  recovering: { label: 'Recovering', className: 'bg-status-warn/15 text-status-warn' },
+  fatigued: { label: 'Fatigued', className: 'bg-sep text-ink-2' },
 };
 
 /** Shown for a muscle with no training in the window — no recovery estimate. */
-const NO_DATA_BADGE = { label: 'No recent data', className: 'bg-surface-800 text-surface-500' };
+const NO_DATA_BADGE = { label: 'No recent data', className: 'bg-fill text-ink-3' };
 
 /** "ready in ~Xh" — coarse, human-readable time until Fresh. */
 function formatReadyIn(hours: number): string {
@@ -173,8 +173,8 @@ function ReadinessMap({ rows }: { rows: ReadinessRow[] }) {
               onClick={() => setMode(m.id)}
               className={`px-2.5 py-1 rounded text-[11px] font-medium transition-colors ${
                 mode === m.id
-                  ? 'bg-surface-700 text-surface-100'
-                  : 'text-surface-500 hover:text-surface-300'
+                  ? 'bg-sep text-ink'
+                  : 'text-ink-3 hover:text-ink-2'
               }`}
               data-testid={`readiness-map-mode-${m.id}`}
               aria-pressed={mode === m.id}
@@ -221,7 +221,7 @@ function RecoveryBadge({
       <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium text-right ${badge.className}`} data-testid={`readiness-badge-${muscle}`}>
         {badge.label}
       </span>
-      {readyIn && <span className="text-[10px] text-surface-500">{readyIn}</span>}
+      {readyIn && <span className="text-[10px] text-ink-3">{readyIn}</span>}
     </div>
   );
 }
@@ -241,13 +241,13 @@ function ReadinessChildContent({ child }: { child: ReadinessChild }) {
           {/* flex-wrap: same as the coarse row — never truncate the name to fit
               the band label; wrap the label instead. */}
           <div className="flex flex-wrap items-center justify-between gap-x-2">
-            <span className="text-xs text-surface-400">{child.displayName}</span>
-            <span className="text-[10px] tabular-nums text-surface-500 flex-shrink-0 ml-auto">
+            <span className="text-xs text-ink-2">{child.displayName}</span>
+            <span className="text-[10px] tabular-nums text-ink-3 flex-shrink-0 ml-auto">
               <span className={zoneTextClass(child.zone, child.sets, child.band)} data-testid={`readiness-sets-${child.muscle}`}>{child.sets}</span>
-              <span className="text-surface-600"> · {zoneBandLabel(child.band)}</span>
+              <span className="text-ink-3"> · {zoneBandLabel(child.band)}</span>
             </span>
           </div>
-          <div className="mt-1 h-1 rounded-full bg-surface-800 overflow-hidden">
+          <div className="mt-1 h-1 rounded-full bg-fill overflow-hidden">
             <div className={`h-full rounded-full ${zoneBarClass(child.zone, child.sets, child.band)}`} style={{ width: `${barFillPct(child.sets, child.band.mrv)}%` }} />
           </div>
         </div>
@@ -265,15 +265,15 @@ function ReadinessRowContent({ row }: { row: ReadinessRow }) {
         {/* flex-wrap: on narrow screens the band label drops to its own line
             instead of shrink-squeezing the muscle name into "Ham…". */}
         <div className="flex flex-wrap items-center justify-between gap-x-2">
-          <span className="text-sm text-surface-100">{row.displayName}</span>
+          <span className="text-sm text-ink">{row.displayName}</span>
           <span className="text-[11px] tabular-nums flex-shrink-0 ml-auto">
             {/* Row-aware color: an in-zone parent with a lagging fine child
                 reads warning, never green. Coarse bands are group landmarks. */}
             <span className={rowTextClass(row)} data-testid={`readiness-sets-${row.muscle}`}>{row.sets}</span>
-            <span className="text-surface-600"> · {groupZoneBandLabel(row.band)}</span>
+            <span className="text-ink-3"> · {groupZoneBandLabel(row.band)}</span>
           </span>
         </div>
-        <div className="mt-1.5 h-1 rounded-full bg-surface-800 overflow-hidden">
+        <div className="mt-1.5 h-1 rounded-full bg-fill overflow-hidden">
           <div className={`h-full rounded-full ${rowBarClass(row)}`} style={{ width: `${barFillPct(row.sets, row.band.mrv)}%` }} />
         </div>
       </div>
@@ -371,7 +371,7 @@ export function MuscleReadinessContent({
       />
 
       {isLoading ? (
-        <div className="py-8 text-center text-sm text-surface-500" data-testid={loadingTestId}>
+        <div className="py-8 text-center text-sm text-ink-3" data-testid={loadingTestId}>
           Loading readiness…
         </div>
       ) : (
@@ -379,7 +379,7 @@ export function MuscleReadinessContent({
           {active.rows.length > 0 && (
             <ReadinessMap rows={mapRows} />
           )}
-          <div className="divide-y divide-surface-800/70">
+          <div className="divide-y divide-sep/70">
             <MuscleGroupList
               rows={active.rows}
               expansion={expansion}
@@ -421,7 +421,7 @@ export function MuscleReadinessContent({
                 );
               }}
               testIdPrefix="readiness-row"
-              childrenClassName="border-l border-surface-800/80 ml-5 mb-1 pl-2"
+              childrenClassName="border-l border-sep/80 ml-5 mb-1 pl-2"
             />
           </div>
         </>
@@ -429,7 +429,7 @@ export function MuscleReadinessContent({
 
       {wearableNotice && !isLoading && (
         <p
-          className="mt-3 text-[11px] leading-relaxed text-surface-500"
+          className="mt-3 text-[11px] leading-relaxed text-ink-3"
           data-testid="readiness-wearable-notice"
         >
           {wearableNotice}
@@ -437,7 +437,7 @@ export function MuscleReadinessContent({
       )}
 
       {showFootnote && (
-        <p className="mt-3 text-[11px] leading-relaxed text-surface-600">
+        <p className="mt-3 text-[11px] leading-relaxed text-ink-3">
           Sorted by what to train now: recovered muscles behind on weekly volume
           come first; fatigued muscles sink to the bottom. Set counts include
           today&rsquo;s workout as you log it; recovery updates once you finish

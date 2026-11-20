@@ -188,7 +188,7 @@ export function ResumeWorkoutBanner() {
       <div className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] left-0 right-0 z-40 px-4 lg:left-64 lg:bottom-4">
         <div className="max-w-md mx-auto">
           <div
-            className="bg-surface-900/95 backdrop-blur border-[1.5px] border-primary-500 rounded-full shadow-2xl shadow-black/50 pl-4 pr-2 py-2 cursor-pointer"
+            className="bg-card/95 backdrop-blur border-[1.5px] border-action rounded-full shadow-2xl shadow-black/50 pl-4 pr-2 py-2 cursor-pointer"
             onClick={handleResume}
             role="button"
             aria-label="Resume workout"
@@ -197,15 +197,15 @@ export function ResumeWorkoutBanner() {
               <div
                 className={
                   staleEmpty
-                    ? 'w-2.5 h-2.5 flex-shrink-0 rounded-full bg-surface-500'
-                    : 'w-2.5 h-2.5 flex-shrink-0 rounded-full bg-success-400 animate-pulse'
+                    ? 'w-2.5 h-2.5 flex-shrink-0 rounded-full bg-ink-3'
+                    : 'w-2.5 h-2.5 flex-shrink-0 rounded-full bg-status-ok animate-pulse'
                 }
               />
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-surface-100 truncate">
+                <p className="text-sm font-semibold text-ink truncate">
                   {workoutLabel}
                 </p>
-                <p className="text-[11px] text-surface-400 truncate tabular-nums">
+                <p className="text-[11px] text-ink-2 truncate tabular-nums">
                   {/* Stale + empty: nothing was ever logged, so a rest countdown
                       or set tally would be noise. Say what it actually is. */}
                   {staleEmpty ? (
@@ -225,7 +225,7 @@ export function ResumeWorkoutBanner() {
               </div>
               <button
                 onClick={(e) => { e.stopPropagation(); handleDiscard(); }}
-                className="flex-shrink-0 min-h-[44px] px-3 rounded-full text-xs text-surface-400 hover:text-surface-200 transition-colors"
+                className="flex-shrink-0 min-h-[44px] px-3 rounded-full text-xs text-ink-2 hover:text-ink transition-colors"
               >
                 Discard
               </button>
@@ -244,17 +244,17 @@ export function ResumeWorkoutBanner() {
       {/* Discard Confirmation Modal */}
       {showDiscardConfirm && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-surface-900 rounded-xl p-6 max-w-sm w-full shadow-xl border border-surface-700">
-            <h3 className="text-lg font-semibold text-surface-100 mb-2">
+          <div className="bg-card rounded-card p-6 max-w-sm w-full shadow-xl">
+            <h3 className="text-lg font-semibold text-ink mb-2">
               Discard Workout?
             </h3>
-            <p className="text-surface-400 text-sm mb-4">
+            <p className="text-ink-2 text-sm mb-4">
               {completedSetsCount > 0
                 ? `You have ${completedSetsCount} set${completedSetsCount !== 1 ? 's' : ''} logged. Discarding will delete this progress and can't be undone.`
                 : 'This will remove the workout session. You can start fresh later.'}
             </p>
             {discardError && (
-              <p className="text-danger-400 text-sm mb-4">
+              <p className="text-status-bad text-sm mb-4">
                 {discardError}
               </p>
             )}

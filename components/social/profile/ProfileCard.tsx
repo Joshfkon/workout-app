@@ -102,10 +102,10 @@ const ProfileCard = forwardRef<HTMLDivElement, ProfileCardProps>(
               href={getProfileUrl(profile.username)}
               className="block hover:opacity-80 transition-opacity"
             >
-              <p className="text-sm font-medium text-surface-100 truncate">
+              <p className="text-sm font-medium text-ink truncate">
                 {displayName}
               </p>
-              <p className="text-xs text-surface-400 truncate">
+              <p className="text-xs text-ink-2 truncate">
                 @{profile.username}
               </p>
             </Link>
@@ -140,16 +140,16 @@ const ProfileCard = forwardRef<HTMLDivElement, ProfileCardProps>(
                 href={getProfileUrl(profile.username)}
                 className="block hover:opacity-80 transition-opacity"
               >
-                <h3 className="text-lg font-semibold text-surface-100 truncate">
+                <h3 className="text-lg font-semibold text-ink truncate">
                   {displayName}
                 </h3>
-                <p className="text-sm text-surface-400 truncate">
+                <p className="text-sm text-ink-2 truncate">
                   @{profile.username}
                 </p>
               </Link>
 
               {profile.bio && (
-                <p className="mt-2 text-sm text-surface-300 line-clamp-2">
+                <p className="mt-2 text-sm text-ink-2 line-clamp-2">
                   {profile.bio}
                 </p>
               )}
@@ -158,36 +158,36 @@ const ProfileCard = forwardRef<HTMLDivElement, ProfileCardProps>(
         </div>
 
         {/* Stats row */}
-        <div className="flex items-center justify-around p-4 mt-2 border-t border-surface-800">
+        <div className="flex items-center justify-around p-4 mt-2 border-t border-sep">
           <div className="text-center">
-            <p className="text-lg font-semibold text-surface-100">
+            <p className="text-lg font-semibold text-ink">
               {formatSocialCount(profile.workout_count)}
             </p>
-            <p className="text-xs text-surface-400">Workouts</p>
+            <p className="text-xs text-ink-2">Workouts</p>
           </div>
 
-          <div className="w-px h-8 bg-surface-800" />
+          <div className="w-px h-8 bg-fill" />
 
           <Link
             href={`${getProfileUrl(profile.username)}/followers`}
             className="text-center hover:opacity-80 transition-opacity"
           >
-            <p className="text-lg font-semibold text-surface-100">
+            <p className="text-lg font-semibold text-ink">
               {formatSocialCount(profile.follower_count)}
             </p>
-            <p className="text-xs text-surface-400">Followers</p>
+            <p className="text-xs text-ink-2">Followers</p>
           </Link>
 
-          <div className="w-px h-8 bg-surface-800" />
+          <div className="w-px h-8 bg-fill" />
 
           <Link
             href={`${getProfileUrl(profile.username)}/following`}
             className="text-center hover:opacity-80 transition-opacity"
           >
-            <p className="text-lg font-semibold text-surface-100">
+            <p className="text-lg font-semibold text-ink">
               {formatSocialCount(profile.following_count)}
             </p>
-            <p className="text-xs text-surface-400">Following</p>
+            <p className="text-xs text-ink-2">Following</p>
           </Link>
         </div>
 
@@ -203,15 +203,15 @@ const ProfileCard = forwardRef<HTMLDivElement, ProfileCardProps>(
               {profile.badges.slice(0, 3).map((badge) => (
                 <span
                   key={badge.id}
-                  className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-surface-800 rounded-full"
+                  className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-fill rounded-full"
                   title={badge.description}
                 >
                   <span>{badge.icon}</span>
-                  <span className="text-surface-300">{badge.name}</span>
+                  <span className="text-ink-2">{badge.name}</span>
                 </span>
               ))}
               {profile.badges.length > 3 && (
-                <span className="inline-flex items-center px-2 py-1 text-xs text-surface-400 bg-surface-800 rounded-full">
+                <span className="inline-flex items-center px-2 py-1 text-xs text-ink-2 bg-fill rounded-full">
                   +{profile.badges.length - 3} more
                 </span>
               )}
@@ -221,7 +221,7 @@ const ProfileCard = forwardRef<HTMLDivElement, ProfileCardProps>(
 
         {/* Training info */}
         {(profile.training_experience || profile.gym_name) && (
-          <div className="px-4 pb-4 flex flex-wrap gap-2 text-xs text-surface-400">
+          <div className="px-4 pb-4 flex flex-wrap gap-2 text-xs text-ink-2">
             {profile.training_experience && (
               <span className="capitalize">{profile.training_experience}</span>
             )}

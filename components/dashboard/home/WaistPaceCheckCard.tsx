@@ -138,9 +138,9 @@ export function WaistPaceCheckCard({
   };
 
   return (
-    <div className="rounded-card bg-warning-500/10 border border-warning-500/20 p-4" data-testid="waist-pace-check">
+    <div className="rounded-card bg-status-warn/10 border border-status-warn/20 p-4" data-testid="waist-pace-check">
       <div className="flex items-start gap-3">
-        <IconRulerMeasure className="w-5 h-5 text-warning-400 flex-shrink-0 mt-0.5" aria-hidden="true" />
+        <IconRulerMeasure className="w-5 h-5 text-status-warn flex-shrink-0 mt-0.5" aria-hidden="true" />
         <div className="flex-1 min-w-0">
           <p className="text-[15px] font-medium text-ink">Waist is outpacing this gain</p>
           <p className="mt-1.5 text-xs text-ink-2">{signal.message}</p>

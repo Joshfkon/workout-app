@@ -222,7 +222,7 @@ function AvatarUploadComponent({
         )}
       </div>
 
-      <p className="text-xs text-surface-500 text-center">
+      <p className="text-xs text-ink-3 text-center">
         JPEG, PNG, WebP or GIF. Max 5MB.
       </p>
     </div>

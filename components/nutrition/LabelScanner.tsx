@@ -366,16 +366,16 @@ export function LabelScanner({ onClose, onParsed }: LabelScannerProps) {
   // ---------------------------------------------------------------------------
 
   return (
-    <div className="bg-surface-800 rounded-lg border border-surface-700 overflow-hidden" data-testid="label-scanner">
+    <div className="bg-fill rounded-lg border border-sep overflow-hidden" data-testid="label-scanner">
       {/* Header */}
-      <div className="flex items-center justify-between p-3 border-b border-surface-700">
+      <div className="flex items-center justify-between p-3 border-b border-sep">
         <div className="flex items-center gap-2">
-          <svg className="w-5 h-5 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="w-5 h-5 text-action" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m-6-8h6M5 4h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5a1 1 0 011-1z" />
           </svg>
-          <span className="font-medium text-surface-100">Scan Nutrition Label</span>
+          <span className="font-medium text-ink">Scan Nutrition Label</span>
         </div>
-        <button onClick={onClose} className="p-1 text-surface-400 hover:text-surface-200" aria-label="Close label scanner">
+        <button onClick={onClose} className="p-1 text-ink-2 hover:text-ink" aria-label="Close label scanner">
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
@@ -397,8 +397,8 @@ export function LabelScanner({ onClose, onParsed }: LabelScannerProps) {
       <div className="p-4 space-y-4">
         {stage === 'idle' && (
           <div className="flex flex-col items-center justify-center py-6 px-4">
-            <div className="w-16 h-16 rounded-full bg-primary-500/20 flex items-center justify-center mb-4">
-              <svg className="w-8 h-8 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="w-16 h-16 rounded-full bg-action/20 flex items-center justify-center mb-4">
+              <svg className="w-8 h-8 text-action" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
@@ -415,7 +415,7 @@ export function LabelScanner({ onClose, onParsed }: LabelScannerProps) {
             >
               Take Photo Instead
             </Button>
-            <p className="text-xs text-surface-500 mt-3 text-center">
+            <p className="text-xs text-ink-3 mt-3 text-center">
               Fit the Nutrition Facts panel in the frame — flat, well-lit, and filling most of the shot.
             </p>
           </div>
@@ -459,33 +459,33 @@ export function LabelScanner({ onClose, onParsed }: LabelScannerProps) {
         {stage === 'ocr' && (
           <div className="flex flex-col items-center justify-center py-10" data-testid="label-ocr-progress">
             <LoadingAnimation type="dots" size="md" />
-            <p className="mt-3 text-surface-400 text-sm">
+            <p className="mt-3 text-ink-2 text-sm">
               Reading label…{ocrProgress > 0 ? ` ${ocrProgress}%` : ''}
             </p>
-            <p className="mt-1 text-xs text-surface-500">Runs on your device — nothing is uploaded.</p>
+            <p className="mt-1 text-xs text-ink-3">Runs on your device — nothing is uploaded.</p>
           </div>
         )}
 
         {stage === 'ai' && (
           <div className="flex flex-col items-center justify-center py-10" data-testid="label-ai-progress">
             <LoadingAnimation type="dots" size="md" />
-            <p className="mt-3 text-surface-400 text-sm">Asking AI to read the label…</p>
+            <p className="mt-3 text-ink-2 text-sm">Asking AI to read the label…</p>
           </div>
         )}
 
         {stage === 'review' && (
           <div className="space-y-3" data-testid="label-scan-review">
             {error ? (
-              <div className="p-3 rounded-lg bg-danger-500/10 border border-danger-500/20">
-                <p className="text-sm text-danger-400">{error}</p>
+              <div className="p-3 rounded-lg bg-status-bad/10 border border-status-bad/20">
+                <p className="text-sm text-status-bad">{error}</p>
               </div>
             ) : (
-              <div className="p-3 rounded-lg bg-warning-500/10 border border-warning-500/20 space-y-1">
-                <p className="text-sm font-medium text-warning-400">
+              <div className="p-3 rounded-lg bg-status-warn/10 border border-status-warn/20 space-y-1">
+                <p className="text-sm font-medium text-status-warn">
                   Couldn&apos;t read the label confidently
                 </p>
                 {result?.warnings.map((warning) => (
-                  <p key={warning} className="text-xs text-warning-400/90">
+                  <p key={warning} className="text-xs text-status-warn/90">
                     {warning}
                   </p>
                 ))}
@@ -494,7 +494,7 @@ export function LabelScanner({ onClose, onParsed }: LabelScannerProps) {
 
             {/* What we did manage to read, so "use anyway" is an informed choice */}
             {result && result.hasCoreFields && (
-              <div className="p-3 bg-surface-900/60 rounded-lg text-sm text-surface-300">
+              <div className="p-3 bg-card/60 rounded-lg text-sm text-ink-2">
                 {result.fields.calories} cal · {result.fields.proteinG}g P ·{' '}
                 {result.fields.totalCarbsG}g C · {result.fields.totalFatG}g F
                 {result.fields.servingSizeText ? ` · ${result.fields.servingSizeText}` : ''}
@@ -512,7 +512,7 @@ export function LabelScanner({ onClose, onParsed }: LabelScannerProps) {
                 Try AI scan
               </Button>
               {!isOnline && (
-                <p className="text-xs text-surface-500 text-center">
+                <p className="text-xs text-ink-3 text-center">
                   AI scan needs an internet connection — you&apos;re offline. Use the values below or enter them manually.
                 </p>
               )}
@@ -534,8 +534,8 @@ export function LabelScanner({ onClose, onParsed }: LabelScannerProps) {
         )}
 
         {stage !== 'review' && error && (
-          <div className="p-3 rounded-lg bg-surface-700/50">
-            <p className="text-sm text-surface-300">{error}</p>
+          <div className="p-3 rounded-lg bg-sep/50">
+            <p className="text-sm text-ink-2">{error}</p>
           </div>
         )}
       </div>

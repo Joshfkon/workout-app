@@ -152,8 +152,8 @@ export const InfoTooltip = memo(function InfoTooltip({
       onClick={handleToggle}
       className={cn(
         'inline-flex items-center justify-center rounded-full',
-        'text-surface-400 hover:text-surface-200 hover:bg-surface-800',
-        'transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 focus:ring-offset-surface-900',
+        'text-ink-2 hover:text-ink hover:bg-fill',
+        'transition-colors focus:outline-none focus:ring-2 focus:ring-action focus:ring-offset-1 focus:ring-offset-card',
         sizes[size],
         inline && 'ml-1',
         className
@@ -183,7 +183,7 @@ export const InfoTooltip = memo(function InfoTooltip({
       role="tooltip"
       className={cn(
         'fixed z-[100] w-72 p-3 rounded-lg',
-        'bg-surface-800 border border-surface-700 shadow-xl',
+        'bg-fill border border-sep shadow-xl',
         'animate-fade-in',
         positionClasses[position]
       )}
@@ -195,16 +195,16 @@ export const InfoTooltip = memo(function InfoTooltip({
       {/* Header */}
       <div className="flex items-start justify-between gap-2 mb-2">
         <div>
-          <span className="font-semibold text-surface-100">{content.term}</span>
+          <span className="font-semibold text-ink">{content.term}</span>
           {content.fullName && (
-            <span className="text-surface-400 text-sm ml-1">
+            <span className="text-ink-2 text-sm ml-1">
               ({content.fullName})
             </span>
           )}
         </div>
         <button
           onClick={() => setIsOpen(false)}
-          className="p-0.5 text-surface-400 hover:text-surface-200 rounded"
+          className="p-0.5 text-ink-2 hover:text-ink rounded"
           aria-label="Close"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -214,13 +214,13 @@ export const InfoTooltip = memo(function InfoTooltip({
       </div>
 
       {/* Short explanation */}
-      <p className="text-sm text-surface-300 leading-relaxed">
+      <p className="text-sm text-ink-2 leading-relaxed">
         {content.shortExplanation}
       </p>
 
       {/* Long explanation (if available) */}
       {content.longExplanation && (
-        <p className="text-xs text-surface-400 mt-2 leading-relaxed">
+        <p className="text-xs text-ink-2 mt-2 leading-relaxed">
           {content.longExplanation}
         </p>
       )}
@@ -229,7 +229,7 @@ export const InfoTooltip = memo(function InfoTooltip({
       {content.learnMoreSlug && (
         <Link
           href={`/dashboard/learn/${content.learnMoreSlug}`}
-          className="inline-flex items-center gap-1 mt-3 text-xs text-primary-400 hover:text-primary-300 transition-colors"
+          className="inline-flex items-center gap-1 mt-3 text-xs text-action transition-colors"
           onClick={() => setIsOpen(false)}
         >
           Learn more
@@ -277,7 +277,7 @@ export const ExplainedTerm = memo(function ExplainedTerm({
 
   return (
     <span className={cn('inline-flex items-center', className)}>
-      <span className="border-b border-dotted border-surface-500 cursor-help">
+      <span className="border-b border-dotted border-ink-3 cursor-help">
         {content.term}
       </span>
       <InfoTooltip term={term} />

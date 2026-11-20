@@ -15,9 +15,9 @@ export function ImbalanceAlert({
   className = ''
 }: ImbalanceAlertProps) {
   const severityColors = {
-    minor: 'bg-surface-800/50',
-    moderate: 'bg-warning-500/10 border border-warning-500/30',
-    significant: 'bg-danger-500/10 border border-danger-500/30'
+    minor: 'bg-fill/50',
+    moderate: 'bg-status-warn/10 border border-status-warn/30',
+    significant: 'bg-status-bad/10 border border-status-bad/30'
   };
   
   const severityBadge = {
@@ -37,7 +37,7 @@ export function ImbalanceAlert({
     return (
       <div className={`flex items-center gap-2 p-2 rounded-lg ${severityColors[imbalance.severity]} ${className}`}>
         <span>{typeIcons[imbalance.type]}</span>
-        <span className="text-sm text-surface-300 flex-1 truncate">{imbalance.description}</span>
+        <span className="text-sm text-ink-2 flex-1 truncate">{imbalance.description}</span>
         <Badge size="sm" variant={severityBadge[imbalance.severity]}>
           {imbalance.severity}
         </Badge>
@@ -51,8 +51,8 @@ export function ImbalanceAlert({
         <div className="flex gap-3">
           <span className="text-xl">{typeIcons[imbalance.type]}</span>
           <div>
-            <p className="font-medium text-surface-200">{imbalance.description}</p>
-            <p className="text-sm text-surface-400 mt-1">{imbalance.recommendation}</p>
+            <p className="font-medium text-ink">{imbalance.description}</p>
+            <p className="text-sm text-ink-2 mt-1">{imbalance.recommendation}</p>
           </div>
         </div>
         <Badge variant={severityBadge[imbalance.severity]}>
@@ -77,8 +77,8 @@ export function ImbalanceList({
 }: ImbalanceListProps) {
   if (imbalances.length === 0) {
     return (
-      <div className={`p-4 bg-success-500/10 border border-success-500/30 rounded-lg text-center ${className}`}>
-        <span className="text-success-400">✓ No significant imbalances detected</span>
+      <div className={`p-4 bg-status-ok/10 border border-status-ok/30 rounded-lg text-center ${className}`}>
+        <span className="text-status-ok">✓ No significant imbalances detected</span>
       </div>
     );
   }

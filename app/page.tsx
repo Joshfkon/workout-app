@@ -41,28 +41,28 @@ export default async function Home({
   // marketing page (and its pricing link) is web-only.
   return (
     <NativeAppRedirect to="/login">
-    <div className="min-h-screen bg-surface-950 relative overflow-hidden">
+    <div className="min-h-screen bg-canvas relative overflow-hidden">
       {/* Top navigation - fixed height to prevent overlap */}
-      <nav className="fixed top-0 left-0 right-0 z-20 flex items-center justify-between px-4 py-3 md:px-6 md:py-4 bg-surface-950/80 backdrop-blur-sm border-b border-surface-800/50">
+      <nav className="fixed top-0 left-0 right-0 z-20 flex items-center justify-between px-4 py-3 md:px-6 md:py-4 bg-canvas/80 backdrop-blur-sm border-b border-sep/50">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center flex-shrink-0">
+          <div className="w-8 h-8 rounded-lg bg-action flex items-center justify-center flex-shrink-0">
             <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
           </div>
-          <span className="text-lg font-bold text-surface-100 tracking-tight">HyperTrack</span>
+          <span className="text-lg font-bold text-ink tracking-tight">HyperTrack</span>
         </div>
         <div className="flex items-center gap-2 sm:gap-3">
           <ThemeToggleCompact />
           <Link
             href="/login"
-            className="px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium text-surface-300 hover:text-surface-100 transition-colors"
+            className="px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium text-ink-2 hover:text-ink transition-colors"
           >
             Login
           </Link>
           <Link
             href="/register"
-            className="px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium rounded-lg bg-primary-500 hover:bg-primary-600 text-white transition-colors"
+            className="px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium rounded-lg bg-action hover:bg-action text-on-action transition-colors"
           >
             Sign Up
           </Link>
@@ -71,8 +71,8 @@ export default async function Home({
 
       {/* Background gradient effects */}
       <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute -top-1/2 -left-1/2 w-full h-full bg-gradient-radial from-primary-900/20 via-transparent to-transparent" />
-        <div className="absolute -bottom-1/2 -right-1/2 w-full h-full bg-gradient-radial from-accent-900/20 via-transparent to-transparent" />
+        <div className="absolute -top-1/2 -left-1/2 w-full h-full bg-gradient-radial from-action/15 via-transparent to-transparent" />
+        <div className="absolute -bottom-1/2 -right-1/2 w-full h-full bg-gradient-radial from-action/15 via-transparent to-transparent" />
       </div>
 
       {/* Grid pattern overlay */}
@@ -88,11 +88,11 @@ export default async function Home({
       <div className="relative z-10 flex flex-col items-center justify-center min-h-screen px-4 pt-20 md:pt-16">
         {/* Hero content */}
         <div className="text-center max-w-2xl animate-fade-in">
-          <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold text-surface-100 mb-6 tracking-tight">
-            Train <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary-400 to-accent-400">Smarter</span>,
+          <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold text-ink mb-6 tracking-tight">
+            Train <span className="text-transparent bg-clip-text bg-action ">Smarter</span>,
             <br />Grow Faster
           </h1>
-          <p className="text-lg sm:text-xl text-surface-400 mb-10 leading-relaxed px-2">
+          <p className="text-lg sm:text-xl text-ink-2 mb-10 leading-relaxed px-2">
             Science-based hypertrophy training with AI coaching and nutrition tracking.
             Track volume, manage fatigue, hit your macros, and optimize your gains.
           </p>
@@ -106,19 +106,19 @@ export default async function Home({
                 /login and the secondary duplicated the header's Sign Up. */}
             <Link
               href="/register"
-              className="btn-primary px-8 py-4 text-lg rounded-xl shadow-lg shadow-primary-500/25 hover:shadow-primary-500/40 transition-all"
+              className="btn-primary px-8 py-4 text-lg rounded-xl shadow-lg shadow-action/25 hover:shadow-action/40 transition-all"
             >
               Start Free Trial
             </Link>
             <Link
               href="/login"
-              className="btn-secondary px-8 py-4 text-lg rounded-xl border border-surface-700"
+              className="btn-secondary px-8 py-4 text-lg rounded-xl border border-sep"
             >
               Log In
             </Link>
           </div>
           {/* Trial disclosure */}
-          <p className="text-sm text-surface-500 text-center max-w-md px-4">
+          <p className="text-sm text-ink-3 text-center max-w-md px-4">
             14-day free trial. No credit card required. Automatically continues as Free plan—upgrade anytime.
           </p>
         </div>
@@ -127,7 +127,7 @@ export default async function Home({
         <div className="mt-6 animate-slide-up" style={{ animationDelay: '0.15s' }}>
           <Link
             href="/learn"
-            className="inline-flex items-center gap-2 text-surface-400 hover:text-primary-400 transition-colors group"
+            className="inline-flex items-center gap-2 text-ink-2 hover:text-action transition-colors group"
           >
             <span>Learn about the science</span>
             <svg 
@@ -213,28 +213,28 @@ export default async function Home({
       </div>
 
       {/* Footer */}
-      <footer className="relative z-10 border-t border-surface-800/50 mt-20">
+      <footer className="relative z-10 border-t border-sep/50 mt-20">
         <div className="max-w-5xl mx-auto px-4 py-8">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center flex-shrink-0">
+              <div className="w-6 h-6 rounded-lg bg-action flex items-center justify-center flex-shrink-0">
                 <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
               </div>
-              <span className="text-sm text-surface-400">© 2026 HyperTrack</span>
+              <span className="text-sm text-ink-2">© 2026 HyperTrack</span>
             </div>
             <div className="flex items-center gap-6 text-sm">
-              <Link href="/privacy" className="text-surface-400 hover:text-surface-200 transition-colors">
+              <Link href="/privacy" className="text-ink-2 hover:text-ink transition-colors">
                 Privacy
               </Link>
-              <Link href="/terms" className="text-surface-400 hover:text-surface-200 transition-colors">
+              <Link href="/terms" className="text-ink-2 hover:text-ink transition-colors">
                 Terms
               </Link>
-              <Link href="/support" className="text-surface-400 hover:text-surface-200 transition-colors">
+              <Link href="/support" className="text-ink-2 hover:text-ink transition-colors">
                 Support
               </Link>
-              <Link href="/pricing" className="text-surface-400 hover:text-surface-200 transition-colors">
+              <Link href="/pricing" className="text-ink-2 hover:text-ink transition-colors">
                 Pricing
               </Link>
             </div>
@@ -260,18 +260,18 @@ function FeatureCard({
   return (
     <div className={`card p-6 transition-colors group ${
       accent 
-        ? 'border-primary-500/30 bg-gradient-to-br from-primary-500/5 to-transparent hover:border-primary-500/50' 
-        : 'hover:border-surface-700'
+        ? 'border-action/30 bg-action/5 to-transparent hover:border-action/50' 
+        : 'hover:border-sep'
     }`}>
       <div className={`w-12 h-12 rounded-lg flex items-center justify-center mb-4 transition-colors ${
         accent
-          ? 'bg-primary-500/20 text-primary-400 group-hover:bg-primary-500/30'
-          : 'bg-surface-800 text-primary-400 group-hover:bg-primary-500/10'
+          ? 'bg-action/20 text-action group-hover:bg-action/30'
+          : 'bg-fill text-action group-hover:bg-action/10'
       }`}>
         {icon}
       </div>
-      <h3 className="text-lg font-semibold text-surface-100 mb-2">{title}</h3>
-      <p className="text-surface-400 text-sm leading-relaxed">{description}</p>
+      <h3 className="text-lg font-semibold text-ink mb-2">{title}</h3>
+      <p className="text-ink-2 text-sm leading-relaxed">{description}</p>
     </div>
   );
 }

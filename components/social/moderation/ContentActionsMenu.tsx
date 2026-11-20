@@ -138,7 +138,7 @@ export function ContentActionsMenu({
         aria-label={`More options for this ${label}`}
         onClick={() => setStep('menu')}
         className={cn(
-          'shrink-0 p-1.5 -m-1.5 rounded-lg text-surface-400 hover:text-surface-200 hover:bg-surface-800 transition-colors',
+          'shrink-0 p-1.5 -m-1.5 rounded-lg text-ink-2 hover:text-ink hover:bg-fill transition-colors',
           className
         )}
       >
@@ -183,7 +183,7 @@ export function ContentActionsMenu({
               onChange={(e) => setReason(e.target.value as ReportReason)}
             />
             <div>
-              <label htmlFor={`report-note-${targetId}`} className="block text-sm font-medium text-surface-200 mb-1.5">
+              <label htmlFor={`report-note-${targetId}`} className="block text-sm font-medium text-ink mb-1.5">
                 Details (optional)
               </label>
               <textarea
@@ -192,12 +192,12 @@ export function ContentActionsMenu({
                 onChange={(e) => setNote(e.target.value)}
                 maxLength={REPORT_NOTE_MAX_LENGTH}
                 rows={3}
-                className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-surface-100 placeholder-surface-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="w-full px-3 py-2 bg-card rounded-lg text-ink placeholder-ink-3 focus:outline-none focus:ring-2 focus:ring-action shadow-card"
                 placeholder="Anything that helps us review this"
               />
             </div>
             {error && <p className="text-sm text-error-400">{error}</p>}
-            <p className="text-xs text-surface-400">
+            <p className="text-xs text-ink-2">
               Reports are reviewed within 24 hours. Content that breaks our rules is removed and the
               account behind it may be suspended.
             </p>
@@ -214,9 +214,9 @@ export function ContentActionsMenu({
 
         {step === 'reported' && (
           <div className="space-y-4">
-            <p className="text-sm text-surface-300">
+            <p className="text-sm text-ink-2">
               Thanks. We review reports within 24 hours. You can also reach us at{' '}
-              <a href={`mailto:${MODERATION_CONTACT_EMAIL}`} className="text-primary-400 hover:underline">
+              <a href={`mailto:${MODERATION_CONTACT_EMAIL}`} className="text-action hover:underline">
                 {MODERATION_CONTACT_EMAIL}
               </a>
               .
@@ -237,7 +237,7 @@ export function ContentActionsMenu({
 
         {step === 'confirm-block' && (
           <div className="space-y-4">
-            <p className="text-sm text-surface-300">
+            <p className="text-sm text-ink-2">
               You will no longer see their posts, comments, profile or shared workouts, and you will
               stop following each other. They are not told that you blocked them.
             </p>
@@ -255,7 +255,7 @@ export function ContentActionsMenu({
 
         {step === 'blocked' && (
           <div className="space-y-4">
-            <p className="text-sm text-surface-300">
+            <p className="text-sm text-ink-2">
               You won&apos;t see content from {who} any more. You can unblock them from their profile.
             </p>
             <ModalFooter>

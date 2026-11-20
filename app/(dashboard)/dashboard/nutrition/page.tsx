@@ -196,7 +196,7 @@ type WeightChartRange = keyof typeof WEIGHT_CHART_RANGE_DAYS;
 function MacroNumbersSkeleton() {
   return (
     <div
-      className="rounded-2xl border border-sep bg-card p-4 animate-pulse"
+      className="rounded-card bg-card p-4 animate-pulse shadow-card"
       aria-hidden="true"
     >
       <div className="mb-4 flex items-center justify-between">
@@ -218,7 +218,7 @@ function MacroNumbersSkeleton() {
 /** Skeleton for a single meal section while a never-fetched day loads. */
 function MealSectionSkeleton() {
   return (
-    <div className="rounded-2xl border border-sep bg-card p-4 animate-pulse">
+    <div className="rounded-card bg-card p-4 animate-pulse shadow-card">
       <div className="flex items-center justify-between">
         <div className="h-4 w-28 rounded bg-fill" />
         <div className="h-3 w-16 rounded bg-fill" />
@@ -1669,7 +1669,7 @@ function NutritionPageContent() {
     return (
       <div className="max-w-7xl mx-auto p-4 md:p-6">
         <div className="flex flex-col items-center justify-center py-20">
-          <div className="w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin" />
+          <div className="w-8 h-8 border-4 border-action border-t-transparent rounded-full animate-spin" />
           <p className="mt-4 text-ink-2">Loading...</p>
         </div>
       </div>
@@ -1681,7 +1681,7 @@ function NutritionPageContent() {
     return (
       <div className="max-w-7xl mx-auto p-4 md:p-6">
         <div className="flex flex-col items-center justify-center py-20">
-          <div className="w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin" />
+          <div className="w-8 h-8 border-4 border-action border-t-transparent rounded-full animate-spin" />
           <p className="mt-4 text-ink-2">Loading...</p>
         </div>
       </div>
@@ -1810,7 +1810,7 @@ function NutritionPageContent() {
             {showSettingsMenu && (
               <>
                 <div className="fixed inset-0 z-30" onClick={() => setShowSettingsMenu(false)} />
-                <div className="absolute right-0 top-full mt-1 z-40 w-56 overflow-hidden rounded-card border border-sep bg-card py-1 shadow-float">
+                <div className="absolute right-0 top-full mt-1 z-40 w-56 overflow-hidden rounded-card bg-card py-1 shadow-float">
                   {[
                     { label: 'Calculate macros', action: () => setShowMacroCalculator(true) },
                     { label: nutritionTargets ? 'Edit targets' : 'Enter targets manually', action: () => setShowTargetsModal(true) },
@@ -1971,7 +1971,7 @@ function NutritionPageContent() {
                     {openMealMenu === meal.type && (
                       <>
                         <div className="fixed inset-0 z-30" onClick={() => setOpenMealMenu(null)} />
-                        <div className="absolute right-0 top-full mt-1 z-40 w-56 overflow-hidden rounded-card border border-sep bg-card py-1 shadow-float">
+                        <div className="absolute right-0 top-full mt-1 z-40 w-56 overflow-hidden rounded-card bg-card py-1 shadow-float">
                           {hasEntries && (
                             <button
                               onClick={() => {
@@ -2109,7 +2109,7 @@ function NutritionPageContent() {
       {/* Log / update today's weight CTA */}
       <button
         onClick={() => setShowWeightLog(true)}
-        className="w-full flex items-center justify-between gap-3 rounded-2xl border border-primary-500/40 bg-primary-500/10 p-4 hover:bg-primary-500/20 transition-colors"
+        className="w-full flex items-center justify-between gap-3 rounded-2xl border border-action/40 bg-action/10 p-4 hover:bg-action/20 transition-colors"
       >
         <span className="flex items-center gap-3 min-w-0">
           <IconScale size={22} className="text-action flex-shrink-0" aria-hidden="true" />
@@ -2213,7 +2213,7 @@ function NutritionPageContent() {
                         onClick={() => setWeightChartRange(range)}
                         className={`px-2 py-1 text-xs rounded-md transition-colors ${
                           weightChartRange === range
-                            ? 'bg-primary-500 text-white'
+                            ? 'bg-action text-on-action'
                             : 'text-ink-2 hover:text-ink'
                         }`}
                       >

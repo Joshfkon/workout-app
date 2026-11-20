@@ -63,8 +63,8 @@ export function SaveWorkoutButton({
         'flex items-center gap-1.5 font-medium rounded-lg transition-all',
         sizeClasses[size],
         localSaved
-          ? 'bg-primary-500 text-white hover:bg-primary-600'
-          : 'bg-surface-700 text-surface-200 hover:bg-surface-600',
+          ? 'bg-action text-on-action hover:bg-action'
+          : 'bg-sep text-ink hover:bg-sep',
         isLoading && 'opacity-50 cursor-not-allowed'
       )}
     >

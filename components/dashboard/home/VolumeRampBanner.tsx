@@ -22,7 +22,7 @@ export function VolumeRampBanner({ lowCount, week }: VolumeRampBannerProps) {
       href="/dashboard/volume"
       className="flex items-center gap-3 rounded-card bg-card shadow-card p-4 active:bg-fill transition-colors"
     >
-      <span className="w-9 h-9 rounded-lg bg-warning-500/15 text-warning-400 flex items-center justify-center flex-shrink-0">
+      <span className="w-9 h-9 rounded-lg bg-status-warn/15 text-status-warn flex items-center justify-center flex-shrink-0">
         <IconChartBar size={18} aria-hidden="true" />
       </span>
       <p className="flex-1 text-[13px] text-ink leading-snug">

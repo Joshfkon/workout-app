@@ -154,24 +154,24 @@ export default function LoginPage() {
       {/* Logo */}
       <div className="text-center mb-8">
         <Link href="/" className="inline-flex items-center gap-3 group">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center group-hover:scale-105 transition-transform">
+          <div className="w-12 h-12 rounded-xl bg-action flex items-center justify-center group-hover:scale-105 transition-transform">
             <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
           </div>
-          <span className="text-2xl font-bold text-surface-100 tracking-tight">HyperTrack</span>
+          <span className="text-2xl font-bold text-ink tracking-tight">HyperTrack</span>
         </Link>
       </div>
 
       <Card variant="elevated" className="p-6">
         <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-surface-100">Welcome back</h1>
-          <p className="text-surface-400 mt-1">Sign in to continue your training</p>
+          <h1 className="text-2xl font-bold text-ink">Welcome back</h1>
+          <p className="text-ink-2 mt-1">Sign in to continue your training</p>
         </div>
 
         {infoMessage && !needsConfirmation && (
-          <div role="status" className="p-3 rounded-lg mb-4 bg-danger-500/10 border border-danger-500/20">
-            <p className="text-sm font-medium text-danger-400">{infoMessage}</p>
+          <div role="status" className="p-3 rounded-lg mb-4 bg-status-bad/10 border border-status-bad/20">
+            <p className="text-sm font-medium text-status-bad">{infoMessage}</p>
           </div>
         )}
 
@@ -179,14 +179,14 @@ export default function LoginPage() {
           <div
             role="status"
             data-testid="confirm-email-panel"
-            className="p-3 rounded-lg mb-4 bg-warning-500/10 border border-warning-500/20"
+            className="p-3 rounded-lg mb-4 bg-status-warn/10 border border-status-warn/20"
           >
-            <p className="text-sm font-medium text-warning-400">Confirm your email to sign in</p>
-            <p className="text-sm text-surface-400 mt-1">
+            <p className="text-sm font-medium text-status-warn">Confirm your email to sign in</p>
+            <p className="text-sm text-ink-2 mt-1">
               {email ? (
                 <>
                   We sent a confirmation link to{' '}
-                  <span className="text-surface-200 font-medium">{email}</span>. Check your inbox
+                  <span className="text-ink font-medium">{email}</span>. Check your inbox
                   and spam folder.
                 </>
               ) : (
@@ -198,7 +198,7 @@ export default function LoginPage() {
                 type="button"
                 onClick={handleResendConfirmation}
                 disabled={resendStatus === 'sending' || resendCooldown > 0}
-                className="text-sm text-primary-400 hover:text-primary-300 font-medium underline disabled:opacity-60 disabled:no-underline"
+                className="text-sm text-action font-medium underline disabled:opacity-60 disabled:no-underline"
               >
                 {resendStatus === 'sending'
                   ? 'Sending…'
@@ -209,13 +209,13 @@ export default function LoginPage() {
               <button
                 type="button"
                 onClick={goToVerifyCode}
-                className="text-sm text-primary-400 hover:text-primary-300 font-medium underline"
+                className="text-sm text-action font-medium underline"
               >
                 Enter code instead
               </button>
             </div>
             {resendStatus === 'error' && (
-              <p className="text-xs text-danger-400 mt-1">
+              <p className="text-xs text-status-bad mt-1">
                 {email
                   ? 'Could not resend the email. Please try again in a minute.'
                   : 'Enter your email above first, then tap resend.'}
@@ -246,15 +246,15 @@ export default function LoginPage() {
               autoComplete="current-password"
             />
             <div className="mt-1 text-right">
-              <Link href="/forgot-password" className="text-xs text-primary-400 hover:text-primary-300">
+              <Link href="/forgot-password" className="text-xs text-action">
                 Forgot password?
               </Link>
             </div>
           </div>
 
           {error && !needsConfirmation && (
-            <div data-testid="login-error" className="p-3 rounded-lg bg-danger-500/10 border border-danger-500/20">
-              <p className="text-sm text-danger-400">{error}</p>
+            <div data-testid="login-error" className="p-3 rounded-lg bg-status-bad/10 border border-status-bad/20">
+              <p className="text-sm text-status-bad">{error}</p>
             </div>
           )}
 
@@ -264,9 +264,9 @@ export default function LoginPage() {
         </form>
 
         <div className="mt-6 text-center">
-          <p className="text-sm text-surface-400">
+          <p className="text-sm text-ink-2">
             Don&apos;t have an account?{' '}
-            <Link href="/register" className="text-primary-400 hover:text-primary-300 font-medium">
+            <Link href="/register" className="text-action font-medium">
               Sign up
             </Link>
           </p>

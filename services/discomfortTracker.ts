@@ -448,8 +448,8 @@ export function getSeverityInfo(severity: DiscomfortSeverity): {
     case 'discomfort':
       return { label: 'Discomfort (Moderate)', color: 'text-orange-400', icon: '!' };
     case 'pain':
-      return { label: 'Painful', color: 'text-danger-400', icon: '!!' };
+      return { label: 'Painful', color: 'text-status-bad', icon: '!!' };
     case 'stop':
-      return { label: 'Had to Stop', color: 'text-danger-400', icon: '!!!' };
+      return { label: 'Had to Stop', color: 'text-status-bad', icon: '!!!' };
   }
 }

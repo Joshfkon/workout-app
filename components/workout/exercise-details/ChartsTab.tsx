@@ -152,16 +152,16 @@ export function ChartsTab({
   if (sessions === undefined) {
     return (
       <div className="space-y-3">
-        <div className="h-48 rounded-lg bg-surface-800/50 animate-pulse" />
-        <div className="h-40 rounded-lg bg-surface-800/50 animate-pulse" />
+        <div className="h-48 rounded-lg bg-fill/50 animate-pulse" />
+        <div className="h-40 rounded-lg bg-fill/50 animate-pulse" />
       </div>
     );
   }
 
   if (sessions.length < 2) {
     return (
-      <div className="bg-surface-800/30 rounded-lg p-6 text-center">
-        <p className="text-surface-500 text-sm">
+      <div className="bg-fill/30 rounded-lg p-6 text-center">
+        <p className="text-ink-3 text-sm">
           Complete at least 2 workouts with this exercise to see progress charts
         </p>
       </div>
@@ -170,9 +170,9 @@ export function ChartsTab({
 
   return (
     <div className="space-y-5" data-testid="exercise-detail-charts">
-      <div className="bg-surface-800/30 rounded-lg p-3">
+      <div className="bg-fill/30 rounded-lg p-3">
         <div className="flex items-center justify-between mb-2 gap-2">
-          <p className="text-sm font-medium text-surface-200">
+          <p className="text-sm font-medium text-ink">
             {metric === 'reps' ? 'Session rep total' : 'Est. 1RM trend'}
           </p>
           <SegmentedControl
@@ -241,7 +241,7 @@ export function ChartsTab({
               </ResponsiveContainer>
             </div>
           ) : (
-            <p className="text-surface-500 text-sm py-8 text-center">
+            <p className="text-ink-3 text-sm py-8 text-center">
               No sessions in this range
             </p>
           )
@@ -280,13 +280,13 @@ export function ChartsTab({
                   </LineChart>
                 </ResponsiveContainer>
               </div>
-              <p className="text-[11px] text-surface-500 mt-1.5">
+              <p className="text-[11px] text-ink-3 mt-1.5">
                 One line per gym — machines read differently, so compare within a line, not across.
                 Deload sessions excluded.
               </p>
             </>
           ) : (
-            <p className="text-surface-500 text-sm py-6 text-center">
+            <p className="text-ink-3 text-sm py-6 text-center">
               No non-deload sessions in this range
             </p>
           )
@@ -331,27 +331,27 @@ export function ChartsTab({
               </ResponsiveContainer>
             </div>
             {trendData.some((p) => p.deloadE1rm !== null) && (
-              <p className="text-[11px] text-surface-500 mt-1.5 flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-surface-500 inline-block" />
+              <p className="text-[11px] text-ink-3 mt-1.5 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-ink-3 inline-block" />
                 Deload sessions shown as gray dots, excluded from the trend
               </p>
             )}
           </>
         ) : (
-          <p className="text-surface-500 text-sm py-6 text-center">
+          <p className="text-ink-3 text-sm py-6 text-center">
             {repTotalMode
               ? 'No est. 1RM in this range — high-rep sets fall outside the estimator'
               : 'No non-deload sessions in this range'}
           </p>
         )}
         {metric === 'reps' ? (
-          <p className="text-[11px] text-surface-500 mt-1.5">
+          <p className="text-[11px] text-ink-3 mt-1.5">
             {repTotalMode
               ? 'Rep-total progression: this exercise trends total reps at its working load.'
               : 'Total reps across straight sets per session; deload sessions excluded.'}
           </p>
         ) : repTotalMode ? (
-          <p className="text-[11px] text-surface-500 mt-1.5">
+          <p className="text-[11px] text-ink-3 mt-1.5">
             Shown for reference — this exercise progresses by session rep total,
             and only sets low-rep enough to estimate a 1RM appear here.
           </p>
@@ -359,8 +359,8 @@ export function ChartsTab({
       </div>
 
       {/* Volume per week */}
-      <div className="bg-surface-800/30 rounded-lg p-3">
-        <p className="text-sm font-medium text-surface-200 mb-3">Volume per week</p>
+      <div className="bg-fill/30 rounded-lg p-3">
+        <p className="text-sm font-medium text-ink mb-3">Volume per week</p>
         <div className="h-40">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={weeklyVolume}>

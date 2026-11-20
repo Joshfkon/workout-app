@@ -98,17 +98,17 @@ describe('SetLoggerRow feedback sheet', () => {
       }
 
       await user.click(clean);
-      expect(clean.className).toContain('bg-success-500');
+      expect(clean.className).toContain('bg-status-ok');
       expect(clean).toHaveAttribute('aria-pressed', 'true');
       expect(breakdown.className).toContain(SELECTOR_CHIP_IDLE);
       expect(ugly.className).toContain(SELECTOR_CHIP_IDLE);
 
       await user.click(breakdown);
-      expect(breakdown.className).toContain('bg-warning-500');
+      expect(breakdown.className).toContain('bg-status-warn');
       expect(clean.className).toContain(SELECTOR_CHIP_IDLE);
 
       await user.click(ugly);
-      expect(ugly.className).toContain('bg-danger-500');
+      expect(ugly.className).toContain('bg-status-bad');
       expect(breakdown.className).toContain(SELECTOR_CHIP_IDLE);
     });
   });

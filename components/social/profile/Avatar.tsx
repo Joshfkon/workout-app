@@ -55,7 +55,7 @@ const Avatar = forwardRef<HTMLDivElement, AvatarProps>(
             width={sizePx[size]}
             height={sizePx[size]}
             className={cn(
-              'rounded-full object-cover bg-surface-800',
+              'rounded-full object-cover bg-fill',
               sizeClasses[size]
             )}
             unoptimized
@@ -63,7 +63,7 @@ const Avatar = forwardRef<HTMLDivElement, AvatarProps>(
         ) : (
           <div
             className={cn(
-              'rounded-full bg-gradient-to-br from-primary-500 to-primary-700',
+              'rounded-full bg-action ',
               'flex items-center justify-center font-semibold text-white',
               sizeClasses[size]
             )}
@@ -75,9 +75,9 @@ const Avatar = forwardRef<HTMLDivElement, AvatarProps>(
         {showOnlineIndicator && (
           <span
             className={cn(
-              'absolute bottom-0 right-0 block rounded-full ring-2 ring-surface-900',
+              'absolute bottom-0 right-0 block rounded-full ring-2 ring-card',
               size === 'xs' ? 'w-1.5 h-1.5' : size === 'sm' ? 'w-2 h-2' : 'w-3 h-3',
-              isOnline ? 'bg-success-500' : 'bg-surface-500'
+              isOnline ? 'bg-status-ok' : 'bg-ink-3'
             )}
           />
         )}

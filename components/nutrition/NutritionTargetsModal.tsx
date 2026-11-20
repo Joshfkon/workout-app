@@ -139,14 +139,14 @@ export function NutritionTargetsModal({
       <form onSubmit={handleSubmit}>
         <div className="space-y-4">
           {error && (
-            <div className="p-3 text-sm text-warning-400 bg-warning-500/10 border border-warning-500/20 rounded-lg">
+            <div className="p-3 text-sm text-status-warn bg-status-warn/10 border border-status-warn/20 rounded-lg">
               {error}
             </div>
           )}
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label htmlFor="calories" className="block text-sm font-medium text-surface-300 mb-1">
+              <label htmlFor="calories" className="block text-sm font-medium text-ink-2 mb-1">
                 Calories
               </label>
               <Input
@@ -159,18 +159,18 @@ export function NutritionTargetsModal({
                 required
                 autoFocus
               />
-              <p className="mt-1 text-xs text-surface-500">
+              <p className="mt-1 text-xs text-ink-3">
                 Daily calorie target
               </p>
               {lowCalorieWarning && (
-                <p role="alert" data-testid="low-calorie-warning" className="mt-1 text-xs text-warning-400">
+                <p role="alert" data-testid="low-calorie-warning" className="mt-1 text-xs text-status-warn">
                   {lowCalorieWarning}
                 </p>
               )}
             </div>
 
             <div>
-              <label htmlFor="meals" className="block text-sm font-medium text-surface-300 mb-1">
+              <label htmlFor="meals" className="block text-sm font-medium text-ink-2 mb-1">
                 Meals per Day
               </label>
               <Input
@@ -182,14 +182,14 @@ export function NutritionTargetsModal({
                 onChange={(e) => setMealsPerDay(e.target.value)}
                 placeholder="3"
               />
-              <p className="mt-1 text-xs text-surface-500">
+              <p className="mt-1 text-xs text-ink-3">
                 For calorie suggestions
               </p>
             </div>
           </div>
 
           <div>
-            <label htmlFor="protein" className="block text-sm font-medium text-surface-300 mb-1">
+            <label htmlFor="protein" className="block text-sm font-medium text-ink-2 mb-1">
               Protein (g)
             </label>
             <Input
@@ -201,13 +201,13 @@ export function NutritionTargetsModal({
               placeholder="150"
               required
             />
-            <p className="mt-1 text-xs text-surface-500">
+            <p className="mt-1 text-xs text-ink-3">
               {protein ? `${Math.round(parseFloat(protein) * 4)} calories (4 cal/g)` : '4 calories per gram'}
             </p>
           </div>
 
           <div>
-            <label htmlFor="carbs" className="block text-sm font-medium text-surface-300 mb-1">
+            <label htmlFor="carbs" className="block text-sm font-medium text-ink-2 mb-1">
               Carbs (g)
             </label>
             <Input
@@ -219,13 +219,13 @@ export function NutritionTargetsModal({
               placeholder="200"
               required
             />
-            <p className="mt-1 text-xs text-surface-500">
+            <p className="mt-1 text-xs text-ink-3">
               {carbs ? `${Math.round(parseFloat(carbs) * 4)} calories (4 cal/g)` : '4 calories per gram'}
             </p>
           </div>
 
           <div>
-            <label htmlFor="fat" className="block text-sm font-medium text-surface-300 mb-1">
+            <label htmlFor="fat" className="block text-sm font-medium text-ink-2 mb-1">
               Fat (g)
             </label>
             <Input
@@ -237,14 +237,14 @@ export function NutritionTargetsModal({
               placeholder="65"
               required
             />
-            <p className="mt-1 text-xs text-surface-500">
+            <p className="mt-1 text-xs text-ink-3">
               {fat ? `${Math.round(parseFloat(fat) * 9)} calories (9 cal/g)` : '9 calories per gram'}
             </p>
           </div>
 
           {calories && protein && carbs && fat && (
-            <div className="p-3 bg-surface-800 rounded-lg">
-              <p className="text-sm text-surface-300">
+            <div className="p-3 bg-fill rounded-lg">
+              <p className="text-sm text-ink-2">
                 Macro breakdown: {Math.round((parseFloat(protein) * 4 / parseFloat(calories)) * 100)}% protein,{' '}
                 {Math.round((parseFloat(carbs) * 4 / parseFloat(calories)) * 100)}% carbs,{' '}
                 {Math.round((parseFloat(fat) * 9 / parseFloat(calories)) * 100)}% fat
@@ -253,16 +253,16 @@ export function NutritionTargetsModal({
           )}
 
           {/* Meal Names Customization */}
-          <div className="border-t border-surface-700 pt-4">
+          <div className="border-t border-sep pt-4">
             <button
               type="button"
               onClick={() => setShowMealNames(!showMealNames)}
               className="flex items-center justify-between w-full text-left"
             >
-              <span className="text-sm font-medium text-surface-300">
+              <span className="text-sm font-medium text-ink-2">
                 Customize Meal Names
               </span>
-              <span className="text-surface-500 text-sm">
+              <span className="text-ink-3 text-sm">
                 {showMealNames ? '▲' : '▼'}
               </span>
             </button>
@@ -271,7 +271,7 @@ export function NutritionTargetsModal({
               <div className="mt-3 grid grid-cols-2 gap-3">
                 {(['breakfast', 'lunch', 'dinner', 'snack'] as const).map((meal) => (
                   <div key={meal}>
-                    <label className="block text-xs text-surface-500 mb-1">
+                    <label className="block text-xs text-ink-3 mb-1">
                       {DEFAULT_MEAL_NAMES[meal]}
                     </label>
                     <input
@@ -279,11 +279,11 @@ export function NutritionTargetsModal({
                       value={mealNames[meal] || ''}
                       onChange={(e) => setMealNames(prev => ({ ...prev, [meal]: e.target.value }))}
                       placeholder={DEFAULT_MEAL_NAMES[meal]}
-                      className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-sm text-surface-100 placeholder-surface-500"
+                      className="w-full px-3 py-2 bg-card rounded-lg text-sm text-ink placeholder-ink-3 shadow-card"
                     />
                   </div>
                 ))}
-                <p className="col-span-2 text-xs text-surface-500">
+                <p className="col-span-2 text-xs text-ink-3">
                   Leave blank to use default names
                 </p>
               </div>

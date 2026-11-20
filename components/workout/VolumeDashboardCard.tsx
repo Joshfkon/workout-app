@@ -19,15 +19,15 @@ function VolumeBar({ muscle, currentSets, estimatedMRV, status }: VolumeBarProps
   const barColor = useMemo(() => {
     switch (status) {
       case 'below_mev':
-        return 'bg-danger-500/60';
+        return 'bg-status-bad/60';
       case 'low':
-        return 'bg-surface-500';
+        return 'bg-ink-3';
       case 'optimal':
-        return 'bg-success-500';
+        return 'bg-status-ok';
       case 'high':
-        return 'bg-warning-500';
+        return 'bg-status-warn';
       case 'at_limit':
-        return 'bg-danger-500';
+        return 'bg-status-bad';
     }
   }, [status]);
 
@@ -39,12 +39,12 @@ function VolumeBar({ muscle, currentSets, estimatedMRV, status }: VolumeBarProps
   return (
     <div className="space-y-1">
       <div className="flex justify-between text-sm">
-        <span className="text-surface-300">{displayName}</span>
-        <span className="text-surface-400">
+        <span className="text-ink-2">{displayName}</span>
+        <span className="text-ink-2">
           {currentSets}/{estimatedMRV} sets{statusIcon}
         </span>
       </div>
-      <div className="h-2 bg-surface-800 rounded-full overflow-hidden">
+      <div className="h-2 bg-fill rounded-full overflow-hidden">
         <div
           className={`h-full ${barColor} transition-all duration-300`}
           style={{ width: `${percentage}%` }}
@@ -111,12 +111,12 @@ export function VolumeDashboardCard({
     return (
       <Card className="p-5">
         <div className="animate-pulse space-y-4">
-          <div className="h-5 bg-surface-800 rounded w-1/3" />
+          <div className="h-5 bg-fill rounded w-1/3" />
           <div className="space-y-3">
             {[1, 2, 3, 4].map(i => (
               <div key={i} className="space-y-2">
-                <div className="h-4 bg-surface-800 rounded w-1/2" />
-                <div className="h-2 bg-surface-800 rounded" />
+                <div className="h-4 bg-fill rounded w-1/2" />
+                <div className="h-2 bg-fill rounded" />
               </div>
             ))}
           </div>
@@ -131,9 +131,9 @@ export function VolumeDashboardCard({
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <span className="text-lg">{'\uD83D\uDCCA'}</span>
-          <h3 className="font-semibold text-surface-100">Volume & Recovery</h3>
+          <h3 className="font-semibold text-ink">Volume & Recovery</h3>
         </div>
-        <span className="text-xs text-surface-500">{confidenceDesc}</span>
+        <span className="text-xs text-ink-3">{confidenceDesc}</span>
       </div>
 
       {/* Volume Bars */}
@@ -154,13 +154,13 @@ export function VolumeDashboardCard({
         <div
           className={`p-3 rounded-lg mb-4 ${
             primaryAlert.severity === 'alert'
-              ? 'bg-danger-500/10 border border-danger-500/20'
-              : 'bg-warning-500/10 border border-warning-500/20'
+              ? 'bg-status-bad/10 border border-status-bad/20'
+              : 'bg-status-warn/10 border border-status-warn/20'
           }`}
         >
           <p
             className={`text-sm font-medium ${
-              primaryAlert.severity === 'alert' ? 'text-danger-300' : 'text-warning-300'
+              primaryAlert.severity === 'alert' ? 'text-status-bad' : 'text-status-warn'
             }`}
           >
             {primaryAlert.severity === 'alert' ? '\u26A0\uFE0F' : '\u26A0'} {primaryAlert.message}
@@ -172,7 +172,7 @@ export function VolumeDashboardCard({
       {showLink && (
         <Link
           href="/dashboard/volume"
-          className="flex items-center justify-between text-sm text-primary-400 hover:text-primary-300 transition-colors"
+          className="flex items-center justify-between text-sm text-action transition-colors"
         >
           <span>View Details</span>
           <span>{'\u2192'}</span>

@@ -12,11 +12,11 @@ const CONTACT_EMAIL = 'privacy@hypertrack.app';
 
 export default function PrivacyPolicyPage() {
   return (
-    <div className="min-h-screen bg-surface-950">
+    <div className="min-h-screen bg-canvas">
       <div className="max-w-3xl mx-auto px-4 py-16">
         <Link
           href="/"
-          className="inline-flex items-center gap-2 text-surface-400 hover:text-surface-200 mb-10 transition-colors"
+          className="inline-flex items-center gap-2 text-ink-2 hover:text-ink mb-10 transition-colors"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -24,10 +24,10 @@ export default function PrivacyPolicyPage() {
           Back to Home
         </Link>
 
-        <h1 className="text-4xl font-black text-surface-100 mb-2">Privacy Policy</h1>
-        <p className="text-surface-400 mb-10">Last updated: {LAST_UPDATED}</p>
+        <h1 className="text-4xl font-black text-ink mb-2">Privacy Policy</h1>
+        <p className="text-ink-2 mb-10">Last updated: {LAST_UPDATED}</p>
 
-        <div className="space-y-10 text-surface-300 leading-relaxed">
+        <div className="space-y-10 text-ink-2 leading-relaxed">
           <section className="space-y-3">
             <p>
               HyperTrack (&ldquo;HyperTrack,&rdquo; &ldquo;we,&rdquo; &ldquo;us,&rdquo; or
@@ -189,7 +189,7 @@ export default function PrivacyPolicyPage() {
               Depending on where you live, you may have additional rights under laws such as the GDPR
               or CCPA, including the right to access, correct, delete, or restrict processing of your
               personal data. To exercise these rights, contact us at{' '}
-              <a href={`mailto:${CONTACT_EMAIL}`} className="text-primary-400 hover:underline">
+              <a href={`mailto:${CONTACT_EMAIL}`} className="text-action hover:underline">
                 {CONTACT_EMAIL}
               </a>
               .
@@ -234,7 +234,7 @@ export default function PrivacyPolicyPage() {
             <p>
               If you have questions or requests regarding this Privacy Policy or your data, contact us
               at{' '}
-              <a href={`mailto:${CONTACT_EMAIL}`} className="text-primary-400 hover:underline">
+              <a href={`mailto:${CONTACT_EMAIL}`} className="text-action hover:underline">
                 {CONTACT_EMAIL}
               </a>
               .
@@ -249,12 +249,12 @@ export default function PrivacyPolicyPage() {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="space-y-3">
-      <h2 className="text-2xl font-bold text-surface-100">{title}</h2>
+      <h2 className="text-2xl font-bold text-ink">{title}</h2>
       {children}
     </section>
   );
 }
 
 function SubHeading({ children }: { children: React.ReactNode }) {
-  return <h3 className="text-lg font-semibold text-surface-200 pt-2">{children}</h3>;
+  return <h3 className="text-lg font-semibold text-ink pt-2">{children}</h3>;
 }

@@ -2914,7 +2914,7 @@ describe('ExerciseCard — motion capture integration', () => {
     );
     expect(screen.getByTestId('set-motion-icon-1')).toHaveAttribute('data-fit', 'on-target');
     expect(screen.getByTestId('set-motion-icon-1')).toHaveClass('text-status-ok');
-    expect(screen.getByTestId('set-motion-fit-bar-1')).toHaveClass('bg-success-400');
+    expect(screen.getByTestId('set-motion-fit-bar-1')).toHaveClass('bg-status-ok');
     expect(screen.getByTestId('set-motion-icon-1')).toHaveAccessibleName(
       'Coach feedback for set 1 (slowed about as much as the target)'
     );
@@ -2932,7 +2932,7 @@ describe('ExerciseCard — motion capture integration', () => {
         renderMotionSheet={renderMotionSheet}
       />
     );
-    expect(screen.getByTestId('set-motion-fit-bar-1')).toHaveClass('bg-warning-400');
+    expect(screen.getByTestId('set-motion-fit-bar-1')).toHaveClass('bg-status-warn');
 
     rerender(<ExerciseCard {...base} sets={logged} motionSets={row(null, 'low')} renderMotionSheet={renderMotionSheet} />);
     expect(screen.getByTestId('set-motion-icon-1')).not.toHaveAttribute('data-fit');

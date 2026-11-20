@@ -132,10 +132,10 @@ export function BottomNavigation({ volumeGoalsMet = false }: BottomNavigationPro
         aria-label="Loading page"
         data-testid="tab-nav-progress"
       >
-        <div className="h-0.5 w-1/3 bg-primary-400 animate-nav-progress" />
+        <div className="h-0.5 w-1/3 bg-action animate-nav-progress" />
       </div>
     )}
-    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-surface-900 border-t border-surface-800 pb-safe-bottom lg:hidden">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-card border-t border-sep pb-safe-bottom lg:hidden">
       <div className="flex items-center h-16">
         {navItems.map((item) => {
           const Icon = item.icon;
@@ -154,14 +154,14 @@ export function BottomNavigation({ volumeGoalsMet = false }: BottomNavigationPro
               }}
               className={cn(
                 'flex flex-col items-center justify-center gap-1 flex-1 h-full transition-colors',
-                isActive ? 'text-primary-400' : 'text-surface-500 hover:text-surface-300'
+                isActive ? 'text-action' : 'text-ink-3 hover:text-ink-2'
               )}
             >
               <span className="relative">
                 <Icon size={20} stroke={2} aria-hidden="true" />
                 {item.name === 'Train' && volumeGoalsMet && (
                   <span
-                    className="absolute -top-0.5 -right-1 w-2 h-2 rounded-full bg-green-400 ring-2 ring-surface-900"
+                    className="absolute -top-0.5 -right-1 w-2 h-2 rounded-full bg-green-400 ring-2 ring-card"
                     role="img"
                     aria-label="All muscle groups at target weekly sets"
                   />

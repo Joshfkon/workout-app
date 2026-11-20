@@ -96,7 +96,7 @@ export const PlateCalculatorModal = memo(function PlateCalculatorModal({
       size="lg"
     >
       {isLoading ? (
-        <div className="p-4 text-center text-surface-400">Loading...</div>
+        <div className="p-4 text-center text-ink-2">Loading...</div>
       ) : (
         <PlateCalculator
           key={exerciseId ?? 'none'}

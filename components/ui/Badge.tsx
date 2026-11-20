@@ -16,12 +16,12 @@ export const Badge = memo(function Badge({
   ...props
 }: BadgeProps) {
   const variants = {
-    default: 'bg-surface-700 text-surface-200',
-    success: 'bg-success-500/20 text-success-400 border border-success-500/30',
-    warning: 'bg-warning-500/20 text-warning-400 border border-warning-500/30',
-    danger: 'bg-danger-500/20 text-danger-400 border border-danger-500/30',
-    info: 'bg-primary-500/20 text-primary-400 border border-primary-500/30',
-    outline: 'bg-transparent border border-surface-600 text-surface-300',
+    default: 'bg-sep text-ink',
+    success: 'bg-status-ok/20 text-status-ok border border-status-ok/30',
+    warning: 'bg-status-warn/20 text-status-warn border border-status-warn/30',
+    danger: 'bg-status-bad/20 text-status-bad border border-status-bad/30',
+    info: 'bg-action/20 text-action border border-action/30',
+    outline: 'bg-transparent border border-sep text-ink-2',
   };
 
   const sizes = {

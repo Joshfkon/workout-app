@@ -274,7 +274,7 @@ export function WellnessTrendsCard({
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <div>
             <CardTitle>Wellness Trends</CardTitle>
-            <p className="text-xs text-surface-500 mt-1">Showing {rangeLabel}</p>
+            <p className="text-xs text-ink-3 mt-1">Showing {rangeLabel}</p>
           </div>
           {anyData && (
             <div className="flex items-center gap-1 flex-wrap">
@@ -284,8 +284,8 @@ export function WellnessTrendsCard({
                   onClick={() => setActiveKey(def.key)}
                   className={`px-2.5 py-1 text-xs font-medium rounded-lg transition-colors ${
                     effectiveKey === def.key
-                      ? 'bg-primary-500 text-white'
-                      : 'bg-surface-800 text-surface-400 hover:text-surface-200'
+                      ? 'bg-action text-on-action'
+                      : 'bg-fill text-ink-2 hover:text-ink'
                   }`}
                   data-testid={`wellness-chip-${def.key}`}
                 >
@@ -297,8 +297,8 @@ export function WellnessTrendsCard({
                 aria-expanded={moreOpen}
                 className={`px-2.5 py-1 text-xs font-medium rounded-lg transition-colors ${
                   moreOpen || moreDefs.some((d) => d.key === effectiveKey)
-                    ? 'bg-surface-700 text-surface-200'
-                    : 'bg-surface-800 text-surface-400 hover:text-surface-200'
+                    ? 'bg-sep text-ink'
+                    : 'bg-fill text-ink-2 hover:text-ink'
                 }`}
                 data-testid="wellness-chip-more"
               >
@@ -316,8 +316,8 @@ export function WellnessTrendsCard({
                   onClick={() => setActiveKey(def.key)}
                   className={`px-2.5 py-1 text-xs font-medium rounded-lg transition-colors ${
                     effectiveKey === def.key
-                      ? 'bg-primary-500 text-white'
-                      : 'bg-surface-800 text-surface-400 hover:text-surface-200'
+                      ? 'bg-action text-on-action'
+                      : 'bg-fill text-ink-2 hover:text-ink'
                   }`}
                   data-testid={`wellness-chip-${def.key}`}
                 >
@@ -329,7 +329,7 @@ export function WellnessTrendsCard({
                 <Link
                   key={def.key}
                   href="/dashboard/log"
-                  className="px-2.5 py-1 text-xs rounded-lg bg-surface-800/60 text-surface-500 hover:text-surface-300 transition-colors"
+                  className="px-2.5 py-1 text-xs rounded-lg bg-fill/60 text-ink-3 hover:text-ink-2 transition-colors"
                   data-testid={`wellness-log-${def.key}`}
                 >
                   {def.label} · Log +
@@ -342,10 +342,10 @@ export function WellnessTrendsCard({
       <CardContent>
         {!anyData ? (
           <div className="text-center py-8">
-            <p className="text-sm text-surface-400">No wellness data for this period</p>
+            <p className="text-sm text-ink-2">No wellness data for this period</p>
             <Link
               href="/dashboard/log"
-              className="inline-block mt-2 text-xs text-primary-400 hover:text-primary-300"
+              className="inline-block mt-2 text-xs text-action"
             >
               Log today&apos;s check-in →
             </Link>
@@ -416,7 +416,7 @@ export function WellnessTrendsCard({
                   </ResponsiveContainer>
                 </div>
                 {activeDef.lowerIsBetter && (
-                  <p className="text-[11px] text-surface-500 mt-1" data-testid="lower-is-better-note">
+                  <p className="text-[11px] text-ink-3 mt-1" data-testid="lower-is-better-note">
                     Lower is better for {activeDef.label.toLowerCase()}.
                   </p>
                 )}
@@ -440,22 +440,22 @@ export function WellnessTrendsCard({
                     }}
                     className={`text-left p-2.5 rounded-lg border transition-colors ${
                       effectiveKey === def.key
-                        ? 'border-primary-500/40 bg-primary-500/5'
-                        : 'border-surface-800 bg-surface-800/40 hover:bg-surface-800'
+                        ? 'border-action/40 bg-action/5'
+                        : 'border-sep bg-fill/40 hover:bg-fill'
                     }`}
                     data-testid={`wellness-tile-${def.key}`}
                   >
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] text-surface-400">{def.label}</span>
+                      <span className="text-[11px] text-ink-2">{def.label}</span>
                       {Math.abs(delta) >= 0.05 && (
                         <span
-                          className={`text-[10px] ${deltaGood ? 'text-success-400' : 'text-warning-400'}`}
+                          className={`text-[10px] ${deltaGood ? 'text-status-ok' : 'text-status-warn'}`}
                         >
                           {delta > 0 ? '▲' : '▼'} {def.format(Math.abs(delta)).trim()}
                         </span>
                       )}
                     </div>
-                    <p className="text-sm font-semibold text-surface-100 mt-0.5">
+                    <p className="text-sm font-semibold text-ink mt-0.5">
                       {def.format(latest.value)}
                     </p>
                     <Sparkline values={series.map((s) => s.value)} color={def.color} />

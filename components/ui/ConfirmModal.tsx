@@ -36,9 +36,9 @@ export const ConfirmModal = memo(function ConfirmModal({
   }, [onConfirm]);
 
   const iconColors = {
-    danger: 'text-danger-400 bg-danger-500/10',
-    warning: 'text-warning-400 bg-warning-500/10',
-    default: 'text-primary-400 bg-primary-500/10',
+    danger: 'text-status-bad bg-status-bad/10',
+    warning: 'text-status-warn bg-status-warn/10',
+    default: 'text-action bg-action/10',
   };
 
   const buttonVariants = {
@@ -73,12 +73,12 @@ export const ConfirmModal = memo(function ConfirmModal({
         </div>
 
         {/* Title */}
-        <h3 className="text-lg font-semibold text-surface-100 mb-2">
+        <h3 className="text-lg font-semibold text-ink mb-2">
           {title}
         </h3>
 
         {/* Message */}
-        <p className="text-sm text-surface-400 mb-6">
+        <p className="text-sm text-ink-2 mb-6">
           {message}
         </p>
 

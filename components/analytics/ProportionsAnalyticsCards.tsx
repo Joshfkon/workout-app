@@ -44,7 +44,7 @@ export function ProportionalityRatiosCard({ ratios, onRatioClick }: Proportional
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-xs text-surface-500">
+          <p className="text-xs text-ink-3">
             Add more measurements to see your proportionality analysis.
           </p>
         </CardContent>
@@ -71,17 +71,17 @@ export function ProportionalityRatiosCard({ ratios, onRatioClick }: Proportional
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="flex items-center gap-2 text-[10px] text-surface-500">
+        <div className="flex items-center gap-2 text-[10px] text-ink-3">
           <div className="flex items-center gap-1">
-            <div className="w-2 h-2 rounded bg-warning-500/50" />
+            <div className="w-2 h-2 rounded bg-status-warn/50" />
             <span>Below</span>
           </div>
           <div className="flex items-center gap-1">
-            <div className="w-2 h-2 rounded bg-success-500/50" />
+            <div className="w-2 h-2 rounded bg-status-ok/50" />
             <span>Optimal</span>
           </div>
           <div className="flex items-center gap-1">
-            <div className="w-2 h-2 rounded bg-primary-500/50" />
+            <div className="w-2 h-2 rounded bg-action/50" />
             <span>Above</span>
           </div>
         </div>
@@ -106,18 +106,18 @@ export function ProportionalityRatiosCard({ ratios, onRatioClick }: Proportional
                   status={ratio.status}
                 />
                 <div className="flex items-center justify-between mt-1">
-                  <span className="text-[10px] text-surface-500">{ratio.formula}</span>
-                  <span className="text-[10px] text-surface-500">
+                  <span className="text-[10px] text-ink-3">{ratio.formula}</span>
+                  <span className="text-[10px] text-ink-3">
                     {ratio.percentOfIdeal}% of ideal
                   </span>
                 </div>
               </button>
 
               {isExpanded && (
-                <div className="pl-2 border-l-2 border-surface-700 space-y-1 mt-2">
-                  <p className="text-xs text-surface-400">{ratio.description}</p>
+                <div className="pl-2 border-l-2 border-sep space-y-1 mt-2">
+                  <p className="text-xs text-ink-2">{ratio.description}</p>
                   {ratio.recommendation && (
-                    <p className="text-xs text-primary-400">{ratio.recommendation}</p>
+                    <p className="text-xs text-action">{ratio.recommendation}</p>
                   )}
                 </div>
               )}
@@ -156,7 +156,7 @@ export function SuperheroBenchmarksCard({
           <CardTitle className="text-sm">How You Compare</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-xs text-surface-500">
+          <p className="text-xs text-ink-3">
             Add measurements to see how you compare to physique benchmarks.
           </p>
         </CardContent>
@@ -185,23 +185,23 @@ export function SuperheroBenchmarksCard({
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <CardTitle className="text-sm">How You Compare</CardTitle>
-          <span className="text-[10px] text-surface-500">
+          <span className="text-[10px] text-ink-3">
             Scaled for {formatHeight(heightCm, displayUnit)}
           </span>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="flex items-center gap-2 text-[10px] text-surface-500">
+        <div className="flex items-center gap-2 text-[10px] text-ink-3">
           <div className="flex items-center gap-1">
-            <div className="w-2 h-2 rounded bg-warning-500/50" />
+            <div className="w-2 h-2 rounded bg-status-warn/50" />
             <span>Attainable</span>
           </div>
           <div className="flex items-center gap-1">
-            <div className="w-2 h-2 rounded bg-primary-500/50" />
+            <div className="w-2 h-2 rounded bg-action/50" />
             <span>Elite</span>
           </div>
           <div className="flex items-center gap-1">
-            <div className="w-2 h-2 rounded bg-success-500/50" />
+            <div className="w-2 h-2 rounded bg-status-ok/50" />
             <span>Superhero</span>
           </div>
         </div>
@@ -221,7 +221,7 @@ export function SuperheroBenchmarksCard({
         {benchmarks.length > 4 && (
           <button
             onClick={() => setShowAll(!showAll)}
-            className="w-full text-center text-xs text-primary-400 hover:text-primary-300 py-1"
+            className="w-full text-center text-xs text-action py-1"
           >
             {showAll ? 'Show less' : `Show ${benchmarks.length - 4} more`}
           </button>
@@ -261,9 +261,9 @@ export function ImprovedAsymmetryCard({ asymmetries, displayUnit }: ImprovedAsym
       </CardHeader>
       <CardContent className="space-y-3">
         {allBalanced ? (
-          <div className="p-3 bg-success-500/10 border border-success-500/20 rounded-lg text-center">
-            <p className="text-sm text-success-400">Excellent bilateral symmetry across all measurements!</p>
-            <p className="text-xs text-surface-500 mt-1">All differences are within the normal 3% range.</p>
+          <div className="p-3 bg-status-ok/10 border border-status-ok/20 rounded-lg text-center">
+            <p className="text-sm text-status-ok">Excellent bilateral symmetry across all measurements!</p>
+            <p className="text-xs text-ink-3 mt-1">All differences are within the normal 3% range.</p>
           </div>
         ) : (
           significantAsymmetries.map((asym) => (
@@ -271,28 +271,28 @@ export function ImprovedAsymmetryCard({ asymmetries, displayUnit }: ImprovedAsym
               key={asym.bodyPart}
               className={`p-3 rounded-lg border ${
                 asym.severity === 'significant'
-                  ? 'bg-danger-500/10 border-danger-500/30'
+                  ? 'bg-status-bad/10 border-status-bad/30'
                   : asym.severity === 'moderate'
-                  ? 'bg-warning-500/10 border-warning-500/30'
-                  : 'bg-surface-800/50 border-surface-700'
+                  ? 'bg-status-warn/10 border-status-warn/30'
+                  : 'bg-fill/50 border-sep'
               }`}
             >
               <div className="flex items-start justify-between mb-2">
                 <div>
-                  <span className="text-sm font-medium text-surface-200">{asym.bodyPart}</span>
+                  <span className="text-sm font-medium text-ink">{asym.bodyPart}</span>
                   <div className="flex items-center gap-2 mt-0.5">
                     <span className={`text-xs font-medium ${
-                      asym.severityColor === 'green' ? 'text-success-400' :
+                      asym.severityColor === 'green' ? 'text-status-ok' :
                       asym.severityColor === 'yellow' ? 'text-yellow-400' :
-                      asym.severityColor === 'orange' ? 'text-warning-400' :
-                      'text-danger-400'
+                      asym.severityColor === 'orange' ? 'text-status-warn' :
+                      'text-status-bad'
                     }`}>
                       {asym.dominantSide === 'balanced'
                         ? 'Balanced'
                         : `${asym.dominantSide.charAt(0).toUpperCase() + asym.dominantSide.slice(1)} +${Math.abs(asym.percentDifference).toFixed(1)}%`
                       }
                     </span>
-                    <span className="text-xs text-surface-500">
+                    <span className="text-xs text-ink-3">
                       ({formatMeasurementDiff(asym.differenceCm, displayUnit)})
                     </span>
                   </div>
@@ -310,36 +310,36 @@ export function ImprovedAsymmetryCard({ asymmetries, displayUnit }: ImprovedAsym
                 </Badge>
               </div>
 
-              <p className="text-xs text-surface-400 mb-2">{asym.severityContext}</p>
+              <p className="text-xs text-ink-2 mb-2">{asym.severityContext}</p>
 
               {/* Visual comparison bar */}
               <div className="flex items-center gap-2 text-xs">
-                <span className="text-surface-500 w-8">L</span>
+                <span className="text-ink-3 w-8">L</span>
                 <div className="flex-1 relative">
-                  <div className="h-2 bg-surface-700 rounded-full overflow-hidden flex">
+                  <div className="h-2 bg-sep rounded-full overflow-hidden flex">
                     <div
-                      className="h-full bg-primary-500"
+                      className="h-full bg-action"
                       style={{
                         width: `${(asym.leftValueCm / (asym.leftValueCm + asym.rightValueCm)) * 100}%`
                       }}
                     />
                     <div
-                      className="h-full bg-primary-400"
+                      className="h-full bg-action"
                       style={{
                         width: `${(asym.rightValueCm / (asym.leftValueCm + asym.rightValueCm)) * 100}%`
                       }}
                     />
                   </div>
                 </div>
-                <span className="text-surface-500 w-8 text-right">R</span>
+                <span className="text-ink-3 w-8 text-right">R</span>
               </div>
-              <div className="flex justify-between mt-1 text-[10px] text-surface-500">
+              <div className="flex justify-between mt-1 text-[10px] text-ink-3">
                 <span>{formatMeasurement(asym.leftValueCm, displayUnit)}</span>
                 <span>{formatMeasurement(asym.rightValueCm, displayUnit)}</span>
               </div>
 
               {asym.severity !== 'normal' && (
-                <p className="text-xs text-primary-400 mt-2">{asym.recommendation}</p>
+                <p className="text-xs text-action mt-2">{asym.recommendation}</p>
               )}
             </div>
           ))
@@ -375,23 +375,23 @@ export function TrainingPrioritiesCard({ priorities, onTrackItems = [] }: Traini
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        <p className="text-xs text-surface-500">
+        <p className="text-xs text-ink-3">
           Based on your proportions, exercise suggestions are weighted by these priorities:
         </p>
 
         {highPriority.length > 0 && (
           <div className="space-y-2">
             <div className="flex items-center gap-2 text-xs">
-              <span className="text-danger-400 font-medium">HIGH PRIORITY</span>
+              <span className="text-status-bad font-medium">HIGH PRIORITY</span>
             </div>
             {highPriority.map((p, i) => (
-              <div key={i} className="pl-3 border-l-2 border-danger-500/50 py-1">
+              <div key={i} className="pl-3 border-l-2 border-status-bad/50 py-1">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-surface-200">{p.muscleGroup}</span>
+                  <span className="text-sm font-medium text-ink">{p.muscleGroup}</span>
                   <Badge variant="danger" size="sm">{p.issueType}</Badge>
                 </div>
-                <p className="text-xs text-surface-400 mt-0.5">{p.reason}</p>
-                <p className="text-[10px] text-surface-500">({p.metricValue})</p>
+                <p className="text-xs text-ink-2 mt-0.5">{p.reason}</p>
+                <p className="text-[10px] text-ink-3">({p.metricValue})</p>
               </div>
             ))}
           </div>
@@ -400,15 +400,15 @@ export function TrainingPrioritiesCard({ priorities, onTrackItems = [] }: Traini
         {mediumPriority.length > 0 && (
           <div className="space-y-2">
             <div className="flex items-center gap-2 text-xs">
-              <span className="text-warning-400 font-medium">MEDIUM PRIORITY</span>
+              <span className="text-status-warn font-medium">MEDIUM PRIORITY</span>
             </div>
             {mediumPriority.map((p, i) => (
-              <div key={i} className="pl-3 border-l-2 border-warning-500/50 py-1">
+              <div key={i} className="pl-3 border-l-2 border-status-warn/50 py-1">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-surface-300">{p.muscleGroup}</span>
+                  <span className="text-sm text-ink-2">{p.muscleGroup}</span>
                   <Badge variant="warning" size="sm">{p.issueType}</Badge>
                 </div>
-                <p className="text-xs text-surface-400 mt-0.5">{p.reason}</p>
+                <p className="text-xs text-ink-2 mt-0.5">{p.reason}</p>
               </div>
             ))}
           </div>
@@ -417,22 +417,22 @@ export function TrainingPrioritiesCard({ priorities, onTrackItems = [] }: Traini
         {onTrackItems.length > 0 && (
           <div className="space-y-2">
             <div className="flex items-center gap-2 text-xs">
-              <span className="text-success-400 font-medium">ON TRACK</span>
+              <span className="text-status-ok font-medium">ON TRACK</span>
             </div>
             <div className="flex flex-wrap gap-2">
               {onTrackItems.map((item, i) => (
-                <div key={i} className="flex items-center gap-1 text-xs text-surface-400">
-                  <span className="text-success-400">✓</span>
+                <div key={i} className="flex items-center gap-1 text-xs text-ink-2">
+                  <span className="text-status-ok">✓</span>
                   <span>{item.label}</span>
-                  <span className="text-surface-600">({item.detail})</span>
+                  <span className="text-ink-3">({item.detail})</span>
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        <div className="pt-2 border-t border-surface-800">
-          <p className="text-[10px] text-surface-600 flex items-center gap-1">
+        <div className="pt-2 border-t border-sep">
+          <p className="text-[10px] text-ink-3 flex items-center gap-1">
             <span>ℹ️</span>
             <span>Exercise suggestions are automatically weighted by these priorities</span>
           </p>
@@ -492,7 +492,7 @@ export function ScoreBreakdownCard({ breakdown, onComponentClick }: ScoreBreakdo
         </div>
       </CardHeader>
       <CardContent className="space-y-2">
-        <p className="text-xs text-surface-500 mb-3">Breakdown:</p>
+        <p className="text-xs text-ink-3 mb-3">Breakdown:</p>
 
         {(Object.keys(breakdown.components) as Array<keyof ScoreBreakdown['components']>).map((key) => {
           const score = breakdown.components[key];
@@ -505,7 +505,7 @@ export function ScoreBreakdownCard({ breakdown, onComponentClick }: ScoreBreakdo
                   setExpandedComponent(isExpanded ? null : key);
                   onComponentClick?.(key);
                 }}
-                className="w-full flex items-center gap-2 py-1 hover:bg-surface-800/50 rounded transition-colors"
+                className="w-full flex items-center gap-2 py-1 hover:bg-fill/50 rounded transition-colors"
               >
                 <span className="text-sm">{componentIcons[key]}</span>
                 <div className="flex-1">
@@ -520,7 +520,7 @@ export function ScoreBreakdownCard({ breakdown, onComponentClick }: ScoreBreakdo
               </button>
 
               {isExpanded && (
-                <div className="pl-7 pr-2 py-2 text-xs text-surface-400 bg-surface-800/30 rounded-b">
+                <div className="pl-7 pr-2 py-2 text-xs text-ink-2 bg-fill/30 rounded-b">
                   {breakdown.explanations[key]}
                 </div>
               )}
@@ -528,7 +528,7 @@ export function ScoreBreakdownCard({ breakdown, onComponentClick }: ScoreBreakdo
           );
         })}
 
-        <p className="text-[10px] text-surface-600 pt-2">
+        <p className="text-[10px] text-ink-3 pt-2">
           Tap any score to see details
         </p>
       </CardContent>

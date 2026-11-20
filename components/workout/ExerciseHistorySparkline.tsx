@@ -112,12 +112,12 @@ export function ExerciseHistorySparkline({
   }`;
 
   return (
-    <div className="p-3 bg-surface-800/50 rounded-lg" data-testid="history-sparkline">
+    <div className="p-3 bg-fill/50 rounded-lg" data-testid="history-sparkline">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-surface-400 uppercase tracking-wider">
+        <span className="text-xs font-medium text-ink-2 uppercase tracking-wider">
           Last {Math.round(SPARKLINE_WINDOW_DAYS / 7)} Weeks
         </span>
-        <span className="text-xs text-surface-500">
+        <span className="text-xs text-ink-3">
           {METRIC_LABELS[metric]} · {points.length} sessions
           {gymLabel && (
             <span data-testid="history-sparkline-gym"> · {gymLabel}</span>
@@ -126,7 +126,7 @@ export function ExerciseHistorySparkline({
       </div>
       <svg
         viewBox="0 0 100 26"
-        className="w-full h-8 mt-2 text-primary-400"
+        className="w-full h-8 mt-2 text-action"
         preserveAspectRatio="none"
         aria-hidden="true"
       >
@@ -141,16 +141,16 @@ export function ExerciseHistorySparkline({
         />
       </svg>
       <div className="mt-1 flex items-center justify-between text-xs">
-        <span className="text-surface-500">{formatValue(firstDisplay)}</span>
+        <span className="text-ink-3">{formatValue(firstDisplay)}</span>
         <span>
-          <span className="text-surface-200">{formatValue(latestDisplay)}</span>{' '}
+          <span className="text-ink">{formatValue(latestDisplay)}</span>{' '}
           <span
             className={
               delta > 0
-                ? 'text-success-400'
+                ? 'text-status-ok'
                 : delta < 0
-                  ? 'text-danger-400'
-                  : 'text-surface-500'
+                  ? 'text-status-bad'
+                  : 'text-ink-3'
             }
             data-testid="history-sparkline-delta"
           >

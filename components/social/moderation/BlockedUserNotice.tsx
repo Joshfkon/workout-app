@@ -22,8 +22,8 @@ export function BlockedUserNotice({ userId, username }: { userId: string; userna
   return (
     <Card>
       <CardContent className="py-8 text-center">
-        <h3 className="text-lg font-semibold text-surface-100 mb-2">You blocked @{username}</h3>
-        <p className="text-surface-400 mb-4">
+        <h3 className="text-lg font-semibold text-ink mb-2">You blocked @{username}</h3>
+        <p className="text-ink-2 mb-4">
           Their profile, posts, comments and shared workouts are hidden from you.
         </p>
         {error && <p className="text-sm text-error-400 mb-3">{error}</p>}

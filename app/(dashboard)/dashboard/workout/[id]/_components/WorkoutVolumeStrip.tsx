@@ -100,9 +100,9 @@ function barFillPct(sets: number, mrv: number): number {
 
 /** Status-dot colour for a readiness score (green / amber / red). */
 function readinessDotClass(readiness: number): string {
-  if (readiness >= READINESS_READY_THRESHOLD) return 'bg-success-500';
-  if (readiness >= READINESS_AMBER_THRESHOLD) return 'bg-warning-500';
-  return 'bg-danger-500';
+  if (readiness >= READINESS_READY_THRESHOLD) return 'bg-status-ok';
+  if (readiness >= READINESS_AMBER_THRESHOLD) return 'bg-status-warn';
+  return 'bg-status-bad';
 }
 
 /** The two projection warning states (spec'd colors): red for a locked-in
@@ -116,26 +116,26 @@ function projectionWarning(row: WorkoutMuscleVolumeRow): 'locked' | 'over' | nul
 /** Card border tint for a projection warning. */
 function chipBorderClass(row: WorkoutMuscleVolumeRow): string {
   const warning = projectionWarning(row);
-  if (warning === 'locked') return 'border-danger-500/50';
-  if (warning === 'over') return 'border-warning-500/50';
-  return 'border-surface-800';
+  if (warning === 'locked') return 'border-status-bad/50';
+  if (warning === 'over') return 'border-status-warn/50';
+  return 'border-sep';
 }
 
 /** Fill for the hatched planned segment (lighter than the week-to-date fill;
  *  tinted by the projection warning). */
 function plannedSegmentClass(row: WorkoutMuscleVolumeRow): string {
   const warning = projectionWarning(row);
-  if (warning === 'locked') return 'bg-danger-500/50';
-  if (warning === 'over') return 'bg-warning-500/60';
-  return 'bg-surface-400/50';
+  if (warning === 'locked') return 'bg-status-bad/50';
+  if (warning === 'over') return 'bg-status-warn/60';
+  return 'bg-ink-3/50';
 }
 
 /** Text colour for the "+N → M" projection microline. */
 function projectionTextClass(row: WorkoutMuscleVolumeRow): string {
   const warning = projectionWarning(row);
-  if (warning === 'locked') return 'text-danger-400';
-  if (warning === 'over') return 'text-warning-400';
-  return 'text-surface-400';
+  if (warning === 'locked') return 'text-status-bad';
+  if (warning === 'over') return 'text-status-warn';
+  return 'text-ink-2';
 }
 
 /** Diagonal hatch so the planned segment reads "not done yet" at a glance. */
@@ -211,7 +211,7 @@ export function WorkoutVolumeStrip({
       <div className="flex items-center justify-between px-0.5 mb-1.5">
         <button
           onClick={toggleCollapsed}
-          className="flex items-center gap-1 text-[11px] uppercase tracking-wide text-surface-500 hover:text-surface-300"
+          className="flex items-center gap-1 text-[11px] uppercase tracking-wide text-ink-3 hover:text-ink-2"
           data-testid="workout-volume-strip-toggle"
           aria-expanded={!collapsed}
           aria-controls="workout-volume-strip-cards"
@@ -225,7 +225,7 @@ export function WorkoutVolumeStrip({
         </button>
         <button
           onClick={onOpenDetail}
-          className="text-[11px] font-medium text-primary-400 hover:text-primary-300"
+          className="text-[11px] font-medium text-action"
           data-testid="workout-volume-strip-details"
         >
           Details
@@ -242,7 +242,7 @@ export function WorkoutVolumeStrip({
             <button
               key={row.key}
               onClick={onOpenDetail}
-              className={`flex-shrink-0 snap-start w-[104px] text-left rounded-lg border ${chipBorderClass(row)} bg-surface-900/60 px-2.5 py-2 hover:border-surface-700 transition-colors`}
+              className={`flex-shrink-0 snap-start w-[104px] text-left rounded-lg border ${chipBorderClass(row)} bg-card/60 px-2.5 py-2 hover:border-sep transition-colors`}
               data-testid={`workout-volume-chip-${row.muscle}`}
               aria-label={`${row.displayName}: ${formatEffectiveVolume(row.effectiveSets)} effective of ${row.sets} weekly sets${
                 row.unratedSets > 0 ? `, ${formatEffectiveVolume(row.unratedSets)} unrated` : ''
@@ -260,16 +260,16 @@ export function WorkoutVolumeStrip({
               <div className="flex items-center gap-1.5 min-w-0">
                 <span
                   className={`h-[9px] w-[9px] flex-shrink-0 rounded-full ${
-                    isLoading ? 'bg-surface-700' : readinessDotClass(row.readiness)
+                    isLoading ? 'bg-sep' : readinessDotClass(row.readiness)
                   }`}
                   data-testid={`workout-volume-readiness-dot-${row.muscle}`}
                   aria-hidden
                 />
-                <span className="text-xs font-medium text-surface-200 truncate">{row.displayName}</span>
+                <span className="text-xs font-medium text-ink truncate">{row.displayName}</span>
               </div>
               <div className="mt-0.5">
                 {isLoading ? (
-                  <span className="inline-block h-4 w-8 rounded bg-surface-700 animate-pulse" aria-hidden />
+                  <span className="inline-block h-4 w-8 rounded bg-sep animate-pulse" aria-hidden />
                 ) : (
                   <>
                     <span
@@ -280,34 +280,34 @@ export function WorkoutVolumeStrip({
                           below with its unit — never "16.6/17", which reads as
                           current/target. */}
                       {formatEffectiveVolume(row.effectiveSets)}
-                      <span className="text-[10px] font-normal text-surface-500"> eff</span>
+                      <span className="text-[10px] font-normal text-ink-3"> eff</span>
                     </span>
-                    <span className="block text-[10px] tabular-nums text-surface-500">
+                    <span className="block text-[10px] tabular-nums text-ink-3">
                       of {row.sets} sets
                       {/* Unrated sets are EXCLUDED from the effective number
                           (services/effectiveVolume) — surfacing the count here
                           is the other half of that rule: never an effective
                           value silently computed over a subset. */}
                       {row.unratedSets > 0 && (
-                        <span className="text-warning-400"> · {formatEffectiveVolume(row.unratedSets)} unrated</span>
+                        <span className="text-status-warn"> · {formatEffectiveVolume(row.unratedSets)} unrated</span>
                       )}
                     </span>
                   </>
                 )}
               </div>
-              <div className="mt-1.5 relative h-1.5 rounded-full bg-surface-800 overflow-visible">
+              <div className="mt-1.5 relative h-1.5 rounded-full bg-fill overflow-visible">
                 {!isLoading && (
                   <>
                     {/* Optimal zone markers (MEV and MRV) - vertical ticks showing the target band */}
                     <div
-                      className="absolute -top-px -bottom-px w-px bg-surface-400"
+                      className="absolute -top-px -bottom-px w-px bg-ink-3"
                       style={{ left: `${(row.band.mev / row.band.mrv) * 100}%` }}
                       data-testid={`workout-volume-mev-marker-${row.muscle}`}
                       aria-label={`MEV marker at ${row.band.mev} sets`}
                       title={`MEV: ${row.band.mev} sets`}
                     />
                     <div
-                      className="absolute -top-px -bottom-px w-px bg-surface-400"
+                      className="absolute -top-px -bottom-px w-px bg-ink-3"
                       style={{ left: '100%' }}
                       data-testid={`workout-volume-mrv-marker-${row.muscle}`}
                       aria-label={`MRV marker at ${row.band.mrv} sets`}
@@ -341,20 +341,20 @@ export function WorkoutVolumeStrip({
                 )}
               </div>
               <p className="mt-1 flex items-baseline justify-between gap-1 text-[10px] tabular-nums">
-                <span className="text-surface-500">
+                <span className="text-ink-3">
                   {row.band.mev}–{row.band.mrv}
                 </span>
                 {!isLoading &&
                   (row.readyInHours <= 0 ? (
                     <span
-                      className="font-semibold text-success-400"
+                      className="font-semibold text-status-ok"
                       data-testid={`workout-volume-readiness-${row.muscle}`}
                     >
                       Ready
                     </span>
                   ) : (
                     <span
-                      className="text-surface-500"
+                      className="text-ink-3"
                       data-testid={`workout-volume-readiness-${row.muscle}`}
                     >
                       {readyInLabel(row.readyInHours)}
@@ -366,7 +366,7 @@ export function WorkoutVolumeStrip({
           {expanderVisible && (
             <button
               onClick={toggleShowAll}
-              className="flex-shrink-0 snap-start w-[104px] rounded-lg border border-dashed border-surface-700 px-2.5 py-2 text-[11px] font-medium text-surface-400 hover:border-surface-600 hover:text-surface-300 transition-colors"
+              className="flex-shrink-0 snap-start w-[104px] rounded-lg border border-dashed border-sep px-2.5 py-2 text-[11px] font-medium text-ink-2 hover:border-sep hover:text-ink-2 transition-colors"
               data-testid="workout-volume-strip-show-all"
               aria-expanded={showAll}
             >
@@ -382,30 +382,30 @@ export function WorkoutVolumeStrip({
           <div className="mt-1">
             <button
               onClick={() => setProjectionOpen((prev) => !prev)}
-              className="flex w-full items-center gap-1 px-0.5 text-[11px] text-surface-500 hover:text-surface-300"
+              className="flex w-full items-center gap-1 px-0.5 text-[11px] text-ink-3 hover:text-ink-2"
               data-testid="workout-volume-projection-summary"
               aria-expanded={projectionOpen}
               aria-controls="workout-volume-projection-list"
             >
-              <span className="text-surface-500">After today’s plan:</span>
+              <span className="text-ink-3">After today’s plan:</span>
               <span className="flex items-baseline gap-1 tabular-nums">
                 {inRangeCount > 0 && (
-                  <span className="text-surface-400">{inRangeCount} in range</span>
+                  <span className="text-ink-2">{inRangeCount} in range</span>
                 )}
                 {underCount > 0 && (
-                  <span className="text-surface-400">
+                  <span className="text-ink-2">
                     {inRangeCount > 0 && '· '}
                     {underCount} under
                   </span>
                 )}
                 {overCount > 0 && (
-                  <span className="text-warning-400">
+                  <span className="text-status-warn">
                     {(inRangeCount > 0 || underCount > 0) && '· '}
                     {overCount} over max
                   </span>
                 )}
                 {lockedCount > 0 && (
-                  <span className="text-danger-400">
+                  <span className="text-status-bad">
                     {(inRangeCount > 0 || underCount > 0 || overCount > 0) && '· '}
                     {lockedCount} locked under
                   </span>
@@ -421,7 +421,7 @@ export function WorkoutVolumeStrip({
             {projectionOpen && (
               <div
                 id="workout-volume-projection-list"
-                className="mt-1 rounded-lg border border-surface-800 bg-surface-900/60 px-3 py-2"
+                className="mt-1 rounded-lg border border-sep bg-card/60 px-3 py-2"
                 data-testid="workout-volume-projection-list"
               >
                 {projectionRows.map((row) => (
@@ -430,13 +430,13 @@ export function WorkoutVolumeStrip({
                     className="grid grid-cols-[minmax(0,1fr)_auto_auto_auto] items-baseline gap-x-3 py-0.5 text-[11px] tabular-nums"
                     data-testid={`workout-volume-projection-row-${row.muscle}`}
                   >
-                    <span className="truncate text-surface-300">{row.displayName}</span>
-                    <span className="text-right text-surface-200">
+                    <span className="truncate text-ink-2">{row.displayName}</span>
+                    <span className="text-right text-ink">
                       {row.plannedSets > 0
                         ? `${row.sets} +${row.plannedSets} → ${row.projectedSets}`
                         : `${row.sets}`}
                     </span>
-                    <span className="text-right text-surface-500">
+                    <span className="text-right text-ink-3">
                       {row.band.mev}–{row.band.mrv}
                     </span>
                     <span className={`text-right font-medium ${projectionTextClass(row)}`}>
@@ -452,10 +452,10 @@ export function WorkoutVolumeStrip({
                   return (
                     <div
                       key={s.muscle}
-                      className="mt-1 flex items-center gap-2 border-t border-surface-800 pt-1.5 text-[11px]"
+                      className="mt-1 flex items-center gap-2 border-t border-sep pt-1.5 text-[11px]"
                       data-testid={`volume-deficit-suggestion-${s.muscle}`}
                     >
-                      <span className="min-w-0 flex-1 text-surface-400">
+                      <span className="min-w-0 flex-1 text-ink-2">
                         {action.kind === 'add_sets' ? (
                           <>
                             {s.displayName}: +{action.addSets} set
@@ -473,7 +473,7 @@ export function WorkoutVolumeStrip({
                         ? onAddSetsToBlock && (
                             <button
                               onClick={() => onAddSetsToBlock(action.blockId, action.addSets)}
-                              className="flex-shrink-0 rounded-md border border-primary-500/40 px-2 py-0.5 font-medium text-primary-400 hover:bg-primary-500/10"
+                              className="flex-shrink-0 rounded-md border border-action/40 px-2 py-0.5 font-medium text-action hover:bg-action/10"
                               data-testid={`volume-deficit-add-sets-${s.muscle}`}
                             >
                               +{action.addSets} set{action.addSets === 1 ? '' : 's'}
@@ -482,7 +482,7 @@ export function WorkoutVolumeStrip({
                         : onAddExerciseForMuscle && (
                             <button
                               onClick={() => onAddExerciseForMuscle(s.muscle)}
-                              className="flex-shrink-0 rounded-md border border-primary-500/40 px-2 py-0.5 font-medium text-primary-400 hover:bg-primary-500/10"
+                              className="flex-shrink-0 rounded-md border border-action/40 px-2 py-0.5 font-medium text-action hover:bg-action/10"
                               data-testid={`volume-deficit-add-exercise-${s.muscle}`}
                             >
                               Add exercise
@@ -492,7 +492,7 @@ export function WorkoutVolumeStrip({
                   );
                 })}
                 {lockedCount > 0 && (
-                  <p className="mt-1 text-[11px] text-danger-400">
+                  <p className="mt-1 text-[11px] text-status-bad">
                     Locked in: recovery won’t allow more quality sets before this
                     week’s window closes.
                   </p>

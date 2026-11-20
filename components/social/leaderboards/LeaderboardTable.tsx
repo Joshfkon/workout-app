@@ -27,10 +27,10 @@ export function LeaderboardTable({
     return (
       <div className="text-center py-12">
         <p className="text-5xl mb-4">🏆</p>
-        <h3 className="text-lg font-semibold text-surface-100 mb-2">
+        <h3 className="text-lg font-semibold text-ink mb-2">
           No rankings yet
         </h3>
-        <p className="text-surface-400 max-w-sm mx-auto">
+        <p className="text-ink-2 max-w-sm mx-auto">
           Complete workouts this week to appear on the leaderboard!
         </p>
       </div>
@@ -51,7 +51,7 @@ export function LeaderboardTable({
 
       {isLoading && (
         <div className="flex justify-center py-4">
-          <div className="animate-spin h-6 w-6 border-2 border-surface-500 border-t-primary-500 rounded-full" />
+          <div className="animate-spin h-6 w-6 border-2 border-ink-3 border-t-action rounded-full" />
         </div>
       )}
 

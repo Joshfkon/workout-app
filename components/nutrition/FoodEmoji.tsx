@@ -23,7 +23,7 @@ export function FoodEmojiAvatar({
     <span
       aria-hidden="true"
       data-testid="food-emoji-avatar"
-      className={`flex flex-shrink-0 items-center justify-center rounded-full bg-surface-800 ${sizeClasses}`}
+      className={`flex flex-shrink-0 items-center justify-center rounded-full bg-fill ${sizeClasses}`}
     >
       {foodEmoji(name, brand)}
     </span>

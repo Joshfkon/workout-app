@@ -113,28 +113,28 @@ export function heatLevel(avgWeeklySets: number, band: VolumeBand): HeatLevel {
  * SVG fills per heat level — the heat-mode twin of weeklyVolume's
  * ZONE_FILL_CLASSES, kept here so the map, the legend and any future surface
  * paint identically. The reds deliberately reuse the app's below-MEV family
- * (danger-300 soft / danger-500 solid / warning-500 amber); the green ramp
- * darkens 300 → 700 with volume.
+ * (soft bad at 50% / solid bad / warn); the green ramp is the ok status
+ * colour at rising opacity (50% → 70% → 85% → solid) with volume.
  */
 export const HEAT_FILL_CLASSES: Record<HeatLevel, string> = {
-  untrained: 'fill-danger-300',
-  critical: 'fill-danger-500',
-  below: 'fill-warning-500',
-  low: 'fill-success-300',
-  moderate: 'fill-success-500',
-  high: 'fill-success-600',
-  very_high: 'fill-success-700',
+  untrained: 'fill-status-bad/50',
+  critical: 'fill-status-bad',
+  below: 'fill-status-warn',
+  low: 'fill-status-ok/50',
+  moderate: 'fill-status-ok/70',
+  high: 'fill-status-ok/85',
+  very_high: 'fill-status-ok',
 };
 
 /** Legend-swatch backgrounds, same tokens as the fills. */
 export const HEAT_SWATCH_CLASSES: Record<HeatLevel, string> = {
-  untrained: 'bg-danger-300',
-  critical: 'bg-danger-500',
-  below: 'bg-warning-500',
-  low: 'bg-success-300',
-  moderate: 'bg-success-500',
-  high: 'bg-success-600',
-  very_high: 'bg-success-700',
+  untrained: 'bg-status-bad/50',
+  critical: 'bg-status-bad',
+  below: 'bg-status-warn',
+  low: 'bg-status-ok/50',
+  moderate: 'bg-status-ok/70',
+  high: 'bg-status-ok/85',
+  very_high: 'bg-status-ok',
 };
 
 /** Short legend / detail labels per bucket. */

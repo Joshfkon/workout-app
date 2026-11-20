@@ -18,8 +18,8 @@ import { cn } from '@/lib/utils';
 import type { SharedWorkoutWithProfile, Difficulty } from '@/types/social';
 
 const difficultyColors: Record<Difficulty, string> = {
-  beginner: 'bg-success-500/20 text-success-400 border-success-500/30',
-  intermediate: 'bg-warning-500/20 text-warning-400 border-warning-500/30',
+  beginner: 'bg-status-ok/20 text-status-ok border-status-ok/30',
+  intermediate: 'bg-status-warn/20 text-status-warn border-status-warn/30',
   advanced: 'bg-error-500/20 text-error-400 border-error-500/30',
 };
 
@@ -271,20 +271,20 @@ export default function SharedWorkoutDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-surface-950 flex items-center justify-center">
-        <div className="animate-spin h-8 w-8 border-2 border-surface-500 border-t-primary-500 rounded-full" />
+      <div className="min-h-screen bg-canvas flex items-center justify-center">
+        <div className="animate-spin h-8 w-8 border-2 border-ink-3 border-t-action rounded-full" />
       </div>
     );
   }
 
   if (error || !workout) {
     return (
-      <div className="min-h-screen bg-surface-950 flex flex-col items-center justify-center px-4">
+      <div className="min-h-screen bg-canvas flex flex-col items-center justify-center px-4">
         <p className="text-5xl mb-4">🔍</p>
-        <h1 className="text-xl font-semibold text-surface-100 mb-2">
+        <h1 className="text-xl font-semibold text-ink mb-2">
           {error || 'Workout not found'}
         </h1>
-        <p className="text-surface-400 text-center mb-6">
+        <p className="text-ink-2 text-center mb-6">
           This workout may have been removed or made private.
         </p>
         <Button variant="outline" onClick={() => router.push('/dashboard/discover')}>
@@ -299,13 +299,13 @@ export default function SharedWorkoutDetailPage() {
   const duration = workout.workout_data?.estimated_duration_minutes || 0;
 
   return (
-    <div className="min-h-screen bg-surface-950">
+    <div className="min-h-screen bg-canvas">
       {/* Header */}
-      <header className="bg-surface-900 border-b border-surface-800">
+      <header className="bg-card border-b border-sep">
         <div className="max-w-3xl mx-auto px-4 py-4">
           <button
             onClick={() => router.back()}
-            className="flex items-center gap-2 text-surface-400 hover:text-surface-200 mb-4"
+            className="flex items-center gap-2 text-ink-2 hover:text-ink mb-4"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -325,11 +325,11 @@ export default function SharedWorkoutDetailPage() {
             <div className="flex-1 min-w-0">
               <Link
                 href={`/dashboard/profile/${workout.user_profile.username}`}
-                className="font-medium text-surface-100 hover:text-primary-400"
+                className="font-medium text-ink hover:text-action"
               >
                 {workout.user_profile.display_name || workout.user_profile.username}
               </Link>
-              <p className="text-sm text-surface-500">
+              <p className="text-sm text-ink-3">
                 @{workout.user_profile.username} &middot; {formatDistanceToNow(workout.created_at)}
               </p>
             </div>
@@ -343,13 +343,13 @@ export default function SharedWorkoutDetailPage() {
           </div>
 
           {/* Title */}
-          <h1 className="text-2xl font-bold text-surface-100 mb-2">
+          <h1 className="text-2xl font-bold text-ink mb-2">
             {workout.title}
           </h1>
 
           {/* Tags */}
           <div className="flex flex-wrap gap-2 mb-4">
-            <span className="px-3 py-1 rounded-full text-sm font-medium bg-surface-800 text-surface-300 capitalize">
+            <span className="px-3 py-1 rounded-full text-sm font-medium bg-fill text-ink-2 capitalize">
               {workout.share_type.replace('_', ' ')}
             </span>
             {workout.difficulty && (
@@ -366,11 +366,11 @@ export default function SharedWorkoutDetailPage() {
 
           {/* Description */}
           {workout.description && (
-            <p className="text-surface-300 mb-4">{workout.description}</p>
+            <p className="text-ink-2 mb-4">{workout.description}</p>
           )}
 
           {/* Stats */}
-          <div className="flex items-center gap-6 text-sm text-surface-400 mb-6">
+          <div className="flex items-center gap-6 text-sm text-ink-2 mb-6">
             <div className="flex items-center gap-2">
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
@@ -438,12 +438,12 @@ export default function SharedWorkoutDetailPage() {
         {/* Muscle groups */}
         {workout.target_muscle_groups && workout.target_muscle_groups.length > 0 && (
           <div className="mb-6">
-            <h2 className="text-sm font-medium text-surface-400 mb-2">Target Muscles</h2>
+            <h2 className="text-sm font-medium text-ink-2 mb-2">Target Muscles</h2>
             <div className="flex flex-wrap gap-2">
               {workout.target_muscle_groups.map((muscle) => (
                 <span
                   key={muscle}
-                  className="px-3 py-1 rounded-full text-sm bg-primary-500/10 text-primary-400 capitalize"
+                  className="px-3 py-1 rounded-full text-sm bg-action/10 text-action capitalize"
                 >
                   {muscle}
                 </span>
@@ -454,26 +454,26 @@ export default function SharedWorkoutDetailPage() {
 
         {/* Exercises */}
         <div className="space-y-4">
-          <h2 className="text-lg font-semibold text-surface-100">Exercises</h2>
+          <h2 className="text-lg font-semibold text-ink">Exercises</h2>
           {exercises.map((exercise, index) => (
             <Card key={index} className="p-4">
               <div className="flex items-start justify-between">
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="w-6 h-6 flex items-center justify-center rounded-full bg-primary-500/20 text-primary-400 text-xs font-medium">
+                    <span className="w-6 h-6 flex items-center justify-center rounded-full bg-action/20 text-action text-xs font-medium">
                       {index + 1}
                     </span>
-                    <h3 className="font-medium text-surface-100">{exercise.exercise_name}</h3>
+                    <h3 className="font-medium text-ink">{exercise.exercise_name}</h3>
                   </div>
                   {exercise.notes && (
-                    <p className="mt-1 text-sm text-surface-400 ml-8">{exercise.notes}</p>
+                    <p className="mt-1 text-sm text-ink-2 ml-8">{exercise.notes}</p>
                   )}
                 </div>
                 <div className="text-right text-sm">
-                  <p className="text-surface-200">
+                  <p className="text-ink">
                     {exercise.sets} sets x {exercise.rep_range[0]}-{exercise.rep_range[1]} reps
                   </p>
-                  <p className="text-surface-500">RIR {exercise.target_rir}</p>
+                  <p className="text-ink-3">RIR {exercise.target_rir}</p>
                 </div>
               </div>
             </Card>
@@ -481,8 +481,8 @@ export default function SharedWorkoutDetailPage() {
         </div>
 
         {/* Social stats */}
-        <div className="mt-8 pt-6 border-t border-surface-800">
-          <div className="flex items-center gap-6 text-sm text-surface-400">
+        <div className="mt-8 pt-6 border-t border-sep">
+          <div className="flex items-center gap-6 text-sm text-ink-2">
             <span>{workout.view_count} views</span>
             <span>{workout.save_count} saves</span>
             <span>{workout.copy_count} copies</span>
@@ -492,7 +492,7 @@ export default function SharedWorkoutDetailPage() {
 
       {/* Share toast */}
       {showShareToast && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 bg-surface-800 text-surface-100 rounded-lg shadow-lg">
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 bg-fill text-ink rounded-lg shadow-lg">
           Link copied to clipboard!
         </div>
       )}

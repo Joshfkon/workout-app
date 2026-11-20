@@ -175,13 +175,13 @@ export const FirstTimeHint = memo(function FirstTimeHint({
   const getArrowClasses = () => {
     switch (position) {
       case 'top':
-        return 'bottom-0 left-1/2 -translate-x-1/2 translate-y-full border-t-primary-600 border-x-transparent border-b-transparent';
+        return 'bottom-0 left-1/2 -translate-x-1/2 translate-y-full border-t-action border-x-transparent border-b-transparent';
       case 'bottom':
-        return 'top-0 left-1/2 -translate-x-1/2 -translate-y-full border-b-primary-600 border-x-transparent border-t-transparent';
+        return 'top-0 left-1/2 -translate-x-1/2 -translate-y-full border-b-action border-x-transparent border-t-transparent';
       case 'left':
-        return 'right-0 top-1/2 -translate-y-1/2 translate-x-full border-l-primary-600 border-y-transparent border-r-transparent';
+        return 'right-0 top-1/2 -translate-y-1/2 translate-x-full border-l-action border-y-transparent border-r-transparent';
       case 'right':
-        return 'left-0 top-1/2 -translate-y-1/2 -translate-x-full border-r-primary-600 border-y-transparent border-l-transparent';
+        return 'left-0 top-1/2 -translate-y-1/2 -translate-x-full border-r-action border-y-transparent border-l-transparent';
     }
   };
 
@@ -192,7 +192,7 @@ export const FirstTimeHint = memo(function FirstTimeHint({
       style={tooltipPosition ? { top: tooltipPosition.top, left: tooltipPosition.left } : { visibility: 'hidden' }}
       className={cn(
         'fixed z-[9999] w-64 max-w-[calc(100vw-2rem)] p-3 rounded-lg',
-        'bg-primary-600 text-white shadow-lg',
+        'bg-action text-on-action shadow-lg',
         'transition-all duration-200',
         isAnimatingOut ? 'opacity-0 scale-95' : 'opacity-100 scale-100 animate-fade-in',
         className
@@ -212,14 +212,14 @@ export const FirstTimeHint = memo(function FirstTimeHint({
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1">
           <h4 className="font-semibold text-sm mb-1">{title}</h4>
-          <p className="text-xs text-primary-100 leading-relaxed">
+          <p className="text-xs text-action leading-relaxed">
             {description}
           </p>
         </div>
 
         <button
           onClick={handleDismiss}
-          className="flex-shrink-0 p-0.5 hover:bg-primary-500 rounded transition-colors"
+          className="flex-shrink-0 p-0.5 hover:bg-action rounded transition-colors"
           aria-label="Dismiss hint"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -235,21 +235,21 @@ export const FirstTimeHint = memo(function FirstTimeHint({
             <a
               href={action.href}
               onClick={handleDismiss}
-              className="px-3 py-1.5 bg-white text-primary-600 text-xs font-medium rounded hover:bg-primary-50 transition-colors"
+              className="px-3 py-1.5 bg-white text-action text-xs font-medium rounded hover:bg-action-tint transition-colors"
             >
               {action.label}
             </a>
           ) : (
             <button
               onClick={handleAction}
-              className="px-3 py-1.5 bg-white text-primary-600 text-xs font-medium rounded hover:bg-primary-50 transition-colors"
+              className="px-3 py-1.5 bg-white text-action text-xs font-medium rounded hover:bg-action-tint transition-colors"
             >
               {action.label}
             </button>
           )}
           <button
             onClick={handleDismiss}
-            className="px-3 py-1.5 text-xs text-primary-100 hover:text-white transition-colors"
+            className="px-3 py-1.5 text-xs text-action hover:text-white transition-colors"
           >
             Got it
           </button>
@@ -260,7 +260,7 @@ export const FirstTimeHint = memo(function FirstTimeHint({
       {!action && (
         <button
           onClick={handleDismiss}
-          className="mt-2 text-xs text-primary-200 hover:text-white transition-colors"
+          className="mt-2 text-xs text-action hover:text-white transition-colors"
         >
           Got it, don&apos;t show again
         </button>
@@ -310,14 +310,14 @@ export const InlineHint = memo(function InlineHint({
         // primary-* is a fixed ramp (it does not flip with the theme like
         // surface-*), so both themes are spelled out: a light tint with dark
         // text on light, the original dark-blue wash on dark.
-        'bg-primary-50 border border-primary-200 text-primary-900',
-        'dark:bg-primary-900/30 dark:border-primary-800 dark:text-primary-100',
+        'bg-action-tint border border-action/40 text-on-action',
+        'dark:bg-action/15 dark:border-action/40 dark:text-action',
         'animate-fade-in',
         className
       )}
     >
       <svg
-        className="w-5 h-5 text-primary-600 dark:text-primary-400 flex-shrink-0 mt-0.5"
+        className="w-5 h-5 text-action dark:text-action flex-shrink-0 mt-0.5"
         fill="none"
         viewBox="0 0 24 24"
         stroke="currentColor"
@@ -332,7 +332,7 @@ export const InlineHint = memo(function InlineHint({
       <div className="flex-1 text-sm">{children}</div>
       <button
         onClick={dismiss}
-        className="flex-shrink-0 p-1 hover:bg-primary-100 dark:hover:bg-primary-800 rounded transition-colors"
+        className="flex-shrink-0 p-1 hover:bg-action-tint dark:hover:bg-action-tint rounded transition-colors"
         aria-label="Dismiss"
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">

@@ -19,18 +19,18 @@ export function ConfidenceIndicator({ confidence, notes }: ConfidenceIndicatorPr
   const info = CONFIDENCE_DISPLAY[confidence];
 
   return (
-    <div className={`rounded-lg p-4 ${info.bgColor} border border-surface-700`}>
+    <div className={`rounded-lg p-4 ${info.bgColor} border border-sep`}>
       <div className="flex items-center gap-3">
         <div
           className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center
-            ${confidence === 'high' ? 'bg-success-900/50' : ''}
-            ${confidence === 'medium' ? 'bg-warning-900/50' : ''}
-            ${confidence === 'low' ? 'bg-danger-900/50' : ''}
+            ${confidence === 'high' ? 'bg-status-ok/15' : ''}
+            ${confidence === 'medium' ? 'bg-status-warn/15' : ''}
+            ${confidence === 'low' ? 'bg-status-bad/15' : ''}
           `}
         >
           {confidence === 'high' && (
             <svg
-              className="w-6 h-6 text-success-400"
+              className="w-6 h-6 text-status-ok"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -45,7 +45,7 @@ export function ConfidenceIndicator({ confidence, notes }: ConfidenceIndicatorPr
           )}
           {confidence === 'medium' && (
             <svg
-              className="w-6 h-6 text-warning-400"
+              className="w-6 h-6 text-status-warn"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -60,7 +60,7 @@ export function ConfidenceIndicator({ confidence, notes }: ConfidenceIndicatorPr
           )}
           {confidence === 'low' && (
             <svg
-              className="w-6 h-6 text-danger-400"
+              className="w-6 h-6 text-status-bad"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -81,14 +81,14 @@ export function ConfidenceIndicator({ confidence, notes }: ConfidenceIndicatorPr
               AI Confidence: {confidence.charAt(0).toUpperCase() + confidence.slice(1)}
             </span>
           </div>
-          <p className="text-sm text-surface-400 mt-0.5">{info.message}</p>
+          <p className="text-sm text-ink-2 mt-0.5">{info.message}</p>
         </div>
       </div>
 
       {notes && (
-        <div className="mt-3 pt-3 border-t border-surface-700">
-          <p className="text-xs text-surface-500 mb-1">AI Notes:</p>
-          <p className="text-sm text-surface-300">{notes}</p>
+        <div className="mt-3 pt-3 border-t border-sep">
+          <p className="text-xs text-ink-3 mb-1">AI Notes:</p>
+          <p className="text-sm text-ink-2">{notes}</p>
         </div>
       )}
     </div>

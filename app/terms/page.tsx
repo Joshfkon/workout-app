@@ -12,11 +12,11 @@ const CONTACT_EMAIL = 'support@hypertrack.app';
 
 export default function TermsOfServicePage() {
   return (
-    <div className="min-h-screen bg-surface-950">
+    <div className="min-h-screen bg-canvas">
       <div className="max-w-3xl mx-auto px-4 py-16">
         <Link
           href="/"
-          className="inline-flex items-center gap-2 text-surface-400 hover:text-surface-200 mb-10 transition-colors"
+          className="inline-flex items-center gap-2 text-ink-2 hover:text-ink mb-10 transition-colors"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -24,17 +24,17 @@ export default function TermsOfServicePage() {
           Back to Home
         </Link>
 
-        <h1 className="text-4xl font-black text-surface-100 mb-2">Terms of Service</h1>
-        <p className="text-surface-400 mb-10">Last updated: {LAST_UPDATED}</p>
+        <h1 className="text-4xl font-black text-ink mb-2">Terms of Service</h1>
+        <p className="text-ink-2 mb-10">Last updated: {LAST_UPDATED}</p>
 
-        <div className="space-y-10 text-surface-300 leading-relaxed">
+        <div className="space-y-10 text-ink-2 leading-relaxed">
           <section className="space-y-3">
             <p>
               These Terms of Service (&ldquo;Terms&rdquo;) govern your access to and use of
               HyperTrack (the &ldquo;Service&rdquo;), provided by HyperTrack (&ldquo;HyperTrack,&rdquo;
               &ldquo;we,&rdquo; &ldquo;us,&rdquo; or &ldquo;our&rdquo;). By creating an account or using
               the Service, you agree to these Terms and to our{' '}
-              <Link href="/privacy" className="text-primary-400 hover:underline">Privacy Policy</Link>.
+              <Link href="/privacy" className="text-action hover:underline">Privacy Policy</Link>.
               If you do not agree, do not use the Service.
             </p>
           </section>
@@ -205,7 +205,7 @@ export default function TermsOfServicePage() {
           <Section title="17. Contact Us">
             <p>
               Questions about these Terms? Contact us at{' '}
-              <a href={`mailto:${CONTACT_EMAIL}`} className="text-primary-400 hover:underline">
+              <a href={`mailto:${CONTACT_EMAIL}`} className="text-action hover:underline">
                 {CONTACT_EMAIL}
               </a>
               .
@@ -220,7 +220,7 @@ export default function TermsOfServicePage() {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="space-y-3">
-      <h2 className="text-2xl font-bold text-surface-100">{title}</h2>
+      <h2 className="text-2xl font-bold text-ink">{title}</h2>
       {children}
     </section>
   );

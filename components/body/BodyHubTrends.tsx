@@ -259,7 +259,7 @@ export function BodyHubTrends({
                   onClick={() => setMetric(option.value)}
                   className={`px-3 py-1 text-xs font-medium rounded whitespace-nowrap transition-all ${
                     activeMetric === option.value
-                      ? 'bg-primary-500 text-white shadow-sm'
+                      ? 'bg-action text-on-action shadow-sm'
                       : 'text-ink-2 hover:text-ink'
                   }`}
                 >

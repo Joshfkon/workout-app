@@ -37,13 +37,13 @@ const Slider = forwardRef<HTMLInputElement, SliderProps>(
             {label && (
               <label
                 htmlFor={sliderId}
-                className="text-sm font-medium text-surface-200"
+                className="text-sm font-medium text-ink"
               >
                 {label}
               </label>
             )}
             {showValue && (
-              <span className="text-sm font-mono text-primary-400">
+              <span className="text-sm font-mono text-action">
                 {valueFormatter(currentValue)}
               </span>
             )}
@@ -58,24 +58,24 @@ const Slider = forwardRef<HTMLInputElement, SliderProps>(
             max={max}
             value={value}
             className={cn(
-              `w-full h-2 bg-surface-700 rounded-full appearance-none cursor-pointer
+              `w-full h-2 bg-sep rounded-full appearance-none cursor-pointer
               [&::-webkit-slider-thumb]:appearance-none
               [&::-webkit-slider-thumb]:w-5
               [&::-webkit-slider-thumb]:h-5
               [&::-webkit-slider-thumb]:rounded-full
-              [&::-webkit-slider-thumb]:bg-primary-500
+              [&::-webkit-slider-thumb]:bg-action
               [&::-webkit-slider-thumb]:border-2
-              [&::-webkit-slider-thumb]:border-primary-400
+              [&::-webkit-slider-thumb]:border-action
               [&::-webkit-slider-thumb]:cursor-pointer
               [&::-webkit-slider-thumb]:transition-all
-              [&::-webkit-slider-thumb]:hover:bg-primary-400
+              [&::-webkit-slider-thumb]:hover:bg-action
               [&::-webkit-slider-thumb]:hover:scale-110
               [&::-moz-range-thumb]:w-5
               [&::-moz-range-thumb]:h-5
               [&::-moz-range-thumb]:rounded-full
-              [&::-moz-range-thumb]:bg-primary-500
+              [&::-moz-range-thumb]:bg-action
               [&::-moz-range-thumb]:border-2
-              [&::-moz-range-thumb]:border-primary-400
+              [&::-moz-range-thumb]:border-action
               [&::-moz-range-thumb]:cursor-pointer`,
               className
             )}
@@ -86,7 +86,7 @@ const Slider = forwardRef<HTMLInputElement, SliderProps>(
           />
         </div>
         {marks && (
-          <div className="relative mt-1 flex justify-between text-xs text-surface-500">
+          <div className="relative mt-1 flex justify-between text-xs text-ink-3">
             {marks.map((mark) => (
               <span key={mark.value}>{mark.label}</span>
             ))}

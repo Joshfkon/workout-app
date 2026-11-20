@@ -54,9 +54,9 @@ export const StepTracking = memo(function StepTracking({ date, userWeightKg }: S
         // Show success feedback
         const input = document.getElementById('steps-input') as HTMLInputElement;
         if (input) {
-          input.classList.add('border-success-500');
+          input.classList.add('border-status-ok');
           setTimeout(() => {
-            input.classList.remove('border-success-500');
+            input.classList.remove('border-status-ok');
           }, 1000);
         }
       } else {
@@ -101,7 +101,7 @@ export const StepTracking = memo(function StepTracking({ date, userWeightKg }: S
       <CardContent>
         <div className="space-y-3">
           <div>
-            <label htmlFor="steps-input" className="block text-sm font-medium text-surface-300 mb-1.5">
+            <label htmlFor="steps-input" className="block text-sm font-medium text-ink-2 mb-1.5">
               Steps for {displayDate}
             </label>
             <div className="flex gap-2">
@@ -132,13 +132,13 @@ export const StepTracking = memo(function StepTracking({ date, userWeightKg }: S
           </div>
           
           {savedSteps !== null && (
-            <div className="text-sm text-surface-400">
-              Saved: <span className="font-medium text-surface-200">{savedSteps.toLocaleString()}</span> steps
+            <div className="text-sm text-ink-2">
+              Saved: <span className="font-medium text-ink">{savedSteps.toLocaleString()}</span> steps
             </div>
           )}
 
           {isToday && savedSteps === null && (
-            <p className="text-xs text-surface-500">
+            <p className="text-xs text-ink-3">
               Log your steps to improve TDEE accuracy
             </p>
           )}

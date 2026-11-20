@@ -102,9 +102,9 @@ interface ComparisonRow {
 }
 
 function SupportIcon({ value }: { value: SupportLevel }) {
-  if (value === true) return <span className="text-success-400">✓</span>;
-  if (value === 'partial') return <span className="text-warning-400">◐</span>;
-  return <span className="text-surface-600">—</span>;
+  if (value === true) return <span className="text-status-ok">✓</span>;
+  if (value === 'partial') return <span className="text-status-warn">◐</span>;
+  return <span className="text-ink-3">—</span>;
 }
 
 const comparisonPoints: ComparisonRow[] = [
@@ -133,30 +133,30 @@ export default function AboutPage() {
     <div className="max-w-5xl mx-auto space-y-12 pb-12">
       {/* Hero */}
       <div className="text-center space-y-4">
-        <h1 className="text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-primary-400 via-purple-400 to-pink-400">
+        <h1 className="text-4xl md:text-5xl font-black text-ink">
           HyperTrack
         </h1>
-        <p className="text-xl text-surface-300 max-w-2xl mx-auto">
+        <p className="text-xl text-ink-2 max-w-2xl mx-auto">
           The most scientifically advanced hypertrophy training and nutrition app ever built. 
           AI-powered workout planning, smart nutrition tracking, and personalized coaching—all in one place.
         </p>
       </div>
 
       {/* Philosophy */}
-      <Card className="p-8 bg-gradient-to-br from-primary-500/10 to-purple-500/10 border-primary-500/20">
-        <h2 className="text-2xl font-bold text-surface-100 mb-4">Our Philosophy</h2>
-        <div className="space-y-4 text-surface-300">
+      <Card className="bg-action/10 p-8 border-action/20">
+        <h2 className="text-2xl font-bold text-ink mb-4">Our Philosophy</h2>
+        <div className="space-y-4 text-ink-2">
           <p>
-            <strong className="text-surface-100">Most fitness apps are glorified notepads.</strong> They let you log sets and reps 
+            <strong className="text-ink">Most fitness apps are glorified notepads.</strong> They let you log sets and reps 
             or track calories in isolation, maybe show a graph, and call it a day. But data without intelligence is just busywork.
           </p>
           <p>
-            HyperTrack integrates <strong className="text-surface-100">training AND nutrition</strong> into one intelligent system built on the latest science: 
+            HyperTrack integrates <strong className="text-ink">training AND nutrition</strong> into one intelligent system built on the latest science: 
             Renaissance Periodization&apos;s volume landmarks, Mike Israetel&apos;s SFR concepts, Greg Nuckols&apos; periodization research, 
             Brad Schoenfeld&apos;s hypertrophy mechanisms, and evidence-based nutrition protocols. Our AI coaching ties it all together.
           </p>
           <p>
-            <strong className="text-surface-100">The result?</strong> Every set you do is intentional. Every exercise is S-tier optimized. 
+            <strong className="text-ink">The result?</strong> Every set you do is intentional. Every exercise is S-tier optimized. 
             Your macros adapt to your changing body. You get personalized coaching advice before every workout. 
             No more guessing, no more junk volume, no more spinning your wheels.
           </p>
@@ -165,16 +165,16 @@ export default function AboutPage() {
 
       {/* Features Grid */}
       <div>
-        <h2 className="text-2xl font-bold text-surface-100 mb-6 text-center">
+        <h2 className="text-2xl font-bold text-ink mb-6 text-center">
           Features That Actually Matter
         </h2>
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
           {features.map((feature) => (
-            <Card key={feature.title} className="p-5 hover:border-primary-500/30 transition-colors">
+            <Card key={feature.title} className="p-5 hover:border-action/30 transition-colors">
               <div className="text-3xl mb-3">{feature.icon}</div>
-              <h3 className="text-lg font-semibold text-surface-100 mb-2">{feature.title}</h3>
-              <p className="text-sm text-surface-400 mb-3">{feature.description}</p>
-              <p className="text-xs text-primary-400 italic">{feature.competitors}</p>
+              <h3 className="text-lg font-semibold text-ink mb-2">{feature.title}</h3>
+              <p className="text-sm text-ink-2 mb-3">{feature.description}</p>
+              <p className="text-xs text-action italic">{feature.competitors}</p>
             </Card>
           ))}
         </div>
@@ -182,30 +182,30 @@ export default function AboutPage() {
 
       {/* Comparison Table */}
       <div>
-        <h2 className="text-2xl font-bold text-surface-100 mb-6 text-center">
+        <h2 className="text-2xl font-bold text-ink mb-6 text-center">
           How We Compare
         </h2>
         <Card className="overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="bg-surface-800/50">
-                  <th className="text-left p-4 text-surface-300 font-medium">Feature</th>
-                  <th className="text-center p-4 text-primary-400 font-bold">HyperTrack</th>
-                  <th className="text-center p-4 text-surface-400 font-medium">Strong</th>
-                  <th className="text-center p-4 text-surface-400 font-medium">Hevy</th>
-                  <th className="text-center p-4 text-surface-400 font-medium">Fitbod</th>
+                <tr className="bg-fill/50">
+                  <th className="text-left p-4 text-ink-2 font-medium">Feature</th>
+                  <th className="text-center p-4 text-action font-bold">HyperTrack</th>
+                  <th className="text-center p-4 text-ink-2 font-medium">Strong</th>
+                  <th className="text-center p-4 text-ink-2 font-medium">Hevy</th>
+                  <th className="text-center p-4 text-ink-2 font-medium">Fitbod</th>
                 </tr>
               </thead>
               <tbody>
                 {comparisonPoints.map((row, idx) => (
-                  <tr key={row.feature} className={idx % 2 === 0 ? 'bg-surface-900/30' : ''}>
-                    <td className="p-4 text-surface-300">{row.feature}</td>
+                  <tr key={row.feature} className={idx % 2 === 0 ? 'bg-card/30' : ''}>
+                    <td className="p-4 text-ink-2">{row.feature}</td>
                     <td className="p-4 text-center">
                       {row.hypertracker ? (
-                        <span className="text-success-400 text-xl">✓</span>
+                        <span className="text-status-ok text-xl">✓</span>
                       ) : (
-                        <span className="text-surface-600">—</span>
+                        <span className="text-ink-3">—</span>
                       )}
                     </td>
                     <td className="p-4 text-center">
@@ -222,8 +222,8 @@ export default function AboutPage() {
               </tbody>
             </table>
           </div>
-          <div className="p-4 bg-surface-800/30 border-t border-surface-800">
-            <p className="text-xs text-surface-500 text-center">
+          <div className="p-4 bg-fill/30 border-t border-sep">
+            <p className="text-xs text-ink-3 text-center">
               ✓ = Full support &nbsp;|&nbsp; ◐ = Partial/Limited &nbsp;|&nbsp; — = Not available
             </p>
           </div>
@@ -232,26 +232,26 @@ export default function AboutPage() {
 
       {/* Who It's For */}
       <Card className="p-8">
-        <h2 className="text-2xl font-bold text-surface-100 mb-6 text-center">Who Is HyperTrack For?</h2>
+        <h2 className="text-2xl font-bold text-ink mb-6 text-center">Who Is HyperTrack For?</h2>
         <div className="grid md:grid-cols-3 gap-6">
           <div className="text-center">
             <div className="text-4xl mb-3">🏆</div>
-            <h3 className="font-semibold text-surface-200 mb-2">Intermediate Lifters</h3>
-            <p className="text-sm text-surface-400">
+            <h3 className="font-semibold text-ink mb-2">Intermediate Lifters</h3>
+            <p className="text-sm text-ink-2">
               Past the beginner gains but want to maximize the next phase. You need smart programming, not just more volume.
             </p>
           </div>
           <div className="text-center">
             <div className="text-4xl mb-3">📚</div>
-            <h3 className="font-semibold text-surface-200 mb-2">Evidence-Based Enthusiasts</h3>
-            <p className="text-sm text-surface-400">
+            <h3 className="font-semibold text-ink mb-2">Evidence-Based Enthusiasts</h3>
+            <p className="text-sm text-ink-2">
               You&apos;ve read the research and want an app that actually implements it. No bro-science here.
             </p>
           </div>
           <div className="text-center">
             <div className="text-4xl mb-3">⚙️</div>
-            <h3 className="font-semibold text-surface-200 mb-2">Optimization Nerds</h3>
-            <p className="text-sm text-surface-400">
+            <h3 className="font-semibold text-ink mb-2">Optimization Nerds</h3>
+            <p className="text-sm text-ink-2">
               You want to squeeze every drop of gains from your training. You care about efficiency, not just effort.
             </p>
           </div>
@@ -260,41 +260,41 @@ export default function AboutPage() {
 
       {/* Science Section */}
       <div className="space-y-4">
-        <h2 className="text-2xl font-bold text-surface-100 text-center">Built on Real Science</h2>
+        <h2 className="text-2xl font-bold text-ink text-center">Built on Real Science</h2>
         <div className="grid md:grid-cols-2 gap-4">
           <Card className="p-5">
-            <h3 className="font-semibold text-surface-200 mb-2">Volume Landmarks (RP)</h3>
-            <p className="text-sm text-surface-400">
+            <h3 className="font-semibold text-ink mb-2">Volume Landmarks (RP)</h3>
+            <p className="text-sm text-ink-2">
               MEV, MAV, MRV concepts from Renaissance Periodization ensure you&apos;re always training in the productive zone—enough to grow, not so much you can&apos;t recover.
             </p>
           </Card>
           <Card className="p-5">
-            <h3 className="font-semibold text-surface-200 mb-2">Stimulus-to-Fatigue Ratio</h3>
-            <p className="text-sm text-surface-400">
+            <h3 className="font-semibold text-ink mb-2">Stimulus-to-Fatigue Ratio</h3>
+            <p className="text-sm text-ink-2">
               Not all exercises are equal. Machine flyes give more chest stimulus per unit of fatigue than barbell bench. We rate exercises S/A/B/C and prioritize accordingly.
             </p>
           </Card>
           <Card className="p-5">
-            <h3 className="font-semibold text-surface-200 mb-2">Evidence-Based Protein</h3>
-            <p className="text-sm text-surface-400">
+            <h3 className="font-semibold text-ink mb-2">Evidence-Based Protein</h3>
+            <p className="text-sm text-ink-2">
               1g/lb protein for muscle building, increased to 1.2g/lb during aggressive cuts or GLP-1 use. Our macro calculator implements the latest research.
             </p>
           </Card>
           <Card className="p-5">
-            <h3 className="font-semibold text-surface-200 mb-2">Fiber Type Optimization</h3>
-            <p className="text-sm text-surface-400">
+            <h3 className="font-semibold text-ink mb-2">Fiber Type Optimization</h3>
+            <p className="text-sm text-ink-2">
               Calves are slow-twitch dominant (need high reps). Hamstrings are fast-twitch (respond to heavy loads). Your rep ranges should reflect this.
             </p>
           </Card>
           <Card className="p-5">
-            <h3 className="font-semibold text-surface-200 mb-2">Autoregulation & RPE</h3>
-            <p className="text-sm text-surface-400">
+            <h3 className="font-semibold text-ink mb-2">Autoregulation & RPE</h3>
+            <p className="text-sm text-ink-2">
               RIR (Reps in Reserve) targets that progress through your mesocycle. Start at 3 RIR, end at 0-1 RIR. Systematic overload without guessing.
             </p>
           </Card>
           <Card className="p-5">
-            <h3 className="font-semibold text-surface-200 mb-2">Adaptive TDEE</h3>
-            <p className="text-sm text-surface-400">
+            <h3 className="font-semibold text-ink mb-2">Adaptive TDEE</h3>
+            <p className="text-sm text-ink-2">
               Your metabolism adapts during dieting. When you log new weight, we recalculate your TDEE and macro targets to keep progress on track.
             </p>
           </Card>
@@ -302,19 +302,19 @@ export default function AboutPage() {
       </div>
 
       {/* CTA */}
-      <Card className="p-8 text-center bg-gradient-to-r from-primary-500/20 to-purple-500/20 border-primary-500/30">
-        <h2 className="text-2xl font-bold text-surface-100 mb-2">Ready to Train Smarter?</h2>
-        <p className="text-surface-400 mb-6">
+      <Card className="bg-action/20 p-8 text-center border-action/30">
+        <h2 className="text-2xl font-bold text-ink mb-2">Ready to Train Smarter?</h2>
+        <p className="text-ink-2 mb-6">
           Stop leaving gains on the table with outdated training methods.
         </p>
         <div className="flex justify-center gap-4">
           <Link href="/dashboard/mesocycle/new">
-            <button className="px-6 py-3 bg-primary-500 hover:bg-primary-600 text-white font-semibold rounded-lg transition-colors">
+            <button className="px-6 py-3 bg-action hover:bg-action text-on-action font-semibold rounded-lg transition-colors">
               Create Your Mesocycle
             </button>
           </Link>
           <Link href="/dashboard">
-            <button className="px-6 py-3 bg-surface-800 hover:bg-surface-700 text-surface-200 font-semibold rounded-lg transition-colors">
+            <button className="px-6 py-3 bg-fill hover:bg-sep text-ink font-semibold rounded-lg transition-colors">
               Go to Dashboard
             </button>
           </Link>
@@ -322,7 +322,7 @@ export default function AboutPage() {
       </Card>
 
       {/* Footer note */}
-      <p className="text-center text-xs text-surface-600">
+      <p className="text-center text-xs text-ink-3">
         HyperTrack is continuously evolving. Built with ❤️ for the lifting community.
       </p>
     </div>

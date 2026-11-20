@@ -112,11 +112,11 @@ export function BodyweightSetEditRow({
   };
 
   return (
-    <tr className="bg-primary-500/10">
-      <td className="px-3 py-2 text-surface-300 font-medium" colSpan={6}>
-        <div className="space-y-3 p-3 bg-surface-800/50 rounded-lg">
+    <tr className="bg-action/10">
+      <td className="px-3 py-2 text-ink-2 font-medium" colSpan={6}>
+        <div className="space-y-3 p-3 bg-fill/50 rounded-lg">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-surface-200">Edit Set {set.setNumber}</span>
+            <span className="text-sm font-medium text-ink">Edit Set {set.setNumber}</span>
             <div className="flex gap-2">
               <Button
                 onClick={handleSave}
@@ -149,7 +149,7 @@ export function BodyweightSetEditRow({
           {/* Reps and RPE inputs */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs text-surface-500 mb-1">Reps</label>
+              <label className="block text-xs text-ink-3 mb-1">Reps</label>
               <input
                 type="number"
                 inputMode="numeric"
@@ -159,12 +159,12 @@ export function BodyweightSetEditRow({
                 onKeyDown={handleKeyDown}
                 min="1"
                 max="100"
-                className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-surface-100 text-center font-mono focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="w-full px-3 py-2 bg-card rounded-lg text-ink text-center font-mono focus:ring-2 focus:ring-action focus:border-transparent shadow-card"
                 autoFocus
               />
             </div>
             <div>
-              <label className="block text-xs text-surface-500 mb-1">RPE</label>
+              <label className="block text-xs text-ink-3 mb-1">RPE</label>
               <input
                 type="number"
                 inputMode="decimal"
@@ -174,13 +174,13 @@ export function BodyweightSetEditRow({
                 step="0.5"
                 min="1"
                 max="10"
-                className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-surface-100 text-center font-mono focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="w-full px-3 py-2 bg-card rounded-lg text-ink text-center font-mono focus:ring-2 focus:ring-action focus:border-transparent shadow-card"
               />
             </div>
           </div>
 
           {/* Effective load display */}
-          <div className="text-xs text-surface-400 text-center">
+          <div className="text-xs text-ink-2 text-center">
             Effective Load: {formatWeightValue(bodyweightData.effectiveLoadKg, unit)} {unit}
           </div>
         </div>

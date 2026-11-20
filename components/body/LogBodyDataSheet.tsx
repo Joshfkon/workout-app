@@ -70,10 +70,10 @@ const SEGMENTS: { value: BodyLogSegment; label: string }[] = [
 ];
 
 const inputClass =
-  'w-full px-3 py-2 rounded-lg bg-fill border border-sep text-ink text-[15px] placeholder:text-ink-2 focus:outline-none focus:border-primary-500';
+  'w-full px-3 py-2 rounded-lg bg-fill border border-sep text-ink text-[15px] placeholder:text-ink-2 focus:outline-none focus:border-action';
 const labelClass = 'block text-[11px] font-medium text-ink-2 mb-1';
 const saveButtonClass =
-  'w-full py-2.5 rounded-lg bg-primary-500 text-white text-[13px] font-medium hover:bg-primary-600 transition-colors disabled:opacity-60';
+  'w-full py-2.5 rounded-lg bg-action text-on-action text-[13px] font-medium hover:bg-action transition-colors disabled:opacity-60';
 
 export function LogBodyDataSheet({
   isOpen,
@@ -273,7 +273,7 @@ export function LogBodyDataSheet({
         />
 
         {error && (
-          <div className="p-2.5 rounded-lg bg-danger-500/10 border border-danger-500/20 text-status-bad text-xs">
+          <div className="p-2.5 rounded-lg bg-status-bad/10 border border-status-bad/20 text-status-bad text-xs">
             {error}
           </div>
         )}
@@ -556,7 +556,7 @@ export function LogBodyDataSheet({
               Regional breakdown (arms/legs/trunk, android/gynoid, VAT)?{' '}
               <Link
                 href="/dashboard/body-composition/add"
-                className="text-action hover:text-action"
+                className="text-action"
               >
                 Use the full scan form
               </Link>

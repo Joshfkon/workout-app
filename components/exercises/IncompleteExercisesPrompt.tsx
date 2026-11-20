@@ -58,12 +58,12 @@ export function IncompleteExercisesPrompt({
   }
 
   return (
-    <Card className="bg-warning-900/20 border-warning-700">
+    <Card className="bg-status-warn/15 border-status-warn">
       <div className="p-4">
         <div className="flex items-start gap-3">
           <div className="flex-shrink-0">
             <svg
-              className="w-6 h-6 text-warning-400"
+              className="w-6 h-6 text-status-warn"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -78,10 +78,10 @@ export function IncompleteExercisesPrompt({
           </div>
 
           <div className="flex-1">
-            <h3 className="font-medium text-warning-300">
+            <h3 className="font-medium text-status-warn">
               Incomplete Custom Exercises
             </h3>
-            <p className="text-sm text-surface-400 mt-1">
+            <p className="text-sm text-ink-2 mt-1">
               You have {exercises.length} custom exercise
               {exercises.length === 1 ? '' : 's'} with incomplete data. This may
               affect injury detection and exercise suggestions.
@@ -92,11 +92,11 @@ export function IncompleteExercisesPrompt({
               {exercises.slice(0, 3).map((exercise) => (
                 <div
                   key={exercise.id}
-                  className="flex items-center justify-between py-2 border-b border-surface-700/50 last:border-0"
+                  className="flex items-center justify-between py-2 border-b border-sep/50 last:border-0"
                 >
                   <div>
-                    <p className="text-sm text-surface-200">{exercise.name}</p>
-                    <p className="text-xs text-surface-500">
+                    <p className="text-sm text-ink">{exercise.name}</p>
+                    <p className="text-xs text-ink-3">
                       Missing: {exercise.missingFields.slice(0, 2).join(', ')}
                       {exercise.missingFields.length > 2 &&
                         ` +${exercise.missingFields.length - 2} more`}
@@ -112,7 +112,7 @@ export function IncompleteExercisesPrompt({
                 </div>
               ))}
               {exercises.length > 3 && (
-                <p className="text-xs text-surface-500 text-center pt-2">
+                <p className="text-xs text-ink-3 text-center pt-2">
                   +{exercises.length - 3} more exercises
                 </p>
               )}

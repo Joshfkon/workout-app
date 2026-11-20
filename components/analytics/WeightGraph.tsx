@@ -66,10 +66,10 @@ const WeightTooltip = memo(function WeightTooltip({
   const data = payload[0].payload as WeightChartDataPoint;
 
   return (
-    <div className="bg-surface-800 border border-surface-700 rounded-lg p-3 shadow-lg">
-      <p className="text-sm text-surface-400 mb-1">{formatDate(data.date)}</p>
-      <p className="text-surface-100 font-semibold">
-        {data.weight.toFixed(1)} <span className="text-surface-400 font-normal">{preferredUnit}</span>
+    <div className="bg-fill border border-sep rounded-lg p-3 shadow-lg">
+      <p className="text-sm text-ink-2 mb-1">{formatDate(data.date)}</p>
+      <p className="text-ink font-semibold">
+        {data.weight.toFixed(1)} <span className="text-ink-2 font-normal">{preferredUnit}</span>
       </p>
     </div>
   );
@@ -193,7 +193,7 @@ export const WeightGraph = memo(function WeightGraph({ weightHistory, preferredU
     return (
       <div className={className}>
         <div className="text-center py-4">
-          <p className="text-surface-400 text-sm">No weight data for this period</p>
+          <p className="text-ink-2 text-sm">No weight data for this period</p>
         </div>
       </div>
     );
@@ -203,16 +203,16 @@ export const WeightGraph = memo(function WeightGraph({ weightHistory, preferredU
     <div className={className}>
       {/* Timeframe selector */}
       <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2 text-xs text-surface-500">
+        <div className="flex items-center gap-2 text-xs text-ink-3">
           <span>Trend</span>
           {trend && (
             <span
               className={
                 trend.isNegative
-                  ? 'text-success-400'
+                  ? 'text-status-ok'
                   : trend.isPositive
-                  ? 'text-warning-400'
-                  : 'text-surface-400'
+                  ? 'text-status-warn'
+                  : 'text-ink-2'
               }
             >
               {trend.perWeek > 0 ? '+' : ''}
@@ -220,15 +220,15 @@ export const WeightGraph = memo(function WeightGraph({ weightHistory, preferredU
             </span>
           )}
         </div>
-        <div className="flex gap-1 bg-surface-800 rounded-lg p-0.5">
+        <div className="flex gap-1 bg-fill rounded-lg p-0.5">
           {(['7d', '14d', '30d', '90d'] as Timeframe[]).map((tf) => (
             <button
               key={tf}
               onClick={() => setTimeframe(tf)}
               className={`px-2 py-1 text-xs rounded-md transition-colors ${
                 timeframe === tf
-                  ? 'bg-primary-500 text-white'
-                  : 'text-surface-400 hover:text-surface-200'
+                  ? 'bg-action text-on-action'
+                  : 'text-ink-2 hover:text-ink'
               }`}
             >
               {tf}

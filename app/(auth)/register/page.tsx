@@ -127,29 +127,29 @@ export default function RegisterPage() {
       {/* Logo */}
       <div className="text-center mb-8">
         <Link href="/" className="inline-flex items-center gap-3 group">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center group-hover:scale-105 transition-transform">
+          <div className="w-12 h-12 rounded-xl bg-action flex items-center justify-center group-hover:scale-105 transition-transform">
             <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
           </div>
-          <span className="text-2xl font-bold text-surface-100 tracking-tight">HyperTrack</span>
+          <span className="text-2xl font-bold text-ink tracking-tight">HyperTrack</span>
         </Link>
       </div>
 
       {sentTo ? (
         <Card variant="elevated" className="p-6">
           <div className="text-center space-y-4" data-testid="confirmation-sent">
-            <div className="w-16 h-16 mx-auto rounded-full bg-success-500/20 flex items-center justify-center">
-              <svg className="w-8 h-8 text-success-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="w-16 h-16 mx-auto rounded-full bg-status-ok/20 flex items-center justify-center">
+              <svg className="w-8 h-8 text-status-ok" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
               </svg>
             </div>
-            <h2 className="text-xl font-bold text-surface-100">Confirm your email</h2>
-            <p className="text-surface-400">
+            <h2 className="text-xl font-bold text-ink">Confirm your email</h2>
+            <p className="text-ink-2">
               We sent a confirmation link to{' '}
-              <span className="text-surface-200 font-medium">{sentTo}</span>
+              <span className="text-ink font-medium">{sentTo}</span>
             </p>
-            <p className="text-sm text-surface-500">
+            <p className="text-sm text-ink-3">
               Not there after a couple of minutes? Check your spam folder. You can also enter the
               code from the email instead of clicking the link.
             </p>
@@ -160,14 +160,14 @@ export default function RegisterPage() {
               <button
                 type="button"
                 onClick={() => setSentTo(null)}
-                className="text-sm text-primary-400 hover:text-primary-300 font-medium underline"
+                className="text-sm text-action font-medium underline"
               >
                 Wrong address? Change email
               </button>
             </div>
-            <p className="text-sm text-surface-400 pt-2">
+            <p className="text-sm text-ink-2 pt-2">
               Already confirmed?{' '}
-              <Link href="/login" className="text-primary-400 hover:text-primary-300 font-medium">
+              <Link href="/login" className="text-action font-medium">
                 Sign in
               </Link>
             </p>
@@ -176,8 +176,8 @@ export default function RegisterPage() {
       ) : (
       <Card variant="elevated" className="p-6">
         <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-surface-100">Create your account</h1>
-          <p className="text-surface-400 mt-1">Start your hypertrophy journey</p>
+          <h1 className="text-2xl font-bold text-ink">Create your account</h1>
+          <p className="text-ink-2 mt-1">Start your hypertrophy journey</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -205,7 +205,7 @@ export default function RegisterPage() {
                 type="button"
                 onClick={() => setShowPassword((v) => !v)}
                 aria-label={showPassword ? 'Hide password' : 'Show password'}
-                className="-m-2 p-2 text-surface-400 hover:text-surface-200 transition-colors"
+                className="-m-2 p-2 text-ink-2 hover:text-ink transition-colors"
               >
                 {showPassword ? <IconEyeOff size={18} /> : <IconEye size={18} />}
               </button>
@@ -225,24 +225,24 @@ export default function RegisterPage() {
           />
 
           {error && (
-            <div className="p-3 rounded-lg bg-danger-500/10 border border-danger-500/20">
+            <div className="p-3 rounded-lg bg-status-bad/10 border border-status-bad/20">
               {error === 'EMAIL_EXISTS' ? (
                 <div>
-                  <p className="text-sm text-danger-400 font-medium">
+                  <p className="text-sm text-status-bad font-medium">
                     An account with this email already exists.
                   </p>
-                  <p className="text-sm text-surface-400 mt-1">
-                    <Link href="/login" className="text-primary-400 hover:text-primary-300 underline">
+                  <p className="text-sm text-ink-2 mt-1">
+                    <Link href="/login" className="text-action underline">
                       Sign in instead
                     </Link>
                     {' '}or{' '}
-                    <Link href="/forgot-password" className="text-primary-400 hover:text-primary-300 underline">
+                    <Link href="/forgot-password" className="text-action underline">
                       reset your password
                     </Link>
                   </p>
                 </div>
               ) : (
-                <p className="text-sm text-danger-400">{error}</p>
+                <p className="text-sm text-status-bad">{error}</p>
               )}
             </div>
           )}
@@ -253,9 +253,9 @@ export default function RegisterPage() {
         </form>
 
         <div className="mt-6 text-center">
-          <p className="text-sm text-surface-400">
+          <p className="text-sm text-ink-2">
             Already have an account?{' '}
-            <Link href="/login" className="text-primary-400 hover:text-primary-300 font-medium">
+            <Link href="/login" className="text-action font-medium">
               Sign in
             </Link>
           </p>
@@ -264,16 +264,16 @@ export default function RegisterPage() {
       )}
 
       <div className="mt-4 text-center space-y-2">
-        <p className="text-sm text-surface-500">
+        <p className="text-sm text-ink-3">
           Get full Elite access for 14 days—no credit card required.
         </p>
-        <p className="text-xs text-surface-600">
+        <p className="text-xs text-ink-3">
           By signing up, you agree to our{' '}
-          <Link href="/terms" className="text-surface-500 hover:text-surface-300 underline">
+          <Link href="/terms" className="text-ink-3 hover:text-ink-2 underline">
             Terms of Service
           </Link>{' '}
           and{' '}
-          <Link href="/privacy" className="text-surface-500 hover:text-surface-300 underline">
+          <Link href="/privacy" className="text-ink-3 hover:text-ink-2 underline">
             Privacy Policy
           </Link>
         </p>

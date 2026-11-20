@@ -39,8 +39,8 @@ export const WorkoutCard = memo(function WorkoutCard({
           disabled={isFirst}
           className={`p-2 rounded-lg transition-all ${
             isFirst
-              ? 'bg-surface-800/50 text-surface-600 cursor-not-allowed'
-              : 'bg-surface-700 text-surface-300 hover:bg-primary-500 hover:text-white'
+              ? 'bg-fill/50 text-ink-3 cursor-not-allowed'
+              : 'bg-sep text-ink-2 hover:bg-action hover:text-white'
           }`}
           title="Move up"
         >
@@ -53,8 +53,8 @@ export const WorkoutCard = memo(function WorkoutCard({
           disabled={isLast}
           className={`p-2 rounded-lg transition-all ${
             isLast
-              ? 'bg-surface-800/50 text-surface-600 cursor-not-allowed'
-              : 'bg-surface-700 text-surface-300 hover:bg-primary-500 hover:text-white'
+              ? 'bg-fill/50 text-ink-3 cursor-not-allowed'
+              : 'bg-sep text-ink-2 hover:bg-action hover:text-white'
           }`}
           title="Move down"
         >
@@ -65,18 +65,18 @@ export const WorkoutCard = memo(function WorkoutCard({
       </div>
 
       {/* Card with edit mode styling */}
-      <div className={`relative ring-2 ring-offset-2 ring-offset-surface-900 rounded-xl ${
-        isHidden ? 'ring-surface-600/50' : 'ring-primary-500/30'
+      <div className={`relative ring-2 ring-offset-2 ring-offset-card rounded-xl ${
+        isHidden ? 'ring-sep/50' : 'ring-action/30'
       }`}>
         {/* Top controls: drag handle and hide/show button */}
         <div className="absolute -top-3 left-1/2 -translate-x-1/2 flex items-center gap-2">
           {/* Drag handle indicator */}
           <div className={`px-3 py-1 rounded-full border ${
             isHidden
-              ? 'bg-surface-700/50 border-surface-600/50'
-              : 'bg-primary-500/20 border-primary-500/30'
+              ? 'bg-sep/50 border-sep/50'
+              : 'bg-action/20 border-action/30'
           }`}>
-            <svg className={`w-4 h-4 ${isHidden ? 'text-surface-500' : 'text-primary-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className={`w-4 h-4 ${isHidden ? 'text-ink-3' : 'text-action'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
             </svg>
           </div>
@@ -87,8 +87,8 @@ export const WorkoutCard = memo(function WorkoutCard({
               onClick={onToggleVisibility}
               className={`px-2 py-1 rounded-full border transition-all flex items-center gap-1.5 ${
                 isHidden
-                  ? 'bg-surface-700 border-surface-600 text-surface-400 hover:bg-surface-600 hover:text-surface-200'
-                  : 'bg-surface-800 border-surface-700 text-surface-400 hover:bg-danger-500/20 hover:border-danger-500/50 hover:text-danger-400'
+                  ? 'bg-sep border-sep text-ink-2 hover:bg-sep hover:text-ink'
+                  : 'bg-fill border-sep text-ink-2 hover:bg-status-bad/20 hover:border-status-bad/50 hover:text-status-bad'
               }`}
               title={isHidden ? 'Show card' : 'Hide card'}
             >
@@ -115,8 +115,8 @@ export const WorkoutCard = memo(function WorkoutCard({
         {/* Hidden badge overlay */}
         {isHidden && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
-            <div className="bg-surface-900/80 px-4 py-2 rounded-lg border border-surface-700">
-              <span className="text-sm text-surface-400 font-medium">{hiddenLabel}</span>
+            <div className="bg-card/80 px-4 py-2 rounded-lg border border-sep">
+              <span className="text-sm text-ink-2 font-medium">{hiddenLabel}</span>
             </div>
           </div>
         )}

@@ -154,14 +154,14 @@ export function BodyHubNudges({ onLog, refreshKey = 0 }: BodyHubNudgesProps) {
   return (
     <>
       {showMeasureNudge && (
-        <div className="flex items-center gap-3 p-3 rounded-xl bg-warning-500/10 border border-warning-500/20">
+        <div className="flex items-center gap-3 p-3 rounded-xl bg-status-warn/10 border border-status-warn/20">
           <IconRuler2 size={18} className="text-status-warn flex-shrink-0" aria-hidden="true" />
           <p className="flex-1 text-[13px] text-ink">
             Last measurements: {tapeWeeks} {tapeWeeks === 1 ? 'week' : 'weeks'} ago — log a set?
           </p>
           <button
             onClick={() => onLog('measurements')}
-            className="px-3 py-1.5 rounded-lg bg-warning-500/20 text-warning-300 text-xs font-medium hover:bg-warning-500/30 transition-colors flex-shrink-0"
+            className="px-3 py-1.5 rounded-lg bg-status-warn/20 text-status-warn text-xs font-medium hover:bg-status-warn/30 transition-colors flex-shrink-0"
           >
             Log
           </button>
@@ -179,14 +179,14 @@ export function BodyHubNudges({ onLog, refreshKey = 0 }: BodyHubNudgesProps) {
       )}
 
       {showDexaNudge && (
-        <div className="flex items-center gap-3 p-3 rounded-xl bg-primary-500/10 border border-primary-500/20">
+        <div className="flex items-center gap-3 p-3 rounded-xl bg-action/10 border border-action/20">
           <IconScan size={18} className="text-action flex-shrink-0" aria-hidden="true" />
           <p className="flex-1 text-[13px] text-ink">
             DEXA due — last scan {scanWeeks} {scanWeeks === 1 ? 'week' : 'weeks'} ago.
           </p>
           <button
             onClick={() => onLog('dexa')}
-            className="px-3 py-1.5 rounded-lg bg-primary-500/20 text-action text-xs font-medium hover:bg-primary-500/30 transition-colors flex-shrink-0"
+            className="px-3 py-1.5 rounded-lg bg-action/20 text-action text-xs font-medium hover:bg-action/30 transition-colors flex-shrink-0"
           >
             Log scan
           </button>
@@ -204,7 +204,7 @@ export function BodyHubNudges({ onLog, refreshKey = 0 }: BodyHubNudgesProps) {
       )}
 
       {showDexaSuggestion && (
-        <div className="flex items-center gap-3 p-3 rounded-xl bg-card border border-sep">
+        <div className="flex items-center gap-3 p-3 rounded-card bg-card shadow-card">
           <IconScan size={18} className="text-ink-2 flex-shrink-0" aria-hidden="true" />
           <p className="flex-1 text-[13px] text-ink-2">
             Want a &quot;DEXA due&quot; reminder? Suggested: every {SUGGESTED_DEXA_WEEKS} weeks.

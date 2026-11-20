@@ -38,16 +38,16 @@ export function LoadingState({
       <div className={cn('space-y-6', className)}>
         {/* PageHeader skeleton */}
         <div className="animate-pulse">
-          <div className="h-8 w-48 bg-surface-800 rounded mb-2" />
-          <div className="h-4 w-64 bg-surface-800 rounded" />
+          <div className="h-8 w-48 bg-fill rounded mb-2" />
+          <div className="h-4 w-64 bg-fill rounded" />
         </div>
         
         {/* List items skeleton */}
         <div className="space-y-3">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="rounded-2xl border border-surface-800 bg-surface-900 p-4 animate-pulse">
-              <div className="h-6 w-3/4 bg-surface-800 rounded mb-2" />
-              <div className="h-4 w-1/2 bg-surface-800 rounded" />
+            <div key={i} className="rounded-card bg-card p-4 animate-pulse shadow-card">
+              <div className="h-6 w-3/4 bg-fill rounded mb-2" />
+              <div className="h-4 w-1/2 bg-fill rounded" />
             </div>
           ))}
         </div>
@@ -61,7 +61,7 @@ export function LoadingState({
         <div className="flex flex-col items-center justify-center">
           <LoadingAnimation type={type} size={size} />
           {label && (
-            <p className="text-surface-400 mt-4">{label}</p>
+            <p className="text-ink-2 mt-4">{label}</p>
           )}
         </div>
       </CardContent>

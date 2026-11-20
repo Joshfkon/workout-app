@@ -144,7 +144,7 @@ export function PRCelebration({ celebration, onDone }: PRCelebrationProps) {
           <motion.button
             type="button"
             onClick={onDone}
-            className="pointer-events-auto relative flex flex-col items-center gap-1 rounded-2xl bg-surface-900/95 border border-yellow-500/40 shadow-xl shadow-yellow-500/20 px-8 py-6 text-center backdrop-blur"
+            className="pointer-events-auto relative flex flex-col items-center gap-1 rounded-2xl bg-card/95 border border-yellow-500/40 shadow-xl shadow-yellow-500/20 px-8 py-6 text-center backdrop-blur"
             initial={reduceMotion ? { opacity: 0 } : { scale: 0.5, opacity: 0, y: 20 }}
             animate={reduceMotion ? { opacity: 1 } : { scale: 1, opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
@@ -164,8 +164,8 @@ export function PRCelebration({ celebration, onDone }: PRCelebrationProps) {
             <span className="text-xl font-bold text-yellow-400 uppercase tracking-wide">
               {celebration.title}
             </span>
-            <span className="text-surface-200 font-medium">{celebration.exerciseName}</span>
-            <span className="text-surface-400 text-sm tabular-nums">{celebration.detail}</span>
+            <span className="text-ink font-medium">{celebration.exerciseName}</span>
+            <span className="text-ink-2 text-sm tabular-nums">{celebration.detail}</span>
           </motion.button>
         </motion.div>
       )}

@@ -59,33 +59,33 @@ export function GoodTargetsStrip({
 
   return (
     <>
-      <div className="mb-2 rounded-lg bg-surface-800/60 px-3 py-2.5">
+      <div className="mb-2 rounded-lg bg-fill/60 px-3 py-2.5">
         <div className="flex items-center justify-between gap-2">
-          <p className="text-[11px] uppercase tracking-wide text-surface-500">
+          <p className="text-[11px] uppercase tracking-wide text-ink-3">
             {previewing ? `Good targets in ${formatHoursAhead(hoursAhead)}` : 'Good targets today'}
           </p>
           {previewing && (
             <button
               onClick={() => onHoursAheadChange(0)}
-              className="flex-shrink-0 text-[11px] font-medium text-primary-400 hover:text-primary-300"
+              className="flex-shrink-0 text-[11px] font-medium text-action"
               data-testid="readiness-time-reset"
             >
               Back to now
             </button>
           )}
         </div>
-        <p className="text-sm text-surface-100 mt-0.5" data-testid="readiness-targets">
+        <p className="text-sm text-ink mt-0.5" data-testid="readiness-targets">
           {targets.length > 0 ? (
             targets.map((t, i) => (
               <span key={`${t.muscle}-${t.isChild ? 'c' : 'r'}`}>
-                {i > 0 && <span className="text-surface-500">, </span>}
+                {i > 0 && <span className="text-ink-3">, </span>}
                 {t.tier === 'soon' ? (
                   // Ready-soon pick: muted + parenthetical ETA, visibly distinct
                   // from fully-Fresh picks (a legitimate target for a session
                   // planned a little ahead, not a ready-now recommendation).
-                  <span className="text-surface-400">
+                  <span className="text-ink-2">
                     {t.displayName}{' '}
-                    <span className="text-surface-500">(ready {formatReadyEta(t.readyInHours)})</span>
+                    <span className="text-ink-3">(ready {formatReadyEta(t.readyInHours)})</span>
                   </span>
                 ) : (
                   t.displayName
@@ -122,7 +122,7 @@ export function GoodTargetsStrip({
 
       {previewing && (
         <p
-          className="mb-2 text-[11px] leading-relaxed text-surface-500"
+          className="mb-2 text-[11px] leading-relaxed text-ink-3"
           data-testid="readiness-preview-note"
         >
           Projected for {futureLabel}, assuming nothing new is logged: recovery

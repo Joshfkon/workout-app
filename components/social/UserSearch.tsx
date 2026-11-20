@@ -95,7 +95,7 @@ export function UserSearch({
         }
         rightIcon={
           isSearching ? (
-            <div className="animate-spin h-4 w-4 border-2 border-surface-500 border-t-primary-500 rounded-full" />
+            <div className="animate-spin h-4 w-4 border-2 border-ink-3 border-t-action rounded-full" />
           ) : query ? (
             <button
               onClick={() => {
@@ -103,7 +103,7 @@ export function UserSearch({
                 setResults([]);
                 setHasSearched(false);
               }}
-              className="text-surface-400 hover:text-surface-200"
+              className="text-ink-2 hover:text-ink"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -133,7 +133,7 @@ export function UserSearch({
 
       {/* Empty state */}
       {hasSearched && results.length === 0 && query.length >= 2 && (
-        <div className="mt-8 text-center text-surface-400">
+        <div className="mt-8 text-center text-ink-2">
           <p className="text-4xl mb-3">🔍</p>
           <p>No users found for &quot;{query}&quot;</p>
           <p className="text-sm mt-1">Try a different search term</p>
@@ -142,7 +142,7 @@ export function UserSearch({
 
       {/* Hint */}
       {!hasSearched && !query && (
-        <div className="mt-8 text-center text-surface-400">
+        <div className="mt-8 text-center text-ink-2">
           <p className="text-4xl mb-3">👥</p>
           <p>Search for other lifters</p>
           <p className="text-sm mt-1">Find friends by username or name</p>

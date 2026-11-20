@@ -510,11 +510,11 @@ describe('getVolumeStatusDescription', () => {
   });
 
   it('returns appropriate colors for each status', () => {
-    expect(getVolumeStatusDescription('below_mev').color).toContain('surface');
-    expect(getVolumeStatusDescription('effective').color).toContain('primary');
-    expect(getVolumeStatusDescription('optimal').color).toContain('success');
-    expect(getVolumeStatusDescription('approaching_mrv').color).toContain('warning');
-    expect(getVolumeStatusDescription('exceeding_mrv').color).toContain('danger');
+    expect(getVolumeStatusDescription('below_mev').color).toContain('ink');
+    expect(getVolumeStatusDescription('effective').color).toContain('action');
+    expect(getVolumeStatusDescription('optimal').color).toContain('status-ok');
+    expect(getVolumeStatusDescription('approaching_mrv').color).toContain('status-warn');
+    expect(getVolumeStatusDescription('exceeding_mrv').color).toContain('status-bad');
   });
 });
 

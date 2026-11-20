@@ -63,14 +63,14 @@ interface TodayNutrition {
 function RatingSegments({
   value,
   onChange,
-  selectedClass = 'bg-primary-500 text-white',
+  selectedClass = 'bg-action text-on-action',
 }: {
   value: Rating;
   onChange: (rating: Rating) => void;
   selectedClass?: string;
 }) {
   return (
-    <div className="flex gap-1 rounded-lg bg-surface-800 p-0.5">
+    <div className="flex gap-1 rounded-lg bg-fill p-0.5">
       {([1, 2, 3, 4, 5] as Rating[]).map((rating) => (
         <button
           key={rating}
@@ -79,7 +79,7 @@ function RatingSegments({
           className={`relative flex-1 h-8 rounded-md text-sm font-medium transition-colors after:absolute after:inset-x-0 after:-inset-y-1.5 after:content-[''] ${
             value === rating
               ? selectedClass
-              : 'text-surface-400 hover:bg-surface-700'
+              : 'text-ink-2 hover:bg-sep'
           }`}
         >
           {rating}
@@ -306,10 +306,10 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
   };
 
   const getScoreColor = (score: number) => {
-    if (score >= 80) return 'text-success-400';
-    if (score >= 60) return 'text-primary-400';
-    if (score >= 40) return 'text-warning-400';
-    return 'text-danger-400';
+    if (score >= 80) return 'text-status-ok';
+    if (score >= 60) return 'text-action';
+    if (score >= 40) return 'text-status-warn';
+    return 'text-status-bad';
   };
 
   return (
@@ -320,8 +320,8 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
       className="w-full max-w-md mx-auto flex flex-col min-h-0 max-h-full overflow-hidden"
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-surface-800 flex-shrink-0">
-        <h2 className="text-lg font-semibold text-surface-100">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-sep flex-shrink-0">
+        <h2 className="text-lg font-semibold text-ink">
           Pre-Workout Check-In
         </h2>
         {onClose && (
@@ -329,7 +329,7 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
             onClick={onClose}
             aria-label="Close check-in"
             data-testid="readiness-checkin-close"
-            className="-m-2 p-2 text-surface-400 hover:text-surface-200 hover:bg-surface-800 rounded-lg transition-colors"
+            className="-m-2 p-2 text-ink-2 hover:text-ink hover:bg-fill rounded-lg transition-colors"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -356,10 +356,10 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
         {/* Sleep Quality */}
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <label className="text-sm font-medium text-surface-200">
+            <label className="text-sm font-medium text-ink">
               Sleep Quality
             </label>
-            <span className="text-sm text-primary-400">
+            <span className="text-sm text-action">
               {getRatingLabel(sleepQuality, 'sleep')}
             </span>
           </div>
@@ -369,11 +369,11 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
         {/* Stress Level */}
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <label className="text-sm font-medium text-surface-200">
+            <label className="text-sm font-medium text-ink">
               Stress Level{' '}
-              <span className="font-normal text-xs text-surface-500">(1 = high, 5 = low)</span>
+              <span className="font-normal text-xs text-ink-3">(1 = high, 5 = low)</span>
             </label>
-            <span className="text-sm text-primary-400">
+            <span className="text-sm text-action">
               {getRatingLabel(stressLevel, 'stress')}
             </span>
           </div>
@@ -383,14 +383,14 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
         {/* Muscle soreness from the last session hitting today's muscles */}
         {sorenessMuscles && sorenessMuscles.length > 0 && (
           <div>
-            <label className="text-sm font-medium text-surface-200">
+            <label className="text-sm font-medium text-ink">
               Muscle soreness{' '}
-              <span className="font-normal text-xs text-surface-500">(optional)</span>
+              <span className="font-normal text-xs text-ink-3">(optional)</span>
             </label>
             <div className="mt-1.5 space-y-1.5">
               {sorenessMuscles.map((muscle) => (
                 <div key={muscle} className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                  <p className="text-xs font-medium text-surface-300 min-w-[60px]">
+                  <p className="text-xs font-medium text-ink-2 min-w-[60px]">
                     {STANDARD_MUSCLE_DISPLAY_NAMES[muscle]}
                   </p>
                   <div className="flex flex-wrap items-center gap-1">
@@ -400,8 +400,8 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
                         onClick={() => toggleSoreness(muscle, option.value)}
                         className={`relative rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors after:absolute after:inset-x-0 after:-inset-y-2 after:content-[''] ${
                           sorenessRatings[muscle] === option.value
-                            ? 'bg-primary-500 text-white'
-                            : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
+                            ? 'bg-action text-on-action'
+                            : 'bg-fill text-ink-2 hover:bg-sep'
                         }`}
                       >
                         {option.label}
@@ -416,48 +416,48 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
 
         {/* Cut-specific: Focus & Libido (for refeed detection) */}
         {isOnCut && (
-          <div className="p-3 bg-gradient-to-br from-amber-500/10 to-orange-500/10 border border-amber-500/20 rounded-xl space-y-3">
+          <div className="bg-amber-500/10 p-3 border border-amber-500/20 rounded-xl space-y-3">
             <div className="flex items-center gap-2">
               <span className="text-lg">🎯</span>
               <div>
-                <p className="text-sm font-medium text-surface-100">Cut Health Check</p>
-                <p className="text-xs text-surface-400">These help us detect when you might need a refeed</p>
+                <p className="text-sm font-medium text-ink">Cut Health Check</p>
+                <p className="text-xs text-ink-2">These help us detect when you might need a refeed</p>
               </div>
             </div>
 
             {/* Focus Rating */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="text-sm font-medium text-surface-200">
+                <label className="text-sm font-medium text-ink">
                   Mental Focus / Clarity
                 </label>
-                <span className={`text-sm ${focusRating <= 2 ? 'text-amber-400' : 'text-primary-400'}`}>
+                <span className={`text-sm ${focusRating <= 2 ? 'text-amber-400' : 'text-action'}`}>
                   {getRatingLabel(focusRating, 'focus')}
                 </span>
               </div>
               <RatingSegments
                 value={focusRating}
                 onChange={setFocusRating}
-                selectedClass={focusRating <= 2 ? 'bg-amber-500 text-white' : 'bg-primary-500 text-white'}
+                selectedClass={focusRating <= 2 ? 'bg-amber-500 text-white' : 'bg-action text-on-action'}
               />
             </div>
 
             {/* Libido Rating */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="text-sm font-medium text-surface-200">
+                <label className="text-sm font-medium text-ink">
                   Libido / Drive
                 </label>
-                <span className={`text-sm ${libidoRating <= 2 ? 'text-amber-400' : 'text-primary-400'}`}>
+                <span className={`text-sm ${libidoRating <= 2 ? 'text-amber-400' : 'text-action'}`}>
                   {getRatingLabel(libidoRating, 'libido')}
                 </span>
               </div>
               <RatingSegments
                 value={libidoRating}
                 onChange={setLibidoRating}
-                selectedClass={libidoRating <= 2 ? 'bg-amber-500 text-white' : 'bg-primary-500 text-white'}
+                selectedClass={libidoRating <= 2 ? 'bg-amber-500 text-white' : 'bg-action text-on-action'}
               />
-              <p className="text-xs text-surface-500 mt-1">A drop in libido can indicate hormonal stress from dieting</p>
+              <p className="text-xs text-ink-3 mt-1">A drop in libido can indicate hormonal stress from dieting</p>
             </div>
 
             {/* Refeed Alert */}
@@ -467,7 +467,7 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
                   <span className="text-lg">⚠️</span>
                   <div>
                     <p className="text-sm font-medium text-amber-400">Refeed Recommended</p>
-                    <p className="text-xs text-surface-300 mt-1">
+                    <p className="text-xs text-ink-2 mt-1">
                       Low focus and libido can indicate your body needs more fuel. Consider a higher-carb day to restore glycogen and hormonal balance.
                     </p>
                   </div>
@@ -478,47 +478,47 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
         )}
 
         {/* Today's Nutrition (from logging) */}
-        <div className="px-3 py-2.5 bg-surface-800/50 rounded-lg">
+        <div className="px-3 py-2.5 bg-fill/50 rounded-lg">
           <div className="flex items-center justify-between">
-            <label className="text-sm font-medium text-surface-200">
+            <label className="text-sm font-medium text-ink">
               Today&apos;s Nutrition
             </label>
             <span className={`text-sm font-medium ${
-              nutritionRating >= 4 ? 'text-success-400' :
-              nutritionRating >= 3 ? 'text-primary-400' :
-              nutritionRating >= 2 ? 'text-warning-400' : 'text-danger-400'
+              nutritionRating >= 4 ? 'text-status-ok' :
+              nutritionRating >= 3 ? 'text-action' :
+              nutritionRating >= 2 ? 'text-status-warn' : 'text-status-bad'
             }`}>
               {getRatingLabel(nutritionRating, 'nutrition')}
             </span>
           </div>
           {todayNutrition ? (
-            <p className="mt-1 text-sm text-surface-300">
+            <p className="mt-1 text-sm text-ink-2">
               {Math.round(todayNutrition.calories)} cal
               {' · '}
-              <span className="text-primary-400">{Math.round(todayNutrition.protein * 10) / 10}g P</span>
+              <span className="text-action">{Math.round(todayNutrition.protein * 10) / 10}g P</span>
               {' · '}
               {Math.round(todayNutrition.carbs)}g C
               {' · '}
               {Math.round(todayNutrition.fat)}g F
             </p>
           ) : (
-            <p className="mt-1 text-xs text-surface-500">No nutrition logged today. Log your meals to improve this score!</p>
+            <p className="mt-1 text-xs text-ink-3">No nutrition logged today. Log your meals to improve this score!</p>
           )}
           {todayNutrition && todayNutrition.targetProtein && (
             <div className="mt-1.5 flex items-center gap-2">
-              <div className="flex-1 h-1.5 bg-surface-700 rounded-full overflow-hidden">
+              <div className="flex-1 h-1.5 bg-sep rounded-full overflow-hidden">
                 <div
                   className={`h-full transition-all ${
                     (todayNutrition.protein / todayNutrition.targetProtein) >= 0.9
-                      ? 'bg-success-500'
+                      ? 'bg-status-ok'
                       : (todayNutrition.protein / todayNutrition.targetProtein) >= 0.5
-                        ? 'bg-warning-500'
-                        : 'bg-danger-500'
+                        ? 'bg-status-warn'
+                        : 'bg-status-bad'
                   }`}
                   style={{ width: `${Math.min(100, (todayNutrition.protein / todayNutrition.targetProtein) * 100)}%` }}
                 />
               </div>
-              <span className="text-xs text-surface-400">
+              <span className="text-xs text-ink-2">
                 {Math.round((todayNutrition.protein / todayNutrition.targetProtein) * 100)}% protein
               </span>
             </div>
@@ -527,9 +527,9 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
 
         {/* Bodyweight (optional) — label and input inline */}
         <div className="flex items-center justify-between gap-3">
-          <label htmlFor="checkin-bodyweight" className="text-sm font-medium text-surface-200">
+          <label htmlFor="checkin-bodyweight" className="text-sm font-medium text-ink">
             Bodyweight{' '}
-            <span className="font-normal text-xs text-surface-500">(optional)</span>
+            <span className="font-normal text-xs text-ink-3">(optional)</span>
           </label>
           <div className="flex items-center gap-2">
             <input
@@ -539,14 +539,14 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
               onChange={(e) => setBodyweight(e.target.value)}
               placeholder={unit === 'lb' ? 'e.g., 165' : 'e.g., 75.5'}
               step="0.1"
-              className="w-24 px-3 py-2 text-right bg-surface-800 border border-surface-700 rounded-lg text-surface-100 placeholder:text-surface-500 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              className="w-24 px-3 py-2 text-right bg-fill border border-sep rounded-lg text-ink placeholder:text-ink-3 focus:ring-2 focus:ring-action focus:border-transparent"
             />
-            <span className="text-sm text-surface-400">{unit}</span>
+            <span className="text-sm text-ink-2">{unit}</span>
           </div>
         </div>
 
         {/* Temporary Injury Section */}
-        <div className="border-t border-surface-700 pt-3">
+        <div className="border-t border-sep pt-3">
           <button
             type="button"
             onClick={() => setShowInjurySection(!showInjurySection)}
@@ -554,12 +554,12 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
           >
             <div className="flex items-center gap-2">
               <span className="text-lg">🤕</span>
-              <span className="text-sm font-medium text-surface-200">
+              <span className="text-sm font-medium text-ink">
                 Dealing with pain or injury today?
               </span>
             </div>
             <svg
-              className={`w-5 h-5 text-surface-400 transition-transform ${showInjurySection ? 'rotate-180' : ''}`}
+              className={`w-5 h-5 text-ink-2 transition-transform ${showInjurySection ? 'rotate-180' : ''}`}
               fill="none" viewBox="0 0 24 24" stroke="currentColor"
             >
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -584,15 +584,15 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
           )}
 
           {showInjurySection && (
-            <div className="mt-3 space-y-4 p-4 bg-surface-800/50 rounded-lg">
-              <p className="text-xs text-surface-400">
+            <div className="mt-3 space-y-4 p-4 bg-fill/50 rounded-lg">
+              <p className="text-xs text-ink-2">
                 Tell us about any temporary pain or injury. We&apos;ll adjust your workout to avoid aggravating it.
               </p>
 
               {/* Current injuries */}
               {temporaryInjuries.length > 0 && (
                 <div className="space-y-2">
-                  <p className="text-xs font-medium text-surface-300">Current issues:</p>
+                  <p className="text-xs font-medium text-ink-2">Current issues:</p>
                   <div className="flex flex-wrap gap-2">
                     {temporaryInjuries.map(injury => {
                       const areaInfo = INJURY_AREAS.find(a => a.value === injury.area);
@@ -602,10 +602,10 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
                           key={injury.area}
                           className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${
                             injury.severity === 3
-                              ? 'bg-danger-500/20 text-danger-400'
+                              ? 'bg-status-bad/20 text-status-bad'
                               : injury.severity === 2
-                                ? 'bg-warning-500/20 text-warning-400'
-                                : 'bg-surface-700 text-surface-300'
+                                ? 'bg-status-warn/20 text-status-warn'
+                                : 'bg-sep text-ink-2'
                           }`}
                         >
                           <span>{areaInfo?.icon}</span>
@@ -613,7 +613,7 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
                           <span className="text-xs opacity-70">({severityLabels[injury.severity - 1]})</span>
                           <button
                             onClick={() => removeInjury(injury.area)}
-                            className="ml-1 p-0.5 hover:bg-surface-600 rounded-full"
+                            className="ml-1 p-0.5 hover:bg-sep rounded-full"
                           >
                             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -629,11 +629,11 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
               {/* Add injury form */}
               <div className="space-y-3">
                 <div>
-                  <label className="block text-xs font-medium text-surface-300 mb-1.5">Area affected</label>
+                  <label className="block text-xs font-medium text-ink-2 mb-1.5">Area affected</label>
                   <select
                     value={selectedArea}
                     onChange={(e) => setSelectedArea(e.target.value as TemporaryInjury['area'])}
-                    className="w-full px-3 py-2 bg-surface-700 border border-surface-600 rounded-lg text-surface-100 text-sm"
+                    className="w-full px-3 py-2 bg-sep border border-sep rounded-lg text-ink text-sm"
                   >
                     <option value="">Select area...</option>
                     {INJURY_AREAS.filter(area => !temporaryInjuries.some(i => i.area === area.value)).map(area => (
@@ -645,7 +645,7 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-surface-300 mb-1.5">Severity</label>
+                  <label className="block text-xs font-medium text-ink-2 mb-1.5">Severity</label>
                   <div className="flex gap-2">
                     {[1, 2, 3].map(level => (
                       <button
@@ -655,18 +655,18 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
                         className={`flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-colors ${
                           selectedSeverity === level
                             ? level === 3
-                              ? 'bg-danger-500 text-white'
+                              ? 'bg-status-bad text-white'
                               : level === 2
-                                ? 'bg-warning-500 text-black'
-                                : 'bg-primary-500 text-white'
-                            : 'bg-surface-700 text-surface-400 hover:bg-surface-600'
+                                ? 'bg-status-warn text-black'
+                                : 'bg-action text-on-action'
+                            : 'bg-sep text-ink-2 hover:bg-sep'
                         }`}
                       >
                         {level === 1 ? 'Mild' : level === 2 ? 'Moderate' : 'Significant'}
                       </button>
                     ))}
                   </div>
-                  <p className="text-xs text-surface-500 mt-1">
+                  <p className="text-xs text-ink-3 mt-1">
                     {selectedSeverity === 1 && 'Slight discomfort - can work around it'}
                     {selectedSeverity === 2 && 'Noticeable pain - need to be careful'}
                     {selectedSeverity === 3 && 'Significant pain - avoid stressing this area'}
@@ -688,13 +688,13 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
         </div>
 
         {/* Readiness Score Display */}
-        <div className="bg-surface-800/50 rounded-lg px-3 py-2.5 flex items-center justify-between gap-3">
+        <div className="bg-fill/50 rounded-lg px-3 py-2.5 flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-sm text-surface-400">Readiness Score</p>
+            <p className="text-sm text-ink-2">Readiness Score</p>
             <p className={`text-sm ${getScoreColor(readinessScore)}`}>
               {interpretation.message}
             </p>
-            <p className="text-xs text-surface-500 mt-0.5">
+            <p className="text-xs text-ink-3 mt-0.5">
               {interpretation.recommendation}
             </p>
           </div>
@@ -707,7 +707,7 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
         {onSkipPermanently && (
           <button
             onClick={onSkipPermanently}
-            className="w-full text-center text-xs text-surface-500 hover:text-surface-300 transition-colors"
+            className="w-full text-center text-xs text-ink-3 hover:text-ink-2 transition-colors"
           >
             Don&apos;t show this again — re-enable in Settings
           </button>
@@ -717,7 +717,7 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, onClose,
       {/* Sticky footer — actions visible at every scroll position */}
       <div
         data-testid="readiness-checkin-footer"
-        className="flex gap-3 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] border-t border-surface-800 bg-surface-900 flex-shrink-0"
+        className="flex gap-3 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] border-t border-sep bg-card flex-shrink-0"
       >
         {onSkip && (
           <Button variant="ghost" onClick={onSkip} className="flex-1">

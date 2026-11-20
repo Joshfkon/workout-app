@@ -52,7 +52,7 @@ export function SplashScreen({ onComplete, onReady, duration = 800 }: SplashScre
       }`}
     >
       {/* Animated background */}
-      <div className="absolute inset-0 bg-gradient-to-br from-surface-950 via-surface-900 to-surface-950 splash-bg" />
+      <div className="absolute inset-0 bg-canvas splash-bg" />
 
       {/* Dynamic lines animation */}
       <div className="absolute inset-0 overflow-hidden">
@@ -81,11 +81,11 @@ export function SplashScreen({ onComplete, onReady, duration = 800 }: SplashScre
         {/* Icon */}
         <div className="relative mb-4 splash-icon-enter">
           {/* Glow effect */}
-          <div className="absolute inset-0 blur-2xl bg-primary-500/50 rounded-full splash-glow" />
+          <div className="absolute inset-0 blur-2xl bg-action/50 rounded-full splash-glow" />
 
           {/* Dumbbell Icon */}
           <svg
-            className="w-24 h-24 text-primary-500 relative z-10"
+            className="w-24 h-24 text-action relative z-10"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -105,7 +105,7 @@ export function SplashScreen({ onComplete, onReady, duration = 800 }: SplashScre
           {APP_NAME.split('').map((letter, i) => (
             <span
               key={i}
-              className="text-3xl md:text-4xl font-black text-surface-100 tracking-wider splash-letter"
+              className="text-3xl md:text-4xl font-black text-ink tracking-wider splash-letter"
               style={{ animationDelay: `${0.08 + i * 0.015}s` }}
             >
               {letter}
@@ -114,22 +114,22 @@ export function SplashScreen({ onComplete, onReady, duration = 800 }: SplashScre
         </div>
 
         {/* Tagline */}
-        <p className="mt-3 text-sm text-primary-400 font-medium tracking-widest uppercase splash-tagline">
+        <p className="mt-3 text-sm text-action font-medium tracking-widest uppercase splash-tagline">
           Train Smarter
         </p>
 
         {/* Loading bar */}
-        <div className="mt-8 w-48 h-1 bg-surface-800 rounded-full overflow-hidden splash-bar-container">
-          <div className="h-full bg-gradient-to-r from-primary-500 via-accent-500 to-primary-500 rounded-full splash-progress" />
+        <div className="mt-8 w-48 h-1 bg-fill rounded-full overflow-hidden splash-bar-container">
+          <div className="h-full bg-action rounded-full splash-progress" />
         </div>
       </div>
 
       {/* Corner accents */}
       <div className="absolute top-0 left-0 w-32 h-32 splash-corner-tl">
-        <div className="w-full h-full border-l-2 border-t-2 border-primary-500/30" />
+        <div className="w-full h-full border-l-2 border-t-2 border-action/30" />
       </div>
       <div className="absolute bottom-0 right-0 w-32 h-32 splash-corner-br">
-        <div className="w-full h-full border-r-2 border-b-2 border-primary-500/30" />
+        <div className="w-full h-full border-r-2 border-b-2 border-action/30" />
       </div>
 
       {/* CSS Animations - optimized for faster load times */}
@@ -143,7 +143,7 @@ export function SplashScreen({ onComplete, onReady, duration = 800 }: SplashScre
           height: 2px;
           left: -100%;
           right: -100%;
-          background: linear-gradient(to right, transparent, rgb(var(--primary-500) / 0.3), transparent);
+          background: linear-gradient(to right, transparent, rgb(var(--ht-action) / 0.3), transparent);
           animation: lineMove 0.8s ease-in-out forwards;
           opacity: 0;
         }
@@ -151,7 +151,7 @@ export function SplashScreen({ onComplete, onReady, duration = 800 }: SplashScre
         .splash-ring {
           position: absolute;
           border-radius: 50%;
-          border: 1px solid rgb(var(--primary-500) / 0.2);
+          border: 1px solid rgb(var(--ht-action) / 0.2);
           width: 100px;
           height: 100px;
           animation: ringExpand 1.2s ease-out infinite;

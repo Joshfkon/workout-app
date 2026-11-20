@@ -78,8 +78,8 @@ const MOTION_FIT_TEXT: Record<VelocityTargetFit, string> = {
   harder: 'text-status-warn',
 };
 const MOTION_FIT_BAR: Record<Exclude<VelocityTargetFit, 'easier'>, string> = {
-  'on-target': 'bg-success-400',
-  harder: 'bg-warning-400',
+  'on-target': 'bg-status-ok',
+  harder: 'bg-status-warn',
 };
 const MOTION_FIT_LABEL: Record<VelocityTargetFit, string> = {
   'on-target': 'slowed about as much as the target',
@@ -3251,7 +3251,7 @@ export const ExerciseCard = memo(function ExerciseCard({
             {!repTotalMode && plateau && (
               <button
                 onClick={() => setShowPlateauSheet(true)}
-                className="rounded-full px-2.5 py-1 text-[11px] font-medium leading-none flex-shrink-0 bg-warning-500/10 text-status-warn hover:bg-warning-500/20 transition-colors"
+                className="rounded-full px-2.5 py-1 text-[11px] font-medium leading-none flex-shrink-0 bg-status-warn/10 text-status-warn hover:bg-status-warn/20 transition-colors"
                 aria-haspopup="dialog"
               >
                 Plateau
@@ -3286,7 +3286,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                 its own claim — never disguised as a constraint rationale. */}
             {progressionStall && (
               <span
-                className="rounded-full px-2.5 py-1 text-[11px] font-medium leading-none flex-shrink-0 bg-warning-500/10 text-status-warn"
+                className="rounded-full px-2.5 py-1 text-[11px] font-medium leading-none flex-shrink-0 bg-status-warn/10 text-status-warn"
                 data-testid="progression-stall-pill"
                 title={
                   progressionStall.kind === 'target_stall'
@@ -3407,7 +3407,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                   }}
                   placeholder={weightLabel}
                   aria-label={`Bodyweight in ${weightLabel}`}
-                  className="w-24 px-2 py-1.5 font-mono text-sm bg-card border border-sep rounded-lg text-ink placeholder:text-ink-3 focus:border-action focus:outline-none"
+                  className="w-24 px-2 py-1.5 font-mono text-sm bg-card rounded-lg text-ink placeholder:text-ink-3 focus:border-action focus:outline-none shadow-card"
                 />
                 <button
                   type="submit"
@@ -3605,7 +3605,7 @@ export const ExerciseCard = memo(function ExerciseCard({
               <div
                 className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
                   completedWarmups.size === warmupRows.rows.length
-                    ? 'bg-success-500/20 text-status-ok'
+                    ? 'bg-status-ok/20 text-status-ok'
                     : 'bg-amber-500/20 text-status-warn'
                 }`}
               >
@@ -3666,7 +3666,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                     <th className="px-1 py-2 w-10"></th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-surface-800">
+                <tbody className="divide-y divide-sep">
                 {warmupRows.rows.map((row) => {
                   const warmup = row.warmup;
                   const hasCustomWeight = customWarmupWeights.has(warmup.setNumber);
@@ -3848,7 +3848,7 @@ export const ExerciseCard = memo(function ExerciseCard({
             dismissible, non-blocking. Links to the swap picker's Similar tab. */}
         {painNotice && (
           <div
-            className="flex items-start gap-2 rounded-lg bg-warning-500/10 border border-warning-500/30 px-2.5 py-2 text-[12px] text-status-warn"
+            className="flex items-start gap-2 rounded-lg bg-status-warn/10 border border-status-warn/30 px-2.5 py-2 text-[12px] text-status-warn"
             data-testid="pain-pattern-notice"
           >
             <span className="flex-1">
@@ -3959,7 +3959,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                     onKeyDown={handleEditKeyDown}
                     step="0.5"
                     aria-label="Edit weight"
-                    className="flex-1 min-w-0 px-1 py-1.5 bg-card border border-sep rounded text-center font-mono text-ink text-sm"
+                    className="flex-1 min-w-0 px-1 py-1.5 bg-card rounded text-center font-mono text-ink text-sm shadow-card"
                     autoFocus
                   />
                   <span className="text-[11px] text-ink-2">×</span>
@@ -3972,7 +3972,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                     onFocus={(e) => e.target.select()}
                     onKeyDown={handleEditKeyDown}
                     aria-label="Edit reps"
-                    className="w-16 px-1 py-1.5 bg-card border border-sep rounded text-center font-mono text-ink text-sm"
+                    className="w-16 px-1 py-1.5 bg-card rounded text-center font-mono text-ink text-sm shadow-card"
                   />
                 </div>
 
@@ -3981,7 +3981,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                   <button
                     onClick={saveEdit}
                     aria-label="Save set edit"
-                    className="min-h-[44px] min-w-[44px] flex items-center justify-center text-status-ok hover:bg-success-500/20 rounded-lg"
+                    className="min-h-[44px] min-w-[44px] flex items-center justify-center text-status-ok hover:bg-status-ok/20 rounded-lg"
                   >
                     <IconCheck size={16} />
                   </button>
@@ -4001,7 +4001,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                         onSetDelete(set.id);
                       }}
                       aria-label="Delete set"
-                      className="min-h-[44px] min-w-[44px] flex items-center justify-center text-status-bad hover:bg-danger-500/10 rounded-lg"
+                      className="min-h-[44px] min-w-[44px] flex items-center justify-center text-status-bad hover:bg-status-bad/10 rounded-lg"
                     >
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -4082,7 +4082,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                     }}
                     aria-label={`Confirm delete set ${set.setNumber}`}
                     data-testid={`confirm-delete-set-${set.setNumber}`}
-                    className="absolute inset-y-0 right-0 flex w-[88px] items-center justify-center rounded-r-lg bg-danger-500 text-sm font-semibold text-white"
+                    className="absolute inset-y-0 right-0 flex w-[88px] items-center justify-center rounded-r-lg bg-status-bad text-sm font-semibold text-white"
                   >
                     Delete
                   </button>
@@ -4372,7 +4372,7 @@ export const ExerciseCard = memo(function ExerciseCard({
               <button
                 onClick={cancelDropset}
                 aria-label="Cancel dropset"
-                className="p-2 rounded-lg bg-fill hover:bg-surface-600 transition-colors"
+                className="p-2 rounded-lg bg-fill hover:bg-sep transition-colors"
               >
                 <svg className="w-4 h-4 text-ink-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -4606,7 +4606,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                     <button
                       type="button"
                       onClick={() => applySensorReps(sensorRepOffer)}
-                      className="font-medium text-action hover:text-action"
+                      className="font-medium text-action"
                       data-testid="motion-rep-offer-use"
                     >
                       Use {sensorRepOffer}
@@ -4644,7 +4644,7 @@ export const ExerciseCard = memo(function ExerciseCard({
               className="flex items-center gap-2 px-1 py-2 text-[12px] text-ink-2"
             >
               <span className="w-4 flex-shrink-0 text-center">{pendingSetNumber}</span>
-              <span className="text-surface-700" aria-hidden="true">|</span>
+              <span className="text-ink-3" aria-hidden="true">|</span>
               <span className="truncate">
                 {pendingWeight}
                 {!isBodyweightExercise && pendingWeight !== '—' ? ` ${weightLabel}` : ''} ×{' '}
@@ -4663,7 +4663,7 @@ export const ExerciseCard = memo(function ExerciseCard({
             <button
               onClick={() => onTargetSetsChange(Number(block.targetSets) + 1)}
               disabled={Number(block.targetSets) >= 10}
-              className="w-full py-2.5 rounded-lg border border-dashed border-sep text-sm text-ink-2 hover:text-ink hover:border-surface-500 transition-colors disabled:opacity-30"
+              className="w-full py-2.5 rounded-lg border border-dashed border-sep text-sm text-ink-2 hover:text-ink hover:border-ink-3 transition-colors disabled:opacity-30"
             >
               + Add set
             </button>
@@ -4717,7 +4717,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                             Exercise Demo
                           </p>
                           {isVideo && (
-                            <div className="relative rounded-lg overflow-hidden bg-card border border-sep">
+                            <div className="relative rounded-lg overflow-hidden bg-card shadow-card">
                               <video
                                 src={demoGifUrl}
                                 className="w-full h-auto max-h-48 object-contain"
@@ -4735,7 +4735,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                             </div>
                           )}
                           {isImage && (
-                            <div className="relative rounded-lg overflow-hidden bg-card border border-sep">
+                            <div className="relative rounded-lg overflow-hidden bg-card shadow-card">
                               {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img
                                 src={demoGifUrl}
@@ -4750,7 +4750,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                             </div>
                           )}
                           {youtubeVideoId && (
-                            <div className="relative rounded-lg overflow-hidden bg-card border border-sep aspect-video">
+                            <div className="relative rounded-lg overflow-hidden bg-card aspect-video shadow-card">
                               <iframe
                                 src={`https://www.youtube.com/embed/${youtubeVideoId}?rel=0`}
                                 title={`${exercise.name} form video`}
@@ -4879,7 +4879,7 @@ export const ExerciseCard = memo(function ExerciseCard({
           <div className="absolute inset-0 bg-black/70" />
           <div
             ref={swapSheetRef}
-            className="relative w-full max-w-lg bg-card rounded-t-2xl sm:rounded-xl shadow-2xl border border-sep overflow-hidden flex flex-col"
+            className="relative w-full max-w-lg bg-card rounded-t-2xl sm:rounded-xl shadow-2xl overflow-hidden flex flex-col"
             style={{
               // Keep the sheet (and its search field) above the on-screen
               // keyboard; safe-area stays additive with the keyboard inset.
@@ -4976,8 +4976,8 @@ export const ExerciseCard = memo(function ExerciseCard({
                   {hasInjuries && (
                     <div className={`mb-3 p-3 rounded-lg ${
                       safeAlternatives.length > 0 
-                        ? 'bg-success-500/10 border border-success-500/20' 
-                        : 'bg-warning-500/10 border border-warning-500/20'
+                        ? 'bg-status-ok/10 border border-status-ok/20' 
+                        : 'bg-status-warn/10 border border-status-warn/20'
                     }`}>
                       {safeAlternatives.length > 0 ? (
                         <p className="text-xs text-status-ok">
@@ -5002,7 +5002,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                       }}
                       className={`w-full p-3 text-left rounded-lg transition-colors flex items-center gap-3 ${
                         injuryRisk.isRisky 
-                          ? 'hover:bg-danger-500/10 opacity-60' 
+                          ? 'hover:bg-status-bad/10 opacity-60' 
                           : 'hover:bg-fill'
                       }`}
                     >
@@ -5014,14 +5014,14 @@ export const ExerciseCard = memo(function ExerciseCard({
                           {injuryRisk.isRisky && (
                             <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium flex-shrink-0 ${
                               injuryRisk.severity === 3 
-                                ? 'bg-danger-500/20 text-status-bad' 
-                                : 'bg-warning-500/20 text-status-warn'
+                                ? 'bg-status-bad/20 text-status-bad' 
+                                : 'bg-status-warn/20 text-status-warn'
                             }`}>
                               ⚠️ {injuryRisk.severity === 3 ? 'Risky' : 'Caution'}
                             </span>
                           )}
                           {!injuryRisk.isRisky && hasInjuries && (
-                            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-success-500/20 text-status-ok flex-shrink-0">
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-status-ok/20 text-status-ok flex-shrink-0">
                               ✓ Safe
                             </span>
                           )}
@@ -5038,8 +5038,8 @@ export const ExerciseCard = memo(function ExerciseCard({
                       <div className="flex items-center gap-2 flex-shrink-0">
                         <div 
                           className={`px-2 py-0.5 rounded text-xs font-medium ${
-                            score >= 80 ? 'bg-success-500/20 text-status-ok' :
-                            score >= 60 ? 'bg-warning-500/20 text-status-warn' :
+                            score >= 80 ? 'bg-status-ok/20 text-status-ok' :
+                            score >= 60 ? 'bg-status-warn/20 text-status-warn' :
                             'bg-fill text-ink-2'
                           }`}
                         >
@@ -5068,7 +5068,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                 <>
                   {/* Injury warning in browse tab */}
                   {hasInjuries && (
-                    <div className="mb-2 p-2 bg-warning-500/10 border border-warning-500/20 rounded-lg">
+                    <div className="mb-2 p-2 bg-status-warn/10 border border-status-warn/20 rounded-lg">
                       <p className="text-xs text-status-warn">
                         ⚠️ Exercises marked with warnings may aggravate your injury
                       </p>
@@ -5093,7 +5093,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                           }}
                           className={`w-full p-3 text-left rounded-lg transition-colors flex items-center gap-3 ${
                             altInjuryRisk.isRisky
-                              ? 'hover:bg-danger-500/10 opacity-60'
+                              ? 'hover:bg-status-bad/10 opacity-60'
                               : 'hover:bg-fill'
                           }`}
                         >
@@ -5110,8 +5110,8 @@ export const ExerciseCard = memo(function ExerciseCard({
                               {altInjuryRisk.isRisky && (
                                 <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium flex-shrink-0 ${
                                   altInjuryRisk.severity === 3 
-                                    ? 'bg-danger-500/20 text-status-bad' 
-                                    : 'bg-warning-500/20 text-status-warn'
+                                    ? 'bg-status-bad/20 text-status-bad' 
+                                    : 'bg-status-warn/20 text-status-warn'
                                 }`}>
                                   ⚠️
                                 </span>
@@ -5144,7 +5144,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                     setShowSwapModal(false);
                     onCreateCustomSwap(swapSearch.trim() || undefined);
                   }}
-                  className="w-full py-2.5 px-4 rounded-lg bg-fill hover:bg-surface-600 text-action text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                  className="w-full py-2.5 px-4 rounded-lg bg-fill hover:bg-sep text-action text-sm font-medium transition-colors flex items-center justify-center gap-2"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -5164,7 +5164,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                       setShowSwapModal(false);
                     }
                   }}
-                  className="w-full py-2.5 px-4 rounded-lg bg-fill hover:bg-surface-600 text-ink text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                  className="w-full py-2.5 px-4 rounded-lg bg-fill hover:bg-sep text-ink text-sm font-medium transition-colors flex items-center justify-center gap-2"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
@@ -5198,7 +5198,7 @@ export const ExerciseCard = memo(function ExerciseCard({
             <ul className="space-y-2">
               {plateau.suggestions.map((suggestion, i) => (
                 <li key={i} className="flex items-start gap-2 text-[13px] text-ink">
-                  <span className="mt-1.5 w-1 h-1 rounded-full bg-warning-400 flex-shrink-0" aria-hidden="true" />
+                  <span className="mt-1.5 w-1 h-1 rounded-full bg-status-warn flex-shrink-0" aria-hidden="true" />
                   {suggestion}
                 </li>
               ))}
@@ -5259,7 +5259,7 @@ export const ExerciseCard = memo(function ExerciseCard({
       {/* RPE Guide Modal */}
       {showRpeGuide && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowRpeGuide(false)}>
-          <div className="bg-card border border-sep rounded-xl p-4 max-w-sm mx-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-card rounded-card p-4 max-w-sm mx-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-bold text-ink">RPE Guide</h3>
               <button 

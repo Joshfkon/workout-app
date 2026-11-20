@@ -191,20 +191,20 @@ export interface ConfidenceDisplay {
 export const CONFIDENCE_DISPLAY: Record<AIConfidence, ConfidenceDisplay> = {
   high: {
     level: 'high',
-    color: 'text-success-400',
-    bgColor: 'bg-success-900/30',
+    color: 'text-status-ok',
+    bgColor: 'bg-status-ok/15',
     message: 'AI is confident in this analysis',
   },
   medium: {
     level: 'medium',
-    color: 'text-warning-400',
-    bgColor: 'bg-warning-900/30',
+    color: 'text-status-warn',
+    bgColor: 'bg-status-warn/15',
     message: 'Review recommended - some assumptions made',
   },
   low: {
     level: 'low',
-    color: 'text-danger-400',
-    bgColor: 'bg-danger-900/30',
+    color: 'text-status-bad',
+    bgColor: 'bg-status-bad/15',
     message: 'Please review carefully - unusual exercise',
   },
 };

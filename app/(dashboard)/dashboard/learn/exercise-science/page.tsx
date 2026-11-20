@@ -12,7 +12,7 @@ export default function ExerciseScienceArticle() {
       {/* Back Navigation */}
       <Link
         href="/dashboard/learn"
-        className="inline-flex items-center gap-2 text-surface-400 hover:text-surface-200 mb-8 transition-colors"
+        className="inline-flex items-center gap-2 text-ink-2 hover:text-ink mb-8 transition-colors"
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -24,20 +24,20 @@ export default function ExerciseScienceArticle() {
       <div className="mb-8">
         <div className="flex items-center gap-3 mb-4">
           <span className="text-4xl">📊</span>
-          <span className="px-3 py-1 bg-purple-500/10 text-purple-400 rounded-full text-xs font-medium">
+          <span className="px-3 py-1 bg-action/10 text-action rounded-full text-xs font-medium">
             Training Science
           </span>
         </div>
-        <h1 className="text-3xl font-bold text-surface-100 mb-3">Exercise Selection Science</h1>
-        <p className="text-lg text-surface-400">
+        <h1 className="text-3xl font-bold text-ink mb-3">Exercise Selection Science</h1>
+        <p className="text-lg text-ink-2">
           Why we rate exercises S/A/B/C and how to pick the most effective movements for muscle growth.
         </p>
       </div>
 
       {/* Article Content */}
-      <article className="space-y-8 text-surface-300">
+      <article className="space-y-8 text-ink-2">
         <section>
-          <h2 className="text-xl font-bold text-surface-100 mb-4">
+          <h2 className="text-xl font-bold text-ink mb-4">
             Why Some Exercises Build More Muscle
           </h2>
           <p className="mb-4">
@@ -48,23 +48,23 @@ export default function ExerciseScienceArticle() {
 
         {/* Stretch Under Load */}
         <section>
-          <h2 className="text-xl font-bold text-surface-100 mb-4">Stretch Under Load</h2>
+          <h2 className="text-xl font-bold text-ink mb-4">Stretch Under Load</h2>
           <p className="mb-4">
             Does the muscle get stretched while under tension? This triggers more muscle growth.
           </p>
           <div className="grid md:grid-cols-2 gap-4">
-            <Card className="p-4 bg-success-500/10 border-success-500/20">
-              <p className="font-medium text-success-300 mb-2">High Stretch</p>
-              <ul className="text-sm text-surface-400 space-y-1">
+            <Card className="p-4 bg-status-ok/10 border-status-ok/20">
+              <p className="font-medium text-status-ok mb-2">High Stretch</p>
+              <ul className="text-sm text-ink-2 space-y-1">
                 <li>• Incline dumbbell curl</li>
                 <li>• Romanian deadlift</li>
                 <li>• Cable fly (stretched position)</li>
                 <li>• Overhead tricep extension</li>
               </ul>
             </Card>
-            <Card className="p-4 bg-surface-800/50">
-              <p className="font-medium text-surface-300 mb-2">Low Stretch</p>
-              <ul className="text-sm text-surface-500 space-y-1">
+            <Card className="p-4 bg-fill/50">
+              <p className="font-medium text-ink-2 mb-2">Low Stretch</p>
+              <ul className="text-sm text-ink-3 space-y-1">
                 <li>• Concentration curl (peak)</li>
                 <li>• Leg press (top position)</li>
                 <li>• Pec deck (contracted)</li>
@@ -75,23 +75,23 @@ export default function ExerciseScienceArticle() {
 
         {/* Resistance Profile */}
         <section>
-          <h2 className="text-xl font-bold text-surface-100 mb-4">Resistance Profile</h2>
+          <h2 className="text-xl font-bold text-ink mb-4">Resistance Profile</h2>
           <p className="mb-4">
             Is the exercise challenging throughout the full range, or only at certain points?
           </p>
-          <Card className="p-5 bg-surface-800/50 mb-4">
+          <Card className="p-5 bg-fill/50 mb-4">
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-surface-300">Cables & well-designed machines</span>
-                <span className="text-success-400 text-sm">Excellent</span>
+                <span className="text-ink-2">Cables & well-designed machines</span>
+                <span className="text-status-ok text-sm">Excellent</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-surface-300">Free weights (most angles)</span>
-                <span className="text-warning-400 text-sm">Good</span>
+                <span className="text-ink-2">Free weights (most angles)</span>
+                <span className="text-status-warn text-sm">Good</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-surface-300">Bodyweight at disadvantaged angles</span>
-                <span className="text-surface-500 text-sm">Variable</span>
+                <span className="text-ink-2">Bodyweight at disadvantaged angles</span>
+                <span className="text-ink-3 text-sm">Variable</span>
               </div>
             </div>
           </Card>
@@ -99,67 +99,67 @@ export default function ExerciseScienceArticle() {
 
         {/* Progression Ease */}
         <section>
-          <h2 className="text-xl font-bold text-surface-100 mb-4">Progression Ease</h2>
+          <h2 className="text-xl font-bold text-ink mb-4">Progression Ease</h2>
           <p className="mb-4">How easy is it to add weight over time?</p>
           <ul className="space-y-2 text-sm">
             <li className="flex items-center gap-2">
-              <span className="text-success-400">Easy:</span>
-              <span className="text-surface-400">Machines (small increments), barbells</span>
+              <span className="text-status-ok">Easy:</span>
+              <span className="text-ink-2">Machines (small increments), barbells</span>
             </li>
             <li className="flex items-center gap-2">
-              <span className="text-warning-400">Medium:</span>
-              <span className="text-surface-400">Dumbbells (5lb jumps can be big)</span>
+              <span className="text-status-warn">Medium:</span>
+              <span className="text-ink-2">Dumbbells (5lb jumps can be big)</span>
             </li>
             <li className="flex items-center gap-2">
-              <span className="text-danger-400">Hard:</span>
-              <span className="text-surface-400">Bodyweight exercises</span>
+              <span className="text-status-bad">Hard:</span>
+              <span className="text-ink-2">Bodyweight exercises</span>
             </li>
           </ul>
         </section>
 
         {/* The Tiers */}
         <section>
-          <h2 className="text-xl font-bold text-surface-100 mb-4">Our Tier System</h2>
+          <h2 className="text-xl font-bold text-ink mb-4">Our Tier System</h2>
           <div className="space-y-3">
-            <Card className="p-4 bg-gradient-to-r from-yellow-500/10 to-transparent border-yellow-500/20">
+            <Card className="bg-yellow-500/10 p-4 border-yellow-500/20">
               <div className="flex items-center gap-3">
                 <span className="text-2xl">⭐</span>
                 <div>
                   <p className="font-bold text-yellow-400">S-Tier</p>
-                  <p className="text-sm text-surface-400">
+                  <p className="text-sm text-ink-2">
                     Maximum stimulus, favorable fatigue, great progression
                   </p>
                 </div>
               </div>
             </Card>
-            <Card className="p-4 bg-gradient-to-r from-primary-500/10 to-transparent border-primary-500/20">
+            <Card className="p-4 bg-action/10 to-transparent border-action/20">
               <div className="flex items-center gap-3">
                 <span className="text-2xl">🅰️</span>
                 <div>
-                  <p className="font-bold text-primary-400">A-Tier</p>
-                  <p className="text-sm text-surface-400">
+                  <p className="font-bold text-action">A-Tier</p>
+                  <p className="text-sm text-ink-2">
                     Excellent exercises with minor drawbacks
                   </p>
                 </div>
               </div>
             </Card>
-            <Card className="p-4 bg-gradient-to-r from-surface-700/30 to-transparent border-surface-700">
+            <Card className="p-4 bg-sep/30 to-transparent border-sep">
               <div className="flex items-center gap-3">
                 <span className="text-2xl">🅱️</span>
                 <div>
-                  <p className="font-bold text-surface-300">B-Tier</p>
-                  <p className="text-sm text-surface-400">
+                  <p className="font-bold text-ink-2">B-Tier</p>
+                  <p className="text-sm text-ink-2">
                     Good exercises, useful for variety
                   </p>
                 </div>
               </div>
             </Card>
-            <Card className="p-4 bg-gradient-to-r from-surface-800/30 to-transparent border-surface-800">
+            <Card className="p-4 bg-fill/30 to-transparent border-sep">
               <div className="flex items-center gap-3">
                 <span className="text-2xl">©️</span>
                 <div>
-                  <p className="font-bold text-surface-400">C-Tier</p>
-                  <p className="text-sm text-surface-500">
+                  <p className="font-bold text-ink-2">C-Tier</p>
+                  <p className="text-sm text-ink-3">
                     Suboptimal but still usable
                   </p>
                 </div>
@@ -170,13 +170,13 @@ export default function ExerciseScienceArticle() {
 
         {/* CTA */}
         <section className="pt-4">
-          <Card className="p-6 text-center bg-gradient-to-r from-purple-500/10 to-primary-500/10 border-purple-500/20">
-            <h3 className="text-lg font-bold text-surface-100 mb-2">Explore Our Exercise Database</h3>
-            <p className="text-sm text-surface-400 mb-4">
+          <Card className="bg-action/10 p-6 text-center border-action/20">
+            <h3 className="text-lg font-bold text-ink mb-2">Explore Our Exercise Database</h3>
+            <p className="text-sm text-ink-2 mb-4">
               See ratings for 500+ exercises with detailed hypertrophy scores.
             </p>
             <Link href="/dashboard/exercises">
-              <button className="px-6 py-2 bg-primary-500 hover:bg-primary-600 text-white font-semibold rounded-lg transition-colors">
+              <button className="px-6 py-2 bg-action hover:bg-action text-on-action font-semibold rounded-lg transition-colors">
                 View Exercises
               </button>
             </Link>

@@ -172,30 +172,30 @@ export default function LearnPage() {
       {/* Hero */}
       <div className="relative overflow-hidden">
         <div className="absolute inset-0">
-          <div className="absolute -top-1/2 -left-1/2 w-full h-full bg-gradient-radial from-primary-900/30 via-transparent to-transparent" />
-          <div className="absolute -bottom-1/2 -right-1/2 w-full h-full bg-gradient-radial from-purple-900/20 via-transparent to-transparent" />
+          <div className="absolute -top-1/2 -left-1/2 w-full h-full bg-gradient-radial from-action/15 via-transparent to-transparent" />
+          <div className="absolute -bottom-1/2 -right-1/2 w-full h-full bg-gradient-radial from-action/20 via-transparent to-transparent" />
         </div>
         
         <div className="relative max-w-6xl mx-auto px-4 py-20">
-          <h1 className="text-4xl md:text-6xl font-black text-surface-100 mb-6">
+          <h1 className="text-4xl md:text-6xl font-black text-ink mb-6">
             The Science Behind{' '}
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary-400 to-purple-400">
+            <span className="text-ink">
               HyperTrack
             </span>
           </h1>
-          <p className="text-xl text-surface-300 max-w-3xl">
+          <p className="text-xl text-ink-2 max-w-3xl">
             We didn&apos;t just build another workout logger. We encoded decades of exercise science and nutrition research 
             into AI-powered algorithms that optimize your training, diet, and recovery in real-time.
           </p>
 
           {/* Quick Navigation */}
-          <div className="mt-8 p-6 bg-surface-900/50 rounded-xl border border-surface-800">
-            <h2 className="text-sm font-semibold text-surface-300 mb-3 uppercase tracking-wider">On This Page</h2>
+          <div className="mt-8 p-6 bg-card/50 rounded-xl border border-sep">
+            <h2 className="text-sm font-semibold text-ink-2 mb-3 uppercase tracking-wider">On This Page</h2>
             <div className="grid md:grid-cols-2 gap-2 text-sm">
-              <a href="#features" className="text-surface-400 hover:text-primary-400 transition-colors">→ Features That Matter</a>
-              <a href="#science" className="text-surface-400 hover:text-primary-400 transition-colors">→ Scientific Foundation</a>
-              <a href="#comparison" className="text-surface-400 hover:text-primary-400 transition-colors">→ How We Compare</a>
-              <a href="#sources" className="text-surface-400 hover:text-primary-400 transition-colors">→ Sources & Disclaimers</a>
+              <a href="#features" className="text-ink-2 hover:text-action transition-colors">→ Features That Matter</a>
+              <a href="#science" className="text-ink-2 hover:text-action transition-colors">→ Scientific Foundation</a>
+              <a href="#comparison" className="text-ink-2 hover:text-action transition-colors">→ How We Compare</a>
+              <a href="#sources" className="text-ink-2 hover:text-action transition-colors">→ Sources & Disclaimers</a>
             </div>
           </div>
         </div>
@@ -205,39 +205,39 @@ export default function LearnPage() {
       <div className="max-w-6xl mx-auto px-4 pb-20 space-y-20">
         
         {/* The Problem */}
-        <section className="py-12 border-b border-surface-800">
-          <h2 className="text-3xl font-bold text-surface-100 mb-6">The Problem with Most Workout Apps</h2>
+        <section className="py-12 border-b border-sep">
+          <h2 className="text-3xl font-bold text-ink mb-6">The Problem with Most Workout Apps</h2>
           <div className="grid md:grid-cols-3 gap-6">
-            <div className="p-6 bg-surface-900/50 rounded-xl border border-surface-800">
-              <div className="w-12 h-12 mb-4 rounded-lg bg-surface-800 flex items-center justify-center">
-                <svg className="w-6 h-6 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="p-6 bg-card/50 rounded-xl border border-sep">
+              <div className="w-12 h-12 mb-4 rounded-lg bg-fill flex items-center justify-center">
+                <svg className="w-6 h-6 text-ink-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
               </div>
-              <h3 className="font-semibold text-surface-200 mb-2">They&apos;re Just Digital Notepads</h3>
-              <p className="text-surface-400 text-sm">
+              <h3 className="font-semibold text-ink mb-2">They&apos;re Just Digital Notepads</h3>
+              <p className="text-ink-2 text-sm">
                 Log your sets, see a chart, repeat. No intelligence, no optimization, no understanding of WHY you&apos;re doing what you&apos;re doing.
               </p>
             </div>
-            <div className="p-6 bg-surface-900/50 rounded-xl border border-surface-800">
-              <div className="w-12 h-12 mb-4 rounded-lg bg-surface-800 flex items-center justify-center">
-                <svg className="w-6 h-6 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="p-6 bg-card/50 rounded-xl border border-sep">
+              <div className="w-12 h-12 mb-4 rounded-lg bg-fill flex items-center justify-center">
+                <svg className="w-6 h-6 text-ink-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
                 </svg>
               </div>
-              <h3 className="font-semibold text-surface-200 mb-2">Random Workout Generators</h3>
-              <p className="text-surface-400 text-sm">
+              <h3 className="font-semibold text-ink mb-2">Random Workout Generators</h3>
+              <p className="text-ink-2 text-sm">
                 Some apps generate workouts, but without understanding periodization, fatigue accumulation, or your specific needs. It&apos;s fitness roulette.
               </p>
             </div>
-            <div className="p-6 bg-surface-900/50 rounded-xl border border-surface-800">
-              <div className="w-12 h-12 mb-4 rounded-lg bg-surface-800 flex items-center justify-center">
-                <svg className="w-6 h-6 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="p-6 bg-card/50 rounded-xl border border-sep">
+              <div className="w-12 h-12 mb-4 rounded-lg bg-fill flex items-center justify-center">
+                <svg className="w-6 h-6 text-ink-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
               </div>
-              <h3 className="font-semibold text-surface-200 mb-2">One-Size-Fits-All Volume</h3>
-              <p className="text-surface-400 text-sm">
+              <h3 className="font-semibold text-ink mb-2">One-Size-Fits-All Volume</h3>
+              <p className="text-ink-2 text-sm">
                 &quot;Do 3x10 for everything&quot; ignores that muscles respond differently, people recover differently, and goals require different approaches.
               </p>
             </div>
@@ -246,34 +246,34 @@ export default function LearnPage() {
 
         {/* Features Deep Dive */}
         <section id="features">
-          <h2 className="text-3xl font-bold text-surface-100 mb-8 text-center">Features That Actually Matter</h2>
+          <h2 className="text-3xl font-bold text-ink mb-8 text-center">Features That Actually Matter</h2>
           <div className="space-y-8">
             {features.map((feature, idx) => (
               <div 
                 key={feature.title}
                 className={`p-8 rounded-2xl border ${
                   idx % 2 === 0 
-                    ? 'bg-gradient-to-r from-primary-500/5 to-transparent border-primary-500/20' 
-                    : 'bg-gradient-to-r from-purple-500/5 to-transparent border-purple-500/20'
+                    ? 'bg-action/5 to-transparent border-action/20' 
+                    : 'bg-action/5 border-action/20'
                 }`}
               >
                 <div className="flex items-start gap-6">
                   <div className="text-5xl shrink-0">{feature.icon}</div>
                   <div>
-                    <h3 className="text-xl font-bold text-surface-100 mb-2">{feature.title}</h3>
-                    <p className="text-surface-300 mb-4">{feature.description}</p>
-                    <div className="p-4 bg-surface-900/50 rounded-lg border border-surface-700">
-                      <p className="text-sm text-surface-400">
-                        <span className="font-semibold text-primary-400">How it works: </span>
+                    <h3 className="text-xl font-bold text-ink mb-2">{feature.title}</h3>
+                    <p className="text-ink-2 mb-4">{feature.description}</p>
+                    <div className="p-4 bg-card/50 rounded-lg border border-sep">
+                      <p className="text-sm text-ink-2">
+                        <span className="font-semibold text-action">How it works: </span>
                         {feature.howItWorks}
                       </p>
                     </div>
                     {feature.disclaimer && (
-                      <div className="mt-3 p-3 bg-warning-500/10 rounded-lg border border-warning-500/20 flex gap-2">
-                        <svg className="w-4 h-4 text-warning-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <div className="mt-3 p-3 bg-status-warn/10 rounded-lg border border-status-warn/20 flex gap-2">
+                        <svg className="w-4 h-4 text-status-warn shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
-                        <p className="text-xs text-surface-400">{feature.disclaimer}</p>
+                        <p className="text-xs text-ink-2">{feature.disclaimer}</p>
                       </div>
                     )}
                   </div>
@@ -285,23 +285,23 @@ export default function LearnPage() {
 
         {/* The Science */}
         <section id="science">
-          <h2 className="text-3xl font-bold text-surface-100 mb-4 text-center">Built on Real Science</h2>
-          <p className="text-center text-surface-400 mb-12 max-w-2xl mx-auto">
+          <h2 className="text-3xl font-bold text-ink mb-4 text-center">Built on Real Science</h2>
+          <p className="text-center text-ink-2 mb-12 max-w-2xl mx-auto">
             Our features are informed by peer-reviewed research and established training methodologies. See citations below.
           </p>
           
           <div className="grid gap-6">
             {scienceConcepts.map((concept) => (
-              <div key={concept.title} className="p-6 bg-surface-900/50 rounded-xl border border-surface-800 hover:border-surface-700 transition-colors">
+              <div key={concept.title} className="p-6 bg-card/50 rounded-xl border border-sep hover:border-sep transition-colors">
                 <div className="flex items-start justify-between gap-4 mb-3">
-                  <h3 className="text-lg font-bold text-surface-100">{concept.title}</h3>
-                  <span className="px-3 py-1 bg-surface-800 rounded-full text-xs text-surface-400 shrink-0">
+                  <h3 className="text-lg font-bold text-ink">{concept.title}</h3>
+                  <span className="px-3 py-1 bg-fill rounded-full text-xs text-ink-2 shrink-0">
                     {concept.source}
                   </span>
                 </div>
-                <p className="text-surface-300 mb-3">{concept.explanation}</p>
+                <p className="text-ink-2 mb-3">{concept.explanation}</p>
                 {concept.citation && (
-                  <p className="text-xs text-surface-500 mb-3 italic">
+                  <p className="text-xs text-ink-3 mb-3 italic">
                     <span className="font-semibold">Citation: </span>
                     {concept.citation}
                     {concept.doi && (
@@ -311,7 +311,7 @@ export default function LearnPage() {
                           href={concept.doi} 
                           target="_blank" 
                           rel="noopener noreferrer"
-                          className="text-primary-400 hover:text-primary-300 underline"
+                          className="text-action underline"
                         >
                           [DOI]
                         </Link>
@@ -319,11 +319,11 @@ export default function LearnPage() {
                     )}
                   </p>
                 )}
-                <div className="flex items-start gap-2 p-3 bg-primary-500/10 rounded-lg border border-primary-500/20">
-                  <svg className="w-5 h-5 text-primary-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div className="flex items-start gap-2 p-3 bg-action/10 rounded-lg border border-action/20">
+                  <svg className="w-5 h-5 text-action shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  <p className="text-sm text-primary-300">
+                  <p className="text-sm text-action">
                     <span className="font-semibold">In HyperTrack:</span> {concept.application}
                   </p>
                 </div>
@@ -334,33 +334,33 @@ export default function LearnPage() {
 
         {/* Comparison */}
         <section id="comparison">
-          <h2 className="text-3xl font-bold text-surface-100 mb-8 text-center">How We Compare</h2>
-          <div className="overflow-hidden rounded-xl border border-surface-800">
+          <h2 className="text-3xl font-bold text-ink mb-8 text-center">How We Compare</h2>
+          <div className="overflow-hidden rounded-xl border border-sep">
             <table className="w-full">
               <thead>
-                <tr className="bg-surface-800/70">
-                  <th className="text-left p-4 text-surface-300 font-medium">Feature</th>
-                  <th className="text-center p-4 text-primary-400 font-bold">HyperTrack</th>
-                  <th className="text-center p-4 text-surface-400 font-medium">Other Apps</th>
+                <tr className="bg-fill/70">
+                  <th className="text-left p-4 text-ink-2 font-medium">Feature</th>
+                  <th className="text-center p-4 text-action font-bold">HyperTrack</th>
+                  <th className="text-center p-4 text-ink-2 font-medium">Other Apps</th>
                 </tr>
               </thead>
               <tbody>
                 {comparisonTable.map((row, idx) => (
                   <tr 
                     key={row.feature} 
-                    className={idx % 2 === 0 ? 'bg-surface-900/30' : 'bg-surface-900/10'}
+                    className={idx % 2 === 0 ? 'bg-card/30' : 'bg-card/10'}
                   >
-                    <td className="p-4 text-surface-300">{row.feature}</td>
+                    <td className="p-4 text-ink-2">{row.feature}</td>
                     <td className="p-4 text-center">
-                      <span className="text-success-400 text-xl">✓</span>
+                      <span className="text-status-ok text-xl">✓</span>
                     </td>
                     <td className="p-4 text-center">
                       {row.others === true ? (
-                        <span className="text-success-400 text-xl">✓</span>
+                        <span className="text-status-ok text-xl">✓</span>
                       ) : row.others === 'partial' ? (
-                        <span className="text-warning-400">◐</span>
+                        <span className="text-status-warn">◐</span>
                       ) : (
-                        <span className="text-surface-600">—</span>
+                        <span className="text-ink-3">—</span>
                       )}
                     </td>
                   </tr>
@@ -371,64 +371,64 @@ export default function LearnPage() {
         </section>
 
         {/* Sources & Disclaimers */}
-        <section id="sources" className="py-12 border-t border-surface-800">
-          <h2 className="text-3xl font-bold text-surface-100 mb-6 text-center">Sources & Disclaimers</h2>
+        <section id="sources" className="py-12 border-t border-sep">
+          <h2 className="text-3xl font-bold text-ink mb-6 text-center">Sources & Disclaimers</h2>
           
           <div className="space-y-6 max-w-4xl mx-auto">
             {/* General Disclaimer */}
-            <div className="p-6 bg-surface-900/50 rounded-xl border border-surface-800">
-              <h3 className="text-lg font-semibold text-surface-100 mb-3">General Disclaimer</h3>
-              <p className="text-sm text-surface-400 mb-3">
+            <div className="p-6 bg-card/50 rounded-xl border border-sep">
+              <h3 className="text-lg font-semibold text-ink mb-3">General Disclaimer</h3>
+              <p className="text-sm text-ink-2 mb-3">
                 HyperTrack is a training and nutrition tracking tool designed for informational and educational purposes. 
                 It is not a substitute for professional medical advice, diagnosis, or treatment. Always consult with qualified 
                 healthcare professionals, registered dietitians, or certified personal trainers before starting any new training 
                 program, dietary regimen, or supplementation.
               </p>
-              <p className="text-sm text-surface-400">
+              <p className="text-sm text-ink-2">
                 Individual results may vary. The recommendations and calculations provided by HyperTrack are based on general 
                 research findings and population-level data, which may not apply to every individual.
               </p>
             </div>
 
             {/* AI & Automation */}
-            <div className="p-6 bg-surface-900/50 rounded-xl border border-surface-800">
-              <h3 className="text-lg font-semibold text-surface-100 mb-3">AI-Generated Content</h3>
-              <p className="text-sm text-surface-400">
+            <div className="p-6 bg-card/50 rounded-xl border border-sep">
+              <h3 className="text-lg font-semibold text-ink mb-3">AI-Generated Content</h3>
+              <p className="text-sm text-ink-2">
                 Our AI coaching features use Claude AI to generate personalized guidance. While informed by training science, 
                 AI outputs are probabilistic and may occasionally contain errors. AI coaching does not replace human coaching, 
                 supervision, or professional expertise. For detailed information about data handling, see our{' '}
-                <Link href="/privacy" className="text-primary-400 hover:text-primary-300 underline">
+                <Link href="/privacy" className="text-action underline">
                   Privacy Policy
                 </Link>.
               </p>
             </div>
 
             {/* Health & Medical */}
-            <div className="p-6 bg-surface-900/50 rounded-xl border border-surface-800">
-              <h3 className="text-lg font-semibold text-surface-100 mb-3">Health & Medical Information</h3>
-              <p className="text-sm text-surface-400 mb-3">
+            <div className="p-6 bg-card/50 rounded-xl border border-sep">
+              <h3 className="text-lg font-semibold text-ink mb-3">Health & Medical Information</h3>
+              <p className="text-sm text-ink-2 mb-3">
                 Features related to body composition (DEXA, FFMI), nutrition targets, and medication support (GLP-1) provide 
                 general information only. They are not medical assessments, diagnoses, or prescriptions.
               </p>
-              <p className="text-sm text-surface-400">
+              <p className="text-sm text-ink-2">
                 If you are taking prescription medications, have existing health conditions, or are under medical supervision, 
                 consult your healthcare provider before making dietary or training changes. For our full terms, see our{' '}
-                <Link href="/terms" className="text-primary-400 hover:text-primary-300 underline">
+                <Link href="/terms" className="text-action underline">
                   Terms of Service
                 </Link>.
               </p>
             </div>
 
             {/* Research Sources */}
-            <div className="p-6 bg-surface-900/50 rounded-xl border border-surface-800">
-              <h3 className="text-lg font-semibold text-surface-100 mb-3">Research & Methodology</h3>
-              <p className="text-sm text-surface-400 mb-4">
+            <div className="p-6 bg-card/50 rounded-xl border border-sep">
+              <h3 className="text-lg font-semibold text-ink mb-3">Research & Methodology</h3>
+              <p className="text-sm text-ink-2 mb-4">
                 Our features are informed by exercise science research, established training methodologies, and industry 
                 best practices. Citations are provided where specific claims reference published work. Training science is 
                 an evolving field; our understanding continues to improve as new research emerges.
               </p>
-              <div className="space-y-2 text-xs text-surface-500">
-                <p className="font-semibold text-surface-400">Key Sources & Resources:</p>
+              <div className="space-y-2 text-xs text-ink-3">
+                <p className="font-semibold text-ink-2">Key Sources & Resources:</p>
                 <ul className="list-disc list-inside space-y-1 ml-2">
                   <li>Renaissance Periodization — Volume landmarks, stimulus-to-fatigue ratio research</li>
                   <li>Stronger By Science — Evidence reviews and training science</li>
@@ -443,32 +443,32 @@ export default function LearnPage() {
 
         {/* Who It's For */}
         <section className="text-center">
-          <h2 className="text-3xl font-bold text-surface-100 mb-8">Who Is HyperTrack For?</h2>
+          <h2 className="text-3xl font-bold text-ink mb-8">Who Is HyperTrack For?</h2>
           <div className="grid md:grid-cols-3 gap-8">
             <div className="p-6">
-              <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-br from-primary-500/20 to-purple-500/20 flex items-center justify-center">
+              <div className="bg-action/20 w-20 h-20 mx-auto mb-4 rounded-full flex items-center justify-center">
                 <span className="text-4xl">🏆</span>
               </div>
-              <h3 className="text-xl font-semibold text-surface-100 mb-2">Intermediate Lifters</h3>
-              <p className="text-surface-400">
+              <h3 className="text-xl font-semibold text-ink mb-2">Intermediate Lifters</h3>
+              <p className="text-ink-2">
                 Past the beginner gains, ready to maximize the next phase with intelligent programming.
               </p>
             </div>
             <div className="p-6">
-              <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-br from-primary-500/20 to-purple-500/20 flex items-center justify-center">
+              <div className="bg-action/20 w-20 h-20 mx-auto mb-4 rounded-full flex items-center justify-center">
                 <span className="text-4xl">📚</span>
               </div>
-              <h3 className="text-xl font-semibold text-surface-100 mb-2">Science-Based Lifters</h3>
-              <p className="text-surface-400">
+              <h3 className="text-xl font-semibold text-ink mb-2">Science-Based Lifters</h3>
+              <p className="text-ink-2">
                 You&apos;ve read the research and want an app that actually implements it. No bro-science.
               </p>
             </div>
             <div className="p-6">
-              <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-br from-primary-500/20 to-purple-500/20 flex items-center justify-center">
+              <div className="bg-action/20 w-20 h-20 mx-auto mb-4 rounded-full flex items-center justify-center">
                 <span className="text-4xl">⚙️</span>
               </div>
-              <h3 className="text-xl font-semibold text-surface-100 mb-2">Optimization Nerds</h3>
-              <p className="text-surface-400">
+              <h3 className="text-xl font-semibold text-ink mb-2">Optimization Nerds</h3>
+              <p className="text-ink-2">
                 You want to squeeze every drop of gains from your training. Efficiency over effort.
               </p>
             </div>
@@ -476,22 +476,22 @@ export default function LearnPage() {
         </section>
 
         {/* CTA */}
-        <section className="text-center py-12 px-8 bg-gradient-to-r from-primary-500/10 via-purple-500/10 to-primary-500/10 rounded-2xl border border-primary-500/20">
-          <h2 className="text-3xl font-bold text-surface-100 mb-4">Ready to Train Smarter?</h2>
-          <p className="text-surface-300 mb-8 max-w-xl mx-auto">
+        <section className="bg-action/10 text-center py-12 px-8 rounded-2xl border border-action/20">
+          <h2 className="text-3xl font-bold text-ink mb-4">Ready to Train Smarter?</h2>
+          <p className="text-ink-2 mb-8 max-w-xl mx-auto">
             Stop leaving gains on the table with outdated training methods. 
             Join the evidence-based lifting revolution.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link
               href="/register"
-              className="px-8 py-4 bg-primary-500 hover:bg-primary-600 text-white font-semibold rounded-xl transition-colors shadow-lg shadow-primary-500/25"
+              className="px-8 py-4 bg-action hover:bg-action text-on-action font-semibold rounded-xl transition-colors shadow-lg shadow-action/25"
             >
               Get Started Free
             </Link>
             <Link
               href="/login"
-              className="px-8 py-4 bg-surface-800 hover:bg-surface-700 text-surface-200 font-semibold rounded-xl transition-colors"
+              className="px-8 py-4 bg-fill hover:bg-sep text-ink font-semibold rounded-xl transition-colors"
             >
               Sign In
             </Link>
@@ -500,8 +500,8 @@ export default function LearnPage() {
       </div>
 
       {/* Footer */}
-      <div className="border-t border-surface-800 py-8 text-center">
-        <p className="text-sm text-surface-500">
+      <div className="border-t border-sep py-8 text-center">
+        <p className="text-sm text-ink-3">
           HyperTrack © {new Date().getFullYear()} • Built with ❤️ for the lifting community
         </p>
       </div>

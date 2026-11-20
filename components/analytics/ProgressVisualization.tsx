@@ -51,11 +51,11 @@ export function ProgressBar({
   };
 
   const colorClasses = {
-    default: 'bg-surface-500',
-    success: 'bg-success-500',
-    warning: 'bg-warning-500',
-    danger: 'bg-danger-500',
-    primary: 'bg-primary-500',
+    default: 'bg-ink-3',
+    success: 'bg-status-ok',
+    warning: 'bg-status-warn',
+    danger: 'bg-status-bad',
+    primary: 'bg-action',
   };
 
   const gradientStyle = gradient
@@ -66,11 +66,11 @@ export function ProgressBar({
     <div className="w-full">
       {(label || valueLabel) && (
         <div className="flex items-center justify-between mb-1">
-          {label && <span className="text-xs text-surface-400">{label}</span>}
-          {valueLabel && <span className="text-xs font-medium text-surface-200">{valueLabel}</span>}
+          {label && <span className="text-xs text-ink-2">{label}</span>}
+          {valueLabel && <span className="text-xs font-medium text-ink">{valueLabel}</span>}
         </div>
       )}
-      <div className={`relative w-full bg-surface-800 rounded-full overflow-hidden ${sizeClasses[size]}`}>
+      <div className={`relative w-full bg-fill rounded-full overflow-hidden ${sizeClasses[size]}`}>
         <div
           className={`${sizeClasses[size]} rounded-full transition-all duration-500 ease-out ${
             gradient ? '' : colorClasses[variant]
@@ -90,7 +90,7 @@ export function ProgressBar({
       </div>
       {showPercentage && (
         <div className="mt-1 text-right">
-          <span className="text-[10px] text-surface-500">{Math.round(percentage)}%</span>
+          <span className="text-[10px] text-ink-3">{Math.round(percentage)}%</span>
         </div>
       )}
     </div>
@@ -141,19 +141,19 @@ export function RatioProgressBar({
   return (
     <div className="w-full">
       <div className="flex items-center justify-between mb-1">
-        <span className="text-xs text-surface-400">{label}</span>
+        <span className="text-xs text-ink-2">{label}</span>
         <div className="flex items-center gap-2 text-xs">
-          <span className={`font-medium ${isOptimal ? 'text-success-400' : isBelowOptimal ? 'text-warning-400' : 'text-surface-200'}`}>
+          <span className={`font-medium ${isOptimal ? 'text-status-ok' : isBelowOptimal ? 'text-status-warn' : 'text-ink'}`}>
             {current.toFixed(2)}
           </span>
-          <span className="text-surface-600">→</span>
-          <span className="text-surface-400">{target.toFixed(2)}</span>
+          <span className="text-ink-3">→</span>
+          <span className="text-ink-2">{target.toFixed(2)}</span>
         </div>
       </div>
-      <div className={`relative w-full bg-surface-800 rounded-full overflow-hidden ${sizeClasses}`}>
+      <div className={`relative w-full bg-fill rounded-full overflow-hidden ${sizeClasses}`}>
         {/* Optimal range indicator */}
         <div
-          className="absolute top-0 bottom-0 bg-success-500/20"
+          className="absolute top-0 bottom-0 bg-status-ok/20"
           style={{
             left: `${rangeStart}%`,
             width: `${rangeEnd - rangeStart}%`,
@@ -162,7 +162,7 @@ export function RatioProgressBar({
         {/* Current value bar */}
         <div
           className={`absolute top-0 bottom-0 rounded-full ${
-            isOptimal ? 'bg-success-500' : isBelowOptimal ? 'bg-warning-500' : 'bg-primary-500'
+            isOptimal ? 'bg-status-ok' : isBelowOptimal ? 'bg-status-warn' : 'bg-action'
           }`}
           style={{
             left: 0,
@@ -171,7 +171,7 @@ export function RatioProgressBar({
         />
         {/* Target marker */}
         <div
-          className="absolute top-0 bottom-0 w-0.5 bg-surface-300"
+          className="absolute top-0 bottom-0 w-0.5 bg-ink-2"
           style={{ left: `${targetPos}%` }}
         />
       </div>
@@ -224,10 +224,10 @@ export function BenchmarkBar({
   const toPercent = (val: number) => ((val - visualMin) / visualRange) * 100;
 
   const tierColors = {
-    below_attainable: 'bg-surface-500',
-    attainable_natural: 'bg-warning-500',
-    elite_natural: 'bg-primary-500',
-    superhero: 'bg-success-500',
+    below_attainable: 'bg-ink-3',
+    attainable_natural: 'bg-status-warn',
+    elite_natural: 'bg-action',
+    superhero: 'bg-status-ok',
   };
 
   const tierLabels = {
@@ -240,7 +240,7 @@ export function BenchmarkBar({
   return (
     <div className="w-full">
       <div className="flex items-center justify-between mb-1">
-        <span className="text-xs font-medium text-surface-300">{label}</span>
+        <span className="text-xs font-medium text-ink-2">{label}</span>
         <div className="flex items-center gap-2">
           <span className={`text-xs font-medium ${tierColors[currentTier].replace('bg-', 'text-').replace('-500', '-400')}`}>
             {current.toFixed(1)} {unit}
@@ -250,31 +250,31 @@ export function BenchmarkBar({
           </span>
         </div>
       </div>
-      <div className="relative w-full h-6 bg-surface-900 rounded overflow-hidden">
+      <div className="relative w-full h-6 bg-card rounded overflow-hidden">
         {/* Tier zones */}
         <div
-          className="absolute top-0 bottom-0 bg-warning-500/20 border-r border-warning-500/40"
+          className="absolute top-0 bottom-0 bg-status-warn/20 border-r border-status-warn/40"
           style={{
             left: `${toPercent(isInverted ? benchmarks.attainable.max : benchmarks.attainable.min)}%`,
             width: `${Math.abs(toPercent(benchmarks.attainable.max) - toPercent(benchmarks.attainable.min))}%`,
           }}
         />
         <div
-          className="absolute top-0 bottom-0 bg-primary-500/20 border-r border-primary-500/40"
+          className="absolute top-0 bottom-0 bg-action/20 border-r border-action/40"
           style={{
             left: `${toPercent(isInverted ? benchmarks.elite.max : benchmarks.elite.min)}%`,
             width: `${Math.abs(toPercent(benchmarks.elite.max) - toPercent(benchmarks.elite.min))}%`,
           }}
         />
         <div
-          className="absolute top-0 bottom-0 bg-success-500/20"
+          className="absolute top-0 bottom-0 bg-status-ok/20"
           style={{
             left: `${toPercent(isInverted ? benchmarks.superhero.max : benchmarks.superhero.min)}%`,
             width: `${Math.abs(toPercent(benchmarks.superhero.max) - toPercent(benchmarks.superhero.min))}%`,
           }}
         />
         {/* Tier labels */}
-        <div className="absolute inset-0 flex items-center justify-between px-1 text-[8px] text-surface-500">
+        <div className="absolute inset-0 flex items-center justify-between px-1 text-[8px] text-ink-3">
           <span style={{ marginLeft: `${toPercent(benchmarks.attainable.min)}%` }}>
             {benchmarks.attainable.min.toFixed(1)}
           </span>
@@ -328,11 +328,11 @@ export function ProportionsBenchmarkBar({
 
   // Zone colors based on status
   const statusConfig = {
-    far_below: { color: 'bg-danger-500', textColor: 'text-danger-400', label: 'Needs Focus' },
-    below: { color: 'bg-warning-500', textColor: 'text-warning-400', label: 'Below Target' },
-    optimal: { color: 'bg-success-500', textColor: 'text-success-400', label: 'Optimal' },
-    above: { color: 'bg-primary-500', textColor: 'text-primary-400', label: 'Above Target' },
-    far_above: { color: 'bg-surface-500', textColor: 'text-surface-400', label: 'Well Developed' },
+    far_below: { color: 'bg-status-bad', textColor: 'text-status-bad', label: 'Needs Focus' },
+    below: { color: 'bg-status-warn', textColor: 'text-status-warn', label: 'Below Target' },
+    optimal: { color: 'bg-status-ok', textColor: 'text-status-ok', label: 'Optimal' },
+    above: { color: 'bg-action', textColor: 'text-action', label: 'Above Target' },
+    far_above: { color: 'bg-ink-3', textColor: 'text-ink-2', label: 'Well Developed' },
   };
 
   const config = statusConfig[status];
@@ -340,21 +340,21 @@ export function ProportionsBenchmarkBar({
   return (
     <div className="w-full">
       <div className="flex items-center justify-between mb-1">
-        <span className="text-xs font-medium text-surface-300">{label}</span>
+        <span className="text-xs font-medium text-ink-2">{label}</span>
         <div className="flex items-center gap-2">
           <span className={`text-xs font-medium ${config.textColor}`}>
             {current.toFixed(2)}
           </span>
-          <span className="text-[10px] text-surface-500">→ {target.toFixed(2)}</span>
+          <span className="text-[10px] text-ink-3">→ {target.toFixed(2)}</span>
           <span className={`text-[10px] px-1.5 py-0.5 rounded ${config.color} text-white`}>
             {config.label}
           </span>
         </div>
       </div>
-      <div className="relative w-full h-6 bg-surface-900 rounded overflow-hidden">
+      <div className="relative w-full h-6 bg-card rounded overflow-hidden">
         {/* Below target zone (left of range) */}
         <div
-          className="absolute top-0 bottom-0 bg-warning-500/20 border-r border-warning-500/40"
+          className="absolute top-0 bottom-0 bg-status-warn/20 border-r border-status-warn/40"
           style={{
             left: '0%',
             width: `${toPercent(range[0])}%`,
@@ -362,7 +362,7 @@ export function ProportionsBenchmarkBar({
         />
         {/* Optimal zone (within range) */}
         <div
-          className="absolute top-0 bottom-0 bg-success-500/20 border-r border-success-500/40"
+          className="absolute top-0 bottom-0 bg-status-ok/20 border-r border-status-ok/40"
           style={{
             left: `${toPercent(range[0])}%`,
             width: `${toPercent(range[1]) - toPercent(range[0])}%`,
@@ -370,14 +370,14 @@ export function ProportionsBenchmarkBar({
         />
         {/* Above target zone (right of range) */}
         <div
-          className="absolute top-0 bottom-0 bg-primary-500/20"
+          className="absolute top-0 bottom-0 bg-action/20"
           style={{
             left: `${toPercent(range[1])}%`,
             width: `${100 - toPercent(range[1])}%`,
           }}
         />
         {/* Range labels */}
-        <div className="absolute inset-0 flex items-center text-[8px] text-surface-500 px-1">
+        <div className="absolute inset-0 flex items-center text-[8px] text-ink-3 px-1">
           <span style={{ position: 'absolute', left: `${Math.max(2, toPercent(range[0]) - 4)}%` }}>
             {range[0].toFixed(2)}
           </span>
@@ -387,7 +387,7 @@ export function ProportionsBenchmarkBar({
         </div>
         {/* Target marker */}
         <div
-          className="absolute top-0 bottom-0 w-0.5 bg-surface-300/50"
+          className="absolute top-0 bottom-0 w-0.5 bg-ink-2/50"
           style={{ left: `${toPercent(target)}%` }}
         />
         {/* Current value marker */}
@@ -438,11 +438,11 @@ export function ProgressRing({
   const offset = circumference - (Math.min(100, Math.max(0, value)) / 100) * circumference;
 
   const colorClasses = {
-    default: 'stroke-surface-500',
-    success: 'stroke-success-500',
-    warning: 'stroke-warning-500',
-    danger: 'stroke-danger-500',
-    primary: 'stroke-primary-500',
+    default: 'stroke-ink-3',
+    success: 'stroke-status-ok',
+    warning: 'stroke-status-warn',
+    danger: 'stroke-status-bad',
+    primary: 'stroke-action',
   };
 
   return (
@@ -464,7 +464,7 @@ export function ProgressRing({
           fill="none"
           stroke="currentColor"
           strokeWidth={strokeWidth}
-          className="text-surface-800"
+          className="text-ink-3"
         />
         {/* Progress circle */}
         <circle
@@ -483,12 +483,12 @@ export function ProgressRing({
       {(showValue || label) && (
         <div className="absolute inset-0 flex flex-col items-center justify-center">
           {showValue && (
-            <span className="text-sm font-bold text-surface-200">
+            <span className="text-sm font-bold text-ink">
               {Math.round(value)}%
             </span>
           )}
           {label && (
-            <span className="text-[10px] text-surface-500">{label}</span>
+            <span className="text-[10px] text-ink-3">{label}</span>
           )}
         </div>
       )}
@@ -543,17 +543,17 @@ export function ScoreGauge({
         showValue={false}
       />
       <div className="absolute flex flex-col items-center justify-center" style={{ height: config.ringSize }}>
-        <span className={`font-bold text-surface-200 ${config.fontSize}`}>
+        <span className={`font-bold text-ink ${config.fontSize}`}>
           {Math.round(score)}%
         </span>
       </div>
       {label && (
-        <span className={`mt-1 text-surface-400 ${config.labelSize}`}>{label}</span>
+        <span className={`mt-1 text-ink-2 ${config.labelSize}`}>{label}</span>
       )}
       {onShowBreakdown && (
         <button
           onClick={onShowBreakdown}
-          className="mt-1 text-[10px] text-primary-400 hover:text-primary-300"
+          className="mt-1 text-[10px] text-action"
         >
           View breakdown
         </button>

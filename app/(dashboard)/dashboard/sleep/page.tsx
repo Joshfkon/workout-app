@@ -71,20 +71,20 @@ function SleepTooltip({ active, payload, label }: TooltipProps<number, string>) 
   if (!active || !payload || payload.length === 0) return null;
   const point = payload[0].payload as SleepTrendPoint;
   return (
-    <div className="bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-xs">
-      <p className="text-surface-300 font-medium mb-1">{formatTooltipDay(String(label))}</p>
+    <div className="bg-fill border border-sep rounded-lg px-3 py-2 text-xs">
+      <p className="text-ink-2 font-medium mb-1">{formatTooltipDay(String(label))}</p>
       {point.hours != null ? (
-        <p className="text-surface-100">
+        <p className="text-ink">
           {formatSleepHours(point.hours)} slept
           {point.quality && (
-            <span className="text-surface-400"> · {SLEEP_QUALITY_LABELS[point.quality]}</span>
+            <span className="text-ink-2"> · {SLEEP_QUALITY_LABELS[point.quality]}</span>
           )}
         </p>
       ) : (
-        <p className="text-surface-500">Not logged</p>
+        <p className="text-ink-3">Not logged</p>
       )}
       {point.rollingAvg != null && (
-        <p className="text-surface-400 mt-0.5">
+        <p className="text-ink-2 mt-0.5">
           {formatSleepHours(Math.round(point.rollingAvg * 10) / 10)} 7-day avg
         </p>
       )}
@@ -102,10 +102,10 @@ function StatTile({
   sub?: React.ReactNode;
 }) {
   return (
-    <div className="bg-surface-900 border border-surface-800 rounded-xl p-3">
-      <p className="text-xs text-surface-500 mb-1">{label}</p>
-      <div className="text-lg font-semibold text-surface-100">{children}</div>
-      {sub && <p className="text-[11px] text-surface-500 mt-0.5">{sub}</p>}
+    <div className="bg-card rounded-card p-3 shadow-card">
+      <p className="text-xs text-ink-3 mb-1">{label}</p>
+      <div className="text-lg font-semibold text-ink">{children}</div>
+      {sub && <p className="text-[11px] text-ink-3 mt-0.5">{sub}</p>}
     </div>
   );
 }
@@ -133,17 +133,17 @@ export default function SleepPage() {
 
   const trendTile = (() => {
     if (stats.direction === null) {
-      return { value: '—', sub: 'log 3+ nights each week to see a trend', color: 'text-surface-400' };
+      return { value: '—', sub: 'log 3+ nights each week to see a trend', color: 'text-ink-2' };
     }
     const delta = stats.deltaPerWeek!;
     if (stats.direction === 'steady') {
-      return { value: '→ steady', sub: 'vs last week', color: 'text-surface-100' };
+      return { value: '→ steady', sub: 'vs last week', color: 'text-ink' };
     }
     const signedDelta = `${delta > 0 ? '+' : '−'}${formatSleepHours(round1(Math.abs(delta)))}`;
     return {
       value: `${stats.direction === 'up' ? '↑' : '↓'} ${signedDelta}`,
       sub: 'avg/night vs last week',
-      color: stats.direction === 'up' ? 'text-success-400' : 'text-warning-400',
+      color: stats.direction === 'up' ? 'text-status-ok' : 'text-status-warn',
     };
   })();
 
@@ -153,7 +153,7 @@ export default function SleepPage() {
     <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
       <Link
         href="/dashboard"
-        className="text-sm text-surface-400 hover:text-surface-200 inline-flex items-center gap-1"
+        className="text-sm text-ink-2 hover:text-ink inline-flex items-center gap-1"
       >
         ← Back to Dashboard
       </Link>
@@ -173,17 +173,17 @@ export default function SleepPage() {
         <div className="space-y-4 animate-pulse" data-testid="sleep-page-skeleton">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="h-20 bg-surface-800 rounded-xl" />
+              <div key={i} className="h-20 bg-fill rounded-xl" />
             ))}
           </div>
-          <div className="h-64 bg-surface-800 rounded-xl" />
+          <div className="h-64 bg-fill rounded-xl" />
         </div>
       ) : !hasAnyData ? (
         <Card>
           <CardContent className="text-center py-10">
-            <IconMoon size={28} className="mx-auto text-surface-600 mb-3" aria-hidden="true" />
-            <p className="text-sm text-surface-300 mb-1">No sleep logged yet</p>
-            <p className="text-xs text-surface-500 mb-4">
+            <IconMoon size={28} className="mx-auto text-ink-3 mb-3" aria-hidden="true" />
+            <p className="text-sm text-ink-2 mb-1">No sleep logged yet</p>
+            <p className="text-xs text-ink-3 mb-4">
               Log a night to start tracking your average and trend.
             </p>
             <Button size="sm" onClick={() => setIsLogOpen(true)}>
@@ -205,7 +205,7 @@ export default function SleepPage() {
                   />
                 </span>
               ) : (
-                <span className="text-surface-400">not logged</span>
+                <span className="text-ink-2">not logged</span>
               )}
             </StatTile>
             <StatTile label="7-day avg">
@@ -236,8 +236,8 @@ export default function SleepPage() {
                       onClick={() => setRangeDays(r.days)}
                       className={`px-2.5 py-1 text-xs font-medium rounded-lg transition-colors ${
                         rangeDays === r.days
-                          ? 'bg-primary-500 text-white'
-                          : 'bg-surface-800 text-surface-400 hover:text-surface-200'
+                          ? 'bg-action text-on-action'
+                          : 'bg-fill text-ink-2 hover:text-ink'
                       }`}
                       data-testid={`sleep-range-${r.label}`}
                     >
@@ -249,7 +249,7 @@ export default function SleepPage() {
             </CardHeader>
             <CardContent>
               {loggedInRange === 0 ? (
-                <p className="text-sm text-surface-500 text-center py-8">
+                <p className="text-sm text-ink-3 text-center py-8">
                   No sleep logged in this range.
                 </p>
               ) : (
@@ -276,7 +276,7 @@ export default function SleepPage() {
                         <Legend
                           wrapperStyle={{ fontSize: 11 }}
                           formatter={(value: string) => (
-                            <span className="text-surface-400">{value}</span>
+                            <span className="text-ink-2">{value}</span>
                           )}
                         />
                         <ReferenceLine
@@ -306,7 +306,7 @@ export default function SleepPage() {
                       </ComposedChart>
                     </ResponsiveContainer>
                   </div>
-                  <p className="text-[11px] text-surface-500 mt-2">
+                  <p className="text-[11px] text-ink-3 mt-2">
                     Unlogged nights are gaps, not zeros — the average only counts logged nights.
                   </p>
                 </>
@@ -323,17 +323,17 @@ export default function SleepPage() {
               <CardContent>
                 <div className="grid grid-cols-3 gap-2">
                   {([...SLEEP_QUALITIES].reverse() as SleepQuality[]).map((q) => (
-                    <div key={q} className="text-center p-2.5 bg-surface-800/50 rounded-lg">
-                      <div className="flex items-center justify-center gap-1.5 text-xs text-surface-400">
+                    <div key={q} className="text-center p-2.5 bg-fill/50 rounded-lg">
+                      <div className="flex items-center justify-center gap-1.5 text-xs text-ink-2">
                         <span
                           className={`w-1.5 h-1.5 rounded-full ${SLEEP_QUALITY_DOT_CLASS[q]}`}
                           aria-hidden="true"
                         />
                         {SLEEP_QUALITY_LABELS[q]}
                       </div>
-                      <p className="text-lg font-semibold text-surface-100 mt-0.5">
+                      <p className="text-lg font-semibold text-ink mt-0.5">
                         {stats.qualityCounts30[q]}
-                        <span className="text-xs text-surface-500 font-normal">
+                        <span className="text-xs text-ink-3 font-normal">
                           {' '}night{stats.qualityCounts30[q] === 1 ? '' : 's'}
                         </span>
                       </p>

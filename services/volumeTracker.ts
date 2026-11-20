@@ -310,31 +310,31 @@ export function getVolumeStatusDescription(status: VolumeStatus): {
       return {
         label: 'Below MEV',
         description: 'Not enough volume to maintain muscle. Consider adding sets.',
-        color: 'text-surface-400',
+        color: 'text-ink-2',
       };
     case 'effective':
       return {
         label: 'Effective',
         description: 'Volume is sufficient for maintenance and some growth.',
-        color: 'text-primary-400',
+        color: 'text-action',
       };
     case 'optimal':
       return {
         label: 'Optimal',
         description: 'Volume is in the ideal range for maximum hypertrophy.',
-        color: 'text-success-400',
+        color: 'text-status-ok',
       };
     case 'approaching_mrv':
       return {
         label: 'Approaching MRV',
         description: 'High volume - good for overreaching but monitor recovery.',
-        color: 'text-warning-400',
+        color: 'text-status-warn',
       };
     case 'exceeding_mrv':
       return {
         label: 'Exceeding MRV',
         description: 'Volume exceeds recoverable limit. Risk of overtraining.',
-        color: 'text-danger-400',
+        color: 'text-status-bad',
       };
   }
 }

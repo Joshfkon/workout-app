@@ -271,20 +271,20 @@ export function MacroCalculatorModal({
     >
       <div className="space-y-6">
         {error && (
-          <div className="p-3 text-sm text-danger-400 bg-danger-500/10 border border-danger-500/20 rounded-lg">
+          <div className="p-3 text-sm text-status-bad bg-status-bad/10 border border-status-bad/20 rounded-lg">
             {error}
           </div>
         )}
 
         {/* Step 1: Your Stats */}
         <div className="space-y-4">
-          <h3 className="text-sm font-semibold text-surface-300 uppercase tracking-wider">
+          <h3 className="text-sm font-semibold text-ink-2 uppercase tracking-wider">
             Your Stats
           </h3>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-surface-300 mb-1">
+              <label className="block text-sm font-medium text-ink-2 mb-1">
                 Weight (lbs)
               </label>
               <Input
@@ -295,7 +295,7 @@ export function MacroCalculatorModal({
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-surface-300 mb-1">
+              <label className="block text-sm font-medium text-ink-2 mb-1">
                 Age
               </label>
               <Input
@@ -308,7 +308,7 @@ export function MacroCalculatorModal({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-surface-300 mb-1">
+            <label className="block text-sm font-medium text-ink-2 mb-1">
               Height
             </label>
             <div className="flex gap-2">
@@ -319,7 +319,7 @@ export function MacroCalculatorModal({
                   onChange={(e) => setHeightFeet(e.target.value)}
                   placeholder="5"
                 />
-                <span className="text-xs text-surface-500 mt-1">feet</span>
+                <span className="text-xs text-ink-3 mt-1">feet</span>
               </div>
               <div className="flex-1">
                 <Input
@@ -328,14 +328,14 @@ export function MacroCalculatorModal({
                   onChange={(e) => setHeightInches(e.target.value)}
                   placeholder="10"
                 />
-                <span className="text-xs text-surface-500 mt-1">inches</span>
+                <span className="text-xs text-ink-3 mt-1">inches</span>
               </div>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-surface-300 mb-1">
+              <label className="block text-sm font-medium text-ink-2 mb-1">
                 Sex
               </label>
               <Select
@@ -348,7 +348,7 @@ export function MacroCalculatorModal({
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-surface-300 mb-1">
+              <label className="block text-sm font-medium text-ink-2 mb-1">
                 Body Fat % (optional)
               </label>
               <Input
@@ -363,12 +363,12 @@ export function MacroCalculatorModal({
 
         {/* Step 2: Activity Level */}
         <div className="space-y-4">
-          <h3 className="text-sm font-semibold text-surface-300 uppercase tracking-wider">
+          <h3 className="text-sm font-semibold text-ink-2 uppercase tracking-wider">
             Activity Level
           </h3>
 
           <div>
-            <label className="block text-sm font-medium text-surface-300 mb-1">
+            <label className="block text-sm font-medium text-ink-2 mb-1">
               Daily Activity (excluding workouts)
             </label>
             <Select
@@ -383,7 +383,7 @@ export function MacroCalculatorModal({
 
           <div className="grid grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-surface-300 mb-1">
+              <label className="block text-sm font-medium text-ink-2 mb-1">
                 Workouts/Week
               </label>
               <Input
@@ -395,7 +395,7 @@ export function MacroCalculatorModal({
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-surface-300 mb-1">
+              <label className="block text-sm font-medium text-ink-2 mb-1">
                 Duration (min)
               </label>
               <Input
@@ -405,7 +405,7 @@ export function MacroCalculatorModal({
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-surface-300 mb-1">
+              <label className="block text-sm font-medium text-ink-2 mb-1">
                 Intensity
               </label>
               <Select
@@ -423,10 +423,10 @@ export function MacroCalculatorModal({
 
         {/* Step 3: Goal */}
         <div className="space-y-3">
-          <h3 className="text-sm font-semibold text-surface-300 uppercase tracking-wider">
+          <h3 className="text-sm font-semibold text-ink-2 uppercase tracking-wider">
             Your Goal
           </h3>
-          <p className="text-xs text-surface-400">
+          <p className="text-xs text-ink-2">
             This also sets your training phase (bulk / cut / maintain) used for progression and volume recommendations.
           </p>
 
@@ -437,12 +437,12 @@ export function MacroCalculatorModal({
                 onClick={() => setGoal(opt.value)}
                 className={`p-2 rounded-lg border text-center transition-colors ${
                   goal === opt.value
-                    ? 'border-primary-500 bg-primary-500/10'
-                    : 'border-surface-700 hover:border-surface-600'
+                    ? 'border-action bg-action/10'
+                    : 'border-sep hover:border-sep'
                 }`}
               >
-                <div className="text-sm font-medium text-surface-100">{opt.label}</div>
-                <div className="text-xs text-surface-400">{opt.description}</div>
+                <div className="text-sm font-medium text-ink">{opt.label}</div>
+                <div className="text-xs text-ink-2">{opt.description}</div>
               </button>
             ))}
           </div>
@@ -450,10 +450,10 @@ export function MacroCalculatorModal({
 
         {/* Step 4: Medications/Peptides */}
         <div className="space-y-3">
-          <h3 className="text-sm font-semibold text-surface-300 uppercase tracking-wider">
+          <h3 className="text-sm font-semibold text-ink-2 uppercase tracking-wider">
             Medications (Optional)
           </h3>
-          <p className="text-xs text-surface-400">
+          <p className="text-xs text-ink-2">
             GLP-1 medications affect appetite and require higher protein to prevent muscle loss.
           </p>
 
@@ -467,8 +467,8 @@ export function MacroCalculatorModal({
           />
           
           {peptide !== 'none' && (
-            <div className="p-3 bg-warning-500/10 border border-warning-500/20 rounded-lg">
-              <p className="text-sm text-warning-300">
+            <div className="p-3 bg-status-warn/10 border border-status-warn/20 rounded-lg">
+              <p className="text-sm text-status-warn">
                 <IconPill size={14} className="inline -mt-0.5 mr-1" aria-hidden="true" />
                 <strong>Peptide Adjustments:</strong> Protein increased to prevent muscle loss. 
                 You may tolerate a larger deficit due to reduced appetite.
@@ -480,10 +480,10 @@ export function MacroCalculatorModal({
         {/* Step 5: Cardio Configuration (only show when cutting) */}
         {(goal.includes('cut')) && (
           <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-surface-300 uppercase tracking-wider">
+            <h3 className="text-sm font-semibold text-ink-2 uppercase tracking-wider">
               Zone 2 Cardio (Optional)
             </h3>
-            <p className="text-xs text-surface-400">
+            <p className="text-xs text-ink-2">
               When macro floors block your desired cut rate, cardio can help you reach your goal by burning stored body fat without reducing essential dietary nutrients.
             </p>
 
@@ -493,18 +493,18 @@ export function MacroCalculatorModal({
                 id="cardio-enabled"
                 checked={cardioEnabled}
                 onChange={(e) => setCardioEnabled(e.target.checked)}
-                className="w-4 h-4 rounded border-surface-700 bg-surface-800 text-primary-500 focus:ring-primary-500"
+                className="w-4 h-4 rounded border-sep bg-fill text-action focus:ring-action"
               />
-              <label htmlFor="cardio-enabled" className="text-sm text-surface-300">
+              <label htmlFor="cardio-enabled" className="text-sm text-ink-2">
                 Enable cardio prescription
               </label>
             </div>
 
             {cardioEnabled && (
-              <div className="space-y-3 p-3 bg-surface-800/50 border border-surface-700 rounded-lg">
+              <div className="space-y-3 p-3 bg-fill/50 border border-sep rounded-lg">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-surface-300 mb-1">
+                    <label className="block text-sm font-medium text-ink-2 mb-1">
                       Mode
                     </label>
                     <Select
@@ -517,7 +517,7 @@ export function MacroCalculatorModal({
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-surface-300 mb-1">
+                    <label className="block text-sm font-medium text-ink-2 mb-1">
                       Modality
                     </label>
                     <Select
@@ -533,7 +533,7 @@ export function MacroCalculatorModal({
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-surface-300 mb-1">
+                  <label className="block text-sm font-medium text-ink-2 mb-1">
                     Net Efficiency ({cardioNetEfficiency})
                   </label>
                   <input
@@ -545,7 +545,7 @@ export function MacroCalculatorModal({
                     onChange={(e) => setCardioNetEfficiency(e.target.value)}
                     className="w-full"
                   />
-                  <p className="text-xs text-surface-500 mt-1">
+                  <p className="text-xs text-ink-3 mt-1">
                     Accounts for NEAT drop and metabolic efficiency (0.6-0.75 typical)
                   </p>
                 </div>
@@ -561,46 +561,46 @@ export function MacroCalculatorModal({
 
         {/* Results */}
         {recommendation && (
-          <div className="space-y-4 p-4 bg-surface-800/50 border border-surface-700 rounded-lg">
-            <h3 className="text-lg font-semibold text-surface-100">
+          <div className="space-y-4 p-4 bg-fill/50 border border-sep rounded-lg">
+            <h3 className="text-lg font-semibold text-ink">
               Your Recommended Targets
             </h3>
 
             <div className="grid grid-cols-4 gap-4 text-center">
               <div>
-                <div className="text-2xl font-bold text-primary-400">
+                <div className="text-2xl font-bold text-action">
                   {recommendation.calories}
                 </div>
-                <div className="text-sm text-surface-400">Calories</div>
+                <div className="text-sm text-ink-2">Calories</div>
               </div>
               <div>
-                <div className="text-2xl font-bold text-accent-400">
+                <div className="text-2xl font-bold text-action">
                   {recommendation.protein}g
                 </div>
-                <div className="text-sm text-surface-400">Protein</div>
-                <div className="text-xs text-surface-500">{recommendation.proteinPercent}%</div>
+                <div className="text-sm text-ink-2">Protein</div>
+                <div className="text-xs text-ink-3">{recommendation.proteinPercent}%</div>
               </div>
               <div>
-                <div className="text-2xl font-bold text-warning-400">
+                <div className="text-2xl font-bold text-status-warn">
                   {recommendation.carbs}g
                 </div>
-                <div className="text-sm text-surface-400">Carbs</div>
-                <div className="text-xs text-surface-500">{recommendation.carbsPercent}%</div>
+                <div className="text-sm text-ink-2">Carbs</div>
+                <div className="text-xs text-ink-3">{recommendation.carbsPercent}%</div>
               </div>
               <div>
-                <div className="text-2xl font-bold text-danger-400">
+                <div className="text-2xl font-bold text-status-bad">
                   {recommendation.fat}g
                 </div>
-                <div className="text-sm text-surface-400">Fat</div>
-                <div className="text-xs text-surface-500">{recommendation.fatPercent}%</div>
+                <div className="text-sm text-ink-2">Fat</div>
+                <div className="text-xs text-ink-3">{recommendation.fatPercent}%</div>
               </div>
             </div>
 
-            <div className="text-sm text-surface-300 bg-surface-900/50 p-3 rounded-lg space-y-2">
+            <div className="text-sm text-ink-2 bg-card/50 p-3 rounded-lg space-y-2">
               <p className="mb-2">{recommendation.explanation}</p>
               
               {/* Energy Metrics */}
-              <div className="flex flex-wrap gap-4 text-xs text-surface-400 pt-2 border-t border-surface-800">
+              <div className="flex flex-wrap gap-4 text-xs text-ink-2 pt-2 border-t border-sep">
                 <span>BMR: {recommendation.bmr} cal</span>
                 <span>TDEE: {recommendation.tdee} cal</span>
                 {recommendation.deficit !== 0 && (
@@ -620,17 +620,17 @@ export function MacroCalculatorModal({
                   "2308 → 2305 (−3 cal)" adjustment is noise, not information */}
               {(Math.abs(recommendation.calories - recommendation.requestedCalories) >= 25 ||
                 Math.abs(recommendation.requestedWeeklyChangeKg - recommendation.weeklyChangeKg) >= 0.023) && (
-                <div className="pt-2 border-t border-surface-800">
-                  <p className="text-xs font-medium text-surface-400 mb-1">Adjustments Applied:</p>
+                <div className="pt-2 border-t border-sep">
+                  <p className="text-xs font-medium text-ink-2 mb-1">Adjustments Applied:</p>
                   {Math.abs(recommendation.calories - recommendation.requestedCalories) >= 25 && (
-                    <p className="text-xs text-surface-500">
+                    <p className="text-xs text-ink-3">
                       Calories: {recommendation.requestedCalories} → {recommendation.calories}
                       ({recommendation.calories - recommendation.requestedCalories > 0 ? '+' : ''}
                       {recommendation.calories - recommendation.requestedCalories} cal)
                     </p>
                   )}
                   {Math.abs(recommendation.requestedWeeklyChangeKg - recommendation.weeklyChangeKg) >= 0.023 && (
-                    <p className="text-xs text-surface-500">
+                    <p className="text-xs text-ink-3">
                       Weekly change: {recommendation.requestedWeeklyChangeKg.toFixed(3)} kg → {recommendation.weeklyChangeKg.toFixed(3)} kg
                     </p>
                   )}
@@ -640,14 +640,14 @@ export function MacroCalculatorModal({
 
             {/* Guardrails Applied */}
             {recommendation.guardrailsApplied && recommendation.guardrailsApplied.length > 0 && (
-              <div className="p-3 bg-primary-500/10 border border-primary-500/20 rounded-lg">
-                <p className="text-xs font-medium text-primary-300 mb-2">
+              <div className="p-3 bg-action/10 border border-action/20 rounded-lg">
+                <p className="text-xs font-medium text-action mb-2">
                   <IconAdjustments size={14} className="inline -mt-0.5 mr-1" aria-hidden="true" />
                   Guardrails Applied:
                 </p>
                 <ul className="space-y-1">
                   {recommendation.guardrailsApplied.map((guardrail, index) => (
-                    <li key={index} className="text-xs text-primary-400">
+                    <li key={index} className="text-xs text-action">
                       • {guardrail}
                     </li>
                   ))}
@@ -657,8 +657,8 @@ export function MacroCalculatorModal({
 
             {/* Peptide Notes */}
             {recommendation.peptideNotes && (
-              <div className="p-3 bg-accent-500/10 border border-accent-500/20 rounded-lg">
-                <p className="text-sm text-accent-300">
+              <div className="p-3 bg-action/10 border border-action/20 rounded-lg">
+                <p className="text-sm text-action">
                   <IconBulb size={14} className="inline -mt-0.5 mr-1" aria-hidden="true" />
                   <strong>Peptide Tip:</strong> {recommendation.peptideNotes}
                 </p>
@@ -667,50 +667,50 @@ export function MacroCalculatorModal({
 
             {/* Cardio Prescription */}
             {recommendation.cardioPrescription && recommendation.cardioPrescription.needed && (
-              <div className="p-4 bg-primary-500/10 border border-primary-500/20 rounded-lg space-y-3">
+              <div className="p-4 bg-action/10 border border-action/20 rounded-lg space-y-3">
                 <div className="flex items-start gap-2">
-                  <IconRun size={20} className="shrink-0 text-primary-400" aria-hidden="true" />
+                  <IconRun size={20} className="shrink-0 text-action" aria-hidden="true" />
                   <div className="flex-1">
-                    <h4 className="text-sm font-semibold text-primary-300 mb-1">
+                    <h4 className="text-sm font-semibold text-action mb-1">
                       Zone 2 Cardio Prescription
                     </h4>
-                    <p className="text-xs text-primary-400 mb-2">
+                    <p className="text-xs text-action mb-2">
                       {recommendation.cardioPrescription.summary}
                     </p>
                     <div className="grid grid-cols-2 gap-3 mt-3 text-xs">
                       <div>
-                        <span className="text-surface-400">Minutes/Day:</span>
-                        <span className="ml-2 font-semibold text-surface-200">
+                        <span className="text-ink-2">Minutes/Day:</span>
+                        <span className="ml-2 font-semibold text-ink">
                           {recommendation.cardioPrescription.prescribedMinutesPerDay}
                         </span>
                       </div>
                       <div>
-                        <span className="text-surface-400">Minutes/Week:</span>
-                        <span className="ml-2 font-semibold text-surface-200">
+                        <span className="text-ink-2">Minutes/Week:</span>
+                        <span className="ml-2 font-semibold text-ink">
                           {recommendation.cardioPrescription.prescribedMinutesPerWeek}
                         </span>
                       </div>
                       <div>
-                        <span className="text-surface-400">Kcal/Day:</span>
-                        <span className="ml-2 font-semibold text-surface-200">
+                        <span className="text-ink-2">Kcal/Day:</span>
+                        <span className="ml-2 font-semibold text-ink">
                           ~{recommendation.cardioPrescription.shortfallKcalPerDay}
                         </span>
                       </div>
                       <div>
-                        <span className="text-surface-400">Loss Rate:</span>
-                        <span className="ml-2 font-semibold text-surface-200">
+                        <span className="text-ink-2">Loss Rate:</span>
+                        <span className="ml-2 font-semibold text-ink">
                           {recommendation.cardioPrescription.withCardioWeeklyLossLbs} lb/wk
                         </span>
                       </div>
                     </div>
                     {recommendation.cardioPrescription.hitCap && (
-                      <div className="mt-2 p-2 bg-warning-500/10 border border-warning-500/20 rounded text-xs text-warning-300">
+                      <div className="mt-2 p-2 bg-status-warn/10 border border-status-warn/20 rounded text-xs text-status-warn">
                         <IconAlertTriangle size={12} className="inline -mt-0.5 mr-1" aria-hidden="true" />
                         Cardio capped at {recommendation.cardioPrescription.capMinutesPerDay} min/day
                       </div>
                     )}
-                    <div className="mt-3 p-2 bg-surface-900/50 rounded text-xs text-surface-400">
-                      <strong className="text-surface-300">Why cardio ≠ eating less:</strong> {recommendation.cardioPrescription.whyCardioNotDiet}
+                    <div className="mt-3 p-2 bg-card/50 rounded text-xs text-ink-2">
+                      <strong className="text-ink-2">Why cardio ≠ eating less:</strong> {recommendation.cardioPrescription.whyCardioNotDiet}
                     </div>
                   </div>
                 </div>

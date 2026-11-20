@@ -21,19 +21,19 @@ export interface IdleWorkoutPromptProps {
 export function IdleWorkoutPrompt({ onDismiss, onFinish }: IdleWorkoutPromptProps) {
   return (
     <div
-      className="bg-warning-500/10 border border-warning-500/30 rounded-xl p-4 mb-4 shadow-lg"
+      className="bg-status-warn/10 border border-status-warn/30 rounded-xl p-4 mb-4 shadow-lg"
       data-testid="idle-workout-prompt"
       role="alert"
     >
       <div className="flex items-start gap-3">
         <div className="flex-shrink-0 mt-0.5">
-          <IconAlertCircle className="w-5 h-5 text-warning-400" />
+          <IconAlertCircle className="w-5 h-5 text-status-warn" />
         </div>
         <div className="flex-1 min-w-0">
-          <h3 className="text-sm font-semibold text-warning-200 mb-1">
+          <h3 className="text-sm font-semibold text-status-warn mb-1">
             Still training?
           </h3>
-          <p className="text-sm text-warning-300/90 mb-3">
+          <p className="text-sm text-status-warn/90 mb-3">
             It&apos;s been ~20 minutes since your last set. Are you still working out?
           </p>
           <div className="flex gap-2">

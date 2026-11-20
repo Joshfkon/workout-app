@@ -70,12 +70,12 @@ const QUALITY_BREAKDOWN_ROWS: ReadonlyArray<{
   name: string;
   dotClass: string;
 }> = [
-  { bucket: 'stimulative', name: 'Stimulative', dotClass: 'bg-success-500' },
+  { bucket: 'stimulative', name: 'Stimulative', dotClass: 'bg-status-ok' },
   { bucket: 'maxed', name: 'Maxed', dotClass: 'bg-orange-500' },
-  { bucket: 'effective', name: 'Effective', dotClass: 'bg-primary-500' },
-  { bucket: 'easy', name: 'Easy', dotClass: 'bg-surface-400' },
-  { bucket: 'junk', name: 'Junk', dotClass: 'bg-surface-500' },
-  { bucket: 'excessive', name: 'Excessive', dotClass: 'bg-danger-500' },
+  { bucket: 'effective', name: 'Effective', dotClass: 'bg-action' },
+  { bucket: 'easy', name: 'Easy', dotClass: 'bg-ink-3' },
+  { bucket: 'junk', name: 'Junk', dotClass: 'bg-ink-3' },
+  { bucket: 'excessive', name: 'Excessive', dotClass: 'bg-status-bad' },
 ];
 
 /** Set-table quality cell: text class + short label per display bucket. */
@@ -1099,10 +1099,10 @@ export function SessionSummary({
               // Judgment is confidence-gated; the raw numbers below always show.
               const verdict = getCalibrationVerdict(cal, enhancedAthleteMode);
               const colorClasses = {
-                gray: { bg: 'bg-fill/30', text: 'text-ink', border: 'border-surface-600/50' },
-                green: { bg: 'bg-success-500/20', text: 'text-status-ok', border: 'border-success-500/30' },
-                yellow: { bg: 'bg-warning-500/20', text: 'text-status-warn', border: 'border-warning-500/30' },
-                red: { bg: 'bg-danger-500/20', text: 'text-status-bad', border: 'border-danger-500/30' },
+                gray: { bg: 'bg-fill/30', text: 'text-ink', border: 'border-sep/50' },
+                green: { bg: 'bg-status-ok/20', text: 'text-status-ok', border: 'border-status-ok/30' },
+                yellow: { bg: 'bg-status-warn/20', text: 'text-status-warn', border: 'border-status-warn/30' },
+                red: { bg: 'bg-status-bad/20', text: 'text-status-bad', border: 'border-status-bad/30' },
               };
               const colors = colorClasses[verdict.color];
 
@@ -1160,7 +1160,7 @@ export function SessionSummary({
                   fill="none"
                   stroke="currentColor"
                   strokeWidth="3"
-                  className="text-surface-700"
+                  className="text-ink-3"
                 />
                 <path
                   d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
@@ -1169,9 +1169,9 @@ export function SessionSummary({
                   strokeWidth="3"
                   strokeDasharray={`${qualityScore}, 100`}
                   className={
-                    qualityScore >= 80 ? 'text-success-500' :
-                    qualityScore >= 60 ? 'text-primary-500' :
-                    qualityScore >= 40 ? 'text-warning-500' : 'text-danger-500'
+                    qualityScore >= 80 ? 'text-status-ok' :
+                    qualityScore >= 60 ? 'text-action' :
+                    qualityScore >= 40 ? 'text-status-warn' : 'text-status-bad'
                   }
                 />
               </svg>
@@ -1231,7 +1231,7 @@ export function SessionSummary({
                   </div>
                   <div className="h-2 bg-fill rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-gradient-to-r from-primary-500 to-accent-500 rounded-full transition-all duration-500"
+                      className="h-full bg-action rounded-full transition-all duration-500"
                       style={{ width: `${percentage}%` }}
                     />
                   </div>
@@ -1280,7 +1280,7 @@ export function SessionSummary({
           <IconTarget size={16} className="text-ink-2" aria-hidden="true" /> Intensity Distribution
         </h3>
         <div className="grid grid-cols-4 gap-2">
-          <div className="text-center p-2 bg-success-500/10 rounded-lg border border-success-500/20">
+          <div className="text-center p-2 bg-status-ok/10 rounded-lg border border-status-ok/20">
             <p className="text-lg font-bold text-status-ok">{rpeDistribution.easy}</p>
             <p className="text-xs text-ink-2">Easy</p>
             <p className="text-xs text-ink-3">RPE 1-6</p>
@@ -1464,9 +1464,9 @@ export function SessionSummary({
                                 <tr
                                   key={set.id}
                                   className={`border-t border-sep ${
-                                    bucket === 'stimulative' ? 'bg-success-500/5' :
+                                    bucket === 'stimulative' ? 'bg-status-ok/5' :
                                     bucket === 'maxed' ? 'bg-orange-500/5' :
-                                    bucket === 'excessive' ? 'bg-danger-500/5' : ''
+                                    bucket === 'excessive' ? 'bg-status-bad/5' : ''
                                   }`}
                                 >
                                   <td className="px-2 py-1.5 text-ink-2">{idx + 1}</td>
@@ -1544,10 +1544,10 @@ export function SessionSummary({
         <div className="flex items-center gap-3">
           <div className={`px-4 py-2 rounded-lg font-bold text-lg ${
             sessionRpe >= 9
-              ? 'bg-danger-500/20 text-status-bad'
+              ? 'bg-status-bad/20 text-status-bad'
               : sessionRpe >= 7
-              ? 'bg-warning-500/20 text-status-warn'
-              : 'bg-primary-500/20 text-action'
+              ? 'bg-status-warn/20 text-status-warn'
+              : 'bg-action/20 text-action'
           }`}>
             {sessionRpe}/10
           </div>

@@ -79,12 +79,12 @@ export default function LeaderboardsPage() {
   const selectedTab = LEADERBOARD_TABS.find(t => t.id === selectedType);
 
   return (
-    <div className="min-h-screen bg-surface-950">
+    <div className="min-h-screen bg-canvas">
       {/* Header */}
-      <header className="sticky top-0 z-10 bg-surface-950/95 backdrop-blur-sm border-b border-surface-800">
+      <header className="sticky top-0 z-10 bg-canvas/95 backdrop-blur-sm border-b border-sep">
         <div className="max-w-3xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between mb-4">
-            <h1 className="text-2xl font-bold text-surface-100">Leaderboards</h1>
+            <h1 className="text-2xl font-bold text-ink">Leaderboards</h1>
             <Button
               variant="ghost"
               size="sm"
@@ -116,8 +116,8 @@ export default function LeaderboardsPage() {
                 className={cn(
                   'px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors',
                   selectedType === tab.id
-                    ? 'bg-primary-600 text-white'
-                    : 'bg-surface-800 text-surface-400 hover:text-surface-200'
+                    ? 'bg-action text-on-action'
+                    : 'bg-fill text-ink-2 hover:text-ink'
                 )}
               >
                 {tab.label}
@@ -131,7 +131,7 @@ export default function LeaderboardsPage() {
       <main className="max-w-3xl mx-auto px-4 py-6 space-y-6">
         {/* Description */}
         {selectedTab && (
-          <p className="text-surface-400 text-sm">{selectedTab.description}</p>
+          <p className="text-ink-2 text-sm">{selectedTab.description}</p>
         )}
 
         {/* User's rank card */}
@@ -171,11 +171,11 @@ export default function LeaderboardsPage() {
         )}
 
         {/* Info card */}
-        <Card className="bg-surface-800/50">
+        <Card className="bg-fill/50">
           <CardContent className="py-4">
             <div className="flex items-start gap-3">
               <svg
-                className="w-5 h-5 text-surface-400 mt-0.5"
+                className="w-5 h-5 text-ink-2 mt-0.5"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -187,8 +187,8 @@ export default function LeaderboardsPage() {
                   d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                 />
               </svg>
-              <div className="text-sm text-surface-400">
-                <p className="font-medium text-surface-300 mb-1">How rankings work</p>
+              <div className="text-sm text-ink-2">
+                <p className="font-medium text-ink-2 mb-1">How rankings work</p>
                 <p>
                   Leaderboards update throughout the week as you complete workouts.
                   Only users who have opted in to leaderboards in their privacy settings are shown.

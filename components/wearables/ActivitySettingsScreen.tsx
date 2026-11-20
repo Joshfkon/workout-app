@@ -116,7 +116,7 @@ export function ActivitySettingsScreen() {
   if (loading || !settings) {
     return (
       <div className="flex items-center justify-center p-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-primary-500" />
+        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-action" />
       </div>
     );
   }
@@ -137,8 +137,8 @@ export function ActivitySettingsScreen() {
               key={mode.value}
               className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
                 settings.adjustmentMode === mode.value
-                  ? 'border-primary-500 bg-primary-500/10'
-                  : 'border-surface-700 hover:bg-surface-50 dark:hover:bg-surface-800'
+                  ? 'border-action bg-action/10'
+                  : 'border-sep hover:bg-ink dark:hover:bg-fill'
               }`}
             >
               <input
@@ -151,7 +151,7 @@ export function ActivitySettingsScreen() {
               />
               <div>
                 <div className="font-medium">{mode.label}</div>
-                <div className="text-sm text-surface-500">{mode.description}</div>
+                <div className="text-sm text-ink-3">{mode.description}</div>
               </div>
             </label>
           ))}
@@ -175,9 +175,9 @@ export function ActivitySettingsScreen() {
               max={1000}
               className="w-24"
             />
-            <span className="text-surface-400">calories</span>
+            <span className="text-ink-2">calories</span>
           </div>
-          <p className="text-sm text-surface-500">
+          <p className="text-sm text-ink-3">
             Even on very active/inactive days, your target will not change by more than
             this amount.
           </p>
@@ -199,7 +199,7 @@ export function ActivitySettingsScreen() {
             />
             <div>
               <div className="font-medium">Use app workout estimates</div>
-              <div className="text-sm text-surface-500">
+              <div className="text-sm text-ink-3">
                 Conservative calorie estimates based on your logged sets, rest times,
                 and workout duration.
               </div>
@@ -217,7 +217,7 @@ export function ActivitySettingsScreen() {
             />
             <div>
               <div className="font-medium">Use wearable workout calories</div>
-              <div className="text-sm text-surface-500">
+              <div className="text-sm text-ink-3">
                 Use calories reported by your Apple Watch or other wearable.
                 <span className="text-yellow-500 block mt-1">
                   Warning: Often overestimates resistance training by 50-100%.
@@ -243,7 +243,7 @@ export function ActivitySettingsScreen() {
                   (e.target.value as WearableSource) || null
                 )
               }
-              className="w-full p-2 rounded-lg border border-surface-600 bg-surface-900"
+              className="w-full p-2 rounded-lg bg-card shadow-card"
             >
               <option value="">Auto (use priority order)</option>
               {connections.map((conn) => (
@@ -252,7 +252,7 @@ export function ActivitySettingsScreen() {
                 </option>
               ))}
             </select>
-            <p className="text-sm text-surface-500">
+            <p className="text-sm text-ink-3">
               If you have multiple devices, choose which one to use for step data.
             </p>
           </CardContent>
@@ -270,7 +270,7 @@ export function ActivitySettingsScreen() {
               {connections.map((conn) => (
                 <div
                   key={conn.id}
-                  className="flex items-center justify-between p-2 bg-surface-800 rounded"
+                  className="flex items-center justify-between p-2 bg-fill rounded"
                 >
                   <span>{conn.deviceName || formatSourceName(conn.source)}</span>
                   <span className="text-green-500 text-sm">Connected</span>

@@ -723,11 +723,11 @@ export function getFormLabel(form: FormRating): string {
 export function getFormColorClass(form: FormRating): string {
   switch (form) {
     case 'clean':
-      return 'text-success-400';
+      return 'text-status-ok';
     case 'some_breakdown':
-      return 'text-warning-400';
+      return 'text-status-warn';
     case 'ugly':
-      return 'text-danger-400';
+      return 'text-status-bad';
   }
 }
 

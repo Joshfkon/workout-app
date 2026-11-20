@@ -34,7 +34,7 @@ function paceBadgeClasses(pace: ProgressionPace): string {
     case 'behind':
       return 'bg-orange-500/10 text-orange-400';
     case 'plateaued':
-      return 'bg-warning-500/10 text-status-warn';
+      return 'bg-status-warn/10 text-status-warn';
     case 'calibrating':
     case 'insufficient_data':
       return 'bg-fill text-ink-2';
@@ -96,7 +96,7 @@ export function MuscleProgressionCard({ groups, exerciseNames, goal }: MusclePro
         <h3 className="font-medium text-ink">Progression by muscle group</h3>
         <p className="text-xs text-ink-2 mt-0.5">{subtitle}</p>
       </div>
-      <ul className="divide-y divide-surface-800">
+      <ul className="divide-y divide-sep">
         {activeGroups.map((group) => {
           const isOpen = expanded.has(group.muscleGroup);
           const display = getPaceDisplay(group.pace);

@@ -174,16 +174,16 @@ export function TDEEDashboard({
   const isAdaptive = hasPersonalData;
 
   const confidenceColor = useMemo(() => {
-    if (!activeEstimate) return 'text-surface-500';
+    if (!activeEstimate) return 'text-ink-3';
     switch (activeEstimate.confidence) {
       case 'stable':
-        return 'text-success-400';
+        return 'text-status-ok';
       case 'stabilizing':
-        return 'text-warning-400';
+        return 'text-status-warn';
       case 'unstable':
-        return 'text-surface-400';
+        return 'text-ink-2';
       default:
-        return 'text-surface-500';
+        return 'text-ink-3';
     }
   }, [activeEstimate]);
 
@@ -226,18 +226,18 @@ export function TDEEDashboard({
     return (
       <Card className="p-6">
         <div className="text-center space-y-4">
-          <div className="w-16 h-16 mx-auto rounded-full bg-surface-800 flex items-center justify-center">
+          <div className="w-16 h-16 mx-auto rounded-full bg-fill flex items-center justify-center">
             <IconFlame size={28} className="text-orange-400" aria-hidden="true" />
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-surface-100">
+            <h3 className="text-lg font-semibold text-ink">
               Start Tracking Your Metabolism
             </h3>
-            <p className="text-sm text-surface-400 mt-1">
+            <p className="text-sm text-ink-2 mt-1">
               Log your weight and nutrition daily to unlock personalized TDEE estimates.
             </p>
           </div>
-          <div className="flex items-center justify-center gap-2 text-sm text-surface-500">
+          <div className="flex items-center justify-center gap-2 text-sm text-ink-3">
             <span>0/{dataQuality.daysWithData || 14} days logged</span>
           </div>
         </div>
@@ -251,17 +251,17 @@ export function TDEEDashboard({
       <Card className="p-6">
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-orange-500/20 to-red-500/20 flex items-center justify-center">
+            <div className="bg-orange-500/20 w-10 h-10 rounded-full flex items-center justify-center">
               <IconFlame size={20} className="text-orange-400" aria-hidden="true" />
             </div>
             <div>
-              <h3 className="text-lg font-semibold text-surface-100">Your Metabolism</h3>
-              <p className="text-xs text-surface-500">{subtitle}</p>
+              <h3 className="text-lg font-semibold text-ink">Your Metabolism</h3>
+              <p className="text-xs text-ink-3">{subtitle}</p>
             </div>
           </div>
           <Link
             href="/dashboard/learn/adaptive-tdee"
-            className="text-xs text-primary-400 hover:text-primary-300 transition-colors"
+            className="text-xs text-action transition-colors"
           >
             How it works →
           </Link>
@@ -270,21 +270,21 @@ export function TDEEDashboard({
         <div className="grid grid-cols-2 gap-6">
           {/* TDEE Value */}
           <div>
-            <p className="text-xs text-surface-500 uppercase tracking-wide mb-1">
+            <p className="text-xs text-ink-3 uppercase tracking-wide mb-1">
               Estimated TDEE
             </p>
-            <p className="text-3xl font-bold text-surface-100">
+            <p className="text-3xl font-bold text-ink">
               {displayTDEE.toLocaleString()}
-              <span className="text-lg font-normal text-surface-400 ml-1">cal/day</span>
+              <span className="text-lg font-normal text-ink-2 ml-1">cal/day</span>
             </p>
           </div>
 
           {/* Burn Rate */}
           <div>
-            <p className="text-xs text-surface-500 uppercase tracking-wide mb-1">Burn Rate</p>
-            <p className="text-2xl font-bold text-surface-100">
+            <p className="text-xs text-ink-3 uppercase tracking-wide mb-1">Burn Rate</p>
+            <p className="text-2xl font-bold text-ink">
               {displayBurnRate.toFixed(1)}
-              <span className="text-sm font-normal text-surface-400 ml-1">cal/lb</span>
+              <span className="text-sm font-normal text-ink-2 ml-1">cal/lb</span>
             </p>
           </div>
         </div>
@@ -292,19 +292,19 @@ export function TDEEDashboard({
         {/* Confidence Indicator */}
         <div className="mt-6">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-surface-500">Personalization</span>
+            <span className="text-xs text-ink-3">Personalization</span>
             <span className={`text-xs font-medium ${confidenceColor}`}>
               {displayConfidenceScore}%
             </span>
           </div>
-          <div className="h-2 bg-surface-800 rounded-full overflow-hidden">
+          <div className="h-2 bg-fill rounded-full overflow-hidden">
             <div
               className={`h-full transition-all duration-500 ${
                 activeEstimate.confidence === 'stable'
-                  ? 'bg-success-500'
+                  ? 'bg-status-ok'
                   : activeEstimate.confidence === 'stabilizing'
-                    ? 'bg-warning-500'
-                    : 'bg-primary-500'
+                    ? 'bg-status-warn'
+                    : 'bg-action'
               }`}
               style={{ width: `${Math.max(displayConfidenceScore, 4)}%` }}
             />
@@ -312,7 +312,7 @@ export function TDEEDashboard({
           <div className="flex items-center justify-between mt-2">
             <p className={`text-xs ${confidenceColor}`}>{confidenceLabel}</p>
             {intervalEstimate && intervalEstimate.usableIntervalDays > 0 && (
-              <p className="text-xs text-surface-500">
+              <p className="text-xs text-ink-3">
                 {intervalEstimate.weighInCount} weigh-ins · {intervalEstimate.usableIntervalDays} interval-days
               </p>
             )}
@@ -321,15 +321,15 @@ export function TDEEDashboard({
 
         {/* Formula Comparison — shown once the blend is informed by real data */}
         {isAdaptive && formulaEstimate && (
-          <div className="mt-4 p-3 bg-surface-800/50 rounded-lg">
+          <div className="mt-4 p-3 bg-fill/50 rounded-lg">
             <div className="flex items-center justify-between">
-              <span className="text-xs text-surface-400">Formula estimate</span>
-              <span className="text-sm text-surface-300">
+              <span className="text-xs text-ink-2">Formula estimate</span>
+              <span className="text-sm text-ink-2">
                 {formulaEstimate.estimatedTDEE.toLocaleString()} cal/day
               </span>
             </div>
             {Math.abs(displayTDEE - formulaEstimate.estimatedTDEE) > 100 && (
-              <p className="text-xs text-surface-500 mt-1">
+              <p className="text-xs text-ink-3 mt-1">
                 Your actual metabolism is{' '}
                 {displayTDEE > formulaEstimate.estimatedTDEE ? 'higher' : 'lower'}{' '}
                 than formulas predict by{' '}
@@ -344,24 +344,24 @@ export function TDEEDashboard({
           ? cardWarnings.slice(0, 2).map((warning, i) => (
               <div
                 key={`${warning.kind}-${i}`}
-                className="mt-4 p-3 bg-warning-500/10 border border-warning-500/20 rounded-lg"
+                className="mt-4 p-3 bg-status-warn/10 border border-status-warn/20 rounded-lg"
               >
                 <div className="flex items-start gap-2">
-                  <span className="text-warning-400">
+                  <span className="text-status-warn">
                     {warning.kind === 'missing_calories' ? '🍽️' : warning.kind === 'missing_weight' ? '⚖️' : 'ℹ️'}
                   </span>
-                  <p className="flex-1 text-xs text-warning-300">{warning.message}</p>
+                  <p className="flex-1 text-xs text-status-warn">{warning.message}</p>
                 </div>
               </div>
             ))
           : !intervalEstimate && dataQuality.issues.length > 0 && (
-              <div className="mt-4 p-3 bg-warning-500/10 border border-warning-500/20 rounded-lg">
+              <div className="mt-4 p-3 bg-status-warn/10 border border-status-warn/20 rounded-lg">
                 <div className="flex items-start gap-2">
-                  <span className="text-warning-400">⚠</span>
+                  <span className="text-status-warn">⚠</span>
                   <div className="flex-1">
-                    <p className="text-xs text-warning-300">{dataQuality.issues[0]}</p>
+                    <p className="text-xs text-status-warn">{dataQuality.issues[0]}</p>
                     {dataQuality.suggestions[0] && (
-                      <p className="text-xs text-surface-400 mt-1">Tip: {dataQuality.suggestions[0]}</p>
+                      <p className="text-xs text-ink-2 mt-1">Tip: {dataQuality.suggestions[0]}</p>
                     )}
                   </div>
                 </div>
@@ -371,7 +371,7 @@ export function TDEEDashboard({
         {/* View Details Toggle */}
         <button
           onClick={() => setShowDetails(!showDetails)}
-          className="w-full mt-4 py-2 text-xs text-surface-400 hover:text-surface-300 transition-colors flex items-center justify-center gap-1"
+          className="w-full mt-4 py-2 text-xs text-ink-2 hover:text-ink-2 transition-colors flex items-center justify-center gap-1"
         >
           {showDetails ? 'Hide details' : 'View details'}
           <svg
@@ -395,7 +395,7 @@ export function TDEEDashboard({
         <Card className="p-6">
           <CardHeader className="pb-4">
             <CardTitle className="text-base">Estimate Convergence</CardTitle>
-            <p className="text-xs text-surface-500">
+            <p className="text-xs text-ink-3">
               Watch your personal burn rate stabilize over time
             </p>
           </CardHeader>
@@ -455,7 +455,7 @@ export function TDEEDashboard({
                 </LineChart>
               </ResponsiveContainer>
             </div>
-            <p className="text-xs text-surface-500 text-center mt-2">
+            <p className="text-xs text-ink-3 text-center mt-2">
               {activeEstimate.confidence === 'stable'
                 ? 'Your estimate has stabilized. Predictions should be accurate!'
                 : 'Keep logging data for more accurate estimates'}
@@ -469,7 +469,7 @@ export function TDEEDashboard({
         <Card className="p-6">
           <CardHeader className="pb-4">
             <CardTitle className="text-base">Recalculate TDEE</CardTitle>
-            <p className="text-xs text-surface-500">
+            <p className="text-xs text-ink-3">
               Reset and recalculate your TDEE estimate from your weight data
             </p>
           </CardHeader>
@@ -479,13 +479,13 @@ export function TDEEDashboard({
               <div
                 className={`mb-4 p-4 rounded-lg border ${
                   resetResult.success
-                    ? 'bg-success-500/10 border-success-500/20'
-                    : 'bg-danger-500/10 border-danger-500/20'
+                    ? 'bg-status-ok/10 border-status-ok/20'
+                    : 'bg-status-bad/10 border-status-bad/20'
                 }`}
               >
                 <p
                   className={`text-sm font-medium ${
-                    resetResult.success ? 'text-success-300' : 'text-danger-300'
+                    resetResult.success ? 'text-status-ok' : 'text-status-bad'
                   }`}
                 >
                   {resetResult.success ? '✓ ' : '✗ '}
@@ -494,66 +494,66 @@ export function TDEEDashboard({
 
                 {resetResult.success && resetResult.weightDataSummary.totalEntries > 0 && (
                   <div className="mt-3 space-y-2">
-                    <p className="text-xs text-surface-400">Weight Data Summary:</p>
+                    <p className="text-xs text-ink-2">Weight Data Summary:</p>
                     <div className="grid grid-cols-2 gap-2 text-xs">
                       <div className="flex justify-between">
-                        <span className="text-surface-500">Total entries:</span>
-                        <span className="text-surface-300">
+                        <span className="text-ink-3">Total entries:</span>
+                        <span className="text-ink-2">
                           {resetResult.weightDataSummary.totalEntries}
                         </span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-surface-500">In kg:</span>
-                        <span className="text-surface-300">
+                        <span className="text-ink-3">In kg:</span>
+                        <span className="text-ink-2">
                           {resetResult.weightDataSummary.entriesWithKgUnit}
                         </span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-surface-500">In lbs:</span>
-                        <span className="text-surface-300">
+                        <span className="text-ink-3">In lbs:</span>
+                        <span className="text-ink-2">
                           {resetResult.weightDataSummary.entriesWithLbUnit}
                         </span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-surface-500">No unit:</span>
-                        <span className="text-surface-300">
+                        <span className="text-ink-3">No unit:</span>
+                        <span className="text-ink-2">
                           {resetResult.weightDataSummary.entriesWithNullUnit}
                         </span>
                       </div>
                     </div>
 
                     {resetResult.oldEstimate && resetResult.newEstimate && (
-                      <div className="mt-3 pt-3 border-t border-surface-700">
-                        <p className="text-xs text-surface-400 mb-2">Before → After:</p>
+                      <div className="mt-3 pt-3 border-t border-sep">
+                        <p className="text-xs text-ink-2 mb-2">Before → After:</p>
                         <div className="space-y-1 text-xs">
                           <div className="flex justify-between">
-                            <span className="text-surface-500">TDEE:</span>
+                            <span className="text-ink-3">TDEE:</span>
                             <span>
-                              <span className="text-surface-400">
+                              <span className="text-ink-2">
                                 {resetResult.oldEstimate.tdee.toLocaleString()}
                               </span>
-                              <span className="text-surface-500 mx-1">→</span>
-                              <span className="text-success-400">
+                              <span className="text-ink-3 mx-1">→</span>
+                              <span className="text-status-ok">
                                 {resetResult.newEstimate.tdee.toLocaleString()} cal/day
                               </span>
                             </span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-surface-500">Weight:</span>
+                            <span className="text-ink-3">Weight:</span>
                             <span>
-                              <span className="text-surface-400">
+                              <span className="text-ink-2">
                                 {resetResult.oldEstimate.currentWeight.toFixed(1)}
                               </span>
-                              <span className="text-surface-500 mx-1">→</span>
-                              <span className="text-success-400">
+                              <span className="text-ink-3 mx-1">→</span>
+                              <span className="text-status-ok">
                                 {resetResult.newEstimate.currentWeight.toFixed(1)} lbs
                               </span>
                             </span>
                           </div>
                           {resetResult.newEstimate.rSquared !== null && (
                             <div className="flex justify-between">
-                              <span className="text-surface-500">R² correlation:</span>
-                              <span className="text-success-400">
+                              <span className="text-ink-3">R² correlation:</span>
+                              <span className="text-status-ok">
                                 {(resetResult.newEstimate.rSquared * 100).toFixed(1)}%
                               </span>
                             </div>
@@ -616,7 +616,7 @@ export function TDEEDashboard({
               )}
             </Button>
 
-            <p className="text-xs text-surface-500 mt-3 text-center">
+            <p className="text-xs text-ink-3 mt-3 text-center">
               This will delete your current TDEE estimate and recalculate it fresh from your weight
               and calorie data.
             </p>
@@ -772,8 +772,8 @@ export function TDEEDashboard({
           <Card className="p-6">
             <div className="flex items-start justify-between mb-4">
               <div>
-                <h3 className="text-base font-semibold text-surface-100">Weight Projection</h3>
-                <p className="text-xs text-surface-500">
+                <h3 className="text-base font-semibold text-ink">Weight Projection</h3>
+                <p className="text-xs text-ink-3">
                   At {targetCalories?.toLocaleString() || predictions[0]?.assumedDailyCalories.toLocaleString()} cal/day
                 </p>
               </div>
@@ -786,19 +786,19 @@ export function TDEEDashboard({
 
             <div className="space-y-3">
               {/* Current */}
-              <div className="py-2 border-b border-surface-800">
+              <div className="py-2 border-b border-sep">
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm text-surface-400">Current</span>
-                  <span className="text-sm font-semibold text-surface-100">
+                  <span className="text-sm text-ink-2">Current</span>
+                  <span className="text-sm font-semibold text-ink">
                     {currentWeight.toFixed(1)} lbs
                   </span>
                 </div>
                 {currentFFMI && currentBodyFatPercent && (
                   <div className="flex items-center justify-between mt-2 text-xs">
-                    <span className="text-surface-500">FFMI:</span>
-                    <span className="text-surface-300">{currentFFMI.normalizedFfmi.toFixed(1)}</span>
-                    <span className="text-surface-500 ml-3">BF%:</span>
-                    <span className="text-surface-300">{currentBodyFatPercent.toFixed(1)}%</span>
+                    <span className="text-ink-3">FFMI:</span>
+                    <span className="text-ink-2">{currentFFMI.normalizedFfmi.toFixed(1)}</span>
+                    <span className="text-ink-3 ml-3">BF%:</span>
+                    <span className="text-ink-2">{currentBodyFatPercent.toFixed(1)}%</span>
                   </div>
                 )}
               </div>
@@ -809,54 +809,54 @@ export function TDEEDashboard({
                 return (
                   <div
                     key={prediction.targetDate}
-                    className="py-2 border-b border-surface-800 last:border-0"
+                    className="py-2 border-b border-sep last:border-0"
                   >
                     <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm text-surface-400">
+                      <span className="text-sm text-ink-2">
                         In {prediction.daysFromNow} days
-                        <span className="text-xs text-surface-500 ml-1">
+                        <span className="text-xs text-ink-3 ml-1">
                           ({new Date(prediction.targetDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})
                         </span>
                       </span>
                       <div className="text-right">
-                        <span className="text-sm font-semibold text-surface-100">
+                        <span className="text-sm font-semibold text-ink">
                           {prediction.predictedWeight} lbs
                         </span>
-                        <span className="text-xs text-surface-500 ml-1">
+                        <span className="text-xs text-ink-3 ml-1">
                           (±{((prediction.confidenceRange[1] - prediction.confidenceRange[0]) / 2).toFixed(1)})
                         </span>
                       </div>
                     </div>
                     {bodyComp ? (
-                      <div className="mt-2 p-2 bg-surface-800/30 rounded text-xs">
+                      <div className="mt-2 p-2 bg-fill/30 rounded text-xs">
                         <div className="flex items-center justify-between mb-1">
-                          <span className="text-surface-500">Body Fat %</span>
+                          <span className="text-ink-3">Body Fat %</span>
                           <div className="flex items-center gap-1">
-                            <span className="text-surface-500">{bodyComp.bodyFatPercent.pessimistic.toFixed(0)}%</span>
-                            <span className="text-surface-400">→</span>
-                            <span className="text-surface-200 font-medium">{bodyComp.bodyFatPercent.expected.toFixed(0)}%</span>
-                            <span className="text-surface-400">→</span>
-                            <span className="text-success-400">{bodyComp.bodyFatPercent.optimistic.toFixed(0)}%</span>
+                            <span className="text-ink-3">{bodyComp.bodyFatPercent.pessimistic.toFixed(0)}%</span>
+                            <span className="text-ink-2">→</span>
+                            <span className="text-ink font-medium">{bodyComp.bodyFatPercent.expected.toFixed(0)}%</span>
+                            <span className="text-ink-2">→</span>
+                            <span className="text-status-ok">{bodyComp.bodyFatPercent.optimistic.toFixed(0)}%</span>
                           </div>
                         </div>
                         <div className="flex items-center justify-between">
-                          <span className="text-surface-500">FFMI</span>
+                          <span className="text-ink-3">FFMI</span>
                           <div className="flex items-center gap-1">
-                            <span className="text-surface-500">{bodyComp.ffmi.pessimistic.toFixed(1)}</span>
-                            <span className="text-surface-400">→</span>
-                            <span className="text-surface-200 font-medium">{bodyComp.ffmi.expected.toFixed(1)}</span>
-                            <span className="text-surface-400">→</span>
-                            <span className="text-success-400">{bodyComp.ffmi.optimistic.toFixed(1)}</span>
+                            <span className="text-ink-3">{bodyComp.ffmi.pessimistic.toFixed(1)}</span>
+                            <span className="text-ink-2">→</span>
+                            <span className="text-ink font-medium">{bodyComp.ffmi.expected.toFixed(1)}</span>
+                            <span className="text-ink-2">→</span>
+                            <span className="text-status-ok">{bodyComp.ffmi.optimistic.toFixed(1)}</span>
                           </div>
                         </div>
                         {bodyComp.confidenceLevel === 'low' && (
-                          <p className="text-surface-500 mt-1 text-[10px]">
+                          <p className="text-ink-3 mt-1 text-[10px]">
                             ⚠️ Wide uncertainty range - log DEXA scans to improve
                           </p>
                         )}
                       </div>
                     ) : (
-                      <div className="mt-2 p-2 bg-surface-800/30 rounded text-xs text-surface-500">
+                      <div className="mt-2 p-2 bg-fill/30 rounded text-xs text-ink-3">
                         <p className="text-[10px]">
                           Body composition projection unavailable. 
                           {!heightCm && ' Height required.'}
@@ -871,8 +871,8 @@ export function TDEEDashboard({
             </div>
 
             {targetWeight && activeEstimate.confidence !== 'unstable' && (
-            <div className="mt-4 p-3 bg-primary-500/10 border border-primary-500/20 rounded-lg">
-              <p className="text-xs text-primary-300">
+            <div className="mt-4 p-3 bg-action/10 border border-action/20 rounded-lg">
+              <p className="text-xs text-action">
                 <span className="font-semibold">Target {targetWeight} lbs:</span>{' '}
                 Estimated in{' '}
                 {Math.ceil(
@@ -890,7 +890,7 @@ export function TDEEDashboard({
 
             <Link
               href="/dashboard/learn/adaptive-tdee"
-              className="block mt-4 text-center text-xs text-surface-500 hover:text-surface-400 transition-colors"
+              className="block mt-4 text-center text-xs text-ink-3 hover:text-ink-2 transition-colors"
             >
               How accurate is this? →
             </Link>
@@ -901,26 +901,26 @@ export function TDEEDashboard({
       {/* Data Collection Progress (legacy unlock framing) — suppressed when the
           interval estimator is active, since it always ships a usable number. */}
       {!isAdaptive && !intervalEstimate && (
-        <Card className="p-4 bg-surface-900/50">
+        <Card className="p-4 bg-card/50">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-primary-500/10 flex items-center justify-center">
-              <IconChartBar size={18} className="text-primary-400" aria-hidden="true" />
+            <div className="w-10 h-10 rounded-full bg-action/10 flex items-center justify-center">
+              <IconChartBar size={18} className="text-action" aria-hidden="true" />
             </div>
             <div className="flex-1">
-              <p className="text-sm text-surface-200">Building your personal estimate</p>
-              <p className="text-xs text-surface-500">
+              <p className="text-sm text-ink">Building your personal estimate</p>
+              <p className="text-xs text-ink-3">
                 {dataQuality.daysWithData} of 14 days logged
               </p>
             </div>
             <div className="text-right">
-              <p className="text-sm font-semibold text-primary-400">
+              <p className="text-sm font-semibold text-action">
                 {Math.round((dataQuality.daysWithData / 14) * 100)}%
               </p>
             </div>
           </div>
-          <div className="mt-3 h-1.5 bg-surface-800 rounded-full overflow-hidden">
+          <div className="mt-3 h-1.5 bg-fill rounded-full overflow-hidden">
             <div
-              className="h-full bg-primary-500 transition-all duration-500"
+              className="h-full bg-action transition-all duration-500"
               style={{ width: `${Math.min((dataQuality.daysWithData / 14) * 100, 100)}%` }}
             />
           </div>

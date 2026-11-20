@@ -45,7 +45,7 @@ function BarbellSide({
         width={sleeveW}
         height={14}
         rx={3}
-        className="fill-surface-500"
+        className="fill-ink-3"
       />
       {/* End cap at the sleeve tip */}
       <rect
@@ -54,7 +54,7 @@ function BarbellSide({
         width={3}
         height={18}
         rx={1.5}
-        className="fill-surface-400"
+        className="fill-ink-3"
       />
       {/* Collar / shoulder the plates butt up against */}
       <rect
@@ -63,7 +63,7 @@ function BarbellSide({
         width={5}
         height={32}
         rx={1.5}
-        className="fill-surface-400"
+        className="fill-ink-3"
       />
 
       {/* Plates */}
@@ -81,7 +81,7 @@ function BarbellSide({
               height={item.height}
               rx={2.5}
               fill={color}
-              className="stroke-surface-950"
+              className="stroke-canvas"
               strokeWidth={1}
             />
             {showPlateLabel(item.plate, unit) && (
@@ -142,16 +142,16 @@ export function BarbellVisualization({
   const uniquePlates = Array.from(new Set(platesPerSide)).sort((a, b) => b - a);
 
   return (
-    <div className="bg-surface-800 rounded-lg p-4">
+    <div className="bg-fill rounded-lg p-4">
       {belowBase ? (
         <div
           data-testid="plate-calc-below-base"
-          className="flex flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-surface-600 bg-surface-900/40 py-8 text-center"
+          className="flex flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-sep bg-card/40 py-8 text-center"
         >
-          <p className="text-sm font-semibold text-surface-100">
+          <p className="text-sm font-semibold text-ink">
             Target is below the {isMachine ? 'starting' : 'bar'} weight
           </p>
-          <p className="text-xs text-surface-300">
+          <p className="text-xs text-ink-2">
             The {isMachine ? 'machine starts' : 'empty bar weighs'} {baseWeight}
             {unit}. Enter {baseWeight}
             {unit} or more to load plates.
@@ -175,7 +175,7 @@ export function BarbellVisualization({
                 width={COLLAR_OFFSET * 2}
                 height={8}
                 rx={2}
-                className="fill-surface-500"
+                className="fill-ink-3"
               />
 
               <BarbellSide
@@ -197,10 +197,10 @@ export function BarbellVisualization({
 
           {/* Weight summary */}
           <div className="mt-3 text-center">
-            <p className="text-lg font-bold text-surface-100">
+            <p className="text-lg font-bold text-ink">
               {calculation.actualTotal} {unit}
             </p>
-            <p className="text-xs text-surface-300">
+            <p className="text-xs text-ink-2">
               {isMachine ? (
                 (machineBaseWeight ?? 0) > 0 ? (
                   <>Machine base: {machineBaseWeight}{unit} + Plates: {calculation.weightPerSide}{unit} × 2</>
@@ -214,9 +214,9 @@ export function BarbellVisualization({
             {isClosestMatch && (
               <p
                 data-testid="plate-calc-closest"
-                className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-warning-500 bg-surface-700 px-2 py-1 text-xs font-medium text-surface-100"
+                className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-status-warn bg-sep px-2 py-1 text-xs font-medium text-ink"
               >
-                <span aria-hidden className="h-2 w-2 rounded-full bg-warning-500" />
+                <span aria-hidden className="h-2 w-2 rounded-full bg-status-warn" />
                 Can&apos;t match exactly — closest is {calculation.actualTotal}{unit}
               </p>
             )}
@@ -255,12 +255,12 @@ export function PlateChip({
 }) {
   const color = getPlateColor(plate, unit);
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-md border border-surface-600 bg-surface-700 px-2 py-1">
+    <span className="inline-flex items-center gap-1.5 rounded-md border border-sep bg-sep px-2 py-1">
       <span
-        className="h-3 w-3 rounded-sm border border-surface-500"
+        className="h-3 w-3 rounded-sm border border-ink-3"
         style={{ backgroundColor: color }}
       />
-      <span className="text-xs font-medium text-surface-200">
+      <span className="text-xs font-medium text-ink">
         {plate}{unit}
         {count && count > 1 ? ` × ${count}` : ''}
       </span>

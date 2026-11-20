@@ -70,21 +70,21 @@ function AxisIndicator({ axis }: { axis: Vec3 }) {
   return (
     <div className="flex items-center gap-3">
       <svg width="88" height="88" viewBox="0 0 88 88" aria-hidden="true">
-        <rect x="24" y="8" width="40" height="72" rx="8" fill="none" strokeWidth="1.5" className="stroke-surface-600" />
-        <circle cx="44" cy="44" r="3" className="fill-surface-500" />
+        <rect x="24" y="8" width="40" height="72" rx="8" fill="none" strokeWidth="1.5" className="stroke-sep" />
+        <circle cx="44" cy="44" r="3" className="fill-ink-3" />
         {planar > 0.05 && (
           <>
-            <line x1="44" y1="44" x2={44 + dx} y2={44 + dy} strokeWidth="2.5" strokeLinecap="round" className="stroke-primary-400" />
-            <circle cx={44 + dx} cy={44 + dy} r="3.5" className="fill-primary-400" />
+            <line x1="44" y1="44" x2={44 + dx} y2={44 + dy} strokeWidth="2.5" strokeLinecap="round" className="stroke-action" />
+            <circle cx={44 + dx} cy={44 + dy} r="3.5" className="fill-action" />
           </>
         )}
       </svg>
-      <div className="text-xs text-surface-400 space-y-0.5">
+      <div className="text-xs text-ink-2 space-y-0.5">
         <p>Rotation axis relative to the phone:</p>
         <p>
           in-screen {Math.round(planar * 100)}% · {axis.z >= 0 ? 'out of' : 'into'} screen {zPct}%
         </p>
-        <p className="text-surface-500">
+        <p className="text-ink-3">
           For a side-mounted phone on a rotating arm this should point mostly {`"through"`} the
           phone, perpendicular to the arm&apos;s swing plane.
         </p>
@@ -276,13 +276,13 @@ export function CalibrationWizard({ userId, exercises, onSaved, onClose }: Calib
           <div className="space-y-3">
             {!sweeping ? (
               <>
-                <ol className="text-sm text-surface-300 space-y-1.5 list-decimal list-inside">
+                <ol className="text-sm text-ink-2 space-y-1.5 list-decimal list-inside">
                   <li>
-                    Tap <span className="font-medium text-surface-100">Start</span> (phone in hand).
+                    Tap <span className="font-medium text-ink">Start</span> (phone in hand).
                   </li>
                   <li>Set the phone on the machine mount and let it sit still for a moment.</li>
                   <li>
-                    Do <span className="font-medium text-surface-100">3 slow, full-range reps</span>{' '}
+                    Do <span className="font-medium text-ink">3 slow, full-range reps</span>{' '}
                     — unloaded or light — pausing briefly at each end of the stroke.
                   </li>
                   <li>Let the arm rest, take the phone back, and tap Stop.</li>
@@ -296,7 +296,7 @@ export function CalibrationWizard({ userId, exercises, onSaved, onClose }: Calib
               </>
             ) : (
               <>
-                <p className="text-sm text-surface-300">
+                <p className="text-sm text-ink-2">
                   Recording… mount the phone, do 3 slow full-range reps, retrieve it, then stop.
                 </p>
                 <Button onClick={stopSweep} className="w-full" size="lg" data-testid="calibration-stop-sweep">
@@ -320,29 +320,29 @@ export function CalibrationWizard({ userId, exercises, onSaved, onClose }: Calib
 
             {eligibility.eligible ? (
               <>
-                <div className="p-3 rounded-lg bg-surface-900/60 space-y-2">
+                <div className="p-3 rounded-lg bg-card/60 space-y-2">
                   <div className="flex items-baseline gap-4">
                     <div>
-                      <p className="text-xs text-surface-500">Calibration ROM</p>
-                      <p className="text-xl font-semibold text-primary-400">
+                      <p className="text-xs text-ink-3">Calibration ROM</p>
+                      <p className="text-xl font-semibold text-action">
                         {eligibility.romDegrees!.toFixed(1)}°
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs text-surface-500">Axis quality</p>
-                      <p className="text-xl font-semibold text-surface-100">
+                      <p className="text-xs text-ink-3">Axis quality</p>
+                      <p className="text-xl font-semibold text-ink">
                         {eligibility.axisQuality! >= 1000 ? '999+' : eligibility.axisQuality!.toFixed(0)}
                       </p>
                     </div>
                   </div>
                   <AxisIndicator axis={eligibility.pivotAxis!} />
-                  <p className="text-xs text-surface-400">
+                  <p className="text-xs text-ink-2">
                     Sanity-check the ROM against the machine&apos;s real stroke. If it looks wrong,
                     redo the sweep — don&apos;t save a bad calibration.
                   </p>
                 </div>
-                <div className="p-3 rounded-lg bg-warning-500/10 border border-warning-500/20">
-                  <p className="text-xs text-warning-400">
+                <div className="p-3 rounded-lg bg-status-warn/10 border border-status-warn/20">
+                  <p className="text-xs text-status-warn">
                     This calibration is only valid for this exact setup. Changing the seat height or
                     moving the phone mount invalidates it — you&apos;ll need to calibrate again.
                   </p>
@@ -358,8 +358,8 @@ export function CalibrationWizard({ userId, exercises, onSaved, onClose }: Calib
               </>
             ) : (
               <>
-                <div className="p-3 rounded-lg bg-warning-500/10 border border-warning-500/20">
-                  <p className="text-sm text-warning-400" data-testid="calibration-ineligible-reason">
+                <div className="p-3 rounded-lg bg-status-warn/10 border border-status-warn/20">
+                  <p className="text-sm text-status-warn" data-testid="calibration-ineligible-reason">
                     Can&apos;t save as a machine calibration: {eligibility.reason}
                   </p>
                 </div>
@@ -372,8 +372,8 @@ export function CalibrationWizard({ userId, exercises, onSaved, onClose }: Calib
         )}
 
         {error && (
-          <div className="p-3 rounded-lg bg-danger-500/10 border border-danger-500/20">
-            <p className="text-sm text-danger-400">{error}</p>
+          <div className="p-3 rounded-lg bg-status-bad/10 border border-status-bad/20">
+            <p className="text-sm text-status-bad">{error}</p>
           </div>
         )}
       </CardContent>

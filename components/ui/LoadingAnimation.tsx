@@ -89,17 +89,17 @@ export function LoadingAnimation({
           >
             {/* Left plates */}
             <div className="flex items-center">
-              <div className="w-2 h-10 bg-gradient-to-b from-primary-400 to-primary-600 rounded-sm" />
-              <div className="w-1.5 h-8 bg-gradient-to-b from-accent-400 to-accent-600 rounded-sm" />
+              <div className="w-2 h-10 bg-action rounded-sm" />
+              <div className="w-1.5 h-8 bg-action rounded-sm" />
             </div>
             
             {/* Bar */}
-            <div className="w-12 h-1.5 bg-gradient-to-r from-surface-500 via-surface-300 to-surface-500 rounded-full" />
+            <div className="w-12 h-1.5 bg-ink-3 rounded-full" />
             
             {/* Right plates */}
             <div className="flex items-center">
-              <div className="w-1.5 h-8 bg-gradient-to-b from-accent-400 to-accent-600 rounded-sm" />
-              <div className="w-2 h-10 bg-gradient-to-b from-primary-400 to-primary-600 rounded-sm" />
+              <div className="w-1.5 h-8 bg-action rounded-sm" />
+              <div className="w-2 h-10 bg-action rounded-sm" />
             </div>
           </div>
         </div>
@@ -109,13 +109,13 @@ export function LoadingAnimation({
         <div className={`relative ${sizeClasses[size]} flex items-center justify-center`}>
           <div className="flex items-center gap-1 animate-pulse">
             {/* Left weight */}
-            <div className="w-4 h-10 bg-gradient-to-b from-primary-400 to-primary-600 rounded-md" />
-            <div className="w-3 h-8 bg-gradient-to-b from-primary-500 to-primary-700 rounded-md" />
+            <div className="w-4 h-10 bg-action rounded-md" />
+            <div className="w-3 h-8 bg-action rounded-md" />
             {/* Handle */}
-            <div className="w-8 h-3 bg-gradient-to-r from-surface-400 via-surface-300 to-surface-400 rounded-full" />
+            <div className="w-8 h-3 bg-ink-3 rounded-full" />
             {/* Right weight */}
-            <div className="w-3 h-8 bg-gradient-to-b from-primary-500 to-primary-700 rounded-md" />
-            <div className="w-4 h-10 bg-gradient-to-b from-primary-400 to-primary-600 rounded-md" />
+            <div className="w-3 h-8 bg-action rounded-md" />
+            <div className="w-4 h-10 bg-action rounded-md" />
           </div>
         </div>
       )}
@@ -125,7 +125,7 @@ export function LoadingAnimation({
           {[0, 1, 2, 3, 4].map((i) => (
             <div
               key={i}
-              className="w-2 bg-gradient-to-t from-primary-500 to-accent-400 rounded-t-full"
+              className="w-2 bg-action rounded-t-full"
               style={{
                 height: '100%',
                 animation: 'repPulse 1s ease-in-out infinite',
@@ -140,7 +140,7 @@ export function LoadingAnimation({
         <div className={`relative ${sizeClasses[size]} flex items-center justify-center`}>
           <svg 
             viewBox="0 0 24 24" 
-            className="w-full h-full text-primary-500"
+            className="w-full h-full text-action"
             style={{ animation: 'heartbeat 1s ease-in-out infinite' }}
           >
             <path 
@@ -158,7 +158,7 @@ export function LoadingAnimation({
             {[0, 1, 2].map((i) => (
               <div
                 key={i}
-                className="absolute rounded-full border-4 border-primary-500"
+                className="absolute rounded-full border-4 border-action"
                 style={{
                   width: `${(3 - i) * 20 + 20}px`,
                   height: `${(3 - i) * 20 + 20}px`,
@@ -166,7 +166,7 @@ export function LoadingAnimation({
                   left: `${i * 10}px`,
                   animation: 'weightPulse 1.5s ease-in-out infinite',
                   animationDelay: `${i * 0.2}s`,
-                  background: `linear-gradient(135deg, rgba(var(--primary-500), 0.3), rgba(var(--accent-500), 0.3))`,
+                  background: `rgb(var(--ht-action) / 0.3)`,
                 }}
               />
             ))}
@@ -176,9 +176,9 @@ export function LoadingAnimation({
 
       {actualType === 'pulse' && (
         <div className={`relative ${sizeClasses[size]}`}>
-          <div className="absolute inset-0 rounded-full bg-primary-500/30 animate-ping" />
-          <div className="absolute inset-2 rounded-full bg-primary-500/50 animate-ping" style={{ animationDelay: '0.2s' }} />
-          <div className="absolute inset-4 rounded-full bg-primary-500 animate-pulse" />
+          <div className="absolute inset-0 rounded-full bg-action/30 animate-ping" />
+          <div className="absolute inset-2 rounded-full bg-action/50 animate-ping" style={{ animationDelay: '0.2s' }} />
+          <div className="absolute inset-4 rounded-full bg-action animate-pulse" />
         </div>
       )}
 
@@ -186,10 +186,10 @@ export function LoadingAnimation({
         <div className={`relative ${sizeClasses[size]} flex items-center justify-center`}>
           <div style={{ animation: 'kettlebellSwing 1s ease-in-out infinite', transformOrigin: 'top center' }}>
             {/* Handle */}
-            <div className="w-6 h-3 border-4 border-surface-400 rounded-t-full mx-auto" />
+            <div className="w-6 h-3 border-4 border-ink-3 rounded-t-full mx-auto" />
             {/* Body */}
-            <div className="w-10 h-10 bg-gradient-to-b from-surface-500 to-surface-700 rounded-full -mt-1 flex items-center justify-center">
-              <div className="w-4 h-4 bg-surface-800 rounded-full" />
+            <div className="w-10 h-10 bg-ink-3 rounded-full -mt-1 flex items-center justify-center">
+              <div className="w-4 h-4 bg-fill rounded-full" />
             </div>
           </div>
         </div>
@@ -216,8 +216,8 @@ export function LoadingAnimation({
             />
             <defs>
               <linearGradient id="muscleGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="rgb(var(--primary-400))" />
-                <stop offset="100%" stopColor="rgb(var(--primary-600))" />
+                <stop offset="0%" stopColor="rgb(var(--ht-action))" />
+                <stop offset="100%" stopColor="rgb(var(--ht-action))" />
               </linearGradient>
             </defs>
           </svg>
@@ -234,7 +234,7 @@ export function LoadingAnimation({
               fill="none"
               stroke="currentColor"
               strokeWidth="4"
-              className="text-surface-700"
+              className="text-ink-3"
             />
             <circle
               cx="25"
@@ -246,7 +246,7 @@ export function LoadingAnimation({
               strokeLinecap="round"
               strokeDasharray="80, 200"
               strokeDashoffset="0"
-              className="text-primary-500"
+              className="text-action"
             />
           </svg>
         </div>
@@ -257,7 +257,7 @@ export function LoadingAnimation({
           {[0, 1, 2].map((i) => (
             <div
               key={i}
-              className="w-3 h-3 bg-primary-500 rounded-full"
+              className="w-3 h-3 bg-action rounded-full"
               style={{
                 animation: 'dotBounce 0.6s ease-in-out infinite',
                 animationDelay: `${i * 0.15}s`,
@@ -271,23 +271,23 @@ export function LoadingAnimation({
       {actualType === 'pullup' && (
         <div className={`relative ${sizeClasses[size]} flex flex-col items-center justify-center`}>
           {/* Pull-up bar */}
-          <div className="w-20 h-2 bg-gradient-to-r from-surface-500 via-surface-400 to-surface-500 rounded-full" />
+          <div className="w-20 h-2 bg-ink-3 rounded-full" />
           {/* Person doing pull-up */}
           <div 
             className="flex flex-col items-center"
             style={{ animation: 'pullupMove 1s ease-in-out infinite' }}
           >
             {/* Head */}
-            <div className="w-4 h-4 bg-primary-400 rounded-full mt-1" />
+            <div className="w-4 h-4 bg-action rounded-full mt-1" />
             {/* Body */}
-            <div className="w-2 h-8 bg-gradient-to-b from-primary-500 to-primary-600 rounded-sm" />
+            <div className="w-2 h-8 bg-action rounded-sm" />
             {/* Arms holding bar - positioned at top */}
             <div 
               className="absolute top-2 flex gap-8"
               style={{ animation: 'pullupArms 1s ease-in-out infinite' }}
             >
-              <div className="w-1 h-6 bg-primary-400 rounded-full origin-top" style={{ transform: 'rotate(-30deg)' }} />
-              <div className="w-1 h-6 bg-primary-400 rounded-full origin-top" style={{ transform: 'rotate(30deg)' }} />
+              <div className="w-1 h-6 bg-action rounded-full origin-top" style={{ transform: 'rotate(-30deg)' }} />
+              <div className="w-1 h-6 bg-action rounded-full origin-top" style={{ transform: 'rotate(30deg)' }} />
             </div>
           </div>
         </div>
@@ -298,22 +298,22 @@ export function LoadingAnimation({
         <div className={`relative ${sizeClasses[size]} flex items-center justify-center`}>
           <div style={{ animation: 'squatMove 0.9s ease-in-out infinite' }}>
             {/* Head */}
-            <div className="w-5 h-5 bg-primary-400 rounded-full mx-auto" />
+            <div className="w-5 h-5 bg-action rounded-full mx-auto" />
             {/* Barbell across shoulders */}
             <div className="flex items-center -mt-1">
-              <div className="w-2 h-4 bg-accent-500 rounded-sm" />
-              <div className="w-14 h-1.5 bg-gradient-to-r from-surface-400 via-surface-300 to-surface-400 rounded-full" />
-              <div className="w-2 h-4 bg-accent-500 rounded-sm" />
+              <div className="w-2 h-4 bg-action rounded-sm" />
+              <div className="w-14 h-1.5 bg-ink-3 rounded-full" />
+              <div className="w-2 h-4 bg-action rounded-sm" />
             </div>
             {/* Torso */}
-            <div className="w-6 h-6 bg-gradient-to-b from-primary-500 to-primary-600 rounded-sm mx-auto" />
+            <div className="w-6 h-6 bg-action rounded-sm mx-auto" />
             {/* Legs */}
             <div 
               className="flex justify-center gap-2"
               style={{ animation: 'squatLegs 0.9s ease-in-out infinite' }}
             >
-              <div className="w-2 h-8 bg-primary-600 rounded-sm origin-top" />
-              <div className="w-2 h-8 bg-primary-600 rounded-sm origin-top" />
+              <div className="w-2 h-8 bg-action rounded-sm origin-top" />
+              <div className="w-2 h-8 bg-action rounded-sm origin-top" />
             </div>
           </div>
         </div>
@@ -330,15 +330,15 @@ export function LoadingAnimation({
                 className="flex flex-col items-center mr-1"
                 style={{ animation: 'pushupArms 0.8s ease-in-out infinite' }}
               >
-                <div className="w-1.5 h-6 bg-primary-400 rounded-full" />
+                <div className="w-1.5 h-6 bg-action rounded-full" />
               </div>
               {/* Body */}
-              <div className="w-16 h-3 bg-gradient-to-r from-primary-500 to-primary-600 rounded-full -rotate-12 origin-right" style={{ animation: 'pushupBody 0.8s ease-in-out infinite' }} />
+              <div className="w-16 h-3 bg-action rounded-full -rotate-12 origin-right" style={{ animation: 'pushupBody 0.8s ease-in-out infinite' }} />
               {/* Head at front */}
-              <div className="w-4 h-4 bg-primary-400 rounded-full -ml-2 mb-1" />
+              <div className="w-4 h-4 bg-action rounded-full -ml-2 mb-1" />
             </div>
             {/* Ground line */}
-            <div className="w-20 h-0.5 bg-surface-600 mt-1 rounded-full" />
+            <div className="w-20 h-0.5 bg-sep mt-1 rounded-full" />
           </div>
         </div>
       )}
@@ -348,7 +348,7 @@ export function LoadingAnimation({
         <div className={`relative ${sizeClasses[size]} flex items-center justify-center`}>
           {/* Rope */}
           <div 
-            className="absolute w-16 h-16 border-2 border-accent-400 rounded-full"
+            className="absolute w-16 h-16 border-2 border-action rounded-full"
             style={{ 
               animation: 'ropeSpinFast 0.4s linear infinite',
               borderStyle: 'dashed',
@@ -358,13 +358,13 @@ export function LoadingAnimation({
           {/* Person jumping */}
           <div style={{ animation: 'jumpMove 0.4s ease-in-out infinite' }}>
             {/* Head */}
-            <div className="w-4 h-4 bg-primary-400 rounded-full mx-auto" />
+            <div className="w-4 h-4 bg-action rounded-full mx-auto" />
             {/* Body */}
-            <div className="w-2 h-6 bg-gradient-to-b from-primary-500 to-primary-600 rounded-sm mx-auto" />
+            <div className="w-2 h-6 bg-action rounded-sm mx-auto" />
             {/* Legs */}
             <div className="flex justify-center gap-0.5">
-              <div className="w-1.5 h-4 bg-primary-600 rounded-sm" />
-              <div className="w-1.5 h-4 bg-primary-600 rounded-sm" />
+              <div className="w-1.5 h-4 bg-action rounded-sm" />
+              <div className="w-1.5 h-4 bg-action rounded-sm" />
             </div>
           </div>
         </div>
@@ -375,40 +375,40 @@ export function LoadingAnimation({
         <div className={`relative ${sizeClasses[size]} flex items-end justify-center pb-2`}>
           <div style={{ animation: 'deadliftMove 1.2s ease-in-out infinite' }}>
             {/* Head */}
-            <div className="w-4 h-4 bg-primary-400 rounded-full mx-auto mb-0.5" />
+            <div className="w-4 h-4 bg-action rounded-full mx-auto mb-0.5" />
             {/* Upper body - bends forward */}
             <div 
-              className="w-3 h-6 bg-gradient-to-b from-primary-500 to-primary-600 rounded-sm mx-auto origin-bottom"
+              className="w-3 h-6 bg-action rounded-sm mx-auto origin-bottom"
               style={{ animation: 'deadliftBend 1.2s ease-in-out infinite' }}
             />
             {/* Legs - slight bend */}
             <div className="flex justify-center gap-1">
-              <div className="w-2 h-6 bg-primary-700 rounded-sm" />
-              <div className="w-2 h-6 bg-primary-700 rounded-sm" />
+              <div className="w-2 h-6 bg-action rounded-sm" />
+              <div className="w-2 h-6 bg-action rounded-sm" />
             </div>
             {/* Barbell at ground level */}
             <div 
               className="flex items-center -mt-2"
               style={{ animation: 'barbellUp 1.2s ease-in-out infinite' }}
             >
-              <div className="w-3 h-4 bg-accent-500 rounded-sm" />
-              <div className="w-1 h-3 bg-accent-600 rounded-sm" />
-              <div className="w-10 h-1 bg-gradient-to-r from-surface-400 via-surface-300 to-surface-400 rounded-full" />
-              <div className="w-1 h-3 bg-accent-600 rounded-sm" />
-              <div className="w-3 h-4 bg-accent-500 rounded-sm" />
+              <div className="w-3 h-4 bg-action rounded-sm" />
+              <div className="w-1 h-3 bg-action rounded-sm" />
+              <div className="w-10 h-1 bg-ink-3 rounded-full" />
+              <div className="w-1 h-3 bg-action rounded-sm" />
+              <div className="w-3 h-4 bg-action rounded-sm" />
             </div>
           </div>
         </div>
       )}
 
       {text && (
-        <p className={`text-surface-400 font-medium ${textSizes[size]} animate-pulse`}>
+        <p className={`text-ink-2 font-medium ${textSizes[size]} animate-pulse`}>
           {text}
         </p>
       )}
 
       {showTip && tip && (
-        <p className="text-xs text-surface-500 max-w-xs text-center italic">
+        <p className="text-xs text-ink-3 max-w-xs text-center italic">
           💡 {tip}
         </p>
       )}

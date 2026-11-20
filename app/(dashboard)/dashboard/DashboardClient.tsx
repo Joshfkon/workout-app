@@ -73,9 +73,9 @@ import type { TrainingPhase, UpdatePhaseResult } from '@/lib/actions/phase';
 
 // Loading placeholder for lazily-loaded modal content
 const CardSkeleton = () => (
-  <div className="animate-pulse bg-surface-800 rounded-lg p-4 space-y-3">
-    <div className="h-4 bg-surface-700 rounded w-3/4" />
-    <div className="h-8 bg-surface-700 rounded w-full" />
+  <div className="animate-pulse bg-fill rounded-lg p-4 space-y-3">
+    <div className="h-4 bg-sep rounded w-3/4" />
+    <div className="h-8 bg-sep rounded w-full" />
   </div>
 );
 

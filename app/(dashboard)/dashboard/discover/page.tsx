@@ -77,12 +77,12 @@ export default function DiscoverPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-surface-950">
+    <div className="min-h-screen bg-canvas">
       {/* Header */}
-      <header className="sticky top-0 z-10 bg-surface-950/95 backdrop-blur-sm border-b border-surface-800">
+      <header className="sticky top-0 z-10 bg-canvas/95 backdrop-blur-sm border-b border-sep">
         <div className="max-w-4xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between mb-4">
-            <h1 className="text-2xl font-bold text-surface-100">Discover Workouts</h1>
+            <h1 className="text-2xl font-bold text-ink">Discover Workouts</h1>
             <Button
               variant="ghost"
               size="sm"
@@ -109,7 +109,7 @@ export default function DiscoverPage() {
           <div className="flex gap-2">
             <div className="relative flex-1">
               <svg
-                className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-surface-500"
+                className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-ink-3"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -126,7 +126,7 @@ export default function DiscoverPage() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search workouts..."
-                className="w-full pl-10 pr-4 py-2.5 bg-surface-900 border border-surface-700 rounded-lg text-surface-100 placeholder-surface-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="w-full pl-10 pr-4 py-2.5 bg-card rounded-lg text-ink placeholder-ink-3 focus:outline-none focus:ring-2 focus:ring-action shadow-card"
               />
             </div>
             <button
@@ -134,8 +134,8 @@ export default function DiscoverPage() {
               className={cn(
                 'px-4 py-2.5 rounded-lg border transition-colors flex items-center gap-2',
                 showFilters
-                  ? 'bg-primary-500/10 border-primary-500 text-primary-400'
-                  : 'bg-surface-900 border-surface-700 text-surface-400 hover:border-surface-600'
+                  ? 'bg-action/10 border-action text-action'
+                  : 'bg-card border-sep text-ink-2 hover:border-sep'
               )}
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -143,7 +143,7 @@ export default function DiscoverPage() {
               </svg>
               Filters
               {hasActiveFilters && (
-                <span className="w-2 h-2 rounded-full bg-primary-500" />
+                <span className="w-2 h-2 rounded-full bg-action" />
               )}
             </button>
           </div>
@@ -157,8 +157,8 @@ export default function DiscoverPage() {
                 className={cn(
                   'px-4 py-2 rounded-full text-sm font-medium transition-colors capitalize',
                   sortBy === option
-                    ? 'bg-primary-600 text-white'
-                    : 'bg-surface-800 text-surface-400 hover:text-surface-200'
+                    ? 'bg-action text-on-action'
+                    : 'bg-fill text-ink-2 hover:text-ink'
                 )}
               >
                 {option === 'saves' ? 'Most Saved' : option === 'popular' ? 'Most Viewed' : 'Recent'}
@@ -168,10 +168,10 @@ export default function DiscoverPage() {
 
           {/* Expanded filters */}
           {showFilters && (
-            <div className="mt-4 p-4 bg-surface-900 rounded-lg border border-surface-800 space-y-4">
+            <div className="mt-4 p-4 bg-card rounded-lg space-y-4 shadow-card">
               {/* Type filter */}
               <div>
-                <label className="block text-sm font-medium text-surface-300 mb-2">Type</label>
+                <label className="block text-sm font-medium text-ink-2 mb-2">Type</label>
                 <div className="flex flex-wrap gap-2">
                   {(['all', 'single_workout', 'template', 'program'] as const).map((type) => (
                     <button
@@ -180,8 +180,8 @@ export default function DiscoverPage() {
                       className={cn(
                         'px-3 py-1.5 rounded-lg text-sm transition-colors capitalize',
                         shareType === type
-                          ? 'bg-primary-500 text-white'
-                          : 'bg-surface-800 text-surface-400 hover:text-surface-200'
+                          ? 'bg-action text-on-action'
+                          : 'bg-fill text-ink-2 hover:text-ink'
                       )}
                     >
                       {type === 'all' ? 'All Types' : type.replace('_', ' ')}
@@ -192,7 +192,7 @@ export default function DiscoverPage() {
 
               {/* Difficulty filter */}
               <div>
-                <label className="block text-sm font-medium text-surface-300 mb-2">Difficulty</label>
+                <label className="block text-sm font-medium text-ink-2 mb-2">Difficulty</label>
                 <div className="flex flex-wrap gap-2">
                   {(['all', 'beginner', 'intermediate', 'advanced'] as const).map((diff) => (
                     <button
@@ -201,8 +201,8 @@ export default function DiscoverPage() {
                       className={cn(
                         'px-3 py-1.5 rounded-lg text-sm transition-colors capitalize',
                         difficulty === diff
-                          ? 'bg-primary-500 text-white'
-                          : 'bg-surface-800 text-surface-400 hover:text-surface-200'
+                          ? 'bg-action text-on-action'
+                          : 'bg-fill text-ink-2 hover:text-ink'
                       )}
                     >
                       {diff === 'all' ? 'All Levels' : diff}
@@ -213,7 +213,7 @@ export default function DiscoverPage() {
 
               {/* Muscle groups filter */}
               <div>
-                <label className="block text-sm font-medium text-surface-300 mb-2">Muscle Groups</label>
+                <label className="block text-sm font-medium text-ink-2 mb-2">Muscle Groups</label>
                 <div className="flex flex-wrap gap-2">
                   {MUSCLE_GROUPS.map((muscle) => (
                     <button
@@ -222,8 +222,8 @@ export default function DiscoverPage() {
                       className={cn(
                         'px-3 py-1.5 rounded-lg text-sm transition-colors capitalize',
                         selectedMuscles.includes(muscle)
-                          ? 'bg-primary-500 text-white'
-                          : 'bg-surface-800 text-surface-400 hover:text-surface-200'
+                          ? 'bg-action text-on-action'
+                          : 'bg-fill text-ink-2 hover:text-ink'
                       )}
                     >
                       {muscle}
@@ -236,7 +236,7 @@ export default function DiscoverPage() {
               {hasActiveFilters && (
                 <button
                   onClick={clearFilters}
-                  className="text-sm text-primary-400 hover:text-primary-300 transition-colors"
+                  className="text-sm text-action transition-colors"
                 >
                   Clear all filters
                 </button>
@@ -258,10 +258,10 @@ export default function DiscoverPage() {
         {!error && workouts.length === 0 && !isLoading && (
           <div className="text-center py-16">
             <p className="text-5xl mb-4">🏋️</p>
-            <h2 className="text-xl font-semibold text-surface-100 mb-2">
+            <h2 className="text-xl font-semibold text-ink mb-2">
               No workouts found
             </h2>
-            <p className="text-surface-400 max-w-sm mx-auto">
+            <p className="text-ink-2 max-w-sm mx-auto">
               {hasActiveFilters
                 ? 'Try adjusting your filters to find more workouts.'
                 : 'Be the first to share a workout with the community!'}
@@ -294,7 +294,7 @@ export default function DiscoverPage() {
         {/* Loading state */}
         {isLoading && (
           <div className="flex justify-center py-8">
-            <div className="animate-spin h-8 w-8 border-2 border-surface-500 border-t-primary-500 rounded-full" />
+            <div className="animate-spin h-8 w-8 border-2 border-ink-3 border-t-action rounded-full" />
           </div>
         )}
 
@@ -309,7 +309,7 @@ export default function DiscoverPage() {
 
         {/* End of feed */}
         {!isLoading && !hasMore && workouts.length > 0 && (
-          <p className="text-center text-surface-500 py-8">
+          <p className="text-center text-ink-3 py-8">
             That&apos;s all the workouts!
           </p>
         )}
@@ -358,23 +358,23 @@ function CopyWorkoutModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-md bg-surface-900 rounded-xl border border-surface-800 overflow-hidden">
+      <div className="w-full max-w-md bg-card rounded-card overflow-hidden shadow-card">
         <div className="p-6">
-          <h2 className="text-lg font-semibold text-surface-100 mb-2">
+          <h2 className="text-lg font-semibold text-ink mb-2">
             Copy Workout
           </h2>
-          <p className="text-sm text-surface-400 mb-4">
+          <p className="text-sm text-ink-2 mb-4">
             This will add &quot;{workout.title}&quot; to your workout templates.
           </p>
 
           {/* Exercise preview */}
-          <div className="bg-surface-800/50 rounded-lg p-3 mb-4 max-h-48 overflow-y-auto">
-            <p className="text-xs font-medium text-surface-400 mb-2">Exercises included:</p>
+          <div className="bg-fill/50 rounded-lg p-3 mb-4 max-h-48 overflow-y-auto">
+            <p className="text-xs font-medium text-ink-2 mb-2">Exercises included:</p>
             <div className="space-y-1">
               {workout.workout_data?.exercises?.map((exercise, index) => (
                 <div key={index} className="flex justify-between text-sm">
-                  <span className="text-surface-200">{exercise.exercise_name}</span>
-                  <span className="text-surface-400">
+                  <span className="text-ink">{exercise.exercise_name}</span>
+                  <span className="text-ink-2">
                     {exercise.sets} x {exercise.rep_range[0]}-{exercise.rep_range[1]}
                   </span>
                 </div>
@@ -389,7 +389,7 @@ function CopyWorkoutModal({
           )}
 
           {success ? (
-            <div className="flex items-center justify-center gap-2 py-4 text-success-400">
+            <div className="flex items-center justify-center gap-2 py-4 text-status-ok">
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>

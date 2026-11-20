@@ -168,7 +168,7 @@ function HealthStats({
 
 function PermissionBanner({ isSyncing, onAllow }: { isSyncing: boolean; onAllow: () => void }) {
   return (
-    <div className="mb-3 flex items-center justify-between gap-3 rounded-card bg-warning-500/10 border border-warning-500/20 p-3">
+    <div className="mb-3 flex items-center justify-between gap-3 rounded-card bg-status-warn/10 border border-status-warn/20 p-3">
       <p className="text-xs text-ink">
         Apple Health needs your OK on this iPhone before anything can sync.
       </p>
@@ -176,7 +176,7 @@ function PermissionBanner({ isSyncing, onAllow }: { isSyncing: boolean; onAllow:
         type="button"
         onClick={onAllow}
         disabled={isSyncing}
-        className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-action hover:bg-primary-400 disabled:opacity-60"
+        className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold text-on-action bg-action hover:bg-action disabled:opacity-60"
       >
         {isSyncing ? 'Syncing…' : 'Allow access'}
       </button>
@@ -345,7 +345,7 @@ export function HealthGlanceCard({
             <button
               type="button"
               onClick={() => setShowConnect(true)}
-              className="shrink-0 px-3 py-2 rounded-card text-sm font-semibold text-white bg-action hover:bg-primary-400 transition-colors"
+              className="shrink-0 px-3 py-2 rounded-card text-sm font-semibold text-on-action bg-action hover:bg-action transition-colors"
             >
               {healthKitCapable ? 'Connect Apple Health' : 'Connect a wearable'}
             </button>

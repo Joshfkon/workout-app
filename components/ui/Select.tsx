@@ -38,7 +38,7 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(
         {label && (
           <label
             htmlFor={selectId}
-            className="block text-sm font-medium text-surface-200 mb-1.5"
+            className="block text-sm font-medium text-ink mb-1.5"
           >
             {label}
           </label>
@@ -48,13 +48,13 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(
             ref={ref}
             id={selectId}
             className={cn(
-              `w-full rounded-lg bg-surface-800 border px-4 py-2.5 pr-10
-              text-surface-100 appearance-none cursor-pointer
+              `w-full rounded-lg bg-fill border px-4 py-2.5 pr-10
+              text-ink appearance-none cursor-pointer
               focus:outline-none focus:ring-2 focus:border-transparent
               transition-all duration-200`,
               error
-                ? 'border-danger-500 focus:ring-danger-500'
-                : 'border-surface-700 focus:ring-primary-500',
+                ? 'border-status-bad focus:ring-status-bad'
+                : 'border-sep focus:ring-action',
               className
             )}
             {...props}
@@ -74,7 +74,7 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(
               </option>
             ))}
           </select>
-          <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-surface-400">
+          <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-ink-2">
             <svg
               className="w-5 h-5"
               fill="none"
@@ -91,10 +91,10 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(
           </div>
         </div>
         {error && (
-          <p className="mt-1.5 text-sm text-danger-400">{error}</p>
+          <p className="mt-1.5 text-sm text-status-bad">{error}</p>
         )}
         {hint && !error && (
-          <p className="mt-1.5 text-sm text-surface-500">{hint}</p>
+          <p className="mt-1.5 text-sm text-ink-3">{hint}</p>
         )}
       </div>
     );

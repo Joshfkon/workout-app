@@ -625,17 +625,17 @@ export function formatFFMI(ffmi: number): string {
 export function getFFMIColor(classification: FFMIClassification): string {
   switch (classification) {
     case 'below_average':
-      return 'text-surface-400';
+      return 'text-ink-2';
     case 'average':
-      return 'text-primary-400';
+      return 'text-action';
     case 'above_average':
-      return 'text-primary-300';
+      return 'text-action';
     case 'excellent':
-      return 'text-success-400';
+      return 'text-status-ok';
     case 'superior':
-      return 'text-accent-400';
+      return 'text-action';
     case 'suspicious':
-      return 'text-warning-400';
+      return 'text-status-warn';
   }
 }
 
@@ -644,10 +644,10 @@ export function getFFMIColor(classification: FFMIClassification): string {
  */
 export function getTrendIndicator(rate: number): { icon: string; color: string } {
   if (rate > 0.1) {
-    return { icon: '↑', color: 'text-success-400' };
+    return { icon: '↑', color: 'text-status-ok' };
   } else if (rate < -0.1) {
-    return { icon: '↓', color: 'text-danger-400' };
+    return { icon: '↓', color: 'text-status-bad' };
   }
-  return { icon: '→', color: 'text-surface-400' };
+  return { icon: '→', color: 'text-ink-2' };
 }
 

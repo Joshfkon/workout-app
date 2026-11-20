@@ -29,28 +29,28 @@ export const ProgressionFlagBanner = memo(function ProgressionFlagBanner({
 
   const colorClasses = {
     green: {
-      bg: 'bg-success-500/10',
-      border: 'border-success-500/30',
-      icon: 'text-success-400',
-      accent: 'text-success-300',
+      bg: 'bg-status-ok/10',
+      border: 'border-status-ok/30',
+      icon: 'text-status-ok',
+      accent: 'text-status-ok',
     },
     yellow: {
-      bg: 'bg-warning-500/10',
-      border: 'border-warning-500/30',
-      icon: 'text-warning-400',
-      accent: 'text-warning-300',
+      bg: 'bg-status-warn/10',
+      border: 'border-status-warn/30',
+      icon: 'text-status-warn',
+      accent: 'text-status-warn',
     },
     red: {
-      bg: 'bg-danger-500/10',
-      border: 'border-danger-500/30',
-      icon: 'text-danger-400',
-      accent: 'text-danger-300',
+      bg: 'bg-status-bad/10',
+      border: 'border-status-bad/30',
+      icon: 'text-status-bad',
+      accent: 'text-status-bad',
     },
     blue: {
-      bg: 'bg-primary-500/10',
-      border: 'border-primary-500/30',
-      icon: 'text-primary-400',
-      accent: 'text-primary-300',
+      bg: 'bg-action/10',
+      border: 'border-action/30',
+      icon: 'text-action',
+      accent: 'text-action',
     },
   };
 
@@ -100,12 +100,12 @@ export const ProgressionFlagBanner = memo(function ProgressionFlagBanner({
               {signalText}
             </span>
             {signal.metadata?.weeksStagnant != null && (
-              <span className="text-xs text-surface-500">
+              <span className="text-xs text-ink-3">
                 {signal.metadata.weeksStagnant} weeks
               </span>
             )}
           </div>
-          <p className="text-sm text-surface-400 leading-snug">
+          <p className="text-sm text-ink-2 leading-snug">
             {signal.reason}
           </p>
         </div>
@@ -149,10 +149,10 @@ export const ProgressionFlagInline = memo(function ProgressionFlagInline({
   const signalColor = getSignalColor(signal.signal);
 
   const dotColors = {
-    green: 'bg-success-500',
-    yellow: 'bg-warning-500',
-    red: 'bg-danger-500',
-    blue: 'bg-primary-500',
+    green: 'bg-status-ok',
+    yellow: 'bg-status-warn',
+    red: 'bg-status-bad',
+    blue: 'bg-action',
   };
 
   return (
@@ -160,8 +160,8 @@ export const ProgressionFlagInline = memo(function ProgressionFlagInline({
       onClick={onPress}
       className={cn(
         'flex items-center gap-2 px-2 py-1 rounded-md',
-        'text-xs text-surface-300',
-        'hover:bg-surface-800 transition-colors'
+        'text-xs text-ink-2',
+        'hover:bg-fill transition-colors'
       )}
     >
       <span className={cn('w-2 h-2 rounded-full animate-pulse', dotColors[signalColor])} />

@@ -37,7 +37,7 @@ export function NativeAppRedirect({ to, children }: { to: string; children: Reac
   }, [router, to]);
 
   if (isNative) {
-    return <div className="min-h-screen bg-surface-950" data-testid="native-redirect" />;
+    return <div className="min-h-screen bg-canvas" data-testid="native-redirect" />;
   }
 
   const inlineRedirect = `(function(){try{var c=window.Capacitor;if(c&&c.isNativePlatform&&c.isNativePlatform()){document.documentElement.style.visibility='hidden';window.location.replace(${JSON.stringify(to)});}}catch(e){}})();`;

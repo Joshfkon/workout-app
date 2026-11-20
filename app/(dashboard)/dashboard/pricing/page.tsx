@@ -95,27 +95,27 @@ function PricingContent() {
     <div className="max-w-5xl mx-auto space-y-8">
       {/* Header */}
       <div className="text-center">
-        <h1 className="text-3xl font-bold text-surface-100">Choose Your Plan</h1>
-        <p className="text-surface-400 mt-2 max-w-xl mx-auto">
+        <h1 className="text-3xl font-bold text-ink">Choose Your Plan</h1>
+        <p className="text-ink-2 mt-2 max-w-xl mx-auto">
           Unlock your full potential with HyperTrack. Choose the plan that fits your training goals.
         </p>
       </div>
 
       {/* Trial Banner */}
       {isTrialing && trialDaysRemaining > 0 && (
-        <Card className="border-warning-500/30 bg-warning-500/5">
+        <Card className="border-status-warn/30 bg-status-warn/5">
           <CardContent className="p-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-warning-500/20 flex items-center justify-center">
-                <svg className="w-5 h-5 text-warning-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <div className="w-10 h-10 rounded-full bg-status-warn/20 flex items-center justify-center">
+                <svg className="w-5 h-5 text-status-warn" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
               <div>
-                <p className="font-medium text-surface-200">
-                  You have <span className="text-warning-400">{trialDaysRemaining} days</span> left in your free trial
+                <p className="font-medium text-ink">
+                  You have <span className="text-status-warn">{trialDaysRemaining} days</span> left in your free trial
                 </p>
-                <p className="text-sm text-surface-400">
+                <p className="text-sm text-ink-2">
                   Enjoy full Elite access while exploring all features
                 </p>
               </div>
@@ -129,9 +129,9 @@ function PricingContent() {
       {message && (
         <div className={`p-4 rounded-lg ${
           message.type === 'success' 
-            ? 'bg-success-500/10 border border-success-500/20 text-success-400'
+            ? 'bg-status-ok/10 border border-status-ok/20 text-status-ok'
             : message.type === 'error'
-            ? 'bg-danger-500/10 border border-danger-500/20 text-danger-400'
+            ? 'bg-status-bad/10 border border-status-bad/20 text-status-bad'
             : 'bg-info-500/10 border border-info-500/20 text-info-400'
         }`}>
           {message.text}
@@ -139,17 +139,17 @@ function PricingContent() {
       )}
 
       {/* Promo Code Box */}
-      <Card className="border-primary-500/20 bg-gradient-to-r from-primary-500/5 to-accent-500/5">
+      <Card className="border-action/20 bg-action/5 ">
         <CardContent className="p-6">
           <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 rounded-full bg-primary-500/20 flex items-center justify-center">
-              <svg className="w-5 h-5 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="w-10 h-10 rounded-full bg-action/20 flex items-center justify-center">
+              <svg className="w-5 h-5 text-action" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" />
               </svg>
             </div>
             <div>
-              <h3 className="font-semibold text-surface-100">Have a Promo Code?</h3>
-              <p className="text-sm text-surface-400">Enter your code below to unlock premium features instantly</p>
+              <h3 className="font-semibold text-ink">Have a Promo Code?</h3>
+              <p className="text-sm text-ink-2">Enter your code below to unlock premium features instantly</p>
             </div>
           </div>
           
@@ -173,8 +173,8 @@ function PricingContent() {
           {promoResult && (
             <div className={`mt-4 p-3 rounded-lg text-sm ${
               promoResult.success 
-                ? 'bg-success-500/10 border border-success-500/20 text-success-400'
-                : 'bg-danger-500/10 border border-danger-500/20 text-danger-400'
+                ? 'bg-status-ok/10 border border-status-ok/20 text-status-ok'
+                : 'bg-status-bad/10 border border-status-bad/20 text-status-bad'
             }`}>
               {promoResult.message}
             </div>
@@ -188,8 +188,8 @@ function PricingContent() {
       {isNative ? (
         <Card>
           <CardContent className="p-6 text-center space-y-2">
-            <h2 className="text-lg font-semibold text-surface-100">Plans &amp; billing are managed on the web</h2>
-            <p className="text-sm text-surface-400 max-w-md mx-auto">
+            <h2 className="text-lg font-semibold text-ink">Plans &amp; billing are managed on the web</h2>
+            <p className="text-sm text-ink-2 max-w-md mx-auto">
               Already subscribed? Your plan is active here automatically. You can compare what each
               plan includes below, or redeem a promo code above.
             </p>
@@ -198,13 +198,13 @@ function PricingContent() {
       ) : (
         <>
           <div className="flex justify-center">
-            <div className="inline-flex items-center gap-2 p-1 bg-surface-800 rounded-lg">
+            <div className="inline-flex items-center gap-2 p-1 bg-fill rounded-lg">
               <button
                 onClick={() => setBillingPeriod('monthly')}
                 className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                   billingPeriod === 'monthly'
-                    ? 'bg-surface-700 text-surface-100'
-                    : 'text-surface-400 hover:text-surface-200'
+                    ? 'bg-sep text-ink'
+                    : 'text-ink-2 hover:text-ink'
                 }`}
               >
                 Monthly
@@ -213,8 +213,8 @@ function PricingContent() {
                 onClick={() => setBillingPeriod('yearly')}
                 className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                   billingPeriod === 'yearly'
-                    ? 'bg-surface-700 text-surface-100'
-                    : 'text-surface-400 hover:text-surface-200'
+                    ? 'bg-sep text-ink'
+                    : 'text-ink-2 hover:text-ink'
                 }`}
               >
                 Yearly
@@ -253,16 +253,16 @@ function PricingContent() {
       {/* Feature Comparison */}
       <Card>
         <CardContent className="p-6">
-          <h2 className="text-xl font-bold text-surface-100 mb-6 text-center">Feature Comparison</h2>
+          <h2 className="text-xl font-bold text-ink mb-6 text-center">Feature Comparison</h2>
           
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-surface-700">
-                  <th className="py-3 px-4 text-left text-surface-400 font-medium">Feature</th>
-                  <th className="py-3 px-4 text-center text-surface-400 font-medium">Free</th>
-                  <th className="py-3 px-4 text-center text-surface-400 font-medium">Pro</th>
-                  <th className="py-3 px-4 text-center text-surface-400 font-medium">Elite</th>
+                <tr className="border-b border-sep">
+                  <th className="py-3 px-4 text-left text-ink-2 font-medium">Feature</th>
+                  <th className="py-3 px-4 text-center text-ink-2 font-medium">Free</th>
+                  <th className="py-3 px-4 text-center text-ink-2 font-medium">Pro</th>
+                  <th className="py-3 px-4 text-center text-ink-2 font-medium">Elite</th>
                 </tr>
               </thead>
               <tbody>
@@ -289,7 +289,7 @@ function PricingContent() {
         <>
           <Card>
             <CardContent className="p-6">
-              <h2 className="text-xl font-bold text-surface-100 mb-6 text-center">Frequently Asked Questions</h2>
+              <h2 className="text-xl font-bold text-ink mb-6 text-center">Frequently Asked Questions</h2>
 
               <div className="space-y-4 max-w-2xl mx-auto">
                 <FaqItem
@@ -312,7 +312,7 @@ function PricingContent() {
             </CardContent>
           </Card>
 
-          <div className="text-center text-surface-400 text-sm">
+          <div className="text-center text-ink-2 text-sm">
             <p>30-day money-back guarantee. No questions asked.</p>
           </div>
         </>
@@ -334,25 +334,25 @@ function FeatureRow({
 }) {
   const renderValue = (value: boolean | string) => {
     if (typeof value === 'string') {
-      return <span className="text-surface-300">{value}</span>;
+      return <span className="text-ink-2">{value}</span>;
     }
     if (value) {
       return (
-        <svg className="w-5 h-5 text-success-400 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg className="w-5 h-5 text-status-ok mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
         </svg>
       );
     }
     return (
-      <svg className="w-5 h-5 text-surface-600 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <svg className="w-5 h-5 text-ink-3 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
       </svg>
     );
   };
 
   return (
-    <tr className="border-b border-surface-800">
-      <td className="py-3 px-4 text-surface-300">{feature}</td>
+    <tr className="border-b border-sep">
+      <td className="py-3 px-4 text-ink-2">{feature}</td>
       <td className="py-3 px-4 text-center">{renderValue(free)}</td>
       <td className="py-3 px-4 text-center">{renderValue(pro)}</td>
       <td className="py-3 px-4 text-center">{renderValue(elite)}</td>
@@ -362,9 +362,9 @@ function FeatureRow({
 
 function FaqItem({ question, answer }: { question: string; answer: string }) {
   return (
-    <div className="p-4 bg-surface-800/50 rounded-lg">
-      <h3 className="font-medium text-surface-200 mb-2">{question}</h3>
-      <p className="text-sm text-surface-400">{answer}</p>
+    <div className="p-4 bg-fill/50 rounded-lg">
+      <h3 className="font-medium text-ink mb-2">{question}</h3>
+      <p className="text-sm text-ink-2">{answer}</p>
     </div>
   );
 }
@@ -376,8 +376,8 @@ export default function PricingPage() {
     <Suspense fallback={
       <div className="max-w-5xl mx-auto space-y-8">
         <div className="text-center">
-          <h1 className="text-3xl font-bold text-surface-100">Choose Your Plan</h1>
-          <p className="text-surface-400 mt-2">Loading pricing...</p>
+          <h1 className="text-3xl font-bold text-ink">Choose Your Plan</h1>
+          <p className="text-ink-2 mt-2">Loading pricing...</p>
         </div>
       </div>
     }>

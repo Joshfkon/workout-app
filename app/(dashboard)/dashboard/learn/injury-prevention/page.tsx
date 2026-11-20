@@ -77,7 +77,7 @@ export default function InjuryPreventionArticle() {
       {/* Back Navigation */}
       <Link
         href="/dashboard/learn"
-        className="inline-flex items-center gap-2 text-surface-400 hover:text-surface-200 mb-8 transition-colors"
+        className="inline-flex items-center gap-2 text-ink-2 hover:text-ink mb-8 transition-colors"
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -89,43 +89,43 @@ export default function InjuryPreventionArticle() {
       <div className="mb-8">
         <div className="flex items-center gap-3 mb-4">
           <span className="text-4xl">🛡️</span>
-          <span className="px-3 py-1 bg-success-500/10 text-success-400 rounded-full text-xs font-medium">
+          <span className="px-3 py-1 bg-status-ok/10 text-status-ok rounded-full text-xs font-medium">
             Safety
           </span>
         </div>
-        <h1 className="text-3xl font-bold text-surface-100 mb-3">Smart Injury Prevention</h1>
-        <p className="text-lg text-surface-400">
+        <h1 className="text-3xl font-bold text-ink mb-3">Smart Injury Prevention</h1>
+        <p className="text-lg text-ink-2">
           How we analyze exercise biomechanics to keep you safe and suggest intelligent alternatives.
         </p>
       </div>
 
       {/* Article Content */}
-      <article className="space-y-8 text-surface-300">
+      <article className="space-y-8 text-ink-2">
         {/* Beyond Skip Leg Day */}
         <section>
-          <h2 className="text-xl font-bold text-surface-100 mb-4">
+          <h2 className="text-xl font-bold text-ink mb-4">
             Beyond &quot;Skip Leg Day&quot;
           </h2>
           <p className="mb-4">
             Most fitness apps handle injuries with a blunt instrument: &quot;Oh, you hurt your
             shoulder? Here, do legs instead.&quot;
           </p>
-          <Card className="p-4 bg-danger-500/10 border-danger-500/20 mb-4">
-            <p className="text-danger-300 font-medium mb-2">That&apos;s not good enough.</p>
-            <p className="text-sm text-surface-400">
+          <Card className="p-4 bg-status-bad/10 border-status-bad/20 mb-4">
+            <p className="text-status-bad font-medium mb-2">That&apos;s not good enough.</p>
+            <p className="text-sm text-ink-2">
               A back injury doesn&apos;t just affect back exercises—it affects squats, deadlifts,
               bench press (yes, bench press), and dozens of other movements.
             </p>
           </Card>
-          <p className="text-surface-400">
+          <p className="text-ink-2">
             We built a comprehensive system that actually understands exercise biomechanics.
           </p>
         </section>
 
         {/* What We Track */}
         <section>
-          <h2 className="text-xl font-bold text-surface-100 mb-4">How We Analyze Exercises</h2>
-          <p className="mb-6 text-surface-400">
+          <h2 className="text-xl font-bold text-ink mb-4">How We Analyze Exercises</h2>
+          <p className="mb-6 text-ink-2">
             Every exercise in our database has detailed safety metadata:
           </p>
           <div className="space-y-4">
@@ -134,9 +134,9 @@ export default function InjuryPreventionArticle() {
                 <div className="flex items-start gap-4">
                   <div className="text-2xl shrink-0">{check.icon}</div>
                   <div>
-                    <h3 className="font-semibold text-surface-100">{check.title}</h3>
-                    <p className="text-sm text-surface-500 mb-2">{check.description}</p>
-                    <p className="text-sm text-surface-400">{check.detail}</p>
+                    <h3 className="font-semibold text-ink">{check.title}</h3>
+                    <p className="text-sm text-ink-3 mb-2">{check.description}</p>
+                    <p className="text-sm text-ink-2">{check.detail}</p>
                   </div>
                 </div>
               </Card>
@@ -146,40 +146,40 @@ export default function InjuryPreventionArticle() {
 
         {/* Spinal Loading Table */}
         <section>
-          <h2 className="text-xl font-bold text-surface-100 mb-4">Spinal Loading Levels</h2>
+          <h2 className="text-xl font-bold text-ink mb-4">Spinal Loading Levels</h2>
           <Card className="overflow-hidden">
             <table className="w-full text-sm">
-              <thead className="bg-surface-800">
+              <thead className="bg-fill">
                 <tr>
-                  <th className="px-4 py-3 text-left text-surface-300 font-medium">Level</th>
-                  <th className="px-4 py-3 text-left text-surface-300 font-medium">Examples</th>
+                  <th className="px-4 py-3 text-left text-ink-2 font-medium">Level</th>
+                  <th className="px-4 py-3 text-left text-ink-2 font-medium">Examples</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-surface-800">
-                <tr className="bg-success-500/5">
-                  <td className="px-4 py-3 font-medium text-success-400">None</td>
-                  <td className="px-4 py-3 text-surface-400">
+              <tbody className="divide-y divide-sep">
+                <tr className="bg-status-ok/5">
+                  <td className="px-4 py-3 font-medium text-status-ok">None</td>
+                  <td className="px-4 py-3 text-ink-2">
                     Machine chest press, leg extension
                   </td>
                 </tr>
-                <tr className="bg-primary-500/5">
-                  <td className="px-4 py-3 font-medium text-primary-400">Low</td>
-                  <td className="px-4 py-3 text-surface-400">
+                <tr className="bg-action/5">
+                  <td className="px-4 py-3 font-medium text-action">Low</td>
+                  <td className="px-4 py-3 text-ink-2">
                     Cable exercises, most isolation work
                   </td>
                 </tr>
-                <tr className="bg-warning-500/5">
-                  <td className="px-4 py-3 font-medium text-warning-400">Moderate</td>
-                  <td className="px-4 py-3 text-surface-400">Bench press, lunges, hip thrusts</td>
+                <tr className="bg-status-warn/5">
+                  <td className="px-4 py-3 font-medium text-status-warn">Moderate</td>
+                  <td className="px-4 py-3 text-ink-2">Bench press, lunges, hip thrusts</td>
                 </tr>
-                <tr className="bg-danger-500/5">
-                  <td className="px-4 py-3 font-medium text-danger-400">High</td>
-                  <td className="px-4 py-3 text-surface-400">Squats, deadlifts, barbell rows</td>
+                <tr className="bg-status-bad/5">
+                  <td className="px-4 py-3 font-medium text-status-bad">High</td>
+                  <td className="px-4 py-3 text-ink-2">Squats, deadlifts, barbell rows</td>
                 </tr>
               </tbody>
             </table>
           </Card>
-          <p className="text-sm text-surface-500 mt-3">
+          <p className="text-sm text-ink-3 mt-3">
             If you have a back injury, we automatically filter out moderate and high spinal loading
             exercises.
           </p>
@@ -187,36 +187,36 @@ export default function InjuryPreventionArticle() {
 
         {/* Example Scenario */}
         <section>
-          <h2 className="text-xl font-bold text-surface-100 mb-4">How It Works In Practice</h2>
-          <Card className="p-4 bg-surface-800/50 mb-4">
-            <p className="text-sm text-surface-400 mb-2">You log:</p>
-            <p className="font-medium text-surface-200">&quot;{exampleScenario.injury}&quot;</p>
+          <h2 className="text-xl font-bold text-ink mb-4">How It Works In Practice</h2>
+          <Card className="p-4 bg-fill/50 mb-4">
+            <p className="text-sm text-ink-2 mb-2">You log:</p>
+            <p className="font-medium text-ink">&quot;{exampleScenario.injury}&quot;</p>
           </Card>
 
-          <p className="text-sm text-surface-400 mb-4">We ask follow-up questions:</p>
-          <ul className="list-disc list-inside space-y-1 text-sm text-surface-500 mb-6 ml-4">
+          <p className="text-sm text-ink-2 mb-4">We ask follow-up questions:</p>
+          <ul className="list-disc list-inside space-y-1 text-sm text-ink-3 mb-6 ml-4">
             <li>Does bending forward hurt? (flexion)</li>
             <li>Does arching backward hurt? (extension)</li>
             <li>Does twisting hurt? (rotation)</li>
             <li>Does carrying heavy things hurt? (loading)</li>
           </ul>
 
-          <p className="text-sm text-surface-400 mb-4">We then flag exercises:</p>
+          <p className="text-sm text-ink-2 mb-4">We then flag exercises:</p>
 
           <div className="space-y-4">
             {/* Avoid */}
-            <Card className="p-4 bg-danger-500/10 border-danger-500/20">
+            <Card className="p-4 bg-status-bad/10 border-status-bad/20">
               <div className="flex items-center gap-2 mb-3">
-                <span className="text-danger-400 text-xl">🔴</span>
-                <span className="font-semibold text-danger-300">Avoid</span>
+                <span className="text-status-bad text-xl">🔴</span>
+                <span className="font-semibold text-status-bad">Avoid</span>
               </div>
               <ul className="space-y-2">
                 {exampleScenario.avoid.map((ex, idx) => (
                   <li key={idx} className="flex items-start gap-2 text-sm">
-                    <span className="text-danger-400">×</span>
+                    <span className="text-status-bad">×</span>
                     <div>
-                      <span className="text-surface-200">{ex.name}</span>
-                      <span className="text-surface-500 ml-2">— {ex.reason}</span>
+                      <span className="text-ink">{ex.name}</span>
+                      <span className="text-ink-3 ml-2">— {ex.reason}</span>
                     </div>
                   </li>
                 ))}
@@ -224,19 +224,19 @@ export default function InjuryPreventionArticle() {
             </Card>
 
             {/* Caution */}
-            <Card className="p-4 bg-warning-500/10 border-warning-500/20">
+            <Card className="p-4 bg-status-warn/10 border-status-warn/20">
               <div className="flex items-center gap-2 mb-3">
-                <span className="text-warning-400 text-xl">🟡</span>
-                <span className="font-semibold text-warning-300">Caution</span>
-                <span className="text-xs text-surface-500">Use lighter weight, stop if discomfort</span>
+                <span className="text-status-warn text-xl">🟡</span>
+                <span className="font-semibold text-status-warn">Caution</span>
+                <span className="text-xs text-ink-3">Use lighter weight, stop if discomfort</span>
               </div>
               <ul className="space-y-2">
                 {exampleScenario.caution.map((ex, idx) => (
                   <li key={idx} className="flex items-start gap-2 text-sm">
-                    <span className="text-warning-400">⚠</span>
+                    <span className="text-status-warn">⚠</span>
                     <div>
-                      <span className="text-surface-200">{ex.name}</span>
-                      <span className="text-surface-500 ml-2">— {ex.reason}</span>
+                      <span className="text-ink">{ex.name}</span>
+                      <span className="text-ink-3 ml-2">— {ex.reason}</span>
                     </div>
                   </li>
                 ))}
@@ -244,18 +244,18 @@ export default function InjuryPreventionArticle() {
             </Card>
 
             {/* Safe */}
-            <Card className="p-4 bg-success-500/10 border-success-500/20">
+            <Card className="p-4 bg-status-ok/10 border-status-ok/20">
               <div className="flex items-center gap-2 mb-3">
-                <span className="text-success-400 text-xl">🟢</span>
-                <span className="font-semibold text-success-300">Safe</span>
+                <span className="text-status-ok text-xl">🟢</span>
+                <span className="font-semibold text-status-ok">Safe</span>
               </div>
               <ul className="space-y-2">
                 {exampleScenario.safe.map((ex, idx) => (
                   <li key={idx} className="flex items-start gap-2 text-sm">
-                    <span className="text-success-400">✓</span>
+                    <span className="text-status-ok">✓</span>
                     <div>
-                      <span className="text-surface-200">{ex.name}</span>
-                      <span className="text-surface-500 ml-2">— {ex.reason}</span>
+                      <span className="text-ink">{ex.name}</span>
+                      <span className="text-ink-3 ml-2">— {ex.reason}</span>
                     </div>
                   </li>
                 ))}
@@ -266,43 +266,43 @@ export default function InjuryPreventionArticle() {
 
         {/* Smart Substitutions */}
         <section>
-          <h2 className="text-xl font-bold text-surface-100 mb-4">Smart Substitutions</h2>
-          <p className="mb-4 text-surface-400">
+          <h2 className="text-xl font-bold text-ink mb-4">Smart Substitutions</h2>
+          <p className="mb-4 text-ink-2">
             When we flag an exercise, we don&apos;t just say &quot;don&apos;t do this.&quot; We offer
             alternatives:
           </p>
           <div className="space-y-4">
             <Card className="p-4">
-              <p className="text-sm text-surface-500 mb-2">Can&apos;t do Barbell Rows?</p>
+              <p className="text-sm text-ink-3 mb-2">Can&apos;t do Barbell Rows?</p>
               <div className="flex flex-wrap gap-2">
-                <span className="px-3 py-1 bg-surface-800 rounded-full text-sm text-surface-300">
+                <span className="px-3 py-1 bg-fill rounded-full text-sm text-ink-2">
                   → Chest-Supported Row
                 </span>
-                <span className="px-3 py-1 bg-surface-800 rounded-full text-sm text-surface-300">
+                <span className="px-3 py-1 bg-fill rounded-full text-sm text-ink-2">
                   → Cable Row with back pad
                 </span>
-                <span className="px-3 py-1 bg-surface-800 rounded-full text-sm text-surface-300">
+                <span className="px-3 py-1 bg-fill rounded-full text-sm text-ink-2">
                   → Machine Row
                 </span>
               </div>
             </Card>
             <Card className="p-4">
-              <p className="text-sm text-surface-500 mb-2">Can&apos;t do Squats?</p>
+              <p className="text-sm text-ink-3 mb-2">Can&apos;t do Squats?</p>
               <div className="flex flex-wrap gap-2">
-                <span className="px-3 py-1 bg-surface-800 rounded-full text-sm text-surface-300">
+                <span className="px-3 py-1 bg-fill rounded-full text-sm text-ink-2">
                   → Leg Press
                 </span>
-                <span className="px-3 py-1 bg-surface-800 rounded-full text-sm text-surface-300">
+                <span className="px-3 py-1 bg-fill rounded-full text-sm text-ink-2">
                   → Hack Squat
                 </span>
-                <span className="px-3 py-1 bg-surface-800 rounded-full text-sm text-surface-300">
+                <span className="px-3 py-1 bg-fill rounded-full text-sm text-ink-2">
                   → Leg Extension + Leg Curl
                 </span>
               </div>
             </Card>
           </div>
-          <p className="text-sm text-surface-500 mt-4">We prioritize:</p>
-          <ol className="list-decimal list-inside space-y-1 text-sm text-surface-400 mt-2 ml-4">
+          <p className="text-sm text-ink-3 mt-4">We prioritize:</p>
+          <ol className="list-decimal list-inside space-y-1 text-sm text-ink-2 mt-2 ml-4">
             <li>Same muscle group</li>
             <li>Similar movement pattern</li>
             <li>Machine/supported versions</li>
@@ -312,17 +312,17 @@ export default function InjuryPreventionArticle() {
 
         {/* Injury Types */}
         <section>
-          <h2 className="text-xl font-bold text-surface-100 mb-4">20+ Injury Types Supported</h2>
+          <h2 className="text-xl font-bold text-ink mb-4">20+ Injury Types Supported</h2>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
             {injuryCategories.map((cat, idx) => (
               <Card key={idx} className="p-3">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="font-medium text-surface-200">{cat.name}</span>
-                  <span className="text-xs px-2 py-0.5 bg-surface-800 rounded-full text-surface-400">
+                  <span className="font-medium text-ink">{cat.name}</span>
+                  <span className="text-xs px-2 py-0.5 bg-fill rounded-full text-ink-2">
                     {cat.count}
                   </span>
                 </div>
-                <p className="text-xs text-surface-500">{cat.examples}</p>
+                <p className="text-xs text-ink-3">{cat.examples}</p>
               </Card>
             ))}
           </div>
@@ -330,32 +330,32 @@ export default function InjuryPreventionArticle() {
 
         {/* Tracking Recovery */}
         <section>
-          <h2 className="text-xl font-bold text-surface-100 mb-4">Tracking Recovery</h2>
-          <p className="mb-4 text-surface-400">
+          <h2 className="text-xl font-bold text-ink mb-4">Tracking Recovery</h2>
+          <p className="mb-4 text-ink-2">
             As your injury heals, gradually reintroduce exercises:
           </p>
           <Card className="p-5">
             <div className="space-y-4">
               <div className="flex items-center gap-4">
-                <div className="w-16 text-sm text-surface-500">Week 1-2</div>
-                <div className="flex-1 h-2 bg-surface-800 rounded-full overflow-hidden">
-                  <div className="h-full w-1/3 bg-success-500"></div>
+                <div className="w-16 text-sm text-ink-3">Week 1-2</div>
+                <div className="flex-1 h-2 bg-fill rounded-full overflow-hidden">
+                  <div className="h-full w-1/3 bg-status-ok"></div>
                 </div>
-                <div className="text-sm text-surface-400">Only &quot;Safe&quot; exercises</div>
+                <div className="text-sm text-ink-2">Only &quot;Safe&quot; exercises</div>
               </div>
               <div className="flex items-center gap-4">
-                <div className="w-16 text-sm text-surface-500">Week 3-4</div>
-                <div className="flex-1 h-2 bg-surface-800 rounded-full overflow-hidden">
-                  <div className="h-full w-2/3 bg-warning-500"></div>
+                <div className="w-16 text-sm text-ink-3">Week 3-4</div>
+                <div className="flex-1 h-2 bg-fill rounded-full overflow-hidden">
+                  <div className="h-full w-2/3 bg-status-warn"></div>
                 </div>
-                <div className="text-sm text-surface-400">Add &quot;Caution&quot; at reduced weight</div>
+                <div className="text-sm text-ink-2">Add &quot;Caution&quot; at reduced weight</div>
               </div>
               <div className="flex items-center gap-4">
-                <div className="w-16 text-sm text-surface-500">Week 5+</div>
-                <div className="flex-1 h-2 bg-surface-800 rounded-full overflow-hidden">
-                  <div className="h-full w-full bg-primary-500"></div>
+                <div className="w-16 text-sm text-ink-3">Week 5+</div>
+                <div className="flex-1 h-2 bg-fill rounded-full overflow-hidden">
+                  <div className="h-full w-full bg-action"></div>
                 </div>
-                <div className="text-sm text-surface-400">Full exercise library</div>
+                <div className="text-sm text-ink-2">Full exercise library</div>
               </div>
             </div>
           </Card>
@@ -363,30 +363,30 @@ export default function InjuryPreventionArticle() {
 
         {/* Discomfort Logging */}
         <section>
-          <h2 className="text-xl font-bold text-surface-100 mb-4">Discomfort Logging</h2>
-          <p className="mb-4 text-surface-400">
+          <h2 className="text-xl font-bold text-ink mb-4">Discomfort Logging</h2>
+          <p className="mb-4 text-ink-2">
             During workouts, you can log discomfort on any set:
           </p>
           <div className="flex gap-3 mb-4">
-            <Card className="flex-1 p-3 text-center bg-warning-500/5 border-warning-500/20">
-              <p className="text-warning-400 font-medium">Twinge</p>
-              <p className="text-xs text-surface-500">Noticed something, minor</p>
+            <Card className="flex-1 p-3 text-center bg-status-warn/5 border-status-warn/20">
+              <p className="text-status-warn font-medium">Twinge</p>
+              <p className="text-xs text-ink-3">Noticed something, minor</p>
             </Card>
-            <Card className="flex-1 p-3 text-center bg-warning-500/10 border-warning-500/30">
-              <p className="text-warning-300 font-medium">Discomfort</p>
-              <p className="text-xs text-surface-500">Uncomfortable but manageable</p>
+            <Card className="flex-1 p-3 text-center bg-status-warn/10 border-status-warn/30">
+              <p className="text-status-warn font-medium">Discomfort</p>
+              <p className="text-xs text-ink-3">Uncomfortable but manageable</p>
             </Card>
-            <Card className="flex-1 p-3 text-center bg-danger-500/10 border-danger-500/20">
-              <p className="text-danger-400 font-medium">Pain</p>
-              <p className="text-xs text-surface-500">Should stop</p>
+            <Card className="flex-1 p-3 text-center bg-status-bad/10 border-status-bad/20">
+              <p className="text-status-bad font-medium">Pain</p>
+              <p className="text-xs text-ink-3">Should stop</p>
             </Card>
           </div>
-          <Card className="p-4 bg-primary-500/10 border-primary-500/20">
-            <p className="text-sm text-surface-400">
-              If you log discomfort <strong className="text-surface-200">3+ times</strong> on the same body part
+          <Card className="p-4 bg-action/10 border-action/20">
+            <p className="text-sm text-ink-2">
+              If you log discomfort <strong className="text-ink">3+ times</strong> on the same body part
               in 2 weeks, we prompt:
             </p>
-            <p className="text-sm text-primary-300 mt-2 italic">
+            <p className="text-sm text-action mt-2 italic">
               &quot;You&apos;ve logged knee discomfort multiple times. Want to track this as an injury
               for smarter exercise recommendations?&quot;
             </p>
@@ -395,44 +395,44 @@ export default function InjuryPreventionArticle() {
 
         {/* Volume and Injury Risk */}
         <section>
-          <h2 className="text-xl font-bold text-surface-100 mb-4">Volume and Injury Risk</h2>
-          <p className="mb-4 text-surface-400">
+          <h2 className="text-xl font-bold text-ink mb-4">Volume and Injury Risk</h2>
+          <p className="mb-4 text-ink-2">
             Excessive volume doesn&apos;t just hurt gains - it increases injury risk.
           </p>
-          <Card className="p-4 bg-warning-500/10 border-warning-500/20 mb-4">
-            <h4 className="font-semibold text-warning-300 mb-2">When fatigue accumulates:</h4>
-            <ul className="space-y-2 text-sm text-surface-400">
+          <Card className="p-4 bg-status-warn/10 border-status-warn/20 mb-4">
+            <h4 className="font-semibold text-status-warn mb-2">When fatigue accumulates:</h4>
+            <ul className="space-y-2 text-sm text-ink-2">
               <li className="flex items-start gap-2">
-                <span className="text-warning-400">{'\u26A0'}</span>
+                <span className="text-status-warn">{'\u26A0'}</span>
                 <span>Form breaks down (the system tracks this)</span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-warning-400">{'\u26A0'}</span>
+                <span className="text-status-warn">{'\u26A0'}</span>
                 <span>Stabilizer muscles fatigue before prime movers</span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-warning-400">{'\u26A0'}</span>
+                <span className="text-status-warn">{'\u26A0'}</span>
                 <span>Connective tissue stress accumulates</span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-warning-400">{'\u26A0'}</span>
+                <span className="text-status-warn">{'\u26A0'}</span>
                 <span>Reaction time and coordination suffer</span>
               </li>
             </ul>
           </Card>
-          <p className="text-sm text-surface-400 mb-4">
+          <p className="text-sm text-ink-2 mb-4">
             This is why we monitor form quality and RIR drift. Catching fatigue early isn&apos;t just
             about optimizing gains - it&apos;s injury prevention.
           </p>
-          <Card className="p-4 bg-danger-500/10 border-danger-500/20">
-            <p className="text-sm text-danger-300 font-medium">
+          <Card className="p-4 bg-status-bad/10 border-status-bad/20">
+            <p className="text-sm text-status-bad font-medium">
               If you&apos;re seeing form degradation warnings, take them seriously. An ugly set today
               could be a tweaked back tomorrow.
             </p>
           </Card>
           <Link
             href="/dashboard/learn/adaptive-volume"
-            className="block mt-4 text-sm text-primary-400 hover:text-primary-300 transition-colors"
+            className="block mt-4 text-sm text-action transition-colors"
           >
             Learn more about our volume tracking {'\u2192'}
           </Link>
@@ -440,30 +440,30 @@ export default function InjuryPreventionArticle() {
 
         {/* The Bottom Line */}
         <section>
-          <h2 className="text-xl font-bold text-surface-100 mb-4">The Bottom Line</h2>
-          <Card className="p-5 bg-success-500/10 border-success-500/20">
+          <h2 className="text-xl font-bold text-ink mb-4">The Bottom Line</h2>
+          <Card className="p-5 bg-status-ok/10 border-status-ok/20">
             <p className="mb-3">
               We don&apos;t just track what muscles an exercise works. We understand:
             </p>
             <ul className="space-y-2 text-sm">
               <li className="flex items-start gap-2">
-                <span className="text-success-400">✓</span>
+                <span className="text-status-ok">✓</span>
                 <span>What stabilizes the movement</span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-success-400">✓</span>
+                <span className="text-status-ok">✓</span>
                 <span>What loads the spine</span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-success-400">✓</span>
+                <span className="text-status-ok">✓</span>
                 <span>What stresses each joint</span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-success-400">✓</span>
+                <span className="text-status-ok">✓</span>
                 <span>What positions are required</span>
               </li>
             </ul>
-            <p className="mt-4 font-medium text-success-300">
+            <p className="mt-4 font-medium text-status-ok">
               So when you&apos;re injured, we can give you a workout that&apos;s actually safe—not just
               &quot;do arms instead.&quot;
             </p>
@@ -472,13 +472,13 @@ export default function InjuryPreventionArticle() {
 
         {/* CTA */}
         <section className="pt-4">
-          <Card className="p-6 text-center bg-gradient-to-r from-success-500/10 to-primary-500/10 border-success-500/20">
-            <h3 className="text-lg font-bold text-surface-100 mb-2">Have an Injury?</h3>
-            <p className="text-sm text-surface-400 mb-4">
+          <Card className="p-6 text-center bg-status-ok/10 border-status-ok/20">
+            <h3 className="text-lg font-bold text-ink mb-2">Have an Injury?</h3>
+            <p className="text-sm text-ink-2 mb-4">
               Log it in your profile and we&apos;ll automatically adjust your workouts.
             </p>
             <Link href="/dashboard/profile">
-              <button className="px-6 py-2 bg-success-500 hover:bg-success-600 text-white font-semibold rounded-lg transition-colors">
+              <button className="px-6 py-2 bg-status-ok hover:bg-status-ok text-white font-semibold rounded-lg transition-colors">
                 Manage Injuries
               </button>
             </Link>
@@ -487,27 +487,27 @@ export default function InjuryPreventionArticle() {
       </article>
 
       {/* Related Articles */}
-      <div className="mt-12 pt-8 border-t border-surface-800">
-        <h3 className="text-lg font-semibold text-surface-100 mb-4">Related Articles</h3>
+      <div className="mt-12 pt-8 border-t border-sep">
+        <h3 className="text-lg font-semibold text-ink mb-4">Related Articles</h3>
         <div className="grid md:grid-cols-2 gap-4">
           <Link href="/dashboard/learn/adaptive-volume">
-            <Card className="p-4 hover:border-surface-600 transition-colors cursor-pointer">
+            <Card className="p-4 hover:border-sep transition-colors cursor-pointer">
               <div className="flex items-center gap-3">
                 <span className="text-2xl">{'\uD83D\uDCCA'}</span>
                 <div>
-                  <p className="font-medium text-surface-200">Personalized Volume & Recovery</p>
-                  <p className="text-xs text-surface-500">How we track fatigue to prevent injury</p>
+                  <p className="font-medium text-ink">Personalized Volume & Recovery</p>
+                  <p className="text-xs text-ink-3">How we track fatigue to prevent injury</p>
                 </div>
               </div>
             </Card>
           </Link>
           <Link href="/dashboard/learn/adaptive-tdee">
-            <Card className="p-4 hover:border-surface-600 transition-colors cursor-pointer">
+            <Card className="p-4 hover:border-sep transition-colors cursor-pointer">
               <div className="flex items-center gap-3">
                 <span className="text-2xl">{'\uD83D\uDD25'}</span>
                 <div>
-                  <p className="font-medium text-surface-200">How We Calculate Your Metabolism</p>
-                  <p className="text-xs text-surface-500">Adaptive TDEE estimation</p>
+                  <p className="font-medium text-ink">How We Calculate Your Metabolism</p>
+                  <p className="text-xs text-ink-3">Adaptive TDEE estimation</p>
                 </div>
               </div>
             </Card>

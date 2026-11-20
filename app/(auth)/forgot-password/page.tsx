@@ -51,28 +51,28 @@ export default function ForgotPasswordPage() {
       {/* Logo */}
       <div className="text-center mb-8">
         <Link href="/" className="inline-flex items-center gap-3 group">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center group-hover:scale-105 transition-transform">
+          <div className="w-12 h-12 rounded-xl bg-action flex items-center justify-center group-hover:scale-105 transition-transform">
             <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
           </div>
-          <span className="text-2xl font-bold text-surface-100 tracking-tight">HyperTrack</span>
+          <span className="text-2xl font-bold text-ink tracking-tight">HyperTrack</span>
         </Link>
       </div>
 
       <Card variant="elevated" className="p-6">
         {success ? (
           <div className="text-center space-y-4">
-            <div className="w-16 h-16 mx-auto rounded-full bg-success-500/20 flex items-center justify-center">
-              <svg className="w-8 h-8 text-success-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="w-16 h-16 mx-auto rounded-full bg-status-ok/20 flex items-center justify-center">
+              <svg className="w-8 h-8 text-status-ok" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
               </svg>
             </div>
-            <h2 className="text-xl font-bold text-surface-100">Check your email</h2>
-            <p className="text-surface-400">
-              We&apos;ve sent a password reset link to <span className="text-surface-200 font-medium">{email}</span>
+            <h2 className="text-xl font-bold text-ink">Check your email</h2>
+            <p className="text-ink-2">
+              We&apos;ve sent a password reset link to <span className="text-ink font-medium">{email}</span>
             </p>
-            <p className="text-sm text-surface-500">
+            <p className="text-sm text-ink-3">
               Didn&apos;t receive the email? Check your spam folder or try again. Reading the email
               on a different device? Enter the code from it instead of clicking the link.
             </p>
@@ -88,8 +88,8 @@ export default function ForgotPasswordPage() {
         ) : (
           <>
             <div className="text-center mb-6">
-              <h1 className="text-2xl font-bold text-surface-100">Forgot password?</h1>
-              <p className="text-surface-400 mt-1">
+              <h1 className="text-2xl font-bold text-ink">Forgot password?</h1>
+              <p className="text-ink-2 mt-1">
                 No worries, we&apos;ll send you reset instructions.
               </p>
             </div>
@@ -106,8 +106,8 @@ export default function ForgotPasswordPage() {
               />
 
               {error && (
-                <div className="p-3 rounded-lg bg-danger-500/10 border border-danger-500/20">
-                  <p className="text-sm text-danger-400">{error}</p>
+                <div className="p-3 rounded-lg bg-status-bad/10 border border-status-bad/20">
+                  <p className="text-sm text-status-bad">{error}</p>
                 </div>
               )}
 
@@ -121,7 +121,7 @@ export default function ForgotPasswordPage() {
         <div className="mt-6 text-center">
           <Link 
             href="/login" 
-            className="inline-flex items-center text-sm text-primary-400 hover:text-primary-300 font-medium"
+            className="inline-flex items-center text-sm text-action font-medium"
           >
             <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />

@@ -73,15 +73,15 @@ export function ExerciseStatusModal({
     <Modal isOpen={isOpen} onClose={handleClose} title={title} description={description} size="sm">
       <div className="space-y-4">
         <div>
-          <p className="text-sm text-surface-400 mb-3">Reason (optional):</p>
+          <p className="text-sm text-ink-2 mb-3">Reason (optional):</p>
           <div className="space-y-2">
             {REASON_OPTIONS.map((option) => (
               <label
                 key={option.value}
                 className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
                   selectedReason === option.value
-                    ? 'border-primary-500 bg-primary-500/10'
-                    : 'border-surface-700 hover:border-surface-600 bg-surface-800/50'
+                    ? 'border-action bg-action/10'
+                    : 'border-sep hover:border-sep bg-fill/50'
                 }`}
               >
                 <input
@@ -90,10 +90,10 @@ export function ExerciseStatusModal({
                   value={option.value}
                   checked={selectedReason === option.value}
                   onChange={() => setSelectedReason(option.value)}
-                  className="mt-0.5 w-4 h-4 text-primary-600 bg-surface-800 border-surface-600 focus:ring-primary-500 focus:ring-offset-surface-900"
+                  className="mt-0.5 w-4 h-4 text-action bg-fill border-sep focus:ring-action focus:ring-offset-card"
                 />
                 <div>
-                  <p className="text-sm text-surface-200">{option.label}</p>
+                  <p className="text-sm text-ink">{option.label}</p>
                 </div>
               </label>
             ))}
@@ -102,14 +102,14 @@ export function ExerciseStatusModal({
 
         {selectedReason === 'other' && (
           <div>
-            <label className="block text-sm text-surface-400 mb-2">
+            <label className="block text-sm text-ink-2 mb-2">
               Add a note (optional):
             </label>
             <textarea
               value={customNote}
               onChange={(e) => setCustomNote(e.target.value)}
               placeholder="Why are you hiding this exercise?"
-              className="w-full px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-200 placeholder:text-surface-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
+              className="w-full px-3 py-2 bg-fill border border-sep rounded-lg text-ink placeholder:text-ink-3 focus:outline-none focus:ring-2 focus:ring-action focus:border-transparent resize-none"
               rows={2}
             />
           </div>
@@ -170,8 +170,8 @@ export function ResetPreferencesModal({
       size="sm"
     >
       <div className="space-y-4">
-        <p className="text-sm text-surface-300">This will:</p>
-        <ul className="list-disc list-inside text-sm text-surface-400 space-y-1">
+        <p className="text-sm text-ink-2">This will:</p>
+        <ul className="list-disc list-inside text-sm text-ink-2 space-y-1">
           {archivedCount > 0 && (
             <li>Unarchive {archivedCount} exercise{archivedCount > 1 ? 's' : ''}</li>
           )}
@@ -179,7 +179,7 @@ export function ResetPreferencesModal({
             <li>Re-enable suggestions for {doNotSuggestCount} exercise{doNotSuggestCount > 1 ? 's' : ''}</li>
           )}
         </ul>
-        <p className="text-sm text-surface-500">Your workout history is not affected.</p>
+        <p className="text-sm text-ink-3">Your workout history is not affected.</p>
 
         <ModalFooter>
           <Button variant="ghost" onClick={onClose} disabled={isSubmitting}>

@@ -37,17 +37,17 @@ import type { EatingWindow, PacingPhase } from '@/services/intakePacing';
 const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
 const RING_STROKE: Record<RingTone, string> = {
-  green: 'stroke-success-500',
-  yellow: 'stroke-warning-500',
-  red: 'stroke-danger-500',
-  neutral: 'stroke-surface-400',
+  green: 'stroke-status-ok',
+  yellow: 'stroke-status-warn',
+  red: 'stroke-status-bad',
+  neutral: 'stroke-ink-3',
 };
 
 const WEEK_TEXT: Record<RingTone, string> = {
-  green: 'text-success-400',
-  yellow: 'text-warning-400',
-  red: 'text-danger-400',
-  neutral: 'text-surface-500',
+  green: 'text-status-ok',
+  yellow: 'text-status-warn',
+  red: 'text-status-bad',
+  neutral: 'text-ink-3',
 };
 
 /** SVG compliance ring with the day number in the center. */
@@ -64,7 +64,7 @@ function DayRing({ cell }: { cell: CalendarDayCell }) {
           r={r}
           fill="none"
           strokeWidth="2.5"
-          className="stroke-surface-800"
+          className="stroke-fill"
         />
         {!ring.empty && ring.fill > 0 && (
           <circle
@@ -85,10 +85,10 @@ function DayRing({ cell }: { cell: CalendarDayCell }) {
       <span
         className={`relative text-[12px] tabular-nums ${
           cell.isToday
-            ? 'font-bold text-primary-400'
+            ? 'font-bold text-action'
             : cell.isFuture
-              ? 'text-surface-600'
-              : 'text-surface-200'
+              ? 'text-ink-3'
+              : 'text-ink'
         }`}
       >
         {cell.dayOfMonth}
@@ -190,16 +190,16 @@ export function NutritionCalendarSheet({
           <button
             onClick={() => changeMonth(-1)}
             aria-label="Previous month"
-            className="flex h-10 w-10 items-center justify-center rounded-lg text-surface-400 transition-colors hover:bg-surface-800 hover:text-surface-200"
+            className="flex h-10 w-10 items-center justify-center rounded-lg text-ink-2 transition-colors hover:bg-fill hover:text-ink"
           >
             <IconChevronLeft size={20} aria-hidden="true" />
           </button>
           <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-surface-100">{monthLabel}</span>
+            <span className="text-sm font-semibold text-ink">{monthLabel}</span>
             {!isCurrentMonth && (
               <button
                 onClick={() => setMonthKey(todayKey.slice(0, 7))}
-                className="rounded-full border border-primary-500/40 px-2 py-0.5 text-[11px] font-medium text-primary-400 transition-colors hover:bg-primary-500/10"
+                className="rounded-full border border-action/40 px-2 py-0.5 text-[11px] font-medium text-action transition-colors hover:bg-action/10"
               >
                 Today
               </button>
@@ -208,7 +208,7 @@ export function NutritionCalendarSheet({
           <button
             onClick={() => changeMonth(1)}
             aria-label="Next month"
-            className="flex h-10 w-10 items-center justify-center rounded-lg text-surface-400 transition-colors hover:bg-surface-800 hover:text-surface-200"
+            className="flex h-10 w-10 items-center justify-center rounded-lg text-ink-2 transition-colors hover:bg-fill hover:text-ink"
           >
             <IconChevronRight size={20} aria-hidden="true" />
           </button>
@@ -217,11 +217,11 @@ export function NutritionCalendarSheet({
         {/* Grid: 7 day columns + the WEEK column */}
         <div className="grid grid-cols-[repeat(7,minmax(0,1fr))_minmax(3.25rem,auto)] gap-x-0.5 gap-y-1 text-center">
           {WEEKDAYS.map((d, i) => (
-            <span key={`${d}-${i}`} className="py-1 text-[10px] uppercase text-surface-500">
+            <span key={`${d}-${i}`} className="py-1 text-[10px] uppercase text-ink-3">
               {d}
             </span>
           ))}
-          <span className="py-1 text-[10px] uppercase text-surface-500">Week</span>
+          <span className="py-1 text-[10px] uppercase text-ink-3">Week</span>
 
           {model.weeks.map((week, weekIdx) => (
             <FragmentRow key={`week-${weekIdx}`}>
@@ -238,10 +238,10 @@ export function NutritionCalendarSheet({
                     data-testid="calendar-day"
                     className={`flex h-11 items-center justify-center rounded-lg transition-colors ${
                       cell.dateKey === selectedDate
-                        ? 'bg-surface-800'
+                        ? 'bg-fill'
                         : cell.isFuture
                           ? 'cursor-default'
-                          : 'hover:bg-surface-800'
+                          : 'hover:bg-fill'
                     }`}
                   >
                     <DayRing cell={cell} />
@@ -249,7 +249,7 @@ export function NutritionCalendarSheet({
                 )
               )}
               <div
-                className="flex h-11 flex-col items-center justify-center rounded-lg bg-surface-800/40 px-1"
+                className="flex h-11 flex-col items-center justify-center rounded-lg bg-fill/40 px-1"
                 data-testid="week-summary"
                 data-tone={week.summary.tone}
               >
@@ -259,7 +259,7 @@ export function NutritionCalendarSheet({
                   {week.summary.netKcal === null ? '—' : formatNetKcal(week.summary.netKcal)}
                 </span>
                 {week.summary.phaseLabel && week.summary.netKcal !== null && (
-                  <span className="text-[9px] uppercase tracking-wide text-surface-500">
+                  <span className="text-[9px] uppercase tracking-wide text-ink-3">
                     {week.summary.phaseLabel}
                   </span>
                 )}
@@ -269,7 +269,7 @@ export function NutritionCalendarSheet({
         </div>
 
         {/* Legend */}
-        <p className="mt-3 text-center text-[11px] text-surface-500">
+        <p className="mt-3 text-center text-[11px] text-ink-3">
           Ring = % of calorie target · color graded for that day&apos;s phase
           {model.spansPhases
             ? ` (${Array.from(

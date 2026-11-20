@@ -135,11 +135,11 @@ describe('cross-surface parity (one fixture, four surfaces)', () => {
     const datum = volumeRowsToMapData(rows).biceps!;
     expect(datum.zone).toBe('in_zone');
     // Same helper family, same token: bar green ⇔ map region green.
-    expect(zoneBarClass(bicepsRow.zone, bicepsRow.sets, bicepsRow.band)).toBe('bg-success-300');
-    expect(zoneFillClass(datum.zone!, datum.value, datum.band)).toBe('fill-success-300');
+    expect(zoneBarClass(bicepsRow.zone, bicepsRow.sets, bicepsRow.band)).toBe('bg-status-ok/50');
+    expect(zoneFillClass(datum.zone!, datum.value, datum.band)).toBe('fill-status-ok/50');
     // Mid-band and top-of-band deepen through the same shared helper.
-    expect(zoneBarClass('in_zone', 18, bicepsRow.band)).toBe('bg-success-500');
-    expect(zoneBarClass('in_zone', 25, bicepsRow.band)).toBe('bg-success-600');
+    expect(zoneBarClass('in_zone', 18, bicepsRow.band)).toBe('bg-status-ok/75');
+    expect(zoneBarClass('in_zone', 25, bicepsRow.band)).toBe('bg-status-ok');
   });
 
   it('an untrained muscle warns in light red on the map AND the bar, distinct from over-MRV', () => {
@@ -150,11 +150,11 @@ describe('cross-surface parity (one fixture, four surfaces)', () => {
     expect(zoneColorToken(calvesRow.zone, calvesRow.sets)).toBe('untrained');
 
     const datum = volumeRowsToMapData(volumeRows).gastrocnemius!;
-    expect(zoneBarClass(calvesRow.zone, calvesRow.sets)).toBe('bg-danger-300');
-    expect(zoneFillClass(datum.zone!, datum.value)).toBe('fill-danger-300');
+    expect(zoneBarClass(calvesRow.zone, calvesRow.sets)).toBe('bg-status-bad/50');
+    expect(zoneFillClass(datum.zone!, datum.value)).toBe('fill-status-bad/50');
     // A muscle trained past MRV keeps the solid red — too little and too much
     // must never paint the same.
-    expect(zoneFillClass('over_mrv', 40)).toBe('fill-danger-500');
+    expect(zoneFillClass('over_mrv', 40)).toBe('fill-status-bad');
   });
 
   it('recovery map matches the readiness rows on a shared fixture (asserted, not by construction)', () => {

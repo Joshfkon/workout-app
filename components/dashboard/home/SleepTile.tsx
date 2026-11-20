@@ -92,7 +92,7 @@ export function SleepTile({ sleep, onLog }: { sleep: SleepGlance; onLog: () => v
           <button
             type="button"
             onClick={onLog}
-            className="text-xs font-medium text-action hover:text-primary-300 transition-colors"
+            className="text-xs font-medium text-action transition-colors"
             data-testid="sleep-log-action"
           >
             + log

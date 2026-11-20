@@ -25,7 +25,7 @@ export interface MealAccent {
   lightHex: string;
 }
 
-/** Card backgrounds the accents sit on (surface-900 in each theme). */
+/** Card backgrounds the accents sit on (bg-card in each theme). */
 export const MEAL_ACCENT_SURFACES = {
   dark: '#18181b', // rgb(24 24 27)
   light: '#ffffff',

@@ -64,13 +64,13 @@ export interface MuscleMapProps {
 }
 
 /** Neutral base tone for unmapped/no-data regions (theme-aware token). */
-const BASE_FILL = 'fill-surface-800';
+const BASE_FILL = 'fill-fill';
 
 /** Recovery-status fills — same families as the readiness badge colors. */
 const RECOVERY_FILL: Record<RecoveryStatus, string> = {
-  fresh: 'fill-success-500',
-  recovering: 'fill-warning-500',
-  fatigued: 'fill-surface-600',
+  fresh: 'fill-status-ok',
+  recovering: 'fill-status-warn',
+  fatigued: 'fill-sep',
 };
 
 const RECOVERY_ARIA: Record<RecoveryStatus, string> = {
@@ -124,7 +124,7 @@ function presentRegion(mode: MuscleMapMode, datum: MuscleMapDatum | undefined): 
   // highlight
   const primary = datum.value >= 1;
   return {
-    fillClass: 'fill-primary-500',
+    fillClass: 'fill-action',
     fillOpacity: primary ? 1 : datum.value,
     ariaStatus: primary
       ? 'primary muscle'

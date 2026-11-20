@@ -220,8 +220,8 @@ export function WorkoutDaySelector({
                 title={preset.hint}
                 className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${
                   isActive
-                    ? 'bg-primary-500 text-white'
-                    : 'bg-surface-800 text-surface-300 hover:bg-surface-700'
+                    ? 'bg-action text-on-action'
+                    : 'bg-fill text-ink-2 hover:bg-sep'
                 }`}
               >
                 {preset.label}
@@ -233,7 +233,7 @@ export function WorkoutDaySelector({
             onClick={() => onChange(shiftDays(selectedDays, 1))}
             disabled={!canShift}
             title="Move every selected day one day later"
-            className="px-3 py-1.5 text-xs font-medium rounded-full bg-surface-800 text-surface-300 hover:bg-surface-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className="px-3 py-1.5 text-xs font-medium rounded-full bg-fill text-ink-2 hover:bg-sep transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Shift +1 day
           </button>
@@ -255,8 +255,8 @@ export function WorkoutDaySelector({
               className={`
                 flex-1 py-3 px-1 sm:px-2 rounded-lg text-center transition-all
                 ${isSelected
-                  ? 'bg-primary-500 text-white ring-2 ring-primary-400 ring-offset-2 ring-offset-surface-900'
-                  : 'bg-surface-800 text-surface-300 hover:bg-surface-700'
+                  ? 'bg-action text-on-action ring-2 ring-action ring-offset-2 ring-offset-card'
+                  : 'bg-fill text-ink-2 hover:bg-sep'
                 }
               `}
             >
@@ -270,19 +270,19 @@ export function WorkoutDaySelector({
 
       {/* Selection status */}
       <div className="flex items-center justify-between">
-        <span className={`text-sm ${error ? 'text-warning-400' : 'text-surface-400'}`}>
+        <span className={`text-sm ${error ? 'text-status-warn' : 'text-ink-2'}`}>
           {selectedDays.length}/{daysPerWeek} days selected
         </span>
         {error && (
-          <span className="text-xs text-warning-400">{error}</span>
+          <span className="text-xs text-status-warn">{error}</span>
         )}
       </div>
 
       {/* Selected days preview */}
       {selectedDays.length > 0 && (
-        <div className="p-3 bg-surface-800/50 rounded-lg">
-          <p className="text-xs text-surface-500 mb-1">Your workout schedule:</p>
-          <p className="text-sm text-surface-200 font-medium">
+        <div className="p-3 bg-fill/50 rounded-lg">
+          <p className="text-xs text-ink-3 mb-1">Your workout schedule:</p>
+          <p className="text-sm text-ink font-medium">
             {sortDays(selectedDays).join(', ')}
           </p>
         </div>

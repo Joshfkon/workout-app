@@ -74,7 +74,7 @@ describe('Input', () => {
   it('applies error styles when error is present', () => {
     render(<Input error="Invalid input" placeholder="Test" />);
     const input = screen.getByPlaceholderText('Test');
-    expect(input).toHaveClass('border-danger-500');
+    expect(input).toHaveClass('border-status-bad');
   });
 
   it('hides hint when error is shown', () => {
@@ -95,7 +95,7 @@ describe('Input', () => {
   it('applies hint styles', () => {
     render(<Input hint="Helper text" />);
     const hint = screen.getByText('Helper text');
-    expect(hint).toHaveClass('text-surface-500');
+    expect(hint).toHaveClass('text-ink-3');
   });
 
   // ============================================

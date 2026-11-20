@@ -354,25 +354,25 @@ export default function TemplatesPage() {
       <div>
         <div className="flex items-baseline justify-between mb-2">
           <SectionLabel>Quick start</SectionLabel>
-          <span className="text-xs text-surface-500">No template needed</span>
+          <span className="text-xs text-ink-3">No template needed</span>
         </div>
         <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0">
           {STARTER_TEMPLATES.map((t) => (
             <Link
               key={t.id}
               href={starterTemplateHref(t)}
-              className="shrink-0 w-44 p-4 rounded-xl bg-surface-800 border border-surface-700 hover:border-primary-500 hover:bg-surface-700 transition-colors"
+              className="shrink-0 w-44 p-4 rounded-xl bg-fill border border-sep hover:border-action hover:bg-sep transition-colors"
             >
               <span className="text-2xl block mb-2">{t.emoji}</span>
-              <span className="block font-semibold text-surface-100">{t.name}</span>
-              <span className="block text-xs text-surface-400 mt-1 leading-snug">{t.description}</span>
+              <span className="block font-semibold text-ink">{t.name}</span>
+              <span className="block text-xs text-ink-2 mt-1 leading-snug">{t.description}</span>
             </Link>
           ))}
         </div>
       </div>
 
       {error && (
-        <div className="p-3 text-sm text-danger-400 bg-danger-500/10 border border-danger-500/20 rounded-lg">
+        <div className="p-3 text-sm text-status-bad bg-status-bad/10 border border-status-bad/20 rounded-lg">
           {error}
         </div>
       )}
@@ -388,23 +388,23 @@ export default function TemplatesPage() {
                 className="flex items-center gap-2 text-left group"
               >
                 <span style={{ color: folder.color }}>📁</span>
-                <span className="font-semibold text-surface-100 group-hover:text-primary-400 transition-colors">
+                <span className="font-semibold text-ink group-hover:text-action transition-colors">
                   {folder.name}
                 </span>
-                <span className="text-sm text-surface-500">({folder.templates.length})</span>
-                <span className="text-surface-500 text-sm">
+                <span className="text-sm text-ink-3">({folder.templates.length})</span>
+                <span className="text-ink-3 text-sm">
                   {folder.isExpanded ? '▼' : '▶'}
                 </span>
               </button>
               <div className="relative">
                 <button
                   onClick={() => setOpenFolderMenu(openFolderMenu === folder.id ? null : folder.id)}
-                  className="p-2 text-surface-400 hover:text-surface-200 hover:bg-surface-800 rounded-lg transition-colors"
+                  className="p-2 text-ink-2 hover:text-ink hover:bg-fill rounded-lg transition-colors"
                 >
                   •••
                 </button>
                 {openFolderMenu === folder.id && (
-                  <div className="absolute right-0 top-full mt-1 bg-surface-800 border border-surface-700 rounded-lg shadow-xl z-10 min-w-[140px]">
+                  <div className="absolute right-0 top-full mt-1 bg-fill border border-sep rounded-lg shadow-xl z-10 min-w-[140px]">
                     <button
                       onClick={() => {
                         setEditingFolder(folder);
@@ -412,7 +412,7 @@ export default function TemplatesPage() {
                         setFolderColor(folder.color);
                         setOpenFolderMenu(null);
                       }}
-                      className="w-full px-4 py-2 text-left text-sm text-surface-200 hover:bg-surface-700 first:rounded-t-lg"
+                      className="w-full px-4 py-2 text-left text-sm text-ink hover:bg-sep first:rounded-t-lg"
                     >
                       Edit Folder
                     </button>
@@ -422,13 +422,13 @@ export default function TemplatesPage() {
                         setShowCreateTemplate(true);
                         setOpenFolderMenu(null);
                       }}
-                      className="w-full px-4 py-2 text-left text-sm text-surface-200 hover:bg-surface-700"
+                      className="w-full px-4 py-2 text-left text-sm text-ink hover:bg-sep"
                     >
                       Add Template
                     </button>
                     <button
                       onClick={() => handleDeleteFolder(folder.id)}
-                      className="w-full px-4 py-2 text-left text-sm text-danger-400 hover:bg-surface-700 last:rounded-b-lg"
+                      className="w-full px-4 py-2 text-left text-sm text-status-bad hover:bg-sep last:rounded-b-lg"
                     >
                       Delete Folder
                     </button>
@@ -454,7 +454,7 @@ export default function TemplatesPage() {
                   />
                 ))}
                 {folder.templates.length === 0 && (
-                  <p className="text-sm text-surface-500 py-4">No templates in this folder</p>
+                  <p className="text-sm text-ink-3 py-4">No templates in this folder</p>
                 )}
               </div>
             )}
@@ -465,7 +465,7 @@ export default function TemplatesPage() {
         {unfolderedTemplates.length > 0 && (
           <div className="space-y-2">
             {folders.length > 0 && (
-              <p className="text-sm text-surface-500 font-medium">Other Templates</p>
+              <p className="text-sm text-ink-3 font-medium">Other Templates</p>
             )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {unfolderedTemplates.map((template) => (
@@ -511,18 +511,18 @@ export default function TemplatesPage() {
         >
           <div
             ref={folderModalRef}
-            className="bg-surface-900 border border-surface-700 rounded-xl w-full max-w-md overflow-y-auto"
+            className="bg-card rounded-card w-full max-w-md overflow-y-auto shadow-card"
             style={{ maxHeight: `calc(100vh - 2rem - ${folderKbInset}px)` }}
           >
-            <div className="p-4 border-b border-surface-700">
-              <h2 className="text-lg font-semibold text-surface-100">
+            <div className="p-4 border-b border-sep">
+              <h2 className="text-lg font-semibold text-ink">
                 {editingFolder ? 'Edit Folder' : 'Create Folder'}
               </h2>
             </div>
             <form onSubmit={editingFolder ? handleUpdateFolder : handleCreateFolder}>
               <div className="p-4 space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-surface-300 mb-1">
+                  <label className="block text-sm font-medium text-ink-2 mb-1">
                     Folder Name
                   </label>
                   <input
@@ -530,12 +530,12 @@ export default function TemplatesPage() {
                     value={folderName}
                     onChange={(e) => setFolderName(e.target.value)}
                     placeholder="e.g., Push Pull Legs"
-                    className="w-full px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100"
+                    className="w-full px-3 py-2 bg-fill border border-sep rounded-lg text-ink"
                     autoFocus
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-surface-300 mb-2">
+                  <label className="block text-sm font-medium text-ink-2 mb-2">
                     Color
                   </label>
                   <div className="flex gap-2 flex-wrap">
@@ -545,7 +545,7 @@ export default function TemplatesPage() {
                         type="button"
                         onClick={() => setFolderColor(color)}
                         className={`w-8 h-8 rounded-full transition-transform ${
-                          folderColor === color ? 'ring-2 ring-white ring-offset-2 ring-offset-surface-900 scale-110' : ''
+                          folderColor === color ? 'ring-2 ring-white ring-offset-2 ring-offset-card scale-110' : ''
                         }`}
                         style={{ backgroundColor: color }}
                       />
@@ -553,7 +553,7 @@ export default function TemplatesPage() {
                   </div>
                 </div>
               </div>
-              <div className="p-4 border-t border-surface-700 flex justify-end gap-2">
+              <div className="p-4 border-t border-sep flex justify-end gap-2">
                 <Button
                   type="button"
                   variant="ghost"
@@ -585,16 +585,16 @@ export default function TemplatesPage() {
         >
           <div
             ref={templateModalRef}
-            className="bg-surface-900 border border-surface-700 rounded-xl w-full max-w-md overflow-y-auto"
+            className="bg-card rounded-card w-full max-w-md overflow-y-auto shadow-card"
             style={{ maxHeight: `calc(100vh - 2rem - ${templateKbInset}px)` }}
           >
-            <div className="p-4 border-b border-surface-700">
-              <h2 className="text-lg font-semibold text-surface-100">Create Template</h2>
+            <div className="p-4 border-b border-sep">
+              <h2 className="text-lg font-semibold text-ink">Create Template</h2>
             </div>
             <form onSubmit={handleCreateTemplate}>
               <div className="p-4 space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-surface-300 mb-1">
+                  <label className="block text-sm font-medium text-ink-2 mb-1">
                     Template Name
                   </label>
                   <input
@@ -602,19 +602,19 @@ export default function TemplatesPage() {
                     value={templateName}
                     onChange={(e) => setTemplateName(e.target.value)}
                     placeholder="e.g., Push Day, Upper Body"
-                    className="w-full px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100"
+                    className="w-full px-3 py-2 bg-fill border border-sep rounded-lg text-ink"
                     autoFocus
                   />
                 </div>
                 {folders.length > 0 && (
                   <div>
-                    <label className="block text-sm font-medium text-surface-300 mb-1">
+                    <label className="block text-sm font-medium text-ink-2 mb-1">
                       Folder (optional)
                     </label>
                     <select
                       value={templateFolderId || ''}
                       onChange={(e) => setTemplateFolderId(e.target.value || null)}
-                      className="w-full px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100"
+                      className="w-full px-3 py-2 bg-fill border border-sep rounded-lg text-ink"
                     >
                       <option value="">No folder</option>
                       {folders.map((folder) => (
@@ -626,7 +626,7 @@ export default function TemplatesPage() {
                   </div>
                 )}
               </div>
-              <div className="p-4 border-t border-surface-700 flex justify-end gap-2">
+              <div className="p-4 border-t border-sep flex justify-end gap-2">
                 <Button
                   type="button"
                   variant="ghost"
@@ -687,7 +687,7 @@ function TemplateCard({
         <div className="flex justify-between items-start mb-2">
           <Link 
             href={`/dashboard/templates/${template.id}`}
-            className="font-semibold text-surface-100 hover:text-primary-400 transition-colors"
+            className="font-semibold text-ink hover:text-action transition-colors"
           >
             {template.name}
           </Link>
@@ -697,22 +697,22 @@ function TemplateCard({
                 e.preventDefault();
                 onMenuToggle();
               }}
-              className="p-1 text-surface-400 hover:text-surface-200 hover:bg-surface-700 rounded transition-colors"
+              className="p-1 text-ink-2 hover:text-ink hover:bg-sep rounded transition-colors"
             >
               •••
             </button>
             {menuOpen && (
-              <div className="absolute right-0 top-full mt-1 bg-surface-800 border border-surface-700 rounded-lg shadow-xl z-20 min-w-[140px]">
+              <div className="absolute right-0 top-full mt-1 bg-fill border border-sep rounded-lg shadow-xl z-20 min-w-[140px]">
                 <Link
                   href={`/dashboard/templates/${template.id}`}
-                  className="block px-4 py-2 text-sm text-surface-200 hover:bg-surface-700 first:rounded-t-lg"
+                  className="block px-4 py-2 text-sm text-ink hover:bg-sep first:rounded-t-lg"
                 >
                   Edit Template
                 </Link>
                 <button
                   onClick={onStartWorkout}
                   disabled={isStarting || template.exercises.length === 0}
-                  className="w-full px-4 py-2 text-left text-sm text-surface-200 hover:bg-surface-700 disabled:opacity-50 disabled:hover:bg-transparent"
+                  className="w-full px-4 py-2 text-left text-sm text-ink hover:bg-sep disabled:opacity-50 disabled:hover:bg-transparent"
                 >
                   {isStarting
                     ? 'Starting...'
@@ -722,7 +722,7 @@ function TemplateCard({
                 </button>
                 <button
                   onClick={onDelete}
-                  className="w-full px-4 py-2 text-left text-sm text-danger-400 hover:bg-surface-700 last:rounded-b-lg"
+                  className="w-full px-4 py-2 text-left text-sm text-status-bad hover:bg-sep last:rounded-b-lg"
                 >
                   Delete
                 </button>
@@ -730,10 +730,10 @@ function TemplateCard({
             )}
           </div>
         </div>
-        <p className="text-sm text-surface-400 mb-3 line-clamp-2">
+        <p className="text-sm text-ink-2 mb-3 line-clamp-2">
           {formatExerciseList(template.exercises)}
         </p>
-        <div className="flex items-center gap-1 text-xs text-surface-500">
+        <div className="flex items-center gap-1 text-xs text-ink-3">
           <span>🕐</span>
           <span>{formatDate(template.last_performed_at)}</span>
         </div>

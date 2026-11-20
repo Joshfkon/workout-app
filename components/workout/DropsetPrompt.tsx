@@ -165,7 +165,7 @@ export function DropsetPrompt({
               </div>
               <button
                 onClick={onCancel}
-                className="text-surface-400 hover:text-surface-300 p-1"
+                className="text-ink-2 hover:text-ink-2 p-1"
               >
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -190,7 +190,7 @@ export function DropsetPrompt({
             {/* Input row */}
             <div className="flex gap-2 items-center">
               <div className="flex-1">
-                <label className="text-xs text-surface-400 block mb-1">Weight</label>
+                <label className="text-xs text-ink-2 block mb-1">Weight</label>
                 <input
                   type="number"
                   value={weight}
@@ -201,7 +201,7 @@ export function DropsetPrompt({
                 />
               </div>
               <div className="flex-1">
-                <label className="text-xs text-surface-400 block mb-1">Reps</label>
+                <label className="text-xs text-ink-2 block mb-1">Reps</label>
                 <input
                   ref={repsInputRef}
                   type="number"
@@ -213,7 +213,7 @@ export function DropsetPrompt({
                 />
               </div>
               <div className="flex-1">
-                <label className="text-xs text-surface-400 block mb-1">RPE</label>
+                <label className="text-xs text-ink-2 block mb-1">RPE</label>
                 <input
                   type="number"
                   value={rpe}
@@ -239,7 +239,7 @@ export function DropsetPrompt({
             </div>
 
             {/* No rest indicator */}
-            <div className="mt-2 text-center text-xs text-surface-500">
+            <div className="mt-2 text-center text-xs text-ink-3">
               No rest between drops - go immediately!
             </div>
           </div>

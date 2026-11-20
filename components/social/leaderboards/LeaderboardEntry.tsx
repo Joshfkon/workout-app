@@ -57,8 +57,8 @@ export function LeaderboardEntry({
       className={cn(
         'flex items-center gap-3 p-3 rounded-lg transition-colors',
         isCurrentUser
-          ? 'bg-primary-500/10 border border-primary-500/30'
-          : 'bg-surface-800/50 hover:bg-surface-800'
+          ? 'bg-action/10 border border-action/30'
+          : 'bg-fill/50 hover:bg-fill'
       )}
     >
       {/* Rank */}
@@ -66,7 +66,7 @@ export function LeaderboardEntry({
         {rankBadge ? (
           <span className="text-2xl">{rankBadge.emoji}</span>
         ) : (
-          <span className="text-lg font-bold text-surface-400">#{entry.rank}</span>
+          <span className="text-lg font-bold text-ink-2">#{entry.rank}</span>
         )}
       </div>
 
@@ -81,26 +81,26 @@ export function LeaderboardEntry({
           size="sm"
         />
         <div className="min-w-0">
-          <p className="font-medium text-surface-100 truncate">
+          <p className="font-medium text-ink truncate">
             {entry.user_profile.display_name || entry.user_profile.username}
             {isCurrentUser && (
-              <span className="ml-2 text-xs text-primary-400">(You)</span>
+              <span className="ml-2 text-xs text-action">(You)</span>
             )}
           </p>
-          <p className="text-xs text-surface-500">@{entry.user_profile.username}</p>
+          <p className="text-xs text-ink-3">@{entry.user_profile.username}</p>
         </div>
       </Link>
 
       {/* Score */}
       <div className="text-right">
-        <p className="font-bold text-surface-100">
+        <p className="font-bold text-ink">
           {formatScore(entry.score, type, units)}
         </p>
         {rankChange !== 0 && (
           <p
             className={cn(
               'text-xs flex items-center justify-end gap-0.5',
-              rankChange > 0 ? 'text-success-400' : 'text-error-400'
+              rankChange > 0 ? 'text-status-ok' : 'text-error-400'
             )}
           >
             {rankChange > 0 ? (

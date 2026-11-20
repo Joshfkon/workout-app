@@ -87,12 +87,12 @@ export const SafetyTierBadge = memo(function SafetyTierBadge({
           className={cn(
             'absolute z-50 top-full left-1/2 -translate-x-1/2 mt-2',
             'w-64 p-3 rounded-lg',
-            'bg-surface-800 border border-surface-700 shadow-lg',
-            'text-xs text-surface-300',
+            'bg-fill border border-sep shadow-lg',
+            'text-xs text-ink-2',
             'animate-in fade-in-0 zoom-in-95 duration-200'
           )}
         >
-          <p className="font-medium text-surface-100 mb-1">{info.label}</p>
+          <p className="font-medium text-ink mb-1">{info.label}</p>
           <p>{info.description}</p>
 
           {/* Arrow */}
@@ -101,7 +101,7 @@ export const SafetyTierBadge = memo(function SafetyTierBadge({
               'absolute bottom-full left-1/2 -translate-x-1/2',
               'w-0 h-0',
               'border-l-8 border-r-8 border-b-8',
-              'border-l-transparent border-r-transparent border-b-surface-800'
+              'border-l-transparent border-r-transparent border-b-sep'
             )}
           />
         </div>
@@ -127,9 +127,9 @@ export const SafetyTierDot = memo(function SafetyTierDot({
   const info = getTierDisplayInfo(tier);
 
   const colorClasses = {
-    green: 'bg-success-500',
-    yellow: 'bg-warning-500',
-    red: 'bg-danger-500',
+    green: 'bg-status-ok',
+    yellow: 'bg-status-warn',
+    red: 'bg-status-bad',
   }[info.color];
 
   const sizeClasses = {
@@ -170,7 +170,7 @@ export const SafetyTierLegend = memo(function SafetyTierLegend({
         return (
           <div key={tier} className="flex items-start gap-2">
             <SafetyTierBadge tier={tier} variant="short" showTooltip={false} />
-            <span className="text-sm text-surface-400">{info.description}</span>
+            <span className="text-sm text-ink-2">{info.description}</span>
           </div>
         );
       })}
