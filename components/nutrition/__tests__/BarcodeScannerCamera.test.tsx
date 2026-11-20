@@ -66,9 +66,10 @@ beforeEach(() => {
   scannerRunning = false;
   mockIsNativePlatform.mockReturnValue(false);
   mockIsPluginAvailable.mockReturnValue(false);
-  // html5-qrcode rejects stop() when the scanner isn't running yet.
+  // Like the real html5-qrcode, stop() THROWS synchronously when the scanner
+  // isn't running (it is not a rejected promise).
   mockStop.mockImplementation(() => {
-    if (!scannerRunning) return Promise.reject(new Error('Cannot stop, scanner is not running'));
+    if (!scannerRunning) throw 'Cannot stop, scanner is not running or paused.';
     scannerRunning = false;
     return Promise.resolve();
   });
@@ -132,4 +133,11 @@ describe('BarcodeScanner camera lifecycle', () => {
     expect(mockIsPluginAvailable).toHaveBeenCalledWith('BarcodeScanner');
     expect(mockStart).toHaveBeenCalledTimes(1);
   });
+});
+
+it('unmounts cleanly when the camera never started (camera unavailable)', async () => {
+  mockStart.mockRejectedValue(new Error('NotAllowedError'));
+  const { unmount } = render(<BarcodeScanner onScan={jest.fn().mockResolvedValue(undefined)} onClose={jest.fn()} />);
+  await openCamera();
+  expect(() => unmount()).not.toThrow();
 });
