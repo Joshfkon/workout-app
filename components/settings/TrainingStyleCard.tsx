@@ -82,24 +82,24 @@ export function TrainingStyleCard({ userId }: { userId: string | null }) {
   return (
     <Card data-testid="training-style-card">
       <CardHeader>
-        <CardTitle>Training Style</CardTitle>
-        <p className="text-sm text-surface-400 mt-1">
+        <CardTitle>Training style</CardTitle>
+        <p className="text-body text-ink-2 mt-1">
           Plan follows a mesocycle (a multi-week training block). Freestyle hides mesocycles: start
           workouts as you go, and Home shows today&apos;s workout instead of a plan.
         </p>
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="inline-flex rounded-lg bg-surface-800 p-1 gap-1" role="group" aria-label="Training style">
+        <div className="flex w-full rounded-[10px] bg-fill p-0.5" role="group" aria-label="Training style">
           {OPTIONS.map(({ value, label }) => (
             <button
               key={value}
               type="button"
               onClick={() => void choose(value)}
               disabled={isSaving || !userId}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+              className={`flex-1 h-8 rounded-[8px] text-subhead transition-colors ${
                 preference === value
-                  ? 'bg-surface-600 text-surface-50'
-                  : 'text-surface-400 hover:text-surface-200'
+                  ? 'bg-card font-semibold text-ink shadow-[0_1px_3px_rgb(0_0_0/0.14)]'
+                  : 'font-medium text-ink-2 hover:text-ink'
               }`}
               aria-pressed={preference === value}
             >
@@ -108,12 +108,12 @@ export function TrainingStyleCard({ userId }: { userId: string | null }) {
           ))}
         </div>
         {preference === 'auto' && effective && (
-          <p className="text-xs text-surface-500">
-            Using <span className="text-surface-300">{STYLE_NAMES[effective]}</span>, based on how
+          <p className="text-caption text-ink-3">
+            Using <span className="text-ink-2">{STYLE_NAMES[effective]}</span>, based on how
             your recent workouts were started.
           </p>
         )}
-        {error && <p className="text-xs text-danger-400">{error}</p>}
+        {error && <p className="text-caption text-status-bad">{error}</p>}
       </CardContent>
     </Card>
   );

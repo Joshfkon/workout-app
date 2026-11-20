@@ -46,8 +46,8 @@ export function SubscriptionCard() {
         </CardHeader>
         <CardContent>
           <div className="animate-pulse space-y-4">
-            <div className="h-4 bg-surface-700 rounded w-1/3" />
-            <div className="h-4 bg-surface-700 rounded w-1/2" />
+            <div className="h-4 bg-sep rounded w-1/3" />
+            <div className="h-4 bg-sep rounded w-1/2" />
           </div>
         </CardContent>
       </Card>
@@ -67,36 +67,36 @@ export function SubscriptionCard() {
               'default'
             }
           >
-            {isTrialing ? 'Trial' : status === 'active' ? 'Active' : status === 'past_due' ? 'Past Due' : 'Free'}
+            {isTrialing ? 'Trial' : status === 'active' ? 'Active' : status === 'past_due' ? 'Past due' : 'Free'}
           </Badge>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Current Plan */}
-        <div className="p-4 bg-surface-800/50 rounded-lg">
+        <div className="p-4 bg-fill/50 rounded-lg">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm text-surface-400">Current Plan</span>
+            <span className="text-body text-ink-2">Current plan</span>
             <span className={`text-lg font-bold ${
-              effectiveTier === 'elite' ? 'text-accent-400' :
-              effectiveTier === 'pro' ? 'text-primary-400' :
-              'text-surface-300'
+              effectiveTier === 'elite' ? 'text-action' :
+              effectiveTier === 'pro' ? 'text-action' :
+              'text-ink-2'
             }`}>
               {tierInfo.name}
             </span>
           </div>
-          <p className="text-xs text-surface-500">{tierInfo.description}</p>
+          <p className="text-caption text-ink-3">{tierInfo.description}</p>
         </div>
         
         {/* Trial Info */}
         {isTrialing && trialEndsAt && (
-          <div className="p-4 bg-warning-500/10 border border-warning-500/20 rounded-lg">
-            <div className="flex items-center gap-2 text-warning-400 mb-1">
+          <div className="p-4 bg-status-warn/10 border border-status-warn/20 rounded-lg">
+            <div className="flex items-center gap-2 text-status-warn mb-1">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <span className="text-sm font-medium">Trial ends in {trialDaysRemaining} days</span>
+              <span className="text-body font-medium">Trial ends in {trialDaysRemaining} days</span>
             </div>
-            <p className="text-xs text-surface-400">
+            <p className="text-caption text-ink-2">
               {trialEndsAt.toLocaleDateString('en-US', { 
                 weekday: 'long', 
                 year: 'numeric', 
@@ -109,11 +109,11 @@ export function SubscriptionCard() {
         
         {/* Billing Period */}
         {status === 'active' && currentPeriodEnd && (
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-surface-400">
+          <div className="flex items-center justify-between text-body">
+            <span className="text-ink-2">
               {cancelAtPeriodEnd ? 'Access until' : 'Next billing date'}
             </span>
-            <span className="text-surface-200">
+            <span className="text-ink">
               {currentPeriodEnd.toLocaleDateString('en-US', { 
                 month: 'short', 
                 day: 'numeric', 
@@ -124,8 +124,8 @@ export function SubscriptionCard() {
         )}
         
         {cancelAtPeriodEnd && (
-          <div className="p-3 bg-danger-500/10 border border-danger-500/20 rounded-lg">
-            <p className="text-sm text-danger-400">
+          <div className="p-3 bg-status-bad/10 border border-status-bad/20 rounded-lg">
+            <p className="text-body text-status-bad">
               Your subscription will be canceled at the end of this billing period.
             </p>
           </div>
@@ -134,7 +134,7 @@ export function SubscriptionCard() {
         {/* Actions — billing is web-only, so hide all purchase/management
             actions inside the native app (App Store Guideline 3.1.1). */}
         {isNative ? (
-          <p className="text-xs text-surface-500">
+          <p className="text-caption text-ink-3">
             Your subscription is managed on the web.
           </p>
         ) : (
@@ -142,7 +142,7 @@ export function SubscriptionCard() {
             {tier === 'free' && !isTrialing ? (
               <Link href="/dashboard/pricing" className="flex-1">
                 <Button className="w-full" variant="primary">
-                  Upgrade Now
+                  Upgrade now
                 </Button>
               </Link>
             ) : status === 'active' || isTrialing ? (
@@ -153,11 +153,11 @@ export function SubscriptionCard() {
                   isLoading={isOpeningPortal}
                   className="flex-1"
                 >
-                  Manage Subscription
+                  Manage subscription
                 </Button>
                 <Link href="/dashboard/pricing">
                   <Button variant="secondary">
-                    Change Plan
+                    Change plan
                   </Button>
                 </Link>
               </>

@@ -60,14 +60,14 @@ export function PreferencesTabPanel({
       {/* Preferences */}
       <Card>
         <CardHeader>
-          <CardTitle>App Preferences</CardTitle>
-          <p className="text-sm text-surface-400 mt-1">
+          <CardTitle>App preferences</CardTitle>
+          <p className="text-body text-ink-2 mt-1">
             Customize how the app works and what you see during workouts
           </p>
         </CardHeader>
         <CardContent className="space-y-6">
           <Select
-            label="Weight Units"
+            label="Weight units"
             value={units}
             onChange={(e) => handleUnitsChange(e.target.value as WeightUnit)}
             options={[
@@ -78,7 +78,7 @@ export function PreferencesTabPanel({
           />
 
           <Slider
-            label="Default Rest Timer"
+            label="Default rest timer"
             min={30}
             max={300}
             step={15}
@@ -87,11 +87,11 @@ export function PreferencesTabPanel({
             valueFormatter={(v) => `${Math.floor(v / 60)}:${(v % 60).toString().padStart(2, '0')}`}
           />
 
-          <div className="space-y-4 pt-2 border-t border-surface-700">
+          <div className="space-y-4 pt-2 border-t border-sep">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-surface-200">Show Form Cues</p>
-                <p className="text-xs text-surface-500">Display exercise form tips during workouts</p>
+                <p className="text-body font-medium text-ink">Show form cues</p>
+                <p className="text-caption text-ink-3">Display exercise form tips during workouts</p>
               </div>
               <Toggle
                 checked={showFormCues}
@@ -101,8 +101,8 @@ export function PreferencesTabPanel({
 
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-surface-200">Show Warmup Suggestions</p>
-                <p className="text-xs text-surface-500">Display warmup protocol before exercises</p>
+                <p className="text-body font-medium text-ink">Show warmup suggestions</p>
+                <p className="text-caption text-ink-3">Display warmup protocol before exercises</p>
               </div>
               <Toggle
                 checked={showWarmupSuggestions}
@@ -112,8 +112,8 @@ export function PreferencesTabPanel({
 
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-surface-200">Prioritize Hypertrophy</p>
-                <p className="text-xs text-surface-500">Select S-tier exercises first (Nippard methodology)</p>
+                <p className="text-body font-medium text-ink">Prioritize hypertrophy</p>
+                <p className="text-caption text-ink-3">Select S-tier exercises first (Nippard methodology)</p>
               </div>
               <Toggle
                 checked={prioritizeHypertrophy}
@@ -123,8 +123,8 @@ export function PreferencesTabPanel({
 
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-surface-200">Skip Pre-Workout Check-In</p>
-                <p className="text-xs text-surface-500">Start workouts immediately without readiness questions</p>
+                <p className="text-body font-medium text-ink">Skip pre-workout check-in</p>
+                <p className="text-caption text-ink-3">Start workouts immediately without readiness questions</p>
               </div>
               <Toggle
                 checked={skipPreWorkoutCheckIn}
@@ -134,8 +134,8 @@ export function PreferencesTabPanel({
 
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-surface-200">Morning Waist in Check-In</p>
-                <p className="text-xs text-surface-500">Optional waist entry in the daily check-in; feeds your composition trend</p>
+                <p className="text-body font-medium text-ink">Morning waist in check-in</p>
+                <p className="text-caption text-ink-3">Optional waist entry in the daily check-in; feeds your composition trend</p>
               </div>
               <Toggle
                 checked={trackWaistInCheckin}
@@ -145,8 +145,8 @@ export function PreferencesTabPanel({
 
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-surface-200">AI Coach Notes</p>
-                <p className="text-xs text-surface-500">Show AI-generated coaching tips during workouts</p>
+                <p className="text-body font-medium text-ink">AI coach notes</p>
+                <p className="text-caption text-ink-3">Show AI-generated coaching tips during workouts</p>
               </div>
               <Toggle
                 checked={showAiCoachNotes}
@@ -164,7 +164,7 @@ export function PreferencesTabPanel({
       <Card>
         <CardHeader>
           <CardTitle>Reminders</CardTitle>
-          <p className="text-sm text-surface-400 mt-1">
+          <p className="text-body text-ink-2 mt-1">
             Optional nudges to log meals and health metrics
           </p>
         </CardHeader>
@@ -182,13 +182,13 @@ export function PreferencesTabPanel({
         <div className="relative">
           {hasUnsavedChanges && !isSaving && (
             <div className="absolute -top-8 left-0 right-0 text-center">
-              <span className="text-xs text-warning-400 bg-surface-900/95 px-3 py-1 rounded-full border border-warning-500/30">
+              <span className="text-caption text-status-warn bg-card/95 px-3 py-1 rounded-full border border-status-warn/30">
                 Unsaved changes
               </span>
             </div>
           )}
           <Button onClick={onSave} isLoading={isSaving} className="w-full shadow-lg">
-            Save Preferences
+            Save preferences
           </Button>
         </div>
       </div>

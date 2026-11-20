@@ -21,41 +21,41 @@ export function VolumeLandmarksCard({ experience, volumeLandmarks, setVolumeLand
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Volume Landmarks</CardTitle>
-        <p className="text-sm text-surface-400 mt-1">
+        <CardTitle>Volume landmarks</CardTitle>
+        <p className="text-body text-ink-2 mt-1">
           Weekly sets per muscle group (based on Dr. Mike Israetel&apos;s research)
         </p>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
           {/* Explanation box */}
-          <div className="p-4 bg-surface-800/50 rounded-lg border border-surface-700 space-y-3">
-            <div className="flex gap-6 flex-wrap text-sm">
+          <div className="p-4 bg-fill/50 rounded-lg border border-sep space-y-3">
+            <div className="flex gap-6 flex-wrap text-body">
               <div className="flex items-center gap-2">
-                <span className="w-10 h-6 bg-warning-500/20 border border-warning-500/40 rounded text-xs flex items-center justify-center font-medium text-warning-400">MEV</span>
-                <span className="text-surface-400"><span className="font-medium text-surface-200">Minimum Effective Volume</span> — {DIRECT_MEV_TOOLTIP}</span>
+                <span className="w-10 h-6 bg-status-warn/20 border border-status-warn/40 rounded text-caption flex items-center justify-center font-medium text-status-warn">MEV</span>
+                <span className="text-ink-2"><span className="font-medium text-ink">Minimum effective volume</span> — {DIRECT_MEV_TOOLTIP}</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="w-10 h-6 bg-success-500/20 border border-success-500/40 rounded text-xs flex items-center justify-center font-medium text-success-400">MAV</span>
-                <span className="text-surface-400"><span className="font-medium text-surface-200">Maximum Adaptive Volume</span> — Sweet spot for growth</span>
+                <span className="w-10 h-6 bg-status-ok/20 border border-status-ok/40 rounded text-caption flex items-center justify-center font-medium text-status-ok">MAV</span>
+                <span className="text-ink-2"><span className="font-medium text-ink">Maximum adaptive volume</span> — Sweet spot for growth</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="w-10 h-6 bg-danger-500/20 border border-danger-500/40 rounded text-xs flex items-center justify-center font-medium text-danger-400">MRV</span>
-                <span className="text-surface-400"><span className="font-medium text-surface-200">Maximum Recoverable Volume</span> — Upper limit before overtraining</span>
+                <span className="w-10 h-6 bg-status-bad/20 border border-status-bad/40 rounded text-caption flex items-center justify-center font-medium text-status-bad">MRV</span>
+                <span className="text-ink-2"><span className="font-medium text-ink">Maximum recoverable volume</span> — Upper limit before overtraining</span>
               </div>
             </div>
-            <p className="text-xs text-surface-500 border-t border-surface-700 pt-3">
+            <p className="text-caption text-ink-3 border-t border-sep pt-3">
               These values are pre-filled based on your experience level and published hypertrophy research. Adjust based on your personal recovery capacity and response.
             </p>
           </div>
 
           {/* Column headers */}
           <div className="flex items-center gap-4">
-            <span className="w-24 text-xs text-surface-500 font-medium">Muscle</span>
-            <div className="flex-1 grid grid-cols-3 gap-2 text-xs text-center">
-              <span className="text-warning-400 font-medium" title={DIRECT_MEV_TOOLTIP}>Direct MEV</span>
-              <span className="text-success-400 font-medium">MAV</span>
-              <span className="text-danger-400 font-medium">MRV</span>
+            <span className="w-24 text-caption text-ink-3 font-medium">Muscle</span>
+            <div className="flex-1 grid grid-cols-3 gap-2 text-caption text-center">
+              <span className="text-status-warn font-medium" title={DIRECT_MEV_TOOLTIP}>Direct MEV</span>
+              <span className="text-status-ok font-medium">MAV</span>
+              <span className="text-status-bad font-medium">MRV</span>
             </div>
           </div>
 
@@ -79,10 +79,10 @@ export function VolumeLandmarksCard({ experience, volumeLandmarks, setVolumeLand
             return (
               <div key={muscle} className="space-y-1">
                 <div className="flex items-center gap-4">
-                  <span className="w-24 text-sm text-surface-300">
+                  <span className="w-24 text-body text-ink-2">
                     {STANDARD_MUSCLE_DISPLAY_NAMES[muscle]}
                     {parent && (
-                      <span className="block text-[10px] leading-tight text-surface-500">
+                      <span className="block text-caption text-ink-3">
                         subtarget
                       </span>
                     )}
@@ -108,16 +108,16 @@ export function VolumeLandmarksCard({ experience, volumeLandmarks, setVolumeLand
                     />
                   </div>
                 </div>
-                {hint && <p className="pl-28 text-xs text-surface-500">{hint}</p>}
+                {hint && <p className="pl-28 text-caption text-ink-3">{hint}</p>}
                 {violation && (
-                  <p className="pl-28 text-xs text-warning-400">{violation}</p>
+                  <p className="pl-28 text-caption text-status-warn">{violation}</p>
                 )}
               </div>
             );
           })}
-          <div className="flex items-center gap-4 pt-2 border-t border-surface-800">
-            <span className="w-24 text-xs text-surface-500">Legend</span>
-            <div className="flex-1 grid grid-cols-3 gap-2 text-center text-xs text-surface-500">
+          <div className="flex items-center gap-4 pt-2 border-t border-sep">
+            <span className="w-24 text-caption text-ink-3">Legend</span>
+            <div className="flex-1 grid grid-cols-3 gap-2 text-center text-caption text-ink-3">
               <span>MEV</span>
               <span>MAV</span>
               <span>MRV</span>

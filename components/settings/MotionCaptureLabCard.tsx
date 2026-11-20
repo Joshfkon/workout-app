@@ -76,7 +76,7 @@ export function MotionCaptureLabCard() {
       <CardHeader>
         <CardTitle>
           Motion Capture{' '}
-          <span className="ml-1 text-xs font-normal uppercase tracking-wide text-warning-400">
+          <span className="ml-1 text-caption font-normal text-status-warn">
             Experimental
           </span>
         </CardTitle>
@@ -84,11 +84,11 @@ export function MotionCaptureLabCard() {
       <CardContent className="space-y-4">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <p className="text-sm text-surface-300">
+            <p className="text-body text-ink-2">
               Strap your phone to a single-DOF machine arm (e.g. iso-lateral incline press) and
               record per-rep tempo, ROM, and handle speed from the IMU.
             </p>
-            <p className="mt-1 text-xs text-surface-500">
+            <p className="mt-1 text-caption text-ink-3">
               Display-only telemetry — never feeds progression, prescriptions, or volume.
             </p>
           </div>
@@ -101,10 +101,10 @@ export function MotionCaptureLabCard() {
 
         {enabled && (
           <>
-            <div className="flex items-center justify-between gap-4 pt-1 border-t border-surface-700">
+            <div className="flex items-center justify-between gap-4 pt-1 border-t border-sep">
               <div>
-                <p className="text-sm text-surface-300 mt-3">Keep raw sample buffers</p>
-                <p className="mt-1 text-xs text-surface-500">
+                <p className="text-body text-ink-2 mt-3">Keep raw sample buffers</p>
+                <p className="mt-1 text-caption text-ink-3">
                   On by default while this feature is experimental — bad captures can&apos;t be
                   debugged from derived metrics alone. Raw IMU streams are kept (max{' '}
                   {RAW_BUFFER_SESSION_CAP} per workout). Turn off to store derived per-rep metrics
@@ -119,14 +119,14 @@ export function MotionCaptureLabCard() {
             </div>
             <Link
               href="/dashboard/motion"
-              className="inline-block text-sm text-primary-400 hover:text-primary-300"
+              className="inline-block text-body text-action"
             >
               Open Motion Capture →
             </Link>
           </>
         )}
 
-        {error && <p className="text-xs text-danger-400">{error}</p>}
+        {error && <p className="text-caption text-status-bad">{error}</p>}
       </CardContent>
     </Card>
   );

@@ -93,7 +93,7 @@ export function LegacyHistoryBackfill({ userId }: LegacyHistoryBackfillProps) {
 
   if (counts === 'loading') {
     return (
-      <p className="text-sm text-surface-500" data-testid="legacy-backfill-loading">
+      <p className="text-body text-ink-3" data-testid="legacy-backfill-loading">
         Checking your workout history…
       </p>
     );
@@ -101,7 +101,7 @@ export function LegacyHistoryBackfill({ userId }: LegacyHistoryBackfillProps) {
 
   if (counts === null) {
     return (
-      <p className="text-sm text-surface-500" data-testid="legacy-backfill-unavailable">
+      <p className="text-body text-ink-3" data-testid="legacy-backfill-unavailable">
         Gym assignment isn&rsquo;t available right now.
       </p>
     );
@@ -111,7 +111,7 @@ export function LegacyHistoryBackfill({ userId }: LegacyHistoryBackfillProps) {
 
   return (
     <div className="space-y-4" data-testid="legacy-backfill">
-      <p className="text-sm text-surface-400">
+      <p className="text-body text-ink-2">
         Machine weights aren&rsquo;t comparable between gyms, so each gym keeps its own history
         for machine and cable exercises. Workouts logged before gym tracking aren&rsquo;t tied to
         a gym yet — until they are, they show up in every gym&rsquo;s history.
@@ -119,7 +119,7 @@ export function LegacyHistoryBackfill({ userId }: LegacyHistoryBackfillProps) {
 
       {result && (
         <p
-          className="flex items-start gap-2 text-sm text-success-400"
+          className="flex items-start gap-2 text-body text-status-ok"
           data-testid="legacy-backfill-result"
         >
           <IconCheck size={16} className="mt-0.5 flex-shrink-0" />
@@ -128,7 +128,7 @@ export function LegacyHistoryBackfill({ userId }: LegacyHistoryBackfillProps) {
       )}
 
       {nothingToDo ? (
-        <p className="text-sm text-surface-300" data-testid="legacy-backfill-done">
+        <p className="text-body text-ink-2" data-testid="legacy-backfill-done">
           All of your completed workouts are assigned to a gym. New sets are tagged automatically
           with the workout&rsquo;s location.
         </p>
@@ -138,7 +138,7 @@ export function LegacyHistoryBackfill({ userId }: LegacyHistoryBackfillProps) {
               per-workout correction flow yet (updateSessionLocation is only
               reachable from an active session), so a mixed history assigned
               here cannot be untangled afterwards. */}
-          <p className="text-sm text-surface-200" data-testid="legacy-backfill-count">
+          <p className="text-body text-ink" data-testid="legacy-backfill-count">
             <span className="font-semibold">{counts.setCount.toLocaleString('en-US')} sets</span>{' '}
             across{' '}
             <span className="font-semibold">
@@ -161,33 +161,33 @@ export function LegacyHistoryBackfill({ userId }: LegacyHistoryBackfillProps) {
                   data-gym-id={gym.id}
                   className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl border text-left transition-colors ${
                     active
-                      ? 'border-primary-500/60 bg-primary-500/10 text-surface-100'
-                      : 'border-surface-800 bg-surface-800/40 text-surface-300 hover:bg-surface-800'
+                      ? 'border-action/60 bg-action/10 text-ink'
+                      : 'border-sep bg-fill/40 text-ink-2 hover:bg-fill'
                   }`}
                 >
                   <IconMapPin
                     size={18}
-                    className={`flex-shrink-0 ${active ? 'text-primary-400' : 'text-surface-500'}`}
+                    className={`flex-shrink-0 ${active ? 'text-action' : 'text-ink-3'}`}
                   />
                   <span className="flex-1 min-w-0">
-                    <span className="block text-sm font-medium truncate">{gym.name}</span>
+                    <span className="block text-body font-medium truncate">{gym.name}</span>
                     {gym.is_default && (
-                      <span className="block text-xs text-surface-500">Default</span>
+                      <span className="block text-caption text-ink-3">Default</span>
                     )}
                   </span>
-                  {active && <IconCheck size={18} className="flex-shrink-0 text-primary-400" />}
+                  {active && <IconCheck size={18} className="flex-shrink-0 text-action" />}
                 </button>
               );
             })}
             {gyms.length === 0 && (
-              <p className="text-sm text-surface-500">
+              <p className="text-body text-ink-3">
                 Add a gym under Gym Equipment &amp; Locations first.
               </p>
             )}
           </div>
 
           {error && (
-            <p className="text-sm text-danger-400" data-testid="legacy-backfill-error">
+            <p className="text-body text-status-bad" data-testid="legacy-backfill-error">
               {error}
             </p>
           )}
@@ -207,16 +207,16 @@ export function LegacyHistoryBackfill({ userId }: LegacyHistoryBackfillProps) {
             size="sm"
           >
             <div className="space-y-4">
-              <p className="text-sm text-surface-300">
+              <p className="text-body text-ink-2">
                 This tags {counts.setCount.toLocaleString('en-US')} sets across{' '}
                 {counts.sessionCount.toLocaleString('en-US')} completed workouts as trained at{' '}
-                <span className="font-semibold text-surface-100">
+                <span className="font-semibold text-ink">
                   {gyms.find((g) => g.id === selectedGymId)?.name ?? 'the selected gym'}
                 </span>
                 . Machine exercise suggestions and records at other gyms will start fresh from a
                 conservative estimate.
               </p>
-              <p className="text-xs text-surface-500">
+              <p className="text-caption text-ink-3">
                 This can&rsquo;t be undone, and completed workouts can&rsquo;t be re-assigned
                 afterwards — only continue if this history was genuinely all at{' '}
                 {gyms.find((g) => g.id === selectedGymId)?.name ?? 'this gym'}.
