@@ -105,7 +105,7 @@ export function SiteEntriesEditor({
         type="button"
         onClick={() => setShowEntries((s) => !s)}
         data-testid="measurement-entries-toggle"
-        className="text-xs text-primary-400 hover:text-primary-300 transition-colors"
+        className="text-xs text-action hover:text-action transition-colors"
       >
         {showEntries ? 'Hide entries' : `Edit entries (${entries.length})`}
       </button>
@@ -117,10 +117,10 @@ export function SiteEntriesEditor({
           {entries.map((entry) => (
             <div
               key={entry.date}
-              className="flex items-center justify-between gap-2 py-1.5 px-2 rounded-lg bg-surface-800/40"
+              className="flex items-center justify-between gap-2 py-1.5 px-2 rounded-lg bg-fill/40"
               data-testid={`measurement-entry-${entry.date}`}
             >
-              <span className="text-xs text-surface-400">
+              <span className="text-xs text-ink-2">
                 {new Date(`${entry.date}T00:00:00`).toLocaleDateString('en-US', {
                   month: 'short',
                   day: 'numeric',
@@ -137,16 +137,16 @@ export function SiteEntriesEditor({
                     onChange={(e) => setEditValue(e.target.value)}
                     autoFocus
                     data-testid="measurement-entry-input"
-                    className="w-16 px-2 py-0.5 text-sm bg-surface-900 border border-surface-700 rounded text-surface-100 text-center"
+                    className="w-16 px-2 py-0.5 text-sm bg-card border border-sep rounded text-ink text-center"
                     aria-label={`${label} on ${entry.date}`}
                   />
-                  <span className="text-xs text-surface-500">{tapeUnit}</span>
+                  <span className="text-xs text-ink-2">{tapeUnit}</span>
                   <button
                     type="button"
                     onClick={() => saveEdit(entry.date)}
                     disabled={isMutating}
                     data-testid="measurement-entry-save"
-                    className="text-xs font-medium text-primary-400 hover:text-primary-300 disabled:opacity-50 transition-colors"
+                    className="text-xs font-medium text-action hover:text-action disabled:opacity-50 transition-colors"
                   >
                     Save
                   </button>
@@ -157,20 +157,20 @@ export function SiteEntriesEditor({
                       setMutateError(null);
                     }}
                     disabled={isMutating}
-                    className="text-xs text-surface-500 hover:text-surface-300 disabled:opacity-50 transition-colors"
+                    className="text-xs text-ink-2 hover:text-ink disabled:opacity-50 transition-colors"
                   >
                     Cancel
                   </button>
                 </div>
               ) : confirmDeleteDate === entry.date ? (
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-danger-400">Delete this entry?</span>
+                  <span className="text-xs text-status-bad">Delete this entry?</span>
                   <button
                     type="button"
                     onClick={() => deleteEntry(entry.date)}
                     disabled={isMutating}
                     data-testid="measurement-entry-delete-confirm"
-                    className="text-xs font-medium text-danger-400 hover:text-danger-300 disabled:opacity-50 transition-colors"
+                    className="text-xs font-medium text-status-bad hover:text-danger-300 disabled:opacity-50 transition-colors"
                   >
                     Delete
                   </button>
@@ -178,14 +178,14 @@ export function SiteEntriesEditor({
                     type="button"
                     onClick={() => setConfirmDeleteDate(null)}
                     disabled={isMutating}
-                    className="text-xs text-surface-500 hover:text-surface-300 disabled:opacity-50 transition-colors"
+                    className="text-xs text-ink-2 hover:text-ink disabled:opacity-50 transition-colors"
                   >
                     Cancel
                   </button>
                 </div>
               ) : (
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-surface-200">
+                  <span className="text-sm font-medium text-ink">
                     {(tapeUnit === 'in' ? cmToIn(entry.valueCm) : entry.valueCm).toFixed(1)}{' '}
                     {tapeUnit}
                   </span>
@@ -193,7 +193,7 @@ export function SiteEntriesEditor({
                     type="button"
                     onClick={() => startEdit(entry)}
                     data-testid={`measurement-entry-edit-${entry.date}`}
-                    className="text-xs text-primary-400 hover:text-primary-300 transition-colors"
+                    className="text-xs text-action hover:text-action transition-colors"
                   >
                     Edit
                   </button>
@@ -205,7 +205,7 @@ export function SiteEntriesEditor({
                       setConfirmDeleteDate(entry.date);
                     }}
                     data-testid={`measurement-entry-delete-${entry.date}`}
-                    className="text-xs text-surface-500 hover:text-danger-400 transition-colors"
+                    className="text-xs text-ink-2 hover:text-status-bad transition-colors"
                   >
                     Delete
                   </button>
@@ -216,7 +216,7 @@ export function SiteEntriesEditor({
         </div>
       )}
       {mutateError && (
-        <p className="text-xs text-danger-400 mt-1.5" data-testid="measurement-entry-error">
+        <p className="text-xs text-status-bad mt-1.5" data-testid="measurement-entry-error">
           {mutateError}
         </p>
       )}

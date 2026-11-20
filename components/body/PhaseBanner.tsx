@@ -26,11 +26,11 @@ export function PhaseBanner({ phase, href }: PhaseBannerProps) {
     return (
       <Link
         href={href}
-        className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-surface-800/60 border border-surface-700/60 text-sm hover:bg-surface-800 transition-colors"
+        className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-fill/60 border border-sep/60 text-sm hover:bg-fill transition-colors"
         data-testid="phase-banner-empty"
       >
-        <span className="text-surface-300">No active phase — set one</span>
-        <span className="text-primary-400 text-xs font-medium shrink-0">Set phase</span>
+        <span className="text-ink">No active phase — set one</span>
+        <span className="text-action text-xs font-medium shrink-0">Set phase</span>
       </Link>
     );
   }
@@ -49,10 +49,10 @@ export function PhaseBanner({ phase, href }: PhaseBannerProps) {
 
   return (
     <div
-      className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-surface-800/60 border border-surface-700/60"
+      className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-fill/60 border border-sep/60"
       data-testid="phase-banner"
     >
-      <div className="flex items-center gap-2 min-w-0 text-xs text-surface-400">
+      <div className="flex items-center gap-2 min-w-0 text-xs text-ink-2">
         <span
           className={`px-1.5 py-0.5 rounded font-semibold uppercase tracking-wide text-[10px] ${style.badgeBg} ${style.text} shrink-0`}
         >
@@ -60,7 +60,7 @@ export function PhaseBanner({ phase, href }: PhaseBannerProps) {
         </span>
         <span className="truncate">{parts.join(' · ')}</span>
       </div>
-      <Link href={href} className="text-primary-400 text-xs font-medium shrink-0 hover:text-primary-300">
+      <Link href={href} className="text-action text-xs font-medium shrink-0 hover:text-action">
         Manage
       </Link>
     </div>

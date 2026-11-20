@@ -70,8 +70,8 @@ const SEGMENTS: { value: BodyLogSegment; label: string }[] = [
 ];
 
 const inputClass =
-  'w-full px-3 py-2 rounded-lg bg-surface-800 border border-surface-700 text-surface-100 text-[15px] placeholder:text-surface-500 focus:outline-none focus:border-primary-500';
-const labelClass = 'block text-[11px] font-medium text-surface-400 mb-1';
+  'w-full px-3 py-2 rounded-lg bg-fill border border-sep text-ink text-[15px] placeholder:text-ink-2 focus:outline-none focus:border-primary-500';
+const labelClass = 'block text-[11px] font-medium text-ink-2 mb-1';
 const saveButtonClass =
   'w-full py-2.5 rounded-lg bg-primary-500 text-white text-[13px] font-medium hover:bg-primary-600 transition-colors disabled:opacity-60';
 
@@ -273,7 +273,7 @@ export function LogBodyDataSheet({
         />
 
         {error && (
-          <div className="p-2.5 rounded-lg bg-danger-500/10 border border-danger-500/20 text-danger-400 text-xs">
+          <div className="p-2.5 rounded-lg bg-danger-500/10 border border-danger-500/20 text-status-bad text-xs">
             {error}
           </div>
         )}
@@ -330,7 +330,7 @@ export function LogBodyDataSheet({
                 <label className={labelClass} htmlFor="body-log-measure-date">
                   Date
                 </label>
-                <p className="text-[11px] text-surface-500 mb-1 whitespace-nowrap">
+                <p className="text-[11px] text-ink-2 mb-1 whitespace-nowrap">
                   {previousLoggedAt
                     ? `Previous: ${new Date(`${previousLoggedAt}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
                     : 'First entry'}
@@ -351,7 +351,7 @@ export function LogBodyDataSheet({
             <div className="max-h-[45vh] overflow-y-auto space-y-3 pr-1">
               {measurementGroups.map(([group, fields]) => (
                 <div key={group}>
-                  <p className="text-[11px] font-semibold tracking-wide uppercase text-surface-500 mb-1.5">
+                  <p className="text-[11px] font-semibold tracking-wide uppercase text-ink-2 mb-1.5">
                     {group}
                   </p>
                   <div className="grid grid-cols-2 gap-2">
@@ -362,7 +362,7 @@ export function LogBodyDataSheet({
                             guidance for taking the tape reading consistently. */}
                         <div className="flex items-center mb-1">
                           <label
-                            className="text-[11px] font-medium text-surface-400"
+                            className="text-[11px] font-medium text-ink-2"
                             htmlFor={`body-log-${field.key}`}
                           >
                             {field.label}
@@ -394,7 +394,7 @@ export function LogBodyDataSheet({
               ))}
             </div>
 
-            <p className="text-[11px] text-surface-500">
+            <p className="text-[11px] text-ink-2">
               Skip any site — only filled fields are saved.
             </p>
             <button onClick={handleSave} disabled={isSaving} className={saveButtonClass}>
@@ -552,11 +552,11 @@ export function LogBodyDataSheet({
               </div>
             </div>
 
-            <p className="text-[11px] text-surface-500">
+            <p className="text-[11px] text-ink-2">
               Regional breakdown (arms/legs/trunk, android/gynoid, VAT)?{' '}
               <Link
                 href="/dashboard/body-composition/add"
-                className="text-primary-400 hover:text-primary-300"
+                className="text-action hover:text-action"
               >
                 Use the full scan form
               </Link>

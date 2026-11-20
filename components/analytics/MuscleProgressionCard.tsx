@@ -30,14 +30,14 @@ function paceBadgeClasses(pace: ProgressionPace): string {
     case 'ahead':
       return 'bg-emerald-500/10 text-emerald-400';
     case 'on_track':
-      return 'bg-surface-700/60 text-surface-300';
+      return 'bg-fill/60 text-ink';
     case 'behind':
       return 'bg-orange-500/10 text-orange-400';
     case 'plateaued':
-      return 'bg-warning-500/10 text-warning-400';
+      return 'bg-warning-500/10 text-status-warn';
     case 'calibrating':
     case 'insufficient_data':
-      return 'bg-surface-800 text-surface-500';
+      return 'bg-fill text-ink-2';
   }
 }
 
@@ -92,9 +92,9 @@ export function MuscleProgressionCard({ groups, exerciseNames, goal }: MusclePro
 
   return (
     <Card id="muscle-progression" padding="none" className="scroll-mt-4">
-      <div className="p-4 border-b border-surface-800">
-        <h3 className="font-medium text-surface-100">Progression by muscle group</h3>
-        <p className="text-xs text-surface-500 mt-0.5">{subtitle}</p>
+      <div className="p-4 border-b border-sep">
+        <h3 className="font-medium text-ink">Progression by muscle group</h3>
+        <p className="text-xs text-ink-2 mt-0.5">{subtitle}</p>
       </div>
       <ul className="divide-y divide-surface-800">
         {activeGroups.map((group) => {
@@ -104,15 +104,15 @@ export function MuscleProgressionCard({ groups, exerciseNames, goal }: MusclePro
             <li key={group.muscleGroup}>
               <button
                 onClick={() => toggle(group.muscleGroup)}
-                className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-surface-800/50 transition-colors"
+                className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-fill/50 transition-colors"
                 aria-expanded={isOpen}
               >
-                <span className="flex-1 min-w-0 text-sm font-medium text-surface-200 truncate">
+                <span className="flex-1 min-w-0 text-sm font-medium text-ink truncate">
                   {muscleDisplayName(group.muscleGroup)}
                 </span>
                 {paceHasRate(group.pace) && (
                   <span
-                    className={`text-xs font-mono ${group.rateImplausible ? 'text-warning-400' : 'text-surface-400'}`}
+                    className={`text-xs font-mono ${group.rateImplausible ? 'text-status-warn' : 'text-ink-2'}`}
                     title={
                       group.rateImplausible
                         ? 'Rate exceeded the plausibility ceiling and was capped — usually a data issue (equipment change or mislogged load), not real progress'
@@ -124,7 +124,7 @@ export function MuscleProgressionCard({ groups, exerciseNames, goal }: MusclePro
                   </span>
                 )}
                 {group.plateauedCount > 0 && (
-                  <span className="text-[11px] text-warning-400">
+                  <span className="text-[11px] text-status-warn">
                     {group.plateauedCount} plateaued
                   </span>
                 )}
@@ -134,7 +134,7 @@ export function MuscleProgressionCard({ groups, exerciseNames, goal }: MusclePro
                   {display.label}
                 </span>
                 <svg
-                  className={`w-4 h-4 text-surface-500 flex-shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                  className={`w-4 h-4 text-ink-2 flex-shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`}
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
@@ -151,11 +151,11 @@ export function MuscleProgressionCard({ groups, exerciseNames, goal }: MusclePro
                         key={insight.exerciseId}
                         className="flex items-center gap-3 pl-8 pr-4 py-1.5"
                       >
-                        <span className="flex-1 min-w-0 text-sm text-surface-400 truncate">
+                        <span className="flex-1 min-w-0 text-sm text-ink-2 truncate">
                           {exerciseNames?.get(insight.exerciseId) ?? 'Exercise'}
                         </span>
                         {paceHasRate(insight.pace) && (
-                          <span className="text-xs font-mono text-surface-500">
+                          <span className="text-xs font-mono text-ink-2">
                             {formatWeeklyPct(insight.weeklyChangePct)}
                           </span>
                         )}
@@ -174,10 +174,10 @@ export function MuscleProgressionCard({ groups, exerciseNames, goal }: MusclePro
         })}
         {calibratingGroups.length > 0 && (
           <li
-            className="px-4 py-3 text-xs text-surface-500"
+            className="px-4 py-3 text-xs text-ink-2"
             data-testid="muscle-progression-calibrating-summary"
           >
-            <span className="font-medium text-surface-400">
+            <span className="font-medium text-ink-2">
               {calibratingGroups.length} calibrating
             </span>{' '}
             after program change — {calibratingGroups.map((g) => muscleDisplayName(g.muscleGroup)).join(', ')}.
@@ -186,10 +186,10 @@ export function MuscleProgressionCard({ groups, exerciseNames, goal }: MusclePro
         )}
         {buildingGroups.length > 0 && (
           <li
-            className="px-4 py-3 text-xs text-surface-500"
+            className="px-4 py-3 text-xs text-ink-2"
             data-testid="muscle-progression-building-summary"
           >
-            <span className="font-medium text-surface-400">
+            <span className="font-medium text-ink-2">
               {buildingGroups.length} building history
             </span>{' '}
             — {buildingGroups.map((g) => muscleDisplayName(g.muscleGroup)).join(', ')}.

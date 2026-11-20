@@ -251,7 +251,7 @@ export function BodyHubTrends({
             <CardTitle>
               {activeMetric === 'map' ? 'Composition Map' : 'Body Composition Trend'}
             </CardTitle>
-            <div className="inline-flex self-start sm:self-auto bg-surface-800 rounded-lg p-1">
+            <div className="inline-flex self-start sm:self-auto bg-fill rounded-lg p-1">
               {metricOptions.map((option) => (
                 <button
                   key={option.value}
@@ -260,7 +260,7 @@ export function BodyHubTrends({
                   className={`px-3 py-1 text-xs font-medium rounded whitespace-nowrap transition-all ${
                     activeMetric === option.value
                       ? 'bg-primary-500 text-white shadow-sm'
-                      : 'text-surface-400 hover:text-surface-200'
+                      : 'text-ink-2 hover:text-ink'
                   }`}
                 >
                   {option.label}
@@ -271,9 +271,9 @@ export function BodyHubTrends({
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <div className="h-56 animate-pulse bg-surface-800/50 rounded-lg" />
+            <div className="h-56 animate-pulse bg-fill/50 rounded-lg" />
           ) : trend.length === 0 ? (
-            <p className="text-sm text-surface-500 py-8 text-center">
+            <p className="text-sm text-ink-2 py-8 text-center">
               Log a DEXA scan to unlock the composition trend — bodyweight
               alone can&apos;t estimate body fat.
             </p>
@@ -293,13 +293,13 @@ export function BodyHubTrends({
             <>
               {latest && (
                 <div className="flex items-baseline gap-2 mb-3">
-                  <span className="text-2xl font-semibold text-surface-100">
+                  <span className="text-2xl font-semibold text-ink">
                     {latest.value}
-                    <span className="text-sm text-surface-500 font-normal">
+                    <span className="text-sm text-ink-2 font-normal">
                       {unitSuffix}
                     </span>
                   </span>
-                  <span className="text-xs text-surface-500">
+                  <span className="text-xs text-ink-2">
                     {latest.kind === 'dexa' ? 'measured (DEXA)' : 'current estimate'}
                     {' · '}
                     {new Date(`${latest.date}T00:00:00`).toLocaleDateString('en-US', {
@@ -424,7 +424,7 @@ export function BodyHubTrends({
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>
-              <p className="text-[11px] text-surface-500 mt-2">
+              <p className="text-[11px] text-ink-2 mt-2">
                 <span className="inline-block w-2.5 h-2.5 rounded-full bg-cyan-400 align-middle mr-1" />
                 DEXA scans (measured) · line between scans is an estimate
                 re-anchored to pass through every scan
@@ -437,7 +437,7 @@ export function BodyHubTrends({
                 .
               </p>
               {activeMetric === 'ffmi' && latestFfmi && (
-                <p className="text-[11px] text-surface-500 mt-1">
+                <p className="text-[11px] text-ink-2 mt-1">
                   Chart shows raw FFMI (fat-free mass / height m²) · latest{' '}
                   {latestFfmi.ffmi} · height-normalized:{' '}
                   {latestFfmi.normalizedFfmi}
