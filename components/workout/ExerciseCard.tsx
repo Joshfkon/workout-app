@@ -65,6 +65,7 @@ import { SuggestionBanner } from './SuggestionBanner';
 import { composeNextSetCall, loggedEffortVerdict, type NextSetCall } from '@/services/setRecommendationLine';
 import { MOTION_SET_CONFIG, type EffortZone } from '@/services/shared/motion/motionSetConfig';
 import { velocityTargetFit, type VelocityTargetFit } from '@/services/shared/motion/setSummary';
+import { getSetReps, getSetDuration } from '@/services/shared/setModality';
 import { BottomSheet } from './BottomSheet';
 import { useKeyboardInset } from '@/hooks/useKeyboardInset';
 
@@ -4149,7 +4150,10 @@ export const ExerciseCard = memo(function ExerciseCard({
                     className="flex-shrink-0 text-subhead text-ink-2 tabular-nums"
                     data-testid={`set-last-time-${set.setNumber}`}
                   >
-                    last {displayWeight(previousSets[setIndex].weightKg, true)} × {previousSets[setIndex].reps}
+                    {/* Modality-aware: a timed exercise's last set is seconds, not reps. */}
+                    last {displayWeight(previousSets[setIndex].weightKg, true)} ×{' '}
+                    {getSetReps(previousSets[setIndex], exercise) ??
+                      `${getSetDuration(previousSets[setIndex], exercise)}s`}
                   </span>
                 )}
                 <span className="ml-auto flex-shrink-0 text-[11px] text-ink-2">
