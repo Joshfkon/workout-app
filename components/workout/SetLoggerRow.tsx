@@ -111,7 +111,9 @@ function clampToChip(rir: number): RepsInTank {
   return Math.max(0, Math.min(4, Number.isFinite(rounded) ? rounded : 2)) as RepsInTank;
 }
 
-const RIR_CHIPS: RepsInTank[] = [4, 3, 2, 1, 0];
+// 0 → 4+ left to right (approved mockup): reads as "how many more could you
+// have done?" counting up. The edit row in ExerciseCard uses the same order.
+const RIR_CHIPS: RepsInTank[] = [0, 1, 2, 3, 4];
 
 /** Chip face text — RIR 4 renders as "4+" (stored as integer 4). */
 const RIR_CHIP_TEXT: Record<RepsInTank, string> = {

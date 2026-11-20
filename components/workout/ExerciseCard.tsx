@@ -89,11 +89,11 @@ const MOTION_FIT_LABEL: Record<VelocityTargetFit, string> = {
 
 // Compact RIR chips for the inline set editor — discrete values for each RIR level.
 const EDIT_RIR_OPTIONS: { value: RepsInTank; label: string }[] = [
-  { value: 4, label: '4+' },
-  { value: 3, label: '3' },
-  { value: 2, label: '2' },
-  { value: 1, label: '1' },
   { value: 0, label: '0' },
+  { value: 1, label: '1' },
+  { value: 2, label: '2' },
+  { value: 3, label: '3' },
+  { value: 4, label: '4+' },
 ];
 
 // Read an exercise's primary muscle defensively: different call sites feed
