@@ -5,8 +5,8 @@ export default function WorkoutLoading() {
     <div className="space-y-4 p-4">
       {/* Header skeleton */}
       <div className="animate-pulse space-y-2">
-        <div className="h-6 bg-surface-700 rounded w-48" />
-        <div className="h-4 bg-surface-700 rounded w-32" />
+        <div className="h-6 bg-fill rounded w-48" />
+        <div className="h-4 bg-fill rounded w-32" />
       </div>
 
       {/* Exercise cards skeleton */}

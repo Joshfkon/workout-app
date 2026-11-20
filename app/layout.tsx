@@ -69,7 +69,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" data-theme="dark" style={{ backgroundColor: '#09090b' }} suppressHydrationWarning>
+    <html lang="en" data-theme="dark" style={{ backgroundColor: '#0b0b0d' }} suppressHydrationWarning>
       <head>
         {/* No-FOUC theme: resolve the saved preference (dark | light | system)
             and stamp an explicit data-theme before first paint. SSR default is
@@ -99,27 +99,27 @@ export default function RootLayout({
           }
           /* CRITICAL: Absolute fallback to prevent white screen - !important overrides everything */
           html {
-            background-color: #09090b !important;
+            background-color: #0b0b0d !important;
           }
           html[data-theme="light"] {
-            background-color: #f8fafc !important;
+            background-color: #f2f2f7 !important;
           }
           html::before {
             content: '';
             position: fixed;
             inset: 0;
-            background: linear-gradient(to bottom right, #09090b, #18181b, #09090b);
+            background: linear-gradient(to bottom right, #0b0b0d, #18181b, #0b0b0d);
             z-index: -1;
           }
           html[data-theme="light"]::before {
-            background: #f8fafc;
+            background: #f2f2f7;
           }
           body {
-            background-color: #09090b !important;
+            background-color: #0b0b0d !important;
             font-family: var(--font-inter);
           }
           html[data-theme="light"] body {
-            background-color: #f8fafc !important;
+            background-color: #f2f2f7 !important;
           }
           #static-splash {
             position: fixed;
@@ -128,7 +128,7 @@ export default function RootLayout({
             display: flex;
             align-items: center;
             justify-content: center;
-            background: linear-gradient(to bottom right, #09090b, #18181b, #09090b);
+            background: linear-gradient(to bottom right, #0b0b0d, #18181b, #0b0b0d);
           }
           #static-splash .logo-container {
             display: flex;
