@@ -138,12 +138,12 @@ export function WaistPaceCheckCard({
   };
 
   return (
-    <div className="rounded-xl bg-warning-500/10 border border-warning-500/20 p-4" data-testid="waist-pace-check">
+    <div className="rounded-card bg-warning-500/10 border border-warning-500/20 p-4" data-testid="waist-pace-check">
       <div className="flex items-start gap-3">
         <IconRulerMeasure className="w-5 h-5 text-warning-400 flex-shrink-0 mt-0.5" aria-hidden="true" />
         <div className="flex-1 min-w-0">
-          <p className="text-[15px] font-medium text-surface-100">Waist is outpacing this gain</p>
-          <p className="mt-1.5 text-xs text-surface-400">{signal.message}</p>
+          <p className="text-[15px] font-medium text-ink">Waist is outpacing this gain</p>
+          <p className="mt-1.5 text-xs text-ink-2">{signal.message}</p>
           <div className="mt-3">
             <Button size="sm" variant="ghost" onClick={handleDismiss}>
               Dismiss

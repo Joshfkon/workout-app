@@ -77,19 +77,19 @@ interface TodayHeroCardProps {
  */
 function MoreOptionsLink({ showPlanLink = false }: { showPlanLink?: boolean }) {
   return (
-    <div className="mt-1.5 flex items-center justify-center gap-3 text-xs text-surface-500">
+    <div className="mt-2 flex items-center justify-center gap-3 text-subhead text-ink-2">
       {showPlanLink && (
         <>
           <Link
             href="/dashboard/mesocycle/plan"
-            className="hover:text-surface-300 transition-colors"
+            className="hover:text-ink transition-colors"
           >
             See the plan
           </Link>
           <span aria-hidden="true">·</span>
         </>
       )}
-      <Link href="/dashboard/train" className="hover:text-surface-300 transition-colors">
+      <Link href="/dashboard/train" className="hover:text-ink transition-colors">
         More options
       </Link>
     </div>
@@ -99,8 +99,8 @@ function MoreOptionsLink({ showPlanLink = false }: { showPlanLink?: boolean }) {
 /** Divider + sparkles coach line rendered below the hero CTA. */
 function CoachLine({ text }: { text: string }) {
   return (
-    <div className="border-t border-surface-800 mt-3 pt-2 flex items-start gap-1.5 text-xs text-surface-400">
-      <IconSparkles size={14} className="flex-shrink-0 mt-0.5 text-primary-400" aria-hidden="true" />
+    <div className="border-t border-sep mt-4 pt-3 flex items-start gap-1.5 text-subhead text-ink-2">
+      <IconSparkles size={15} className="flex-shrink-0 mt-0.5 text-action" aria-hidden="true" />
       <span>{text}</span>
     </div>
   );
@@ -124,11 +124,9 @@ function HeroShell({
 }) {
   return (
     <>
-      <div className={`text-[11px] font-semibold tracking-widest uppercase mb-1.5 ${eyebrowClass}`}>
-        {eyebrow}
-      </div>
-      <div className="text-2xl font-bold text-surface-100">{title}</div>
-      {meta && <p className="text-[13px] text-surface-400 mt-1">{meta}</p>}
+      <div className={`text-caption font-semibold mb-0.5 ${eyebrowClass}`}>{eyebrow}</div>
+      <div className="text-title text-ink">{title}</div>
+      {meta && <p className="text-subhead text-ink-2 mt-1">{meta}</p>}
       <div className="mt-4">{cta}</div>
       {children}
     </>
@@ -173,19 +171,15 @@ export function TodayHeroCard({
       <div>
         <Link href={`/dashboard/workout/${workout.id}`} className="block">
           <div
-            className={`rounded-2xl p-5 border transition-colors ${
-              inProgress
-                ? 'bg-warning-500/10 border-warning-500/20 hover:bg-warning-500/15'
-                : 'bg-primary-500/10 border-primary-500/20 hover:bg-primary-500/15'
-            }`}
+className="rounded-card bg-card shadow-card p-5 transition-colors active:bg-fill"
           >
             <HeroShell
               eyebrow={`Next up${eyebrowContext ? ` · ${eyebrowContext}` : ''}`}
-              eyebrowClass={inProgress ? 'text-warning-400' : 'text-primary-400'}
+              eyebrowClass={inProgress ? 'text-status-warn' : 'text-action'}
               title={title}
               meta={meta}
               cta={
-                <div className="w-full py-3 rounded-xl text-center text-[15px] font-semibold text-white bg-gradient-to-r from-primary-500 to-primary-600">
+                <div className="flex w-full min-h-[50px] items-center justify-center rounded-button bg-action text-on-action text-headline transition-[filter] hover:brightness-110 active:brightness-95">
                   {inProgress ? 'Continue workout' : 'Start workout'}
                 </div>
               }
@@ -203,10 +197,10 @@ export function TodayHeroCard({
   if (!workout && scheduled) {
     return (
       <div>
-        <div className="rounded-2xl p-5 border bg-primary-500/10 border-primary-500/20">
+        <div className="rounded-card bg-card shadow-card p-5">
           <HeroShell
             eyebrow={`Next up${eyebrowContext ? ` · ${eyebrowContext}` : ''}`}
-            eyebrowClass="text-primary-400"
+            eyebrowClass="text-action"
             title={scheduled.dayName}
             meta={workoutMeta ?? null}
             cta={
@@ -214,7 +208,7 @@ export function TodayHeroCard({
                 type="button"
                 onClick={onStartWorkout}
                 disabled={isStarting || !onStartWorkout}
-                className="w-full py-3 rounded-xl text-center text-[15px] font-semibold text-white bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-400 hover:to-primary-500 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                className="flex w-full min-h-[50px] items-center justify-center rounded-button bg-action text-on-action text-headline transition-[filter] hover:brightness-110 active:brightness-95 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {isStarting ? 'Starting...' : 'Start workout'}
               </button>
@@ -233,17 +227,17 @@ export function TodayHeroCard({
   // below must stay reachable as the primary hero for new users.
   if (meal && (hasPlan || freestyle)) {
     return (
-      <div className="rounded-2xl p-5 border bg-success-500/10 border-success-500/20">
+      <div className="rounded-card bg-card shadow-card p-5">
         <HeroShell
           eyebrow={`Next up · ${meal.timeLabel}`}
-          eyebrowClass="text-success-400"
+          eyebrowClass="text-action"
           title={meal.title}
           meta={meal.meta}
           cta={
             <button
               type="button"
               onClick={onLogFood}
-              className="w-full py-3 rounded-xl text-center text-[15px] font-semibold text-white bg-gradient-to-r from-success-500 to-success-600 hover:from-success-400 hover:to-success-500 transition-colors"
+              className="flex w-full min-h-[50px] items-center justify-center rounded-button bg-action text-on-action text-headline transition-[filter] hover:brightness-110 active:brightness-95"
             >
               Log food
             </button>
@@ -257,10 +251,10 @@ export function TodayHeroCard({
   if (workout && workout.state === 'completed') {
     return (
       <Link href={`/dashboard/workout/${workout.id}`} className="block">
-        <div className="rounded-2xl p-5 border bg-success-500/10 border-success-500/20 hover:bg-success-500/15 transition-colors">
+        <div className="rounded-card bg-card shadow-card p-5 transition-colors active:bg-fill">
           <HeroShell
             eyebrow="Done today"
-            eyebrowClass="text-success-400"
+            eyebrowClass="text-status-ok"
             title={scheduled?.dayName ?? mesocycleName ?? 'Workout complete'}
             meta={
               workout.exercises > 0
@@ -268,7 +262,7 @@ export function TodayHeroCard({
                 : null
             }
             cta={
-              <div className="w-full py-3 rounded-xl text-center text-[15px] font-semibold text-white bg-success-500">
+              <div className="flex w-full min-h-[50px] items-center justify-center rounded-button bg-action-tint text-action text-headline">
                 View workout
               </div>
             }
@@ -281,18 +275,20 @@ export function TodayHeroCard({
   if (freestyle) {
     return (
       <div>
-        <div className="relative rounded-2xl p-5 border bg-primary-500/10 border-primary-500/20">
-          <div className="text-[11px] font-semibold tracking-widest uppercase mb-1.5 text-primary-400">
-            Next up
-          </div>
-          <div className="text-2xl font-bold text-surface-100">Ready to train?</div>
-          <p className="text-[13px] text-surface-400 mt-1 mb-4">
-            Start an empty workout, take an AI suggestion, or repeat a previous one.
+        <div className="relative rounded-card bg-card shadow-card p-5">
+          <div className="text-caption font-semibold mb-0.5 text-action">Next up</div>
+          <div className="text-title text-ink">Ready to train?</div>
+          <p className="text-subhead text-ink-2 mt-1 mb-4">
+            Start empty and add exercises as you go, or repeat a past workout or take a suggestion.
           </p>
-          <Link href="/dashboard/train" className="block">
-            <span className="block w-full py-3 rounded-xl text-center text-sm font-semibold text-white bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-400 hover:to-primary-500 transition-colors">
-              Start workout
-            </span>
+          {/* One tap straight into an empty workout; the Train tab keeps
+              every other way to start (repeat a previous one, AI suggestion). */}
+          <StartWorkoutButton />
+          <Link
+            href="/dashboard/train"
+            className="mt-2.5 flex w-full min-h-[44px] items-center justify-center rounded-button bg-action-tint text-action text-body font-semibold transition-[filter] hover:brightness-110"
+          >
+            Repeat or get a suggestion
           </Link>
         </div>
       </div>
@@ -302,26 +298,25 @@ export function TodayHeroCard({
   if (!hasPlan) {
     return (
       <div>
-        <div className="relative rounded-2xl p-5 border bg-primary-500/10 border-primary-500/20">
+        <div className="relative rounded-card bg-card shadow-card p-5">
           <FirstTimeHint
             id="dashboard-mesocycle-intro"
             title="Want a program?"
             description="HyperTrack can build a 4–8 week program (a mesocycle) that adds a little each week, then gives you a recovery week. Or just start a workout — it learns from what you log."
             position="top"
           />
-          <div className="text-[11px] font-semibold tracking-widest uppercase mb-1.5 text-primary-400">
-            Next up
-          </div>
-          <div className="text-2xl font-bold text-surface-100">Ready to train?</div>
-          <p className="text-[13px] text-surface-400 mt-1 mb-4">
+          <div className="text-caption font-semibold mb-0.5 text-action">Next up</div>
+          <div className="text-title text-ink">Ready to train?</div>
+          <p className="text-subhead text-ink-2 mt-1 mb-4">
             Start a workout and add exercises as you go, or have HyperTrack build you a program.
           </p>
           <div className="flex gap-2">
             <StartWorkoutButton className="flex-1" />
-            <Link href="/dashboard/mesocycle/new" className="flex-1">
-              <span className="block w-full py-3 rounded-xl text-center text-sm font-semibold text-surface-200 bg-surface-800 hover:bg-surface-700 transition-colors">
-                Build a program
-              </span>
+            <Link
+              href="/dashboard/mesocycle/new"
+              className="flex flex-1 min-h-[50px] items-center justify-center rounded-button bg-action-tint text-action text-headline transition-[filter] hover:brightness-110"
+            >
+              Build a program
             </Link>
           </div>
         </div>

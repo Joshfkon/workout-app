@@ -1,6 +1,7 @@
 'use client';
 
-import { IconScale, IconDroplet, IconSalad, IconRun, IconHeartbeat, type Icon } from '@tabler/icons-react';
+import { IconScale, IconDroplet, IconSalad, IconRun, IconHeartbeat, IconMoon, type Icon } from '@tabler/icons-react';
+import { Chip } from '@/components/ui';
 
 interface QuickLogRowProps {
   /** Opens the weight-log modal. */
@@ -9,6 +10,8 @@ interface QuickLogRowProps {
   onLogWater?: () => void;
   /** Opens the food quick-log modal. */
   onLogFood: () => void;
+  /** Opens the sleep log; omit to hide (needs a signed-in user). */
+  onLogSleep?: () => void;
   /** Opens the cardio modal; omit to hide (only with an active cardio prescription). */
   onLogCardio?: () => void;
   /** Opens the blood-pressure modal; omit to hide (needs a signed-in user). */
@@ -16,39 +19,33 @@ interface QuickLogRowProps {
 }
 
 /**
- * Quick log row — one-tap logging for Weight / Water / Food / Cardio / BP.
- * Each button opens a modal wired up by the dashboard (the old scroll-to
- * detail cards were removed from the home page).
+ * Quick log — one-tap logging as a row of chips (design system): Water,
+ * Food, Weight, Sleep, Cardio, Blood pressure. Each opens its sheet; the row
+ * scrolls sideways when it doesn't fit.
  */
-export function QuickLogRow({ onLogWeight, onLogWater, onLogFood, onLogCardio, onLogBloodPressure }: QuickLogRowProps) {
-  const actions: { label: string; icon: Icon; iconClass: string; onClick: (() => void) | undefined }[] = [
-    { label: 'Water', icon: IconDroplet, iconClass: 'text-primary-400', onClick: onLogWater },
-    { label: 'Food', icon: IconSalad, iconClass: 'text-success-400', onClick: onLogFood },
-    { label: 'Weight', icon: IconScale, iconClass: 'text-accent-400', onClick: onLogWeight },
-    { label: 'Cardio', icon: IconRun, iconClass: 'text-danger-400', onClick: onLogCardio },
-    { label: 'Blood Pressure', icon: IconHeartbeat, iconClass: 'text-danger-300', onClick: onLogBloodPressure },
+export function QuickLogRow({ onLogWeight, onLogWater, onLogFood, onLogSleep, onLogCardio, onLogBloodPressure }: QuickLogRowProps) {
+  const actions: { label: string; icon: Icon; onClick: (() => void) | undefined }[] = [
+    { label: 'Water', icon: IconDroplet, onClick: onLogWater },
+    { label: 'Food', icon: IconSalad, onClick: onLogFood },
+    { label: 'Weight', icon: IconScale, onClick: onLogWeight },
+    { label: 'Sleep', icon: IconMoon, onClick: onLogSleep },
+    { label: 'Cardio', icon: IconRun, onClick: onLogCardio },
+    { label: 'Blood pressure', icon: IconHeartbeat, onClick: onLogBloodPressure },
   ];
   const visible = actions.filter(
     (a): a is (typeof actions)[number] & { onClick: () => void } => !!a.onClick
   );
 
   return (
-    <div>
-      <div className="text-[11px] font-semibold tracking-widest uppercase text-surface-500 mb-2">
-        Quick log
-      </div>
-      <div className="grid grid-cols-2 gap-2">
+    <section aria-label="Quick log">
+      <h2 className="mx-1 mb-2 text-headline text-ink">Quick log</h2>
+      <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none]">
         {visible.map((a) => (
-          <button
-            key={a.label}
-            onClick={a.onClick}
-            className="bg-surface-900 border border-surface-800 rounded-xl py-3.5 flex items-center justify-center gap-2 text-sm font-medium text-surface-200 hover:bg-surface-800 transition-colors"
-          >
-            <a.icon size={18} aria-hidden="true" className={a.iconClass} />
+          <Chip key={a.label} onClick={a.onClick} icon={<a.icon size={16} />}>
             {a.label}
-          </button>
+          </Chip>
         ))}
       </div>
-    </div>
+    </section>
   );
 }

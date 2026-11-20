@@ -11,11 +11,11 @@ export function StartWorkoutButton({ className }: { className?: string }) {
         type="button"
         onClick={() => void start()}
         disabled={isStarting}
-        className="block w-full py-3 rounded-xl text-center text-sm font-semibold text-white bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-400 hover:to-primary-500 transition-colors disabled:opacity-70"
+        className="flex w-full min-h-[50px] items-center justify-center rounded-button bg-action text-on-action text-headline transition-[filter] hover:brightness-110 active:brightness-95 disabled:opacity-70"
       >
         {isStarting ? 'Starting…' : 'Start workout'}
       </button>
-      {error && <p className="mt-1.5 text-[11px] text-danger-400">{error}</p>}
+      {error && <p className="mt-1.5 text-caption text-status-bad">{error}</p>}
     </div>
   );
 }

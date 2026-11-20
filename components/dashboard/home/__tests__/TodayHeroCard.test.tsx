@@ -284,7 +284,9 @@ describe('TodayHeroCard — freestyle training style', () => {
     render(<TodayHeroCard workout={null} hasPlan={false} freestyle mesocycleName={null} />);
 
     expect(screen.getByText('Ready to train?')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /start workout/i })).toHaveAttribute(
+    // One tap into an empty workout; repeat / AI suggestion live on Train.
+    expect(screen.getByRole('button', { name: 'Start workout' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Repeat or get a suggestion' })).toHaveAttribute(
       'href',
       '/dashboard/train'
     );

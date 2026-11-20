@@ -90,9 +90,9 @@ function Stat({
 }) {
   const body = (
     <>
-      <div className="text-[11px] uppercase tracking-wide text-surface-500">{label}</div>
-      <div className="text-lg font-semibold text-surface-100 tabular-nums">{value}</div>
-      {detail && <div className="text-[11px] text-surface-500 truncate">{detail}</div>}
+      <div className="text-[11px] uppercase tracking-wide text-ink-2">{label}</div>
+      <div className="text-lg font-semibold text-ink tabular-nums">{value}</div>
+      {detail && <div className="text-[11px] text-ink-2 truncate">{detail}</div>}
     </>
   );
   if (!onClick) return <div className="min-w-0">{body}</div>;
@@ -101,7 +101,7 @@ function Stat({
       type="button"
       onClick={onClick}
       aria-label={actionLabel}
-      className="min-w-0 text-left rounded-lg -m-1 p-1 hover:bg-surface-800/60 transition-colors"
+      className="min-w-0 text-left rounded-lg -m-1 p-1 hover:bg-fill/60 transition-colors"
     >
       {body}
     </button>
@@ -158,7 +158,7 @@ function HealthStats({
         />
       </div>
       {syncedAgo && (
-        <p className="mt-2 text-[11px] text-surface-500" data-testid="health-synced-ago">
+        <p className="mt-2 text-[11px] text-ink-2" data-testid="health-synced-ago">
           Updated {syncedAgo}
         </p>
       )}
@@ -168,15 +168,15 @@ function HealthStats({
 
 function PermissionBanner({ isSyncing, onAllow }: { isSyncing: boolean; onAllow: () => void }) {
   return (
-    <div className="mb-3 flex items-center justify-between gap-3 rounded-xl bg-warning-500/10 border border-warning-500/20 p-3">
-      <p className="text-xs text-surface-300">
+    <div className="mb-3 flex items-center justify-between gap-3 rounded-card bg-warning-500/10 border border-warning-500/20 p-3">
+      <p className="text-xs text-ink">
         Apple Health needs your OK on this iPhone before anything can sync.
       </p>
       <button
         type="button"
         onClick={onAllow}
         disabled={isSyncing}
-        className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-primary-500 hover:bg-primary-400 disabled:opacity-60"
+        className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-action hover:bg-primary-400 disabled:opacity-60"
       >
         {isSyncing ? 'Syncing…' : 'Allow access'}
       </button>
@@ -289,7 +289,7 @@ export function HealthGlanceCard({
   // Region-scoped placeholder on first load only (cached-first: a revisit
   // renders the cached numbers).
   if (isLoading && !data) {
-    return <div className="h-[104px] rounded-2xl bg-surface-900 border border-surface-800 animate-pulse" />;
+    return <div className="h-[104px] rounded-card bg-card shadow-card animate-pulse" />;
   }
 
   const connected = !!data?.sourceName;
@@ -297,23 +297,23 @@ export function HealthGlanceCard({
   return (
     <>
       <div
-        className="rounded-2xl p-4 bg-surface-900 border border-surface-800"
+        className="rounded-card p-4 bg-card shadow-card"
         data-testid="health-glance-card"
       >
         <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-1.5 text-xs text-surface-500">
+          <div className="flex items-center gap-1.5 text-xs text-ink-2">
             <IconActivityHeartbeat size={14} aria-hidden="true" />
             <span>Health</span>
-            {connected && <span className="text-surface-600">· {data?.sourceName}</span>}
+            {connected && <span className="text-ink-2">· {data?.sourceName}</span>}
           </div>
           {connected && (
-            <div className="flex items-center gap-3 text-xs text-surface-500">
+            <div className="flex items-center gap-3 text-xs text-ink-2">
               {usesAppleHealth && !needsPermission && (
                 <button
                   type="button"
                   onClick={() => void syncNow(false)}
                   disabled={isSyncing}
-                  className="hover:text-surface-300 disabled:opacity-60"
+                  className="hover:text-ink disabled:opacity-60"
                 >
                   {isSyncing ? 'Syncing…' : 'Sync now'}
                 </button>
@@ -321,7 +321,7 @@ export function HealthGlanceCard({
               <button
                 type="button"
                 onClick={() => setShowConnect(true)}
-                className="hover:text-surface-300"
+                className="hover:text-ink"
               >
                 Manage
               </button>
@@ -339,13 +339,13 @@ export function HealthGlanceCard({
           </>
         ) : (
           <div className="flex items-center justify-between gap-3">
-            <p className="text-sm text-surface-300">
+            <p className="text-sm text-ink">
               Sync sleep, steps and HRV automatically to sharpen recovery and calorie estimates.
             </p>
             <button
               type="button"
               onClick={() => setShowConnect(true)}
-              className="shrink-0 px-3 py-2 rounded-xl text-sm font-semibold text-white bg-primary-500 hover:bg-primary-400 transition-colors"
+              className="shrink-0 px-3 py-2 rounded-card text-sm font-semibold text-white bg-action hover:bg-primary-400 transition-colors"
             >
               {healthKitCapable ? 'Connect Apple Health' : 'Connect a wearable'}
             </button>
