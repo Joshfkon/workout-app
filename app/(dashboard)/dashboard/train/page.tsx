@@ -69,6 +69,10 @@ import { sessionIndexFromCompleted } from '@/lib/training/mesocycleProgress';
 import { buildTrainingSchedule, type ScheduleMode } from '@/lib/training/trainingSchedule';
 import {
   createRepeatSession,
+  deriveWorkoutTitle,
+  RECENT_SESSION_SELECT,
+  toRepeatableExercises,
+  type RecentSessionRow,
   type RepeatableExercise,
 } from '@/lib/training/repeatWorkout';
 import { getOrCreateTodaySession } from '../workout/_lib/adhocSession';
@@ -146,28 +150,6 @@ interface InProgressBlockRow {
   set_logs: { id: string; is_warmup: boolean | null }[] | null;
 }
 
-interface RecentSessionRow {
-  id: string;
-  completed_at: string;
-  started_at: string | null;
-  /** Active duration snapshot (pauses excluded); null for legacy sessions. */
-  duration_seconds: number | null;
-  exercise_blocks:
-    | {
-        exercise_id: string;
-        order: number | null;
-        suggestion_reason: string | null;
-        exercises:
-          | { name: string | null; primary_muscle: string | null }
-          | { name: string | null; primary_muscle: string | null }[]
-          | null;
-        set_logs:
-          | { is_warmup: boolean | null; weight_kg: number | null; reps: number | null }[]
-          | null;
-      }[]
-    | null;
-}
-
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /**
@@ -197,41 +179,6 @@ function formatHoursMinutes(totalMinutes: number): string {
   if (hours === 0) return `${minutes}m`;
   if (minutes === 0) return `${hours}h`;
   return `${hours}h ${minutes}m`;
-}
-
-/**
- * "Pull · Back, Biceps" — the split-day name parsed from the blocks'
- * suggestion_reason ("Pull - Week 2 ...", written by the start path) plus the
- * top two muscle groups by working sets. Falls back gracefully when either
- * half is missing (ad-hoc sessions have neither a day name nor a plan).
- */
-function deriveWorkoutTitle(blocks: NonNullable<RecentSessionRow['exercise_blocks']>): string {
-  let dayName: string | null = null;
-  for (const block of blocks) {
-    const match = /^(.+?) - Week \d+/.exec(block.suggestion_reason ?? '');
-    if (match) {
-      dayName = match[1];
-      break;
-    }
-  }
-
-  const setsByGroup = new Map<string, number>();
-  blocks.forEach((block) => {
-    const workingSets = (block.set_logs ?? []).filter((l) => !l.is_warmup).length;
-    if (workingSets === 0) return;
-    const exercise = Array.isArray(block.exercises) ? block.exercises[0] : block.exercises;
-    const legacy = exercise?.primary_muscle ? toLegacyMuscleGroup(exercise.primary_muscle) : null;
-    if (!legacy) return;
-    setsByGroup.set(legacy, (setsByGroup.get(legacy) ?? 0) + workingSets);
-  });
-  const topMuscles = Array.from(setsByGroup.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 2)
-    .map(([group]) => capitalize(group))
-    .join(', ');
-
-  if (dayName && topMuscles) return `${dayName} · ${topMuscles}`;
-  return dayName ?? (topMuscles || 'Workout');
 }
 
 // Removed custom gradient/outline classes in favor of Button component variants
@@ -311,7 +258,7 @@ export default function TrainPage() {
           supabase
             .from('workout_sessions')
             .select(
-              'id, completed_at, started_at, duration_seconds, exercise_blocks(exercise_id, order, suggestion_reason, exercises(name, primary_muscle), set_logs(is_warmup, weight_kg, reps))'
+              RECENT_SESSION_SELECT
             )
             .eq('user_id', user.id)
             .eq('state', 'completed')
@@ -361,21 +308,7 @@ export default function TrainPage() {
             const completedAt = new Date(row.completed_at);
             const rawDurationMin = activeDurationMin(row);
             const durationMin = rawDurationMin != null ? Math.round(rawDurationMin) : null;
-            // The clone list for "Repeat previous workout": exercise ids +
-            // working sets (weights feed E1RM re-estimation, not the targets).
-            const exercises: RepeatableExercise[] = [...blocks]
-              .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-              .map((b) => {
-                const exercise = Array.isArray(b.exercises) ? b.exercises[0] : b.exercises;
-                return {
-                  exerciseId: b.exercise_id,
-                  name: exercise?.name ?? '',
-                  sets: (b.set_logs ?? [])
-                    .filter((l) => !l.is_warmup)
-                    .map((l) => ({ weight_kg: l.weight_kg ?? 0, reps: l.reps ?? 0 })),
-                };
-              })
-              .filter((e) => e.exerciseId && e.name);
+            const exercises = toRepeatableExercises(blocks);
             return {
               id: row.id,
               completedAt,
