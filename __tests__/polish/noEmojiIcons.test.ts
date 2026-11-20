@@ -9,7 +9,7 @@ import { join } from 'path';
 
 const FILES = [
   'app/(dashboard)/dashboard/analytics/page.tsx',
-  'app/(dashboard)/dashboard/nutrition/page.tsx',
+  'app/(dashboard)/dashboard/nutrition/_components/NutritionScreen.tsx',
   'app/(dashboard)/dashboard/train/page.tsx',
   'app/(dashboard)/dashboard/more/page.tsx',
   'app/(dashboard)/dashboard/DashboardClient.tsx',
