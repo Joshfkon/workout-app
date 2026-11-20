@@ -7056,7 +7056,7 @@ export default function WorkoutPage() {
     const isLastMainRow = !blocks.some((b, i) => i > index && isBlockInMainList(i));
 
     const linkIcon = (
-      <svg className="h-4 w-4 text-[#a99bff]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <svg className="h-4 w-4 text-action" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 010 5.656l-3 3a4 4 0 01-5.656-5.656l1.5-1.5m8.656-4.328a4 4 0 015.656 5.656l-1.5 1.5" />
       </svg>
     );
@@ -7433,7 +7433,7 @@ export default function WorkoutPage() {
             onClick={() => setShowCoachMessage(!showCoachMessage)}
             className="w-full p-4 flex items-center gap-3 text-left"
           >
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-400 to-purple-500 flex items-center justify-center flex-shrink-0">
+            <div className="w-10 h-10 rounded-full bg-action-tint flex items-center justify-center flex-shrink-0">
               <span className="text-lg">🏋️</span>
             </div>
             <div className="flex-1 min-w-0">
@@ -7558,12 +7558,12 @@ export default function WorkoutPage() {
           const cluster = getClusterInfo(index);
           const clusterClasses = cluster.clustered
             ? [
-                'bg-[#6d5ce0]/[0.06] border-l border-r border-[#6d5ce0]/60 px-2.5',
-                cluster.isFirst ? 'border-t rounded-t-xl pt-1' : 'border-t border-[#6d5ce0]/25 !mt-0',
+                'bg-action/[0.06] border-l border-r border-action/40 px-2.5',
+                cluster.isFirst ? 'border-t rounded-t-xl pt-1' : 'border-t border-action/20 !mt-0',
                 cluster.isLast ? 'border-b rounded-b-xl pb-2' : '',
               ].join(' ')
             : cluster.inGroup
-              ? 'border-l-2 border-[#6d5ce0]/60 rounded-l pl-2' // degraded (drag-split) fallback
+              ? 'border-l-2 border-action/40 rounded-l pl-2' // degraded (drag-split) fallback
               : '';
 
           // Calculate if this item should be visually shifted during drag
@@ -7599,7 +7599,7 @@ export default function WorkoutPage() {
               {cluster.isFirst && (
                 <div
                   data-testid="superset-eyebrow"
-                  className="flex items-center justify-between px-1 pt-1.5 pb-2 text-[11px] font-semibold uppercase tracking-wide text-[#a99bff]"
+                  className="flex items-center justify-between px-1 pt-1.5 pb-2 text-[11px] font-semibold uppercase tracking-wide text-action"
                 >
                   <span className="inline-flex items-center gap-1.5">
                     <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -7672,7 +7672,7 @@ export default function WorkoutPage() {
                   {cluster.slot && (
                     <div
                       data-testid="superset-slot"
-                      className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-[#6d5ce0]/25 text-xs font-bold text-[#a99bff]"
+                      className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-action-tint text-xs font-bold text-action"
                       aria-label={`Superset position ${cluster.slot}`}
                     >
                       {cluster.slot}

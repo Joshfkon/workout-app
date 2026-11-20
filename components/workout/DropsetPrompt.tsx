@@ -143,22 +143,22 @@ export function DropsetPrompt({
   return (
     <tr>
       <td colSpan={6} className="p-0">
-        <div className="relative border-l-4 border-purple-500 bg-gradient-to-r from-purple-500/20 to-purple-500/5">
+        <div className="relative rounded-card bg-action-tint">
           {/* Pulsing glow effect for urgency */}
-          <div className="absolute inset-0 animate-pulse bg-purple-500/10 pointer-events-none" />
+          <div className="absolute inset-0 animate-pulse bg-action/10 pointer-events-none" />
 
           <div className="relative px-4 py-3">
             {/* Header with drop indicator */}
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1 text-purple-400">
+                <div className="flex items-center gap-1 text-action">
                   <svg className="w-5 h-5 animate-bounce" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
                   </svg>
                   <span className="font-bold text-lg">DROP NOW</span>
                 </div>
                 {totalDrops > 1 && (
-                  <span className="text-xs text-purple-300 bg-purple-500/20 px-2 py-0.5 rounded-full">
+                  <span className="text-xs text-action bg-action-tint px-2 py-0.5 rounded-full">
                     Drop {dropNumber}/{totalDrops}
                   </span>
                 )}
@@ -175,14 +175,14 @@ export function DropsetPrompt({
 
             {/* Target weight display */}
             <div className="text-center mb-3">
-              <span className="text-3xl font-bold text-surface-100">
+              <span className="text-3xl font-bold text-ink">
                 {displayTargetWeight} {unit}
               </span>
             </div>
 
             {/* Plate math helper for barbell exercises */}
             {plateChange && (
-              <div className="text-center mb-3 text-sm text-purple-300 bg-purple-500/10 rounded-lg py-2 px-3">
+              <div className="text-center mb-3 text-sm text-action bg-action/10 rounded-lg py-2 px-3">
                 <span className="font-medium">Remove:</span> {plateChange.plates}
               </div>
             )}
@@ -197,7 +197,7 @@ export function DropsetPrompt({
                   onChange={(e) => setWeight(e.target.value)}
                   onKeyDown={handleKeyDown}
                   step="0.5"
-                  className="w-full px-3 py-2 bg-surface-900 border border-purple-500/50 rounded-lg text-center font-mono text-lg text-surface-100 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full px-3 py-2 bg-card border border-action/50 rounded-lg text-center font-mono text-lg text-ink focus:ring-2 focus:ring-action focus:border-transparent"
                 />
               </div>
               <div className="flex-1">
@@ -209,7 +209,7 @@ export function DropsetPrompt({
                   onChange={(e) => setReps(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder="?"
-                  className="w-full px-3 py-2 bg-surface-900 border border-purple-500/50 rounded-lg text-center font-mono text-lg text-surface-100 placeholder-surface-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full px-3 py-2 bg-card border border-action/50 rounded-lg text-center font-mono text-lg text-ink placeholder-ink-3 focus:ring-2 focus:ring-action focus:border-transparent"
                 />
               </div>
               <div className="flex-1">
@@ -222,16 +222,16 @@ export function DropsetPrompt({
                   step="0.5"
                   min="1"
                   max="10"
-                  className="w-full px-3 py-2 bg-surface-900 border border-purple-500/50 rounded-lg text-center font-mono text-lg text-surface-100 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full px-3 py-2 bg-card border border-action/50 rounded-lg text-center font-mono text-lg text-ink focus:ring-2 focus:ring-action focus:border-transparent"
                 />
               </div>
               <div className="pt-5">
                 <button
                   onClick={handleSubmit}
                   disabled={!reps || parseFloat(reps) <= 0}
-                  className="p-3 rounded-lg bg-purple-500 hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="p-3 rounded-lg bg-action hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
-                  <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg className="w-6 h-6 text-on-action" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                   </svg>
                 </button>
