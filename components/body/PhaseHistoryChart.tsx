@@ -151,7 +151,7 @@ export function PhaseHistoryChart({ weighIns, scanDays, phases, unitLabel }: Pha
 
   if (weighIns.length < 2) {
     return (
-      <p className="text-sm text-surface-500 py-8 text-center">
+      <p className="text-sm text-ink-2 py-8 text-center">
         Not enough weight data to chart yet.
       </p>
     );

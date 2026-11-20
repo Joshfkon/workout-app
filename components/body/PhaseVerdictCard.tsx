@@ -23,27 +23,27 @@ export function PhaseVerdictCard({ assessment, href }: PhaseVerdictCardProps) {
 
   return (
     <Link href={href} className="block" data-testid="phase-verdict-card">
-      <Card
-        className={`border-l-4 ${style.border} hover:bg-surface-800/60 transition-colors cursor-pointer`}
-      >
+      <Card className="transition-colors active:bg-fill cursor-pointer">
         <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <span className={`w-2 h-2 rounded-full shrink-0 ${style.dot}`} aria-hidden="true" />
-            <span className="text-xs uppercase tracking-wide text-surface-400">{style.label}</span>
+          <div className="flex items-start justify-between gap-3">
+            <p className="text-headline text-ink">{assessment.headline}</p>
+            <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-fill px-2.5 py-1 text-caption font-semibold text-ink">
+              <span className={`h-2 w-2 shrink-0 rounded-full ${style.dot}`} aria-hidden="true" />
+              {style.label}
+            </span>
           </div>
-          <p className="text-sm font-semibold text-surface-100">{assessment.headline}</p>
           {assessment.details.length > 0 && (
             <div className="space-y-1">
               {assessment.details.map((detail) => (
-                <div key={`${detail.metric}-${detail.text}`} className="flex gap-2 text-xs">
-                  <span className="text-surface-500 shrink-0 w-16">{detail.metric}</span>
-                  <span className="text-surface-300">{detail.text}</span>
+                <div key={`${detail.metric}-${detail.text}`} className="flex gap-2 text-subhead">
+                  <span className="text-ink-2 shrink-0 w-20">{detail.metric}</span>
+                  <span className="text-ink">{detail.text}</span>
                 </div>
               ))}
             </div>
           )}
           {assessment.suggestion && (
-            <p className="text-xs text-surface-200 border-t border-surface-700/60 pt-2">
+            <p className="text-subhead text-ink border-t border-sep pt-2">
               {assessment.suggestion}
             </p>
           )}

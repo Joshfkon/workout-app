@@ -138,7 +138,7 @@ export function PhaseFormModal({ seed, error, saving, onClose, onSave }: PhaseFo
             value={form.note}
             onChange={(e) => setForm((prev) => (prev ? { ...prev, note: e.target.value } : prev))}
           />
-          {shownError && <p className="text-sm text-danger-400">{shownError}</p>}
+          {shownError && <p className="text-sm text-status-bad">{shownError}</p>}
           <ModalFooter>
             <Button variant="ghost" onClick={onClose} disabled={saving}>
               Cancel

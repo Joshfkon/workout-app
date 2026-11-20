@@ -8,7 +8,7 @@ import { useQuery, useQueryClient, useIsRestoring } from '@tanstack/react-query'
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Card, CardHeader, CardTitle, CardContent, Button, Badge, FullPageLoading, ErrorRetry, PageHeader, LoadingState } from '@/components/ui';
+import { Card, CardHeader, CardTitle, CardContent, Button, Badge, FullPageLoading, ErrorRetry, PageHeader, LoadingState, Sheet, ListGroup, ListRow } from '@/components/ui';
 import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 import { resolveAuthState } from '@/lib/supabase/authState';
 import { useMusclePriorities } from '@/components/settings/MusclePrioritySettings';
@@ -93,72 +93,72 @@ const LogBodyDataSheet = dynamic(
 // Body composition chart
 const BodyCompChart = dynamic(
   () => import('@/components/analytics/BodyCompCharts').then(m => m.BodyCompChart),
-  { ssr: false, loading: () => <div className="h-64 animate-pulse bg-surface-700 rounded" /> }
+  { ssr: false, loading: () => <div className="h-64 animate-pulse bg-fill rounded" /> }
 );
 
 // Wellness charts
 const HydrationChart = dynamic(
   () => import('@/components/analytics/WellnessCharts').then(m => m.HydrationChart),
-  { ssr: false, loading: () => <div className="h-[300px] animate-pulse bg-surface-700 rounded" /> }
+  { ssr: false, loading: () => <div className="h-[300px] animate-pulse bg-fill rounded" /> }
 );
 const CardioChart = dynamic(
   () => import('@/components/analytics/WellnessCharts').then(m => m.CardioChart),
-  { ssr: false, loading: () => <div className="h-[300px] animate-pulse bg-surface-700 rounded" /> }
+  { ssr: false, loading: () => <div className="h-[300px] animate-pulse bg-fill rounded" /> }
 );
 const SleepHoursChart = dynamic(
   () => import('@/components/analytics/WellnessCharts').then(m => m.SleepHoursChart),
-  { ssr: false, loading: () => <div className="h-[200px] animate-pulse bg-surface-700 rounded" /> }
+  { ssr: false, loading: () => <div className="h-[200px] animate-pulse bg-fill rounded" /> }
 );
 const SleepQualityChart = dynamic(
   () => import('@/components/analytics/WellnessCharts').then(m => m.SleepQualityChart),
-  { ssr: false, loading: () => <div className="h-[200px] animate-pulse bg-surface-700 rounded" /> }
+  { ssr: false, loading: () => <div className="h-[200px] animate-pulse bg-fill rounded" /> }
 );
 const EnergyChart = dynamic(
   () => import('@/components/analytics/WellnessCharts').then(m => m.EnergyChart),
-  { ssr: false, loading: () => <div className="h-[200px] animate-pulse bg-surface-700 rounded" /> }
+  { ssr: false, loading: () => <div className="h-[200px] animate-pulse bg-fill rounded" /> }
 );
 const MoodChart = dynamic(
   () => import('@/components/analytics/WellnessCharts').then(m => m.MoodChart),
-  { ssr: false, loading: () => <div className="h-[200px] animate-pulse bg-surface-700 rounded" /> }
+  { ssr: false, loading: () => <div className="h-[200px] animate-pulse bg-fill rounded" /> }
 );
 const FocusChart = dynamic(
   () => import('@/components/analytics/WellnessCharts').then(m => m.FocusChart),
-  { ssr: false, loading: () => <div className="h-[200px] animate-pulse bg-surface-700 rounded" /> }
+  { ssr: false, loading: () => <div className="h-[200px] animate-pulse bg-fill rounded" /> }
 );
 const LibidoChart = dynamic(
   () => import('@/components/analytics/WellnessCharts').then(m => m.LibidoChart),
-  { ssr: false, loading: () => <div className="h-[200px] animate-pulse bg-surface-700 rounded" /> }
+  { ssr: false, loading: () => <div className="h-[200px] animate-pulse bg-fill rounded" /> }
 );
 const StressChart = dynamic(
   () => import('@/components/analytics/WellnessCharts').then(m => m.StressChart),
-  { ssr: false, loading: () => <div className="h-[200px] animate-pulse bg-surface-700 rounded" /> }
+  { ssr: false, loading: () => <div className="h-[200px] animate-pulse bg-fill rounded" /> }
 );
 const SorenessChart = dynamic(
   () => import('@/components/analytics/WellnessCharts').then(m => m.SorenessChart),
-  { ssr: false, loading: () => <div className="h-[200px] animate-pulse bg-surface-700 rounded" /> }
+  { ssr: false, loading: () => <div className="h-[200px] animate-pulse bg-fill rounded" /> }
 );
 const HungerChart = dynamic(
   () => import('@/components/analytics/WellnessCharts').then(m => m.HungerChart),
-  { ssr: false, loading: () => <div className="h-[200px] animate-pulse bg-surface-700 rounded" /> }
+  { ssr: false, loading: () => <div className="h-[200px] animate-pulse bg-fill rounded" /> }
 );
 
 // Daily tracking cards relocated from the home dashboard (Phase 3.3).
 // Self-fetching client components — loaded on demand for the Wellness tab.
 const ActivityCard = dynamic(
   () => import('@/components/dashboard/ActivityCard').then(m => m.ActivityCard),
-  { ssr: false, loading: () => <div className="h-40 animate-pulse bg-surface-700 rounded-xl" /> }
+  { ssr: false, loading: () => <div className="h-40 animate-pulse bg-fill rounded-xl" /> }
 );
 const HydrationTracker = dynamic(
   () => import('@/components/dashboard/HydrationTracker').then(m => m.HydrationTracker),
-  { ssr: false, loading: () => <div className="h-40 animate-pulse bg-surface-700 rounded-xl" /> }
+  { ssr: false, loading: () => <div className="h-40 animate-pulse bg-fill rounded-xl" /> }
 );
 const BodyTargets = dynamic(
   () => import('@/components/dashboard/BodyTargets').then(m => m.BodyTargets),
-  { ssr: false, loading: () => <div className="h-40 animate-pulse bg-surface-700 rounded-xl" /> }
+  { ssr: false, loading: () => <div className="h-40 animate-pulse bg-fill rounded-xl" /> }
 );
 const BloodPressureCard = dynamic(
   () => import('@/components/dashboard/BloodPressureCard').then(m => m.BloodPressureCard),
-  { ssr: false, loading: () => <div className="h-40 animate-pulse bg-surface-700 rounded-xl" /> }
+  { ssr: false, loading: () => <div className="h-40 animate-pulse bg-fill rounded-xl" /> }
 );
 
 // Tab types. Down to three: Goals dissolved into Body (targets editor +
@@ -222,7 +222,7 @@ function PercentileBar({ percentile, label, showValue = true }: { percentile: nu
 
   return (
     <div className="space-y-1">
-      <div className="flex justify-between text-xs text-surface-400">
+      <div className="flex justify-between text-xs text-ink-2">
         <span>{label}</span>
         {showValue && <span className="font-medium">{percentile}th</span>}
       </div>
@@ -276,16 +276,17 @@ function AnalyticsPageContent() {
   const searchParams = useSearchParams();
   const { preferences } = useUserPreferences();
   const [activeTab, setActiveTab] = useState<TabType>(
-    () => parseTabParam(searchParams.get('tab')) ?? 'body-composition'
+    () => parseTabParam(searchParams.get('tab')) ?? 'strength'
   );
   const sectionParam = searchParams.get('section');
+  const [showPlateauIdeas, setShowPlateauIdeas] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   // Follow URL changes (back/forward, in-app deep links to another tab).
   // No/invalid param means the default tab — a base-route navigation (e.g.
   // the Progress nav item) must reset a previously deep-linked tab.
   useEffect(() => {
-    setActiveTab(parseTabParam(searchParams.get('tab')) ?? 'body-composition');
+    setActiveTab(parseTabParam(searchParams.get('tab')) ?? 'strength');
   }, [searchParams]);
 
   const handleTabChange = (tab: TabType) => {
@@ -1519,9 +1520,9 @@ function AnalyticsPageContent() {
   );
 
   const tabs = [
-    { id: 'body-composition' as TabType, label: 'Body', icon: IconChartBar },
-    { id: 'strength' as TabType, label: 'Strength', icon: IconBarbell },
-    { id: 'wellness' as TabType, label: 'Wellness', icon: IconActivityHeartbeat },
+    { id: 'strength' as TabType, label: 'Strength' },
+    { id: 'body-composition' as TabType, label: 'Body' },
+    { id: 'wellness' as TabType, label: 'Wellness' },
   ];
 
   // The global time-range selector genuinely scopes only the Wellness data
@@ -1530,7 +1531,7 @@ function AnalyticsPageContent() {
   const rangeAppliesToTab = activeTab === 'wellness';
 
   const timeRangeSelector = (
-    <div className="flex gap-1 bg-surface-800 p-1 rounded-lg flex-wrap" data-testid="analytics-range-selector">
+    <div className="flex gap-0.5 bg-fill p-0.5 rounded-[10px] flex-wrap" data-testid="analytics-range-selector">
       {([
         { value: '7d', label: '7d' },
         { value: '30d', label: '30d' },
@@ -1542,10 +1543,8 @@ function AnalyticsPageContent() {
         <button
           key={range.value}
           onClick={() => setTimeRange(range.value)}
-          className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
-            timeRange === range.value
-              ? 'bg-primary-500 text-white'
-              : 'text-surface-400 hover:text-surface-200'
+          className={`h-7 px-2.5 text-caption rounded-[8px] transition-colors ${
+            timeRange === range.value ? 'bg-card text-ink font-semibold shadow-[0_1px_3px_rgb(0_0_0/0.14)]' : 'text-ink-2'
           }`}
         >
           {range.label}
@@ -1565,21 +1564,19 @@ function AnalyticsPageContent() {
       />
 
       {/* Tab Navigation */}
-      <div className="flex gap-1 bg-surface-800/50 p-1 rounded-xl">
+      <div className="flex rounded-[10px] bg-fill p-0.5" role="tablist" aria-label="Progress sections">
         {tabs.map((tab) => (
           <button
             key={tab.id}
+            role="tab"
+            aria-selected={activeTab === tab.id}
             data-testid={`analytics-tab-${tab.id}`}
             onClick={() => handleTabChange(tab.id)}
-            className={`flex-1 flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-2 px-1 sm:px-4 py-2 sm:py-2.5 min-h-[52px] rounded-lg text-sm font-medium transition-all ${
-              activeTab === tab.id
-                ? 'bg-surface-700 text-surface-100 shadow-sm'
-                : 'text-surface-400 hover:text-surface-200 hover:bg-surface-800'
+            className={`flex-1 h-9 rounded-[8px] text-subhead text-ink transition-colors ${
+              activeTab === tab.id ? 'bg-card font-semibold shadow-[0_1px_3px_rgb(0_0_0/0.14)]' : 'font-medium'
             }`}
           >
-            <tab.icon size={18} stroke={1.75} aria-hidden="true" />
-            {/* P1-7: labels always visible — icon-only tabs hid five sections' worth of features */}
-            <span className="text-[10px] leading-tight sm:text-sm text-center">{tab.label}</span>
+            {tab.label}
           </button>
         ))}
       </div>
@@ -1590,7 +1587,7 @@ function AnalyticsPageContent() {
           {/* Body hub front door: Log + Edit goals. Goal-setting moved here
               from the dissolved Goals tab, behind this header action. */}
           <div className="flex items-center justify-between gap-2">
-            <h2 className="text-lg font-semibold text-surface-100">Body</h2>
+            <h2 className="text-lg font-semibold text-ink">Body</h2>
             <div className="flex items-center gap-2">
               <Button
                 variant="ghost"
@@ -1619,35 +1616,40 @@ function AnalyticsPageContent() {
             </div>
           </div>
 
+          {/* 1. Verdict card — the rules-based phase assessment. Tapping it
+              opens the phase editor. 2. Phase banner — compact current-phase
+              strip with the Manage link (or the set-one CTA). */}
+          <PhaseVerdictCard assessment={assessment} href="/dashboard/phases" />
+          <PhaseBanner phase={currentPhase} href="/dashboard/phases" />
+
           {/* Recommendations — first thing on the tab. Correctly signed,
               unit-aware, evidence-cited (deload-advisor style), and suppressed
               inside the phase-boundary water window. */}
           {recommendations.length > 0 && (
             <Card>
               <CardHeader>
-                <CardTitle>Recommendations</CardTitle>
+                <CardTitle>Tips for you</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-3">
+                <div className="divide-y divide-sep">
                   {recommendations.slice(0, 3).map((rec, index) => (
-                    <div
-                      key={index}
-                      className={`p-3 rounded-lg border ${
-                        rec.type === 'warning'
-                          ? 'bg-warning-500/10 border-warning-500/20'
-                          : rec.type === 'achievement'
-                          ? 'bg-success-500/10 border-success-500/20'
-                          : 'bg-primary-500/10 border-primary-500/20'
-                      }`}
-                    >
-                      <h4 className="font-medium text-surface-200 text-sm">{rec.title}</h4>
-                      <p className="text-xs text-surface-400 mt-1">{rec.message}</p>
+                    <div key={index} className="flex gap-3 py-3 first:pt-0 last:pb-0">
+                      <span
+                        className={`mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full ${
+                          rec.type === 'warning' ? 'bg-status-warn' : rec.type === 'achievement' ? 'bg-status-ok' : 'bg-action'
+                        }`}
+                        aria-hidden="true"
+                      />
+                      <div className="min-w-0">
+                      <h4 className="text-body font-semibold text-ink">{rec.title}</h4>
+                      <p className="text-subhead text-ink-2 mt-0.5">{rec.message}</p>
                       {rec.evidence && (
-                        <p className="text-[11px] text-surface-500 mt-1.5 flex items-start gap-1">
+                        <p className="text-caption text-ink-2 mt-1 flex items-start gap-1">
                           <IconChartBar size={12} className="mt-0.5 shrink-0" aria-hidden="true" />
                           <span>{rec.evidence}</span>
                         </p>
                       )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1655,11 +1657,6 @@ function AnalyticsPageContent() {
             </Card>
           )}
 
-          {/* 1. Verdict card — the rules-based phase assessment. Tapping it
-              opens the phase editor. 2. Phase banner — compact current-phase
-              strip with the Manage link (or the set-one CTA). */}
-          <PhaseVerdictCard assessment={assessment} href="/dashboard/phases" />
-          <PhaseBanner phase={currentPhase} href="/dashboard/phases" />
 
           {/* Prominence (getBodyCompLayout): with ≥2 DEXA scans the trend
               module (incl. the Composition Map) leads the tab; below that
@@ -1677,14 +1674,14 @@ function AnalyticsPageContent() {
           {!bodyCompLayout.trendFirst && bodyTrendModule}
 
           {bodyCompLayout.showScanPrompt && (
-            <p className="text-xs text-surface-500 text-center">
+            <p className="text-xs text-ink-2 text-center">
               {scans.length === 0
                 ? 'Track weight, measurements, and strength now. Log a DEXA scan to add composition trends and the Composition Map.'
                 : 'You can see overall progress. One more scan adds the Composition Map and phase-to-phase analysis.'}{' '}
               <button
                 type="button"
                 onClick={() => setLogSegment('dexa')}
-                className="text-primary-400 hover:text-primary-300 font-medium"
+                className="text-action hover:text-action font-medium"
               >
                 Log scan
               </button>
@@ -1749,13 +1746,13 @@ function AnalyticsPageContent() {
           {/* No data state */}
           {scans.length === 0 && (
             <Card className="text-center py-12">
-              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-surface-800 flex items-center justify-center">
-                <svg className="w-8 h-8 text-surface-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-fill flex items-center justify-center">
+                <svg className="w-8 h-8 text-ink-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                 </svg>
               </div>
-              <h2 className="text-lg font-semibold text-surface-200">Building Your Body Data</h2>
-              <p className="text-surface-500 mt-2 max-w-md mx-auto">
+              <h2 className="text-lg font-semibold text-ink">Building Your Body Data</h2>
+              <p className="text-ink-2 mt-2 max-w-md mx-auto">
                 You&apos;re already tracking workouts, weight, and measurements. Add a DEXA scan to see lean vs. fat trends and unlock composition insights.
               </p>
               <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-6">
@@ -1779,12 +1776,27 @@ function AnalyticsPageContent() {
           {/* Per-lift trend breakdown (the home "Lifts" tile's detail view).
               First so ?section=lift-trends deep links land above the fold. */}
           {liftTrendsSummary && (
-            <LiftTrendsCard summary={liftTrendsSummary} units={units === 'lb' ? 'lb' : 'kg'} />
+            <LiftTrendsCard
+              summary={liftTrendsSummary}
+              units={units === 'lb' ? 'lb' : 'kg'}
+              attentionNames={plateauAlerts.map((a) => a.exerciseName)}
+              onSeeIdeas={() => setShowPlateauIdeas(true)}
+            />
           )}
-          {/* Plateau alerts derived from per-exercise E1RM trends. Hidden when none. */}
-          {plateauAlerts.length > 0 && (
+          {/* Plateau alerts (with their ideas) open from the summary's "See
+              ideas"; without a lift-trend summary they stay inline. */}
+          {plateauAlerts.length > 0 && !liftTrendsSummary && (
             <PlateauAlertList alerts={plateauAlerts} units={units === 'lb' ? 'lb' : 'kg'} />
           )}
+          <Sheet
+            isOpen={showPlateauIdeas && plateauAlerts.length > 0}
+            onClose={() => setShowPlateauIdeas(false)}
+            title="Lifts that need attention"
+            size="lg"
+            grouped
+          >
+            <PlateauAlertList alerts={plateauAlerts} units={units === 'lb' ? 'lb' : 'kg'} />
+          </Sheet>
           {/* Progression pace per muscle group vs the expected rate for the
               user's experience level (services/progressionInsights) */}
           {muscleProgression.length > 0 && (
@@ -1795,30 +1807,19 @@ function AnalyticsPageContent() {
             />
           )}
 
-          {/* Link to detailed Volume tracking */}
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex-1">
-                  <h3 className="text-sm font-semibold text-surface-100 mb-1">
-                    Weekly Volume Tracking
-                  </h3>
-                  <p className="text-xs text-surface-400">
-                    Track sets per muscle group, compare against your volume landmarks (MEV/MAV/MRV), 
-                    and see detailed breakdowns by exercise.
-                  </p>
-                </div>
-                <Link href="/dashboard/volume">
-                  <Button size="sm">View Volume →</Button>
-                </Link>
-              </div>
-            </CardContent>
-          </Card>
+          {/* Weekly sets per muscle (the volume page) — one row. */}
+          <ListGroup>
+            <ListRow
+              title="Sets per week"
+              subtitle="Each muscle against its weekly range (MEV–MRV)"
+              href="/dashboard/volume"
+            />
+          </ListGroup>
 
           {strengthProfile ? (
             <>
               {/* Overall Score — rendered exactly ONCE (was duplicated). */}
-              <Card className="bg-gradient-to-br from-primary-500/10 to-accent-500/10 border-primary-500/30" data-testid="strength-score-card">
+              <Card data-testid="strength-score-card">
                 <CardContent className="p-6">
                   <div className="flex flex-col md:flex-row items-center gap-6">
                     <div className="relative">
@@ -1851,37 +1852,37 @@ function AnalyticsPageContent() {
                         </defs>
                       </svg>
                       <div className="absolute inset-0 flex flex-col items-center justify-center">
-                        <span className="text-3xl font-bold text-surface-100">{strengthProfile.overallScore}</span>
-                        <span className="text-xs text-surface-400">/ 100</span>
+                        <span className="text-3xl font-bold text-ink">{strengthProfile.overallScore}</span>
+                        <span className="text-xs text-ink-2">/ 100</span>
                       </div>
                     </div>
 
                     <div className="flex-1 space-y-3">
                       <div>
-                        <p className="text-sm text-surface-400">Overall Strength Level</p>
+                        <p className="text-sm text-ink-2">Overall Strength Level</p>
                         <p className={`text-2xl font-bold capitalize ${getStrengthLevelColor(strengthProfile.strengthLevel)}`}>
                           {formatStrengthLevel(strengthProfile.strengthLevel)}
                         </p>
                       </div>
 
                       <div className="grid grid-cols-3 gap-3">
-                        <div className="p-2 bg-surface-900/50 rounded-lg">
-                          <p className="text-xs text-surface-500">Balance</p>
-                          <p className="text-lg font-bold text-surface-100">{strengthProfile.balanceScore}%</p>
+                        <div className="p-2 bg-card/50 rounded-lg">
+                          <p className="text-xs text-ink-2">Balance</p>
+                          <p className="text-lg font-bold text-ink">{strengthProfile.balanceScore}%</p>
                         </div>
-                        <div className="p-2 bg-surface-900/50 rounded-lg">
-                          <p className="text-xs text-surface-500">FFMI</p>
+                        <div className="p-2 bg-card/50 rounded-lg">
+                          <p className="text-xs text-ink-2">FFMI</p>
                           {/* Canonical FFMI (selectCanonicalFfmi) — NOT the
                               stale, normalized-in-one-field value frozen on
                               the calibration session. Falls back to the frozen
                               value only when no scan/height exists. */}
-                          <p className="text-lg font-bold text-surface-100" data-testid="strength-ffmi-stat">
+                          <p className="text-lg font-bold text-ink" data-testid="strength-ffmi-stat">
                             {(ffmiResult?.ffmi ?? strengthProfile.bodyComposition.ffmi).toFixed(1)}
                           </p>
                         </div>
-                        <div className="p-2 bg-surface-900/50 rounded-lg">
-                          <p className="text-xs text-surface-500">Lean Mass</p>
-                          <p className="text-lg font-bold text-surface-100">{displayWeight(strengthProfile.bodyComposition.leanMassKg)} {weightUnit}</p>
+                        <div className="p-2 bg-card/50 rounded-lg">
+                          <p className="text-xs text-ink-2">Lean Mass</p>
+                          <p className="text-lg font-bold text-ink">{displayWeight(strengthProfile.bodyComposition.leanMassKg)} {weightUnit}</p>
                         </div>
                       </div>
                     </div>
@@ -1897,11 +1898,11 @@ function AnalyticsPageContent() {
                 <CardContent>
                   <div className="space-y-4">
                     {strengthProfile.calibratedLifts.map((lift) => (
-                      <div key={lift.benchmarkId} className="p-4 bg-surface-800/50 rounded-xl">
+                      <div key={lift.benchmarkId} className="p-4 bg-fill/50 rounded-xl">
                         <div className="flex items-center justify-between mb-3">
                           <div>
-                            <h4 className="font-medium text-surface-200">{lift.lift}</h4>
-                            <p className="text-sm text-surface-500">
+                            <h4 className="font-medium text-ink">{lift.lift}</h4>
+                            <p className="text-sm text-ink-2">
                               E1RM: {displayWeight(lift.estimated1RM)} {weightUnit}
                             </p>
                           </div>
@@ -1924,7 +1925,7 @@ function AnalyticsPageContent() {
                 <Card className="border-warning-500/30">
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
-                      <IconAlertTriangle size={18} className="text-warning-400" aria-hidden="true" />
+                      <IconAlertTriangle size={18} className="text-status-warn" aria-hidden="true" />
                       Detected Imbalances
                     </CardTitle>
                   </CardHeader>
@@ -1941,8 +1942,8 @@ function AnalyticsPageContent() {
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div>
-                              <p className="text-sm font-medium text-surface-200">{imbalance.description}</p>
-                              <p className="text-xs text-surface-400 mt-1">{imbalance.recommendation}</p>
+                              <p className="text-sm font-medium text-ink">{imbalance.description}</p>
+                              <p className="text-xs text-ink-2 mt-1">{imbalance.recommendation}</p>
                             </div>
                             <Badge size="sm" variant={imbalance.severity === 'significant' ? 'danger' : 'warning'}>
                               {imbalance.severity}
@@ -1958,12 +1959,12 @@ function AnalyticsPageContent() {
           ) : (
             <Card className="text-center py-6">
               <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-primary-500/20 flex items-center justify-center">
-                <svg className="w-6 h-6 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="w-6 h-6 text-action" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                 </svg>
               </div>
-              <h2 className="text-base font-semibold text-surface-200">Calibrate Your Strength</h2>
-              <p className="text-sm text-surface-500 mt-1.5 max-w-md mx-auto">
+              <h2 className="text-base font-semibold text-ink">Calibrate Your Strength</h2>
+              <p className="text-sm text-ink-2 mt-1.5 max-w-md mx-auto">
                 Log a few workouts to see strength trends, percentile rankings, and personalized recommendations.
               </p>
               <Button className="mt-4" size="sm" onClick={() => router.push('/onboarding')}>
@@ -1998,7 +1999,7 @@ function AnalyticsPageContent() {
               and blood pressure. Cardio logging moved to the Train page. */}
           {userId && (
             <div className="space-y-3" data-testid="wellness-today">
-              <h2 className="text-[15px] font-medium text-surface-100">Today</h2>
+              <h2 className="text-[15px] font-medium text-ink">Today</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
                 <ActivityCard userId={userId} />
                 <HydrationTracker userId={userId} unit={units === 'kg' ? 'ml' : 'oz'} />
@@ -2061,7 +2062,7 @@ function AnalyticsPageContent() {
 // boundary for the static prerender pass — the fallback matches the page's
 // own loading state so nothing visibly changes.
 export default function AnalyticsPage() {
-  useDocumentTitle('Analytics');
+  useDocumentTitle('Progress');
   return (
     <Suspense fallback={<FullPageLoading text="Loading your analytics..." title="Progress" />}>
       <AnalyticsPageContent />
@@ -2111,15 +2112,15 @@ function MusclePrioritiesDisplay({ userId }: { userId: string }) {
             <Button variant="ghost" size="sm">Edit in Settings</Button>
           </Link>
         </CardTitle>
-        <p className="text-sm text-surface-400 mt-1">
+        <p className="text-sm text-ink-2 mt-1">
           These priorities influence volume allocation in program generation
         </p>
       </CardHeader>
       <CardContent>
         {!hasCustomPriorities ? (
           <div className="text-center py-4">
-            <p className="text-surface-400 text-sm mb-2">No custom priorities set</p>
-            <p className="text-xs text-surface-500 mb-3">
+            <p className="text-ink-2 text-sm mb-2">No custom priorities set</p>
+            <p className="text-xs text-ink-2 mb-3">
               All muscle groups are set to normal priority (3). Set custom priorities in Settings to influence program generation.
             </p>
             <Link href="/dashboard/settings">
@@ -2130,7 +2131,7 @@ function MusclePrioritiesDisplay({ userId }: { userId: string }) {
           <div className="space-y-4">
             {highPriority.length > 0 && (
             <div>
-              <h4 className="text-xs font-medium text-surface-400 mb-2 uppercase tracking-wide">
+              <h4 className="text-xs font-medium text-ink-2 mb-2 uppercase tracking-wide">
                 High Priority ({highPriority.length})
               </h4>
               <div className="flex flex-wrap gap-2">
@@ -2149,7 +2150,7 @@ function MusclePrioritiesDisplay({ userId }: { userId: string }) {
 
           {normalPriority.length > 0 && normalPriority.length < priorities.length && (
             <div>
-              <h4 className="text-xs font-medium text-surface-400 mb-2 uppercase tracking-wide">
+              <h4 className="text-xs font-medium text-ink-2 mb-2 uppercase tracking-wide">
                 Normal Priority ({normalPriority.length})
               </h4>
               <div className="flex flex-wrap gap-2">
@@ -2168,7 +2169,7 @@ function MusclePrioritiesDisplay({ userId }: { userId: string }) {
 
           {lowPriority.length > 0 && (
             <div>
-              <h4 className="text-xs font-medium text-surface-400 mb-2 uppercase tracking-wide">
+              <h4 className="text-xs font-medium text-ink-2 mb-2 uppercase tracking-wide">
                 Low Priority ({lowPriority.length})
               </h4>
               <div className="flex flex-wrap gap-2">
@@ -2186,14 +2187,14 @@ function MusclePrioritiesDisplay({ userId }: { userId: string }) {
           )}
 
           {priorities.some(p => p.reason) && (
-            <div className="pt-3 border-t border-surface-800">
-              <h4 className="text-xs font-medium text-surface-400 mb-2">Notes</h4>
+            <div className="pt-3 border-t border-sep">
+              <h4 className="text-xs font-medium text-ink-2 mb-2">Notes</h4>
               <div className="space-y-1">
                 {priorities
                   .filter(p => p.reason)
                   .map((p) => (
-                    <div key={p.muscleGroup} className="text-xs text-surface-400">
-                      <span className="font-medium text-surface-300">{getMuscleDisplayName(p.muscleGroup)}:</span>{' '}
+                    <div key={p.muscleGroup} className="text-xs text-ink-2">
+                      <span className="font-medium text-ink">{getMuscleDisplayName(p.muscleGroup)}:</span>{' '}
                       {p.reason}
                     </div>
                   ))}

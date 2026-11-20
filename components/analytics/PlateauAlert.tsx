@@ -78,7 +78,7 @@ export function PlateauAlert({
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-1">
               <svg
-                className="w-5 h-5 text-warning-400"
+                className="w-5 h-5 text-status-warn"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -90,7 +90,7 @@ export function PlateauAlert({
                   d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
                 />
               </svg>
-              <span className="font-medium text-surface-100">{exerciseName}</span>
+              <span className="font-medium text-ink">{exerciseName}</span>
               <Badge
                 variant={result.weeksSinceProgress >= 6 ? 'danger' : 'warning'}
                 size="sm"
@@ -98,16 +98,16 @@ export function PlateauAlert({
                 {getSeverityLabel()}
               </Badge>
             </div>
-            <p className="text-sm text-surface-400">
+            <p className="text-sm text-ink-2">
               No progress in {formatWeeks(result.weeksSinceProgress)}
               {hasValidE1RM && (
                 <>
                   {' '}• Current E1RM:{' '}
-                  <span className="font-mono text-surface-300">
+                  <span className="font-mono text-ink">
                     {formatWeight(result.currentE1RM, safeUnits)}
                   </span>
                   {showDelta && (
-                    <span className="text-danger-400 ml-2">
+                    <span className="text-status-bad ml-2">
                       ({displayDelta.toFixed(1)} {unitLabel} from recent peak)
                     </span>
                   )}
@@ -117,7 +117,7 @@ export function PlateauAlert({
           </div>
           <button
             onClick={onDismiss}
-            className="p-1 text-surface-500 hover:text-surface-300 transition-colors"
+            className="p-1 text-ink-2 hover:text-ink transition-colors"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -129,7 +129,7 @@ export function PlateauAlert({
         <div className="mt-3">
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="flex items-center gap-1 text-sm text-primary-400 hover:text-primary-300 transition-colors"
+            className="flex items-center gap-1 text-sm text-action hover:text-action transition-colors"
           >
             {isExpanded ? 'Hide' : 'Show'} suggestions
             <svg
@@ -147,9 +147,9 @@ export function PlateauAlert({
               {result.suggestions.map((suggestion, i) => (
                 <div
                   key={i}
-                  className="flex items-start gap-2 text-sm text-surface-300"
+                  className="flex items-start gap-2 text-sm text-ink"
                 >
-                  <span className="text-primary-400 mt-0.5">•</span>
+                  <span className="text-action mt-0.5">•</span>
                   <span>{suggestion}</span>
                 </div>
               ))}
@@ -181,12 +181,12 @@ export function PlateauAlertList({ alerts, units, onDismiss }: PlateauAlertListP
       <Card>
         <div className="text-center py-6">
           <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-success-500/20 flex items-center justify-center">
-            <svg className="w-6 h-6 text-success-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-6 h-6 text-status-ok" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          <p className="text-surface-200 font-medium">All exercises progressing</p>
-          <p className="text-sm text-surface-500 mt-1">
+          <p className="text-ink font-medium">All exercises progressing</p>
+          <p className="text-sm text-ink-2 mt-1">
             No plateaus detected - keep up the great work!
           </p>
         </div>
@@ -197,7 +197,7 @@ export function PlateauAlertList({ alerts, units, onDismiss }: PlateauAlertListP
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-surface-300">
+        <h3 className="text-sm font-medium text-ink">
           Plateau Alerts ({activeAlerts.length})
         </h3>
       </div>
